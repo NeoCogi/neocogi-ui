@@ -91,6 +91,31 @@ impl Default for UiRuntime {
 }
 
 impl UiRuntime {
+    /// Projects editable focus through the same transforms and eligibility gates as routing.
+    pub(crate) fn text_input_area(&self, root: &Node, style: &Skin) -> Option<Recti> {
+        let target = self.input_router.focus_target()?;
+        Self::text_input_area_from(root, target, self.root_transform, style)
+    }
+
+    /// Finds the focused editor's clipped content box without introducing a geometry cache.
+    fn text_input_area_from(node: &Node, target: RuntimeNodeId, parent: Transform, style: &Skin) -> Option<Recti> {
+        if !node_accepts_input(node) || !node.intersects_clip(parent) {
+            return None;
+        }
+        if node.id() == target {
+            let (options, keyboard) = node_interaction_config(node);
+            if options.intersects(WidgetOption::NO_INTERACT) || !keyboard.contains(KeyboardBehavior::TEXT_INPUT) {
+                return None;
+            }
+            let outer = parent.resolve(node.state.layout.allocation);
+            return crate::ui_node::frame::frame_geometry(outer, node_frame_role(node), style)
+                .content_or_empty()
+                .positive_intersection(parent.clip);
+        }
+        let child_parent = parent.push(node.state.layout);
+        node.with_children(|children| children.iter().find_map(|child| Self::text_input_area_from(child, target, child_parent, style)))
+    }
+
     /// Creates an empty runtime.
     pub(crate) fn new() -> Self {
         Self::default()
@@ -241,7 +266,7 @@ impl UiRuntime {
     /// Returns the router's focused identity for integration tests.
     #[cfg(test)]
     pub(crate) fn debug_focus_target(&self) -> Option<RuntimeNodeId> {
-        self.input_router.debug_focus_target()
+        self.input_router.focus_target()
     }
 
     /// Returns the router's hovered identity for integration tests.

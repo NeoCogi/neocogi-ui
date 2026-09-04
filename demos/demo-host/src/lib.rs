@@ -32,6 +32,11 @@
 //! This module owns host setup, backend selection, input forwarding, and the example main loop used
 //! by retained-mode demos. Native targets use SDL; `wasm32-unknown-unknown` uses the browser DOM and
 //! WebGL 2 directly.
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+mod browser_input;
+#[cfg(any(test, all(target_arch = "wasm32", target_os = "unknown")))]
+mod wheel;
+
 use microui_redux::{
     self as microui,
     prelude::{AtlasHandle, Dimensioni, FrameInfo, color},
@@ -310,6 +315,7 @@ where
             match event {
                 Event::Quit { .. } => return false,
                 Event::Window { win_event: WindowEvent::Close, .. } => return false,
+                Event::Window { win_event: WindowEvent::FocusLost, .. } => self.ctx.cancel_input(),
                 Event::MouseWheel { x, y, .. } => self.ctx.scroll(x * -30, y * -30),
                 Event::MouseButtonDown { x, y, mouse_btn, .. } => {
                     let mb = map_mouse_button(mouse_btn);
@@ -359,6 +365,17 @@ where
             // Application mutations can affect retained state and layout, so synchronize once
             // more before the paint-only frame is submitted.
             update(&mut self.ctx, &mut self.state, dimensions);
+            // Activate SDL's IME only for committed editable focus, using the same host-neutral
+            // area as the browser. Avoid restarting an already active composition each frame.
+            let text_input = self._sdl_vid.text_input();
+            if let Some(area) = self.ctx.text_input_area() {
+                text_input.set_rect(sdl2::rect::Rect::new(area.x, area.y, area.width as u32, area.height as u32));
+                if !text_input.is_active() {
+                    text_input.start();
+                }
+            } else if text_input.is_active() {
+                text_input.stop();
+            }
             if let Err(error) = self.ctx.frame(info).render_ui() {
                 eprintln!("[microui-redux][example] frame failed: {error}");
             }
@@ -375,18 +392,10 @@ mod browser {
     use std::{cell::RefCell, rc::Rc, sync::Arc};
 
     use wasm_bindgen::{JsCast, closure::Closure};
-    use web_sys::{Event, EventTarget, HtmlCanvasElement, HtmlElement, KeyboardEvent, PointerEvent, WheelEvent};
+    use web_sys::{HtmlCanvasElement, HtmlElement};
+    use crate::browser_input::{BrowserInput, BrowserInputHost};
 
     use super::{AtlasHandle, BackendInitContext, Dimensioni, FrameInfo, PlatformRenderer, SelectedBackend, color, microui, webgl_canvas_renderer};
-
-    enum BrowserInput {
-        MouseMove(i32, i32),
-        MouseDown(i32, i32, microui::MouseButton),
-        MouseUp(i32, i32, microui::MouseButton),
-        Scroll(i32, i32),
-        Key(microui::KeyEvent),
-        Text(String),
-    }
 
     /// Browser application runner backed directly by an HTML canvas and WebGL 2.
     pub struct Application<S: 'static, ApplicationRenderer = ()>
@@ -400,9 +409,7 @@ mod browser {
         /// Canvas that owns the active WebGL context and determines physical frame dimensions.
         canvas: HtmlCanvasElement,
         /// Buffered DOM input translated into the narrower microui event vocabulary.
-        input: Rc<RefCell<Vec<BrowserInput>>>,
-        /// Closures retained so their registered JavaScript callbacks remain alive.
-        _listeners: Vec<Closure<dyn FnMut(Event)>>,
+        input: BrowserInputHost,
     }
 
     impl<S: 'static> Application<S, ()> {
@@ -445,17 +452,10 @@ mod browser {
                 webgl_canvas_renderer::WebGlCanvasRenderer::new_with_application(gl.clone(), atlas, canvas.width(), canvas.height(), application_renderer)?;
             let mut ctx = microui::Context::new(renderer);
             let state = init_state(gl, &mut ctx);
-            let input = Rc::new(RefCell::new(Vec::new()));
-            let listeners = install_input_listeners(&canvas, input.clone())?;
+            let input = BrowserInputHost::new(&canvas)?;
             let _ = canvas.unchecked_ref::<HtmlElement>().focus();
 
-            Ok(Self {
-                state,
-                ctx,
-                canvas,
-                input,
-                _listeners: listeners,
-            })
+            Ok(Self { state, ctx, canvas, input })
         }
 
         /// Starts a `requestAnimationFrame` loop using the normal retained-state update.
@@ -522,7 +522,7 @@ mod browser {
             F: Fn(&mut microui::Context<SelectedBackend<ApplicationRenderer>, S>, &mut S, Dimensioni),
         {
             resize_canvas(&self.canvas);
-            for event in self.input.borrow_mut().drain(..) {
+            for event in self.input.drain() {
                 match event {
                     BrowserInput::MouseMove(x, y) => self.ctx.mousemove(x, y),
                     BrowserInput::MouseDown(x, y, button) => self.ctx.mousedown(x, y, button),
@@ -530,6 +530,7 @@ mod browser {
                     BrowserInput::Scroll(x, y) => self.ctx.scroll(x, y),
                     BrowserInput::Key(event) => self.ctx.key(event),
                     BrowserInput::Text(text) => self.ctx.text(&text),
+                    BrowserInput::Cancel => self.ctx.cancel_input(),
                 }
             }
 
@@ -538,108 +539,12 @@ mod browser {
                 update(&mut self.ctx, &mut self.state, dimensions);
                 frame(&mut self.ctx, &mut self.state, dimensions);
                 update(&mut self.ctx, &mut self.state, dimensions);
+                self.input.synchronize(&self.canvas, self.ctx.text_input_area());
                 if let Err(error) = self.ctx.frame(info).render_ui() {
                     eprintln!("[microui-redux][example] frame failed: {error}");
                 }
             }
         }
-    }
-
-    fn install_input_listeners(canvas: &HtmlCanvasElement, input: Rc<RefCell<Vec<BrowserInput>>>) -> Result<Vec<Closure<dyn FnMut(Event)>>, String> {
-        let target = canvas.unchecked_ref::<EventTarget>();
-        let mut listeners = Vec::new();
-
-        {
-            let canvas = canvas.clone();
-            let input = input.clone();
-            listen(target, "pointermove", &mut listeners, move |event| {
-                if let Some(event) = event.dyn_ref::<PointerEvent>() {
-                    let (x, y) = pointer_position(&canvas, event);
-                    input.borrow_mut().push(BrowserInput::MouseMove(x, y));
-                }
-            })?;
-        }
-        {
-            let canvas = canvas.clone();
-            let input = input.clone();
-            listen(target, "pointerdown", &mut listeners, move |event| {
-                if let Some(pointer) = event.dyn_ref::<PointerEvent>() {
-                    if let Some(button) = mouse_button(pointer.button()) {
-                        let (x, y) = pointer_position(&canvas, pointer);
-                        input.borrow_mut().push(BrowserInput::MouseDown(x, y, button));
-                        let _ = canvas.unchecked_ref::<HtmlElement>().focus();
-                        event.prevent_default();
-                    }
-                }
-            })?;
-        }
-        {
-            let canvas = canvas.clone();
-            let input = input.clone();
-            listen(target, "pointerup", &mut listeners, move |event| {
-                if let Some(pointer) = event.dyn_ref::<PointerEvent>() {
-                    if let Some(button) = mouse_button(pointer.button()) {
-                        let (x, y) = pointer_position(&canvas, pointer);
-                        input.borrow_mut().push(BrowserInput::MouseUp(x, y, button));
-                        event.prevent_default();
-                    }
-                }
-            })?;
-        }
-        {
-            let input = input.clone();
-            listen(target, "wheel", &mut listeners, move |event| {
-                if let Some(wheel) = event.dyn_ref::<WheelEvent>() {
-                    input
-                        .borrow_mut()
-                        .push(BrowserInput::Scroll(wheel_delta(wheel.delta_x()), wheel_delta(wheel.delta_y())));
-                    event.prevent_default();
-                }
-            })?;
-        }
-        {
-            let input = input.clone();
-            listen(target, "keydown", &mut listeners, move |event| {
-                if let Some(keyboard) = event.dyn_ref::<KeyboardEvent>() {
-                    if let Some(key) = map_key(&keyboard.key()) {
-                        let mut key_event = microui::KeyEvent::pressed(key, map_modifiers(keyboard));
-                        key_event.repeat = keyboard.repeat();
-                        input.borrow_mut().push(BrowserInput::Key(key_event));
-                        event.prevent_default();
-                    }
-                    if !keyboard.ctrl_key() && !keyboard.meta_key() && !keyboard.alt_key() {
-                        let key = keyboard.key();
-                        if key.chars().count() == 1 && !key.chars().all(char::is_control) {
-                            input.borrow_mut().push(BrowserInput::Text(key));
-                        }
-                    }
-                }
-            })?;
-        }
-        listen(target, "keyup", &mut listeners, move |event| {
-            if let Some(keyboard) = event.dyn_ref::<KeyboardEvent>() {
-                if let Some(key) = map_key(&keyboard.key()) {
-                    input
-                        .borrow_mut()
-                        .push(BrowserInput::Key(microui::KeyEvent::released(key, map_modifiers(keyboard))));
-                    event.prevent_default();
-                }
-            }
-        })?;
-
-        Ok(listeners)
-    }
-
-    fn listen<F>(target: &EventTarget, name: &str, listeners: &mut Vec<Closure<dyn FnMut(Event)>>, callback: F) -> Result<(), String>
-    where
-        F: FnMut(Event) + 'static,
-    {
-        let callback = Closure::wrap(Box::new(callback) as Box<dyn FnMut(Event)>);
-        target
-            .add_event_listener_with_callback(name, callback.as_ref().unchecked_ref())
-            .map_err(js_error)?;
-        listeners.push(callback);
-        Ok(())
     }
 
     fn resize_canvas(canvas: &HtmlCanvasElement) {
@@ -652,84 +557,6 @@ mod browser {
         if canvas.height() != height {
             canvas.set_height(height);
         }
-    }
-
-    fn pointer_position(canvas: &HtmlCanvasElement, event: &PointerEvent) -> (i32, i32) {
-        let bounds = canvas.get_bounding_client_rect();
-        let scale_x = if bounds.width() > 0.0 { canvas.width() as f64 / bounds.width() } else { 1.0 };
-        let scale_y = if bounds.height() > 0.0 {
-            canvas.height() as f64 / bounds.height()
-        } else {
-            1.0
-        };
-        (
-            ((event.client_x() as f64 - bounds.left()) * scale_x).round() as i32,
-            ((event.client_y() as f64 - bounds.top()) * scale_y).round() as i32,
-        )
-    }
-
-    fn mouse_button(button: i16) -> Option<microui::MouseButton> {
-        match button {
-            0 => Some(microui::MouseButton::LEFT),
-            1 => Some(microui::MouseButton::MIDDLE),
-            2 => Some(microui::MouseButton::RIGHT),
-            _ => None,
-        }
-    }
-
-    fn wheel_delta(value: f64) -> i32 {
-        (-value.round()).clamp(i32::MIN as f64, i32::MAX as f64) as i32
-    }
-
-    fn map_key(key: &str) -> Option<microui::Key> {
-        match key {
-            "Backspace" => Some(microui::Key::Backspace),
-            "Delete" => Some(microui::Key::Delete),
-            "Enter" => Some(microui::Key::Enter),
-            "Escape" | "Esc" => Some(microui::Key::Escape),
-            " " | "Spacebar" => Some(microui::Key::Space),
-            "Tab" => Some(microui::Key::Tab),
-            "Insert" => Some(microui::Key::Insert),
-            "Home" => Some(microui::Key::Home),
-            "End" => Some(microui::Key::End),
-            "PageUp" => Some(microui::Key::PageUp),
-            "PageDown" => Some(microui::Key::PageDown),
-            "ArrowUp" => Some(microui::Key::ArrowUp),
-            "ArrowDown" => Some(microui::Key::ArrowDown),
-            "ArrowLeft" => Some(microui::Key::ArrowLeft),
-            "ArrowRight" => Some(microui::Key::ArrowRight),
-            "Alt" => Some(microui::Key::Alt),
-            "Control" => Some(microui::Key::Control),
-            "Shift" => Some(microui::Key::Shift),
-            "Meta" | "OS" => Some(microui::Key::Super),
-            _ if key.starts_with('F') => key[1..]
-                .parse::<u8>()
-                .ok()
-                .filter(|number| (1..=24).contains(number))
-                .map(microui::Key::Function),
-            _ => {
-                let mut characters = key.chars();
-                let character = characters.next()?;
-                characters.next().is_none().then_some(microui::Key::Character(character))
-            }
-        }
-    }
-
-    fn map_modifiers(event: &KeyboardEvent) -> microui::Modifiers {
-        let mut modifiers = microui::Modifiers::NONE;
-        if event.alt_key() {
-            modifiers |= microui::Modifiers::ALT;
-        }
-        if event.ctrl_key() {
-            modifiers |= microui::Modifiers::CTRL;
-        }
-        if event.shift_key() {
-            modifiers |= microui::Modifiers::SHIFT;
-        }
-        if event.meta_key() {
-            modifiers |= microui::Modifiers::SUPER;
-        }
-        modifiers
     }
 
     fn js_error(error: wasm_bindgen::JsValue) -> String {

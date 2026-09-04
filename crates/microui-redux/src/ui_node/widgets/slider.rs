@@ -413,7 +413,13 @@ impl Widget for Slider {
     }
 
     fn keyboard_behavior(&self) -> KeyboardBehavior {
-        KeyboardBehavior::TAB_STOP | KeyboardBehavior::ADJUST_HORIZONTAL
+        // Native text input is useful only while the numeric editor is active.
+        let text = if self.edit.editing {
+            KeyboardBehavior::TEXT_INPUT
+        } else {
+            KeyboardBehavior::NONE
+        };
+        KeyboardBehavior::TAB_STOP | KeyboardBehavior::ADJUST_HORIZONTAL | text
     }
 }
 

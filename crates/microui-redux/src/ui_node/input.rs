@@ -35,6 +35,9 @@ use crate::{KeyEvent, MouseButton, Vec2i};
 /// Input event routed to one retained widget or container.
 #[derive(Clone, Debug)]
 pub enum UiInputEvent {
+    /// Host focus or capture was lost. The manager consumes this boundary, clears transient
+    /// targets, and updates widgets with no routed event and no held buttons or modifiers.
+    Cancel,
     /// Pointer moved without any mouse button held.
     MouseMove {
         /// Current pointer position in the receiver's routed local coordinate space.
@@ -91,7 +94,7 @@ impl UiInputEvent {
             Self::MouseMove { pos, .. } | Self::MouseDrag { pos, .. } | Self::MouseDown { pos, .. } | Self::MouseUp { pos, .. } | Self::Scroll { pos, .. } => {
                 Some(*pos)
             }
-            Self::Key { .. } | Self::Text { .. } => None,
+            Self::Cancel | Self::Key { .. } | Self::Text { .. } => None,
         }
     }
 

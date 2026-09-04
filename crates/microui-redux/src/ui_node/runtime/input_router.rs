@@ -229,9 +229,8 @@ impl InputRouter {
         self.routed_input_routes
     }
 
-    /// Returns the focused identity for retained routing tests.
-    #[cfg(test)]
-    pub(super) const fn debug_focus_target(&self) -> Option<RuntimeNodeId> {
+    /// Returns the authoritative focused identity for host input queries and routing tests.
+    pub(super) const fn focus_target(&self) -> Option<RuntimeNodeId> {
         self.focus
     }
 

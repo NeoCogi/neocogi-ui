@@ -281,6 +281,7 @@ impl Widget for OrderedProbe {
                 UiInputEvent::Key { event } if event.is_pressed() => "key-down",
                 UiInputEvent::Key { .. } => "key-up",
                 UiInputEvent::Text { .. } => "text",
+                UiInputEvent::Cancel => panic!("cancellation is consumed by the manager"),
             });
         }
 
@@ -488,6 +489,51 @@ impl crate::LeafWidget for TopologyMutator {
     fn measure(&self, _style: &Skin, _atlas: &AtlasHandle, _constraints: Constraints) -> Dimensioni {
         Dimensioni::new(20, 10)
     }
+}
+
+/// Host cancellation clears held state in FIFO order and never routes a synthetic release.
+#[test]
+fn host_cancellation_revokes_capture_and_focus_before_later_input() {
+    let (state, probe) = OrderedProbe::create(WidgetOption::NONE);
+    let mut ctx = context();
+    let root = ctx.ui().create_window(Window::new("cancel", rect(10, 10, 100, 80), probe));
+    ctx.ui().set_window_options(&root, WindowOption::NO_TITLE | WindowOption::NO_RESIZE).unwrap();
+    ctx.mousedown(20, 20, MouseButton::LEFT);
+    ctx.key(KeyEvent::pressed(Key::Shift, Modifiers::SHIFT));
+    ctx.cancel_input();
+    ctx.text("must not reach the old focus");
+    ctx.mousemove(25, 25);
+    ctx.update_ui(Dimensioni::new(320, 240));
+    state
+        .try_read(|state| {
+            assert_eq!(state.events, ["down", "key-down", "move"]);
+            assert_eq!(state.held_buttons, [1, 1, 0, 0, 0]);
+            assert_eq!(state.held_keys, [0, Modifiers::SHIFT.bits(), 0, 0, 0]);
+        })
+        .unwrap();
+}
+
+/// Native input follows committed editor focus, including resize and host cancellation.
+#[test]
+fn text_input_area_tracks_editable_focus_and_committed_geometry() {
+    let (_, node) = Textbox::create(TextboxParameters::new(""));
+    let id = node.id();
+    let mut ctx = context();
+    let root = ctx.ui().create_window(Window::new("editor", rect(10, 10, 140, 100), node));
+    ctx.ui().set_window_options(&root, WindowOption::NO_TITLE | WindowOption::NO_RESIZE).unwrap();
+    let dimensions = Dimensioni::new(320, 240);
+    assert!(ctx.text_input_area().is_none());
+    ctx.update_ui(dimensions);
+    assert!(ctx.text_input_area().is_none());
+    let area = ctx.debug_root_node_rect(root.id(), id).unwrap();
+    ctx.mousedown(area.x + 1, area.y + 1, MouseButton::LEFT);
+    assert!(ctx.text_input_area().is_none(), "queued input invalidates the old commit");
+    ctx.update_ui(dimensions);
+    let focused = ctx.text_input_area().expect("textbox requests native input");
+    assert!(focused.width > 0 && focused.height > 0);
+    ctx.cancel_input();
+    ctx.update_ui(dimensions);
+    assert!(ctx.text_input_area().is_none());
 }
 
 #[test]

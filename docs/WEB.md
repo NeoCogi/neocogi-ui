@@ -45,6 +45,32 @@ ratio, translates pointer/wheel/keyboard input into microui events, and schedule
 The browser build has no virtual filesystem: the file-dialog entry is disabled, while all bundled
 themes and demonstration assets are embedded and remain available.
 
+## Input contract
+
+The host captures one primary pointer until release. It reconciles the full button mask, including
+mouse chords, and cancels the core gesture on `pointercancel`, unexpected `lostpointercapture`,
+or browser/DOM focus loss. Touch and pen supply primary-pointer mouse emulation; multiple contacts,
+pressure, and gestures are outside this host's contract. Canvas touch scrolling is disabled while
+the UI owns the pointer.
+
+Wheel deltas retain the browser's positive-right/down direction. Pixel deltas are scaled from CSS
+to framebuffer pixels, lines mean 30 CSS pixels, and pages mean one canvas extent per axis.
+Fractional pixels accumulate across events so slow trackpad movement is retained.
+
+Focused text editors use a host-owned transparent textarea positioned within the editor's visible
+area. Printable keys retain their DOM default; navigation/editing commands go to the core. Native
+`input` commits, including paste, are drained from the textarea. Composition stays there until
+`compositionend`; draining and clearing its final value prevents a subsequent final `input` event
+from duplicating the commit. This follows the DOM update boundary described in
+[UI Events](https://www.w3.org/TR/uievents/#events-composition-input-events).
+
+This bridge accepts committed Unicode; it does not expose retained selection, copy/cut, rich text,
+surrounding text, or inline preedit rendering to the browser. Its anchor is the editor area rather
+than the exact caret. Focus is synchronized after the retained update, so mobile browsers that
+require text-input focus within a trusted gesture may need a host-specific immediate focus policy
+to show their software keyboard. App/host writers own those extensions, font coverage, shaping,
+and accessibility. Browser callbacks are unregistered and the textarea removed when the host drops.
+
 ## GitHub Pages
 
 The `WebGL demo` workflow builds the site on every push to `master` and supports manual dispatch.

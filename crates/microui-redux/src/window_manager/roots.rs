@@ -2875,6 +2875,19 @@ impl WindowManager {
 
     /// Routes and applies one normalized event across every eligible surface.
     fn update_for_event(&mut self, atlas: &crate::AtlasHandle, event: &UiInputEvent, input: crate::input::InputSnapshot) {
+        if matches!(event, UiInputEvent::Cancel) {
+            // Cancellation has no recipient and must never become a synthetic mouse release.
+            // Editors still receive the ordinary update so they can finish their blur policy.
+            self.finish_keyboard_menu(true);
+            self.pending_menu_alt = false;
+            self.window_cycle_key_down = false;
+            self.discard_pointer_capture_tail = false;
+            for node in &mut self.surfaces.nodes {
+                node.clear_transient_targets();
+            }
+            self.update_eligible_widget_trees(atlas, input);
+            return;
+        }
         // Resolve event-wide dismissal and menu-toggle context before selecting a recipient. An
         // outside press may change the visible forest and must do so before hit testing below.
         let style = self.bundle.skin().clone();
@@ -3427,6 +3440,19 @@ impl WindowManager {
             .or_else(|| self.captured_input_surface())
             .or_else(|| modal.map(SurfaceKey::Root).filter(|surface| self.surface_accepts_input(*surface)))
             .or_else(|| self.front_input_surface())
+    }
+
+    /// Resolves native text input from committed editable focus, excluding active menu commands.
+    pub(crate) fn text_input_area(&self) -> Option<Recti> {
+        self.ui_commit?;
+        if self.active_menu_root().is_some() {
+            return None;
+        }
+        let surface = self.surfaces.surface(self.keyboard_input_surface()?)?;
+        match &surface.body {
+            SurfaceBody::Widgets { root, runtime } => runtime.text_input_area(root, self.bundle.skin()),
+            SurfaceBody::Menu(_) => None,
+        }
     }
 
     /// Returns the popup options installed for new definitions.

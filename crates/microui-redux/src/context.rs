@@ -576,6 +576,24 @@ impl<B: RendererBackend, State: 'static> Context<B, State> {
     pub fn text(&mut self, text: &str) {
         self.window_manager.text(text);
     }
+
+    /// Queues loss of host focus or pointer capture in input order.
+    ///
+    /// Hosts must call this on blur, pointer cancellation, or unexpected capture loss. The next
+    /// update clears held buttons/modifiers and widget focus/capture without generating a click.
+    /// Text editors apply their normal blur policy; a cancellation does not roll back their value.
+    pub fn cancel_input(&mut self) {
+        self.window_manager.cancel_input();
+    }
+
+    /// Returns the focused text editor's visible area in committed framebuffer coordinates.
+    ///
+    /// Hosts can place their native text input/IME anchor here. This is the editor's content area,
+    /// not an exact caret rectangle. Returns `None` before a UI commit or outside editable focus.
+    /// Custom editors opt in with [`crate::KeyboardBehavior::TEXT_INPUT`].
+    pub fn text_input_area(&self) -> Option<Recti> {
+        self.window_manager.text_input_area()
+    }
 }
 
 // Skin, backend callbacks, and renderer resources.

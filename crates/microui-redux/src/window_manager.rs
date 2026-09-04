@@ -274,6 +274,12 @@ pub(crate) struct WindowManager {
 }
 
 impl WindowManager {
+    /// Queues an ordered host cancellation and requires a new UI commit before paint.
+    pub(crate) fn cancel_input(&mut self) {
+        self.input.cancel();
+        self.invalidate_ui_commit();
+    }
+
     /// Creates an empty manager with a resolved skin and no committed UI frame.
     pub(crate) fn new(bundle: SkinBundle) -> Self {
         // Retained identities come from the process-wide allocator, so manager construction needs

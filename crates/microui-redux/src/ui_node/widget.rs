@@ -162,6 +162,11 @@ bitflags! {
         const EXPAND_COLLAPSE = 64;
         /// F4, Alt+Down, Alt+Up, and Escape control a popup-bearing surface.
         const POPUP = 128;
+        /// The focused control currently accepts committed text from a host input method.
+        ///
+        /// Editors with a separate adjustment mode return this flag only while editing. Hosts
+        /// query `Context::text_input_area` after update to activate and position native input.
+        const TEXT_INPUT = 256;
         /// No keyboard focus or traversal behavior.
         const NONE = 0;
     }

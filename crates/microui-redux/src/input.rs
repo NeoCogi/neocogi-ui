@@ -199,13 +199,44 @@ impl KeyEvent {
     }
 }
 
+/// Host transitions retained in call order until the next UI update.
 enum RawInputEvent {
-    MouseMove { pos: Vec2i },
-    MouseDown { pos: Vec2i, button: MouseButton },
-    MouseUp { pos: Vec2i, button: MouseButton },
-    Scroll { delta: Vec2i },
-    Key { event: KeyEvent },
-    Text { text: String },
+    /// Revoke a gesture without synthesizing a release or activation.
+    Cancel,
+    /// Pointer position before held-state normalization.
+    MouseMove {
+        /// Absolute framebuffer coordinates.
+        pos: Vec2i,
+    },
+    /// Explicit press, retained independently of subsequent releases.
+    MouseDown {
+        /// Absolute framebuffer coordinates.
+        pos: Vec2i,
+        /// Buttons entering held state.
+        button: MouseButton,
+    },
+    /// Explicit release, never synthesized by cancellation.
+    MouseUp {
+        /// Absolute framebuffer coordinates.
+        pos: Vec2i,
+        /// Buttons leaving held state.
+        button: MouseButton,
+    },
+    /// Wheel distance associated with the latest consumed pointer position.
+    Scroll {
+        /// Physical pixels, positive right/down.
+        delta: Vec2i,
+    },
+    /// Logical command key with an authoritative modifier snapshot.
+    Key {
+        /// Complete host-normalized transition.
+        event: KeyEvent,
+    },
+    /// Committed text from the host input method.
+    Text {
+        /// UTF-8 insertion, independent of logical character keys.
+        text: String,
+    },
 }
 
 /// Held and pointer state after one queued raw event has been applied.
@@ -241,6 +272,11 @@ impl Default for Input {
 }
 
 impl Input {
+    /// Queues loss of host focus or pointer capture alongside ordinary transitions.
+    pub(crate) fn cancel(&mut self) {
+        self.pending.push_back(RawInputEvent::Cancel);
+    }
+
     /// Queues a mouse-pointer position update.
     pub(crate) fn mousemove(&mut self, x: i32, y: i32) {
         self.pending.push_back(RawInputEvent::MouseMove { pos: Vec2i::new(x, y) });
@@ -291,6 +327,12 @@ impl Input {
     pub(crate) fn pop_event(&mut self) -> Option<UiInputEvent> {
         let event = self.pending.pop_front()?;
         Some(match event {
+            RawInputEvent::Cancel => {
+                // Reset held state only when this boundary is consumed, preserving earlier events.
+                self.mouse_down = MouseButton::NONE;
+                self.modifiers = Modifiers::NONE;
+                UiInputEvent::Cancel
+            }
             RawInputEvent::MouseMove { pos } => {
                 // Raw coordinates come from the application and may jump across the complete i32
                 // domain. Preserve the direction and clamp only the unrepresentable magnitude so

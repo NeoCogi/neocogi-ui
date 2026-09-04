@@ -711,7 +711,7 @@ impl Widget for TextArea {
     fn keyboard_behavior(&self) -> KeyboardBehavior {
         // The inner editor is the composed control's one Tab stop. Its containing ScrollArea and
         // structural scrollbars remain non-focusable pointer surfaces and therefore preserve this focus.
-        KeyboardBehavior::TAB_STOP
+        KeyboardBehavior::TAB_STOP | KeyboardBehavior::TEXT_INPUT
     }
 }
 

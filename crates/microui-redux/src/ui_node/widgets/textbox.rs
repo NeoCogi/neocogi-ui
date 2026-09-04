@@ -458,7 +458,7 @@ impl Widget for Textbox {
     }
 
     fn keyboard_behavior(&self) -> KeyboardBehavior {
-        KeyboardBehavior::TAB_STOP
+        KeyboardBehavior::TAB_STOP | KeyboardBehavior::TEXT_INPUT
     }
 }
 

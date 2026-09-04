@@ -167,3 +167,32 @@ relative to the lower bound and clamps to the range. Keyboard, wheel, pointer, a
 text commits share this policy; a text commit on focus loss can emit `SliderChanged` and return
 `Changed` even without a routed event. An unchanged result emits nothing. Non-finite setter inputs
 or invalid numeric text preserve the previous finite value.
+## Native text input and host cancellation
+
+An editor returns `KeyboardBehavior::TEXT_INPUT` together with its focus/traversal flags while it
+accepts text. `Textbox` and `TextArea` do so continuously; `Number` and `Slider` do so only in their
+text editing mode. A custom editor must make the same choice itself. After `update_ui` or
+`update_ui_state`, `Context::text_input_area()` returns the focused editor's clipped content area
+in framebuffer coordinates, or `None`. Queued input invalidates that query until the next update.
+
+Hosts must deliver committed strings with `Context::text` independently of `Context::key`. A
+logical character key is useful for commands but is not a text insertion: one composed character
+can require several keys, and paste or speech input can insert text without any character key.
+Custom widgets apply their own normalization, editing, and measurement-change policy to those
+strings. Built-in editors share their existing single-line or multiline normalization.
+
+Call `Context::cancel_input()` when the host loses focus, receives pointer cancellation, or
+unexpectedly loses pointer capture. This boundary is processed in input order. It clears held
+buttons/modifiers, focus, hover, capture, and active popup/menu gestures. Widgets receive an update
+with no routed event and cleared held state, so editors apply their normal blur/commit policy.
+Cancellation never synthesizes a mouse release or rolls back an application value. Custom drag
+widgets must clear their private gesture state when capture/held state disappears; they cannot
+depend on always receiving `MouseUp`.
+
+The area query is deliberately an editor box, **not an exact caret rectangle**. Hosts requiring
+caret-accurate candidate positioning need an explicit editor-specific extension. The core stores
+committed text only: native hosts own preedit presentation, candidate selection, and composition
+cancellation. Selection synchronization, copy/cut of retained text, rich-text paste, surrounding
+text/reconversion, accessibility, and mobile virtual keyboard policy are application/host work;
+the textarea bridge in the demo does not supply those features. Atlas glyph coverage and shaping
+remain independent of accepting a Unicode string. See `TYPOGRAPHY.md` for rendering limitations.
