@@ -64,6 +64,12 @@ thread. The rendering traits intentionally have no `Send` or `Sync` requirement.
 should deliver owned application data before `Context::frame`; custom callbacks execute
 synchronously during display-list execution.
 
+The native WGPU and Vulkan backends retain an SDL `Window` clone. SDL shares the existing native
+window and its video subsystem through that clone; it does not create a second window. GPU surface
+destruction precedes release of this retained owner, including on constructor failure. Applications
+may therefore drop their own window handle before dropping the renderer without invalidating its
+raw window/display handles. Keep native rendering and window operations on their owning thread.
+
 The complete sequence is:
 
 ```text
