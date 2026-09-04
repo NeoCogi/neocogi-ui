@@ -43,7 +43,7 @@ mod skin;
 mod typography;
 
 pub use appearance::Visual;
-pub use bundle::SkinBundle;
+pub use bundle::{SkinBundle, SkinInstallError};
 pub use crate::render::{Color, color};
 pub use icons::{IconRef, IconRole};
 #[cfg(feature = "theme-json")]

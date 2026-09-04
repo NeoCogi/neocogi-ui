@@ -323,10 +323,9 @@ fn downstream_resources_bundle_and_chrome_form_one_typed_runtime_value() {
     assert_eq!(body.resolve(context.skin(), &context.atlas()), context.atlas().font_id("body").unwrap());
     assert_eq!(close.resolve(context.skin(), &context.atlas()), context.atlas().icon_id("close").unwrap());
 
-    // Build a separately allocated atlas/skin pair and describe manager-owned chrome with one
-    // concrete data recipe. Installing the bundle uploads and publishes both halves together.
-    let replacement_context = context_with_state::<()>();
-    let replacement_atlas = replacement_context.atlas();
+    // Keep the catalog's exact logical resources and describe manager-owned chrome with one
+    // concrete recipe. Derived/repacked atlases are tested separately with the builder feature.
+    let replacement_atlas = context.resource_catalog().default_skin_bundle().atlas().clone();
     let mut replacement_skin = Skin::from_atlas(&replacement_atlas);
     replacement_skin.metrics.padding = 19;
     replacement_skin.window_chrome = WindowChromeSkin::classic_mac(color(222, 222, 222, 255));
@@ -344,6 +343,22 @@ fn downstream_resources_bundle_and_chrome_form_one_typed_runtime_value() {
     let close_role = IconRef::role(IconRole::Close);
     assert_eq!(body_role.resolve(context.skin(), &context.atlas()), context.atlas().font_id("body").unwrap());
     assert_eq!(close_role.resolve(context.skin(), &context.atlas()), context.atlas().icon_id("close").unwrap());
+}
+
+/// Identical names from an unrelated allocation do not preserve logical resource capabilities.
+#[test]
+fn downstream_skin_install_rejects_foreign_catalog_ids_and_preserves_live_widgets() {
+    let mut ctx = context();
+    let original = ctx.atlas();
+    let body = ctx.resource_catalog().font_ref("body").unwrap();
+    let (_, content) = TextBlock::create(TextBlockParameters::new("retained").font(body));
+    ctx.ui().create_window(Window::new("catalog", rect(0, 0, 200, 200), content));
+    let foreign = context();
+    assert!(matches!(ctx.set_skin_bundle(foreign.skin_bundle()), Err(microui_redux::SkinInstallError::MissingFont { name, .. }) if name == "body"));
+    assert_eq!(ctx.atlas().font_id("body"), original.font_id("body"));
+    // The original bug accepted this bundle and then panicked on the retained exact FontRef.
+    ctx.update_ui(Dimensioni::new(300, 300));
+    assert_eq!(body.resolve(ctx.skin(), &ctx.atlas()), original.font_id("body").unwrap());
 }
 
 struct FileDialogModel {

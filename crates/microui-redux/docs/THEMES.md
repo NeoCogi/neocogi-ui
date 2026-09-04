@@ -318,3 +318,25 @@ the saved height and emits `WindowEvent::Restored`. Maximize saves the exact nor
 tracks the complete inherited viewport, and emits `WindowEvent::Maximized`. Activating the same
 caption position while maximized uses `control.restore_button`, restores the saved rectangle, and
 emits `WindowEvent::Restored`.
+
+## Compatibility with retained application resources
+
+`Context::set_skin_bundle` and `set_theme` return `SkinInstallError`. Before uploading anything,
+Context verifies that the candidate contains **every exact font and icon ID from its original
+ResourceCatalog**, including optional resources that the candidate skin itself does not use.
+Missing IDs return `MissingFont` or `MissingIcon`; backend failures return `Upload`. Either failure
+preserves the previous active skin and atlas. A separate atlas containing the same names is not
+compatible: names do not recreate existing logical IDs.
+
+Derive theme bundles from `context.resource_catalog()` through the theme loader, or repack the
+catalog's resources using the atlas builder's copy operations, which preserve logical IDs. A new
+atlas allocation is allowed; allocation identity is not the compatibility rule. For scalar edits,
+clone `context.skin()` and use `set_skin` with the current atlas.
+
+Application authors should obtain persistent exact references from the ResourceCatalog, or use
+semantic `FontRef::role` / `IconRef::role` references. Theme-private resources exist only in their
+specific bundles. Authors who retain exact IDs for theme-private artwork must replace those widget
+references when switching to a bundle that omits that artwork. Context intentionally protects the
+stable application catalog; it does not scan arbitrary widget fields to discover private resource
+dependencies. A valid standalone `SkinBundle` proves that its own skin can resolve its resources,
+while installation additionally proves compatibility with the receiving application's catalog.

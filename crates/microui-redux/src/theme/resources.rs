@@ -83,6 +83,23 @@ impl ResourceCatalog {
         SkinBundle::from_atlas(self.atlas.clone())
     }
 
+    /// Checks catalog membership before an installation can mutate backend or retained state.
+    pub(crate) fn validate_bundle(&self, bundle: &SkinBundle) -> Result<(), super::SkinInstallError> {
+        // Reuse the atlas's concrete typed tables. Installation is an infrequent resource operation,
+        // so these owned diagnostic names need no parallel cached catalog or dependency registry.
+        for (name, id) in self.atlas.clone_font_table() {
+            if !bundle.atlas().contains_font(id) {
+                return Err(super::SkinInstallError::MissingFont { name, id });
+            }
+        }
+        for (name, id) in self.atlas.clone_icon_table() {
+            if !bundle.atlas().contains_icon(id) {
+                return Err(super::SkinInstallError::MissingIcon { name, id });
+            }
+        }
+        Ok(())
+    }
+
     /// Borrows the pristine source atlas for internal deterministic theme derivation.
     #[cfg(feature = "theme-json")]
     pub(crate) fn atlas(&self) -> &AtlasHandle {

@@ -619,11 +619,13 @@ impl<B: RendererBackend, State: 'static> Context<B, State> {
     ///
     /// # Errors
     ///
-    /// Returns [`crate::AtlasUploadError`] when the backend cannot install the bundle atlas.
-    pub fn set_skin_bundle(&mut self, bundle: &SkinBundle) -> Result<(), crate::AtlasUploadError> {
-        // Renderer replacement is the only fallible step. Publish the already validated pair only
-        // after it succeeds so Context never exposes a half-installed skin or atlas.
-        self.renderer.replace_atlas(bundle.atlas().clone())?;
+    /// Returns [`crate::SkinInstallError`] if any original catalog identity is missing, or if the
+    /// backend rejects the upload. Matching names alone do not establish resource compatibility.
+    pub fn set_skin_bundle(&mut self, bundle: &SkinBundle) -> Result<(), crate::SkinInstallError> {
+        // A valid standalone bundle can still omit resources used by this Context's widgets.
+        // Reject that case before invoking the backend, then publish only after a successful upload.
+        self.resource_catalog.validate_bundle(bundle)?;
+        self.renderer.replace_atlas(bundle.atlas().clone()).map_err(crate::SkinInstallError::Upload)?;
         debug_assert!(self.renderer.atlas().ptr_eq(bundle.atlas()));
         self.window_manager.set_skin_bundle(bundle.clone());
         Ok(())
@@ -637,11 +639,11 @@ impl<B: RendererBackend, State: 'static> Context<B, State> {
     ///
     /// # Errors
     ///
-    /// Returns [`crate::AtlasUploadError`] when the backend cannot allocate, upload, or bind the
-    /// replacement atlas. The current theme remains unchanged.
+    /// Returns [`crate::SkinInstallError`] for incompatible catalog resources or a backend upload
+    /// failure. The current theme remains unchanged.
     ///
     #[cfg(feature = "theme-json")]
-    pub fn set_theme(&mut self, theme: &LoadedTheme) -> Result<(), crate::AtlasUploadError> {
+    pub fn set_theme(&mut self, theme: &LoadedTheme) -> Result<(), crate::SkinInstallError> {
         // LoadedTheme contributes only a selection name around the same atomic runtime value.
         self.set_skin_bundle(theme.bundle())
     }
@@ -1115,7 +1117,7 @@ mod theme_tests {
     #[test]
     fn set_theme_replaces_atlas_and_skin_together() {
         let initial = test_atlas();
-        let replacement = test_atlas();
+        let replacement = crate::atlas::builder::Builder::from_atlas_with_size(&initial, 64, 64).unwrap().build().unwrap();
         let replacement_style = Skin::from_atlas(&replacement);
         let replacement_font = replacement_style.resolve_font_role(&replacement, crate::FontRole::Body);
         let theme = LoadedTheme::new("Replacement", SkinBundle::new(replacement.clone(), replacement_style));
@@ -1136,7 +1138,7 @@ mod theme_tests {
     fn set_theme_failure_preserves_previous_atlas_and_skin() {
         let initial = test_atlas();
         let initial_font = Skin::from_atlas(&initial).resolve_font_role(&initial, crate::FontRole::Body);
-        let replacement = test_atlas();
+        let replacement = crate::atlas::builder::Builder::from_atlas_with_size(&initial, 64, 64).unwrap().build().unwrap();
         let theme = LoadedTheme::new("Rejected", SkinBundle::new(replacement.clone(), Skin::from_atlas(&replacement)));
         let mut context = Context::<ThemeAtlasBackend>::new(ThemeAtlasBackend {
             atlas: initial.clone(),
@@ -1145,9 +1147,43 @@ mod theme_tests {
 
         let error = context.set_theme(&theme).expect_err("fixture backend must reject replacement atlas");
 
-        assert_eq!(error, AtlasUploadError::new("fixture rejected atlas"));
+        assert_eq!(error, crate::SkinInstallError::Upload(AtlasUploadError::new("fixture rejected atlas")));
         assert!(context.atlas().ptr_eq(&initial));
         assert_eq!(context.skin().resolve_font_role(&context.atlas(), crate::FontRole::Body), initial_font);
+    }
+
+    /// Optional application resources are protected even when the candidate's own skin is valid.
+    #[test]
+    fn missing_catalog_resources_are_rejected_before_backend_upload() {
+        let directory = tempfile::tempdir().unwrap();
+        let icon_path = directory.path().join("application.png");
+        fs::write(&icon_path, fixture_png(1, 1)).unwrap();
+        let base = crate::test_support::test_atlas_with_font_sizes(&[("body", 10), ("application-font", 12)]);
+        let mut builder = crate::atlas::builder::Builder::from_atlas_with_size(&base, 64, 64).unwrap();
+        builder.add_icon_named("application-icon", &icon_path).unwrap();
+        let source = builder.build().unwrap();
+
+        for omit_font in [true, false] {
+            // Excluding an optional resource still permits a fully valid standalone SkinBundle.
+            let fonts = if omit_font { &["application-font"][..] } else { &[] };
+            let icons = if omit_font { &[][..] } else { &["application-icon"] };
+            let candidate = crate::atlas::builder::Builder::from_atlas_with_size_excluding(&source, 64, 64, fonts, icons)
+                .unwrap()
+                .build()
+                .unwrap();
+            let bundle = SkinBundle::from_atlas(candidate);
+            let (backend, log) = recording_backend(source.clone());
+            let mut context = Context::<_>::new(backend);
+            log.clear();
+            let error = context.set_skin_bundle(&bundle).unwrap_err();
+            if omit_font {
+                assert!(matches!(error, crate::SkinInstallError::MissingFont { name, id } if name == "application-font" && Some(id) == source.font_id(&name)));
+            } else {
+                assert!(matches!(error, crate::SkinInstallError::MissingIcon { name, id } if name == "application-icon" && Some(id) == source.icon_id(&name)));
+            }
+            assert!(log.snapshot().is_empty(), "incompatible bundles must not reach the backend");
+            assert!(context.atlas().ptr_eq(&source));
+        }
     }
 
     /// Verifies consecutive theme loads always derive from the pristine application catalog.

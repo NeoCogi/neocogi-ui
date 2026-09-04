@@ -33,6 +33,48 @@ use crate::AtlasHandle;
 
 use super::{IconRole, Skin};
 
+/// Failure to install a bundle without invalidating the Context's application resource catalog.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SkinInstallError {
+    /// The candidate omits a logical font from the original application catalog.
+    MissingFont {
+        /// Catalog spelling for diagnostics; matching is by the exact typed identity below.
+        name: String,
+        /// Stable font identity that existing retained widgets may reference.
+        id: crate::FontId,
+    },
+    /// The candidate omits a logical icon from the original application catalog.
+    MissingIcon {
+        /// Catalog spelling for diagnostics; an unrelated icon with the same name is insufficient.
+        name: String,
+        /// Stable icon identity that existing retained widgets may reference.
+        id: crate::IconId,
+    },
+    /// Resources were compatible, but the backend rejected the transactional atlas upload.
+    Upload(crate::AtlasUploadError),
+}
+
+impl std::fmt::Display for SkinInstallError {
+    /// Describes the failed boundary while keeping exact resource IDs available for typed handling.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingFont { name, .. } => write!(f, "skin bundle omits application font {name:?}"),
+            Self::MissingIcon { name, .. } => write!(f, "skin bundle omits application icon {name:?}"),
+            Self::Upload(source) => write!(f, "skin atlas upload failed: {source}"),
+        }
+    }
+}
+
+impl std::error::Error for SkinInstallError {
+    /// Exposes the backend cause only when the upload stage was reached.
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Upload(source) => Some(source),
+            Self::MissingFont { .. } | Self::MissingIcon { .. } => None,
+        }
+    }
+}
+
 /// One resolved [`Skin`] paired with the exact immutable [`AtlasHandle`] it uses.
 ///
 /// Image-backed nine patches and semantic resource tables contain stable typed IDs that the paired
