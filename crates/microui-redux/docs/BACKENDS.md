@@ -70,6 +70,22 @@ destruction precedes release of this retained owner, including on constructor fa
 may therefore drop their own window handle before dropping the renderer without invalidating its
 raw window/display handles. Keep native rendering and window operations on their owning thread.
 
+Glow targets OpenGL ES 3 and WebGL 2 and draws UI to the default window/canvas framebuffer. Each
+UI draw establishes its framebuffer, viewport, scissor, color mask, blend equation/factors, depth
+and stencil policy, rasterization enables, program/uniforms, texture unit zero, sampler, and private
+vertex array/buffers. Atlas, external-texture, and colored-triangle draws share that one setup.
+Frame clears restore their target and write region too. CPU uploads select the texture unit and
+reset unpack-buffer binding, alignment, row/image strides, and skips; browser uploads also disable
+implicit flipping, premultiplication, and color-space conversion of decoded RGBA bytes.
+
+Application renderer authors may leave those persistent settings changed. They must use their own
+GPU objects, finish scoped operations (including queries and transform feedback), and restore any
+extension-specific state outside the documented ES 3/WebGL 2 baseline. They must not modify or
+delete backend-owned resources. These are author responsibilities: the backend cannot recover an
+unfinished application operation or infer the meaning of arbitrary extension state. Application
+commands should establish the state they consume, just as the UI backend does; UI rendering does
+not promise to restore the application's previous state on return.
+
 The complete sequence is:
 
 ```text
