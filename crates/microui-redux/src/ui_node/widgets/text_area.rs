@@ -61,8 +61,6 @@
 
 use crate::{ControlRole};
 
-use std::{cell::RefCell, rc::Rc};
-
 use crate::ui_node::text_layout::{TextLine, build_text_lines, text_block_size};
 use crate::*;
 
@@ -140,9 +138,9 @@ pub struct TextArea {
     /// Weak capability for scroll queries and caret reveal requests after composition.
     scroll_area: Option<TypedWidgetHandle<ScrollArea>>,
     /// Runtime-owned source for user-originated text changes.
-    changed_event: Rc<RefCell<crate::event::WidgetEventPort<TextAreaChanged>>>,
+    changed_event: crate::EventSource<TextAreaChanged>,
     /// Runtime-owned source for user submissions.
-    submitted_event: Rc<RefCell<crate::event::WidgetEventPort<TextAreaSubmitted>>>,
+    submitted_event: crate::EventSource<TextAreaSubmitted>,
 }
 
 /// Snapshot emitted after a user-originated text-area value change.
@@ -207,8 +205,8 @@ impl TextArea {
             font: parameters.font,
             interaction: TextAreaInteraction::default(),
             scroll_area: None,
-            changed_event: Rc::new(RefCell::new(crate::event::WidgetEventPort::new())),
-            submitted_event: Rc::new(RefCell::new(crate::event::WidgetEventPort::new())),
+            changed_event: crate::EventSource::new(),
+            submitted_event: crate::EventSource::new(),
         }
     }
 
@@ -341,13 +339,13 @@ impl TextArea {
 
         // Emit complete immutable snapshots after the semantic update has committed cursor and text.
         if outcome.changed {
-            self.changed_event.borrow_mut().emit(TextAreaChanged {
+            self.changed_event.emit(TextAreaChanged {
                 text: self.buf.clone(),
                 cursor: self.cursor,
             });
         }
         if outcome.submitted {
-            self.submitted_event.borrow_mut().emit(TextAreaSubmitted { text: self.buf.clone() });
+            self.submitted_event.emit(TextAreaSubmitted { text: self.buf.clone() });
         }
     }
 
@@ -433,7 +431,7 @@ impl crate::TypedWidget<TextAreaChanged> for TextArea {
     /// Returns the runtime-owned user-change event endpoint.
     fn event(&self) -> crate::WidgetEventPortHandle<TextAreaChanged> {
         // Create a weak endpoint handle without transferring ownership from the retained leaf.
-        crate::WidgetEventPortHandle::new(&self.changed_event)
+        self.changed_event.event()
     }
 }
 
@@ -441,7 +439,7 @@ impl crate::TypedWidget<TextAreaSubmitted> for TextArea {
     /// Returns the runtime-owned submission event endpoint.
     fn event(&self) -> crate::WidgetEventPortHandle<TextAreaSubmitted> {
         // Create a weak endpoint handle without transferring ownership from the retained leaf.
-        crate::WidgetEventPortHandle::new(&self.submitted_event)
+        self.submitted_event.event()
     }
 }
 

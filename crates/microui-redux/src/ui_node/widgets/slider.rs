@@ -56,7 +56,6 @@
 use crate::{ControlRole};
 
 use crate::*;
-use std::{cell::RefCell, rc::Rc};
 
 use super::numeric_edit::*;
 
@@ -156,7 +155,7 @@ pub struct Slider {
     /// Inline numeric editing state.
     edit: NumberEditState,
     /// Runtime-owned source for user-originated value changes.
-    changed_event: Rc<RefCell<crate::event::WidgetEventPort<SliderChanged>>>,
+    changed_event: crate::EventSource<SliderChanged>,
 }
 
 impl Slider {
@@ -265,7 +264,7 @@ impl Slider {
         value = clamp_slider_value(value, self.low, self.high);
         self.value = value;
         if last != value {
-            self.changed_event.borrow_mut().emit(SliderChanged { value });
+            self.changed_event.emit(SliderChanged { value });
         }
     }
 
@@ -329,7 +328,7 @@ impl TypedWidgetHandle<Slider> {
 
 impl crate::TypedWidget<SliderChanged> for Slider {
     fn event(&self) -> crate::WidgetEventPortHandle<SliderChanged> {
-        crate::WidgetEventPortHandle::new(&self.changed_event)
+        self.changed_event.event()
     }
 }
 
@@ -429,7 +428,7 @@ impl WidgetBuilder for SliderBuilder {
             low: parameters.low,
             high: parameters.high,
             edit: NumberEditState::default(),
-            changed_event: Rc::new(RefCell::new(crate::event::WidgetEventPort::new())),
+            changed_event: crate::EventSource::new(),
         }
     }
 }

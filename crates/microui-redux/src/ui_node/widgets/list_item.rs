@@ -35,7 +35,7 @@
 use crate::{ControlRole};
 
 use super::*;
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
 
 /// One-shot construction input for a [`ListItem`].
 pub struct ListItemParameters {
@@ -126,7 +126,7 @@ pub struct ListItem {
     /// Mutable label displayed for the item.
     label: String,
     /// Runtime-owned source for user submissions.
-    submitted_event: Rc<RefCell<crate::event::WidgetEventPort<ListItemSubmitted>>>,
+    submitted_event: Rc<crate::EventSource<ListItemSubmitted>>,
 }
 
 impl ListItem {
@@ -139,7 +139,7 @@ impl ListItem {
     /// Constructs a list item that emits through an enclosing list view's shared port.
     pub(crate) fn create_with_event_port(
         parameters: ListItemParameters,
-        submitted_event: Rc<RefCell<crate::event::WidgetEventPort<ListItemSubmitted>>>,
+        submitted_event: Rc<crate::EventSource<ListItemSubmitted>>,
     ) -> (TypedWidgetHandle<Self>, Node) {
         let widget = Self {
             icon: parameters.icon,
@@ -246,7 +246,7 @@ impl Widget for ListItem {
         }
         // Clone before emission so observers receive an immutable selection snapshot.
         let label = self.label.clone();
-        self.submitted_event.borrow_mut().emit(ListItemSubmitted { label });
+        self.submitted_event.emit(ListItemSubmitted { label });
     }
 
     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
@@ -260,7 +260,7 @@ impl Widget for ListItem {
 
 impl crate::TypedWidget<ListItemSubmitted> for ListItem {
     fn event(&self) -> crate::WidgetEventPortHandle<ListItemSubmitted> {
-        crate::WidgetEventPortHandle::new(&self.submitted_event)
+        self.submitted_event.event()
     }
 }
 
@@ -277,7 +277,7 @@ impl WidgetBuilder for ListItemBuilder {
             font: parameters.font,
             opt: parameters.opt,
             label: parameters.label,
-            submitted_event: Rc::new(RefCell::new(crate::event::WidgetEventPort::new())),
+            submitted_event: Rc::new(crate::EventSource::new()),
         }
     }
 }

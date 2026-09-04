@@ -39,14 +39,13 @@
 //! directory entries are converted lossily. Accepting a typed name is lexical: the dialog does not
 //! require the resulting path to exist or to identify a regular file.
 
-use std::{cell::RefCell, path::Path, rc::Rc};
+use std::{path::Path, rc::Rc};
 
 use crate::{
     Button, ButtonParameters, ButtonSubmitted, Context, IconRef, IconRole, Linear, LinearItem, LinearParameters, ListItem, ListItemParameters,
     ListItemSubmitted, Node, Recti, ScrollArea, ScrollAreaOption, ScrollAreaParameters, Textbox, TextboxParameters, TextboxSubmitted, TypedWidgetHandle, Ui,
     WidgetEventPortHandle, WidgetOption, Window, WindowEvent, WindowHandle, WindowOption,
 };
-use crate::event::WidgetEventPort;
 #[cfg(test)]
 use crate::ui_node::RuntimeNodeId;
 
@@ -212,7 +211,7 @@ pub struct FileDialog {
     /// Application-side semantic activation, synchronized with the hidden dialog window.
     active: bool,
     /// Component-owned terminal event source retained independently of any one activation.
-    completed: Rc<RefCell<WidgetEventPort<FileDialogCompleted>>>,
+    completed: crate::EventSource<FileDialogCompleted>,
     /// Non-owning stable capability and event projection for the Context-owned dialog window.
     window: WindowHandle,
     /// UTF-8 directory currently represented by the two retained list columns.
@@ -232,9 +231,9 @@ pub struct FileDialog {
     #[cfg_attr(not(test), allow(dead_code))]
     file_scroll: TypedWidgetHandle<ScrollArea>,
     /// Shared typed source used by every dynamically rebuilt folder row.
-    folder_item_port: Rc<RefCell<WidgetEventPort<ListItemSubmitted>>>,
+    folder_item_port: Rc<crate::EventSource<ListItemSubmitted>>,
     /// Shared typed source used by every dynamically rebuilt file row.
-    file_item_port: Rc<RefCell<WidgetEventPort<ListItemSubmitted>>>,
+    file_item_port: Rc<crate::EventSource<ListItemSubmitted>>,
     /// Weak handle for the editable directory path.
     path_box: TypedWidgetHandle<Textbox>,
     /// Weak handle for the accepted file name.
@@ -269,8 +268,8 @@ impl FileDialog {
         let current_working_directory = String::new();
         let folders = Vec::new();
         let files = Vec::new();
-        let folder_item_port = Rc::new(RefCell::new(WidgetEventPort::new()));
-        let file_item_port = Rc::new(RefCell::new(WidgetEventPort::new()));
+        let folder_item_port = Rc::new(crate::EventSource::new());
+        let file_item_port = Rc::new(crate::EventSource::new());
         let folder_rows = Self::make_folder_rows(&current_working_directory, &folders, &folder_item_port);
         let file_rows = Self::make_file_rows(&files, &file_item_port);
 
@@ -349,9 +348,9 @@ impl FileDialog {
             .expect("new file-dialog path event must be unsubscribed");
         ctx.subscribe_with(go_handle.submitted(), accessor, Self::dispatch_go::<State>)
             .expect("new file-dialog Go event must be unsubscribed");
-        ctx.subscribe_with(WidgetEventPortHandle::new(&folder_item_port), accessor, Self::dispatch_folder::<State>)
+        ctx.subscribe_with(folder_item_port.event(), accessor, Self::dispatch_folder::<State>)
             .expect("new file-dialog folder event must be unsubscribed");
-        ctx.subscribe_with(WidgetEventPortHandle::new(&file_item_port), accessor, Self::dispatch_file::<State>)
+        ctx.subscribe_with(file_item_port.event(), accessor, Self::dispatch_file::<State>)
             .expect("new file-dialog file event must be unsubscribed");
         ctx.subscribe_context_with(ok_handle.submitted(), accessor, Self::dispatch_accept::<State>)
             .expect("new file-dialog Open event must be unsubscribed");
@@ -362,7 +361,7 @@ impl FileDialog {
 
         Self {
             active: false,
-            completed: Rc::new(RefCell::new(WidgetEventPort::new())),
+            completed: crate::EventSource::new(),
             window,
             current_working_directory,
             folders,
@@ -415,7 +414,7 @@ impl FileDialog {
         }
     }
 
-    fn make_folder_rows(cwd: &str, folders: &[String], submitted_event: &Rc<RefCell<WidgetEventPort<ListItemSubmitted>>>) -> DialogRows {
+    fn make_folder_rows(cwd: &str, folders: &[String], submitted_event: &Rc<crate::EventSource<ListItemSubmitted>>) -> DialogRows {
         if folders.is_empty() {
             return DialogRows {
                 nodes: vec![Self::static_item("No folders")],
@@ -445,7 +444,7 @@ impl FileDialog {
         }
     }
 
-    fn make_file_rows(files: &[String], submitted_event: &Rc<RefCell<WidgetEventPort<ListItemSubmitted>>>) -> DialogRows {
+    fn make_file_rows(files: &[String], submitted_event: &Rc<crate::EventSource<ListItemSubmitted>>) -> DialogRows {
         if files.is_empty() {
             return DialogRows {
                 nodes: vec![Self::static_item("No files")],
@@ -498,7 +497,7 @@ impl FileDialog {
 
     /// Returns the completion source owned by this component.
     pub fn completed(&self) -> WidgetEventPortHandle<FileDialogCompleted> {
-        WidgetEventPortHandle::new(&self.completed)
+        self.completed.event()
     }
 
     /// Returns the retained dialog window used by this component.
@@ -706,7 +705,7 @@ impl FileDialog {
         // invariant violation rather than silently changing the component state twice.
         debug_assert!(self.active);
         self.active = false;
-        self.completed.borrow_mut().emit(FileDialogCompleted::new(completion));
+        self.completed.emit(FileDialogCompleted::new(completion));
     }
 
     /// Hides the modal surface before publishing one accepted or cancelled result.

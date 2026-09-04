@@ -36,7 +36,6 @@
 use crate::{ControlRole};
 
 use super::*;
-use std::{cell::RefCell, rc::Rc};
 
 #[derive(Clone)]
 /// Describes the content rendered inside a button widget.
@@ -160,7 +159,7 @@ pub struct Button {
     /// Initialization-only fill behavior.
     fill: WidgetFillOption,
     /// Runtime-owned source for user submissions.
-    submitted_event: Rc<RefCell<crate::event::WidgetEventPort<ButtonSubmitted>>>,
+    submitted_event: crate::EventSource<ButtonSubmitted>,
 }
 
 impl Button {
@@ -274,7 +273,7 @@ impl Widget for Button {
             return;
         }
         // Pointer click, Enter, and Space converge on the button's single typed submission port.
-        self.submitted_event.borrow_mut().emit(ButtonSubmitted);
+        self.submitted_event.emit(ButtonSubmitted);
     }
 
     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
@@ -290,7 +289,7 @@ impl Widget for Button {
 
 impl crate::TypedWidget<ButtonSubmitted> for Button {
     fn event(&self) -> crate::WidgetEventPortHandle<ButtonSubmitted> {
-        crate::WidgetEventPortHandle::new(&self.submitted_event)
+        self.submitted_event.event()
     }
 }
 
@@ -307,7 +306,7 @@ impl WidgetBuilder for ButtonBuilder {
             font: parameters.font,
             opt: parameters.opt,
             fill: parameters.fill,
-            submitted_event: Rc::new(RefCell::new(crate::event::WidgetEventPort::new())),
+            submitted_event: crate::EventSource::new(),
         }
     }
 }

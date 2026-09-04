@@ -35,8 +35,6 @@
 
 use crate::{ControlRole};
 
-use std::{cell::RefCell, rc::Rc};
-
 use super::*;
 use crate::{WidgetBuilder, WidgetParameters};
 
@@ -107,7 +105,7 @@ pub struct Checkbox {
     /// Current checked value.
     checked: bool,
     /// Runtime-owned source for user-originated value changes.
-    changed_event: Rc<RefCell<crate::event::WidgetEventPort<CheckboxChanged>>>,
+    changed_event: crate::EventSource<CheckboxChanged>,
 }
 
 impl Checkbox {
@@ -218,7 +216,7 @@ impl Widget for Checkbox {
         // Windows-style checkboxes toggle with Space; Enter remains available to a default button.
         self.checked = !self.checked;
         let checked = self.checked;
-        self.changed_event.borrow_mut().emit(CheckboxChanged { checked });
+        self.changed_event.emit(CheckboxChanged { checked });
     }
 
     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
@@ -232,7 +230,7 @@ impl Widget for Checkbox {
 
 impl crate::TypedWidget<CheckboxChanged> for Checkbox {
     fn event(&self) -> crate::WidgetEventPortHandle<CheckboxChanged> {
-        crate::WidgetEventPortHandle::new(&self.changed_event)
+        self.changed_event.event()
     }
 }
 
@@ -249,7 +247,7 @@ impl WidgetBuilder for CheckboxBuilder {
             font: parameters.font,
             opt: parameters.opt,
             checked: parameters.checked,
-            changed_event: Rc::new(RefCell::new(crate::event::WidgetEventPort::new())),
+            changed_event: crate::EventSource::new(),
         }
     }
 }

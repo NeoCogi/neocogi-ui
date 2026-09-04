@@ -35,7 +35,7 @@
 //! per-row widget subtree, interaction node, or three-cell presentation tree. Keyboard focus is the
 //! manager's active surface identity plus that container's selected direct-child slot.
 
-use std::{cell::RefCell, fmt, rc::Rc};
+use std::fmt;
 
 use crate::ui_node::widgets::content_height;
 use crate::math::RectExt;
@@ -229,7 +229,7 @@ pub(crate) struct MenuItemRecord {
     /// Mutable presentation and interaction values stored without a second mirror type.
     pub(crate) parameters: MenuItemParameters,
     /// Strong source of this item's independently subscribable typed event.
-    submitted_event: Rc<RefCell<crate::event::WidgetEventPort<MenuItemSubmitted>>>,
+    submitted_event: crate::EventSource<MenuItemSubmitted>,
 }
 
 /// Uniquely owned declaration value for one actionable menu row.
@@ -247,8 +247,8 @@ impl MenuItem {
         // Stable identity is a plain value; only the event queue is shared because subscriptions
         // are weak capabilities. The semantic record itself remains uniquely owned throughout.
         let id = MenuItemId::allocate();
-        let submitted_event = Rc::new(RefCell::new(crate::event::WidgetEventPort::new()));
-        let handle = MenuItemHandle::new(id, WidgetEventPortHandle::new(&submitted_event));
+        let submitted_event = crate::EventSource::new();
+        let handle = MenuItemHandle::new(id, submitted_event.event());
         let item = Self {
             record: MenuItemRecord { id, parameters, submitted_event },
         };
@@ -599,7 +599,7 @@ impl MenuSurface {
             MenuSlot::Item(item) if item.parameters.enabled => {
                 // Queue only the semantic event; WindowManager closes the complete path after this
                 // mutable surface borrow ends and before application dispatch begins.
-                item.submitted_event.borrow_mut().emit(MenuItemSubmitted);
+                item.submitted_event.emit(MenuItemSubmitted);
                 Some(MenuAction::SubmitAndClose)
             }
             MenuSlot::Item(_) | MenuSlot::Separator => None,
@@ -667,7 +667,7 @@ impl MenuSurface {
                 MenuSlot::Item(item) if item.parameters.enabled => {
                     // Emission only queues a typed value. Application code cannot run until the
                     // manager has consumed `SubmitAndClose` and released every surface borrow.
-                    item.submitted_event.borrow_mut().emit(MenuItemSubmitted);
+                    item.submitted_event.emit(MenuItemSubmitted);
                     Some(MenuAction::SubmitAndClose)
                 }
                 MenuSlot::Item(_) | MenuSlot::Separator => None,

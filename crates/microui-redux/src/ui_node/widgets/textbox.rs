@@ -60,7 +60,6 @@ use crate::{ControlRole};
 
 use crate::*;
 use crate::math::clamp_i64_to_i32;
-use std::{cell::RefCell, rc::Rc};
 
 use super::text_edit::{
     ReturnBehavior, apply_text_input, caret_rect, centered_line_top, clamp_cursor_boundary, cursor_from_text_x, font_line_metrics, normalize_single_line_text,
@@ -122,9 +121,9 @@ pub struct Textbox {
     /// Base widget options.
     opt: WidgetOption,
     /// Runtime-owned source for user-originated text changes.
-    changed_event: Rc<RefCell<crate::event::WidgetEventPort<TextboxChanged>>>,
+    changed_event: crate::EventSource<TextboxChanged>,
     /// Runtime-owned source for user submissions.
-    submitted_event: Rc<RefCell<crate::event::WidgetEventPort<TextboxSubmitted>>>,
+    submitted_event: crate::EventSource<TextboxSubmitted>,
 }
 
 impl Textbox {
@@ -273,10 +272,10 @@ impl Textbox {
         });
         let submitted = outcome.submitted.then(|| TextboxSubmitted { text: self.buf.clone() });
         if let Some(event) = changed {
-            self.changed_event.borrow_mut().emit(event);
+            self.changed_event.emit(event);
         }
         if let Some(event) = submitted {
-            self.submitted_event.borrow_mut().emit(event);
+            self.submitted_event.emit(event);
         }
     }
 
@@ -289,13 +288,13 @@ impl Textbox {
 
 impl crate::TypedWidget<TextboxChanged> for Textbox {
     fn event(&self) -> crate::WidgetEventPortHandle<TextboxChanged> {
-        crate::WidgetEventPortHandle::new(&self.changed_event)
+        self.changed_event.event()
     }
 }
 
 impl crate::TypedWidget<TextboxSubmitted> for Textbox {
     fn event(&self) -> crate::WidgetEventPortHandle<TextboxSubmitted> {
-        crate::WidgetEventPortHandle::new(&self.submitted_event)
+        self.submitted_event.event()
     }
 }
 
@@ -478,8 +477,8 @@ impl WidgetBuilder for TextboxBuilder {
             cursor,
             font: parameters.font,
             opt: parameters.opt,
-            changed_event: Rc::new(RefCell::new(crate::event::WidgetEventPort::new())),
-            submitted_event: Rc::new(RefCell::new(crate::event::WidgetEventPort::new())),
+            changed_event: crate::EventSource::new(),
+            submitted_event: crate::EventSource::new(),
         }
     }
 }

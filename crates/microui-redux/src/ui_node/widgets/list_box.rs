@@ -33,7 +33,6 @@
 use crate::{ControlRole};
 
 use super::*;
-use std::{cell::RefCell, rc::Rc};
 
 /// One-shot construction input for a [`ListBox`].
 pub struct ListBoxParameters {
@@ -101,7 +100,7 @@ pub struct ListBox {
     /// Base widget options.
     opt: WidgetOption,
     /// Runtime-owned source for user submissions.
-    submitted_event: Rc<RefCell<crate::event::WidgetEventPort<ListBoxSubmitted>>>,
+    submitted_event: crate::EventSource<ListBoxSubmitted>,
 }
 
 impl ListBox {
@@ -159,7 +158,7 @@ impl Widget for ListBox {
             return;
         }
         // Pointer and keyboard activation publish the same application-facing submission.
-        self.submitted_event.borrow_mut().emit(ListBoxSubmitted);
+        self.submitted_event.emit(ListBoxSubmitted);
     }
 
     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
@@ -173,7 +172,7 @@ impl Widget for ListBox {
 
 impl crate::TypedWidget<ListBoxSubmitted> for ListBox {
     fn event(&self) -> crate::WidgetEventPortHandle<ListBoxSubmitted> {
-        crate::WidgetEventPortHandle::new(&self.submitted_event)
+        self.submitted_event.event()
     }
 }
 
@@ -190,7 +189,7 @@ impl WidgetBuilder for ListBoxBuilder {
             image: parameters.image,
             font: parameters.font,
             opt: parameters.opt,
-            submitted_event: Rc::new(RefCell::new(crate::event::WidgetEventPort::new())),
+            submitted_event: crate::EventSource::new(),
         }
     }
 }

@@ -36,7 +36,6 @@
 use crate::{ControlRole};
 
 use super::*;
-use std::{cell::RefCell, rc::Rc};
 
 /// Compares rectangles structurally because the external geometry type does not implement equality.
 fn same_rect(left: Recti, right: Recti) -> bool {
@@ -100,9 +99,9 @@ pub struct Combo {
     /// Base widget options.
     opt: WidgetOption,
     /// Runtime-owned source for selection changes.
-    changed_event: Rc<RefCell<crate::event::WidgetEventPort<ComboChanged>>>,
+    changed_event: crate::EventSource<ComboChanged>,
     /// Runtime-owned source for header submissions.
-    submitted_event: Rc<RefCell<crate::event::WidgetEventPort<ComboSubmitted>>>,
+    submitted_event: crate::EventSource<ComboSubmitted>,
 }
 
 impl Combo {
@@ -182,14 +181,14 @@ impl Combo {
         if self.selected == previous_selected && self.label == previous_label {
             return;
         }
-        self.changed_event.borrow_mut().emit(ComboChanged {
+        self.changed_event.emit(ComboChanged {
             selected: self.selected,
             label: self.label.clone(),
         });
     }
 
     fn emit_changed(&mut self) {
-        self.changed_event.borrow_mut().emit(ComboChanged {
+        self.changed_event.emit(ComboChanged {
             selected: self.selected,
             label: self.label.clone(),
         });
@@ -328,7 +327,7 @@ impl Combo {
             None
         };
         if let Some(event) = submitted {
-            self.submitted_event.borrow_mut().emit(event);
+            self.submitted_event.emit(event);
         }
     }
 
@@ -357,13 +356,13 @@ impl Combo {
 
 impl crate::TypedWidget<ComboChanged> for Combo {
     fn event(&self) -> crate::WidgetEventPortHandle<ComboChanged> {
-        crate::WidgetEventPortHandle::new(&self.changed_event)
+        self.changed_event.event()
     }
 }
 
 impl crate::TypedWidget<ComboSubmitted> for Combo {
     fn event(&self) -> crate::WidgetEventPortHandle<ComboSubmitted> {
-        crate::WidgetEventPortHandle::new(&self.submitted_event)
+        self.submitted_event.event()
     }
 }
 
@@ -404,8 +403,8 @@ impl WidgetBuilder for ComboBuilder {
             label: String::new(),
             font: parameters.font,
             opt: parameters.opt,
-            changed_event: Rc::new(RefCell::new(crate::event::WidgetEventPort::new())),
-            submitted_event: Rc::new(RefCell::new(crate::event::WidgetEventPort::new())),
+            changed_event: crate::EventSource::new(),
+            submitted_event: crate::EventSource::new(),
         }
     }
 }

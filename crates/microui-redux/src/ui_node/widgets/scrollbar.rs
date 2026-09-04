@@ -56,8 +56,6 @@
 //! allocating the track. Shared geometry keeps paint, dragging, and track clicks consistent.
 use crate::{ControlRole};
 
-use std::{cell::RefCell, rc::Rc};
-
 use crate::math::{clamp_i64_to_i32, RectExt};
 use crate::{Dimensioni, MouseButton, Node, Recti, TypedWidgetHandle, UiInputEvent, Vec2i, Widget, WidgetOption, WidgetPaintCtx, WidgetParameters, WidgetUpdateCtx};
 
@@ -286,7 +284,7 @@ pub struct Scrollbar {
     content_len: i32,
     offset: i32,
     opt: WidgetOption,
-    changed_event: Rc<RefCell<crate::event::WidgetEventPort<ScrollbarChanged>>>,
+    changed_event: crate::EventSource<ScrollbarChanged>,
 }
 
 impl Scrollbar {
@@ -303,7 +301,7 @@ impl Scrollbar {
             content_len,
             offset: parameters.offset.clamp(0, maximum),
             opt: parameters.opt,
-            changed_event: Rc::new(RefCell::new(crate::event::WidgetEventPort::new())),
+            changed_event: crate::EventSource::new(),
         };
         Node::typed_widget(widget)
     }
@@ -403,7 +401,7 @@ impl crate::TypedWidget<ScrollbarChanged> for Scrollbar {
     /// Returns the runtime-owned event endpoint for user-originated offset changes.
     fn event(&self) -> crate::WidgetEventPortHandle<ScrollbarChanged> {
         // Clone only a weak view of the shared port; the retained scrollbar remains its sole owner.
-        crate::WidgetEventPortHandle::new(&self.changed_event)
+        self.changed_event.event()
     }
 }
 
@@ -450,7 +448,7 @@ impl Widget for Scrollbar {
         if self.offset != previous {
             // Publish only user-originated movement. Programmatic setters intentionally remain
             // silent so owners can synchronize range and offset without recursive notifications.
-            self.changed_event.borrow_mut().emit(ScrollbarChanged { offset: self.offset });
+            self.changed_event.emit(ScrollbarChanged { offset: self.offset });
         }
     }
 

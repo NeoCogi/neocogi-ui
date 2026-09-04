@@ -69,6 +69,50 @@ pub trait TypedWidget<E: WidgetEvent>: Widget {
     fn event(&self) -> WidgetEventPortHandle<E>;
 }
 
+/// Producer-owned queue for one concrete semantic event type.
+///
+/// Store this in a widget or application component and expose only [`Self::event`] to subscribers.
+/// Emission never invokes application code: Context delivers the owned payload after widget
+/// traversal releases its borrows. Events emitted without a subscription are discarded.
+///
+/// The source is deliberately not cloneable. Several internal controls belonging to one component
+/// may explicitly share an `Rc<EventSource<E>>`; ordinary widgets own the source directly. Neither
+/// its weak endpoint nor a subscription extends the producer's lifetime. Sources belong to the UI
+/// thread and are neither `Send` nor `Sync`.
+pub struct EventSource<E: WidgetEvent> {
+    /// Private queue ownership; neither callers nor subscribers can borrow or drain this storage.
+    port: Rc<RefCell<WidgetEventPort<E>>>,
+}
+
+impl<E: WidgetEvent> EventSource<E> {
+    /// Creates a source with no subscriber and no pending payload allocation.
+    pub fn new() -> Self {
+        Self {
+            port: Rc::new(RefCell::new(WidgetEventPort::new())),
+        }
+    }
+
+    /// Returns a weak, subscribable endpoint for this source without granting emission access.
+    pub fn event(&self) -> WidgetEventPortHandle<E> {
+        WidgetEventPortHandle::new(&self.port)
+    }
+
+    /// Queues an owned snapshot after the producer commits the state described by it.
+    ///
+    /// The short queue borrow ends here. Delivery occurs at Context's next dispatch boundary;
+    /// callers must not expect their subscribed application handler to have run on return.
+    pub fn emit(&self, event: E) {
+        self.port.borrow_mut().emit(event);
+    }
+}
+
+impl<E: WidgetEvent> Default for EventSource<E> {
+    /// Uses the same disconnected initial state as [`Self::new`].
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// One retained-producer-owned typed event queue and its connection state.
 ///
 /// The queue exists only in `Connected`, so "disconnected" and "connected but empty" remain
@@ -170,7 +214,7 @@ impl<W: Widget + 'static> crate::TypedWidgetHandle<W> {
     /// and the concrete widget borrow is released before the caller can subscribe. If the widget
     /// cell is currently unavailable or already dead, the result behaves as an expired event
     /// handle.
-    pub(crate) fn widget_event<E: WidgetEvent>(&self) -> WidgetEventPortHandle<E>
+    pub fn widget_event<E: WidgetEvent>(&self) -> WidgetEventPortHandle<E>
     where
         W: TypedWidget<E>,
     {

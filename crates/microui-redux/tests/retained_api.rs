@@ -146,6 +146,74 @@ fn context() -> Context<TestBackend> {
     context_with_state()
 }
 
+/// Downstream-only payload proves production needs no private event internals.
+struct ExternalEvent(u32);
+impl WidgetEvent for ExternalEvent {}
+
+/// Minimal custom widget owning the same concrete source as built-in controls.
+struct EventWidget {
+    /// Stable interaction policy for this non-interactive test producer.
+    options: WidgetOption,
+    /// Semantic event queue owned only by this widget.
+    events: EventSource<ExternalEvent>,
+}
+
+impl Widget for EventWidget {
+    /// Supplies runtime options independently of event production.
+    fn widget_opt(&self) -> &WidgetOption {
+        &self.options
+    }
+    /// This fixture emits through explicit widget mutations in the test below.
+    fn update(&mut self, _: &mut WidgetUpdateCtx<'_>, _: Option<&UiInputEvent>) {}
+    /// Event production does not require paint commands.
+    fn paint(&mut self, _: &mut WidgetPaintCtx<'_>) {}
+}
+
+impl LeafWidget for EventWidget {
+    /// A fixed size keeps this test independent of font and theme metrics.
+    fn measure(&self, _: &Skin, _: &AtlasHandle, _: Constraints) -> Dimensioni {
+        Dimensioni::new(10, 10)
+    }
+}
+
+impl TypedWidget<ExternalEvent> for EventWidget {
+    /// Projects subscription access without revealing queue ownership.
+    fn event(&self) -> WidgetEventPortHandle<ExternalEvent> {
+        self.events.event()
+    }
+}
+
+/// Exercises creation, projection, deferred delivery, exclusivity, and lifetime entirely downstream.
+#[test]
+fn downstream_custom_widget_uses_the_public_typed_event_source() {
+    let mut context = context_with_state::<Vec<u32>>();
+    let (widget, node) = Node::typed_widget(EventWidget {
+        options: WidgetOption::NONE,
+        events: EventSource::new(),
+    });
+    let endpoint = widget.widget_event::<ExternalEvent>();
+    // Before subscription, there is deliberately no history to replay.
+    widget.try_update(|widget| widget.events.emit(ExternalEvent(0))).unwrap();
+    context.subscribe(endpoint.clone(), |values, event| values.push(event.0)).unwrap();
+    assert_eq!(context.subscribe(endpoint.clone(), |_, _| {}), Err(SubscribeError::AlreadySubscribed));
+    widget
+        .try_update(|widget| {
+            widget.events.emit(ExternalEvent(1));
+            widget.events.emit(ExternalEvent(2));
+        })
+        .unwrap();
+    let mut values = Vec::new();
+    assert!(values.is_empty());
+    context.update_ui_state(Dimensioni::new(100, 100), &mut values);
+    assert_eq!(values, [1, 2]);
+    // A subscription and cloned endpoint cannot keep a removed producer alive.
+    drop(node);
+    assert!(!endpoint.is_alive());
+    assert!(!widget.widget_event::<ExternalEvent>().is_alive());
+    context.update_ui_state(Dimensioni::new(100, 100), &mut values);
+    assert_eq!(values, [1, 2]);
+}
+
 /// Verifies external code reads and replaces visuals through the typed control family.
 #[test]
 fn downstream_skin_visuals_are_concrete_and_exhaustive() {

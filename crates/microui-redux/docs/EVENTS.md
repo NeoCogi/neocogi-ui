@@ -10,7 +10,7 @@ methods on one application state value. Its central rule remains deliberately na
 
 There is no public event bus, application-wide message enum, global queue, multicast list,
 payload downcast, or public standalone dispatcher lifetime. The public surface consists of event
-payload types, weak [`WidgetEventPortHandle`] values, state-only [`crate::Context::subscribe`] methods,
+payload types, producer-owned [`EventSource`] values, weak [`WidgetEventPortHandle`] values, state-only [`crate::Context::subscribe`] methods,
 and opt-in context-aware [`crate::Context::subscribe_context`] methods. Context owns the
 application widget-event dispatcher.
 
@@ -60,7 +60,7 @@ Context<B, State>
 │
 ├── owns SurfaceForest
 │      ├── SurfaceNode(Independent/Child Window or Dialog) ── SurfaceBody::Widgets
-│      │      └── concrete Widget owns Rc<RefCell<WidgetEventPort<E>>>
+│      │      └── concrete Widget owns EventSource<E>
 │      ├── SurfaceNode(Application Popup) ── SurfaceBody::Widgets
 │      └── SurfaceNode(Menu Popup) ── SurfaceBody::Menu
 │             └── sole parent edge points to its owning surface
@@ -79,7 +79,7 @@ Application State
 └── owns FileDialog
        ├── holds a non-owning WindowHandle { stable ID, weak events }
        ├── owns shared dynamic-row event ports
-       └── owns WidgetEventPort<FileDialogCompleted>
+       └── owns EventSource<FileDialogCompleted>
 ```
 
 The only strong event-port owner is its retained producer. Consequently:
@@ -511,3 +511,41 @@ fn install_file_dialog<B: RendererBackend>(
 Accepted, in-dialog cancelled, title-closed, and explicitly cancelled activations each publish one
 terminal `FileDialogCompleted` event at a safe dispatch boundary. `FileDialog::is_open` reports the
 component's current activation without any frame-time polling requirement.
+
+## Writing an event producer
+
+Custom widgets and built-in widgets use the same public `EventSource<E>`. Define an owned payload,
+implement `WidgetEvent`, store the source in the producer, and expose its weak endpoint. Do not
+expose the source itself to application consumers: possession grants permission to emit.
+
+```rust
+use microui_redux::{EventSource, WidgetEvent, WidgetEventPortHandle};
+
+/// Owned snapshot of one completed component operation.
+struct Completed { value: String }
+impl WidgetEvent for Completed {}
+
+/// Application-owned component with its own typed completion queue.
+struct Component { completed: EventSource<Completed> }
+impl Component {
+    /// Exposes subscription access without giving callers the producer.
+    fn completed(&self) -> WidgetEventPortHandle<Completed> { self.completed.event() }
+    /// Commits a completed result and queues its snapshot for the next dispatch boundary.
+    fn finish(&mut self, value: String) { self.completed.emit(Completed { value }); }
+}
+```
+
+A retained widget additionally implements `TypedWidget<E>::event` by returning `self.source.event()`.
+Its application handle can then call `handle.widget_event::<E>()`; no built-in extension method,
+downcast, public queue, or access to a `RefCell` is necessary. A widget with several event types
+implements `TypedWidget` separately for each payload. Named accessors such as `changed()` are
+optional conveniences over that same projection.
+
+The producer author must emit **after** committing the state represented by the payload, provide
+an owned snapshot rather than a reference into mutable widget storage, and avoid emitting ordinary
+user-change events from programmatic setters. The application author must subscribe before the
+activity they wish to observe, keep the producer alive until ordinary queued events are delivered,
+and combine multiple consequences in the source's single handler. Emission is deferred and has no
+global ordering across sources. Sharing a source between several private controls is an explicit
+component ownership decision, for example `Rc<EventSource<RowSubmitted>>`; weak subscriber handles
+never acquire that ownership.

@@ -30,7 +30,7 @@
 
 //! Concrete retained surface ownership and cross-surface traversal policy.
 
-use std::{cell::RefCell, fmt, rc::Rc};
+use std::fmt;
 
 use super::*;
 use crate::menu::{MenuAction, MenuEntry, MenuSlot, MenuSurface};
@@ -616,7 +616,7 @@ struct RootState {
     /// Expanded outer height retained while the minimize button shows a compact window.
     unminimized_height: Option<i32>,
     /// Strong owner of the unified window geometry/lifecycle event stream.
-    events: Rc<RefCell<crate::event::WidgetEventPort<WindowEvent>>>,
+    events: crate::EventSource<WindowEvent>,
     /// Optional concrete menu bar laid out above the application widget body.
     menu_bar: Option<MenuSurface>,
     /// Descendant viewport policy applied when layout enters direct structural child windows.
@@ -643,7 +643,7 @@ enum PopupState {
         /// Exact screen rectangle supplied by the public popup API.
         anchor: Recti,
         /// Strong owner of policy-driven popup lifecycle events.
-        events: Rc<RefCell<crate::event::WidgetEventPort<PopupEvent>>>,
+        events: crate::EventSource<PopupEvent>,
         /// Whether the next committed layout must select this popup's first keyboard target.
         focus_on_layout: bool,
     },
@@ -839,7 +839,7 @@ impl SurfaceNode {
     fn emit_window_event(&mut self, event: WindowEvent) {
         // The strong port shares the window node's exact lifetime, while subscribers carry only a
         // weak capability and cannot emit into this queue themselves.
-        self.root().expect("window events are emitted only by roots").events.borrow_mut().emit(event);
+        self.root().expect("window events are emitted only by roots").events.emit(event);
     }
 
     /// Dismisses an active popup and emits exactly one policy event.
@@ -848,7 +848,7 @@ impl SurfaceNode {
         self.surface.body.clear_transient_targets();
         if let Some(PopupState::Application { events, .. }) = self.popup() {
             // Menu popups have no unobservable lifecycle port; their visibility is wholly internal.
-            events.borrow_mut().emit(PopupEvent::Dismissed);
+            events.emit(PopupEvent::Dismissed);
         }
     }
 
@@ -1358,8 +1358,8 @@ impl WindowManager {
         // Identity and event delivery are allocated separately, then paired once in the returned
         // application handle. The forest owns the same ID and the only strong event endpoint.
         let id = RootId::allocate();
-        let events = Rc::new(RefCell::new(crate::event::WidgetEventPort::new()));
-        let event_handle = crate::WidgetEventPortHandle::new(&events);
+        let events = crate::EventSource::new();
+        let event_handle = events.event();
         self.surfaces.insert_root(SurfaceNode {
             key: SurfaceKey::Root(id),
             parent: parent.map(SurfaceKey::Root),
@@ -1458,8 +1458,8 @@ impl WindowManager {
         let id = PopupId::allocate();
         // The forest node retains the strong lifecycle port while the application handle combines
         // an independent stable ID with a weak endpoint for the same registered popup.
-        let events = Rc::new(RefCell::new(crate::event::WidgetEventPort::new()));
-        let event_handle = crate::WidgetEventPortHandle::new(&events);
+        let events = crate::EventSource::new();
+        let event_handle = events.event();
         self.surfaces.insert_popup(SurfaceNode {
             key: SurfaceKey::Popup(id),
             parent: Some(parent),
