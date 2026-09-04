@@ -34,7 +34,7 @@ InputRouter routes input to one retained node
 Widget::update mutates widget state and may emit WidgetEvent
         │
         v
-WidgetEventDispatcher invokes the subscribed application-state method
+WidgetEventDispatcher invokes the typed callback with State, Ui, and the event
 ```
 
 Each retained `UiRuntime` owns one `InputRouter`, but routing state is no longer mixed into the

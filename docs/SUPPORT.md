@@ -1,6 +1,6 @@
 # Support and compatibility
 
-`microui-redux` is pre-1.0 and currently intended for experimentation and early integration. This
+`microui-redux` is pre-alpha and currently intended for experimentation and early integration. This
 page records what downstream users can rely on without implying guarantees the project does not yet
 make.
 
@@ -18,17 +18,18 @@ device, or event loop. Those responsibilities belong to the application through
 
 The repository includes SDL-based Glow, Vulkan, and WGPU integrations as native executable
 examples, plus a `web-sys` WebGL 2 integration for an HTML canvas. The automated project
-workflow runs native checks on Linux and builds the browser demo for GitHub Pages. Windows and
+workflows test isolated core features, check each native backend on Linux, and build/test the
+browser host on pull requests. Publishing to GitHub Pages is a separate trusted deployment. Windows and
 macOS portability are intended, but they are not currently a CI-backed platform guarantee. Treat
 the example integrations as reference code to adapt to an application's own renderer and
 lifecycle.
 
 ## API compatibility
 
-Pre-1.0 minor releases may make breaking API and data-format changes. The project favors a smaller,
-consistent API over compatibility layers, so downstream applications should review the
-[changelog](CHANGELOG.md) before upgrading. Patch releases should remain focused on compatible fixes,
-but no formal long-term-support branch exists.
+During pre-alpha, APIs and data formats may change whenever a simpler, consistent design warrants
+it. There is no compatibility or long-term-support commitment. Pin the checkout revision used by
+your application and review the [changelog](CHANGELOG.md) before upgrading. The manifest version
+is not a promise that the unreleased checkout matches a published package.
 
 ## Reporting a problem
 

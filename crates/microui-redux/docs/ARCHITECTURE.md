@@ -11,7 +11,7 @@
 - **Container**: the generic retained branch owner. It stores one erased concrete `ContainerWidget` and one authoritative opaque `Children` collection. The concrete widget owns semantic state, configuration, event ports, and layout policy; only the generic container owns children strongly.
 - **Layout engine + flows**: parent container widgets measure and assign child rectangles through scoped child-aware APIs and `ContainerLayoutCtx`. Linear, Grid, and Disclosure expose their layout configuration and topology through `TypedWidgetHandle<W>`; ScrollArea accepts one arbitrary content node and owns only viewport state.
 - **Widget**: the common update/paint contract. A leaf additionally implements `LeafWidget` for intrinsic measurement; a branch implements `ContainerWidget` for child-aware measurement and placement. Concrete widgets combine semantic values, interaction state, native event ports, and runtime phases; `*Parameters` are only one-shot initialization.
-- **Node**: the non-cloneable owner of one concrete leaf or container runtime. Leaf storage is erased to `Rc<RefCell<dyn LeafWidget>>`; container storage erases to `Rc<RefCell<dyn ContainerWidget>>`. Applications and coordinating widgets may retain a weak `TypedWidgetHandle<W>` without affecting node lifetime. A `Node` receives private process-unique identity when constructed and transfers exactly once into a window, an application popup, or an opaque `Children` collection; attached nodes cannot be detached or reparented.
+- **Node**: the non-cloneable owner of one concrete leaf or container runtime. Each allocation wraps the concrete widget in private `WidgetStorage<W>`, which carries its measurement dirty marker; only the widget role is erased at the leaf/container boundary. Applications and coordinating widgets may retain a weak `TypedWidgetHandle<W>` without affecting node lifetime. A `Node` receives private process-unique identity when constructed and transfers exactly once into a window, an application popup, or an opaque `Children` collection; attached nodes cannot be detached or reparented.
 - **Rendering**: widgets obtain a local `Painter` from `WidgetPaintCtx`; retained traversal owns the internal display list, and Context's private executor submits it through one exclusively borrowed `RendererBackend::Frame`. The portable target supports drawables up to 8192x8192 and geometry up to four maximum drawable spans beyond the viewport; see the [render subsystem guide](RENDER.md#supported-coordinate-domain) for the complete coordinate contract and integration API.
 - **Typography**: atlases can bake multiple named fonts and sizes. `Skin` resolves semantic roles
   (`body`, `small`, `title`, `heading`, `mono`) through stable `FontRef` values, while text-bearing
@@ -91,8 +91,8 @@ state's weak topology capability, or destroy and recreate the window.
 ### Concrete surface forest and parent edges
 
 `Context` owns one private `SurfaceForest`. Its single `Vec<SurfaceNode>` retains independent and
-child windows, dialogs, application popups, and menu popups; no parallel `WindowEntry` registry,
-child list, or popup-owner adapter exists. Each node combines common screen-space geometry with a
+child windows, dialogs, application popups, and menu popups. The key index and child adjacency
+described below are derived access data and never own additional surfaces. Each node combines common screen-space geometry with a
 concrete role:
 
 - a window or dialog owns one application `Node` and its `UiRuntime`, window policy, the unified
@@ -108,7 +108,7 @@ existing leaf/container boundary inside `Node`; that is independent of surface o
 Every forest node has at most one parent edge. An independent window has none; a structural child
 or dialog points to its ordinary owner; a top-level popup points to a window or dialog; and a
 submenu menu surface points to its direct popup parent. Following edges derives both the top-level
-family and popup owner without another relationship table. The restricted constructors admit only
+family and popup owner, whose derived lookup entries are rebuilt when policy changes. The restricted constructors admit only
 ordinary child-window nesting and directly owned modal dialogs: there is no reparenting, nested
 dialog ownership, or public subpopup-registration API. Destroying a window recursively destroys
 every child window, dialog, and popup below it. Hiding a parent removes its complete family from
@@ -413,7 +413,12 @@ Registered windows can be configured with `Ui::set_window_options(&window, ...)`
 `TypedWidgetHandle<ScrollArea>` for offset changes. The content may be any leaf or container. It
 fills at least the viewport width and keeps its desired height; explicit descendant relationships
 remain in the content container.
-Every retained node caches preferred measurements and placement across layout passes. A geometry
-change clears that node and its weakly linked ancestor caches, while topology operations do this
-automatically. Ordinary traversal rejects nodes whose retained rectangles do not intersect the
-inherited viewport, regardless of which container owns them.
+Every retained node caches preferred measurements and placement across layout passes. Widget
+`Change::Changed`, checked handle mutation, and child edits record local invalidation. Before
+measurement, synchronization walks the authoritative tree, consumes local dirty markers, and
+invalidates dependent ancestor caches on its return path. There are no weak parent-cache links.
+New constraints and installed skin revisions independently determine cache reuse. Custom
+containers receive a weak `ChildrenHandle` through `bind_children`; their authors coordinate
+per-child metadata and permitted mutation phases as described in the [widget guide](WIDGETS.md).
+Ordinary traversal rejects nodes whose retained rectangles do not intersect the inherited viewport,
+regardless of which container owns them.

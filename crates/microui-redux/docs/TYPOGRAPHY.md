@@ -51,11 +51,18 @@ metrics, the mandatory underscore entries, every glyph/icon rectangle, and the o
 before returning a handle. `Skin::from_atlas` and `SkinBundle::new` enforce the standard UI's
 semantic font/icon naming policy and validate that image visuals belong to the paired atlas.
 
-`FontId` and `IconId` are opaque capabilities scoped to one runtime atlas allocation. Cloning an
-`AtlasHandle` preserves their owner, while loading identical source metadata again creates a
-different owner. A renderer rejects foreign font and icon IDs during display-list preflight.
-Retained widget state stores `FontRef` and `IconRef` instead; they resolve through the active bundle
-when measurement or paint needs the short-lived capability.
+`FontId` and `IconId` identify logical resources, independently of atlas allocation or table position.
+Cloning an `AtlasHandle` retains those IDs. A builder derived from an existing atlas preserves IDs
+when copying or replacing its named resources; independently loading even identical serialized
+metadata allocates different IDs. A display list is valid only if the installed atlas contains its
+exact IDs, and preflight rejects absent IDs before issuing draws.
+
+Retained `FontRef` and `IconRef` values choose semantic roles or explicit catalog IDs. Semantic
+roles resolve through the active skin; named catalog references keep the checked logical ID instead
+of repeating a name lookup at every measurement. `Context::set_theme` rejects bundles missing any
+application catalog font or icon before asking the backend to upload. Applications retaining
+references to theme-private artwork must replace those references with the theme that owns them.
+See the [theme replacement contract](THEMES.md) for that author responsibility.
 
 ```rust
 # #[cfg(feature = "builder")]

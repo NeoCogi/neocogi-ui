@@ -4,7 +4,7 @@
 - `png_source` – accepts static PNG-compressed serialized atlases and `ImageSource::Png { .. }`; pixels are decoded to RGBA and pass the same strict atlas validation as raw sources before a handle is returned. Animated PNGs are rejected.
 - `theme-json` *(default)* – enables strict versioned JSON theme loading and relative per-state
   image patches. It includes `builder` and `png_source`; repeated references to one resolved image
-  path share one Context-owned texture upload.
+  path share one region in the completed theme atlas and use the ordinary atlas draw batch.
 - `save-to-rust` *(default)* – enables `AtlasHandle::to_rust_files` to emit the current atlas as Rust code for embedding.
 
 Disabling default features leaves only the raw RGBA upload path (`ImageSource::Raw { .. }`):

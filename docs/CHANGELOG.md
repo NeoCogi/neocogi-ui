@@ -17,8 +17,15 @@ and compatibility layers were removed.
   mutations.
 - `WidgetEventPortHandle<E>` connects through one typed `subscribe(port, callback)` API; callbacks
   receive application state, `Ui`, and the concrete event after retained widget borrows end.
-- `FileDialog` is now a reusable, application-owned component whose completion is delivered through
-  the same typed event dispatcher.
+- `Widget::update` reports `Change::Changed` or `NoChange` for geometry inputs. Context updates
+  automatically commit layout; shared state, update eligibility/order, and observational painting
+  remain explicit widget/application author responsibilities.
+- Custom containers receive an opaque weak `ChildrenHandle` through `bind_children`. Checked edits
+  preserve rejected owners and automatically invalidate geometry. Standalone widgets implement
+  `From<Parameters>`; redundant builder marker traits and stateless builders were removed.
+- `FileDialog` is an application-owned component with native-path requests/results and typed
+  completion. Directory reads are transactional and fallible; hidden or destroyed dialog surfaces
+  settle pending requests through the same event dispatcher.
 
 ### Surfaces, menus, and input
 
@@ -33,12 +40,25 @@ and compatibility layers were removed.
   marks.
 - Logical key events, persistent focus, wrapping Tab traversal, Ctrl+F6 window cycling, popup Escape
   handling, and F10/Alt menu navigation now share one backend-neutral keyboard contract.
+- Forest key lookup, child adjacency, inherited policy, and visibility are derived from its single
+  authoritative node vector. Normal geometry phases reuse that projection instead of rescanning
+  ancestry and all potential children for each surface.
+- Native/browser hosts forward explicit cancellation and committed text. Browser wheel units,
+  button chords, pointer capture, and composition use one owned input bridge with documented limits.
 
 ### Rendering, themes, and widgets
 
 - `Painter` records backend-neutral work into a display list. `RendererBackend::Frame<'a>` provides
   one exclusive submission frame, and typed custom-render callbacks receive that selected frame
   directly.
+- `RendererFrame::finish` explicitly returns recording/submission/presentation errors; dropping a
+  frame abandons pending work. Native surface backends retain their SDL window owner.
+- Glow drawing shares UI state restoration and upload preparation. WGPU validates device texture
+  limits and resolves error scopes before replacing retained resources. Vulkan uses Ash's native
+  constructors directly, and unused renderer code no longer hides behind blanket warnings.
+- Skin installation requires all application catalog IDs in the candidate atlas; compatible
+  derivation preserves IDs across allocation changes. Slider setters stay silent and do not snap
+  programmatic values during later eventless updates.
 - `ContextFrame::render_ui` is paint-only and rejects missing, stale, or dimension-mismatched UI
   commits before acquiring a backend frame.
 - `Skin` provides typed role/state visuals, stable font and icon references, configurable window
@@ -47,8 +67,8 @@ and compatibility layers were removed.
 - A WebGL 2 canvas renderer, browser-native animation loop, local build/server script, and GitHub Pages
   workflow make the complete demo available in the browser.
 - Public retained scrolling now includes `Scrollbar`, `ScrollArea`, and a scrollable `TextArea`.
-- Atlas configuration supports semantic font roles and named variants in runtime-built, generated,
-  and external atlas forms.
+- Demo atlases use one recipe for runtime construction, normal Cargo host generation, and export.
+  The stale external-atlas metadata path and nested Cargo build were removed.
 - The examples and guides were updated for the 0.8 contracts. Standalone guides now participate in
   doctesting, with complete Rust examples compiled during documentation tests.
 

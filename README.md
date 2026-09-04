@@ -8,8 +8,8 @@ retain typed weak handles for later access, and register windows, dialogs, popup
 `Context`. Ordered input and typed widget events update that retained state; painting records a
 backend-neutral display list for the application's `RendererBackend`.
 
-> **Development status:** `0.8.0` is the current crate version. The crate remains pre-1.0,
-> so APIs may continue to evolve in later minor releases.
+> **Development status:** this checkout is pre-alpha. Its manifests use `0.8.0`, which is
+> marked unreleased in the changelog. APIs and data formats may change without compatibility layers.
 
 Compared with [microui-rs](https://github.com/neocogi/microui-rs), this crate embraces standard
 library types, reusable retained trees, and richer widgets such as custom rendering callbacks,
@@ -21,11 +21,12 @@ dialogs, and a file dialog.
 
 ## Getting started
 
-Use the current pre-1.0 release:
+To use the API documented in this checkout, clone the repository and point your application at
+the local core package. For an application beside the checkout:
 
 ```toml
 [dependencies]
-microui-redux = "0.8.0"
+microui-redux = { path = "../microui-redux/crates/microui-redux" }
 ```
 
 `microui-redux` does not create a native window or graphics device. Applications provide a
@@ -89,7 +90,10 @@ fn draw<B: RendererBackend>(
 ```
 
 Contexts with application state use `update_ui_state` instead. Call the same update method after
-every programmatic widget mutation before depending on its result. The complete
+every programmatic widget mutation before depending on its result. Custom widgets return
+`Change::Changed` when update changes measurement or placement inputs; updates commit geometry
+automatically. See the [widget author contract](crates/microui-redux/docs/WIDGETS.md#reporting-geometry-changes-during-update)
+for external-state, visibility, ordering, and paint responsibilities. The complete
 [`simple` demo](demos/basic/src/bin/simple.rs) supplies SDL windowing, input translation, atlas setup, and a
 selectable example renderer.
 
@@ -104,7 +108,8 @@ points are [built-in widgets](crates/microui-redux/docs/WIDGETS.md), [typed even
 Applications normally import `microui_redux::prelude`; `microui_redux::retained` is available for
 explicit imports of the retained core. Backend contracts live under `microui_redux::render`, atlas
 construction lives under `microui_redux::atlas::builder`, and the complete generated API reference
-is available on [docs.rs](https://docs.rs/microui-redux).
+for published releases is available on [docs.rs](https://docs.rs/microui-redux). Build the reference
+for this checkout with `cargo doc -p microui-redux --no-deps --open`.
 
 ## License
 
