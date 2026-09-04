@@ -358,10 +358,15 @@ where
 /// measurement. Content and Fixed overflow remain visible, and every geometry accumulation uses
 /// saturating arithmetic.
 pub struct Linear {
+    /// Weak topology capability supplied by generic container construction.
     children: ChildrenHandle,
+    /// One relationship specification per owned child, in the same order.
     specs: Vec<LinearItemSpec>,
+    /// Main axis and placement order.
     direction: LinearDirection,
+    /// Shared cross-axis sizing policy.
     cross_size: LinearCrossSize,
+    /// Reusable placement extents invalidated by topology or track edits.
     resolved_main: Vec<i32>,
 }
 
@@ -381,7 +386,7 @@ impl Linear {
         let (children, specs) = collect_items(parameters.items);
         let children = Rc::new(RefCell::new(children));
         let widget = Self {
-            children: ChildrenHandle::new(&children),
+            children: ChildrenHandle::default(),
             specs,
             direction: parameters.direction,
             cross_size: parameters.cross_size,
@@ -805,6 +810,11 @@ fn measure_layout_child(
 }
 
 impl ContainerWidget for Linear {
+    /// Uses the same construction hook available to downstream mutable containers.
+    fn bind_children(&mut self, children: ChildrenHandle) {
+        self.children = children;
+    }
+
     fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: Constraints) -> Dimensioni {
         // Route the public widget contract through the scalar immutable pass; placement scratch is
         // intentionally unavailable through this shared reference.

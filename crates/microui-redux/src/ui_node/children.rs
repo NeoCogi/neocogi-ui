@@ -42,12 +42,24 @@ use super::Node;
 /// [`crate::ContainerLayoutCtx`] provides scoped geometry operations without weakening those
 /// ownership rules.
 pub struct Children {
+    /// Unique mounted owners, available only to framework traversal.
     pub(super) nodes: Vec<Node>,
+    /// Topology edits invalidate cached geometry even when widget update returns `NoChange`.
+    pub(super) measurement_dirty: bool,
 }
 
-/// Crate-private weak access used by built-in mutable container state.
-#[derive(Clone)]
-pub(crate) struct ChildrenHandle {
+/// Weak, opaque capability for editing a container's ordered children.
+///
+/// [`crate::ContainerWidget::bind_children`] supplies this handle during construction. Keeping or
+/// cloning it never keeps a removed subtree alive. Edits fail during traversal or after destruction;
+/// ownership-taking failures return the original input, and successful edits invalidate geometry.
+///
+/// Keep the handle private when the container has per-child layout metadata. Update that metadata
+/// only after a successful edit, before returning control to the runtime. A default handle is
+/// unbound and rejects edits. Attached nodes can never be borrowed, detached, or reparented.
+#[derive(Clone, Default)]
+pub struct ChildrenHandle {
+    /// The generic container remains the sole persistent owner of this collection.
     cell: Weak<RefCell<Children>>,
 }
 
@@ -73,11 +85,15 @@ impl ChildrenHandle {
         let Ok(mut children) = owner.try_borrow_mut() else {
             return Err(input);
         };
-        Ok(f(&mut children, input))
+        let result = f(&mut children, input);
+        // The closure may replace the complete Children value; mark the final installed collection.
+        // A rejected index can conservatively invalidate too, without risking stale geometry.
+        children.measurement_dirty = true;
+        Ok(result)
     }
 
     /// Reports the current child count, or `None` when storage is unavailable.
-    pub(crate) fn len(&self) -> Option<usize> {
+    pub fn len(&self) -> Option<usize> {
         // Read access is checked because update and paint traversal may hold a mutable collection
         // borrow while visiting descendants.
         let owner = self.cell.upgrade()?;
@@ -86,52 +102,39 @@ impl ChildrenHandle {
     }
 
     /// Reports whether the collection is empty, or `None` when storage is unavailable.
-    pub(crate) fn is_empty(&self) -> Option<bool> {
+    pub fn is_empty(&self) -> Option<bool> {
         // Reuse `len` so liveness and borrow-conflict behavior has one implementation.
         self.len().map(|len| len == 0)
     }
 
-    /// Appends an unmounted node or returns it unchanged when mutation is unavailable.
-    #[cfg(test)]
-    #[allow(clippy::result_large_err)] // Failure deliberately returns the unique node owner unchanged.
-    pub(crate) fn try_push(&self, node: Node) -> Result<(), Node> {
-        // Upgrade and borrow before consuming the node so failure preserves its unique ownership.
-        let Some(owner) = self.cell.upgrade() else {
-            return Err(node);
-        };
-        let Ok(mut children) = owner.try_borrow_mut() else {
-            return Err(node);
-        };
-        children.push(node);
-        Ok(())
+    /// Appends one unmounted node, returning the exact owner when access is unavailable.
+    #[allow(clippy::result_large_err)] // Ownership-transfer failures must preserve the unboxed node.
+    pub fn try_push(&self, node: Node) -> Result<(), Node> {
+        self.try_update_with(node, Children::push)
     }
 
-    /// Drops every child, returning `None` when mutation is unavailable.
-    #[cfg(test)]
-    pub(crate) fn try_clear(&self) -> Option<()> {
-        // Clearing keeps the collection allocation and weak-handle identity stable.
-        let owner = self.cell.upgrade()?;
-        let mut children = owner.try_borrow_mut().ok()?;
-        children.clear();
-        Some(())
+    /// Inserts at `index`; unavailable access or an index greater than `len` returns the node.
+    #[allow(clippy::result_large_err)] // Same unique-owner contract as append.
+    pub fn try_insert(&self, index: usize, node: Node) -> Result<(), Node> {
+        self.try_update_with(node, |children, node| children.insert(index, node))?
     }
 
-    /// Replaces every child or returns the unconsumed iterator when mutation is unavailable.
-    #[cfg(test)]
-    pub(crate) fn try_replace<I>(&self, nodes: I) -> Result<(), I>
-    where
-        I: IntoIterator<Item = Node>,
-    {
-        // Acquire the collection before advancing `nodes`; this preserves every unique node on
-        // failure even when the caller supplied a lazy iterator.
-        let Some(owner) = self.cell.upgrade() else {
-            return Err(nodes);
-        };
-        let Ok(mut children) = owner.try_borrow_mut() else {
-            return Err(nodes);
-        };
-        children.replace(nodes);
-        Ok(())
+    /// Drops one indexed subtree; `None` means unavailable, `Some(false)` means no such index.
+    pub fn try_remove_drop(&self, index: usize) -> Option<bool> {
+        self.try_update_with(index, Children::remove_drop).ok()
+    }
+
+    /// Drops all child owners, or returns `None` when access is unavailable.
+    pub fn try_clear(&self) -> Option<()> {
+        self.try_update_with((), |children, ()| children.clear()).ok()
+    }
+
+    /// Replaces all children, returning the unconsumed iterator when access is unavailable.
+    ///
+    /// Collection happens only after acquiring exclusive access. The replacement is collected
+    /// before old owners are dropped, so iterator panics leave the installed children intact.
+    pub fn try_replace<I: IntoIterator<Item = Node>>(&self, nodes: I) -> Result<(), I> {
+        self.try_update_with(nodes, Children::replace)
     }
 }
 
@@ -139,7 +142,10 @@ impl Children {
     /// Creates an empty child collection.
     pub const fn new() -> Self {
         // No backing allocation is created until the first node is inserted.
-        Self { nodes: Vec::new() }
+        Self {
+            nodes: Vec::new(),
+            measurement_dirty: false,
+        }
     }
 
     /// Returns the number of owned child nodes.
@@ -188,7 +194,6 @@ impl Children {
     }
 
     /// Replaces all children in iterator order, dropping the previous owners.
-    #[cfg(test)]
     pub(crate) fn replace(&mut self, nodes: impl IntoIterator<Item = Node>) {
         // Collect the replacement sequence once, then drop the previous vector and its subtrees.
         let nodes: Vec<_> = nodes.into_iter().collect();
@@ -224,7 +229,10 @@ impl Default for Children {
 
 impl FromIterator<Node> for Children {
     fn from_iter<T: IntoIterator<Item = Node>>(iter: T) -> Self {
-        Self { nodes: iter.into_iter().collect() }
+        Self {
+            nodes: iter.into_iter().collect(),
+            measurement_dirty: false,
+        }
     }
 }
 

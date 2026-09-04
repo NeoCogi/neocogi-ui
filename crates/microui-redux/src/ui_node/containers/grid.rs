@@ -448,7 +448,7 @@ impl Grid {
         items.set_columns(parameters.column_tracks.len());
         let children = Rc::new(RefCell::new(parameters.children));
         let widget = Self {
-            children: ChildrenHandle::new(&children),
+            children: ChildrenHandle::default(),
             items,
             column_tracks: parameters.column_tracks,
             row_tracks: parameters.row_tracks,
@@ -503,6 +503,11 @@ impl GridMeasureCtx for GridLayoutMeasureCtx<'_, '_> {
 }
 
 impl ContainerWidget for Grid {
+    /// Uses the same construction hook available to downstream mutable containers.
+    fn bind_children(&mut self, children: ChildrenHandle) {
+        self.children = children;
+    }
+
     fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: crate::Constraints) -> Dimensioni {
         grid_size(ctx, self, constraints)
     }

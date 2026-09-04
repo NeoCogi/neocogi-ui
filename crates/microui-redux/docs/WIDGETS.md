@@ -81,6 +81,68 @@ Containers exclusively own their child nodes. Topology mutations consume new nod
 unaccepted value unchanged when insertion cannot occur; removed nodes are dropped rather than
 detached for reparenting.
 
+## Mutable custom containers
+
+`Container::new(widget, children)` calls `ContainerWidget::bind_children` once, before publishing
+the widget. Store the supplied `ChildrenHandle` in a private field initialized with `Default`.
+It offers `try_push`, `try_insert`, `try_remove_drop`, `try_clear`, `try_replace`, `len`, and
+`is_empty`. These operations share the built-in containers' checked child-storage access and
+invalidate geometry even when no typed widget setter runs and `update` returns `NoChange`.
+
+```rust
+use microui_redux::retained::*;
+use microui_redux::Constraints;
+use microui_redux::prelude::{Dimensioni, Recti};
+
+/// An overlay places each child in the same allocation.
+#[derive(Default)]
+struct Overlay {
+    /// Weak editing access; the generic Container exclusively owns the actual nodes.
+    children: ChildrenHandle,
+}
+impl Widget for Overlay {
+    fn widget_opt(&self) -> &WidgetOption { &WidgetOption::NO_INTERACT }
+    fn paint(&mut self, _: &mut WidgetPaintCtx<'_>) {}
+}
+impl ContainerWidget for Overlay {
+    fn bind_children(&mut self, children: ChildrenHandle) { self.children = children; }
+    fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: Constraints) -> Dimensioni {
+        let mut size = Dimensioni::default();
+        for index in 0..ctx.child_count() {
+            if let Some(child) = ctx.measure_child(index, constraints) {
+                size.width = size.width.max(child.width);
+                size.height = size.height.max(child.height);
+            }
+        }
+        size
+    }
+    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, children: &mut Children, rect: Recti) {
+        for index in 0..children.len() { ctx.layout_child(children, index, rect); }
+    }
+}
+let (overlay, container) = Container::new(Overlay::default(), []);
+let (_, child) = microui_redux::TextBlock::create(microui_redux::TextBlockParameters::new("Added"));
+// Recover the ownership-taking input if either the widget or the child collection is unavailable.
+let result = overlay.try_update_with(child, |overlay, child| overlay.children.try_push(child));
+assert!(matches!(result, Ok(Ok(()))));
+let node = Node::container(container);
+# drop(node);
+```
+
+A handle never exposes an attached `Node`, permits reparenting, or extends the container's lifetime.
+Mutations fail during a conflicting traversal borrow or after destruction. Insertion also rejects
+an index greater than the current length. Rejected nodes are returned intact; replacement returns
+its original, unconsumed iterator if access cannot be acquired. Removal drops the subtree and its
+weak widget/event handles expire. An invalid removal returns `Some(false)`; unavailable access
+returns `None`.
+
+The container author owns parallel metadata such as spans or track policies: validate it before
+editing, update it only after success, and finish both before returning to the runtime. Keep the
+child handle private when exporting it would let callers bypass that coordination. Do not edit
+children from measurement, placement, or paint. Perform edits through container methods between
+runtime phases or from eligible update/event handlers, then call the ordinary context update to
+commit layout. Fixed-topology widgets can leave the binding hook at its default implementation.
+
 ## Retained mutation
 
 Convenience methods on `TypedWidgetHandle<W>` return `None` after the mounted widget has been

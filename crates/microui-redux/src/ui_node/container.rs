@@ -33,7 +33,7 @@ use std::{cell::RefCell, rc::Rc};
 use crate::math::RectExt;
 use crate::{Constraints, Dimensioni, Recti, SliceInsets, Skin, TypedWidgetHandle, UiInputEvent, Vec2i, Widget, WidgetOption};
 
-use super::{ChildParticipation, Children, NodeLayout, NodeRuntime, UiRuntime, WidgetStorage};
+use super::{ChildParticipation, Children, ChildrenHandle, NodeLayout, NodeRuntime, UiRuntime, WidgetStorage};
 
 /// Scoped services for measuring one retained container's children.
 ///
@@ -85,6 +85,14 @@ impl<'a> MeasureCtx<'a> {
 /// heterogeneous child collection separately. Runtime calls never retain the widget borrow while
 /// recursively visiting descendants.
 pub trait ContainerWidget: Widget {
+    /// Receives weak topology access once during construction, before the container is observable.
+    ///
+    /// Mutable custom containers store this in a private field initialized with `Default`.
+    /// Fixed-topology widgets can ignore it. Do not edit during this hook: initial children and
+    /// any matching layout metadata must already describe the same sequence. Topology operations
+    /// invalidate measurement independently of the widget's [`crate::Change`] result.
+    fn bind_children(&mut self, _children: ChildrenHandle) {}
+
     /// Measures preferred content from the authoritative child collection.
     fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: Constraints) -> Dimensioni;
 
@@ -134,6 +142,8 @@ impl Container {
     where
         W: ContainerWidget + 'static,
     {
+        // Built-in and downstream widgets receive exactly the same weak ownership capability.
+        widget.borrow_mut().widget.bind_children(ChildrenHandle::new(&children));
         let handle = TypedWidgetHandle::new(&widget);
         let widget: Rc<RefCell<WidgetStorage<dyn ContainerWidget>>> = widget;
         (handle, Self { children, widget })
@@ -230,20 +240,28 @@ impl Container {
         f(&mut widget.widget)
     }
 
+    /// Combines semantic widget edits and independently issued topology edits.
     pub(crate) fn is_measurement_dirty(&self) -> bool {
-        self.widget
-            .try_borrow()
-            .unwrap_or_else(|_| typed_container_borrow_conflict())
-            .is_measurement_dirty()
+        self.children.borrow().measurement_dirty
+            || self
+                .widget
+                .try_borrow()
+                .unwrap_or_else(|_| typed_container_borrow_conflict())
+                .is_measurement_dirty()
     }
 
+    /// Consumes both sources, even when the first already requires measurement.
     pub(crate) fn take_measurement_dirty(&mut self) -> bool {
-        self.widget
-            .try_borrow_mut()
-            .unwrap_or_else(|_| typed_container_borrow_conflict())
-            .take_measurement_dirty()
+        let topology_dirty = std::mem::take(&mut self.children.borrow_mut().measurement_dirty);
+        topology_dirty
+            | self
+                .widget
+                .try_borrow_mut()
+                .unwrap_or_else(|_| typed_container_borrow_conflict())
+                .take_measurement_dirty()
     }
 
+    /// Invalidates geometry following a widget-reported change.
     pub(crate) fn mark_measurement_dirty(&mut self) {
         self.widget
             .try_borrow_mut()

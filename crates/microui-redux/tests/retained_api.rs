@@ -570,14 +570,26 @@ fn standalone_scrollbar_exposes_public_range_value_and_event_contracts() {
     assert!(!scrollbar.is_alive());
 }
 
+/// Downstream container with geometry-only child access and optional weak topology edits.
 struct ExternalContainer {
+    /// Bound by generic construction; never owns a subtree.
+    children: ChildrenHandle,
+    /// Counts actual measurement calls to detect stale caches.
     measure_calls: Cell<usize>,
+    /// Counts committed placements independently of measurements.
     layout_calls: Cell<usize>,
+    /// Records the child allocation exposed by the scoped layout API.
     allocated_child: Cell<Option<Dimensioni>>,
+    /// Interaction policy is unrelated to topology access.
     options: WidgetOption,
 }
 
 impl ContainerWidget for ExternalContainer {
+    /// Accepts the framework capability before the widget is exposed through a typed handle.
+    fn bind_children(&mut self, children: ChildrenHandle) {
+        self.children = children;
+    }
+
     fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: Constraints) -> Dimensioni {
         self.measure_calls.set(self.measure_calls.get() + 1);
         ctx.measure_child(0, constraints).unwrap_or_else(|| Dimensioni::new(20, 20))
@@ -603,6 +615,7 @@ impl Widget for ExternalContainer {
 fn external_container(children: impl IntoIterator<Item = Node>) -> (TypedWidgetHandle<ExternalContainer>, Container) {
     Container::new(
         ExternalContainer {
+            children: ChildrenHandle::default(),
             measure_calls: Cell::new(0),
             layout_calls: Cell::new(0),
             allocated_child: Cell::new(None),
@@ -693,4 +706,58 @@ fn downstream_child_windows_use_their_parent_clip_and_layer_contract() {
     assert_eq!(ctx.ui().set_window_layer(&child, DEFAULT_LAYER), Err(SurfaceMutationError::ManagedLayer));
     ctx.ui().destroy_window(&parent).unwrap();
     assert_eq!(ctx.ui().window_layer(&child), Err(SurfaceMutationError::UnknownWindow));
+}
+
+/// Exercises weak edits without a typed widget mutation, including warmed caches and owner drops.
+#[test]
+fn downstream_child_edits_invalidate_geometry_and_preserve_unique_ownership_on_failure() {
+    let (first, leaf) = ExternalLeaf::create();
+    let (widget, container) = external_container([leaf]);
+    let children = widget.try_read(|widget| widget.children.clone()).unwrap();
+    let mut ctx = context();
+    let window = ctx.ui().create_window(Window::new("dynamic", rect(0, 0, 160, 120), Node::container(container)));
+    let dimensions = Dimensioni::new(300, 300);
+    ctx.update_ui(dimensions);
+    let warm = widget.try_read(|widget| widget.measure_calls.get()).unwrap();
+    ctx.update_ui(dimensions);
+    assert_eq!(widget.try_read(|widget| widget.measure_calls.get()), Some(warm));
+
+    // Failed insertion preserves the same live owner, which can subsequently be appended.
+    let (second, candidate) = ExternalLeaf::create();
+    let candidate = children.try_insert(5, candidate).expect_err("invalid index");
+    assert!(second.is_alive());
+    assert_eq!(children.len(), Some(1));
+    assert!(children.try_push(candidate).is_ok());
+    ctx.update_ui(dimensions);
+    let after_push = widget.try_read(|widget| widget.measure_calls.get()).unwrap();
+    assert!(after_push > warm, "NoChange cannot suppress topology invalidation");
+    ctx.update_ui(dimensions);
+    assert_eq!(widget.try_read(|widget| widget.measure_calls.get()), Some(after_push));
+
+    // Removal drops precisely the indexed subtree, while replacement drops the remaining one.
+    assert_eq!(children.try_remove_drop(0), Some(true));
+    assert!(!first.is_alive());
+    assert!(second.is_alive());
+    let (third, replacement) = ExternalLeaf::create();
+    assert!(children.try_replace([replacement]).is_ok());
+    assert!(!second.is_alive());
+    ctx.update_ui(dimensions);
+    assert!(widget.try_read(|widget| widget.measure_calls.get()).unwrap() > after_push);
+    assert_eq!(children.try_clear(), Some(()));
+    assert!(!third.is_alive());
+    assert_eq!(children.is_empty(), Some(true));
+
+    // Keeping the public edit capability cannot extend the container or its descendants' lifetime.
+    ctx.ui().destroy_window(&window).unwrap();
+    assert!(!widget.is_alive());
+    assert_eq!(children.len(), None);
+    let (unmounted, candidate) = ExternalLeaf::create();
+    let candidate = children.try_push(candidate).expect_err("expired collection");
+    let visited = Cell::new(0);
+    let replacement = [candidate].into_iter().inspect(|_| visited.set(visited.get() + 1));
+    let replacement = children.try_replace(replacement).expect_err("expired replacement");
+    assert_eq!(visited.get(), 0, "failure must not consume a lazy ownership transfer");
+    assert!(unmounted.is_alive());
+    drop(replacement);
+    assert!(!unmounted.is_alive());
 }

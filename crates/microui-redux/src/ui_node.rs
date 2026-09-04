@@ -71,7 +71,7 @@ pub mod widgets;
 pub use widgets::{Scrollbar, ScrollbarAxis, ScrollbarChanged, ScrollbarParameters};
 
 mod children;
-pub use children::Children;
+pub use children::{Children, ChildrenHandle};
 mod node_layout;
 pub use node_layout::ChildParticipation;
 pub(crate) use node_layout::{NodeLayout, RuntimeNodeId, Transform};
