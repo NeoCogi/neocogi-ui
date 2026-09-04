@@ -91,6 +91,12 @@ struct SmokeFrame<'a> {
 }
 
 impl RendererFrame for SmokeFrame<'_> {
+    /// Completes the recorded frame at the same explicit boundary as GPU backends.
+    fn finish(self) -> Result<(), microui_redux::render::FrameError> {
+        self.backend.flush_pending_quads();
+        Ok(())
+    }
+
     fn push_quad(&mut self, _vertices: [Vertex; 4]) {
         self.backend.pending_quads += 1;
     }
@@ -109,12 +115,6 @@ impl RendererFrame for SmokeFrame<'_> {
         }
         self.backend.flush_pending_quads();
         self.backend.events.borrow_mut().push(SmokeEvent::Texture { id, vertices });
-    }
-}
-
-impl Drop for SmokeFrame<'_> {
-    fn drop(&mut self) {
-        self.backend.flush_pending_quads();
     }
 }
 

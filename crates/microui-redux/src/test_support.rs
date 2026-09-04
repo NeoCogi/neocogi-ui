@@ -290,6 +290,11 @@ pub(crate) struct NoopRenderer {
 pub(crate) struct NoopFrame;
 
 impl RendererFrame for NoopFrame {
+    /// Completes this backend fixture; it owns no fallible native submission.
+    fn finish(self) -> Result<(), crate::render::FrameError> {
+        Ok(())
+    }
+
     fn push_quad(&mut self, _vertices: [Vertex; 4]) {}
 
     fn push_triangle(&mut self, _vertices: [Vertex; 3]) {}
@@ -461,6 +466,13 @@ impl RecordingFrame<'_> {
 }
 
 impl RendererFrame for RecordingFrame<'_> {
+    /// Completes the recorded frame at the same explicit boundary as GPU backends.
+    fn finish(self) -> Result<(), crate::render::FrameError> {
+        self.backend.log.push(RenderEvent::Flush);
+        self.backend.log.push(RenderEvent::End);
+        Ok(())
+    }
+
     fn push_quad(&mut self, vertices: [Vertex; 4]) {
         self.backend.log.push(RenderEvent::AtlasQuad(vertices.map(RecordedVertex::from)));
     }
@@ -478,13 +490,6 @@ impl RendererFrame for RecordingFrame<'_> {
             id,
             vertices: vertices.map(RecordedVertex::from),
         });
-    }
-}
-
-impl Drop for RecordingFrame<'_> {
-    fn drop(&mut self) {
-        self.backend.log.push(RenderEvent::Flush);
-        self.backend.log.push(RenderEvent::End);
     }
 }
 

@@ -84,6 +84,11 @@ struct MeasurementFrame<'a> {
 }
 
 impl RendererFrame for MeasurementFrame<'_> {
+    /// Completes this backend fixture; it owns no fallible native submission.
+    fn finish(self) -> Result<(), crate::render::FrameError> {
+        Ok(())
+    }
+
     fn push_quad(&mut self, _vertices: [Vertex; 4]) {
         let mut submissions = self.backend.submissions.get();
         submissions.quads += 1;

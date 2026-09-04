@@ -1027,6 +1027,11 @@ mod theme_tests {
     struct ThemeAtlasFrame;
 
     impl RendererFrame for ThemeAtlasFrame {
+        /// Completes this backend fixture; it owns no fallible native submission.
+        fn finish(self) -> Result<(), crate::render::FrameError> {
+            Ok(())
+        }
+
         /// Ignores atlas-backed quads because no test frame is rendered.
         fn push_quad(&mut self, _vertices: [Vertex; 4]) {}
 

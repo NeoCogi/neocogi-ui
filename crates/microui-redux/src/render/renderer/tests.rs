@@ -50,6 +50,10 @@ struct CountingRenderer {
 
 #[derive(Default)]
 struct CountingStats {
+    /// Explicit completion attempts, independent of destructor calls.
+    finishes: Cell<usize>,
+    /// Injects a submission failure after acquisition and display-list execution.
+    fail_finish: Cell<bool>,
     atlas_reads: Cell<usize>,
     quads: Cell<usize>,
     texture_quads: Cell<usize>,
@@ -63,6 +67,16 @@ struct CountingFrame<'a> {
 }
 
 impl RendererFrame for CountingFrame<'_> {
+    /// Reports an injected finish error through the actual executor boundary.
+    fn finish(self) -> Result<(), crate::render::FrameError> {
+        self.backend.stats.finishes.set(self.backend.stats.finishes.get() + 1);
+        if self.backend.stats.fail_finish.get() {
+            Err(FrameError::new("finish failed"))
+        } else {
+            Ok(())
+        }
+    }
+
     fn push_quad(&mut self, _vertices: [Vertex; 4]) {
         self.backend.stats.quads.set(self.backend.stats.quads.get() + 1);
     }
@@ -120,6 +134,11 @@ struct TextureUploadRenderer {
 struct EmptyFrame;
 
 impl RendererFrame for EmptyFrame {
+    /// Completes this backend fixture; it owns no fallible native submission.
+    fn finish(self) -> Result<(), crate::render::FrameError> {
+        Ok(())
+    }
+
     fn push_quad(&mut self, _vertices: [Vertex; 4]) {}
     fn push_triangle(&mut self, _vertices: [Vertex; 3]) {}
     fn flush(&mut self) {}
@@ -1028,6 +1047,29 @@ fn frame_lifecycle_is_forwarded_in_order() {
     );
 }
 
+/// Completion failures reach Context callers and do not leave a frame borrow or queued work alive.
+#[test]
+fn frame_finish_failure_is_observable_and_the_next_frame_can_complete() {
+    let stats = Rc::new(CountingStats::default());
+    let mut context = crate::Context::new(CountingRenderer {
+        atlas: crate::test_support::test_atlas(),
+        stats: stats.clone(),
+    });
+    let dimensions = Dimensioni::new(32, 32);
+    context.update_ui(dimensions);
+    stats.fail_finish.set(true);
+    assert_eq!(
+        context.frame(frame_info(32, 32)).render_ui(),
+        Err(RenderError::Frame(FrameError::new("finish failed")))
+    );
+    assert_eq!(stats.finishes.get(), 1);
+    assert_eq!(stats.drops.get(), 1);
+    stats.fail_finish.set(false);
+    context.frame(frame_info(32, 32)).render_ui().unwrap();
+    assert_eq!(stats.finishes.get(), 2);
+    assert_eq!(stats.drops.get(), 2);
+}
+
 #[test]
 fn frame_acquisition_failure_discards_the_list_without_finalization() {
     struct FailingBackend {
@@ -1162,7 +1204,7 @@ fn invisible_custom_operations_do_not_invoke_callbacks() {
 }
 
 #[test]
-fn panicking_custom_callback_still_drops_the_backend_frame_without_double_panicking() {
+fn panicking_custom_callback_abandons_the_backend_frame_without_submission() {
     let atlas = make_atlas();
     let (backend, log) = recording_backend(atlas.clone());
     let mut renderer = Renderer::new(backend);
@@ -1174,5 +1216,5 @@ fn panicking_custom_callback_still_drops_the_backend_frame_without_double_panick
         let _ = renderer.render(frame_info(32, 32), &mut list);
     }));
     assert!(panic.is_err());
-    assert!(log.snapshot().iter().any(|event| matches!(event, RenderEvent::End)));
+    assert!(!log.snapshot().iter().any(|event| matches!(event, RenderEvent::End)));
 }

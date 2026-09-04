@@ -82,7 +82,7 @@ ContextFrame::render_ui(self)
     -> preflight resource keys
     -> RendererBackend::frame acquires native frame resources
     -> Context's private executor drains and submits the DisplayList once
-    -> backend frame Drop flushes, submits, and presents
+    -> backend frame finish flushes, submits, and presents or reports an error
 ```
 
 `render_ui` never drains input, updates widgets, or computes layout. A missing commit, pending input,
@@ -303,7 +303,7 @@ The list is designed to be reused:
 
 The frame-owned executor handles ordinary drawing, external-texture barriers,
 and custom-render barriers in one painter-order loop. Its backend frame is
-finalized when the executor leaves scope.
+completed explicitly by the executor, with errors returned to the Context caller.
 
 Solid line and polygon tessellation appends into `SolidGeometry` workspace
 rather than returning temporary vectors in the rendering path. Final clipped
@@ -425,10 +425,13 @@ struct Backend {
     atlas: AtlasHandle,
 }
 
-#[must_use = "dropping the frame finalizes it"]
+#[must_use = "call finish to complete the frame"]
 struct BackendFrame<'a>(&'a mut Backend);
 
 impl RendererFrame for BackendFrame<'_> {
+    /// Completes this backend fixture; it owns no fallible native submission.
+    fn finish(self) -> Result<(), microui_redux::render::FrameError> { Ok(()) }
+
     fn push_quad(&mut self, _vertices: [Vertex; 4]) {}
     fn push_triangle(&mut self, _vertices: [Vertex; 3]) {}
     fn flush(&mut self) {}
@@ -483,8 +486,8 @@ Backend rules:
 - `flush` must submit outstanding batched work without ending the frame.
 - `draw_texture` receives a pre-clipped quad. Backends that batch atlas work
   must preserve painter order when switching textures.
-- concrete frame `Drop` performs best-effort, non-panicking final flush,
-  submission, and presentation.
+- `finish(self)` performs final flush, submission, and presentation, returning `FrameError` on
+  failure. Concrete frame `Drop` abandons pending work without submission or presentation.
 - `create_texture` obtains immutable dimensions from `TextureId::size` and must
   return an error without retaining the ID when creation fails.
 - `destroy_texture` releases the matching backend resource.

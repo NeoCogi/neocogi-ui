@@ -50,8 +50,8 @@ There are two frame values and one shared frame trait in the public lifecycle:
 | Type | What it represents | What ending it does |
 | --- | --- | --- |
 | `ContextFrame<'ctx, B, State = ()>` | The application-level paint/submission frame. It exclusively borrows `Context<B, State>` while committed retained UI is painted and recorded. | `render_ui(self)` paints and submits once. Dropping without submission cancels. |
-| `B::Frame<'backend>` | The backend-level RAII frame. It exclusively borrows the concrete backend only while the recorded display list is executing. | Its `Drop` implementation performs backend-specific, best-effort finalization. WGPU/Vulkan submit and present there; GL flushes before the outer window runner swaps buffers. |
-| `RendererFrame` | The common trait implemented by every `B::Frame<'_>`. | Defines the standard UI operations: atlas quads/triangles, flush boundaries, and external textures. |
+| `B::Frame<'backend>` | The backend-level RAII frame. It exclusively borrows the concrete backend only while the recorded display list is executing. | `finish(self)` reports completion errors. WGPU/Vulkan submit and present there; GL flushes before the host swaps buffers. Dropping without finish abandons pending work. |
+| `RendererFrame` | The common trait implemented by every `B::Frame<'_>`. | Defines atlas quads/triangles, flush boundaries, external textures, and explicit fallible completion. |
 
 The lifetime is created by the borrow of `&mut B` in `RendererBackend::frame`; applications do not
 choose it and should not try to make it `'static`. While the returned frame exists, it owns the
@@ -105,7 +105,7 @@ Internal display-list execution       RendererFrame calls + typed custom callbac
         |
 Application command handling          GL records immediately; WGPU/Vulkan prepare then record
         |
-drop backend frame                    finalize/submit/present as applicable; release borrow
+backend_frame.finish(self)            complete/submit/present or return FrameError; release borrow
         |
 drop logical frame                    release the exclusive Context borrow
 ```
@@ -115,8 +115,10 @@ operations use the backend-neutral `RendererFrame` methods. Immediately before a
 operation, the executor closes the current UI batch and invokes the registered callback with
 the concrete `&mut B::Frame<'_>`. Later UI commands continue after that callback, preserving
 painter order. Acquisition failures are returned as `FrameError` before callbacks execute. Once a
-frame exists, its `Drop` path must be non-panicking and best-effort because Rust destructors cannot
-return a presentation error.
+frame exists, `finish(self)` completes it and propagates command/submission/presentation failures
+through `RenderError::Frame` to `ContextFrame::render_ui`. An unfinished frame's destructor only
+abandons pending work and must not submit or present. Application-renderer panics unwind normally;
+they are not converted to success or swallowed by a finalizing destructor.
 
 This concrete frame type is useful because it may expose inherent methods that are deliberately
 absent from `RendererFrame`. `RendererFrame` remains the small UI contract; it does not grow into a
@@ -271,3 +273,12 @@ cargo run -p microui-redux-basic-demos --bin backend-frame-cube --no-default-fea
 
 The same custom-frame path is available in the WebGL 2 canvas backend. Build the complete browser
 site with `./scripts/web-demo.sh build`; see the [browser build guide](../../../docs/WEB.md).
+
+
+Frame failure is observable, but GPU work is not transactional. Glow executes commands immediately;
+earlier draws and clears may already have happened when a later command fails. It latches the first
+application error and ignores later frame commands. WGPU abandons an encoder on application prepare
+or render failure instead of presenting it. Vulkan marks any post-acquire failure or abandonment
+fatal, because the acquire semaphore and image may still be outstanding; construct a new renderer
+to recover. Hosts decide how to log, retry, recreate the backend, or stop after `render_ui` fails.
+A successful finish reports the backend's synchronous completion boundary, not eventual GPU health.

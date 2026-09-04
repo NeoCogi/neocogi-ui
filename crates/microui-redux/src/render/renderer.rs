@@ -217,7 +217,7 @@ impl<B: RendererBackend> Renderer<B> {
             clipped_triangles: &mut self.clipped_triangles,
             solid_triangles,
         };
-        executor.run(ops.drain(..));
+        executor.run(ops.drain(..))?;
         Ok(())
     }
 
@@ -331,7 +331,7 @@ impl<B: RendererBackend> Renderer<B> {
 
 /// Interprets one display list while owning its active backend frame.
 struct DisplayListExecutor<'frame, 'resources, B: RendererBackend> {
-    /// Active backend frame finalized when this executor is dropped.
+    /// Active backend frame consumed by `run`, or abandoned if execution unwinds.
     frame: B::Frame<'frame>,
     /// Renderer-owned custom callbacks available at painter-order barriers.
     custom_renderers: &'resources mut CustomRenderRegistry<B>,
@@ -353,10 +353,12 @@ struct DisplayListExecutor<'frame, 'resources, B: RendererBackend> {
 
 impl<B: RendererBackend> DisplayListExecutor<'_, '_, B> {
     /// Drains every operation through one frame-scoped interpreter.
-    fn run(mut self, operations: impl Iterator<Item = DrawOp>) {
+    fn run(mut self, operations: impl Iterator<Item = DrawOp>) -> Result<(), super::FrameError> {
         for operation in operations {
             self.execute(operation);
         }
+        // Submission is observable to the Context caller; Drop only handles abandonment.
+        self.frame.finish()
     }
 
     /// Executes one operation after resolving its final viewport clip.

@@ -199,9 +199,10 @@ impl FrameInfo {
     }
 }
 
-/// Backend-frame acquisition failure.
+/// Backend-frame acquisition, command, submission, or presentation failure.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FrameError {
+    /// Backend-provided detail retained through Context error propagation.
     message: String,
 }
 
@@ -279,6 +280,13 @@ impl From<&str> for AtlasUploadError {
 
 /// Active-frame geometry submission interface implemented by every backend frame.
 pub trait RendererFrame {
+    /// Completes and consumes this frame, reporting command, submission, or presentation failure.
+    ///
+    /// Backends may latch an error from an earlier infallible command and return it here. Dropping
+    /// an unfinished frame abandons pending work; destructors must not submit or present. Immediate
+    /// APIs can already have executed work, so failure/abandonment does not promise GPU rollback.
+    fn finish(self) -> Result<(), FrameError>;
+
     /// Appends one atlas-backed quad.
     fn push_quad(&mut self, vertices: [Vertex; 4]);
     /// Appends one atlas-backed triangle.
@@ -310,6 +318,9 @@ pub trait RendererFrame {
 /// struct BackendFrame<'a>(&'a mut Backend);
 ///
 /// impl RendererFrame for BackendFrame<'_> {
+///     /// Completes this backend fixture; it owns no fallible native submission.
+///     fn finish(self) -> Result<(), microui_redux::render::FrameError> { Ok(()) }
+
 ///     fn push_quad(&mut self, _vertices: [Vertex; 4]) {}
 ///     fn push_triangle(&mut self, _vertices: [Vertex; 3]) {}
 ///     fn flush(&mut self) {}
