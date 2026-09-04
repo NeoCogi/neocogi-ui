@@ -159,3 +159,11 @@ The author contract has deliberate limits:
 markers and propagates invalidation to dependent ancestors. A parent's `NoChange` cannot hide a
 child's `Changed`, and a later `NoChange` cannot undo a prior handle mutation. No public dirty-bit
 API, global dependency registry, or automatic shared-state observer is required.
+
+Slider construction and programmatic `set_value` clamp finite values to the configured range but
+preserve values between steps. They never emit a user-change event, including during later updates.
+For example, setting `4.4` on a step-1 slider retains `4.4`. A subsequent user adjustment snaps
+relative to the lower bound and clamps to the range. Keyboard, wheel, pointer, and changed numeric
+text commits share this policy; a text commit on focus loss can emit `SliderChanged` and return
+`Changed` even without a routed event. An unchanged result emits nothing. Non-finite setter inputs
+or invalid numeric text preserve the previous finite value.

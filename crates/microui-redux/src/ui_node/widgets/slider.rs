@@ -173,7 +173,8 @@ impl Slider {
     /// Updates the current value, clamping finite input to the slider range.
     ///
     /// NaN and infinities are ignored so invalid external input cannot select an arbitrary endpoint
-    /// or erase the last valid retained value.
+    /// or erase the last valid retained value. Programmatic values are not step-snapped and never
+    /// emit user-change events, including during subsequent eventless updates.
     pub fn set_value(&mut self, value: Real) {
         if value.is_finite() {
             self.value = clamp_slider_value(value, self.low, self.high);
@@ -202,19 +203,24 @@ impl Slider {
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
         let last = self.value;
         let mut value = last;
+        // Distinguish a user adjustment from merely visiting an unsnapped programmatic value.
+        let mut adjusted = false;
         if !self.edit.editing {
             // The validated ascending range gives all inputs one direction: Right increases and
             // Left decreases. Continuous sliders use one percent; stepped sliders use one step.
             let range = self.high - self.low;
             let amount = if self.step != 0.0 { self.step } else { range / 100.0 };
-            match ctx.action(input, self.keyboard_behavior()) {
-                Some(KeyboardAction::Decrease) => value -= amount,
-                Some(KeyboardAction::Increase) => value += amount,
-                Some(KeyboardAction::Activate | KeyboardAction::Expand | KeyboardAction::Collapse) | None => {}
-            }
-            if self.step != 0.0 {
-                value = snap_slider_value(value, self.low, self.step);
-            }
+            adjusted = match ctx.action(input, self.keyboard_behavior()) {
+                Some(KeyboardAction::Decrease) => {
+                    value -= amount;
+                    true
+                }
+                Some(KeyboardAction::Increase) => {
+                    value += amount;
+                    true
+                }
+                Some(KeyboardAction::Activate | KeyboardAction::Expand | KeyboardAction::Collapse) | None => false,
+            };
         }
         if number_textbox_update(ctx, input, &mut self.edit, self.precision, font, &mut value) {
             return crate::Change::NoChange;
@@ -227,9 +233,7 @@ impl Slider {
                     // Positive wheel direction follows Right Arrow and increasing pointer x.
                     let step_amount = if self.step != 0. { self.step } else { range / 100.0 };
                     value += wheel as Real * step_amount;
-                    if self.step != 0. {
-                        value = snap_slider_value(value, self.low, self.step);
-                    }
+                    adjusted = true;
                 }
             }
         }
@@ -254,14 +258,16 @@ impl Slider {
             // cancelling a much larger negative lower bound.
             let fraction = (f64::from(pointer_pos.x) / f64::from(base.width)).clamp(0.0, 1.0);
             value = slider_value_at_fraction(self.low, self.high, fraction);
-            if self.step != 0. {
-                value = snap_slider_value(value, self.low, self.step);
-            }
+            adjusted = true;
         }
-        if range == 0.0 {
-            value = self.low;
+        if !adjusted && value == last {
+            // No user adjustment or committed text change occurred. In particular, an eventless
+            // visit must not normalize an off-step value installed by construction or a setter.
+            return crate::Change::NoChange;
         }
-        value = clamp_slider_value(value, self.low, self.high);
+        // Keyboard, wheel, pointer, and committed text share one snap-and-clamp policy. Numeric
+        // text may commit on blur with no routed event; its changed candidate reaches this path.
+        value = clamp_slider_value(snap_slider_value(value, self.low, self.step), self.low, self.high);
         self.value = value;
         if last != value {
             self.changed_event.emit(SliderChanged { value });
@@ -901,6 +907,47 @@ mod tests {
         slider.set_value(4.0);
         assert_eq!(slider.value(), 4.0);
         assert!(!dispatcher.dispatch(&mut Vec::new()));
+    }
+
+    /// Eventless blur commits are user edits and share the step policy of pointer/key/wheel input.
+    #[test]
+    fn slider_text_commit_on_blur_snaps_once_and_reports_changed_geometry() {
+        let mut slider = SliderBuilder::create_widget(SliderParameters::with_opt(2.0, 0.0, 10.0, 1.0, DecimalPrecision::ZERO, WidgetOption::FRAME).unwrap());
+        let mut dispatcher = slider_dispatcher(&slider);
+        slider.edit.editing = true;
+        // Enter through the editing contract instead of reaching into the private numeric buffer.
+        run_slider_once(
+            &mut slider,
+            rect(0, 0, 100, 20),
+            vec![UiInputEvent::Text { text: "4.4".to_owned() }],
+            true,
+            true,
+            false,
+            None,
+        );
+        let atlas = make_test_atlas();
+        let style = test_skin(&atlas);
+        let bounds = rect(0, 0, 100, 20);
+        let mut ctx = WidgetUpdateCtx::new_with_interaction(
+            bounds,
+            bounds,
+            &style,
+            &atlas,
+            true,
+            false,
+            false,
+            false,
+            false,
+            MouseButton::NONE,
+            Modifiers::NONE,
+        );
+        assert_eq!(slider.update(&mut ctx, None), crate::Change::Changed);
+        assert_eq!(slider.value(), 4.0);
+        let mut values = Vec::new();
+        assert!(dispatcher.dispatch(&mut values));
+        assert_eq!(values, [4.0]);
+        assert_eq!(slider.update(&mut ctx, None), crate::Change::NoChange);
+        assert!(!dispatcher.dispatch(&mut values));
     }
 
     /// Verifies both numeric setters retain their last finite value when given invalid input.

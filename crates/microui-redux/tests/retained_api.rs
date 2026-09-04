@@ -361,6 +361,25 @@ fn downstream_skin_install_rejects_foreign_catalog_ids_and_preserves_live_widget
     assert_eq!(body.resolve(ctx.skin(), &ctx.atlas()), original.font_id("body").unwrap());
 }
 
+/// A setter remains silent after actual Context updates, including on a stepped slider.
+#[test]
+fn downstream_slider_programmatic_values_are_not_normalized_by_eventless_updates() {
+    use microui_redux::{DecimalPrecision, Slider, SliderParameters};
+    let mut ctx = context_with_state::<Vec<f32>>();
+    let (slider, body) = Slider::create(SliderParameters::with_opt(2.4, 0.0, 10.0, 1.0, DecimalPrecision::ZERO, WidgetOption::FRAME).unwrap());
+    ctx.ui().create_window(Window::new("slider", rect(0, 0, 200, 200), body));
+    ctx.subscribe(slider.changed(), |values, event| values.push(event.value)).unwrap();
+    let mut values = Vec::new();
+    let dimensions = Dimensioni::new(300, 300);
+    ctx.update_ui_state(dimensions, &mut values);
+    assert_eq!(slider.value(), Some(2.4));
+    slider.set_value(4.4).unwrap();
+    ctx.update_ui_state(dimensions, &mut values);
+    ctx.update_ui_state(dimensions, &mut values);
+    assert_eq!(slider.value(), Some(4.4));
+    assert!(values.is_empty());
+}
+
 struct FileDialogModel {
     dialog: FileDialog,
     /// Terminal result observed only through the component-owned typed source.
