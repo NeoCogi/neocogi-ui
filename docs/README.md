@@ -22,8 +22,8 @@ cover the retained UI model, integration details, and repository workflows.
 
 - [Rendering](../crates/microui-redux/docs/RENDER.md) — painter and display-list architecture, clipping, textures, backend
   implementation, and performance validation.
-- [Backend frames and custom rendering](../crates/microui-redux/docs/BACKENDS.md) — selected backend frame types, frame
-  lifetimes, custom callbacks, and the backend-frame cube example.
+- [Backend frames and typed application rendering](../crates/microui-redux/docs/BACKENDS.md) — selected backend frame types,
+  native application renderers, concrete command flow, frame lifetimes, and custom callbacks.
 - [Examples](EXAMPLES.md) — running the demos, backend selection, asset loading, and size-focused
   builds.
 - [WebGL demo](WEB.md) — building, serving, and publishing the HTML canvas demo.

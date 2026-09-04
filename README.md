@@ -30,7 +30,11 @@ microui-redux = "0.8.0"
 
 `microui-redux` does not create a native window or graphics device. Applications provide a
 `RendererBackend`; the repository examples contain SDL-based Glow, Vulkan, WGPU, and browser
-WebGL 2 integrations.
+WebGL 2 integrations. Non-UI graphics stay application-owned: each example backend can be
+specialized by a concrete command type and native renderer, giving application code direct GPU
+preparation and recording access without `Any`, downcasting, or a portable pseudo-renderer. See
+[backend frames and typed application rendering](crates/microui-redux/docs/BACKENDS.md) for the
+complete ownership and command flow.
 
 Clone the repository and run the full demo with one backend:
 

@@ -1,36 +1,29 @@
-# Backend frames and custom rendering
+# Backend frames and typed application rendering
 
 ## How `SelectedBackend::Frame<'a>` works
 
 `SelectedBackend` is not a special type supplied by microui-redux. The examples define it as an
-ordinary compile-time alias for one concrete renderer. The feature guards use WebGL, Glow, Vulkan,
-then WGPU precedence so the aliases remain well-defined when additive Cargo tooling enables
-several backend features:
+ordinary compile-time alias for one concrete renderer. Each renderer accepts an application
+renderer type parameter, so the final backend contains both its UI state and the application's
+native GPU state as one statically known type. The feature guards use WebGL, Glow, Vulkan, then
+WGPU precedence so the aliases remain well-defined when additive Cargo tooling enables several
+backend features:
 
 ```rust,ignore
-#[cfg(feature = "webgl")]
-use microui_redux_renderer_webgl_canvas::WebGlCanvasRenderer as SelectedBackend;
-#[cfg(all(not(feature = "webgl"), feature = "glow"))]
-use microui_redux_renderer_glow::GLRenderer as SelectedBackend;
-#[cfg(all(not(feature = "webgl"), not(feature = "glow"), feature = "vulkan"))]
-use microui_redux_renderer_vulkan::VulkanRenderer as SelectedBackend;
-#[cfg(all(
-    not(feature = "webgl"),
-    not(feature = "glow"),
-    not(feature = "vulkan"),
-    feature = "wgpu"
-))]
-use microui_redux_renderer_wgpu::WgpuRenderer as SelectedBackend;
+// demo-host defines this alias independently for each backend feature.
+type SelectedBackend<ApplicationRenderer = ()> =
+    /* GLRenderer<ApplicationRenderer>, VulkanRenderer<ApplicationRenderer>, ... */;
 
-type SelectedFrame<'a> =
-    <SelectedBackend as RendererBackend>::Frame<'a>;
+// The full demo needs only one local name for its completely concrete backend.
+type DemoBackend = SelectedBackend<DemoRenderer>;
 ```
 
 `RendererBackend::Frame<'a>` is a generic associated type (GAT): each backend chooses its own
-active-frame type, and that type may borrow the backend for `'a`. For example, the WebGL backend
-selects `WebGlCanvasFrame<'a>`, GL selects `GlFrame<'a>`, WGPU selects `WgpuFrame<'a>`, and Vulkan
-selects `VulkanFrame<'a>`. The fully qualified alias above is simply an unambiguous way to spell
-“the frame type associated with the backend selected by this build.”
+active-frame type, and that type may borrow the backend for `'a`. WebGL and native GL both select
+`GlFrame<'a, ApplicationRenderer>` directly, WGPU selects `WgpuFrame<'a,
+ApplicationRenderer>`, and Vulkan selects `VulkanFrame<'a, ApplicationRenderer>`. Applications do
+not need to name that associated type: `register_custom_renderer` infers the concrete frame from
+the `Context` receiving the registration.
 
 The relevant part of the backend contract is:
 
@@ -88,6 +81,8 @@ RendererBackend::frame(&mut backend)  acquire SelectedBackend::Frame<'_>
         |
 Internal display-list execution       RendererFrame calls + typed custom callbacks
         |
+Application command handling          GL records immediately; WGPU/Vulkan prepare then record
+        |
 drop backend frame                    finalize/submit/present as applicable; release borrow
         |
 drop logical frame                    release the exclusive Context borrow
@@ -96,28 +91,24 @@ drop logical frame                    release the exclusive Context borrow
 Context's executor acquires the backend frame only after resource preflight succeeds. Normal UI
 operations use the backend-neutral `RendererFrame` methods. Immediately before a custom-render
 operation, the executor closes the current UI batch and invokes the registered callback with
-`&mut SelectedFrame<'_>`. Later UI commands continue after that callback, preserving painter
-order. Acquisition failures are returned as `FrameError` before callbacks execute. Once a frame
-exists, its `Drop` path must be non-panicking and best-effort because Rust destructors cannot
+the concrete `&mut B::Frame<'_>`. Later UI commands continue after that callback, preserving
+painter order. Acquisition failures are returned as `FrameError` before callbacks execute. Once a
+frame exists, its `Drop` path must be non-panicking and best-effort because Rust destructors cannot
 return a presentation error.
 
-This concrete type is useful because a backend frame may expose additional inherent methods that
-are deliberately absent from `RendererFrame`: a render-pass encoder, a mesh submission method, or
-another backend-specific command recorder. The example backends all provide
-`enqueue_colored_vertices`, so a selected-backend callback can call it directly:
+This concrete frame type is useful because it may expose inherent methods that are deliberately
+absent from `RendererFrame`. `RendererFrame` remains the small UI contract; it does not grow into a
+lowest-common-denominator graphics API. The example backends expose
+`enqueue_colored_vertices(CustomRenderArgs, Vec<Vertex>)` for the small CPU-projected cube example:
 
 ```rust,ignore
 let cube_renderer = ctx.register_custom_renderer({
     let angle = angle.clone();
-    move |frame: &mut SelectedFrame<'_>, args: CustomRenderArgs| {
-        let area = CustomRenderArea {
-            rect: args.content_area,
-            clip: args.view,
-        };
+    move |frame, args: CustomRenderArgs| {
         let vertices = build_cube_vertices(args.content_area, white_uv, angle.get());
 
-        // This is an inherent SelectedFrame method, not part of RendererFrame.
-        frame.enqueue_colored_vertices(area, vertices);
+        // This is an inherent concrete-frame method, not part of RendererFrame.
+        frame.enqueue_colored_vertices(args, vertices);
     }
 })?;
 
@@ -125,6 +116,10 @@ let cube = CubeBuilder::create_widget(CubeParameters);
 let tree = Node::custom_render(cube, cube_renderer);
 let _root = ctx.ui().create_window(Window::new("Cube", rect(40, 40, 360, 360), tree));
 ```
+
+That colored-vertex helper is not the application-rendering abstraction. It is merely a compact
+demo convenience. Three-dimensional meshes and more complex GPU work use the typed native
+application renderer described below.
 
 `register_custom_renderer` accepts a callback valid for every frame borrow lifetime. In expanded
 form its important bound is `for<'frame> FnMut(&mut B::Frame<'frame>, CustomRenderArgs)`. That
@@ -145,16 +140,106 @@ preflight before a backend frame is acquired.
 The executor does not invoke the callback when that intersection is empty. Do not intersect
 `content_area` and `view` again inside the callback.
 
+## The application renderer is native and concrete
+
+Each reusable backend is generic over one backend-specific application renderer trait:
+
+| Backend | Application trait | Preparation capabilities | Ordered graphics capabilities |
+| --- | --- | --- | --- |
+| Glow and WebGL 2 | `GlApplicationRenderer` | The callback executes immediately with the shared `Arc<glow::Context>`, framebuffer dimensions, and `CustomRenderArgs`. | Any operation supported by that GL context: application programs, buffers, textures, framebuffer state, and native draw calls. |
+| WGPU | `WgpuApplicationRenderer` | `WgpuApplicationPrepareContext` exposes `Device`, `Queue`, a pre-pass `CommandEncoder`, surface format, and extent. Applications can create/upload resources and encode transfer or compute work before graphics. | `render` receives the active color/depth `RenderPass` and can bind arbitrary compatible pipelines, bind groups, buffers, viewports, scissors, and direct or indirect draws. |
+| Vulkan | `VulkanApplicationRenderer` | `VulkanApplicationPrepareContext` exposes the logical device, an active primary command buffer outside the render pass, compatible formats/render pass, extent, memory properties, fenced frame slot, and swapchain generation. Applications can create resources and record transfer, compute, barriers, queries, or other legal pre-pass commands. | `render` receives the same primary command buffer inside the shared graphics render pass and can record arbitrary compatible native graphics commands. |
+
+Every trait has an associated `Command` type. The backend stores that type directly in its frame
+command enum; it never stores `dyn Any`, asks for a type identifier, or downcasts. An application
+with several operations defines an ordinary enum and matches it exhaustively, just as it would for
+a typed event:
+
+```rust,ignore
+enum DemoCommand {
+    DrawMesh(MeshSubmission),
+    DrawIndirect(IndirectSubmission),
+}
+
+struct DemoRenderer {
+    // Backend-specific pipelines, buffers, descriptors, and frame-slot resources.
+}
+
+impl WgpuApplicationRenderer for DemoRenderer {
+    type Command = DemoCommand;
+
+    fn prepare(
+        &mut self,
+        context: WgpuApplicationPrepareContext<'_>,
+        commands: &[&DemoCommand],
+    ) -> Result<(), String> {
+        // Allocate/upload resources and optionally encode compute or transfer work.
+        Ok(())
+    }
+
+    fn render<'pass>(
+        &'pass self,
+        pass: &mut wgpu::RenderPass<'pass>,
+        args: CustomRenderArgs,
+        command_index: usize,
+        command: &'pass DemoCommand,
+    ) -> Result<(), String> {
+        match command {
+            DemoCommand::DrawMesh(mesh) => {
+                // Bind the application's pipeline/resources and issue the native indexed draw.
+            }
+            DemoCommand::DrawIndirect(draw) => {
+                // Bind application state and issue the native indirect draw.
+            }
+        }
+        Ok(())
+    }
+}
+```
+
+The host constructs the fully specialized backend with
+`Application::new_with_renderer(atlas, DemoRenderer::new(), initialize_state)`. A registered
+microui callback then bridges the retained display-list position to the application's concrete
+command:
+
+```rust,ignore
+let renderer = ctx.register_custom_renderer(
+    move |frame, args: CustomRenderArgs| {
+        frame.enqueue_application(
+            args,
+            DemoCommand::DrawMesh(MeshSubmission {
+                mesh: mesh.clone(),
+                pvm: camera.pvm(),
+                view_model: camera.view_matrix(),
+            }),
+        );
+    },
+)?;
+```
+
+The full demo keeps `DemoCommand`, `MeshVertex`, `MeshBuffers`, `MeshSubmission`, shader assets,
+and all three native pipeline implementations under `demos/demo-renderer`. Reusable renderers know
+only the associated command selected by the application. UI-only construction uses a public
+uninhabited command type, making application dispatch impossible rather than representing “no
+command” with a nullable or dynamically typed value.
+
+Painter order is preserved without constraining GPU behavior. Glow flushes previous UI geometry
+and invokes the application immediately. WGPU and Vulkan retain commands until the frame is fully
+known, run a preparation phase, and replay application graphics at the exact positions where their
+custom-render nodes appeared. A following UI draw explicitly restores its own complete pipeline
+state, so application code does not depend on private UI bindings.
+
 Custom callbacks receive no input and should not acquire another frame, mutate the atlas, or
 finalize/present the backend frame. Update application/widget state before `Context::frame`; inside
 the callback, read that state and record work on the supplied frame. Use `Painter` instead when the
 drawing can be expressed with portable UI primitives.
 
-The complete, documented [backend-frame cube demo](../../../demos/basic/src/bin/backend-frame-cube.rs)
-implements a small retained `CubeWidget`. It uses `rs_math3d`'s `Vec3f`, `Quatf`, `lookat`,
-`perspective`, and `project3` primitives to transform the cube, depth-sorts its faces, and submits
-the resulting triangles through `SelectedFrame::enqueue_colored_vertices`. Run it with exactly one
-backend:
+The documented [backend-frame cube demo](../../../demos/basic/src/bin/backend-frame-cube.rs) is an
+intentionally small example of inherent frame methods. It transforms and depth-sorts a cube on the
+CPU, then submits colored UI vertices. The full demo's Suzanne viewport is the GPU example: it
+submits `DemoCommand::DrawMesh`, and the application renderer performs vertex transformation,
+depth testing, shading, and indexed drawing on the selected graphics API. Run the small cube with
+exactly one backend:
 
 ```bash
 cargo run -p microui-redux-basic-demos --bin backend-frame-cube --no-default-features --features glow
