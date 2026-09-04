@@ -36,7 +36,6 @@
 use crate::{ControlRole};
 
 use super::*;
-use crate::{WidgetBuilder, WidgetParameters};
 
 /// One-shot construction input for a [`Checkbox`].
 ///
@@ -58,8 +57,6 @@ impl crate::LeafWidget for Checkbox {
         self.preferred_size(style, atlas)
     }
 }
-
-impl WidgetParameters for CheckboxParameters {}
 
 impl CheckboxParameters {
     /// Creates checkbox parameters with the body font and no special widget options.
@@ -111,7 +108,7 @@ pub struct Checkbox {
 impl Checkbox {
     /// Constructs a retained node and a weak typed handle to its concrete checkbox.
     pub fn create(parameters: CheckboxParameters) -> (crate::TypedWidgetHandle<Self>, crate::Node) {
-        let widget = CheckboxBuilder::create_widget(parameters);
+        let widget = Checkbox::from(parameters);
         crate::Node::typed_widget(widget)
     }
 
@@ -237,14 +234,9 @@ impl crate::TypedWidget<CheckboxChanged> for Checkbox {
     }
 }
 
-/// Builder associating checkbox parameters with the concrete [`Checkbox`] runtime.
-pub struct CheckboxBuilder;
-
-impl WidgetBuilder for CheckboxBuilder {
-    type Parameters = CheckboxParameters;
-    type W = Checkbox;
-
-    fn create_widget(parameters: Self::Parameters) -> Self::W {
+impl From<CheckboxParameters> for Checkbox {
+    /// Transfers one-shot parameters into the concrete Checkbox runtime.
+    fn from(parameters: CheckboxParameters) -> Self {
         Checkbox {
             label: parameters.label,
             font: parameters.font,

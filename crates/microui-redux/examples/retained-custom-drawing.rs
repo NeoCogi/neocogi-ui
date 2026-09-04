@@ -93,17 +93,9 @@ struct RetainedPaint {
     opt: WidgetOption,
 }
 
-struct RetainedPaintParameters;
-
-impl WidgetParameters for RetainedPaintParameters {}
-
-struct RetainedPaintBuilder;
-
-impl WidgetBuilder for RetainedPaintBuilder {
-    type Parameters = RetainedPaintParameters;
-    type W = RetainedPaint;
-
-    fn create_widget(_parameters: Self::Parameters) -> Self::W {
+impl Default for RetainedPaint {
+    /// Creates the RetainedPaint runtime with its fixed input policy.
+    fn default() -> Self {
         RetainedPaint { opt: WidgetOption::NONE }
     }
 }
@@ -183,7 +175,7 @@ fn make_atlas() -> AtlasHandle {
 fn main() -> Result<(), String> {
     let backend = NoopRenderer { atlas: make_atlas() };
     let mut ctx = Context::<_>::new(backend);
-    let paint = RetainedPaintBuilder::create_widget(RetainedPaintParameters);
+    let paint = RetainedPaint::default();
     let tree = Node::widget(paint);
     ctx.ui().create_window(Window::new("retained custom drawing", rect(12, 12, 132, 84), tree));
 

@@ -56,8 +56,6 @@ impl crate::LeafWidget for Number {
     }
 }
 
-impl WidgetParameters for NumberParameters {}
-
 impl NumberParameters {
     /// Creates number parameters with default widget options.
     ///
@@ -77,7 +75,7 @@ impl NumberParameters {
     /// non-negative. Failed construction publishes no partially normalized parameter value.
     pub fn with_opt(value: Real, step: Real, precision: DecimalPrecision, opt: WidgetOption) -> Result<Self, NumericParameterError> {
         // The numeric fields stay private, so this one gate establishes the invariant consumed by
-        // NumberBuilder and every later update/paint path.
+        // Number construction and every later update/paint path.
         validate_numeric_value_and_step(value, step)?;
         Ok(Self {
             value,
@@ -126,8 +124,7 @@ pub struct Number {
 impl Number {
     /// Constructs a retained node and a weak typed handle to its concrete number input.
     pub fn create(parameters: NumberParameters) -> (TypedWidgetHandle<Self>, Node) {
-        let widget = NumberBuilder::create_widget(parameters);
-        Node::typed_widget(widget)
+        Node::typed_widget(Self::from(parameters))
     }
 
     /// Returns the current number value.
@@ -279,14 +276,9 @@ impl Widget for Number {
     }
 }
 
-/// Type-level constructor for [`Number`].
-pub struct NumberBuilder;
-
-impl WidgetBuilder for NumberBuilder {
-    type Parameters = NumberParameters;
-    type W = Number;
-
-    fn create_widget(parameters: Self::Parameters) -> Self::W {
+impl From<NumberParameters> for Number {
+    /// Transfers one-shot parameters into the concrete Number runtime.
+    fn from(parameters: NumberParameters) -> Self {
         // NumberParameters' private numeric fields can only be produced by its fallible validated
         // constructors, so the runtime starts finite without a second repair policy.
         Number {

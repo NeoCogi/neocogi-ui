@@ -57,7 +57,7 @@
 use crate::{ControlRole};
 
 use crate::math::{clamp_i64_to_i32, RectExt};
-use crate::{Dimensioni, MouseButton, Node, Recti, TypedWidgetHandle, UiInputEvent, Vec2i, Widget, WidgetOption, WidgetPaintCtx, WidgetParameters, WidgetUpdateCtx};
+use crate::{Dimensioni, MouseButton, Node, Recti, TypedWidgetHandle, UiInputEvent, Vec2i, Widget, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 /// Axis selector used by shared scrollbar geometry helpers.
@@ -233,8 +233,6 @@ pub struct ScrollbarParameters {
     pub opt: WidgetOption,
 }
 
-impl WidgetParameters for ScrollbarParameters {}
-
 impl ScrollbarParameters {
     /// Creates an empty scrollbar on `axis`; callers or a containing layout can install lengths later.
     pub fn new(axis: ScrollbarAxis) -> Self {
@@ -261,7 +259,7 @@ impl ScrollbarParameters {
 
     /// Replaces the base widget options while retaining scrollbar-specific focus behavior.
     pub const fn with_opt(mut self, opt: WidgetOption) -> Self {
-        // Store only caller-authored options. Scrollbar::create adds the mandatory preserve-focus
+        // Store only caller-authored options. Scrollbar adds the mandatory preserve-focus
         // behavior so an option replacement cannot accidentally make a bar steal editor focus.
         self.opt = opt;
         self
@@ -279,31 +277,43 @@ impl crate::WidgetEvent for ScrollbarChanged {}
 
 /// Standalone one-axis scrollbar whose allocation supplies its complete track rectangle.
 pub struct Scrollbar {
+    /// Immutable axis used to project pointer and layout coordinates.
     axis: ScrollbarAxis,
+    /// Nonnegative length currently visible through the scroll viewport.
     viewport_len: i32,
+    /// Nonnegative total content extent on the selected axis.
     content_len: i32,
+    /// Requested content offset, clamped whenever the authoritative lengths change.
     offset: i32,
+    /// Caller-authored interaction options, augmented by the control's focus-preserving policy.
     opt: WidgetOption,
+    /// Typed source for user-originated offset changes; programmatic setters remain silent.
     changed_event: crate::EventSource<ScrollbarChanged>,
 }
 
-impl Scrollbar {
-    /// Creates a standalone scrollbar node and a weak typed handle to its retained state.
-    pub fn create(parameters: ScrollbarParameters) -> (TypedWidgetHandle<Self>, Node) {
+impl From<ScrollbarParameters> for Scrollbar {
+    /// Normalizes the complete initial range before publishing the standalone control.
+    fn from(parameters: ScrollbarParameters) -> Self {
         // Normalize all range inputs before mounting so the first measure, update, and paint phases
         // observe one coherent range and offset.
         let viewport_len = parameters.viewport_len.max(0);
         let content_len = parameters.content_len.max(0);
         let maximum = scrollbar_max_scroll(content_len, viewport_len);
-        let widget = Self {
+        Self {
             axis: parameters.axis,
             viewport_len,
             content_len,
             offset: parameters.offset.clamp(0, maximum),
             opt: parameters.opt,
             changed_event: crate::EventSource::new(),
-        };
-        Node::typed_widget(widget)
+        }
+    }
+}
+
+impl Scrollbar {
+    /// Creates a standalone scrollbar node and a weak typed handle to its retained state.
+    pub fn create(parameters: ScrollbarParameters) -> (TypedWidgetHandle<Self>, Node) {
+        Node::typed_widget(Self::from(parameters))
     }
 
     /// Returns the axis configured when this scrollbar was constructed.

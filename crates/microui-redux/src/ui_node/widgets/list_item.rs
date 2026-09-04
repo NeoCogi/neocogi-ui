@@ -57,8 +57,6 @@ impl<Value: Clone + 'static> crate::LeafWidget for ListItem<Value> {
     }
 }
 
-impl<Value: 'static> WidgetParameters for ListItemParameters<Value> {}
-
 impl ListItemParameters {
     /// Creates list-item parameters with default widget options.
     pub fn new(label: impl Into<String>) -> Self {
@@ -155,8 +153,7 @@ pub struct ListItem<Value: Clone + 'static = ()> {
 impl<Value: Clone + 'static> ListItem<Value> {
     /// Constructs a retained node and a weak typed handle to its concrete list item.
     pub fn create(parameters: ListItemParameters<Value>) -> (TypedWidgetHandle<Self>, Node) {
-        let widget = Self::from(parameters);
-        Node::typed_widget(widget)
+        Node::typed_widget(Self::from(parameters))
     }
 
     /// Constructs a list item that emits through an enclosing list view's shared port.

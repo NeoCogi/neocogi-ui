@@ -31,10 +31,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::ui_node::children::ChildrenHandle;
-use crate::{
-    AvailableSpace, Container, ContainerWidget, Dimensioni, MeasureCtx, Recti, TrackSize, TypedWidgetHandle, Widget, WidgetOption, WidgetPaintCtx,
-    WidgetParameters,
-};
+use crate::{AvailableSpace, Container, ContainerWidget, Dimensioni, MeasureCtx, Recti, TrackSize, TypedWidgetHandle, Widget, WidgetOption, WidgetPaintCtx};
 
 use crate::ui_node::layout::{TrackResolver, resolve_tracks_in_place};
 use super::{Children, ContainerLayoutCtx, Node};
@@ -294,8 +291,6 @@ pub struct GridParameters {
     column_tracks: Vec<TrackSize>,
     row_tracks: Vec<TrackSize>,
 }
-
-impl WidgetParameters for GridParameters {}
 
 impl GridParameters {
     /// Creates a Grid from track policies and ordered unmounted items.

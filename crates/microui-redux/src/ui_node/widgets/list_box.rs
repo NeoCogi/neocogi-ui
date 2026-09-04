@@ -52,8 +52,6 @@ impl crate::LeafWidget for ListBox {
     }
 }
 
-impl WidgetParameters for ListBoxParameters {}
-
 impl ListBoxParameters {
     /// Creates list-box parameters with default widget options.
     pub fn new(label: impl Into<String>, image: Option<TextureId>) -> Self {
@@ -106,7 +104,7 @@ pub struct ListBox {
 impl ListBox {
     /// Constructs a retained node and a weak typed handle to its concrete list box.
     pub fn create(parameters: ListBoxParameters) -> (crate::TypedWidgetHandle<Self>, crate::Node) {
-        let widget = ListBoxBuilder::create_widget(parameters);
+        let widget = ListBox::from(parameters);
         crate::Node::typed_widget(widget)
     }
 
@@ -179,14 +177,9 @@ impl crate::TypedWidget<ListBoxSubmitted> for ListBox {
     }
 }
 
-/// Builder associating list-box parameters with the concrete runtime.
-pub struct ListBoxBuilder;
-
-impl WidgetBuilder for ListBoxBuilder {
-    type Parameters = ListBoxParameters;
-    type W = ListBox;
-
-    fn create_widget(parameters: Self::Parameters) -> Self::W {
+impl From<ListBoxParameters> for ListBox {
+    /// Transfers one-shot parameters into the concrete ListBox runtime.
+    fn from(parameters: ListBoxParameters) -> Self {
         ListBox {
             label: parameters.label,
             image: parameters.image,

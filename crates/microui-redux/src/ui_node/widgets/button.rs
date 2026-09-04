@@ -81,8 +81,6 @@ pub struct ButtonParameters {
     pub fill: WidgetFillOption,
 }
 
-impl WidgetParameters for ButtonParameters {}
-
 impl ButtonParameters {
     /// Creates text-button parameters with default options.
     pub fn new(label: impl Into<String>) -> Self {
@@ -165,7 +163,7 @@ pub struct Button {
 impl Button {
     /// Constructs a retained node and a weak typed handle to its concrete button.
     pub fn create(parameters: ButtonParameters) -> (crate::TypedWidgetHandle<Self>, crate::Node) {
-        let widget = ButtonBuilder::create_widget(parameters);
+        let widget = Button::from(parameters);
         crate::Node::typed_widget(widget)
     }
 
@@ -296,14 +294,9 @@ impl crate::TypedWidget<ButtonSubmitted> for Button {
     }
 }
 
-/// Builder associating button parameters with the concrete runtime.
-pub struct ButtonBuilder;
-
-impl WidgetBuilder for ButtonBuilder {
-    type Parameters = ButtonParameters;
-    type W = Button;
-
-    fn create_widget(parameters: Self::Parameters) -> Self::W {
+impl From<ButtonParameters> for Button {
+    /// Transfers one-shot parameters into the concrete Button runtime.
+    fn from(parameters: ButtonParameters) -> Self {
         Button {
             content: parameters.content,
             font: parameters.font,

@@ -34,7 +34,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     AtlasHandle, ChildParticipation, Container, ContainerWidget, ControlState, Dimensioni, MeasureCtx, PointerState, Recti, Skin, TypedWidgetHandle,
-    UiInputEvent, Widget, WidgetOption, WidgetPaintCtx, WidgetParameters, WidgetUpdateCtx,
+    UiInputEvent, Widget, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx,
 };
 
 use super::{Children, ContainerLayoutCtx, LinearItem, Node};
@@ -57,8 +57,6 @@ pub struct DisclosureParameters {
     variant: DisclosureVariant,
     opt: WidgetOption,
 }
-
-impl WidgetParameters for DisclosureParameters {}
 
 impl DisclosureParameters {
     /// Creates the framed header presentation and its top-to-bottom body items.

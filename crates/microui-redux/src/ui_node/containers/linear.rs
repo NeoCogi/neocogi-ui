@@ -35,7 +35,7 @@ use std::{cell::RefCell, rc::Rc};
 use crate::ui_node::children::ChildrenHandle;
 use crate::{
     AtlasHandle, AvailableSpace, Children, Constraints, Container, ContainerLayoutCtx, ContainerWidget, Dimensioni, MeasureCtx, Node, Recti, Skin, TrackSize,
-    TypedWidgetHandle, UiInputEvent, Widget, WidgetOption, WidgetPaintCtx, WidgetParameters, WidgetUpdateCtx,
+    TypedWidgetHandle, UiInputEvent, Widget, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx,
 };
 
 use crate::ui_node::layout::TrackResolver;
@@ -126,8 +126,6 @@ pub struct LinearParameters {
     direction: LinearDirection,
     cross_size: LinearCrossSize,
 }
-
-impl WidgetParameters for LinearParameters {}
 
 impl LinearParameters {
     /// Creates a left-to-right sequence with content-derived line height.

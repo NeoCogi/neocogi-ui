@@ -200,15 +200,9 @@ struct TextureClippingParameters {
     screen_content: Rc<RefCell<Option<Recti>>>,
 }
 
-impl WidgetParameters for TextureClippingParameters {}
-
-struct TextureClippingBuilder;
-
-impl WidgetBuilder for TextureClippingBuilder {
-    type Parameters = TextureClippingParameters;
-    type W = TextureClippingProbe;
-
-    fn create_widget(parameters: Self::Parameters) -> Self::W {
+impl From<TextureClippingParameters> for TextureClippingProbe {
+    /// Transfers one-shot parameters into the concrete TextureClippingProbe runtime.
+    fn from(parameters: TextureClippingParameters) -> Self {
         TextureClippingProbe {
             texture: parameters.texture,
             white_icon: parameters.white_icon,
@@ -251,7 +245,7 @@ fn main() -> Result<(), String> {
     // process boundary; retain the typed texture failure until that same final boundary.
     let texture = ctx.try_load_image_rgba(16, 12, &[0xFF; 16 * 12 * 4]).map_err(|error| error.to_string())?;
     let screen_content = Rc::new(RefCell::new(None));
-    let probe = TextureClippingBuilder::create_widget(TextureClippingParameters {
+    let probe = TextureClippingProbe::from(TextureClippingParameters {
         texture,
         white_icon,
         screen_content: screen_content.clone(),

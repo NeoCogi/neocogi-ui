@@ -65,17 +65,9 @@ struct CubeWidget {
     opt: WidgetOption,
 }
 
-struct CubeParameters;
-
-impl WidgetParameters for CubeParameters {}
-
-struct CubeBuilder;
-
-impl WidgetBuilder for CubeBuilder {
-    type Parameters = CubeParameters;
-    type W = CubeWidget;
-
-    fn create_widget(_parameters: Self::Parameters) -> Self::W {
+impl Default for CubeWidget {
+    /// Creates the CubeWidget runtime with its fixed input policy.
+    fn default() -> Self {
         CubeWidget { opt: WidgetOption::NO_INTERACT }
     }
 }
@@ -189,7 +181,7 @@ fn main() {
             })
             .expect("register cube renderer");
 
-        let cube = CubeBuilder::create_widget(CubeParameters);
+        let cube = CubeWidget::default();
         let tree = Node::custom_render(cube, cube_renderer);
         ctx.ui().create_window(Window::new("Typed backend-frame cube", rect(40, 40, 360, 360), tree));
 

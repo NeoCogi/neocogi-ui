@@ -81,8 +81,6 @@ impl crate::LeafWidget for Textbox {
     }
 }
 
-impl WidgetParameters for TextboxParameters {}
-
 impl TextboxParameters {
     /// Creates textbox parameters with default widget options.
     pub fn new(buf: impl Into<String>) -> Self {
@@ -227,8 +225,7 @@ impl crate::WidgetEvent for TextboxSubmitted {}
 impl Textbox {
     /// Constructs a retained node and a weak typed handle to its concrete textbox.
     pub fn create(parameters: TextboxParameters) -> (TypedWidgetHandle<Self>, Node) {
-        let widget = TextboxBuilder::create_widget(parameters);
-        Node::typed_widget(widget)
+        Node::typed_widget(Self::from(parameters))
     }
 
     /// Returns the native event endpoint emitted after every user-originated text change.
@@ -462,14 +459,9 @@ impl Widget for Textbox {
     }
 }
 
-/// Builder associating textbox parameters with the concrete runtime.
-pub struct TextboxBuilder;
-
-impl WidgetBuilder for TextboxBuilder {
-    type Parameters = TextboxParameters;
-    type W = Textbox;
-
-    fn create_widget(parameters: Self::Parameters) -> Self::W {
+impl From<TextboxParameters> for Textbox {
+    /// Transfers one-shot parameters into the concrete Textbox runtime.
+    fn from(parameters: TextboxParameters) -> Self {
         // Parameters retain their original input until the concrete storage boundary. Normalize
         // here so even a future alternate constructor cannot mount a multiline textbox buffer.
         let buf = normalize_single_line_text(parameters.buf);
@@ -528,7 +520,7 @@ mod tests {
 
     #[test]
     fn text_events_preserve_complete_snapshots_and_per_port_fifo() {
-        let mut textbox = TextboxBuilder::create_widget(TextboxParameters::new(""));
+        let mut textbox = Textbox::from(TextboxParameters::new(""));
         let mut dispatcher = text_dispatcher(&textbox);
 
         update_textbox(
@@ -560,7 +552,7 @@ mod tests {
 
     #[test]
     fn programmatic_text_and_cursor_setters_are_silent() {
-        let mut textbox = TextboxBuilder::create_widget(TextboxParameters::new("initial"));
+        let mut textbox = Textbox::from(TextboxParameters::new("initial"));
         let mut dispatcher = text_dispatcher(&textbox);
         textbox.set_text("replacement");
         textbox.set_cursor(3);
@@ -572,7 +564,7 @@ mod tests {
     /// Verifies the public Home and End keys select the two single-line cursor boundaries.
     #[test]
     fn home_and_end_keys_select_single_line_boundaries() {
-        let mut textbox = TextboxBuilder::create_widget(TextboxParameters::new("abcd"));
+        let mut textbox = Textbox::from(TextboxParameters::new("abcd"));
         textbox.set_cursor(2);
 
         update_textbox(
@@ -597,7 +589,7 @@ mod tests {
     /// Verifies construction, programmatic replacement, and pasted input all remain single-line.
     #[test]
     fn every_text_ingress_removes_line_endings() {
-        let mut textbox = TextboxBuilder::create_widget(TextboxParameters::new("a\r\nb\rc\n"));
+        let mut textbox = Textbox::from(TextboxParameters::new("a\r\nb\rc\n"));
         assert_eq!(textbox.text(), "abc");
         assert_eq!(textbox.cursor(), 3);
 

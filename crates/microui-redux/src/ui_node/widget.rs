@@ -253,12 +253,6 @@ impl KeyboardBehavior {
     }
 }
 
-/// Marker trait for one-shot widget construction input.
-///
-/// Parameters seed and configure one concrete runtime. Values that applications mutate after
-/// construction live directly in the builder's associated widget.
-pub trait WidgetParameters: 'static {}
-
 /// Cloneable, non-owning typed access to one concrete retained widget.
 ///
 /// A [`crate::Node`] owns the only persistent strong reference after construction. Containers and
@@ -333,17 +327,6 @@ impl<W: Widget + 'static> TypedWidgetHandle<W> {
         let mut widget = widget.try_borrow_mut().ok()?;
         Some(f(&mut widget.widget))
     }
-}
-
-/// Associates one-shot construction parameters with one concrete widget runtime.
-pub trait WidgetBuilder: Sized + 'static {
-    /// One-shot input consumed during construction.
-    type Parameters: WidgetParameters;
-    /// Concrete runtime created by this builder.
-    type W: LeafWidget + 'static;
-
-    /// Consumes parameters and creates the concrete widget before it is mounted and erased.
-    fn create_widget(parameters: Self::Parameters) -> Self::W;
 }
 
 /// Whether one widget update changed inputs to retained measurement or child placement.
@@ -517,8 +500,6 @@ mod widget_tests {
         value: usize,
     }
 
-    impl WidgetParameters for TestParameters {}
-
     struct TestWidget {
         value: usize,
         opt: WidgetOption,
@@ -547,13 +528,9 @@ mod widget_tests {
         }
     }
 
-    struct TestBuilder;
-
-    impl WidgetBuilder for TestBuilder {
-        type Parameters = TestParameters;
-        type W = TestWidget;
-
-        fn create_widget(parameters: Self::Parameters) -> Self::W {
+    impl From<TestParameters> for TestWidget {
+        /// Transfers one-shot parameters into the concrete TestWidget runtime.
+        fn from(parameters: TestParameters) -> Self {
             TestWidget {
                 value: parameters.value,
                 opt: WidgetOption::NONE,
@@ -563,7 +540,7 @@ mod widget_tests {
 
     #[test]
     fn runtime_retains_one_strong_owner_and_exposes_only_weak_handles() {
-        let widget = TestBuilder::create_widget(TestParameters { value: 7 });
+        let widget = TestWidget::from(TestParameters { value: 7 });
         let (state, node) = crate::Node::typed_widget(widget);
 
         assert_eq!(state.try_read(|state| state.value), Some(7));
@@ -579,7 +556,7 @@ mod widget_tests {
 
     #[test]
     fn checked_widget_handle_reads_and_updates_allocate_nothing() {
-        let widget = TestBuilder::create_widget(TestParameters { value: 0 });
+        let widget = TestWidget::from(TestParameters { value: 0 });
         let (state, _node) = crate::Node::typed_widget(widget);
 
         // Warm the checked upgrade and borrow paths before isolating their steady-state cost.
@@ -599,7 +576,7 @@ mod widget_tests {
 
     #[test]
     fn panicking_typed_update_preserves_measurement_invalidation() {
-        let widget = TestBuilder::create_widget(TestParameters { value: 0 });
+        let widget = TestWidget::from(TestParameters { value: 0 });
         let (state, mut node) = crate::Node::typed_widget(widget);
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -620,7 +597,7 @@ mod widget_tests {
             handle.clone()
         }
 
-        let (handle, _node) = crate::Node::typed_widget(TestBuilder::create_widget(TestParameters { value: 0 }));
+        let (handle, _node) = crate::Node::typed_widget(TestWidget::from(TestParameters { value: 0 }));
         let clone = clone_handle(&handle);
 
         assert!(clone.is_alive());
@@ -628,8 +605,8 @@ mod widget_tests {
 
     #[test]
     fn same_cell_conflicts_are_unavailable_and_cross_cell_access_succeeds() {
-        let first_widget = TestBuilder::create_widget(TestParameters { value: 1 });
-        let second_widget = TestBuilder::create_widget(TestParameters { value: 2 });
+        let first_widget = TestWidget::from(TestParameters { value: 1 });
+        let second_widget = TestWidget::from(TestParameters { value: 2 });
         let (first, _first_node) = crate::Node::typed_widget(first_widget);
         let first_clone = first.clone();
         let (second, _second_node) = crate::Node::typed_widget(second_widget);
@@ -648,7 +625,7 @@ mod widget_tests {
 
     #[test]
     fn active_access_keeps_state_alive_until_its_closure_returns() {
-        let widget = TestBuilder::create_widget(TestParameters { value: 4 });
+        let widget = TestWidget::from(TestParameters { value: 4 });
         let (state, node) = crate::Node::typed_widget(widget);
         let widget = RefCell::new(Some(node));
 
@@ -661,7 +638,7 @@ mod widget_tests {
 
         assert!(!state.is_alive());
 
-        let widget = TestBuilder::create_widget(TestParameters { value: 5 });
+        let widget = TestWidget::from(TestParameters { value: 5 });
         let (state, node) = crate::Node::typed_widget(widget);
         let widget = RefCell::new(Some(node));
         state
@@ -675,7 +652,7 @@ mod widget_tests {
 
     #[test]
     fn update_with_preserves_input_when_widget_access_is_unavailable() {
-        let widget = TestBuilder::create_widget(TestParameters { value: 0 });
+        let widget = TestWidget::from(TestParameters { value: 0 });
         let (state, node) = crate::Node::typed_widget(widget);
         let closure_called = Rc::new(Cell::new(false));
 
@@ -714,7 +691,7 @@ mod widget_tests {
 
     #[test]
     fn discarded_handle_does_not_change_runtime_widget_ownership() {
-        let (handle, node) = crate::Node::typed_widget(TestBuilder::create_widget(TestParameters { value: 9 }));
+        let (handle, node) = crate::Node::typed_widget(TestWidget::from(TestParameters { value: 9 }));
         let observer = handle.clone();
         drop(handle);
         assert_eq!(observer.try_read(|widget| widget.value), Some(9));

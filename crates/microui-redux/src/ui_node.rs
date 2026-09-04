@@ -65,10 +65,7 @@ pub(crate) mod text_layout;
 pub use text_layout::TextWrap;
 mod widget;
 mod widget_context;
-pub use widget::{
-    Change, KeyboardAction, KeyboardBehavior, LeafWidget, TypedWidgetHandle, Widget, WidgetBuilder, WidgetFillOption, WidgetOption, WidgetPaintCtx,
-    WidgetParameters, WidgetUpdateCtx,
-};
+pub use widget::{Change, KeyboardAction, KeyboardBehavior, LeafWidget, TypedWidgetHandle, Widget, WidgetFillOption, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx};
 pub(crate) use widget::WidgetStorage;
 pub mod widgets;
 pub use widgets::{Scrollbar, ScrollbarAxis, ScrollbarChanged, ScrollbarParameters};

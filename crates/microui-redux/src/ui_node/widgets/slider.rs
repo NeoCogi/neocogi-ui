@@ -83,8 +83,6 @@ impl crate::LeafWidget for Slider {
     }
 }
 
-impl WidgetParameters for SliderParameters {}
-
 impl SliderParameters {
     /// Creates slider parameters with default widget options.
     ///
@@ -161,8 +159,7 @@ pub struct Slider {
 impl Slider {
     /// Constructs a retained node and a weak typed handle to its concrete slider.
     pub fn create(parameters: SliderParameters) -> (TypedWidgetHandle<Self>, Node) {
-        let widget = SliderBuilder::create_widget(parameters);
-        Node::typed_widget(widget)
+        Node::typed_widget(Self::from(parameters))
     }
 
     /// Returns the current slider value.
@@ -423,14 +420,9 @@ impl Widget for Slider {
     }
 }
 
-/// Type-level constructor for [`Slider`].
-pub struct SliderBuilder;
-
-impl WidgetBuilder for SliderBuilder {
-    type Parameters = SliderParameters;
-    type W = Slider;
-
-    fn create_widget(parameters: Self::Parameters) -> Self::W {
+impl From<SliderParameters> for Slider {
+    /// Transfers one-shot parameters into the concrete Slider runtime.
+    fn from(parameters: SliderParameters) -> Self {
         // SliderParameters' private fields arrive finite, ordered, and directionally coherent;
         // only the initial value may need ordinary endpoint clamping.
         Slider {
@@ -454,7 +446,7 @@ mod tests {
     use super::*;
     use crate::test_support::{test_atlas as make_test_atlas, test_skin};
     use crate::ui_node::{UiInputEvent, widget_context::localize_event};
-    use crate::{Number, NumberBuilder, NumberParameters};
+    use crate::{Number, NumberParameters};
 
     fn run_slider_once(slider: &mut Slider, rect: Recti, events: Vec<UiInputEvent>, hovered: bool, focused: bool, active: bool, scroll: Option<Vec2i>) {
         let atlas = make_test_atlas();
@@ -615,7 +607,7 @@ mod tests {
         };
         let bounds = rect(0, 0, 100, 20);
 
-        let mut keyboard_increase = SliderBuilder::create_widget(parameters());
+        let mut keyboard_increase = Slider::from(parameters());
         run_slider_once(
             &mut keyboard_increase,
             bounds,
@@ -627,9 +619,9 @@ mod tests {
             false,
             None,
         );
-        let mut wheel_increase = SliderBuilder::create_widget(parameters());
+        let mut wheel_increase = Slider::from(parameters());
         run_slider_once(&mut wheel_increase, bounds, Vec::new(), true, false, false, Some(vec2(0, 1)));
-        let mut pointer_increase = SliderBuilder::create_widget(parameters());
+        let mut pointer_increase = Slider::from(parameters());
         run_slider_once(
             &mut pointer_increase,
             bounds,
@@ -645,7 +637,7 @@ mod tests {
         );
         assert_eq!([keyboard_increase.value(), wheel_increase.value(), pointer_increase.value()], [6.0; 3]);
 
-        let mut keyboard_decrease = SliderBuilder::create_widget(parameters());
+        let mut keyboard_decrease = Slider::from(parameters());
         run_slider_once(
             &mut keyboard_decrease,
             bounds,
@@ -657,9 +649,9 @@ mod tests {
             false,
             None,
         );
-        let mut wheel_decrease = SliderBuilder::create_widget(parameters());
+        let mut wheel_decrease = Slider::from(parameters());
         run_slider_once(&mut wheel_decrease, bounds, Vec::new(), true, false, false, Some(vec2(0, -1)));
-        let mut pointer_decrease = SliderBuilder::create_widget(parameters());
+        let mut pointer_decrease = Slider::from(parameters());
         run_slider_once(
             &mut pointer_decrease,
             bounds,
@@ -681,7 +673,7 @@ mod tests {
         let atlas = make_test_atlas();
         let style = test_skin(&atlas);
 
-        let mut slider = SliderBuilder::create_widget(SliderParameters::new(5.0, 5.0, 5.0).expect("equal finite bounds form a valid inert slider"));
+        let mut slider = Slider::from(SliderParameters::new(5.0, 5.0, 5.0).expect("equal finite bounds form a valid inert slider"));
         let rect = rect(0, 0, 100, 20);
         let input = vec![UiInputEvent::MouseDrag {
             pos: vec2(50, 10),
@@ -699,7 +691,7 @@ mod tests {
 
     #[test]
     fn slider_wheel_snaps_fractional_step_from_lower_bound() {
-        let mut slider = SliderBuilder::create_widget(
+        let mut slider = Slider::from(
             SliderParameters::with_opt(1.15, 1.0, 2.0, 0.2, precision(2), WidgetOption::FRAME)
                 .expect("finite ascending fractional slider parameters must validate"),
         );
@@ -714,7 +706,7 @@ mod tests {
 
     #[test]
     fn slider_drag_snaps_fractional_step_from_lower_bound() {
-        let mut slider = SliderBuilder::create_widget(
+        let mut slider = Slider::from(
             SliderParameters::with_opt(10.0, 10.0, 20.0, 0.25, precision(2), WidgetOption::FRAME)
                 .expect("finite ascending fractional slider parameters must validate"),
         );
@@ -733,7 +725,7 @@ mod tests {
         let atlas = make_test_atlas();
         let style = test_skin(&atlas);
 
-        let mut slider = SliderBuilder::create_widget(SliderParameters::new(0.0, 0.0, 100.0).expect("finite ascending slider parameters must validate"));
+        let mut slider = Slider::from(SliderParameters::new(0.0, 0.0, 100.0).expect("finite ascending slider parameters must validate"));
         let rect = rect(40, 20, 100, 20);
         let input = vec![UiInputEvent::MouseDrag {
             pos: vec2(90, 30),
@@ -751,7 +743,7 @@ mod tests {
     /// Verifies pointer mapping normalizes screen space before scaling a valid maximum-size range.
     #[test]
     fn slider_pointer_midpoint_does_not_overflow_a_large_finite_range() {
-        let mut slider = SliderBuilder::create_widget(SliderParameters::new(0.0, 0.0, Real::MAX).expect("a maximum finite range span must remain usable"));
+        let mut slider = Slider::from(SliderParameters::new(0.0, 0.0, Real::MAX).expect("a maximum finite range span must remain usable"));
         let input = vec![UiInputEvent::MouseDrag {
             pos: vec2(50, 10),
             delta: Vec2i::default(),
@@ -768,7 +760,7 @@ mod tests {
     fn slider_pointer_right_edge_preserves_a_small_upper_endpoint() {
         let low = Real::MIN / 2.0;
         let high = 1.0;
-        let mut slider = SliderBuilder::create_widget(SliderParameters::new(low, low, high).expect("a finite wide-offset range must remain usable"));
+        let mut slider = Slider::from(SliderParameters::new(low, low, high).expect("a finite wide-offset range must remain usable"));
         let input = vec![UiInputEvent::MouseDrag {
             pos: vec2(100, 10),
             delta: Vec2i::default(),
@@ -784,7 +776,7 @@ mod tests {
     #[test]
     fn slider_tiny_step_keeps_a_representable_pointer_value() {
         let minimum_step = Real::from_bits(1);
-        let mut slider = SliderBuilder::create_widget(
+        let mut slider = Slider::from(
             SliderParameters::with_opt(0.0, 0.0, 1.0, minimum_step, DecimalPrecision::ZERO, WidgetOption::FRAME)
                 .expect("the smallest positive finite step must remain usable"),
         );
@@ -811,8 +803,7 @@ mod tests {
             .patch
             .with_insets(crate::SliceInsets::ZERO);
         crate::test_support::replace_control_patches(&mut style, ControlRole::SliderThumb, |_| frame);
-        let mut slider =
-            SliderBuilder::create_widget(SliderParameters::new(Real::MAX / 2.0, 0.0, Real::MAX).expect("a maximum finite range span must remain usable"));
+        let mut slider = Slider::from(SliderParameters::new(Real::MAX / 2.0, 0.0, Real::MAX).expect("a maximum finite range span must remain usable"));
         let bounds = rect(0, 0, 100, 20);
         let mut display_list = crate::render::DisplayList::new();
         let mut ctx = WidgetPaintCtx::new_with_content_geometry(bounds, &mut display_list, bounds, &style, &atlas, true, false, false, false, false, true);
@@ -830,8 +821,7 @@ mod tests {
 
     #[test]
     fn number_drag_records_a_typed_change_and_programmatic_setter_is_silent() {
-        let mut number =
-            NumberBuilder::create_widget(NumberParameters::new(0.0, 2.0, DecimalPrecision::ZERO).expect("finite non-negative number parameters must validate"));
+        let mut number = Number::from(NumberParameters::new(0.0, 2.0, DecimalPrecision::ZERO).expect("finite non-negative number parameters must validate"));
         let mut dispatcher = number_dispatcher(&number);
         let mut values = Vec::new();
         number.set_value(4.0);
@@ -853,9 +843,8 @@ mod tests {
     /// Verifies wide drag arithmetic preserves representable cancellation in both directions.
     #[test]
     fn number_drag_does_not_overflow_before_a_representable_result() {
-        let mut increasing = NumberBuilder::create_widget(
-            NumberParameters::new(Real::MIN, Real::MAX, DecimalPrecision::ZERO).expect("finite extreme number parameters must validate"),
-        );
+        let mut increasing =
+            Number::from(NumberParameters::new(Real::MIN, Real::MAX, DecimalPrecision::ZERO).expect("finite extreme number parameters must validate"));
         run_number_once(
             &mut increasing,
             vec![UiInputEvent::MouseDrag {
@@ -866,9 +855,8 @@ mod tests {
         );
         assert_eq!(increasing.value(), Real::MAX);
 
-        let mut decreasing = NumberBuilder::create_widget(
-            NumberParameters::new(Real::MAX, Real::MAX, DecimalPrecision::ZERO).expect("finite extreme number parameters must validate"),
-        );
+        let mut decreasing =
+            Number::from(NumberParameters::new(Real::MAX, Real::MAX, DecimalPrecision::ZERO).expect("finite extreme number parameters must validate"));
         run_number_once(
             &mut decreasing,
             vec![UiInputEvent::MouseDrag {
@@ -883,9 +871,8 @@ mod tests {
     /// Verifies arrow arithmetic saturates at the finite Real endpoints instead of jumping to zero.
     #[test]
     fn number_arrow_overflow_saturates_in_the_requested_direction() {
-        let mut increasing = NumberBuilder::create_widget(
-            NumberParameters::new(Real::MAX, Real::MAX, DecimalPrecision::ZERO).expect("finite extreme number parameters must validate"),
-        );
+        let mut increasing =
+            Number::from(NumberParameters::new(Real::MAX, Real::MAX, DecimalPrecision::ZERO).expect("finite extreme number parameters must validate"));
         run_number_once(
             &mut increasing,
             vec![UiInputEvent::Key {
@@ -894,9 +881,8 @@ mod tests {
         );
         assert_eq!(increasing.value(), Real::MAX);
 
-        let mut decreasing = NumberBuilder::create_widget(
-            NumberParameters::new(Real::MIN, Real::MAX, DecimalPrecision::ZERO).expect("finite extreme number parameters must validate"),
-        );
+        let mut decreasing =
+            Number::from(NumberParameters::new(Real::MIN, Real::MAX, DecimalPrecision::ZERO).expect("finite extreme number parameters must validate"));
         run_number_once(
             &mut decreasing,
             vec![UiInputEvent::Key {
@@ -908,7 +894,7 @@ mod tests {
 
     #[test]
     fn slider_programmatic_setter_is_silent() {
-        let mut slider = SliderBuilder::create_widget(SliderParameters::new(0.0, -5.0, 5.0).expect("finite ascending slider parameters must validate"));
+        let mut slider = Slider::from(SliderParameters::new(0.0, -5.0, 5.0).expect("finite ascending slider parameters must validate"));
         let mut dispatcher = slider_dispatcher(&slider);
         slider.set_value(4.0);
         assert_eq!(slider.value(), 4.0);
@@ -918,7 +904,7 @@ mod tests {
     /// Eventless blur commits are user edits and share the step policy of pointer/key/wheel input.
     #[test]
     fn slider_text_commit_on_blur_snaps_once_and_reports_changed_geometry() {
-        let mut slider = SliderBuilder::create_widget(SliderParameters::with_opt(2.0, 0.0, 10.0, 1.0, DecimalPrecision::ZERO, WidgetOption::FRAME).unwrap());
+        let mut slider = Slider::from(SliderParameters::with_opt(2.0, 0.0, 10.0, 1.0, DecimalPrecision::ZERO, WidgetOption::FRAME).unwrap());
         let mut dispatcher = slider_dispatcher(&slider);
         slider.edit.editing = true;
         // Enter through the editing contract instead of reaching into the private numeric buffer.
@@ -959,8 +945,8 @@ mod tests {
     /// Verifies both numeric setters retain their last finite value when given invalid input.
     #[test]
     fn numeric_programmatic_setters_ignore_non_finite_values() {
-        let mut number = NumberBuilder::create_widget(NumberParameters::new(3.0, 1.0, DecimalPrecision::ZERO).expect("finite number parameters must validate"));
-        let mut slider = SliderBuilder::create_widget(SliderParameters::new(4.0, 0.0, 10.0).expect("finite slider parameters must validate"));
+        let mut number = Number::from(NumberParameters::new(3.0, 1.0, DecimalPrecision::ZERO).expect("finite number parameters must validate"));
+        let mut slider = Slider::from(SliderParameters::new(4.0, 0.0, 10.0).expect("finite slider parameters must validate"));
 
         for invalid in [Real::NAN, Real::INFINITY, Real::NEG_INFINITY] {
             number.set_value(invalid);
@@ -976,7 +962,7 @@ mod tests {
         let atlas = make_test_atlas();
         let mut style = test_skin(&atlas);
         style.metrics.thumb_size = i32::MIN;
-        let mut slider = SliderBuilder::create_widget(SliderParameters::new(0.5, 0.0, 1.0).expect("finite ascending slider parameters must validate"));
+        let mut slider = Slider::from(SliderParameters::new(0.5, 0.0, 1.0).expect("finite ascending slider parameters must validate"));
         let bounds = rect(0, 0, 100, 20);
         let mut display_list = crate::render::DisplayList::new();
         let mut ctx = WidgetPaintCtx::new_with_content_geometry(bounds, &mut display_list, bounds, &style, &atlas, true, false, false, false, false, true);

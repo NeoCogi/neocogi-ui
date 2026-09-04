@@ -53,8 +53,6 @@ impl crate::LeafWidget for Custom {
     }
 }
 
-impl WidgetParameters for CustomParameters {}
-
 impl CustomParameters {
     /// Creates custom-render parameters with default options.
     pub fn new(name: impl Into<String>) -> Self {
@@ -105,7 +103,7 @@ pub struct Custom {
 impl Custom {
     /// Constructs the unique runtime without exposing a meaningless unit-widget handle.
     pub fn create(parameters: CustomParameters) -> Self {
-        CustomBuilder::create_widget(parameters)
+        Custom::from(parameters)
     }
 
     /// Measures the custom widget's debug label as its default preferred size.
@@ -134,14 +132,9 @@ impl Widget for Custom {
     }
 }
 
-/// Builder associating custom-render parameters with the concrete runtime.
-pub struct CustomBuilder;
-
-impl WidgetBuilder for CustomBuilder {
-    type Parameters = CustomParameters;
-    type W = Custom;
-
-    fn create_widget(parameters: Self::Parameters) -> Self::W {
+impl From<CustomParameters> for Custom {
+    /// Transfers one-shot parameters into the concrete Custom runtime.
+    fn from(parameters: CustomParameters) -> Self {
         Custom {
             name: parameters.name,
             font: parameters.font,

@@ -56,8 +56,6 @@ impl crate::LeafWidget for Combo {
     }
 }
 
-impl WidgetParameters for ComboParameters {}
-
 impl ComboParameters {
     /// Creates combo parameters with default widget options.
     pub const fn new() -> Self {
@@ -275,8 +273,7 @@ impl crate::WidgetEvent for ComboSubmitted {}
 impl Combo {
     /// Constructs a retained node and a weak typed handle to its concrete combo.
     pub fn create(parameters: ComboParameters) -> (TypedWidgetHandle<Self>, Node) {
-        let widget = ComboBuilder::create_widget(parameters);
-        Node::typed_widget(widget)
+        Node::typed_widget(Self::from(parameters))
     }
 
     /// Returns the native event endpoint emitted after every selection change.
@@ -392,14 +389,9 @@ impl Widget for Combo {
     }
 }
 
-/// Builder associating combo parameters with the concrete runtime.
-pub struct ComboBuilder;
-
-impl WidgetBuilder for ComboBuilder {
-    type Parameters = ComboParameters;
-    type W = Combo;
-
-    fn create_widget(parameters: Self::Parameters) -> Self::W {
+impl From<ComboParameters> for Combo {
+    /// Transfers one-shot parameters into the concrete Combo runtime.
+    fn from(parameters: ComboParameters) -> Self {
         Combo {
             selected: 0,
             open: false,

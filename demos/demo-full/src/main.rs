@@ -137,18 +137,10 @@ struct Grid3dWidgetParameters {
     data: Rc<RefCell<Grid3dState>>,
 }
 
-impl WidgetParameters for Grid3dWidgetParameters {}
-
-/// Typed builder used by `Node::custom_render` to pair input with backend rendering.
-struct Grid3dWidgetBuilder;
-
-impl WidgetBuilder for Grid3dWidgetBuilder {
-    type Parameters = Grid3dWidgetParameters;
-    type W = Grid3dWidget;
-
+impl From<Grid3dWidgetParameters> for Grid3dWidget {
     /// Creates a scroll-grabbing leaf over the complete grid body.
-    fn create_widget(parameters: Self::Parameters) -> Self::W {
-        Self::W {
+    fn from(parameters: Grid3dWidgetParameters) -> Self {
+        Self {
             data: parameters.data,
             opt: WidgetOption::GRAB_SCROLL,
         }
@@ -221,15 +213,9 @@ struct PainterDemo {
 
 struct PainterDemoParameters;
 
-impl WidgetParameters for PainterDemoParameters {}
-
-struct PainterDemoBuilder;
-
-impl WidgetBuilder for PainterDemoBuilder {
-    type Parameters = PainterDemoParameters;
-    type W = PainterDemo;
-
-    fn create_widget(_parameters: Self::Parameters) -> Self::W {
+impl From<PainterDemoParameters> for PainterDemo {
+    /// Transfers one-shot parameters into the concrete PainterDemo runtime.
+    fn from(_parameters: PainterDemoParameters) -> Self {
         PainterDemo {
             phase: 0.0,
             star_center: None,
@@ -387,15 +373,9 @@ struct FalloffEditor {
 
 struct FalloffEditorParameters;
 
-impl WidgetParameters for FalloffEditorParameters {}
-
-struct FalloffEditorBuilder;
-
-impl WidgetBuilder for FalloffEditorBuilder {
-    type Parameters = FalloffEditorParameters;
-    type W = FalloffEditor;
-
-    fn create_widget(_parameters: Self::Parameters) -> Self::W {
+impl From<FalloffEditorParameters> for FalloffEditor {
+    /// Transfers one-shot parameters into the concrete FalloffEditor runtime.
+    fn from(_parameters: FalloffEditorParameters) -> Self {
         let mut editor = FalloffEditor {
             nodes: vec![
                 FalloffNode {
@@ -843,15 +823,9 @@ struct SuzanneWidgetParameters {
     data: Rc<RefCell<SuzanneData>>,
 }
 
-impl WidgetParameters for SuzanneWidgetParameters {}
-
-struct SuzanneWidgetBuilder;
-
-impl WidgetBuilder for SuzanneWidgetBuilder {
-    type Parameters = SuzanneWidgetParameters;
-    type W = SuzanneWidget;
-
-    fn create_widget(parameters: Self::Parameters) -> Self::W {
+impl From<SuzanneWidgetParameters> for SuzanneWidget {
+    /// Transfers one-shot parameters into the concrete SuzanneWidget runtime.
+    fn from(parameters: SuzanneWidgetParameters) -> Self {
         SuzanneWidget {
             data: parameters.data,
             opt: WidgetOption::GRAB_SCROLL,
@@ -945,10 +919,6 @@ impl LeafWidget for SuzanneWidget {
     fn measure(&self, _style: &Skin, _atlas: &AtlasHandle, _constraints: Constraints) -> Dimensioni {
         Dimensioni::new(80, 24)
     }
-}
-
-fn stateful_leaf<B: WidgetBuilder>(parameters: B::Parameters) -> (TypedWidgetHandle<B::W>, Node) {
-    Node::typed_widget(B::create_widget(parameters))
 }
 
 trait IntoDemoNode {
@@ -1149,10 +1119,6 @@ fn replace_root_content(root: &TypedWidgetHandle<Linear>, items: Vec<LinearItem>
     if !matches!(root.try_update_with(items, Linear::replace), Ok(Ok(()))) {
         panic!("{name} root content state unavailable");
     }
-}
-
-fn retained_leaf<B: WidgetBuilder>(parameters: B::Parameters) -> Node {
-    stateful_leaf::<B>(parameters).1
 }
 
 fn static_label(text: impl Into<String>) -> Node {
@@ -1670,41 +1636,41 @@ impl State {
         let blue_texture = upload_solid_texture(ctx, 64, 24, [0, 0, 0xFF, 0xFF]);
         let noise_texture = upload_noise_texture(ctx, 24, 32);
         let texture_buttons = [
-            retained_leaf::<ButtonBuilder>(ButtonParameters::with_image(
+            Node::widget(Button::from(ButtonParameters::with_image(
                 "Texture 1 - Red",
                 Some(red_texture),
                 WidgetOption::FRAME,
                 WidgetFillOption::ALL,
-            )),
-            retained_leaf::<ButtonBuilder>(ButtonParameters::with_image(
+            ))),
+            Node::widget(Button::from(ButtonParameters::with_image(
                 "Texture 2 - Green",
                 Some(green_texture),
                 WidgetOption::FRAME,
                 WidgetFillOption::ALL,
-            )),
-            retained_leaf::<ButtonBuilder>(ButtonParameters::with_image(
+            ))),
+            Node::widget(Button::from(ButtonParameters::with_image(
                 "Texture 3 - Blue",
                 Some(blue_texture),
                 WidgetOption::FRAME,
                 WidgetFillOption::ALL,
-            )),
-            retained_leaf::<ButtonBuilder>(ButtonParameters::with_image(
+            ))),
+            Node::widget(Button::from(ButtonParameters::with_image(
                 "Texture 4 - Noise",
                 Some(noise_texture),
                 WidgetOption::FRAME,
                 WidgetFillOption::ALL,
-            )),
+            ))),
         ];
         let external_image_button = image_texture.map(|texture| {
-            retained_leaf::<ButtonBuilder>(ButtonParameters::with_scaled_image(
+            Node::widget(Button::from(ButtonParameters::with_scaled_image(
                 "External Image",
                 Some(texture),
                 WidgetOption::FRAME,
                 WidgetFillOption::ALL,
-            ))
+            )))
         });
         let style_color_slider_pairs = std::array::from_fn(|_| {
-            stateful_leaf::<SliderBuilder>(
+            Slider::create(
                 SliderParameters::with_opt(0.0, 0.0, 255.0, 0.0, DecimalPrecision::ZERO, WidgetOption::FRAME | WidgetOption::ALIGN_CENTER)
                     .expect("hard-coded color slider parameters must be valid"),
             )
@@ -1712,27 +1678,27 @@ impl State {
         let style_color_slider_states = style_color_slider_pairs.each_ref().map(|(state, _)| state.clone());
         let style_color_slider_changed = style_color_slider_pairs.each_ref().map(|(handle, _)| handle.changed());
         let style_color_sliders = style_color_slider_pairs.map(|(_, runtime)| runtime);
-        let style_color_swatch_pairs = std::array::from_fn(|_| stateful_leaf::<ColorSwatchBuilder>(ColorSwatchParameters::new(color(0, 0, 0, 0xFF))));
+        let style_color_swatch_pairs = std::array::from_fn(|_| ColorSwatch::create(ColorSwatchParameters::new(color(0, 0, 0, 0xFF))));
         let style_color_swatch_states = style_color_swatch_pairs.each_ref().map(|(state, _)| state.clone());
         let style_color_swatches = style_color_swatch_pairs.map(|(_, runtime)| runtime);
         let style_value_slider_pairs = [
-            stateful_leaf::<SliderBuilder>(
+            Slider::create(
                 SliderParameters::with_opt(0.0, 0.0, 16.0, 0.0, DecimalPrecision::ZERO, WidgetOption::FRAME | WidgetOption::ALIGN_CENTER)
                     .expect("hard-coded style slider parameters must be valid"),
             ),
-            stateful_leaf::<SliderBuilder>(
+            Slider::create(
                 SliderParameters::with_opt(0.0, 0.0, 16.0, 0.0, DecimalPrecision::ZERO, WidgetOption::FRAME | WidgetOption::ALIGN_CENTER)
                     .expect("hard-coded style slider parameters must be valid"),
             ),
-            stateful_leaf::<SliderBuilder>(
+            Slider::create(
                 SliderParameters::with_opt(0.0, 0.0, 128.0, 0.0, DecimalPrecision::ZERO, WidgetOption::FRAME | WidgetOption::ALIGN_CENTER)
                     .expect("hard-coded style slider parameters must be valid"),
             ),
-            stateful_leaf::<SliderBuilder>(
+            Slider::create(
                 SliderParameters::with_opt(0.0, 0.0, 128.0, 0.0, DecimalPrecision::ZERO, WidgetOption::FRAME | WidgetOption::ALIGN_CENTER)
                     .expect("hard-coded style slider parameters must be valid"),
             ),
-            stateful_leaf::<SliderBuilder>(
+            Slider::create(
                 SliderParameters::with_opt(0.0, 0.0, 128.0, 0.0, DecimalPrecision::ZERO, WidgetOption::FRAME | WidgetOption::ALIGN_CENTER)
                     .expect("hard-coded style slider parameters must be valid"),
             ),
@@ -1741,7 +1707,7 @@ impl State {
         let style_value_slider_changed = style_value_slider_pairs.each_ref().map(|(handle, _)| handle.changed());
         let style_value_sliders = style_value_slider_pairs.map(|(_, runtime)| runtime);
         let bg_slider_pairs = std::array::from_fn(|_| {
-            stateful_leaf::<SliderBuilder>(
+            Slider::create(
                 SliderParameters::with_opt(0.0, 0.0, 255.0, 0.0, DecimalPrecision::ZERO, WidgetOption::FRAME | WidgetOption::ALIGN_CENTER)
                     .expect("hard-coded background slider parameters must be valid"),
             )
@@ -1756,22 +1722,22 @@ impl State {
             .wrap(TextWrap::Word),
         )
         .1;
-        let (submit_buf_state, submit_buf) = stateful_leaf::<TextboxBuilder>(TextboxParameters::new("").font(FontRole::Mono.into()));
+        let (submit_buf_state, submit_buf) = Textbox::create(TextboxParameters::new("").font(FontRole::Mono.into()));
         let submit_buf_submitted = submit_buf_state.submitted();
-        let (log_text_state, log_text) = stateful_leaf::<TextBlockBuilder>(TextBlockParameters::new("").font(FontRole::Mono.into()));
+        let (log_text_state, log_text) = TextBlock::create(TextBlockParameters::new("").font(FontRole::Mono.into()));
         let (_, log_scroll_content) = Linear::create(LinearParameters::vertical([log_text]));
         let (log_scroll_state, log_scroll) = ScrollArea::create(ScrollAreaParameters::new(
             ScrollAreaOption::FRAME | ScrollAreaOption::ENABLE_SCROLL,
             log_scroll_content,
         ));
-        let typography_heading = retained_leaf::<TextBlockBuilder>(TextBlockParameters::new("NORMAL.ttf at 18px").font(FontRole::Heading.into()));
-        let typography_body = retained_leaf::<TextBlockBuilder>(
+        let typography_heading = Node::widget(TextBlock::from(TextBlockParameters::new("NORMAL.ttf at 18px").font(FontRole::Heading.into())));
+        let typography_body = Node::widget(TextBlock::from(
             TextBlockParameters::with_wrap(
                 "NORMAL.ttf at 12px remains the control font. Window titles use BOLD.ttf, and the log window uses CONSOLE.ttf for input and output.",
                 TextWrap::Word,
             )
             .font(FontRole::Body.into()),
-        );
+        ));
         // Begin with an application-owned copy of the ordinary atlas-derived default selection.
         let style = themes.selected_skin().clone();
         let style_palette = FlatPalette::default();
@@ -1804,10 +1770,7 @@ impl State {
         // is replaced from real drawable dimensions by `sync_grid_surface` every frame because this
         // construction callback cannot yet observe the platform window size.
         let (grid_menu_bar, grid_menu_items) = grid_menu_bar(ctx);
-        let grid_node = Node::custom_render(
-            Grid3dWidgetBuilder::create_widget(Grid3dWidgetParameters { data: grid_3d_state.clone() }),
-            grid_renderer,
-        );
+        let grid_node = Node::custom_render(Grid3dWidget::from(Grid3dWidgetParameters { data: grid_3d_state.clone() }), grid_renderer);
         let grid_root = ctx.ui().create_window(
             Window::new("X-Y Grid Surface", rect(0, 0, 1, 1), grid_node)
                 .menu_bar(grid_menu_bar)
@@ -1891,7 +1854,7 @@ impl State {
             .ui()
             .create_child_window(&grid_root, Window::new("Weight Demo", rect(530, 270, 280, 260), weight_node))
             .expect("grid root must own the weight demo");
-        let (combo_typed_state, combo_runtime) = stateful_leaf::<ComboBuilder>(ComboParameters::new());
+        let (combo_typed_state, combo_runtime) = Combo::create(ComboParameters::new());
         let combo_submitted = combo_typed_state.submitted();
         let combo_item_pairs = [
             ListItem::create(ListItemParameters::new("Apple")),
@@ -1960,7 +1923,7 @@ impl State {
         ];
         let weight_button_submitted = weight_button_pairs.each_ref().map(|(submitted, _)| submitted.clone());
         let weight_buttons = weight_button_pairs.map(|(_, runtime)| runtime);
-        let (background_swatch_state, background_swatch) = stateful_leaf::<ColorSwatchBuilder>(ColorSwatchParameters::new(color(90, 95, 100, 0xFF)));
+        let (background_swatch_state, background_swatch) = ColorSwatch::create(ColorSwatchParameters::new(color(90, 95, 100, 0xFF)));
         let runtimes = DemoRuntimes {
             bg_sliders,
             style_color_sliders,
@@ -2027,9 +1990,9 @@ impl State {
             triangle_renderer,
             suzanne_renderer,
             triangle_widget: Custom::create(CustomParameters::new("Triangle")),
-            painter_widget: PainterDemoBuilder::create_widget(PainterDemoParameters),
-            falloff_widget: FalloffEditorBuilder::create_widget(FalloffEditorParameters),
-            suzanne_widget: SuzanneWidgetBuilder::create_widget(SuzanneWidgetParameters { data: suzanne_data.clone() }),
+            painter_widget: PainterDemo::from(PainterDemoParameters),
+            falloff_widget: FalloffEditor::from(FalloffEditorParameters),
+            suzanne_widget: SuzanneWidget::from(SuzanneWidgetParameters { data: suzanne_data.clone() }),
             background_swatch,
         };
         // The file picker is a library component owned by this application state. Its dialog and

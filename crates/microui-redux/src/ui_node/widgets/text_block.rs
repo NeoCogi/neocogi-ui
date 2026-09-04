@@ -82,8 +82,6 @@ impl crate::LeafWidget for TextBlock {
     }
 }
 
-impl WidgetParameters for TextBlockParameters {}
-
 impl TextBlockParameters {
     /// Creates text-block parameters without wrapping.
     pub fn new(text: impl Into<String>) -> Self {
@@ -123,8 +121,7 @@ pub struct TextBlock {
 impl TextBlock {
     /// Constructs a retained node and a weak typed handle to its concrete text block.
     pub fn create(parameters: TextBlockParameters) -> (TypedWidgetHandle<Self>, Node) {
-        let widget = TextBlockBuilder::create_widget(parameters);
-        Node::typed_widget(widget)
+        Node::typed_widget(Self::from(parameters))
     }
 
     /// Returns the current display text.
@@ -223,14 +220,9 @@ impl Widget for TextBlock {
     }
 }
 
-/// Builder associating text-block parameters with the concrete runtime.
-pub struct TextBlockBuilder;
-
-impl WidgetBuilder for TextBlockBuilder {
-    type Parameters = TextBlockParameters;
-    type W = TextBlock;
-
-    fn create_widget(parameters: Self::Parameters) -> Self::W {
+impl From<TextBlockParameters> for TextBlock {
+    /// Transfers one-shot parameters into the concrete TextBlock runtime.
+    fn from(parameters: TextBlockParameters) -> Self {
         TextBlock {
             wrap: parameters.wrap,
             font: parameters.font,
@@ -251,7 +243,7 @@ mod tests {
     /// Verifies both public parameter forms and later replacements canonicalize line endings.
     #[test]
     fn text_block_stores_only_lf_line_endings() {
-        let mut block = TextBlockBuilder::create_widget(TextBlockParameters {
+        let mut block = TextBlock::from(TextBlockParameters {
             text: "a\r\nb\rc\n".to_owned(),
             wrap: TextWrap::None,
             font: FontRef::Role(FontRole::Body),

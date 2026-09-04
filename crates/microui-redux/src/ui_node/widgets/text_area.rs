@@ -81,8 +81,6 @@ pub struct TextAreaParameters {
     pub scroll_options: ScrollAreaOption,
 }
 
-impl WidgetParameters for TextAreaParameters {}
-
 impl TextAreaParameters {
     /// Creates framed, scrollable text-area parameters without line wrapping.
     pub fn new(buf: impl Into<String>) -> Self {

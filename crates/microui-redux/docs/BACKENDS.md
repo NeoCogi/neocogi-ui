@@ -136,7 +136,7 @@ let cube_renderer = ctx.register_custom_renderer({
     }
 })?;
 
-let cube = CubeBuilder::create_widget(CubeParameters);
+let cube = CubeWidget::default();
 let tree = Node::custom_render(cube, cube_renderer);
 let _root = ctx.ui().create_window(Window::new("Cube", rect(40, 40, 360, 360), tree));
 ```

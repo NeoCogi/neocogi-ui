@@ -11,6 +11,12 @@ Most built-ins accept a one-shot `*Parameters` value and return
 the weak typed handle only when later reads, mutations, or event subscriptions are needed. Removing
 the node expires its handles instead of keeping an invisible widget alive.
 
+Standalone controls also implement `From<TheirParameters>` when an unmounted concrete value is
+useful: `let button = Button::from(ButtonParameters::new("Save"));`. Mount that value with
+`Node::typed_widget(button)` or `Node::widget(button)`. Parameters are ordinary structs, and
+construction needs no marker trait or separate stateless builder type. Composed controls such as
+`TextArea` use `create()` to install their complete internal tree and weak coordination handles.
+
 ```rust
 # use microui_redux::prelude::*;
 # struct Model { checked: bool }

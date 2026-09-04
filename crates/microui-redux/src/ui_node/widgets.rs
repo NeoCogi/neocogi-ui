@@ -82,20 +82,20 @@ mod textbox;
 pub(crate) use control::content_height;
 use control::{inline_content_size, place_inline_content, place_scaled_visual_content, scaled_visual_content_size, text_size, widget_fill_visible};
 
-pub use button::{Button, ButtonBuilder, ButtonContent, ButtonParameters, ButtonSubmitted};
-pub use checkbox::{Checkbox, CheckboxBuilder, CheckboxChanged, CheckboxParameters};
-pub use color_swatch::{ColorSwatch, ColorSwatchBuilder, ColorSwatchParameters};
-pub use combo::{Combo, ComboBuilder, ComboChanged, ComboParameters, ComboSubmitted};
-pub use custom::{Custom, CustomBuilder, CustomParameters};
-pub use list_box::{ListBox, ListBoxBuilder, ListBoxParameters, ListBoxSubmitted};
+pub use button::{Button, ButtonContent, ButtonParameters, ButtonSubmitted};
+pub use checkbox::{Checkbox, CheckboxChanged, CheckboxParameters};
+pub use color_swatch::{ColorSwatch, ColorSwatchParameters};
+pub use combo::{Combo, ComboChanged, ComboParameters, ComboSubmitted};
+pub use custom::{Custom, CustomParameters};
+pub use list_box::{ListBox, ListBoxParameters, ListBoxSubmitted};
 pub use list_item::{ListItem, ListItemParameters, ListItemSubmitted};
-pub use number::{Number, NumberBuilder, NumberChanged, NumberParameters};
+pub use number::{Number, NumberChanged, NumberParameters};
 pub use numeric_edit::{DecimalPrecision, DecimalPrecisionError, NumericParameterError};
 pub use scrollbar::{Scrollbar, ScrollbarAxis, ScrollbarChanged, ScrollbarParameters};
-pub use slider::{Slider, SliderBuilder, SliderChanged, SliderParameters};
+pub use slider::{Slider, SliderChanged, SliderParameters};
 pub use text_area::{TextArea, TextAreaChanged, TextAreaParameters, TextAreaSubmitted};
-pub use text_block::{TextBlock, TextBlockBuilder, TextBlockParameters};
-pub use textbox::{Textbox, TextboxBuilder, TextboxChanged, TextboxParameters, TextboxSubmitted};
+pub use text_block::{TextBlock, TextBlockParameters};
+pub use textbox::{Textbox, TextboxChanged, TextboxParameters, TextboxSubmitted};
 
 #[cfg(test)]
 mod tests;

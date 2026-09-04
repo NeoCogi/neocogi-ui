@@ -48,13 +48,13 @@ fn image_widgets_measure_external_texture_dimensions() {
     let style = test_skin(&atlas);
     let texture = TextureId::new_test(7, 13, 5);
 
-    let button = ButtonBuilder::create_widget(ButtonParameters::with_image("aa", Some(texture), WidgetOption::FRAME, WidgetFillOption::ALL));
+    let button = Button::from(ButtonParameters::with_image("aa", Some(texture), WidgetOption::FRAME, WidgetFillOption::ALL));
     let button_size = button.measure(&style, &atlas, Constraints::unbounded());
 
     assert_eq!(button_size.width, style.metrics.padding * 2 + texture.width() + style.metrics.padding + 16);
     assert_eq!(button_size.height, 14);
 
-    let list_box = ListBoxBuilder::create_widget(ListBoxParameters::new("a", Some(texture)));
+    let list_box = ListBox::from(ListBoxParameters::new("a", Some(texture)));
     let list_size = list_box.measure(&style, &atlas, Constraints::unbounded());
 
     assert_eq!(list_size.width, style.metrics.padding * 2 + texture.width() + style.metrics.padding + 8);
@@ -80,7 +80,7 @@ fn inline_image_placement_keeps_visual_and_text_rects_separate() {
 fn combo_run_toggles_open_state() {
     let atlas = make_test_atlas();
     let style = Rc::new(test_skin(&atlas));
-    let mut combo = ComboBuilder::create_widget(ComboParameters::new());
+    let mut combo = Combo::from(ComboParameters::new());
     let rect = rect(0, 0, 100, 20);
     let mut ctx = WidgetUpdateCtx::new_with_interaction(
         rect,
@@ -125,7 +125,7 @@ fn combo_submission_carries_update_anchor_while_paint_remains_observational() {
 
     let atlas = make_test_atlas();
     let style = test_skin(&atlas);
-    let mut combo = ComboBuilder::create_widget(ComboParameters::new());
+    let mut combo = Combo::from(ComboParameters::new());
     let mut dispatcher = crate::event::WidgetEventDispatcher::new();
     dispatcher.subscribe(combo.submitted(), record).unwrap();
     let update_rect = rect(30, 40, 100, 20);
@@ -176,7 +176,7 @@ fn combo_submission_carries_update_anchor_while_paint_remains_observational() {
 
 #[test]
 fn combo_select_updates_label_and_closes_popup() {
-    let mut combo = ComboBuilder::create_widget(ComboParameters::new());
+    let mut combo = Combo::from(ComboParameters::new());
     let items = ["Apple", "Banana", "Cherry"];
 
     combo.open_popup();
@@ -265,11 +265,11 @@ fn record_combo(events: &mut Vec<ClickEvent>, event: &ComboSubmitted) {
 
 #[test]
 fn typed_click_events_preserve_fifo_within_each_port() {
-    let mut checkbox = CheckboxBuilder::create_widget(CheckboxParameters::new("check", false));
-    let mut button = ButtonBuilder::create_widget(ButtonParameters::new("button"));
+    let mut checkbox = Checkbox::from(CheckboxParameters::new("check", false));
+    let mut button = Button::from(ButtonParameters::new("button"));
     let mut item = ListItem::from(ListItemParameters::new("item"));
-    let mut list = ListBoxBuilder::create_widget(ListBoxParameters::new("list", None));
-    let mut combo = ComboBuilder::create_widget(ComboParameters::new());
+    let mut list = ListBox::from(ListBoxParameters::new("list", None));
+    let mut combo = Combo::from(ComboParameters::new());
 
     let mut dispatcher = crate::event::WidgetEventDispatcher::new();
     dispatcher.subscribe(checkbox.changed(), record_checkbox).unwrap();

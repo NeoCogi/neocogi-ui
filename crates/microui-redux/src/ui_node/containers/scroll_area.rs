@@ -37,7 +37,7 @@ use bitflags::bitflags;
 use crate::ui_node::widgets::{Scrollbar, ScrollbarAxis, ScrollbarParameters};
 use crate::{
     ChildParticipation, Container, ContainerWidget, Dimensioni, FrameRole, MeasureCtx, Recti, TypedWidgetHandle, UiInputEvent, Vec2i, Widget, WidgetOption,
-    WidgetPaintCtx, WidgetParameters, WidgetUpdateCtx,
+    WidgetPaintCtx, WidgetUpdateCtx,
 };
 
 use super::{Children, ContainerLayoutCtx, Node};
@@ -81,8 +81,6 @@ pub struct ScrollAreaParameters {
     /// Immutable presentation options for the completed composite.
     opt: ScrollAreaOption,
 }
-
-impl WidgetParameters for ScrollAreaParameters {}
 
 impl ScrollAreaParameters {
     /// Creates a scroll area that owns one ordinary content node.

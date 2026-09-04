@@ -275,8 +275,7 @@ pub mod retained {
         AvailableSpace, Change, ChildParticipation, Children, Constraints, Container, ContainerLayoutCtx, ContainerWidget, Disclosure, DisclosureParameters,
         Grid, GridItem, GridParameters, GridSpan, KeyboardAction, KeyboardBehavior, LeafWidget, Linear, LinearCrossSize, LinearDirection, LinearItem,
         LinearParameters, MeasureCtx, Node, ScrollArea, ScrollAreaOption, ScrollAreaParameters, Scrollbar, ScrollbarAxis, ScrollbarChanged,
-        ScrollbarParameters, TrackSize, UiInputEvent, Widget, TextWrap, TypedWidgetHandle, WidgetBuilder, WidgetFillOption, WidgetOption, WidgetPaintCtx,
-        WidgetParameters, WidgetUpdateCtx,
+        ScrollbarParameters, TrackSize, UiInputEvent, Widget, TextWrap, TypedWidgetHandle, WidgetFillOption, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx,
     };
     pub use crate::context::{Context, ContextFrame, Ui};
     pub use crate::window_manager::{
@@ -306,7 +305,7 @@ pub mod prelude {
         KeyboardBehavior, Linear, LinearCrossSize, LinearDirection, LinearItem, LinearParameters, Node, PopupEvent, PopupHandle, MeasureCtx,
         SurfaceCreationError, SurfaceMutationError, WindowEvent, WindowHandle, LayerBinding, DEFAULT_LAYER, MAX_LAYER, MIN_LAYER, ScrollArea, ScrollAreaOption,
         ScrollAreaParameters, Scrollbar, ScrollbarAxis, ScrollbarChanged, ScrollbarParameters, TrackSize, LeafWidget, TextWrap, UiInputEvent,
-        TypedWidgetHandle, Widget, WidgetBuilder, WidgetFillOption, WidgetOption, WidgetPaintCtx, WidgetParameters, WidgetUpdateCtx, Window, WindowOption,
+        TypedWidgetHandle, Widget, WidgetFillOption, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx, Window, WindowOption,
     };
     pub use crate::math::{expand_rect, rect, vec2};
     pub use crate::theme::{
@@ -317,12 +316,11 @@ pub mod prelude {
     #[cfg(feature = "theme-json")]
     pub use crate::theme::{LoadedTheme, THEME_SCHEMA_VERSION, ThemeLoadError};
     pub use crate::widgets::{
-        Button, ButtonBuilder, ButtonContent, ButtonParameters, ButtonSubmitted, Checkbox, CheckboxBuilder, CheckboxChanged, CheckboxParameters, ColorSwatch,
-        ColorSwatchBuilder, ColorSwatchParameters, Combo, ComboBuilder, ComboChanged, ComboParameters, ComboSubmitted, Custom, CustomBuilder, CustomParameters,
-        DecimalPrecision, DecimalPrecisionError, ListBox, ListBoxBuilder, ListBoxParameters, ListBoxSubmitted, ListItem, ListItemParameters, ListItemSubmitted,
-        Number, NumberBuilder, NumberChanged, NumberParameters, NumericParameterError, Slider, SliderBuilder, SliderChanged, SliderParameters, TextArea,
-        TextAreaChanged, TextAreaParameters, TextAreaSubmitted, TextBlock, TextBlockBuilder, TextBlockParameters, Textbox, TextboxBuilder, TextboxChanged,
-        TextboxParameters, TextboxSubmitted, Real,
+        Button, ButtonContent, ButtonParameters, ButtonSubmitted, Checkbox, CheckboxChanged, CheckboxParameters, ColorSwatch, ColorSwatchParameters, Combo,
+        ComboChanged, ComboParameters, ComboSubmitted, Custom, CustomParameters, DecimalPrecision, DecimalPrecisionError, ListBox, ListBoxParameters,
+        ListBoxSubmitted, ListItem, ListItemParameters, ListItemSubmitted, Number, NumberChanged, NumberParameters, NumericParameterError, Slider,
+        SliderChanged, SliderParameters, TextArea, TextAreaChanged, TextAreaParameters, TextAreaSubmitted, TextBlock, TextBlockParameters, Textbox,
+        TextboxChanged, TextboxParameters, TextboxSubmitted, Real,
     };
     pub use rs_math3d::{
         Box3f, Color4b, CrossProduct, Dimension, Dimensioni, FloatVector, Mat4f, Quat, Quatf, Rect, Recti, Vec2f, Vec2i, Vec3f, Vec4f, Vector, Vector3,
@@ -354,14 +352,13 @@ pub use ui_node::{
     AvailableSpace, Change, ChildParticipation, Children, Constraints, Container, ContainerLayoutCtx, ContainerWidget, Disclosure, DisclosureParameters, Grid,
     GridItem, GridParameters, GridSpan, KeyboardAction, KeyboardBehavior, LeafWidget, Linear, LinearCrossSize, LinearDirection, LinearItem, LinearParameters,
     MeasureCtx, Node, ScrollArea, ScrollAreaOption, ScrollAreaParameters, Scrollbar, ScrollbarAxis, ScrollbarChanged, ScrollbarParameters, TextWrap, TrackSize,
-    UiInputEvent, Widget, TypedWidgetHandle, WidgetBuilder, WidgetFillOption, WidgetOption, WidgetPaintCtx, WidgetParameters, WidgetUpdateCtx,
+    UiInputEvent, Widget, TypedWidgetHandle, WidgetFillOption, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx,
 };
 pub use widgets::{
-    Button, ButtonBuilder, ButtonContent, ButtonParameters, ButtonSubmitted, Checkbox, CheckboxBuilder, CheckboxChanged, CheckboxParameters, ColorSwatch,
-    ColorSwatchBuilder, ColorSwatchParameters, Combo, ComboBuilder, ComboChanged, ComboParameters, ComboSubmitted, Custom, CustomBuilder, CustomParameters,
-    DecimalPrecision, DecimalPrecisionError, ListBox, ListBoxBuilder, ListBoxParameters, ListBoxSubmitted, ListItem, ListItemParameters, ListItemSubmitted,
-    Number, NumberBuilder, NumberChanged, NumberParameters, NumericParameterError, Slider, SliderBuilder, SliderChanged, SliderParameters, TextArea,
-    TextAreaChanged, TextAreaParameters, TextAreaSubmitted, Real, TextBlock, TextBlockBuilder, TextBlockParameters, Textbox, TextboxBuilder, TextboxChanged,
+    Button, ButtonContent, ButtonParameters, ButtonSubmitted, Checkbox, CheckboxChanged, CheckboxParameters, ColorSwatch, ColorSwatchParameters, Combo,
+    ComboChanged, ComboParameters, ComboSubmitted, Custom, CustomParameters, DecimalPrecision, DecimalPrecisionError, ListBox, ListBoxParameters,
+    ListBoxSubmitted, ListItem, ListItemParameters, ListItemSubmitted, Number, NumberChanged, NumberParameters, NumericParameterError, Slider, SliderChanged,
+    SliderParameters, TextArea, TextAreaChanged, TextAreaParameters, TextAreaSubmitted, Real, TextBlock, TextBlockParameters, Textbox, TextboxChanged,
     TextboxParameters, TextboxSubmitted,
 };
 

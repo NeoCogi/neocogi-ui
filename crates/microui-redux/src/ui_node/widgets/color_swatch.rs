@@ -52,8 +52,6 @@ impl crate::LeafWidget for ColorSwatch {
     }
 }
 
-impl WidgetParameters for ColorSwatchParameters {}
-
 impl ColorSwatchParameters {
     /// Creates swatch parameters with the provided fill color.
     pub fn new(fill: Color) -> Self {
@@ -94,7 +92,7 @@ pub struct ColorSwatch {
 impl ColorSwatch {
     /// Constructs a retained node and a weak typed handle to its concrete color swatch.
     pub fn create(parameters: ColorSwatchParameters) -> (crate::TypedWidgetHandle<Self>, crate::Node) {
-        let widget = ColorSwatchBuilder::create_widget(parameters);
+        let widget = ColorSwatch::from(parameters);
         crate::Node::typed_widget(widget)
     }
 
@@ -177,14 +175,9 @@ impl Widget for ColorSwatch {
     }
 }
 
-/// Builder associating color-swatch parameters with the concrete runtime.
-pub struct ColorSwatchBuilder;
-
-impl WidgetBuilder for ColorSwatchBuilder {
-    type Parameters = ColorSwatchParameters;
-    type W = ColorSwatch;
-
-    fn create_widget(parameters: Self::Parameters) -> Self::W {
+impl From<ColorSwatchParameters> for ColorSwatch {
+    /// Transfers one-shot parameters into the concrete ColorSwatch runtime.
+    fn from(parameters: ColorSwatchParameters) -> Self {
         ColorSwatch {
             font: parameters.font,
             opt: parameters.opt,
