@@ -30,7 +30,7 @@ impl Model {
 fn install_file_dialog<B: RendererBackend>(context: &mut Context<B, Model>, owner_window: &WindowHandle) -> Model {
     let file_dialog = FileDialog::new(context, owner_window, Model::file_dialog_mut);
     context
-        .subscribe(file_dialog.completed(), Model::file_dialog_completed)
+        .subscribe(file_dialog.completed(), |state, _, event| Model::file_dialog_completed(state, event))
         .expect("the new completion source has no previous subscriber");
     Model { file_dialog, last_completion: None }
 }

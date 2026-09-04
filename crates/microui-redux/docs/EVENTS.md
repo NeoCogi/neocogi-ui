@@ -3,16 +3,16 @@
 Strongly typed semantic dispatch for retained widgets, application state, and reusable components.
 
 This module connects events produced by retained widgets and application-owned components to
-methods on one application state value. Its central rule remains deliberately narrow:
+callbacks receiving one application state value. Its central rule remains deliberately narrow:
 
 > One widget-event dispatcher owns subscriptions for exactly one concrete target type, while each
 > retained producer owns and queues the payloads for its own event ports.
 
 There is no public event bus, application-wide message enum, global queue, multicast list,
 payload downcast, or public standalone dispatcher lifetime. The public surface consists of event
-payload types, producer-owned [`EventSource`] values, weak [`WidgetEventPortHandle`] values, state-only [`crate::Context::subscribe`] methods,
-and opt-in context-aware [`crate::Context::subscribe_context`] methods. Context owns the
-application widget-event dispatcher.
+payload types, producer-owned [`EventSource`] values, weak [`WidgetEventPortHandle`] values, and
+one [`crate::Context::subscribe`] method. Each callback receives application state, a scoped `Ui`,
+and its concrete event. Context owns the application widget-event dispatcher.
 
 ## Input routing versus widget-event dispatch
 
@@ -68,13 +68,13 @@ Context<B, State>
 │
 └── owns WidgetEventDispatcher<State>
        └── owns Vec<Box<dyn WidgetEventDispatch<State>>>
-                  └── owns Subscription<State, E, Handler>
+                  └── owns Subscription<E, Handler>
                              ├── owns Handler
                              └── owns queue storage        ─────┐
                                                                │
 WidgetEventPortHandle<E> ──────────────── Weak ────────────────┘
 
-dispatch boundary ── lends &mut Ui<'_> ──> opted-in Handler
+dispatch boundary ── lends &mut Ui<'_> ──> Handler
 
 Application State
 └── owns FileDialog
@@ -86,7 +86,8 @@ Application State
 The producer owns the source; its subscription owns only queue storage. Consequently:
 
 - cloning a `WidgetEventPortHandle` does not extend producer lifetime;
-- registering a handler does not extend producer lifetime;
+- the subscription machinery does not retain a producer; application captures own whatever
+  values they explicitly move into the callback, so capture weak UI handles rather than owners;
 - removing a widget closes its port and discards ordinary queued payloads;
 - explicitly closing a source preserves one terminal payload for its existing subscriber;
 - an application-owned component source remains alive for the component lifetime; and
@@ -168,23 +169,27 @@ typed retained source
      │ changed() / submitted() / completed() / ...
      v
 WidgetEventPortHandle<E>
-     │ Context::subscribe(port, State::method)
+     │ Context::subscribe(port, callback)
      v
-WidgetEventDispatcher<State>::add
+WidgetEventDispatcher<State>::subscribe
      │
      ├── upgrade the handle's Weak port reference
      ├── connect and retain queue storage without retaining the producer
-     ├── retain the concrete method or bound-method handler
-     └── erase Subscription<State, E, Handler>
+     ├── retain the concrete callback and its captures
+     └── erase Subscription<E, Handler>
                         as Box<dyn WidgetEventDispatch<State>>
 ```
 
-[`crate::Context::subscribe_with`] follows the same path but captures one application value in
-the concrete handler. That value belongs to the subscription and lives until the context is
-dropped or the dead subscription is pruned. [`crate::Context::subscribe_context`] and
-[`crate::Context::subscribe_context_with`] use parallel typed adapters whose methods also receive
-a short-lived [`crate::Ui`]. The dispatcher stores no context borrow; it lends the
-capability only while invoking the method at the safe boundary below.
+The callback has the single signature `FnMut(&mut State, &mut Ui<'_>, &E) + 'static`. A method with
+that signature can be passed directly. A closure can ignore `Ui`, call an existing state-only
+method, or capture owned registration data with `move`. Mutable captures persist across event
+batches. They are subscription-owned and drop when the Context drops or its dead subscription is
+pruned. Rust prevents retaining the temporary `Ui` and event borrows.
+
+Application authors own capture policy: avoid strong owner cycles and keep authoritative model
+state in `State` when it needs to be read outside the handler. Use a small concrete struct or enum
+for related registration data instead of scattering unrelated captures. Stateful callbacks do not
+change source lifetime, dispatch ordering, or the single-subscriber rule.
 
 Application code therefore needs no separate dispatcher value:
 
@@ -203,7 +208,7 @@ impl Model {
 
 fn build<B: RendererBackend>(context: &mut Context<B, Model>) -> Node {
     let (button, node) = Button::create(ButtonParameters::new("Save"));
-    context.subscribe(button.submitted(), Model::save).unwrap();
+    context.subscribe(button.submitted(), |state, _, event| Model::save(state, event)).unwrap();
     node
 }
 
@@ -216,8 +221,8 @@ fn update<B: RendererBackend>(
 }
 ```
 
-A handler that must mutate a retained window or popup opts into context access explicitly. The ordinary
-state-only signature above remains unchanged:
+A handler that must mutate a retained window or popup uses the same subscription method and its
+borrowed `Ui` argument:
 
 ```no_run
 use microui_redux::prelude::*;
@@ -237,18 +242,18 @@ fn subscribe<B: RendererBackend>(
     context: &mut Context<B, Model>,
     submitted: WidgetEventPortHandle<ButtonSubmitted>,
 ) {
-    context.subscribe_context(submitted, Model::show_popup).unwrap();
+    context.subscribe(submitted, Model::show_popup).unwrap();
 }
 ```
 
 The type erasure applies only to the subscriptions stored in the heterogeneous dispatcher vector:
 
 ```text
-Subscription<State, ButtonSubmitted, fn(...)> ───────────────┐
-Subscription<State, SliderChanged, BoundEventHandler<...>> ──┼──> dyn WidgetEventDispatch<State>
-Subscription<State, TextboxChanged, fn(...)> ────────────────┘
+Subscription<ButtonSubmitted, CallbackA> ──┐
+Subscription<SliderChanged, CallbackB> ─────┼──> dyn WidgetEventDispatch<State>
+Subscription<TextboxChanged, CallbackC> ────┘
 
-                             E remains concrete ─────────> EventHandler::handle
+                  E remains concrete ─────> callback(state, ui, &event)
 ```
 
 Payloads are never converted to `Any`, cloned for a subscriber, or wrapped in `Rc`. A port has one
@@ -274,7 +279,7 @@ Context input FIFO
              ├── update every eligible retained root
              │       └── widgets append native payloads to their own ports
              ├── dispatch application handlers with &mut State
-             │       └── opted-in handlers also receive &mut Ui<'_>
+             │       └── handlers also receive &mut Ui<'_>
              └── commit layout before routing the next raw input event
 ```
 
@@ -341,11 +346,11 @@ dropped during unwinding; newly emitted events still in live ports remain queued
 
 ## Application-owned component binding
 
-A reusable component can bind its private control sources to methods on the ordinary application
-target by storing an accessor function with each subscription. `FileDialog::new` uses this pattern:
+A reusable component can bind its private control sources to callbacks on the ordinary application
+target by capturing an accessor function in each subscription. `FileDialog::new` uses this pattern:
 the application supplies `fn(&mut State) -> &mut FileDialog`, and the component registers its button,
-textbox, list-item, and root sources through `Context::subscribe_with` or
-`Context::subscribe_context_with`. Dispatch borrows the application state, follows the accessor to
+textbox, list-item, and root sources through ordinary `Context::subscribe` callbacks capturing
+that accessor. Dispatch borrows the application state, follows the accessor to
 the component, and invokes its behavior at the same safe boundary as every other application
 handler.
 
@@ -376,9 +381,8 @@ rather than retained by the port.
 Each subscription adds one vector entry and one boxed concrete [`Subscription`]. Constructing an
 application-owned `FileDialog` adds one ordinary hidden root and one subscription for each stable
 internal source; contexts that do not construct one pay none of those costs. Dynamic folder and file
-rows share stable ports, so refreshing or reopening does not rebuild subscriptions. Context-aware
-handlers add no queue or retained owner; their adapter contains only the supplied function pointer
-and optional bound value. The handler is statically dispatched inside that subscription; only
+rows share stable ports, so refreshing or reopening does not rebuild subscriptions. Callbacks add no extra queue or callable allocation: the concrete callback and its captures live
+directly inside the existing subscription box. The handler is statically dispatched inside that subscription; only
 [`WidgetEventDispatch`] is dynamically dispatched. The dispatcher first scans its `S` subscriptions to
 prune dead widgets, then
 visits every subscription once per cascade sweep and invokes handlers once per delivered event.
@@ -392,10 +396,8 @@ of a synchronous, context-local retained UI event mechanism.
 
 ## Event-time surface and component coordination
 
-Handlers that only mutate application or widget state continue to use `Context::subscribe` and
-`Context::subscribe_with`. A handler that must create, show, hide, move, resize, raise, or destroy a
-Context-owned window or popup uses `subscribe_context` or `subscribe_context_with` and receives a
-short-lived `Ui<'_>`:
+Every `Context::subscribe` callback receives a short-lived `Ui<'_>`. Use it to create, show, hide,
+move, resize, raise, or destroy Context-owned windows and popups; ignore it for state-only work:
 
 ```rust,ignore
 impl Model {
@@ -410,7 +412,7 @@ impl Model {
     }
 }
 
-ctx.subscribe_context(open_button.submitted(), Model::show_popup)?;
+ctx.subscribe(open_button.submitted(), Model::show_popup)?;
 ```
 
 `Ui` owns nothing. It is an exclusive borrow of the Context-owned `WindowManager`, lent
@@ -494,7 +496,7 @@ fn install_file_dialog<B: RendererBackend>(
     // The owner is the public stable window capability itself; no numeric window ID is exposed.
     let file_dialog = FileDialog::new(context, owner_window, Model::file_dialog_mut);
     context
-        .subscribe(file_dialog.completed(), Model::file_dialog_completed)
+        .subscribe(file_dialog.completed(), |state, _, event| Model::file_dialog_completed(state, event))
         .expect("the new completion source has no previous subscriber");
     Model {
         file_dialog,

@@ -751,8 +751,8 @@ mod tests {
     fn text_dispatcher(text_area: &TextArea) -> crate::event::WidgetEventDispatcher<Vec<RecordedEvent>> {
         // Register both ports against one ordered state log to characterize independent delivery.
         let mut dispatcher = crate::event::WidgetEventDispatcher::new();
-        dispatcher.subscribe(text_area.changed(), record_changed).unwrap();
-        dispatcher.subscribe(text_area.submitted(), record_submitted).unwrap();
+        dispatcher.subscribe(text_area.changed(), |state, _, event| record_changed(state, event)).unwrap();
+        dispatcher.subscribe(text_area.submitted(), |state, _, event| record_submitted(state, event)).unwrap();
         dispatcher
     }
 

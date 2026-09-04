@@ -30,7 +30,7 @@ construction needs no marker trait or separate stateless builder type. Composed 
 # ) -> Result<WindowHandle, SubscribeError> {
 let (checkbox, checkbox_node) =
     Checkbox::create(CheckboxParameters::new("Enable preview", false));
-context.subscribe(checkbox.changed(), Model::checkbox_changed)?;
+context.subscribe(checkbox.changed(), |state, _, event| Model::checkbox_changed(state, event))?;
 
 let (_, content) = Linear::create(LinearParameters::vertical([
     LinearItem::content(checkbox_node),

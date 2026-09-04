@@ -197,8 +197,8 @@ fn downstream_custom_widget_uses_the_public_typed_event_source() {
     let endpoint = widget.widget_event::<ExternalEvent>();
     // Before subscription, there is deliberately no history to replay.
     widget.try_update(|widget| widget.events.emit(ExternalEvent(0))).unwrap();
-    context.subscribe(endpoint.clone(), |values, event| values.push(event.0)).unwrap();
-    assert_eq!(context.subscribe(endpoint.clone(), |_, _| {}), Err(SubscribeError::AlreadySubscribed));
+    context.subscribe(endpoint.clone(), |values, _, event| values.push(event.0)).unwrap();
+    assert_eq!(context.subscribe(endpoint.clone(), |_, _, _| {}), Err(SubscribeError::AlreadySubscribed));
     widget
         .try_update(|widget| {
             widget.events.emit(ExternalEvent(1));
@@ -373,7 +373,7 @@ fn downstream_slider_programmatic_values_are_not_normalized_by_eventless_updates
     let mut ctx = context_with_state::<Vec<f32>>();
     let (slider, body) = Slider::create(SliderParameters::with_opt(2.4, 0.0, 10.0, 1.0, DecimalPrecision::ZERO, WidgetOption::FRAME).unwrap());
     ctx.ui().create_window(Window::new("slider", rect(0, 0, 200, 200), body));
-    ctx.subscribe(slider.changed(), |values, event| values.push(event.value)).unwrap();
+    ctx.subscribe(slider.changed(), |values, _, event| values.push(event.value)).unwrap();
     let mut values = Vec::new();
     let dimensions = Dimensioni::new(300, 300);
     ctx.update_ui_state(dimensions, &mut values);
@@ -411,7 +411,7 @@ fn downstream_file_dialog_completion_is_subscriber_driven_without_widget_access(
     ));
     let mut dialog = FileDialog::new(&mut context, &owner, FileDialogModel::dialog_mut);
     let completed = dialog.completed();
-    context.subscribe(completed, FileDialogModel::file_dialog_completed).unwrap();
+    context.subscribe(completed, |state, _, event| FileDialogModel::file_dialog_completed(state, event)).unwrap();
     dialog
         .open(&mut context.ui(), FileDialogRequest::default())
         .expect("dialog and owner must be available for this activation");
@@ -448,7 +448,7 @@ fn downstream_window_owns_declarative_menu_and_live_concrete_items() {
     let (open, open_item) = MenuItem::create(MenuItemParameters::new("Open").shortcut_hint("Ctrl+O"));
     // Menu commands project their typed submission ports; intrinsic menu policy closes the popup
     // before the application dispatcher invokes this handler.
-    context.subscribe_context(open.submitted(), MenuModel::open_submitted).unwrap();
+    context.subscribe(open.submitted(), MenuModel::open_submitted).unwrap();
     let (save, save_item) = MenuItem::create(MenuItemParameters::new("Save").disabled());
     let (word_wrap, word_wrap_item) = MenuItem::create(MenuItemParameters::new("Word Wrap").checked(true));
     let body = TextBlock::create(TextBlockParameters::new("body")).1;

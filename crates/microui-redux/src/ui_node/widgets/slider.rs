@@ -523,13 +523,13 @@ mod tests {
 
     fn slider_dispatcher(slider: &Slider) -> crate::event::WidgetEventDispatcher<Vec<Real>> {
         let mut dispatcher = crate::event::WidgetEventDispatcher::new();
-        dispatcher.subscribe(slider.changed(), record_slider_change).unwrap();
+        dispatcher.subscribe(slider.changed(), |state, _, event| record_slider_change(state, event)).unwrap();
         dispatcher
     }
 
     fn number_dispatcher(number: &Number) -> crate::event::WidgetEventDispatcher<Vec<Real>> {
         let mut dispatcher = crate::event::WidgetEventDispatcher::new();
-        dispatcher.subscribe(number.changed(), record_number_change).unwrap();
+        dispatcher.subscribe(number.changed(), |state, _, event| record_number_change(state, event)).unwrap();
         dispatcher
     }
 

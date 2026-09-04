@@ -311,12 +311,6 @@ struct State {
     buttons: [CalcButton; 20],
 }
 
-impl State {
-    fn apply_action(&mut self, action: &Action, _: &ButtonSubmitted) {
-        self.calculator.apply(*action);
-    }
-}
-
 fn main() {
     let atlas = atlas_assets::load_atlas();
     let fw = Application::new(atlas, |_gl, ctx| {
@@ -382,7 +376,10 @@ fn main() {
         |state, context| {
             for button in &state.buttons {
                 context
-                    .subscribe_with(button.submitted.clone(), button.action, State::apply_action)
+                    .subscribe(button.submitted.clone(), {
+                        let action = button.action;
+                        move |state, _, _| state.calculator.apply(action)
+                    })
                     .expect("calculator button should remain alive");
             }
         },

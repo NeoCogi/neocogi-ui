@@ -46,8 +46,8 @@ use std::{
 
 use crate::{
     Button, ButtonParameters, ButtonSubmitted, Context, IconRef, IconRole, Linear, LinearItem, LinearParameters, ListItem, ListItemParameters,
-    ListItemSubmitted, Node, Recti, ScrollArea, ScrollAreaOption, ScrollAreaParameters, Textbox, TextboxParameters, TextboxSubmitted, TextboxChanged,
-    TextBlock, TextBlockParameters, TypedWidgetHandle, Ui, WidgetEventPortHandle, WidgetOption, Window, WindowEvent, WindowHandle, WindowOption,
+    ListItemSubmitted, Node, Recti, ScrollArea, ScrollAreaOption, ScrollAreaParameters, Textbox, TextboxParameters, TextboxSubmitted, TextBlock,
+    TextBlockParameters, TypedWidgetHandle, Ui, WidgetEventPortHandle, WidgetOption, Window, WindowEvent, WindowHandle, WindowOption,
 };
 #[cfg(test)]
 use crate::ui_node::RuntimeNodeId;
@@ -185,9 +185,6 @@ struct FileDialogTestFields {
     /// Editable filename identity for input-driven selection invalidation tests.
     filename_id: RuntimeNodeId,
 }
-
-/// Function pointer used by retained subscriptions to recover one application-owned dialog.
-type FileDialogAccessor<State> = for<'a> fn(&'a mut State) -> &'a mut FileDialog;
 
 /// Failure to activate a file-dialog request; the previous request state remains intact.
 #[derive(Debug)]
@@ -375,27 +372,28 @@ impl FileDialog {
 
         // These sources are new and private to this component, so connection failure would indicate
         // an internal construction error rather than an application-level subscription conflict.
-        ctx.subscribe_with(up_handle.submitted(), accessor, Self::dispatch_up::<State>)
+        ctx.subscribe(up_handle.submitted(), move |state, _, event| accessor(state).up_submitted(event))
             .expect("new file-dialog Up event must be unsubscribed");
-        ctx.subscribe_with(home_handle.submitted(), accessor, Self::dispatch_home::<State>)
+        ctx.subscribe(home_handle.submitted(), move |state, _, event| accessor(state).home_submitted(event))
             .expect("new file-dialog Home event must be unsubscribed");
-        ctx.subscribe_with(path_box.changed(), accessor, Self::dispatch_path_changed::<State>)
+        // Real user edits make the text fields authoritative over a retained native path.
+        ctx.subscribe(path_box.changed(), move |state, _, _| accessor(state).path_input_dirty = true)
             .expect("new file-dialog path-change event must be unsubscribed");
-        ctx.subscribe_with(path_box.submitted(), accessor, Self::dispatch_path::<State>)
+        ctx.subscribe(path_box.submitted(), move |state, _, event| accessor(state).path_submitted(event))
             .expect("new file-dialog path event must be unsubscribed");
-        ctx.subscribe_with(go_handle.submitted(), accessor, Self::dispatch_go::<State>)
+        ctx.subscribe(go_handle.submitted(), move |state, _, event| accessor(state).go_submitted(event))
             .expect("new file-dialog Go event must be unsubscribed");
-        ctx.subscribe_with(folder_item_port.event(), accessor, Self::dispatch_folder::<State>)
+        ctx.subscribe(folder_item_port.event(), move |state, _, event| accessor(state).folder_submitted(event))
             .expect("new file-dialog folder event must be unsubscribed");
-        ctx.subscribe_with(file_name_box.changed(), accessor, Self::dispatch_filename_changed::<State>)
+        ctx.subscribe(file_name_box.changed(), move |state, _, _| accessor(state).selected_path = None)
             .expect("new file-dialog filename event must be unsubscribed");
-        ctx.subscribe_with(file_item_port.event(), accessor, Self::dispatch_file::<State>)
+        ctx.subscribe(file_item_port.event(), move |state, _, event| accessor(state).file_submitted(event))
             .expect("new file-dialog file event must be unsubscribed");
-        ctx.subscribe_context_with(ok_handle.submitted(), accessor, Self::dispatch_accept::<State>)
+        ctx.subscribe(ok_handle.submitted(), move |state, ui, event| accessor(state).accept_submitted(ui, event))
             .expect("new file-dialog Open event must be unsubscribed");
-        ctx.subscribe_context_with(cancel_handle.submitted(), accessor, Self::dispatch_cancel::<State>)
+        ctx.subscribe(cancel_handle.submitted(), move |state, ui, event| accessor(state).cancel_submitted(ui, event))
             .expect("new file-dialog Cancel event must be unsubscribed");
-        ctx.subscribe_context_with(window.events(), accessor, Self::dispatch_window_event::<State>)
+        ctx.subscribe(window.events(), move |state, ui, event| accessor(state).window_event(ui, event))
             .expect("new file-dialog window event must be unsubscribed");
 
         Self {
@@ -713,16 +711,6 @@ impl FileDialog {
         self.selected_path = Some(path.clone());
     }
 
-    /// A user edit makes the path input authoritative rather than its lossy native display.
-    fn dispatch_path_changed<State>(state: &mut State, accessor: &FileDialogAccessor<State>, _: &TextboxChanged) {
-        accessor(state).path_input_dirty = true;
-    }
-
-    /// A user edit makes the filename textbox authoritative, even if its final label collides.
-    fn dispatch_filename_changed<State>(state: &mut State, accessor: &FileDialogAccessor<State>, _: &TextboxChanged) {
-        accessor(state).selected_path = None;
-    }
-
     /// Ends the active request and queues its single terminal component event.
     fn emit_completion(&mut self, completion: FileDialogStatus) {
         // Every caller checks activity before entering, keeping duplicate terminal events a debug
@@ -778,55 +766,6 @@ impl FileDialog {
                 // are exhaustive defensive handling for application-customized future options.
             }
         }
-    }
-
-    /// Recovers the application-owned component and forwards its up action.
-    fn dispatch_up<State>(state: &mut State, accessor: &FileDialogAccessor<State>, event: &ButtonSubmitted) {
-        accessor(state).up_submitted(event);
-    }
-
-    /// Recovers the application-owned component and forwards its home action.
-    fn dispatch_home<State>(state: &mut State, accessor: &FileDialogAccessor<State>, event: &ButtonSubmitted) {
-        accessor(state).home_submitted(event);
-    }
-
-    /// Recovers the application-owned component and forwards its path action.
-    fn dispatch_path<State>(state: &mut State, accessor: &FileDialogAccessor<State>, event: &TextboxSubmitted) {
-        accessor(state).path_submitted(event);
-    }
-
-    /// Recovers the application-owned component and forwards its go action.
-    fn dispatch_go<State>(state: &mut State, accessor: &FileDialogAccessor<State>, event: &ButtonSubmitted) {
-        accessor(state).go_submitted(event);
-    }
-
-    /// Recovers the application-owned component and forwards its folder action.
-    fn dispatch_folder<State>(state: &mut State, accessor: &FileDialogAccessor<State>, event: &ListItemSubmitted<PathBuf>) {
-        accessor(state).folder_submitted(event);
-    }
-
-    /// Recovers the application-owned component and forwards its file action.
-    fn dispatch_file<State>(state: &mut State, accessor: &FileDialogAccessor<State>, event: &ListItemSubmitted<PathBuf>) {
-        accessor(state).file_submitted(event);
-    }
-
-    /// Resolves the application-owned component before forwarding its Open submission.
-    fn dispatch_accept<State>(state: &mut State, accessor: &FileDialogAccessor<State>, ui: &mut Ui<'_>, event: &ButtonSubmitted) {
-        // The stored accessor avoids retaining a second owner or erasing application state.
-        accessor(state).accept_submitted(ui, event);
-    }
-
-    /// Resolves the application-owned component before forwarding its Cancel submission.
-    fn dispatch_cancel<State>(state: &mut State, accessor: &FileDialogAccessor<State>, ui: &mut Ui<'_>, event: &ButtonSubmitted) {
-        // Forward the shared Ui borrow so event-time and direct cancellation use identical code.
-        accessor(state).cancel_submitted(ui, event);
-    }
-
-    /// Resolves the application-owned component before forwarding one dialog-window event.
-    fn dispatch_window_event<State>(state: &mut State, accessor: &FileDialogAccessor<State>, ui: &mut Ui<'_>, event: &WindowEvent) {
-        // The component exhaustively interprets the concrete window event without an erased payload
-        // or a second close-only event port.
-        accessor(state).window_event(ui, event);
     }
 }
 
@@ -891,7 +830,7 @@ mod tests {
             Button::create(ButtonParameters::new("owner")).1,
         ));
         let dialog = FileDialog::new(&mut context, &owner, Model::dialog_mut);
-        context.subscribe(dialog.completed(), Model::completed).unwrap();
+        context.subscribe(dialog.completed(), |state, _, event| Model::completed(state, event)).unwrap();
         (
             context,
             Model {
@@ -1179,7 +1118,7 @@ mod tests {
         let (button, node) = Button::create(ButtonParameters::new("open"));
         let button_id = node.id();
         let window = context.ui().create_window(Window::new("window", rect(0, 0, 100, 80), node));
-        context.subscribe_context(button.submitted(), Model::open_from_button).unwrap();
+        context.subscribe(button.submitted(), Model::open_from_button).unwrap();
         context.update_ui_state(dimensions(), &mut model);
 
         click_node(&mut context, &mut model, &window, button_id, true);
@@ -1319,8 +1258,12 @@ mod tests {
         ));
         let first = FileDialog::new(&mut context, &owner, DualModel::first_mut);
         let second = FileDialog::new(&mut context, &owner, DualModel::second_mut);
-        context.subscribe(first.completed(), DualModel::first_completed).unwrap();
-        context.subscribe(second.completed(), DualModel::second_completed).unwrap();
+        context
+            .subscribe(first.completed(), |state, _, event| DualModel::first_completed(state, event))
+            .unwrap();
+        context
+            .subscribe(second.completed(), |state, _, event| DualModel::second_completed(state, event))
+            .unwrap();
         let mut model = DualModel {
             first,
             second,
@@ -1349,7 +1292,9 @@ mod tests {
     fn open_dialog_blocks_pointer_input_to_underlying_windows() {
         let (mut context, mut model) = context_and_model();
         let (button, button_node) = Button::create(ButtonParameters::new("behind"));
-        context.subscribe(button.submitted(), Model::behind_submitted).unwrap();
+        context
+            .subscribe(button.submitted(), |state, _, event| Model::behind_submitted(state, event))
+            .unwrap();
         let window = context.ui().create_window(Window::new("window", rect(0, 0, 100, 80), button_node));
         context
             .ui()

@@ -15,8 +15,8 @@ and compatibility layers were removed.
 - `Context` owns input ordering, surface lifetime, rendering, and the application event dispatcher.
   `update_ui` and `update_ui_state` are the synchronization boundary for input and programmatic
   mutations.
-- `WidgetEventPortHandle<E>` connects through `subscribe`, `subscribe_with`, `subscribe_context`,
-  and `subscribe_context_with`; application handlers run only after retained widget borrows end.
+- `WidgetEventPortHandle<E>` connects through one typed `subscribe(port, callback)` API; callbacks
+  receive application state, `Ui`, and the concrete event after retained widget borrows end.
 - `FileDialog` is now a reusable, application-owned component whose completion is delivered through
   the same typed event dispatcher.
 

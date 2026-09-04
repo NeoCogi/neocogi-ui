@@ -229,7 +229,7 @@ fn increment_event_counter<E>(count: &mut usize, _: &E) {
 
 fn event_counter<E: crate::WidgetEvent>(port: crate::WidgetEventPortHandle<E>) -> crate::event::WidgetEventDispatcher<usize> {
     let mut dispatcher = crate::event::WidgetEventDispatcher::new();
-    dispatcher.subscribe(port, increment_event_counter::<E>).unwrap();
+    dispatcher.subscribe(port, |state, _, event| increment_event_counter::<E>(state, event)).unwrap();
     dispatcher
 }
 
@@ -2031,8 +2031,8 @@ fn widget_handle_events_invoke_state_methods_without_polling() {
     let first_rect = ctx.debug_root_node_rect(root.id(), first_id).unwrap();
     let second_rect = ctx.debug_root_node_rect(root.id(), second_id).unwrap();
 
-    ctx.subscribe_with(first_submitted, "first", Model::record).unwrap();
-    ctx.subscribe_with(second_submitted, "second", Model::record).unwrap();
+    ctx.subscribe(first_submitted, move |state, _, event| Model::record(state, &"first", event)).unwrap();
+    ctx.subscribe(second_submitted, move |state, _, event| Model::record(state, &"second", event)).unwrap();
     ctx.mousedown(first_rect.x + 1, first_rect.y + 1, MouseButton::LEFT);
     ctx.mouseup(first_rect.x + 1, first_rect.y + 1, MouseButton::LEFT);
     ctx.mousedown(second_rect.x + 1, second_rect.y + 1, MouseButton::LEFT);
@@ -2083,7 +2083,7 @@ fn context_aware_handler_creates_and_mutates_every_root_kind_before_layout() {
         .ui()
         .set_window_options(&source, WindowOption::FRAME | WindowOption::NO_TITLE | WindowOption::NO_RESIZE)
         .unwrap();
-    context.subscribe_context(submitted, Model::create_roots).unwrap();
+    context.subscribe(submitted, Model::create_roots).unwrap();
     let mut model = Model::default();
     context.update_ui_state(dimensions, &mut model);
     let button_rect = context.debug_root_node_rect(source.id(), button_id).unwrap();
@@ -2156,8 +2156,8 @@ fn typed_events_keep_composed_combo_and_popup_state_synchronized() {
         popup: popup.clone(),
         submitted_anchor: None,
     };
-    context.subscribe_context(combo.submitted(), Model::combo_submitted).unwrap();
-    context.subscribe(popup.events(), Model::popup_submitted).unwrap();
+    context.subscribe(combo.submitted(), Model::combo_submitted).unwrap();
+    context.subscribe(popup.events(), |state, _, event| Model::popup_submitted(state, event)).unwrap();
     context.update_ui_state(dimensions, &mut model);
     let combo_rect = context.debug_root_node_rect(source.id(), combo_id).unwrap();
 
@@ -2314,7 +2314,7 @@ fn textbox_handle_event_dispatches_a_complete_snapshot_to_state() {
     ctx.update_ui_state(dimensions, &mut model);
     let textbox_rect = ctx.debug_root_node_rect(root.id(), node_id).unwrap();
 
-    ctx.subscribe(changed, Model::changed).unwrap();
+    ctx.subscribe(changed, |state, _, event| Model::changed(state, event)).unwrap();
     ctx.mousedown(textbox_rect.x + 1, textbox_rect.y + 1, MouseButton::LEFT);
     ctx.text("é");
     ctx.update_ui_state(dimensions, &mut model);
@@ -2486,7 +2486,7 @@ fn showing_a_popup_atomically_hides_and_dismisses_the_previous_one() {
     fn record(events: &mut Vec<PopupEvent>, event: &PopupEvent) {
         events.push(*event);
     }
-    dispatcher.subscribe(first.events(), record).unwrap();
+    dispatcher.subscribe(first.events(), |state, _, event| record(state, event)).unwrap();
     let mut submissions = Vec::new();
 
     ctx.ui().show_popup_at(&first, rect(12, 18, 90, 1)).unwrap();
@@ -2513,7 +2513,7 @@ fn hiding_a_window_hides_its_active_popup() {
     fn record(events: &mut Vec<PopupEvent>, event: &PopupEvent) {
         events.push(*event);
     }
-    dispatcher.subscribe(second.events(), record).unwrap();
+    dispatcher.subscribe(second.events(), |state, _, event| record(state, event)).unwrap();
     let mut submissions = Vec::new();
 
     ctx.ui().show_popup(&first).unwrap();
@@ -2569,7 +2569,7 @@ fn outside_popup_press_hides_and_records_typed_submission() {
     fn record(events: &mut Vec<PopupEvent>, event: &PopupEvent) {
         events.push(*event);
     }
-    widget_event_dispatcher.subscribe(popup.events(), record).unwrap();
+    widget_event_dispatcher.subscribe(popup.events(), |state, _, event| record(state, event)).unwrap();
     let mut submissions = Vec::new();
     ctx.update_and_render_ui();
 
@@ -3417,7 +3417,7 @@ fn title_drag_and_close_record_typed_window_events() {
     let mut ctx = context();
     let root = ctx.ui().create_window(Window::new("window", rect(30, 30, 140, 100), empty_content()));
     let mut dispatcher = crate::event::WidgetEventDispatcher::new();
-    dispatcher.subscribe(root.events(), record).unwrap();
+    dispatcher.subscribe(root.events(), |state, _, event| record(state, event)).unwrap();
     let mut events = Vec::new();
     ctx.update_and_render_ui();
     let (title, _, _) = ctx.debug_root_chrome(root.id()).unwrap();
@@ -3587,7 +3587,7 @@ fn positive_caption_flags_minimize_maximize_follow_viewport_and_restore_exactly(
         .set_window_options(&root, WindowOption::FRAME | WindowOption::MINIMIZE_BUTTON | WindowOption::MAXIMIZE_BUTTON)
         .unwrap();
     let mut dispatcher = crate::event::WidgetEventDispatcher::new();
-    dispatcher.subscribe(root.events(), record).unwrap();
+    dispatcher.subscribe(root.events(), |state, _, event| record(state, event)).unwrap();
     let mut events = Vec::new();
     let initial_dimensions = Dimensioni::new(320, 240);
     ctx.update_ui(initial_dimensions);
@@ -4378,8 +4378,8 @@ fn menu_items_dispatch_directly_after_close_while_disabled_items_leave_the_menu_
     let root = ctx
         .ui()
         .create_window(Window::new("menu events", rect(20, 25, 180, 120), empty_content()).menu_bar(menu_bar));
-    ctx.subscribe_context(enabled.submitted(), Model::enabled_submitted).unwrap();
-    ctx.subscribe_context(disabled.submitted(), Model::disabled_submitted).unwrap();
+    ctx.subscribe(enabled.submitted(), Model::enabled_submitted).unwrap();
+    ctx.subscribe(disabled.submitted(), Model::disabled_submitted).unwrap();
     let mut model = Model::default();
     ctx.update_ui_state(dimensions, &mut model);
 

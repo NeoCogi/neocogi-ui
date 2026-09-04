@@ -121,7 +121,7 @@
 //! invariant panic. End the closure before calling `update_ui` or `render_ui`.
 //!
 //! Event-driven applications construct `Context::<B, State>::new(backend)`, register each
-//! native widget endpoint through [`Context::subscribe`] or [`Context::subscribe_with`], and call
+//! native widget endpoint through [`Context::subscribe`], and call
 //! [`Context::update_ui_state`]. The context owns the only application widget-event dispatcher for
 //! all retained windows. This semantic dispatcher is distinct from retained raw-input routing:
 //! each retained runtime owns an input router that targets pointer, keyboard, or text input to one

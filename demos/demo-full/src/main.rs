@@ -1291,9 +1291,7 @@ fn registered_menu_item(
     // The handle keeps stable presentation identity and projects a separate weak submission
     // endpoint, while the uniquely owned value enters exactly one declarative menu position.
     let (handle, item) = MenuItem::create(parameters);
-    context
-        .subscribe_context(handle.submitted(), handler)
-        .expect("new menu item must be unsubscribed");
+    context.subscribe(handle.submitted(), handler).expect("new menu item must be unsubscribed");
     (handle, item)
 }
 
@@ -2052,21 +2050,34 @@ impl State {
         state
     }
 
+    /// Captures each control's immutable identity beside its concrete event callback.
     fn subscribe_events(&self, context: &mut Context<DemoBackend, Self>) {
         for (index, changed) in self.bg_slider_changed.iter().enumerate() {
-            context.subscribe_with(changed.clone(), index, Self::background_changed).unwrap();
+            context
+                .subscribe(changed.clone(), move |state, _, event| Self::background_changed(state, index, event))
+                .unwrap();
         }
         for (index, changed) in self.style_color_slider_changed.iter().enumerate() {
-            context.subscribe_with(changed.clone(), index, Self::style_color_changed).unwrap();
+            context
+                .subscribe(changed.clone(), move |state, _, event| Self::style_color_changed(state, index, event))
+                .unwrap();
         }
         for (index, changed) in self.style_value_slider_changed.iter().enumerate() {
-            context.subscribe_with(changed.clone(), index, Self::style_value_changed).unwrap();
+            context
+                .subscribe(changed.clone(), move |state, _, event| Self::style_value_changed(state, index, event))
+                .unwrap();
         }
 
-        context.subscribe(self.submit_buf_submitted.clone(), Self::text_submitted).unwrap();
-        context.subscribe(self.submit_button_submitted.clone(), Self::submit_button).unwrap();
+        context
+            .subscribe(self.submit_buf_submitted.clone(), |state, _, event| Self::text_submitted(state, event))
+            .unwrap();
+        context
+            .subscribe(self.submit_button_submitted.clone(), |state, _, event| Self::submit_button(state, event))
+            .unwrap();
         for (index, submitted) in self.test_button_submitted.iter().enumerate() {
-            context.subscribe_context_with(submitted.clone(), index, Self::test_button).unwrap();
+            context
+                .subscribe(submitted.clone(), move |state, ui, event| Self::test_button(state, index, ui, event))
+                .unwrap();
         }
         for (submitted, label) in self.tree_button_submitted.iter().zip([
             "Pressed button 1",
@@ -2076,18 +2087,22 @@ impl State {
             "Pressed button 5",
             "Pressed button 6",
         ]) {
-            context.subscribe_with(submitted.clone(), label, Self::log_button).unwrap();
+            context.subscribe(submitted.clone(), move |state, _, _| state.write_log(label)).unwrap();
         }
-        context.subscribe_context(self.combo_submitted.clone(), Self::combo_submitted).unwrap();
+        context.subscribe(self.combo_submitted.clone(), Self::combo_submitted).unwrap();
         for (index, submitted) in self.combo_item_submitted.iter().enumerate() {
-            context.subscribe_context_with(submitted.clone(), index, Self::combo_item).unwrap();
+            context
+                .subscribe(submitted.clone(), move |state, ui, event| Self::combo_item(state, index, ui, event))
+                .unwrap();
         }
-        context.subscribe(self.combo_popup_root.events(), Self::combo_popup_event).unwrap();
+        context
+            .subscribe(self.combo_popup_root.events(), |state, _, event| Self::combo_popup_event(state, event))
+            .unwrap();
         // One concrete window event stream reports both geometry changes and close requests. The
         // floating Demo Window retains diagnostics independently of the platform-sized grid window.
-        context.subscribe_context(self.demo_root.events(), Self::demo_window_event).unwrap();
+        context.subscribe(self.demo_root.events(), Self::demo_window_event).unwrap();
         for (submitted, label) in self.popup_menu_item_submitted.iter().zip(["Hello", "World"]) {
-            context.subscribe_with(submitted.clone(), label, Self::log_menu_item).unwrap();
+            context.subscribe(submitted.clone(), move |state, _, _| state.write_log(label)).unwrap();
         }
         for (submitted, label) in self.stack_direction_button_submitted.iter().zip([
             "Top->Bottom: call 1",
@@ -2097,7 +2112,7 @@ impl State {
             "Bottom->Top: call 2",
             "Bottom->Top: call 3",
         ]) {
-            context.subscribe_with(submitted.clone(), label, Self::log_button).unwrap();
+            context.subscribe(submitted.clone(), move |state, _, _| state.write_log(label)).unwrap();
         }
         for (submitted, label) in self.weight_button_submitted.iter().zip([
             "Weight row: 1",
@@ -2110,26 +2125,28 @@ impl State {
             "Weight grid: 5",
             "Weight grid: 6",
         ]) {
-            context.subscribe_with(submitted.clone(), label, Self::log_button).unwrap();
+            context.subscribe(submitted.clone(), move |state, _, _| state.write_log(label)).unwrap();
         }
         // Subscribe to this application-owned component's stable completion source once.
         let file_dialog_completed = self.file_dialog.completed();
-        context.subscribe_context(file_dialog_completed, Self::file_dialog_completed).unwrap();
+        context.subscribe(file_dialog_completed, Self::file_dialog_completed).unwrap();
     }
 
-    fn background_changed(&mut self, index: &usize, event: &SliderChanged) {
-        self.bg[*index] = event.value;
+    /// Applies the channel index captured when its background slider was registered.
+    fn background_changed(&mut self, index: usize, event: &SliderChanged) {
+        self.bg[index] = event.value;
         self.sync_background_swatch();
     }
 
-    fn style_color_changed(&mut self, index: &usize, event: &SliderChanged) {
+    /// Edits the captured palette channel and schedules the resolved skin update.
+    fn style_color_changed(&mut self, index: usize, event: &SliderChanged) {
         if !self.themes.palette_editable() {
             // Programmatic slider setters are silent, so restoring the displayed authored value
             // cannot recursively publish another change event. Image theme pixels remain intact.
             self.sync_skin_controls_from_skin();
             return;
         }
-        let color_index = *index / 4;
+        let color_index = index / 4;
         let color = match color_index {
             0 => &mut self.style_palette.text,
             1 => &mut self.style_palette.border,
@@ -2152,7 +2169,7 @@ impl State {
             _ => return,
         };
         let value = event.value as u8;
-        match *index % 4 {
+        match index % 4 {
             0 => color.r = value,
             1 => color.g = value,
             2 => color.b = value,
@@ -2164,7 +2181,8 @@ impl State {
         self.style_dirty = true;
     }
 
-    fn style_value_changed(&mut self, index: &usize, event: &SliderChanged) {
+    /// Applies the captured metric selector to the current skin.
+    fn style_value_changed(&mut self, index: usize, event: &SliderChanged) {
         match index {
             0 => self.style.metrics.padding = event.value as i32,
             1 => self.style.metrics.spacing = event.value as i32,
@@ -2188,7 +2206,8 @@ impl State {
         self.submit_log(text);
     }
 
-    fn test_button(&mut self, index: &usize, context: &mut Ui<'_>, _: &ButtonSubmitted) {
+    /// Dispatches the captured demo action with the event boundary's UI access.
+    fn test_button(&mut self, index: usize, context: &mut Ui<'_>, _: &ButtonSubmitted) {
         match index {
             0 => self.write_log("Pressed button 1"),
             1 => self.write_log("Pressed button 2"),
@@ -2206,16 +2225,6 @@ impl State {
         }
     }
 
-    fn log_button(&mut self, label: &&'static str, _: &ButtonSubmitted) {
-        self.write_log(label);
-    }
-
-    /// Appends the label bound to one standalone popup-menu item endpoint.
-    fn log_menu_item(&mut self, label: &&'static str, _: &MenuItemSubmitted) {
-        // The menu manager has already closed the popup before dispatch reaches application state.
-        self.write_log(label);
-    }
-
     fn combo_submitted(&mut self, context: &mut Ui<'_>, event: &ComboSubmitted) {
         // Combo owns the semantic toggle; its demo window owns the retained popup definition.
         // Reconcile them once, at the event boundary that joins the two application-chosen pieces.
@@ -2230,7 +2239,8 @@ impl State {
         }
     }
 
-    fn combo_item(&mut self, index: &usize, context: &mut Ui<'_>, _: &ListItemSubmitted) {
+    /// Selects the captured row and closes its popup in the same transaction.
+    fn combo_item(&mut self, index: usize, context: &mut Ui<'_>, _: &ListItemSubmitted) {
         let labels: Vec<String> = self
             .combo_item_states
             .iter()
@@ -2238,7 +2248,7 @@ impl State {
             .collect();
         let selected = self
             .combo_typed_state
-            .try_update(|combo| combo.select(*index, &labels))
+            .try_update(|combo| combo.select(index, &labels))
             .expect("combo state unavailable");
         // Selection closes both authorities in the same dispatch transaction: Combo commits its
         // semantic state above, and the context hides the retained popup before the next layout.

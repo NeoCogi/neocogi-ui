@@ -50,11 +50,11 @@ fn build_model<B: RendererBackend>(
     // The handle projects the event port; the value moves into one menu below.
     let (open, open_item) =
         MenuItem::create(MenuItemParameters::new("Open...").shortcut_hint("Ctrl+O"));
-    context.subscribe_context(open.submitted(), Model::open)?;
+    context.subscribe(open.submitted(), Model::open)?;
 
     // This command has the same handler but remains a distinct typed event source.
     let (recent, recent_item) = MenuItem::create(MenuItemParameters::new("Recent Document"));
-    context.subscribe_context(recent.submitted(), Model::open)?;
+    context.subscribe(recent.submitted(), Model::open)?;
 
     // Keep this handle because application state will mutate the item after construction.
     let (save, save_item) = MenuItem::create(

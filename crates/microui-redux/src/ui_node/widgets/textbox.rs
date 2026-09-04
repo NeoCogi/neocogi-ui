@@ -498,8 +498,8 @@ mod tests {
 
     fn text_dispatcher(textbox: &Textbox) -> crate::event::WidgetEventDispatcher<Vec<RecordedEvent>> {
         let mut dispatcher = crate::event::WidgetEventDispatcher::new();
-        dispatcher.subscribe(textbox.changed(), record_changed).unwrap();
-        dispatcher.subscribe(textbox.submitted(), record_submitted).unwrap();
+        dispatcher.subscribe(textbox.changed(), |state, _, event| record_changed(state, event)).unwrap();
+        dispatcher.subscribe(textbox.submitted(), |state, _, event| record_submitted(state, event)).unwrap();
         dispatcher
     }
 

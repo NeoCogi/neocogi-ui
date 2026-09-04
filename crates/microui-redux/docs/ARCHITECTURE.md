@@ -306,7 +306,7 @@ let (_, tree) = Linear::create(LinearParameters::horizontal(
 let _window = ctx.ui().create_window(Window::new("main", rect(20, 20, 240, 120), tree));
 let dimensions = Dimensioni::new(800, 600);
 let info = FrameInfo::try_new(dimensions, color(20, 22, 26, 255))?;
-ctx.subscribe(name_submitted, Model::name_submitted)?;
+ctx.subscribe(name_submitted, |state, _, event| Model::name_submitted(state, event))?;
 let mut model = Model::default();
 ctx.update_ui_state(dimensions, &mut model);
 ctx.frame(info).render_ui()?;
@@ -392,8 +392,8 @@ fn popup_event(&mut self, event: &PopupEvent) {
     }
 }
 
-context.subscribe_context(window.events(), Model::window_event).unwrap();
-context.subscribe(popup.events(), Model::popup_event).unwrap();
+context.subscribe(window.events(), Model::window_event).unwrap();
+context.subscribe(popup.events(), |state, _, event| Model::popup_event(state, event)).unwrap();
 context.ui().set_window_visible(&window, true).unwrap();
 context.ui().show_popup_at(&popup, anchor).unwrap();
 ```

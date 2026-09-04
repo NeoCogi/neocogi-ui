@@ -484,55 +484,25 @@ impl<B: RendererBackend, State: 'static> Context<B, State> {
         });
     }
 
-    /// Subscribes the context's application state to one typed retained UI event.
+    /// Connects one typed event callback to this context's application state.
     ///
-    /// A retained event port accepts one subscription and returns
-    /// [`crate::SubscribeError::AlreadySubscribed`] for another.
-    pub fn subscribe<E: crate::WidgetEvent>(&mut self, port: crate::WidgetEventPortHandle<E>, method: fn(&mut State, &E)) -> Result<(), crate::SubscribeError> {
-        self.widget_event_dispatcher.subscribe(port, method)
-    }
-
-    /// Subscribes the context's application state with one bound application value.
+    /// The callback receives `(&mut State, &mut Ui<'_>, &E)` after retained widget borrows end.
+    /// Ignore `ui` when only state changes are needed, or use it to edit windows and popups;
+    /// resulting layout is committed at that dispatch boundary. Captures must be owned or
+    /// `'static`, may be mutable, and live until the subscription is dropped or pruned. Prefer
+    /// weak widget/surface handles when capturing UI references so callbacks do not retain owners.
+    /// Neither the borrowed event nor `Ui` may be retained beyond the invocation.
     ///
-    /// A retained event port accepts one subscription and returns
-    /// [`crate::SubscribeError::AlreadySubscribed`] for another.
-    pub fn subscribe_with<E: crate::WidgetEvent, BoundContext: 'static>(
+    /// Each source accepts one subscriber. A second registration returns
+    /// [`crate::SubscribeError::AlreadySubscribed`]; an expired source returns
+    /// [`crate::SubscribeError::WidgetExpired`]. Callbacks run in source FIFO and subscription
+    /// sweep order; emission remains deferred. See the events guide for cascade and panic policy.
+    pub fn subscribe<E: crate::WidgetEvent>(
         &mut self,
         port: crate::WidgetEventPortHandle<E>,
-        context: BoundContext,
-        method: fn(&mut State, &BoundContext, &E),
+        handler: impl FnMut(&mut State, &mut Ui<'_>, &E) + 'static,
     ) -> Result<(), crate::SubscribeError> {
-        self.widget_event_dispatcher.subscribe_with(port, context, method)
-    }
-
-    /// Subscribes a state method that also needs safe context-owned UI mutation access.
-    ///
-    /// The supplied [`Ui`] exists only for one dispatch call after retained widget borrows
-    /// have ended. Root mutations performed through it are committed by the layout immediately
-    /// following that dispatch boundary. Use [`Context::subscribe`] when the handler only mutates
-    /// application or widget state.
-    pub fn subscribe_context<E: crate::WidgetEvent>(
-        &mut self,
-        port: crate::WidgetEventPortHandle<E>,
-        method: for<'a> fn(&mut State, &mut Ui<'a>, &E),
-    ) -> Result<(), crate::SubscribeError> {
-        // Store the typed function pointer in the same context-owned dispatcher as state-only
-        // subscriptions; only its invocation adapter differs.
-        self.widget_event_dispatcher.subscribe_context(port, method)
-    }
-
-    /// Subscribes a context-aware state method with one immutable bound application value.
-    ///
-    /// The bound value precedes [`Ui`] and the event payload in the method signature,
-    /// matching the established [`Context::subscribe_with`] argument order.
-    pub fn subscribe_context_with<E: crate::WidgetEvent, BoundContext: 'static>(
-        &mut self,
-        port: crate::WidgetEventPortHandle<E>,
-        context: BoundContext,
-        method: for<'a> fn(&mut State, &BoundContext, &mut Ui<'a>, &E),
-    ) -> Result<(), crate::SubscribeError> {
-        // The dispatcher owns the bound value and preserves ordinary subscription ordering.
-        self.widget_event_dispatcher.subscribe_context_with(port, context, method)
+        self.widget_event_dispatcher.subscribe(port, handler)
     }
 }
 

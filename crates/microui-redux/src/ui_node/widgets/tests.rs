@@ -127,7 +127,7 @@ fn combo_submission_carries_update_anchor_while_paint_remains_observational() {
     let style = test_skin(&atlas);
     let mut combo = Combo::from(ComboParameters::new());
     let mut dispatcher = crate::event::WidgetEventDispatcher::new();
-    dispatcher.subscribe(combo.submitted(), record).unwrap();
+    dispatcher.subscribe(combo.submitted(), |state, _, event| record(state, event)).unwrap();
     let update_rect = rect(30, 40, 100, 20);
     let mut update = WidgetUpdateCtx::new_with_interaction(
         update_rect,
@@ -272,11 +272,11 @@ fn typed_click_events_preserve_fifo_within_each_port() {
     let mut combo = Combo::from(ComboParameters::new());
 
     let mut dispatcher = crate::event::WidgetEventDispatcher::new();
-    dispatcher.subscribe(checkbox.changed(), record_checkbox).unwrap();
-    dispatcher.subscribe(button.submitted(), record_button).unwrap();
-    dispatcher.subscribe(item.submitted(), record_item).unwrap();
-    dispatcher.subscribe(list.submitted(), record_list_box).unwrap();
-    dispatcher.subscribe(combo.submitted(), record_combo).unwrap();
+    dispatcher.subscribe(checkbox.changed(), |state, _, event| record_checkbox(state, event)).unwrap();
+    dispatcher.subscribe(button.submitted(), |state, _, event| record_button(state, event)).unwrap();
+    dispatcher.subscribe(item.submitted(), |state, _, event| record_item(state, event)).unwrap();
+    dispatcher.subscribe(list.submitted(), |state, _, event| record_list_box(state, event)).unwrap();
+    dispatcher.subscribe(combo.submitted(), |state, _, event| record_combo(state, event)).unwrap();
 
     for _ in 0..2 {
         run_click(&mut checkbox);
@@ -314,7 +314,7 @@ fn combo_selection_and_item_clamping_emit_only_value_changes() {
     fn record_change(events: &mut Vec<(usize, String)>, event: &ComboChanged) {
         events.push((event.selected, event.label.clone()));
     }
-    dispatcher.subscribe(state.changed(), record_change).unwrap();
+    dispatcher.subscribe(state.changed(), |state, _, event| record_change(state, event)).unwrap();
     let mut events = Vec::new();
 
     state
@@ -343,8 +343,8 @@ fn checkbox_and_list_item_programmatic_setters_are_silent() {
     fn ignore_checkbox(_: &mut (), _: &CheckboxChanged) {}
     fn ignore_item(_: &mut (), _: &ListItemSubmitted) {}
     let mut dispatcher = crate::event::WidgetEventDispatcher::<()>::new();
-    dispatcher.subscribe(checkbox.changed(), ignore_checkbox).unwrap();
-    dispatcher.subscribe(item.submitted(), ignore_item).unwrap();
+    dispatcher.subscribe(checkbox.changed(), |state, _, event| ignore_checkbox(state, event)).unwrap();
+    dispatcher.subscribe(item.submitted(), |state, _, event| ignore_item(state, event)).unwrap();
 
     checkbox
         .try_update(|state| {
@@ -365,7 +365,7 @@ fn subscribing_to_an_event_does_not_borrow_semantic_widget_state() {
     let mut dispatcher = crate::event::WidgetEventDispatcher::<()>::new();
 
     let subscribed = button
-        .try_update(|_| dispatcher.subscribe(submitted, ignore))
+        .try_update(|_| dispatcher.subscribe(submitted, |state, _, event| ignore(state, event)))
         .expect("button state should remain available");
 
     assert!(subscribed.is_ok());
