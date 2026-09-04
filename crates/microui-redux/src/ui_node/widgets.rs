@@ -88,7 +88,7 @@ pub use color_swatch::{ColorSwatch, ColorSwatchBuilder, ColorSwatchParameters};
 pub use combo::{Combo, ComboBuilder, ComboChanged, ComboParameters, ComboSubmitted};
 pub use custom::{Custom, CustomBuilder, CustomParameters};
 pub use list_box::{ListBox, ListBoxBuilder, ListBoxParameters, ListBoxSubmitted};
-pub use list_item::{ListItem, ListItemBuilder, ListItemParameters, ListItemSubmitted};
+pub use list_item::{ListItem, ListItemParameters, ListItemSubmitted};
 pub use number::{Number, NumberBuilder, NumberChanged, NumberParameters};
 pub use numeric_edit::{DecimalPrecision, DecimalPrecisionError, NumericParameterError};
 pub use scrollbar::{Scrollbar, ScrollbarAxis, ScrollbarChanged, ScrollbarParameters};

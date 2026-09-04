@@ -567,8 +567,29 @@ own local visibility intent when an ancestor hides; modal descendants are explic
 receive their own notification.
 
 `FileDialog::open` returns `FileDialogOpenError::AlreadyOpen` for an overlapping activation, or
-`Surface` for an invalid/hidden owner or stale/foreign window. These failures leave the request
+`Surface` for an invalid/hidden owner or stale/foreign window. `ReadDirectory { path, source }`
+preserves the concrete filesystem error when the initial listing cannot be read. These failures leave the request
 state unchanged. Applications must handle the result, keep their component accessible through the
 registered accessor while dispatch is possible, and continue driving Context updates to receive
 deferred completion. Context teardown does not run application callbacks. Destroyed dialog windows
 cannot be reopened; construct a new component if a new retained lifetime is needed.
+
+Requests accept native `PathBuf`/`Path` values. Opening resolves the initial directory to an absolute
+path without canonicalizing symlinks; acceptance emits `FileDialogStatus::Accepted(PathBuf)`.
+The application can open that path directly and derive a label using `path.display()` or
+`path.file_name()`. Acceptance remains lexical: validate existence and file type when your app
+requires them. Spaces are significant; the dialog never trims typed path or filename text.
+
+Rows carry their exact native path as `ListItemSubmitted<PathBuf>::value`. Lossy Unicode labels
+are presentation only, so two different non-UTF-8 names with the same label still select different
+files or folders. Selecting a row retains the native path even if the single-line filename editor
+cannot represent its encoding or line endings. A subsequent user edit discards that selection and
+makes the typed UTF-8 name authoritative. Similarly, an unchanged path display refreshes the native
+directory; editing it starts a new typed path.
+
+Navigation reads and sorts the entire directory before replacing rows, selection, or the current
+directory. Any enumeration or metadata failure preserves the old listing and displays the attempted
+path and error in the dialog. Successful navigation clears that diagnostic. Directory symlinks are
+followed; a dangling or unreadable target is an explicit error. Reads run synchronously on the UI
+thread, so applications needing remote/slow filesystems should supply an asynchronous picker of
+their own. The library does not silently show an incomplete result as a successful directory read.

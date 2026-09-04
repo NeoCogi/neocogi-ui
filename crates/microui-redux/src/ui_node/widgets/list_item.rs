@@ -38,7 +38,9 @@ use super::*;
 use std::rc::Rc;
 
 /// One-shot construction input for a [`ListItem`].
-pub struct ListItemParameters {
+pub struct ListItemParameters<Value = ()> {
+    /// Application data carried unchanged by the row and cloned into each submission.
+    pub value: Value,
     /// Initial label displayed for the list item.
     pub label: String,
     /// Optional atlas icon rendered alongside the label.
@@ -49,18 +51,19 @@ pub struct ListItemParameters {
     pub opt: WidgetOption,
 }
 
-impl crate::LeafWidget for ListItem {
+impl<Value: Clone + 'static> crate::LeafWidget for ListItem<Value> {
     fn measure(&self, style: &Skin, atlas: &AtlasHandle, constraints: Constraints) -> Dimensioni {
         self.preferred_size_widget(style, atlas, constraints)
     }
 }
 
-impl WidgetParameters for ListItemParameters {}
+impl<Value: 'static> WidgetParameters for ListItemParameters<Value> {}
 
 impl ListItemParameters {
     /// Creates list-item parameters with default widget options.
     pub fn new(label: impl Into<String>) -> Self {
         Self {
+            value: (),
             label: label.into(),
             icon: None,
             font: FontRef::Role(FontRole::Body),
@@ -71,6 +74,7 @@ impl ListItemParameters {
     /// Creates list-item parameters with explicit widget options.
     pub fn with_opt(label: impl Into<String>, opt: WidgetOption) -> Self {
         Self {
+            value: (),
             label: label.into(),
             icon: None,
             font: FontRef::Role(FontRole::Body),
@@ -81,6 +85,7 @@ impl ListItemParameters {
     /// Creates list-item parameters with an icon and default widget options.
     pub fn with_icon(label: impl Into<String>, icon: IconRef) -> Self {
         Self {
+            value: (),
             label: label.into(),
             icon: Some(icon),
             font: FontRef::Role(FontRole::Body),
@@ -91,10 +96,24 @@ impl ListItemParameters {
     /// Creates list-item parameters with an icon and explicit widget options.
     pub fn with_icon_opt(label: impl Into<String>, icon: IconRef, opt: WidgetOption) -> Self {
         Self {
+            value: (),
             label: label.into(),
             icon: Some(icon),
             font: FontRef::Role(FontRole::Body),
             opt,
+        }
+    }
+}
+
+impl<Value> ListItemParameters<Value> {
+    /// Associates concrete application data with this row without deriving identity from its label.
+    pub fn with_value<Other>(self, value: Other) -> ListItemParameters<Other> {
+        ListItemParameters {
+            label: self.label,
+            icon: self.icon,
+            font: self.font,
+            opt: self.opt,
+            value,
         }
     }
 
@@ -108,15 +127,19 @@ impl ListItemParameters {
 
 /// Snapshot emitted when the user submits a list item.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ListItemSubmitted {
+pub struct ListItemSubmitted<Value = ()> {
+    /// Concrete application data at submission time, independent of lossy display text.
+    pub value: Value,
     /// Item label at submission time.
     pub label: String,
 }
 
-impl crate::WidgetEvent for ListItemSubmitted {}
+impl<Value: 'static> crate::WidgetEvent for ListItemSubmitted<Value> {}
 
 /// Concrete retained list item, including its semantic state.
-pub struct ListItem {
+pub struct ListItem<Value: Clone + 'static = ()> {
+    /// Typed row payload; changing the displayed label never changes this value.
+    value: Value,
     /// Initialization-only icon.
     icon: Option<IconRef>,
     /// Initialization-only font.
@@ -126,26 +149,27 @@ pub struct ListItem {
     /// Mutable label displayed for the item.
     label: String,
     /// Runtime-owned source for user submissions.
-    submitted_event: Rc<crate::EventSource<ListItemSubmitted>>,
+    submitted_event: Rc<crate::EventSource<ListItemSubmitted<Value>>>,
 }
 
-impl ListItem {
+impl<Value: Clone + 'static> ListItem<Value> {
     /// Constructs a retained node and a weak typed handle to its concrete list item.
-    pub fn create(parameters: ListItemParameters) -> (TypedWidgetHandle<Self>, Node) {
-        let widget = ListItemBuilder::create_widget(parameters);
+    pub fn create(parameters: ListItemParameters<Value>) -> (TypedWidgetHandle<Self>, Node) {
+        let widget = Self::from(parameters);
         Node::typed_widget(widget)
     }
 
     /// Constructs a list item that emits through an enclosing list view's shared port.
     pub(crate) fn create_with_event_port(
-        parameters: ListItemParameters,
-        submitted_event: Rc<crate::EventSource<ListItemSubmitted>>,
+        parameters: ListItemParameters<Value>,
+        submitted_event: Rc<crate::EventSource<ListItemSubmitted<Value>>>,
     ) -> (TypedWidgetHandle<Self>, Node) {
         let widget = Self {
             icon: parameters.icon,
             font: parameters.font,
             opt: parameters.opt,
             label: parameters.label,
+            value: parameters.value,
             submitted_event,
         };
         Node::typed_widget(widget)
@@ -162,8 +186,8 @@ impl ListItem {
     }
 
     /// Returns the native event endpoint emitted once for every user submission.
-    pub fn submitted(&self) -> crate::WidgetEventPortHandle<ListItemSubmitted> {
-        <Self as crate::TypedWidget<ListItemSubmitted>>::event(self)
+    pub fn submitted(&self) -> crate::WidgetEventPortHandle<ListItemSubmitted<Value>> {
+        <Self as crate::TypedWidget<ListItemSubmitted<Value>>>::event(self)
     }
 
     /// Measures the row label and optional icon.
@@ -218,7 +242,7 @@ impl ListItem {
     }
 }
 
-impl TypedWidgetHandle<ListItem> {
+impl<Value: Clone + 'static> TypedWidgetHandle<ListItem<Value>> {
     /// Clones the current item label while the widget is retained.
     pub fn label(&self) -> Option<String> {
         self.try_read(|widget| widget.label().to_owned())
@@ -230,12 +254,12 @@ impl TypedWidgetHandle<ListItem> {
     }
 
     /// Returns the list item's native submission endpoint.
-    pub fn submitted(&self) -> WidgetEventPortHandle<ListItemSubmitted> {
+    pub fn submitted(&self) -> WidgetEventPortHandle<ListItemSubmitted<Value>> {
         self.widget_event()
     }
 }
 
-impl Widget for ListItem {
+impl<Value: Clone + 'static> Widget for ListItem<Value> {
     fn widget_opt(&self) -> &WidgetOption {
         &self.opt
     }
@@ -246,7 +270,7 @@ impl Widget for ListItem {
         }
         // Clone before emission so observers receive an immutable selection snapshot.
         let label = self.label.clone();
-        self.submitted_event.emit(ListItemSubmitted { label });
+        self.submitted_event.emit(ListItemSubmitted { label, value: self.value.clone() });
 
         // Submitting preserves the label and icon used by intrinsic measurement.
         crate::Change::NoChange
@@ -261,25 +285,21 @@ impl Widget for ListItem {
     }
 }
 
-impl crate::TypedWidget<ListItemSubmitted> for ListItem {
-    fn event(&self) -> crate::WidgetEventPortHandle<ListItemSubmitted> {
+impl<Value: Clone + 'static> crate::TypedWidget<ListItemSubmitted<Value>> for ListItem<Value> {
+    fn event(&self) -> crate::WidgetEventPortHandle<ListItemSubmitted<Value>> {
         self.submitted_event.event()
     }
 }
 
-/// Builder associating list-item parameters with the concrete runtime.
-pub struct ListItemBuilder;
-
-impl WidgetBuilder for ListItemBuilder {
-    type Parameters = ListItemParameters;
-    type W = ListItem;
-
-    fn create_widget(parameters: Self::Parameters) -> Self::W {
-        ListItem {
+impl<Value: Clone + 'static> From<ListItemParameters<Value>> for ListItem<Value> {
+    /// Transfers construction data into one concrete row and its typed event source.
+    fn from(parameters: ListItemParameters<Value>) -> Self {
+        Self {
             icon: parameters.icon,
             font: parameters.font,
             opt: parameters.opt,
             label: parameters.label,
+            value: parameters.value,
             submitted_event: Rc::new(crate::EventSource::new()),
         }
     }
@@ -300,7 +320,7 @@ mod tests {
         let mut style = test_skin(&atlas);
         style.metrics.padding = i32::MAX;
         let check = atlas.icon_id("check").expect("test atlas must contain the exact check resource");
-        let mut item = ListItemBuilder::create_widget(ListItemParameters::with_icon("item", IconRef::named(check)));
+        let mut item = ListItem::from(ListItemParameters::with_icon("item", IconRef::named(check)));
         let bounds = rect(0, 0, 20, 20);
         let mut display_list = DisplayList::new();
         let mut ctx = WidgetPaintCtx::new_with_content_geometry(bounds, &mut display_list, bounds, &style, &atlas, true, true, false, false, false, true);

@@ -20,10 +20,11 @@ area keep their byte cursor on Unicode scalar-value boundaries. Left/right movem
 operate on one scalar value at a time, not on a user-perceived grapheme cluster. Combining
 sequences and multi-scalar emoji can therefore require more than one cursor or deletion operation.
 
-File-dialog paths also cross the public API as UTF-8 `String` values. On platforms that permit
-non-UTF-8 paths, the default current directory and enumerated directory entries are converted
-lossily. Accepting a typed name is lexical: the resulting path is not required to exist or identify
-a regular file.
+File-dialog requests and accepted results use native `PathBuf` values. Directory rows carry those
+paths in typed submission events; only their display labels are converted lossily. Selecting a row
+preserves its native identity, including non-UTF-8 bytes or line endings that an editable single-line
+label cannot represent. Editing a path/filename creates a UTF-8 path instead. Acceptance is lexical;
+the application validates existence and file type when required.
 
 Rendering coverage is a separate atlas concern. Text measurement and drawing iterate Unicode
 scalar values and use the same lookup rules:

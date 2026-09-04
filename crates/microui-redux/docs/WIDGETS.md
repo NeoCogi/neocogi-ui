@@ -167,6 +167,25 @@ relative to the lower bound and clamps to the range. Keyboard, wheel, pointer, a
 text commits share this policy; a text commit on focus loss can emit `SliderChanged` and return
 `Changed` even without a routed event. An unchanged result emits nothing. Non-finite setter inputs
 or invalid numeric text preserve the previous finite value.
+## Typed list-row data
+
+List rows can carry explicit application data independently of display text:
+
+```rust
+use microui_redux::prelude::*;
+use std::path::PathBuf;
+
+let path = PathBuf::from("report.txt");
+let (row, node) = ListItem::create(ListItemParameters::new("Report").with_value(path));
+let submitted: WidgetEventPortHandle<ListItemSubmitted<PathBuf>> = row.submitted();
+// Subscribe to `submitted` and use event.value as the native path; event.label is presentation.
+# let _ = (node, submitted);
+```
+
+The payload remains concrete through the widget and event source. It must be `Clone + 'static`
+because each submission owns a clone. Ordinary rows use the default `()` payload. Prefer a concrete
+enum for several row actions; neither strings-as-keys nor type erasure are needed.
+
 ## Native text input and host cancellation
 
 An editor returns `KeyboardBehavior::TEXT_INPUT` together with its focus/traversal flags while it

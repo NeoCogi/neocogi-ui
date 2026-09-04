@@ -1156,7 +1156,7 @@ fn retained_leaf<B: WidgetBuilder>(parameters: B::Parameters) -> Node {
 }
 
 fn static_label(text: impl Into<String>) -> Node {
-    retained_leaf::<ListItemBuilder>(ListItemParameters::with_opt(text, WidgetOption::NO_INTERACT))
+    ListItem::create(ListItemParameters::with_opt(text, WidgetOption::NO_INTERACT)).1
 }
 
 fn centered_button(label: impl Into<String>) -> (WidgetEventPortHandle<ButtonSubmitted>, Node) {
@@ -1894,10 +1894,10 @@ impl State {
         let (combo_typed_state, combo_runtime) = stateful_leaf::<ComboBuilder>(ComboParameters::new());
         let combo_submitted = combo_typed_state.submitted();
         let combo_item_pairs = [
-            stateful_leaf::<ListItemBuilder>(ListItemParameters::new("Apple")),
-            stateful_leaf::<ListItemBuilder>(ListItemParameters::new("Banana")),
-            stateful_leaf::<ListItemBuilder>(ListItemParameters::new("Cherry")),
-            stateful_leaf::<ListItemBuilder>(ListItemParameters::new("Date")),
+            ListItem::create(ListItemParameters::new("Apple")),
+            ListItem::create(ListItemParameters::new("Banana")),
+            ListItem::create(ListItemParameters::new("Cherry")),
+            ListItem::create(ListItemParameters::new("Date")),
         ];
         let combo_item_states = combo_item_pairs.each_ref().map(|(state, _)| state.clone());
         let combo_item_submitted = combo_item_pairs.each_ref().map(|(handle, _)| handle.submitted());
@@ -1912,7 +1912,7 @@ impl State {
             .expect("combo state unavailable");
         let combo_items = combo_item_pairs.map(|(_, runtime)| runtime);
         let window_info_value_pairs =
-            ["40, 40", "300, 450", "0.0"].map(|label| stateful_leaf::<ListItemBuilder>(ListItemParameters::with_opt(label, WidgetOption::NO_INTERACT)));
+            ["40, 40", "300, 450", "0.0"].map(|label| ListItem::create(ListItemParameters::with_opt(label, WidgetOption::NO_INTERACT)));
         let window_info_value_states = window_info_value_pairs.each_ref().map(|(state, _)| state.clone());
         let window_info_values = window_info_value_pairs.map(|(_, runtime)| runtime);
         let (submit_button_submitted, submit_button) = centered_button("Submit");
@@ -3028,7 +3028,7 @@ impl State {
         }
         match event.status() {
             FileDialogStatus::Accepted(result) => {
-                self.write_log(format!("Selected file: {}", result.file_name).as_str());
+                self.write_log(format!("Selected file: {}", result.display()).as_str());
             }
             FileDialogStatus::Cancelled => {
                 self.write_log("File dialog canceled");

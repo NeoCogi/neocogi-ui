@@ -267,7 +267,7 @@ fn record_combo(events: &mut Vec<ClickEvent>, event: &ComboSubmitted) {
 fn typed_click_events_preserve_fifo_within_each_port() {
     let mut checkbox = CheckboxBuilder::create_widget(CheckboxParameters::new("check", false));
     let mut button = ButtonBuilder::create_widget(ButtonParameters::new("button"));
-    let mut item = ListItemBuilder::create_widget(ListItemParameters::new("item"));
+    let mut item = ListItem::from(ListItemParameters::new("item"));
     let mut list = ListBoxBuilder::create_widget(ListBoxParameters::new("list", None));
     let mut combo = ComboBuilder::create_widget(ComboParameters::new());
 

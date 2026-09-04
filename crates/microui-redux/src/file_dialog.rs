@@ -35,16 +35,19 @@
 //! [`crate::Context`] dispatcher. Opening resets and shows that window; acceptance or cancellation
 //! hides it and emits [`FileDialogCompleted`] from the component-owned source.
 //!
-//! Paths cross the public API as UTF-8 [`String`] values. On platforms that permit non-UTF-8 paths,
-//! directory entries are converted lossily. Accepting a typed name is lexical: the dialog does not
+//! Native paths remain [`PathBuf`] values; lossy labels are presentation only. Directory reads
+//! complete before replacing a listing. Accepting a typed name is lexical: the dialog does not
 //! require the resulting path to exist or to identify a regular file.
 
-use std::{path::Path, rc::Rc};
+use std::{
+    path::{Path, PathBuf},
+    rc::Rc,
+};
 
 use crate::{
     Button, ButtonParameters, ButtonSubmitted, Context, IconRef, IconRole, Linear, LinearItem, LinearParameters, ListItem, ListItemParameters,
-    ListItemSubmitted, Node, Recti, ScrollArea, ScrollAreaOption, ScrollAreaParameters, Textbox, TextboxParameters, TextboxSubmitted, TypedWidgetHandle, Ui,
-    WidgetEventPortHandle, WidgetOption, Window, WindowEvent, WindowHandle, WindowOption,
+    ListItemSubmitted, Node, Recti, ScrollArea, ScrollAreaOption, ScrollAreaParameters, Textbox, TextboxParameters, TextboxSubmitted, TextboxChanged,
+    TextBlock, TextBlockParameters, TypedWidgetHandle, Ui, WidgetEventPortHandle, WidgetOption, Window, WindowEvent, WindowHandle, WindowOption,
 };
 #[cfg(test)]
 use crate::ui_node::RuntimeNodeId;
@@ -54,15 +57,14 @@ const DEFAULT_FILE_DIALOG_RECT: Recti = Recti { x: 50, y: 50, width: 720, height
 
 /// One-shot configuration used to open a file dialog.
 ///
-/// # Path encoding
-///
-/// File-dialog paths cross the public API as UTF-8 [`String`] values. On platforms that permit
-/// non-UTF-8 paths, the default current directory and directory entries encountered while browsing
-/// are converted lossily.
+/// Native path identity is preserved even when display labels need lossy Unicode conversion.
 #[derive(Clone, Debug)]
 pub struct FileDialogRequest {
+    /// Window title for this activation.
     title: String,
-    initial_directory: String,
+    /// Native directory to read before the request becomes active.
+    initial_directory: PathBuf,
+    /// Initial screen-space window geometry.
     rect: Recti,
 }
 
@@ -80,10 +82,9 @@ impl FileDialogRequest {
 
     /// Replaces the directory displayed when the dialog opens.
     ///
-    /// A missing or unreadable directory remains visible in the path box and produces no filesystem
-    /// entries; an available lexical parent can still be shown for navigation. Opening the dialog
-    /// itself does not fail.
-    pub fn with_initial_directory(mut self, directory: impl Into<String>) -> Self {
+    /// A missing or unreadable directory causes `FileDialog::open` to return an error before
+    /// showing the window or replacing the previous request data.
+    pub fn with_initial_directory(mut self, directory: impl Into<PathBuf>) -> Self {
         self.initial_directory = directory.into();
         self
     }
@@ -100,7 +101,7 @@ impl FileDialogRequest {
     }
 
     /// Returns the configured initial directory.
-    pub fn initial_directory(&self) -> &str {
+    pub fn initial_directory(&self) -> &Path {
         &self.initial_directory
     }
 
@@ -112,10 +113,7 @@ impl FileDialogRequest {
 
 impl Default for FileDialogRequest {
     fn default() -> Self {
-        let initial_directory = std::env::current_dir()
-            .unwrap_or_else(|_| std::path::PathBuf::from("."))
-            .to_string_lossy()
-            .into_owned();
+        let initial_directory = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         Self {
             title: DEFAULT_FILE_DIALOG_TITLE.to_owned(),
             initial_directory,
@@ -124,28 +122,15 @@ impl Default for FileDialogRequest {
     }
 }
 
-/// Path accepted by a file dialog.
-///
-/// `file_name` and `file_path` are UTF-8 [`String`] values. On platforms that permit non-UTF-8
-/// paths, filesystem entries encountered by the dialog are converted lossily. Acceptance does not
-/// imply that the path exists or identifies a regular file; applications that require those
-/// conditions must validate [`FileDialogResult::file_path`] after completion.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct FileDialogResult {
-    /// Selected basename suitable for display.
-    pub file_name: String,
-    /// Selected path, resolved against the dialog's current directory when entered relatively.
-    pub file_path: String,
-}
-
 /// Terminal outcome of one file-dialog activation.
 ///
 /// Completion events always carry one of these outcomes; pending state is represented by
 /// [`FileDialog::is_open`] rather than an impossible event variant.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum FileDialogStatus {
-    /// The user accepted a non-empty file selection.
-    Accepted(FileDialogResult),
+    /// The user accepted a non-empty native path. Acceptance is lexical; the application must
+    /// validate existence/type if required and derive display text with `Path::display`.
+    Accepted(PathBuf),
     /// The user cancelled, closed, explicitly cancelled, or otherwise ended the dialog.
     Cancelled,
 }
@@ -161,6 +146,7 @@ pub struct FileDialogCompleted {
 }
 
 impl FileDialogCompleted {
+    /// Owns the terminal snapshot before deferred dispatch begins.
     fn new(status: FileDialogStatus) -> Self {
         Self { status }
     }
@@ -196,25 +182,35 @@ struct FileDialogTestFields {
     ok_button_id: RuntimeNodeId,
     /// Persistent cancellation button identity.
     cancel_button_id: RuntimeNodeId,
+    /// Editable filename identity for input-driven selection invalidation tests.
+    filename_id: RuntimeNodeId,
 }
 
 /// Function pointer used by retained subscriptions to recover one application-owned dialog.
 type FileDialogAccessor<State> = for<'a> fn(&'a mut State) -> &'a mut FileDialog;
 
 /// Failure to activate a file-dialog request; the previous request state remains intact.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Debug)]
 pub enum FileDialogOpenError {
     /// A request is still awaiting acceptance or cancellation.
     AlreadyOpen,
+    /// Reading the requested directory failed; no partial listing or active request was published.
+    ReadDirectory {
+        /// Native directory whose complete listing could not be read.
+        path: PathBuf,
+        /// Concrete filesystem error, including entry/metadata iteration failures.
+        source: std::io::Error,
+    },
     /// The supplied UI cannot show this dialog under its current ownership/visibility policy.
     Surface(crate::SurfaceMutationError),
 }
 
 impl std::fmt::Display for FileDialogOpenError {
-    /// Keeps modal ownership failures distinct from overlapping application requests.
+    /// Preserves ownership, overlap, and filesystem failure context for callers.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::AlreadyOpen => f.write_str("file dialog already has an active request"),
+            Self::ReadDirectory { path, source } => write!(f, "cannot read {}: {source}", path.display()),
             Self::Surface(source) => write!(f, "cannot open file dialog: {source}"),
         }
     }
@@ -225,6 +221,7 @@ impl std::error::Error for FileDialogOpenError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::AlreadyOpen => None,
+            Self::ReadDirectory { source, .. } => Some(source),
             Self::Surface(source) => Some(source),
         }
     }
@@ -243,30 +240,36 @@ pub struct FileDialog {
     completed: crate::EventSource<FileDialogCompleted>,
     /// Non-owning stable capability and event projection for the Context-owned dialog window.
     window: WindowHandle,
-    /// UTF-8 directory currently represented by the two retained list columns.
-    current_working_directory: String,
-    /// Display names currently mounted in the folder column.
-    folders: Vec<String>,
-    /// Display names currently mounted in the file column.
-    files: Vec<String>,
+    /// Native directory currently represented by the two retained list columns.
+    current_working_directory: PathBuf,
+    /// Native folder paths retained only for geometry assertions; production rows own their payload.
+    #[cfg(test)]
+    folders: Vec<PathBuf>,
+    /// Native file paths retained only for geometry assertions; production rows own their payload.
+    #[cfg(test)]
+    files: Vec<PathBuf>,
     /// Weak retained topology capability for replacing folder rows in place.
     folder_column: TypedWidgetHandle<Linear>,
     /// Weak retained topology capability for replacing file rows in place.
     file_column: TypedWidgetHandle<Linear>,
     /// Retained folder viewport state used by refresh and tests.
-    #[cfg_attr(not(test), allow(dead_code))]
     folder_scroll: TypedWidgetHandle<ScrollArea>,
     /// Retained file viewport state used by refresh and tests.
-    #[cfg_attr(not(test), allow(dead_code))]
     file_scroll: TypedWidgetHandle<ScrollArea>,
     /// Shared typed source used by every dynamically rebuilt folder row.
-    folder_item_port: Rc<crate::EventSource<ListItemSubmitted>>,
+    folder_item_port: Rc<crate::EventSource<ListItemSubmitted<PathBuf>>>,
     /// Shared typed source used by every dynamically rebuilt file row.
-    file_item_port: Rc<crate::EventSource<ListItemSubmitted>>,
+    file_item_port: Rc<crate::EventSource<ListItemSubmitted<PathBuf>>>,
     /// Weak handle for the editable directory path.
     path_box: TypedWidgetHandle<Textbox>,
     /// Weak handle for the accepted file name.
     file_name_box: TypedWidgetHandle<Textbox>,
+    /// Whether the user has edited the path input since it displayed the native current directory.
+    path_input_dirty: bool,
+    /// Exact row selection, retained independently of its lossy filename presentation.
+    selected_path: Option<PathBuf>,
+    /// Visible filesystem diagnostic; successful navigation clears it.
+    error_text: TypedWidgetHandle<TextBlock>,
     /// Node identities used only for retained geometry and interaction tests.
     #[cfg(test)]
     test: FileDialogTestFields,
@@ -294,17 +297,17 @@ impl FileDialog {
     ) -> Self {
         // Start with an empty dormant model. The first activation supplies directory data, title, and
         // geometry immediately before this already-retained modal window becomes visible.
-        let current_working_directory = String::new();
+        let current_working_directory = PathBuf::new();
         let folders = Vec::new();
         let files = Vec::new();
         let folder_item_port = Rc::new(crate::EventSource::new());
         let file_item_port = Rc::new(crate::EventSource::new());
-        let folder_rows = Self::make_folder_rows(&current_working_directory, &folders, &folder_item_port);
-        let file_rows = Self::make_file_rows(&files, &file_item_port);
+        let folder_rows = Self::make_rows(&current_working_directory, &folders, IconRole::ClosedFolder, &folder_item_port);
+        let file_rows = Self::make_rows(&current_working_directory, &files, IconRole::File, &file_item_port);
 
         let (up_handle, up_node) = Button::create(ButtonParameters::new("Up"));
         let (home_handle, home_node) = Button::create(ButtonParameters::new("Home"));
-        let (path_box, path_node) = Textbox::create(TextboxParameters::new(current_working_directory.clone()));
+        let (path_box, path_node) = Textbox::create(TextboxParameters::new(current_working_directory.to_string_lossy()));
         let (go_handle, go_node) = Button::create(ButtonParameters::new("Go"));
 
         let (folder_column, folder_content) = Linear::create(LinearParameters::vertical(
@@ -331,6 +334,7 @@ impl FileDialog {
             up_button_id: up_node.id(),
             ok_button_id: ok_node.id(),
             cancel_button_id: cancel_node.id(),
+            filename_id: file_name_node.id(),
         };
 
         let (_, toolbar) = Linear::create(LinearParameters::horizontal([
@@ -350,10 +354,12 @@ impl FileDialog {
             LinearItem::fixed(cancel_node, 96),
             LinearItem::fixed(ok_node, 96),
         ]));
+        let (error_text, error_node) = TextBlock::create(TextBlockParameters::new(""));
         let (_, shell) = Linear::create(LinearParameters::vertical([
             LinearItem::content(toolbar),
             LinearItem::flex(browser, 1.0),
             LinearItem::content(filename),
+            LinearItem::content(error_node),
             LinearItem::content(actions),
         ]));
 
@@ -373,12 +379,16 @@ impl FileDialog {
             .expect("new file-dialog Up event must be unsubscribed");
         ctx.subscribe_with(home_handle.submitted(), accessor, Self::dispatch_home::<State>)
             .expect("new file-dialog Home event must be unsubscribed");
+        ctx.subscribe_with(path_box.changed(), accessor, Self::dispatch_path_changed::<State>)
+            .expect("new file-dialog path-change event must be unsubscribed");
         ctx.subscribe_with(path_box.submitted(), accessor, Self::dispatch_path::<State>)
             .expect("new file-dialog path event must be unsubscribed");
         ctx.subscribe_with(go_handle.submitted(), accessor, Self::dispatch_go::<State>)
             .expect("new file-dialog Go event must be unsubscribed");
         ctx.subscribe_with(folder_item_port.event(), accessor, Self::dispatch_folder::<State>)
             .expect("new file-dialog folder event must be unsubscribed");
+        ctx.subscribe_with(file_name_box.changed(), accessor, Self::dispatch_filename_changed::<State>)
+            .expect("new file-dialog filename event must be unsubscribed");
         ctx.subscribe_with(file_item_port.event(), accessor, Self::dispatch_file::<State>)
             .expect("new file-dialog file event must be unsubscribed");
         ctx.subscribe_context_with(ok_handle.submitted(), accessor, Self::dispatch_accept::<State>)
@@ -393,7 +403,9 @@ impl FileDialog {
             completed: crate::EventSource::new(),
             window,
             current_working_directory,
+            #[cfg(test)]
             folders,
+            #[cfg(test)]
             files,
             folder_column,
             file_column,
@@ -403,92 +415,65 @@ impl FileDialog {
             file_item_port,
             path_box,
             file_name_box,
+            path_input_dirty: false,
+            selected_path: None,
+            error_text,
             #[cfg(test)]
             test,
         }
     }
 
+    /// Creates a noninteractive heading/empty-list row through the ordinary widget path.
     fn static_item(label: &str) -> Node {
         let (_, node) = ListItem::create(ListItemParameters::with_opt(label, WidgetOption::NO_INTERACT));
         node
     }
 
-    fn read_directory(path: &Path) -> (Vec<String>, Vec<String>) {
+    /// Reads and sorts a complete native listing; no entry or metadata error is silently dropped.
+    fn read_directory(path: &Path) -> std::io::Result<(Vec<PathBuf>, Vec<PathBuf>)> {
         let mut folders = Vec::new();
         let mut files = Vec::new();
-        if let Ok(entries) = std::fs::read_dir(path) {
-            for entry in entries.flatten() {
-                let entry_path = entry.path();
-                if entry_path.is_dir() {
-                    folders.push(entry_path.to_string_lossy().into_owned());
-                } else {
-                    files.push(entry.file_name().to_string_lossy().into_owned());
-                }
+        for entry in std::fs::read_dir(path)? {
+            let path = entry?.path();
+            // Follow directory symlinks consistently with navigation. An unreadable or dangling
+            // target is an explicit listing failure instead of silently changing its row kind.
+            if path.metadata()?.is_dir() {
+                folders.push(path);
+            } else {
+                files.push(path);
             }
         }
         folders.sort();
         files.sort();
-        if let Some(parent) = path.parent() {
-            folders.insert(0, parent.to_string_lossy().into_owned());
+        if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+            folders.insert(0, parent.to_path_buf());
         }
-        (folders, files)
+        Ok((folders, files))
     }
 
-    fn folder_label<'a>(cwd: &str, folder: &'a str) -> &'a str {
-        let parent = Path::new(cwd).parent().map(|path| path.to_string_lossy().into_owned());
-        if parent.as_deref() == Some(folder) {
-            ".."
-        } else {
-            Path::new(folder).file_name().and_then(|name| name.to_str()).unwrap_or(folder)
-        }
-    }
-
-    fn make_folder_rows(cwd: &str, folders: &[String], submitted_event: &Rc<crate::EventSource<ListItemSubmitted>>) -> DialogRows {
-        if folders.is_empty() {
-            return DialogRows {
-                nodes: vec![Self::static_item("No folders")],
-                #[cfg(test)]
-                ids: Vec::new(),
-            };
-        }
-        let mut nodes = Vec::with_capacity(folders.len());
+    /// Builds either column through one path-preserving row implementation.
+    fn make_rows(cwd: &Path, paths: &[PathBuf], icon: IconRole, submitted_event: &Rc<crate::EventSource<ListItemSubmitted<PathBuf>>>) -> DialogRows {
+        let mut nodes = Vec::with_capacity(paths.len().max(1));
         #[cfg(test)]
-        let mut ids = Vec::with_capacity(folders.len());
-        for folder in folders {
-            let label = Self::folder_label(cwd, folder);
-            // Rows retain the semantic role, so an open dialog adopts replacement skin artwork
-            // without rebuilding its retained topology or keeping an old atlas capability alive.
+        let mut ids = Vec::with_capacity(paths.len());
+        for path in paths {
+            let label = if cwd.parent() == Some(path.as_path()) {
+                std::borrow::Cow::Borrowed("..")
+            } else {
+                path.file_name().unwrap_or(path.as_os_str()).to_string_lossy()
+            };
+            // Display text is never a key: even identical replacement-character labels carry
+            // distinct native paths in their statically typed submission payloads.
             let (_, node) = ListItem::create_with_event_port(
-                ListItemParameters::with_icon(label, IconRef::role(IconRole::ClosedFolder)),
+                ListItemParameters::with_icon(label, IconRef::role(icon)).with_value(path.clone()),
                 Rc::clone(submitted_event),
             );
             #[cfg(test)]
             ids.push(node.id());
             nodes.push(node);
         }
-        DialogRows {
-            nodes,
-            #[cfg(test)]
-            ids,
-        }
-    }
-
-    fn make_file_rows(files: &[String], submitted_event: &Rc<crate::EventSource<ListItemSubmitted>>) -> DialogRows {
-        if files.is_empty() {
-            return DialogRows {
-                nodes: vec![Self::static_item("No files")],
-                #[cfg(test)]
-                ids: Vec::new(),
-            };
-        }
-        let mut nodes = Vec::with_capacity(files.len());
-        #[cfg(test)]
-        let mut ids = Vec::with_capacity(files.len());
-        for file in files {
-            let (_, node) = ListItem::create_with_event_port(ListItemParameters::with_icon(file, IconRef::role(IconRole::File)), Rc::clone(submitted_event));
-            #[cfg(test)]
-            ids.push(node.id());
-            nodes.push(node);
+        if nodes.is_empty() {
+            nodes.push(Self::static_item("No entries"));
         }
         DialogRows {
             nodes,
@@ -497,10 +482,10 @@ impl FileDialog {
         }
     }
 
-    fn refresh_entries(&mut self) {
-        let (folders, files) = Self::read_directory(Path::new(&self.current_working_directory));
-        let folder_rows = Self::make_folder_rows(&self.current_working_directory, &folders, &self.folder_item_port);
-        let file_rows = Self::make_file_rows(&files, &self.file_item_port);
+    /// Commits an already complete listing to the two existing retained columns.
+    fn install_entries(&mut self, folders: Vec<PathBuf>, files: Vec<PathBuf>) {
+        let folder_rows = Self::make_rows(&self.current_working_directory, &folders, IconRole::ClosedFolder, &self.folder_item_port);
+        let file_rows = Self::make_rows(&self.current_working_directory, &files, IconRole::File, &self.file_item_port);
         #[cfg(test)]
         let folder_item_ids = folder_rows.ids;
         #[cfg(test)]
@@ -515,10 +500,10 @@ impl FileDialog {
             panic!("file-dialog file column unavailable with {} replacement nodes", rejected.len());
         }
 
-        self.folders = folders;
-        self.files = files;
         #[cfg(test)]
         {
+            self.folders = folders;
+            self.files = files;
             self.test.folder_item_ids = folder_item_ids;
             self.test.file_item_ids = file_item_ids;
         }
@@ -553,15 +538,25 @@ impl FileDialog {
     /// # Errors
     ///
     /// An already active request returns `AlreadyOpen`. A stale/foreign window or hidden owner
-    /// returns `Surface`; validation completes before request data or activity is changed.
-    pub fn open(&mut self, ui: &mut Ui<'_>, request: FileDialogRequest) -> Result<(), FileDialogOpenError> {
+    /// returns `Surface`; a failed complete directory read returns `ReadDirectory`. Neither
+    /// failure publishes request data, shows the window, or changes activity.
+    pub fn open(&mut self, ui: &mut Ui<'_>, mut request: FileDialogRequest) -> Result<(), FileDialogOpenError> {
         if self.active {
             return Err(FileDialogOpenError::AlreadyOpen);
         }
-        // Showing validates both context ownership and modal eligibility. No application callback
-        // runs during these synchronous mutations; prepare_open publishes activity only on success.
+        // Validate ownership and read the full candidate before any visibility or model mutation.
+        ui.window_visible(&self.window).map_err(FileDialogOpenError::Surface)?;
+        request.initial_directory = std::path::absolute(&request.initial_directory).map_err(|source| FileDialogOpenError::ReadDirectory {
+            path: request.initial_directory.clone(),
+            source,
+        })?;
+        let entries = Self::read_directory(&request.initial_directory).map_err(|source| FileDialogOpenError::ReadDirectory {
+            path: request.initial_directory.clone(),
+            source,
+        })?;
+        // Showing then validates modal eligibility. All remaining model mutations are infallible.
         ui.set_window_visible(&self.window, true).map_err(FileDialogOpenError::Surface)?;
-        let (title, rect) = self.prepare_open(request);
+        let (title, rect) = self.prepare_open(request, entries);
         ui.set_window_name(&self.window, title).expect("validated dialog remains registered");
         ui.set_window_rect(&self.window, rect).expect("validated dialog remains registered");
         Ok(())
@@ -587,11 +582,13 @@ impl FileDialog {
     }
 
     /// Resets activation-specific model and widget state before the dialog window is shown.
-    fn prepare_open(&mut self, request: FileDialogRequest) -> (String, Recti) {
+    fn prepare_open(&mut self, request: FileDialogRequest, entries: (Vec<PathBuf>, Vec<PathBuf>)) -> (String, Recti) {
         let FileDialogRequest { title, initial_directory, rect } = request;
         self.current_working_directory = initial_directory;
         self.path_box
-            .try_update_with(self.current_working_directory.clone(), |state, path| state.set_text(path))
+            .try_update_with(self.current_working_directory.to_string_lossy().into_owned(), |state, path| {
+                state.set_text(path)
+            })
             .expect("file-dialog path box must remain mounted");
         self.file_name_box
             .try_update(Textbox::clear)
@@ -602,78 +599,76 @@ impl FileDialog {
         self.file_scroll
             .try_update(|state| state.set_offset(crate::Vec2i::default()))
             .expect("file-dialog file scroll area must remain mounted");
-        self.refresh_entries();
+        self.path_input_dirty = false;
+        self.selected_path = None;
+        self.error_text.clear().expect("file-dialog error text must remain mounted");
+        self.install_entries(entries.0, entries.1);
         self.active = true;
         (title, rect)
     }
 
-    fn navigate_to(&mut self, directory: String) -> bool {
-        if directory.is_empty() || directory == self.current_working_directory {
-            return false;
-        }
-        self.current_working_directory = directory;
-        self.path_box
-            .try_update_with(self.current_working_directory.clone(), |state, path| state.set_text(path))
-            .expect("file-dialog path box must remain mounted");
-        self.file_name_box
-            .try_update(Textbox::clear)
-            .expect("file-dialog filename box must remain mounted");
-        true
-    }
-
-    fn resolve_directory_path(&self, input: &str) -> Option<String> {
-        let input = input.trim();
+    /// Resolves a typed directory lexically; whitespace is part of the native filename.
+    fn resolve_directory_path(&self, input: &str) -> Option<PathBuf> {
         if input.is_empty() {
             return None;
         }
-        let raw = Path::new(input);
-        let candidate = if raw.is_absolute() {
-            raw.to_path_buf()
-        } else {
-            Path::new(&self.current_working_directory).join(raw)
-        };
-        candidate.is_dir().then(|| candidate.to_string_lossy().into_owned())
+        // An unchanged lossy path display refers to the committed native directory, not to a
+        // different Unicode path containing replacement characters.
+        if !self.path_input_dirty && self.path_box.text().as_deref() == Some(input) {
+            return Some(self.current_working_directory.clone());
+        }
+        Some(self.current_working_directory.join(input))
     }
 
-    fn home_dir() -> Option<String> {
-        std::env::var("HOME")
-            .ok()
+    /// Reads the platform home setting without converting its native encoding to Unicode.
+    fn home_dir() -> Option<PathBuf> {
+        std::env::var_os("HOME")
             .filter(|home| !home.is_empty())
-            .or_else(|| std::env::var("USERPROFILE").ok().filter(|home| !home.is_empty()))
+            .or_else(|| std::env::var_os("USERPROFILE").filter(|home| !home.is_empty()))
+            .map(PathBuf::from)
     }
 
+    /// Accepts an exact selected path or resolves the user's untrimmed UTF-8 filename.
     fn accepted_status(&self) -> Option<FileDialogStatus> {
-        let typed_name = self.file_name_box.try_read(|state| state.text().trim().to_owned()).unwrap_or_default();
+        if let Some(path) = &self.selected_path {
+            return Some(FileDialogStatus::Accepted(path.clone()));
+        }
+        let typed_name = self.file_name_box.text()?;
         if typed_name.is_empty() {
             return None;
         }
-        let typed_path = Path::new(&typed_name);
-        let file_path = if typed_path.is_absolute() {
-            typed_path.to_string_lossy().into_owned()
-        } else {
-            Path::new(&self.current_working_directory).join(typed_path).to_string_lossy().into_owned()
-        };
-        let file_name = Path::new(&file_path)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .map(str::to_owned)
-            .unwrap_or(typed_name);
-        Some(FileDialogStatus::Accepted(FileDialogResult { file_name, file_path }))
+        let path = self.current_working_directory.join(&typed_name);
+        Some(FileDialogStatus::Accepted(path))
     }
 
-    fn navigate_and_refresh(&mut self, directory: String) {
-        if self.navigate_to(directory) {
-            self.refresh_entries();
+    /// Reads a complete candidate before replacing the current directory, rows, or selection.
+    fn navigate_and_refresh(&mut self, directory: PathBuf) {
+        match Self::read_directory(&directory) {
+            Ok((folders, files)) => {
+                self.current_working_directory = directory;
+                self.install_entries(folders, files);
+                self.selected_path = None;
+                self.file_name_box.clear().expect("file-dialog filename must remain mounted");
+                self.error_text.clear().expect("file-dialog error text must remain mounted");
+            }
+            Err(error) => {
+                // Preserve the old snapshot and selection; show the attempted path with its error.
+                self.error_text
+                    .set_text(format!("Cannot read {}: {error}", directory.display()))
+                    .expect("file-dialog error text must remain mounted");
+            }
         }
+        self.path_input_dirty = false;
+        self.path_box
+            .set_text(self.current_working_directory.to_string_lossy())
+            .expect("file-dialog path must remain mounted");
     }
 
     /// Navigates to the current directory's parent after an Up-button submission.
     fn up_submitted(&mut self, _event: &ButtonSubmitted) {
         // Resolve the parent from committed controller state; filesystem refresh remains atomic with
         // the navigation update performed by `navigate_and_refresh`.
-        let parent = Path::new(&self.current_working_directory)
-            .parent()
-            .map(|path| path.to_string_lossy().into_owned());
+        let parent = self.current_working_directory.parent().map(Path::to_path_buf);
         if let Some(parent) = parent {
             self.navigate_and_refresh(parent);
         }
@@ -681,10 +676,8 @@ impl FileDialog {
 
     /// Navigates to the platform home directory after a Home-button submission.
     fn home_submitted(&mut self, _event: &ButtonSubmitted) {
-        // Ignore an unavailable or invalid home directory and leave the current listing unchanged.
-        if let Some(home) = Self::home_dir()
-            && Path::new(&home).is_dir()
-        {
+        // An unavailable home setting has no destination; filesystem failures remain visible.
+        if let Some(home) = Self::home_dir() {
             self.navigate_and_refresh(home);
         }
     }
@@ -706,26 +699,28 @@ impl FileDialog {
         }
     }
 
-    /// Navigates to the folder named by one submitted dynamic row.
-    fn folder_submitted(&mut self, event: &ListItemSubmitted) {
-        // Match the display label back to the controller's authoritative directory snapshot before
-        // replacing rows; the dispatcher detached the complete event batch before this call.
-        let directory = self
-            .folders
-            .iter()
-            .find(|folder| Self::folder_label(&self.current_working_directory, folder) == event.label)
-            .cloned();
-        if let Some(directory) = directory {
-            self.navigate_and_refresh(directory);
-        }
+    /// Navigates by the row's native payload; display-label collisions are irrelevant.
+    fn folder_submitted(&mut self, event: &ListItemSubmitted<PathBuf>) {
+        self.navigate_and_refresh(event.value.clone());
     }
 
-    /// Copies a submitted file-row label into the filename textbox.
-    fn file_submitted(&mut self, event: &ListItemSubmitted) {
-        // Clone the owned label only when transferring it into the retained textbox mutation.
+    /// Retains the exact native row selection while displaying only its lossy basename.
+    fn file_submitted(&mut self, event: &ListItemSubmitted<PathBuf>) {
+        let path = &event.value;
         self.file_name_box
-            .try_update_with(event.label.clone(), |state, name| state.set_text(name))
-            .expect("file-dialog filename box must remain mounted");
+            .set_text(path.file_name().unwrap_or(path.as_os_str()).to_string_lossy())
+            .expect("file-dialog filename must remain mounted");
+        self.selected_path = Some(path.clone());
+    }
+
+    /// A user edit makes the path input authoritative rather than its lossy native display.
+    fn dispatch_path_changed<State>(state: &mut State, accessor: &FileDialogAccessor<State>, _: &TextboxChanged) {
+        accessor(state).path_input_dirty = true;
+    }
+
+    /// A user edit makes the filename textbox authoritative, even if its final label collides.
+    fn dispatch_filename_changed<State>(state: &mut State, accessor: &FileDialogAccessor<State>, _: &TextboxChanged) {
+        accessor(state).selected_path = None;
     }
 
     /// Ends the active request and queues its single terminal component event.
@@ -785,27 +780,33 @@ impl FileDialog {
         }
     }
 
+    /// Recovers the application-owned component and forwards its up action.
     fn dispatch_up<State>(state: &mut State, accessor: &FileDialogAccessor<State>, event: &ButtonSubmitted) {
         accessor(state).up_submitted(event);
     }
 
+    /// Recovers the application-owned component and forwards its home action.
     fn dispatch_home<State>(state: &mut State, accessor: &FileDialogAccessor<State>, event: &ButtonSubmitted) {
         accessor(state).home_submitted(event);
     }
 
+    /// Recovers the application-owned component and forwards its path action.
     fn dispatch_path<State>(state: &mut State, accessor: &FileDialogAccessor<State>, event: &TextboxSubmitted) {
         accessor(state).path_submitted(event);
     }
 
+    /// Recovers the application-owned component and forwards its go action.
     fn dispatch_go<State>(state: &mut State, accessor: &FileDialogAccessor<State>, event: &ButtonSubmitted) {
         accessor(state).go_submitted(event);
     }
 
-    fn dispatch_folder<State>(state: &mut State, accessor: &FileDialogAccessor<State>, event: &ListItemSubmitted) {
+    /// Recovers the application-owned component and forwards its folder action.
+    fn dispatch_folder<State>(state: &mut State, accessor: &FileDialogAccessor<State>, event: &ListItemSubmitted<PathBuf>) {
         accessor(state).folder_submitted(event);
     }
 
-    fn dispatch_file<State>(state: &mut State, accessor: &FileDialogAccessor<State>, event: &ListItemSubmitted) {
+    /// Recovers the application-owned component and forwards its file action.
+    fn dispatch_file<State>(state: &mut State, accessor: &FileDialogAccessor<State>, event: &ListItemSubmitted<PathBuf>) {
         accessor(state).file_submitted(event);
     }
 
@@ -947,23 +948,23 @@ mod tests {
         let (mut context, mut model, owner) = context_model_and_owner();
         let original_directory = model.dialog.current_working_directory.clone();
         context.ui().set_window_visible(&owner, false).unwrap();
-        let request = FileDialogRequest::new().with_initial_directory("/unused-request-directory");
-        assert_eq!(
+        let request = FileDialogRequest::default();
+        assert!(matches!(
             model.dialog.open(&mut context.ui(), request),
             Err(FileDialogOpenError::Surface(SurfaceMutationError::InvalidDialogOwner))
-        );
+        ));
         assert!(!model.dialog.is_open());
         assert_eq!(model.dialog.current_working_directory, original_directory);
         let (mut foreign, _) = context_and_model();
-        assert_eq!(
+        assert!(matches!(
             model.dialog.open(&mut foreign.ui(), FileDialogRequest::default()),
             Err(FileDialogOpenError::Surface(SurfaceMutationError::UnknownWindow))
-        );
+        ));
         context.ui().destroy_window(&owner).unwrap();
-        assert_eq!(
+        assert!(matches!(
             model.dialog.open(&mut context.ui(), FileDialogRequest::default()),
             Err(FileDialogOpenError::Surface(SurfaceMutationError::UnknownWindow))
-        );
+        ));
         context.update_ui_state(dimensions(), &mut model);
         assert!(model.completions.is_empty());
     }
@@ -999,10 +1000,10 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let request = FileDialogRequest::new()
             .with_title("Choose")
-            .with_initial_directory(dir.to_string_lossy())
+            .with_initial_directory(&dir)
             .with_rect(Recti::new(10, 20, 400, 300));
         assert_eq!(request.title(), "Choose");
-        assert_eq!(request.initial_directory(), dir.to_string_lossy());
+        assert_eq!(request.initial_directory(), dir);
         let request_rect = request.rect();
         assert_eq!((request_rect.x, request_rect.y, request_rect.width, request_rect.height), (10, 20, 400, 300));
 
@@ -1021,6 +1022,142 @@ mod tests {
         context.update_ui_state(dimensions(), &mut model);
         assert_eq!(model.completions, [FileDialogStatus::Cancelled]);
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// Both opening and navigation retain the previous complete snapshot on filesystem failure.
+    #[test]
+    fn unreadable_directory_does_not_publish_an_empty_or_partial_listing() {
+        let directory = tempfile::tempdir().unwrap();
+        let file = directory.path().join("existing.txt");
+        fs::write(&file, b"existing").unwrap();
+        let missing = directory.path().join("missing");
+        let (mut context, mut model) = context_and_model();
+        assert!(
+            matches!(model.dialog.open(&mut context.ui(), FileDialogRequest::new().with_initial_directory(&missing)),
+            Err(FileDialogOpenError::ReadDirectory { path, source }) if path == missing && source.kind() == std::io::ErrorKind::NotFound)
+        );
+        assert!(!model.dialog.is_open());
+        assert_eq!(context.ui().window_visible(model.dialog.window()), Ok(false));
+        model
+            .dialog
+            .open(&mut context.ui(), FileDialogRequest::new().with_initial_directory(directory.path()))
+            .unwrap();
+        let rows = model.dialog.test.file_item_ids.clone();
+        model.dialog.file_submitted(&ListItemSubmitted {
+            label: "existing.txt".to_owned(),
+            value: file.clone(),
+        });
+        model.dialog.navigate_and_refresh(missing);
+        assert_eq!(model.dialog.current_working_directory, directory.path());
+        assert_eq!(model.dialog.test.file_item_ids, rows);
+        assert_eq!(model.dialog.accepted_status(), Some(FileDialogStatus::Accepted(file)));
+        assert!(model.dialog.error_text.text().unwrap().starts_with("Cannot read "));
+        model.dialog.navigate_and_refresh(directory.path().to_path_buf());
+        assert_eq!(model.dialog.error_text.text().as_deref(), Some(""));
+    }
+
+    /// Directory iteration must propagate entry/metadata failures rather than filtering them out.
+    #[cfg(unix)]
+    #[test]
+    fn broken_entry_rejects_the_complete_directory_candidate() {
+        let directory = tempfile::tempdir().unwrap();
+        fs::write(directory.path().join("readable"), b"ok").unwrap();
+        std::os::unix::fs::symlink("missing-target", directory.path().join("broken-link")).unwrap();
+        assert_eq!(FileDialog::read_directory(directory.path()).unwrap_err().kind(), std::io::ErrorKind::NotFound);
+    }
+
+    /// Typed names retain spaces, while native row selections survive lossy/normalized display.
+    #[test]
+    fn typed_filename_spaces_are_not_trimmed() {
+        let directory = tempfile::tempdir().unwrap();
+        fs::create_dir(directory.path().join(" child ")).unwrap();
+        let (mut context, mut model) = context_and_model();
+        model
+            .dialog
+            .open(&mut context.ui(), FileDialogRequest::new().with_initial_directory(directory.path()))
+            .unwrap();
+        model.dialog.file_name_box.set_text(" picked.txt ").unwrap();
+        assert_eq!(
+            model.dialog.accepted_status(),
+            Some(FileDialogStatus::Accepted(directory.path().join(" picked.txt ")))
+        );
+        assert_eq!(model.dialog.resolve_directory_path(" child "), Some(directory.path().join(" child ")));
+    }
+
+    /// Two equal lossy labels must still select and navigate to their distinct native paths.
+    #[cfg(unix)]
+    #[test]
+    fn native_row_payloads_preserve_non_utf8_names_and_label_collisions() {
+        use std::os::unix::ffi::OsStringExt;
+        let directory = tempfile::tempdir().unwrap();
+        let files =
+            [b"file-\x80".as_slice(), b"file-\x81".as_slice(), b"\n".as_slice()].map(|name| directory.path().join(std::ffi::OsString::from_vec(name.to_vec())));
+        let folders = [b"dir-\x80".as_slice(), b"dir-\x81".as_slice()].map(|name| directory.path().join(std::ffi::OsString::from_vec(name.to_vec())));
+        assert_eq!(files[0].to_string_lossy(), files[1].to_string_lossy());
+        for path in &files {
+            fs::write(path, b"native").unwrap();
+        }
+        for path in &folders {
+            fs::create_dir(path).unwrap();
+        }
+        let (mut context, mut model) = context_and_model();
+        for expected in &files {
+            model
+                .dialog
+                .open(&mut context.ui(), FileDialogRequest::new().with_initial_directory(directory.path()))
+                .unwrap();
+            context.update_ui_state(dimensions(), &mut model);
+            let index = model.dialog.files.iter().position(|path| path == expected).unwrap();
+            let node = model.dialog.test.file_item_ids[index];
+            let window = model.dialog.window.clone();
+            click_node(&mut context, &mut model, &window, node, true);
+            release_pointer(&mut context, &mut model);
+            let accept = model.dialog.test.ok_button_id;
+            click_node(&mut context, &mut model, &window, accept, true);
+            assert_eq!(model.completions.pop(), Some(FileDialogStatus::Accepted(expected.clone())));
+            release_pointer(&mut context, &mut model);
+        }
+        // Editing and then restoring the same lossy label must discard the original native row
+        // identity. This exercises real TextboxChanged dispatch, not a comparison of final strings.
+        model
+            .dialog
+            .open(&mut context.ui(), FileDialogRequest::new().with_initial_directory(directory.path()))
+            .unwrap();
+        context.update_ui_state(dimensions(), &mut model);
+        let index = model.dialog.files.iter().position(|path| path == &files[0]).unwrap();
+        let row = model.dialog.test.file_item_ids[index];
+        let window = model.dialog.window.clone();
+        click_node(&mut context, &mut model, &window, row, true);
+        release_pointer(&mut context, &mut model);
+        let filename = model.dialog.test.filename_id;
+        click_node(&mut context, &mut model, &window, filename, true);
+        context.text("x");
+        context.key(crate::KeyEvent::pressed(crate::Key::Backspace, crate::Modifiers::NONE));
+        context.update_ui_state(dimensions(), &mut model);
+        let unicode_path = directory.path().join(files[0].file_name().unwrap().to_string_lossy().as_ref());
+        assert_ne!(unicode_path, files[0]);
+        assert_eq!(model.dialog.accepted_status(), Some(FileDialogStatus::Accepted(unicode_path)));
+        model.dialog.cancel(&mut context.ui());
+        release_pointer(&mut context, &mut model);
+        for expected in &folders {
+            model
+                .dialog
+                .open(&mut context.ui(), FileDialogRequest::new().with_initial_directory(directory.path()))
+                .unwrap();
+            context.update_ui_state(dimensions(), &mut model);
+            let index = model.dialog.folders.iter().position(|path| path == expected).unwrap();
+            let node = model.dialog.test.folder_item_ids[index];
+            let window = model.dialog.window.clone();
+            click_node(&mut context, &mut model, &window, node, true);
+            assert_eq!(&model.dialog.current_working_directory, expected);
+            model.dialog.go_submitted(&ButtonSubmitted);
+            assert_eq!(
+                &model.dialog.current_working_directory, expected,
+                "unchanged lossy path input refreshes the native directory"
+            );
+            model.dialog.cancel(&mut context.ui());
+            release_pointer(&mut context, &mut model);
+        }
     }
 
     /// Proves the component exposes the same authenticated, fallible capability as other windows.
@@ -1052,10 +1189,11 @@ mod tests {
 
     #[test]
     fn accepted_dialog_dispatches_completion_in_the_input_transaction() {
+        let directory = tempfile::tempdir().unwrap();
         let (mut context, mut model) = context_and_model();
         model
             .dialog
-            .open(&mut context.ui(), FileDialogRequest::new().with_initial_directory("/retained-test"))
+            .open(&mut context.ui(), FileDialogRequest::new().with_initial_directory(directory.path()))
             .expect("dialog and owner must be available for this activation");
         context.update_ui_state(dimensions(), &mut model);
         model
@@ -1067,13 +1205,7 @@ mod tests {
         let open = model.dialog.test.ok_button_id;
 
         click_node(&mut context, &mut model, &dialog_window, open, true);
-        assert_eq!(
-            model.completions,
-            [FileDialogStatus::Accepted(FileDialogResult {
-                file_name: "picked.txt".to_owned(),
-                file_path: "/retained-test/picked.txt".to_owned(),
-            })]
-        );
+        assert_eq!(model.completions, [FileDialogStatus::Accepted(directory.path().join("picked.txt"))]);
         assert!(!model.dialog.is_open());
         assert_eq!(context.debug_root_visible(dialog_window.id()), Some(false));
     }
@@ -1110,7 +1242,7 @@ mod tests {
             .dialog
             .open(
                 &mut context.ui(),
-                FileDialogRequest::new().with_title("First").with_initial_directory(first_dir.to_string_lossy()),
+                FileDialogRequest::new().with_title("First").with_initial_directory(&first_dir),
             )
             .expect("dialog and owner must be available for this activation");
         filename.try_update_with("stale.txt", |state, text| state.set_text(text)).unwrap();
@@ -1122,9 +1254,7 @@ mod tests {
             .dialog
             .open(
                 &mut context.ui(),
-                FileDialogRequest::new()
-                    .with_title("Second")
-                    .with_initial_directory(second_dir.to_string_lossy()),
+                FileDialogRequest::new().with_title("Second").with_initial_directory(&second_dir),
             )
             .expect("dialog and owner must be available for this activation");
         assert_eq!(model.dialog.window.id(), dialog_window.id());
@@ -1146,10 +1276,10 @@ mod tests {
     fn overlapping_open_returns_an_error_without_closing_the_active_component() {
         let (mut context, mut model) = context_and_model();
         model.dialog.open(&mut context.ui(), FileDialogRequest::default()).unwrap();
-        assert_eq!(
+        assert!(matches!(
             model.dialog.open(&mut context.ui(), FileDialogRequest::default()),
             Err(FileDialogOpenError::AlreadyOpen)
-        );
+        ));
         assert!(model.dialog.is_open());
         assert_eq!(context.debug_modal_root(), Some(model.dialog.window.id()));
     }
@@ -1276,7 +1406,7 @@ mod tests {
         let (mut context, mut model) = context_and_model();
         model
             .dialog
-            .open(&mut context.ui(), FileDialogRequest::new().with_initial_directory(dir.to_string_lossy()))
+            .open(&mut context.ui(), FileDialogRequest::new().with_initial_directory(&dir))
             .expect("dialog and owner must be available for this activation");
         context.update_ui_state(dimensions(), &mut model);
         let dialog_window = model.dialog.window.clone();
@@ -1289,13 +1419,7 @@ mod tests {
         release_pointer(&mut context, &mut model);
         let open = model.dialog.test.ok_button_id;
         click_node(&mut context, &mut model, &dialog_window, open, batched);
-        assert_eq!(
-            model.completions,
-            [FileDialogStatus::Accepted(FileDialogResult {
-                file_name: "picked.txt".to_owned(),
-                file_path: file_path.to_string_lossy().into_owned(),
-            })]
-        );
+        assert_eq!(model.completions, [FileDialogStatus::Accepted(file_path)]);
         assert!(!model.dialog.is_open());
         fs::remove_dir_all(dir).unwrap();
     }
@@ -1363,7 +1487,7 @@ mod tests {
         let (mut context, mut model) = context_and_model();
         model
             .dialog
-            .open(&mut context.ui(), FileDialogRequest::new().with_initial_directory(dir.to_string_lossy()))
+            .open(&mut context.ui(), FileDialogRequest::new().with_initial_directory(&dir))
             .expect("dialog and owner must be available for this activation");
         context.update_ui_state(dimensions(), &mut model);
         let index = model
@@ -1378,7 +1502,7 @@ mod tests {
         let path_box = model.dialog.path_box.clone();
         click_node(&mut context, &mut model, &dialog_window, child_node, false);
         assert_eq!(Path::new(&model.dialog.current_working_directory), child);
-        assert_eq!(model.dialog.files, ["inside.txt"]);
+        assert_eq!(model.dialog.files, [child.join("inside.txt")]);
         assert!(folder_scroll.is_alive());
         assert!(path_box.is_alive());
         fs::remove_dir_all(dir).unwrap();
@@ -1394,7 +1518,7 @@ mod tests {
         let (mut context, mut model) = context_and_model();
         model
             .dialog
-            .open(&mut context.ui(), FileDialogRequest::new().with_initial_directory(dir.to_string_lossy()))
+            .open(&mut context.ui(), FileDialogRequest::new().with_initial_directory(&dir))
             .expect("dialog and owner must be available for this activation");
         context.update_ui_state(dimensions(), &mut model);
         let path = model.dialog.path_box.clone();
@@ -1402,7 +1526,7 @@ mod tests {
         let file_scroll = model.dialog.file_scroll.clone();
         file_scroll.try_update(|state| state.set_offset(crate::vec2(0, 40))).unwrap();
         fs::write(dir.join("new-file.txt"), b"row").unwrap();
-        model.dialog.refresh_entries();
+        model.dialog.go_submitted(&ButtonSubmitted);
         context.update_ui_state(dimensions(), &mut model);
         assert!(path.is_alive() && folder_scroll.is_alive() && file_scroll.is_alive());
         assert_eq!(file_scroll.try_read(|state| state.offset().y), Some(40));
@@ -1410,7 +1534,7 @@ mod tests {
         for entry in fs::read_dir(&dir).unwrap() {
             fs::remove_file(entry.unwrap().path()).unwrap();
         }
-        model.dialog.refresh_entries();
+        model.dialog.go_submitted(&ButtonSubmitted);
         context.update_ui_state(dimensions(), &mut model);
         assert_eq!(file_scroll.try_read(|state| state.offset().y), Some(0));
         fs::remove_dir_all(dir).unwrap();
