@@ -64,7 +64,8 @@ mod view3d;
 use camera::Camera;
 use microui_redux_demo_assets as atlas_assets;
 use microui_redux_demo_host::{Application, BackendInitContext, SelectedBackend, monotonic_seconds};
-use microui_redux_renderer_common::{CustomRenderArea, MeshBuffers, MeshSubmission, MeshVertex};
+use microui_redux_demo_renderer::{DemoCommand, DemoRenderer, MeshBuffers, MeshSubmission, MeshVertex};
+use microui_redux_renderer_common::CustomRenderArea;
 use obj_loader::Obj;
 use polymesh::PolyMesh;
 use view3d::View3D;
@@ -76,7 +77,8 @@ use std::{fs, path::PathBuf};
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 include!(concat!(env!("OUT_DIR"), "/embedded_theme_assets.rs"));
 
-type SelectedFrame<'a> = <SelectedBackend as RendererBackend>::Frame<'a>;
+/// Feature-selected backend specialized by the full demo's native GPU renderer.
+type DemoBackend = SelectedBackend<DemoRenderer>;
 
 #[repr(C)]
 pub struct TriVertex {
@@ -1205,7 +1207,7 @@ struct DemoThemes {
 
 impl DemoThemes {
     /// Loads the bundled JSON themes while preserving the Context's original flat style.
-    fn load(context: &mut Context<SelectedBackend, State>) -> Self {
+    fn load(context: &mut Context<DemoBackend, State>) -> Self {
         // Theme loading bakes each unique PNG into its candidate atlas and leaves the installed
         // Context style alone. Retaining every bundle permits switching without later file I/O.
         let default = LoadedTheme::new("Default Skin", context.skin_bundle().clone());
@@ -1269,7 +1271,7 @@ impl DemoThemes {
     }
 
     /// Installs a newly selected skin bundle before the editable Skin copy is published.
-    fn install_selected(&mut self, context: &mut Context<SelectedBackend, State>) {
+    fn install_selected(&mut self, context: &mut Context<DemoBackend, State>) {
         if self.installed == self.selected {
             // Skin Editor changes do not require a GPU atlas upload while the base theme is stable.
             return;
@@ -1303,7 +1305,7 @@ struct GridMenuItems {
 
 /// Creates and subscribes one concrete item before its value enters the menu hierarchy.
 fn registered_menu_item(
-    context: &mut Context<SelectedBackend, State>,
+    context: &mut Context<DemoBackend, State>,
     parameters: MenuItemParameters,
     handler: for<'a> fn(&mut State, &mut Ui<'a>, &MenuItemSubmitted),
 ) -> (MenuItemHandle, MenuItem) {
@@ -1317,7 +1319,7 @@ fn registered_menu_item(
 }
 
 /// Builds the compact declarative menu hierarchy used by the main demo window.
-fn demo_menu_bar(context: &mut Context<SelectedBackend, State>) -> (MenuBar, DemoMenuItems) {
+fn demo_menu_bar(context: &mut Context<DemoBackend, State>) -> (MenuBar, DemoMenuItems) {
     let (new_session, new_session_item) =
         registered_menu_item(context, MenuItemParameters::new("New Session").shortcut_hint("Ctrl+N"), State::menu_new_session);
     let open_file_parameters = MenuItemParameters::new("Open...").shortcut_hint("Ctrl+O");
@@ -1404,7 +1406,7 @@ fn demo_menu_bar(context: &mut Context<SelectedBackend, State>) -> (MenuBar, Dem
 }
 
 /// Builds the independent compact menu hierarchy owned by the fullscreen X-Y grid surface.
-fn grid_menu_bar(context: &mut Context<SelectedBackend, State>) -> (MenuBar, GridMenuItems) {
+fn grid_menu_bar(context: &mut Context<DemoBackend, State>) -> (MenuBar, GridMenuItems) {
     // Grid items use the same direct typed subscriptions as the floating window's items. Popup
     // ownership and closure follow from the MenuBar installed on the grid Window below.
     let (reset_view, reset_view_item) = registered_menu_item(context, MenuItemParameters::new("Reset View"), State::grid_reset_view);
@@ -1467,8 +1469,8 @@ struct DemoRuntimes {
     weight_buttons: [Node; 9],
     external_image_button: Option<Node>,
     checkboxes: [Node; 3],
-    triangle_renderer: CustomRenderHandle<SelectedBackend>,
-    suzanne_renderer: CustomRenderHandle<SelectedBackend>,
+    triangle_renderer: CustomRenderHandle<DemoBackend>,
+    suzanne_renderer: CustomRenderHandle<DemoBackend>,
     triangle_widget: Custom,
     painter_widget: PainterDemo,
     falloff_widget: FalloffEditor,
@@ -1552,7 +1554,7 @@ struct State {
 }
 
 impl State {
-    pub fn new(_backend: BackendInitContext, ctx: &mut Context<SelectedBackend, Self>) -> Self {
+    pub fn new(_backend: BackendInitContext, ctx: &mut Context<DemoBackend, Self>) -> Self {
         // Load the two image themes once while the Context still exposes its pristine default style.
         let themes = DemoThemes::load(ctx);
         let image_texture = load_external_image_texture(ctx);
@@ -1575,7 +1577,7 @@ impl State {
         }));
         let grid_renderer = {
             let grid_3d_state = grid_3d_state.clone();
-            ctx.register_custom_renderer(move |frame: &mut SelectedFrame<'_>, args: CustomRenderArgs| {
+            ctx.register_custom_renderer(move |frame, args: CustomRenderArgs| {
                 let area = area_from_args(&args);
                 if area.rect.width <= 0 || area.rect.height <= 0 {
                     frame.enqueue_colored_vertices(area, Vec::new());
@@ -1624,7 +1626,7 @@ impl State {
 
         let triangle_renderer = {
             let triangle_data = triangle_data.clone();
-            ctx.register_custom_renderer(move |frame: &mut SelectedFrame<'_>, args: CustomRenderArgs| {
+            ctx.register_custom_renderer(move |frame, args: CustomRenderArgs| {
                 let triangle = triangle_data.borrow();
                 let area = area_from_args(&args);
                 frame.enqueue_colored_vertices(area, build_triangle_vertices(area.rect, white_uv, triangle.angle));
@@ -1633,19 +1635,19 @@ impl State {
         };
         let suzanne_renderer = {
             let suzanne_data = suzanne_data.clone();
-            ctx.register_custom_renderer(move |frame: &mut SelectedFrame<'_>, args: CustomRenderArgs| {
+            ctx.register_custom_renderer(move |frame, args: CustomRenderArgs| {
                 let area = area_from_args(&args);
                 let mut suzanne = suzanne_data.borrow_mut();
                 // Projection is a rendering cache derived from the authoritative committed area.
                 // This also initializes the aspect ratio on an inputless first frame.
                 suzanne.view_3d.set_dimension(Dimensioni::new(area.rect.width, area.rect.height));
-                frame.enqueue_mesh_draw(
-                    area,
-                    MeshSubmission {
+                frame.enqueue_application(
+                    args,
+                    DemoCommand::DrawMesh(MeshSubmission {
                         mesh: suzanne.mesh.clone(),
                         pvm: suzanne.view_3d.pvm(),
                         view_model: suzanne.view_3d.view_matrix(),
-                    },
+                    }),
                 );
             })
             .expect("register Suzanne renderer")
@@ -2074,7 +2076,7 @@ impl State {
         state
     }
 
-    fn subscribe_events(&self, context: &mut Context<SelectedBackend, Self>) {
+    fn subscribe_events(&self, context: &mut Context<DemoBackend, Self>) {
         for (index, changed) in self.bg_slider_changed.iter().enumerate() {
             context.subscribe_with(changed.clone(), index, Self::background_changed).unwrap();
         }
@@ -2934,7 +2936,7 @@ impl State {
         );
     }
 
-    fn style_window(&mut self, ctx: &mut Context<SelectedBackend, Self>) {
+    fn style_window(&mut self, ctx: &mut Context<DemoBackend, Self>) {
         if !self.style_dirty {
             // Animated demo frames still repaint, but an unchanged style must preserve retained
             // measurement caches and the layout commit produced by the preceding update.
@@ -2970,19 +2972,19 @@ impl State {
         self.style_dirty = false;
     }
 
-    fn typography_window(&mut self, _ctx: &mut Context<SelectedBackend, Self>) {}
+    fn typography_window(&mut self, _ctx: &mut Context<DemoBackend, Self>) {}
 
-    fn triangle_window(&mut self, _ctx: &mut Context<SelectedBackend, Self>) {}
+    fn triangle_window(&mut self, _ctx: &mut Context<DemoBackend, Self>) {}
 
-    fn suzanne_window(&mut self, _ctx: &mut Context<SelectedBackend, Self>) {}
+    fn suzanne_window(&mut self, _ctx: &mut Context<DemoBackend, Self>) {}
 
-    fn painter_window(&mut self, _ctx: &mut Context<SelectedBackend, Self>) {}
+    fn painter_window(&mut self, _ctx: &mut Context<DemoBackend, Self>) {}
 
-    fn falloff_window(&mut self, _ctx: &mut Context<SelectedBackend, Self>) {}
+    fn falloff_window(&mut self, _ctx: &mut Context<DemoBackend, Self>) {}
 
-    fn stack_direction_window(&mut self, _ctx: &mut Context<SelectedBackend, Self>) {}
+    fn stack_direction_window(&mut self, _ctx: &mut Context<DemoBackend, Self>) {}
 
-    fn weight_window(&mut self, _ctx: &mut Context<SelectedBackend, Self>) {}
+    fn weight_window(&mut self, _ctx: &mut Context<DemoBackend, Self>) {}
 
     fn update_fps_label(&mut self) {
         // FPS is produced by this frame callback rather than discovered by polling retained UI.
@@ -3009,7 +3011,7 @@ impl State {
     }
 
     /// Keeps the chromeless layer-0 grid surface exactly aligned with the drawable viewport.
-    fn sync_grid_surface(&mut self, ctx: &mut Context<SelectedBackend, Self>, dimensions: Dimensioni) {
+    fn sync_grid_surface(&mut self, ctx: &mut Context<DemoBackend, Self>, dimensions: Dimensioni) {
         // The platform owns drawable dimensions, while Context owns retained window geometry. Join
         // those authorities once per host frame so window resizes become visible in the second
         // update/layout commit performed by the shared example runner before painting.
@@ -3019,7 +3021,7 @@ impl State {
     }
 
     /// Applies application-owned animation, style, and viewport state between update commits.
-    fn process_frame(&mut self, ctx: &mut Context<SelectedBackend, Self>, dimensions: Dimensioni) {
+    fn process_frame(&mut self, ctx: &mut Context<DemoBackend, Self>, dimensions: Dimensioni) {
         // Synchronize geometry before the style and animated state changes below; all of them are
         // consumed together by the runner's post-callback retained update.
         self.sync_grid_surface(ctx, dimensions);
@@ -3046,7 +3048,7 @@ impl State {
     }
 }
 
-fn upload_solid_texture(ctx: &mut Context<SelectedBackend, State>, width: i32, height: i32, rgba: [u8; 4]) -> TextureId {
+fn upload_solid_texture(ctx: &mut Context<DemoBackend, State>, width: i32, height: i32, rgba: [u8; 4]) -> TextureId {
     let mut pixels = Vec::with_capacity((width * height * 4) as usize);
     for _ in 0..width * height {
         pixels.extend_from_slice(&rgba);
@@ -3054,7 +3056,7 @@ fn upload_solid_texture(ctx: &mut Context<SelectedBackend, State>, width: i32, h
     ctx.load_image_rgba(width, height, &pixels)
 }
 
-fn upload_noise_texture(ctx: &mut Context<SelectedBackend, State>, width: i32, height: i32) -> TextureId {
+fn upload_noise_texture(ctx: &mut Context<DemoBackend, State>, width: i32, height: i32) -> TextureId {
     let mut pixels = Vec::with_capacity((width * height * 4) as usize);
     for y in 0..height {
         for x in 0..width {
@@ -3067,7 +3069,7 @@ fn upload_noise_texture(ctx: &mut Context<SelectedBackend, State>, width: i32, h
 
 fn main() {
     let atlas = atlas_assets::load_atlas();
-    let app = Application::new(atlas, |backend: BackendInitContext, ctx| State::new(backend, ctx)).unwrap();
+    let app = Application::new_with_renderer(atlas, DemoRenderer::new(), |backend: BackendInitContext, ctx| State::new(backend, ctx)).unwrap();
 
     app.event_loop_events(
         |state, context| state.subscribe_events(context),
@@ -3384,7 +3386,7 @@ fn demo_asset_path(relative: &str) -> PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(relative)
 }
 
-fn load_external_image_texture(ctx: &mut Context<SelectedBackend, State>) -> Option<TextureId> {
+fn load_external_image_texture(ctx: &mut Context<DemoBackend, State>) -> Option<TextureId> {
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     let png_bytes = include_bytes!("../assets/FACEPALM.png").to_vec();
     #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
