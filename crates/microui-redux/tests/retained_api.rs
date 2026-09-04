@@ -163,8 +163,6 @@ impl Widget for EventWidget {
     fn widget_opt(&self) -> &WidgetOption {
         &self.options
     }
-    /// This fixture emits through explicit widget mutations in the test below.
-    fn update(&mut self, _: &mut WidgetUpdateCtx<'_>, _: Option<&UiInputEvent>) {}
     /// Event production does not require paint commands.
     fn paint(&mut self, _: &mut WidgetPaintCtx<'_>) {}
 }
@@ -212,6 +210,86 @@ fn downstream_custom_widget_uses_the_public_typed_event_source() {
     assert!(!widget.widget_event::<ExternalEvent>().is_alive());
     context.update_ui_state(Dimensioni::new(100, 100), &mut values);
     assert_eq!(values, [1, 2]);
+}
+
+/// Custom geometry source that synchronizes explicitly shared application state during update.
+struct GrowingWidget {
+    /// Geometry committed by the most recent update or checked handle mutation.
+    height: i32,
+    /// Application-side desired height; reading this is the widget author's explicit responsibility.
+    desired: std::rc::Rc<Cell<i32>>,
+    /// Measurement observations let the test distinguish cache reuse from correct-looking paint.
+    measures: std::rc::Rc<Cell<usize>>,
+    /// Last painted allocation verifies the parent's content track was also recomputed.
+    painted: std::rc::Rc<Cell<i32>>,
+}
+
+impl Widget for GrowingWidget {
+    /// This probe needs no frame or interaction policy.
+    fn widget_opt(&self) -> &WidgetOption {
+        &WidgetOption::NONE
+    }
+
+    /// Synchronizes the shared value even when no raw input is routed to this widget.
+    fn update(&mut self, _: &mut WidgetUpdateCtx<'_>, _: Option<&UiInputEvent>) -> Change {
+        let desired = self.desired.get();
+        let change = Change::from(self.height != desired);
+        self.height = desired;
+        change
+    }
+
+    /// Records only a paint observation; it never changes the geometry being painted.
+    fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+        self.painted.set(ctx.local_rect().height);
+    }
+}
+
+impl LeafWidget for GrowingWidget {
+    /// Counts actual intrinsic queries independently of the layout allocation.
+    fn measure(&self, _: &Skin, _: &AtlasHandle, _: Constraints) -> Dimensioni {
+        self.measures.set(self.measures.get() + 1);
+        Dimensioni::new(20, self.height)
+    }
+}
+
+/// Proves eventless updates commit geometry and NoChange preserves independent invalidation.
+#[test]
+fn downstream_update_change_controls_geometry_without_a_manual_measurement_request() {
+    let mut ctx = context();
+    let desired = std::rc::Rc::new(Cell::new(40));
+    let measures = std::rc::Rc::new(Cell::new(0));
+    let painted = std::rc::Rc::new(Cell::new(0));
+    let (widget, leaf) = Node::typed_widget(GrowingWidget {
+        height: 10,
+        desired: desired.clone(),
+        measures: measures.clone(),
+        painted: painted.clone(),
+    });
+    let (_, body) = Linear::create(LinearParameters::vertical([LinearItem::content(leaf)]));
+    let window = ctx.ui().create_window(Window::new("growth", rect(0, 0, 200, 200), body));
+    let dimensions = Dimensioni::new(300, 300);
+    ctx.update_ui(dimensions);
+    ctx.frame(FrameInfo::try_new(dimensions, color(0, 0, 0, 255)).unwrap()).render_ui().unwrap();
+    assert_eq!(painted.get(), 40);
+
+    // An unchanged update reuses both the child's and the parent's retained measurements.
+    let warm_count = measures.get();
+    ctx.update_ui(dimensions);
+    assert_eq!(measures.get(), warm_count);
+
+    // The next update reports NoChange, but cannot clear a setter's existing dirty marker.
+    desired.set(60);
+    widget.try_update(|widget| widget.height = 60).unwrap();
+    ctx.update_ui(dimensions);
+    assert!(measures.get() > warm_count);
+    ctx.frame(FrameInfo::try_new(dimensions, color(0, 0, 0, 255)).unwrap()).render_ui().unwrap();
+    assert_eq!(painted.get(), 60);
+
+    // New available width invalidates the cache independently of the widget's update result.
+    let before_resize = measures.get();
+    ctx.ui().set_window_rect(&window, rect(0, 0, 240, 200)).unwrap();
+    ctx.update_ui(dimensions);
+    assert!(measures.get() > before_resize);
 }
 
 /// Verifies external code reads and replaces visuals through the typed control family.
@@ -478,8 +556,6 @@ impl Widget for ExternalContainer {
         &self.options
     }
 
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) {}
-
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }
 
@@ -510,7 +586,6 @@ impl Widget for ExternalLeaf {
         &self.options
     }
 
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) {}
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }
 

@@ -79,8 +79,11 @@ impl Widget for SkinProbe {
         &self.opt
     }
 
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) -> crate::Change {
         self.observations.update.set(Self::observe(ctx.skin()));
+
+        // Geometry is unchanged here; mutations through other handles invalidate their owners.
+        crate::Change::NoChange
     }
 
     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
@@ -116,11 +119,14 @@ impl Widget for Probe {
         &self.opt
     }
 
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         self.counts.updates.set(self.counts.updates.get() + 1);
         self.counts.routed_events.set(self.counts.routed_events.get() + usize::from(input.is_some()));
         self.counts.hovered.set(ctx.hovered());
         self.log.borrow_mut().push(format!("{}:update", self.name));
+
+        // Geometry is unchanged here; mutations through other handles invalidate their owners.
+        crate::Change::NoChange
     }
 
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {
@@ -148,8 +154,6 @@ impl Widget for FocusProbe {
     fn widget_opt(&self) -> &WidgetOption {
         &self.opt
     }
-
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) {}
 
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
 
@@ -214,8 +218,11 @@ impl Widget for TraversalContainer {
         &self.opt
     }
 
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) {
+    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) -> crate::Change {
         self.log.borrow_mut().push("container:update".to_owned());
+
+        // Geometry is unchanged here; mutations through other handles invalidate their owners.
+        crate::Change::NoChange
     }
 
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {
@@ -258,7 +265,7 @@ impl Widget for CaptureContainer {
         &self.opt
     }
 
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         // Mirror the public contract: reconcile private drag state from runtime-owned activity on
         // every update, including an eventless update after capture invalidation.
         self.active = ctx.active();
@@ -271,6 +278,9 @@ impl Widget for CaptureContainer {
                 _ => {}
             }
         }
+
+        // Geometry is unchanged here; mutations through other handles invalidate their owners.
+        crate::Change::NoChange
     }
 
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
@@ -292,13 +302,16 @@ impl Widget for CrossSubtreeRemover {
         &self.opt
     }
 
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) {
+    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) -> crate::Change {
         if !self.removed {
             self.target
                 .try_update(|target| target.children.try_clear().expect("target topology must be available during sibling update"))
                 .expect("cross-subtree target widget must be independently available");
             self.removed = true;
         }
+
+        // Geometry is unchanged here; mutations through other handles invalidate their owners.
+        crate::Change::NoChange
     }
 
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
@@ -671,7 +684,7 @@ fn every_runtime_phase_observes_the_same_context_skin() {
 }
 
 #[test]
-fn consumed_event_conservatively_invalidates_recipient_and_ancestors() {
+fn consumed_event_with_no_geometry_change_reuses_recipient_and_ancestor_measurements() {
     let log = Rc::new(RefCell::new(Vec::new()));
     let (probe, counts) = Probe::new("leaf", log.clone());
     let (container, container_state) = TraversalContainer::new([Node::widget(probe)], log);
@@ -694,8 +707,8 @@ fn consumed_event_conservatively_invalidates_recipient_and_ancestors() {
     runtime.update_tree_root(&mut root, &style, atlas.clone(), empty_input());
     layout_root(&mut runtime, &mut root, &style, atlas);
 
-    assert_eq!(counts.measures.get(), leaf_measurements + 1);
-    assert_eq!(container_state.try_read(|state| state.measurements.get()), Some(container_measurements + 1));
+    assert_eq!(counts.measures.get(), leaf_measurements);
+    assert_eq!(container_state.try_read(|state| state.measurements.get()), Some(container_measurements));
 }
 
 #[test]

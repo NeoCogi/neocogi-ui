@@ -32,8 +32,8 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::ui_node::children::ChildrenHandle;
 use crate::{
-    AvailableSpace, Container, ContainerWidget, Dimensioni, MeasureCtx, Recti, TrackSize, TypedWidgetHandle, UiInputEvent, Widget, WidgetOption,
-    WidgetPaintCtx, WidgetParameters, WidgetUpdateCtx,
+    AvailableSpace, Container, ContainerWidget, Dimensioni, MeasureCtx, Recti, TrackSize, TypedWidgetHandle, Widget, WidgetOption, WidgetPaintCtx,
+    WidgetParameters,
 };
 
 use crate::ui_node::layout::{TrackResolver, resolve_tracks_in_place};
@@ -525,8 +525,6 @@ impl Widget for Grid {
     fn widget_opt(&self) -> &WidgetOption {
         &WidgetOption::NO_INTERACT
     }
-
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) {}
 
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }

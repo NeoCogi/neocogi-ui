@@ -334,10 +334,13 @@ impl Widget for ScrollArea {
         }
     }
 
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
-        // Routing guarantees that only an accepted wheel event reaches this surface.
-        let Some(UiInputEvent::Scroll { delta, .. }) = input else { return };
-        self.scroll_by(*delta);
+    /// Reports scrolling because child placement reads the scrollbar-owned offsets.
+    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
+        // The child handles preserve intrinsic measurement; this result invalidates placement.
+        match input {
+            Some(UiInputEvent::Scroll { delta, .. }) => crate::Change::from(self.scroll_by(*delta)),
+            _ => crate::Change::NoChange,
+        }
     }
 
     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
@@ -407,7 +410,6 @@ impl Widget for ScrollSurface {
     }
 
     /// Performs no semantic update because ScrollArea and its children own all scrolling state.
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) {}
 
     /// Emits no paint operations because clipping and translation are traversal geometry.
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
@@ -671,8 +673,6 @@ mod tests {
             &WidgetOption::NONE
         }
 
-        fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) {}
-
         fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
     }
 
@@ -707,8 +707,6 @@ mod tests {
         fn widget_opt(&self) -> &WidgetOption {
             &WidgetOption::NONE
         }
-
-        fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) {}
 
         fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
     }

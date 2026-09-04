@@ -168,10 +168,10 @@ impl Widget for Grid3dWidget {
     }
 
     /// Applies left-button arcball motion and wheel zoom to the shared grid camera.
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> microui_redux::Change {
         let bounds = ctx.local_rect();
         if bounds.width <= 0 || bounds.height <= 0 {
-            return;
+            return microui_redux::Change::NoChange;
         }
 
         // View3D normalizes pointer positions against its current dimensions, so synchronize the
@@ -197,6 +197,9 @@ impl Widget for Grid3dWidget {
             }
             _ => {}
         }
+
+        // Geometry is unchanged here; mutations through other handles invalidate their owners.
+        microui_redux::Change::NoChange
     }
 
     /// Paints nothing because the associated backend custom renderer owns all grid geometry.
@@ -240,12 +243,12 @@ impl Widget for PainterDemo {
         &self.opt
     }
 
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> microui_redux::Change {
         let bounds = ctx.local_rect();
         let local_width = bounds.width.max(0) as f32;
         let local_height = bounds.height.max(0) as f32;
         if local_width <= 0.0 || local_height <= 0.0 {
-            return;
+            return microui_redux::Change::NoChange;
         }
 
         self.phase = (self.phase + 0.025) % (PI * 2.0);
@@ -263,6 +266,9 @@ impl Widget for PainterDemo {
         } else {
             self.star_center = None;
         }
+
+        // Geometry is unchanged here; mutations through other handles invalidate their owners.
+        microui_redux::Change::NoChange
     }
 
     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
@@ -649,11 +655,11 @@ impl Widget for FalloffEditor {
         KeyboardBehavior::FOCUSABLE
     }
 
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> microui_redux::Change {
         let bounds = ctx.local_rect();
         let graph = Self::graph_rect(bounds);
         if graph.width <= 0 || graph.height <= 0 {
-            return;
+            return microui_redux::Change::NoChange;
         }
 
         let mut changed = false;
@@ -667,7 +673,9 @@ impl Widget for FalloffEditor {
             Some(UiInputEvent::MouseDown { pos, .. } | UiInputEvent::MouseUp { pos, .. } | UiInputEvent::Scroll { pos, .. }) => Some((*pos, Vec2i::default())),
             _ => None,
         };
-        let Some((mouse_pos, mouse_delta)) = pointer else { return };
+        let Some((mouse_pos, mouse_delta)) = pointer else {
+            return microui_redux::Change::NoChange;
+        };
         let mouse_local = Vec2f::new(mouse_pos.x as f32, mouse_pos.y as f32);
         self.hovered = if ctx.hovered() { self.pick_target(graph, mouse_local) } else { None };
 
@@ -691,6 +699,9 @@ impl Widget for FalloffEditor {
         }
 
         let _ = changed;
+
+        // Geometry is unchanged here; mutations through other handles invalidate their owners.
+        microui_redux::Change::NoChange
     }
 
     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
@@ -859,10 +870,10 @@ impl Widget for SuzanneWidget {
         KeyboardBehavior::TAB_STOP
     }
 
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> microui_redux::Change {
         let bounds = ctx.local_rect();
         if bounds.width <= 0 || bounds.height <= 0 {
-            return;
+            return microui_redux::Change::NoChange;
         }
 
         let mut suzanne = self.data.borrow_mut();
@@ -922,6 +933,9 @@ impl Widget for SuzanneWidget {
                 }
             }
         }
+
+        // Geometry is unchanged here; mutations through other handles invalidate their owners.
+        microui_redux::Change::NoChange
     }
 
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}

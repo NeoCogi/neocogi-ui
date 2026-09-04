@@ -208,15 +208,18 @@ impl Widget for Checkbox {
         &self.opt
     }
 
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         if ctx.action(input, self.keyboard_behavior()) != Some(KeyboardAction::Activate) {
-            return;
+            return crate::Change::NoChange;
         }
 
         // Windows-style checkboxes toggle with Space; Enter remains available to a default button.
         self.checked = !self.checked;
         let checked = self.checked;
         self.changed_event.emit(CheckboxChanged { checked });
+
+        // The check mark changes paint only; both states reserve the same icon space.
+        crate::Change::NoChange
     }
 
     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {

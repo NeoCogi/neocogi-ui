@@ -82,3 +82,80 @@ removed. Use `try_read`, `try_update`, or `try_update_with` for behavior not exp
 method, and finish the access closure before starting retained traversal. After every programmatic
 mutation, call `Context::update_ui` or `Context::update_ui_state` before depending on its visual,
 interaction, or layout result. See the [layout guide](LAYOUT.md) for the synchronization contract.
+
+## Reporting geometry changes during update
+
+`Context::update_ui` (or `update_ui_state`) commits measurement and layout automatically. Widget
+and application authors do not call a separate measurement function. The runtime commits layout
+before routing the next queued input event, so an earlier event's size or topology change affects
+later hit testing in the same update.
+
+`Widget::update` returns `Change::Changed` when it changes inputs used by measurement or child
+placement. `Change::NoChange` means those inputs stayed the same. It is independent of semantic
+event emission: a button can submit an event while returning `NoChange`. The event handler still
+runs, and its checked widget or topology mutations still invalidate their owners. The return value
+also does not suppress painting or updates of children. Static widgets can use the default update.
+
+| Change | Who records invalidation? |
+| --- | --- |
+| Widget update changes text, preferred size, child participation, or child translation | Widget author returns `Changed`, including during `update(None)` |
+| Programmatic mutation through a public typed handle | Handle records invalidation before granting mutable access |
+| Controlled child insertion, removal, or replacement | Owning container's mutation API |
+| New available size or wrapping width | Runtime measurement cache compares constraints |
+| New installed skin/atlas bundle | Runtime measurement cache compares skin revision |
+| Origin-only move, unchanged available size | Placement moves the widget; intrinsic measurement can be reused |
+| Paint-only color, caret, animation, or private drawing cache | No geometry invalidation needed; paint observes current state |
+| External/shared state changed without going through a handle | Application/widget author must synchronize it explicitly |
+
+A widget that reads external data should copy the geometry-relevant data into its own retained state
+and compare it during update. For example:
+
+```rust
+use microui_redux::{Change, Widget, WidgetOption, WidgetUpdateCtx, WidgetPaintCtx, UiInputEvent};
+use std::{cell::Cell, rc::Rc};
+
+/// A widget that observes a height requested by application-owned shared state.
+struct HeightWidget {
+    /// Height committed for subsequent measurement and painting.
+    height: i32,
+    /// Desired geometry; the runtime cannot observe writes to this cell.
+    desired_height: Rc<Cell<i32>>,
+}
+impl Widget for HeightWidget {
+    fn widget_opt(&self) -> &WidgetOption { &WidgetOption::NONE }
+    fn update(&mut self, _: &mut WidgetUpdateCtx<'_>, _: Option<&UiInputEvent>) -> Change {
+        let next = self.desired_height.get().max(0);
+        let change = Change::from(next != self.height);
+        self.height = next;
+        change
+    }
+    fn paint(&mut self, _: &mut WidgetPaintCtx<'_>) { /* Paint committed state. */ }
+}
+```
+
+The author contract has deliberate limits:
+
+- **The widget author must report changes truthfully.** The runtime cannot inspect arbitrary fields,
+  compare previous widget values, or infer dependencies from event types. Returning `NoChange` after
+  changing measurement/placement inputs can leave stale geometry. Return `Changed` when uncertain;
+  this costs cache reuse but preserves correctness. Cursor-only edits can return `NoChange` when
+  measurement does not read the cursor. Committing numeric text on focus loss must report any
+  resulting value change even though that update may receive no input event.
+- **The application author owns synchronization of shared/external state.** An `Rc<Cell<_>>`,
+  `RefCell`, background result, or other application model can change without touching the widget.
+  The application must apply it through a typed handle before the relevant layout, or arrange an
+  eligible widget update that observes it and returns `Changed`. A widget that measures directly
+  from an externally mutated cell while always returning `NoChange` violates this contract.
+- **An update callback is not a universal watcher.** Hidden, clipped, or otherwise ineligible widgets
+  are not guaranteed to run. Changes that must affect layout while a widget is ineligible should
+  go through its public typed handle. Similarly, a widget watching another widget that updates
+  later in traversal sees that change only on a subsequent update; synchronize such dependencies
+  in application code or a typed event handler when same-transaction geometry is required.
+- **Painting must remain observational.** Do not change measurement inputs, topology, or application
+  coordination state from paint, including through captured handles. Private rendering caches are
+  allowed only when they do not change the current layout or emit coordination events.
+
+`Changed` is intentionally conservative and local. The runtime combines it with existing dirty
+markers and propagates invalidation to dependent ancestors. A parent's `NoChange` cannot hide a
+child's `Changed`, and a later `NoChange` cannot undo a prior handle mutation. No public dirty-bit
+API, global dependency registry, or automatic shared-state observer is required.

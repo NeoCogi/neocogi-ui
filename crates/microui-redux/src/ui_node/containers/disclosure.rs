@@ -244,7 +244,7 @@ impl Widget for DisclosureHeader {
         &self.opt
     }
 
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         // Pointer/Enter/Space toggle while directional keys expose the conventional tree behavior.
         match ctx.action(input, self.keyboard_behavior()) {
             Some(crate::KeyboardAction::Activate) => {
@@ -258,6 +258,9 @@ impl Widget for DisclosureHeader {
             }
             Some(crate::KeyboardAction::Decrease | crate::KeyboardAction::Increase) | None => {}
         }
+
+        // The header size is fixed; its checked ancestor handle records disclosure invalidation.
+        crate::Change::NoChange
     }
 
     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
@@ -379,8 +382,6 @@ impl Widget for Disclosure {
     fn widget_opt(&self) -> &WidgetOption {
         &WidgetOption::NO_INTERACT
     }
-
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) {}
 
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }

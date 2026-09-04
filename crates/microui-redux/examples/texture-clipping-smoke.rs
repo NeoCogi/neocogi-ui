@@ -223,8 +223,6 @@ impl Widget for TextureClippingProbe {
         &self.options
     }
 
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _events: Option<&UiInputEvent>) {}
-
     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
         *self.screen_content.borrow_mut() = Some(ctx.screen_content_rect());
         let white = color(255, 255, 255, 255);

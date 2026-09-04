@@ -55,7 +55,6 @@ impl UiRuntime {
         // Snapshot interaction before invoking user code so all reads during this update are stable.
         let (opt, _keyboard) = node_interaction_config(node);
         let id = node.id();
-        let was_focused = node.state.focused;
         let (hovered, focused, clicked, active) = self.input_router.commit_interaction_snapshot(id, node.state.hovered, input, opt);
         node.state.hovered = hovered;
         node.state.focused = focused;
@@ -84,13 +83,11 @@ impl UiRuntime {
             input.mouse_buttons,
             input.modifiers,
         );
-        node.data.with_widget_mut(|widget| widget.update(&mut widget_ctx, event.as_ref()));
-        if event.is_some() || was_focused != node.state.focused {
-            // A routed event is precisely a consumed/captured delivery. A focus transition is the
-            // other generic update trigger: the old focus owner may commit intrinsic state while
-            // receiving `None` (for example an inline numeric editor committing on blur). Both
-            // write the same node-local marker as typed handles; layout performs the sole upward
-            // propagation after the update traversal completes.
+        let change = node.data.with_widget_mut(|widget| widget.update(&mut widget_ctx, event.as_ref()));
+        if change == crate::Change::Changed {
+            // An eventless update can change intrinsic geometry just as a routed event can. Use
+            // the widget's result and preserve any marker already recorded by a handle mutation;
+            // layout remains the sole upward propagation boundary for both paths.
             node.mark_measurement_dirty();
         }
         let traverse_children = node.is_container();

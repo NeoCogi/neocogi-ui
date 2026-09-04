@@ -59,12 +59,6 @@ use rs_math3d::{Recti, Vec2f, Vec2i, color4b};
 ///         &self.options
 ///     }
 ///
-///     fn update(
-///         &mut self,
-///         _ctx: &mut WidgetUpdateCtx<'_>,
-///         _event: Option<&UiInputEvent>,
-///     ) {}
-///
 ///     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
 ///         let mut painter = ctx.painter();
 ///         let bounds = painter.local_rect();

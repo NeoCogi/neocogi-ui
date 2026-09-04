@@ -108,8 +108,6 @@ impl Widget for RetainedPaint {
         &self.opt
     }
 
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) {}
-
     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
         let hovered = ctx.hovered();
         let mut painter = ctx.painter();

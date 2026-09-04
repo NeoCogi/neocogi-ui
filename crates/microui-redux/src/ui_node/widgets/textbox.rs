@@ -263,7 +263,7 @@ impl Textbox {
     }
 
     /// Applies input and cursor movement for this textbox.
-    fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
+    fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
         let outcome = textbox_update(ctx, input, &mut self.buf, &mut self.cursor, self.opt, font);
         let changed = outcome.changed.then(|| TextboxChanged {
@@ -277,6 +277,8 @@ impl Textbox {
         if let Some(event) = submitted {
             self.submitted_event.emit(event);
         }
+        // Only committed value/text changes affect this widget's preferred dimensions.
+        crate::Change::from(outcome.changed)
     }
 
     /// Paints the textbox frame, text, and caret.
@@ -447,7 +449,7 @@ impl Widget for Textbox {
         FrameRole::Control(ControlRole::TextInput)
     }
 
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         self.update_widget(ctx, input)
     }
 

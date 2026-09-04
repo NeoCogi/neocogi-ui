@@ -240,13 +240,16 @@ impl Widget for ListItem {
         &self.opt
     }
 
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         if ctx.action(input, self.keyboard_behavior()) != Some(KeyboardAction::Activate) {
-            return;
+            return crate::Change::NoChange;
         }
         // Clone before emission so observers receive an immutable selection snapshot.
         let label = self.label.clone();
         self.submitted_event.emit(ListItemSubmitted { label });
+
+        // Submitting preserves the label and icon used by intrinsic measurement.
+        crate::Change::NoChange
     }
 
     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {

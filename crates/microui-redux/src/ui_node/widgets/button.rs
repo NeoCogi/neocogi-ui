@@ -268,12 +268,15 @@ impl Widget for Button {
         FrameRole::Control(ControlRole::Button)
     }
 
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         if ctx.action(input, self.keyboard_behavior()) != Some(KeyboardAction::Activate) {
-            return;
+            return crate::Change::NoChange;
         }
         // Pointer click, Enter, and Space converge on the button's single typed submission port.
         self.submitted_event.emit(ButtonSubmitted);
+
+        // Submitting leaves the label and preferred dimensions unchanged.
+        crate::Change::NoChange
     }
 
     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {

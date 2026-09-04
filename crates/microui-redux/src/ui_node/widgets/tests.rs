@@ -39,7 +39,7 @@ fn run_click<W: Widget>(widget: &mut W) {
     let style = test_skin(&atlas);
     let bounds = rect(0, 0, 100, 20);
     let mut ctx = WidgetUpdateCtx::new_with_interaction(bounds, bounds, &style, &atlas, true, true, true, true, true, MouseButton::LEFT, Modifiers::NONE);
-    widget.update(&mut ctx, None)
+    widget.update(&mut ctx, None);
 }
 
 #[test]

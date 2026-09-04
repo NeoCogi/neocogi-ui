@@ -376,8 +376,11 @@ impl Widget for Combo {
         FrameRole::Control(ControlRole::Combo)
     }
 
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
-        self.update_widget(ctx, input)
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
+        self.update_widget(ctx, input);
+
+        // Popup coordination is deferred; the header retains the same geometry.
+        crate::Change::NoChange
     }
 
     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {

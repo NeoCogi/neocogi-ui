@@ -153,12 +153,15 @@ impl Widget for ListBox {
         &self.opt
     }
 
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         if ctx.action(input, self.keyboard_behavior()) != Some(KeyboardAction::Activate) {
-            return;
+            return crate::Change::NoChange;
         }
         // Pointer and keyboard activation publish the same application-facing submission.
         self.submitted_event.emit(ListBoxSubmitted);
+
+        // The submitted event does not change this header's intrinsic inputs.
+        crate::Change::NoChange
     }
 
     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {

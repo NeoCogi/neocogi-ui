@@ -327,7 +327,7 @@ impl TextArea {
     }
 
     /// Applies one routed editing event and publishes resulting semantic events.
-    fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
+    fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         // Runtime-only navigation preference is reset lazily so typed cursor setters need no phase
         // context and remain safe between retained updates.
         if self.reset_preferred_x {
@@ -347,6 +347,8 @@ impl TextArea {
         if outcome.submitted {
             self.submitted_event.emit(TextAreaSubmitted { text: self.buf.clone() });
         }
+        // Only committed value/text changes affect this widget's preferred dimensions.
+        crate::Change::from(outcome.changed)
     }
 
     /// Paints editable content and its caret in stable content-local coordinates.
@@ -695,7 +697,7 @@ impl Widget for TextArea {
     }
 
     /// Applies one routed event to retained text and cursor state.
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         // Keep the trait boundary thin so unit tests and retained traversal share one implementation.
         self.update_widget(ctx, input)
     }

@@ -424,7 +424,7 @@ impl Widget for Scrollbar {
     }
 
     /// Applies track clicks and captured thumb dragging to the current offset.
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         // Resolve one geometry snapshot from this widget's local allocation so hit testing and drag
         // conversion use the exact same track and thumb for the complete event.
         let geometry = self.geometry(ctx.local_rect(), ctx.skin().metrics.thumb_size.max(0));
@@ -450,6 +450,9 @@ impl Widget for Scrollbar {
             // silent so owners can synchronize range and offset without recursive notifications.
             self.changed_event.emit(ScrollbarChanged { offset: self.offset });
         }
+
+        // A containing ScrollArea reads this offset when placing its content.
+        crate::Change::from(self.offset != previous)
     }
 
     /// Paints the track and proportional thumb inside the complete local allocation.

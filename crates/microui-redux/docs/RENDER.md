@@ -130,11 +130,7 @@ impl Widget for PaintedSwatch {
         &self.options
     }
 
-    fn update(
-        &mut self,
-        _ctx: &mut WidgetUpdateCtx<'_>,
-        _event: Option<&UiInputEvent>,
-    ) {}
+
 
     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
         let hovered = ctx.hovered();

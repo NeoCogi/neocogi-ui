@@ -85,8 +85,6 @@ impl Widget for CubeWidget {
         &self.opt
     }
 
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) {}
-
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {
         // The custom-render callback is the paint path for this node.
     }

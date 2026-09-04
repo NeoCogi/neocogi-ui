@@ -826,9 +826,12 @@ impl Widget for Linear {
         &WidgetOption::NO_INTERACT
     }
 
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) {
+    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) -> crate::Change {
         // Linear owns no event-driven semantic state, so runtime update traversal only visits its
         // descendants after this intentionally empty surface callback.
+
+        // Child updates report their own changes independently of this static surface.
+        crate::Change::NoChange
     }
 
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {

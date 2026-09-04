@@ -270,8 +270,8 @@ pub mod retained {
     pub use crate::menu::{Menu, MenuBar, MenuItem, MenuItemAccessError, MenuItemHandle, MenuItemMark, MenuItemParameters, MenuItemSubmitted};
     pub use crate::render::{CustomRenderArgs, CustomRenderHandle};
     pub use crate::ui_node::{
-        AvailableSpace, ChildParticipation, Children, Constraints, Container, ContainerLayoutCtx, ContainerWidget, Disclosure, DisclosureParameters, Grid,
-        GridItem, GridParameters, GridSpan, KeyboardAction, KeyboardBehavior, LeafWidget, Linear, LinearCrossSize, LinearDirection, LinearItem,
+        AvailableSpace, Change, ChildParticipation, Children, Constraints, Container, ContainerLayoutCtx, ContainerWidget, Disclosure, DisclosureParameters,
+        Grid, GridItem, GridParameters, GridSpan, KeyboardAction, KeyboardBehavior, LeafWidget, Linear, LinearCrossSize, LinearDirection, LinearItem,
         LinearParameters, MeasureCtx, Node, ScrollArea, ScrollAreaOption, ScrollAreaParameters, Scrollbar, ScrollbarAxis, ScrollbarChanged,
         ScrollbarParameters, TrackSize, UiInputEvent, Widget, TextWrap, TypedWidgetHandle, WidgetBuilder, WidgetFillOption, WidgetOption, WidgetPaintCtx,
         WidgetParameters, WidgetUpdateCtx,
@@ -299,7 +299,7 @@ pub mod prelude {
         RendererFrame, SliceInsets, TextureError, TextureId,
     };
     pub use crate::retained::{
-        ChildParticipation, ChildWindowClip, Children, Container, ContainerLayoutCtx, ContainerWidget, Context, ContextFrame, Ui, CustomRenderArgs,
+        Change, ChildParticipation, ChildWindowClip, Children, Container, ContainerLayoutCtx, ContainerWidget, Context, ContextFrame, Ui, CustomRenderArgs,
         AvailableSpace, Constraints, CustomRenderHandle, Disclosure, DisclosureParameters, Grid, GridItem, GridParameters, GridSpan, KeyboardAction,
         KeyboardBehavior, Linear, LinearCrossSize, LinearDirection, LinearItem, LinearParameters, Node, PopupEvent, PopupHandle, MeasureCtx,
         SurfaceCreationError, SurfaceMutationError, WindowEvent, WindowHandle, LayerBinding, DEFAULT_LAYER, MAX_LAYER, MIN_LAYER, ScrollArea, ScrollAreaOption,
@@ -349,7 +349,7 @@ pub use theme::{
 #[cfg(feature = "theme-json")]
 pub use theme::{LoadedTheme, THEME_SCHEMA_VERSION, ThemeLoadError};
 pub use ui_node::{
-    AvailableSpace, ChildParticipation, Children, Constraints, Container, ContainerLayoutCtx, ContainerWidget, Disclosure, DisclosureParameters, Grid,
+    AvailableSpace, Change, ChildParticipation, Children, Constraints, Container, ContainerLayoutCtx, ContainerWidget, Disclosure, DisclosureParameters, Grid,
     GridItem, GridParameters, GridSpan, KeyboardAction, KeyboardBehavior, LeafWidget, Linear, LinearCrossSize, LinearDirection, LinearItem, LinearParameters,
     MeasureCtx, Node, ScrollArea, ScrollAreaOption, ScrollAreaParameters, Scrollbar, ScrollbarAxis, ScrollbarChanged, ScrollbarParameters, TextWrap, TrackSize,
     UiInputEvent, Widget, TypedWidgetHandle, WidgetBuilder, WidgetFillOption, WidgetOption, WidgetPaintCtx, WidgetParameters, WidgetUpdateCtx,

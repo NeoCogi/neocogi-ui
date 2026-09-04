@@ -182,8 +182,6 @@ impl Widget for DesiredSize {
         &WidgetOption::NONE
     }
 
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) {}
-
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }
 
@@ -208,7 +206,6 @@ impl Widget for CompleteSkinMeasureProbe {
     }
 
     /// The probe has no eventless or routed semantic work.
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _event: Option<&UiInputEvent>) {}
 
     /// Rendering is irrelevant to the measurement-cache contract under test.
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
@@ -269,7 +266,7 @@ impl Widget for OrderedProbe {
         &self.opt
     }
 
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, event: Option<&UiInputEvent>) {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, event: Option<&UiInputEvent>) -> crate::Change {
         self.updates += 1;
         self.held_buttons.push(ctx.mouse_buttons().bits());
         self.held_keys.push(ctx.modifiers().bits());
@@ -286,6 +283,9 @@ impl Widget for OrderedProbe {
                 UiInputEvent::Text { .. } => "text",
             });
         }
+
+        // Geometry is unchanged here; mutations through other handles invalidate their owners.
+        crate::Change::NoChange
     }
 
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {
@@ -334,7 +334,8 @@ impl Widget for CommitProbe {
         &self.opt
     }
 
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, event: Option<&UiInputEvent>) {
+    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, event: Option<&UiInputEvent>) -> crate::Change {
+        let previous_height = self.intrinsic_height;
         if event.is_some()
             && let Some(grow_to) = self.grow_to.take()
         {
@@ -343,6 +344,9 @@ impl Widget for CommitProbe {
         if matches!(event, Some(UiInputEvent::MouseDown { .. })) {
             self.presses += 1;
         }
+
+        // Event routing must commit changed preferred height before the next hit test.
+        crate::Change::from(self.intrinsic_height != previous_height)
     }
 
     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
@@ -381,13 +385,16 @@ impl Widget for SiblingMutationProbe {
         &self.opt
     }
 
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _event: Option<&UiInputEvent>) {
+    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _event: Option<&UiInputEvent>) -> crate::Change {
         if let Some((target, value)) = &self.target {
             target
                 .try_update(|state| state.value = *value)
                 .expect("the sibling target must not be borrowed yet or anymore");
         }
         self.observed_during_update.push(self.value);
+
+        // Geometry is unchanged here; mutations through other handles invalidate their owners.
+        crate::Change::NoChange
     }
 
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
@@ -415,8 +422,11 @@ impl Widget for CountedProbe {
         &self.opt
     }
 
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _event: Option<&UiInputEvent>) {
+    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _event: Option<&UiInputEvent>) -> crate::Change {
         self.updates.set(self.updates.get() + 1);
+
+        // Geometry is unchanged here; mutations through other handles invalidate their owners.
+        crate::Change::NoChange
     }
 
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
@@ -443,8 +453,10 @@ impl Widget for TopologyMutator {
     }
 
     #[allow(clippy::result_large_err)] // Failed topology changes must preserve the unique node owner.
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _event: Option<&UiInputEvent>) {
-        let Some(candidate) = self.candidate.take() else { return };
+    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _event: Option<&UiInputEvent>) -> crate::Change {
+        let Some(candidate) = self.candidate.take() else {
+            return crate::Change::NoChange;
+        };
         let same_container = self
             .same_container
             .borrow()
@@ -464,6 +476,9 @@ impl Widget for TopologyMutator {
         };
         self.same_container_blocked = same_container_blocked;
         self.other_container_changed = other_container_changed;
+
+        // Geometry is unchanged here; mutations through other handles invalidate their owners.
+        crate::Change::NoChange
     }
 
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}

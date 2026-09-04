@@ -127,8 +127,6 @@ impl Widget for Custom {
         &self.opt
     }
 
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) {}
-
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
 
     fn keyboard_behavior(&self) -> KeyboardBehavior {

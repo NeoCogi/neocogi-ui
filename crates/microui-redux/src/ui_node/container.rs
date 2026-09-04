@@ -373,8 +373,6 @@ mod tests {
             &WidgetOption::NO_INTERACT
         }
 
-        fn update(&mut self, _ctx: &mut crate::WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) {}
-
         fn paint(&mut self, _ctx: &mut crate::WidgetPaintCtx<'_>) {}
     }
 

@@ -161,7 +161,7 @@ impl Number {
     }
 
     /// Updates number value from shift-click text entry or horizontal drag.
-    fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
+    fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
         let last = self.value;
         if !self.edit.editing {
@@ -189,6 +189,8 @@ impl Number {
         if let Some(event) = changed {
             self.changed_event.emit(event);
         }
+        // Only committed value/text changes affect this widget's preferred dimensions.
+        crate::Change::from(self.value != last)
     }
 
     /// Paints either the inline numeric editor or the formatted value.
@@ -258,7 +260,7 @@ impl Widget for Number {
         FrameRole::Control(ControlRole::TextInput)
     }
 
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         self.update_widget(ctx, input)
     }
 

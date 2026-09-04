@@ -341,6 +341,26 @@ pub trait WidgetBuilder: Sized + 'static {
     fn create_widget(parameters: Self::Parameters) -> Self::W;
 }
 
+/// Whether one widget update changed inputs to retained measurement or child placement.
+///
+/// This is a geometry contract, independent of event emission and painting. A paint-only change
+/// such as moving a caret can return `NoChange`; changing text, intrinsic size, participation, or
+/// child transforms must return `Changed`. When uncertain, returning `Changed` is conservative.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Change {
+    /// Geometry inputs changed or may have changed; invalidate this node and its ancestors.
+    Changed,
+    /// This update preserved geometry inputs; independently recorded invalidation still applies.
+    NoChange,
+}
+
+impl From<bool> for Change {
+    /// Converts a concrete before/after comparison into the update contract.
+    fn from(changed: bool) -> Self {
+        if changed { Self::Changed } else { Self::NoChange }
+    }
+}
+
 /// Common retained runtime phase contract implemented by concrete widgets.
 ///
 /// Widgets participate in the retained update and paint phases. Geometry is deliberately split by
@@ -365,9 +385,23 @@ pub trait Widget {
     /// update context intentionally cannot record drawing commands. Implementations that retain a
     /// local drag mode must reconcile it from [`WidgetUpdateCtx::active`] on every call; pointer
     /// capture is runtime-owned and has no separate widget lifecycle callback. Delivery of a
-    /// consumed or captured event conservatively invalidates this node's retained measurement and
-    /// its dependent ancestors; widgets do not report cache effects themselves.
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>);
+    /// consumed or captured event alone does not invalidate measurement. Return [`Change::Changed`]
+    /// whenever this call changes inputs read by measurement or child placement, including on a
+    /// `None` update (animation, shared-state synchronization, or committing an editor on blur).
+    /// The runtime propagates that invalidation upward before the next input is routed.
+    ///
+    /// [`Change::NoChange`] does not suppress event dispatch, painting, descendant updates, or
+    /// invalidation already recorded through typed handles. Resize constraints, skin revision,
+    /// topology edits, and handle mutations are tracked independently. Widget authors must report
+    /// their own changes truthfully; app authors must synchronize external/shared state through a
+    /// typed handle or a widget update that reports `Changed`. Out-of-band interior mutation is
+    /// not observable by the runtime. Hidden/clipped widgets are not guaranteed an update, so
+    /// shared geometry state should be synchronized through handles before it must affect layout.
+    /// The default is suitable for widgets with no update behavior.
+    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) -> Change {
+        // Static widgets retain valid measurement until an independently tracked input changes.
+        Change::NoChange
+    }
     /// Records paint commands through paint-only capabilities.
     ///
     /// Paint is observational with respect to application-authored semantic state, topology,
@@ -415,7 +449,6 @@ impl Widget for WidgetOption {
     fn widget_opt(&self) -> &WidgetOption {
         self
     }
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) {}
 
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }
@@ -491,8 +524,11 @@ mod widget_tests {
             &self.opt
         }
 
-        fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) {
+        fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) -> crate::Change {
             self.value += 1;
+
+            // Geometry is unchanged here; mutations through other handles invalidate their owners.
+            crate::Change::NoChange
         }
 
         fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {

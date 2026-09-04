@@ -197,7 +197,7 @@ impl Slider {
     }
 
     /// Updates slider value from shift-click text entry, scroll, or pointer drag.
-    fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
+    fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         let base = ctx.local_rect();
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
         let last = self.value;
@@ -217,7 +217,7 @@ impl Slider {
             }
         }
         if number_textbox_update(ctx, input, &mut self.edit, self.precision, font, &mut value) {
-            return;
+            return crate::Change::NoChange;
         }
         if let Some(UiInputEvent::Scroll { delta, .. }) = input {
             let range = self.high - self.low;
@@ -266,6 +266,8 @@ impl Slider {
         if last != value {
             self.changed_event.emit(SliderChanged { value });
         }
+        // Only committed value/text changes affect this widget's preferred dimensions.
+        crate::Change::from(self.value != last)
     }
 
     /// Paints either the inline numeric editor or the slider track/thumb/value label.
@@ -396,7 +398,7 @@ impl Widget for Slider {
         FrameRole::Control(ControlRole::SliderTrack)
     }
 
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         self.update_widget(ctx, input)
     }
 
