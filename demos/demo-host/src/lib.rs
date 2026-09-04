@@ -42,12 +42,20 @@ use std::sync::Arc;
 
 #[cfg(all(not(feature = "webgl"), feature = "glow"))]
 use microui_redux_renderer_glow as glow_renderer;
+#[cfg(all(not(feature = "webgl"), feature = "glow"))]
+use microui_redux_renderer_glow::GlApplicationRenderer as PlatformRenderer;
 #[cfg(all(feature = "webgl", target_arch = "wasm32", target_os = "unknown"))]
 use microui_redux_renderer_webgl_canvas as webgl_canvas_renderer;
+#[cfg(all(feature = "webgl", target_arch = "wasm32", target_os = "unknown"))]
+use microui_redux_renderer_webgl_canvas::GlApplicationRenderer as PlatformRenderer;
 #[cfg(all(not(feature = "webgl"), not(feature = "glow"), feature = "vulkan"))]
 use microui_redux_renderer_vulkan as vulkan_renderer;
+#[cfg(all(not(feature = "webgl"), not(feature = "glow"), feature = "vulkan"))]
+use microui_redux_renderer_vulkan::VulkanApplicationRenderer as PlatformRenderer;
 #[cfg(all(not(feature = "webgl"), not(feature = "glow"), not(feature = "vulkan"), feature = "wgpu"))]
 use microui_redux_renderer_wgpu as wgpu_renderer;
+#[cfg(all(not(feature = "webgl"), not(feature = "glow"), not(feature = "vulkan"), feature = "wgpu"))]
+use microui_redux_renderer_wgpu::WgpuApplicationRenderer as PlatformRenderer;
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 use sdl2::event::{Event, WindowEvent};
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
@@ -64,53 +72,80 @@ compile_error!("the `webgl` demo backend requires --target wasm32-unknown-unknow
 #[cfg(all(target_arch = "wasm32", target_os = "unknown", not(feature = "webgl")))]
 compile_error!("browser demos require the `webgl` backend feature");
 
+/// Renderer backend selected by Cargo features and specialized by application GPU state.
 #[cfg(feature = "webgl")]
-pub type SelectedBackend = webgl_canvas_renderer::WebGlCanvasRenderer;
+pub type SelectedBackend<ApplicationRenderer = ()> = webgl_canvas_renderer::WebGlCanvasRenderer<ApplicationRenderer>;
+/// Renderer backend selected by Cargo features and specialized by application GPU state.
 #[cfg(all(not(feature = "webgl"), feature = "glow"))]
-pub type SelectedBackend = glow_renderer::GLRenderer;
+pub type SelectedBackend<ApplicationRenderer = ()> = glow_renderer::GLRenderer<ApplicationRenderer>;
+/// Renderer backend selected by Cargo features and specialized by application GPU state.
 #[cfg(all(not(feature = "webgl"), not(feature = "glow"), feature = "vulkan"))]
-pub type SelectedBackend = vulkan_renderer::VulkanRenderer;
+pub type SelectedBackend<ApplicationRenderer = ()> = vulkan_renderer::VulkanRenderer<ApplicationRenderer>;
+/// Renderer backend selected by Cargo features and specialized by application GPU state.
 #[cfg(all(not(feature = "webgl"), not(feature = "glow"), not(feature = "vulkan"), feature = "wgpu"))]
-pub type SelectedBackend = wgpu_renderer::WgpuRenderer;
-
-// The example app keeps one concrete renderer backend behind the shared microui `Context`. The
-// rest of the example code only talks to `MicroUI`, while backend initialization stays feature-
-// gated in this file.
-type MicroUI<S> = microui::Context<SelectedBackend, S>;
+pub type SelectedBackend<ApplicationRenderer = ()> = wgpu_renderer::WgpuRenderer<ApplicationRenderer>;
 
 #[cfg(any(feature = "webgl", feature = "glow"))]
+/// Native graphics handle supplied to application state initialization on GL backends.
 pub type BackendInitContext = Arc<glow::Context>;
 #[cfg(any(
     all(not(feature = "webgl"), not(feature = "glow"), feature = "vulkan"),
     all(not(feature = "webgl"), not(feature = "glow"), not(feature = "vulkan"), feature = "wgpu"),
 ))]
-pub struct BackendInitContext;
+/// Unit initialization value for backends whose application renderer owns native setup.
+pub type BackendInitContext = ();
 
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-pub struct Application<S: 'static> {
+/// Native SDL application hosting microui and a concrete application GPU renderer.
+pub struct Application<S: 'static, ApplicationRenderer = ()>
+where
+    ApplicationRenderer: PlatformRenderer,
+{
     // Drop renderer-backed state before the SDL window/subsystem. Vulkan and wgpu surfaces
     // borrow native window resources, so the window must outlive `state`, `ctx`, and backend data.
+    /// Application-owned retained state updated by the demo callbacks.
     state: S,
-    ctx: MicroUI<S>,
+    /// Microui context containing the selected, application-specialized backend.
+    ctx: microui::Context<SelectedBackend<ApplicationRenderer>, S>,
     #[cfg(feature = "glow")]
+    /// Native GL context that must remain current while rendering and outlive GL resources.
     backend: BackendData,
+    /// SDL window whose native handles back Vulkan/wgpu surfaces or the GL drawable.
     window: Window,
+    /// SDL video subsystem retained for the lifetime of its window and GL configuration.
     _sdl_vid: VideoSubsystem,
+    /// Root SDL owner used to construct the event pump.
     sdl_ctx: Sdl,
 }
 
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-impl<S: 'static> Application<S> {
-    /// Creates the example application by initializing SDL, the chosen backend, and user state.
-    pub fn new<F: FnMut(BackendInitContext, &mut MicroUI<S>) -> S>(atlas: AtlasHandle, mut init_state: F) -> Result<Self, String>
+impl<S: 'static> Application<S, ()> {
+    /// Creates a UI-only application using the selected backend's uninhabited command type.
+    pub fn new<F: FnMut(BackendInitContext, &mut microui::Context<SelectedBackend, S>) -> S>(atlas: AtlasHandle, mut init_state: F) -> Result<Self, String>
     where
         S: 'static,
     {
+        Self::new_with_renderer(atlas, (), move |backend, context| init_state(backend, context))
+    }
+}
+
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+impl<S, ApplicationRenderer> Application<S, ApplicationRenderer>
+where
+    S: 'static,
+    ApplicationRenderer: PlatformRenderer,
+{
+    /// Creates an application with concrete GPU renderer state supplied by the caller.
+    pub fn new_with_renderer<F>(atlas: AtlasHandle, application_renderer: ApplicationRenderer, mut init_state: F) -> Result<Self, String>
+    where
+        F: FnMut(BackendInitContext, &mut microui::Context<SelectedBackend<ApplicationRenderer>, S>) -> S,
+    {
         // SDL/video/window setup is backend-dependent, but state construction always receives a
-        // ready-to-use microui `Context` plus any backend-specific initialization payload.
+        // ready-to-use, statically specialized microui `Context` plus any backend-specific
+        // initialization payload.
         let sdl_ctx = sdl2::init().map_err(|err| err.to_string())?;
         let video = sdl_ctx.video().map_err(|err| err.to_string())?;
-        let (bundle, init_ctx) = init_backend(&video, atlas)?;
+        let (bundle, init_ctx) = init_backend(&video, atlas, application_renderer)?;
         #[cfg(feature = "glow")]
         let BackendBundle { window, backend, renderer } = bundle;
         #[cfg(any(
@@ -135,7 +170,7 @@ impl<S: 'static> Application<S> {
     #[allow(dead_code)] // Each example selects either polling or subscriber-driven updates.
     pub fn event_loop<F>(self, f: F)
     where
-        F: Fn(&mut MicroUI<S>, &mut S, Dimensioni) + 'static,
+        F: Fn(&mut microui::Context<SelectedBackend<ApplicationRenderer>, S>, &mut S, Dimensioni) + 'static,
     {
         self.event_loop_with_update(|ctx, state, dimensions| ctx.update_ui_state(dimensions, state), f);
     }
@@ -145,8 +180,8 @@ impl<S: 'static> Application<S> {
     pub fn event_loop_events<Setup, F>(mut self, setup: Setup, f: F)
     where
         S: 'static,
-        Setup: FnOnce(&S, &mut MicroUI<S>),
-        F: Fn(&mut MicroUI<S>, &mut S, Dimensioni) + 'static,
+        Setup: FnOnce(&S, &mut microui::Context<SelectedBackend<ApplicationRenderer>, S>),
+        F: Fn(&mut microui::Context<SelectedBackend<ApplicationRenderer>, S>, &mut S, Dimensioni) + 'static,
     {
         setup(&self.state, &mut self.ctx);
         self.event_loop_with_update(|ctx, state, dimensions| ctx.update_ui_state(dimensions, state), f);
@@ -155,8 +190,8 @@ impl<S: 'static> Application<S> {
     /// Shared SDL driver parameterized by the first retained update performed each frame.
     fn event_loop_with_update<Update, F>(self, update: Update, f: F)
     where
-        Update: FnMut(&mut MicroUI<S>, &mut S, Dimensioni) + 'static,
-        F: Fn(&mut MicroUI<S>, &mut S, Dimensioni) + 'static,
+        Update: FnMut(&mut microui::Context<SelectedBackend<ApplicationRenderer>, S>, &mut S, Dimensioni) + 'static,
+        F: Fn(&mut microui::Context<SelectedBackend<ApplicationRenderer>, S>, &mut S, Dimensioni) + 'static,
     {
         #[cfg(feature = "glow")]
         {
@@ -176,8 +211,8 @@ impl<S: 'static> Application<S> {
     /// Processes input and renders one frame, returning false when the host requests shutdown.
     fn run_frame<Update, F>(&mut self, event_pump: &mut sdl2::EventPump, update: &mut Update, f: &F) -> bool
     where
-        Update: FnMut(&mut MicroUI<S>, &mut S, Dimensioni),
-        F: Fn(&mut MicroUI<S>, &mut S, Dimensioni),
+        Update: FnMut(&mut microui::Context<SelectedBackend<ApplicationRenderer>, S>, &mut S, Dimensioni),
+        F: Fn(&mut microui::Context<SelectedBackend<ApplicationRenderer>, S>, &mut S, Dimensioni),
     {
         let (width, height) = self.window.size();
 
@@ -342,7 +377,7 @@ mod browser {
     use wasm_bindgen::{JsCast, closure::Closure};
     use web_sys::{Event, EventTarget, HtmlCanvasElement, HtmlElement, KeyboardEvent, PointerEvent, WheelEvent};
 
-    use super::{AtlasHandle, BackendInitContext, Dimensioni, FrameInfo, MicroUI, SelectedBackend, color, microui, webgl_canvas_renderer};
+    use super::{AtlasHandle, BackendInitContext, Dimensioni, FrameInfo, PlatformRenderer, SelectedBackend, color, microui, webgl_canvas_renderer};
 
     enum BrowserInput {
         MouseMove(i32, i32),
@@ -354,17 +389,42 @@ mod browser {
     }
 
     /// Browser application runner backed directly by an HTML canvas and WebGL 2.
-    pub struct Application<S: 'static> {
+    pub struct Application<S: 'static, ApplicationRenderer = ()>
+    where
+        ApplicationRenderer: PlatformRenderer,
+    {
+        /// Application-owned retained state updated by the browser frame callbacks.
         state: S,
-        ctx: MicroUI<S>,
+        /// Microui context containing the application-specialized WebGL backend.
+        ctx: microui::Context<SelectedBackend<ApplicationRenderer>, S>,
+        /// Canvas that owns the active WebGL context and determines physical frame dimensions.
         canvas: HtmlCanvasElement,
+        /// Buffered DOM input translated into the narrower microui event vocabulary.
         input: Rc<RefCell<Vec<BrowserInput>>>,
+        /// Closures retained so their registered JavaScript callbacks remain alive.
         _listeners: Vec<Closure<dyn FnMut(Event)>>,
     }
 
-    impl<S: 'static> Application<S> {
-        /// Creates the browser application from the page's `canvas` element.
-        pub fn new<F: FnMut(BackendInitContext, &mut MicroUI<S>) -> S>(atlas: AtlasHandle, mut init_state: F) -> Result<Self, String> {
+    impl<S: 'static> Application<S, ()> {
+        /// Creates a UI-only browser application from the page's `canvas` element.
+        pub fn new<F: FnMut(BackendInitContext, &mut microui::Context<SelectedBackend, S>) -> S>(
+            atlas: AtlasHandle,
+            mut init_state: F,
+        ) -> Result<Self, String> {
+            Self::new_with_renderer(atlas, (), move |backend, context| init_state(backend, context))
+        }
+    }
+
+    impl<S, ApplicationRenderer> Application<S, ApplicationRenderer>
+    where
+        S: 'static,
+        ApplicationRenderer: PlatformRenderer,
+    {
+        /// Creates a browser application with caller-owned WebGL renderer state.
+        pub fn new_with_renderer<F>(atlas: AtlasHandle, application_renderer: ApplicationRenderer, mut init_state: F) -> Result<Self, String>
+        where
+            F: FnMut(BackendInitContext, &mut microui::Context<SelectedBackend<ApplicationRenderer>, S>) -> S,
+        {
             let window = web_sys::window().ok_or("browser window is unavailable")?;
             let document = window.document().ok_or("browser document is unavailable")?;
             let canvas = document
@@ -381,8 +441,9 @@ mod browser {
                 .dyn_into::<web_sys::WebGl2RenderingContext>()
                 .map_err(|_| "canvas returned a non-WebGL 2 context")?;
             let gl = Arc::new(glow::Context::from_webgl2_context(webgl));
-            let renderer = webgl_canvas_renderer::WebGlCanvasRenderer::new(gl.clone(), atlas, canvas.width(), canvas.height())?;
-            let mut ctx = microui::Context::<SelectedBackend, S>::new(renderer);
+            let renderer =
+                webgl_canvas_renderer::WebGlCanvasRenderer::new_with_application(gl.clone(), atlas, canvas.width(), canvas.height(), application_renderer)?;
+            let mut ctx = microui::Context::new(renderer);
             let state = init_state(gl, &mut ctx);
             let input = Rc::new(RefCell::new(Vec::new()));
             let listeners = install_input_listeners(&canvas, input.clone())?;
@@ -401,7 +462,7 @@ mod browser {
         #[allow(dead_code)]
         pub fn event_loop<F>(self, f: F)
         where
-            F: Fn(&mut MicroUI<S>, &mut S, Dimensioni) + 'static,
+            F: Fn(&mut microui::Context<SelectedBackend<ApplicationRenderer>, S>, &mut S, Dimensioni) + 'static,
         {
             self.event_loop_with_update(|ctx, state, dimensions| ctx.update_ui_state(dimensions, state), f);
         }
@@ -410,8 +471,8 @@ mod browser {
         #[allow(dead_code)]
         pub fn event_loop_events<Setup, F>(mut self, setup: Setup, f: F)
         where
-            Setup: FnOnce(&S, &mut MicroUI<S>),
-            F: Fn(&mut MicroUI<S>, &mut S, Dimensioni) + 'static,
+            Setup: FnOnce(&S, &mut microui::Context<SelectedBackend<ApplicationRenderer>, S>),
+            F: Fn(&mut microui::Context<SelectedBackend<ApplicationRenderer>, S>, &mut S, Dimensioni) + 'static,
         {
             setup(&self.state, &mut self.ctx);
             self.event_loop_with_update(|ctx, state, dimensions| ctx.update_ui_state(dimensions, state), f);
@@ -419,12 +480,19 @@ mod browser {
 
         fn event_loop_with_update<Update, F>(self, update: Update, frame: F)
         where
-            Update: FnMut(&mut MicroUI<S>, &mut S, Dimensioni) + 'static,
-            F: Fn(&mut MicroUI<S>, &mut S, Dimensioni) + 'static,
+            Update: FnMut(&mut microui::Context<SelectedBackend<ApplicationRenderer>, S>, &mut S, Dimensioni) + 'static,
+            F: Fn(&mut microui::Context<SelectedBackend<ApplicationRenderer>, S>, &mut S, Dimensioni) + 'static,
         {
-            struct Driver<S: 'static, Update, Frame> {
-                application: Application<S>,
+            /// State retained by the self-scheduling browser animation callback.
+            struct Driver<S: 'static, ApplicationRenderer, Update, Frame>
+            where
+                ApplicationRenderer: PlatformRenderer,
+            {
+                /// Browser application whose canvas and renderer survive between callbacks.
+                application: Application<S, ApplicationRenderer>,
+                /// Retained-state update invoked before and after application frame construction.
                 update: Update,
+                /// Application UI construction callback invoked once per animation frame.
                 frame: Frame,
             }
 
@@ -450,8 +518,8 @@ mod browser {
 
         fn run_frame<Update, F>(&mut self, update: &mut Update, frame: &F)
         where
-            Update: FnMut(&mut MicroUI<S>, &mut S, Dimensioni),
-            F: Fn(&mut MicroUI<S>, &mut S, Dimensioni),
+            Update: FnMut(&mut microui::Context<SelectedBackend<ApplicationRenderer>, S>, &mut S, Dimensioni),
+            F: Fn(&mut microui::Context<SelectedBackend<ApplicationRenderer>, S>, &mut S, Dimensioni),
         {
             resize_canvas(&self.canvas);
             for event in self.input.borrow_mut().drain(..) {
@@ -692,7 +760,14 @@ pub fn monotonic_seconds() -> f64 {
 
 #[cfg(all(not(all(target_arch = "wasm32", target_os = "unknown")), feature = "glow"))]
 /// Initializes the OpenGL example backend and returns the window, renderer, and GL init context.
-fn init_backend(video: &VideoSubsystem, atlas: AtlasHandle) -> Result<(BackendBundle, BackendInitContext), String> {
+fn init_backend<ApplicationRenderer>(
+    video: &VideoSubsystem,
+    atlas: AtlasHandle,
+    application_renderer: ApplicationRenderer,
+) -> Result<(BackendBundle<ApplicationRenderer>, BackendInitContext), String>
+where
+    ApplicationRenderer: PlatformRenderer,
+{
     // The GL example owns an explicit SDL GL context in addition to the microui renderer.
     let gl_attr = video.gl_attr();
     gl_attr.set_context_profile(GLProfile::GLES);
@@ -709,7 +784,7 @@ fn init_backend(video: &VideoSubsystem, atlas: AtlasHandle) -> Result<(BackendBu
 
     let (width, height) = window.size();
     let gl = Arc::new(gl);
-    let renderer = glow_renderer::GLRenderer::new(gl.clone(), atlas, width, height)?;
+    let renderer = glow_renderer::GLRenderer::new_with_application(gl.clone(), atlas, width, height, application_renderer)?;
 
     Ok((
         BackendBundle {
@@ -723,13 +798,20 @@ fn init_backend(video: &VideoSubsystem, atlas: AtlasHandle) -> Result<(BackendBu
 
 #[cfg(all(not(all(target_arch = "wasm32", target_os = "unknown")), not(feature = "glow"), feature = "vulkan"))]
 /// Initializes the Vulkan example backend and returns the window, renderer, and init marker.
-fn init_backend(video: &VideoSubsystem, atlas: AtlasHandle) -> Result<(BackendBundle, BackendInitContext), String> {
+fn init_backend<ApplicationRenderer>(
+    video: &VideoSubsystem,
+    atlas: AtlasHandle,
+    application_renderer: ApplicationRenderer,
+) -> Result<(BackendBundle<ApplicationRenderer>, BackendInitContext), String>
+where
+    ApplicationRenderer: PlatformRenderer,
+{
     // Vulkan and wgpu derive their native surfaces from the SDL window itself, so the renderer is
     // created immediately from that window handle and then stored inside the microui `Context`.
     let window = video.window("Window", 1024, 768).resizable().vulkan().build().map_err(|err| err.to_string())?;
     let (width, height) = window.size();
-    let renderer = vulkan_renderer::VulkanRenderer::new(&window, atlas, width, height)?;
-    let init_ctx = BackendInitContext;
+    let renderer = vulkan_renderer::VulkanRenderer::new_with_application(&window, atlas, width, height, application_renderer)?;
+    let init_ctx = ();
 
     Ok((BackendBundle { window, renderer }, init_ctx))
 }
@@ -741,24 +823,40 @@ fn init_backend(video: &VideoSubsystem, atlas: AtlasHandle) -> Result<(BackendBu
     feature = "wgpu"
 ))]
 /// Initializes the wgpu example backend and returns the window, renderer, and init marker.
-fn init_backend(video: &VideoSubsystem, atlas: AtlasHandle) -> Result<(BackendBundle, BackendInitContext), String> {
+fn init_backend<ApplicationRenderer>(
+    video: &VideoSubsystem,
+    atlas: AtlasHandle,
+    application_renderer: ApplicationRenderer,
+) -> Result<(BackendBundle<ApplicationRenderer>, BackendInitContext), String>
+where
+    ApplicationRenderer: PlatformRenderer,
+{
     let window = video.window("Window", 1024, 768).resizable().build().map_err(|err| err.to_string())?;
     let (width, height) = window.size();
-    let renderer = wgpu_renderer::WgpuRenderer::new(&window, atlas, width, height)?;
-    let init_ctx = BackendInitContext;
+    let renderer = wgpu_renderer::WgpuRenderer::new_with_application(&window, atlas, width, height, application_renderer)?;
+    let init_ctx = ();
 
     Ok((BackendBundle { window, renderer }, init_ctx))
 }
 
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-struct BackendBundle {
+/// Backend-specific objects produced as one initialization transaction.
+struct BackendBundle<ApplicationRenderer>
+where
+    ApplicationRenderer: PlatformRenderer,
+{
+    /// SDL window whose native handles remain valid for the renderer lifetime.
     window: Window,
     #[cfg(feature = "glow")]
+    /// Explicit native GL context retained outside the Glow renderer.
     backend: BackendData,
-    renderer: SelectedBackend,
+    /// Feature-selected backend specialized by concrete application renderer state.
+    renderer: SelectedBackend<ApplicationRenderer>,
 }
 
 #[cfg(all(not(all(target_arch = "wasm32", target_os = "unknown")), feature = "glow"))]
+/// Native GL objects owned by the host rather than by the renderer backend.
 struct BackendData {
+    /// SDL GL context made current before entering the frame loop.
     gl_ctx: GLContext,
 }
