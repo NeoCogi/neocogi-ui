@@ -282,3 +282,9 @@ or render failure instead of presenting it. Vulkan marks any post-acquire failur
 fatal, because the acquire semaphore and image may still be outstanding; construct a new renderer
 to recover. Hosts decide how to log, retry, recreate the backend, or stop after `render_ui` fails.
 A successful finish reports the backend's synchronous completion boundary, not eventual GPU health.
+
+The native WGPU backend validates atlas and user-texture dimensions against the selected device's
+2D limit. Texture creation, upload, view creation, and bind-group creation run inside validation,
+out-of-memory, and internal-error scopes. All scopes are resolved before a candidate replaces a
+live atlas or enters the texture map. Failure therefore preserves the previous resource identity
+and returns through `AtlasUploadError` or `TextureError`; it cannot publish an invalid placeholder.
