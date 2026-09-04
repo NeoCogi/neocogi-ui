@@ -120,7 +120,7 @@ stores only the deepest active popup key and derives the visible parent-to-child
 parent edges. Opening another top-level popup replaces the branch, opening a submenu extends or
 replaces its suffix, and outside presses or owner changes truncate it. Each removed application
 popup emits exactly one `PopupEvent::Dismissed`; private menu popups need no public lifecycle port.
-No `PopupPath` object or parallel per-popup visibility state can disagree with that active key.
+The visible path is derived from that active key; there is no separately authored popup visibility state.
 
 ### Chronological order and visible traversal
 
@@ -132,19 +132,29 @@ fixed-layer peers. For a child it changes order only among siblings with the sam
 Changing an independent window's fixed layer mutates only that node's mode, so moving a complete
 family between layers does not manufacture a new activation.
 
-The forest rebuilds one allocation-reusing `visible_order` after an ordering, layer, visibility, or
-popup-path change. It scans independent roots once for each fixed layer from `MIN_LAYER` to
+The forest keeps a disposable key index beside its authoritative vector. Each entry records the
+current vector position, direct child keys in sibling chronology, derived root policy, and visible
+membership. Appending indexes the new node; moving or removing nodes rebuilds positions and edges.
+Parent-first policy derivation visits each node once after an ordering, layer, visibility, enabled,
+or popup-path change. A new hidden popup derives only its own inherited policy. These projections
+never own surfaces or accept independent application edits.
+
+The forest rebuilds one allocation-reusing `visible_order` after those policy changes. It scans independent roots once for each fixed layer from `MIN_LAYER` to
 `MAX_LAYER`, recursively inserts each locally visible child family in parent-first order, and then
 scans modal nodes. The active popup chain is inserted at its owning fixed or modal transient tier.
-Layout, retained updates, and diagnostics consume that materialized traversal directly.
+Layout, retained updates, and diagnostics consume that materialized traversal directly. Layout
+and paint reuse it without rebuilding policy. Stable-key lookup and visible membership are expected
+O(1); policy derivation and a complete child traversal are O(n). The sixteen layer scans have a
+fixed factor. Ownership edits still move Vec elements and may rebuild indexes in O(n); recursive
+traversal uses stack space proportional to nesting depth.
 
-Painting and hit testing use the same parent edges rather than a second z-order model. One family
+Painting and hit testing follow the same derived direct-child edges. One family
 paints each parent background and application body, then its child families in sibling chronology,
 then the parent's intrinsic menu bar and manager chrome. Hit testing performs the inverse: parent
 menu/chrome, child families in reverse sibling chronology, then the parent body. This gives the
 required sandwich without a general overlay graph or render-command reordering. The popup branch
 keeps its existing transient tier above the ordinary families in its inherited fixed band. Stable
-sorting, z-index counters, child arrays, and separate fixed/modal order arrays remain unnecessary.
+sorting, z-index counters, and separate fixed/modal order arrays remain unnecessary.
 
 ### Window bands, transients, and activation
 
@@ -154,8 +164,7 @@ window's `LayerBinding::Fixed(u8)`. Structural children have no separately mutab
 inherit the fixed band of their top-level family, report that effective `LayerBinding::Fixed(u8)`
 through `Ui::window_layer`, and reject `set_window_layer` with `ManagedLayer`. Numeric validation
 uses `MIN_LAYER`, `MAX_LAYER`, and `DEFAULT_LAYER`. Dialogs report `LayerBinding::Modal`; popups
-expose no layer binding and use their owner's fixed or modal band. No extra inherited binding variant
-or cached per-child layer is needed.
+expose no layer binding and use their owner's fixed or modal band. Applications author only the independent root's band; child bindings are derived and committed before the mutation returns.
 
 Within a fixed layer, independent windows retain chronological order. Children retain a separate
 chronological order at each direct parent. `Ui::bring_window_to_front(&window)` raises an

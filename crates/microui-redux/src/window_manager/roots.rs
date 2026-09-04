@@ -30,7 +30,10 @@
 
 //! Concrete retained surface ownership and cross-surface traversal policy.
 
-use std::fmt;
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+};
 
 use super::*;
 use crate::menu::{MenuAction, MenuEntry, MenuSlot, MenuSurface};
@@ -568,7 +571,7 @@ impl SurfaceBody {
 /// Public code carries stable [`WindowHandle`] and [`PopupHandle`] capabilities. Internally, this
 /// compact process-unique typed key is sufficient for common layout, input, and paint traversal
 /// without an erased payload, trait object, or `(owner, popup)` adapter pair.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub(super) enum SurfaceKey {
     /// An independent window, structural child window, or modal dialog.
     Root(RootId),
@@ -900,6 +903,32 @@ impl SurfaceNode {
     }
 }
 
+/// Inherited root policy computed once per forest change in parent-first order.
+#[derive(Copy, Clone)]
+struct SurfacePolicy {
+    /// Nearest root: a window owns itself, while popup edges inherit their window owner.
+    owner: RootId,
+    /// Fixed or modal band; structural children inherit their parent's resolved band.
+    mode: RootMode,
+    /// Local root visibility combined with all structural owners' visibility.
+    visible: bool,
+    /// Structural children inherit disablement; modal roots start their own enabled scope.
+    enabled: bool,
+}
+
+/// Disposable lookup and traversal data derived exclusively from the authoritative node vector.
+#[derive(Default)]
+struct SurfaceIndex {
+    /// Current vector position; root activation can move it without changing stable identity.
+    position: usize,
+    /// Direct child keys in vector chronology, used forward for paint and backward for hit testing.
+    children: Vec<SurfaceKey>,
+    /// Complete inherited policy, absent only while a private rebuild is in progress.
+    policy: Option<SurfacePolicy>,
+    /// Constant-time membership in the committed visible traversal, including active popups.
+    displayed: bool,
+}
+
 /// Concrete ownership forest plus incrementally maintained traversal order.
 ///
 /// `nodes` owns every application tree exactly once, and the relative order of its root nodes is the
@@ -915,6 +944,14 @@ pub(super) struct SurfaceForest {
     /// Indices are deliberately not exposed as identity because fronting a root moves its complete
     /// node to this vector's tail. Stable keys and parent edges remain valid across that move.
     nodes: Vec<SurfaceNode>,
+    /// Derived key lookup, adjacency, and inherited policy. This never owns a surface.
+    index: HashMap<SurfaceKey, SurfaceIndex>,
+    /// Test-only work counter: geometry phases must not repeat inherited-policy derivation.
+    #[cfg(test)]
+    policy_visits: usize,
+    /// Test-only lookup count used to bound complete paint/hit-test traversal work.
+    #[cfg(test)]
+    lookups: std::cell::Cell<usize>,
     /// Deepest popup in the sole active branch, or no visible popup branch.
     active_popup: Option<PopupId>,
     /// Materialized parent-first base traversal, reused without per-frame allocation.
@@ -932,6 +969,11 @@ impl SurfaceForest {
     pub(super) fn new() -> Self {
         Self {
             nodes: Vec::new(),
+            index: HashMap::new(),
+            #[cfg(test)]
+            policy_visits: 0,
+            #[cfg(test)]
+            lookups: std::cell::Cell::new(0),
             active_popup: None,
             visible_order: Vec::new(),
             popup_path_scratch: Vec::new(),
@@ -940,7 +982,77 @@ impl SurfaceForest {
 
     /// Resolves a stable surface key to its current storage index.
     fn node_index(&self, key: SurfaceKey) -> Option<usize> {
-        self.nodes.iter().position(|node| node.key == key)
+        #[cfg(test)]
+        self.lookups.set(self.lookups.get() + 1);
+        self.index.get(&key).map(|entry| entry.position)
+    }
+
+    /// Adds one freshly appended node to the lookup and its parent's chronological child sequence.
+    fn index_node(&mut self, position: usize) {
+        let node = &self.nodes[position];
+        let old = self.index.insert(node.key, SurfaceIndex { position, ..SurfaceIndex::default() });
+        debug_assert!(old.is_none(), "surface identities are unique");
+        if let Some(parent) = node.parent {
+            self.index
+                .get_mut(&parent)
+                .expect("a new surface's parent is already retained")
+                .children
+                .push(node.key);
+        }
+    }
+
+    /// Rebuilds lookup and adjacency after vector positions or membership change.
+    fn rebuild_index(&mut self) {
+        self.index.clear();
+        // Fronting can place a parent after its child, so populate every key before resolving edges.
+        for (position, node) in self.nodes.iter().enumerate() {
+            self.index.insert(node.key, SurfaceIndex { position, ..SurfaceIndex::default() });
+        }
+        for node in &self.nodes {
+            if let Some(parent) = node.parent {
+                self.index.get_mut(&parent).expect("retained parent edges must resolve").children.push(node.key);
+            }
+        }
+    }
+
+    /// Reads already committed inherited policy without rescanning an ancestor chain.
+    fn policy(&self, key: SurfaceKey) -> Option<SurfacePolicy> {
+        self.index.get(&key)?.policy
+    }
+
+    /// Resolves one node from its parent's policy, then visits each direct child exactly once.
+    fn derive_policy_tree(&mut self, key: SurfaceKey, parent: Option<SurfacePolicy>) {
+        #[cfg(test)]
+        {
+            self.policy_visits += 1;
+        }
+        let node = self.node(key).expect("indexed surface must remain retained");
+        let policy = match (key, node.root()) {
+            (SurfaceKey::Root(owner), Some(state)) => SurfacePolicy {
+                owner,
+                mode: if state.mode == RootMode::Child {
+                    parent.expect("child has a root parent").mode
+                } else {
+                    state.mode
+                },
+                visible: state.visible && (matches!(state.mode, RootMode::Normal { .. }) || parent.is_some_and(|parent| parent.visible)),
+                enabled: !node.surface.options.intersects(WindowOption::DISABLED)
+                    && (state.mode != RootMode::Child || parent.is_some_and(|parent| parent.enabled)),
+            },
+            (SurfaceKey::Popup(_), None) => parent.expect("popup has a retained owner"),
+            _ => unreachable!("surface identity and body role must agree"),
+        };
+        self.index.get_mut(&key).expect("derived surface must be indexed").policy = Some(policy);
+        // Copy one key at a time so recursion does not clone adjacency or retain a mutable borrow.
+        let count = self.index[&key].children.len();
+        for child in 0..count {
+            self.derive_policy_tree(self.index[&key].children[child], Some(policy));
+        }
+    }
+
+    /// Tests committed traversal membership without a linear visible-order scan.
+    fn is_displayed(&self, key: SurfaceKey) -> bool {
+        self.index.get(&key).is_some_and(|entry| entry.displayed)
     }
 
     /// Borrows one retained surface node by stable identity.
@@ -1001,13 +1113,19 @@ impl SurfaceForest {
         // Registration is chronologically newest. Hidden dialogs do not participate until shown,
         // and showing them moves the same node to the tail again.
         self.nodes.push(node);
+        self.index_node(self.nodes.len() - 1);
         self.rebuild_visible_order();
     }
 
     /// Inserts a retained popup whose visibility remains derived from `active_popup`.
     fn insert_popup(&mut self, node: SurfaceNode) {
         debug_assert!(matches!(node.key, SurfaceKey::Popup(_)) && node.popup().is_some());
+        let parent = self.policy(node.parent.expect("new popup has a retained parent"));
+        let key = node.key;
         self.nodes.push(node);
+        self.index_node(self.nodes.len() - 1);
+        // A new hidden leaf cannot alter the active path or any existing policy. Derive only it.
+        self.derive_policy_tree(key, parent);
     }
 
     /// Moves one complete root node to the newest point in global activation chronology.
@@ -1020,6 +1138,7 @@ impl SurfaceForest {
         // event ports, stable keys, and parent edges retain their identities.
         let node = self.nodes.remove(index);
         self.nodes.push(node);
+        self.rebuild_index();
         self.rebuild_visible_order();
     }
 
@@ -1035,68 +1154,19 @@ impl SurfaceForest {
         self.rebuild_visible_order();
     }
 
-    /// Resolves the direct root parent stored for a child window or modal dialog.
-    fn root_parent(&self, root: RootId) -> Option<RootId> {
-        // Popup parents are impossible for root nodes; retain the explicit match so a malformed
-        // forest cannot silently turn a non-root edge into a structural window relationship.
-        match self.root_node(root)?.parent {
-            Some(SurfaceKey::Root(parent)) => Some(parent),
-            Some(SurfaceKey::Popup(_)) | None => None,
-        }
+    /// Reads the fixed or modal band committed from root ancestry.
+    fn stacking_mode(&self, root: RootId) -> Option<RootMode> {
+        self.policy(SurfaceKey::Root(root)).map(|policy| policy.mode)
     }
 
-    /// Resolves the global stacking band inherited by one root.
-    fn stacking_mode(&self, mut root: RootId) -> Option<RootMode> {
-        // Child construction only points toward an already retained ancestor, so this loop cannot
-        // cycle. Following values rather than retaining a second layer mirror keeps parent changes
-        // immediately authoritative for every descendant.
-        loop {
-            let node = self.root_node(root)?;
-            match node.root()?.mode {
-                mode @ (RootMode::Normal { .. } | RootMode::Modal) => return Some(mode),
-                RootMode::Child => root = self.root_parent(root)?,
-            }
-        }
-    }
-
-    /// Returns whether one root and every structural owner currently request visibility.
+    /// Reads local visibility combined with structural owner visibility.
     fn root_is_effectively_visible(&self, root: RootId) -> bool {
-        // Unknown/non-root keys are conservatively absent. A separate local bit is necessary so a
-        // hidden ancestor suppresses participation without permanently hiding each child record.
-        let Some(node) = self.root_node(root) else {
-            return false;
-        };
-        let Some(state) = node.root() else {
-            return false;
-        };
-        if !state.visible {
-            return false;
-        }
-        match state.mode {
-            RootMode::Normal { .. } => true,
-            RootMode::Child | RootMode::Modal => self.root_parent(root).is_some_and(|parent| self.root_is_effectively_visible(parent)),
-        }
+        self.policy(SurfaceKey::Root(root)).is_some_and(|policy| policy.visible)
     }
 
-    /// Returns whether one root and its structural window ancestry accept interaction.
+    /// Reads structural disablement, with modal dialogs retaining their independent enabled scope.
     fn root_is_effectively_enabled(&self, root: RootId) -> bool {
-        let Some(node) = self.root_node(root) else {
-            return false;
-        };
-        let Some(state) = node.root() else {
-            return false;
-        };
-        if node.surface.options.intersects(WindowOption::DISABLED) {
-            return false;
-        }
-        match state.mode {
-            // Independent windows and modal dialogs own their enabled state. In particular, a
-            // dialog remains usable when its ordinary owner is intentionally disabled beneath it.
-            RootMode::Normal { .. } | RootMode::Modal => true,
-            // Structural child windows are part of their parent's interactive family and cannot
-            // escape an explicitly disabled ancestor.
-            RootMode::Child => self.root_parent(root).is_some_and(|parent| self.root_is_effectively_enabled(parent)),
-        }
+        self.policy(SurfaceKey::Root(root)).is_some_and(|policy| policy.enabled)
     }
 
     /// Selects the adjacent visible ordinary root in activation chronology, with wrapping.
@@ -1143,11 +1213,12 @@ impl SurfaceForest {
         // edges preserves forest chronology among siblings while keeping unrelated descendants
         // out of this family's contiguous layout/update traversal.
         output.push(SurfaceKey::Root(root));
-        for node in &self.nodes {
-            let (SurfaceKey::Root(child), Some(state)) = (node.key, node.root()) else {
-                continue;
-            };
-            if state.mode == RootMode::Child && node.parent == Some(SurfaceKey::Root(root)) && state.visible {
+        for &key in &self.index[&SurfaceKey::Root(root)].children {
+            let node = self.node(key).expect("indexed child must remain retained");
+            if let (SurfaceKey::Root(child), Some(state)) = (key, node.root())
+                && state.mode == RootMode::Child
+                && state.visible
+            {
                 self.append_visible_root_tree(child, output);
             }
         }
@@ -1163,14 +1234,9 @@ impl SurfaceForest {
         })
     }
 
-    /// Follows sole parent edges to the root that owns one surface.
-    fn owning_root(&self, mut key: SurfaceKey) -> Option<RootId> {
-        loop {
-            match key {
-                SurfaceKey::Root(root) => return self.root_node(root).map(|_| root),
-                SurfaceKey::Popup(_) => key = self.node(key)?.parent?,
-            }
-        }
+    /// Reads the nearest root resolved from sole parent edges during the last forest change.
+    fn owning_root(&self, key: SurfaceKey) -> Option<RootId> {
+        self.policy(key).map(|policy| policy.owner)
     }
 
     /// Returns a popup's zero-based depth below its owning root.
@@ -1190,17 +1256,7 @@ impl SurfaceForest {
 
     /// Returns whether one popup is an ancestor-or-self of the active leaf.
     fn popup_is_active(&self, popup: PopupId) -> bool {
-        let mut current = self.active_popup;
-        while let Some(candidate) = current {
-            if candidate == popup {
-                return true;
-            }
-            current = match self.popup_node(candidate).and_then(|node| node.parent) {
-                Some(SurfaceKey::Popup(parent)) => Some(parent),
-                _ => None,
-            };
-        }
-        false
+        self.is_displayed(SurfaceKey::Popup(popup))
     }
 
     /// Returns the first popup below the root in the active branch.
@@ -1232,8 +1288,19 @@ impl SurfaceForest {
         output.reverse();
     }
 
-    /// Rebuilds layered visibility by filtering the one chronological node order.
+    /// Rebuilds inherited policy and layered visibility only after a forest policy/order change.
     fn rebuild_visible_order(&mut self) {
+        // Parent-first derivation visits every edge once, even after chronology moves a parent
+        // behind its children. Geometry-only layout and paint reuse this committed projection.
+        for entry in self.index.values_mut() {
+            entry.displayed = false;
+        }
+        for position in 0..self.nodes.len() {
+            let node = &self.nodes[position];
+            if node.parent.is_none() {
+                self.derive_policy_tree(node.key, None);
+            }
+        }
         let active_owner = self.active_popup.and_then(|popup| self.owning_root(SurfaceKey::Popup(popup)));
         let active_mode = active_owner.and_then(|root| self.stacking_mode(root));
 
@@ -1272,23 +1339,26 @@ impl SurfaceForest {
             visible.extend_from_slice(&popup_path);
         }
 
+        for key in &visible {
+            self.index.get_mut(key).expect("visible surface must be indexed").displayed = true;
+        }
         self.visible_order = visible;
         self.popup_path_scratch = popup_path;
     }
 
     /// Removes roots and all popup descendants whose derived owner is in `roots`.
     fn remove_roots(&mut self, roots: &[RootId]) {
-        let removed = self
+        let roots: HashSet<_> = roots.iter().copied().collect();
+        let removed: HashSet<_> = self
             .nodes
             .iter()
             .filter_map(|node| self.owning_root(node.key).filter(|owner| roots.contains(owner)).map(|_| node.key))
-            .collect::<Vec<_>>();
-        // Removing complete nodes also removes them from the authoritative chronological order, so
-        // no secondary stacking structure needs reconciliation.
+            .collect();
         self.nodes.retain(|node| !removed.contains(&node.key));
         if self.active_popup.is_some_and(|popup| removed.contains(&SurfaceKey::Popup(popup))) {
             self.active_popup = None;
         }
+        self.rebuild_index();
         self.rebuild_visible_order();
     }
 }
@@ -1386,7 +1456,6 @@ impl WindowManager {
         for (trigger_slot, entries) in menu_popups.into_iter().enumerate() {
             self.register_menu_popup(SurfaceKey::Root(id), trigger_slot, entries);
         }
-        self.surfaces.rebuild_visible_order();
         self.invalidate_ui_commit();
         WindowHandle::new(id, event_handle)
     }
@@ -1558,6 +1627,7 @@ impl WindowManager {
         let active_menu_root = self.active_menu_root();
         let active_popup_owner = self.active_popup_owner();
         self.root_node_mut(root)?.set_root_options(options);
+        self.surfaces.rebuild_visible_order();
 
         // A disabled structural root disables every child window in that family. Revoke their
         // pointer targets immediately rather than waiting for another input event to discover that
@@ -1624,8 +1694,8 @@ impl WindowManager {
     /// Returns the effective fixed or modal layer policy of one window.
     pub fn window_layer(&self, window: &WindowHandle) -> Result<LayerBinding, SurfaceMutationError> {
         let root = self.window_id(window)?;
-        // Resolve through Child edges at read time so changing a family root is immediately visible
-        // to every descendant without synchronizing cached layer mirrors.
+        // Mutations commit inherited policy before returning, so this indexed read immediately
+        // reflects a family layer change without repeating the ancestry walk.
         let mode = self.surfaces.stacking_mode(root).ok_or(SurfaceMutationError::UnknownWindow)?;
         Ok(match mode {
             RootMode::Normal { layer } => LayerBinding::Fixed(layer),
@@ -1870,7 +1940,7 @@ impl WindowManager {
 
     /// Queries effective visibility after authenticating the window against this forest.
     pub(crate) fn window_visible(&self, window: &WindowHandle) -> Result<bool, SurfaceMutationError> {
-        // Reuse the authoritative parent-chain policy; no second visibility mirror is stored.
+        // Read the policy already derived from authoritative parent edges at the mutation boundary.
         self.window_id(window).map(|id| self.root_is_visible(id))
     }
 
@@ -1910,15 +1980,13 @@ impl WindowManager {
     /// Collects one root and every structurally owned child window or modal dialog below it.
     fn owned_root_ids(&self, root: RootId) -> Vec<RootId> {
         let mut ids = vec![root];
-        // Parent edges always point toward an earlier retained root, so repeatedly scanning for
-        // direct members reaches a fixed point without cycle detection or a second child registry.
+        // Every node has one parent, so direct adjacency visits each descendant once without
+        // duplicate detection or repeated global scans. Popup subtrees cannot own root windows.
         let mut index = 0;
         while index < ids.len() {
-            let owner = ids[index];
-            for node in &self.surfaces.nodes {
-                let SurfaceKey::Root(candidate) = node.key else { continue };
-                if node.parent == Some(SurfaceKey::Root(owner)) && node.root().is_some() && !ids.contains(&candidate) {
-                    ids.push(candidate);
+            for &key in &self.surfaces.index[&SurfaceKey::Root(ids[index])].children {
+                if let SurfaceKey::Root(child) = key {
+                    ids.push(child);
                 }
             }
             index += 1;
@@ -2078,9 +2146,9 @@ impl WindowManager {
     /// Repairs active-surface identity after visibility or ownership changes.
     fn reconcile_active_surface(&mut self) {
         let modal = self.surfaces.active_modal_root();
-        let retained = self.active_surface.is_some_and(|surface| {
-            self.surfaces.visible_order.contains(&surface) && self.surface_is_eligible(surface, modal) && self.surface_accepts_input(surface)
-        });
+        let retained = self
+            .active_surface
+            .is_some_and(|surface| self.surfaces.is_displayed(surface) && self.surface_is_eligible(surface, modal) && self.surface_accepts_input(surface));
         if !retained {
             // A modal root is the only mandatory fallback. Ordinary roots continue using the front
             // visible surface lazily until a pointer or window-cycle command selects one exactly.
@@ -2214,16 +2282,14 @@ impl WindowManager {
 
     /// Returns the direct menu-popup child opened by one branch slot.
     fn menu_popup_for_slot(&self, surface: SurfaceKey, slot: usize) -> Option<PopupId> {
-        // Forest parent edges are authoritative, so no parallel submenu map is needed for keyboard
-        // or pointer activation.
-        self.surfaces
-            .nodes
-            .iter()
-            .find(|node| node.parent == Some(surface) && matches!(node.popup(), Some(PopupState::Menu { trigger_slot }) if *trigger_slot == slot))
-            .and_then(|node| match node.key {
-                SurfaceKey::Popup(popup) => Some(popup),
-                SurfaceKey::Root(_) => None,
-            })
+        // Restrict lookup to direct derived edges; the forest remains the sole menu owner.
+        self.surfaces.index.get(&surface)?.children.iter().find_map(|&key| {
+            let node = self.surfaces.node(key)?;
+            match (key, node.popup()) {
+                (SurfaceKey::Popup(popup), Some(PopupState::Menu { trigger_slot })) if *trigger_slot == slot => Some(popup),
+                _ => None,
+            }
+        })
     }
 
     /// Clears every derived menu-child selection after restoring the parent surface.
@@ -2844,11 +2910,10 @@ impl WindowManager {
     /// Lays out the reusable parent-first visible traversal and commits inherited surface clips.
     fn layout(&mut self, viewport: Recti, atlas: &crate::AtlasHandle) {
         self.sync_menu_presentation();
-        self.surfaces.rebuild_visible_order();
         let style = self.bundle.skin().clone();
         for index in 0..self.surfaces.nodes.len() {
             let key = self.surfaces.nodes[index].key;
-            if !self.surfaces.visible_order.contains(&key) {
+            if !self.surfaces.is_displayed(key) {
                 self.surfaces.nodes[index].clear_transient_targets();
             }
         }
@@ -3076,7 +3141,7 @@ impl WindowManager {
         let modal = self.surfaces.active_modal_root();
         for index in 0..self.surfaces.nodes.len() {
             let key = self.surfaces.nodes[index].key;
-            let visible = self.surfaces.visible_order.contains(&key);
+            let visible = self.surfaces.is_displayed(key);
             if !visible {
                 self.surfaces.nodes[index].clear_transient_targets();
             } else if !self.surface_is_eligible(key, modal) || !self.surface_accepts_input(key) {
@@ -3118,23 +3183,18 @@ impl WindowManager {
             );
         }
 
-        // Forest chronology remains the sibling z-order source. Scanning direct edges avoids a
-        // second child collection while recursion keeps each descendant family contiguous.
-        let node_count = self.surfaces.nodes.len();
-        for index in 0..node_count {
-            let child = {
-                let node = &self.surfaces.nodes[index];
-                match (node.key, node.parent, node.root()) {
-                    (SurfaceKey::Root(child), Some(SurfaceKey::Root(parent)), Some(state))
-                        if parent == root && state.mode == RootMode::Child && state.visible =>
-                    {
-                        Some(child)
-                    }
-                    _ => None,
-                }
-            };
-            if let Some(child) = child {
-                self.paint_root_tree(child, style, atlas, focus_surface, active_window);
+        // Derived adjacency retains sibling chronology while visiting only this family's edges.
+        let key = SurfaceKey::Root(root);
+        let count = self.surfaces.index[&key].children.len();
+        for index in 0..count {
+            let child = self.surfaces.index[&key].children[index];
+            if let SurfaceKey::Root(child_root) = child
+                && self
+                    .surfaces
+                    .node(child)
+                    .is_some_and(|node| node.root().is_some_and(|state| state.mode == RootMode::Child && state.visible))
+            {
+                self.paint_root_tree(child_root, style, atlas, focus_surface, active_window);
             }
         }
 
@@ -3241,7 +3301,6 @@ impl WindowManager {
         // Resolve both projections from one bundle before mutating display-list and surface state.
         let atlas = self.bundle.atlas().clone();
         self.display_list.clear();
-        self.surfaces.rebuild_visible_order();
         let style = self.bundle.skin().clone();
         let active_mode = self.active_popup_owner().and_then(|owner| self.surfaces.stacking_mode(owner));
         // A menu owns keyboard presentation without discarding application focus. Otherwise the
@@ -3352,13 +3411,11 @@ impl WindowManager {
 
         // Later sibling records paint in front. Recurse before testing the parent base so children
         // sit above application content while remaining below parent-owned overlays.
-        for node in self.surfaces.nodes.iter().rev() {
-            let (SurfaceKey::Root(child), Some(state)) = (node.key, node.root()) else {
-                continue;
-            };
-            if state.mode == RootMode::Child
+        for &key in self.surfaces.index[&SurfaceKey::Root(root)].children.iter().rev() {
+            let child_node = self.surfaces.node(key).expect("indexed child must remain retained");
+            if let (SurfaceKey::Root(child), Some(state)) = (key, child_node.root())
+                && state.mode == RootMode::Child
                 && state.visible
-                && node.parent == Some(SurfaceKey::Root(root))
                 && let Some(target) = self.input_root_tree_at(child, point)
             {
                 return Some(target);
@@ -3434,9 +3491,7 @@ impl WindowManager {
     fn keyboard_input_surface(&self) -> Option<SurfaceKey> {
         let modal = self.surfaces.active_modal_root();
         self.active_surface
-            .filter(|surface| {
-                self.surfaces.visible_order.contains(surface) && self.surface_is_eligible(*surface, modal) && self.surface_accepts_input(*surface)
-            })
+            .filter(|surface| self.surfaces.is_displayed(*surface) && self.surface_is_eligible(*surface, modal) && self.surface_accepts_input(*surface))
             .or_else(|| self.captured_input_surface())
             .or_else(|| modal.map(SurfaceKey::Root).filter(|surface| self.surface_accepts_input(*surface)))
             .or_else(|| self.front_input_surface())
@@ -3708,5 +3763,69 @@ impl WindowManager {
                 Some(popup.surface.body.menu()?.slot_rects())
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod index_tests {
+    use super::*;
+
+    /// Builds a minimal unique retained body without depending on application models.
+    fn window(name: &str) -> Window {
+        let (_, body) = crate::Linear::create(crate::LinearParameters::vertical([] as [Node; 0]));
+        Window::new(name, rect(0, 0, 100, 100), body)
+    }
+
+    /// Counts structural work for both a wide family and a deep ancestry, without timing thresholds.
+    #[test]
+    fn indexed_traversal_reuses_policy_and_visits_linear_work() {
+        for size in [32, 128] {
+            let atlas = crate::test_support::test_atlas();
+            let skin = crate::test_support::test_skin(&atlas);
+            let mut manager = WindowManager::new(SkinBundle::new(atlas, skin));
+            let parent = manager.create_window(window("parent"));
+            let mut deepest = parent.clone();
+            for _ in 0..size {
+                manager.create_child_window(&parent, window("wide")).unwrap();
+                deepest = manager.create_child_window(&deepest, window("deep")).unwrap();
+            }
+            let count = manager.surfaces.nodes.len();
+            assert_eq!(manager.surfaces.index.values().map(|entry| entry.children.len()).sum::<usize>(), count - 1);
+
+            // Reordering places the oldest parent after its descendants in the authoritative Vec.
+            manager.bring_window_to_front(&parent).unwrap();
+            manager.surfaces.policy_visits = 0;
+            manager.set_window_layer(&parent, 3).unwrap();
+            assert_eq!(manager.surfaces.policy_visits, count, "derive every node exactly once");
+            assert_eq!(manager.window_layer(&deepest), Ok(LayerBinding::Fixed(3)));
+            for (position, node) in manager.surfaces.nodes.iter().enumerate() {
+                assert_eq!(manager.surfaces.node_index(node.key), Some(position));
+            }
+
+            let dimensions = Dimensioni::new(400, 400);
+            manager.update(dimensions);
+            manager.surfaces.policy_visits = 0;
+            manager.surfaces.lookups.set(0);
+            manager.update(dimensions);
+            manager.paint(dimensions);
+            assert_eq!(manager.input_surface_at(Vec2i::new(1000, 1000)), None);
+            assert_eq!(manager.surfaces.policy_visits, 0, "geometry-only phases reuse committed policy");
+            assert!(
+                manager.surfaces.lookups.get() < 80 * count,
+                "complete traversal must stay linear in surface count"
+            );
+
+            // Policy changes become observable before another layout or paint call.
+            manager.set_window_options(&parent, WindowOption::DISABLED).unwrap();
+            assert!(!manager.surfaces.root_is_effectively_enabled(deepest.id()));
+            manager.set_window_visible(&parent, false).unwrap();
+            assert!(!manager.surfaces.root_is_effectively_visible(deepest.id()));
+            manager.set_window_visible(&parent, true).unwrap();
+            assert!(manager.surfaces.root_is_effectively_visible(deepest.id()));
+            manager.destroy_window(&parent).unwrap();
+            assert!(manager.surfaces.index.is_empty());
+            assert!(manager.surfaces.visible_order.is_empty());
+            assert!(manager.surfaces.nodes.is_empty());
+        }
     }
 }
