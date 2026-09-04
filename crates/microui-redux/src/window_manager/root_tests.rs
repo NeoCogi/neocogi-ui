@@ -3409,7 +3409,7 @@ fn title_drag_and_close_record_typed_window_events() {
     assert!(dispatcher.dispatch(&mut events));
     assert!(matches!(
         events.as_slice(),
-        [WindowEvent::GeometryChanged { rect }, WindowEvent::CloseRequested]
+        [WindowEvent::GeometryChanged { rect }, WindowEvent::Hidden, WindowEvent::CloseRequested]
             if (rect.x, rect.y, rect.width, rect.height) == (40, 38, 140, 100)
     ));
 }

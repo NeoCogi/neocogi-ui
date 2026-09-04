@@ -150,6 +150,13 @@ impl<'a> Ui<'a> {
         self.window_manager.create_menu_popup(parent, menu)
     }
 
+    /// Returns whether a window and all its structural owners currently permit visibility.
+    ///
+    /// This is current policy, unlike a deferred [`crate::WindowEvent::Hidden`] notification.
+    pub fn window_visible(&self, window: &WindowHandle) -> Result<bool, SurfaceMutationError> {
+        self.window_manager.window_visible(window)
+    }
+
     /// Replaces a retained window or dialog title before the next layout commit.
     pub fn set_window_name(&mut self, window: &WindowHandle, name: impl Into<String>) -> Result<(), SurfaceMutationError> {
         // Convert the caller-facing string once at the concrete manager boundary that owns it.

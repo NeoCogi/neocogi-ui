@@ -53,7 +53,8 @@ Context owns a concrete `SurfaceForest` and the widget-event dispatcher containi
 handlers. Each forest node owns either `{ Node, UiRuntime }` widget content or a direct
 `MenuSurface`; sole parent edges encode structural child-window, dialog, and popup ownership.
 Application state may own reusable components and their semantic event sources. Neither a handle
-nor a subscription keeps a removed producer alive.
+nor a subscription keeps a removed producer alive. A subscription retains queue storage so an
+explicit terminal event can survive removal; ordinary producer destruction discards pending events.
 
 ```text
 Context<B, State>
@@ -69,7 +70,7 @@ Context<B, State>
        └── owns Vec<Box<dyn WidgetEventDispatch<State>>>
                   └── owns Subscription<State, E, Handler>
                              ├── owns Handler
-                             └── owns Weak port reference ─────┐
+                             └── owns queue storage        ─────┐
                                                                │
 WidgetEventPortHandle<E> ──────────────── Weak ────────────────┘
 
@@ -82,17 +83,18 @@ Application State
        └── owns EventSource<FileDialogCompleted>
 ```
 
-The only strong event-port owner is its retained producer. Consequently:
+The producer owns the source; its subscription owns only queue storage. Consequently:
 
 - cloning a `WidgetEventPortHandle` does not extend producer lifetime;
 - registering a handler does not extend producer lifetime;
-- removing a widget immediately destroys its port and queued payloads;
+- removing a widget closes its port and discards ordinary queued payloads;
+- explicitly closing a source preserves one terminal payload for its existing subscriber;
 - an application-owned component source remains alive for the component lifetime; and
-- the next dispatch prunes the now-dead subscription.
+- the next dispatch delivers any explicit terminal fact and prunes closed empty subscriptions.
 
 Manager-owned chrome follows the same concrete rule. `WindowHandle::events()` projects one weak
 `WindowEvent` port whose variants report geometry changes, close requests, minimization,
-maximization, and restoration; combining them removes separate event allocations without erasing
+maximization, restoration, local hiding, and destruction; combining them removes separate event allocations without erasing
 payloads. `PopupHandle::events()` projects the separate `PopupEvent::Dismissed` lifecycle stream,
 so popup events cannot be subscribed through a window endpoint or vice versa.
 
@@ -110,30 +112,28 @@ runtime-checked, short mutable accesses. It also intentionally makes this mechan
 
 ## The port state machine
 
-[`WidgetEventPort`] uses an explicit state enum for both subscription state and storage. It has
-exactly two stable states:
+`WidgetEventPort` uses one concrete enum for connection, storage, and closure:
 
 ```text
-                       subscribe / connect
-     ┌─────────────────────────────────────────────────┐
-     │                                                 v
-┌──────────────┐                               ┌────────────────────┐
-│ Disconnected │                               │ Connected          │
-│              │                               │ pending: FIFO      │
-└──────────────┘                               └────────────────────┘
-     │      ^                                      │          │
-     │      │ subscription / dispatcher drop       │ emit(E)  │ drain
-     │      └──────────────────────────────────────┘          │
-     │                                                        │
-     └── emit(E): discard                         FIFO <- E   └── FIFO -> handler
+Disconnected --subscribe--> Connected { pending: FIFO }
+     ^                          |
+     +----subscriber drop-------+
+
+Connected --source.close(event)--> Closed { terminal: Some(event) }
+Connected --ordinary source drop--> Closed { terminal: None }
+Disconnected --close/drop---------> Closed { terminal: None }
 ```
 
-Connecting installs an empty queue. A second connection fails with
-[`SubscribeError::AlreadySubscribed`]. Emission while connected appends the owned payload to
-that queue; emission while disconnected is intentionally discarded, so subscribing never
-replays historical retained activity. Draining moves the complete queue out and leaves the port
-connected with a new empty queue. Dropping the exclusive subscription disconnects the port and
-clears anything still pending.
+A connected source queues owned payloads; disconnected emission is discarded. Connecting never
+replays history and a second connection returns `AlreadySubscribed`. Draining detaches the batch
+before invoking handlers so recursive emission cannot collide with a queue borrow.
+
+`EventSource::close` permanently expires public endpoints and replaces pending ordinary events
+with one terminal fact for the existing subscriber. The subscription keeps only queue storage,
+allowing that fact to be delivered after producer removal. Repeated close/drop calls preserve the
+first terminal fact; later emission is discarded and new subscriptions return `WidgetExpired`.
+Ordinary source drop closes without a terminal fact and discards pending payloads. Context teardown
+drops subscriptions without running handlers, so it never promises terminal delivery after teardown.
 
 ### Exclusive-subscription policy
 
@@ -173,7 +173,7 @@ WidgetEventPortHandle<E>
 WidgetEventDispatcher<State>::add
      │
      ├── upgrade the handle's Weak port reference
-     ├── connect and retain the Weak port reference
+     ├── connect and retain queue storage without retaining the producer
      ├── retain the concrete method or bound-method handler
      └── erase Subscription<State, E, Handler>
                         as Box<dyn WidgetEventDispatch<State>>
@@ -323,21 +323,16 @@ feedback loop instead of hanging the UI thread.
 ## Lifetime and failure behavior
 
 ```text
-widget removed
-     └── port dropped
-            ├── queued events dropped
-            ├── handles become expired
-            └── subscription's Weak expires -> subscription pruned on dispatch
-
-context/dispatcher dropped
-     └── subscriptions dropped
-            └── live ports disconnected and their queues cleared
+ordinary producer removal -> close queue -> discard ordinary pending events -> expire endpoints
+explicit source.close(E)  -> close queue -> retain terminal E in current subscription
+next dispatch            -> deliver terminal E once -> prune closed empty subscriptions
+context/dispatcher drop  -> discard subscriptions and pending events; invoke no handlers
 ```
 
 Subscribing through an expired handle returns [`SubscribeError::WidgetExpired`]. A live port
 permits only one subscription and returns [`SubscribeError::AlreadySubscribed`] for a second. There
 is no public unsubscribe operation: a context subscription normally lasts until either the
-widget or context is dropped.
+producer closes/is dropped or the context is dropped.
 
 A subscription takes its whole pending batch out of the port before invoking its handler. This
 is what releases the port's `RefCell` borrow and permits a handler to emit another event safely.
@@ -483,7 +478,7 @@ impl Model {
     ) {
         if !self.file_dialog.is_open() {
             self.file_dialog
-                .open(ui, FileDialogRequest::default());
+                .open(ui, FileDialogRequest::default()).expect("dialog and owner must be available for this activation");
         }
     }
 
@@ -549,3 +544,31 @@ and combine multiple consequences in the source's single handler. Emission is de
 global ordering across sources. Sharing a source between several private controls is an explicit
 component ownership decision, for example `Rc<EventSource<RowSubmitted>>`; weak subscriber handles
 never acquire that ownership.
+
+## File-dialog dismissal and pending requests
+
+`FileDialog::is_open()` reports a pending activation. `Ui::window_visible(dialog.window())` reports
+current effective surface visibility. They answer different questions between an external surface
+mutation and the next safe event dispatch: hiding/destroying a dialog or its owner changes surface
+policy immediately, then `Context::update_ui_state` delivers the lifecycle notification and settles
+the pending request as `Cancelled` exactly once.
+
+Acceptance, explicit cancellation, Cancel-button submission, title close, direct hiding, owner
+hiding, direct destruction, and owner destruction converge on the component's completion path.
+`WindowEvent::Destroyed` uses the existing source's terminal close operation, so removing the
+retained tree cannot erase the notification needed to settle the component. The manager knows no
+file-dialog-specific state or completion type.
+
+Hiding is a deferred notification of a past transition. The component checks current visibility
+before acting on it, so explicit cancel/reopen before dispatch does not let an old notification
+cancel a newly visible request. Application authors who handle `Hidden` themselves should likewise
+query current policy when coordinating a reusable component. Structural child windows retain their
+own local visibility intent when an ancestor hides; modal descendants are explicitly hidden and
+receive their own notification.
+
+`FileDialog::open` returns `FileDialogOpenError::AlreadyOpen` for an overlapping activation, or
+`Surface` for an invalid/hidden owner or stale/foreign window. These failures leave the request
+state unchanged. Applications must handle the result, keep their component accessible through the
+registered accessor while dispatch is possible, and continue driving Context updates to receive
+deferred completion. Context teardown does not run application callbacks. Destroyed dialog windows
+cannot be reopened; construct a new component if a new retained lifetime is needed.

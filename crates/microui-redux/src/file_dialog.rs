@@ -201,6 +201,35 @@ struct FileDialogTestFields {
 /// Function pointer used by retained subscriptions to recover one application-owned dialog.
 type FileDialogAccessor<State> = for<'a> fn(&'a mut State) -> &'a mut FileDialog;
 
+/// Failure to activate a file-dialog request; the previous request state remains intact.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum FileDialogOpenError {
+    /// A request is still awaiting acceptance or cancellation.
+    AlreadyOpen,
+    /// The supplied UI cannot show this dialog under its current ownership/visibility policy.
+    Surface(crate::SurfaceMutationError),
+}
+
+impl std::fmt::Display for FileDialogOpenError {
+    /// Keeps modal ownership failures distinct from overlapping application requests.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::AlreadyOpen => f.write_str("file dialog already has an active request"),
+            Self::Surface(source) => write!(f, "cannot open file dialog: {source}"),
+        }
+    }
+}
+
+impl std::error::Error for FileDialogOpenError {
+    /// Preserves the exact manager failure for application diagnostics.
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::AlreadyOpen => None,
+            Self::Surface(source) => Some(source),
+        }
+    }
+}
+
 /// Reusable retained file-picker component owned by application state.
 ///
 /// Construct it once with [`FileDialog::new`], store the returned value at the location selected by
@@ -502,16 +531,17 @@ impl FileDialog {
 
     /// Returns the retained dialog window used by this component.
     ///
-    /// Its typed handle supports the same checked mutations and event access as any other window.
-    /// Use it for inspection and event access only: hiding or destroying the window independently
-    /// desynchronizes the component. Route lifecycle changes through [`Self::open`] and
-    /// [`Self::cancel`].
+    /// Hiding or destroying this window (or its owner) cancels an active request at the next
+    /// event dispatch boundary. Use `Ui::window_visible` when current surface policy is needed.
     pub fn window(&self) -> &WindowHandle {
         // Lend the aggregate capability without transferring ownership or exposing its private ID.
         &self.window
     }
 
-    /// Returns whether this component is open, regardless of which visible dialog is frontmost.
+    /// Returns whether a request awaits completion, regardless of which dialog is frontmost.
+    ///
+    /// External hiding/destruction is reconciled at the next Context update's event dispatch.
+    /// This value describes pending component work; `Ui::window_visible` reports current visibility.
     pub const fn is_open(&self) -> bool {
         self.active
     }
@@ -520,19 +550,21 @@ impl FileDialog {
     ///
     /// Completion is emitted through [`Self::completed`] during a later retained event dispatch.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics when the dialog is already open, its application-owned window was destroyed, `ui`
-    /// belongs to another Context, or the owning window is not currently eligible to show its
-    /// modal dialog (for example, because the owner is hidden).
-    pub fn open(&mut self, ui: &mut Ui<'_>, request: FileDialogRequest) {
+    /// An already active request returns `AlreadyOpen`. A stale/foreign window or hidden owner
+    /// returns `Surface`; validation completes before request data or activity is changed.
+    pub fn open(&mut self, ui: &mut Ui<'_>, request: FileDialogRequest) -> Result<(), FileDialogOpenError> {
+        if self.active {
+            return Err(FileDialogOpenError::AlreadyOpen);
+        }
+        // Showing validates both context ownership and modal eligibility. No application callback
+        // runs during these synchronous mutations; prepare_open publishes activity only on success.
+        ui.set_window_visible(&self.window, true).map_err(FileDialogOpenError::Surface)?;
         let (title, rect) = self.prepare_open(request);
-        ui.set_window_name(&self.window, title)
-            .expect("application-owned file-dialog window must remain registered");
-        ui.set_window_rect(&self.window, rect)
-            .expect("application-owned file-dialog window must remain registered");
-        ui.set_window_visible(&self.window, true)
-            .expect("application-owned file-dialog window must remain registered");
+        ui.set_window_name(&self.window, title).expect("validated dialog remains registered");
+        ui.set_window_rect(&self.window, rect).expect("validated dialog remains registered");
+        Ok(())
     }
 
     /// Cancels an open picker through the current retained UI transaction.
@@ -542,8 +574,8 @@ impl FileDialog {
     ///
     /// # Panics
     ///
-    /// Panics if the picker is open but its dialog window was destroyed or `ui` belongs to a
-    /// different Context.
+    /// Panics if a live picker is used with a `Ui` from a different Context. An already destroyed
+    /// window needs no visibility mutation and can still settle its pending request.
     pub fn cancel(&mut self, ui: &mut Ui<'_>) -> bool {
         if !self.active {
             return false;
@@ -556,9 +588,6 @@ impl FileDialog {
 
     /// Resets activation-specific model and widget state before the dialog window is shown.
     fn prepare_open(&mut self, request: FileDialogRequest) -> (String, Recti) {
-        assert!(!self.active, "file dialog is already open");
-        assert!(self.window.events().is_alive(), "application-owned file-dialog window was destroyed");
-
         let FileDialogRequest { title, initial_directory, rect } = request;
         self.current_working_directory = initial_directory;
         self.path_box
@@ -712,8 +741,10 @@ impl FileDialog {
     fn finish(&mut self, ui: &mut Ui<'_>, completion: FileDialogStatus) {
         // Hide the retained modal before publishing completion so later subscribers observe the
         // component as idle at the same dispatch boundary.
-        ui.set_window_visible(&self.window, false)
-            .expect("application-owned file-dialog window must remain registered");
+        if self.window.events().is_alive() {
+            ui.set_window_visible(&self.window, false)
+                .expect("a live dialog must be used with its owning Ui");
+        }
         self.emit_completion(completion);
     }
 
@@ -741,8 +772,12 @@ impl FileDialog {
         // Non-close lifecycle observations remain on the shared port but do not alter file-picker
         // state. A close request converges with explicit and button cancellation.
         match event {
-            WindowEvent::CloseRequested if self.active => self.finish(ui, FileDialogStatus::Cancelled),
-            WindowEvent::CloseRequested | WindowEvent::GeometryChanged { .. } => {}
+            WindowEvent::CloseRequested | WindowEvent::Hidden if self.active && ui.window_visible(&self.window) != Ok(true) => {
+                // A queued hide from cancel/reopen must not cancel the newly visible request.
+                self.finish(ui, FileDialogStatus::Cancelled);
+            }
+            WindowEvent::Destroyed if self.active => self.finish(ui, FileDialogStatus::Cancelled),
+            WindowEvent::CloseRequested | WindowEvent::Hidden | WindowEvent::Destroyed | WindowEvent::GeometryChanged { .. } => {}
             WindowEvent::Minimized { .. } | WindowEvent::Maximized { .. } | WindowEvent::Restored { .. } => {
                 // File-dialog windows do not expose minimize/maximize buttons, so these variants
                 // are exhaustive defensive handling for application-customized future options.
@@ -806,7 +841,6 @@ mod tests {
     use crate::{Button, ButtonParameters, ButtonSubmitted, Context, Dimensioni, MouseButton, SurfaceMutationError, WindowOption, rect};
     use std::{
         fs,
-        panic::{AssertUnwindSafe, catch_unwind},
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -830,7 +864,9 @@ mod tests {
         }
 
         fn open_from_button(&mut self, ui: &mut Ui<'_>, _event: &ButtonSubmitted) {
-            self.dialog.open(ui, FileDialogRequest::default());
+            self.dialog
+                .open(ui, FileDialogRequest::default())
+                .expect("dialog and owner must be available for this activation");
         }
 
         fn behind_submitted(&mut self, _event: &ButtonSubmitted) {
@@ -839,6 +875,12 @@ mod tests {
     }
 
     fn context_and_model() -> (Context<NoopRenderer, Model>, Model) {
+        let (context, model, _) = context_model_and_owner();
+        (context, model)
+    }
+
+    /// Retains the public owner capability for owner-driven lifecycle regression cases.
+    fn context_model_and_owner() -> (Context<NoopRenderer, Model>, Model, WindowHandle) {
         let mut context = Context::new_test_state(NoopRenderer { atlas: test_atlas() }, dimensions());
         // The fixture window gives the component the same stable lifetime owner required from a
         // real application. Its geometry is unrelated to the dialog's screen-space rectangle.
@@ -856,7 +898,74 @@ mod tests {
                 completions: Vec::new(),
                 behind_submissions: 0,
             },
+            owner,
         )
+    }
+
+    /// Every manager dismissal path settles a pending request once, without retaining its window.
+    #[test]
+    fn hiding_or_destroying_the_dialog_or_owner_completes_once() {
+        for owner_target in [false, true] {
+            for destroy in [false, true] {
+                let (mut context, mut model, owner) = context_model_and_owner();
+                model.dialog.open(&mut context.ui(), FileDialogRequest::default()).unwrap();
+                let target = if owner_target { &owner } else { model.dialog.window() };
+                if destroy {
+                    context.ui().destroy_window(target).unwrap();
+                    assert!(!model.dialog.window().events().is_alive());
+                } else {
+                    context.ui().set_window_visible(target, false).unwrap();
+                    assert_eq!(context.ui().window_visible(model.dialog.window()), Ok(false));
+                }
+                // Surface policy changes synchronously; component completion waits for dispatch.
+                assert!(model.dialog.is_open());
+                context.update_ui_state(dimensions(), &mut model);
+                assert!(!model.dialog.is_open());
+                assert_eq!(model.completions, [FileDialogStatus::Cancelled]);
+                context.update_ui_state(dimensions(), &mut model);
+                assert_eq!(model.completions, [FileDialogStatus::Cancelled]);
+            }
+        }
+    }
+
+    /// A queued hide reports past policy and must not cancel an explicitly reopened request.
+    #[test]
+    fn cancel_then_reopen_before_dispatch_ignores_the_old_hide_notification() {
+        let (mut context, mut model) = context_and_model();
+        model.dialog.open(&mut context.ui(), FileDialogRequest::default()).unwrap();
+        assert!(model.dialog.cancel(&mut context.ui()));
+        model.dialog.open(&mut context.ui(), FileDialogRequest::default()).unwrap();
+        context.update_ui_state(dimensions(), &mut model);
+        assert_eq!(model.completions, [FileDialogStatus::Cancelled]);
+        assert!(model.dialog.is_open());
+        assert_eq!(context.ui().window_visible(model.dialog.window()), Ok(true));
+    }
+
+    /// Failed modal eligibility cannot publish an activation that has no visible window.
+    #[test]
+    fn failed_open_preserves_idle_request_state() {
+        let (mut context, mut model, owner) = context_model_and_owner();
+        let original_directory = model.dialog.current_working_directory.clone();
+        context.ui().set_window_visible(&owner, false).unwrap();
+        let request = FileDialogRequest::new().with_initial_directory("/unused-request-directory");
+        assert_eq!(
+            model.dialog.open(&mut context.ui(), request),
+            Err(FileDialogOpenError::Surface(SurfaceMutationError::InvalidDialogOwner))
+        );
+        assert!(!model.dialog.is_open());
+        assert_eq!(model.dialog.current_working_directory, original_directory);
+        let (mut foreign, _) = context_and_model();
+        assert_eq!(
+            model.dialog.open(&mut foreign.ui(), FileDialogRequest::default()),
+            Err(FileDialogOpenError::Surface(SurfaceMutationError::UnknownWindow))
+        );
+        context.ui().destroy_window(&owner).unwrap();
+        assert_eq!(
+            model.dialog.open(&mut context.ui(), FileDialogRequest::default()),
+            Err(FileDialogOpenError::Surface(SurfaceMutationError::UnknownWindow))
+        );
+        context.update_ui_state(dimensions(), &mut model);
+        assert!(model.completions.is_empty());
     }
 
     fn unique_temp_dir(name: &str) -> std::path::PathBuf {
@@ -899,7 +1008,10 @@ mod tests {
 
         let (mut context, mut model) = context_and_model();
         let dialog_window = model.dialog.window().clone();
-        model.dialog.open(&mut context.ui(), request);
+        model
+            .dialog
+            .open(&mut context.ui(), request)
+            .expect("dialog and owner must be available for this activation");
         assert!(model.dialog.is_open());
         assert_eq!(context.debug_root_name(dialog_window.id()).as_deref(), Some("Choose"));
         let window_rect = context.debug_root_rect(dialog_window.id()).unwrap();
@@ -943,7 +1055,8 @@ mod tests {
         let (mut context, mut model) = context_and_model();
         model
             .dialog
-            .open(&mut context.ui(), FileDialogRequest::new().with_initial_directory("/retained-test"));
+            .open(&mut context.ui(), FileDialogRequest::new().with_initial_directory("/retained-test"))
+            .expect("dialog and owner must be available for this activation");
         context.update_ui_state(dimensions(), &mut model);
         model
             .dialog
@@ -968,7 +1081,10 @@ mod tests {
     #[test]
     fn explicit_cancel_queues_one_completion_for_the_next_update() {
         let (mut context, mut model) = context_and_model();
-        model.dialog.open(&mut context.ui(), FileDialogRequest::default());
+        model
+            .dialog
+            .open(&mut context.ui(), FileDialogRequest::default())
+            .expect("dialog and owner must be available for this activation");
         assert!(model.dialog.cancel(&mut context.ui()));
         assert!(!model.dialog.cancel(&mut context.ui()));
         assert!(model.completions.is_empty());
@@ -990,21 +1106,27 @@ mod tests {
         let filename = model.dialog.file_name_box.clone();
         let scroll = model.dialog.file_scroll.clone();
 
-        model.dialog.open(
-            &mut context.ui(),
-            FileDialogRequest::new().with_title("First").with_initial_directory(first_dir.to_string_lossy()),
-        );
+        model
+            .dialog
+            .open(
+                &mut context.ui(),
+                FileDialogRequest::new().with_title("First").with_initial_directory(first_dir.to_string_lossy()),
+            )
+            .expect("dialog and owner must be available for this activation");
         filename.try_update_with("stale.txt", |state, text| state.set_text(text)).unwrap();
         scroll.try_update(|state| state.set_offset(crate::vec2(0, 20))).unwrap();
         assert!(model.dialog.cancel(&mut context.ui()));
         context.update_ui_state(dimensions(), &mut model);
 
-        model.dialog.open(
-            &mut context.ui(),
-            FileDialogRequest::new()
-                .with_title("Second")
-                .with_initial_directory(second_dir.to_string_lossy()),
-        );
+        model
+            .dialog
+            .open(
+                &mut context.ui(),
+                FileDialogRequest::new()
+                    .with_title("Second")
+                    .with_initial_directory(second_dir.to_string_lossy()),
+            )
+            .expect("dialog and owner must be available for this activation");
         assert_eq!(model.dialog.window.id(), dialog_window.id());
         assert_eq!(model.dialog.test.ok_button_id, open);
         assert_eq!(
@@ -1021,13 +1143,13 @@ mod tests {
     }
 
     #[test]
-    fn overlapping_open_panics_without_closing_the_active_component() {
+    fn overlapping_open_returns_an_error_without_closing_the_active_component() {
         let (mut context, mut model) = context_and_model();
-        model.dialog.open(&mut context.ui(), FileDialogRequest::default());
-        let result = catch_unwind(AssertUnwindSafe(|| {
-            model.dialog.open(&mut context.ui(), FileDialogRequest::default());
-        }));
-        assert!(result.is_err());
+        model.dialog.open(&mut context.ui(), FileDialogRequest::default()).unwrap();
+        assert_eq!(
+            model.dialog.open(&mut context.ui(), FileDialogRequest::default()),
+            Err(FileDialogOpenError::AlreadyOpen)
+        );
         assert!(model.dialog.is_open());
         assert_eq!(context.debug_modal_root(), Some(model.dialog.window.id()));
     }
@@ -1076,8 +1198,14 @@ mod tests {
             second_completions: 0,
         };
 
-        model.first.open(&mut context.ui(), FileDialogRequest::new().with_title("First"));
-        model.second.open(&mut context.ui(), FileDialogRequest::new().with_title("Second"));
+        model
+            .first
+            .open(&mut context.ui(), FileDialogRequest::new().with_title("First"))
+            .expect("dialog and owner must be available for this activation");
+        model
+            .second
+            .open(&mut context.ui(), FileDialogRequest::new().with_title("Second"))
+            .expect("dialog and owner must be available for this activation");
         assert_ne!(model.first.window.id(), model.second.window.id());
         assert_eq!(context.debug_modal_root(), Some(model.second.window.id()));
         assert!(model.second.cancel(&mut context.ui()));
@@ -1097,7 +1225,10 @@ mod tests {
             .ui()
             .set_window_options(&window, WindowOption::FRAME | WindowOption::NO_TITLE | WindowOption::NO_RESIZE)
             .unwrap();
-        model.dialog.open(&mut context.ui(), FileDialogRequest::default());
+        model
+            .dialog
+            .open(&mut context.ui(), FileDialogRequest::default())
+            .expect("dialog and owner must be available for this activation");
         context.update_ui_state(dimensions(), &mut model);
 
         context.mousedown(10, 10, MouseButton::LEFT);
@@ -1111,7 +1242,10 @@ mod tests {
     #[test]
     fn action_buttons_keep_standard_height_and_browser_absorbs_resize() {
         let (mut context, mut model) = context_and_model();
-        model.dialog.open(&mut context.ui(), FileDialogRequest::default());
+        model
+            .dialog
+            .open(&mut context.ui(), FileDialogRequest::default())
+            .expect("dialog and owner must be available for this activation");
         context.update_ui_state(dimensions(), &mut model);
         let dialog_window = model.dialog.window.clone();
         let toolbar_before = context.debug_root_node_rect(dialog_window.id(), model.dialog.test.up_button_id).unwrap();
@@ -1142,7 +1276,8 @@ mod tests {
         let (mut context, mut model) = context_and_model();
         model
             .dialog
-            .open(&mut context.ui(), FileDialogRequest::new().with_initial_directory(dir.to_string_lossy()));
+            .open(&mut context.ui(), FileDialogRequest::new().with_initial_directory(dir.to_string_lossy()))
+            .expect("dialog and owner must be available for this activation");
         context.update_ui_state(dimensions(), &mut model);
         let dialog_window = model.dialog.window.clone();
         let file_node = model.dialog.test.file_item_ids[0];
@@ -1178,7 +1313,10 @@ mod tests {
     #[test]
     fn empty_accept_stays_open_and_cancel_button_completes() {
         let (mut context, mut model) = context_and_model();
-        model.dialog.open(&mut context.ui(), FileDialogRequest::default());
+        model
+            .dialog
+            .open(&mut context.ui(), FileDialogRequest::default())
+            .expect("dialog and owner must be available for this activation");
         context.update_ui_state(dimensions(), &mut model);
         let dialog_window = model.dialog.window.clone();
         let open = model.dialog.test.ok_button_id;
@@ -1196,7 +1334,10 @@ mod tests {
     #[test]
     fn close_request_cancels_and_hides_the_dialog_window() {
         let (mut context, mut model) = context_and_model();
-        model.dialog.open(&mut context.ui(), FileDialogRequest::default());
+        model
+            .dialog
+            .open(&mut context.ui(), FileDialogRequest::default())
+            .expect("dialog and owner must be available for this activation");
         context.update_ui_state(dimensions(), &mut model);
         let dialog_window = model.dialog.window.clone();
         let close = context
@@ -1222,7 +1363,8 @@ mod tests {
         let (mut context, mut model) = context_and_model();
         model
             .dialog
-            .open(&mut context.ui(), FileDialogRequest::new().with_initial_directory(dir.to_string_lossy()));
+            .open(&mut context.ui(), FileDialogRequest::new().with_initial_directory(dir.to_string_lossy()))
+            .expect("dialog and owner must be available for this activation");
         context.update_ui_state(dimensions(), &mut model);
         let index = model
             .dialog
@@ -1252,7 +1394,8 @@ mod tests {
         let (mut context, mut model) = context_and_model();
         model
             .dialog
-            .open(&mut context.ui(), FileDialogRequest::new().with_initial_directory(dir.to_string_lossy()));
+            .open(&mut context.ui(), FileDialogRequest::new().with_initial_directory(dir.to_string_lossy()))
+            .expect("dialog and owner must be available for this activation");
         context.update_ui_state(dimensions(), &mut model);
         let path = model.dialog.path_box.clone();
         let folder_scroll = model.dialog.folder_scroll.clone();

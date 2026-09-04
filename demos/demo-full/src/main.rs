@@ -2238,11 +2238,7 @@ impl State {
                     .expect("test popup definition and owning demo window must exist");
             }
             4 => self.write_log("Pressed button 4"),
-            5 if !self.file_dialog.is_open() => {
-                self.file_dialog.open(context, FileDialogRequest::default());
-                self.write_log("Open dialog!");
-            }
-            5 => {}
+            5 => self.open_file_dialog(context),
             _ => unreachable!("test button index is bounded by construction"),
         }
     }
@@ -2304,14 +2300,23 @@ impl State {
         self.write_log("Started a new demo session");
     }
 
-    /// Opens the independent file dialog for the registered Open item.
+    /// Opens the file picker through the same checked path as the test button.
     fn menu_open_file(&mut self, context: &mut Ui<'_>, _event: &MenuItemSubmitted) {
+        self.open_file_dialog(context);
+    }
+
+    /// Changes menu state only after a request has successfully acquired its modal window.
+    fn open_file_dialog(&mut self, context: &mut Ui<'_>) {
         if self.file_dialog.is_open() {
             return;
         }
-        context.menu_item_mut(&self.menu_open_file).expect("Open menu item unavailable").enabled = false;
-        self.file_dialog.open(context, FileDialogRequest::default());
-        self.write_log("Opened the file dialog from File > Open...");
+        match self.file_dialog.open(context, FileDialogRequest::default()) {
+            Ok(()) => {
+                context.menu_item_mut(&self.menu_open_file).expect("Open menu item unavailable").enabled = false;
+                self.write_log("Opened the file dialog");
+            }
+            Err(error) => self.write_log(&format!("Cannot open file dialog: {error}")),
+        }
     }
 
     /// Clears log output for the registered Clear Log item.
@@ -2452,6 +2457,8 @@ impl State {
     /// Handles all manager-originated events for the ordinary floating Demo Window.
     fn demo_window_event(&mut self, context: &mut Ui<'_>, event: &WindowEvent) {
         let (event_rect, enforce_demo_minimum) = match event {
+            // Lifecycle notifications carry no new rectangle to constrain.
+            WindowEvent::Hidden | WindowEvent::Destroyed => return,
             WindowEvent::GeometryChanged { rect } => (rect, !self.demo_root_minimized),
             WindowEvent::Maximized { rect } => {
                 // Maximized geometry belongs to the inherited viewport and must not be replaced by
@@ -3011,8 +3018,14 @@ impl State {
     }
 
     fn file_dialog_completed(&mut self, context: &mut Ui<'_>, event: &FileDialogCompleted) {
-        // Completion makes File > Open available again regardless of acceptance or cancellation.
-        context.menu_item_mut(&self.menu_open_file).expect("Open menu item unavailable").enabled = true;
+        // Owner destruction can remove the menu before its dialog's terminal event arrives.
+        if let Ok(item) = context.menu_item_mut(&self.menu_open_file) {
+            item.enabled = true;
+        }
+        // The terminal cancellation may outlive the window that contained the log widgets too.
+        if !self.demo_root.events().is_alive() {
+            return;
+        }
         match event.status() {
             FileDialogStatus::Accepted(result) => {
                 self.write_log(format!("Selected file: {}", result.file_name).as_str());

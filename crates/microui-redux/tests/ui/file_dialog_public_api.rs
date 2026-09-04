@@ -16,7 +16,9 @@ impl Model {
 
     fn show_file_dialog(&mut self, ui: &mut Ui<'_>, _event: &ButtonSubmitted) {
         if !self.file_dialog.is_open() {
-            self.file_dialog.open(ui, FileDialogRequest::default());
+            self.file_dialog
+                .open(ui, FileDialogRequest::default())
+                .expect("dialog and owner must be available for this activation");
         }
     }
 

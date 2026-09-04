@@ -751,6 +751,10 @@ impl SurfaceNode {
     /// Shows or hides a root without dropping its application state.
     fn set_root_visible(&mut self, visible: bool) {
         let root = self.root_mut().expect("visibility is defined only for root nodes");
+        if root.visible && !visible {
+            // One policy transition produces one notification, including owner-driven dismissal.
+            root.events.emit(WindowEvent::Hidden);
+        }
         root.visible = visible;
         if !visible {
             self.clear_transient_targets();
@@ -1828,6 +1832,15 @@ impl WindowManager {
         {
             self.active_surface = self.surfaces.root_node(root).and_then(|node| node.parent);
         }
+        for &id in &removed {
+            // The source closes before its root disappears. Its existing subscription retains
+            // only this terminal fact, so components can settle requests without retaining UI.
+            self.root_node(id)?
+                .root()
+                .expect("collected roots have root policy")
+                .events
+                .close(WindowEvent::Destroyed);
+        }
         self.surfaces.remove_roots(&removed);
         self.reconcile_active_surface();
         self.invalidate_ui_commit();
@@ -1853,6 +1866,12 @@ impl WindowManager {
             .and_then(SurfaceNode::root)
             .map(|_| window.id())
             .ok_or(SurfaceMutationError::UnknownWindow)
+    }
+
+    /// Queries effective visibility after authenticating the window against this forest.
+    pub(crate) fn window_visible(&self, window: &WindowHandle) -> Result<bool, SurfaceMutationError> {
+        // Reuse the authoritative parent-chain policy; no second visibility mirror is stored.
+        self.window_id(window).map(|id| self.root_is_visible(id))
     }
 
     /// Authenticates a creation owner and requires an ordinary window role.

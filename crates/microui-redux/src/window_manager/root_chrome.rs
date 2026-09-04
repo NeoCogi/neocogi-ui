@@ -91,6 +91,13 @@ pub enum WindowEvent {
     },
     /// The user released the manager-owned close affordance after a matching press.
     CloseRequested,
+    /// Local visibility became false, including a modal dismissed because its owner was hidden.
+    ///
+    /// Delivery is deferred; query current visibility before acting on an old notification after
+    /// an explicit hide/show sequence. Structural children retain their local visibility intent.
+    Hidden,
+    /// The window and its retained content were destroyed; delivered once after producer removal.
+    Destroyed,
     /// The user minimized the window to its configured compact content height.
     Minimized {
         /// Complete compact outer rectangle.

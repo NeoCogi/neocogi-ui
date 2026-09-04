@@ -388,7 +388,9 @@ fn downstream_file_dialog_completion_is_subscriber_driven_without_widget_access(
     let mut dialog = FileDialog::new(&mut context, &owner, FileDialogModel::dialog_mut);
     let completed = dialog.completed();
     context.subscribe(completed, FileDialogModel::file_dialog_completed).unwrap();
-    dialog.open(&mut context.ui(), FileDialogRequest::default());
+    dialog
+        .open(&mut context.ui(), FileDialogRequest::default())
+        .expect("dialog and owner must be available for this activation");
     let mut model = FileDialogModel { dialog, completion: None };
 
     // Explicit cancellation queues one event; the retained update delivers it without frame polling.

@@ -266,7 +266,7 @@ mod window_manager;
 /// low-level renderer details or manual container drawing helpers through default imports.
 pub mod retained {
     pub use crate::event::{EventSource, SubscribeError, TypedWidget, WidgetEvent, WidgetEventPortHandle};
-    pub use crate::file_dialog::{FileDialog, FileDialogCompleted, FileDialogRequest, FileDialogResult, FileDialogStatus};
+    pub use crate::file_dialog::{FileDialog, FileDialogCompleted, FileDialogOpenError, FileDialogRequest, FileDialogResult, FileDialogStatus};
     pub use crate::menu::{Menu, MenuBar, MenuItem, MenuItemAccessError, MenuItemHandle, MenuItemMark, MenuItemParameters, MenuItemSubmitted};
     pub use crate::render::{CustomRenderArgs, CustomRenderHandle};
     pub use crate::ui_node::{
@@ -290,7 +290,7 @@ pub mod retained {
 pub mod prelude {
     pub use crate::event::{EventSource, SubscribeError, TypedWidget, WidgetEvent, WidgetEventPortHandle};
     pub use crate::atlas::{AtlasError, AtlasHandle, AtlasSource, CharEntry, FontEntry, FontId, IconId, SourceFormat};
-    pub use crate::file_dialog::{FileDialog, FileDialogCompleted, FileDialogRequest, FileDialogResult, FileDialogStatus};
+    pub use crate::file_dialog::{FileDialog, FileDialogCompleted, FileDialogOpenError, FileDialogRequest, FileDialogResult, FileDialogStatus};
     pub use crate::menu::{Menu, MenuBar, MenuItem, MenuItemAccessError, MenuItemHandle, MenuItemMark, MenuItemParameters, MenuItemSubmitted};
     pub use crate::image::{ImageError, ImageSource, ImageStorageError, MAX_DECODED_RGBA_BYTES, load_image_bytes};
     pub use crate::input::{Key, KeyEvent, KeyState, Modifiers, MouseButton};
@@ -335,7 +335,7 @@ pub use window_manager::{
     WindowEvent, WindowHandle, WindowOption,
 };
 pub use event::{EventSource, SubscribeError, TypedWidget, WidgetEvent, WidgetEventPortHandle};
-pub use file_dialog::{FileDialog, FileDialogCompleted, FileDialogRequest, FileDialogResult, FileDialogStatus};
+pub use file_dialog::{FileDialog, FileDialogCompleted, FileDialogOpenError, FileDialogRequest, FileDialogResult, FileDialogStatus};
 pub use menu::{Menu, MenuBar, MenuItem, MenuItemAccessError, MenuItemHandle, MenuItemMark, MenuItemParameters, MenuItemSubmitted};
 pub use image::{ImageError, ImageSource, ImageStorageError, MAX_DECODED_RGBA_BYTES, load_image_bytes};
 pub use input::{Key, KeyEvent, KeyState, Modifiers, MouseButton};

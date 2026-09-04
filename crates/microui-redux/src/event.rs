@@ -104,6 +104,22 @@ impl<E: WidgetEvent> EventSource<E> {
     pub fn emit(&self, event: E) {
         self.port.borrow_mut().emit(event);
     }
+
+    /// Permanently closes this source, preserving one terminal event for its current subscriber.
+    ///
+    /// Pending ordinary events are discarded. Handles immediately report expired, further emission
+    /// is ignored, and subsequent close calls preserve the first terminal event. Without a current
+    /// subscriber the terminal event is discarded too; closing never creates replay history.
+    pub fn close(&self, terminal: E) {
+        self.port.borrow_mut().close(Some(terminal));
+    }
+}
+
+impl<E: WidgetEvent> Drop for EventSource<E> {
+    /// Expires endpoints and discards ordinary events without erasing an explicit terminal event.
+    fn drop(&mut self) {
+        self.port.borrow_mut().close(None);
+    }
 }
 
 impl<E: WidgetEvent> Default for EventSource<E> {
@@ -115,13 +131,21 @@ impl<E: WidgetEvent> Default for EventSource<E> {
 
 /// One retained-producer-owned typed event queue and its connection state.
 ///
-/// The queue exists only in `Connected`, so "disconnected" and "connected but empty" remain
-/// distinct without a boolean whose value must agree with a separate collection.
-pub(crate) enum WidgetEventPort<E: WidgetEvent> {
+/// Connected owns ordinary queued events; Closed may retain one explicit terminal fact.
+/// Disconnected is distinct from both, with no redundant liveness or connection boolean.
+enum WidgetEventPort<E: WidgetEvent> {
     /// No subscription exists; emitted events are discarded.
     Disconnected,
     /// Exactly one subscription exists and owns the right to drain this FIFO.
-    Connected { pending: Vec<E> },
+    Connected {
+        /// Ordinary snapshots awaiting the next safe dispatch boundary.
+        pending: Vec<E>,
+    },
+    /// The producer closed or was dropped; only an explicitly published terminal event survives.
+    Closed {
+        /// One final payload retained by the existing subscription until its next dispatch.
+        terminal: Option<E>,
+    },
 }
 
 impl<E: WidgetEvent> WidgetEventPort<E> {
@@ -129,7 +153,7 @@ impl<E: WidgetEvent> WidgetEventPort<E> {
     ///
     /// Widgets construct their ports before they are mounted or subscribed, so the initial state
     /// deliberately has no queue allocation and records no events.
-    pub(crate) fn new() -> Self {
+    fn new() -> Self {
         Self::Disconnected
     }
 
@@ -137,7 +161,7 @@ impl<E: WidgetEvent> WidgetEventPort<E> {
     ///
     /// The widget calls this only after committing the semantic or lifecycle state described by
     /// `event`. Delivery is deferred; this method never invokes application code.
-    pub(crate) fn emit(&mut self, event: E) {
+    fn emit(&mut self, event: E) {
         if let Self::Connected { pending } = self {
             pending.push(event);
         }
@@ -147,6 +171,9 @@ impl<E: WidgetEvent> WidgetEventPort<E> {
     ///
     /// The exclusive connection enforces the design's one-port/one-state-method rule.
     fn connect(&mut self) -> Result<(), SubscribeError> {
+        if matches!(self, Self::Closed { .. }) {
+            return Err(SubscribeError::WidgetExpired);
+        }
         if matches!(self, Self::Connected { .. }) {
             return Err(SubscribeError::AlreadySubscribed);
         }
@@ -159,7 +186,21 @@ impl<E: WidgetEvent> WidgetEventPort<E> {
     /// Calling this for an already disconnected port is harmless. In normal operation it is called
     /// by the exclusive subscription's [`Drop`] implementation.
     fn disconnect(&mut self) {
-        *self = Self::Disconnected;
+        // Disconnection cannot resurrect a closed source or make its terminal event replayable.
+        *self = if matches!(self, Self::Closed { .. }) {
+            Self::Closed { terminal: None }
+        } else {
+            Self::Disconnected
+        };
+    }
+
+    /// Closes once, retaining a terminal payload only if a subscriber was connected.
+    fn close(&mut self, terminal: Option<E>) {
+        match self {
+            Self::Connected { .. } => *self = Self::Closed { terminal },
+            Self::Disconnected => *self = Self::Closed { terminal: None },
+            Self::Closed { .. } => {} // A later producer drop must not overwrite its terminal fact.
+        }
     }
 
     /// Moves the complete pending batch out while preserving the connected state.
@@ -171,6 +212,7 @@ impl<E: WidgetEvent> WidgetEventPort<E> {
         match self {
             Self::Disconnected => Vec::new(),
             Self::Connected { pending } => std::mem::take(pending),
+            Self::Closed { terminal } => terminal.take().into_iter().collect(),
         }
     }
 }
@@ -184,7 +226,7 @@ pub struct WidgetEventPortHandle<E: WidgetEvent>(Weak<RefCell<WidgetEventPort<E>
 
 impl<E: WidgetEvent> WidgetEventPortHandle<E> {
     /// Creates a weak handle to a live retained-producer-owned port.
-    pub(crate) fn new(port: &Rc<RefCell<WidgetEventPort<E>>>) -> Self {
+    fn new(port: &Rc<RefCell<WidgetEventPort<E>>>) -> Self {
         Self(Rc::downgrade(port))
     }
 
@@ -192,7 +234,7 @@ impl<E: WidgetEvent> WidgetEventPortHandle<E> {
     ///
     /// Projection through an unavailable typed widget handle uses this value so event access stays
     /// weak and fallible without manufacturing an owner.
-    pub(crate) fn expired() -> Self {
+    fn expired() -> Self {
         Self(Weak::new())
     }
 
@@ -200,10 +242,9 @@ impl<E: WidgetEvent> WidgetEventPortHandle<E> {
     ///
     /// This is a liveness observation, not an ownership claim. The handle remains weak, and a later
     /// attempt to subscribe can still report [`SubscribeError::WidgetExpired`] if the producer is
-    /// removed between operations. The variant retains its established widget-oriented name for API
-    /// compatibility.
+    /// removed or closed between operations.
     pub fn is_alive(&self) -> bool {
-        self.0.strong_count() != 0
+        self.0.upgrade().is_some_and(|port| !matches!(*port.borrow(), WidgetEventPort::Closed { .. }))
     }
 }
 
@@ -232,9 +273,7 @@ impl<E: WidgetEvent> Clone for WidgetEventPortHandle<E> {
 impl<E: WidgetEvent> fmt::Debug for WidgetEventPortHandle<E> {
     /// Reports current liveness without exposing port identity or queued payloads.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("WidgetEventPortHandle")
-            .field("alive", &(self.0.strong_count() != 0))
-            .finish_non_exhaustive()
+        f.debug_struct("WidgetEventPortHandle").field("alive", &self.is_alive()).finish_non_exhaustive()
     }
 }
 
@@ -335,8 +374,8 @@ impl<Target, BoundContext, E: WidgetEvent> EventHandler<Target, E> for BoundUiEv
 /// `Target` remains common to the whole vector; the implementation retains each concrete event and
 /// handler type. This is the module's only dynamic dispatch boundary.
 trait WidgetEventDispatch<Target> {
-    /// Reports whether the concrete retained producer still owns the subscribed port.
-    fn is_alive(&self) -> bool;
+    /// Reports whether a live source or undelivered terminal fact still needs this subscription.
+    fn needs_dispatch(&self) -> bool;
     /// Drains one port batch into `target` and returns the number of delivered payloads.
     fn dispatch(&self, target: &mut Target, ui: &mut crate::Ui<'_>) -> usize;
 }
@@ -346,10 +385,12 @@ trait WidgetEventDispatch<Target> {
 /// `Handler` is either the method pointer supplied to `subscribe` or the explicit
 /// [`BoundEventHandler`] created by `subscribe_with`. The [`WidgetEventDispatch`] implementation relates
 /// the handler to its target type; the target value itself is borrowed only when dispatch runs.
-/// The weak port reference makes this subscription the complete connection lifetime without
-/// retaining a removed producer.
+/// Queue ownership lets an explicit terminal event survive producer removal. The source closes its
+/// queue on drop, so this storage never retains the producer or ordinary events after removal.
 struct Subscription<E: WidgetEvent, Handler> {
-    port: WidgetEventPortHandle<E>,
+    /// Queue storage only; producer lifetime is represented by its explicit Closed state.
+    port: Rc<RefCell<WidgetEventPort<E>>>,
+    /// Concrete invocation data, independent of producer ownership.
     handler: Handler,
 }
 
@@ -360,7 +401,7 @@ impl<E: WidgetEvent, Handler> Subscription<E, Handler> {
             return Err(SubscribeError::WidgetExpired);
         };
         inner.borrow_mut().connect()?;
-        Ok(Self { port, handler })
+        Ok(Self { port: inner, handler })
     }
 }
 
@@ -369,9 +410,11 @@ where
     E: WidgetEvent,
     Handler: EventHandler<Target, E>,
 {
-    /// Reports whether the producer still strongly owns the subscribed port.
-    fn is_alive(&self) -> bool {
-        self.port.0.strong_count() != 0
+    /// Reports whether the subscription has a live producer or an undelivered terminal event.
+    fn needs_dispatch(&self) -> bool {
+        // A dead producer gets one final dispatch opportunity only if it explicitly closed with
+        // a terminal event; ordinary queues disappear immediately on producer drop.
+        !matches!(*self.port.borrow(), WidgetEventPort::Closed { terminal: None })
     }
 
     /// Detaches one complete batch, then invokes the concrete handler in port FIFO order.
@@ -379,7 +422,7 @@ where
     /// Detaching before the first invocation is essential: handler code may cause widgets to emit
     /// without colliding with a live mutable borrow of this port.
     fn dispatch(&self, target: &mut Target, ui: &mut crate::Ui<'_>) -> usize {
-        let events = self.port.0.upgrade().map(|port| port.borrow_mut().drain()).unwrap_or_default();
+        let events = self.port.borrow_mut().drain();
         let count = events.len();
         for event in events {
             // The port borrow ended when drain returned, so a context-aware handler may safely
@@ -393,11 +436,9 @@ where
 impl<E: WidgetEvent, Handler> Drop for Subscription<E, Handler> {
     /// Disconnects a still-live port and clears its queue.
     ///
-    /// No action is necessary if producer removal already destroyed the port.
+    /// Closed queues stay closed; dropping a subscription also discards an undelivered terminal fact.
     fn drop(&mut self) {
-        if let Some(port) = self.port.0.upgrade() {
-            port.borrow_mut().disconnect();
-        }
+        self.port.borrow_mut().disconnect();
     }
 }
 
@@ -488,9 +529,9 @@ impl<Target: 'static> WidgetEventDispatcher<Target> {
     /// transaction exceeding [`MAX_EVENT_DISPATCHES`] both panic because either indicates a broken
     /// event feedback loop rather than recoverable input.
     pub(crate) fn dispatch_with_context(&mut self, target: &mut Target, ui: &mut crate::Ui<'_>) -> bool {
-        // Prune subscriptions whose weak event ports expired before lending UI mutation access to
-        // any application method.
-        self.subscriptions.retain(|subscription| subscription.is_alive());
+        // Prune closed empty queues before lending UI access. Closed queues with a terminal fact
+        // survive this sweep long enough to deliver it without retaining their removed producer.
+        self.subscriptions.retain(|subscription| subscription.needs_dispatch());
 
         let mut dispatched = 0usize;
         loop {
@@ -539,14 +580,14 @@ mod tests {
     #[derive(Default)]
     struct State {
         values: Vec<i32>,
-        source: Option<Rc<RefCell<WidgetEventPort<i32>>>>,
+        source: Option<Rc<EventSource<i32>>>,
     }
 
     impl State {
         fn record_and_cascade(&mut self, event: &i32) {
             self.values.push(*event);
             if *event < 10 {
-                self.source.as_ref().unwrap().borrow_mut().emit(event + 10);
+                self.source.as_ref().unwrap().emit(event + 10);
             }
         }
 
@@ -557,12 +598,12 @@ mod tests {
 
     #[test]
     fn port_queues_native_events_until_the_dispatcher_dispatches() {
-        let owner = Rc::new(RefCell::new(WidgetEventPort::new()));
+        let owner = Rc::new(EventSource::new());
         let mut dispatcher = WidgetEventDispatcher::new();
-        dispatcher.subscribe(WidgetEventPortHandle::new(&owner), State::record_and_cascade).unwrap();
+        dispatcher.subscribe(owner.event(), State::record_and_cascade).unwrap();
 
-        owner.borrow_mut().emit(3);
-        owner.borrow_mut().emit(4);
+        owner.emit(3);
+        owner.emit(4);
         let mut state = State {
             source: Some(Rc::clone(&owner)),
             ..State::default()
@@ -574,13 +615,11 @@ mod tests {
 
     #[test]
     fn bound_subscriber_receives_registration_context() {
-        let owner = Rc::new(RefCell::new(WidgetEventPort::new()));
+        let owner = Rc::new(EventSource::new());
         let mut dispatcher = WidgetEventDispatcher::new();
-        dispatcher
-            .subscribe_with(WidgetEventPortHandle::new(&owner), 40, State::record_with_offset)
-            .unwrap();
+        dispatcher.subscribe_with(owner.event(), 40, State::record_with_offset).unwrap();
 
-        owner.borrow_mut().emit(2);
+        owner.emit(2);
         let mut state = State::default();
         assert!(dispatcher.dispatch(&mut state));
         assert_eq!(state.values, [42]);
@@ -588,8 +627,8 @@ mod tests {
 
     #[test]
     fn one_port_accepts_only_one_context_subscription() {
-        let owner = Rc::new(RefCell::new(WidgetEventPort::new()));
-        let port = WidgetEventPortHandle::new(&owner);
+        let owner = Rc::new(EventSource::new());
+        let port = owner.event();
         let mut dispatcher = WidgetEventDispatcher::new();
         dispatcher.subscribe(port.clone(), State::record_and_cascade).unwrap();
 
@@ -598,15 +637,15 @@ mod tests {
 
     #[test]
     fn dropping_the_context_dispatcher_disconnects_and_clears_its_ports() {
-        let owner = Rc::new(RefCell::new(WidgetEventPort::new()));
-        let port = WidgetEventPortHandle::new(&owner);
+        let owner = Rc::new(EventSource::new());
+        let port = owner.event();
         let mut dispatcher = WidgetEventDispatcher::new();
         dispatcher.subscribe(port.clone(), State::record_and_cascade).unwrap();
 
-        owner.borrow_mut().emit(1);
+        owner.emit(1);
         drop(dispatcher);
-        owner.borrow_mut().emit(2);
-        assert!(matches!(&*owner.borrow(), WidgetEventPort::Disconnected));
+        owner.emit(2);
+        assert!(matches!(&*owner.port.borrow(), WidgetEventPort::Disconnected));
 
         let mut replacement = WidgetEventDispatcher::new();
         replacement.subscribe(port, State::record_and_cascade).unwrap();
@@ -614,9 +653,9 @@ mod tests {
 
     #[test]
     fn expired_subscriptions_are_pruned_during_dispatch() {
-        let owner = Rc::new(RefCell::new(WidgetEventPort::new()));
+        let owner = Rc::new(EventSource::new());
         let mut dispatcher = WidgetEventDispatcher::new();
-        dispatcher.subscribe(WidgetEventPortHandle::new(&owner), State::record_and_cascade).unwrap();
+        dispatcher.subscribe(owner.event(), State::record_and_cascade).unwrap();
         drop(owner);
 
         assert!(!dispatcher.dispatch(&mut State::default()));
@@ -625,11 +664,56 @@ mod tests {
 
     #[test]
     fn ports_discard_events_without_a_subscription() {
-        let owner = Rc::new(RefCell::new(WidgetEventPort::new()));
-        owner.borrow_mut().emit(1);
+        let owner = Rc::new(EventSource::new());
+        owner.emit(1);
 
         let mut dispatcher = WidgetEventDispatcher::new();
-        dispatcher.subscribe(WidgetEventPortHandle::new(&owner), State::record_and_cascade).unwrap();
+        dispatcher.subscribe(owner.event(), State::record_and_cascade).unwrap();
         assert!(!dispatcher.dispatch(&mut State::default()));
+    }
+
+    /// Closing preserves exactly one terminal fact while immediately expiring public endpoints.
+    #[test]
+    fn terminal_event_survives_source_drop_without_preserving_ordinary_events() {
+        let source = EventSource::new();
+        let endpoint = source.event();
+        let mut dispatcher = WidgetEventDispatcher::new();
+        dispatcher.subscribe(endpoint.clone(), State::record_and_cascade).unwrap();
+        source.emit(1);
+        source.close(99);
+        source.close(100); // Repeated closure cannot replace the first terminal fact.
+        source.emit(2);
+        assert!(!endpoint.is_alive());
+        assert_eq!(dispatcher.subscribe(endpoint, State::record_and_cascade), Err(SubscribeError::WidgetExpired));
+        drop(source);
+
+        let mut state = State::default();
+        assert!(dispatcher.dispatch(&mut state));
+        assert_eq!(state.values, [99]);
+        assert!(!dispatcher.dispatch(&mut state));
+        assert!(dispatcher.subscriptions.is_empty());
+    }
+
+    /// Ordinary destruction deliberately has no terminal history or retained payload batch.
+    #[test]
+    fn dropping_an_open_source_discards_pending_events() {
+        let source = EventSource::new();
+        let mut dispatcher = WidgetEventDispatcher::new();
+        dispatcher.subscribe(source.event(), State::record_and_cascade).unwrap();
+        source.emit(1);
+        drop(source);
+        assert!(!dispatcher.dispatch(&mut State::default()));
+    }
+
+    /// A terminal fact is delivered only to the subscription that existed at closure time.
+    #[test]
+    fn closing_without_a_subscriber_never_creates_replay_history() {
+        let source = EventSource::new();
+        source.close(99);
+        let mut dispatcher = WidgetEventDispatcher::new();
+        assert_eq!(
+            dispatcher.subscribe(source.event(), State::record_and_cascade),
+            Err(SubscribeError::WidgetExpired)
+        );
     }
 }
