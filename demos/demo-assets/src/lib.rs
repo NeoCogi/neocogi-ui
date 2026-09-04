@@ -53,6 +53,8 @@
 //! Default atlas asset configuration shared by examples and the build-time atlas exporter.
 
 use microui_redux::prelude::AtlasHandle;
+#[cfg(all(not(feature = "prebuilt-atlas"), not(feature = "external-atlas"), feature = "builder"))]
+use std::path::{Path, PathBuf};
 #[cfg(all(feature = "external-atlas", not(feature = "prebuilt-atlas")))]
 use std::fs;
 
@@ -65,74 +67,79 @@ pub fn atlas_config() -> builder::Config {
     builder::Config {
         texture_height: 256,
         texture_width: 512,
-        white_icon: "assets/WHITE.png".into(),
+        white_icon: workspace_path("assets/WHITE.png"),
         icons: vec![
             builder::IconAsset {
                 name: "close".into(),
-                path: "assets/CLOSE.png".into(),
+                path: workspace_path("assets/CLOSE.png"),
             },
             builder::IconAsset {
                 name: "expand".into(),
-                path: "assets/PLUS.png".into(),
+                path: workspace_path("assets/PLUS.png"),
             },
             builder::IconAsset {
                 name: "collapse".into(),
-                path: "assets/MINUS.png".into(),
+                path: workspace_path("assets/MINUS.png"),
             },
             builder::IconAsset {
                 name: "check".into(),
-                path: "assets/CHECK.png".into(),
+                path: workspace_path("assets/CHECK.png"),
             },
             builder::IconAsset {
                 name: "expand_down".into(),
-                path: "assets/EXPAND_DOWN.png".into(),
+                path: workspace_path("assets/EXPAND_DOWN.png"),
             },
             builder::IconAsset {
                 name: "open_folder".into(),
-                path: "assets/OPEN_FOLDER_16.png".into(),
+                path: workspace_path("assets/OPEN_FOLDER_16.png"),
             },
             builder::IconAsset {
                 name: "closed_folder".into(),
-                path: "assets/CLOSED_FOLDER_16.png".into(),
+                path: workspace_path("assets/CLOSED_FOLDER_16.png"),
             },
             builder::IconAsset {
                 name: "file".into(),
-                path: "assets/FILE_16.png".into(),
+                path: workspace_path("assets/FILE_16.png"),
             },
         ],
         fonts: vec![
             builder::FontAsset {
                 name: "body".into(),
-                path: "assets/NORMAL.ttf".into(),
+                path: workspace_path("assets/NORMAL.ttf"),
                 size: 12,
             },
             builder::FontAsset {
                 name: "small".into(),
-                path: "assets/NORMAL.ttf".into(),
+                path: workspace_path("assets/NORMAL.ttf"),
                 size: 10,
             },
             builder::FontAsset {
                 name: "title".into(),
-                path: "assets/BOLD.ttf".into(),
+                path: workspace_path("assets/BOLD.ttf"),
                 size: 12,
             },
             builder::FontAsset {
                 name: "heading".into(),
-                path: "assets/NORMAL.ttf".into(),
+                path: workspace_path("assets/NORMAL.ttf"),
                 size: 18,
             },
             builder::FontAsset {
                 name: "mono".into(),
-                path: "assets/CONSOLE.ttf".into(),
+                path: workspace_path("assets/CONSOLE.ttf"),
                 size: 14,
             },
             builder::FontAsset {
                 name: "calculator-display".into(),
-                path: "assets/CONSOLE.ttf".into(),
+                path: workspace_path("assets/CONSOLE.ttf"),
                 size: 28,
             },
         ],
     }
+}
+
+#[cfg(all(not(feature = "prebuilt-atlas"), not(feature = "external-atlas"), feature = "builder"))]
+fn workspace_path(relative: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(relative)
 }
 
 #[cfg(all(not(feature = "prebuilt-atlas"), not(feature = "external-atlas"), feature = "builder"))]
@@ -169,7 +176,7 @@ mod external {
 
 #[cfg(all(feature = "external-atlas", not(feature = "prebuilt-atlas")))]
 pub fn load_atlas() -> AtlasHandle {
-    let atlas_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("atlas.png");
+    let atlas_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../atlas.png");
     let pixels = fs::read(&atlas_path).unwrap_or_else(|err| panic!("Failed to read {}: {err}", atlas_path.display()));
     let source = external::external_atlas_source(&pixels);
     // Decoding and metadata validation form one fallible load operation, so the diagnostic must
@@ -179,5 +186,5 @@ pub fn load_atlas() -> AtlasHandle {
 
 #[cfg(all(not(feature = "prebuilt-atlas"), not(feature = "external-atlas"), not(feature = "builder")))]
 compile_error!(
-    "examples/common/atlas_assets.rs requires `builder` for runtime atlas generation, `external-atlas` for atlas.png loading, or `prebuilt-atlas` for embedded atlas data"
+    "demo assets require `builder` for runtime atlas generation, `external-atlas` for atlas.png loading, or `prebuilt-atlas` for embedded atlas data"
 );

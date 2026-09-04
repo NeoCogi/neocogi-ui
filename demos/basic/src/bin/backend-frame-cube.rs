@@ -45,21 +45,14 @@
 //! Run with one backend, for example:
 //!
 //! ```text
-//! cargo run --example backend-frame-cube --features example-glow
-//! cargo run --example backend-frame-cube --features example-vulkan
-//! cargo run --example backend-frame-cube --features example-wgpu
+//! cargo run -p microui-redux-basic-demos --bin backend-frame-cube --no-default-features --features glow
+//! cargo run -p microui-redux-basic-demos --bin backend-frame-cube --no-default-features --features vulkan
+//! cargo run -p microui-redux-basic-demos --bin backend-frame-cube --no-default-features --features wgpu
 //! ```
 
-#[path = "./common/mod.rs"]
-mod common;
-
-use common::{application::Application, atlas_assets, mesh::CustomRenderArea};
-#[cfg(feature = "example-glow")]
-use common::glow_renderer::GLRenderer as SelectedBackend;
-#[cfg(all(not(feature = "example-glow"), feature = "example-vulkan"))]
-use common::vulkan_renderer::VulkanRenderer as SelectedBackend;
-#[cfg(all(not(feature = "example-glow"), not(feature = "example-vulkan"), feature = "example-wgpu"))]
-use common::wgpu_renderer::WgpuRenderer as SelectedBackend;
+use microui_redux_demo_assets as atlas_assets;
+use microui_redux_demo_host::{Application, SelectedBackend};
+use microui_redux_renderer_common::CustomRenderArea;
 use microui_redux::{prelude::*, render::Vertex};
 use rs_math3d::{EPS_F32, lookat, perspective, project3};
 use std::cell::Cell;

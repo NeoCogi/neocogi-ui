@@ -31,45 +31,44 @@
 //!
 //! This module owns window/event setup, backend selection, input forwarding, and the example main
 //! loop used by retained-mode demos.
-use crate::*;
 use microui_redux::{
     self as microui,
-    prelude::{AtlasHandle, Dimensioni, FrameInfo},
+    prelude::{AtlasHandle, Dimensioni, FrameInfo, color},
 };
 
-#[cfg(feature = "example-glow")]
+#[cfg(feature = "glow")]
 use std::sync::Arc;
 
-#[cfg(feature = "example-glow")]
-use crate::common::glow_renderer;
-#[cfg(all(not(feature = "example-glow"), feature = "example-vulkan"))]
-use crate::common::vulkan_renderer;
-#[cfg(all(not(feature = "example-glow"), not(feature = "example-vulkan"), feature = "example-wgpu"))]
-use crate::common::wgpu_renderer;
+#[cfg(feature = "glow")]
+use microui_redux_renderer_glow as glow_renderer;
+#[cfg(all(not(feature = "glow"), feature = "vulkan"))]
+use microui_redux_renderer_vulkan as vulkan_renderer;
+#[cfg(all(not(feature = "glow"), not(feature = "vulkan"), feature = "wgpu"))]
+use microui_redux_renderer_wgpu as wgpu_renderer;
 use sdl2::event::{Event, WindowEvent};
 use sdl2::keyboard::{Keycode, Mod};
-#[cfg(feature = "example-glow")]
+#[cfg(feature = "glow")]
 use sdl2::video::{GLContext, GLProfile, SwapInterval};
 use sdl2::video::Window;
 use sdl2::{Sdl, VideoSubsystem};
 
-#[cfg(feature = "example-glow")]
-type SelectedBackend = glow_renderer::GLRenderer;
-#[cfg(all(not(feature = "example-glow"), feature = "example-vulkan"))]
-type SelectedBackend = vulkan_renderer::VulkanRenderer;
-#[cfg(all(not(feature = "example-glow"), not(feature = "example-vulkan"), feature = "example-wgpu"))]
-type SelectedBackend = wgpu_renderer::WgpuRenderer;
+#[cfg(feature = "glow")]
+pub type SelectedBackend = glow_renderer::GLRenderer;
+#[cfg(all(not(feature = "glow"), feature = "vulkan"))]
+pub type SelectedBackend = vulkan_renderer::VulkanRenderer;
+#[cfg(all(not(feature = "glow"), not(feature = "vulkan"), feature = "wgpu"))]
+pub type SelectedBackend = wgpu_renderer::WgpuRenderer;
 
 // The example app keeps one concrete renderer backend behind the shared microui `Context`. The
 // rest of the example code only talks to `MicroUI`, while backend initialization stays feature-
 // gated in this file.
 type MicroUI<S> = microui::Context<SelectedBackend, S>;
 
-#[cfg(feature = "example-glow")]
+#[cfg(feature = "glow")]
 pub type BackendInitContext = Arc<glow::Context>;
 #[cfg(any(
-    all(not(feature = "example-glow"), feature = "example-vulkan"),
-    all(not(feature = "example-glow"), not(feature = "example-vulkan"), feature = "example-wgpu"),
+    all(not(feature = "glow"), feature = "vulkan"),
+    all(not(feature = "glow"), not(feature = "vulkan"), feature = "wgpu"),
 ))]
 pub struct BackendInitContext;
 
@@ -78,7 +77,7 @@ pub struct Application<S: 'static> {
     // borrow native window resources, so the window must outlive `state`, `ctx`, and backend data.
     state: S,
     ctx: MicroUI<S>,
-    #[cfg(feature = "example-glow")]
+    #[cfg(feature = "glow")]
     backend: BackendData,
     window: Window,
     _sdl_vid: VideoSubsystem,
@@ -96,11 +95,11 @@ impl<S: 'static> Application<S> {
         let sdl_ctx = sdl2::init().map_err(|err| err.to_string())?;
         let video = sdl_ctx.video().map_err(|err| err.to_string())?;
         let (bundle, init_ctx) = init_backend(&video, atlas)?;
-        #[cfg(feature = "example-glow")]
+        #[cfg(feature = "glow")]
         let BackendBundle { window, backend, renderer } = bundle;
         #[cfg(any(
-            all(not(feature = "example-glow"), feature = "example-vulkan"),
-            all(not(feature = "example-glow"), not(feature = "example-vulkan"), feature = "example-wgpu"),
+            all(not(feature = "glow"), feature = "vulkan"),
+            all(not(feature = "glow"), not(feature = "vulkan"), feature = "wgpu"),
         ))]
         let BackendBundle { window, renderer } = bundle;
 
@@ -108,7 +107,7 @@ impl<S: 'static> Application<S> {
         Ok(Self {
             state: init_state(init_ctx, &mut ctx),
             ctx,
-            #[cfg(feature = "example-glow")]
+            #[cfg(feature = "glow")]
             backend,
             window,
             _sdl_vid: video,
@@ -140,7 +139,7 @@ impl<S: 'static> Application<S> {
         Update: FnMut(&mut MicroUI<S>, &mut S, Dimensioni),
         F: Fn(&mut MicroUI<S>, &mut S, Dimensioni),
     {
-        #[cfg(feature = "example-glow")]
+        #[cfg(feature = "glow")]
         {
             self.window.gl_make_current(&self.backend.gl_ctx).unwrap();
             // The shared runner otherwise renders without a scheduling boundary on drivers whose
@@ -300,7 +299,7 @@ impl<S: 'static> Application<S> {
                     eprintln!("[microui-redux][example] frame failed: {error}");
                 }
             }
-            #[cfg(feature = "example-glow")]
+            #[cfg(feature = "glow")]
             self.window.gl_swap_window();
 
             //::std::thread::sleep(::std::time::Duration::new(0, 1_000_000_000u32 / 60));
@@ -308,7 +307,7 @@ impl<S: 'static> Application<S> {
     }
 }
 
-#[cfg(feature = "example-glow")]
+#[cfg(feature = "glow")]
 /// Initializes the OpenGL example backend and returns the window, renderer, and GL init context.
 fn init_backend(video: &VideoSubsystem, atlas: AtlasHandle) -> Result<(BackendBundle, BackendInitContext), String> {
     // The GL example owns an explicit SDL GL context in addition to the microui renderer.
@@ -339,7 +338,7 @@ fn init_backend(video: &VideoSubsystem, atlas: AtlasHandle) -> Result<(BackendBu
     ))
 }
 
-#[cfg(all(not(feature = "example-glow"), feature = "example-vulkan"))]
+#[cfg(all(not(feature = "glow"), feature = "vulkan"))]
 /// Initializes the Vulkan example backend and returns the window, renderer, and init marker.
 fn init_backend(video: &VideoSubsystem, atlas: AtlasHandle) -> Result<(BackendBundle, BackendInitContext), String> {
     // Vulkan and wgpu derive their native surfaces from the SDL window itself, so the renderer is
@@ -352,7 +351,7 @@ fn init_backend(video: &VideoSubsystem, atlas: AtlasHandle) -> Result<(BackendBu
     Ok((BackendBundle { window, renderer }, init_ctx))
 }
 
-#[cfg(all(not(feature = "example-glow"), not(feature = "example-vulkan"), feature = "example-wgpu"))]
+#[cfg(all(not(feature = "glow"), not(feature = "vulkan"), feature = "wgpu"))]
 /// Initializes the wgpu example backend and returns the window, renderer, and init marker.
 fn init_backend(video: &VideoSubsystem, atlas: AtlasHandle) -> Result<(BackendBundle, BackendInitContext), String> {
     let window = video.window("Window", 1024, 768).resizable().build().map_err(|err| err.to_string())?;
@@ -365,12 +364,12 @@ fn init_backend(video: &VideoSubsystem, atlas: AtlasHandle) -> Result<(BackendBu
 
 struct BackendBundle {
     window: Window,
-    #[cfg(feature = "example-glow")]
+    #[cfg(feature = "glow")]
     backend: BackendData,
     renderer: SelectedBackend,
 }
 
-#[cfg(feature = "example-glow")]
+#[cfg(feature = "glow")]
 struct BackendData {
     gl_ctx: GLContext,
 }

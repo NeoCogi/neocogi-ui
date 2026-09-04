@@ -29,13 +29,10 @@
 //
 //! Calculator retained-mode example.
 //!
-//! This example builds a small calculator UI with the retained UI node set API and the Glow/SDL
-//! backend from `examples/common`.
-#[path = "./common/mod.rs"]
-mod common;
-
-use application::Application;
-use common::{atlas_assets, *};
+//! This example builds a small calculator UI with the retained UI node set API and the shared SDL
+//! demo host.
+use microui_redux_demo_assets as atlas_assets;
+use microui_redux_demo_host::Application;
 use microui_redux::prelude::*;
 
 const DISPLAY_MAX_LEN: usize = 24;

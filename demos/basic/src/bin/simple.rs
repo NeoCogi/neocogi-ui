@@ -53,11 +53,8 @@
 //! Minimal retained-mode application example.
 //!
 //! This example wires the common application runner to a small retained UI node set.
-#[path = "./common/mod.rs"]
-mod common;
-
-use application::Application;
-use common::{atlas_assets, *};
+use microui_redux_demo_assets as atlas_assets;
+use microui_redux_demo_host::Application;
 use microui_redux::prelude::*;
 
 struct State {

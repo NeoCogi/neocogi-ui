@@ -988,7 +988,7 @@ mod tests {
     /// Installs one repository-bundled theme through the same filesystem and PNG path as Context.
     fn install_bundled_theme(relative_path: &str) -> (LoadedTheme, usize) {
         // Resolve from the Cargo manifest so tests remain independent of the process working dir.
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(relative_path);
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(relative_path);
         let loaded = load(path.as_path(), &test_atlas()).expect("bundled theme must load through the complete entry point");
         let image_count = loaded
             .bundle()

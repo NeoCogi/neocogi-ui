@@ -577,14 +577,12 @@ recording-time software triangle clipping are introduced for benchmark gains.
 
 ## Working examples
 
-- `examples/retained-custom-drawing.rs` implements a retained custom widget using
+- `crates/microui-redux/examples/retained-custom-drawing.rs` implements a retained custom widget using
   `WidgetPaintCtx::painter`.
-- `examples/texture-clipping-smoke.rs` exercises low-level display-list execution, texture upload,
+- `crates/microui-redux/examples/texture-clipping-smoke.rs` exercises low-level display-list execution, texture upload,
   clipping, and final vertices.
-- `examples/common/glow_renderer.rs`,
-  `examples/common/vulkan_renderer.rs`, and
-  `examples/common/wgpu_renderer.rs` are complete backend implementations.
-- `examples/demo-full.rs` demonstrates retained UI, custom painting, external
+- `crates/renderer-glow`, `crates/renderer-vulkan`, and `crates/renderer-wgpu` are complete backend implementations.
+- `demos/demo-full` demonstrates retained UI, custom painting, external
   textures, and custom backend rendering together.
 
 The rendering API is a clean break from the former layout. This guide and the

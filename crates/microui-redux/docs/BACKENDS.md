@@ -8,16 +8,16 @@ WGPU precedence so the aliases remain well-defined when additive Cargo tooling e
 backend features:
 
 ```rust,ignore
-#[cfg(feature = "example-glow")]
-use common::glow_renderer::GLRenderer as SelectedBackend;
-#[cfg(all(not(feature = "example-glow"), feature = "example-vulkan"))]
-use common::vulkan_renderer::VulkanRenderer as SelectedBackend;
+#[cfg(feature = "glow")]
+use microui_redux_renderer_glow::GLRenderer as SelectedBackend;
+#[cfg(all(not(feature = "glow"), feature = "vulkan"))]
+use microui_redux_renderer_vulkan::VulkanRenderer as SelectedBackend;
 #[cfg(all(
-    not(feature = "example-glow"),
-    not(feature = "example-vulkan"),
-    feature = "example-wgpu"
+    not(feature = "glow"),
+    not(feature = "vulkan"),
+    feature = "wgpu"
 ))]
-use common::wgpu_renderer::WgpuRenderer as SelectedBackend;
+use microui_redux_renderer_wgpu::WgpuRenderer as SelectedBackend;
 
 type SelectedFrame<'a> =
     <SelectedBackend as RendererBackend>::Frame<'a>;
@@ -147,14 +147,14 @@ finalize/present the backend frame. Update application/widget state before `Cont
 the callback, read that state and record work on the supplied frame. Use `Painter` instead when the
 drawing can be expressed with portable UI primitives.
 
-The complete, documented [backend-frame cube example](../examples/backend-frame-cube.rs)
+The complete, documented [backend-frame cube demo](../../../demos/basic/src/bin/backend-frame-cube.rs)
 implements a small retained `CubeWidget`. It uses `rs_math3d`'s `Vec3f`, `Quatf`, `lookat`,
 `perspective`, and `project3` primitives to transform the cube, depth-sorts its faces, and submits
 the resulting triangles through `SelectedFrame::enqueue_colored_vertices`. Run it with exactly one
 backend:
 
 ```bash
-cargo run --example backend-frame-cube --features example-glow
-cargo run --example backend-frame-cube --features example-vulkan
-cargo run --example backend-frame-cube --features example-wgpu
+cargo run -p microui-redux-basic-demos --bin backend-frame-cube --no-default-features --features glow
+cargo run -p microui-redux-basic-demos --bin backend-frame-cube --no-default-features --features vulkan
+cargo run -p microui-redux-basic-demos --bin backend-frame-cube --no-default-features --features wgpu
 ```

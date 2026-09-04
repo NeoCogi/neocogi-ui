@@ -56,25 +56,18 @@
 //! renderer integrations in one interactive application. A dedicated titleless layer-0 family root
 //! fills the client area with its own menu and a perspective X-Y grid; its content-clipped child
 //! windows float above the grid and below the root menu.
-#[path = "./common/mod.rs"]
-mod common;
+mod camera;
+mod obj_loader;
+mod polymesh;
+mod view3d;
 
-use common::{
-    application::Application,
-    application::BackendInitContext,
-    atlas_assets,
-    camera::Camera,
-    mesh::{CustomRenderArea, MeshBuffers, MeshSubmission, MeshVertex},
-    obj_loader::Obj,
-    polymesh::PolyMesh,
-    view3d::View3D,
-};
-#[cfg(feature = "example-glow")]
-use common::glow_renderer::GLRenderer as SelectedBackend;
-#[cfg(all(not(feature = "example-glow"), feature = "example-vulkan"))]
-use common::vulkan_renderer::VulkanRenderer as SelectedBackend;
-#[cfg(all(not(feature = "example-glow"), not(feature = "example-vulkan"), feature = "example-wgpu"))]
-use common::wgpu_renderer::WgpuRenderer as SelectedBackend;
+use camera::Camera;
+use microui_redux_demo_assets as atlas_assets;
+use microui_redux_demo_host::{Application, BackendInitContext, SelectedBackend};
+use microui_redux_renderer_common::{CustomRenderArea, MeshBuffers, MeshSubmission, MeshVertex};
+use obj_loader::Obj;
+use polymesh::PolyMesh;
+use view3d::View3D;
 use microui_redux::{prelude::*, render::Vertex};
 use std::{cell::RefCell, f32::consts::PI, fs, path::PathBuf, rc::Rc, time::Instant};
 
@@ -1534,10 +1527,7 @@ impl State {
     pub fn new(_backend: BackendInitContext, ctx: &mut Context<SelectedBackend, Self>) -> Self {
         // Load the two image themes once while the Context still exposes its pristine default style.
         let themes = DemoThemes::load(ctx);
-        #[cfg(any(feature = "builder", feature = "png_source"))]
         let image_texture = load_external_image_texture(ctx);
-        #[cfg(not(any(feature = "builder", feature = "png_source")))]
-        let image_texture = None;
         let white_uv = {
             let atlas = ctx.atlas();
             let rect = atlas.get_icon_rect(atlas.white_icon());
@@ -3357,12 +3347,11 @@ fn build_mesh_buffers(mesh: &PolyMesh) -> MeshBuffers {
 }
 
 fn demo_asset_path(relative: &str) -> PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(relative)
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(relative)
 }
 
-#[cfg(any(feature = "builder", feature = "png_source"))]
 fn load_external_image_texture(ctx: &mut Context<SelectedBackend, State>) -> Option<TextureId> {
-    let image_path = demo_asset_path("examples/FACEPALM.png");
+    let image_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/FACEPALM.png");
     let png_bytes = match fs::read(&image_path) {
         Ok(bytes) => bytes,
         Err(err) => {

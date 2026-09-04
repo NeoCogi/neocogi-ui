@@ -723,9 +723,9 @@ mod tests {
     use super::*;
     use std::io::Cursor;
 
-    const WHITE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/WHITE.png");
-    const FONT_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/NORMAL.ttf");
-    const FILE_ICON_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/FILE_16.png");
+    const WHITE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/WHITE.png");
+    const FONT_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/NORMAL.ttf");
+    const FILE_ICON_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/FILE_16.png");
 
     /// Verifies the builder supports the same fontless low-level atlas contract as AtlasSource.
     #[test]
@@ -829,7 +829,7 @@ mod tests {
             texture_height: 256,
             // The close glyph is a valid PNG and packs successfully, but it is not a solid opaque
             // white tile. Reaching build isolates structural validation from asset I/O and packing.
-            white_icon: concat!(env!("CARGO_MANIFEST_DIR"), "/assets/CLOSE.png").into(),
+            white_icon: concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/CLOSE.png").into(),
             icons: Vec::new(),
             fonts,
         };

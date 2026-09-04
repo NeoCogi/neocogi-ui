@@ -9,7 +9,7 @@
   `FontRole::Heading.into()`, or create a checked allocation-independent named reference with
   `context.resource_catalog().font_ref("caption")`.
 - Font sizes are selected by choosing another baked font variant, not by scaling one bitmap font at runtime.
-- `examples/demo-full` uses this directly: `NORMAL.ttf` for control/body text, `BOLD.ttf` for window titles, and `CONSOLE.ttf` for the log window’s input/output text.
+- `demos/demo-full` uses this directly: `NORMAL.ttf` for control/body text, `BOLD.ttf` for window titles, and `CONSOLE.ttf` for the log window’s input/output text.
 
 ## Text encoding and glyph coverage
 

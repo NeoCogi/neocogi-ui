@@ -224,8 +224,6 @@
 // duplicate guide modules in the normal API reference.
 #[cfg(doctest)]
 mod guide_doctests {
-    #[doc = include_str!("../README.md")]
-    mod readme {}
     #[doc = include_str!("../docs/ARCHITECTURE.md")]
     mod architecture {}
     #[doc = include_str!("../docs/BACKENDS.md")]
