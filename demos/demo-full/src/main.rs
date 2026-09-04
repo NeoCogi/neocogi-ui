@@ -65,7 +65,6 @@ use camera::Camera;
 use microui_redux_demo_assets as atlas_assets;
 use microui_redux_demo_host::{Application, BackendInitContext, SelectedBackend, monotonic_seconds};
 use microui_redux_demo_renderer::{DemoCommand, DemoRenderer, MeshBuffers, MeshSubmission, MeshVertex};
-use microui_redux_renderer_common::CustomRenderArea;
 use obj_loader::Obj;
 use polymesh::PolyMesh;
 use view3d::View3D;
@@ -1578,20 +1577,20 @@ impl State {
         let grid_renderer = {
             let grid_3d_state = grid_3d_state.clone();
             ctx.register_custom_renderer(move |frame, args: CustomRenderArgs| {
-                let area = area_from_args(&args);
-                if area.rect.width <= 0 || area.rect.height <= 0 {
-                    frame.enqueue_colored_vertices(area, Vec::new());
+                let area = args.content_area;
+                if area.width <= 0 || area.height <= 0 {
+                    frame.enqueue_colored_vertices(args, Vec::new());
                     return;
                 }
                 let mut grid = grid_3d_state.borrow_mut();
                 // Rendering can precede input after a host resize, so keep the projection's
                 // aspect authoritative even when no pointer event has reached the widget yet.
-                grid.view_3d.set_dimension(Dimensioni::new(area.rect.width, area.rect.height));
+                grid.view_3d.set_dimension(Dimensioni::new(area.width, area.height));
                 let pvm = grid.view_3d.pvm();
                 let show_minor_lines = grid.show_minor_lines;
                 drop(grid);
-                let vertices = build_xy_grid_vertices(area.rect, white_uv, show_minor_lines, pvm);
-                frame.enqueue_colored_vertices(area, vertices);
+                let vertices = build_xy_grid_vertices(area, white_uv, show_minor_lines, pvm);
+                frame.enqueue_colored_vertices(args, vertices);
             })
             .expect("register fullscreen X-Y grid renderer")
         };
@@ -1628,19 +1627,19 @@ impl State {
             let triangle_data = triangle_data.clone();
             ctx.register_custom_renderer(move |frame, args: CustomRenderArgs| {
                 let triangle = triangle_data.borrow();
-                let area = area_from_args(&args);
-                frame.enqueue_colored_vertices(area, build_triangle_vertices(area.rect, white_uv, triangle.angle));
+                let area = args.content_area;
+                frame.enqueue_colored_vertices(args, build_triangle_vertices(area, white_uv, triangle.angle));
             })
             .expect("register triangle renderer")
         };
         let suzanne_renderer = {
             let suzanne_data = suzanne_data.clone();
             ctx.register_custom_renderer(move |frame, args: CustomRenderArgs| {
-                let area = area_from_args(&args);
+                let area = args.content_area;
                 let mut suzanne = suzanne_data.borrow_mut();
                 // Projection is a rendering cache derived from the authoritative committed area.
                 // This also initializes the aspect ratio on an inputless first frame.
-                suzanne.view_3d.set_dimension(Dimensioni::new(area.rect.width, area.rect.height));
+                suzanne.view_3d.set_dimension(Dimensioni::new(area.width, area.height));
                 frame.enqueue_application(
                     args,
                     DemoCommand::DrawMesh(MeshSubmission {
@@ -3075,10 +3074,6 @@ fn main() {
         |state, context| state.subscribe_events(context),
         |ctx, state, dimensions| state.process_frame(ctx, dimensions),
     );
-}
-
-fn area_from_args(args: &CustomRenderArgs) -> CustomRenderArea {
-    CustomRenderArea { rect: args.content_area, clip: args.view }
 }
 
 fn rect_edges(rect: Recti) -> Option<[(Vec2f, Vec2f); 4]> {

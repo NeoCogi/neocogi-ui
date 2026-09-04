@@ -34,10 +34,9 @@
 //! is the ownership path used to submit the resulting triangles:
 //!
 //! 1. one Cargo feature selects a concrete renderer as `SelectedBackend`;
-//! 2. `SelectedFrame<'a>` names that backend's `RendererBackend::Frame<'a>` GAT;
-//! 3. a retained `CubeWidget` reserves layout space and provides normal widget state;
-//! 4. a typed custom-render callback receives the already-active `&mut SelectedFrame<'_>`;
-//! 5. the callback calls an inherent method implemented by all three example frame types.
+//! 2. a retained `CubeWidget` reserves layout space and provides normal widget state;
+//! 3. a custom-render callback receives the already-active concrete backend frame;
+//! 4. the callback calls an inherent method implemented by all three example frame types.
 //!
 //! No backend handle is captured and no second frame is opened. The supplied frame already owns
 //! the backend's exclusive mutable borrow and is finalized by `Drop` after display-list execution.
@@ -51,18 +50,11 @@
 //! ```
 
 use microui_redux_demo_assets as atlas_assets;
-use microui_redux_demo_host::{Application, SelectedBackend};
-use microui_redux_renderer_common::CustomRenderArea;
+use microui_redux_demo_host::Application;
 use microui_redux::{prelude::*, render::Vertex};
 use rs_math3d::{EPS_F32, lookat, perspective, project3};
 use std::cell::Cell;
 use std::rc::Rc;
-
-/// Resolves the concrete active-frame type chosen by the backend Cargo feature.
-///
-/// The lifetime is tied to the exclusive borrow made by `RendererBackend::frame`. The callback
-/// may use the frame for this invocation but cannot retain it after the callback returns.
-type SelectedFrame<'a> = <SelectedBackend as RendererBackend>::Frame<'a>;
 
 /// Minimal persistent widget state for the custom-render node.
 ///
@@ -188,15 +180,14 @@ fn main() {
         let white_uv = white_uv(&ctx.atlas());
 
         let cube_renderer = ctx
-            .register_custom_renderer(move |frame: &mut SelectedFrame<'_>, args: CustomRenderArgs| {
+            .register_custom_renderer(move |frame, args: CustomRenderArgs| {
                 // Context's executor invokes this callback only for the authoritative visible view.
-                let area = CustomRenderArea { rect: args.content_area, clip: args.view };
                 let vertices = build_cube_vertices(args.content_area, white_uv, callback_angle.get());
 
                 // This method is specific to the concrete example frame types. It is available
-                // here precisely because the callback receives `SelectedFrame`, not `dyn
-                // RendererFrame` and not an opaque backend handle.
-                frame.enqueue_colored_vertices(area, vertices);
+                // here precisely because Context infers the concrete associated frame rather than
+                // passing a `dyn RendererFrame` or opaque backend handle.
+                frame.enqueue_colored_vertices(args, vertices);
             })
             .expect("register cube renderer");
 

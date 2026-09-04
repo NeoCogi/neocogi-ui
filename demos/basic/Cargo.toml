@@ -20,7 +20,6 @@ external-atlas = ["microui-redux-demo-assets/external-atlas"]
 microui-redux.workspace = true
 microui-redux-demo-assets = { workspace = true, features = ["builder"] }
 microui-redux-demo-host.workspace = true
-microui-redux-renderer-common.workspace = true
 rs-math3d.workspace = true
 
 [[bin]]
