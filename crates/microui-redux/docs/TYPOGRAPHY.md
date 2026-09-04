@@ -58,6 +58,8 @@ Retained widget state stores `FontRef` and `IconRef` instead; they resolve throu
 when measurement or paint needs the short-lived capability.
 
 ```rust
+# #[cfg(feature = "builder")]
+# {
 use microui_redux::{atlas::builder, prelude::*};
 
 let icons = vec![
@@ -115,6 +117,7 @@ let config = builder::Config {
 let (_title, title_node) = TextBlock::create(
     TextBlockParameters::new("Inspector").font(FontRole::Heading.into()),
 );
+# }
 ```
 
 `builder::Config::fonts` may be empty when an application needs to prepare atlas data separately.

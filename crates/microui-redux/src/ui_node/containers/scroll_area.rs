@@ -409,8 +409,6 @@ impl Widget for ScrollSurface {
         &WidgetOption::NO_INTERACT
     }
 
-    /// Performs no semantic update because ScrollArea and its children own all scrolling state.
-
     /// Emits no paint operations because clipping and translation are traversal geometry.
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }

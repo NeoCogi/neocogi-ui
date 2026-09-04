@@ -205,8 +205,6 @@ impl Widget for CompleteSkinMeasureProbe {
         &self.opt
     }
 
-    /// The probe has no eventless or routed semantic work.
-
     /// Rendering is irrelevant to the measurement-cache contract under test.
     fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }

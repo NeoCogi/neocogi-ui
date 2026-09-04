@@ -320,7 +320,7 @@ pub trait RendererFrame {
 /// impl RendererFrame for BackendFrame<'_> {
 ///     /// Completes this backend fixture; it owns no fallible native submission.
 ///     fn finish(self) -> Result<(), microui_redux::render::FrameError> { Ok(()) }
-
+///
 ///     fn push_quad(&mut self, _vertices: [Vertex; 4]) {}
 ///     fn push_triangle(&mut self, _vertices: [Vertex; 3]) {}
 ///     fn flush(&mut self) {}

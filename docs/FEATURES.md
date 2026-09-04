@@ -49,3 +49,17 @@ together. If both atlas-loading features are enabled, `prebuilt-atlas` takes pre
 
 To export an atlas as Rust, enable `save-to-rust` (and `png_source` when serializing PNG-backed atlas data) and call `AtlasHandle::to_rust_files`. The workspace helper enables its required library features in its own manifest:
 `cargo run -p microui-redux-tools --bin atlas-export -- --output path/to/atlas.rs`
+
+
+## Feature validation
+
+CI tests the core package independently with defaults, no features, and each of `builder`,
+`png_source`, `theme-json`, and `save-to-rust` enabled alone. Each job runs unit, public API, and
+documentation tests; feature-gated documentation examples compile when their API is available.
+This isolation matters because testing the whole workspace enables a union of dependencies'
+features and can hide a broken minimal configuration.
+
+Native demos are checked separately with `--no-default-features --features glow`, `vulkan`, and
+`wgpu`. WebGL compilation and DOM regressions run on pull requests independently of Pages
+deployment. `--all-features` is not a substitute for these backend selections: conditional backend
+aliases choose only one branch when several renderer features are enabled together.

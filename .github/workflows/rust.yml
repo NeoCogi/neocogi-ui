@@ -2,27 +2,66 @@ name: Rust
 
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master"]
   pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-
+  # Test the core in isolation: workspace feature unification can hide missing cfg guards.
+  core:
     runs-on: ubuntu-latest
-
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: default
+            flags: ""
+          - name: minimal
+            flags: "--no-default-features"
+          - name: builder
+            flags: "--no-default-features --features builder"
+          - name: png_source
+            flags: "--no-default-features --features png_source"
+          - name: theme-json
+            flags: "--no-default-features --features theme-json"
+          - name: save-to-rust
+            flags: "--no-default-features --features save-to-rust"
+    name: Core (${{ matrix.name }})
     steps:
-    - uses: actions/checkout@v3
-    - name: Install dependencies
-      run: |
-        sudo apt-get update -y -qq
-        sudo apt-get install libsdl2-dev
-    - name: Build
-      run: cargo build --workspace --verbose
-    - name: Run tests
-      run: cargo test --workspace --verbose
-    - name: Verify crates.io package
-      run: cargo package -p microui-redux
+      - uses: actions/checkout@v6
+      - name: Test library, public API, and documentation
+        run: cargo test -p microui-redux ${{ matrix.flags }}
+
+  workspace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install native build dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y libsdl2-dev libvulkan-dev
+      - name: Test workspace
+        run: cargo test --workspace
+      - name: Check warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Verify crates.io package
+        run: cargo package -p microui-redux
+
+  # Renderer selections are alternatives; --all-features only exercises the winning cfg branch.
+  backend:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        renderer: [glow, vulkan, wgpu]
+    name: Native demo (${{ matrix.renderer }})
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install native build dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y libsdl2-dev libvulkan-dev
+      - name: Check selected renderer
+        run: cargo check -p microui-redux-demo-full --all-targets --no-default-features --features ${{ matrix.renderer }}

@@ -503,7 +503,8 @@ impl Builder {
     fn add_font_bytes_after_name_check(&mut self, name: &str, path: &Path, size: usize, bytes: &[u8]) -> Result<FontId, BuilderError> {
         Self::validate_font_size(name, size)?;
         Self::validate_asset_bytes(bytes)?;
-        let font = RasterFont::from_bytes(bytes.to_vec(), FontSettings::default())
+        // Fontdue parses this borrowed input into its own font data; copying the source is redundant.
+        let font = RasterFont::from_bytes(bytes, FontSettings::default())
             .map_err(|error| io::Error::other(format!("Cannot parse font asset `{}`: {error}", path.display())))?;
         let mut next_packer = self.packer.clone();
         let mut planned_glyphs = Vec::with_capacity(95);

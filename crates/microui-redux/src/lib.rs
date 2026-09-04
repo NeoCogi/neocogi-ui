@@ -234,6 +234,8 @@ mod guide_doctests {
     mod menus {}
     #[doc = include_str!("../docs/SKINNING.md")]
     mod skinning {}
+    // This guide's API is supplied entirely by the optional JSON theme loader.
+    #[cfg(feature = "theme-json")]
     #[doc = include_str!("../docs/THEMES.md")]
     mod themes {}
     #[doc = include_str!("../docs/TYPOGRAPHY.md")]

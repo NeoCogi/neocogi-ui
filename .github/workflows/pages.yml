@@ -3,13 +3,15 @@ name: WebGL demo
 on:
   push:
     branches: ["master"]
+  pull_request:
+    branches: ["master"]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: pages
+  group: webgl-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -17,17 +19,15 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pages: write
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
       - name: Build WebGL demo
         run: ./scripts/web-demo.sh build
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
+      - name: Test browser input translation
+        run: ./scripts/test-browser-input.sh
       - name: Upload Pages artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v4
         with:
           path: target/web-demo
@@ -43,6 +43,11 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # Pages configuration belongs to trusted deployment, never to pull-request compilation.
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - name: Deploy Pages artifact
         id: deployment
         uses: actions/deploy-pages@v4

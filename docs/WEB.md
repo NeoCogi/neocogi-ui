@@ -71,10 +71,22 @@ require text-input focus within a trusted gesture may need a host-specific immed
 to show their software keyboard. App/host writers own those extensions, font coverage, shaping,
 and accessibility. Browser callbacks are unregistered and the textarea removed when the host drops.
 
+## Browser regression
+
+After the web build installs the matching bindings tool, run `./scripts/test-browser-input.sh`.
+The script builds the wasm library test export, starts a temporary localhost server, and checks its
+result in headless Chromium. Set `CHROME_BIN` to a compatible executable or
+`MICROUI_BROWSER_TEST_PORT` to change the default port 8118. Generated bindings and result HTML
+remain under `target/browser-input-tests`. The fixture covers DOM composition/paste, keyboard,
+wheel conversion, button chords, cancellation, and teardown. It stubs capture acquisition because
+synthetic pointer events cannot acquire native capture; trusted pointer/OS IME/mobile behavior
+still needs interactive platform testing.
+
 ## GitHub Pages
 
-The `WebGL demo` workflow builds the site on every push to `master` and supports manual dispatch.
-It requests GitHub Pages enablement and configures Actions as the publishing source. If repository
+The `WebGL demo` workflow builds the site and runs DOM input regressions on pull requests, pushes
+to `master`, and manual dispatch. Pull-request jobs have read-only repository permissions and never
+configure or deploy Pages. The trusted deployment job requests GitHub Pages enablement and configures Actions as the publishing source. If repository
 or organization policy prevents automatic enablement, select **GitHub Actions** in
 **Settings > Pages** once. A successful deployment publishes the demo at:
 
