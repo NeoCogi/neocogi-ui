@@ -11,7 +11,10 @@ repository.workspace = true
 default = ["builder"]
 builder = ["microui-redux/builder"]
 prebuilt-atlas = ["microui-redux/png_source"]
-external-atlas = ["microui-redux/png_source"]
 
 [dependencies]
 microui-redux.workspace = true
+
+# Cargo builds these APIs for the host even when the demo target is WebAssembly.
+[build-dependencies]
+microui-redux = { workspace = true, features = ["builder", "save-to-rust", "png_source"] }

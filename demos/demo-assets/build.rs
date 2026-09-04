@@ -27,89 +27,34 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 //
-//! Build-time atlas generation.
-//!
-//! This script only does real work for the `prebuilt-atlas` feature. It shells out to the
-//! `atlas-export` helper so the generated Rust source is produced by the same atlas-building
-//! code path used by examples and tools.
-use std::{
-    env,
-    error::Error,
-    fs,
-    path::{Path, PathBuf},
-    process::Command,
-};
+//! Generates the embedded atlas through ordinary Cargo host build dependencies.
 
-/// Entrypoint used by Cargo before compiling the crate.
+use std::{env, error::Error, path::PathBuf};
+use microui_redux::{atlas::builder::Builder, SourceFormat};
+
+/// Compile exactly the same recipe used by runtime loading and the command-line exporter.
+#[path = "src/recipe.rs"]
+mod recipe;
+
+/// Tracks the recipe's actual inputs and writes validated embedded data only when requested.
 fn main() -> Result<(), Box<dyn Error>> {
-    // Keep Cargo's dependency tracking precise so atlas changes regenerate the embedded source.
-    println!("cargo:rerun-if-changed=../../assets/NORMAL.ttf");
-    println!("cargo:rerun-if-changed=../../assets/BOLD.ttf");
-    println!("cargo:rerun-if-changed=../../assets/CONSOLE.ttf");
-    println!("cargo:rerun-if-changed=../../assets/WHITE.png");
-    println!("cargo:rerun-if-changed=../../assets/CLOSE.png");
-    println!("cargo:rerun-if-changed=../../assets/PLUS.png");
-    println!("cargo:rerun-if-changed=../../assets/MINUS.png");
-    println!("cargo:rerun-if-changed=../../assets/CHECK.png");
-    println!("cargo:rerun-if-changed=../../assets/EXPAND_DOWN.png");
-    println!("cargo:rerun-if-changed=../../assets/OPEN_FOLDER_16.png");
-    println!("cargo:rerun-if-changed=../../assets/CLOSED_FOLDER_16.png");
-    println!("cargo:rerun-if-changed=../../assets/FILE_16.png");
-
-    // The nested `cargo run --bin atlas-export` would recurse into this build script without a
-    // guard. The helper sets this variable so the nested build returns immediately.
-    if env::var("MICROUI_BUILD_TOOL").is_ok() {
+    println!("cargo:rerun-if-changed=src/recipe.rs");
+    if env::var_os("CARGO_FEATURE_PREBUILT_ATLAS").is_none() {
         return Ok(());
     }
-
-    // Regular builds use runtime atlas loading. Only prebuilt atlas builds need generated Rust.
-    if env::var("CARGO_FEATURE_PREBUILT_ATLAS").is_err() {
-        return Ok(());
+    let config = recipe::atlas_config();
+    // Derive file tracking from the recipe itself so a new font/icon cannot silently omit a
+    // build dependency. Repeated font paths are harmless repeated Cargo tracking directives.
+    for path in std::iter::once(&config.white_icon)
+        .chain(config.icons.iter().map(|icon| &icon.path))
+        .chain(config.fonts.iter().map(|font| &font.path))
+    {
+        println!("cargo:rerun-if-changed={}", path.display());
     }
-
-    let out_dir = PathBuf::from(env::var("OUT_DIR")?);
-    let generated = out_dir.join("prebuilt_atlas.rs");
-    let atlas_target_dir = out_dir.join("atlas-export-target");
-    fs::create_dir_all(&atlas_target_dir)?;
-
-    run_atlas_export(&generated, &atlas_target_dir)?;
-    println!("cargo:rerun-if-changed=src/lib.rs");
+    let output = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo provides OUT_DIR")).join("prebuilt_atlas.rs");
+    let atlas = Builder::from_config(&config)?.build()?;
+    // The core exporter writes the PNG and its metadata together; no nested Cargo process,
+    // separate target directory, or copied serialization format is needed.
+    atlas.to_rust_files("PREBUILT_ATLAS", SourceFormat::Png, output)?;
     Ok(())
-}
-
-/// Runs the atlas export helper and writes the generated Rust source into `OUT_DIR`.
-fn run_atlas_export(output: &Path, target_dir: &Path) -> Result<(), Box<dyn Error>> {
-    let mut cmd = Command::new("cargo");
-    // Use a dedicated target dir so release builds don't deadlock on Cargo's global target lock.
-    cmd.env("MICROUI_BUILD_TOOL", "1").env("CARGO_TARGET_DIR", target_dir).args([
-        "run",
-        "-p",
-        "microui-redux-tools",
-        "--bin",
-        "atlas-export",
-        "--release",
-        "--",
-        "--output",
-        output.to_str().expect("valid path"),
-    ]);
-    clear_nested_rustflags(&mut cmd);
-
-    let status = cmd.status()?;
-    if !status.success() {
-        return Err("atlas-export failed".into());
-    }
-    Ok(())
-}
-
-/// Removes final-binary Rust flags from the nested helper build.
-///
-/// Size-focused flags such as `panic=immediate-abort` are only valid when the final build also
-/// rebuilds `std`; the helper build uses normal Cargo settings and must not inherit them.
-fn clear_nested_rustflags(cmd: &mut Command) {
-    cmd.env_remove("RUSTFLAGS").env_remove("CARGO_ENCODED_RUSTFLAGS");
-    for (key, _) in env::vars() {
-        if key.starts_with("CARGO_TARGET_") && key.ends_with("_RUSTFLAGS") {
-            cmd.env_remove(key);
-        }
-    }
 }

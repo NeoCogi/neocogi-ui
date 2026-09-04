@@ -419,6 +419,7 @@ impl Builder {
 
     /// Adds a named PNG icon from caller-owned bytes while retaining its logical source path in
     /// diagnostics.
+    #[cfg(feature = "theme-json")]
     pub(crate) fn add_icon_bytes_named(&mut self, name: &str, path: &Path, bytes: &[u8]) -> Result<IconId, BuilderError> {
         if self.candidate.icons.iter().any(|(existing, _)| existing == name) {
             return Err(AtlasError::DuplicateIconName { name: name.to_string() }.into());
@@ -493,6 +494,7 @@ impl Builder {
 
     /// Adds a named font from caller-owned bytes while retaining its logical source path in
     /// diagnostics.
+    #[cfg(feature = "theme-json")]
     pub(crate) fn add_font_bytes_named(&mut self, name: &str, path: &Path, size: usize, bytes: &[u8]) -> Result<FontId, BuilderError> {
         if self.candidate.fonts.iter().any(|(existing, _)| existing == name) {
             return Err(AtlasError::DuplicateFontName { name: name.to_string() }.into());

@@ -14,7 +14,6 @@ webgl = ["microui-redux-demo-host/webgl"]
 vulkan = ["microui-redux-demo-host/vulkan"]
 wgpu = ["microui-redux-demo-host/wgpu"]
 prebuilt-atlas = ["microui-redux-demo-assets/prebuilt-atlas"]
-external-atlas = ["microui-redux-demo-assets/external-atlas"]
 
 [dependencies]
 microui-redux.workspace = true

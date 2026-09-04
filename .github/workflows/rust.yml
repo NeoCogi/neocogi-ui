@@ -46,6 +46,8 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y libsdl2-dev libvulkan-dev
       - name: Test workspace
         run: cargo test --workspace
+      - name: Compare generated and runtime atlas data
+        run: cargo test -p microui-redux-demo-assets --no-default-features --features "builder prebuilt-atlas"
       - name: Check warnings
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Verify crates.io package

@@ -50,141 +50,77 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-//! Default atlas asset configuration shared by examples and the build-time atlas exporter.
+//! Demo atlas loading from the shared recipe or Cargo-generated embedded data.
 
 use microui_redux::prelude::AtlasHandle;
-#[cfg(all(not(feature = "prebuilt-atlas"), not(feature = "external-atlas"), feature = "builder"))]
-use std::path::{Path, PathBuf};
-#[cfg(all(feature = "external-atlas", not(feature = "prebuilt-atlas")))]
-use std::fs;
 
-#[cfg(all(not(feature = "prebuilt-atlas"), not(feature = "external-atlas"), feature = "builder"))]
-use microui_redux::atlas::builder;
-#[cfg(all(not(feature = "prebuilt-atlas"), not(feature = "external-atlas"), feature = "builder"))]
-pub fn atlas_config() -> builder::Config {
-    // Config owns its recipes and platform paths, so this factory returns one self-contained value
-    // without static borrowed arrays or UTF-8-only path storage.
-    builder::Config {
-        texture_height: 256,
-        texture_width: 512,
-        white_icon: workspace_path("assets/WHITE.png"),
-        icons: vec![
-            builder::IconAsset {
-                name: "close".into(),
-                path: workspace_path("assets/CLOSE.png"),
-            },
-            builder::IconAsset {
-                name: "expand".into(),
-                path: workspace_path("assets/PLUS.png"),
-            },
-            builder::IconAsset {
-                name: "collapse".into(),
-                path: workspace_path("assets/MINUS.png"),
-            },
-            builder::IconAsset {
-                name: "check".into(),
-                path: workspace_path("assets/CHECK.png"),
-            },
-            builder::IconAsset {
-                name: "expand_down".into(),
-                path: workspace_path("assets/EXPAND_DOWN.png"),
-            },
-            builder::IconAsset {
-                name: "open_folder".into(),
-                path: workspace_path("assets/OPEN_FOLDER_16.png"),
-            },
-            builder::IconAsset {
-                name: "closed_folder".into(),
-                path: workspace_path("assets/CLOSED_FOLDER_16.png"),
-            },
-            builder::IconAsset {
-                name: "file".into(),
-                path: workspace_path("assets/FILE_16.png"),
-            },
-        ],
-        fonts: vec![
-            builder::FontAsset {
-                name: "body".into(),
-                path: workspace_path("assets/NORMAL.ttf"),
-                size: 12,
-            },
-            builder::FontAsset {
-                name: "small".into(),
-                path: workspace_path("assets/NORMAL.ttf"),
-                size: 10,
-            },
-            builder::FontAsset {
-                name: "title".into(),
-                path: workspace_path("assets/BOLD.ttf"),
-                size: 12,
-            },
-            builder::FontAsset {
-                name: "heading".into(),
-                path: workspace_path("assets/NORMAL.ttf"),
-                size: 18,
-            },
-            builder::FontAsset {
-                name: "mono".into(),
-                path: workspace_path("assets/CONSOLE.ttf"),
-                size: 14,
-            },
-            builder::FontAsset {
-                name: "calculator-display".into(),
-                path: workspace_path("assets/CONSOLE.ttf"),
-                size: 28,
-            },
-        ],
-    }
-}
+/// Asset recipe also compiled directly into this package's Cargo build script.
+#[cfg(feature = "builder")]
+mod recipe;
+#[cfg(feature = "builder")]
+pub use recipe::atlas_config;
 
-#[cfg(all(not(feature = "prebuilt-atlas"), not(feature = "external-atlas"), feature = "builder"))]
-fn workspace_path(relative: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(relative)
-}
-
-#[cfg(all(not(feature = "prebuilt-atlas"), not(feature = "external-atlas"), feature = "builder"))]
+/// Builds and validates the shared recipe at startup when embedding was not selected.
+#[cfg(all(not(feature = "prebuilt-atlas"), feature = "builder"))]
 pub fn load_atlas() -> AtlasHandle {
-    // Asset decoding and completed-atlas validation are distinct fallible boundaries. Finalizing
-    // through build also preserves the atlas identity already stamped into builder-issued IDs.
-    builder::Builder::from_config(&atlas_config())
-        .expect("default atlas assets must load and pack")
-        .build()
-        .expect("default built atlas must satisfy the complete atlas contract")
+    use microui_redux::atlas::builder::Builder;
+    Builder::from_config(&atlas_config())
+        .and_then(Builder::build)
+        .expect("default atlas assets must load, pack, and satisfy the complete atlas contract")
 }
 
+/// Generated source stays private; callers receive the same validated AtlasHandle in either mode.
 #[cfg(feature = "prebuilt-atlas")]
 mod prebuilt {
     use microui_redux::prelude::AtlasHandle;
     include!(concat!(env!("OUT_DIR"), "/prebuilt_atlas.rs"));
 
+    /// Validates generated pixels and metadata again at the runtime ownership boundary.
     pub fn load() -> AtlasHandle {
-        // Generated metadata is validated again at its runtime ownership boundary; generation is
-        // not treated as permission to bypass structural checks.
         AtlasHandle::try_from(&PREBUILT_ATLAS).expect("generated prebuilt atlas must satisfy the complete atlas contract")
     }
 }
 
+/// Loads the self-contained atlas produced by the host build script.
 #[cfg(feature = "prebuilt-atlas")]
 pub fn load_atlas() -> AtlasHandle {
     prebuilt::load()
 }
 
-#[cfg(all(feature = "external-atlas", not(feature = "prebuilt-atlas")))]
-mod external {
-    include!("external_atlas_metadata.rs");
-}
+#[cfg(all(not(feature = "prebuilt-atlas"), not(feature = "builder")))]
+compile_error!("demo assets require `builder` for runtime generation or `prebuilt-atlas` for embedded data");
 
-#[cfg(all(feature = "external-atlas", not(feature = "prebuilt-atlas")))]
-pub fn load_atlas() -> AtlasHandle {
-    let atlas_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../atlas.png");
-    let pixels = fs::read(&atlas_path).unwrap_or_else(|err| panic!("Failed to read {}: {err}", atlas_path.display()));
-    let source = external::external_atlas_source(&pixels);
-    // Decoding and metadata validation form one fallible load operation, so the diagnostic must
-    // not imply that malformed rectangles or semantic rendering resources decoded successfully.
-    AtlasHandle::try_from(&source).unwrap_or_else(|err| panic!("Failed to load and validate {}: {err}", atlas_path.display()))
-}
+/// Compare host generation with the runtime recipe after actual generated-data decoding.
+#[cfg(all(test, feature = "builder", feature = "prebuilt-atlas"))]
+mod tests {
+    use super::*;
+    use microui_redux::atlas::builder::Builder;
 
-#[cfg(all(not(feature = "prebuilt-atlas"), not(feature = "external-atlas"), not(feature = "builder")))]
-compile_error!(
-    "demo assets require `builder` for runtime atlas generation, `external-atlas` for atlas.png loading, or `prebuilt-atlas` for embedded atlas data"
-);
+    /// Catch recipe/feature drift by validating both pixels and resource presentation metadata.
+    #[test]
+    fn prebuilt_and_runtime_recipes_produce_equivalent_atlases() {
+        let built = Builder::from_config(&atlas_config()).unwrap().build().unwrap();
+        let embedded = load_atlas();
+        assert_eq!((built.width(), built.height()), (embedded.width(), embedded.height()));
+        let built_pixels: Vec<_> = built.pixels_clone().iter().map(|pixel| [pixel.x, pixel.y, pixel.z, pixel.w]).collect();
+        let embedded_pixels: Vec<_> = embedded.pixels_clone().iter().map(|pixel| [pixel.x, pixel.y, pixel.z, pixel.w]).collect();
+        assert_eq!(built_pixels, embedded_pixels);
+        let built_fonts = built.clone_font_table();
+        let embedded_fonts = embedded.clone_font_table();
+        assert_eq!(built_fonts.len(), embedded_fonts.len());
+        for (name, font) in built_fonts {
+            let other = embedded.font_id(&name).expect("generated font keeps its recipe name");
+            assert_eq!(built.get_font_height(font), embedded.get_font_height(other));
+            assert_eq!(built.get_font_baseline(font), embedded.get_font_baseline(other));
+            assert_eq!(built.get_font_size(font), embedded.get_font_size(other));
+        }
+        let built_icons = built.clone_icon_table();
+        assert_eq!(built_icons.len(), embedded.clone_icon_table().len());
+        for (name, icon) in built_icons {
+            let other = embedded.icon_id(&name).expect("generated icon keeps its recipe name");
+            let a = built.get_icon_rect(icon);
+            let b = embedded.get_icon_rect(other);
+            assert_eq!((a.x, a.y, a.width, a.height), (b.x, b.y, b.width, b.height));
+        }
+    }
+}

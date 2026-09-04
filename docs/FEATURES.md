@@ -39,13 +39,15 @@ Use [`scripts/web-demo.sh`](../scripts/web-demo.sh) for the browser build. It se
 packages the generated JavaScript, WebAssembly, embedded assets, and HTML into `target/web-demo`,
 and can start a local HTTP server. See the [WebGL guide](WEB.md).
 
-`external-atlas` is a repository-development path and must not be enabled from a crates.io package.
-It expects
-an existing `atlas.png` whose pixels match the checked-in metadata exactly; `atlas.png` is ignored
-by Git and excluded from the crate package. The repository does not currently provide a command
-that regenerates this pair. Prefer `builder` or `prebuilt-atlas` unless you maintain both files
-together. If both atlas-loading features are enabled, `prebuilt-atlas` takes precedence over
-`external-atlas`.
+Runtime and prebuilt demo atlases use the same recipe in `demos/demo-assets/src/recipe.rs`.
+For `prebuilt-atlas`, a normal Cargo host build dependency calls the core builder and exporter
+and writes the PNG plus Rust metadata together into `OUT_DIR`. Asset change tracking is derived
+from that recipe. Cross-compilation therefore runs generation on the host without launching a
+nested Cargo process or maintaining a separate target directory. When both demo asset features
+are enabled, `prebuilt-atlas` selects the embedded runtime loader; `builder` still exposes the
+shared recipe to tools. CI decodes the generated atlas and compares its pixels and resource
+metadata with runtime generation using `cargo test -p microui-redux-demo-assets
+--no-default-features --features "builder prebuilt-atlas"`.
 
 To export an atlas as Rust, enable `save-to-rust` (and `png_source` when serializing PNG-backed atlas data) and call `AtlasHandle::to_rust_files`. The workspace helper enables its required library features in its own manifest:
 `cargo run -p microui-redux-tools --bin atlas-export -- --output path/to/atlas.rs`
