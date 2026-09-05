@@ -29,7 +29,7 @@
 
 #![doc = include_str!("../docs/EVENTS.md")]
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::fmt;
 use std::rc::{Rc, Weak};
 
@@ -40,7 +40,7 @@ use crate::Widget;
 /// The limit applies across all subscriptions and all cascade sweeps initiated by one call to
 /// [`WidgetEventDispatcher::dispatch_with_context`]. It is a correctness guard against mutually emitting handlers, not a
 /// normal flow-control mechanism.
-const MAX_EVENT_DISPATCHES: usize = 1_000_000;
+const MAX_EVENT_DISPATCHES: usize = microui_contracts::EVENT_DISPATCH_LIMIT as usize;
 
 /// Marker implemented by every typed event payload emitted by retained UI.
 ///
@@ -92,6 +92,17 @@ impl<E: WidgetEvent> EventSource<E> {
         }
     }
 
+    /// Reports whether producing an owned snapshot would have a current receiver.
+    pub(crate) fn connected(&self) -> bool {
+        matches!(*self.port.borrow(), WidgetEventPort::Connected { .. })
+    }
+
+    /// Logical widget closure discards ordinary events even while retained COM handles keep its semantic value alive.
+    pub(crate) fn close_ordinary(&self) {
+        let retired = self.port.borrow_mut().close(None);
+        drop(retired);
+    }
+
     /// Returns a weak, subscribable endpoint for this source without granting emission access.
     pub fn event(&self) -> WidgetEventPortHandle<E> {
         WidgetEventPortHandle::new(&self.port)
@@ -102,7 +113,9 @@ impl<E: WidgetEvent> EventSource<E> {
     /// The short queue borrow ends here. Delivery occurs at Context's next dispatch boundary;
     /// callers must not expect their subscribed application handler to have run on return.
     pub fn emit(&self, event: E) {
-        self.port.borrow_mut().emit(event);
+        let unused = self.port.borrow_mut().emit(event);
+        // User-defined payload destruction can reenter the source; no queue borrow survives.
+        drop(unused);
     }
 
     /// Permanently closes this source, preserving one terminal event for its current subscriber.
@@ -111,14 +124,16 @@ impl<E: WidgetEvent> EventSource<E> {
     /// is ignored, and subsequent close calls preserve the first terminal event. Without a current
     /// subscriber the terminal event is discarded too; closing never creates replay history.
     pub fn close(&self, terminal: E) {
-        self.port.borrow_mut().close(Some(terminal));
+        let retired = self.port.borrow_mut().close(Some(terminal));
+        drop(retired);
     }
 }
 
 impl<E: WidgetEvent> Drop for EventSource<E> {
     /// Expires endpoints and discards ordinary events without erasing an explicit terminal event.
     fn drop(&mut self) {
-        self.port.borrow_mut().close(None);
+        let retired = self.port.borrow_mut().close(None);
+        drop(retired);
     }
 }
 
@@ -161,9 +176,12 @@ impl<E: WidgetEvent> WidgetEventPort<E> {
     ///
     /// The widget calls this only after committing the semantic or lifecycle state described by
     /// `event`. Delivery is deferred; this method never invokes application code.
-    fn emit(&mut self, event: E) {
+    fn emit(&mut self, event: E) -> Option<E> {
         if let Self::Connected { pending } = self {
             pending.push(event);
+            None
+        } else {
+            Some(event)
         }
     }
 
@@ -185,35 +203,114 @@ impl<E: WidgetEvent> WidgetEventPort<E> {
     ///
     /// Calling this for an already disconnected port is harmless. In normal operation it is called
     /// by the exclusive subscription's [`Drop`] implementation.
-    fn disconnect(&mut self) {
-        // Disconnection cannot resurrect a closed source or make its terminal event replayable.
-        *self = if matches!(self, Self::Closed { .. }) {
+    fn disconnect(&mut self) -> Self {
+        // Return retired payload ownership for destruction after the caller releases its borrow.
+        let replacement = if matches!(self, Self::Closed { .. }) {
             Self::Closed { terminal: None }
         } else {
             Self::Disconnected
         };
+        std::mem::replace(self, replacement)
     }
 
     /// Closes once, retaining a terminal payload only if a subscriber was connected.
-    fn close(&mut self, terminal: Option<E>) {
+    fn close(&mut self, terminal: Option<E>) -> Self {
         match self {
-            Self::Connected { .. } => *self = Self::Closed { terminal },
-            Self::Disconnected => *self = Self::Closed { terminal: None },
-            Self::Closed { .. } => {} // A later producer drop must not overwrite its terminal fact.
+            Self::Connected { .. } => std::mem::replace(self, Self::Closed { terminal }),
+            Self::Disconnected => {
+                *self = Self::Closed { terminal: None };
+                Self::Closed { terminal } // Return an unobserved candidate for destruction outside the borrow.
+            }
+            Self::Closed { .. } => Self::Closed { terminal }, // Preserve the first terminal fact; retire the unused candidate.
         }
     }
 
-    /// Moves the complete pending batch out while preserving the connected state.
-    ///
-    /// Returning an owned queue ensures the port's `RefCell` borrow ends before a handler runs. An
-    /// event emitted recursively by that handler therefore enters the new empty queue and is
-    /// observed by a subsequent dispatcher sweep.
-    fn drain(&mut self) -> Vec<E> {
-        match self {
-            Self::Disconnected => Vec::new(),
-            Self::Connected { pending } => std::mem::take(pending),
-            Self::Closed { terminal } => terminal.take().into_iter().collect(),
+    /// Detaches a bounded FIFO prefix; producer and queue borrows end before any callback.
+    fn drain(&mut self, limit: usize) -> Result<EventBatch<E>, nc_com::NcStatus> {
+        let (pending, terminal) = match self {
+            Self::Disconnected => (0, false),
+            Self::Connected { pending } => (pending.len(), false),
+            Self::Closed { terminal } => (usize::from(terminal.is_some()), true),
+        };
+        if limit == 0 && pending != 0 {
+            return Err(microui_contracts::UI_E_EVENT_LIMIT);
         }
+        let events = match self {
+            Self::Disconnected => Vec::new(),
+            Self::Connected { pending } => {
+                if pending.len() <= limit {
+                    std::mem::take(pending)
+                } else {
+                    pending.drain(..limit).collect()
+                }
+            }
+            Self::Closed { terminal } => terminal.take().into_iter().collect(),
+        };
+        Ok(EventBatch { events, terminal })
+    }
+}
+
+/// Detached snapshots retain whether they represent an explicit terminal fact from an already closed producer.
+pub(crate) struct EventBatch<E: WidgetEvent> {
+    /// FIFO snapshots owned by this synchronous delivery attempt.
+    pub(crate) events: Vec<E>,
+    /// Ordinary batches stop after closure; a detached terminal fact remains eligible once.
+    pub(crate) terminal: bool,
+}
+
+/// Exclusive queue lease owns no producer or callback and cannot cancel a later replacement subscription.
+pub(crate) struct EventLease<E: WidgetEvent> {
+    /// Shared queue data alone lets a terminal event outlive its producer.
+    port: Rc<RefCell<WidgetEventPort<E>>>,
+    /// Per-lease cancellation distinguishes this lease from a later subscriber to the same live source.
+    cancelled: Cell<bool>,
+}
+impl<E: WidgetEvent> EventLease<E> {
+    /// Connects before publishing lease ownership; failed exclusive connection changes no existing subscriber.
+    pub(crate) fn connect(endpoint: WidgetEventPortHandle<E>) -> Result<Self, SubscribeError> {
+        let port = endpoint.0.upgrade().ok_or(SubscribeError::WidgetExpired)?;
+        port.borrow_mut().connect()?;
+        Ok(Self { port, cancelled: Cell::new(false) })
+    }
+    /// Live empty sources stay registered; closed sources survive only until their terminal fact is detached.
+    pub(crate) fn active(&self) -> bool {
+        !self.cancelled.get() && !matches!(*self.port.borrow(), WidgetEventPort::Closed { terminal: None })
+    }
+    /// Detaches a bounded batch without lending a producer/queue borrow to its eventual consumer.
+    pub(crate) fn drain(&self, limit: usize) -> Result<EventBatch<E>, nc_com::NcStatus> {
+        if self.cancelled.get() {
+            return Ok(EventBatch { events: Vec::new(), terminal: false });
+        }
+        self.port.borrow_mut().drain(limit)
+    }
+    /// Restores unattempted ordinary snapshots ahead of callback emissions after a recoverable handler error.
+    pub(crate) fn restore(&self, remaining: std::vec::IntoIter<E>) {
+        if self.cancelled.get() {
+            return;
+        }
+        if let WidgetEventPort::Connected { pending } = &mut *self.port.borrow_mut() {
+            let mut prefix: Vec<E> = remaining.collect();
+            prefix.append(pending);
+            *pending = prefix;
+        }
+    }
+
+    /// Checks cancellation and ordinary-source closure before each detached snapshot is delivered.
+    pub(crate) fn can_deliver(&self, terminal: bool) -> bool {
+        !self.cancelled.get() && (terminal || matches!(*self.port.borrow(), WidgetEventPort::Connected { .. }))
+    }
+    /// Disconnects once and discards ordinary/terminal pending snapshots without invoking user code.
+    pub(crate) fn cancel(&self) {
+        if !self.cancelled.replace(true) {
+            let retired = self.port.borrow_mut().disconnect();
+            drop(retired);
+        }
+    }
+}
+impl<E: WidgetEvent> Drop for EventLease<E> {
+    /// An already cancelled old lease cannot disconnect its source's newer subscription.
+    fn drop(&mut self) {
+        self.cancel();
     }
 }
 
@@ -320,20 +417,19 @@ trait WidgetEventDispatch<Target> {
 /// Queue ownership lets an explicit terminal event survive producer removal. The source closes its
 /// queue on drop, so this storage never retains the producer or ordinary events after removal.
 struct Subscription<E: WidgetEvent, Handler> {
-    /// Queue storage only; producer lifetime is represented by its explicit Closed state.
-    port: Rc<RefCell<WidgetEventPort<E>>>,
-    /// Concrete invocation data, independent of producer ownership.
+    /// Shared exclusive queue lease; producer and callback ownership remain separate.
+    lease: EventLease<E>,
+    /// Concrete invocation data retained directly inside the existing subscription allocation.
     handler: Handler,
 }
 
 impl<E: WidgetEvent, Handler> Subscription<E, Handler> {
-    /// Connects a live port and creates its sole subscription.
+    /// Connects using the same ownership rules as a concrete COM subscription.
     fn new(port: WidgetEventPortHandle<E>, handler: Handler) -> Result<Self, SubscribeError> {
-        let Some(inner) = port.0.upgrade() else {
-            return Err(SubscribeError::WidgetExpired);
-        };
-        inner.borrow_mut().connect()?;
-        Ok(Self { port: inner, handler })
+        Ok(Self {
+            lease: EventLease::connect(port)?,
+            handler,
+        })
     }
 }
 
@@ -342,35 +438,23 @@ where
     E: WidgetEvent,
     Handler: FnMut(&mut Target, &mut crate::Ui<'_>, &E),
 {
-    /// Reports whether the subscription has a live producer or an undelivered terminal event.
+    /// Preserves a live source or one undelivered terminal fact without retaining its producer.
     fn needs_dispatch(&self) -> bool {
-        // A dead producer gets one final dispatch opportunity only if it explicitly closed with
-        // a terminal event; ordinary queues disappear immediately on producer drop.
-        !matches!(*self.port.borrow(), WidgetEventPort::Closed { terminal: None })
+        self.lease.active()
     }
 
-    /// Detaches one complete batch, then invokes the concrete handler in port FIFO order.
-    ///
-    /// Detaching before the first invocation is essential: handler code may cause widgets to emit
-    /// without colliding with a live mutable borrow of this port.
+    /// Delivers detached snapshots, stopping if an earlier callback closes their ordinary producer.
     fn dispatch(&mut self, target: &mut Target, ui: &mut crate::Ui<'_>) -> usize {
-        let events = self.port.borrow_mut().drain();
-        let count = events.len();
-        for event in events {
-            // The port borrow ended when drain returned, so a context-aware handler may safely
-            // mutate or destroy retained roots before the next payload is delivered.
+        let batch = self.lease.drain(usize::MAX).expect("an unbounded local batch cannot exhaust its budget");
+        let mut delivered = 0;
+        for event in batch.events {
+            if !self.lease.can_deliver(batch.terminal) {
+                break;
+            }
             (self.handler)(target, ui, &event);
+            delivered += 1;
         }
-        count
-    }
-}
-
-impl<E: WidgetEvent, Handler> Drop for Subscription<E, Handler> {
-    /// Disconnects a still-live port and clears its queue.
-    ///
-    /// Closed queues stay closed; dropping a subscription also discards an undelivered terminal fact.
-    fn drop(&mut self) {
-        self.port.borrow_mut().disconnect();
+        delivered
     }
 }
 
@@ -654,5 +738,112 @@ mod tests {
         drop(source);
         assert!(!dispatcher.dispatch(&mut values));
         assert!(lifetime.upgrade().is_none(), "pruning releases the concrete callback captures");
+    }
+}
+
+#[cfg(test)]
+mod lease_tests {
+    use super::*;
+
+    /// Bounded prefixes preserve FIFO ahead of newly emitted events and reject exhausted budgets without losing data.
+    #[test]
+    fn lease_budget_preserves_pending_fifo_and_old_cancellation_cannot_touch_a_replacement() {
+        let source = EventSource::<i32>::new();
+        let lease = EventLease::connect(source.event()).unwrap();
+        assert!(source.connected());
+        source.emit(1);
+        source.emit(2);
+        assert_eq!(lease.drain(0).err(), Some(microui_contracts::UI_E_EVENT_LIMIT));
+        let first = lease.drain(1).unwrap();
+        assert_eq!(first.events, [1]);
+        source.emit(3);
+        assert_eq!(lease.drain(2).unwrap().events, [2, 3]);
+        assert!(lease.active());
+        assert!(lease.drain(0).unwrap().events.is_empty());
+        lease.cancel();
+        let replacement = EventLease::connect(source.event()).unwrap();
+        source.emit(4);
+        drop(lease);
+        assert_eq!(replacement.drain(1).unwrap().events, [4]);
+    }
+
+    /// Closure cancels detached ordinary work but preserves exactly one explicitly published terminal fact.
+    #[test]
+    fn lease_distinguishes_detached_ordinary_batches_from_terminal_delivery() {
+        let source = EventSource::<i32>::new();
+        let lease = EventLease::connect(source.event()).unwrap();
+        source.emit(1);
+        source.emit(2);
+        let ordinary = lease.drain(2).unwrap();
+        assert!(lease.can_deliver(ordinary.terminal));
+        source.close(9);
+        assert!(!lease.can_deliver(ordinary.terminal));
+        drop(source);
+        assert!(lease.active());
+        let terminal = lease.drain(1).unwrap();
+        assert_eq!(terminal.events, [9]);
+        assert!(lease.can_deliver(terminal.terminal));
+        assert!(!lease.active());
+        assert!(lease.drain(1).unwrap().events.is_empty());
+        lease.cancel();
+        assert!(!lease.can_deliver(terminal.terminal));
+    }
+}
+
+#[cfg(test)]
+mod payload_drop_tests {
+    use super::*;
+
+    /// User payload destructor deliberately reenters its live producer.
+    struct Payload {
+        /// Weak ownership prevents the payload itself from retaining the producer.
+        source: Weak<EventSource<Payload>>,
+        /// Shared count proves every discarded payload is released once.
+        drops: Rc<Cell<usize>>,
+    }
+    impl WidgetEvent for Payload {}
+    impl Drop for Payload {
+        /// Source inspection must succeed while discarded payloads are being retired.
+        fn drop(&mut self) {
+            if let Some(source) = self.source.upgrade() {
+                let _connected = source.connected();
+            }
+            self.drops.set(self.drops.get() + 1);
+        }
+    }
+    /// Disconnected emission, cancellation and both terminal-close paths release payloads outside queue borrows.
+    #[test]
+    fn discarded_payload_destructors_can_reenter_source_observation() {
+        let source = Rc::new(EventSource::new());
+        let drops = Rc::new(Cell::new(0));
+        source.emit(Payload {
+            source: Rc::downgrade(&source),
+            drops: drops.clone(),
+        });
+        assert_eq!(drops.get(), 1);
+        let lease = EventLease::connect(source.event()).unwrap();
+        source.emit(Payload {
+            source: Rc::downgrade(&source),
+            drops: drops.clone(),
+        });
+        lease.cancel();
+        assert_eq!(drops.get(), 2);
+        let replacement = EventLease::connect(source.event()).unwrap();
+        source.emit(Payload {
+            source: Rc::downgrade(&source),
+            drops: drops.clone(),
+        });
+        source.close(Payload {
+            source: Rc::downgrade(&source),
+            drops: drops.clone(),
+        });
+        assert_eq!(drops.get(), 3);
+        source.close(Payload {
+            source: Rc::downgrade(&source),
+            drops: drops.clone(),
+        });
+        assert_eq!(drops.get(), 4);
+        replacement.cancel();
+        assert_eq!(drops.get(), 5);
     }
 }

@@ -82,8 +82,11 @@ impl ListBoxParameters {
 }
 
 /// Semantic payload emitted when the user submits a list box.
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
-pub struct ListBoxSubmitted;
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ListBoxSubmitted {
+    /// Exact displayed label at user activation time, independent of later setter changes.
+    pub label: String,
+}
 
 impl crate::WidgetEvent for ListBoxSubmitted {}
 
@@ -156,7 +159,9 @@ impl Widget for ListBox {
             return crate::Change::NoChange;
         }
         // Pointer and keyboard activation publish the same application-facing submission.
-        self.submitted_event.emit(ListBoxSubmitted);
+        if self.submitted_event.connected() {
+            self.submitted_event.emit(ListBoxSubmitted { label: self.com_label().to_owned() });
+        }
 
         // The submitted event does not change this header's intrinsic inputs.
         crate::Change::NoChange
@@ -191,6 +196,11 @@ impl From<ListBoxParameters> for ListBox {
 }
 
 impl crate::com::widget::WidgetAlgorithm for ListBox {
+    /// Logical COM closure cancels ordinary submissions while retained widget references remain safe.
+    fn close_events(&mut self) {
+        self.submitted_event.close_ordinary();
+    }
+
     /// Synchronizes options inside the one concrete semantic state of a COM leaf.
     fn set_options(&mut self, options: crate::WidgetOption) {
         self.opt = options;

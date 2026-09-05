@@ -39,6 +39,7 @@ pub fn create_runtime(atlas: AtlasHandle) -> ComPtr<IUiRuntimeAbi> {
             target,
             dimensions: Cell::new(Size::default()),
             pending: Cell::new(true),
+            updating: Cell::new(false),
         }),
     })
     .query()
@@ -66,6 +67,8 @@ struct RuntimeStorage {
     dimensions: Cell<Size>,
     /// Structural/setter changes require update before rendering.
     pending: Cell<bool>,
+    /// Spans the full input transaction while individual phases return the context for callback mutations.
+    updating: Cell<bool>,
 }
 
 /// Temporary association between an actual COM widget and an existing retained root.
@@ -282,7 +285,11 @@ impl IUiFactory for Runtime {
     /// Creates one unmounted button whose host has no reference back to this runtime.
     fn create_button(&self) -> Result<ComPtr<IButtonAbi>, NcStatus> {
         self.storage.factory.host.check_mutation()?;
-        Ok(Button::create(self.storage.factory.host.clone(), self.storage.factory.resources.clone()))
+        Ok(Button::create(
+            self.storage.factory.host.clone(),
+            self.storage.factory.resources.clone(),
+            crate::Button::from(crate::ButtonParameters::new("")),
+        ))
     }
 }
 
@@ -297,29 +304,21 @@ impl IUiRuntime for Runtime {
         Ok(())
     }
 
-    /// Processes a normalized event using the existing retained router and layout algorithms.
+    /// Polling and eventful updates execute the same concrete phase sequence.
     fn update(&self, size: Size) -> Result<(), NcStatus> {
-        let storage = &self.storage;
-        storage.open()?;
-        if size.width <= 0 || size.height <= 0 {
-            return Err(NC_E_INVALID_ARG);
-        }
-        let mut context = storage.context()?;
-        storage.collect_changes(&mut context)?;
-        storage.factory.state.error.set(None);
-        context.update_ui(Dimensioni::new(size.width, size.height));
-        if let Some(error) = storage.factory.state.error.take() {
-            storage.pending.set(true);
-            return Err(error);
-        }
-        storage.dimensions.set(size);
-        storage.pending.set(false);
-        Ok(())
+        self.update_cycle(size, None)
+    }
+    /// Lends the dispatcher only after returning owned UI context storage to its idle slot.
+    fn update_with_events(&self, size: Size, dispatcher: ComRef<'_, IEventDispatcherAbi>) -> Result<(), NcStatus> {
+        self.update_cycle(size, Some(dispatcher))
     }
     /// Keeps the renderer reference and stream authority within one synchronous submission.
     fn render(&self, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
         let storage = &self.storage;
         storage.open()?;
+        if storage.updating.get() {
+            return Err(UI_E_BUSY);
+        }
         let mut context = storage.context()?;
         storage.collect_changes(&mut context)?;
         if storage.pending.get() || storage.dimensions.get() != size {
@@ -383,5 +382,97 @@ impl Drop for ContextTransaction<'_> {
     /// Reentry never receives the slot, so it is empty and unborrowed here.
     fn drop(&mut self) {
         *self.slot.borrow_mut() = self.value.take();
+    }
+}
+
+/// Owns the entire input-cycle exclusion without owning or borrowing the context during application callbacks.
+struct UpdateGuard<'a>(
+    /// Reset on success, plugin failure, callback failure or explicit runtime closure.
+    &'a Cell<bool>,
+);
+impl Drop for UpdateGuard<'_> {
+    /// A recoverable failure never leaves future runtime updates permanently blocked.
+    fn drop(&mut self) {
+        self.0.set(false);
+    }
+}
+impl Runtime {
+    /// Executes owned phases so callback edits use ordinary COM window/topology APIs with no borrowed runtime wrapper.
+    fn update_cycle(&self, size: Size, dispatcher: Option<ComRef<'_, IEventDispatcherAbi>>) -> Result<(), NcStatus> {
+        let storage = &self.storage;
+        storage.open()?;
+        if size.width <= 0 || size.height <= 0 {
+            return Err(NC_E_INVALID_ARG);
+        }
+        if storage.updating.replace(true) {
+            return Err(UI_E_BUSY);
+        }
+        let _guard = UpdateGuard(&storage.updating);
+        let dimensions = Dimensioni::new(size.width, size.height);
+        {
+            let mut context = storage.context()?;
+            // A rejected call during paint/another context transaction must not
+            // invalidate the caller's already committed frame.
+            storage.pending.set(true);
+            storage.collect_changes(&mut context)?;
+            context.window_manager.begin_update_cycle(dimensions);
+            storage.phase_result()?;
+        }
+        // All retained traversal ownership is back in storage before entering the
+        // application. A handler can remove/create windows or edit ordinary topology.
+        if self.dispatch_boundary(dispatcher)? {
+            storage.layout_boundary(dimensions)?;
+        }
+        let mut first = true;
+        loop {
+            let updated = {
+                storage.open()?;
+                let mut context = storage.context()?;
+                let updated = context.window_manager.update_cycle_step(first);
+                storage.phase_result()?;
+                updated
+            };
+            first = false;
+            if !updated {
+                break;
+            }
+            self.dispatch_boundary(dispatcher)?;
+            storage.layout_boundary(dimensions)?;
+        }
+        storage.context()?.window_manager.finish_update_cycle(dimensions);
+        storage.dimensions.set(size);
+        storage.pending.set(false);
+        Ok(())
+    }
+
+    /// Runs one finite application sweep without retaining its borrowed capability or any context transaction.
+    fn dispatch_boundary(&self, dispatcher: Option<ComRef<'_, IEventDispatcherAbi>>) -> Result<bool, NcStatus> {
+        let delivered = if let Some(dispatcher) = dispatcher {
+            // This bounds one native input's cascades across every registered source.
+            let delivered = dispatcher.dispatch(EVENT_DISPATCH_LIMIT)?;
+            if delivered > EVENT_DISPATCH_LIMIT {
+                return Err(NC_E_INVALID_ARG);
+            }
+            delivered
+        } else {
+            0
+        };
+        self.storage.open()?;
+        self.storage.phase_result()?;
+        Ok(delivered != 0)
+    }
+}
+impl RuntimeStorage {
+    /// Returns the first component failure before any subsequent collection can clear the phase latch.
+    fn phase_result(&self) -> Result<(), NcStatus> {
+        self.factory.state.error.take().map_or(Ok(()), Err)
+    }
+    /// Collects callback edits and publishes layout before any subsequent input can be routed.
+    fn layout_boundary(&self, dimensions: Dimensioni) -> Result<(), NcStatus> {
+        self.open()?;
+        let mut context = self.context()?;
+        self.collect_changes(&mut context)?;
+        context.window_manager.layout_update_cycle(dimensions);
+        self.phase_result()
     }
 }

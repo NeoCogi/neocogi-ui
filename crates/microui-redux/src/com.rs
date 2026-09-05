@@ -63,8 +63,8 @@ impl Widget<IButtonAbi> {
     /// Connects a concrete typed sink and returns the caller-owned subscription.
     /// Retain this lease in the application event session; the runtime never owns
     /// an application handler. A second live subscriber is rejected by the source.
-    pub fn subscribe(&self, sink: ComRef<'_, IButtonSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.interface.query::<IButtonEventsAbi>()?.subscribe(sink)
+    pub fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.interface.query::<IActivationEventsAbi>()?.subscribe(sink)
     }
 }
 
@@ -389,6 +389,10 @@ impl Ui {
     /// Processes input and synchronizes independently recorded geometry changes.
     pub fn update(&self, size: Size) -> Result<(), NcStatus> {
         self.runtime.update(size)
+    }
+    /// Dispatches typed application events between input phases and commits handler edits before routing subsequent input.
+    pub fn update_with_events<State: 'static>(&self, size: Size, events: &crate::EventSession<State>) -> Result<(), NcStatus> {
+        self.runtime.update_with_events(size, events.as_dispatcher())
     }
     /// Submits a synchronized UI frame to a native window's renderer capability.
     pub fn render(&self, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {

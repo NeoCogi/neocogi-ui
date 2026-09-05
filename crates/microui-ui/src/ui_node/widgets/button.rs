@@ -141,8 +141,11 @@ impl ButtonParameters {
 }
 
 /// Semantic payload emitted when the user submits a button.
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
-pub struct ButtonSubmitted;
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ButtonSubmitted {
+    /// Exact displayed label at user activation time, independent of later setter changes.
+    pub label: String,
+}
 
 impl crate::WidgetEvent for ButtonSubmitted {}
 
@@ -271,7 +274,9 @@ impl Widget for Button {
             return crate::Change::NoChange;
         }
         // Pointer click, Enter, and Space converge on the button's single typed submission port.
-        self.submitted_event.emit(ButtonSubmitted);
+        if self.submitted_event.connected() {
+            self.submitted_event.emit(ButtonSubmitted { label: self.com_label().to_owned() });
+        }
 
         // Submitting leaves the label and preferred dimensions unchanged.
         crate::Change::NoChange
@@ -308,6 +313,11 @@ impl From<ButtonParameters> for Button {
 }
 
 impl crate::com::widget::WidgetAlgorithm for Button {
+    /// Logical COM closure cancels ordinary submissions while retained widget references remain safe.
+    fn close_events(&mut self) {
+        self.submitted_event.close_ordinary();
+    }
+
     /// Synchronizes options inside the one concrete semantic state of a COM leaf.
     fn set_options(&mut self, options: crate::WidgetOption) {
         self.opt = options;

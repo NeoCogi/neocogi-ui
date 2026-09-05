@@ -941,3 +941,5 @@ fn builtin_bulk_paint_preserves_alignment_icons_and_releases_semantic_borrows() 
         Err(NC_E_INVALID_ARG)
     );
 }
+
+mod events;

@@ -12,6 +12,8 @@ pub mod widget;
 pub use widget::{WidgetOptions, WidgetProperties, WidgetFrame, WidgetPaint};
 mod container;
 pub use container::*;
+mod events;
+pub use events::*;
 mod leaves;
 pub use leaves::*;
 mod input;
@@ -118,29 +120,6 @@ pub trait IButton: IWidget {
     fn label(&self) -> Result<ComPtr<nc_com::INcStringAbi>, NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.ButtonSink:v1")]
-/// Concrete semantic event consumer; supplied by the application's static code.
-pub trait IButtonSink {
-    /// Receives an immutable submission snapshot after widget traversal releases its borrows.
-    fn submitted(&self, label: ComRef<'_, nc_com::INcStringAbi>) -> Result<(), NcStatus>;
-}
-
-#[com_interface(auto_guid = "microui.EventSubscription:v1")]
-/// Lease owning one queue and typed consumer; the driver retains this lease.
-pub trait IEventSubscription {
-    /// Delivers one detached batch and returns the number of delivered events.
-    fn dispatch(&self) -> Result<u32, NcStatus>;
-    /// Disconnects explicitly; final object release also disconnects without invoking user code.
-    fn cancel(&self) -> Result<(), NcStatus>;
-}
-
-#[com_interface(auto_guid = "microui.ButtonEvents:v1")]
-/// Separate subscription capability avoids a cycle through a button's editing interface.
-pub trait IButtonEvents {
-    /// Connects the exclusive subscriber and returns its ownership lease.
-    fn subscribe(&self, sink: ComRef<'_, IButtonSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
-}
-
 #[com_interface(auto_guid = "microui.UiFactory:v1")]
 /// Runtime-bound widget factory implemented by the UI plugin.
 pub trait IUiFactory {
@@ -190,6 +169,12 @@ pub const UI_E_OWNER: NcStatus = NcStatus::from_code(-1002);
 pub const UI_E_EXPIRED_SCOPE: NcStatus = NcStatus::from_code(-1003);
 /// Painting requires update/layout to be synchronized after a mutation or resize.
 pub const UI_E_UPDATE_REQUIRED: NcStatus = NcStatus::from_code(-1004);
+/// Backend failure; diagnostics belong to the platform implementation.
+pub const UI_E_RENDER: NcStatus = NcStatus::from_code(-1005);
+/// A live surface rejects the requested structural, modal or managed-layer operation.
+pub const UI_E_POLICY: NcStatus = NcStatus::from_code(-1006);
+/// A bounded event transaction exhausted its callback budget; undispatched queued events remain pending.
+pub const UI_E_EVENT_LIMIT: NcStatus = NcStatus::from_code(-1007);
 
 #[com_interface(auto_guid = "microui.TextMetrics:v1")]
 /// Immutable resource view shared for a complete layout transaction.
@@ -514,8 +499,11 @@ pub trait IWindowManager {
 #[com_interface(auto_guid = "microui.UiRuntime:v1")]
 /// One independent retained UI, also exposing its widget factory/window manager.
 pub trait IUiRuntime {
-    /// Processes one input event; NONE still synchronizes setters and resize.
+    /// Drains queued input, or one eventless update, and synchronizes setters/resize without an application dispatcher.
     fn update(&self, size: Size) -> Result<(), NcStatus>;
+    /// Borrows application dispatch at each safe boundary; handlers may mutate windows/topology before the next input is routed.
+    /// The runtime never retains dispatcher; update/render reentry returns BUSY even while the context is available to handlers.
+    fn update_with_events(&self, size: Size, dispatcher: ComRef<'_, IEventDispatcherAbi>) -> Result<(), NcStatus>;
     /// Queues one copied host event; Text borrows complete UTF-8 bytes only for this call.
     /// The next update applies queued events in order and synchronizes each input transaction.
     fn input(&self, event: UiInputAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
@@ -536,8 +524,6 @@ pub trait IUiProvider {
 pub const UI_PROVIDER_CLASS: nc_com::NcGuid = nc_com::guid_from_qualified_name("microui.UiProvider");
 /// Stable platform activation identity independent of the selected native backend.
 pub const PLATFORM_CLASS: nc_com::NcGuid = nc_com::guid_from_qualified_name("microui.Platform");
-/// Backend failure; diagnostics belong to the platform implementation.
-pub const UI_E_RENDER: NcStatus = NcStatus::from_code(-1005);
 
 #[com_interface(auto_guid = "microui.WidgetHost:v1")]
 /// Runtime identity and mutation authority without a reference back to its tree.
@@ -564,6 +550,3 @@ pub trait IPopup {
     /// Permanently removes this popup subtree and closes its retained widgets.
     fn close(&self) -> Result<(), NcStatus>;
 }
-
-/// A live surface rejects the requested structural, modal or managed-layer operation.
-pub const UI_E_POLICY: NcStatus = NcStatus::from_code(-1006);

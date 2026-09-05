@@ -1165,6 +1165,12 @@ impl TextArea {
     }
 }
 impl crate::com::widget::WidgetAlgorithm for TextArea {
+    /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
+    fn close_events(&mut self) {
+        self.changed_event.close_ordinary();
+        self.submitted_event.close_ordinary();
+    }
+
     /// The editor has no decorative options of its own; the common COM state controls input policy.
     fn set_options(&mut self, _options: WidgetOption) {}
 }

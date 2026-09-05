@@ -141,7 +141,7 @@ Both deployment modes use the same descriptor and class table. Only a dynamic li
 
 The static runtime mode must reuse the existing catalog and API-table implementation. It must not create a second registry design. A native dynamic application links one runtime shared library; a fully static/browser application links one runtime implementation. Do not embed independent process-global registries in each plugin.
 
-Generic implementation-class support must keep the interfaces monomorphic. A `ButtonSink<H>` may be a host-local monomorphization implementing the fixed `IButtonSink` ABI. Initially restrict generic COM classes to objects constructed locally and returned through interfaces; do not silently assign one registered CLSID to unrelated generic instantiations. Objects must own their state; generic lifetimes must not permit borrowed stack state to escape through an unqualified ComPtr.
+Generic implementation-class support must keep the interfaces monomorphic. A `ActivationSink<State, H>` may be a host-local monomorphization implementing the fixed `IActivationSink` ABI. Initially restrict generic COM classes to objects constructed locally and returned through interfaces; do not silently assign one registered CLSID to unrelated generic instantiations. Objects must own their state; generic lifetimes must not permit borrowed stack state to escape through an unqualified ComPtr.
 
 **5. UI crate and plugin boundaries**
 
@@ -239,7 +239,7 @@ The class lists its specialized interface; nc-com supplies every base projection
 in the same allocation. A concrete plugin class contains its private state directly:
 
 ```rust,ignore
-#[com_class(interfaces(IButton, ILeafLayout, IButtonEvents))]
+#[com_class(interfaces(IButton, ILeafLayout, IActivationEvents))]
 /// One button allocation; no legacy trait-object wrapper or public downcast is needed.
 pub struct ButtonObject {
     /// Plugin-local semantic state and pending geometry invalidation.
@@ -265,7 +265,7 @@ I would divide the public capabilities as follows:
 | Common widget behavior | `IWidget` | Concrete widget/container object |
 | Geometry | `ILeafLayout`, `IContainerLayout`, `IChildren` | Widget algorithm plus runtime-owned derived node state |
 | Concrete editing | `IButton`, `ISlider`, `ITextbox`, `ILinear`, `IGrid` | Concrete object |
-| Events | `IButtonEvents`, `IButtonSink`, `IEventSubscription` and equivalent typed families | Source queue, external subscription owner and application handler |
+| Events | `IActivationEvents`, `IActivationSink`, `IEventSubscription` and equivalent typed families | Source queue, external subscription owner and application handler |
 | Platform and rendering | `IPlatformWindow`, `IRenderer`, texture/render-item capabilities | Platform/GPU plugin |
 | Resources | `IAssetBundle`, `IAssetLoader`, optional `IThemeLoader` | Immutable bundle or asset operation |
 
@@ -340,19 +340,19 @@ Application state stays in the statically linked application. The COM UI runtime
 Expose concrete event capabilities. For example:
 
 ```rust
-#[com_interface(auto_guid = "microui.plan.ButtonSink:v1")]
+#[com_interface(auto_guid = "microui.plan.ActivationSink:v1")]
 /// Application-owned handler for one concrete event family.
-pub trait IButtonSink {
+pub trait IActivationSink {
     /// Receives a submission snapshot after traversal releases its mutable borrows.
     fn submitted(&self, label: ComRef<'_, INcStringAbi>)
         -> Result<(), NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.plan.ButtonEvents:v1")]
+#[com_interface(auto_guid = "microui.plan.ActivationEvents:v1")]
 /// Typed subscription endpoint implemented by a button.
-pub trait IButtonEvents {
+pub trait IActivationEvents {
     /// Connects the exclusive subscriber and returns its cancellation/ownership lease.
-    fn subscribe(&self, sink: ComRef<'_, IButtonSinkAbi>)
+    fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>)
         -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
 }
 ```

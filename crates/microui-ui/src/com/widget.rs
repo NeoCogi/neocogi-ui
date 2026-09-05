@@ -10,6 +10,8 @@ use crate::render::{DisplayList, Renderer};
 
 /// Private semantic algorithms reused by each statically known built-in class.
 pub(crate) trait WidgetAlgorithm: crate::Widget {
+    /// Ends semantic event production on logical close; states without event sources need no work.
+    fn close_events(&mut self) {}
     /// Copies common options into the algorithm's existing presentation state.
     fn set_options(&mut self, options: WidgetOption);
     /// Adds concrete state-dependent routing policy to the common caller-authored options.
@@ -55,6 +57,24 @@ pub(super) struct WidgetCore<S: WidgetAlgorithm> {
 }
 
 impl<S: WidgetAlgorithm> WidgetCore<S> {
+    /// Closes ordinary sources with the logical widget, before final COM release drops its semantic state.
+    pub(super) fn close(&self) -> Result<(), NcStatus> {
+        let mut core = self.take()?;
+        if self.state.close()? {
+            core.close_events();
+        }
+        Ok(())
+    }
+
+    /// Obtains the native typed endpoint under local state access, then releases that access before retaining the foreign sink.
+    pub(super) fn subscribe<E: super::events::ComEvent>(&self, sink: ComRef<'_, E::Sink>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>
+    where
+        S: crate::TypedWidget<E>,
+    {
+        self.state.writable()?;
+        let endpoint = { self.take()?.event() };
+        super::events::subscribe(endpoint, sink)
+    }
     /// Takes the inline state so recursive component calls cannot encounter a held RefCell guard.
     pub(super) fn take(&self) -> Result<CoreAccess<'_, S>, NcStatus> {
         let value = self.core.try_borrow_mut().map_err(|_| UI_E_BUSY)?.take().ok_or(UI_E_BUSY)?;
@@ -365,7 +385,7 @@ macro_rules! leaf_class {
                 self.widget.update(state, event, text)
             }
             /// Commits logical closure before final COM destruction.
-            fn close_widget(&self) -> Result<(), NcStatus> { self.widget.state.close()?; Ok(()) }
+            fn close_widget(&self) -> Result<(), NcStatus> { self.widget.close() }
         }
         widget_phase_impl!($name);
         leaf_layout_impl!($name);
@@ -593,6 +613,22 @@ macro_rules! scrolling_impl {
                 }
                 self.widget.take()?.scroll_rect_into_view(local_rect(rect));
                 Ok(())
+            }
+        }
+    };
+}
+
+/// Exposes the two existing independent editor ports on one concrete COM editing object.
+macro_rules! text_subscription_impl {
+    ($name:ident, $changed:ty, $submitted:ty) => {
+        impl ITextEvents for $name {
+            /// Returns the exclusive changed lease without retaining the callback on the producer.
+            fn subscribe_changed(&self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+                self.widget.subscribe::<$changed>(sink)
+            }
+            /// Returns the independent submitted lease through the same typed queue transport.
+            fn subscribe_submitted(&self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+                self.widget.subscribe::<$submitted>(sink)
             }
         }
     };

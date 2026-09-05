@@ -48,13 +48,137 @@ Release mutable RefCell/lock borrows before calling an external widget, containe
 
 ## Typed events and application state
 
-Semantic events have concrete sink interfaces and typed payloads. An application owns its state and its subscriptions. Source queues contain event snapshots, not application callbacks. A subscription owns its source connection and typed sink; the application's event driver owns those subscriptions. The runtime borrows the driver during a transaction rather than permanently owning a path back to application handlers that may retain UI objects.
+`EventSession<State>` is the static application adapter. It owns the concrete
+application state and one registration sequence. Each handler is an owned
+`EventHandler<State, Event>` implementation stored inline in a local generic COM
+sink. The approved `FnMut(&mut State, &Event) -> Result<(), NcStatus>` convenience
+implements that same trait; captures and Rust state never cross the ABI. Generic
+Rust list data also stays in the application; cross-plugin domain data needs a
+concrete domain interface and owner-scoped keys.
 
-Generic adapters are statically linked and own their state, for example through an application-local `Rc<RefCell<State>>` and a concrete handler trait. They must not hide a borrowed stack state pointer inside a retainable COM object. Generic Rust list data stays local to the application; cross-plugin domain data needs a concrete domain interface and owner-scoped keys.
+```rust
+use microui_redux::{Button, EventHandler, EventSession};
+use nc_com::NcStatus;
+use microui_redux::events::Activation;
 
-Dispatch follows deterministic registration-order sweeps and FIFO order within a source, with a finite cascade bound. Detach a delivery batch before invoking handlers, so no producer/tree borrow is held while application code runs. Programmatic setters remain silent unless their concrete API explicitly documents an event. Replacing a value must not manufacture a user submission.
+struct Submitted { button: Button }
+impl EventHandler<u32, Activation> for Submitted {
+    fn handle(&mut self, count: &mut u32, event: &Activation) -> Result<(), NcStatus> {
+        *count += 1;
+        // The event owns the label captured at activation, even after this setter.
+        self.button.set_label(&format!("{}: {}", event.label, count))
+    }
+}
 
-Cancellation and final subscription release disconnect without invoking user code. Closing a source discards ordinary queued work and preserves only the documented terminal fact. The driver can deliver that fact after the producer has logically closed. Do not create a strong ownership cycle between a runtime, its source, a handler, and retained widget/runtime capabilities.
+let events = EventSession::new(0u32);
+let lease = events.subscribe_activation(&button, Submitted { button: button.clone() })?;
+ui.update_with_events(drawable_size, &events)?;
+println!("{} submissions", *events.state()?);
+ui.render(drawable_size, renderer.as_com_ref())?;
+lease.cancel()?; // Explicit cancellation; dropping the session also cancels its leases.
+```
+
+The event capabilities are separate from editing capabilities and may be queried
+once when subscribing. The session offers these concrete families:
+
+| Registration | Producers | Captured payload |
+| --- | --- | --- |
+| `subscribe_activation` | Button, ListItem, ListBox | Submitted label |
+| `subscribe_checkbox` | Checkbox | Checked boolean |
+| `subscribe_numeric` | Slider, Number | Finite committed value |
+| `subscribe_scrollbar` | Scrollbar | Nonnegative clamped offset |
+| `subscribe_text_changed` | Textbox, TextArea | Normalized text and matching UTF-8 byte cursor |
+| `subscribe_text_submitted` | Textbox, TextArea | Submitted normalized text |
+| `subscribe_window` | Logical window | Typed lifecycle/chrome event with copied geometry where relevant |
+| `subscribe_popup` | Popup | Dismissal fact |
+
+A source permits one subscriber per port. Editor changed/submitted ports are
+independent. Subscribing to an occupied port returns `UI_E_BUSY`; subscribing to
+a closed producer returns `UI_E_CLOSED`. A failed registration does not replace
+the current subscriber. TextArea forwards both capabilities to its actual editor;
+there is one queue for each event, without an outer duplicate.
+
+Producer queues contain immutable snapshots and never own application callbacks,
+sinks, leases or sessions. A subscription owns its queue connection and typed
+sink; the session owns subscriptions. The runtime **borrows** `IEventDispatcher`
+synchronously during `update_with_events` and must not retain it. State and
+handlers may therefore own runtime/widget capabilities. Application-created
+ownership cycles still require explicit cancellation. `EventSession` destruction
+cancels every registered lease, including leases retained by other app code, and
+releases their sinks. A retained dispatcher subsequently reports `UI_E_CLOSED`.
+Final subscription release disconnects; final producer release closes its queue.
+Neither invokes application handlers.
+
+Dispatch sweeps sources in registration order, with FIFO inside each source.
+Each source detaches its batch before calling handlers; no producer, retained
+tree, registry or sink-slot borrow crosses the callback. Cross-source order is
+registration order, not a global timestamp order. For example, if B was
+registered before A, A produced `a1, a2`, and B produced `b1`, a sweep delivers
+`b1, a1, a2`. Callback emissions participate in subsequent source visits or
+sweeps until the queues are empty. Registration, session cancellation, and
+recursive dispatch during a session transaction return `UI_E_BUSY`; cancelling
+an individual lease from its own handler is supported and stops the remainder
+of its batch. A cancelled old lease cannot disconnect a later replacement.
+
+`EVENT_DISPATCH_LIMIT` is 1,000,000 callbacks per runtime dispatch boundary,
+including all sources and cascade sweeps. `dispatch_bounded(limit)` selects an
+explicit smaller budget for manual delivery. Exhaustion reports
+`UI_E_EVENT_LIMIT` (-1007) and preserves unattempted events. Delivering exactly
+the limit succeeds when nothing remains; limit zero succeeds only for empty
+queues. A handler error consumes the attempted event, stops delivery, and
+restores unattempted ordinary events ahead of events emitted by that callback.
+Retry never replays the failed attempt. Changes already made by a handler are
+not rolled back. Panics follow the COM abort policy and are not recoverable
+handler errors. A custom dispatcher must report its actual successful callback
+count and honor the supplied bound.
+
+Ordinary widget setters are silent; changing a value does not manufacture a
+user submission. Window visibility transitions and popup dismissal explicitly
+publish lifecycle facts even when initiated by application code. Logical source
+closure discards ordinary queued work, including the remainder of a detached
+batch. Window destruction preserves exactly one terminal `Destroyed` fact for
+its existing subscriber; it can be delivered after the window is closed. A new
+subscriber cannot replay historical events. Cancellation discards terminal facts
+too. Terminal delivery is attempted once, even if its handler returns an error.
+
+`Ui::update_with_events` initially synchronizes geometry, dispatches already
+queued events, then processes each native input followed by semantic dispatch
+and layout before routing the next input. With no native input, eligible widgets
+receive one ordinary update. At handler boundaries the context is available for
+ordinary setters, window creation/removal, topology edits, and input enqueueing.
+Recursive update/render reports `UI_E_BUSY`. Callback failure leaves the frame
+uncommitted, so render reports `UI_E_UPDATE_REQUIRED`; another update can finish
+remaining queued input. If a handler closes the runtime, the outer update
+reports `UI_E_CLOSED`.
+
+`Ui::update` supports polling without event dispatch. `EventSession::dispatch`
+only delivers semantic events: it neither processes native input nor commits
+layout. After manual callbacks mutate geometry, call update before rendering.
+Directly dispatching a raw lease bypasses session ordering and its global budget;
+applications using this lower-level API own those obligations themselves.
+
+Finish `state()`/`state_mut()` borrows before dispatch or an eventful update. A
+handler needs mutable access to the same state; incompatible borrows produce
+`UI_E_BUSY`. As with any handler error, an event attempted while that state is
+unavailable is consumed. Do not hide borrowed stack state inside a retainable
+COM object to work around this rule.
+
+### Geometry synchronization does not repeat ordinary widget behavior
+
+A setter invoked by a handler can run after that widget's ordinary update for
+the current input. The following layout sees its dirty geometry, but the runtime
+does not automatically rerun already visited widgets. Requests implemented by
+ordinary update, such as TextArea caret reveal and preferred-column reset, wait
+for that widget's next eligible update. If immediate caret visibility is required
+after a handler changes cursor, text, font or wrapping, perform another update
+after the outer update returns (or allow a later queued input to supply that
+update). Hidden/ineligible editors retain requests until eligible again.
+
+This is an author obligation: retain such requests explicitly and distinguish
+geometry invalidation from behavior that needs another update. A geometry commit
+alone cannot certify completion of arbitrary pending model work. External/shared
+state still requires explicit synchronization, as described above; neither a
+handler return nor `Changed | NoChange` observes undocumented dependencies.
 
 ## Paths, buffers, resources, and errors
 

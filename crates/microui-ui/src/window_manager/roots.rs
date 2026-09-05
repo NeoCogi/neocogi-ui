@@ -2806,44 +2806,54 @@ impl WindowManager {
         dispatch_state: &mut DispatchState,
         mut after_update: impl FnMut(&mut Self, &mut DispatchState) -> bool,
     ) {
-        // Clone the immutable handle from the same bundle as the skin used below. Holding an owned
-        // handle also avoids borrowing the manager across application dispatch callbacks.
-        let atlas = self.bundle.atlas().clone();
+        self.begin_update_cycle(dimensions);
+        if after_update(self, dispatch_state) {
+            self.layout_update_cycle(dimensions);
+        }
+        let mut first = true;
+        while self.update_cycle_step(first) {
+            first = false;
+            after_update(self, dispatch_state);
+            self.layout_update_cycle(dimensions);
+        }
+        self.finish_update_cycle(dimensions);
+    }
+
+    /// Begins one cycle and lays out every visible tree before either callbacks or input routing.
+    pub(crate) fn begin_update_cycle(&mut self, dimensions: Dimensioni) {
         self.ui_commit = None;
-        let viewport = Recti::new(0, 0, dimensions.width, dimensions.height);
         for node in &mut self.surfaces.nodes {
-            // Every concrete surface begins the cycle so hidden trees retain coherent staged state.
+            // Hidden surfaces retain coherent staged state without receiving ordinary updates.
             node.surface.body.begin_update();
         }
+        self.layout_update_cycle(dimensions);
+    }
 
-        // Commit geometry before any update so widgets receive authoritative content rectangles.
-        // Preserve the pre-input subscriber boundary: a handler may change surface geometry that
-        // must be laid out before either eventless traversal or routing the first queued event.
-        self.layout(viewport, &atlas);
-        if after_update(self, dispatch_state) {
-            self.layout(viewport, &atlas);
-        }
-
-        // A routed event already gives every eligible widget one ordinary update, so add an
-        // eventless traversal only when no raw event can consume pending programmatic work. This
-        // keeps eventful FIFO behavior at exactly one traversal per event while making an empty
-        // Context update a real synchronization boundary for caret reveal and similar requests.
-        if !self.input.has_pending() {
-            let input = self.input.snapshot();
-            self.update_eligible_widget_trees(&atlas, input);
-            // Eventless widget work can emit typed events. Dispatch only after all widget borrows
-            // end, then commit widget and subscriber mutations in the same mandatory layout.
-            after_update(self, dispatch_state);
-            self.layout(viewport, &atlas);
-        }
-
-        while let Some(event) = self.input.pop_event() {
+    /// Applies one queued input, or exactly one initial eventless update when no raw event is pending.
+    /// Returning releases all traversal borrows before the caller dispatches application events.
+    pub(crate) fn update_cycle_step(&mut self, first: bool) -> bool {
+        let atlas = self.bundle.atlas().clone();
+        if let Some(event) = self.input.pop_event() {
             let input = self.input.snapshot();
             self.update_for_event(&atlas, &event, input);
-            // Subscribers run after all retained borrows are released and before the next layout.
-            after_update(self, dispatch_state);
-            self.layout(viewport, &atlas);
+            true
+        } else if first {
+            let input = self.input.snapshot();
+            self.update_eligible_widget_trees(&atlas, input);
+            true
+        } else {
+            false
         }
+    }
+
+    /// Reuses the current bundle after callbacks, so a resource replacement cannot leave an old atlas paired with new skin.
+    pub(crate) fn layout_update_cycle(&mut self, dimensions: Dimensioni) {
+        let atlas = self.bundle.atlas().clone();
+        self.layout(Recti::new(0, 0, dimensions.width, dimensions.height), &atlas);
+    }
+
+    /// Publishes a renderable commit only after every input/callback/layout boundary has completed successfully.
+    pub(crate) fn finish_update_cycle(&mut self, dimensions: Dimensioni) {
         self.ui_commit = Some(dimensions);
     }
 

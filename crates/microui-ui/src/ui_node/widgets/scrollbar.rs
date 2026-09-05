@@ -585,6 +585,11 @@ mod tests {
 }
 
 impl crate::com::widget::WidgetAlgorithm for Scrollbar {
+    /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
+    fn close_events(&mut self) {
+        self.changed_event.close_ordinary();
+    }
+
     /// A zero range paints a full thumb but must not establish meaningless pointer capture.
     fn effective_options(&self, options: WidgetOption) -> WidgetOption {
         if self.max_offset() > 0 {

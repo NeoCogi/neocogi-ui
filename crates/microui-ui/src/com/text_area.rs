@@ -3,8 +3,9 @@ use super::*;
 use super::widget::{Resources, WidgetCore};
 use nc_com::{INcStringAbi, NcString};
 
-leaf_class!(TextEditor, crate::TextArea, IMultilineEditor, IMultilineEditorAbi, IFontStyle);
+leaf_class!(TextEditor, crate::TextArea, IMultilineEditor, IMultilineEditorAbi, IFontStyle, ITextEvents);
 font_style_impl!(TextEditor);
+text_subscription_impl!(TextEditor, crate::TextAreaChanged, crate::TextAreaSubmitted);
 
 impl ITextContent for TextEditor {
     /// Copies normalized text from the only editor buffer into an immutable snapshot.
@@ -56,7 +57,7 @@ impl IMultilineEditor for TextEditor {
     }
 }
 
-#[com_class(interfaces(ITextArea, IScrolling, IContainerLayout, IFontStyle))]
+#[com_class(interfaces(ITextArea, IScrolling, IContainerLayout, IFontStyle, ITextEvents))]
 /// One composed root owns scrolling while inherited text calls edit its fixed actual content child.
 pub(super) struct TextArea {
     /// Shared concrete scroll algorithm; no additional wrapper node surrounds the existing scroll tree.
@@ -67,6 +68,8 @@ pub(super) struct TextArea {
     text: ComPtr<IMultilineEditorAbi>,
     /// Cached typography capability on that same editor, with no duplicate font selection.
     font: ComPtr<IFontStyleAbi>,
+    /// Cached event capability of that same fixed editor, never a root-owned duplicate queue.
+    events: ComPtr<ITextEventsAbi>,
 }
 fixed_phases!(TextArea);
 scrolling_impl!(TextArea);
@@ -83,6 +86,7 @@ impl TextArea {
         let parts = super::scroll::ScrollParts::prepare(host.clone(), resources.clone(), scrolling)?;
         let text = TextEditor::create(host, resources, crate::TextArea::com_new(text, wrap, parts.model));
         let font = text.query()?;
+        let events = text.query()?;
         parts.content.insert(0, text.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
         // The transform surface owns its private editor. This root intentionally
         // retains no content-replacement authority and cannot detach its text leaf.
@@ -91,6 +95,7 @@ impl TextArea {
             editor: parts.editor,
             text,
             font,
+            events,
         })
         .query()
         .expect("text area declares ITextArea"))
@@ -143,5 +148,18 @@ impl IFontStyle for TextArea {
     fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.widget.state.writable()?;
         self.font.set_named_font(name)
+    }
+}
+
+impl ITextEvents for TextArea {
+    /// Forwards changed subscriptions to the actual fixed content editor.
+    fn subscribe_changed(&self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.widget.state.writable()?;
+        self.events.subscribe_changed(sink)
+    }
+    /// Forwards the independent submitted port without adding root queue ownership.
+    fn subscribe_submitted(&self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.widget.state.writable()?;
+        self.events.subscribe_submitted(sink)
     }
 }

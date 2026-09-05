@@ -2,15 +2,15 @@
 use super::*;
 use nc_com::{INcStringAbi, NcString};
 
-leaf_class!(Checkbox, crate::Checkbox, ICheckbox, ICheckboxAbi, IFontStyle);
-leaf_class!(Textbox, crate::Textbox, ITextbox, ITextboxAbi, IFontStyle);
+leaf_class!(Checkbox, crate::Checkbox, ICheckbox, ICheckboxAbi, IFontStyle, ICheckboxEvents);
+leaf_class!(Textbox, crate::Textbox, ITextbox, ITextboxAbi, IFontStyle, ITextEvents);
 leaf_class!(TextBlock, crate::TextBlock, ITextBlock, ITextBlockAbi, IFontStyle);
-leaf_class!(Slider, crate::Slider, ISlider, ISliderAbi, IFontStyle);
-leaf_class!(Number, crate::Number, INumber, INumberAbi, IFontStyle);
+leaf_class!(Slider, crate::Slider, ISlider, ISliderAbi, IFontStyle, INumericEvents);
+leaf_class!(Number, crate::Number, INumber, INumberAbi, IFontStyle, INumericEvents);
 leaf_class!(ColorSwatch, crate::ColorSwatch, IColorSwatch, IColorSwatchAbi, IFontStyle);
-leaf_class!(ListItem, crate::ListItem, IListItem, IListItemAbi, IFontStyle, IIconContent);
-leaf_class!(ListBox, crate::ListBox, IListBox, IListBoxAbi, IFontStyle);
-leaf_class!(Scrollbar, crate::Scrollbar, IScrollbar, IScrollbarAbi);
+leaf_class!(ListItem, crate::ListItem, IListItem, IListItemAbi, IFontStyle, IIconContent, IActivationEvents);
+leaf_class!(ListBox, crate::ListBox, IListBox, IListBoxAbi, IFontStyle, IActivationEvents);
+leaf_class!(Scrollbar, crate::Scrollbar, IScrollbar, IScrollbarAbi, IScrollbarEvents);
 
 impl ICheckbox for Checkbox {
     /// Reads the same boolean state used by pointer/Space updates and paint.
@@ -200,3 +200,47 @@ font_style_impl!(ListBox);
 font_style_impl!(ListItem);
 
 icon_content_impl!(ListItem);
+
+impl ICheckboxEvents for Checkbox {
+    /// Connects the one existing native semantic port without creating a parallel event source.
+    fn subscribe(&self, sink: ComRef<'_, ICheckboxSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.widget.subscribe::<crate::CheckboxChanged>(sink)
+    }
+}
+
+impl INumericEvents for Slider {
+    /// Connects the one existing native semantic port without creating a parallel event source.
+    fn subscribe(&self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.widget.subscribe::<crate::SliderChanged>(sink)
+    }
+}
+
+impl INumericEvents for Number {
+    /// Connects the one existing native semantic port without creating a parallel event source.
+    fn subscribe(&self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.widget.subscribe::<crate::NumberChanged>(sink)
+    }
+}
+
+impl IScrollbarEvents for Scrollbar {
+    /// Connects the one existing native semantic port without creating a parallel event source.
+    fn subscribe(&self, sink: ComRef<'_, IScrollbarSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.widget.subscribe::<crate::ScrollbarChanged>(sink)
+    }
+}
+
+impl IActivationEvents for ListBox {
+    /// Connects the one existing native semantic port without creating a parallel event source.
+    fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.widget.subscribe::<crate::ListBoxSubmitted>(sink)
+    }
+}
+
+impl IActivationEvents for ListItem {
+    /// Connects the one existing native semantic port without creating a parallel event source.
+    fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.widget.subscribe::<crate::ListItemSubmitted>(sink)
+    }
+}
+
+text_subscription_impl!(Textbox, crate::TextboxChanged, crate::TextboxSubmitted);

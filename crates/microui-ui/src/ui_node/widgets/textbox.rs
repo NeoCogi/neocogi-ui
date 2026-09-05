@@ -606,6 +606,12 @@ mod tests {
 }
 
 impl crate::com::widget::WidgetAlgorithm for Textbox {
+    /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
+    fn close_events(&mut self) {
+        self.changed_event.close_ordinary();
+        self.submitted_event.close_ordinary();
+    }
+
     /// Synchronizes options inside the one concrete semantic state of a COM leaf.
     fn set_options(&mut self, options: crate::WidgetOption) {
         self.opt = options;

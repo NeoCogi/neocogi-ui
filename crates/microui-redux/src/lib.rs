@@ -9,3 +9,7 @@
 /// Typed clients and concrete UI interface definitions.
 pub mod com;
 pub use com::*;
+
+/// Application-owned typed semantic events and deterministic COM delivery.
+pub mod events;
+pub use events::{EventSession, EventHandler};

@@ -1089,7 +1089,7 @@ mod tests {
             let window = model.dialog.window.clone();
             click_node(&mut context, &mut model, &window, node, true);
             assert_eq!(&model.dialog.current_working_directory, expected);
-            model.dialog.go_submitted(&ButtonSubmitted);
+            model.dialog.go_submitted(&ButtonSubmitted::default());
             assert_eq!(
                 &model.dialog.current_working_directory, expected,
                 "unchanged lossy path input refreshes the native directory"
@@ -1471,7 +1471,7 @@ mod tests {
         let file_scroll = model.dialog.file_scroll.clone();
         file_scroll.try_update(|state| state.set_offset(crate::vec2(0, 40))).unwrap();
         fs::write(dir.join("new-file.txt"), b"row").unwrap();
-        model.dialog.go_submitted(&ButtonSubmitted);
+        model.dialog.go_submitted(&ButtonSubmitted::default());
         context.update_ui_state(dimensions(), &mut model);
         assert!(path.is_alive() && folder_scroll.is_alive() && file_scroll.is_alive());
         assert_eq!(file_scroll.try_read(|state| state.offset().y), Some(40));
@@ -1479,7 +1479,7 @@ mod tests {
         for entry in fs::read_dir(&dir).unwrap() {
             fs::remove_file(entry.unwrap().path()).unwrap();
         }
-        model.dialog.go_submitted(&ButtonSubmitted);
+        model.dialog.go_submitted(&ButtonSubmitted::default());
         context.update_ui_state(dimensions(), &mut model);
         assert_eq!(file_scroll.try_read(|state| state.offset().y), Some(0));
         fs::remove_dir_all(dir).unwrap();
