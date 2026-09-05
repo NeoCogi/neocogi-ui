@@ -8,6 +8,7 @@ cover the retained UI model, integration details, and repository workflows.
 - [Author contracts](COM_AUTHORS.md) — change reporting, external state, phase limits, scopes, ownership and error recovery.
 - [Native packaging](COM_NATIVE.md) — independent plugin builds, startup order and actual renderer tests.
 - [Assets](COM_ASSETS.md) — immutable catalogs, generated resources and transactional installation.
+- Measured deployment and performance — complete package sizes, memory, startup, tree costs and external counters.
 - [Local COM implementation](../crates/com/README.md) and [ABI specification](../crates/com/docs/abi-v3.md).
 - [Accepted design](COM_DESIGN.md) and [implementation progress](COM_MIGRATION.md).
 
