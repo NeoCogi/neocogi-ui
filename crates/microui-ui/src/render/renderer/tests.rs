@@ -764,7 +764,7 @@ fn custom_barrier_flushes_clips_and_preserves_order() {
     let observed = Rc::new(RefCell::new(Vec::new()));
     let callback_observed = observed.clone();
     let custom_renderer = renderer
-        .register_custom_renderer(move |frame: &mut crate::test_support::RecordingFrame<'_>, args: CustomRenderArgs| {
+        .register_custom_renderer(move |frame: &mut crate::test_support::RecordingFrame<'_>, args: RenderItemArgs| {
             callback_observed.borrow_mut().push((
                 (args.dimensions.width, args.dimensions.height),
                 (args.view.x, args.view.y, args.view.width, args.view.height),

@@ -52,9 +52,9 @@
 //
 //! Built-in retained widgets.
 //!
-//! Each leaf combines semantic state, interaction state, events, and runtime phases in one concrete
-//! widget. Construction returns an owning erased [`crate::Node`] plus a weak
-//! [`crate::TypedWidgetHandle`] when application-facing typed access is useful.
+//! Each COM leaf stores its concrete semantic algorithm inline in WidgetCore.
+//! Application construction and editing use the facade's typed interface projections.
+//! Native constructors and weak accessors exist only for algorithm fixtures.
 
 /// Floating-point type used by numeric widgets.
 pub type Real = f32;
@@ -66,6 +66,7 @@ mod checkbox;
 mod color_swatch;
 mod combo;
 pub(crate) mod control;
+#[cfg(test)]
 mod custom;
 mod list_box;
 mod list_item;
@@ -81,20 +82,25 @@ mod textbox;
 
 // Menus reuse the same intrinsic-height policy as ordinary controls without duplicating code.
 pub(crate) use control::content_height;
-use control::{same_image, image_size, inline_content_size, place_inline_content, place_scaled_visual_content, scaled_visual_content_size, text_size, widget_fill_visible};
+use control::{
+    same_image, image_size, inline_content_size, place_inline_content, place_scaled_visual_content, scaled_visual_content_size, text_size, widget_fill_visible,
+};
 
-pub use button::{Button, ButtonContent, ButtonParameters, ButtonSubmitted};
+pub use button::{Button, ButtonParameters, ButtonSubmitted};
 pub use checkbox::{Checkbox, CheckboxChanged, CheckboxParameters};
 pub use color_swatch::{ColorSwatch, ColorSwatchParameters};
 pub use combo::{Combo, ComboChanged, ComboParameters, ComboSubmitted};
+#[cfg(test)]
 pub use custom::{Custom, CustomParameters};
 pub use list_box::{ListBox, ListBoxParameters, ListBoxSubmitted};
 pub use list_item::{ListItem, ListItemParameters, ListItemSubmitted};
 pub use number::{Number, NumberChanged, NumberParameters};
-pub use numeric_edit::{DecimalPrecision, DecimalPrecisionError, NumericParameterError};
+pub use numeric_edit::{DecimalPrecision};
 pub use scrollbar::{Scrollbar, ScrollbarAxis, ScrollbarChanged, ScrollbarParameters};
 pub use slider::{Slider, SliderChanged, SliderParameters};
-pub use text_area::{TextArea, TextAreaChanged, TextAreaParameters, TextAreaSubmitted};
+pub use text_area::{TextArea, TextAreaChanged, TextAreaSubmitted};
+#[cfg(test)]
+pub use text_area::{TextAreaParameters};
 pub use text_block::{TextBlock, TextBlockParameters};
 pub use textbox::{Textbox, TextboxChanged, TextboxParameters, TextboxSubmitted};
 

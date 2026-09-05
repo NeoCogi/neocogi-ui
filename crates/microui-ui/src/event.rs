@@ -49,6 +49,7 @@ pub use microui_redux::events::{EventSource, EventEndpoint as WidgetEventPortHan
 pub use microui_redux::events::test_support::SubscribeError;
 #[cfg(test)]
 pub(crate) use crate::test_support::events::WidgetEventDispatcher;
+#[cfg(test)]
 impl<W: Widget + 'static> crate::TypedWidgetHandle<W> {
     /// Projects a concrete widget-owned event port through this weak typed widget handle.
     ///

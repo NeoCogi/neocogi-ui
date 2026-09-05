@@ -126,9 +126,8 @@ impl UiRuntime {
             node.data.paint(&mut widget_ctx);
         }
 
-        if let NodeKind::Widget(widget) = &node.data
-            && let Some(renderer) = widget.custom_render()
-        {
+        #[cfg(test)]
+        if let Some(renderer) = node.data.custom_render() {
             // Custom backend work is an ordered barrier immediately after ordinary widget paint.
             display_list.push_custom(screen_content_clip, renderer, screen_content_rect);
         }

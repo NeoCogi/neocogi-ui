@@ -55,6 +55,7 @@ impl crate::LeafWidget for Custom {
 
 impl CustomParameters {
     /// Creates custom-render parameters with default options.
+    #[cfg(test)]
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -62,29 +63,6 @@ impl CustomParameters {
             opt: WidgetOption::NONE,
             keyboard: KeyboardBehavior::NONE,
         }
-    }
-
-    /// Creates custom-render parameters with explicit options.
-    pub fn with_opt(name: impl Into<String>, opt: WidgetOption) -> Self {
-        Self {
-            name: name.into(),
-            font: FontRef::Role(FontRole::Body),
-            opt,
-            keyboard: KeyboardBehavior::NONE,
-        }
-    }
-
-    /// Replaces the font used for default measurement.
-    pub fn font(mut self, font: FontRef) -> Self {
-        // Custom labels use the same stable reference contract as built-in retained widgets.
-        self.font = font;
-        self
-    }
-
-    /// Replaces the custom surface's explicit keyboard routing capabilities.
-    pub const fn keyboard_behavior(mut self, keyboard: KeyboardBehavior) -> Self {
-        self.keyboard = keyboard;
-        self
     }
 }
 
@@ -102,11 +80,13 @@ pub struct Custom {
 
 impl Custom {
     /// Constructs the unique runtime without exposing a meaningless unit-widget handle.
+    #[cfg(test)]
     pub fn create(parameters: CustomParameters) -> Self {
         Custom::from(parameters)
     }
 
     /// Measures the custom widget's debug label as its default preferred size.
+    #[cfg(test)]
     fn preferred_size_widget(&self, style: &Skin, atlas: &AtlasHandle, _constraints: Constraints) -> Dimensioni {
         let padding = style.metrics.padding.max(0);
         let text_w = if self.name.is_empty() {

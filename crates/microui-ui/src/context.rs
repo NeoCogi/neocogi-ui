@@ -28,308 +28,39 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 
-//! Generic application façade over the non-generic retained window manager.
+//! Private frame coordinator used by the UI COM runtime.
 //!
-//! `Context` owns the backend renderer and typed application widget-event dispatcher. Every
-//! retained root, input, layout, modal, style, and display-list operation is delegated to
-//! [`WindowManager`]. Raw input is routed separately inside each retained UI runtime; the
-//! context-owned dispatcher only drains semantic [`crate::WidgetEvent`] ports into application
-//! state.
+//! Context owns the concrete renderer and delegates retained roots, input, layout,
+//! modality and style to WindowManager. Application event dispatch belongs to the
+//! facade EventSession; the native authoring convenience lives only in test fixtures.
 
-use crate::window_manager::{LayerBinding, PopupHandle, SurfaceCreationError, SurfaceMutationError, Window, WindowHandle, WindowManager, WindowOption};
+use crate::window_manager::{WindowManager};
+#[cfg(test)]
+use crate::{Ui, PopupHandle};
 #[cfg(test)]
 use crate::window_manager::RootId;
-use crate::render::{CustomRenderArgs, CustomRenderHandle, CustomRenderRegistryError, FrameInfo, RenderError, Renderer, RendererBackend};
-use crate::{AtlasHandle, Dimensioni, ImageSource, KeyEvent, Menu, MouseButton, Node, Recti, ResourceCatalog, Skin, SkinBundle, TextureError, TextureId};
-#[cfg(feature = "theme-json")]
+#[cfg(test)]
+use crate::render::RenderItemArgs;
+use crate::render::{FrameInfo, RenderError, Renderer, RendererBackend};
+#[cfg(test)]
+use crate::test_support::custom_render::{CustomRenderHandle, CustomRenderRegistryError};
+use crate::{KeyEvent, MouseButton, Recti, ResourceCatalog, SkinBundle};
+#[cfg(test)]
+use crate::{AtlasHandle, Dimensioni, Skin, TextureError, TextureId};
+#[cfg(all(test, feature = "theme-json"))]
 use crate::{LoadedTheme, ThemeLoadError};
-#[cfg(feature = "theme-json")]
-use std::{io, path::Path};
+#[cfg(all(test, feature = "theme-json"))]
+use std::path::Path;
 
-/// Short-lived access to retained UI state owned by a [`Context`].
+/// Private owner of the retained window manager and concrete rendering executor.
 ///
-/// Ordinary application code obtains this façade through [`Context::ui`]. Context-aware event
-/// handlers receive the same concrete type after retained widget traversal has released every
-/// widget borrow. Keeping surface mutation on this non-generic façade prevents the renderer-owning
-/// [`Context`] and event dispatch from maintaining duplicate APIs.
+/// The COM runtime supplies ordered input and owns application event dispatch. This coordinator
+/// lends the manager only for a bounded transaction, then validates and submits the completed
+/// display list. WindowManager owns focus, capture, modal routing and child-window clipping;
+/// Context holds no second tree or callback dispatcher.
 ///
-/// `Ui` owns no surfaces, application state, or renderer resources. Its lifetime is tied to the
-/// exclusive `Context` or dispatch borrow that created it, so it cannot escape a transaction or
-/// re-enter an active retained traversal.
-pub struct Ui<'a> {
-    /// Exclusive access to the context-owned surface, input, and style transaction domain.
-    window_manager: &'a mut WindowManager,
-}
-
-impl<'a> Ui<'a> {
-    /// Lends one already-exclusive window manager to application-facing UI operations.
-    pub(crate) fn new(window_manager: &'a mut WindowManager) -> Self {
-        // Construction stays private so every public capability originates at a Context-controlled
-        // borrow boundary, including the post-traversal event-dispatch boundary.
-        Self { window_manager }
-    }
-
-    /// Creates an open retained window from one complete body and optional menu-bar definition.
-    ///
-    /// The returned handle is weak; the lending [`Context`] remains the sole window owner.
-    pub fn create_window(&mut self, window: Window) -> WindowHandle {
-        // Transfer the complete definition to the same owner used by ordinary Context creation.
-        self.window_manager.create_window(window)
-    }
-
-    /// Creates an open structural child window below `parent`'s menu and chrome.
-    ///
-    /// The child keeps screen-space geometry and its own retained application tree, menu, chrome,
-    /// visibility, focus, and pointer capture. It inherits the fixed layer of its top-level family
-    /// root and participates in chronological z-order only among windows with the same direct
-    /// parent. The parent's [`crate::ChildWindowClip`] policy determines whether the complete child
-    /// surface is additionally clipped to the parent application body.
-    ///
-    /// Destroying the parent destroys the child and its descendants. Hiding the parent excludes the
-    /// complete family until the parent is shown again. Modal dialogs cannot own child windows.
-    ///
-    /// # Errors
-    ///
-    /// Returns an owner-preserving [`SurfaceCreationError`] for a stale, foreign, or modal parent.
-    /// [`SurfaceCreationError::reason`] distinguishes
-    /// [`SurfaceMutationError::UnknownWindow`] from
-    /// [`SurfaceMutationError::InvalidChildWindowParent`], and
-    /// [`SurfaceCreationError::into_input`] recovers the unchanged `window` for retry or reuse.
-    #[allow(clippy::result_large_err)] // Failure deliberately returns the complete unique Window without allocation or erasure.
-    pub fn create_child_window(&mut self, parent: &WindowHandle, window: Window) -> Result<WindowHandle, SurfaceCreationError<Window>> {
-        // WindowManager validates the complete parent contract before transferring the Window into
-        // its forest, so every failure returns the exact retained tree supplied by the caller.
-        self.window_manager.create_child_window(parent, window)
-    }
-
-    /// Creates a hidden retained dialog owned by `parent`.
-    ///
-    /// `parent` must be a live independent or structural child window from this Context. Show the
-    /// returned dialog with [`Self::set_window_visible`]; it becomes the front modal group before
-    /// the layout immediately following this UI transaction.
-    ///
-    /// # Errors
-    ///
-    /// Returns an owner-preserving [`SurfaceCreationError`] when `parent` is stale, foreign, or
-    /// modal. Inspect [`SurfaceCreationError::reason`] and reclaim the original `window` with
-    /// [`SurfaceCreationError::into_input`].
-    #[allow(clippy::result_large_err)] // Failure deliberately returns the complete unique Window without allocation or erasure.
-    pub fn create_dialog(&mut self, parent: &WindowHandle, window: Window) -> Result<WindowHandle, SurfaceCreationError<Window>> {
-        // Authenticate and classify the parent before the manager consumes the dialog definition.
-        self.window_manager.create_dialog(parent, window)
-    }
-
-    /// Creates a hidden auto-sized popup owned directly by `parent`.
-    ///
-    /// The popup definition and retained content tree become a concrete child in the same forest.
-    /// The distinct handle prevents popup identity from entering window-only operations.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`SurfaceCreationError<Node>`] when `parent` is stale or belongs to another
-    /// Context. [`SurfaceCreationError::into_input`] recovers the unchanged content node.
-    #[allow(clippy::result_large_err)] // Failure deliberately returns the complete unique Node without allocation or erasure.
-    pub fn create_popup(&mut self, parent: &WindowHandle, name: &str, content: Node) -> Result<PopupHandle, SurfaceCreationError<Node>> {
-        // Authenticate the owner capability before transferring the popup content into the forest.
-        self.window_manager.create_popup(parent, name, content)
-    }
-
-    /// Creates a hidden popup menu owned directly by `parent`.
-    ///
-    /// The supplied [`Menu`] is the same concrete declaration used below a menu-bar heading. Its
-    /// label names the retained popup for diagnostics; its items, separators, and submenus are
-    /// presented by the normal compact menu surface when the returned handle is shown.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`SurfaceCreationError<Menu>`] when `parent` is stale or belongs to another
-    /// Context. [`SurfaceCreationError::into_input`] recovers the unchanged menu declaration.
-    #[allow(clippy::result_large_err)] // Failure deliberately returns the complete unique Menu without allocation or erasure.
-    pub fn create_menu_popup(&mut self, parent: &WindowHandle, menu: Menu) -> Result<PopupHandle, SurfaceCreationError<Menu>> {
-        // Authenticate the owner capability before transferring the menu into the surface forest.
-        self.window_manager.create_menu_popup(parent, menu)
-    }
-
-    /// Returns whether a window and all its structural owners currently permit visibility.
-    ///
-    /// This is current policy, unlike a deferred [`crate::WindowEvent::Hidden`] notification.
-    pub fn window_visible(&self, window: &WindowHandle) -> Result<bool, SurfaceMutationError> {
-        self.window_manager.window_visible(window)
-    }
-
-    /// Replaces a retained window or dialog title before the next layout commit.
-    pub fn set_window_name(&mut self, window: &WindowHandle, name: impl Into<String>) -> Result<(), SurfaceMutationError> {
-        // Convert the caller-facing string once at the concrete manager boundary that owns it.
-        self.window_manager.set_window_name(window, name.into())
-    }
-
-    /// Replaces a retained window or dialog rectangle before the next layout commit.
-    pub fn set_window_rect(&mut self, window: &WindowHandle, rect: Recti) -> Result<(), SurfaceMutationError> {
-        // The manager validates context ownership before changing authoritative chrome geometry.
-        self.window_manager.set_window_rect(window, rect)
-    }
-
-    /// Replaces a retained window or dialog size without changing its origin.
-    pub fn set_window_size(&mut self, window: &WindowHandle, size: Dimensioni) -> Result<(), SurfaceMutationError> {
-        // Size remains authoritative manager state rather than an application-side deferred value.
-        self.window_manager.set_window_size(window, size)
-    }
-
-    /// Replaces the presentation and interaction options for a retained window or dialog.
-    pub fn set_window_options(&mut self, window: &WindowHandle, options: WindowOption) -> Result<(), SurfaceMutationError> {
-        // Apply option-dependent capture cleanup and enabled-tree propagation in the concrete
-        // WindowManager implementation rather than mirroring either policy in this façade.
-        self.window_manager.set_window_options(window, options)
-    }
-
-    /// Replaces the presentation options for one window-owned popup definition.
-    ///
-    /// Popup identity remains typed so this operation cannot accidentally mutate window chrome.
-    pub fn set_popup_options(&mut self, popup: &PopupHandle, options: WindowOption) -> Result<(), SurfaceMutationError> {
-        // Apply the option change to the retained popup definition before the next layout commit.
-        self.window_manager.set_popup_options(popup, options)
-    }
-
-    /// Assigns an independent window to one of the sixteen fixed application layers.
-    ///
-    /// Structural children inherit their family root's layer and return
-    /// [`SurfaceMutationError::ManagedLayer`] if passed here.
-    pub fn set_window_layer(&mut self, window: &WindowHandle, layer: u8) -> Result<(), SurfaceMutationError> {
-        // Layer validation and modal restrictions remain one WindowManager transaction at the
-        // event-safe mutation boundary; popups derive the layer from their owning window.
-        self.window_manager.set_window_layer(window, layer)
-    }
-
-    /// Returns a registered window's effective fixed or modal layer policy.
-    ///
-    /// A structural child reports its top-level family root's current fixed layer.
-    pub fn window_layer(&self, window: &WindowHandle) -> Result<LayerBinding, SurfaceMutationError> {
-        // Authenticate the handle rather than exposing manager storage or a forged default band.
-        self.window_manager.window_layer(window)
-    }
-
-    /// Shows or hides a retained window or dialog while preserving its application tree.
-    ///
-    /// Hiding a window removes its complete structural family from effective visibility. Child
-    /// windows retain their local visibility intent and recover when their ancestors are shown;
-    /// modal descendants are explicitly closed and do not recover implicitly.
-    ///
-    /// Popup definitions have a distinct typed identity and cannot be passed to this generic window
-    /// operation. Use [`Self::show_popup`], [`Self::show_popup_at`], or [`Self::hide_popup`] instead.
-    pub fn set_window_visible(&mut self, window: &WindowHandle, visible: bool) -> Result<(), SurfaceMutationError> {
-        // Mutate the window synchronously at the safe dispatch boundary so the following layout sees
-        // the requested visibility without an application-owned frame flag.
-        self.window_manager.set_window_visible(window, visible)
-    }
-
-    /// Shows a popup at the current pointer position and activates its keyboard scope.
-    pub fn show_popup(&mut self, popup: &PopupHandle) -> Result<(), SurfaceMutationError> {
-        // Placement and active-path replacement remain atomic inside the manager.
-        self.window_manager.show_popup(popup)
-    }
-
-    /// Hides an active popup and every active descendant while retaining their definitions.
-    ///
-    /// Closing any active suffix records one [`crate::PopupEvent::Dismissed`] event per removed
-    /// application popup.
-    pub fn hide_popup(&mut self, popup: &PopupHandle) -> Result<(), SurfaceMutationError> {
-        // Delegate path truncation to the manager so visibility has one authoritative source.
-        self.window_manager.hide_popup(popup)
-    }
-
-    /// Shows and activates a popup at an exact screen-space anchor before the following layout commit.
-    ///
-    /// This atomic form is intended for composed controls such as combos. It applies popup-path
-    /// replacement and replaces the popup rectangle, so no pointer-relative intermediate placement
-    /// can be observed. Widget popups select their first eligible keyboard target after layout;
-    /// popup menus enter their ordinary compact-menu keyboard scope. The typed handle prevents
-    /// passing a window or dialog as the popup target.
-    pub fn show_popup_at(&mut self, popup: &PopupHandle, anchor: Recti) -> Result<(), SurfaceMutationError> {
-        // Delegate the complete transaction while retaining compile-time popup identity across the
-        // event façade boundary.
-        self.window_manager.show_popup_at(popup, anchor)
-    }
-
-    /// Raises a registered window or dialog inside its effective layer.
-    ///
-    /// This operation never moves an ordinary window across another numeric application layer. An
-    /// independent window raises its complete family among fixed-layer peers; a child raises only
-    /// among siblings with the same direct parent. A visible dialog moves its modal group in front
-    /// and closes popups from the previous modal group. A stale or foreign handle returns a checked
-    /// mutation error.
-    pub fn bring_window_to_front(&mut self, window: &WindowHandle) -> Result<(), SurfaceMutationError> {
-        // Let WindowManager raise the authenticated node inside its structural stacking band.
-        self.window_manager.bring_window_to_front(window)
-    }
-
-    /// Permanently unregisters a window or dialog and its complete structural subtree.
-    ///
-    /// Every child window, dialog, and popup below the target is dropped, making its stable handles
-    /// stale and expiring its weak widget and event endpoints.
-    pub fn destroy_window(&mut self, window: &WindowHandle) -> Result<(), SurfaceMutationError> {
-        // Destruction also expires every weak application widget and event handle in the subtree.
-        self.window_manager.destroy_window(window)
-    }
-
-    /// Borrows the concrete state of one mounted menu item.
-    pub fn menu_item(&self, handle: &crate::MenuItemHandle) -> Result<&crate::MenuItemParameters, crate::MenuItemAccessError> {
-        // The handle's private stable ID selects manager-owned state; its event endpoint remains an
-        // independent subscription capability.
-        self.window_manager.menu_item(handle)
-    }
-
-    /// Mutably borrows the concrete state of one mounted menu item.
-    pub fn menu_item_mut(&mut self, handle: &crate::MenuItemHandle) -> Result<&mut crate::MenuItemParameters, crate::MenuItemAccessError> {
-        // WindowManager invalidates layout conservatively before lending any public field mutably.
-        self.window_manager.menu_item_mut(handle)
-    }
-
-    /// Returns the active popup names at the event-dispatch boundary for internal tests.
-    #[cfg(test)]
-    pub(crate) fn debug_active_popup_names(&self) -> Vec<String> {
-        // This observation proves ordering only: retained updates and manager menu policy have both
-        // completed before an application handler receives the item's typed submission.
-        self.window_manager.debug_active_popup_names()
-    }
-
-    /// Returns the resolved UI skin currently used by the owning context.
-    pub fn skin(&self) -> &Skin {
-        // The manager owns the resolved skin used by layout, input presentation, and paint.
-        self.window_manager.skin()
-    }
-}
-
-/// Primary entry point used to drive the UI over a rendering backend.
-///
-/// `Context` is the only public ordered input-queue boundary. Input forwarding calls append raw
-/// transitions without coalescing; [`Context::update_ui`] drains them in call order. The exception
-/// to ordinary root hit routing is the popup boundary: an outside pointer press dismisses the
-/// active popup before the event may continue to the root underneath.
-///
-/// Across ordinary roots, pointer hover and new presses follow topmost hit geometry. Within a child
-/// family, parent menu/chrome precedes children, children precede the parent body, and later siblings
-/// precede earlier ones. A press raises its target only within the corresponding top-level or sibling
-/// scope and records that concrete root or popup as the active surface independently. Drag remains
-/// confined by pointer capture or the front eligible visual root, while wheel input follows the
-/// topmost eligible root under the pointer. Keyboard and text return to persistent focus in the
-/// active surface; pointer capture does not replace that focus. Captured pointer release still
-/// returns to its widget so local drag state is cleaned up. An active menu uses the same surface
-/// identity plus its concrete container's selected direct child; it temporarily consumes keyboard
-/// and text while preserving the focused application widget that resumes after the menu closes.
-///
-/// The frontmost visible dialog is modal. It occupies the dedicated band above all application
-/// layers, and the dialog with its active popup path forms the only eligible input group. Pointer
-/// input outside that group is consumed at the cross-window boundary; other windows remain visible and continue to
-/// participate in layout and paint.
-///
-/// `Context`, its retained state, and its registered custom-render callbacks stay on the thread
-/// that owns the context. The rendering contracts intentionally do not require `Send` or `Sync`;
-/// applications should deliver any cross-thread results before starting a [`ContextFrame`].
-///
-/// A live [`ContextFrame`] exclusively owns the Context borrow, preventing input/resource
-/// mutation or another logical frame until it is rendered or cancelled. The diagnostic-matched
-/// `tests/ui/context_mutate_during_frame.rs` contract test verifies that rejection beside a passing
-/// complete frame lifecycle.
+/// A ContextFrame exclusively borrows this owner until submission or cancellation. The enclosing
+/// COM runtime adds phase/reentry authority for callers retaining independent widget interfaces.
 pub struct Context<B: RendererBackend> {
     /// High-level renderer that replays root display lists.
     renderer: Renderer<B>,
@@ -342,17 +73,10 @@ pub struct Context<B: RendererBackend> {
     test_dimensions: Dimensioni,
 }
 
-/// Exclusively owned logical UI frame.
+/// One private paint/submission borrow of the retained frame coordinator.
 ///
-/// This value borrows `Context` to serialize paint/submission, but it does not lock independent
-/// [`crate::TypedWidgetHandle`] access. Programmatic mutation after the last update commit may make
-/// that commit semantically stale; drop the unsubmitted frame and call
-/// [`Context::update_ui`] again before painting. No separate
-/// Context token exists.
-///
-/// Submission consumes the frame, making a second submission unrepresentable. The
-/// diagnostic-matched `tests/ui/context_frame_submit_twice.rs` contract test verifies the move
-/// error rather than treating any unrelated compilation failure as success.
+/// Submission consumes this frame; dropping it cancels without acquiring GPU resources. The
+/// enclosing COM runtime checks phase authority and the last geometry commit before painting.
 #[must_use = "call render_ui() to submit this UI frame; dropping it cancels"]
 pub struct ContextFrame<'a, B: RendererBackend> {
     context: &'a mut Context<B>,
@@ -372,6 +96,7 @@ impl<B: RendererBackend> Context<B> {
     /// Panics when the backend atlas lacks the `body` font or any semantic icon required by
     /// [`crate::IconRole::ALL`]. Every constructible atlas already has a validated white
     /// rendering tile.
+    #[cfg(test)]
     pub fn new(backend: B) -> Self {
         let catalog = ResourceCatalog::new(backend.get_atlas());
         Self::from_bundle(backend, catalog.default_skin_bundle())
@@ -398,6 +123,7 @@ impl<B: RendererBackend> Context<B> {
     /// handlers. Its borrow ends independently of renderer and event-dispatcher APIs, allowing
     /// application code to keep those concerns separate without duplicating manager methods on
     /// `Context` itself.
+    #[cfg(test)]
     pub fn ui(&mut self) -> Ui<'_> {
         // Restrict the borrow to WindowManager so the façade remains backend- and application-independent.
         Ui::new(&mut self.window_manager)
@@ -408,6 +134,7 @@ impl<B: RendererBackend> Context<B> {
     /// Selecting another skin bundle never changes this value. Applications can therefore create
     /// checked exact [`crate::FontRef`] and [`crate::IconRef`] values here and keep their typed IDs
     /// in retained widget state across themes derived from this catalog.
+    #[cfg(test)]
     pub fn resource_catalog(&self) -> &ResourceCatalog {
         // Expose one-time named lookup without exposing the catalog's source atlas itself.
         &self.resource_catalog
@@ -437,6 +164,7 @@ impl<B: RendererBackend> Context<B> {
 impl<B: RendererBackend> Context<B> {
     /// Runs eventless widget work, drains input, and commits layout for a polling-only context.
     #[track_caller]
+    #[cfg(test)]
     pub fn update_ui(&mut self, dimensions: Dimensioni) {
         assert!(dimensions.width > 0 && dimensions.height > 0, "update_ui dimensions must be positive");
         self.window_manager.update(dimensions);
@@ -517,16 +245,12 @@ impl<B: RendererBackend> Context<B> {
     /// borrow cannot escape one callback invocation. These negative guarantees are checked by the
     /// diagnostic-matched fixtures under `tests/ui/`; ordinary doctests are unsuitable because any
     /// unrelated compiler error would also make a `compile_fail` block appear successful.
+    #[cfg(test)]
     pub fn register_custom_renderer<F>(&mut self, callback: F) -> Result<CustomRenderHandle<B>, CustomRenderRegistryError>
     where
-        F: for<'frame> FnMut(&mut B::Frame<'frame>, CustomRenderArgs) + 'static,
+        F: for<'frame> FnMut(&mut B::Frame<'frame>, RenderItemArgs) + 'static,
     {
         self.renderer.register_custom_renderer(callback)
-    }
-
-    /// Removes a previously registered custom-render callback.
-    pub fn unregister_custom_renderer(&mut self, handle: CustomRenderHandle<B>) -> Result<(), CustomRenderRegistryError> {
-        self.renderer.unregister_custom_renderer(handle)
     }
 
     /// Replaces the current UI skin.
@@ -537,6 +261,7 @@ impl<B: RendererBackend> Context<B> {
     /// # Panics
     ///
     /// Panics when the skin contains any resource identity absent from the current atlas.
+    #[cfg(test)]
     pub fn set_skin(&mut self, skin: Skin) {
         // Re-pair the edited skin with the existing immutable atlas at the one validated boundary.
         // The renderer needs no upload because this operation cannot replace atlas pixels.
@@ -575,18 +300,21 @@ impl<B: RendererBackend> Context<B> {
     /// failure. The current theme remains unchanged.
     ///
     #[cfg(feature = "theme-json")]
+    #[cfg(test)]
     pub fn set_theme(&mut self, theme: &LoadedTheme) -> Result<(), crate::SkinInstallError> {
         // LoadedTheme contributes only a selection name around the same atomic runtime value.
         self.set_skin_bundle(theme.bundle())
     }
 
     /// Borrows the complete resolved skin and matching immutable atlas.
+    #[cfg(test)]
     pub fn skin_bundle(&self) -> &SkinBundle {
         // WindowManager owns the authoritative pair used by every retained phase.
         self.window_manager.skin_bundle()
     }
 
     /// Returns the resolved UI skin currently used by this context.
+    #[cfg(test)]
     pub fn skin(&self) -> &Skin {
         // Preserve the concise read API as a projection, never as an independently owned field.
         self.skin_bundle().skin()
@@ -597,6 +325,7 @@ impl<B: RendererBackend> Context<B> {
     /// Applications use this handle to resolve named fonts/icons and to construct a compatible
     /// [`Skin`]. Frame execution and resource bookkeeping remain context-owned implementation
     /// details; custom GPU work continues through [`Context::register_custom_renderer`].
+    #[cfg(test)]
     pub fn atlas(&self) -> AtlasHandle {
         // Return the atlas from the same bundle as `skin()` rather than consulting a parallel
         // renderer cache. Successful installation keeps the renderer on this exact allocation.
@@ -612,54 +341,9 @@ impl<B: RendererBackend> Context<B> {
     ///
     /// Returns a concrete [`TextureError`] that distinguishes invalid image data, identifier
     /// exhaustion, and backend creation or upload failure.
+    #[cfg(test)]
     pub fn try_load_image_rgba(&mut self, width: i32, height: i32, pixels: &[u8]) -> Result<TextureId, TextureError> {
         self.renderer.try_load_texture_rgba(width, height, pixels)
-    }
-
-    /// Loads an RGBA image into this Context and returns its [`TextureId`].
-    ///
-    /// Prefer [`Context::try_load_image_rgba`] when callers can handle upload failure.
-    ///
-    /// # Panics
-    ///
-    /// Panics when the RGBA dimensions or byte length are invalid, the Context has exhausted its
-    /// texture identifier space, or the backend rejects texture creation or upload.
-    #[track_caller]
-    pub fn load_image_rgba(&mut self, width: i32, height: i32, pixels: &[u8]) -> TextureId {
-        self.try_load_image_rgba(width, height, pixels).expect("failed to upload RGBA image")
-    }
-
-    /// Deletes a previously uploaded texture.
-    ///
-    /// Deleting an unknown or already-freed handle triggers a debug assertion and is an idempotent
-    /// no-op in release builds.
-    pub fn free_image(&mut self, id: TextureId) {
-        self.renderer.free_texture(id);
-    }
-
-    /// Uploads texture data described by `source`. PNG decoding is only available when the
-    /// `png_source` (or `builder`) feature is enabled.
-    ///
-    /// # Errors
-    ///
-    /// Image decoding and validation failures remain available as [`TextureError::Image`],
-    /// exhausted Context identifiers use [`TextureError::IdentifierSpaceExhausted`], and backend
-    /// creation or upload failures use [`TextureError::Backend`]. A failure never records a
-    /// partially created texture in the Context.
-    pub fn load_image_from(&mut self, source: ImageSource) -> Result<TextureId, TextureError> {
-        match source {
-            ImageSource::Raw { width, height, pixels } => self.try_load_image_rgba(width, height, pixels),
-            #[cfg(any(feature = "builder", feature = "png_source"))]
-            ImageSource::Png { bytes } => {
-                let (width, height, colors) = crate::image::load_image_bytes(ImageSource::Png { bytes })?;
-                // Image loading has already proved each dimension fits the runtime's i32
-                // coordinate domain, so these casts preserve the validated values exactly.
-                let width = width as i32;
-                let height = height as i32;
-                let rgba: Vec<u8> = colors.into_iter().flat_map(|color| [color.x, color.y, color.z, color.w]).collect();
-                self.try_load_image_rgba(width, height, rgba.as_slice())
-            }
-        }
     }
 
     /// Loads a versioned JSON theme and bakes every assigned image patch into its immutable atlas.
@@ -675,28 +359,11 @@ impl<B: RendererBackend> Context<B> {
     /// slice data, font/artwork atlas construction, or image decoding. Loading never mutates the live
     /// backend; only a later [`Context::set_theme`] uploads the completed atlas transactionally.
     #[cfg(feature = "theme-json")]
+    #[cfg(test)]
     pub fn load_theme_file(&mut self, path: impl AsRef<Path>) -> Result<LoadedTheme, ThemeLoadError> {
         // The loader owns every construction stage and returns only the complete immutable bundle.
         // Applications can preload several values and choose one later without repeated file I/O.
         crate::theme::loader::load(path.as_ref(), self.resource_catalog.atlas())
-    }
-
-    /// Loads a versioned JSON theme from memory and obtains each referenced asset from `read_asset`.
-    ///
-    /// `path` is the definition's logical location and anchors relative font, icon, and appearance
-    /// paths exactly as it does for [`Context::load_theme_file`]. This entry point is intended for
-    /// embedded or virtual asset stores on hosts without a filesystem.
-    ///
-    /// # Errors
-    ///
-    /// Returns the same [`ThemeLoadError`] classifications as file loading. Asset-provider failures
-    /// retain the requested logical path inside the nested atlas-build diagnostic.
-    #[cfg(feature = "theme-json")]
-    pub fn load_theme_bytes<F>(&mut self, path: impl AsRef<Path>, definition: &[u8], read_asset: F) -> Result<LoadedTheme, ThemeLoadError>
-    where
-        F: FnMut(&Path) -> io::Result<Vec<u8>>,
-    {
-        crate::theme::loader::load_bytes(path.as_ref(), definition, self.resource_catalog.atlas(), read_asset)
     }
 }
 
@@ -917,7 +584,9 @@ mod theme_tests {
     //! Context-level theme upload transaction tests.
 
     use super::*;
-    use crate::render::{AtlasUploadError, FrameError, RendererFrame, TextureError, Vertex};
+    use crate::render::{AtlasUploadError, FrameError, RendererFrame, Vertex};
+    #[cfg(test)]
+    use crate::render::{TextureError};
     use crate::test_support::{recording_backend, test_atlas};
     use std::fs;
 

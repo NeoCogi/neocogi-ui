@@ -107,8 +107,8 @@ mod guide_doctests {
     mod widgets {}
 }
 
-pub mod atlas;
 pub mod assets;
+pub mod atlas;
 mod context;
 mod event;
 mod identity;
@@ -121,53 +121,21 @@ pub mod render;
 mod test_support;
 pub mod theme;
 mod ui_node;
-pub use ui_node::layout;
-pub use ui_node::widgets;
+pub(crate) use ui_node::widgets;
 mod window_manager;
 
-/// Retained UI authoring types.
-///
-/// This module groups the stable retained concepts used by application code without exposing
-/// low-level renderer details or manual container drawing helpers through default imports.
-pub mod retained {
-    pub use crate::event::{EventSource, TypedWidget, WidgetEventPortHandle};
-    pub use crate::menu::{Menu, MenuBar, MenuItem, MenuItemAccessError, MenuItemHandle, MenuItemMark, MenuItemParameters, MenuItemSubmitted};
-    pub use crate::render::{CustomRenderArgs, CustomRenderHandle};
-    pub use crate::ui_node::{
-        AvailableSpace, Change, ChildParticipation, Children, ChildrenHandle, Constraints, Container, ContainerLayoutCtx, ContainerWidget, Disclosure, DisclosureParameters,
-        Grid, GridItem, GridParameters, GridSpan, KeyboardAction, KeyboardBehavior, LeafWidget, Linear, LinearCrossSize, LinearDirection, LinearItem,
-        LinearParameters, MeasureCtx, Node, ScrollArea, ScrollAreaOption, ScrollAreaParameters, Scrollbar, ScrollbarAxis, ScrollbarChanged,
-        ScrollbarParameters, TrackSize, UiInputEvent, Widget, TextWrap, TypedWidgetHandle, WidgetFillOption, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx,
-    };
-    pub use crate::context::{Context, ContextFrame, Ui};
-    pub use crate::window_manager::{
-        ChildWindowClip, DEFAULT_LAYER, LayerBinding, MAX_LAYER, MIN_LAYER, PopupEvent, PopupHandle, SurfaceCreationError, SurfaceMutationError, Window,
-        WindowEvent, WindowHandle, WindowOption,
-    };
-}
-
-/// Common imports for retained UI applications.
-///
-/// The prelude intentionally favors retained authoring, widget state, skin/input/image types, and
-/// renderer integration. Low-level backend contracts live under [`render`].
+/// Resource, geometry and backend imports for implementation crates.
+/// Applications and extension widgets use the microui-redux facade and canonical COM contracts.
 pub mod prelude {
-    pub use crate::event::{EventSource, TypedWidget, WidgetEventPortHandle};
     pub use crate::atlas::{AtlasError, AtlasHandle, AtlasSource, CharEntry, FontEntry, FontId, IconId, SourceFormat};
-    pub use crate::menu::{Menu, MenuBar, MenuItem, MenuItemAccessError, MenuItemHandle, MenuItemMark, MenuItemParameters, MenuItemSubmitted};
     pub use crate::image::{ImageError, ImageSource, ImageStorageError, MAX_DECODED_RGBA_BYTES, load_image_bytes};
     pub use crate::input::{Key, KeyEvent, KeyState, Modifiers, MouseButton};
     pub use crate::render::{
         AtlasUploadError, FrameError, FrameInfo, FrameInfoError, NinePatch, NinePatchCell, NinePatchCells, NinePatchContent, NinePatchImage, RendererBackend,
         RendererFrame, SliceInsets, TextureError, TextureId,
     };
-    pub use crate::retained::{
-        Change, ChildParticipation, ChildWindowClip, Children, ChildrenHandle, Container, ContainerLayoutCtx, ContainerWidget, Context, ContextFrame, Ui, CustomRenderArgs,
-        AvailableSpace, Constraints, CustomRenderHandle, Disclosure, DisclosureParameters, Grid, GridItem, GridParameters, GridSpan, KeyboardAction,
-        KeyboardBehavior, Linear, LinearCrossSize, LinearDirection, LinearItem, LinearParameters, Node, PopupEvent, PopupHandle, MeasureCtx,
-        SurfaceCreationError, SurfaceMutationError, WindowEvent, WindowHandle, LayerBinding, DEFAULT_LAYER, MAX_LAYER, MIN_LAYER, ScrollArea, ScrollAreaOption,
-        ScrollAreaParameters, Scrollbar, ScrollbarAxis, ScrollbarChanged, ScrollbarParameters, TrackSize, LeafWidget, TextWrap, UiInputEvent,
-        TypedWidgetHandle, Widget, WidgetFillOption, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx, Window, WindowOption,
-    };
+    #[cfg(test)]
+    pub use crate::test_support::custom_render::{CustomRenderHandle};
     pub use crate::math::{expand_rect, rect, vec2};
     pub use crate::theme::{
         CaptionButtonSide, CaptionButtonsSkin, ChromeRole, ChromeState, Color, ControlRole, ControlState, FlatPalette, FontRef, FontRole, FrameRole, IconRef,
@@ -176,13 +144,6 @@ pub mod prelude {
     };
     #[cfg(feature = "theme-json")]
     pub use crate::theme::{LoadedTheme, THEME_SCHEMA_VERSION, ThemeLoadError};
-    pub use crate::widgets::{
-        Button, ButtonContent, ButtonParameters, ButtonSubmitted, Checkbox, CheckboxChanged, CheckboxParameters, ColorSwatch, ColorSwatchParameters, Combo,
-        ComboChanged, ComboParameters, ComboSubmitted, Custom, CustomParameters, DecimalPrecision, DecimalPrecisionError, ListBox, ListBoxParameters,
-        ListBoxSubmitted, ListItem, ListItemParameters, ListItemSubmitted, Number, NumberChanged, NumberParameters, NumericParameterError, Slider,
-        SliderChanged, SliderParameters, TextArea, TextAreaChanged, TextAreaParameters, TextAreaSubmitted, TextBlock, TextBlockParameters, Textbox,
-        TextboxChanged, TextboxParameters, TextboxSubmitted, Real,
-    };
     pub use rs_math3d::{
         Box3f, Color4b, CrossProduct, Dimension, Dimensioni, FloatVector, Mat4f, Quat, Quatf, Rect, Recti, Vec2f, Vec2i, Vec3f, Vec4f, Vector, Vector3,
         color4b, ortho4,
@@ -190,13 +151,14 @@ pub mod prelude {
 }
 
 pub use atlas::{AtlasError, AtlasHandle, AtlasSource, CharEntry, FontEntry, FontId, IconId, SourceFormat};
-pub use context::{Context, ContextFrame, Ui};
-pub use window_manager::{
-    ChildWindowClip, DEFAULT_LAYER, LayerBinding, MAX_LAYER, MIN_LAYER, PopupEvent, PopupHandle, SurfaceCreationError, SurfaceMutationError, Window,
-    WindowEvent, WindowHandle, WindowOption,
-};
-pub use event::{EventSource, TypedWidget, WidgetEventPortHandle};
-pub use menu::{Menu, MenuBar, MenuItem, MenuItemAccessError, MenuItemHandle, MenuItemMark, MenuItemParameters, MenuItemSubmitted};
+pub(crate) use context::{Context};
+#[cfg(test)]
+pub(crate) use test_support::ui::Ui;
+pub(crate) use window_manager::{PopupEvent, PopupHandle, Window, WindowEvent, WindowHandle, WindowOption};
+#[cfg(test)]
+pub(crate) use window_manager::{ChildWindowClip, DEFAULT_LAYER, LayerBinding, MIN_LAYER, SurfaceMutationError};
+pub(crate) use event::{EventSource, TypedWidget, WidgetEventPortHandle};
+pub(crate) use menu::{Menu, MenuBar, MenuItem, MenuItemAccessError, MenuItemHandle, MenuItemMark, MenuItemParameters, MenuItemSubmitted};
 pub use image::{ImageError, ImageSource, ImageStorageError, MAX_DECODED_RGBA_BYTES, load_image_bytes};
 pub use input::{Key, KeyEvent, KeyState, Modifiers, MouseButton};
 pub use math::{expand_rect, rect, vec2};
@@ -208,19 +170,25 @@ pub use theme::{
 };
 #[cfg(feature = "theme-json")]
 pub use theme::{LoadedTheme, THEME_SCHEMA_VERSION, ThemeLoadError};
-pub use ui_node::{
-    AvailableSpace, Change, ChildParticipation, Children, ChildrenHandle, Constraints, Container, ContainerLayoutCtx, ContainerWidget, Disclosure, DisclosureParameters, Grid,
-    GridItem, GridParameters, GridSpan, KeyboardAction, KeyboardBehavior, LeafWidget, Linear, LinearCrossSize, LinearDirection, LinearItem, LinearParameters,
-    MeasureCtx, Node, ScrollArea, ScrollAreaOption, ScrollAreaParameters, Scrollbar, ScrollbarAxis, ScrollbarChanged, ScrollbarParameters, TextWrap, TrackSize,
-    UiInputEvent, Widget, TypedWidgetHandle, WidgetFillOption, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx,
+pub(crate) use ui_node::{
+    AvailableSpace, Change, ChildParticipation, Children, Constraints, ContainerLayoutCtx, ContainerWidget, Disclosure, Grid, GridSpan, KeyboardAction,
+    KeyboardBehavior, LeafWidget, Linear, LinearCrossSize, LinearDirection, MeasureCtx, Node, ScrollArea, Scrollbar, ScrollbarAxis, ScrollbarChanged,
+    ScrollbarParameters, TextWrap, TrackSize, UiInputEvent, Widget, WidgetFillOption, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx,
 };
-pub use widgets::{
-    Button, ButtonContent, ButtonParameters, ButtonSubmitted, Checkbox, CheckboxChanged, CheckboxParameters, ColorSwatch, ColorSwatchParameters, Combo,
-    ComboChanged, ComboParameters, ComboSubmitted, Custom, CustomParameters, DecimalPrecision, DecimalPrecisionError, ListBox, ListBoxParameters,
-    ListBoxSubmitted, ListItem, ListItemParameters, ListItemSubmitted, Number, NumberChanged, NumberParameters, NumericParameterError, Slider, SliderChanged,
-    SliderParameters, TextArea, TextAreaChanged, TextAreaParameters, TextAreaSubmitted, Real, TextBlock, TextBlockParameters, Textbox, TextboxChanged,
-    TextboxParameters, TextboxSubmitted,
+#[cfg(test)]
+pub(crate) use ui_node::{ScrollAreaOption};
+#[cfg(test)]
+pub(crate) use ui_node::{ChildrenHandle, Container, DisclosureParameters, GridParameters, LinearItem, LinearParameters, ScrollAreaParameters, TypedWidgetHandle};
+pub(crate) use widgets::{
+    Button, ButtonParameters, ButtonSubmitted, Checkbox, CheckboxChanged, CheckboxParameters, ColorSwatch, ColorSwatchParameters, Combo, ComboChanged,
+    ComboParameters, ComboSubmitted, DecimalPrecision, ListBox, ListBoxParameters, ListBoxSubmitted, ListItem, ListItemParameters, ListItemSubmitted, Number,
+    NumberChanged, NumberParameters, Slider, SliderChanged, SliderParameters, TextArea, TextAreaChanged, TextAreaSubmitted, Real, TextBlock,
+    TextBlockParameters, Textbox, TextboxChanged, TextboxParameters, TextboxSubmitted,
 };
+#[cfg(test)]
+pub(crate) use widgets::{TextAreaParameters};
+#[cfg(test)]
+pub(crate) use widgets::{Custom, CustomParameters};
 
 #[allow(unused_imports)]
 pub(crate) use rs_math3d::{
@@ -235,4 +203,4 @@ pub(crate) use ui_node::UiRuntime;
 pub mod com;
 
 #[cfg(test)]
-pub use event::SubscribeError;
+pub(crate) use event::SubscribeError;

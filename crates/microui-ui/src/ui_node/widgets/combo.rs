@@ -64,18 +64,6 @@ impl ComboParameters {
             opt: WidgetOption::FRAME,
         }
     }
-
-    /// Creates combo parameters with explicit widget options.
-    pub const fn with_opt(opt: WidgetOption) -> Self {
-        Self { font: FontRef::Role(FontRole::Body), opt }
-    }
-
-    /// Replaces the font used for the current label.
-    pub fn font(mut self, font: FontRef) -> Self {
-        // Retain the stable selection across popup and skin replacement transactions.
-        self.font = font;
-        self
-    }
 }
 
 impl Default for ComboParameters {
@@ -129,6 +117,7 @@ impl Combo {
     }
 
     /// Updates the cached label and clamps the selected index to the provided items.
+    #[cfg(test)]
     pub fn update_items<S: AsRef<str>>(&mut self, items: &[S]) {
         let previous_selected = self.selected;
         if items.is_empty() {
@@ -155,6 +144,7 @@ impl Combo {
     }
 
     /// Applies a submitted popup item selection and closes the popup.
+    #[cfg(test)]
     pub fn select<S: AsRef<str>>(&mut self, index: usize, items: &[S]) -> Option<String> {
         let previous_selected = self.selected;
         let previous_label = self.label.clone();
@@ -175,6 +165,7 @@ impl Combo {
         Some(selected_label)
     }
 
+    #[cfg(test)]
     fn emit_change_if_needed(&mut self, previous_selected: usize, previous_label: &str) {
         if self.selected == previous_selected && self.label == previous_label {
             return;
@@ -193,40 +184,16 @@ impl Combo {
     }
 }
 
+#[cfg(test)]
 impl TypedWidgetHandle<Combo> {
-    /// Returns the selected item index while the combo is retained.
-    pub fn selected(&self) -> Option<usize> {
-        self.try_read(Combo::selected)
-    }
-
-    /// Clones the current selected-item label while the combo is retained.
-    pub fn label(&self) -> Option<String> {
-        self.try_read(|widget| widget.label().to_owned())
-    }
-
     /// Returns whether the retained combo popup is open.
     pub fn is_open(&self) -> Option<bool> {
         self.try_read(Combo::is_open)
     }
 
-    /// Opens the retained combo popup.
-    pub fn open_popup(&self) -> Option<()> {
-        self.try_update(Combo::open_popup)
-    }
-
     /// Closes the retained combo popup.
     pub fn close_popup(&self) -> Option<()> {
         self.try_update(Combo::close_popup)
-    }
-
-    /// Updates the retained item snapshot and clamps selection.
-    pub fn update_items<S: AsRef<str>>(&self, items: &[S]) -> Option<()> {
-        self.try_update(|widget| widget.update_items(items))
-    }
-
-    /// Applies a retained popup selection and returns the selected label.
-    pub fn select<S: AsRef<str>>(&self, index: usize, items: &[S]) -> Option<Option<String>> {
-        self.try_update(|widget| widget.select(index, items))
     }
 
     /// Returns the combo's native selection-change endpoint.
@@ -249,7 +216,6 @@ pub struct ComboChanged {
     pub label: String,
 }
 
-
 /// Popup-state snapshot emitted when the user submits the combo header.
 #[derive(Copy, Clone, Debug)]
 pub struct ComboSubmitted {
@@ -265,21 +231,15 @@ impl PartialEq for ComboSubmitted {
     }
 }
 
-impl Eq for ComboSubmitted {}
-
-
 impl Combo {
     /// Constructs a retained node and a weak typed handle to its concrete combo.
+    #[cfg(test)]
     pub fn create(parameters: ComboParameters) -> (TypedWidgetHandle<Self>, Node) {
         Node::typed_widget(Self::from(parameters))
     }
 
-    /// Returns the native event endpoint emitted after every selection change.
-    pub fn changed(&self) -> crate::WidgetEventPortHandle<ComboChanged> {
-        <Self as crate::TypedWidget<ComboChanged>>::event(self)
-    }
-
     /// Returns the native event endpoint emitted whenever the user submits the combo header.
+    #[cfg(test)]
     pub fn submitted(&self) -> crate::WidgetEventPortHandle<ComboSubmitted> {
         <Self as crate::TypedWidget<ComboSubmitted>>::event(self)
     }
@@ -438,3 +398,4 @@ impl Combo {
         }
     }
 }
+impl Eq for ComboSubmitted {}

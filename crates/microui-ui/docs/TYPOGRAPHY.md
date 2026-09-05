@@ -1,19 +1,19 @@
 # Fonts and typography
 
 - Atlas building supports multiple baked fonts and sizes through `atlas::builder::FontAsset`, and the same config can drive both runtime atlas construction and offline/prebuilt atlas export.
-- `Context::new(...)` constructs its default `SkinBundle` from the conventional atlas font keys
-  `body`, `small`, `title`, `heading`, and `mono`, plus the built-in semantic icon keys. To customize
-  it, clone `context.skin()`, edit its concrete fields, and pass the complete value to
-  `Context::set_skin(...)`.
-- Text-bearing widget parameters expose `.font(FontRef)`. Select a semantic role with
-  `FontRole::Heading.into()`, or create a checked allocation-independent named reference with
-  `context.resource_catalog().font_ref("caption")`.
+- A compiled UI bundle resolves conventional `body`, `small`, `title`, `heading` and `mono`
+  font roles and the standard semantic icon roles. The assets plugin creates the bundle;
+  `Ui::install_assets` installs it transactionally with the renderer.
+- Text-bearing COM widgets expose typed font selection through the facade. Resolve named
+  fonts against the bundle catalog; use semantic roles when the selected theme should
+  determine the exact baked resource.
 - Font sizes are selected by choosing another baked font variant, not by scaling one bitmap font at runtime.
 - `demos/demo-full` uses this directly: `NORMAL.ttf` for control/body text, `BOLD.ttf` for window titles, and `CONSOLE.ttf` for the log window’s input/output text.
 
 ## Text encoding and glyph coverage
 
-All public text enters the library as Rust `str` or `String` values and is therefore valid UTF-8.
+Facade text uses Rust str/String values. Direct COM callers supply explicit byte buffers,
+which implementations validate as UTF-8 before committing text.
 Textbox removes CR and LF so its stored value always remains single-line. TextArea and TextBlock
 canonicalize CRLF and lone CR to LF when text is constructed, replaced, or pasted. Textbox and text
 area keep their byte cursor on Unicode scalar-value boundaries. Left/right movement and deletion
@@ -42,9 +42,9 @@ The text pipeline does not perform grapheme segmentation, script shaping, bidire
 reordering, kerning, or fallback-font selection. `TextWrap::Word` wraps only at ASCII space
 boundaries; an individual word is not split when it exceeds the available width.
 
-An atlas used with `Context` must have a `body` font and the standard semantic icon names
+A compiled UI atlas must have a `body` font and the standard semantic icon names
 `close`, `expand`, `collapse`, `check`, `expand_down`, `open_folder`, `closed_folder`, and `file`.
-Every atlas, including a fontless atlas prepared before Context construction, has a validated opaque
+Every atlas, including a fontless atlas prepared before UI construction, has a validated opaque
 white tile named `white` for solid geometry; no resource depends on a numeric table position.
 `AtlasHandle::try_from` validates dimensions, decoded pixels, unique names and glyphs, font
 metrics, the mandatory underscore entries, every glyph/icon rectangle, and the opaque white tile
@@ -59,7 +59,7 @@ exact IDs, and preflight rejects absent IDs before issuing draws.
 
 Retained `FontRef` and `IconRef` values choose semantic roles or explicit catalog IDs. Semantic
 roles resolve through the active skin; named catalog references keep the checked logical ID instead
-of repeating a name lookup at every measurement. `Context::set_theme` rejects bundles missing any
+of repeating a name lookup at every measurement. Asset installation rejects bundles missing any
 application catalog font or icon before asking the backend to upload. Applications retaining
 references to theme-private artwork must replace those references with the theme that owns them.
 See the [theme replacement contract](THEMES.md) for that author responsibility.
@@ -121,12 +121,21 @@ let config = builder::Config {
     fonts,
 };
 
-let (_title, title_node) = TextBlock::create(
-    TextBlockParameters::new("Inspector").font(FontRole::Heading.into()),
-);
 # }
 ```
 
 `builder::Config::fonts` may be empty when an application needs to prepare atlas data separately.
-A `Context` atlas must name one entry `body`; optional roles that are absent fall back to that same
+A UI atlas must name one entry `body`; optional roles that are absent fall back to that same
 atlas-owned body font.
+
+After installing the compiled bundle, select a font on an actual COM widget:
+
+```rust,no_run
+use microui_redux::{TextBlock, TextFontRole, TextWrapping, Ui};
+use nc_com::NcStatus;
+fn heading(ui: &Ui) -> Result<TextBlock, NcStatus> {
+    let title = ui.widgets().text_block("Inspector", TextWrapping::NONE)?;
+    title.set_font_role(TextFontRole::HEADING)?;
+    Ok(title)
+}
+```

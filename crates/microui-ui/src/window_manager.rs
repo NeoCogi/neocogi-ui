@@ -65,13 +65,15 @@ use crate::{Dimensioni, Node, Recti, Skin, SkinBundle, UiRuntime};
 use roots::{SurfaceForest, SurfaceKey};
 mod root_chrome;
 mod roots;
+#[cfg(test)]
+pub(crate) use roots::SurfaceCreationError;
 
 pub use root_chrome::{WindowEvent, WindowHandle};
 #[cfg(test)]
 pub(crate) use root_chrome::DebugRootChromeControls;
 // Popup identity/events and checked surface failures describe forest policy rather than chrome.
 // Re-export both borrowed-mutation and owner-preserving creation errors with the public window API.
-pub use roots::{PopupEvent, PopupHandle, SurfaceCreationError, SurfaceMutationError};
+pub use roots::{PopupEvent, PopupHandle, SurfaceMutationError};
 
 bitflags! {
     #[derive(Copy, Clone)]
@@ -144,6 +146,7 @@ impl Window {
     }
 
     /// Installs the menu bar that will remain an intrinsic part of this window.
+    #[cfg(test)]
     pub fn menu_bar(mut self, menu_bar: MenuBar) -> Self {
         // A builder replacement keeps exactly one bar and consumes every menu node only once.
         self.menu_bar = Some(menu_bar);
@@ -156,6 +159,7 @@ impl Window {
     /// content belongs behind floating child windows while its intrinsic menu and chrome remain in
     /// front. The setting has no effect until at least one child is registered through
     /// [`crate::Ui::create_child_window`].
+    #[cfg(test)]
     pub const fn child_window_clip(mut self, clip: ChildWindowClip) -> Self {
         // Store policy on the construction value so the first committed child layout observes the
         // same immutable parent configuration as registration and paint ordering.
@@ -303,13 +307,8 @@ impl WindowManager {
         self.ui_commit = None;
     }
 
-    /// Borrows the resolved skin shared by window chrome and application trees.
-    pub(crate) fn skin(&self) -> &Skin {
-        // Project from the atomic bundle so retained traversal cannot observe a mismatched atlas.
-        self.bundle.skin()
-    }
-
     /// Borrows the atomic resolved skin and atlas installed in this manager.
+    #[cfg(test)]
     pub(crate) fn skin_bundle(&self) -> &SkinBundle {
         // Context uses this same pair for public projections and renderer synchronization checks.
         &self.bundle

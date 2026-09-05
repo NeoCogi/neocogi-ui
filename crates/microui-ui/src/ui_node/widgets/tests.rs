@@ -48,7 +48,12 @@ fn image_widgets_measure_external_texture_dimensions() {
     let style = test_skin(&atlas);
     let texture = crate::test_support::test_image(13, 5);
 
-    let button = Button::from(ButtonParameters::with_image("aa", Some(texture.clone()), WidgetOption::FRAME, WidgetFillOption::ALL));
+    let button = Button::from(ButtonParameters::with_image(
+        "aa",
+        Some(texture.clone()),
+        WidgetOption::FRAME,
+        WidgetFillOption::ALL,
+    ));
     let button_size = button.measure(&style, &atlas, Constraints::unbounded());
 
     assert_eq!(button_size.width, style.metrics.padding * 2 + texture.size().width + style.metrics.padding + 16);
@@ -189,6 +194,7 @@ fn combo_select_updates_label_and_closes_popup() {
 
 #[test]
 fn convenience_constructors_store_explicit_outer_frame_policy() {
+    #[cfg(test)]
     fn has_option<W: Widget + 'static>(handle: &TypedWidgetHandle<W>, option: WidgetOption) -> bool {
         handle.try_read(|widget| widget.widget_opt().intersects(option)).unwrap()
     }
@@ -207,9 +213,7 @@ fn convenience_constructors_store_explicit_outer_frame_policy() {
     assert!(has_option(&textbox, WidgetOption::FRAME));
     assert!(!has_option(&text_area, WidgetOption::FRAME));
     assert!(
-        _text_area_node
-            .data
-            .policy().0.intersects(WidgetOption::FRAME),
+        _text_area_node.data.policy().0.intersects(WidgetOption::FRAME),
         "TextArea framing belongs to its returned ScrollArea node"
     );
     assert!(has_option(&slider, WidgetOption::FRAME));
@@ -272,7 +276,9 @@ fn typed_click_events_preserve_fifo_within_each_port() {
     let mut combo = Combo::from(ComboParameters::new());
 
     let mut dispatcher = crate::event::WidgetEventDispatcher::new();
-    dispatcher.subscribe(checkbox.changed(), |state, _, event| record_checkbox(state, event)).unwrap();
+    dispatcher
+        .subscribe(checkbox.changed(), |state, _, event| record_checkbox(state, event))
+        .unwrap();
     dispatcher.subscribe(button.submitted(), |state, _, event| record_button(state, event)).unwrap();
     dispatcher.subscribe(item.submitted(), |state, _, event| record_item(state, event)).unwrap();
     dispatcher.subscribe(list.submitted(), |state, _, event| record_list_box(state, event)).unwrap();
@@ -343,7 +349,9 @@ fn checkbox_and_list_item_programmatic_setters_are_silent() {
     fn ignore_checkbox(_: &mut (), _: &CheckboxChanged) {}
     fn ignore_item(_: &mut (), _: &ListItemSubmitted) {}
     let mut dispatcher = crate::event::WidgetEventDispatcher::<()>::new();
-    dispatcher.subscribe(checkbox.changed(), |state, _, event| ignore_checkbox(state, event)).unwrap();
+    dispatcher
+        .subscribe(checkbox.changed(), |state, _, event| ignore_checkbox(state, event))
+        .unwrap();
     dispatcher.subscribe(item.submitted(), |state, _, event| ignore_item(state, event)).unwrap();
 
     checkbox
@@ -372,6 +380,7 @@ fn subscribing_to_an_event_does_not_borrow_semantic_widget_state() {
 }
 
 #[test]
+#[cfg(test)]
 fn custom_widgets_need_no_unit_state_allocation() {
     let (handle, node) = Node::typed_widget(Custom::create(CustomParameters::new("custom")));
     assert!(handle.is_alive());

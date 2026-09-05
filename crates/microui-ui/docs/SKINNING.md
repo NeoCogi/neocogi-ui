@@ -7,29 +7,16 @@ patch and semantic-content-color model.
 
 ## Runtime ownership
 
-```text
-ResourceCatalog ── builds/loads ──> Skin + exact AtlasHandle
-                                         │
-                                         v
-                                    SkinBundle
-                                         │ atomic install
-                                         v
-                                      Context
-                                         │ one borrowed value
-                                         v
-                            WindowManager ──> retained Node tree
-```
+The UI runtime and renderer install one immutable IAssetBundle together. The plugin
+imports its canonical catalog identity, validates copied metrics/resource tables, prepares
+CPU state and uploads GPU pixels before publishing a new revision. Failed validation or
+upload preserves the current pair. All windows, widgets and scoped services use that
+same committed resource revision.
 
-`Context::new` captures the backend's initial atlas in a stable `ResourceCatalog` and creates a
-default `SkinBundle`. A bundle owns one complete `Skin` and the exact immutable `AtlasHandle` that
-minted every image capability in its visual catalog. `Context::set_skin_bundle` uploads the atlas
-first and publishes the pair only after the backend accepts it. A failed upload leaves the old pair
-active.
-
-`Context::set_skin` is the scalar/programmatic edit path. It pairs the replacement skin with the
-currently active atlas and rejects image-backed visuals from another allocation. JSON loading
-always derives from `Context::resource_catalog()`, never from the previously selected theme, so
-switching themes cannot gradually accumulate fonts, icons, or artwork.
+A producer derives revisions from the original resource catalog, preserving every
+application font/icon identity and meaning. Loading a theme from the currently selected
+theme would accumulate private artwork across switches, so the assets plugin retains the
+original catalog independently of the installed revision.
 
 ## Concrete types
 
@@ -78,12 +65,13 @@ all palette roles and metrics.
 
 ## Stable resources
 
-Raw `FontId` and `IconId` values belong to one atlas allocation. Retained widget parameters instead
-store `FontRef` and `IconRef`:
+ABI resource identifiers belong to an authenticated bundle catalog. The static facade
+uses named/semantic font and icon selections; the implementation resolves these to its
+private FontRef and IconRef values:
 
 - a semantic reference contains a closed `FontRole` or `IconRole`;
 - a named reference contains a checked application resource name created through
-  `Context::resource_catalog()`.
+  the validated asset bundle catalog.
 
 Measurement and paint resolve those references against the current bundle. Named application fonts
 and icons are copied into every rebuilt JSON-theme atlas, while a theme may replace the complete
@@ -94,10 +82,9 @@ allocation-bound values after a bundle switch.
 
 ## Global skin and caches
 
-`Context` owns the sole active skin. Window chrome, every retained node, and every runtime phase
-borrow that same complete value; containers and widgets neither store nor resolve local skins.
-Replacing it through `Context::set_skin` or `Context::set_skin_bundle` therefore has one explicit
-scope: the entire UI managed by that context.
+The UI runtime owns the sole active resource revision. Window chrome and every retained
+node use that complete value. Widgets and containers do not store local skin overrides.
+`Ui::install_assets` replaces the revision for the entire UI through one transaction.
 
 Each validated skin receives one private, non-reused revision. Retained measurement caches key
 their results by constraints and that complete revision, so a global replacement cannot reuse

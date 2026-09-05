@@ -34,14 +34,14 @@
 //! private [`DisplayListExecutor`] intersects that clip with the current viewport immediately
 //! before submission.
 
+#[cfg(test)]
+use crate::test_support::custom_render::{CustomRenderHandle, CustomRenderKey, CustomRenderRegistry, CustomRenderRegistryError};
+#[cfg(test)]
+use super::texture::{RendererId, TextureError};
 use super::{
-    backend::{
-        CustomRenderArgs, CustomRenderHandle, CustomRenderKey, CustomRenderRegistry, CustomRenderRegistryError, FrameError, FrameInfo, RendererBackend,
-        RendererFrame, Vertex,
-    },
+    backend::{RenderItemArgs, FrameError, FrameInfo, RendererBackend, RendererFrame, Vertex},
     display_list::{DisplayList, DrawKind, DrawOp},
     geometry::{ClipRect, SolidTriangle, textured_quad_from_uv},
-    texture::{RendererId, TextureError},
 };
 use crate::{
     atlas::{AtlasHandle, FontId, IconId},
@@ -81,6 +81,7 @@ pub enum RenderError {
         operation_index: usize,
     },
     /// A custom operation references a removed or foreign registry entry.
+    #[cfg(test)]
     UnknownCustomRenderer {
         /// Painter-order operation index containing the reference.
         operation_index: usize,
@@ -101,6 +102,7 @@ impl fmt::Display for RenderError {
             Self::UnknownIcon { id, operation_index } => {
                 write!(f, "unknown atlas icon {:?} in display-list operation {operation_index}", id)
             }
+            #[cfg(test)]
             Self::UnknownCustomRenderer { operation_index } => {
                 write!(f, "unknown custom renderer in display-list operation {operation_index}")
             }
@@ -115,9 +117,9 @@ impl Error for RenderError {
         // executor-owned validation failures and therefore have no lower-level source to expose.
         match self {
             Self::Frame(source) => Some(source),
-            Self::UiUpdateRequired | Self::UnknownTexture { .. } | Self::UnknownFont { .. } | Self::UnknownIcon { .. } | Self::UnknownCustomRenderer { .. } => {
-                None
-            }
+            #[cfg(test)]
+            Self::UnknownCustomRenderer { .. } => None,
+            Self::UiUpdateRequired | Self::UnknownTexture { .. } | Self::UnknownFont { .. } | Self::UnknownIcon { .. } => None,
         }
     }
 }
@@ -140,6 +142,7 @@ impl From<FrameError> for RenderError {
 /// list construction and submission remain crate-owned.
 pub(crate) struct Renderer<B: RendererBackend> {
     /// Process-unique identity copied into every resource capability owned by this renderer.
+    #[cfg(test)]
     id: RendererId,
     /// Uniquely owned backend.
     backend: B,
@@ -152,10 +155,12 @@ pub(crate) struct Renderer<B: RendererBackend> {
     /// UV at the center of the baked white icon used for solid triangles.
     white_uv: Vec2f,
     /// Last renderer-local external texture slot successfully allocated.
+    #[cfg(test)]
     last_texture_slot: u32,
     /// Complete handles for backend-owned external textures.
     textures: HashSet<TextureId>,
     /// Backend-specialized persistent custom callbacks.
+    #[cfg(test)]
     custom_renderers: CustomRenderRegistry<B>,
     /// Scratch output reused by final rectangular triangle clipping.
     clipped_triangles: Vec<Vertex>,
@@ -166,6 +171,7 @@ impl<B: RendererBackend> Renderer<B> {
     pub(crate) fn new(backend: B) -> Self {
         // Allocate provenance once at the concrete Renderer ownership boundary. Textures and custom
         // callbacks copy this same identity rather than maintaining independent global namespaces.
+        #[cfg(test)]
         let id = RendererId::allocate();
         let atlas = backend.get_atlas();
         let atlas_dim = atlas.get_texture_dimension();
@@ -179,14 +185,17 @@ impl<B: RendererBackend> Renderer<B> {
         // white_uv = (white_icon_origin + white_icon_extent / 2) / atlas_extent.
         let white_uv = (white_icon_min + white_icon_extent * 0.5) / atlas_extent;
         Self {
+            #[cfg(test)]
             id,
             backend,
             atlas,
             atlas_dim,
             white_icon_rect,
             white_uv,
+            #[cfg(test)]
             last_texture_slot: 0,
             textures: HashSet::new(),
+            #[cfg(test)]
             custom_renderers: CustomRenderRegistry::new(id),
             clipped_triangles: Vec::new(),
         }
@@ -206,8 +215,9 @@ impl<B: RendererBackend> Renderer<B> {
         let frame = self.backend.frame(info)?;
         let DisplayList { ops, solid_geometry } = list;
         let solid_triangles = solid_geometry.triangles();
-        let executor = DisplayListExecutor {
+        let executor: DisplayListExecutor<'_, '_, B> = DisplayListExecutor {
             frame,
+            #[cfg(test)]
             custom_renderers: &mut self.custom_renderers,
             atlas: &self.atlas,
             atlas_dim: self.atlas_dim,
@@ -243,6 +253,7 @@ impl<B: RendererBackend> Renderer<B> {
                 DrawKind::Image { id, .. } if !self.textures.contains(id) => {
                     return Err(RenderError::UnknownTexture { id: *id, operation_index });
                 }
+                #[cfg(test)]
                 DrawKind::Custom { renderer, .. } if !self.custom_renderers.contains(*renderer) => {
                     return Err(RenderError::UnknownCustomRenderer { operation_index });
                 }
@@ -287,19 +298,22 @@ impl<B: RendererBackend> Renderer<B> {
     }
 
     /// Registers one persistent custom renderer specialized for this backend.
+    #[cfg(test)]
     pub(crate) fn register_custom_renderer<F>(&mut self, callback: F) -> Result<CustomRenderHandle<B>, CustomRenderRegistryError>
     where
-        F: for<'frame> FnMut(&mut B::Frame<'frame>, CustomRenderArgs) + 'static,
+        F: for<'frame> FnMut(&mut B::Frame<'frame>, RenderItemArgs) + 'static,
     {
         self.custom_renderers.register(callback)
     }
 
     /// Removes a previously registered custom renderer.
+    #[cfg(test)]
     pub(crate) fn unregister_custom_renderer(&mut self, handle: CustomRenderHandle<B>) -> Result<(), CustomRenderRegistryError> {
         self.custom_renderers.remove(handle)
     }
 
     /// Uploads one validated RGBA buffer through the context's sole public image API.
+    #[cfg(test)]
     pub(crate) fn try_load_texture_rgba(&mut self, width: i32, height: i32, pixels: &[u8]) -> Result<TextureId, TextureError> {
         crate::image::validate_rgba_buffer(width, height, pixels.len())?;
         // Compute the next slot without committing it, so exhaustion and failed backend uploads
@@ -320,6 +334,7 @@ impl<B: RendererBackend> Renderer<B> {
     /// Destroying an unknown or already-freed handle triggers a debug assertion. In release builds
     /// the repeated operation is an idempotent no-op. The backend is never called more than once
     /// for the same live handle.
+    #[cfg(test)]
     pub(crate) fn free_texture(&mut self, id: TextureId) {
         let removed = self.textures.remove(&id);
         debug_assert!(removed, "attempted to destroy an unknown or already-freed texture: {id:?}");
@@ -334,6 +349,7 @@ struct DisplayListExecutor<'frame, 'resources, B: RendererBackend> {
     /// Active backend frame consumed by `run`, or abandoned if execution unwinds.
     frame: B::Frame<'frame>,
     /// Renderer-owned custom callbacks available at painter-order barriers.
+    #[cfg(test)]
     custom_renderers: &'resources mut CustomRenderRegistry<B>,
     /// Cached atlas used for glyph and icon expansion.
     atlas: &'resources AtlasHandle,
@@ -377,7 +393,7 @@ impl<B: RendererBackend> DisplayListExecutor<'_, '_, B> {
                 if let Some(view) = clip.positive_intersection(rect) {
                     self.frame.draw_com_item(
                         item,
-                        CustomRenderArgs {
+                        RenderItemArgs {
                             dimensions: Dimensioni::new(self.viewport.width, self.viewport.height),
                             content_area: rect,
                             view,
@@ -397,6 +413,7 @@ impl<B: RendererBackend> DisplayListExecutor<'_, '_, B> {
                 };
                 self.draw_solid_triangles(triangles, clip);
             }
+            #[cfg(test)]
             DrawKind::Custom { renderer, content_area } => self.draw_custom(renderer, content_area, clip),
         }
         Ok(())
@@ -514,6 +531,7 @@ impl<B: RendererBackend> DisplayListExecutor<'_, '_, B> {
     }
 
     /// Flushes atlas work and invokes one visible custom callback in painter order.
+    #[cfg(test)]
     fn draw_custom(&mut self, renderer: CustomRenderKey, content_area: Recti, clip: Recti) {
         let Some(view) = clip.positive_intersection(content_area) else {
             return;
@@ -525,7 +543,7 @@ impl<B: RendererBackend> DisplayListExecutor<'_, '_, B> {
         self.frame.flush();
         callback(
             &mut self.frame,
-            CustomRenderArgs {
+            RenderItemArgs {
                 dimensions: Dimensioni::new(self.viewport.width, self.viewport.height),
                 content_area,
                 view,
@@ -555,7 +573,9 @@ fn clipped_textured_quad(dst: Recti, src: Recti, texture_dim: Dimensioni, color:
 
 /// Shared destination clipping interpolates normalized source edges for atlas and COM images alike.
 fn clipped_uv_quad(dst: Recti, source_min: Vec2f, source_max: Vec2f, color: Color, clip: Recti) -> Option<[Vertex; 4]> {
-    if !dst.has_positive_area() { return None; }
+    if !dst.has_positive_area() {
+        return None;
+    }
     let clipped = dst.positive_intersection(clip)?;
 
     let dst_extent = Vec2f::new(dst.width as f32, dst.height as f32);

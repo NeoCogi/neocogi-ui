@@ -203,20 +203,18 @@ string-keyed appearance map exists between syntax parsing and the typed family d
 
 ## Loading and selecting
 
-```rust,no_run
-# use microui_ui::{Context, LoadedTheme};
-# use microui_ui::render::RendererBackend;
-fn select<B: RendererBackend, State: 'static>(context: &mut Context<B, State>, theme: &LoadedTheme) {
-    context.set_theme(theme).expect("backend must upload the selected theme atlas");
-}
-```
+Runtime theme construction is provided by the optional assets plugin. Its typed loader
+reads a native-path document and produces a complete immutable IAssetBundle. The app
+installs that bundle through `Ui::install_assets`; CPU validation and GPU upload must
+succeed before the resource revision is published. Keep the original bundle interface
+when a selector needs to restore the initial theme.
 
-Capture `context.skin_bundle().clone()` in `LoadedTheme::new("Default Skin", bundle)` when a
-selector needs to return to the initial flat appearance after choosing a file theme. Ordinary Skin
-changes clone `context.skin()` and use `Context::set_skin`; image-backed visual edits must continue
-to belong to the currently active atlas. A flat palette editor cannot reinterpret multicolor PNG
-pixels as named RGBA fields, so `demo-full` enables its palette controls only for the programmatic
-flat skin while continuing to permit concrete metric changes for image-backed themes.
+For programmatic changes, copy the current AssetMetrics, edit explicit fields, derive a
+revision with `Ui::derive_style`, then install it. Stable named font/icon identities belong
+to the bundle catalog; a derived revision cannot reinterpret existing resource meanings.
+See [asset authoring and export](../../../docs/COM_ASSETS.md) and the full demo style editor.
+The palette editor is enabled only for the flat theme, while image-backed themes retain
+metric editing; multicolor image pixels are not inferred to be named palette fields.
 
 ## Appearance roles
 

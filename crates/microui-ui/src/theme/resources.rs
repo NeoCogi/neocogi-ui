@@ -102,6 +102,7 @@ impl ResourceCatalog {
 
     /// Borrows the pristine source atlas for internal deterministic theme derivation.
     #[cfg(feature = "theme-json")]
+    #[cfg(test)]
     pub(crate) fn atlas(&self) -> &AtlasHandle {
         // Restrict the pristine atlas to theme derivation so application code cannot bypass the
         // active bundle merely because copied logical resource IDs remain valid in both atlases.

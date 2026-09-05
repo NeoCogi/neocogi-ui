@@ -90,22 +90,6 @@ impl TextboxParameters {
             opt: WidgetOption::FRAME,
         }
     }
-
-    /// Creates textbox parameters with explicit widget options.
-    pub fn with_opt(buf: impl Into<String>, opt: WidgetOption) -> Self {
-        Self {
-            buf: buf.into(),
-            font: FontRef::Role(FontRole::Body),
-            opt,
-        }
-    }
-
-    /// Replaces the font used by the textbox.
-    pub fn font(mut self, font: FontRef) -> Self {
-        // The editable buffer retains a typed semantic or exact ID reference, never a font name.
-        self.font = font;
-        self
-    }
 }
 
 /// Concrete retained textbox, including its semantic and editing state.
@@ -139,6 +123,7 @@ impl Textbox {
     }
 
     /// Clears the current text and resets the cursor.
+    #[cfg(test)]
     pub fn clear(&mut self) {
         self.buf.clear();
         self.cursor = 0;
@@ -155,49 +140,16 @@ impl Textbox {
     }
 
     /// Moves the cursor to the end of the current text.
+    #[cfg(test)]
     pub fn move_cursor_to_end(&mut self) {
         self.cursor = self.buf.len();
     }
 }
 
+#[cfg(test)]
 impl TypedWidgetHandle<Textbox> {
-    /// Clones the current text while the widget is retained.
-    pub fn text(&self) -> Option<String> {
-        self.try_read(|widget| widget.text().to_owned())
-    }
-
-    /// Replaces retained text, removes CR and LF, and moves its cursor to the end.
-    pub fn set_text(&self, text: impl Into<String>) -> Option<()> {
-        self.try_update_with(text.into(), |widget, text| widget.set_text(text)).ok()
-    }
-
-    /// Clears the retained text.
-    pub fn clear(&self) -> Option<()> {
-        self.try_update(Textbox::clear)
-    }
-
-    /// Returns the scalar-aligned byte cursor while the widget is retained.
-    pub fn cursor(&self) -> Option<usize> {
-        self.try_read(Textbox::cursor)
-    }
-
-    /// Moves the retained cursor to the nearest preceding Unicode scalar-value boundary.
-    pub fn set_cursor(&self, cursor: usize) -> Option<()> {
-        self.try_update(|widget| widget.set_cursor(cursor))
-    }
-
-    /// Moves the retained cursor to the end.
-    pub fn move_cursor_to_end(&self) -> Option<()> {
-        self.try_update(Textbox::move_cursor_to_end)
-    }
-
     /// Returns the textbox's native value-change endpoint.
     pub fn changed(&self) -> WidgetEventPortHandle<TextboxChanged> {
-        self.widget_event()
-    }
-
-    /// Returns the textbox's native submission endpoint.
-    pub fn submitted(&self) -> WidgetEventPortHandle<TextboxSubmitted> {
         self.widget_event()
     }
 }
@@ -211,7 +163,6 @@ pub struct TextboxChanged {
     pub cursor: usize,
 }
 
-
 /// Snapshot emitted when the user submits a textbox value.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TextboxSubmitted {
@@ -219,19 +170,21 @@ pub struct TextboxSubmitted {
     pub text: String,
 }
 
-
 impl Textbox {
     /// Constructs a retained node and a weak typed handle to its concrete textbox.
+    #[cfg(test)]
     pub fn create(parameters: TextboxParameters) -> (TypedWidgetHandle<Self>, Node) {
         Node::typed_widget(Self::from(parameters))
     }
 
     /// Returns the native event endpoint emitted after every user-originated text change.
+    #[cfg(test)]
     pub fn changed(&self) -> crate::WidgetEventPortHandle<TextboxChanged> {
         <Self as crate::TypedWidget<TextboxChanged>>::event(self)
     }
 
     /// Returns the native event endpoint emitted whenever the user submits the current text.
+    #[cfg(test)]
     pub fn submitted(&self) -> crate::WidgetEventPortHandle<TextboxSubmitted> {
         <Self as crate::TypedWidget<TextboxSubmitted>>::event(self)
     }
@@ -474,8 +427,6 @@ impl From<TextboxParameters> for Textbox {
         }
     }
 }
-
-
 
 impl crate::com::widget::WidgetAlgorithm for Textbox {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.

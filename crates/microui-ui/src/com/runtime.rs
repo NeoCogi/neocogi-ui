@@ -5,7 +5,7 @@ use super::{
     paint::{Metrics, PaintService},
     render::Backend,
 };
-use crate::prelude::{AtlasHandle, Dimensioni};
+use crate::{AtlasHandle, Dimensioni};
 use crate::Context;
 mod dialogs;
 mod menus;
@@ -342,7 +342,6 @@ impl IInputSink for Runtime {
         storage.pending.set(true);
         Ok(())
     }
-
 }
 
 impl IUiStyle for Runtime {
@@ -391,9 +390,15 @@ impl IUiRuntime for Runtime {
         self.storage.collect_changes(&mut context)?;
         let area = if self.storage.pending.get() { None } else { context.text_input_area() };
         Ok(match area {
-            Some(area) => TextInputArea::Area(Rect { x: area.x, y: area.y, width: area.width, height: area.height }),
+            Some(area) => TextInputArea::Area(Rect {
+                x: area.x,
+                y: area.y,
+                width: area.width,
+                height: area.height,
+            }),
             None => TextInputArea::None,
-        }.into())
+        }
+        .into())
     }
 
     /// Polling and eventful updates execute the same concrete phase sequence.

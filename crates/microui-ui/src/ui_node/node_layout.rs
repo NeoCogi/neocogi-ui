@@ -133,12 +133,6 @@ impl NodeLayout {
         self.content_size = content_size;
         self
     }
-
-    /// Returns this layout with updated child-overflow propagation.
-    pub(crate) fn with_child_overflow_propagation(mut self, propagate_child_overflow: bool) -> Self {
-        self.propagate_child_overflow = propagate_child_overflow;
-        self
-    }
 }
 
 /// Node-local transform and viewport exposed to child nodes.

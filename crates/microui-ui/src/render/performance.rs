@@ -34,7 +34,9 @@
 //!
 //! `cargo test --release render_performance_baseline -- --ignored --nocapture --test-threads=1`
 
-use super::{CustomRenderHandle, DisplayList, FrameError, FrameInfo, Painter, Renderer, RendererBackend, RendererFrame, TextureError, Vertex};
+use super::{DisplayList, FrameError, FrameInfo, Painter, Renderer, RendererBackend, RendererFrame, TextureError, Vertex};
+#[cfg(test)]
+use crate::test_support::custom_render::{CustomRenderHandle};
 use crate::{test_support::AllocationMeasurement, AtlasSource, AtlasUploadError, CharEntry, FontEntry, FontId, SourceFormat, TextureId, color};
 use rs_math3d::{Dimensioni, Recti, Vec2f, Vec2i};
 use std::{cell::Cell, hint::black_box, rc::Rc, time::Instant};

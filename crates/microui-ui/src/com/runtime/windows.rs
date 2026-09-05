@@ -1,7 +1,7 @@
 //! Concrete window/popup COM projections reuse the manager's single authoritative forest.
 use super::*;
 use crate::{
-    prelude::{PopupHandle, WindowHandle, Window},
+    PopupHandle, WindowHandle, Window,
     window_manager::{WindowManager, SurfaceMutationError, WindowOption, LayerBinding, ChildWindowClip},
 };
 use nc_com::{INcStringAbi, NcString};

@@ -1,6 +1,6 @@
 //! Owned recording services keep COM retention independent of stack borrows.
 use super::*;
-use crate::prelude::{FontRole, WidgetOption, ControlRole};
+use crate::{FontRole, WidgetOption, ControlRole};
 
 #[com_class(interfaces(ITextMetrics))]
 /// Immutable text metrics for one installed resource bundle.
@@ -32,7 +32,7 @@ enum Drawing {
     /// Finite endpoints, nonnegative width and packed RGBA for UI-owned line tessellation.
     Line(PaintPoint, PaintPoint, f32, u32),
     /// Owned finite polygon boundary uses the existing shared UI triangulation algorithm.
-    Polygon(Vec<crate::prelude::Vec2f>, u32),
+    Polygon(Vec<crate::Vec2f>, u32),
     /// Complete, validated local atlas triangles copied before the call returns.
     Triangles(Vec<RenderVertex>),
     /// Solid vertices retain their material meaning until the UI executor resolves the current atlas.
@@ -111,7 +111,7 @@ impl IPainter for Recorder {
         if input.offset() != 0 || input.as_slice().iter().any(|p| !p.x.is_finite() || !p.y.is_finite()) {
             return Err(NC_E_INVALID_ARG);
         }
-        let points = input.as_slice().iter().map(|p| crate::prelude::Vec2f::new(p.x, p.y)).collect();
+        let points = input.as_slice().iter().map(|p| crate::Vec2f::new(p.x, p.y)).collect();
         self.push(scope, Drawing::Polygon(points, rgba))
     }
 
@@ -241,13 +241,15 @@ impl PaintService {
             let ctx = &mut clipped;
             match drawing {
                 Drawing::Line(from, to, width, rgba) => ctx.painter().stroke_line(
-                    crate::prelude::Vec2f::new(from.x, from.y),
-                    crate::prelude::Vec2f::new(to.x, to.y),
+                    crate::Vec2f::new(from.x, from.y),
+                    crate::Vec2f::new(to.x, to.y),
                     width,
                     super::render::color(rgba),
                 ),
                 Drawing::Polygon(points, rgba) => ctx.painter().fill_polygon(&points, super::render::color(rgba)),
-                Drawing::Texture(rect, source, rgba, texture) => ctx.painter().com_texture_region(local_rect(rect), source, super::render::color(rgba), texture),
+                Drawing::Texture(rect, source, rgba, texture) => {
+                    ctx.painter().com_texture_region(local_rect(rect), source, super::render::color(rgba), texture)
+                }
                 Drawing::Item(rect, item) => ctx.painter().com_item(local_rect(rect), item),
                 Drawing::ColoredTriangles(vertices) => ctx.painter().colored_triangles(&vertices),
                 Drawing::Triangles(vertices) => ctx.painter().atlas_triangles(&vertices),

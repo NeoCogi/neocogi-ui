@@ -643,39 +643,16 @@ impl InputRouter {
             self.hover = self.pointer_hits_node(node, parent_transform, pos).then(|| node.id());
         }
 
-        match &mut node.data {
-            NodeKind::Widget(widget) => {
-                // Leaf event-kind policy is completely router-owned; no Widget query widens
-                // the public trait or permits a handler to influence geometric target selection.
-                let (opt, keyboard) = {
-                    let widget = widget.widget.try_borrow().expect("retained widget invariant violated during input routing");
-                    (widget.widget.effective_widget_opt(), widget.widget.keyboard_behavior())
-                };
-                self.route_widget_input(&node.state, local_rect, local_clip, opt, keyboard, true, &local_event)
-            }
-            NodeKind::Com(widget) => {
-                let (options, keyboard, _) = widget.policy();
-                let captured_continuation = captured && matches!(&local_event, UiInputEvent::MouseDrag { .. } | UiInputEvent::MouseUp { .. });
-                let accepts_event = captured_continuation || widget.accepts_event(&local_event);
-                let (rect, clip) = if widget.is_container() {
-                    (content_rect, content_clip)
-                } else {
-                    (local_rect, local_clip)
-                };
-                self.route_widget_input(&node.state, rect, clip, options, keyboard, accepts_event, &local_event)
-            }
-            NodeKind::Container(container) => {
-                // An overloaded container surface may add a state-dependent filter after target
-                // selection. Captured continuation skips that query because InputRouter already
-                // owns this target; this also prevents stale surface-local modes from affecting
-                // routing.
-                let opt = container.effective_widget_opt();
-                let keyboard = container.with_widget(|widget| widget.keyboard_behavior());
-                let captured_continuation = captured && matches!(&local_event, UiInputEvent::MouseDrag { .. } | UiInputEvent::MouseUp { .. });
-                let accepts_event = captured_continuation || container.accepts_event(&local_event);
-                self.route_widget_input(&node.state, content_rect, content_clip, opt, keyboard, accepts_event, &local_event)
-            }
-        }
+        let (options, keyboard, _) = node.data.policy();
+        // Once captured, drag/release delivery cannot be vetoed by changing branch policy.
+        let captured_continuation = captured && matches!(&local_event, UiInputEvent::MouseDrag { .. } | UiInputEvent::MouseUp { .. });
+        let accepts_event = captured_continuation || node.data.accepts_event(&local_event);
+        let (rect, clip) = if node.is_container() {
+            (content_rect, content_clip)
+        } else {
+            (local_rect, local_clip)
+        };
+        self.route_widget_input(&node.state, rect, clip, options, keyboard, accepts_event, &local_event)
     }
 }
 

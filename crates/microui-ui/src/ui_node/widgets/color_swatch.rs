@@ -68,13 +68,6 @@ impl ColorSwatchParameters {
         self.label = label.into();
         self
     }
-
-    /// Replaces the font used for the label.
-    pub fn font(mut self, font: FontRef) -> Self {
-        // Keep the stable reference unresolved until the swatch is measured or painted.
-        self.font = font;
-        self
-    }
 }
 
 /// Concrete retained color swatch, including its semantic state.
@@ -91,6 +84,7 @@ pub struct ColorSwatch {
 
 impl ColorSwatch {
     /// Constructs a retained node and a weak typed handle to its concrete color swatch.
+    #[cfg(test)]
     pub fn create(parameters: ColorSwatchParameters) -> (crate::TypedWidgetHandle<Self>, crate::Node) {
         let widget = ColorSwatch::from(parameters);
         crate::Node::typed_widget(widget)
@@ -140,28 +134,6 @@ impl ColorSwatch {
             let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
             ctx.draw_control_text_with_font(font, self.label.as_str(), rect, ControlRole::Button, self.opt);
         }
-    }
-}
-
-impl TypedWidgetHandle<ColorSwatch> {
-    /// Returns the current fill color while the widget is retained.
-    pub fn fill(&self) -> Option<Color> {
-        self.try_read(ColorSwatch::fill)
-    }
-
-    /// Replaces the retained swatch fill.
-    pub fn set_fill(&self, fill: Color) -> Option<()> {
-        self.try_update(|widget| widget.set_fill(fill))
-    }
-
-    /// Clones the current label while the widget is retained.
-    pub fn label(&self) -> Option<String> {
-        self.try_read(|widget| widget.label().to_owned())
-    }
-
-    /// Replaces the retained swatch label.
-    pub fn set_label(&self, label: impl Into<String>) -> Option<()> {
-        self.try_update_with(label.into(), |widget, label| widget.set_label(label)).ok()
     }
 }
 

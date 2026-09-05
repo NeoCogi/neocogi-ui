@@ -290,6 +290,35 @@ impl<'a> ScopedLayout<'a> {
         self.capture(self.service.measure_child(self.scope, index, limits(constraints)))
             .map(|size| Dimensioni::new(size.width, size.height))
     }
+    /// Returns cardinality already authenticated for this scope.
+    pub(crate) fn child_count(&self) -> usize {
+        self.count
+    }
+    /// Places one child with copied geometry and retains any error for final propagation.
+    pub(crate) fn place(&self, index: usize, rect: crate::Recti) -> Option<Dimensioni> {
+        let index = self.index(index)?;
+        self.capture(self.service.place_child(self.scope, index, super::copied_rect(rect)))
+            .map(|size| Dimensioni::new(size.width, size.height))
+    }
+    /// Applies subtree participation through the authoritative runtime service.
+    pub(crate) fn set_participation(&self, index: usize, participation: crate::ChildParticipation) -> bool {
+        let Some(index) = self.index(index) else {
+            return false;
+        };
+        let participation = match participation {
+            crate::ChildParticipation::Active => LayoutParticipation::ACTIVE,
+            crate::ChildParticipation::Disabled => LayoutParticipation::DISABLED,
+            crate::ChildParticipation::Hidden => LayoutParticipation::HIDDEN,
+        };
+        self.capture(self.service.set_participation(self.scope, index, participation)).is_some()
+    }
+    /// Marks a child placement dependency dirty without changing the assigned rectangle.
+    pub(crate) fn invalidate_placement(&self, index: usize) -> bool {
+        let Some(index) = self.index(index) else {
+            return false;
+        };
+        self.capture(self.service.child_placement_changed(self.scope, index)).is_some()
+    }
     /// Makes ignored legacy Option errors observable before publishing a successful COM result.
     pub(crate) fn result(&self) -> Result<(), NcStatus> {
         match self.error.get() {

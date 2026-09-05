@@ -31,8 +31,9 @@
 //!
 //! Painter records through this internal operation interface and Renderer consumes it exactly once.
 
+#[cfg(test)]
+use crate::test_support::custom_render::CustomRenderKey;
 use super::{
-    backend::CustomRenderKey,
     geometry::{SolidGeometry, SolidTriangle, SolidTriangleRange},
 };
 use crate::atlas::{FontId, IconId};
@@ -126,6 +127,7 @@ pub(super) enum DrawKind {
         triangles: SolidTriangleRange,
     },
     /// Invokes backend-specific drawing at this point in the operation stream.
+    #[cfg(test)]
     Custom {
         /// Renderer-owned callback key.
         renderer: CustomRenderKey,
@@ -161,7 +163,14 @@ impl DisplayList {
     }
 
     /// Retains an image in source order; final clipping remains centralized in the executor.
-    pub(super) fn push_com_texture(&mut self, clip: Recti, rect: Recti, source: microui_contracts::TextureRegion, color: Color, texture: nc_com::ComPtr<microui_contracts::ITextureAbi>) {
+    pub(super) fn push_com_texture(
+        &mut self,
+        clip: Recti,
+        rect: Recti,
+        source: microui_contracts::TextureRegion,
+        color: Color,
+        texture: nc_com::ComPtr<microui_contracts::ITextureAbi>,
+    ) {
         self.push(clip, DrawKind::ComTexture { texture, rect, source, color });
     }
 
@@ -194,6 +203,7 @@ impl DisplayList {
     }
 
     /// Appends one backend-specific custom drawing barrier.
+    #[cfg(test)]
     pub(crate) fn push_custom(&mut self, clip: Recti, renderer: CustomRenderKey, content_area: Recti) {
         self.push(clip, DrawKind::Custom { renderer, content_area });
     }

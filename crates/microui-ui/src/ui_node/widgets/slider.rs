@@ -90,6 +90,7 @@ impl SliderParameters {
     ///
     /// Returns [`NumericParameterError`] unless `value` and both range bounds are finite, the
     /// bounds satisfy `low <= high`, and their represented span remains finite.
+    #[cfg(test)]
     pub fn new(value: Real, low: Real, high: Real) -> Result<Self, NumericParameterError> {
         Self::with_opt(value, low, high, 0.0, DecimalPrecision::ZERO, WidgetOption::FRAME)
     }
@@ -116,13 +117,6 @@ impl SliderParameters {
             opt: opt | WidgetOption::GRAB_SCROLL,
         })
     }
-
-    /// Replaces the font used for the numeric label and editor.
-    pub fn font(mut self, font: FontRef) -> Self {
-        // Slider measurement resolves this stable choice only against the current atlas.
-        self.font = font;
-        self
-    }
 }
 
 /// Value snapshot emitted after a user-originated slider change.
@@ -131,7 +125,6 @@ pub struct SliderChanged {
     /// Slider value after applying the triggering input event.
     pub value: Real,
 }
-
 
 /// Concrete retained slider, including its semantic and editing state.
 pub struct Slider {
@@ -157,6 +150,7 @@ pub struct Slider {
 
 impl Slider {
     /// Constructs a retained node and a weak typed handle to its concrete slider.
+    #[cfg(test)]
     pub fn create(parameters: SliderParameters) -> (TypedWidgetHandle<Self>, Node) {
         Node::typed_widget(Self::from(parameters))
     }
@@ -183,6 +177,7 @@ impl Slider {
     }
 
     /// Returns the native event endpoint emitted after every user-originated value change.
+    #[cfg(test)]
     pub fn changed(&self) -> crate::WidgetEventPortHandle<SliderChanged> {
         <Self as crate::TypedWidget<SliderChanged>>::event(self)
     }
@@ -306,6 +301,7 @@ impl Slider {
     }
 }
 
+#[cfg(test)]
 impl TypedWidgetHandle<Slider> {
     /// Returns the current slider value while the widget is retained.
     pub fn value(&self) -> Option<Real> {
@@ -317,11 +313,6 @@ impl TypedWidgetHandle<Slider> {
     /// Non-finite input is ignored, preserving the widget's last finite value.
     pub fn set_value(&self, value: Real) -> Option<()> {
         self.try_update(|widget| widget.set_value(value))
-    }
-
-    /// Returns whether the retained slider is currently editing text.
-    pub fn is_editing(&self) -> Option<bool> {
-        self.try_read(Slider::is_editing)
     }
 
     /// Returns the slider's native value-change endpoint.
@@ -437,8 +428,6 @@ impl From<SliderParameters> for Slider {
         }
     }
 }
-
-
 
 impl crate::com::widget::WidgetAlgorithm for Slider {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.

@@ -242,10 +242,14 @@ impl<'a> WidgetUpdateCtx<'a> {
     }
 
     /// Returns the effective content-local clip committed for this update.
-    pub fn local_clip(&self) -> Recti { self.common.local_clip() }
+    pub fn local_clip(&self) -> Recti {
+        self.common.local_clip()
+    }
 
     /// Whether local pointer tests belong to the current hover root.
-    pub(crate) fn in_hover_root(&self) -> bool { self.in_hover_root }
+    pub(crate) fn in_hover_root(&self) -> bool {
+        self.in_hover_root
+    }
 
     /// Returns whether the pointer is currently over this widget.
     pub fn hovered(&self) -> bool {
@@ -332,10 +336,24 @@ impl<'a> WidgetPaintCtx<'a> {
     pub(crate) fn clipped(&mut self, rect: Recti) -> WidgetPaintCtx<'_> {
         let origin = self.common.content_rect;
         let requested = Recti::new(rect.x.saturating_add(origin.x), rect.y.saturating_add(origin.y), rect.width, rect.height);
-        let clip = self.common.screen_clip.positive_intersection(requested).unwrap_or_else(|| Recti::new(requested.x, requested.y, 0, 0));
-        WidgetPaintCtx::new_with_content_geometry(origin, &mut *self.display_list, clip,
-            self.common.style, self.common.atlas, self.enabled, self.common.hovered,
-            self.common.focused, self.common.clicked, self.common.active, self.window_active)
+        let clip = self
+            .common
+            .screen_clip
+            .positive_intersection(requested)
+            .unwrap_or_else(|| Recti::new(requested.x, requested.y, 0, 0));
+        WidgetPaintCtx::new_with_content_geometry(
+            origin,
+            &mut *self.display_list,
+            clip,
+            self.common.style,
+            self.common.atlas,
+            self.enabled,
+            self.common.hovered,
+            self.common.focused,
+            self.common.clicked,
+            self.common.active,
+            self.window_active,
+        )
     }
 
     /// Creates paint services for one traversal-derived content rectangle.
@@ -369,6 +387,7 @@ impl<'a> WidgetPaintCtx<'a> {
     }
 
     /// Returns the widget's derived content allocation in screen coordinates.
+    #[cfg(test)]
     pub fn screen_content_rect(&self) -> Recti {
         self.common.content_rect
     }

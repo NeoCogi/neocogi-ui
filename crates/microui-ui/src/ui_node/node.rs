@@ -28,14 +28,15 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 
-use crate::render::{CustomRenderHandle, CustomRenderKey, RendererBackend};
-use std::cell::RefCell;
-use std::rc::Rc;
+#[cfg(not(test))]
+use crate::com::ComNode as NodeData;
+#[cfg(test)]
+use crate::test_support::node::NodeData;
 
 use crate::math::RectExt;
-use crate::{AtlasHandle, Constraints, Dimensioni, LeafWidget, Recti, SliceInsets, Skin, TypedWidgetHandle};
+use crate::{AtlasHandle, Constraints, Dimensioni, Recti, SliceInsets, Skin};
 
-use super::{ChildParticipation, Children, Container, NodeLayout, RuntimeNodeId, WidgetStorage};
+use super::{ChildParticipation, Children, NodeLayout, RuntimeNodeId};
 
 /// One preferred-size result associated with an exact installed skin generation.
 struct MeasurementEntry {
@@ -52,28 +53,35 @@ struct MeasurementEntry {
 /// Four retained entries cover the small set of constraints produced by responsive parent flows.
 /// Clearing preserves the vector's capacity, so warmed invalidation reuses its storage.
 struct MeasurementCache {
+    /// Most recent successful preferences for this node, bounded to four constraint keys.
     entries: Vec<MeasurementEntry>,
+    /// Set until placement succeeds even when preferred-size measurement can be reused.
     layout_dirty: bool,
 }
 
 impl MeasurementCache {
+    /// Starts without cached geometry; the first traversal must measure and place.
     fn new() -> Self {
         Self { entries: Vec::new(), layout_dirty: true }
     }
 
+    /// Retains allocation while discarding preferences and the placement commit.
     fn invalidate(&mut self) {
         self.entries.clear();
         self.layout_dirty = true;
     }
 
+    /// Invalidates placement alone for changed child transforms or dependent allocations.
     fn invalidate_layout(&mut self) {
         self.layout_dirty = true;
     }
 
+    /// Reports whether placement has yet to commit for the current inputs.
     fn layout_is_dirty(&self) -> bool {
         self.layout_dirty
     }
 
+    /// Records successful placement after the complete container result is installed.
     fn validate_layout(&mut self) {
         self.layout_dirty = false;
     }
@@ -88,23 +96,13 @@ impl MeasurementCache {
             .map(|cached| cached.preferred)
     }
 
+    /// Evicts the oldest constraint key when the fixed cache budget is reached.
     fn insert(&mut self, entry: MeasurementEntry) {
         if self.entries.len() == 4 {
             self.entries.remove(0);
         }
         self.entries.push(entry);
     }
-}
-
-/// Reports a typed-handle borrow that escaped into retained traversal.
-///
-/// Keep the diagnostic path out of the normal phase-dispatch code: successful traversal is the
-/// overwhelmingly common case, while a conflict is an application contract violation that always
-/// terminates the current operation.
-#[cold]
-#[inline(never)]
-fn widget_borrow_conflict() -> ! {
-    panic!("retained widget invariant violated: a typed access closure must finish before runtime traversal")
 }
 
 #[cfg(test)]
@@ -169,78 +167,29 @@ impl NodeRuntime {
 
 /// Unique owning retained-tree node.
 ///
-/// A `Node` owns exactly one concrete widget or container runtime. It is intentionally not
-/// cloneable: successful insertion transfers ownership into one [`Children`] collection. Its
-/// process-unique identity is runtime-private, unrelated to application-facing window handles, and
-/// is never stored in or exposed through a [`crate::TypedWidgetHandle`]. Attached nodes cannot be
+/// A `Node` owns one mounted COM widget and its cached layout capability. Successful insertion
+/// transfers this non-cloneable owner into one [`Children`] collection. Its identity and geometry
+/// remain private to traversal; applications retain checked COM interfaces. Attached nodes cannot be
 /// detached or reparented: topology APIs either keep ownership in place or drop the removed
 /// runtime. Build a replacement node when content must move to another parent.
 pub struct Node {
     /// Common state for layout, identity, and interaction.
     pub(crate) state: NodeRuntime,
     /// Node-specific payload.
-    pub(crate) data: NodeKind,
+    pub(crate) data: NodeData,
 }
 
 impl Node {
     /// Mounts an already authenticated COM leaf without another widget allocation.
     pub(crate) fn com_widget(widget: crate::com::ComNode) -> Self {
-        Self::from_kind(NodeKind::Com(widget))
+        // Only the algorithm harness accepts native owners; deployed nodes store this value directly.
+        #[cfg(test)]
+        let widget = NodeData::Com(widget);
+        Self::from_data(widget)
     }
 
-    /// Creates a leaf node without retaining a typed application handle.
-    pub fn widget<W: LeafWidget + 'static>(widget: W) -> Self {
-        Self::mount_widget(widget, None).1
-    }
-
-    /// Creates a leaf and a weak typed handle to the same retained widget allocation.
-    pub fn typed_widget<W: LeafWidget + 'static>(widget: W) -> (TypedWidgetHandle<W>, Self) {
-        Self::mount_widget(widget, None)
-    }
-
-    /// Creates a framework-internal leaf without returning a typed application handle.
-    pub(crate) fn widget_internal<W: LeafWidget + 'static>(widget: W) -> Self {
-        Self::widget(widget)
-    }
-
-    /// Creates a leaf node with a backend-typed custom-render callback.
-    ///
-    /// The backend-specific handle is erased only after this checked public boundary; the stored
-    /// key remains private and is validated by the renderer registry before use.
-    pub fn custom_render<B, W>(widget: W, renderer: CustomRenderHandle<B>) -> Self
-    where
-        B: RendererBackend,
-        W: LeafWidget + 'static,
-    {
-        Self::mount_widget(widget, Some(renderer.key)).1
-    }
-
-    /// Creates a custom-render leaf while preserving weak typed application access.
-    pub fn typed_custom_render<B, W>(widget: W, renderer: CustomRenderHandle<B>) -> (TypedWidgetHandle<W>, Self)
-    where
-        B: RendererBackend,
-        W: LeafWidget + 'static,
-    {
-        Self::mount_widget(widget, Some(renderer.key))
-    }
-
-    fn mount_widget<W: LeafWidget + 'static>(widget: W, custom_render: Option<crate::render::CustomRenderKey>) -> (TypedWidgetHandle<W>, Self) {
-        // Allocate once while the concrete type is known, then erase only the strong reference
-        // retained by the node. Both references therefore address the same RefCell allocation.
-        let widget = Rc::new(RefCell::new(WidgetStorage::new(widget)));
-        let handle = TypedWidgetHandle::new(&widget);
-        let widget: Rc<RefCell<WidgetStorage<dyn LeafWidget>>> = widget;
-        let node = Self::from_kind(NodeKind::Widget(WidgetNode::new(widget, custom_render)));
-        (handle, node)
-    }
-
-    /// Creates a branch node from one complete concrete container owner.
-    pub fn container(container: Container) -> Self {
-        // Container is already the complete child/layout owner; Node adds only common runtime state.
-        Self::from_kind(NodeKind::Container(container))
-    }
-
-    fn from_kind(kind: NodeKind) -> Self {
+    /// Allocates the unique runtime identity and empty geometry at final ownership transfer.
+    pub(crate) fn from_data(kind: NodeData) -> Self {
         // Identity is allocated once at the final owning boundary and survives every subsequent move
         // of the non-Clone Node through unmounted construction and retained insertion.
         Self {
@@ -294,46 +243,23 @@ impl Node {
             return (cached, true);
         }
 
-        // Frame geometry is intrinsic to the widget, so remove it from the content bound before
-        // dispatch and add it back to the returned content preference afterward.
-        // Resolve frame policy and preferred size under one scoped widget borrow. Measurement is a
-        // dominant retained-layout path, so reacquiring the same RefCell merely to read options is
-        // both redundant and measurably expensive for large leaf trees.
-        let (frame_insets, measured_content) = match &mut self.data {
-            NodeKind::Widget(node) => {
-                let widget = node.widget.try_borrow().unwrap_or_else(|_| widget_borrow_conflict());
-                let frame_insets = if widget.widget.effective_widget_opt().intersects(crate::WidgetOption::FRAME) {
-                    crate::ui_node::frame::normal_frame_visual(style, widget.widget.frame_appearance_role())
-                        .patch
-                        .insets
-                        .normalized()
-                } else {
-                    SliceInsets::ZERO
-                };
-                let measured_content = widget
-                    .widget
-                    .measure(style, atlas, crate::ui_node::frame::content_constraints(constraints, frame_insets));
-                (frame_insets, measured_content)
+        // One policy snapshot defines framing for both leaf and container capabilities.
+        // COM failures remain dirty and never enter the preferred-size cache.
+        let (options, _, role) = self.data.policy();
+        let frame_insets = if options.intersects(crate::WidgetOption::FRAME) {
+            crate::ui_node::frame::normal_frame_visual(style, role).patch.insets.normalized()
+        } else {
+            SliceInsets::ZERO
+        };
+        let measured_content = match self
+            .data
+            .measure(style, atlas, crate::ui_node::frame::content_constraints(constraints, frame_insets))
+        {
+            Ok(size) => size,
+            Err(_) => {
+                self.state.invalidate_measurement();
+                return (Dimensioni::default(), false);
             }
-            NodeKind::Com(widget) => {
-                let (options, _, role) = widget.policy();
-                let insets = if options.intersects(crate::WidgetOption::FRAME) {
-                    crate::ui_node::frame::normal_frame_visual(style, role).patch.insets.normalized()
-                } else {
-                    SliceInsets::ZERO
-                };
-                let measured = match widget.measure(style, atlas, crate::ui_node::frame::content_constraints(constraints, insets)) {
-                    Ok(size) => size,
-                    Err(_) => {
-                        // The component already latched its error and retained
-                        // dirtiness. Do not publish a failed preference to cache.
-                        self.state.invalidate_measurement();
-                        return (Dimensioni::default(), false);
-                    }
-                };
-                (insets, measured)
-            }
-            NodeKind::Container(container) => container.measure_content_with_frame(style, atlas, constraints),
         };
         // Widgets cannot return negative geometry. Node placement policy is intentionally absent:
         // the parent consumes this desired size while resolving its own child relationship.
@@ -374,36 +300,17 @@ impl Node {
 
     /// Runs `f` with this node's opaque authoritative child collection.
     pub(crate) fn with_children<R>(&self, f: impl FnOnce(&Children) -> R) -> R {
-        // Treat a leaf as an empty collection for read-only generic traversal. This avoids a second
-        // visitor abstraction while preserving the fact that only Container stores descendants.
-        match &self.data {
-            NodeKind::Widget(_) => f(&Children::new()),
-            NodeKind::Com(node) => match node.children() {
-                Some(children) => f(&children),
-                None => f(&Children::new()),
-            },
-            NodeKind::Container(container) => container.with_children(f),
-        }
+        self.data.with_children(f)
     }
 
-    /// Runs `f` with this node's authoritative child collection when it is a container.
+    /// Visits authoritative children only while their transaction is alive.
     pub(crate) fn with_children_mut<R>(&mut self, f: impl FnOnce(&mut Children) -> R) -> Option<R> {
-        // Mutable traversal distinguishes leaves explicitly because there is no persistent empty
-        // collection that could safely accept topology changes.
-        match &mut self.data {
-            NodeKind::Widget(_) => None,
-            NodeKind::Com(node) => node.children().map(|mut children| f(&mut children)),
-            NodeKind::Container(container) => Some(container.with_children_mut(f)),
-        }
+        self.data.with_children_mut(f)
     }
 
-    /// Returns whether this node is a container.
+    /// Uses the cached layout capability without querying an interface again.
     pub(crate) fn is_container(&self) -> bool {
-        match &self.data {
-            NodeKind::Container(_) => true,
-            NodeKind::Com(node) => node.is_container(),
-            NodeKind::Widget(_) => false,
-        }
+        self.data.is_container()
     }
 
     /// Counts this node and every retained descendant.
@@ -432,108 +339,6 @@ impl Node {
         }
         // The child borrow remains scoped to this search and cannot escape through the callback.
         self.with_children(|children| children.iter().find_map(|child| child.with_node_inner(id, f)))
-    }
-}
-
-/// Thin retained leaf owner for one erased widget and optional custom-render metadata.
-pub(crate) struct WidgetNode {
-    /// Sole persistent strong widget owner, erased without changing its allocation.
-    pub(crate) widget: Rc<RefCell<WidgetStorage<dyn LeafWidget>>>,
-    /// Optional custom backend render callback for custom-render leaves.
-    custom_render: Option<CustomRenderKey>,
-}
-
-impl WidgetNode {
-    /// Erases one concrete runtime at the retained leaf boundary.
-    pub(crate) fn new(widget: Rc<RefCell<WidgetStorage<dyn LeafWidget>>>, custom_render: Option<CustomRenderKey>) -> Self {
-        Self { widget, custom_render }
-    }
-
-    /// Returns the private custom-render callback key, when one was supplied at construction.
-    pub(crate) fn custom_render(&self) -> Option<CustomRenderKey> {
-        self.custom_render
-    }
-}
-
-/// Private runtime payload for an owning [`Node`].
-pub(crate) enum NodeKind {
-    /// Node-owned external widget capabilities; no Rust object or weak handle wraps them.
-    Com(crate::com::ComNode),
-    /// Local built-ins still awaiting conversion in the next migration item.
-    Widget(WidgetNode),
-    /// Direct concrete container owner with one erased geometry implementation.
-    Container(Container),
-}
-
-impl NodeKind {
-    /// Reads one concrete policy snapshot for routing and frame geometry.
-    pub(crate) fn policy(&self) -> (crate::WidgetOption, crate::KeyboardBehavior, crate::FrameRole) {
-        match self {
-            Self::Com(node) => node.policy(),
-            Self::Widget(node) => {
-                let storage = node.widget.try_borrow().unwrap_or_else(|_| widget_borrow_conflict());
-                let widget = &storage.widget;
-                (widget.effective_widget_opt(), widget.keyboard_behavior(), widget.frame_appearance_role())
-            }
-            Self::Container(container) => {
-                container.with_widget(|widget| (widget.effective_widget_opt(), widget.keyboard_behavior(), widget.frame_appearance_role()))
-            }
-        }
-    }
-
-    /// Delivers an update directly to the owning representation.
-    pub(crate) fn update(&mut self, ctx: &mut crate::WidgetUpdateCtx<'_>, input: Option<&super::UiInputEvent>) -> crate::Change {
-        match self {
-            Self::Com(node) => node.update(ctx, input),
-            Self::Widget(node) => node
-                .widget
-                .try_borrow_mut()
-                .unwrap_or_else(|_| widget_borrow_conflict())
-                .widget
-                .update(ctx, input),
-            Self::Container(container) => container.with_widget_mut(|widget| widget.update(ctx, input)),
-        }
-    }
-
-    /// Paints without exposing a Rust widget trait object for COM-owned nodes.
-    pub(crate) fn paint(&mut self, ctx: &mut crate::WidgetPaintCtx<'_>) {
-        match self {
-            Self::Com(node) => node.paint(ctx),
-            Self::Widget(node) => node.widget.try_borrow_mut().unwrap_or_else(|_| widget_borrow_conflict()).widget.paint(ctx),
-            Self::Container(container) => container.with_widget_mut(|widget| widget.paint(ctx)),
-        }
-    }
-
-    pub(crate) fn is_measurement_dirty(&self) -> bool {
-        match self {
-            Self::Widget(node) => node.widget.try_borrow().unwrap_or_else(|_| widget_borrow_conflict()).is_measurement_dirty(),
-            Self::Com(widget) => widget.is_dirty(),
-            Self::Container(container) => container.is_measurement_dirty(),
-        }
-    }
-
-    pub(crate) fn take_measurement_dirty(&mut self) -> bool {
-        match self {
-            Self::Widget(node) => node
-                .widget
-                .try_borrow_mut()
-                .unwrap_or_else(|_| widget_borrow_conflict())
-                .take_measurement_dirty(),
-            Self::Com(widget) => widget.take_dirty(),
-            Self::Container(container) => container.take_measurement_dirty(),
-        }
-    }
-
-    fn mark_measurement_dirty(&mut self) {
-        match self {
-            Self::Widget(node) => node
-                .widget
-                .try_borrow_mut()
-                .unwrap_or_else(|_| widget_borrow_conflict())
-                .mark_measurement_dirty(),
-            Self::Com(widget) => widget.mark_dirty(),
-            Self::Container(container) => container.mark_measurement_dirty(),
-        }
     }
 }
 

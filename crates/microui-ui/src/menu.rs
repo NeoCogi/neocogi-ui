@@ -90,6 +90,7 @@ impl MenuItemParameters {
     }
 
     /// Replaces the initial enabled state.
+    #[cfg(test)]
     pub const fn enabled(mut self, enabled: bool) -> Self {
         // Builder methods mutate only the not-yet-shared declaration value.
         self.enabled = enabled;
@@ -97,12 +98,14 @@ impl MenuItemParameters {
     }
 
     /// Makes the item initially disabled.
+    #[cfg(test)]
     pub const fn disabled(self) -> Self {
         // Delegate to the general builder so initialization has one implementation.
         self.enabled(false)
     }
 
     /// Replaces the initial marker state.
+    #[cfg(test)]
     pub const fn mark(mut self, mark: MenuItemMark) -> Self {
         // The role is retained when its boolean is false so alignment remains stable.
         self.mark = mark;
@@ -110,30 +113,19 @@ impl MenuItemParameters {
     }
 
     /// Configures an initially checked or unchecked item.
+    #[cfg(test)]
     pub const fn checked(self, checked: bool) -> Self {
         // Preserve the checkable role independently from its selected value.
         self.mark(MenuItemMark::Checked(checked))
     }
 
-    /// Configures an initially selected or unselected radio item.
-    pub const fn radio(self, selected: bool) -> Self {
-        // Preserve the radio role independently from its selected value.
-        self.mark(MenuItemMark::Radio(selected))
-    }
-
     /// Adds presentation-only accelerator text such as `Ctrl+O`.
     ///
     /// This does not register a keyboard shortcut or submit the item from keyboard input.
+    #[cfg(test)]
     pub fn shortcut_hint(mut self, shortcut_hint: impl Into<String>) -> Self {
         // Store display text only; application shortcut policy remains outside menu presentation.
         self.shortcut_hint = Some(shortcut_hint.into());
-        self
-    }
-
-    /// Replaces the font used by this item.
-    pub fn font(mut self, font: FontRef) -> Self {
-        // One font choice drives measurement and paint for both strings.
-        self.font = font;
         self
     }
 }
@@ -144,7 +136,6 @@ pub struct MenuItemSubmitted {
     /// Label captured during enabled user activation, independent of later presentation edits.
     pub label: String,
 }
-
 
 /// Failure reported when a [`Ui`](crate::Ui) cannot resolve one menu-item capability.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -349,6 +340,7 @@ impl Menu {
     }
 
     /// Appends one uniquely owned actionable item.
+    #[cfg(test)]
     pub fn item(mut self, item: MenuItem) -> Self {
         // Moving the item prevents accidental reuse and removes public handle/node pairs.
         self.entries.push(MenuEntry::Item(item));
@@ -356,6 +348,7 @@ impl Menu {
     }
 
     /// Appends one explicit non-interactive separator row.
+    #[cfg(test)]
     pub fn separator(mut self) -> Self {
         // Preserve exact declaration order; registration performs no implicit grouping.
         self.entries.push(MenuEntry::Separator);
@@ -363,6 +356,7 @@ impl Menu {
     }
 
     /// Appends one recursively composed submenu.
+    #[cfg(test)]
     pub fn submenu(mut self, submenu: Menu) -> Self {
         // The child remains uniquely owned and is flattened only during window registration.
         self.entries.push(MenuEntry::Submenu(submenu));

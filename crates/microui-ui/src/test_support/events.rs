@@ -156,7 +156,6 @@ impl<Target: 'static> WidgetEventDispatcher<Target> {
 mod tests {
     use super::*;
 
-
     #[derive(Default)]
     struct State {
         values: Vec<i32>,
@@ -347,4 +346,3 @@ mod tests {
         assert!(lifetime.upgrade().is_none(), "pruning releases the concrete callback captures");
     }
 }
-

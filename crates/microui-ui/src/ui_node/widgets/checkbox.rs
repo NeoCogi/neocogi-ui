@@ -68,18 +68,6 @@ impl CheckboxParameters {
             opt: WidgetOption::NONE,
         }
     }
-
-    /// Creates checkbox parameters with explicit widget options.
-    pub fn with_opt(label: impl Into<String>, checked: bool, opt: WidgetOption) -> Self {
-        Self { opt, ..Self::new(label, checked) }
-    }
-
-    /// Replaces the label font used by the retained runtime.
-    pub fn font(mut self, font: FontRef) -> Self {
-        // Keep semantic or named selection independent of the atlas active during construction.
-        self.font = font;
-        self
-    }
 }
 
 /// Value snapshot emitted after a user-originated checkbox change.
@@ -88,7 +76,6 @@ pub struct CheckboxChanged {
     /// Checked value after applying the triggering user activation.
     pub checked: bool,
 }
-
 
 /// Concrete retained checkbox, including its semantic and interaction state.
 pub struct Checkbox {
@@ -106,17 +93,20 @@ pub struct Checkbox {
 
 impl Checkbox {
     /// Constructs a retained node and a weak typed handle to its concrete checkbox.
+    #[cfg(test)]
     pub fn create(parameters: CheckboxParameters) -> (crate::TypedWidgetHandle<Self>, crate::Node) {
         let widget = Checkbox::from(parameters);
         crate::Node::typed_widget(widget)
     }
 
     /// Marks the checkbox as checked without recording user interaction.
+    #[cfg(test)]
     pub fn check(&mut self) {
         self.checked = true;
     }
 
     /// Marks the checkbox as unchecked without recording user interaction.
+    #[cfg(test)]
     pub fn uncheck(&mut self) {
         self.checked = false;
     }
@@ -132,6 +122,7 @@ impl Checkbox {
     }
 
     /// Returns the native event endpoint emitted after every user-originated value change.
+    #[cfg(test)]
     pub fn changed(&self) -> crate::WidgetEventPortHandle<CheckboxChanged> {
         <Self as crate::TypedWidget<CheckboxChanged>>::event(self)
     }
@@ -172,25 +163,11 @@ impl Checkbox {
     }
 }
 
+#[cfg(test)]
 impl crate::TypedWidgetHandle<Checkbox> {
     /// Returns the current checked value while the widget is retained.
     pub fn checked(&self) -> Option<bool> {
         self.try_read(Checkbox::checked)
-    }
-
-    /// Marks the retained checkbox as checked.
-    pub fn check(&self) -> Option<()> {
-        self.try_update(Checkbox::check)
-    }
-
-    /// Marks the retained checkbox as unchecked.
-    pub fn uncheck(&self) -> Option<()> {
-        self.try_update(Checkbox::uncheck)
-    }
-
-    /// Replaces the retained checkbox value without emitting a user event.
-    pub fn set_checked(&self, checked: bool) -> Option<()> {
-        self.try_update(|widget| widget.set_checked(checked))
     }
 
     /// Returns the checkbox's native value-change endpoint.

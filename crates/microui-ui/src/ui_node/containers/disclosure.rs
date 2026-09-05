@@ -33,12 +33,21 @@ use crate::ControlRole;
 use std::rc::Rc;
 
 use crate::{
-    AtlasHandle, ChildParticipation, Container, ContainerWidget, ControlState, Dimensioni, MeasureCtx, PointerState, Recti, Skin, TypedWidgetHandle,
-    UiInputEvent, Widget, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx,
+    AtlasHandle, ChildParticipation, ContainerWidget, ControlState, Dimensioni, MeasureCtx, PointerState, Recti, Skin, UiInputEvent, Widget, WidgetOption,
+    WidgetPaintCtx, WidgetUpdateCtx,
 };
+#[cfg(test)]
+use crate::{Container, TypedWidgetHandle};
 
-use super::{ContainerLayoutCtx, LinearItem, Node};
-use crate::{Linear, LinearParameters};
+use super::{ContainerLayoutCtx};
+#[cfg(test)]
+use super::{Node};
+#[cfg(test)]
+use super::{LinearItem};
+#[cfg(test)]
+use crate::{Linear};
+#[cfg(test)]
+use crate::{LinearParameters};
 
 /// Immutable header presentation shared by disclosure layout and its actual interactive header.
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -76,6 +85,7 @@ impl DisclosureState {
 ///
 /// Label, header/tree presentation, and base options are initialization-only. Initial expansion
 /// and children move into [`Disclosure`] for mounted mutation.
+#[cfg(test)]
 pub struct DisclosureParameters {
     label: String,
     expanded: bool,
@@ -84,6 +94,7 @@ pub struct DisclosureParameters {
     opt: WidgetOption,
 }
 
+#[cfg(test)]
 impl DisclosureParameters {
     /// Creates the framed header presentation and its top-to-bottom body items.
     ///
@@ -128,7 +139,8 @@ impl DisclosureParameters {
 /// Expansion gates descendant traversal while retaining every owned runtime and its state. It does
 /// not expose or mutate generic node visibility.
 pub struct Disclosure {
-    /// Temporary legacy editing link; COM composition owns its actual ILinear body projection directly.
+    /// Native fixture editing link; absent from production COM composition.
+    #[cfg(test)]
     content: Option<TypedWidgetHandle<Linear>>,
     /// Same expansion scalar read by the actual header object and parent layout.
     model: Rc<DisclosureState>,
@@ -142,6 +154,7 @@ impl Disclosure {
     }
 
     /// Returns whether descendants are currently gated.
+    #[cfg(test)]
     pub fn is_collapsed(&self) -> bool {
         !self.model.expanded.get()
     }
@@ -157,58 +170,21 @@ impl Disclosure {
     }
 
     /// Reverses the current descendant gate.
+    #[cfg(test)]
     pub fn toggle(&mut self) {
         self.model.set(!self.model.expanded.get());
     }
 
     /// Returns the number of owned child nodes.
+    #[cfg(test)]
     pub fn len(&self) -> Option<usize> {
         self.content.as_ref()?.try_read(Linear::len).flatten()
     }
 
-    /// Returns whether the disclosure owns no children.
-    pub fn is_empty(&self) -> Option<bool> {
-        self.content.as_ref()?.try_read(Linear::is_empty).flatten()
-    }
-
-    /// Appends one still-unmounted body item and its vertical Linear-owned height track.
-    #[allow(clippy::result_large_err)] // Failure returns the exact unique node and its edge metadata.
-    pub fn push(&mut self, item: impl Into<LinearItem>) -> Result<(), LinearItem> {
-        match &self.content {
-            Some(content) => content.try_update_with(item.into(), Linear::push)?,
-            None => Err(item.into()),
-        }
-    }
-
-    /// Inserts an item, returning it unchanged when `index > len`.
-    #[allow(clippy::result_large_err)] // The exact unboxed owner is the failure value by contract.
-    pub fn insert(&mut self, index: usize, item: LinearItem) -> Result<(), LinearItem> {
-        match &self.content {
-            Some(content) => content.try_update_with(item, |content, item| content.insert(index, item))?,
-            None => Err(item),
-        }
-    }
-
-    /// Drops one indexed child owner and reports whether it existed.
-    pub fn remove_drop(&mut self, index: usize) -> Option<bool> {
-        self.content.as_ref()?.try_update(|content| content.remove_drop(index)).flatten()
-    }
-
     /// Drops every child owner.
+    #[cfg(test)]
     pub fn clear(&mut self) -> Option<()> {
         self.content.as_ref()?.try_update(Linear::clear).flatten()
-    }
-
-    /// Replaces all body items in iterator order.
-    pub fn replace<T, I>(&mut self, items: I) -> Result<(), I>
-    where
-        T: Into<LinearItem>,
-        I: IntoIterator<Item = T>,
-    {
-        match &self.content {
-            Some(content) => content.try_update_with(items, Linear::replace)?,
-            None => Err(items),
-        }
     }
 
     // Structural child order is also retained keyboard traversal order. Keeping the visible
@@ -337,6 +313,7 @@ impl Widget for DisclosureHeader {
     }
 
     // Framing belongs to the header sub-rectangle, not the complete descendant allocation.
+    #[cfg(test)]
     fn effective_widget_opt(&self) -> WidgetOption {
         crate::com::widget::WidgetAlgorithm::effective_options(self, self.opt)
     }
@@ -424,6 +401,7 @@ impl Widget for Disclosure {
 }
 
 /// Builds the fixed body/header structure before wrapping it in the public owning node.
+#[cfg(test)]
 fn create_container(parameters: DisclosureParameters) -> (TypedWidgetHandle<Disclosure>, Container) {
     let (content, body) = Linear::create(LinearParameters::vertical(parameters.children));
     let model = DisclosureState::new(parameters.expanded);
@@ -447,6 +425,7 @@ impl Disclosure {
     ///
     /// Construction is complete before the node is returned: callers never observe or manipulate
     /// the two structural children separately.
+    #[cfg(test)]
     pub fn create(parameters: DisclosureParameters) -> (TypedWidgetHandle<Disclosure>, Node) {
         // Add the common Node runtime state around the concrete Container ownership boundary.
         let (state, container) = create_container(parameters);
@@ -454,12 +433,15 @@ impl Disclosure {
     }
 }
 
-
-
 impl Disclosure {
     /// Creates COM semantic state while its concrete class retains the actual typed body capability.
     pub(crate) fn com_new(model: Rc<DisclosureState>, variant: DisclosureVariant) -> Self {
-        Self { content: None, model, variant }
+        Self {
+            #[cfg(test)]
+            content: None,
+            model,
+            variant,
+        }
     }
 }
 impl DisclosureHeader {
@@ -547,6 +529,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(test)]
     fn header_and_tree_preserve_state_and_fixed_structural_children() {
         let (header_state, header) = create_container(DisclosureParameters::header("Header", false, std::iter::empty::<LinearItem>()));
         assert_eq!(header_state.try_read(Disclosure::is_collapsed), Some(true));
@@ -562,6 +545,7 @@ mod tests {
 
     /// Verifies either expansion state fits the one state-independent header allocation.
     #[test]
+    #[cfg(test)]
     fn header_measurement_reserves_the_larger_expand_or_collapse_icon() {
         let atlas = asymmetric_disclosure_atlas();
         let style = Skin::from_atlas(&atlas).with_metrics(|metrics| metrics.padding = 0);

@@ -70,6 +70,7 @@ impl ListItemParameters {
     }
 
     /// Creates list-item parameters with explicit widget options.
+    #[cfg(test)]
     pub fn with_opt(label: impl Into<String>, opt: WidgetOption) -> Self {
         Self {
             value: (),
@@ -81,6 +82,7 @@ impl ListItemParameters {
     }
 
     /// Creates list-item parameters with an icon and default widget options.
+    #[cfg(test)]
     pub fn with_icon(label: impl Into<String>, icon: IconRef) -> Self {
         Self {
             value: (),
@@ -89,37 +91,6 @@ impl ListItemParameters {
             font: FontRef::Role(FontRole::Body),
             opt: WidgetOption::NONE,
         }
-    }
-
-    /// Creates list-item parameters with an icon and explicit widget options.
-    pub fn with_icon_opt(label: impl Into<String>, icon: IconRef, opt: WidgetOption) -> Self {
-        Self {
-            value: (),
-            label: label.into(),
-            icon: Some(icon),
-            font: FontRef::Role(FontRole::Body),
-            opt,
-        }
-    }
-}
-
-impl<Value> ListItemParameters<Value> {
-    /// Associates concrete application data with this row without deriving identity from its label.
-    pub fn with_value<Other>(self, value: Other) -> ListItemParameters<Other> {
-        ListItemParameters {
-            label: self.label,
-            icon: self.icon,
-            font: self.font,
-            opt: self.opt,
-            value,
-        }
-    }
-
-    /// Replaces the font used for the label.
-    pub fn font(mut self, font: FontRef) -> Self {
-        // Retain the semantic or named reference so later atlas replacement remains valid.
-        self.font = font;
-        self
     }
 }
 
@@ -131,7 +102,6 @@ pub struct ListItemSubmitted<Value = ()> {
     /// Item label at submission time.
     pub label: String,
 }
-
 
 /// Concrete retained list item, including its semantic state.
 pub struct ListItem<Value: Clone + 'static = ()> {
@@ -151,6 +121,7 @@ pub struct ListItem<Value: Clone + 'static = ()> {
 
 impl<Value: Clone + 'static> ListItem<Value> {
     /// Constructs a retained node and a weak typed handle to its concrete list item.
+    #[cfg(test)]
     pub fn create(parameters: ListItemParameters<Value>) -> (TypedWidgetHandle<Self>, Node) {
         Node::typed_widget(Self::from(parameters))
     }
@@ -166,6 +137,7 @@ impl<Value: Clone + 'static> ListItem<Value> {
     }
 
     /// Returns the native event endpoint emitted once for every user submission.
+    #[cfg(test)]
     pub fn submitted(&self) -> crate::WidgetEventPortHandle<ListItemSubmitted<Value>> {
         <Self as crate::TypedWidget<ListItemSubmitted<Value>>>::event(self)
     }
@@ -222,17 +194,8 @@ impl<Value: Clone + 'static> ListItem<Value> {
     }
 }
 
+#[cfg(test)]
 impl<Value: Clone + 'static> TypedWidgetHandle<ListItem<Value>> {
-    /// Clones the current item label while the widget is retained.
-    pub fn label(&self) -> Option<String> {
-        self.try_read(|widget| widget.label().to_owned())
-    }
-
-    /// Replaces the item label without emitting a submission.
-    pub fn set_label(&self, label: impl Into<String>) -> Option<()> {
-        self.try_update_with(label.into(), |widget, label| widget.set_label(label)).ok()
-    }
-
     /// Returns the list item's native submission endpoint.
     pub fn submitted(&self) -> WidgetEventPortHandle<ListItemSubmitted<Value>> {
         self.widget_event()
@@ -284,8 +247,6 @@ impl<Value: Clone + 'static> From<ListItemParameters<Value>> for ListItem<Value>
         }
     }
 }
-
-
 
 impl crate::com::widget::WidgetAlgorithm for ListItem {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.

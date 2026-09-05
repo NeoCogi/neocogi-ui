@@ -31,6 +31,7 @@
 //! Built-in retained containers.
 
 use super::container::ContainerLayoutCtx;
+#[cfg(test)]
 use super::{Children, Node};
 
 mod disclosure;
@@ -41,7 +42,17 @@ pub(crate) use linear::LinearItemSpec;
 mod scroll_area;
 pub(crate) use scroll_area::{ScrollModel, ScrollSurface};
 
-pub use disclosure::{Disclosure, DisclosureParameters};
-pub use grid::{Grid, GridItem, GridParameters, GridSpan};
-pub use linear::{Linear, LinearCrossSize, LinearDirection, LinearItem, LinearParameters};
-pub use scroll_area::{ScrollArea, ScrollAreaOption, ScrollAreaParameters};
+pub use disclosure::{Disclosure};
+#[cfg(test)]
+pub use disclosure::{DisclosureParameters};
+pub use grid::{Grid, GridSpan};
+#[cfg(test)]
+pub use grid::GridParameters;
+pub use linear::{Linear, LinearCrossSize, LinearDirection};
+#[cfg(test)]
+pub use linear::{LinearItem, LinearParameters};
+pub use scroll_area::ScrollArea;
+#[cfg(test)]
+pub use scroll_area::ScrollAreaOption;
+#[cfg(test)]
+pub use scroll_area::{ScrollAreaParameters};

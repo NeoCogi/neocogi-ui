@@ -35,8 +35,11 @@ use std::rc::Rc;
 
 use super::*;
 use crate::test_support::test_atlas;
-use crate::ui_node::children::ChildrenHandle;
-use crate::{ChildParticipation, ContainerWidget, TypedWidgetHandle, Widget, WidgetPaintCtx, WidgetUpdateCtx};
+#[cfg(test)]
+use crate::ChildrenHandle;
+use crate::{ChildParticipation, ContainerWidget, Widget, WidgetPaintCtx, WidgetUpdateCtx};
+#[cfg(test)]
+use crate::{TypedWidgetHandle};
 use crate::input::Input;
 
 #[derive(Default)]

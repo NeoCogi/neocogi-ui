@@ -482,6 +482,7 @@ pub(crate) fn load(path: &Path, base: &AtlasHandle) -> Result<LoadedTheme, Theme
 }
 
 /// Compiles one in-memory JSON definition using caller-supplied bytes for every referenced asset.
+#[cfg(test)]
 pub(crate) fn load_bytes<F>(path: &Path, bytes: &[u8], base: &AtlasHandle, mut read_asset: F) -> Result<LoadedTheme, ThemeLoadError>
 where
     F: FnMut(&Path) -> io::Result<Vec<u8>>,

@@ -38,7 +38,9 @@ use std::{
 use super::*;
 use crate::menu::{MenuAction, MenuEntry, MenuSlot, MenuSurface};
 use crate::math::RectExt;
-use crate::{MouseButton, Node, UiInputEvent, Vec2i, rect};
+use crate::{MouseButton, Node, UiInputEvent, Vec2i};
+#[cfg(test)]
+use crate::{rect};
 
 use super::root_chrome::{
     RootCaptionButton, RootChromeGeometry, RootChromePart, RootChromeVisualState, RootFrameKind, RootInteraction, RootResizeAxis, record_root_background,
@@ -88,8 +90,6 @@ impl fmt::Display for SurfaceMutationError {
     }
 }
 
-impl std::error::Error for SurfaceMutationError {}
-
 /// Failed surface creation together with the unchanged value offered for registration.
 ///
 /// `T` is the exact declaration offered to the failed operation: [`Window`] for child-window and
@@ -101,7 +101,7 @@ pub struct SurfaceCreationError<T> {
     /// Concrete validation failure that prevented any forest mutation.
     reason: SurfaceMutationError,
     /// Unmodified unique declaration supplied by the caller.
-    input: T,
+    _input: T,
 }
 
 impl<T> SurfaceCreationError<T> {
@@ -109,19 +109,21 @@ impl<T> SurfaceCreationError<T> {
     fn new(reason: SurfaceMutationError, input: T) -> Self {
         // Construction stays beside the manager's validation boundary so no error can claim to
         // preserve a value after registration has partially transferred it into the forest.
-        Self { reason, input }
+        Self { reason, _input: input }
     }
 
     /// Returns the concrete capability or ownership-policy failure.
+    #[cfg(test)]
     pub const fn reason(&self) -> SurfaceMutationError {
         // The reason is Copy, so callers may retain it before reclaiming the unique input.
         self.reason
     }
 
     /// Recovers the exact typed declaration passed to the failed creation call.
+    #[cfg(test)]
     pub fn into_input(self) -> T {
         // Consume the error so unique ownership has one explicit destination.
-        self.input
+        self._input
     }
 }
 
@@ -156,7 +158,6 @@ pub enum PopupEvent {
     /// Popup policy removed this surface from the sole active branch.
     Dismissed,
 }
-
 
 /// Process-unique identifier for one popup definition inside its owning window.
 ///
@@ -1427,7 +1428,14 @@ impl WindowManager {
     /// Checks whether a live window already owns its intrinsic bar before COM declaration transfer.
     pub(crate) fn has_menu_bar(&self, window: &WindowHandle) -> Result<bool, SurfaceMutationError> {
         let root = self.window_id(window)?;
-        Ok(self.surfaces.root_node(root).expect("authenticated root remains present").root().expect("window resolves root policy").menu_bar.is_some())
+        Ok(self
+            .surfaces
+            .root_node(root)
+            .expect("authenticated root remains present")
+            .root()
+            .expect("window resolves root policy")
+            .menu_bar
+            .is_some())
     }
 
     /// Installs a bar on an already authenticated bar-free window without duplicating menu topology.
@@ -1633,6 +1641,7 @@ impl WindowManager {
     }
 
     /// Replaces a window outer size without changing its screen origin.
+    #[cfg(test)]
     pub fn set_window_size(&mut self, window: &WindowHandle, size: Dimensioni) -> Result<(), SurfaceMutationError> {
         let root = self.window_id(window)?;
         let node = self.root_node_mut(root)?;
@@ -1804,6 +1813,7 @@ impl WindowManager {
     }
 
     /// Shows one popup at the current pointer position.
+    #[cfg(test)]
     pub fn show_popup(&mut self, popup: &PopupHandle) -> Result<(), SurfaceMutationError> {
         let mouse = self.input.snapshot().mouse_pos;
         self.show_popup_at(popup, rect(mouse.x, mouse.y, 1, 1))
@@ -2821,12 +2831,14 @@ impl WindowManager {
     }
 
     /// Performs one update per queued event or one eventless update when the queue is empty.
+    #[cfg(test)]
     pub(crate) fn update(&mut self, dimensions: Dimensioni) {
         // Polling contexts have no application dispatcher, so the safe boundary performs no work.
         self.update_with(dimensions, &mut (), |_, _| false);
     }
 
     /// Performs retained updates while exposing each safe subscriber-dispatch boundary.
+    #[cfg(test)]
     pub(crate) fn update_with<DispatchState>(
         &mut self,
         dimensions: Dimensioni,
@@ -3803,7 +3815,6 @@ impl WindowManager {
     }
 }
 
-
 impl WindowManager {
     /// Collects sticky widget changes even in hidden surfaces before a cache can be reused.
     /// Every tree is visited; a changed earlier root never short-circuits later roots.
@@ -3817,28 +3828,16 @@ impl WindowManager {
         changed
     }
 
-
     /// Copies current window policy into the canonical COM snapshot without a second state store.
-    pub(crate) fn window_snapshot(
-        &self,
-        window: &WindowHandle,
-    ) -> Result<microui_contracts::WindowSnapshot, SurfaceMutationError> {
-        use microui_contracts::{
-            ChildClip, LayerKind, Rect, Visibility, WindowLayer, WindowOptions, WindowSnapshot,
-        };
+    pub(crate) fn window_snapshot(&self, window: &WindowHandle) -> Result<microui_contracts::WindowSnapshot, SurfaceMutationError> {
+        use microui_contracts::{ChildClip, LayerKind, Rect, Visibility, WindowLayer, WindowOptions, WindowSnapshot};
         let id = self.window_id(window)?;
         let node = self.root_node(id)?;
         let root = node.root().expect("validated window has root policy");
         let rect = node.surface.rect;
         let layer = match self.window_layer(window)? {
-            super::LayerBinding::Fixed(number) => WindowLayer {
-                kind: LayerKind::FIXED,
-                number,
-            },
-            super::LayerBinding::Modal => WindowLayer {
-                kind: LayerKind::MODAL,
-                number: 0,
-            },
+            super::LayerBinding::Fixed(number) => WindowLayer { kind: LayerKind::FIXED, number },
+            super::LayerBinding::Modal => WindowLayer { kind: LayerKind::MODAL, number: 0 },
         };
         Ok(WindowSnapshot {
             rect: Rect {
@@ -3847,15 +3846,9 @@ impl WindowManager {
                 width: rect.width,
                 height: rect.height,
             },
-            options: WindowOptions {
-                bits: node.surface.options.bits(),
-            },
+            options: WindowOptions { bits: node.surface.options.bits() },
             layer,
-            visibility: if self.root_is_visible(id) {
-                Visibility::VISIBLE
-            } else {
-                Visibility::HIDDEN
-            },
+            visibility: if self.root_is_visible(id) { Visibility::VISIBLE } else { Visibility::HIDDEN },
             child_clip: match root.child_window_clip {
                 super::ChildWindowClip::None => ChildClip::NONE,
                 super::ChildWindowClip::Content => ChildClip::CONTENT,
@@ -3870,31 +3863,20 @@ impl WindowManager {
     }
 
     /// Changes one parent-owned child clip and invalidates the existing retained layout commit.
-    pub(crate) fn set_child_window_clip(
-        &mut self,
-        window: &WindowHandle,
-        clip: super::ChildWindowClip,
-    ) -> Result<(), SurfaceMutationError> {
+    pub(crate) fn set_child_window_clip(&mut self, window: &WindowHandle, clip: super::ChildWindowClip) -> Result<(), SurfaceMutationError> {
         let id = self.window_id(window)?;
-        self.root_node_mut(id)?
-            .root_mut()
-            .expect("validated window has root policy")
-            .child_window_clip = clip;
+        self.root_node_mut(id)?.root_mut().expect("validated window has root policy").child_window_clip = clip;
         self.invalidate_ui_commit();
         Ok(())
     }
 
     /// Queries active popup policy after authenticating a live popup definition.
     pub(crate) fn popup_visible(&self, popup: &PopupHandle) -> Result<bool, SurfaceMutationError> {
-        self.popup_id(popup)
-            .map(|id| self.surfaces.popup_is_active(id))
+        self.popup_id(popup).map(|id| self.surfaces.popup_is_active(id))
     }
 
     /// Permanently removes one application popup and its descendant popup definitions.
-    pub(crate) fn destroy_popup(
-        &mut self,
-        popup: &PopupHandle,
-    ) -> Result<(), SurfaceMutationError> {
+    pub(crate) fn destroy_popup(&mut self, popup: &PopupHandle) -> Result<(), SurfaceMutationError> {
         let id = self.popup_id(popup)?;
         self.hide_popup(popup)?;
         let mut removed = vec![SurfaceKey::Popup(id)];
@@ -3904,9 +3886,7 @@ impl WindowManager {
             index += 1;
         }
         let removed: HashSet<_> = removed.into_iter().collect();
-        self.surfaces
-            .nodes
-            .retain(|node| !removed.contains(&node.key));
+        self.surfaces.nodes.retain(|node| !removed.contains(&node.key));
         self.surfaces.rebuild_index();
         self.surfaces.rebuild_visible_order();
         self.reconcile_active_surface();
@@ -3914,6 +3894,8 @@ impl WindowManager {
         Ok(())
     }
 }
+
+impl std::error::Error for SurfaceMutationError {}
 
 #[cfg(test)]
 mod index_tests {

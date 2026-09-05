@@ -84,6 +84,7 @@ impl crate::LeafWidget for TextBlock {
 
 impl TextBlockParameters {
     /// Creates text-block parameters without wrapping.
+    #[cfg(test)]
     pub fn new(text: impl Into<String>) -> Self {
         Self::with_wrap(text, TextWrap::None)
     }
@@ -99,6 +100,7 @@ impl TextBlockParameters {
     }
 
     /// Replaces the font used for text measurement and paint.
+    #[cfg(test)]
     pub fn font(mut self, font: FontRef) -> Self {
         // Text layout resolves this stable value against whichever skin bundle is active later.
         self.font = font;
@@ -120,6 +122,7 @@ pub struct TextBlock {
 
 impl TextBlock {
     /// Constructs a retained node and a weak typed handle to its concrete text block.
+    #[cfg(test)]
     pub fn create(parameters: TextBlockParameters) -> (TypedWidgetHandle<Self>, Node) {
         Node::typed_widget(Self::from(parameters))
     }
@@ -134,11 +137,6 @@ impl TextBlock {
         // Static multiline text shares the same canonical LF representation as editable content,
         // keeping measured line ranges identical to the slices submitted during paint.
         self.text = normalize_multiline_text(text);
-    }
-
-    /// Clears the display text.
-    pub fn clear(&mut self) {
-        self.text.clear();
     }
 
     /// Measures wrapped display text using the available width when requested.
@@ -193,20 +191,11 @@ impl TextBlock {
     }
 }
 
+#[cfg(test)]
 impl TypedWidgetHandle<TextBlock> {
-    /// Clones the current display text while the widget is retained.
-    pub fn text(&self) -> Option<String> {
-        self.try_read(|widget| widget.text().to_owned())
-    }
-
     /// Replaces retained display text after normalizing line endings to LF.
     pub fn set_text(&self, text: impl Into<String>) -> Option<()> {
         self.try_update_with(text.into(), |widget, text| widget.set_text(text)).ok()
-    }
-
-    /// Clears the retained display text.
-    pub fn clear(&self) -> Option<()> {
-        self.try_update(TextBlock::clear)
     }
 }
 
@@ -233,8 +222,6 @@ impl From<TextBlockParameters> for TextBlock {
         }
     }
 }
-
-
 
 impl crate::com::widget::WidgetAlgorithm for TextBlock {
     /// Synchronizes options inside the one concrete semantic state of a COM leaf.

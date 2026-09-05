@@ -62,23 +62,6 @@ impl ListBoxParameters {
             opt: WidgetOption::NONE,
         }
     }
-
-    /// Creates list-box parameters with explicit widget options.
-    pub fn with_opt(label: impl Into<String>, image: Option<microui_redux::Image>, opt: WidgetOption) -> Self {
-        Self {
-            label: label.into(),
-            image,
-            font: FontRef::Role(FontRole::Body),
-            opt,
-        }
-    }
-
-    /// Replaces the font used for the label.
-    pub fn font(mut self, font: FontRef) -> Self {
-        // Store the reference itself so a replacement skin can supply a new concrete font ID.
-        self.font = font;
-        self
-    }
 }
 
 /// Semantic payload emitted when the user submits a list box.
@@ -87,7 +70,6 @@ pub struct ListBoxSubmitted {
     /// Exact displayed label at user activation time, independent of later setter changes.
     pub label: String,
 }
-
 
 /// Concrete retained list box, including its semantic and interaction state.
 pub struct ListBox {
@@ -107,12 +89,14 @@ pub struct ListBox {
 
 impl ListBox {
     /// Constructs a retained node and a weak typed handle to its concrete list box.
+    #[cfg(test)]
     pub fn create(parameters: ListBoxParameters) -> (crate::TypedWidgetHandle<Self>, crate::Node) {
         let widget = ListBox::from(parameters);
         crate::Node::typed_widget(widget)
     }
 
     /// Returns the native event endpoint emitted once for every user submission.
+    #[cfg(test)]
     pub fn submitted(&self) -> crate::WidgetEventPortHandle<ListBoxSubmitted> {
         <Self as crate::TypedWidget<ListBoxSubmitted>>::event(self)
     }
@@ -146,15 +130,9 @@ impl ListBox {
         if let (Some(image), Some(visual)) = (self.image.as_ref(), placement.visual) {
             // List-box labels remain theme-colored while external image content preserves the
             // exact source RGBA values supplied to the renderer.
-            ctx.painter().com_texture(visual, crate::color(255, 255, 255, 255), image.as_interface().add_ref());
+            ctx.painter()
+                .com_texture(visual, crate::color(255, 255, 255, 255), image.as_interface().add_ref());
         }
-    }
-}
-
-impl crate::TypedWidgetHandle<ListBox> {
-    /// Returns the list box's native submission endpoint.
-    pub fn submitted(&self) -> crate::WidgetEventPortHandle<ListBoxSubmitted> {
-        self.widget_event()
     }
 }
 
@@ -243,7 +221,9 @@ impl crate::com::widget::FontState for ListBox {
 impl crate::com::widget::ImageState for ListBox {
     /// List-box image editing uses the same immutable image representation and layout helpers.
     fn set_image(&mut self, image: Option<microui_redux::Image>, fit_width: bool) -> bool {
-        if same_image(&self.image, &image) && (image.is_none() || self.fit_width == fit_width) { return false; }
+        if same_image(&self.image, &image) && (image.is_none() || self.fit_width == fit_width) {
+            return false;
+        }
         self.image = image;
         self.fit_width = fit_width;
         true

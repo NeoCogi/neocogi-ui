@@ -78,6 +78,7 @@ pub struct TextAreaParameters {
     /// Font used for measurement, editing, and paint.
     pub font: FontRef,
     /// Presentation and scrolling options applied to the containing [`ScrollArea`].
+    #[cfg(test)]
     pub scroll_options: ScrollAreaOption,
 }
 
@@ -90,11 +91,13 @@ impl TextAreaParameters {
             buf: buf.into(),
             wrap: TextWrap::None,
             font: FontRef::Role(FontRole::Body),
+            #[cfg(test)]
             scroll_options: ScrollAreaOption::FRAME | ScrollAreaOption::ENABLE_SCROLL,
         }
     }
 
     /// Replaces the options applied to the containing scroll area.
+    #[cfg(test)]
     pub const fn scroll_options(mut self, scroll_options: ScrollAreaOption) -> Self {
         // Store the complete outer policy directly; TextArea contributes no hidden scrolling or
         // framing options of its own.
@@ -106,13 +109,6 @@ impl TextAreaParameters {
     pub const fn wrap(mut self, wrap: TextWrap) -> Self {
         // Wrapping is retained by the inner leaf because it determines intrinsic content geometry.
         self.wrap = wrap;
-        self
-    }
-
-    /// Replaces the font used by the editable text content.
-    pub fn font(mut self, font: FontRef) -> Self {
-        // Preserve the semantic font choice until each phase resolves it against the active style.
-        self.font = font;
         self
     }
 }
@@ -150,14 +146,12 @@ pub struct TextAreaChanged {
     pub cursor: usize,
 }
 
-
 /// Snapshot emitted when the user submits a text-area value.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TextAreaSubmitted {
     /// Complete text value at submission time.
     pub text: String,
 }
-
 
 /// Runtime-only cursor navigation state retained by the editable leaf.
 #[derive(Default)]
@@ -170,6 +164,7 @@ struct TextAreaInteraction {
 
 impl TextArea {
     /// Creates editable content inside a scroll area and returns the nested text handle plus outer node.
+    #[cfg(test)]
     pub fn create(parameters: TextAreaParameters) -> (TypedWidgetHandle<Self>, Node) {
         // Split the one-shot input before mounting because presentation belongs to the outer
         // ScrollArea while text, wrapping, and font belong to the retained editable leaf.
@@ -225,6 +220,7 @@ impl TextArea {
     }
 
     /// Clears text, cursor, navigation preference, and the containing scroll offset.
+    #[cfg(test)]
     pub fn clear(&mut self) {
         // Reset semantic state before synchronizing presentation so the next measure sees the empty
         // document while the explicit shared scroll model receives the matching reset.
@@ -254,6 +250,7 @@ impl TextArea {
     }
 
     /// Moves the cursor to the end of the current text and schedules caret reveal.
+    #[cfg(test)]
     pub fn move_cursor_to_end(&mut self) {
         // String length is always a valid terminal UTF-8 boundary.
         self.cursor = self.buf.len();
@@ -263,6 +260,7 @@ impl TextArea {
     }
 
     /// Returns the offset owned by the containing scroll area.
+    #[cfg(test)]
     pub fn scroll(&self) -> Vec2i {
         // An unmounted editor exists only during construction or direct unit tests and therefore has
         // no viewport translation to report.
@@ -270,6 +268,7 @@ impl TextArea {
     }
 
     /// Requests a non-negative offset through the containing scroll area.
+    #[cfg(test)]
     pub fn set_scroll(&self, scroll: Vec2i) {
         // Keep ScrollArea and its two scrollbar children as the only owners of scroll state. Direct
         // editor unit tests have no parent capability and intentionally treat this as a no-op.
@@ -279,12 +278,14 @@ impl TextArea {
     }
 
     /// Returns the native event endpoint emitted after every user-originated text change.
+    #[cfg(test)]
     pub fn changed(&self) -> crate::WidgetEventPortHandle<TextAreaChanged> {
         // Delegate to the typed-event implementation so widget and handle APIs share one endpoint.
         <Self as crate::TypedWidget<TextAreaChanged>>::event(self)
     }
 
     /// Returns the native event endpoint emitted whenever the user submits the current text.
+    #[cfg(test)]
     pub fn submitted(&self) -> crate::WidgetEventPortHandle<TextAreaSubmitted> {
         // Delegate to the typed-event implementation so widget and handle APIs share one endpoint.
         <Self as crate::TypedWidget<TextAreaSubmitted>>::event(self)
@@ -349,6 +350,7 @@ impl TextArea {
     }
 }
 
+#[cfg(test)]
 impl TypedWidgetHandle<TextArea> {
     /// Clones the current text while the editable leaf remains mounted.
     pub fn text(&self) -> Option<String> {
@@ -366,12 +368,6 @@ impl TypedWidgetHandle<TextArea> {
     pub fn clear(&self) -> Option<()> {
         // Clearing changes intrinsic measurement, so use the ordinary invalidating typed update.
         self.try_update(TextArea::clear)
-    }
-
-    /// Returns the scalar-aligned byte cursor while the editable leaf remains mounted.
-    pub fn cursor(&self) -> Option<usize> {
-        // Cursor reads do not consult or mutate containing viewport state.
-        self.try_read(TextArea::cursor)
     }
 
     /// Moves the retained cursor to the nearest preceding Unicode scalar boundary.
@@ -403,18 +399,6 @@ impl TypedWidgetHandle<TextArea> {
         // The nested call mutates only ScrollArea's interactive state; the text leaf remains the
         // checked access anchor exposed to applications.
         self.try_update_without_measurement(|widget| widget.set_scroll(scroll))
-    }
-
-    /// Returns the text area's native value-change endpoint.
-    pub fn changed(&self) -> WidgetEventPortHandle<TextAreaChanged> {
-        // Resolve the endpoint through the generic typed-widget helper.
-        self.widget_event()
-    }
-
-    /// Returns the text area's native submission endpoint.
-    pub fn submitted(&self) -> WidgetEventPortHandle<TextAreaSubmitted> {
-        // Resolve the endpoint through the generic typed-widget helper.
-        self.widget_event()
     }
 }
 
@@ -711,8 +695,6 @@ impl LeafWidget for TextArea {
         self.preferred_size_widget(style, atlas, constraints)
     }
 }
-
-
 
 impl TextArea {
     /// Constructs the actual COM editor using the same normalization and interaction initialization as local composition.

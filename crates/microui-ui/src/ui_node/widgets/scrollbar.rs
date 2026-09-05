@@ -57,7 +57,11 @@
 use crate::{ControlRole};
 
 use crate::math::{clamp_i64_to_i32, RectExt};
-use crate::{Dimensioni, MouseButton, Node, Recti, TypedWidgetHandle, UiInputEvent, Vec2i, Widget, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx};
+use crate::{Dimensioni, MouseButton, Recti, UiInputEvent, Vec2i, Widget, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx};
+#[cfg(test)]
+use crate::{Node};
+#[cfg(test)]
+use crate::{TypedWidgetHandle};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 /// Axis selector used by shared scrollbar geometry helpers.
@@ -256,14 +260,6 @@ impl ScrollbarParameters {
         self.offset = offset;
         self
     }
-
-    /// Replaces the base widget options while retaining scrollbar-specific focus behavior.
-    pub const fn with_opt(mut self, opt: WidgetOption) -> Self {
-        // Store only caller-authored options. Scrollbar adds the mandatory preserve-focus
-        // behavior so an option replacement cannot accidentally make a bar steal editor focus.
-        self.opt = opt;
-        self
-    }
 }
 
 /// Offset snapshot emitted after a user-originated scrollbar movement.
@@ -272,7 +268,6 @@ pub struct ScrollbarChanged {
     /// Clamped content offset after applying the triggering pointer event.
     pub offset: i32,
 }
-
 
 /// Standalone one-axis scrollbar whose allocation supplies its complete track rectangle.
 pub struct Scrollbar {
@@ -364,6 +359,7 @@ impl From<ScrollbarParameters> for Scrollbar {
 
 impl Scrollbar {
     /// Creates a standalone scrollbar node and a weak typed handle to its retained state.
+    #[cfg(test)]
     pub fn create(parameters: ScrollbarParameters) -> (TypedWidgetHandle<Self>, Node) {
         Node::typed_widget(Self::from(parameters))
     }
@@ -404,13 +400,6 @@ impl Scrollbar {
         self.axis_state.maximum()
     }
 
-    /// Returns the native event endpoint emitted after every user-originated offset change.
-    pub fn changed(&self) -> crate::WidgetEventPortHandle<ScrollbarChanged> {
-        // Delegate to the typed-event implementation so direct widgets and typed handles expose the
-        // same runtime-owned endpoint.
-        <Self as crate::TypedWidget<ScrollbarChanged>>::event(self)
-    }
-
     /// Resolves track and thumb geometry from the current allocation and style-owned minimum.
     fn geometry(&self, track: Recti, min_thumb_len: i32) -> ScrollbarGeometry {
         // The retained node allocation is the standalone widget's authoritative track. Range and
@@ -420,20 +409,12 @@ impl Scrollbar {
     }
 }
 
+#[cfg(test)]
 impl TypedWidgetHandle<Scrollbar> {
     /// Returns the current offset while the scrollbar remains mounted.
     pub fn offset(&self) -> Option<i32> {
         // Read through the weak typed capability without extending the node's ownership lifetime.
         self.try_read(Scrollbar::offset)
-    }
-
-    /// Replaces the requested offset without emitting a user-originated change event.
-    ///
-    /// This measurement-preserving setter does not invalidate the current commit; call
-    /// `Context::update_ui` before relying on the resulting presentation.
-    pub fn set_offset(&self, offset: i32) -> Option<()> {
-        // Programmatic synchronization is silent so composite owners do not receive feedback loops.
-        self.try_update_without_measurement(|scrollbar| scrollbar.set_offset(offset))
     }
 
     /// Replaces the current viewport and content lengths.
@@ -468,6 +449,7 @@ impl Widget for Scrollbar {
     }
 
     /// Disables pointer interaction while the scrollbar has no movable content range.
+    #[cfg(test)]
     fn effective_widget_opt(&self) -> WidgetOption {
         // A zero range can still paint a complete thumb when mounted standalone, but accepting a
         // press would create meaningless pointer capture.
@@ -530,8 +512,6 @@ impl crate::LeafWidget for Scrollbar {
         }
     }
 }
-
-
 
 impl crate::com::widget::WidgetAlgorithm for Scrollbar {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.

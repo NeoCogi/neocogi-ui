@@ -28,13 +28,19 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 
+#[cfg(test)]
 use std::{cell::RefCell, rc::Rc};
 
-use crate::ui_node::children::ChildrenHandle;
-use crate::{AvailableSpace, Container, ContainerWidget, Dimensioni, MeasureCtx, Recti, TrackSize, TypedWidgetHandle, Widget, WidgetOption, WidgetPaintCtx};
+#[cfg(test)]
+use crate::ChildrenHandle;
+use crate::{AvailableSpace, ContainerWidget, Dimensioni, MeasureCtx, Recti, TrackSize, Widget, WidgetOption, WidgetPaintCtx};
+#[cfg(test)]
+use crate::{Container, TypedWidgetHandle};
 
 use crate::ui_node::layout::{TrackResolver, resolve_tracks_in_place};
-use super::{Children, ContainerLayoutCtx, Node};
+use super::{ContainerLayoutCtx};
+#[cfg(test)]
+use super::{Children, Node};
 
 /// Validated placement extent for one child owned by a [`Grid`].
 ///
@@ -80,11 +86,13 @@ impl Default for GridSpan {
 ///
 /// `GridItem` is not a runtime tree node: it has no identity, layout, or state of its own. A Grid
 /// consumes it and stores the node and span in one invariant-maintaining collection.
+#[cfg(test)]
 pub struct GridItem {
     node: Node,
     span: GridSpan,
 }
 
+#[cfg(test)]
 impl GridItem {
     /// Wraps a node with the default one-cell placement.
     pub fn new(node: Node) -> Self {
@@ -101,17 +109,13 @@ impl GridItem {
         self.span
     }
 
-    /// Recovers the still-unmounted node, intentionally discarding Grid-only placement.
-    pub fn into_node(self) -> Node {
-        self.node
-    }
-
     /// Splits insertion-only syntax into the parallel values retained by [`GridItems`].
     fn into_parts(self) -> (Node, GridSpan) {
         (self.node, self.span)
     }
 }
 
+#[cfg(test)]
 impl From<Node> for GridItem {
     fn from(node: Node) -> Self {
         Self::new(node)
@@ -137,6 +141,7 @@ struct GridItems {
 
 impl GridItems {
     /// Collects unmounted items and establishes the initial placement invariant.
+    #[cfg(test)]
     fn from_items<T>(items: impl IntoIterator<Item = T>) -> (Children, Self)
     where
         T: Into<GridItem>,
@@ -171,6 +176,7 @@ impl GridItems {
     }
 
     /// Appends one child/span pair and refreshes its derived row-major placement.
+    #[cfg(test)]
     fn push(&mut self, children: &mut Children, item: GridItem) {
         self.debug_assert_synchronized(children.len());
         let (node, span) = item.into_parts();
@@ -184,6 +190,7 @@ impl GridItems {
 
     /// Inserts ownership and placement metadata as one logical operation.
     #[allow(clippy::result_large_err)] // Failure must preserve the exact unmounted owner and span.
+    #[cfg(test)]
     fn insert(&mut self, children: &mut Children, index: usize, item: GridItem) -> Result<(), GridItem> {
         self.debug_assert_synchronized(children.len());
         let (node, span) = item.into_parts();
@@ -202,6 +209,7 @@ impl GridItems {
     }
 
     /// Removes one synchronized child/span pair and reports whether `index` existed.
+    #[cfg(test)]
     fn remove_drop(&mut self, children: &mut Children, index: usize) -> bool {
         self.debug_assert_synchronized(children.len());
         if index >= children.len() {
@@ -216,6 +224,7 @@ impl GridItems {
     }
 
     /// Clears owned and derived state together while retaining reusable allocation.
+    #[cfg(test)]
     fn clear(&mut self, children: &mut Children) {
         children.clear();
         self.spans.clear();
@@ -224,6 +233,7 @@ impl GridItems {
     }
 
     /// Replaces topology while retaining the configured column count used for derived placement.
+    #[cfg(test)]
     fn replace<T>(&mut self, children: &mut Children, items: impl IntoIterator<Item = T>)
     where
         T: Into<GridItem>,
@@ -244,6 +254,7 @@ impl GridItems {
     }
 
     /// Updates one span and all placements derived from the ordered span list.
+    #[cfg(test)]
     fn set_span(&mut self, index: usize, span: GridSpan) -> bool {
         self.debug_assert_synchronized(self.spans.len());
         let Some(current) = self.spans.get_mut(index) else {
@@ -285,6 +296,7 @@ impl GridItems {
 
 /// One-shot construction input for a child-owning [`Grid`].
 #[derive(Default)]
+#[cfg(test)]
 pub struct GridParameters {
     children: Children,
     items: GridItems,
@@ -292,6 +304,7 @@ pub struct GridParameters {
     row_tracks: Vec<TrackSize>,
 }
 
+#[cfg(test)]
 impl GridParameters {
     /// Creates a Grid from track policies and ordered unmounted items.
     ///
@@ -319,11 +332,10 @@ impl GridParameters {
 
 /// Application-facing mutable state for a retained two-dimensional container.
 ///
-/// [`Container`] is the sole strong owner of the authoritative [`Children`] collection. `Grid`
-/// retains only a weak `ChildrenHandle` for checked topology mutation and is the authority for the
-/// parallel child spans, both track axes, derived row-major placements, and reusable layout output.
-/// Span and track changes preserve the identity and widget state of every existing child because
-/// those relationships are Grid-owned metadata rather than generic [`Node`] policy.
+/// The COM container owns the authoritative ChildStore. This inline semantic state owns
+/// child spans, both track axes, derived row-major placements, and reusable layout output.
+/// Metadata remains index-matched after every committed topology edit. Grid-owned spans
+/// and tracks can change without changing the child's actual COM identity.
 ///
 /// # Spans and topology
 ///
@@ -354,6 +366,7 @@ impl GridParameters {
 /// zero. An empty generic Grid remains zero-sized unless an explicit Fixed track contributes extent.
 pub struct Grid {
     /// Weak topology access coordinated with Grid-owned edge metadata below.
+    #[cfg(test)]
     children: ChildrenHandle,
     items: GridItems,
     column_tracks: Vec<TrackSize>,
@@ -372,6 +385,7 @@ impl Grid {
             columns: column_tracks.len().max(1),
         };
         Self {
+            #[cfg(test)]
             children: ChildrenHandle::default(),
             items,
             column_tracks,
@@ -380,59 +394,28 @@ impl Grid {
         }
     }
     /// Returns the number of owned Grid children.
+    #[cfg(test)]
     pub fn len(&self) -> Option<usize> {
         self.children.len()
     }
 
-    /// Returns whether the Grid owns no children.
-    pub fn is_empty(&self) -> Option<bool> {
-        self.children.is_empty()
-    }
-
     /// Appends one still-unmounted node and its Grid placement.
     #[allow(clippy::result_large_err)] // Failure returns the exact unique node and its edge metadata.
+    #[cfg(test)]
     pub fn push(&mut self, item: impl Into<GridItem>) -> Result<(), GridItem> {
         let children = &self.children;
         let items = &mut self.items;
         children.try_update_with(item.into(), |children, item| items.push(children, item))
     }
 
-    /// Inserts an item, returning it unchanged when `index > len`.
-    #[allow(clippy::result_large_err)] // The exact unboxed owner is the failure value by contract.
-    pub fn insert(&mut self, index: usize, item: GridItem) -> Result<(), GridItem> {
-        let children = &self.children;
-        let items = &mut self.items;
-        children.try_update_with(item, |children, item| items.insert(children, index, item))?
-    }
-
-    /// Drops one indexed child owner and its placement, reporting whether it existed.
-    pub fn remove_drop(&mut self, index: usize) -> Option<bool> {
-        let items = &mut self.items;
-        self.children.try_update_with((), |children, ()| items.remove_drop(children, index)).ok()
-    }
-
-    /// Drops every current child owner and placement.
-    pub fn clear(&mut self) -> Option<()> {
-        let items = &mut self.items;
-        self.children.try_update_with((), |children, ()| items.clear(children)).ok()
-    }
-
-    /// Replaces all children and placements in iterator order.
-    pub fn replace<T, I>(&mut self, items: I) -> Result<(), I>
-    where
-        T: Into<GridItem>,
-        I: IntoIterator<Item = T>,
-    {
-        let metadata = &mut self.items;
-        self.children.try_update_with(items, |children, items| metadata.replace(children, items))
-    }
-
     /// Returns one child's Grid-owned placement.
+    #[cfg(test)]
     pub fn span(&self, index: usize) -> Option<GridSpan> {
         self.items.span(index)
     }
 
     /// Replaces one child's placement without replacing or re-identifying the child.
+    #[cfg(test)]
     pub fn set_span(&mut self, index: usize, span: GridSpan) -> bool {
         self.items.set_span(index, span)
     }
@@ -459,11 +442,13 @@ impl Grid {
     }
 
     /// Creates a Grid and its weak typed widget handle.
+    #[cfg(test)]
     pub fn create(parameters: GridParameters) -> (TypedWidgetHandle<Self>, Node) {
         let mut items = parameters.items;
         items.set_columns(parameters.column_tracks.len());
         let children = Rc::new(RefCell::new(parameters.children));
         let widget = Self {
+            #[cfg(test)]
             children: ChildrenHandle::default(),
             items,
             column_tracks: parameters.column_tracks,
@@ -542,6 +527,7 @@ impl GridMeasureCtx for ContainerLayoutCtx<'_> {
 
 impl ContainerWidget for Grid {
     /// Uses the same construction hook available to downstream mutable containers.
+    #[cfg(test)]
     fn bind_children(&mut self, children: ChildrenHandle) {
         self.children = children;
     }
@@ -927,8 +913,10 @@ fn mark_grid_occupied(occupied: &mut Vec<bool>, columns: usize, row: usize, colu
 mod tests {
     use super::*;
     use crate::test_support::test_atlas;
+    #[cfg(test)]
     use crate::TypedWidgetHandle;
 
+    #[cfg(test)]
     fn text_node(label: &str) -> (TypedWidgetHandle<crate::TextBlock>, Node) {
         crate::TextBlock::create(crate::TextBlockParameters::new(label))
     }

@@ -1,7 +1,7 @@
 //! Concrete COM ownership at the retained node boundary.
 use super::*;
 use super::paint::PaintService;
-use crate::prelude::{AtlasHandle, Dimensioni, WidgetOption, KeyboardBehavior, WidgetUpdateCtx, WidgetPaintCtx, UiInputEvent, Constraints, Skin};
+use crate::{AtlasHandle, Dimensioni, WidgetOption, KeyboardBehavior, WidgetUpdateCtx, WidgetPaintCtx, UiInputEvent, Constraints, Skin};
 use crate::Change;
 use super::{
     children::{ChildStore, ChildTransaction},
@@ -132,7 +132,14 @@ impl ComNode {
     }
 
     /// Applies a successful complete branch result to private retained geometry; errors retain dirty state.
-    pub(crate) fn place(&self, traversal: &crate::ui_node::LayoutTraversal, rect: crate::Recti, current: &mut crate::ui_node::NodeRuntime) -> bool {
+    pub(crate) fn place(
+        &self,
+        traversal: &mut crate::ui_node::LayoutTraversal,
+        _skin: &Skin,
+        _atlas: &AtlasHandle,
+        rect: crate::Recti,
+        current: &mut crate::ui_node::NodeRuntime,
+    ) -> bool {
         let NodeLayoutKind::Branch { policy, children, .. } = &self.layout else {
             return true;
         };
@@ -193,7 +200,7 @@ impl ComNode {
 
 impl ComNode {
     /// Collects sticky setter changes without a second owner or weak mutation hook.
-    pub(crate) fn is_dirty(&self) -> bool {
+    pub(crate) fn is_measurement_dirty(&self) -> bool {
         if let NodeLayoutKind::Branch { children, .. } = &self.layout
             && children.dirty.replace(false)
         {
@@ -217,13 +224,13 @@ impl ComNode {
     }
 
     /// Consumes setter and update changes together at the ancestor propagation boundary.
-    pub(crate) fn take_dirty(&self) -> bool {
-        self.is_dirty();
+    pub(crate) fn take_measurement_dirty(&self) -> bool {
+        self.is_measurement_dirty();
         self.dirty.replace(false)
     }
 
     /// Records the geometry result of an update until traversal propagates it.
-    pub(crate) fn mark_dirty(&self) {
+    pub(crate) fn mark_measurement_dirty(&self) {
         self.dirty.set(true);
     }
 }
@@ -268,4 +275,25 @@ const FRAME_ROLES: &[(WidgetFrame, crate::FrameRole)] = &[
 /// Encodes the exact built-in frame family without collapsing input or item roles.
 pub(super) fn frame_contract(role: crate::FrameRole) -> WidgetFrame {
     FRAME_ROLES.iter().find(|(_, value)| *value == role).expect("all frame roles are represented").0
+}
+
+impl ComNode {
+    /// Returns the authenticated owner used by COM child collection operations.
+    #[cfg(not(test))]
+    pub(crate) fn com(&self) -> &Self {
+        self
+    }
+
+    /// Visits branch storage under its transaction; leaves have an empty sequence.
+    pub(crate) fn with_children<R>(&self, f: impl FnOnce(&crate::Children) -> R) -> R {
+        match self.children() {
+            Some(children) => f(&children),
+            None => f(&crate::Children::new()),
+        }
+    }
+
+    /// Keeps the owned child transaction alive for exactly this recursive traversal.
+    pub(crate) fn with_children_mut<R>(&self, f: impl FnOnce(&mut crate::Children) -> R) -> Option<R> {
+        self.children().map(|mut children| f(&mut children))
+    }
 }

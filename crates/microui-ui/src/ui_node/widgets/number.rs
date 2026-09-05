@@ -85,13 +85,6 @@ impl NumberParameters {
             opt,
         })
     }
-
-    /// Replaces the font used for the numeric label and editor.
-    pub fn font(mut self, font: FontRef) -> Self {
-        // Defer capability resolution until numeric measurement uses the active atlas.
-        self.font = font;
-        self
-    }
 }
 
 /// Value snapshot emitted after a user-originated number change.
@@ -100,7 +93,6 @@ pub struct NumberChanged {
     /// Number value after applying the triggering input event.
     pub value: Real,
 }
-
 
 /// Concrete retained number input, including its semantic and editing state.
 pub struct Number {
@@ -122,6 +114,7 @@ pub struct Number {
 
 impl Number {
     /// Constructs a retained node and a weak typed handle to its concrete number input.
+    #[cfg(test)]
     pub fn create(parameters: NumberParameters) -> (TypedWidgetHandle<Self>, Node) {
         Node::typed_widget(Self::from(parameters))
     }
@@ -147,6 +140,7 @@ impl Number {
     }
 
     /// Returns the native event endpoint emitted after every user-originated value change.
+    #[cfg(test)]
     pub fn changed(&self) -> crate::WidgetEventPortHandle<NumberChanged> {
         <Self as crate::TypedWidget<NumberChanged>>::event(self)
     }
@@ -204,30 +198,6 @@ impl Number {
         }
         let label = number_label(self.value, self.precision);
         ctx.draw_control_text_with_font(font, label.as_str(), base, ControlRole::TextInput, self.opt);
-    }
-}
-
-impl TypedWidgetHandle<Number> {
-    /// Returns the current number value while the widget is retained.
-    pub fn value(&self) -> Option<Real> {
-        self.try_read(Number::value)
-    }
-
-    /// Replaces the number value without emitting a user event.
-    ///
-    /// Non-finite input is ignored, preserving the widget's last finite value.
-    pub fn set_value(&self, value: Real) -> Option<()> {
-        self.try_update(|widget| widget.set_value(value))
-    }
-
-    /// Returns whether the retained number is currently editing text.
-    pub fn is_editing(&self) -> Option<bool> {
-        self.try_read(Number::is_editing)
-    }
-
-    /// Returns the number input's native value-change endpoint.
-    pub fn changed(&self) -> WidgetEventPortHandle<NumberChanged> {
-        self.widget_event()
     }
 }
 

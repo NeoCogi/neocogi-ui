@@ -45,9 +45,7 @@ impl ChildStore {
         }
         let nodes = self.take()?;
         for node in nodes.iter() {
-            if let crate::ui_node::NodeKind::Com(node) = &node.data
-                && let super::node::NodeLayoutKind::Branch { children, .. } = &node.layout
-            {
+            if let super::node::NodeLayoutKind::Branch { children, .. } = &node.data.com().layout {
                 children.reject_cycle(parent)?;
             }
         }
@@ -150,10 +148,7 @@ impl IChildren for ChildView {
     fn child(&self, index: u32) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
         let nodes = self.store.take()?;
         let node = nodes.get(index as usize).ok_or(nc_com::NC_E_OUT_OF_RANGE)?;
-        match &node.data {
-            crate::ui_node::NodeKind::Com(node) => Ok(node.widget.clone()),
-            _ => unreachable!("COM collection insertion always constructs COM nodes"),
-        }
+        Ok(node.data.com().widget.clone())
     }
 }
 impl Drop for ChildView {

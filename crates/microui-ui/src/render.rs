@@ -40,12 +40,14 @@ mod painter;
 mod performance;
 mod renderer;
 mod texture;
+#[cfg(test)]
+pub(crate) use texture::RendererId;
 
-pub use backend::{
-    AtlasUploadError, CustomRenderArgs, CustomRenderHandle, CustomRenderRegistryError, FrameError, FrameInfo, FrameInfoError, RendererBackend, RendererFrame,
-    Vertex,
-};
-pub(crate) use backend::CustomRenderKey;
+pub use backend::{AtlasUploadError, RenderItemArgs, FrameError, FrameInfo, FrameInfoError, RendererBackend, RendererFrame, Vertex};
+#[cfg(test)]
+pub use crate::test_support::custom_render::{CustomRenderHandle, CustomRenderRegistryError};
+#[cfg(test)]
+pub(crate) use crate::test_support::custom_render::CustomRenderKey;
 pub use color::{Color, color};
 pub(crate) use display_list::DisplayList;
 pub use painter::Painter;

@@ -76,11 +76,13 @@ pub struct DecimalPrecisionError {
 
 impl DecimalPrecisionError {
     /// Returns the rejected number of fractional digits.
+    #[cfg(test)]
     pub const fn requested(self) -> usize {
         self.requested
     }
 
     /// Returns the largest accepted number of fractional digits.
+    #[cfg(test)]
     pub const fn maximum(self) -> usize {
         DecimalPrecision::MAX.digits()
     }
@@ -97,8 +99,6 @@ impl Display for DecimalPrecisionError {
         )
     }
 }
-
-impl Error for DecimalPrecisionError {}
 
 impl TryFrom<usize> for DecimalPrecision {
     type Error = DecimalPrecisionError;
@@ -170,8 +170,6 @@ impl Display for NumericParameterError {
         }
     }
 }
-
-impl Error for NumericParameterError {}
 
 /// Validates the scalar inputs shared by both numeric widgets.
 pub(super) fn validate_numeric_value_and_step(value: Real, step: Real) -> Result<(), NumericParameterError> {
@@ -299,6 +297,10 @@ fn commit_finite_number(text: &str, value: &mut Real) {
 pub(super) fn number_textbox_paint(ctx: &mut WidgetPaintCtx<'_>, edit: &NumberEditState, font: FontId) {
     textbox_paint(ctx, edit.buf.as_str(), edit.cursor, WidgetOption::NONE, font);
 }
+
+impl Error for DecimalPrecisionError {}
+
+impl Error for NumericParameterError {}
 
 #[cfg(test)]
 mod tests {

@@ -1,7 +1,7 @@
 //! Coarse COM submission adapter over the existing display-list executor.
 use super::*;
 use crate::{AtlasHandle, TextureId};
-use crate::render::{AtlasUploadError, FrameError, FrameInfo, RendererBackend, RendererFrame, TextureError, Vertex, CustomRenderArgs};
+use crate::render::{AtlasUploadError, FrameError, FrameInfo, RendererBackend, RendererFrame, TextureError, Vertex, RenderItemArgs};
 use nc_com::NcCopyToBufferOffset;
 
 /// Decodes canonical RGBA packing independently of machine byte order.
@@ -296,7 +296,12 @@ impl RendererBackend for Backend {
     fn frame(&mut self, info: FrameInfo) -> Result<Self::Frame<'_>, FrameError> {
         self.storage.clear_batches();
         self.storage.vertices.borrow_mut().clear();
-        Ok(Frame { backend: self, info, error: None, recorded:false })
+        Ok(Frame {
+            backend: self,
+            info,
+            error: None,
+            recorded: false,
+        })
     }
     /// Native IDs cannot cross COM; applications create owned images through ITextureFactory.
     fn create_texture(&mut self, _id: TextureId, _pixels: &[u8]) -> Result<(), TextureError> {
@@ -386,7 +391,7 @@ impl RendererFrame for Frame<'_> {
         Ok(())
     }
     /// Records final custom geometry at the current painter-order boundary.
-    fn draw_com_item(&mut self, item: ComPtr<IRenderItemAbi>, args: CustomRenderArgs) -> Result<(), FrameError> {
+    fn draw_com_item(&mut self, item: ComPtr<IRenderItemAbi>, args: RenderItemArgs) -> Result<(), FrameError> {
         let storage = &self.backend.storage;
         if storage.batches.borrow().len() >= MAX_RENDER_BATCHES as usize {
             return Err(FrameError::new("frame batches exceed the shared allocation limit"));
@@ -408,6 +413,8 @@ impl Drop for Frame<'_> {
     /// Failed/abandoned recordings and completed native submissions release resources here.
     /// Successful local recordings transfer their ownership to the checked painter forwarding call.
     fn drop(&mut self) {
-        if !self.recorded { self.backend.storage.clear_batches(); }
+        if !self.recorded {
+            self.backend.storage.clear_batches();
+        }
     }
 }

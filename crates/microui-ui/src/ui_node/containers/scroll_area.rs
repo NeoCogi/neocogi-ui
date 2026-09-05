@@ -30,17 +30,24 @@
 
 use crate::{SurfaceRole};
 
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
+#[cfg(test)]
+use std::cell::RefCell;
 
 use bitflags::bitflags;
 
-use crate::ui_node::widgets::{Scrollbar, ScrollbarAxis, ScrollbarParameters};
+use crate::ui_node::widgets::{ScrollbarAxis};
+#[cfg(test)]
+use crate::ui_node::widgets::{Scrollbar, ScrollbarParameters};
 use crate::{
-    ChildParticipation, Container, ContainerWidget, Dimensioni, FrameRole, MeasureCtx, Recti, TypedWidgetHandle, UiInputEvent, Vec2i, Widget, WidgetOption,
-    WidgetPaintCtx, WidgetUpdateCtx,
+    ChildParticipation, ContainerWidget, Dimensioni, FrameRole, MeasureCtx, Recti, UiInputEvent, Vec2i, Widget, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx,
 };
+#[cfg(test)]
+use crate::{Container, TypedWidgetHandle};
 
-use super::{ContainerLayoutCtx, Node};
+use super::{ContainerLayoutCtx};
+#[cfg(test)]
+use super::{Node};
 
 /// Returns the child allocation for one scrollbar adjacent to the resolved content body.
 fn scrollbar_track(axis: ScrollbarAxis, body: Recti, scrollbar_size: i32) -> Recti {
@@ -75,6 +82,7 @@ bitflags! {
 }
 
 /// One-shot construction input for a retained scroll area.
+#[cfg(test)]
 pub struct ScrollAreaParameters {
     /// The ordinary content node viewed through the scroll surface.
     content: Node,
@@ -82,6 +90,7 @@ pub struct ScrollAreaParameters {
     opt: ScrollAreaOption,
 }
 
+#[cfg(test)]
 impl ScrollAreaParameters {
     /// Creates a scroll area that owns one ordinary content node.
     ///
@@ -289,6 +298,7 @@ impl ScrollArea {
         Self { model, opt }
     }
     /// Returns the requested offsets owned by the actual scrollbar state.
+    #[cfg(test)]
     pub fn offset(&self) -> Vec2i {
         self.model.offset()
     }
@@ -303,10 +313,6 @@ impl ScrollArea {
     /// Requests the nearest offsets that reveal a content-local rectangle.
     pub fn scroll_rect_into_view(&mut self, rect: Recti) {
         self.model.reveal(rect);
-    }
-    /// Returns the shared responsive scrolling policy.
-    pub fn scrolling_enabled(&self) -> bool {
-        self.model.enabled.get()
     }
     /// Enables or disables scrolling and its two actual scrollbar children.
     pub fn set_scrolling_enabled(&mut self, enabled: bool) {
@@ -329,6 +335,7 @@ impl Widget for ScrollArea {
         FrameRole::Surface(SurfaceRole::Panel)
     }
 
+    #[cfg(test)]
     fn effective_widget_opt(&self) -> WidgetOption {
         crate::com::widget::WidgetAlgorithm::effective_options(self, self.opt)
     }
@@ -586,6 +593,7 @@ impl ScrollArea {
     /// The completed parent always owns exactly three structural children: a scrolling content
     /// container and two real scrollbar widgets. The concrete `ScrollArea` is the parent
     /// `ContainerWidget`; the generic `Container` remains the structural owner.
+    #[cfg(test)]
     pub fn create(parameters: ScrollAreaParameters) -> (TypedWidgetHandle<ScrollArea>, Node) {
         // Separate immutable presentation flags from dynamic enablement stored in the widget.
         let enabled = parameters.opt.intersects(ScrollAreaOption::ENABLE_SCROLL);
@@ -610,8 +618,6 @@ impl ScrollArea {
         (handle, Node::container(container))
     }
 }
-
-
 
 impl crate::com::widget::WidgetAlgorithm for ScrollArea {
     /// Keeps the concrete panel paint options synchronized with common COM options.
@@ -639,7 +645,9 @@ mod tests {
     use crate::input::Input;
     use crate::test_support::{AllocationMeasurement, test_atlas};
     use crate::ui_node::UiRuntime;
-    use crate::{Custom, CustomParameters, Linear, LinearItem, LinearParameters, MouseButton, Skin, TextBlock, TextBlockParameters, TextWrap, UNCLIPPED_RECT};
+    use crate::{Custom, CustomParameters, Linear, MouseButton, Skin, TextBlock, TextBlockParameters, TextWrap, UNCLIPPED_RECT};
+    #[cfg(test)]
+    use crate::{LinearItem, LinearParameters};
 
     /// Test leaf whose desired size is content behavior rather than a generic node policy.
     struct FixedContent(Dimensioni);
@@ -658,6 +666,7 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
     fn fixed_content(size: Dimensioni) -> Node {
         Node::widget(FixedContent(size))
     }
@@ -706,6 +715,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(test)]
     fn scroll_area_keeps_one_arbitrary_content_node_behind_its_surface() {
         let child = Custom::create(CustomParameters::new("child"));
         let (child_state, child) = Node::typed_widget(child);
@@ -784,6 +794,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(test)]
     fn ordinary_column_content_reuses_retained_measurements_while_scrolling() {
         let mut first_id = None;
         let rows = (0..1_000).map(|index| {
@@ -900,6 +911,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(test)]
     fn scrollbar_candidates_measure_then_place_content_once() {
         let placements = Rc::new(Cell::new(0));
         let (_, content) = Container::new(

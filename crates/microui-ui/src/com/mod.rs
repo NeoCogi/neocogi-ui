@@ -40,12 +40,12 @@ fn text(input: NcCopyFromBufferOffset<'_, u8>) -> Result<&str, NcStatus> {
 }
 
 /// Converts the canonical ABI rectangle at the temporary retained-engine boundary.
-fn local_rect(rect: Rect) -> crate::prelude::Recti {
+pub(crate) fn local_rect(rect: Rect) -> crate::Recti {
     crate::rect(rect.x, rect.y, rect.width, rect.height)
 }
 
 /// Copies legacy geometry without passing a foreign crate's Rust type through COM.
-fn copied_rect(rect: crate::prelude::Recti) -> Rect {
+pub(crate) fn copied_rect(rect: crate::Recti) -> Rect {
     Rect {
         x: rect.x,
         y: rect.y,

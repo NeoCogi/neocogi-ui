@@ -44,47 +44,21 @@ use rs_math3d::{Recti, Vec2f, Vec2i, color4b};
 /// operation, and tessellates custom solid geometry without consulting style, input, atlas, the
 /// context-owned executor, or [`crate::render::RendererBackend`] state.
 ///
-/// Custom widgets obtain a painter from their [`WidgetPaintCtx`](crate::WidgetPaintCtx):
+/// Built-in algorithms receive this recorder through their private phase context. Independent
+/// widgets use the facade painter over IPainter; this Rust reference never crosses a plugin ABI.
+/// A backend-local helper can record ordinary primitives without depending on widget ownership:
 ///
 /// ```
-/// use microui_ui::prelude::*;
-///
-/// #[derive(Clone)]
-/// struct Swatch {
-///     options: WidgetOption,
-/// }
-///
-/// impl Widget for Swatch {
-///     fn widget_opt(&self) -> &WidgetOption {
-///         &self.options
-///     }
-///
-///     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
-///         let mut painter = ctx.painter();
-///         let bounds = painter.local_rect();
-///         painter.fill_rect(bounds, color(42, 48, 60, 255));
-///
-///         let inset = Recti::new(2, 2, bounds.width - 4, bounds.height - 4);
-///         painter.with_clip(inset, |painter| {
-///             painter.stroke_line(
-///                 Vec2f::new(0.0, 0.0),
-///                 Vec2f::new(bounds.width as f32, bounds.height as f32),
-///                 2.0,
-///                 color(110, 190, 255, 255),
-///             );
-///         });
-///     }
-/// }
-///
-/// impl LeafWidget for Swatch {
-///     fn measure(
-///         &self,
-///         _style: &Skin,
-///         _atlas: &AtlasHandle,
-///         _constraints: Constraints,
-///     ) -> Dimensioni {
-///         Dimensioni::new(48, 24)
-///     }
+/// use microui_ui::{prelude::{color, Recti, Vec2f}, render::Painter};
+/// fn swatch(painter: &mut Painter<'_>) {
+///     let bounds = painter.local_rect();
+///     painter.fill_rect(bounds, color(42, 48, 60, 255));
+///     let inset = Recti::new(2, 2, bounds.width - 4, bounds.height - 4);
+///     painter.with_clip(inset, |painter| {
+///         painter.stroke_line(Vec2f::new(0.0, 0.0),
+///             Vec2f::new(bounds.width as f32, bounds.height as f32),
+///             2.0, color(110, 190, 255, 255));
+///     });
 /// }
 /// ```
 pub struct Painter<'a> {

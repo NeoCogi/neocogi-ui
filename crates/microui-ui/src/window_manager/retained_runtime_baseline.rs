@@ -44,9 +44,11 @@ use crate::render::FrameInfo;
 use crate::test_support::{AllocationCount, AllocationMeasurement, NoopRenderer, test_atlas, test_skin};
 use crate::ui_node::{RuntimeMetrics, UiRuntime};
 use crate::{
-    Button, ButtonParameters, Context, Dimensioni, Key, KeyEvent, Linear, LinearParameters, Modifiers, Node, ScrollArea, ScrollAreaOption,
-    ScrollAreaParameters, TextBlock, TextBlockParameters, UiInputEvent, Window, color, rect,
+    Button, ButtonParameters, Context, Dimensioni, Key, KeyEvent, Linear, Modifiers, Node, ScrollArea, ScrollAreaOption, TextBlock, TextBlockParameters,
+    UiInputEvent, Window, color, rect,
 };
+#[cfg(test)]
+use crate::{LinearParameters, ScrollAreaParameters};
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 

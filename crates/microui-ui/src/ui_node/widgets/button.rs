@@ -93,6 +93,7 @@ impl ButtonParameters {
     }
 
     /// Creates text-button parameters with explicit widget options.
+    #[cfg(test)]
     pub fn with_opt(label: impl Into<String>, opt: WidgetOption) -> Self {
         Self {
             content: ButtonContent::Text { label: label.into(), icon: None },
@@ -102,17 +103,8 @@ impl ButtonParameters {
         }
     }
 
-    /// Creates button parameters with an atlas icon.
-    pub fn with_icon(label: impl Into<String>, icon: IconRef, opt: WidgetOption, fill: WidgetFillOption) -> Self {
-        Self {
-            content: ButtonContent::Text { label: label.into(), icon: Some(icon) },
-            font: FontRef::Role(FontRole::Body),
-            opt,
-            fill,
-        }
-    }
-
     /// Creates image-button parameters with explicit options and fill behavior.
+    #[cfg(test)]
     pub fn with_image(label: impl Into<String>, image: Option<microui_redux::Image>, opt: WidgetOption, fill: WidgetFillOption) -> Self {
         Self {
             content: ButtonContent::Image { label: label.into(), image },
@@ -120,23 +112,6 @@ impl ButtonParameters {
             opt,
             fill,
         }
-    }
-
-    /// Creates scaled-image button parameters.
-    pub fn with_scaled_image(label: impl Into<String>, image: Option<microui_redux::Image>, opt: WidgetOption, fill: WidgetFillOption) -> Self {
-        Self {
-            content: ButtonContent::ScaledImage { label: label.into(), image },
-            font: FontRef::Role(FontRole::Body),
-            opt,
-            fill,
-        }
-    }
-
-    /// Replaces the font used for text content.
-    pub fn font(mut self, font: FontRef) -> Self {
-        // Store the stable reference without resolving it against the currently active atlas.
-        self.font = font;
-        self
     }
 }
 
@@ -146,7 +121,6 @@ pub struct ButtonSubmitted {
     /// Exact displayed label at user activation time, independent of later setter changes.
     pub label: String,
 }
-
 
 /// Concrete retained button, including its semantic and interaction state.
 pub struct Button {
@@ -164,12 +138,14 @@ pub struct Button {
 
 impl Button {
     /// Constructs a retained node and a weak typed handle to its concrete button.
+    #[cfg(test)]
     pub fn create(parameters: ButtonParameters) -> (crate::TypedWidgetHandle<Self>, crate::Node) {
         let widget = Button::from(parameters);
         crate::Node::typed_widget(widget)
     }
 
     /// Returns the native event endpoint emitted once for every user submission.
+    #[cfg(test)]
     pub fn submitted(&self) -> crate::WidgetEventPortHandle<ButtonSubmitted> {
         <Self as crate::TypedWidget<ButtonSubmitted>>::event(self)
     }
@@ -228,7 +204,8 @@ impl Button {
                 if let (Some(image), Some(visual)) = (image.as_ref(), placement.visual) {
                     // External image pixels carry their own color; the adjacent label alone uses
                     // the stateful Button content color selected by the active theme.
-                    ctx.painter().com_texture(visual, crate::color(255, 255, 255, 255), image.as_interface().add_ref());
+                    ctx.painter()
+                        .com_texture(visual, crate::color(255, 255, 255, 255), image.as_interface().add_ref());
                 }
             }
             ButtonContent::ScaledImage { label, image } => {
@@ -244,13 +221,15 @@ impl Button {
                 if let (Some(image), Some(visual)) = (image.as_ref(), placement.visual) {
                     // Scaling changes only destination geometry; it must not introduce a theme
                     // content-color tint that destroys the source image's RGB channels.
-                    ctx.painter().com_texture(visual, crate::color(255, 255, 255, 255), image.as_interface().add_ref());
+                    ctx.painter()
+                        .com_texture(visual, crate::color(255, 255, 255, 255), image.as_interface().add_ref());
                 }
             }
         }
     }
 }
 
+#[cfg(test)]
 impl crate::TypedWidgetHandle<Button> {
     /// Returns the button's native submission endpoint.
     pub fn submitted(&self) -> crate::WidgetEventPortHandle<ButtonSubmitted> {
@@ -386,7 +365,7 @@ impl crate::com::widget::ImageState for Button {
         let (ButtonContent::Text { label, .. } | ButtonContent::Image { label, .. } | ButtonContent::ScaledImage { label, .. }) = &mut self.content;
         let label = std::mem::take(label);
         self.content = match (image, fit_width) {
-            (None, _) => ButtonContent::Text { label, icon:None },
+            (None, _) => ButtonContent::Text { label, icon: None },
             (image, false) => ButtonContent::Image { label, image },
             (image, true) => ButtonContent::ScaledImage { label, image },
         };

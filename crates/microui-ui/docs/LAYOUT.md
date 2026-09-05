@@ -40,37 +40,49 @@ width, or height used to form that area. Tracks are parent-owned because the con
 interprets these rules—the child reports desired content without knowing whether its parent will
 place it in a content, fixed, or flexible track.
 
-- Every built-in leaf reports its own intrinsic preferred size from content metrics (text/icon/thumb/line layout), while every container measures against its authoritative child collection.
-- `Widget::update` returning `Change::Changed` dirties its node's retained measurement, even without a routed event; the runtime propagates that invalidation through dependent ancestors at the next layout boundary. `NoChange` preserves that node's cache unless an independent input invalidated it. Generic `TypedWidgetHandle::try_update` access and topology mutations use the same propagation path. Specialized setters documented as measurement-preserving may defer derived update state until the next synchronization without invalidating the current commit.
-- `LeafWidget::measure` and `ContainerWidget::measure` report desired content, not an allocation. `Constraints` represents each axis as `AvailableSpace::Bounded(i32)` or `AvailableSpace::Unbounded`; bounded zero is not an unconstrained request.
-- Auto-sized roots measure unbounded axes intrinsically. `TrackSize::Content` uses desired extent, `TrackSize::Fixed` stays exact, and `TrackSize::Flex` shares bounded space left after content, fixed tracks, and spacing while falling back to desired content when unbounded.
-- `Context::update_ui` first synchronizes layout, then drains input in API-call order. Every event runs one complete eligible-tree `Widget::update` traversal and one follow-up layout, so geometry changed by one event is authoritative for routing the next.
-- `ContextFrame::render_ui` performs no input, update, or layout work. It paints the committed tree with `Widget::paint` and submits one display list. A missing commit, pending input, a successful invalidating typed mutation in a visible tree, or different frame dimensions returns `RenderError::UiUpdateRequired` before backend acquisition.
-- Leaves and containers share the public `Widget` update/paint contract. `LeafWidget` adds intrinsic measurement; `ContainerWidget` adds child-aware measurement, placement, and optional surface event filtering.
-- Parent containers assign each node one exact retained parent-local allocation. Sizing relationships belong to parent-child edges such as `LinearItem`; `Node` has no global placement policy. Child offsets and clips remain node-local and are resolved through a composed transform during traversal.
-- Resolved outer rectangles and clips remain runtime stack locals. Node behavior works against its local content surface, while outer frame painting, standard hit routing, and conversion from screen input remain runtime-owned.
-- A public widget's Painter geometry and routed pointer positions share the derived content-local origin.
-- Handle-bearing built-in leaf and container constructors return a weak `TypedWidgetHandle<W>` plus one completed owning `Node`. The stateless `Custom::create` exception returns a `Custom` runtime for mounting through `Node::widget`, `Node::custom_render`, or `Node::typed_custom_render`. Concrete container constructors consume child nodes.
-- Every direction is a configuration of one `Linear` widget. Linear and Grid independently invoke the common scalar track resolver, so both apply identical content/fixed/flex, spacing, rounding, and overflow arithmetic without either container being implemented through the other.
-- `LinearCrossSize` gives every direction the same shared-line choices: desired content, stretching across exact allocation, or an exact fixed cross extent. `LinearDirection` combines axis and leading edge.
-- Negative desired extents are normalized to zero at the node boundary. A desired zero remains zero; generic containers do not substitute Skin-owned fallback cells.
+Each COM leaf implements intrinsic measurement; a container implements scoped indexed
+measurement and placement. The ABI uses explicit finite/unbounded `LayoutLimits`,
+including a real bounded zero. Built-in Rust algorithms translate those values to
+private Constraints and share the same scalar track resolver.
+
+`IWidget::update` returning CHANGED invalidates measurement and placement along the
+ancestor path, including eventless updates. NO_CHANGE preserves caches unless another
+input invalidated them. Changed setters, topology edits, new resize constraints and
+resource revisions invalidate independently. A same-value setter is silent and preserves
+geometry. Changes such as caret blinking may affect only paint.
+
+The runtime owns one actual COM node per attachment. Containers own child identities
+through IChildrenEditor and keep only parent-owned edge metadata such as tracks/spans.
+Attachments are exclusive and removal closes the subtree; an application COM reference
+can survive logical closure but cannot revive or reparent that widget.
+
+Parent-local allocations, child offsets and clips remain in private NodeRuntime state.
+Scoped child services expose only indexed geometry; neither native Nodes nor borrowed
+child collections reach an extension. Expired tokens and forbidden reentry fail explicitly.
+
+Every Linear direction uses the same content/fixed/flex resolver as Grid. Fixed tracks
+stay exact, Content uses intrinsic size, and Flex shares finite remaining space or uses
+intrinsic size when unbounded. LinearCrossSize selects content, stretch or fixed cross
+extent. Grid resolves columns before wrapped row heights. Negative preferences normalize
+to zero; empty containers do not acquire a theme-defined fallback cell.
 
 ## Programmatic mutation and commit validity
 
-Built-in leaves and containers are mutated through their typed widget handles between commits. Call
-`update_ui` after every programmatic state or topology change, even when no input is pending, before
-relying on its visual or layout result. Generic `try_update` access conservatively invalidates a
-visible commit. Specialized measurement-preserving setters may leave that commit renderable, but
-derived state such as caret reveal or clamped scrolling is allowed to lag until the next update.
-Applications must not use successful immediate rendering as evidence that synchronization was
-unnecessary.
+Use typed facade setters between phases, then call `Ui::update` before relying on derived
+layout or input results. The runtime synchronizes geometry after each queued input and
+its typed event handlers. Paint observes the resulting commit and rejects stale geometry
+or different drawable dimensions before GPU submission.
 
-Feed raw input through methods such as `mousemove`, `mousedown`, `scroll`, `key`, and `text`; calls
-are queued without coalescing. `Context::key` accepts one backend-normalized `KeyEvent` containing
-logical identity, pressed/released state, the complete modifier snapshot, and repeat state.
-Printable key transitions remain distinct from `text`, which is the authoritative channel for
-composed UTF-8 input. A widget receives the current event as `Option<&UiInputEvent>`, while
-`WidgetUpdateCtx::{mouse_buttons,modifiers}` exposes held state after that event was applied.
+Widget authors must report geometry changes truthfully and latch out-of-band semantic
+changes with WidgetState. Apps must deliver worker/shared-model updates through those
+setters or explicit change recording. The runtime cannot observe arbitrary interior
+mutation, and hidden/clipped widgets are not guaranteed an update. Synchronize state
+before it must affect layout. Resize invalidation does not substitute for reporting
+unrelated semantic changes. See the full [author contract](../../../docs/COM_AUTHORS.md).
+
+Key transitions carry logical identity, pressed/released state, modifiers and repeat.
+Composed UTF-8 text is a separate authoritative input channel. WidgetUpdate copies held
+button/modifier state after applying the current event; events remain FIFO.
 
 Keyboard focus persists after a pointer release and is independent of pointer capture. A widget
 runtime owns one focused node ID; nested containers do not maintain competing mutable focus
@@ -81,7 +93,7 @@ Hidden, clipped, disabled, and pointer-focus-only surfaces are skipped. A modal 
 ordinary-window traversal. A menu uses the common active surface identity plus its concrete
 container's selected direct-child slot; it suspends widget key/text delivery without discarding the
 focused node ID that will resume when the menu closes. Custom widgets opt into focus, traversal, and
-the shared Windows-style action mapping through `Widget::keyboard_behavior`; their default behavior
+the shared Windows-style action mapping through `WidgetProperties::keyboard`; their default behavior
 is keyboard-inert.
 
 An application-addressable popup is a concrete keyboard surface. A widget popup selects its first
@@ -102,65 +114,24 @@ their own semantic role; there is no widget-independent outline pass or hidden f
 Active titles and framed windows likewise select their explicit active chrome state. Deactivated windows
 retain their remembered widget focus and
 enabled client presentation while their frame and title select `ChromeState::Base`. Only an
-explicit `WindowOption::DISABLED` resolves the chrome, intrinsic menu, client backgrounds, child
+explicit `WindowOptions::DISABLED` resolves the chrome, intrinsic menu, client backgrounds, child
 appearances, text, and icons through the theme's `disabled` state.
 
-## Focus performance validation
+## Phase and regression validation
 
-The retained-runtime baseline isolates both repeated Tab traversal and focused-key delivery on a
-single node and a 128-deep production container tree:
+Update and paint visit eligible parents before children and siblings in retained order.
+A successful edit of a later widget is visible when traversal reaches it; editing an
+already visited widget does not rerun it. End-of-event geometry synchronization makes
+all committed changes authoritative before the next input. Errors are observable;
+there is no automatic rollback of already committed semantic/topology edits.
 
-```bash
-cargo test --release retained_runtime_baseline \
-  -- --ignored --nocapture --test-threads=1
-```
+Layout and paint are observational. Do not emit application events or mutate authored
+state through captured COM interfaces in either phase. Use private caches only, release
+interior borrows before calling another component, and return BUSY for recursive entry.
+The shared scoped services and WidgetState enforce authority; authors still own the
+truthfulness of changes and external-state synchronization.
 
-It warms the Tab-stop workspace and routing state before measurement, asserts that both operations
-perform zero allocations, and prints nanoseconds per call for local comparison. Timing has no
-platform-dependent pass threshold. This provides evidence for the focused-ID representation while
-keeping a future route-cache decision dependent on measured tree shapes rather than embedding a
-second persistent ancestry model preemptively.
-
-`ContextFrame` holds the Context borrow needed to serialize paint/submission, but it does not lock independent typed widget or root handles and there is no Context access token. Do not keep a typed-access closure active while retained update/layout/paint can reach that same widget. Framework recursion through a container's scoped child visitor is the intentional exception. If programmatic state changes after the last commit, drop any unsubmitted frame and call `update_ui` again before paint.
-
-The application owns `Context` and its weak typed handles as independent Rust values, so the
-compiler permits explicitly capturing the Context inside a handle-access closure. Do not initiate
-retained traversal that way:
-
-```rust,ignore
-textbox.try_update(|widget| {
-    widget.set_text("hello");
-    context.update_ui(dimensions); // unsupported: the mutable widget borrow is still active
-});
-```
-
-`try_update` holds the concrete widget's checked `RefCell` borrow until its closure returns. If the nested
-layout, update, or paint traversal reaches that widget, the runtime's checked borrow is
-incompatible and panics with a diagnostic naming the runtime phase. This is the reentrancy guard;
-there is no separate Context lock. Finish typed access before committing instead:
-
-```rust
-# use microui_ui::prelude::*;
-# fn synchronize<B: RendererBackend>(
-#     context: &mut Context<B>,
-#     textbox: &TypedWidgetHandle<Textbox>,
-#     dimensions: Dimensioni,
-# ) {
-textbox.set_text("hello").expect("textbox unavailable");
-context.update_ui(dimensions);
-# }
-```
-
-Update and paint visit a node before its eligible children and visit siblings in forward order. A
-successful mutation of a later, currently available state cell is visible when traversal reaches
-it; mutating an already-updated sibling does not rerun that sibling. A container's active child
-visitor borrow makes mutation of that same container return `None`, while another available subtree
-may change. There is no transaction snapshot or rollback, but every input transaction ends with a
-complete layout before the next event is routed.
-
-`Widget::paint` is observational with respect to application-authored semantic state, topology,
-interaction, and committed layout; it may update only private rendering caches. Registered
-custom-render callbacks likewise update only callback-private rendering caches. Mutating retained
-UI through an independently captured typed widget handle during either callback violates the
-contract; it is not a deferred-next-frame update. Commit semantic changes before creating the
-frame.
+Native algorithm fixtures test layout arithmetic, retained cache reuse, focus, routing
+and clipping. The independently built extension additionally verifies real COM identity,
+exclusive attachment, changed/no-change caching, resize, child replacement and exactly-once
+closure. Its execution commands are in [COM_NATIVE.md](../../../docs/COM_NATIVE.md).

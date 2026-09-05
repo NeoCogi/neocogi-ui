@@ -108,19 +108,13 @@ impl LayoutTraversal {
 
         // Leaves expose overflow when their preference exceeds allocation. Containers instead
         // author their child viewport and content extent through the scoped layout context.
-        match &mut node.data {
-            NodeKind::Com(widget) if widget.is_container() => {
-                if !widget.place(self, content, &mut node.state) {
-                    return Dimensioni::new(outer.width, outer.height);
-                }
+        if is_branch {
+            if !node.data.place(self, style, atlas, content, &mut node.state) {
+                return Dimensioni::new(outer.width, outer.height);
             }
-            NodeKind::Widget(_) | NodeKind::Com(_) => {
-                let content_size = Dimensioni::new(outer.width.max(preferred.width).max(0), outer.height.max(preferred.height).max(0));
-                node.state.set_layout(node.state.layout.with_content_size(content_size));
-            }
-            NodeKind::Container(container) => {
-                container.place(self, style, atlas, content, &mut node.state);
-            }
+        } else {
+            let content_size = Dimensioni::new(outer.width.max(preferred.width).max(0), outer.height.max(preferred.height).max(0));
+            node.state.set_layout(node.state.layout.with_content_size(content_size));
         }
 
         // A container may narrow its child clip, but it cannot expand beyond framed content.
