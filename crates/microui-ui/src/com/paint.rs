@@ -1,21 +1,25 @@
 //! Owned recording services keep COM retention independent of stack borrows.
 use super::*;
-use crate::prelude::{AtlasHandle, Skin, FontRole, WidgetOption, ControlRole};
+use crate::prelude::{FontRole, WidgetOption, ControlRole};
 
 #[com_class(interfaces(ITextMetrics))]
 /// Immutable text metrics for one installed resource bundle.
 pub(super) struct Metrics {
-    /// Owning atlas handle; no borrowed glyph table crosses COM.
-    pub(super) atlas: AtlasHandle,
-    /// Complete style snapshot for the same resource revision.
-    pub(super) skin: Skin,
+    /// Exact immutable revision also shared by the concrete built-in objects.
+    pub(super) resources: Rc<super::leaf::Resources>,
 }
 
 impl ITextMetrics for Metrics {
     /// Uses the existing inline-content algorithm so migration preserves sizing.
     fn button_size(&self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<Size, NcStatus> {
         let label = text(input)?;
-        let size = crate::ui_node::widgets::control::inline_content_size(&self.skin, &self.atlas, &crate::FontRef::Role(FontRole::Body), label, None);
+        let size = crate::ui_node::widgets::control::inline_content_size(
+            &self.resources.skin,
+            &self.resources.atlas,
+            &crate::FontRef::Role(FontRole::Body),
+            label,
+            None,
+        );
         Ok(Size { width: size.width, height: size.height })
     }
 }
@@ -24,6 +28,8 @@ impl ITextMetrics for Metrics {
 enum Command {
     /// Solid geometry in the current widget's local coordinates.
     Fill(Rect, u32),
+    /// Complete, validated local atlas triangles copied before the call returns.
+    Triangles(Vec<RenderVertex>),
     /// Owned UTF-8 text and its local allocation.
     Text(Rect, String),
 }
@@ -58,6 +64,25 @@ impl Recorder {
 }
 
 impl IPainter for Recorder {
+    /// Validates the whole batch before publishing any geometry to this scope.
+    fn triangles(&self, scope: PaintScope, input: NcCopyFromBufferOffset<'_, RenderVertex>) -> Result<(), NcStatus> {
+        self.check(scope)?;
+        let vertices = input.as_slice();
+        if input.offset() != 0
+            || !vertices.len().is_multiple_of(3)
+            || vertices
+                .iter()
+                .any(|v| !v.x.is_finite() || !v.y.is_finite() || !v.u.is_finite() || !v.v.is_finite())
+        {
+            return Err(NC_E_INVALID_ARG);
+        }
+        self.recording
+            .commands
+            .try_borrow_mut()
+            .map_err(|_| UI_E_BUSY)?
+            .push(Command::Triangles(vertices.to_vec()));
+        Ok(())
+    }
     /// Stores a checked fill command without accessing the calling stack's painter.
     fn fill(&self, scope: PaintScope, rect: Rect, rgba: u32) -> Result<(), NcStatus> {
         self.check(scope)?;
@@ -120,12 +145,23 @@ impl PaintService {
         self.recording.commands.borrow_mut().clear();
         self.recording.active.set(invocation);
         let guard = Invocation(&self.recording);
-        let result = widget.paint(PaintScope { invocation }, copied_rect(ctx.local_rect()), self.painter.as_com_ref());
+        let state = WidgetPaint {
+            rect: copied_rect(ctx.local_rect()),
+            clip: copied_rect(ctx.local_clip()),
+            enabled: ctx.enabled(),
+            hovered: ctx.hovered(),
+            focused: ctx.focused(),
+            clicked: ctx.clicked(),
+            active: ctx.active(),
+            window_active: ctx.window_active(),
+        };
+        let result = widget.paint(PaintScope { invocation }, state, self.painter.as_com_ref());
         drop(guard);
         result?;
         // No component is called while the queue is borrowed; replay is private Rust code.
         for command in self.recording.commands.borrow_mut().drain(..) {
             match command {
+                Command::Triangles(vertices) => ctx.painter().atlas_triangles(&vertices),
                 Command::Fill(rect, rgba) => ctx.painter().fill_rect(local_rect(rect), super::render::color(rgba)),
                 Command::Text(rect, label) => {
                     let font = ctx.skin().resolve_font_role(ctx.atlas(), FontRole::Body);

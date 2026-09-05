@@ -217,7 +217,7 @@ use nc_com::{
 
 #[com_interface(auto_guid = "microui.plan.Button:v1")]
 /// Button editing capability, independent of its implementation and event transport.
-pub trait IButton {
+pub trait IButton: IWidget {
     /// Replaces the complete UTF-8 label. Offset must be zero; copy before returning.
     fn set_label(&self, label: NcCopyFromBufferOffset<'_, u8>)
         -> Result<(), NcStatus>;

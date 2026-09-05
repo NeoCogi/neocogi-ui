@@ -246,3 +246,22 @@ impl From<CheckboxParameters> for Checkbox {
         }
     }
 }
+
+impl crate::com::leaf::LeafState for Checkbox {
+    /// Synchronizes options inside the one concrete semantic state of a COM leaf.
+    fn set_options(&mut self, options: crate::WidgetOption) { self.opt = options; }
+}
+
+impl Checkbox {
+    /// Borrows the existing semantic label for a synchronous immutable snapshot.
+    pub(crate) fn com_label(&self) -> &str { &self.label }
+    /// Replaces the existing label without publishing a user submission.
+    pub(crate) fn com_set_label(&mut self, text: &str) { self.label.clear(); self.label.push_str(text); }
+}
+
+impl crate::com::leaf::FontState for Checkbox {
+    /// Borrows the semantic font reference already used by layout and painting.
+    fn font(&self) -> &crate::FontRef { &self.font }
+    /// Replaces the same field after the COM resource owner validates the selection.
+    fn set_font(&mut self, font: crate::FontRef) { self.font = font; }
+}

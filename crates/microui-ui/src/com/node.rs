@@ -1,7 +1,7 @@
 //! Concrete COM ownership at the retained node boundary.
 use super::*;
 use super::paint::PaintService;
-use crate::prelude::{AtlasHandle, Dimensioni, WidgetOption, KeyboardBehavior, WidgetUpdateCtx, WidgetPaintCtx, UiInputEvent, ControlRole, Constraints, Skin};
+use crate::prelude::{AtlasHandle, Dimensioni, WidgetOption, KeyboardBehavior, WidgetUpdateCtx, WidgetPaintCtx, UiInputEvent, Constraints, Skin};
 use crate::Change;
 
 /// Node-owned COM capabilities; geometry caches remain in the surrounding node.
@@ -26,10 +26,11 @@ impl ComNode {
     /// Resolves validated COM policy into the private retained router's concrete values.
     pub(crate) fn policy(&self) -> (WidgetOption, KeyboardBehavior, crate::FrameRole) {
         let properties = self.properties.get();
-        let frame = match properties.frame {
-            WidgetFrame::BUTTON => crate::FrameRole::Control(ControlRole::Button),
-            _ => crate::FrameRole::Surface(crate::SurfaceRole::GenericFrame),
-        };
+        let frame = FRAME_ROLES
+            .iter()
+            .find(|(role, _)| *role == properties.frame)
+            .expect("node policy is validated")
+            .1;
         (
             WidgetOption::from_bits_retain(properties.options.bits),
             KeyboardBehavior::from_bits_retain(properties.keyboard),
@@ -156,4 +157,30 @@ impl Drop for ComNode {
             self.host.fail(error);
         }
     }
+}
+
+/// One mapping serves both COM policy decoding and concrete built-in reporting.
+const FRAME_ROLES: &[(WidgetFrame, crate::FrameRole)] = &[
+    (WidgetFrame::GENERIC, crate::FrameRole::Surface(crate::SurfaceRole::GenericFrame)),
+    (WidgetFrame::BUTTON, crate::FrameRole::Control(crate::ControlRole::Button)),
+    (WidgetFrame::CHECKBOX, crate::FrameRole::Control(crate::ControlRole::Checkbox)),
+    (WidgetFrame::TEXT_INPUT, crate::FrameRole::Control(crate::ControlRole::TextInput)),
+    (WidgetFrame::ITEM, crate::FrameRole::Control(crate::ControlRole::Item)),
+    (WidgetFrame::COMBO, crate::FrameRole::Control(crate::ControlRole::Combo)),
+    (WidgetFrame::SLIDER_TRACK, crate::FrameRole::Control(crate::ControlRole::SliderTrack)),
+    (WidgetFrame::SLIDER_THUMB, crate::FrameRole::Control(crate::ControlRole::SliderThumb)),
+    (WidgetFrame::SCROLLBAR_TRACK, crate::FrameRole::Control(crate::ControlRole::ScrollbarTrack)),
+    (WidgetFrame::SCROLLBAR_THUMB, crate::FrameRole::Control(crate::ControlRole::ScrollbarThumb)),
+    (WidgetFrame::CLOSE_BUTTON, crate::FrameRole::Control(crate::ControlRole::CloseButton)),
+    (WidgetFrame::MINIMIZE_BUTTON, crate::FrameRole::Control(crate::ControlRole::MinimizeButton)),
+    (WidgetFrame::MAXIMIZE_BUTTON, crate::FrameRole::Control(crate::ControlRole::MaximizeButton)),
+    (WidgetFrame::RESTORE_BUTTON, crate::FrameRole::Control(crate::ControlRole::RestoreButton)),
+    (WidgetFrame::RESIZE_GRIP, crate::FrameRole::Control(crate::ControlRole::ResizeGrip)),
+    (WidgetFrame::WINDOW, crate::FrameRole::Surface(crate::SurfaceRole::Window)),
+    (WidgetFrame::PANEL, crate::FrameRole::Surface(crate::SurfaceRole::Panel)),
+];
+
+/// Encodes the exact built-in frame family without collapsing input or item roles.
+pub(super) fn frame_contract(role: crate::FrameRole) -> WidgetFrame {
+    FRAME_ROLES.iter().find(|(_, value)| *value == role).expect("all frame roles are represented").0
 }

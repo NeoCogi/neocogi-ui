@@ -84,6 +84,7 @@ pub(super) fn snapshot(ctx: &WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>, 
         Some(KeyboardAction::Collapse) => WidgetAction::COLLAPSE,
     };
     WidgetUpdate {
+        in_hover_root: ctx.in_hover_root(),
         rect: copied_rect(ctx.local_rect()),
         clip: copied_rect(ctx.local_clip()),
         screen: copied_rect(ctx.screen_content_rect()),
@@ -161,4 +162,40 @@ pub(super) fn enqueue(context: &mut crate::Context<super::render::Backend>, even
         UiInput::Text => context.text(text),
     }
     Ok(())
+}
+
+/// Decodes copied COM input for the private built-in algorithms, owning only text.
+pub(super) fn local_event(event: WidgetEventAbi, bytes: NcCopyFromBufferOffset<'_, u8>) -> Result<Option<UiInputEvent>, NcStatus> {
+    let (event, text) = decode_widget_event(event, bytes)?;
+    /// Copies one ABI point into the private math value.
+    fn point(value: Point) -> crate::Vec2i {
+        crate::Vec2i::new(value.x, value.y)
+    }
+    Ok(Some(match event {
+        WidgetEvent::None => return Ok(None),
+        WidgetEvent::Cancel => UiInputEvent::Cancel,
+        WidgetEvent::Move { position, delta } => UiInputEvent::MouseMove {
+            pos: point(position),
+            delta: point(delta),
+        },
+        WidgetEvent::Drag { position, delta, buttons } => UiInputEvent::MouseDrag {
+            pos: point(position),
+            delta: point(delta),
+            buttons: crate::MouseButton::from_bits_retain(u32::from(buttons)),
+        },
+        WidgetEvent::Down { position, buttons } => UiInputEvent::MouseDown {
+            pos: point(position),
+            button: crate::MouseButton::from_bits_retain(u32::from(buttons)),
+        },
+        WidgetEvent::Up { position, buttons } => UiInputEvent::MouseUp {
+            pos: point(position),
+            button: crate::MouseButton::from_bits_retain(u32::from(buttons)),
+        },
+        WidgetEvent::Scroll { position, delta } => UiInputEvent::Scroll {
+            pos: point(position),
+            delta: point(delta),
+        },
+        WidgetEvent::Key(event) => UiInputEvent::Key { event: host_key(event)? },
+        WidgetEvent::Text => UiInputEvent::Text { text: text.to_owned() },
+    }))
 }

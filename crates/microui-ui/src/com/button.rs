@@ -1,16 +1,14 @@
 //! Concrete button storage and its exclusive, typed event subscription.
 use super::*;
-use microui_contracts::widget::WidgetState;
+use super::leaf::{Leaf, Resources};
 use nc_com::{INcStringAbi, NcString};
 use std::collections::VecDeque;
 
-#[com_class(interfaces(IButton, ILeafLayout, IButtonEvents))]
+#[com_class(interfaces(IButton, ILeafLayout, IButtonEvents, IFontStyle, IIconContent, IButtonStyle))]
 /// One authoritative button allocation shared by editing, layout, paint and input.
 pub(super) struct Button {
     /// Shared mount, closure and geometry rules live inside this one allocation.
-    state: WidgetState,
-    /// Current UTF-8 label; snapshots own independent storage.
-    label: RefCell<String>,
+    leaf: Leaf<crate::Button>,
     /// Producer owns queue data, never the application's sink or subscription.
     queue: Rc<Queue>,
 }
@@ -28,10 +26,9 @@ struct Queue {
 
 impl Button {
     /// Constructs an unmounted concrete button for the supplied runtime.
-    pub(super) fn create(host: ComPtr<IWidgetHostAbi>) -> ComPtr<IButtonAbi> {
+    pub(super) fn create(host: ComPtr<IWidgetHostAbi>, resources: Rc<Resources>) -> ComPtr<IButtonAbi> {
         Self::from_value(Self {
-            state: WidgetState::new(host, WidgetOptions::FRAME),
-            label: RefCell::new(String::new()),
+            leaf: Leaf::new(host, resources, crate::Button::from(crate::ButtonParameters::new(""))),
             queue: Rc::default(),
         })
         .query()
@@ -42,92 +39,48 @@ impl Button {
 impl IButton for Button {
     /// Validates before committing and only dirties geometry when text actually differs.
     fn set_label(&self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        self.state.writable()?;
+        self.leaf.state.writable()?;
         let input = text(input)?;
-        let mut label = self.label.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
-        if *label != input {
-            label.clear();
-            label.push_str(input);
-            self.state.record_change(GeometryChange::CHANGED);
+        let mut core = self.leaf.core.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
+        if core.com_label() != input {
+            core.com_set_label(input);
+            self.leaf.state.record_change(GeometryChange::CHANGED);
         }
         Ok(())
     }
     /// Returns an owned immutable snapshot, never a borrow into widget storage.
     fn label(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
-        self.state.readable()?;
-        Ok(NcString::from_utf8_str(&self.label.try_borrow().map_err(|_| UI_E_BUSY)?))
+        self.leaf.state.readable()?;
+        Ok(NcString::from_utf8_str(self.leaf.core.try_borrow().map_err(|_| UI_E_BUSY)?.com_label()))
     }
 }
 
-impl IWidget for Button {
-    /// Returns the runtime's common identity service.
-    fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
-        Ok(self.state.host().add_ref())
-    }
-    /// Commits the sole attachment after the manager has validated ownership/capabilities.
-    fn mount(&self) -> Result<(), NcStatus> {
-        self.state.mount()
-    }
-    /// Idempotently closes ordinary events and all widget capabilities.
-    fn close(&self) -> Result<(), NcStatus> {
-        self.state.close()?;
+leaf_widget_impl!(Button);
+
+impl Button {
+    /// Closes the inherited widget and clears ordinary queued submissions.
+    fn close_widget(&self) -> Result<(), NcStatus> {
+        self.leaf.state.close()?;
         self.queue.closed.set(true);
         self.queue.pending.try_borrow_mut().map_err(|_| UI_E_BUSY)?.clear();
         Ok(())
     }
 
-    /// Declares button appearance and the shared Enter/Space/Tab routing policy.
-    fn properties(&self) -> Result<WidgetProperties, NcStatus> {
-        Ok(WidgetProperties {
-            options: self.state.options()?,
-            keyboard: 2 | 4 | 8,
-            frame: WidgetFrame::BUTTON,
-        })
-    }
-    /// Uses the same validated option mutation rules as every other widget class.
-    fn set_options(&self, options: WidgetOptions) -> Result<(), NcStatus> {
-        self.state.set_options(options)
-    }
-
-    /// Enqueues one immutable submission after the runtime resolves pointer/key activation.
-    fn update(&self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
-        self.state.writable()?;
-        decode_widget_event(event, text)?;
+    /// Uses the shared button algorithm and queues an immutable user-submission snapshot.
+    fn update_widget(&self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
+        let change = self.leaf.update(state, event, text)?;
         if state.action == WidgetAction::ACTIVATE && self.queue.connected.get() && !self.queue.closed.get() {
             let snapshot = self.label()?;
             self.queue.pending.try_borrow_mut().map_err(|_| UI_E_BUSY)?.push_back(snapshot);
         }
-        // Submission changes neither preferred geometry nor child placement.
-        Ok(GeometryChange::NO_CHANGE)
-    }
-
-    /// Drains the accumulated programmatic geometry marker exactly once.
-    fn take_change(&self) -> Result<GeometryChange, NcStatus> {
-        self.state.take_change()
-    }
-    /// Records text synchronously; the painter owns all recorded storage.
-    fn paint(&self, scope: PaintScope, rect: Rect, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
-        self.state.readable()?;
-        let label = self.label.try_borrow().map_err(|_| UI_E_BUSY)?.clone();
-        painter.text(scope, rect, NcCopyFromBufferOffset::new(0, label.as_bytes()))
-    }
-}
-
-impl ILeafLayout for Button {
-    /// Uses shared theme/font metrics without retaining the measurement transaction.
-    fn measure(&self, bounds: LayoutLimits, metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
-        self.state.readable()?;
-        let label = self.label.try_borrow().map_err(|_| UI_E_BUSY)?.clone();
-        bounds.width.validate()?;
-        bounds.height.validate()?;
-        metrics.button_size(NcCopyFromBufferOffset::new(0, label.as_bytes()))
+        Ok(change)
     }
 }
 
 impl IButtonEvents for Button {
     /// Retains the typed sink only inside the returned application-owned lease.
     fn subscribe(&self, sink: ComRef<'_, IButtonSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.state.writable()?;
+        self.leaf.state.writable()?;
         if self.queue.connected.replace(true) {
             return Err(UI_E_BUSY);
         }
@@ -208,5 +161,25 @@ impl Drop for Button {
         if let Ok(mut pending) = self.queue.pending.try_borrow_mut() {
             pending.clear();
         }
+    }
+}
+
+font_style_impl!(Button);
+
+icon_content_impl!(Button);
+impl IButtonStyle for Button {
+    /// Reports the current fill mask from the sole concrete button state.
+    fn fill_states(&self) -> Result<FillStates, NcStatus> {
+        self.leaf.state.readable()?;
+        Ok(FillStates {
+            bits: self.leaf.core.try_borrow().map_err(|_| UI_E_BUSY)?.com_fill().bits() as u8,
+        })
+    }
+    /// Rejects unknown flags before committing a paint-only change.
+    fn set_fill_states(&self, states: FillStates) -> Result<(), NcStatus> {
+        self.leaf.state.writable()?;
+        let fill = crate::WidgetFillOption::from_bits(u32::from(states.bits)).ok_or(NC_E_INVALID_ARG)?;
+        self.leaf.core.try_borrow_mut().map_err(|_| UI_E_BUSY)?.com_set_fill(fill);
+        Ok(())
     }
 }

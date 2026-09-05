@@ -160,7 +160,9 @@ impl ILeafLayout for RetainingWidget {
     /// Checks reentry and mutation rejection while returning deterministic preferred geometry.
     fn measure(&self, _bounds: LayoutLimits, _metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
         self.probe.measures.set(self.probe.measures.get() + 1);
-        if self.probe.fail_measure.get() { return Err(NC_E_INVALID_ARG); }
+        if self.probe.fail_measure.get() {
+            return Err(NC_E_INVALID_ARG);
+        }
         assert_eq!(self.runtime.update(SIZE), Err(UI_E_BUSY));
         assert_eq!(self.button.set_label(NcCopyFromBufferOffset::new(0, b"forbidden")), Err(UI_E_BUSY));
         assert_eq!(self.lifetime.close(), Err(UI_E_BUSY));
@@ -219,13 +221,22 @@ impl IWidget for RetainingWidget {
         self.button.take_change()
     }
     /// Retains authority and probes old tokens while a later scope is active.
-    fn paint(&self, scope: PaintScope, rect: Rect, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
+    fn paint(&self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
         assert_eq!(self.runtime.update(SIZE), Err(UI_E_BUSY));
         assert_eq!(self.button.set_label(NcCopyFromBufferOffset::new(0, b"forbidden")), Err(UI_E_BUSY));
         for (old, expired) in self.probe.painters.borrow().iter() {
-            assert_eq!(old.fill(*expired, rect, 0), Err(UI_E_EXPIRED_SCOPE));
+            assert_eq!(old.fill(*expired, state.rect, 0), Err(UI_E_EXPIRED_SCOPE));
+            assert_eq!(old.triangles(*expired, NcCopyFromBufferOffset::new(0, &[])), Err(UI_E_EXPIRED_SCOPE));
         }
-        painter.fill(scope, rect, 0xff00ff00)?;
+        // Malformed bulk batches fail transactionally before a valid command follows.
+        assert_eq!(painter.triangles(scope, NcCopyFromBufferOffset::new(1, &[])), Err(NC_E_INVALID_ARG));
+        assert_eq!(
+            painter.triangles(scope, NcCopyFromBufferOffset::new(0, &[RenderVertex::default()])),
+            Err(NC_E_INVALID_ARG)
+        );
+        let malformed = [RenderVertex { x: f32::NAN, ..RenderVertex::default() }; 3];
+        assert_eq!(painter.triangles(scope, NcCopyFromBufferOffset::new(0, &malformed)), Err(NC_E_INVALID_ARG));
+        painter.fill(scope, state.rect, 0xff00ff00)?;
         self.probe.painters.borrow_mut().push((painter.add_ref(), scope));
         if self.probe.fail_paint.get() { Err(NC_E_INVALID_ARG) } else { Ok(()) }
     }
@@ -519,7 +530,10 @@ fn failed_com_measurement_retries_after_component_recovery() {
     let probe = Rc::new(WidgetProbe::default());
     probe.fail_measure.set(true);
     let object = RetainingWidget::from_value(RetainingWidget {
-        lifetime: button.query().unwrap(), button, runtime: runtime.clone(), probe: probe.clone(),
+        lifetime: button.query().unwrap(),
+        button,
+        runtime: runtime.clone(),
+        probe: probe.clone(),
     });
     let window = mount(&runtime, &object.query().unwrap()).unwrap();
     assert_eq!(runtime.update(SIZE), Err(NC_E_INVALID_ARG));
@@ -531,4 +545,314 @@ fn failed_com_measurement_retries_after_component_recovery() {
     let (renderer, _) = renderer();
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     window.close().unwrap();
+}
+
+/// The static facade observes one inherited state, normalized text and honest setter markers.
+#[test]
+fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validation() {
+    let runtime = runtime();
+    let ui = microui_redux::com::Ui::from_interface(runtime.clone()).unwrap();
+    let checkbox = ui.widgets().checkbox("Check", false).unwrap();
+    let common = checkbox.node_interface().unwrap();
+    common.take_change().unwrap();
+    checkbox.set_checked(true).unwrap();
+    assert!(checkbox.checked().unwrap());
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
+    checkbox.set_label("A longer checkbox").unwrap();
+    assert_eq!(common.take_change().unwrap(), GeometryChange::CHANGED);
+    assert_eq!(checkbox.label().unwrap(), "A longer checkbox");
+    checkbox.set_font_role(TextFontRole::BODY).unwrap();
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
+    assert_eq!(checkbox.set_named_font("missing"), Err(nc_com::NC_E_NOT_FOUND));
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
+    checkbox.set_named_font("body").unwrap();
+    assert_eq!(common.take_change().unwrap(), GeometryChange::CHANGED);
+
+    let textbox = ui.widgets().textbox("é\r\n☃").unwrap();
+    assert_eq!(textbox.text().unwrap(), "é☃");
+    assert_eq!(textbox.cursor().unwrap(), 5);
+    textbox.set_cursor(4).unwrap();
+    assert_eq!(textbox.cursor().unwrap(), 2);
+    let editor = textbox.node_interface().unwrap().query::<ITextEditorAbi>().unwrap();
+    let text = editor.query::<ITextContentAbi>().unwrap();
+    assert_eq!(editor.query::<IUnknown>().unwrap().as_ptr(), text.query::<IUnknown>().unwrap().as_ptr());
+    let common = textbox.node_interface().unwrap();
+    common.take_change().unwrap();
+    textbox.set_text("é\n☃").unwrap();
+    assert_eq!(textbox.cursor().unwrap(), 5);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
+    assert_eq!(textbox.as_interface().set_text(NcCopyFromBufferOffset::new(0, &[0xff])), Err(NC_E_INVALID_ARG));
+    assert_eq!(textbox.text().unwrap(), "é☃");
+    textbox.clear().unwrap();
+    assert_eq!(textbox.cursor().unwrap(), 0);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::CHANGED);
+
+    let block = ui.widgets().text_block("one\r\ntwo", TextWrapping::NONE).unwrap();
+    assert_eq!(block.text().unwrap(), "one\ntwo");
+    let common = block.node_interface().unwrap();
+    common.take_change().unwrap();
+    block.set_wrapping(TextWrapping::WORD).unwrap();
+    assert_eq!(block.wrapping().unwrap(), TextWrapping::WORD);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::CHANGED);
+    assert_eq!(block.set_wrapping(TextWrapping::from_raw(99)), Err(NC_E_INVALID_ARG));
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
+    runtime.close().unwrap();
+    assert_eq!(textbox.text(), Err(UI_E_CLOSED));
+    assert_eq!(checkbox.set_checked(false), Err(UI_E_CLOSED));
+}
+
+/// Numeric/range setters keep validation atomic and distinguish paint-only values.
+#[test]
+fn builtin_numeric_and_scrollbar_facades_reject_invalid_inputs_without_losing_state() {
+    let runtime = runtime();
+    let ui = microui_redux::com::Ui::from_interface(runtime).unwrap();
+    let slider = ui
+        .widgets()
+        .slider(SliderOptions {
+            value: 5.0,
+            low: 0.0,
+            high: 10.0,
+            step: 1.0,
+            precision: 1,
+        })
+        .unwrap();
+    let common = slider.node_interface().unwrap();
+    common.take_change().unwrap();
+    assert_eq!(slider.set_value(f32::NAN), Err(NC_E_INVALID_ARG));
+    assert_eq!(slider.value().unwrap(), 5.0);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
+    slider.set_value(200.0).unwrap();
+    assert_eq!(slider.value().unwrap(), 10.0);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::CHANGED);
+    assert!(
+        ui.widgets()
+            .slider(SliderOptions {
+                value: 0.0,
+                low: 2.0,
+                high: 1.0,
+                step: 0.0,
+                precision: 0
+            })
+            .is_err()
+    );
+    assert!(ui.widgets().number(NumberOptions { value: 0.0, step: 1.0, precision: 255 }).is_err());
+    let number = ui.widgets().number(NumberOptions { value: 4.0, step: 0.5, precision: 2 }).unwrap();
+    number.set_value(-100.0).unwrap();
+    assert_eq!(number.value().unwrap(), -100.0);
+    assert!(!number.is_editing().unwrap());
+
+    let scrollbar = ui
+        .widgets()
+        .scrollbar(ScrollRange {
+            axis: ScrollAxis::VERTICAL,
+            viewport: 50,
+            content: 100,
+            offset: 80,
+        })
+        .unwrap();
+    assert_eq!(scrollbar.range().unwrap().offset, 50);
+    let common = scrollbar.node_interface().unwrap();
+    common.take_change().unwrap();
+    assert_eq!(scrollbar.set_lengths(-1, 100), Err(NC_E_INVALID_ARG));
+    assert_eq!(scrollbar.range().unwrap().viewport, 50);
+    scrollbar.set_lengths(90, 100).unwrap();
+    assert_eq!(scrollbar.range().unwrap().offset, 10);
+    scrollbar.set_offset(-1).unwrap();
+    assert_eq!(scrollbar.range().unwrap().offset, 0);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
+    let swatch = ui.widgets().color_swatch(0xff102030, "RGBA").unwrap();
+    let common = swatch.node_interface().unwrap();
+    common.take_change().unwrap();
+    swatch.set_fill(0xffaabbcc).unwrap();
+    assert_eq!(swatch.fill().unwrap(), 0xffaabbcc);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
+}
+
+/// Real routing and complete painting exercise all migrated classes through the facade.
+#[test]
+fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
+    let runtime = runtime();
+    let ui = microui_redux::com::Ui::from_interface(runtime.clone()).unwrap();
+    let textbox = ui.widgets().textbox("start").unwrap();
+    let window = ui.window("editor", RECT, &textbox).unwrap();
+    ui.input(
+        UiInput::Key(KeyStroke {
+            key: KeyCode::TAB,
+            value: 0,
+            pressed: true,
+            repeat: false,
+            modifiers: 0,
+        }),
+        "",
+    )
+    .unwrap();
+    ui.input(UiInput::Text, "é\n☃").unwrap();
+    ui.update(SIZE).unwrap();
+    assert_eq!(textbox.text().unwrap(), "starté☃");
+    assert_eq!(textbox.cursor().unwrap(), 10);
+    let (renderer, _) = renderer();
+    ui.render(SIZE, renderer.as_com_ref()).unwrap();
+    window.close().unwrap();
+
+    let checkbox = ui.widgets().checkbox("toggle", false).unwrap();
+    let window = ui.window("checkbox", RECT, &checkbox).unwrap();
+    ui.input(UiInput::Cancel, "").unwrap();
+    ui.input(
+        UiInput::Key(KeyStroke {
+            key: KeyCode::TAB,
+            value: 0,
+            pressed: true,
+            repeat: false,
+            modifiers: 0,
+        }),
+        "",
+    )
+    .unwrap();
+    ui.input(
+        UiInput::Key(KeyStroke {
+            key: KeyCode::SPACE,
+            value: 0,
+            pressed: true,
+            repeat: false,
+            modifiers: 0,
+        }),
+        "",
+    )
+    .unwrap();
+    ui.update(SIZE).unwrap();
+    assert!(checkbox.checked().unwrap());
+    ui.render(SIZE, renderer.as_com_ref()).unwrap();
+    window.close().unwrap();
+
+    let roots = [
+        ui.widgets().button("button").unwrap().node_interface().unwrap(),
+        ui.widgets().text_block("display\ntext", TextWrapping::WORD).unwrap().node_interface().unwrap(),
+        ui.widgets()
+            .slider(SliderOptions {
+                value: 2.0,
+                low: 0.0,
+                high: 10.0,
+                step: 1.0,
+                precision: 0,
+            })
+            .unwrap()
+            .node_interface()
+            .unwrap(),
+        ui.widgets()
+            .number(NumberOptions { value: 42.0, step: 1.0, precision: 0 })
+            .unwrap()
+            .node_interface()
+            .unwrap(),
+        ui.widgets().color_swatch(0xff00ffff, "swatch").unwrap().node_interface().unwrap(),
+        ui.widgets().list_item("item").unwrap().node_interface().unwrap(),
+        ui.widgets().list_box("list box").unwrap().node_interface().unwrap(),
+        ui.widgets()
+            .scrollbar(ScrollRange {
+                axis: ScrollAxis::VERTICAL,
+                viewport: 40,
+                content: 120,
+                offset: 30,
+            })
+            .unwrap()
+            .node_interface()
+            .unwrap(),
+    ];
+    for root in roots {
+        let window = mount(&runtime, &root).unwrap();
+        ui.update(SIZE).unwrap();
+        ui.render(SIZE, renderer.as_com_ref()).unwrap();
+        window.close().unwrap();
+        assert_eq!(root.properties(), Err(UI_E_CLOSED));
+    }
+}
+
+/// Copied paint observations survive the deliberately failing recorder's call.
+#[derive(Default)]
+struct BuiltinPaintProbe {
+    /// Exact local geometry copied by the bulk boundary.
+    vertices: RefCell<Vec<RenderVertex>>,
+    /// One recoverable recorder failure, used to verify workspace restoration.
+    fail: Cell<bool>,
+}
+
+#[com_class(interfaces(IPainter))]
+/// A foreign-style painter that reenters a read-only editing method during copying.
+struct BuiltinPainter {
+    /// The producer's editing projection, independent of its paint helper's storage.
+    button: ComPtr<IButtonAbi>,
+    /// Test-owned geometry and error observations.
+    probe: Rc<BuiltinPaintProbe>,
+}
+impl IPainter for BuiltinPainter {
+    /// Confirms no semantic RefCell guard spans this outward COM call.
+    fn triangles(&self, _scope: PaintScope, vertices: NcCopyFromBufferOffset<'_, RenderVertex>) -> Result<(), NcStatus> {
+        assert_eq!(self.button.label()?.to_string()?, "AB");
+        *self.probe.vertices.borrow_mut() = vertices.as_slice().to_vec();
+        if self.probe.fail.replace(false) { Err(UI_E_RENDER) } else { Ok(()) }
+    }
+    /// Built-in painting uses the bulk path after resolving its complete theme state.
+    fn fill(&self, _scope: PaintScope, _rect: Rect, _rgba: u32) -> Result<(), NcStatus> {
+        panic!("expected one complete bulk batch")
+    }
+    /// Text expansion stays with the UI implementation and its immutable atlas.
+    fn text(&self, _scope: PaintScope, _rect: Rect, _text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        panic!("expected UI-owned text expansion")
+    }
+}
+
+/// Button style changes retain the full algorithm and failed copying does not poison reuse.
+#[test]
+fn builtin_bulk_paint_preserves_alignment_icons_and_releases_semantic_borrows() {
+    let ui = microui_redux::com::Ui::from_interface(runtime()).unwrap();
+    let button = ui.widgets().button("AB").unwrap();
+    button.set_options(WidgetOptions::NONE).unwrap();
+    button.set_fill_states(FillStates::NONE).unwrap();
+    let common = button.node_interface().unwrap();
+    common.take_change().unwrap();
+    assert_eq!(button.set_fill_states(FillStates { bits: 8 }), Err(NC_E_INVALID_ARG));
+    assert_eq!(button.fill_states().unwrap(), FillStates::NONE);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
+    button.set_icon_role(ContentIcon::CHECK).unwrap();
+    assert_eq!(common.take_change().unwrap(), GeometryChange::CHANGED);
+    button.set_icon_role(ContentIcon::CHECK).unwrap();
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
+    assert_eq!(button.set_named_icon("missing"), Err(nc_com::NC_E_NOT_FOUND));
+    button.set_icon_role(ContentIcon::NONE).unwrap();
+    assert_eq!(button.label().unwrap(), "AB");
+    let probe = Rc::new(BuiltinPaintProbe::default());
+    let painter: ComPtr<IPainterAbi> = BuiltinPainter::from_value(BuiltinPainter {
+        button: common.query().unwrap(),
+        probe: probe.clone(),
+    })
+    .query()
+    .unwrap();
+    let bounds = Rect { x: 0, y: 0, width: 100, height: 30 };
+    let paint = WidgetPaint {
+        rect: bounds,
+        clip: bounds,
+        enabled: true,
+        window_active: true,
+        ..WidgetPaint::default()
+    };
+    let scope = PaintScope { invocation: 1 };
+    probe.fail.set(true);
+    assert_eq!(common.paint(scope, paint, painter.as_com_ref()), Err(UI_E_RENDER));
+    common.paint(scope, paint, painter.as_com_ref()).unwrap();
+    let left = probe.vertices.borrow().iter().map(|v| v.x).reduce(f32::min).unwrap();
+    button.set_options(WidgetOptions::ALIGN_RIGHT).unwrap();
+    common.paint(scope, paint, painter.as_com_ref()).unwrap();
+    let right = probe.vertices.borrow().iter().map(|v| v.x).reduce(f32::min).unwrap();
+    assert!(right > left + 40.0, "right alignment must reach the semantic paint algorithm");
+    assert!(probe.vertices.borrow().iter().all(|v| v.x >= 0.0 && v.x <= 100.0 && v.y >= 0.0 && v.y <= 30.0));
+    assert_eq!(
+        common.paint(
+            scope,
+            WidgetPaint {
+                rect: Rect { width: -1, ..bounds },
+                ..paint
+            },
+            painter.as_com_ref()
+        ),
+        Err(NC_E_INVALID_ARG)
+    );
 }

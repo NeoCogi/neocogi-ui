@@ -26,13 +26,13 @@ fn vertex(value: Vertex) -> RenderVertex {
 
 /// Owned frame storage is reused; invocation checks prevent stale readers observing reuse.
 #[derive(Default)]
-struct Storage {
+pub(super) struct Storage {
     /// Zero outside an active renderer call.
     active: Cell<u64>,
     /// Invocation sequence is never allowed to wrap.
     next: Cell<u64>,
     /// Final ordered triangles; no COM call per vertex or glyph.
-    vertices: RefCell<Vec<RenderVertex>>,
+    pub(super) vertices: RefCell<Vec<RenderVertex>>,
 }
 
 #[com_class(interfaces(IRenderStream))]
@@ -57,8 +57,19 @@ impl IRenderStream for Stream {
     }
 }
 
-/// Temporary native RendererBackend adapter; tessellation stays in the existing UI engine.
+/// Final destination of geometry prepared by the single concrete backend type.
+#[derive(Copy, Clone, Eq, PartialEq)]
+enum Destination {
+    /// A built-in paint invocation returns its owned bulk vertices to a painter.
+    Recording,
+    /// A complete retained frame calls the selected external renderer once.
+    Renderer,
+}
+
+/// One concrete geometry backend for local paint recording and complete COM frame submission.
 pub(super) struct Backend {
+    /// Selects local recording or final submission without duplicating the executor type.
+    destination: Destination,
     /// Current validated resource atlas used by both measurement and display-list execution.
     atlas: AtlasHandle,
     /// Widget recording failures prevent submitting even a partially built frame.
@@ -79,12 +90,20 @@ impl Backend {
             .query()
             .expect("Stream declares IRenderStream");
         Self {
+            destination: Destination::Renderer,
             atlas,
             host,
             storage,
             stream,
             target: Rc::default(),
         }
+    }
+    /// Reuses the same backend/executor monomorphization for local widget geometry.
+    pub(super) fn recording(atlas: AtlasHandle, host: Rc<HostState>) -> (Self, Rc<Storage>) {
+        let mut backend = Self::new(atlas, host);
+        backend.destination = Destination::Recording;
+        let storage = backend.storage.clone();
+        (backend, storage)
     }
 }
 
@@ -138,6 +157,9 @@ impl RendererFrame for Frame<'_> {
         }
         if let Some(error) = self.backend.host.error.get() {
             return Err(FrameError::new(error.to_string()));
+        }
+        if self.backend.destination == Destination::Recording {
+            return Ok(());
         }
         let storage = &self.backend.storage;
         let invocation = storage.next.get().checked_add(1).ok_or_else(|| FrameError::new("frame invocation exhausted"))?;

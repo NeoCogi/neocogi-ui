@@ -156,3 +156,47 @@ the component error, leaves the node and its ancestor path dirty, and retries on
 a later update. Widget authors should return an error for temporarily unavailable
 measurement inputs and resume returning a valid nonnegative size after recovery.
 Do not return a fabricated successful size to hide a failed resource lookup.
+
+## Built-in editing and painting
+
+Built-in leaf classes compose one concrete semantic value into their COM
+allocation. `ITextContent` shares text snapshots/replacement; `ITextEditor` adds
+byte-cursor editing, and `ITextbox` inherits both before reaching `IWidget`.
+Slider and Number similarly inherit `INumericValue`. Calls through those bases
+edit the same state used by input, measurement and painting.
+
+A Textbox removes CR and LF during construction, replacement and committed text
+input. Its cursor is a byte offset at a Unicode scalar boundary, not a glyph,
+grapheme or visual column. Replacing text moves the cursor to the end even if
+normalization leaves the text unchanged; that cursor-only operation does not
+invalidate measurement. TextBlock normalizes CR/CRLF to LF. Word wrapping breaks
+at ASCII spaces and keeps an oversized word intact. These are explicit existing
+policies, not promises of grapheme editing or a full Unicode line-break engine.
+
+Numeric constructors validate finite values, finite ascending slider spans,
+nonnegative steps and precision through `f32::DIGITS`. Setters reject nonfinite
+values; sliders clamp valid values to their range. Checkbox checked state, swatch
+color, scrollbar offset/range and button center-fill selection affect paint only.
+Programmatic setters do not manufacture user-originated events. Label, font,
+icon, wrapping and numeric-label changes retain a sticky geometry marker.
+
+Font and icon capabilities select semantic roles or resolve an exact named
+resource once in the widget's runtime bundle. Unknown names leave the previous
+selection intact. Normal measurement and painting retain stable resolved
+identities and perform no COM calls per glyph. FillStates controls unframed
+button center fill; the outer FRAME option remains owned by retained traversal.
+
+Call `WidgetUpdate::validate()` or `WidgetPaint::validate()` before consuming a
+copied phase snapshot, and decode event/text input with `decode_widget_event`.
+Painting receives effective clipping, enabled/hover/focus/press state and logical
+window activation as copied values. It has no mutable runtime context.
+
+`IPainter::triangles` records a complete local atlas batch with one copied call.
+The input offset is zero, its length is a multiple of three, and every position
+and UV component is finite. The runtime validates the whole batch before
+publishing any geometry, applies the widget origin and final viewport clipping,
+and preserves painter order. Built-in classes reuse their existing UI geometry
+algorithms before making this call; they release semantic and scratch borrows
+first. A recorder error restores the reusable workspace. This atlas path does
+not represent application GPU scenes or external texture ownership; those use
+the renderer capabilities specified in the renderer migration.

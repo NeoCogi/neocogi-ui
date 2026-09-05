@@ -540,3 +540,13 @@ mod tests {
         assert!((i64::from(geometry.centered_offset(Vec2i::new(10 + 146 + 4, 20))) - i64::from(offset)).abs() <= 1);
     }
 }
+
+impl crate::com::leaf::LeafState for Scrollbar {
+    /// Synchronizes options inside the one concrete semantic state of a COM leaf.
+    fn set_options(&mut self, options: crate::WidgetOption) { self.opt = options; }
+}
+
+impl Scrollbar {
+    /// Copies range metadata without introducing a second source of scrollbar truth.
+    pub(crate) fn com_lengths(&self) -> (i32, i32) { (self.viewport_len, self.content_len) }
+}

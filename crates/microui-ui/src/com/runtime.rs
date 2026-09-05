@@ -5,7 +5,7 @@ use super::{
     paint::{Metrics, PaintService},
     render::Backend,
 };
-use crate::prelude::{AtlasHandle, Dimensioni, Node, Skin};
+use crate::prelude::{AtlasHandle, Dimensioni, Node};
 use crate::Context;
 use super::node::ComNode;
 mod windows;
@@ -15,12 +15,10 @@ use windows::NativeSurface;
 pub fn create_runtime(atlas: AtlasHandle) -> ComPtr<IUiRuntimeAbi> {
     let state = Rc::new(HostState::default());
     let host: ComPtr<IWidgetHostAbi> = WidgetHost::from_value(WidgetHost { state: state.clone() }).query().expect("host interface");
-    let metrics = Metrics::from_value(Metrics {
-        skin: Skin::from_atlas(&atlas),
-        atlas: atlas.clone(),
-    })
-    .query()
-    .expect("metrics interface");
+    let resources = super::leaf::Resources::new(atlas.clone(), state.clone());
+    let metrics = Metrics::from_value(Metrics { resources: resources.clone() })
+        .query()
+        .expect("metrics interface");
     let backend = Backend::new(atlas, state.clone());
     let target = backend.target.clone();
     Runtime::from_value(Runtime {
@@ -30,6 +28,7 @@ pub fn create_runtime(atlas: AtlasHandle) -> ComPtr<IUiRuntimeAbi> {
             state,
             host,
             metrics,
+            resources,
             painter: PaintService::new(),
             target,
             dimensions: Cell::new(Size::default()),
@@ -59,6 +58,8 @@ struct RuntimeStorage {
     host: ComPtr<IWidgetHostAbi>,
     /// Immutable resource service cached once rather than allocated during measurement.
     metrics: ComPtr<ITextMetricsAbi>,
+    /// Built-in semantic state and geometry share this immutable resource revision.
+    resources: Rc<super::leaf::Resources>,
     /// Reusable owned recorder shared by sequential widget paint calls.
     painter: PaintService,
     /// Renderer is retained only during explicit synchronous submission.
@@ -118,10 +119,122 @@ impl Drop for RuntimeStorage {
 }
 
 impl IUiFactory for Runtime {
+    /// Validates complete checkbox initialization before allocating its COM identity.
+    fn create_checkbox(&self, checked: bool, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ICheckboxAbi>, NcStatus> {
+        self.storage.host.check_mutation()?;
+        let parameters = crate::CheckboxParameters::new(text(label)?, checked);
+        Ok(super::leaves::Checkbox::create(
+            self.storage.host.clone(),
+            self.storage.resources.clone(),
+            crate::Checkbox::from(parameters),
+        ))
+    }
+    /// Validates complete textbox initialization before allocating its COM identity.
+    fn create_textbox(&self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ITextboxAbi>, NcStatus> {
+        self.storage.host.check_mutation()?;
+        let parameters = crate::TextboxParameters::new(text(input)?);
+        Ok(super::leaves::Textbox::create(
+            self.storage.host.clone(),
+            self.storage.resources.clone(),
+            crate::Textbox::from(parameters),
+        ))
+    }
+    /// Validates complete text block initialization before allocating its COM identity.
+    fn create_text_block(&self, input: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping) -> Result<ComPtr<ITextBlockAbi>, NcStatus> {
+        self.storage.host.check_mutation()?;
+        let parameters = crate::TextBlockParameters::with_wrap(text(input)?, super::leaves::local_wrap(wrapping)?);
+        Ok(super::leaves::TextBlock::create(
+            self.storage.host.clone(),
+            self.storage.resources.clone(),
+            crate::TextBlock::from(parameters),
+        ))
+    }
+    /// Validates complete slider initialization before allocating its COM identity.
+    fn create_slider(&self, options: SliderOptions) -> Result<ComPtr<ISliderAbi>, NcStatus> {
+        self.storage.host.check_mutation()?;
+        let parameters = crate::SliderParameters::with_opt(
+            options.value,
+            options.low,
+            options.high,
+            options.step,
+            crate::DecimalPrecision::try_from(usize::from(options.precision)).map_err(|_| NC_E_INVALID_ARG)?,
+            crate::WidgetOption::FRAME,
+        )
+        .map_err(|_| NC_E_INVALID_ARG)?;
+        Ok(super::leaves::Slider::create(
+            self.storage.host.clone(),
+            self.storage.resources.clone(),
+            crate::Slider::from(parameters),
+        ))
+    }
+    /// Validates complete number initialization before allocating its COM identity.
+    fn create_number(&self, options: NumberOptions) -> Result<ComPtr<INumberAbi>, NcStatus> {
+        self.storage.host.check_mutation()?;
+        let parameters = crate::NumberParameters::new(
+            options.value,
+            options.step,
+            crate::DecimalPrecision::try_from(usize::from(options.precision)).map_err(|_| NC_E_INVALID_ARG)?,
+        )
+        .map_err(|_| NC_E_INVALID_ARG)?;
+        Ok(super::leaves::Number::create(
+            self.storage.host.clone(),
+            self.storage.resources.clone(),
+            crate::Number::from(parameters),
+        ))
+    }
+    /// Validates complete color swatch initialization before allocating its COM identity.
+    fn create_color_swatch(&self, rgba: u32, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IColorSwatchAbi>, NcStatus> {
+        self.storage.host.check_mutation()?;
+        let parameters = crate::ColorSwatchParameters::new(super::render::color(rgba)).label(text(label)?);
+        Ok(super::leaves::ColorSwatch::create(
+            self.storage.host.clone(),
+            self.storage.resources.clone(),
+            crate::ColorSwatch::from(parameters),
+        ))
+    }
+    /// Validates complete list item initialization before allocating its COM identity.
+    fn create_list_item(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IListItemAbi>, NcStatus> {
+        self.storage.host.check_mutation()?;
+        let parameters = crate::ListItemParameters::new(text(label)?);
+        Ok(super::leaves::ListItem::create(
+            self.storage.host.clone(),
+            self.storage.resources.clone(),
+            crate::ListItem::from(parameters),
+        ))
+    }
+    /// Validates complete list box initialization before allocating its COM identity.
+    fn create_list_box(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IListBoxAbi>, NcStatus> {
+        self.storage.host.check_mutation()?;
+        let parameters = crate::ListBoxParameters::new(text(label)?, None);
+        Ok(super::leaves::ListBox::create(
+            self.storage.host.clone(),
+            self.storage.resources.clone(),
+            crate::ListBox::from(parameters),
+        ))
+    }
+    /// Validates the axis and complete range before constructing a scrollbar.
+    fn create_scrollbar(&self, range: ScrollRange) -> Result<ComPtr<IScrollbarAbi>, NcStatus> {
+        self.storage.host.check_mutation()?;
+        let axis = match range.axis {
+            ScrollAxis::HORIZONTAL => crate::ScrollbarAxis::Horizontal,
+            ScrollAxis::VERTICAL => crate::ScrollbarAxis::Vertical,
+            _ => return Err(NC_E_INVALID_ARG),
+        };
+        if range.viewport < 0 || range.content < 0 {
+            return Err(NC_E_INVALID_ARG);
+        }
+        let parameters = crate::ScrollbarParameters::new(axis).range(range.viewport, range.content, range.offset);
+        Ok(super::leaves::Scrollbar::create(
+            self.storage.host.clone(),
+            self.storage.resources.clone(),
+            crate::Scrollbar::from(parameters),
+        ))
+    }
+
     /// Creates one unmounted button whose host has no reference back to this runtime.
     fn create_button(&self) -> Result<ComPtr<IButtonAbi>, NcStatus> {
         self.storage.host.check_mutation()?;
-        Ok(Button::create(self.storage.host.clone()))
+        Ok(Button::create(self.storage.host.clone(), self.storage.resources.clone()))
     }
 }
 

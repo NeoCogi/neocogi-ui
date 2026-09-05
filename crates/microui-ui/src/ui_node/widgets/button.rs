@@ -306,3 +306,47 @@ impl From<ButtonParameters> for Button {
         }
     }
 }
+
+impl crate::com::leaf::LeafState for Button {
+    /// Synchronizes options inside the one concrete semantic state of a COM leaf.
+    fn set_options(&mut self, options: crate::WidgetOption) { self.opt = options; }
+}
+
+impl Button {
+    /// Borrows the label independently of whether its adjacent visual is an icon or image.
+    pub(crate) fn com_label(&self) -> &str {
+        match &self.content {
+            ButtonContent::Text { label, .. } | ButtonContent::Image { label, .. } | ButtonContent::ScaledImage { label, .. } => label,
+        }
+    }
+    /// Replaces only text, preserving the concrete visual and scaling selection.
+    pub(crate) fn com_set_label(&mut self, text: &str) {
+        let (ButtonContent::Text { label, .. } | ButtonContent::Image { label, .. } | ButtonContent::ScaledImage { label, .. }) = &mut self.content;
+        label.clear(); label.push_str(text);
+    }
+}
+
+impl crate::com::leaf::FontState for Button {
+    /// Borrows the semantic font reference already used by layout and painting.
+    fn font(&self) -> &crate::FontRef { &self.font }
+    /// Replaces the same field after the COM resource owner validates the selection.
+    fn set_font(&mut self, font: crate::FontRef) { self.font = font; }
+}
+
+impl crate::com::leaf::IconState for Button {
+    /// Changes visual kind while preserving the sole owned label allocation.
+    fn set_icon(&mut self, icon: Option<crate::IconRef>) -> bool {
+        if let ButtonContent::Text { icon: previous, .. } = &self.content
+            && *previous == icon { return false; }
+        let (ButtonContent::Text { label, .. } | ButtonContent::Image { label, .. } | ButtonContent::ScaledImage { label, .. }) = &mut self.content;
+        self.content = ButtonContent::Text { label: std::mem::take(label), icon };
+        true
+    }
+
+}
+impl Button {
+    /// Reads the existing unframed center-fill policy.
+    pub(crate) fn com_fill(&self) -> WidgetFillOption { self.fill }
+    /// Changes the paint-only fill policy after COM validation.
+    pub(crate) fn com_set_fill(&mut self, fill: WidgetFillOption) { self.fill = fill; }
+}

@@ -244,6 +244,9 @@ impl<'a> WidgetUpdateCtx<'a> {
     /// Returns the effective content-local clip committed for this update.
     pub fn local_clip(&self) -> Recti { self.common.local_clip() }
 
+    /// Whether local pointer tests belong to the current hover root.
+    pub(crate) fn in_hover_root(&self) -> bool { self.in_hover_root }
+
     /// Returns whether the pointer is currently over this widget.
     pub fn hovered(&self) -> bool {
         self.common.hovered

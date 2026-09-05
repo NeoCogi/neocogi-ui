@@ -9,7 +9,9 @@
 #![deny(missing_docs)]
 
 pub mod widget;
-pub use widget::{WidgetOptions, WidgetProperties, WidgetFrame};
+pub use widget::{WidgetOptions, WidgetProperties, WidgetFrame, WidgetPaint};
+mod leaves;
+pub use leaves::*;
 mod input;
 pub use input::{
     KeyCode, KeyStroke, Point, WidgetEvent, WidgetEventAbi, WidgetEventTag, WidgetUpdate, WidgetAction, decode_widget_event, UiInput, UiInputAbi, UiInputTag,
@@ -61,6 +63,9 @@ pub struct Rect {
 #[com_interface(auto_guid = "microui.Painter:v1")]
 /// Owned recording service; it never stores references into a caller's stack.
 pub trait IPainter {
+    /// Records complete atlas triangles in local coordinates; offset is zero,
+    /// length is divisible by three, and every position/UV component is finite.
+    fn triangles(&self, scope: PaintScope, vertices: NcCopyFromBufferOffset<'_, RenderVertex>) -> Result<(), NcStatus>;
     /// Records a fill only while this exact invocation remains active.
     fn fill(&self, scope: PaintScope, rect: Rect, rgba: u32) -> Result<(), NcStatus>;
     /// Records UTF-8 text with the current body font and button content style.
@@ -88,7 +93,7 @@ pub trait IWidget {
     /// Drains sticky geometry invalidation recorded by programmatic setters.
     fn take_change(&self) -> Result<GeometryChange, NcStatus>;
     /// Records this widget's visual output within a validated paint invocation.
-    fn paint(&self, scope: PaintScope, rect: Rect, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus>;
+    fn paint(&self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus>;
 }
 
 #[com_interface(auto_guid = "microui.Children:v1")]
@@ -137,6 +142,24 @@ pub trait IButtonEvents {
 #[com_interface(auto_guid = "microui.UiFactory:v1")]
 /// Runtime-bound widget factory implemented by the UI plugin.
 pub trait IUiFactory {
+    /// Constructs an unmounted boolean control with body-font presentation.
+    fn create_checkbox(&self, checked: bool, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ICheckboxAbi>, NcStatus>;
+    /// Constructs an unmounted normalized single-line editor.
+    fn create_textbox(&self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ITextboxAbi>, NcStatus>;
+    /// Constructs multiline display text using the explicit wrapping policy.
+    fn create_text_block(&self, text: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping) -> Result<ComPtr<ITextBlockAbi>, NcStatus>;
+    /// Constructs a slider after validating every arithmetic input.
+    fn create_slider(&self, options: SliderOptions) -> Result<ComPtr<ISliderAbi>, NcStatus>;
+    /// Constructs standalone numeric entry after validating arithmetic inputs.
+    fn create_number(&self, options: NumberOptions) -> Result<ComPtr<INumberAbi>, NcStatus>;
+    /// Constructs an RGBA swatch with an optional label.
+    fn create_color_swatch(&self, rgba: u32, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IColorSwatchAbi>, NcStatus>;
+    /// Constructs one list row; application data is attached in its static adapter.
+    fn create_list_item(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IListItemAbi>, NcStatus>;
+    /// Constructs a button-like list entry.
+    fn create_list_box(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IListBoxAbi>, NcStatus>;
+    /// Constructs a scrollbar with a validated orientation and normalized range.
+    fn create_scrollbar(&self, range: ScrollRange) -> Result<ComPtr<IScrollbarAbi>, NcStatus>;
     /// Constructs an unmounted button; initialization remains concrete and discoverable.
     fn create_button(&self) -> Result<ComPtr<IButtonAbi>, NcStatus>;
 }

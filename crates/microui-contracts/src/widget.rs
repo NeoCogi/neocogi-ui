@@ -164,10 +164,40 @@ impl core::ops::BitOr for WidgetOptions {
 com_int_enum! {
     /// Semantic outer-frame role; concrete theme resources stay in the runtime.
     pub enum WidgetFrame: u8 {
-        /// Noninteractive structural frame.
+        /// Generic appearance in the runtime theme.
         GENERIC = 0,
-        /// Command-button frame with hover, focus and active presentation.
+        /// Button appearance in the runtime theme.
         BUTTON = 1,
+        /// Checkbox appearance in the runtime theme.
+        CHECKBOX = 2,
+        /// Text input appearance in the runtime theme.
+        TEXT_INPUT = 3,
+        /// Item appearance in the runtime theme.
+        ITEM = 4,
+        /// Combo appearance in the runtime theme.
+        COMBO = 5,
+        /// Slider track appearance in the runtime theme.
+        SLIDER_TRACK = 6,
+        /// Slider thumb appearance in the runtime theme.
+        SLIDER_THUMB = 7,
+        /// Scrollbar track appearance in the runtime theme.
+        SCROLLBAR_TRACK = 8,
+        /// Scrollbar thumb appearance in the runtime theme.
+        SCROLLBAR_THUMB = 9,
+        /// Close button appearance in the runtime theme.
+        CLOSE_BUTTON = 10,
+        /// Minimize button appearance in the runtime theme.
+        MINIMIZE_BUTTON = 11,
+        /// Maximize button appearance in the runtime theme.
+        MAXIMIZE_BUTTON = 12,
+        /// Restore button appearance in the runtime theme.
+        RESTORE_BUTTON = 13,
+        /// Resize grip appearance in the runtime theme.
+        RESIZE_GRIP = 14,
+        /// Window appearance in the runtime theme.
+        WINDOW = 15,
+        /// Panel appearance in the runtime theme.
+        PANEL = 16,
     }
 }
 
@@ -189,7 +219,39 @@ impl WidgetProperties {
     /// Rejects unsupported routing/appearance values at the component boundary.
     pub fn validate(self) -> Result<(), NcStatus> {
         self.options.validate()?;
-        if self.keyboard & !511 != 0 || !matches!(self.frame, WidgetFrame::GENERIC | WidgetFrame::BUTTON) {
+        if self.keyboard & !511 != 0 || self.frame.raw() > 16 {
+            return Err(NC_E_INVALID_ARG);
+        }
+        Ok(())
+    }
+}
+
+#[com_struct]
+#[derive(Debug, Default)]
+/// Copied, observational paint state; contains no borrowed runtime storage.
+pub struct WidgetPaint {
+    /// Content allocation in local coordinates, starting at zero.
+    pub rect: crate::Rect,
+    /// Effective content-local clip.
+    pub clip: crate::Rect,
+    /// Whether the containing surface permits interaction.
+    pub enabled: bool,
+    /// Pointer hover state for theme selection.
+    pub hovered: bool,
+    /// Keyboard focus state for theme selection.
+    pub focused: bool,
+    /// Current click transition for theme selection.
+    pub clicked: bool,
+    /// Active pointer interaction state.
+    pub active: bool,
+    /// Whether the logical window owns activation.
+    pub window_active: bool,
+}
+
+impl WidgetPaint {
+    /// Rejects malformed local geometry before a component records any operations.
+    pub fn validate(self) -> Result<(), NcStatus> {
+        if self.rect.x != 0 || self.rect.y != 0 || self.rect.width < 0 || self.rect.height < 0 || self.clip.width < 0 || self.clip.height < 0 {
             return Err(NC_E_INVALID_ARG);
         }
         Ok(())

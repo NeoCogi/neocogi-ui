@@ -78,10 +78,10 @@ mod tests {
         }
 
         /// Delegates one illustrative fill to the scope-checked recorder.
-        fn paint(&self, scope: PaintScope, rect: Rect, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
+        fn paint(&self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
             // Retaining this interface is safe only because its implementation owns its storage;
             // the production recorder must reject this scope after the paint invocation ends.
-            painter.fill(scope, rect, 0xff808080)
+            painter.fill(scope, state.rect, 0xff808080)
         }
     }
 

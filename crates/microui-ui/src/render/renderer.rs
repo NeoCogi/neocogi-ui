@@ -367,6 +367,7 @@ impl<B: RendererBackend> DisplayListExecutor<'_, '_, B> {
             return;
         };
         match kind {
+            DrawKind::AtlasTriangles { vertices } => self.draw_atlas_triangles(&vertices, clip),
             DrawKind::NinePatch { rect, patch } => self.draw_nine_patch(rect, patch, clip),
             DrawKind::Text { font, pos, color, text } => self.draw_text(font, &text, pos, color, clip),
             DrawKind::Icon { id, rect, color } => self.draw_icon(id, rect, color, clip),
@@ -460,6 +461,18 @@ impl<B: RendererBackend> DisplayListExecutor<'_, '_, B> {
         };
         self.frame.flush();
         self.frame.draw_texture(id, vertices);
+    }
+
+    /// Clips a validated atlas batch with the same interpolation as solid geometry.
+    fn draw_atlas_triangles(&mut self, vertices: &[Vertex], clip: Recti) {
+        let Some(clip) = ClipRect::new(clip) else { return; };
+        for triangle in vertices.as_chunks::<3>().0 {
+            self.clipped_triangles.clear();
+            clip.clip_triangle(*triangle, self.clipped_triangles);
+            for triangle in self.clipped_triangles.as_chunks::<3>().0 {
+                self.frame.push_triangle(*triangle);
+            }
+        }
     }
 
     /// Converts and clips typed solid triangles immediately before backend submission.

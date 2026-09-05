@@ -66,6 +66,134 @@ impl Widget<IButtonAbi> {
     }
 }
 
+/// Static Checkbox proxy; semantic storage belongs to its plugin object.
+pub type Checkbox = Widget<ICheckboxAbi>;
+/// Static Textbox proxy; semantic storage belongs to its plugin object.
+pub type Textbox = Widget<ITextboxAbi>;
+/// Static TextBlock proxy; semantic storage belongs to its plugin object.
+pub type TextBlock = Widget<ITextBlockAbi>;
+/// Static Slider proxy; semantic storage belongs to its plugin object.
+pub type Slider = Widget<ISliderAbi>;
+/// Static Number proxy; semantic storage belongs to its plugin object.
+pub type Number = Widget<INumberAbi>;
+/// Static ColorSwatch proxy; semantic storage belongs to its plugin object.
+pub type ColorSwatch = Widget<IColorSwatchAbi>;
+/// Static ListItem proxy; semantic storage belongs to its plugin object.
+pub type ListItem = Widget<IListItemAbi>;
+/// Static ListBox proxy; semantic storage belongs to its plugin object.
+pub type ListBox = Widget<IListBoxAbi>;
+/// Static Scrollbar proxy; semantic storage belongs to its plugin object.
+pub type Scrollbar = Widget<IScrollbarAbi>;
+
+/// Shares inherited text convenience calls while keeping every proxy concrete.
+macro_rules! text_proxy {
+    ($interface:ty) => {
+        impl Widget<$interface> {
+            /// Copies the current immutable text snapshot into application storage.
+            pub fn text(&self) -> Result<String, NcStatus> {
+                self.interface.text()?.to_string()
+            }
+            /// Replaces text through the control's documented normalization policy.
+            pub fn set_text(&self, text: &str) -> Result<(), NcStatus> {
+                self.interface.set_text(NcCopyFromBufferOffset::new(0, text.as_bytes()))
+            }
+            /// Clears text using the same cursor and invalidation rules as replacement.
+            pub fn clear(&self) -> Result<(), NcStatus> {
+                self.set_text("")
+            }
+        }
+    };
+}
+text_proxy!(ITextboxAbi);
+text_proxy!(ITextBlockAbi);
+text_proxy!(IColorSwatchAbi);
+text_proxy!(IListItemAbi);
+text_proxy!(IListBoxAbi);
+
+impl Widget<ICheckboxAbi> {
+    /// Reads the current checked value.
+    pub fn checked(&self) -> Result<bool, NcStatus> {
+        self.interface.checked()
+    }
+    /// Changes checked state silently without invalidating fixed checkbox geometry.
+    pub fn set_checked(&self, checked: bool) -> Result<(), NcStatus> {
+        self.interface.set_checked(checked)
+    }
+    /// Copies the current label snapshot.
+    pub fn label(&self) -> Result<String, NcStatus> {
+        self.interface.label()?.to_string()
+    }
+    /// Replaces label text and records a sticky preferred-size change when needed.
+    pub fn set_label(&self, label: &str) -> Result<(), NcStatus> {
+        self.interface.set_label(NcCopyFromBufferOffset::new(0, label.as_bytes()))
+    }
+}
+impl Widget<ITextboxAbi> {
+    /// Returns the Unicode scalar-boundary byte cursor.
+    pub fn cursor(&self) -> Result<u64, NcStatus> {
+        self.interface.cursor()
+    }
+    /// Clamps to text length and the preceding Unicode scalar boundary.
+    pub fn set_cursor(&self, cursor: u64) -> Result<(), NcStatus> {
+        self.interface.set_cursor(cursor)
+    }
+}
+impl Widget<ITextBlockAbi> {
+    /// Returns the current explicit wrapping policy.
+    pub fn wrapping(&self) -> Result<TextWrapping, NcStatus> {
+        self.interface.wrapping()
+    }
+    /// Updates wrapping and invalidates preferred size when the policy changes.
+    pub fn set_wrapping(&self, wrapping: TextWrapping) -> Result<(), NcStatus> {
+        self.interface.set_wrapping(wrapping)
+    }
+}
+/// Shares numeric convenience methods while each plugin retains its arithmetic rules.
+macro_rules! numeric_proxy {
+    ($interface:ty) => {
+        impl Widget<$interface> {
+            /// Reads the current finite numeric value.
+            pub fn value(&self) -> Result<f32, NcStatus> {
+                self.interface.value()
+            }
+            /// Replaces a finite value silently, applying slider bounds where relevant.
+            pub fn set_value(&self, value: f32) -> Result<(), NcStatus> {
+                self.interface.set_value(value)
+            }
+            /// Reports the inline edit mode which controls routed text input.
+            pub fn is_editing(&self) -> Result<bool, NcStatus> {
+                self.interface.is_editing()
+            }
+        }
+    };
+}
+numeric_proxy!(ISliderAbi);
+numeric_proxy!(INumberAbi);
+impl Widget<IColorSwatchAbi> {
+    /// Reads the packed RGBA paint color.
+    pub fn fill(&self) -> Result<u32, NcStatus> {
+        self.interface.fill()
+    }
+    /// Replaces color without publishing a user event or changing preferred size.
+    pub fn set_fill(&self, rgba: u32) -> Result<(), NcStatus> {
+        self.interface.set_fill(rgba)
+    }
+}
+impl Widget<IScrollbarAbi> {
+    /// Reads a coherent range and offset snapshot.
+    pub fn range(&self) -> Result<ScrollRange, NcStatus> {
+        self.interface.range()
+    }
+    /// Replaces nonnegative range lengths atomically.
+    pub fn set_lengths(&self, viewport: i32, content: i32) -> Result<(), NcStatus> {
+        self.interface.set_lengths(viewport, content)
+    }
+    /// Silently clamps a requested offset to the current range.
+    pub fn set_offset(&self, offset: i32) -> Result<(), NcStatus> {
+        self.interface.set_offset(offset)
+    }
+}
+
 /// Runtime-bound factory client; generic application state is never stored here.
 pub struct WidgetFactory {
     /// The plugin's factory on the same identity as its runtime/window manager.
@@ -73,6 +201,55 @@ pub struct WidgetFactory {
 }
 
 impl WidgetFactory {
+    /// Constructs an initialized, unmounted checkbox in this runtime.
+    pub fn checkbox(&self, label: &str, checked: bool) -> Result<Checkbox, NcStatus> {
+        Ok(Checkbox::from_interface(
+            self.interface.create_checkbox(checked, NcCopyFromBufferOffset::new(0, label.as_bytes()))?,
+        ))
+    }
+    /// Constructs an initialized, unmounted textbox in this runtime.
+    pub fn textbox(&self, text: &str) -> Result<Textbox, NcStatus> {
+        Ok(Textbox::from_interface(
+            self.interface.create_textbox(NcCopyFromBufferOffset::new(0, text.as_bytes()))?,
+        ))
+    }
+    /// Constructs an initialized, unmounted text block in this runtime.
+    pub fn text_block(&self, text: &str, wrapping: TextWrapping) -> Result<TextBlock, NcStatus> {
+        Ok(TextBlock::from_interface(
+            self.interface.create_text_block(NcCopyFromBufferOffset::new(0, text.as_bytes()), wrapping)?,
+        ))
+    }
+    /// Constructs an initialized, unmounted slider in this runtime.
+    pub fn slider(&self, options: SliderOptions) -> Result<Slider, NcStatus> {
+        Ok(Slider::from_interface(self.interface.create_slider(options)?))
+    }
+    /// Constructs an initialized, unmounted number in this runtime.
+    pub fn number(&self, options: NumberOptions) -> Result<Number, NcStatus> {
+        Ok(Number::from_interface(self.interface.create_number(options)?))
+    }
+    /// Constructs an initialized, unmounted color swatch in this runtime.
+    pub fn color_swatch(&self, rgba: u32, label: &str) -> Result<ColorSwatch, NcStatus> {
+        Ok(ColorSwatch::from_interface(
+            self.interface.create_color_swatch(rgba, NcCopyFromBufferOffset::new(0, label.as_bytes()))?,
+        ))
+    }
+    /// Constructs an initialized, unmounted list item in this runtime.
+    pub fn list_item(&self, label: &str) -> Result<ListItem, NcStatus> {
+        Ok(ListItem::from_interface(
+            self.interface.create_list_item(NcCopyFromBufferOffset::new(0, label.as_bytes()))?,
+        ))
+    }
+    /// Constructs an initialized, unmounted list box in this runtime.
+    pub fn list_box(&self, label: &str) -> Result<ListBox, NcStatus> {
+        Ok(ListBox::from_interface(
+            self.interface.create_list_box(NcCopyFromBufferOffset::new(0, label.as_bytes()))?,
+        ))
+    }
+    /// Constructs an initialized, unmounted scrollbar in this runtime.
+    pub fn scrollbar(&self, range: ScrollRange) -> Result<Scrollbar, NcStatus> {
+        Ok(Scrollbar::from_interface(self.interface.create_scrollbar(range)?))
+    }
+
     /// Adopts a typed factory obtained from UI runtime activation.
     pub fn from_interface(interface: ComPtr<IUiFactoryAbi>) -> Self {
         Self { interface }
@@ -100,6 +277,11 @@ impl<'a> Painter<'a> {
     /// Wraps the capability and token received by a widget's COM paint method.
     pub fn from_call(interface: ComRef<'a, IPainterAbi>, scope: PaintScope) -> Self {
         Self { interface, scope }
+    }
+
+    /// Records a complete validated atlas triangle batch with one COM copy.
+    pub fn triangles(&self, vertices: &[RenderVertex]) -> Result<(), NcStatus> {
+        self.interface.triangles(self.scope, NcCopyFromBufferOffset::new(0, vertices))
     }
 
     /// Records a local rectangle within this invocation.
@@ -178,5 +360,62 @@ impl Ui {
     /// Closes the runtime's complete retained forest while handles may remain allocated.
     pub fn close(&self) -> Result<(), NcStatus> {
         self.runtime.close()
+    }
+}
+
+/// Static typography conveniences exist only on text-bearing proxy types.
+macro_rules! font_proxy {
+    ($interface:ty) => {
+        impl Widget<$interface> {
+            /// Selects typography through this same widget object's optional capability.
+            pub fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
+                self.interface.query::<IFontStyleAbi>()?.set_font_role(role)
+            }
+            /// Resolves a named font once in this widget's resource bundle.
+            pub fn set_named_font(&self, name: &str) -> Result<(), NcStatus> {
+                self.interface
+                    .query::<IFontStyleAbi>()?
+                    .set_named_font(NcCopyFromBufferOffset::new(0, name.as_bytes()))
+            }
+        }
+    };
+}
+font_proxy!(IButtonAbi);
+font_proxy!(ICheckboxAbi);
+font_proxy!(ITextboxAbi);
+font_proxy!(ITextBlockAbi);
+font_proxy!(ISliderAbi);
+font_proxy!(INumberAbi);
+font_proxy!(IColorSwatchAbi);
+font_proxy!(IListBoxAbi);
+font_proxy!(IListItemAbi);
+
+/// Adjacent-icon conveniences remain restricted to controls that own such content.
+macro_rules! icon_proxy {
+    ($interface:ty) => {
+        impl Widget<$interface> {
+            /// Selects an icon role, or NONE to remove it, without changing the label.
+            pub fn set_icon_role(&self, icon: ContentIcon) -> Result<(), NcStatus> {
+                self.interface.query::<IIconContentAbi>()?.set_icon_role(icon)
+            }
+            /// Resolves a named icon in this widget's own resource bundle.
+            pub fn set_named_icon(&self, name: &str) -> Result<(), NcStatus> {
+                self.interface
+                    .query::<IIconContentAbi>()?
+                    .set_named_icon(NcCopyFromBufferOffset::new(0, name.as_bytes()))
+            }
+        }
+    };
+}
+icon_proxy!(IButtonAbi);
+icon_proxy!(IListItemAbi);
+impl Widget<IButtonAbi> {
+    /// Reads the current mask controlling center fill on an unframed button.
+    pub fn fill_states(&self) -> Result<FillStates, NcStatus> {
+        self.interface.query::<IButtonStyleAbi>()?.fill_states()
+    }
+    /// Changes the validated paint-only fill mask.
+    pub fn set_fill_states(&self, states: FillStates) -> Result<(), NcStatus> {
+        self.interface.query::<IButtonStyleAbi>()?.set_fill_states(states)
     }
 }

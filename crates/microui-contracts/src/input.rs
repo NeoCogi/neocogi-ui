@@ -150,6 +150,8 @@ pub enum WidgetEvent {
 #[derive(Debug, Eq, PartialEq)]
 /// Router-owned geometry and interaction snapshot for one widget update.
 pub struct WidgetUpdate {
+    /// Whether pointer hit tests belong to the currently hovered logical root.
+    pub in_hover_root: bool,
     /// Content allocation with local origin (0, 0).
     pub rect: Rect,
     /// Effective content-local clip.
@@ -239,4 +241,25 @@ pub enum UiInput {
     Key(KeyStroke),
     /// Complete UTF-8 commit supplied in the accompanying bounded text argument.
     Text,
+}
+
+impl WidgetUpdate {
+    /// Validates copied geometry and held-state tags before semantic mutation.
+    pub fn validate(self) -> Result<(), NcStatus> {
+        if self.rect.x != 0
+            || self.rect.y != 0
+            || self.rect.width < 0
+            || self.rect.height < 0
+            || self.screen.width != self.rect.width
+            || self.screen.height != self.rect.height
+            || self.clip.width < 0
+            || self.clip.height < 0
+            || self.mouse_buttons & !7 != 0
+            || self.modifiers & !15 != 0
+            || self.action.raw() > WidgetAction::COLLAPSE.raw()
+        {
+            return Err(NC_E_INVALID_ARG);
+        }
+        Ok(())
+    }
 }

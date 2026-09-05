@@ -61,6 +61,11 @@ pub(super) struct DrawOp {
 
 /// Private rendering operation payload.
 pub(super) enum DrawKind {
+    /// Atlas geometry already expanded by a COM widget's private UI algorithms.
+    AtlasTriangles {
+        /// Owned triples translated to screen coordinates by Painter.
+        vertices: Vec<super::Vertex>,
+    },
     /// Draws one semantic three-by-three patch.
     NinePatch {
         /// Complete destination rectangle in screen space.
@@ -130,6 +135,11 @@ impl DisplayList {
     #[cfg(test)]
     pub(crate) fn is_empty(&self) -> bool {
         self.ops.is_empty() && self.solid_geometry.is_empty()
+    }
+
+    /// Retains a complete atlas batch in painter order for final viewport clipping.
+    pub(super) fn push_atlas_triangles(&mut self, clip: Recti, vertices: Vec<super::Vertex>) {
+        self.push(clip, DrawKind::AtlasTriangles { vertices });
     }
 
     /// Appends one semantic three-by-three patch operation.
