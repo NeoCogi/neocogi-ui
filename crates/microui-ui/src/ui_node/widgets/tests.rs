@@ -46,18 +46,18 @@ fn run_click<W: Widget>(widget: &mut W) {
 fn image_widgets_measure_external_texture_dimensions() {
     let atlas = make_test_atlas();
     let style = test_skin(&atlas);
-    let texture = TextureId::new_test(7, 13, 5);
+    let texture = crate::test_support::test_image(13, 5);
 
-    let button = Button::from(ButtonParameters::with_image("aa", Some(texture), WidgetOption::FRAME, WidgetFillOption::ALL));
+    let button = Button::from(ButtonParameters::with_image("aa", Some(texture.clone()), WidgetOption::FRAME, WidgetFillOption::ALL));
     let button_size = button.measure(&style, &atlas, Constraints::unbounded());
 
-    assert_eq!(button_size.width, style.metrics.padding * 2 + texture.width() + style.metrics.padding + 16);
+    assert_eq!(button_size.width, style.metrics.padding * 2 + texture.size().width + style.metrics.padding + 16);
     assert_eq!(button_size.height, 14);
 
-    let list_box = ListBox::from(ListBoxParameters::new("a", Some(texture)));
+    let list_box = ListBox::from(ListBoxParameters::new("a", Some(texture.clone())));
     let list_size = list_box.measure(&style, &atlas, Constraints::unbounded());
 
-    assert_eq!(list_size.width, style.metrics.padding * 2 + texture.width() + style.metrics.padding + 8);
+    assert_eq!(list_size.width, style.metrics.padding * 2 + texture.size().width + style.metrics.padding + 8);
     assert_eq!(list_size.height, 14);
 }
 

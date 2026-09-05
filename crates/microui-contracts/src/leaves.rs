@@ -271,3 +271,14 @@ pub trait ICombo: crate::IWidget {
     /// Commits an actual popup selection, closes the header, and emits changed only when index or label differs.
     fn submit_selection(&self, index: u64, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
 }
+
+#[com_interface(auto_guid = "microui.ImageContent:v1")]
+/// Shared image editing for buttons and list-box entries; pixels stay owned by their renderer.
+pub trait IImageContent {
+    /// Installs a positive-sized immutable texture. Width fitting preserves aspect ratio and
+    /// uses the allocated content width; false uses inline placement with dimensions bounded by the allocation.
+    /// Image selection replaces any atlas icon while preserving the label.
+    fn set_image(&self, image: nc_com::ComRef<'_, crate::ITextureAbi>, fit_width: bool) -> Result<(), NcStatus>;
+    /// Removes image content while preserving the current label and font.
+    fn clear_image(&self) -> Result<(), NcStatus>;
+}

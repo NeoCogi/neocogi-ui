@@ -537,3 +537,18 @@ impl RendererBackend for RecordingRenderer {
         self.log.push(RenderEvent::DestroyTexture(id));
     }
 }
+
+#[nc_com::com_class(interfaces(microui_contracts::ITexture))]
+/// CPU-only immutable texture supplies dimensions without any native GPU handle.
+struct TestImage {
+    /// Positive test dimensions used by the real owning facade image wrapper.
+    size: microui_contracts::Size,
+}
+impl microui_contracts::ITexture for TestImage {
+    /// A real COM projection obeys the production immutable-dimension contract.
+    fn size(&self) -> Result<microui_contracts::Size, nc_com::NcStatus> { Ok(self.size) }
+}
+/// Constructs an ordinary owned COM image for algorithm measurement fixtures.
+pub(crate) fn test_image(width:i32,height:i32) -> microui_redux::Image {
+    microui_redux::Image::from_interface(TestImage::from_value(TestImage {size:microui_contracts::Size {width,height}}).query().unwrap()).unwrap()
+}

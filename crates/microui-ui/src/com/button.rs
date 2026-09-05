@@ -10,7 +10,8 @@ leaf_class!(
     IActivationEvents,
     IFontStyle,
     IIconContent,
-    IButtonStyle
+    IButtonStyle,
+    IImageContent
 );
 
 impl IButton for Button {
@@ -58,3 +59,5 @@ impl IButtonStyle for Button {
         Ok(())
     }
 }
+
+super::widget::image_content_impl!(Button);

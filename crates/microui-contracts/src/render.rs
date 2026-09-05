@@ -133,3 +133,26 @@ pub trait IRenderer {
     /// Executes one complete frame synchronously; failure must not present it.
     fn render(&self, info: RenderInfo, assets: ComRef<'_, crate::IAssetBundleAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus>;
 }
+
+#[com_struct]
+#[derive(Debug, PartialEq)]
+/// Normalized source rectangle for one immutable texture; all edges lie in the unit square.
+pub struct TextureRegion {
+    /// Left source edge.
+    pub u0: f32,
+    /// Top source edge.
+    pub v0: f32,
+    /// Right source edge, no smaller than u0.
+    pub u1: f32,
+    /// Bottom source edge, no smaller than v0.
+    pub v1: f32,
+}
+impl TextureRegion {
+    /// Complete image, also used by the ordinary Painter::texture convenience.
+    pub const FULL: Self = Self { u0: 0., v0: 0., u1: 1., v1: 1. };
+    /// Rejects nonfinite, reversed and out-of-image coordinates before retaining a resource.
+    pub fn validate(self) -> Result<(), nc_com::NcStatus> {
+        if [self.u0,self.v0,self.u1,self.v1].iter().all(|v| v.is_finite() && (0. ..=1.).contains(v))
+            && self.u0 <= self.u1 && self.v0 <= self.v1 { Ok(()) } else { Err(nc_com::NC_E_INVALID_ARG) }
+    }
+}

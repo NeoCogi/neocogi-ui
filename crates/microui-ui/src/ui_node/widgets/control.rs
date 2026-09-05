@@ -212,3 +212,14 @@ mod tests {
         assert_eq!((visual.x, visual.y, visual.width, visual.height), (i32::MAX, i32::MAX, 1, i32::MAX));
     }
 }
+
+/// Copies dimensions that were validated and cached before the image became widget content.
+pub(super) fn image_size(image: &microui_redux::Image) -> Dimensioni {
+    let size = image.size();
+    Dimensioni::new(size.width, size.height)
+}
+
+/// Equal retained interface projections preserve geometry; different aliases conservatively remeasure.
+pub(super) fn same_image(a: &Option<microui_redux::Image>, b: &Option<microui_redux::Image>) -> bool {
+    a.as_ref().map(|image| image.as_interface().as_ptr()) == b.as_ref().map(|image| image.as_interface().as_ptr())
+}

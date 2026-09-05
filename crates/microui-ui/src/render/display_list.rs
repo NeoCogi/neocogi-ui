@@ -72,6 +72,8 @@ pub(super) enum DrawKind {
         texture: nc_com::ComPtr<microui_contracts::ITextureAbi>,
         /// Destination in screen coordinates.
         rect: Recti,
+        /// Normalized source region, retained through repeated clipping.
+        source: microui_contracts::TextureRegion,
         /// Multiplicative tint.
         color: Color,
     },
@@ -159,8 +161,8 @@ impl DisplayList {
     }
 
     /// Retains an image in source order; final clipping remains centralized in the executor.
-    pub(super) fn push_com_texture(&mut self, clip: Recti, rect: Recti, color: Color, texture: nc_com::ComPtr<microui_contracts::ITextureAbi>) {
-        self.push(clip, DrawKind::ComTexture { texture, rect, color });
+    pub(super) fn push_com_texture(&mut self, clip: Recti, rect: Recti, source: microui_contracts::TextureRegion, color: Color, texture: nc_com::ComPtr<microui_contracts::ITextureAbi>) {
+        self.push(clip, DrawKind::ComTexture { texture, rect, source, color });
     }
 
     /// Retains application GPU work without creating a callback registry entry.

@@ -307,6 +307,29 @@ color, scrollbar offset/range and button center-fill selection affect paint only
 Programmatic setters do not manufacture user-originated events. Label, font,
 icon, wrapping and numeric-label changes retain a sticky geometry marker.
 
+Button and ListBox also expose `IImageContent`. `set_image(texture, fit_width)`
+retains an immutable `ITexture`, validates its positive dimensions once and then
+commits the edit. A failed dimension query leaves the previous content intact;
+recursive image editing during that query reports BUSY. Measurement and paint
+use the immutable size and do not call back into the image. Image setters dirty
+geometry but emit no activation. `clear_image` preserves the label and font;
+selecting a button icon replaces its image, and selecting an image replaces its
+icon. A retained widget can retain its image after logical window closure; clear
+the image before closure or release the remaining widget handles to retire it.
+
+Width fitting preserves aspect ratio using the allocated content width. Ordinary
+inline placement uses the source dimensions bounded by available width/height,
+matching the existing control layout policy. Images always use white tint,
+independently of the theme's label foreground. For example:
+
+```rust,ignore
+let images = host.renderer.query::<ITextureFactoryAbi>()?;
+let image = images.create_texture(size, NcCopyFromBufferOffset::new(0, &rgba))?;
+let button = host.ui.widgets().button("Preview")?;
+button.set_image(image.as_com_ref(), true)?;
+// The button owns a reference; this local image reference may now be dropped.
+```
+
 Font and icon capabilities select semantic roles or resolve an exact named
 resource once in the widget's runtime bundle. Unknown names leave the previous
 selection intact. Normal measurement and painting retain stable resolved
@@ -724,6 +747,13 @@ satisfying the common image validation/allocation policy. Publication follows a
 successful upload. `ITexture::size` reports immutable source dimensions; a painter's
 destination rectangle changes scaling without changing that image. No public native
 texture ID is accepted across COM.
+
+`Painter::texture` draws the complete source. `texture_region` accepts an explicit
+normalized `TextureRegion`: finite, ordered edges in `[0, 1]`. Destination clipping
+interpolates within that source region. Built-in paint forwarding preserves ordered
+atlas/image boundaries and cropped source coordinates through the same executor;
+it releases queued image references on forwarding errors and after completed
+frames. Keeping a copied frame's vertices does not keep the image alive.
 
 Resources belong to one native window/renderer instance, even when two instances
 use the same GPU API. The native plugin authenticates canonical COM identity against

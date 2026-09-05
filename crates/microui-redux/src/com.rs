@@ -358,9 +358,13 @@ impl<'a> Painter<'a> {
 
     /// Draws an owned immutable texture with an RGBA tint; its creator must be the submitted renderer.
     pub fn texture(&self, rect: Rect, rgba: u32, texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
-        self.interface.texture(self.scope, rect, rgba, texture)
+        self.texture_region(rect, TextureRegion::FULL, rgba, texture)
     }
 
+    /// Draws an explicit normalized subregion with destination clipping preserving source mapping.
+    pub fn texture_region(&self, rect: Rect, source: TextureRegion, rgba: u32, texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
+        self.interface.texture(self.scope, rect, source, rgba, texture)
+    }
     /// Inserts renderer-owned application GPU work at this point in painter order.
     pub fn item(&self, rect: Rect, item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
         self.interface.item(self.scope, rect, item)
@@ -578,3 +582,21 @@ impl Widget<IComboAbi> {
     }
 }
 font_proxy!(IComboAbi);
+
+/// Shares concrete image-capability calls without introducing an image-only widget wrapper.
+macro_rules! image_content {
+    ($name:ident) => {
+        impl $name {
+            /// Installs this renderer-owned image; dimensions are validated before the edit commits.
+            pub fn set_image(&self, image: ComRef<'_, ITextureAbi>, fit_width: bool) -> Result<(), NcStatus> {
+                self.interface.query::<IImageContentAbi>()?.set_image(image, fit_width)
+            }
+            /// Returns to label-only content without generating an activation event.
+            pub fn clear_image(&self) -> Result<(), NcStatus> {
+                self.interface.query::<IImageContentAbi>()?.clear_image()
+            }
+        }
+    };
+}
+image_content!(Button);
+image_content!(ListBox);

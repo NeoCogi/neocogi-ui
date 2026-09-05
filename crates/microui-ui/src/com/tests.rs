@@ -268,6 +268,10 @@ impl IWidget for RetainingWidget {
         assert_eq!(painter.triangles(scope, NcCopyFromBufferOffset::new(1, &[])), Err(NC_E_INVALID_ARG));
         assert_eq!(painter.colored_triangles(scope, NcCopyFromBufferOffset::new(1, &[])), Err(NC_E_INVALID_ARG));
         assert_eq!(painter.colored_triangles(scope, NcCopyFromBufferOffset::new(0, &[ColoredVertex::default()])), Err(NC_E_INVALID_ARG));
+        let image = crate::test_support::test_image(1, 1);
+        for source in [TextureRegion {u0:f32::NAN,..TextureRegion::FULL},TextureRegion {u1:2.,..TextureRegion::FULL},TextureRegion {u0:0.75,u1:0.25,..TextureRegion::FULL}] {
+            assert_eq!(painter.texture(scope,state.rect,source,u32::MAX,image.as_interface()),Err(NC_E_INVALID_ARG));
+        }
         let malformed_solid = [ColoredVertex { x: f32::NAN, y: 0.0, rgba: 0 }; 3];
         assert_eq!(painter.colored_triangles(scope, NcCopyFromBufferOffset::new(0, &malformed_solid)), Err(NC_E_INVALID_ARG));
         assert_eq!(painter.stroke_line(scope, PaintPoint { x: f32::INFINITY, y: 0.0 }, PaintPoint::default(), 1.0, 0), Err(NC_E_INVALID_ARG));
@@ -884,6 +888,12 @@ fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
 /// Copied paint observations survive the deliberately failing recorder's call.
 #[derive(Default)]
 struct BuiltinPaintProbe {
+    /// Image rectangles, cropped source coordinates and tints copied by the same ordered boundary.
+    images: RefCell<Vec<(Rect, TextureRegion, u32)>>,
+    /// False marks atlas geometry; true marks an image barrier.
+    order: RefCell<Vec<bool>>,
+    /// Injects a failure specifically after the preceding text batch succeeded.
+    fail_image: Cell<bool>,
     /// Exact local geometry copied by the bulk boundary.
     vertices: RefCell<Vec<RenderVertex>>,
     /// One recoverable recorder failure, used to verify workspace restoration.
@@ -907,9 +917,12 @@ impl IPainter for BuiltinPainter {
     /// Built-in semantic painting does not route through the independent solid-geometry recorder.
     fn colored_triangles(&self, _scope: PaintScope, _vertices: NcCopyFromBufferOffset<'_, ColoredVertex>) -> Result<(), NcStatus> { panic!("expected resolved built-in atlas geometry") }
 
-    /// This button contains no external image; receiving one would bypass the expected built-in atlas path.
-    fn texture(&self, _scope: PaintScope, _rect: Rect, _rgba: u32, _texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
-        panic!("unexpected external texture in button paint")
+    /// Captures the ordered image barrier after checking read-only reentry into its button.
+    fn texture(&self, _scope: PaintScope, _rect: Rect, _source: TextureRegion, _rgba: u32, _texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
+        assert_eq!(self.button.label()?.to_string()?, "AB");
+        self.probe.images.borrow_mut().push((_rect, _source, _rgba));
+        self.probe.order.borrow_mut().push(true);
+        if self.probe.fail_image.replace(false) { Err(UI_E_RENDER) } else { Ok(()) }
     }
     /// The complete button algorithm cannot emit application GPU work.
     fn item(&self, _scope: PaintScope, _rect: Rect, _item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
@@ -919,6 +932,7 @@ impl IPainter for BuiltinPainter {
     fn triangles(&self, _scope: PaintScope, vertices: NcCopyFromBufferOffset<'_, RenderVertex>) -> Result<(), NcStatus> {
         assert_eq!(self.button.label()?.to_string()?, "AB");
         *self.probe.vertices.borrow_mut() = vertices.as_slice().to_vec();
+        self.probe.order.borrow_mut().push(false);
         if self.probe.fail.replace(false) { Err(UI_E_RENDER) } else { Ok(()) }
     }
     /// Built-in painting uses the bulk path after resolving its complete theme state.
@@ -945,6 +959,8 @@ fn builtin_bulk_paint_preserves_alignment_icons_and_releases_semantic_borrows() 
     assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
     button.set_icon_role(ContentIcon::CHECK).unwrap();
     assert_eq!(common.take_change().unwrap(), GeometryChange::CHANGED);
+    button.clear_image().unwrap();
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
     button.set_icon_role(ContentIcon::CHECK).unwrap();
     assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
     assert_eq!(button.set_named_icon("missing"), Err(nc_com::NC_E_NOT_FOUND));
@@ -1138,3 +1154,5 @@ fn static_leaf_content_recovers_from_reentry_and_errors_with_one_owned_lifetime(
     drop(widget);
     assert_eq!(probe.drops.get(), 1);
 }
+
+mod images;

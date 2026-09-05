@@ -32,3 +32,7 @@ pub mod assets;
 /// Static application leaf behavior stored inline in one concrete COM object.
 pub mod leaf;
 pub use leaf::LeafContent;
+
+/// Owned immutable renderer images with cached measurement dimensions.
+pub mod image;
+pub use image::Image;

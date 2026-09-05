@@ -56,7 +56,7 @@ use rs_math3d::{Recti, Vec2i};
 
 use crate::atlas::{AtlasHandle, FontId, IconId};
 use crate::math::RectExt;
-use crate::render::{DisplayList, Painter, TextureId};
+use crate::render::{DisplayList, Painter};
 use crate::input::{Modifiers, MouseButton};
 use crate::{KeyboardAction, KeyboardBehavior, WidgetOption};
 use crate::theme::{Color, ControlRole, ControlState, MenuRole, MenuState, Skin, SurfaceRole, SurfaceState};
@@ -452,15 +452,6 @@ impl<'a> WidgetPaintCtx<'a> {
         // Callers resolve a semantic content color before reaching this primitive, so explicit image
         // tints and role-specific state colors are preserved exactly.
         self.painter().icon(id, rect, color);
-    }
-
-    /// Draws an external image through a widget-local painter without recoloring its source pixels.
-    pub(crate) fn draw_image(&mut self, image: TextureId, rect: Recti) {
-        // External images are already complete RGBA artwork. A theme content color is appropriate for
-        // monochrome atlas glyphs, but multiplying a photograph or colored texture by black turns
-        // every nontransparent pixel black. Opaque white is the multiplicative identity and keeps
-        // image presentation independent from the selected theme's text color.
-        self.painter().image(image, rect, crate::color(255, 255, 255, 255));
     }
 
     /// Draws one control using this widget's resolved interaction state.

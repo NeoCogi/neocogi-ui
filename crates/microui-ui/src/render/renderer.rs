@@ -367,9 +367,9 @@ impl<B: RendererBackend> DisplayListExecutor<'_, '_, B> {
             return Ok(());
         };
         match kind {
-            DrawKind::ComTexture { texture, rect, color } => {
-                // Normalized unit source yields the same clipped UVs without a foreign size query.
-                if let Some(vertices) = clipped_textured_quad(rect, Recti::new(0, 0, 1, 1), Dimensioni::new(1, 1), color, clip) {
+            DrawKind::ComTexture { texture, rect, source, color } => {
+                // Explicit source coordinates preserve image sampling across nested COM paint recordings.
+                if let Some(vertices) = clipped_uv_quad(rect, Vec2f::new(source.u0, source.v0), Vec2f::new(source.u1, source.v1), color, clip) {
                     self.frame.draw_com_texture(texture, vertices)?;
                 }
             }
@@ -547,6 +547,15 @@ fn clipped_textured_quad(dst: Recti, src: Recti, texture_dim: Dimensioni, color:
     if !dst.has_positive_area() || !src.has_positive_area() || texture_dim.width <= 0 || texture_dim.height <= 0 {
         return None;
     }
+    let extent = Vec2f::new(texture_dim.width as f32, texture_dim.height as f32);
+    let origin = Vec2f::new(src.x as f32, src.y as f32);
+    let end = origin + Vec2f::new(src.width as f32, src.height as f32);
+    clipped_uv_quad(dst, origin / extent, end / extent, color, clip)
+}
+
+/// Shared destination clipping interpolates normalized source edges for atlas and COM images alike.
+fn clipped_uv_quad(dst: Recti, source_min: Vec2f, source_max: Vec2f, color: Color, clip: Recti) -> Option<[Vertex; 4]> {
+    if !dst.has_positive_area() { return None; }
     let clipped = dst.positive_intersection(clip)?;
 
     let dst_extent = Vec2f::new(dst.width as f32, dst.height as f32);
@@ -561,12 +570,9 @@ fn clipped_textured_quad(dst: Recti, src: Recti, texture_dim: Dimensioni, color:
     let t_min = clipped_offset_min / dst_extent;
     let t_max = clipped_offset_max / dst_extent;
 
-    let src_min = Vec2f::new(src.x as f32, src.y as f32);
-    let src_extent = Vec2f::new(src.width as f32, src.height as f32);
-    let texture_extent = Vec2f::new(texture_dim.width as f32, texture_dim.height as f32);
-    // uv = (source_origin + destination_fraction * source_extent) / texture_extent.
-    let uv_min = (src_min + t_min * src_extent) / texture_extent;
-    let uv_max = (src_min + t_max * src_extent) / texture_extent;
+    let source_extent = source_max - source_min;
+    let uv_min = source_min + t_min * source_extent;
+    let uv_max = source_min + t_max * source_extent;
 
     Some(textured_quad_from_uv(clipped, uv_min, uv_max, color))
 }

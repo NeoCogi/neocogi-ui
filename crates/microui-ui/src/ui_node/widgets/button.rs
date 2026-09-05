@@ -52,14 +52,14 @@ pub enum ButtonContent {
         /// Text displayed on the button.
         label: String,
         /// Optional image rendered on the button.
-        image: Option<TextureId>,
+        image: Option<microui_redux::Image>,
     },
     /// An optional image scaled to the allocated button width while preserving aspect ratio.
     ScaledImage {
         /// Text displayed on the button.
         label: String,
         /// Optional image rendered on the button.
-        image: Option<TextureId>,
+        image: Option<microui_redux::Image>,
     },
 }
 
@@ -113,7 +113,7 @@ impl ButtonParameters {
     }
 
     /// Creates image-button parameters with explicit options and fill behavior.
-    pub fn with_image(label: impl Into<String>, image: Option<TextureId>, opt: WidgetOption, fill: WidgetFillOption) -> Self {
+    pub fn with_image(label: impl Into<String>, image: Option<microui_redux::Image>, opt: WidgetOption, fill: WidgetFillOption) -> Self {
         Self {
             content: ButtonContent::Image { label: label.into(), image },
             font: FontRef::Role(FontRole::Body),
@@ -123,7 +123,7 @@ impl ButtonParameters {
     }
 
     /// Creates scaled-image button parameters.
-    pub fn with_scaled_image(label: impl Into<String>, image: Option<TextureId>, opt: WidgetOption, fill: WidgetFillOption) -> Self {
+    pub fn with_scaled_image(label: impl Into<String>, image: Option<microui_redux::Image>, opt: WidgetOption, fill: WidgetFillOption) -> Self {
         Self {
             content: ButtonContent::ScaledImage { label: label.into(), image },
             font: FontRef::Role(FontRole::Body),
@@ -183,11 +183,11 @@ impl Button {
                 inline_content_size(style, atlas, &self.font, label, visual)
             }
             ButtonContent::Image { label, image } => {
-                let visual = image.map(TextureId::size);
+                let visual = image.as_ref().map(image_size);
                 inline_content_size(style, atlas, &self.font, label, visual)
             }
             ButtonContent::ScaledImage { label, image } => {
-                let visual = image.map(TextureId::size);
+                let visual = image.as_ref().map(image_size);
                 if visual.is_some() && constraints.width.bound().is_some() {
                     scaled_visual_content_size(constraints, visual)
                 } else {
@@ -221,19 +221,19 @@ impl Button {
                 }
             }
             ButtonContent::Image { label, image } => {
-                let visual_size = image.map(TextureId::size);
+                let visual_size = image.as_ref().map(image_size);
                 let placement = place_inline_content(rect, ctx.skin(), label, visual_size);
                 if !label.is_empty() {
                     ctx.draw_control_text_with_font(font, label, placement.text, ControlRole::Button, self.opt);
                 }
-                if let (Some(image), Some(visual)) = (*image, placement.visual) {
+                if let (Some(image), Some(visual)) = (image.as_ref(), placement.visual) {
                     // External image pixels carry their own color; the adjacent label alone uses
                     // the stateful Button content color selected by the active theme.
-                    ctx.draw_image(image, visual);
+                    ctx.painter().com_texture(visual, crate::color(255, 255, 255, 255), image.as_interface().add_ref());
                 }
             }
             ButtonContent::ScaledImage { label, image } => {
-                let visual_size = image.map(TextureId::size);
+                let visual_size = image.as_ref().map(image_size);
                 let placement = if visual_size.is_some() {
                     place_scaled_visual_content(rect, visual_size)
                 } else {
@@ -242,10 +242,10 @@ impl Button {
                 if !label.is_empty() {
                     ctx.draw_control_text_with_font(font, label, placement.text, ControlRole::Button, self.opt);
                 }
-                if let (Some(image), Some(visual)) = (*image, placement.visual) {
+                if let (Some(image), Some(visual)) = (image.as_ref(), placement.visual) {
                     // Scaling changes only destination geometry; it must not introduce a theme
                     // content-color tint that destroys the source image's RGB channels.
-                    ctx.draw_image(image, visual);
+                    ctx.painter().com_texture(visual, crate::color(255, 255, 255, 255), image.as_interface().add_ref());
                 }
             }
         }
@@ -371,5 +371,26 @@ impl Button {
     /// Changes the paint-only fill policy after COM validation.
     pub(crate) fn com_set_fill(&mut self, fill: WidgetFillOption) {
         self.fill = fill;
+    }
+}
+
+impl crate::com::widget::ImageState for Button {
+    /// Replaces the visual kind while keeping the single label allocation and selected font.
+    fn set_image(&mut self, image: Option<microui_redux::Image>, fit_width: bool) -> bool {
+        match &self.content {
+            // Clearing image content must not erase an independently selected atlas icon.
+            ButtonContent::Text { .. } if image.is_none() => return false,
+            ButtonContent::Image { image: previous, .. } if !fit_width && same_image(previous, &image) => return false,
+            ButtonContent::ScaledImage { image: previous, .. } if fit_width && same_image(previous, &image) => return false,
+            _ => {}
+        }
+        let (ButtonContent::Text { label, .. } | ButtonContent::Image { label, .. } | ButtonContent::ScaledImage { label, .. }) = &mut self.content;
+        let label = std::mem::take(label);
+        self.content = match (image, fit_width) {
+            (None, _) => ButtonContent::Text { label, icon:None },
+            (image, false) => ButtonContent::Image { label, image },
+            (image, true) => ButtonContent::ScaledImage { label, image },
+        };
+        true
     }
 }

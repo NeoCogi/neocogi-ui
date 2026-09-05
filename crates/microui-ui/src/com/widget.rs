@@ -197,7 +197,6 @@ impl<S: WidgetAlgorithm> WidgetCore<S> {
         let mut recording = PaintRecording {
             resources: &resources,
             scratch: Some(scratch),
-            vertices: Vec::new(),
         };
         {
             let scratch = recording.scratch.as_mut().expect("active recording owns its workspace");
@@ -219,11 +218,10 @@ impl<S: WidgetAlgorithm> WidgetCore<S> {
             let size = crate::Dimensioni::new(state.rect.width.max(1), state.rect.height.max(1));
             let info = crate::render::FrameInfo::try_new(size, crate::color(0, 0, 0, 0)).map_err(|_| NC_E_INVALID_ARG)?;
             scratch.renderer.render(info, &mut scratch.list).map_err(|_| UI_E_RENDER)?;
-            recording.vertices = std::mem::take(&mut *scratch.storage.vertices.borrow_mut());
         }
         // All semantic and scratch RefCell guards have ended. Only owned storage
         // remains live if a custom recorder calls back into this object.
-        painter.triangles(scope, NcCopyFromBufferOffset::new(0, &recording.vertices))
+        recording.scratch.as_ref().expect("active recording owns its workspace").storage.paint(scope, painter)
     }
 }
 
@@ -324,18 +322,12 @@ struct PaintRecording<'a> {
     resources: &'a ResourceRevision,
     /// Present until Drop returns the reusable workspace.
     scratch: Option<PaintScratch>,
-    /// Detached final geometry, borrowed only for the synchronous bulk copy.
-    vertices: Vec<RenderVertex>,
 }
 
 impl Drop for PaintRecording<'_> {
     /// Restores both workspace and vertex capacity after success or failure.
     fn drop(&mut self) {
         let scratch = self.scratch.take().expect("recording owns scratch until drop");
-        if !self.vertices.is_empty() || self.vertices.capacity() != 0 {
-            self.vertices.clear();
-            *scratch.storage.vertices.borrow_mut() = std::mem::take(&mut self.vertices);
-        }
         *self.resources.scratch.borrow_mut() = Some(scratch);
     }
 }
@@ -665,3 +657,37 @@ pub(super) fn local_font_role(role: TextFontRole) -> Result<crate::FontRole, NcS
         _ => Err(NC_E_INVALID_ARG),
     }
 }
+
+/// Private shared editing hook over each algorithm's authoritative concrete image content.
+pub(crate) trait ImageState {
+    /// Receives only a validated owned image, with no caller buffer or native identifier.
+    fn set_image(&mut self, image: Option<microui_redux::Image>, fit_width: bool) -> bool;
+}
+/// Emits the same checked image capability for the two controls that render external images.
+macro_rules! image_content_impl {
+    ($name:ident) => {
+        impl IImageContent for $name {
+            /// Detaches semantic state before reading foreign dimensions; failed reads preserve it.
+            fn set_image(&self, image: ComRef<'_, ITextureAbi>, fit_width: bool) -> Result<(), NcStatus> {
+                self.widget.state.writable()?;
+                let mut core = self.widget.take()?;
+                let image = microui_redux::Image::from_interface(image.add_ref())?;
+                // A hostile dimension provider may reenter lifecycle authority during validation.
+                self.widget.state.writable()?;
+                if super::widget::ImageState::set_image(&mut *core, Some(image), fit_width) {
+                    self.widget.state.record_change(GeometryChange::CHANGED);
+                }
+                Ok(())
+            }
+            /// Clears owned image content and retains the same label/event producer.
+            fn clear_image(&self) -> Result<(), NcStatus> {
+                self.widget.state.writable()?;
+                if super::widget::ImageState::set_image(&mut *self.widget.take()?, None, false) {
+                    self.widget.state.record_change(GeometryChange::CHANGED);
+                }
+                Ok(())
+            }
+        }
+    };
+}
+pub(super) use image_content_impl;

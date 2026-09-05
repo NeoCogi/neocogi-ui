@@ -38,7 +38,7 @@ enum Drawing {
     /// Solid vertices retain their material meaning until the UI executor resolves the current atlas.
     ColoredTriangles(Vec<ColoredVertex>),
     /// Texture capability retained until the prepared frame has finished or been abandoned.
-    Texture(Rect, u32, ComPtr<ITextureAbi>),
+    Texture(Rect, TextureRegion, u32, ComPtr<ITextureAbi>),
     /// Application GPU work retains its precise position among ordinary primitives.
     Item(Rect, ComPtr<IRenderItemAbi>),
     /// Owned UTF-8 text and its local allocation.
@@ -126,13 +126,14 @@ impl IPainter for Recorder {
     }
 
     /// Retains the resource outside the command borrow; validation at submission authenticates its owner.
-    fn texture(&self, scope: PaintScope, rect: Rect, rgba: u32, texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
+    fn texture(&self, scope: PaintScope, rect: Rect, source: TextureRegion, rgba: u32, texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
         self.check(scope)?;
         if rect.width < 0 || rect.height < 0 {
             return Err(NC_E_INVALID_ARG);
         }
+        source.validate()?;
         let texture = texture.add_ref();
-        self.push(scope, Drawing::Texture(rect, rgba, texture))
+        self.push(scope, Drawing::Texture(rect, source, rgba, texture))
     }
     /// Records a capability rather than a callback lending mutable GPU state across COM.
     fn item(&self, scope: PaintScope, rect: Rect, item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
@@ -246,7 +247,7 @@ impl PaintService {
                     super::render::color(rgba),
                 ),
                 Drawing::Polygon(points, rgba) => ctx.painter().fill_polygon(&points, super::render::color(rgba)),
-                Drawing::Texture(rect, rgba, texture) => ctx.painter().com_texture(local_rect(rect), super::render::color(rgba), texture),
+                Drawing::Texture(rect, source, rgba, texture) => ctx.painter().com_texture_region(local_rect(rect), source, super::render::color(rgba), texture),
                 Drawing::Item(rect, item) => ctx.painter().com_item(local_rect(rect), item),
                 Drawing::ColoredTriangles(vertices) => ctx.painter().colored_triangles(&vertices),
                 Drawing::Triangles(vertices) => ctx.painter().atlas_triangles(&vertices),

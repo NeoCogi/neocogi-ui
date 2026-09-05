@@ -95,9 +95,9 @@ pub trait IPainter {
     /// Records complete atlas triangles in local coordinates; offset is zero,
     /// length is divisible by three, and every position/UV component is finite.
     fn triangles(&self, scope: PaintScope, vertices: NcCopyFromBufferOffset<'_, RenderVertex>) -> Result<(), NcStatus>;
-    /// Retains an immutable renderer-owned RGBA texture and draws its complete image in local coordinates.
+    /// Retains an immutable renderer-owned RGBA texture and draws its normalized source region in local coordinates.
     /// Negative extents are invalid; zero extents draw nothing. Ownership is validated before GPU execution.
-    fn texture(&self, scope: PaintScope, rect: Rect, rgba: u32, texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus>;
+    fn texture(&self, scope: PaintScope, rect: Rect, source: TextureRegion, rgba: u32, texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus>;
     /// Retains a renderer-owned custom item at this exact painter-order position.
     /// The UI translates the rectangle and intersects its clip before submission.
     fn item(&self, scope: PaintScope, rect: Rect, item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus>;

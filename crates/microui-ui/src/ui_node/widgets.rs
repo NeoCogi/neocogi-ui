@@ -81,7 +81,7 @@ mod textbox;
 
 // Menus reuse the same intrinsic-height policy as ordinary controls without duplicating code.
 pub(crate) use control::content_height;
-use control::{inline_content_size, place_inline_content, place_scaled_visual_content, scaled_visual_content_size, text_size, widget_fill_visible};
+use control::{same_image, image_size, inline_content_size, place_inline_content, place_scaled_visual_content, scaled_visual_content_size, text_size, widget_fill_visible};
 
 pub use button::{Button, ButtonContent, ButtonParameters, ButtonSubmitted};
 pub use checkbox::{Checkbox, CheckboxChanged, CheckboxParameters};

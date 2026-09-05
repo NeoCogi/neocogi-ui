@@ -9,7 +9,7 @@ leaf_class!(Slider, crate::Slider, ISlider, ISliderAbi, IFontStyle, INumericEven
 leaf_class!(Number, crate::Number, INumber, INumberAbi, IFontStyle, INumericEvents);
 leaf_class!(ColorSwatch, crate::ColorSwatch, IColorSwatch, IColorSwatchAbi, IFontStyle);
 leaf_class!(ListItem, crate::ListItem, IListItem, IListItemAbi, IFontStyle, IIconContent, IActivationEvents);
-leaf_class!(ListBox, crate::ListBox, IListBox, IListBoxAbi, IFontStyle, IActivationEvents);
+leaf_class!(ListBox, crate::ListBox, IListBox, IListBoxAbi, IFontStyle, IActivationEvents, IImageContent);
 leaf_class!(Scrollbar, crate::Scrollbar, IScrollbar, IScrollbarAbi, IScrollbarEvents);
 
 impl ICheckbox for Checkbox {
@@ -244,3 +244,5 @@ impl IActivationEvents for ListItem {
 }
 
 text_subscription_impl!(Textbox, crate::TextboxChanged, crate::TextboxSubmitted);
+
+super::widget::image_content_impl!(ListBox);
