@@ -3,7 +3,7 @@ use super::*;
 use nc_com::{INcStringAbi, NcString};
 use std::collections::VecDeque;
 
-#[com_class(interfaces(IWidget, ILeafLayout, IActivatable, IButton, IButtonEvents, IWidgetLifetime))]
+#[com_class(interfaces(IButton, ILeafLayout, IActivatable, IButtonEvents, IWidgetLifetime))]
 /// One authoritative button allocation shared by editing, layout, paint and input.
 pub(super) struct Button {
     /// Runtime authority has no path back to the owning tree.

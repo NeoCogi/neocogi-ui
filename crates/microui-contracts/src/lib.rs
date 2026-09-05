@@ -80,7 +80,9 @@ pub trait IChildren {
 
 #[com_interface(auto_guid = "microui.Button:v1")]
 /// Concrete button editing contract; there is no generic property bag.
-pub trait IButton {
+// The base slots belong to this same object. An inherited call borrows the
+// button projection; passing a separate IWidget argument requires querying it.
+pub trait IButton: IWidget {
     /// Replaces the complete UTF-8 label; the logical input offset must be zero.
     fn set_label(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Returns the current label as an independently owned immutable string object.

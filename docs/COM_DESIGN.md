@@ -234,10 +234,12 @@ pub trait IUiFactory {
 }
 ```
 
-A concrete plugin class contains its own private state directly:
+Specialized widget interfaces inherit the common contract (`IButton: IWidget`).
+The class lists its specialized interface; nc-com supplies every base projection
+in the same allocation. A concrete plugin class contains its private state directly:
 
 ```rust,ignore
-#[com_class(interfaces(IWidget, ILeafLayout, IButton, IButtonEvents))]
+#[com_class(interfaces(IButton, ILeafLayout, IButtonEvents))]
 /// One button allocation; no legacy trait-object wrapper or public downcast is needed.
 pub struct ButtonObject {
     /// Plugin-local semantic state and pending geometry invalidation.

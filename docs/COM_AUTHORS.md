@@ -70,3 +70,20 @@ A frame finishes explicitly and reports submission/presentation errors. Dropping
 
 
 Window capabilities expose current manager state through copied snapshots. A child inherits its family root's fixed layer; changing a managed child/dialog layer fails. Hiding a parent excludes its structural family, and showing it restores child-local visibility intent without reopening modal dialogs. Popups have a distinct interface, obey the active owner's modal policy, and retain their definition when hidden. Explicit close destroys the corresponding subtree and closes its widgets even when the application retains handles. Parent capabilities are authenticated by their manager-owned COM identity before a widget's mount-once claim is committed. Unknown option bits, malformed visibility/clip tags, invalid dimensions and invalid fixed layers are rejected before mutation.
+
+## Widget interface inheritance
+
+Declare specialized contracts as `IButton: IWidget` (or another single widget
+base). The COM class lists `interfaces(IButton, ...)`; nc-com supplies IWidget
+and every ancestor automatically in the same allocation. Compose one concrete
+widget-state field into the class. Interface inheritance shares behavior and
+identity; it does not create a second widget or copy Rust fields.
+
+`button.take_change()` and borrowed inherited calls use the base vtable prefix
+without reference-count traffic. When an API takes `ComRef<IWidgetAbi>`, query
+IWidget once, retain that projection for as long as needed, and pass its borrow.
+The derived header still advertises IButton, so a raw cast is not a valid base
+projection. The static generic facade hides these checked projections from app
+code. Use distinct names for base and specialized methods; local names take
+precedence during Rust method lookup. Definitions across crates should name a
+base through its module path so generated companion types resolve together.
