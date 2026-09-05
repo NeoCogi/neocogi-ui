@@ -656,3 +656,80 @@ outcome and preserve unattempted outcomes for retry. Cancellation of the lease
 still discards pending outcomes. Ordinary widget/window sources retain their
 separate rule: discard obsolete ordinary work and preserve only their explicitly
 specified terminal fact. No producer stores callbacks or retains the application.
+
+
+## Complete frames, images and application GPU work
+
+`IRenderer::render` prepares and explicitly finishes one complete frame synchronously.
+There is no cloneable COM frame or borrowed native render-pass object. The UI expands
+text, patches and geometry, translates local paint coordinates, and performs final
+clipping before publishing its owned `IRenderStream`. A retained stream/token expires
+on success and failure, including zero-length reads and indexed resource queries.
+
+A stream contains a bulk vertex buffer and ordered `RenderBatch` records. Atlas
+ranges contain positive multiples of three vertices; image ranges contain four
+vertices. Ranges must partition the buffer without gaps, overlap or unused trailing
+vertices. Custom items contain positive content/clip rectangles, with the clip inside
+both content and viewport. Unknown tags, invalid rectangles, non-finite vertex
+components, truncated copies, zero invocation tokens and excess counts fail before
+GPU execution. Limits are 16M vertices and 1M batches per complete frame. Adjacent
+atlas triangles are coalesced. The native plugin makes two bulk reads, plus one owned
+resource fetch for each image/custom batch, and reuses its CPU allocations.
+
+The backend detaches its complete mutable state before calling a foreign stream or
+querying resource identities. Native render/upload/scene-creation reentry returns
+`UI_E_BUSY`; scene edits also reject preparation/execution reentry. All source reads
+and resource authentication finish before a native frame is acquired. A failed
+preparation discards already resolved resource snapshots and allows retry. GPU
+execution failure is reported by explicit finish and does not present the failed
+frame. Immediate GL work may already have executed: abandonment is not GPU rollback,
+and native device/surface loss can require constructing a replacement renderer.
+
+Create immutable images through the chosen renderer's `ITextureFactory`. Uploads
+must have offset zero and exactly width*height*4 RGBA bytes, with positive dimensions
+satisfying the common image validation/allocation policy. Publication follows a
+successful upload. `ITexture::size` reports immutable source dimensions; a painter's
+destination rectangle changes scaling without changing that image. No public native
+texture ID is accepted across COM.
+
+Resources belong to one native window/renderer instance, even when two instances
+use the same GPU API. The native plugin authenticates canonical COM identity against
+its own weak registry; a matching ABI or a claimed numeric owner does not prove
+membership. Foreign images and scenes report `UI_E_OWNER` directly from the renderer.
+The UI's frame API reports backend failures as `UI_E_RENDER`; query
+`IRenderDiagnostics::diagnostic` on the renderer for the underlying preparation or
+native-driver detail. Returned diagnostic strings are immutable snapshots.
+
+An image keeps its native allocation, window and context alive after the public
+window interface is released. A prepared draw keeps its image alive until finish or
+abandonment. Final COM release immediately removes registry authentication before
+that address can be reused; final native-image release deletes while idle, or queues
+deletion until the active ownership transaction exits. Deletion selects the owning
+GL context, and destructors never submit or present. Idle frame storage retains no
+resource references, so it cannot form a device/resource cycle. Plugins remain loaded
+for the process lifetime; hot unloading is unsupported.
+
+The example platform exposes `IDemoScenes::create_scene` and `IMeshScene: IRenderItem`.
+The scene is one COM object. It accepts complete finite mesh records and triangle
+indices, plus atomically replaced column-major projection/view/model transforms.
+Offsets are zero; limits are 4M vertices and 12M indices, every index must name a
+vertex, and two empty buffers clear the mesh. Invalid mesh or transform edits leave
+the prior scene intact. The native renderer snapshots shared immutable mesh buffers
+before preparing actual depth-tested GPU work; it does not substitute CPU UI
+triangles for application rendering.
+
+Use `Painter::texture(rect, rgba, image)` and `Painter::item(rect, scene)` at the
+intended source position. The full example is `demos/com-slice/src/gpu.rs`. Scene edits
+normally change paint only: render again; a UI update is needed if widget geometry or
+other retained inputs also changed. Perform scene edits before painting. The GPU
+owner can detect its own active preparation/execution, but cannot detect a separate
+UI plugin's earlier paint phase. Widget/application authors must uphold observational
+paint and synchronize externally shared scene/model changes; no automatic dependency
+tracking is implied by `GeometryChange::NO_CHANGE`.
+
+Backend-specific application renderers are compiled into the selected GPU plugin.
+Their concrete command enums, GL context, Vulkan command buffers, WGPU encoders and
+render passes remain private Rust values inside that binary. An independently
+loaded GPU extension cannot borrow these native Rust objects through the generic
+COM API. Such an extension would need a separately designed backend-specific ABI;
+this migration intentionally provides typed scene/resource capabilities instead.

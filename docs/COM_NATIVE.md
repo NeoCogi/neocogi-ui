@@ -2,28 +2,37 @@
 
 The incremental migration is tracked in [COM_MIGRATION.md](COM_MIGRATION.md). The accepted final design is [COM_DESIGN.md](COM_DESIGN.md); this document describes the currently executable slice, not completion of that design.
 
-Build and stage the runtime, UI assembly, SDL/Glow assembly and small host:
+Build and stage the runtime, UI assembly, SDL/GPU assembly and small host:
 
 ```sh
 cargo run -p microui-redux-tools --bin com-build
-./target/com-native/debug/microui-demo-com
+./target/com-native/debug/glow/microui-demo-com
 ```
 
-For release artifacts, pass `-- --release` to the driver and use `target/com-native/release`. The driver uses the selected Cargo toolchain, builds each binary separately, and honors `CARGO_TARGET_DIR`. Its builds are offline, so dependencies must already be cached. It does not invoke Cargo from a build script.
+For release artifacts, pass `-- --release` to the driver and use `target/com-native/release/glow`. The driver uses the selected Cargo toolchain, builds each binary separately, and honors `CARGO_TARGET_DIR`. Its builds are offline, so dependencies must already be cached. It does not invoke Cargo from a build script.
+
+Select the native backend explicitly; each package includes only the selected implementation and the demo's matching native mesh renderer:
+
+```sh
+cargo run -p microui-redux-tools --bin com-build -- --backend vulkan
+cargo run -p microui-redux-tools --bin com-build -- --backend wgpu
+```
+
+Packages are staged in `target/com-native/{debug,release}/{glow,vulkan,wgpu}`. Each contains the same host, runtime, UI plugin and `microui-plugin-platform-native`, plus an explicit `plugins.txt`. A native display is required for the Vulkan/WGPU smoke tests. The ordinary Cargo `glow`/`vulkan`/`wgpu` feature priority matches the existing demo renderer when features are unified; the packaging driver selects exactly one with default features disabled.
 
 The host reads the staged `plugins.txt` in order, loads both trusted libraries from beside its executable, and activates their concrete bootstrap classes. `microui-redux` contains only static typed clients and contracts. `microui-ui` contains retained implementation code. The small crates under `plugins/` own descriptors and explicitly selected exports; an ordinary implementation-library dependency never exports a plugin entrypoint accidentally.
 
-On Linux the executable uses an `$ORIGIN` runtime search path. It can start outside the source tree without `LD_LIBRARY_PATH`. The driver includes native filename/search-path handling for macOS and Windows, but those packages have not yet passed the platform deployment gates. Native SDL/OpenGL system dependencies still need to be installed; this is not a system-library bundler.
+On Linux the executable uses an `$ORIGIN` runtime search path. It can start outside the source tree without `LD_LIBRARY_PATH`. The driver includes native filename/search-path handling for macOS and Windows, but those packages have not yet passed the platform deployment gates. Native SDL 2.26+ and the selected graphics API system dependencies still need to be installed; this is not a system-library bundler.
 
 A deterministic input/render/teardown smoke run is available:
 
 ```sh
 cd /tmp
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
-  /absolute/path/to/target/com-native/debug/microui-demo-com --smoke
+  /absolute/path/to/target/com-native/debug/glow/microui-demo-com --smoke
 ```
 
-This uses a real SDL GL context and Mesa rendering. It verifies separate-binary activation, real GPU painting, keyboard activation into application-owned handlers, inherited/composed controls, compact menus, native-path file-picker acceptance, invalidation, resize, explicit update-before-render and logical closure. It does not claim screenshot comparison, hardware-driver coverage, or completion of every input family.
+This uses a real SDL GL context and Mesa rendering. It verifies separate-binary activation, real GPU painting, keyboard activation into application-owned handlers, inherited/composed controls, compact menus, native-path file-picker acceptance, invalidation, resize, explicit update-before-render and logical closure. Glow additionally has a GPU pixel-readback test for image/mesh/overlay order. Linux Vulkan and WGPU packages have passed the same smoke on the native Intel/Mesa display. This does not complete every input family or the browser/platform deployment gates.
 
 The current slice has deliberate transitions with assigned removal milestones:
 
@@ -32,8 +41,25 @@ The current slice has deliberate transitions with assigned removal milestones:
 - The manager mounts arbitrary leaves exposing IWidget and ILeafLayout. Lifetime, common properties, input/update, invalidation and paint belong to IWidget; the separate activation/lifetime interfaces have been removed. The manager now exposes child windows, hidden modal dialogs, typed popups, visibility, layering, title/options and child clipping. The basic built-in leaves now have concrete editing capabilities. Linear/Grid and the real ScrollArea, Disclosure and TextArea compositions expose transactional topology and scoped layout services.
 - Built-in buttons, checkboxes, textboxes, text blocks, sliders, numbers, color swatches, list entries and scrollbars reuse their complete semantic, measurement and theme-paint algorithms. Font/icon selection and button center-fill are concrete optional capabilities. Paint receives copied interaction state and records atlas geometry in bulk. The simple external ITextMetrics/IPainter text conveniences still use body-font button appearance; full external resource metadata arrives with item 15. Finite and unbounded constraints are explicit copied records.
 - UI and platform assemblies both use the same generated demo atlas. They do not yet negotiate arbitrary asset bundles. Item 15 replaces this packaging input with the shared immutable resource-bundle contract. The public application does not depend on the demo asset builder.
-- The renderer submits final atlas triangles in one bulk read using reusable storage. External textures, custom render items, atlas replacement, detailed backend diagnostics and other GPU backends are item 14; unsupported operations currently fail explicitly.
+- The renderer copies one complete vertex buffer and one ordered batch buffer into reusable owned storage, then authenticates image/scene capabilities before opening its native frame. Atlas triangles, clipped image quads and real native 3D commands preserve source order. Texture/scene resources keep their native window/device alive; diagnostics preserve backend failure text. Atlas replacement belongs to the immutable resource transaction in item 15. Temporary legacy-ID and custom-callback hooks disappear with the old direct Context API in item 17.
 - The runtime accepts complete typed pointer/button/wheel/key/modifier/text/cancellation events through input(), then update(size) applies queued input and synchronizes layout. Widget updates receive copied router snapshots and content-local events. The native slice still translates its smaller SDL poll record; complete platform translation, text-input-area and IME integration are item 16.
 - The host owns an `EventSession` and concrete handler. `update_with_events` dispatches between input phases, releases the context for ordinary callback edits, and commits their geometry before routing later input. All current leaf, window and popup event families use the same queue/lease transport. Combo/menu actions and standard native-path picker completion use the same transport; internal component callbacks share the finite boundary budget. The producer never owns the sink or lease.
 
 Painter and render-stream objects own storage. Their monotonically increasing invocation identities expire on every return path and are never reused; retaining an interface is safe but retaining an old token does not extend authority. Tests also exercise reentrant update, mutation during observation, failed paint before backend submission, malformed input, foreign ownership, duplicate mounts and retained handles after closure. See [COM_AUTHORS.md](COM_AUTHORS.md) for the complete author obligations.
+
+The native resource/ownership test is explicit because it creates real OS windows:
+
+```sh
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  cargo test -p microui-plugin-platform-native --lib -- --ignored
+cargo test -p microui-plugin-platform-native --no-default-features --features vulkan --lib -- --ignored
+cargo test -p microui-plugin-platform-native --no-default-features --features wgpu --lib -- --ignored
+```
+
+`demos/com-slice/src/gpu.rs` demonstrates an independently implemented host widget with inline `WidgetState`, a typed immutable image and an inherited mesh render item. Its application logic uses only the facade and contracts. The demo's native shaders/pipelines remain co-packaged with the selected renderer. Factory `host()` supplies widget authority directly, without constructing a dummy built-in control.
+
+On the tested Mesa 25.2.8 installation, combining offscreen EGL, accessible hardware
+devices and `LIBGL_ALWAYS_SOFTWARE=1` crashed in `driCreateNewScreen3` during SDL window
+creation, before renderer construction. Normal hardware-display tests pass; the
+headless software tests pass with hardware devices unavailable. Use the ordinary
+native-display command on a desktop instead of forcing that EGL combination.

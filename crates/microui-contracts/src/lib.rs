@@ -18,6 +18,8 @@ mod file_dialog;
 pub use file_dialog::*;
 mod menu;
 pub use menu::*;
+mod render;
+pub use render::*;
 mod path;
 pub use path::*;
 mod leaves;
@@ -27,7 +29,7 @@ pub use input::{
     KeyCode, KeyStroke, Point, WidgetEvent, WidgetEventAbi, WidgetEventTag, WidgetUpdate, WidgetAction, decode_widget_event, UiInput, UiInputAbi, UiInputTag,
 };
 
-use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, com_interface, com_int_enum, com_struct};
+use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, com_interface, com_int_enum, com_struct};
 
 com_int_enum! {
     /// Whether preferred measurement or child placement inputs changed.
@@ -76,6 +78,12 @@ pub trait IPainter {
     /// Records complete atlas triangles in local coordinates; offset is zero,
     /// length is divisible by three, and every position/UV component is finite.
     fn triangles(&self, scope: PaintScope, vertices: NcCopyFromBufferOffset<'_, RenderVertex>) -> Result<(), NcStatus>;
+    /// Retains an immutable renderer-owned RGBA texture and draws its complete image in local coordinates.
+    /// Negative extents are invalid; zero extents draw nothing. Ownership is validated before GPU execution.
+    fn texture(&self, scope: PaintScope, rect: Rect, rgba: u32, texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus>;
+    /// Retains a renderer-owned custom item at this exact painter-order position.
+    /// The UI translates the rectangle and intersects its clip before submission.
+    fn item(&self, scope: PaintScope, rect: Rect, item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus>;
     /// Records a fill only while this exact invocation remains active.
     fn fill(&self, scope: PaintScope, rect: Rect, rgba: u32) -> Result<(), NcStatus>;
     /// Records UTF-8 text with the current body font and button content style.
@@ -129,6 +137,8 @@ pub trait IButton: IWidget {
 #[com_interface(auto_guid = "microui.UiFactory:v1")]
 /// Runtime-bound widget factory implemented by the UI plugin.
 pub trait IUiFactory {
+    /// Returns this runtime's non-owning authority for inline WidgetState in independent widget classes.
+    fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus>;
     /// Creates an empty combo header; its composing owner supplies generic list data and popup content.
     fn create_combo(&self) -> Result<ComPtr<IComboAbi>, NcStatus>;
     /// Creates a fixed scrolling multiline editor; CRLF and CR normalize to LF and the cursor starts at the end.
@@ -237,49 +247,6 @@ pub struct LayoutLimits {
 pub trait ILeafLayout {
     /// Computes preferred dimensions from explicit finite/unbounded axis constraints.
     fn measure(&self, bounds: LayoutLimits, metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus>;
-}
-
-#[com_struct]
-#[derive(Debug, Default)]
-/// Final atlas-backed vertex; tessellation and clipping already happened in the UI.
-pub struct RenderVertex {
-    /// Horizontal position in drawable pixels.
-    pub x: f32,
-    /// Vertical position in drawable pixels.
-    pub y: f32,
-    /// Normalized horizontal atlas coordinate.
-    pub u: f32,
-    /// Normalized vertical atlas coordinate.
-    pub v: f32,
-    /// Color packed as red in the least significant byte, then green, blue, alpha.
-    pub rgba: u32,
-}
-
-#[com_struct]
-/// Metadata for one synchronous renderer submission.
-pub struct RenderInfo {
-    /// Positive drawable dimensions.
-    pub size: Size,
-    /// Clear color in the same byte order as RenderVertex::rgba.
-    pub clear: u32,
-    /// Unique authority to read this frame's stream; expires when render returns.
-    pub invocation: u64,
-    /// Exact vertex count, always a multiple of three.
-    pub vertex_count: u32,
-}
-
-#[com_interface(auto_guid = "microui.RenderStream:v1")]
-/// Owned reusable vertex storage, readable only during its active submission.
-pub trait IRenderStream {
-    /// Copies a bounded range into caller-owned storage; offsets count vertices.
-    fn vertices(&self, invocation: u64, output: NcCopyToBufferOffset<'_, RenderVertex>) -> Result<u32, NcStatus>;
-}
-
-#[com_interface(auto_guid = "microui.Renderer:v1")]
-/// GPU resources and presentation belong to this object's native window.
-pub trait IRenderer {
-    /// Executes one complete frame synchronously; failure must not present it.
-    fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus>;
 }
 
 com_int_enum! {

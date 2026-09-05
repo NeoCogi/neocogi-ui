@@ -3361,9 +3361,9 @@ fn build_mesh_buffers(mesh: &PolyMesh) -> MeshBuffers {
             let normal = mesh.vertex_normal(v.normal);
             let uv = mesh.vertex_uv(v.tex);
             vertices.push(MeshVertex {
-                position: [position.x, position.y, position.z],
-                normal: [normal.x, normal.y, normal.z],
-                uv: [uv.x, uv.y],
+                position: [position.x, position.y, position.z].into(),
+                normal: [normal.x, normal.y, normal.z].into(),
+                uv: [uv.x, uv.y].into(),
             });
             count += 1;
         }

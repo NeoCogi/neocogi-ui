@@ -132,14 +132,28 @@ impl<'a> Painter<'a> {
         self.clip.relative_to(self.origin)
     }
 
+    /// Records an owned texture without calling foreign code while the display list is borrowed.
+    pub(crate) fn com_texture(&mut self, rect: Recti, color: Color, texture: nc_com::ComPtr<microui_contracts::ITextureAbi>) {
+        self.list.push_com_texture(self.clip, self.screen_rect(rect), color, texture);
+    }
+
+    /// Records application GPU work in the same list as every ordinary widget primitive.
+    pub(crate) fn com_item(&mut self, rect: Recti, item: nc_com::ComPtr<microui_contracts::IRenderItemAbi>) {
+        self.list.push_com_item(self.clip, self.screen_rect(rect), item);
+    }
+
     /// Copies validated COM atlas geometry and applies this painter's local origin.
     pub(crate) fn atlas_triangles(&mut self, vertices: &[microui_contracts::RenderVertex]) {
         let origin = self.origin;
-        let vertices = vertices.iter().map(|v| super::Vertex::new(
-            Vec2f::new(v.x + origin.x as f32, v.y + origin.y as f32),
-            Vec2f::new(v.u, v.v),
-            { let [r, g, b, a] = v.rgba.to_le_bytes(); color4b(r, g, b, a) },
-        )).collect();
+        let vertices = vertices
+            .iter()
+            .map(|v| {
+                super::Vertex::new(Vec2f::new(v.x + origin.x as f32, v.y + origin.y as f32), Vec2f::new(v.u, v.v), {
+                    let [r, g, b, a] = v.rgba.to_le_bytes();
+                    color4b(r, g, b, a)
+                })
+            })
+            .collect();
         self.list.push_atlas_triangles(self.clip, vertices);
     }
 

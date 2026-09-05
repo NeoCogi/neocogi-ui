@@ -69,7 +69,7 @@ struct RuntimeStorage {
     /// Shared construction services retain no root forest or owning runtime.
     factory: Rc<super::factory::NodeFactory>,
     /// Renderer is retained only during explicit synchronous submission.
-    target: Rc<RefCell<Option<ComPtr<IRendererAbi>>>>,
+    target: Rc<RefCell<Option<Rc<ComPtr<IRendererAbi>>>>>,
     /// Last successfully synchronized drawable dimensions.
     dimensions: Cell<Size>,
     /// Structural/setter changes require update before rendering.
@@ -134,6 +134,11 @@ impl Drop for RuntimeStorage {
 }
 
 impl IUiFactory for Runtime {
+    /// Supplies the same host used by built-ins without allocating a dummy widget or retaining the UI tree.
+    fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
+        self.storage.open()?;
+        Ok(self.storage.factory.host.clone())
+    }
     /// Constructs the complete semantic combo header with the same host and immutable resources as other leaves.
     fn create_combo(&self) -> Result<ComPtr<IComboAbi>, NcStatus> {
         self.storage.factory.host.check_mutation()?;
@@ -353,9 +358,11 @@ impl IUiRuntime for Runtime {
         // The complete submission is observational, including calls into the native renderer.
         let _phase = Observation::begin(&storage.factory.state);
         storage.factory.state.error.set(None);
-        *storage.target.borrow_mut() = Some(renderer.add_ref());
+        let renderer = Rc::new(renderer.add_ref());
+        *storage.target.borrow_mut() = Some(renderer);
         let result = context.frame(info).render_ui();
-        storage.target.borrow_mut().take();
+        let renderer = storage.target.borrow_mut().take();
+        drop(renderer);
         if let Some(error) = storage.factory.state.error.take() {
             return Err(error);
         }

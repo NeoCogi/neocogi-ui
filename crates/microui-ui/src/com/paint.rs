@@ -30,6 +30,10 @@ enum Command {
     Fill(Rect, u32),
     /// Complete, validated local atlas triangles copied before the call returns.
     Triangles(Vec<RenderVertex>),
+    /// Texture capability retained until the prepared frame has finished or been abandoned.
+    Texture(Rect, u32, ComPtr<ITextureAbi>),
+    /// Application GPU work retains its precise position among ordinary primitives.
+    Item(Rect, ComPtr<IRenderItemAbi>),
     /// Owned UTF-8 text and its local allocation.
     Text(Rect, String),
 }
@@ -64,6 +68,30 @@ impl Recorder {
 }
 
 impl IPainter for Recorder {
+    /// Retains the resource outside the command borrow; validation at submission authenticates its owner.
+    fn texture(&self, scope: PaintScope, rect: Rect, rgba: u32, texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
+        self.check(scope)?;
+        if rect.width < 0 || rect.height < 0 {
+            return Err(NC_E_INVALID_ARG);
+        }
+        let texture = texture.add_ref();
+        self.recording
+            .commands
+            .try_borrow_mut()
+            .map_err(|_| UI_E_BUSY)?
+            .push(Command::Texture(rect, rgba, texture));
+        Ok(())
+    }
+    /// Records a capability rather than a callback lending mutable GPU state across COM.
+    fn item(&self, scope: PaintScope, rect: Rect, item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
+        self.check(scope)?;
+        if rect.width < 0 || rect.height < 0 {
+            return Err(NC_E_INVALID_ARG);
+        }
+        let item = item.add_ref();
+        self.recording.commands.try_borrow_mut().map_err(|_| UI_E_BUSY)?.push(Command::Item(rect, item));
+        Ok(())
+    }
     /// Validates the whole batch before publishing any geometry to this scope.
     fn triangles(&self, scope: PaintScope, input: NcCopyFromBufferOffset<'_, RenderVertex>) -> Result<(), NcStatus> {
         self.check(scope)?;
@@ -142,7 +170,10 @@ impl PaintService {
         }
         let invocation = self.recording.next.get().checked_add(1).ok_or(nc_com::NC_E_OUT_OF_RANGE)?;
         self.recording.next.set(invocation);
-        self.recording.commands.borrow_mut().clear();
+        // Resource Release may reenter. Detach old values before destruction and preserve the allocation.
+        let mut commands = std::mem::take(&mut *self.recording.commands.borrow_mut());
+        commands.clear();
+        *self.recording.commands.borrow_mut() = commands;
         self.recording.active.set(invocation);
         let guard = Invocation(&self.recording);
         let state = WidgetPaint {
@@ -157,10 +188,17 @@ impl PaintService {
         };
         let result = widget.paint(PaintScope { invocation }, state, self.painter.as_com_ref());
         drop(guard);
-        result?;
-        // No component is called while the queue is borrowed; replay is private Rust code.
-        for command in self.recording.commands.borrow_mut().drain(..) {
+        // Failed paint abandons every retained resource as well; never run Release under the queue borrow.
+        let mut commands = std::mem::take(&mut *self.recording.commands.borrow_mut());
+        if let Err(error) = result {
+            commands.clear();
+            *self.recording.commands.borrow_mut() = commands;
+            return Err(error);
+        }
+        for command in commands.drain(..) {
             match command {
+                Command::Texture(rect, rgba, texture) => ctx.painter().com_texture(local_rect(rect), super::render::color(rgba), texture),
+                Command::Item(rect, item) => ctx.painter().com_item(local_rect(rect), item),
                 Command::Triangles(vertices) => ctx.painter().atlas_triangles(&vertices),
                 Command::Fill(rect, rgba) => ctx.painter().fill_rect(local_rect(rect), super::render::color(rgba)),
                 Command::Text(rect, label) => {
@@ -169,6 +207,7 @@ impl PaintService {
                 }
             }
         }
+        *self.recording.commands.borrow_mut() = commands;
         Ok(())
     }
 }

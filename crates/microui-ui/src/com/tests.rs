@@ -51,6 +51,13 @@ impl IRenderer for Renderer {
             stream.vertices(info.invocation, NcCopyToBufferOffset::new(0, &mut vertices))?,
             info.vertex_count
         );
+        let mut batches = vec![RenderBatch::Atlas { first: 0, count: 0 }.into(); info.batch_count as usize];
+        assert_eq!(stream.batches(info.invocation, NcCopyToBufferOffset::new(0, &mut batches))?, info.batch_count);
+        // These built-in fixtures use one coalesced atlas range regardless of glyph/primitive count.
+        assert_eq!(batches.len(), 1);
+        assert!(matches!(RenderBatch::try_from(batches[0])?, RenderBatch::Atlas { first: 0, count } if count == info.vertex_count));
+        assert_eq!(stream.texture(info.invocation, 0).unwrap_err(), NC_E_INVALID_ARG);
+        assert_eq!(stream.item(info.invocation, 0).unwrap_err(), NC_E_INVALID_ARG);
         assert!(vertices.len() >= 6);
         assert!(vertices.iter().all(|v| v.x.is_finite() && v.y.is_finite()));
         self.probe.calls.set(self.probe.calls.get() + 1);
@@ -112,6 +119,9 @@ fn rendering_requires_synchronized_geometry_and_streams_expire_after_success_and
     assert_eq!(runtime.render(resized, renderer.as_com_ref()), Err(UI_E_RENDER));
     for (stream, scope) in probe.streams.borrow().iter() {
         assert_eq!(stream.vertices(*scope, NcCopyToBufferOffset::new(0, &mut [])), Err(UI_E_EXPIRED_SCOPE));
+        assert_eq!(stream.batches(*scope, NcCopyToBufferOffset::new(0, &mut [])), Err(UI_E_EXPIRED_SCOPE));
+        assert_eq!(stream.texture(*scope, 0).unwrap_err(), UI_E_EXPIRED_SCOPE);
+        assert_eq!(stream.item(*scope, 0).unwrap_err(), UI_E_EXPIRED_SCOPE);
     }
 }
 
@@ -869,6 +879,14 @@ struct BuiltinPainter {
     probe: Rc<BuiltinPaintProbe>,
 }
 impl IPainter for BuiltinPainter {
+    /// This button contains no external image; receiving one would bypass the expected built-in atlas path.
+    fn texture(&self, _scope: PaintScope, _rect: Rect, _rgba: u32, _texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
+        panic!("unexpected external texture in button paint")
+    }
+    /// The complete button algorithm cannot emit application GPU work.
+    fn item(&self, _scope: PaintScope, _rect: Rect, _item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
+        panic!("unexpected custom item in button paint")
+    }
     /// Confirms no semantic RefCell guard spans this outward COM call.
     fn triangles(&self, _scope: PaintScope, vertices: NcCopyFromBufferOffset<'_, RenderVertex>) -> Result<(), NcStatus> {
         assert_eq!(self.button.label()?.to_string()?, "AB");

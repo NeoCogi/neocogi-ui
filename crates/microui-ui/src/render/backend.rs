@@ -295,6 +295,16 @@ pub trait RendererFrame {
     fn flush(&mut self);
     /// Draws one pre-clipped external-texture quad.
     fn draw_texture(&mut self, id: TextureId, vertices: [Vertex; 4]);
+    /// Transfers an owned texture to the COM submission backend. Legacy direct backends reject it.
+    /// This transitional native integration hook is removed with direct Context APIs in milestone 17.
+    fn draw_com_texture(&mut self, _texture: nc_com::ComPtr<microui_contracts::ITextureAbi>, _vertices: [Vertex; 4]) -> Result<(), FrameError> {
+        Err(FrameError::new("COM texture requires the COM runtime submission backend"))
+    }
+    /// Transfers owned application work without lending this native frame through COM.
+    /// Direct legacy Context backends reject this transitional hook until their removal in milestone 17.
+    fn draw_com_item(&mut self, _item: nc_com::ComPtr<microui_contracts::IRenderItemAbi>, _args: CustomRenderArgs) -> Result<(), FrameError> {
+        Err(FrameError::new("COM render item requires the COM runtime submission backend"))
+    }
 }
 
 /// Trait implemented by render backends used by the UI context.

@@ -140,6 +140,15 @@ pub struct TextureId {
 }
 
 impl TextureId {
+    /// Allocates a native backend key after the shared image validator checks the complete upload.
+    /// This key stays inside the platform binary; callers receive an authenticated ITexture capability.
+    /// Direct Context texture allocation retains its existing owner until that API is removed in milestone 17.
+    #[doc(hidden)]
+    pub fn for_upload(width: i32, height: i32, pixels: &[u8]) -> Result<Self, TextureError> {
+        crate::image::validate_rgba_buffer(width, height, pixels.len())?;
+        Ok(Self::new(RendererId::allocate(), 1, width, height))
+    }
+
     /// Creates one Context-owned texture capability with immutable dimensions.
     pub(crate) fn new(renderer: RendererId, slot: u32, width: i32, height: i32) -> Self {
         // Only the private executor calls this production constructor after validating dimensions

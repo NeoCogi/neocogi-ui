@@ -355,18 +355,36 @@ impl<B: RendererBackend> DisplayListExecutor<'_, '_, B> {
     /// Drains every operation through one frame-scoped interpreter.
     fn run(mut self, operations: impl Iterator<Item = DrawOp>) -> Result<(), super::FrameError> {
         for operation in operations {
-            self.execute(operation);
+            self.execute(operation)?;
         }
         // Submission is observable to the Context caller; Drop only handles abandonment.
         self.frame.finish()
     }
 
     /// Executes one operation after resolving its final viewport clip.
-    fn execute(&mut self, DrawOp { clip, kind }: DrawOp) {
+    fn execute(&mut self, DrawOp { clip, kind }: DrawOp) -> Result<(), FrameError> {
         let Some(clip) = clip.positive_intersection(self.viewport) else {
-            return;
+            return Ok(());
         };
         match kind {
+            DrawKind::ComTexture { texture, rect, color } => {
+                // Normalized unit source yields the same clipped UVs without a foreign size query.
+                if let Some(vertices) = clipped_textured_quad(rect, Recti::new(0, 0, 1, 1), Dimensioni::new(1, 1), color, clip) {
+                    self.frame.draw_com_texture(texture, vertices)?;
+                }
+            }
+            DrawKind::ComItem { item, rect } => {
+                if let Some(view) = clip.positive_intersection(rect) {
+                    self.frame.draw_com_item(
+                        item,
+                        CustomRenderArgs {
+                            dimensions: Dimensioni::new(self.viewport.width, self.viewport.height),
+                            content_area: rect,
+                            view,
+                        },
+                    )?;
+                }
+            }
             DrawKind::AtlasTriangles { vertices } => self.draw_atlas_triangles(&vertices, clip),
             DrawKind::NinePatch { rect, patch } => self.draw_nine_patch(rect, patch, clip),
             DrawKind::Text { font, pos, color, text } => self.draw_text(font, &text, pos, color, clip),
@@ -375,12 +393,13 @@ impl<B: RendererBackend> DisplayListExecutor<'_, '_, B> {
             DrawKind::SolidTriangles { triangles } => {
                 let Some(triangles) = self.solid_triangles.get(triangles.as_range()) else {
                     debug_assert!(false, "DisplayList contained an invalid solid-triangle range");
-                    return;
+                    return Ok(());
                 };
                 self.draw_solid_triangles(triangles, clip);
             }
             DrawKind::Custom { renderer, content_area } => self.draw_custom(renderer, content_area, clip),
         }
+        Ok(())
     }
 
     /// Expands a UTF-8 string through the selected atlas font, applying its missing-character
@@ -465,7 +484,9 @@ impl<B: RendererBackend> DisplayListExecutor<'_, '_, B> {
 
     /// Clips a validated atlas batch with the same interpolation as solid geometry.
     fn draw_atlas_triangles(&mut self, vertices: &[Vertex], clip: Recti) {
-        let Some(clip) = ClipRect::new(clip) else { return; };
+        let Some(clip) = ClipRect::new(clip) else {
+            return;
+        };
         for triangle in vertices.as_chunks::<3>().0 {
             self.clipped_triangles.clear();
             clip.clip_triangle(*triangle, self.clipped_triangles);

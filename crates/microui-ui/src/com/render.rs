@@ -1,7 +1,7 @@
 //! Coarse COM submission adapter over the existing display-list executor.
 use super::*;
 use crate::{AtlasHandle, TextureId};
-use crate::render::{AtlasUploadError, FrameError, FrameInfo, RendererBackend, RendererFrame, TextureError, Vertex};
+use crate::render::{AtlasUploadError, FrameError, FrameInfo, RendererBackend, RendererFrame, TextureError, Vertex, CustomRenderArgs};
 use nc_com::NcCopyToBufferOffset;
 
 /// Decodes canonical RGBA packing independently of machine byte order.
@@ -31,8 +31,66 @@ pub(super) struct Storage {
     active: Cell<u64>,
     /// Invocation sequence is never allowed to wrap.
     next: Cell<u64>,
-    /// Final ordered triangles; no COM call per vertex or glyph.
+    /// Ordered draw boundaries and owned capabilities, detached before any foreign Release.
+    batches: RefCell<Vec<Batch>>,
+    /// Final ordered geometry; no COM call per vertex or glyph.
     pub(super) vertices: RefCell<Vec<RenderVertex>>,
+}
+
+/// Each batch owns only the concrete resource kind needed by its draw operation.
+enum Batch {
+    /// A contiguous range of atlas triangles; adjacent ranges are merged.
+    Atlas {
+        /// First vertex in the frame's shared geometry buffer.
+        first: u32,
+        /// Complete triangle vertex count, merged with adjacent atlas operations.
+        count: u32,
+    },
+    /// One clipped quad; Rc permits fetching its COM capability without AddRef under a borrow.
+    Texture {
+        /// First of the four clipped quad vertices.
+        first: u32,
+        /// One retained capability, borrowed through Rc before any foreign AddRef.
+        texture: Rc<ComPtr<ITextureAbi>>,
+    },
+    /// Application work with final clipped geometry and no reference to a native frame.
+    Item {
+        /// Complete content rectangle, already translated to drawable coordinates.
+        rect: Rect,
+        /// Positive content/widget/viewport intersection.
+        clip: Rect,
+        /// One retained application capability with no native frame borrow.
+        item: Rc<ComPtr<IRenderItemAbi>>,
+    },
+}
+
+impl Batch {
+    /// Copies pointer-free metadata; resource capabilities are fetched separately per non-atlas batch.
+    fn record(&self) -> RenderBatchAbi {
+        match self {
+            Self::Atlas { first, count } => RenderBatch::Atlas { first: *first, count: *count },
+            Self::Texture { first, .. } => RenderBatch::Texture { first: *first },
+            Self::Item { rect, clip, .. } => RenderBatch::Item { rect: *rect, clip: *clip },
+        }
+        .into()
+    }
+}
+
+impl Storage {
+    /// Checks even empty reads so an expired stream cannot become valid through a zero-length query.
+    fn check(&self, invocation: u64) -> Result<(), NcStatus> {
+        if invocation == 0 || self.active.get() != invocation {
+            Err(UI_E_EXPIRED_SCOPE)
+        } else {
+            Ok(())
+        }
+    }
+    /// Releases resources with no storage borrow, preserving the batch allocation for the next frame.
+    fn clear_batches(&self) {
+        let mut batches = std::mem::take(&mut *self.batches.borrow_mut());
+        batches.clear();
+        *self.batches.borrow_mut() = batches;
+    }
 }
 
 #[com_class(interfaces(IRenderStream))]
@@ -45,15 +103,43 @@ struct Stream {
 impl IRenderStream for Stream {
     /// Copies a checked prefix of the requested range only during the active invocation.
     fn vertices(&self, invocation: u64, mut output: NcCopyToBufferOffset<'_, RenderVertex>) -> Result<u32, NcStatus> {
-        if invocation == 0 || self.storage.active.get() != invocation {
-            return Err(UI_E_EXPIRED_SCOPE);
-        }
+        self.storage.check(invocation)?;
         let offset = usize::try_from(output.offset()).map_err(|_| NC_E_INVALID_ARG)?;
         let vertices = self.storage.vertices.try_borrow().map_err(|_| UI_E_BUSY)?;
         let source = vertices.get(offset..).ok_or(NC_E_INVALID_ARG)?;
         let count = source.len().min(output.len());
         output.as_mut_slice()[..count].copy_from_slice(&source[..count]);
         u32::try_from(count).map_err(|_| nc_com::NC_E_OUT_OF_RANGE)
+    }
+    /// Copies ordered metadata without invoking any resource method while storage is borrowed.
+    fn batches(&self, invocation: u64, mut output: NcCopyToBufferOffset<'_, RenderBatchAbi>) -> Result<u32, NcStatus> {
+        self.storage.check(invocation)?;
+        let offset = usize::try_from(output.offset()).map_err(|_| NC_E_INVALID_ARG)?;
+        let batches = self.storage.batches.try_borrow().map_err(|_| UI_E_BUSY)?;
+        let source = batches.get(offset..).ok_or(NC_E_INVALID_ARG)?;
+        let count = source.len().min(output.len());
+        for (output, batch) in output.as_mut_slice()[..count].iter_mut().zip(source) {
+            *output = batch.record();
+        }
+        Ok(count as u32)
+    }
+    /// Retains the checked texture after releasing the batch borrow; foreign AddRef may reenter.
+    fn texture(&self, invocation: u64, batch: u32) -> Result<ComPtr<ITextureAbi>, NcStatus> {
+        self.storage.check(invocation)?;
+        let texture = match self.storage.batches.try_borrow().map_err(|_| UI_E_BUSY)?.get(batch as usize) {
+            Some(Batch::Texture { texture, .. }) => texture.clone(),
+            _ => return Err(NC_E_INVALID_ARG),
+        };
+        Ok(texture.as_ref().clone())
+    }
+    /// Uses the same detached ownership boundary for application GPU work.
+    fn item(&self, invocation: u64, batch: u32) -> Result<ComPtr<IRenderItemAbi>, NcStatus> {
+        self.storage.check(invocation)?;
+        let item = match self.storage.batches.try_borrow().map_err(|_| UI_E_BUSY)?.get(batch as usize) {
+            Some(Batch::Item { item, .. }) => item.clone(),
+            _ => return Err(NC_E_INVALID_ARG),
+        };
+        Ok(item.as_ref().clone())
     }
 }
 
@@ -79,7 +165,7 @@ pub(super) struct Backend {
     /// Stable stream object reused for every synchronous submission.
     stream: ComPtr<IRenderStreamAbi>,
     /// Installed only for the duration of the caller's explicit render operation.
-    pub(super) target: Rc<RefCell<Option<ComPtr<IRendererAbi>>>>,
+    pub(super) target: Rc<RefCell<Option<Rc<ComPtr<IRendererAbi>>>>>,
 }
 
 impl Backend {
@@ -138,21 +224,22 @@ impl RendererBackend for Backend {
     }
     /// Clears reused scratch; no native command executes before finish.
     fn frame(&mut self, info: FrameInfo) -> Result<Self::Frame<'_>, FrameError> {
+        self.storage.clear_batches();
         self.storage.vertices.borrow_mut().clear();
         Ok(Frame { backend: self, info, error: None })
     }
-    /// External texture capabilities are added with the full renderer integration.
+    /// Native IDs cannot cross COM; applications create owned images through ITextureFactory.
     fn create_texture(&mut self, _id: TextureId, _pixels: &[u8]) -> Result<(), TextureError> {
-        Err(TextureError::backend("COM textures are not installed"))
+        Err(TextureError::backend("create COM textures through the selected renderer ITextureFactory"))
     }
-    /// No external texture can have been created by this slice adapter.
+    /// COM images are released by their owned capabilities, never by legacy native IDs.
     fn destroy_texture(&mut self, _id: TextureId) {}
 }
 
 impl RendererFrame for Frame<'_> {
     /// Submits the prepared frame once; dropping the frame never submits anything.
-    fn finish(self) -> Result<(), FrameError> {
-        if let Some(error) = self.error {
+    fn finish(mut self) -> Result<(), FrameError> {
+        if let Some(error) = self.error.take() {
             return Err(error);
         }
         if let Some(error) = self.backend.host.error.get() {
@@ -163,7 +250,8 @@ impl RendererFrame for Frame<'_> {
         }
         let storage = &self.backend.storage;
         let invocation = storage.next.get().checked_add(1).ok_or_else(|| FrameError::new("frame invocation exhausted"))?;
-        let vertex_count = u32::try_from(storage.vertices.borrow().len()).map_err(|_| FrameError::new("too many vertices"))?;
+        let vertex_count = storage.vertices.borrow().len() as u32;
+        let batch_count = storage.batches.borrow().len() as u32;
         storage.next.set(invocation);
         let renderer = self.backend.target.borrow().clone().ok_or_else(|| FrameError::new("renderer not selected"))?;
         storage.active.set(invocation);
@@ -177,6 +265,7 @@ impl RendererFrame for Frame<'_> {
                     clear: u32::from_le_bytes([clear.r, clear.g, clear.b, clear.a]),
                     invocation,
                     vertex_count,
+                    batch_count,
                 },
                 self.backend.stream.as_com_ref(),
             )
@@ -189,12 +278,59 @@ impl RendererFrame for Frame<'_> {
     }
     /// Appends to the reusable final vertex buffer.
     fn push_triangle(&mut self, v: [Vertex; 3]) {
-        self.backend.storage.vertices.borrow_mut().extend(v.map(vertex));
+        if self.error.is_some() {
+            return;
+        }
+        let storage = &self.backend.storage;
+        let first = storage.vertices.borrow().len() as u32;
+        let mut batches = storage.batches.borrow_mut();
+        let joins_atlas = matches!(batches.last(), Some(Batch::Atlas { .. }));
+        if first > MAX_RENDER_VERTICES - 3 || (!joins_atlas && batches.len() >= MAX_RENDER_BATCHES as usize) {
+            self.error = Some(FrameError::new("frame geometry exceeds the shared allocation limit"));
+            return;
+        }
+        storage.vertices.borrow_mut().extend(v.map(vertex));
+        if let Some(Batch::Atlas { count, .. }) = batches.last_mut() {
+            *count += 3;
+        } else {
+            batches.push(Batch::Atlas { first, count: 3 });
+        }
     }
     /// Atlas-only triangles preserve their order without introducing an extra draw boundary.
     fn flush(&mut self) {}
+    /// Records a complete owned texture draw; only the selected GPU renderer can authenticate it.
+    fn draw_com_texture(&mut self, texture: ComPtr<ITextureAbi>, vertices: [Vertex; 4]) -> Result<(), FrameError> {
+        let storage = &self.backend.storage;
+        let first = storage.vertices.borrow().len() as u32;
+        if first > MAX_RENDER_VERTICES - 4 || storage.batches.borrow().len() >= MAX_RENDER_BATCHES as usize {
+            return Err(FrameError::new("frame geometry exceeds the shared allocation limit"));
+        }
+        storage.vertices.borrow_mut().extend(vertices.map(vertex));
+        storage.batches.borrow_mut().push(Batch::Texture { first, texture: Rc::new(texture) });
+        Ok(())
+    }
+    /// Records final custom geometry at the current painter-order boundary.
+    fn draw_com_item(&mut self, item: ComPtr<IRenderItemAbi>, args: CustomRenderArgs) -> Result<(), FrameError> {
+        let storage = &self.backend.storage;
+        if storage.batches.borrow().len() >= MAX_RENDER_BATCHES as usize {
+            return Err(FrameError::new("frame batches exceed the shared allocation limit"));
+        }
+        storage.batches.borrow_mut().push(Batch::Item {
+            rect: copied_rect(args.content_area),
+            clip: copied_rect(args.view),
+            item: Rc::new(item),
+        });
+        Ok(())
+    }
     /// Rejects unsupported external resources instead of silently drawing with the wrong texture.
     fn draw_texture(&mut self, _id: TextureId, _vertices: [Vertex; 4]) {
-        self.error = Some(FrameError::new("COM texture batch is not installed"));
+        self.error = Some(FrameError::new("native texture IDs cannot cross COM; submit an owned ITexture"));
+    }
+}
+
+impl Drop for Frame<'_> {
+    /// Abandonment and completed submission both release queued resources without submitting work.
+    fn drop(&mut self) {
+        self.backend.storage.clear_batches();
     }
 }

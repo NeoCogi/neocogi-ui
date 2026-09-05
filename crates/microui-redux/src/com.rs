@@ -230,6 +230,11 @@ pub struct WidgetFactory {
 }
 
 impl WidgetFactory {
+    /// Supplies runtime authority for an independent COM widget's inline WidgetState.
+    pub fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
+        self.interface.host()
+    }
+
     /// Creates a fixed multiline editor and its real scroll children with one shared offset model.
     pub fn text_area(&self, text: &str, wrapping: TextWrapping, scrolling: bool) -> Result<TextArea, NcStatus> {
         Ok(TextArea::from_interface(self.interface.create_text_area(
@@ -319,6 +324,16 @@ impl<'a> Painter<'a> {
     /// Records a complete validated atlas triangle batch with one COM copy.
     pub fn triangles(&self, vertices: &[RenderVertex]) -> Result<(), NcStatus> {
         self.interface.triangles(self.scope, NcCopyFromBufferOffset::new(0, vertices))
+    }
+
+    /// Draws an owned immutable texture with an RGBA tint; its creator must be the submitted renderer.
+    pub fn texture(&self, rect: Rect, rgba: u32, texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
+        self.interface.texture(self.scope, rect, rgba, texture)
+    }
+
+    /// Inserts renderer-owned application GPU work at this point in painter order.
+    pub fn item(&self, rect: Rect, item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
+        self.interface.item(self.scope, rect, item)
     }
 
     /// Records a local rectangle within this invocation.

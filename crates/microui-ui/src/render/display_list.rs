@@ -66,6 +66,22 @@ pub(super) enum DrawKind {
         /// Owned triples translated to screen coordinates by Painter.
         vertices: Vec<super::Vertex>,
     },
+    /// Owned external image used by the COM renderer path.
+    ComTexture {
+        /// Resource retains its renderer/device until submission and GPU destruction finish.
+        texture: nc_com::ComPtr<microui_contracts::ITextureAbi>,
+        /// Destination in screen coordinates.
+        rect: Recti,
+        /// Multiplicative tint.
+        color: Color,
+    },
+    /// Concrete application scene capability consumed by its co-packaged renderer.
+    ComItem {
+        /// No native frame or stack borrow is retained by the display list.
+        item: nc_com::ComPtr<microui_contracts::IRenderItemAbi>,
+        /// Unclipped destination in screen coordinates.
+        rect: Recti,
+    },
     /// Draws one semantic three-by-three patch.
     NinePatch {
         /// Complete destination rectangle in screen space.
@@ -140,6 +156,16 @@ impl DisplayList {
     /// Retains a complete atlas batch in painter order for final viewport clipping.
     pub(super) fn push_atlas_triangles(&mut self, clip: Recti, vertices: Vec<super::Vertex>) {
         self.push(clip, DrawKind::AtlasTriangles { vertices });
+    }
+
+    /// Retains an image in source order; final clipping remains centralized in the executor.
+    pub(super) fn push_com_texture(&mut self, clip: Recti, rect: Recti, color: Color, texture: nc_com::ComPtr<microui_contracts::ITextureAbi>) {
+        self.push(clip, DrawKind::ComTexture { texture, rect, color });
+    }
+
+    /// Retains application GPU work without creating a callback registry entry.
+    pub(super) fn push_com_item(&mut self, clip: Recti, rect: Recti, item: nc_com::ComPtr<microui_contracts::IRenderItemAbi>) {
+        self.push(clip, DrawKind::ComItem { item, rect });
     }
 
     /// Appends one semantic three-by-three patch operation.
