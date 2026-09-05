@@ -105,9 +105,9 @@ impl Host {
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
-            while driver.frame(monotonic_seconds())? {
-                std::thread::sleep(std::time::Duration::from_millis(8));
-            }
+            // Native presentation already applies the backend's pacing policy. An extra sleep
+            // caps throughput even when a mailbox swapchain can accept another frame immediately.
+            while driver.frame(monotonic_seconds())? {}
             Ok(())
         }
     }
