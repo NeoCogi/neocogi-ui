@@ -3,7 +3,7 @@
 Build every native binary independently and stage a complete executable-relative package:
 
 ```sh
-cargo run -p microui-redux-tools --bin com-build -- --demo full --backend glow
+cargo com-build --demo full --backend glow
 ./target/com-native/debug/glow/prebuilt/full/microui-redux-demo-full
 ```
 
@@ -13,6 +13,23 @@ cargo run -p microui-redux-tools --bin com-build -- --demo full --backend glow
 the selected Cargo toolchain, and `CARGO_NET_OFFLINE`; it does not run Cargo from a
 build script. Native demo feature flags are markers: implementation selection
 belongs to the separately built platform package.
+
+A direct `cargo build -p microui-redux-demo-full --features vulkan --release`
+builds only the host executable. It does not build the shared runtime, configure
+its link search path or stage implementation plugins. `unable to find library
+-lnc_com_runtime` means that native link dependency is missing. Use:
+
+```sh
+cargo com-build --demo full --backend vulkan --release
+./target/com-native/release/vulkan/prebuilt/full/microui-redux-demo-full
+```
+
+`cargo com-build` is a workspace alias for the driver invocation above. For a
+custom build system, build `nc-com-runtime` first, set `NC_COM_RUNTIME_LINK_DIR`
+to the directory containing its shared/import library when linking the host,
+and configure the executable-relative runtime lookup. Independently build the
+selected UI/platform/asset plugins and stage them with their descriptor-planned
+manifest. Supplying a linker search path alone does not assemble a runnable demo.
 
 Packages live in `target/com-native/{debug,release,min-size}/{backend}/{assets}/{demo}`.
 They contain the selected executable, one nc-com runtime library, UI and platform

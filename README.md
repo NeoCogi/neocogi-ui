@@ -22,7 +22,7 @@ object and shared state, including inherited interface calls.
 Build a complete native package and run its staged executable:
 
 ```sh
-cargo run -p microui-redux-tools --bin com-build -- --demo full --backend glow
+cargo com-build --demo full --backend glow
 ./target/com-native/debug/glow/prebuilt/full/microui-redux-demo-full
 ```
 
