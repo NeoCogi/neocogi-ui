@@ -147,7 +147,6 @@ pub struct ButtonSubmitted {
     pub label: String,
 }
 
-impl crate::WidgetEvent for ButtonSubmitted {}
 
 /// Concrete retained button, including its semantic and interaction state.
 pub struct Button {

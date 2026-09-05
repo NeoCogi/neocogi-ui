@@ -249,7 +249,6 @@ pub struct ComboChanged {
     pub label: String,
 }
 
-impl crate::WidgetEvent for ComboChanged {}
 
 /// Popup-state snapshot emitted when the user submits the combo header.
 #[derive(Copy, Clone, Debug)]
@@ -268,7 +267,6 @@ impl PartialEq for ComboSubmitted {
 
 impl Eq for ComboSubmitted {}
 
-impl crate::WidgetEvent for ComboSubmitted {}
 
 impl Combo {
     /// Constructs a retained node and a weak typed handle to its concrete combo.

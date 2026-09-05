@@ -150,7 +150,6 @@ pub struct TextAreaChanged {
     pub cursor: usize,
 }
 
-impl crate::WidgetEvent for TextAreaChanged {}
 
 /// Snapshot emitted when the user submits a text-area value.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -159,7 +158,6 @@ pub struct TextAreaSubmitted {
     pub text: String,
 }
 
-impl crate::WidgetEvent for TextAreaSubmitted {}
 
 /// Runtime-only cursor navigation state retained by the editable leaf.
 #[derive(Default)]
@@ -714,6 +712,49 @@ impl LeafWidget for TextArea {
     }
 }
 
+
+
+impl TextArea {
+    /// Constructs the actual COM editor using the same normalization and interaction initialization as local composition.
+    pub(crate) fn com_new(text: &str, wrap: TextWrap, model: std::rc::Rc<crate::ui_node::ScrollModel>) -> Self {
+        let mut editor = Self::new_editor(TextAreaParameters::new(text).wrap(wrap));
+        editor.scroll_area = Some(model);
+        editor
+    }
+    /// Reads the one wrapping choice consumed by both measurement and caret geometry.
+    pub(crate) fn com_wrap(&self) -> TextWrap {
+        self.wrap
+    }
+    /// Invalidates visual-column preference and reveals the caret after a wrapping change.
+    pub(crate) fn com_set_wrap(&mut self, wrap: TextWrap) {
+        self.wrap = wrap;
+        self.reset_preferred_x = true;
+        self.reveal_caret = true;
+    }
+}
+impl crate::com::widget::WidgetAlgorithm for TextArea {
+    /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
+    fn close_events(&mut self) {
+        self.changed_event.close_ordinary();
+        self.submitted_event.close_ordinary();
+    }
+
+    /// The editor has no decorative options of its own; the common COM state controls input policy.
+    fn set_options(&mut self, _options: WidgetOption) {}
+}
+impl crate::com::widget::FontState for TextArea {
+    /// Borrows the actual font selection used by text measurement and paint.
+    fn font(&self) -> &crate::FontRef {
+        &self.font
+    }
+    /// Recomputes visual navigation and caret reveal after the shared resource helper validates the font.
+    fn set_font(&mut self, font: crate::FontRef) {
+        self.font = font;
+        self.reset_preferred_x = true;
+        self.reveal_caret = true;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1143,46 +1184,5 @@ mod tests {
         let scroll = text_area.scroll().unwrap();
         assert_eq!(scroll.x, 0);
         assert!(scroll.y > 0, "revealing the final caret must move the parent-owned vertical offset");
-    }
-}
-
-impl TextArea {
-    /// Constructs the actual COM editor using the same normalization and interaction initialization as local composition.
-    pub(crate) fn com_new(text: &str, wrap: TextWrap, model: std::rc::Rc<crate::ui_node::ScrollModel>) -> Self {
-        let mut editor = Self::new_editor(TextAreaParameters::new(text).wrap(wrap));
-        editor.scroll_area = Some(model);
-        editor
-    }
-    /// Reads the one wrapping choice consumed by both measurement and caret geometry.
-    pub(crate) fn com_wrap(&self) -> TextWrap {
-        self.wrap
-    }
-    /// Invalidates visual-column preference and reveals the caret after a wrapping change.
-    pub(crate) fn com_set_wrap(&mut self, wrap: TextWrap) {
-        self.wrap = wrap;
-        self.reset_preferred_x = true;
-        self.reveal_caret = true;
-    }
-}
-impl crate::com::widget::WidgetAlgorithm for TextArea {
-    /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
-    fn close_events(&mut self) {
-        self.changed_event.close_ordinary();
-        self.submitted_event.close_ordinary();
-    }
-
-    /// The editor has no decorative options of its own; the common COM state controls input policy.
-    fn set_options(&mut self, _options: WidgetOption) {}
-}
-impl crate::com::widget::FontState for TextArea {
-    /// Borrows the actual font selection used by text measurement and paint.
-    fn font(&self) -> &crate::FontRef {
-        &self.font
-    }
-    /// Recomputes visual navigation and caret reveal after the shared resource helper validates the font.
-    fn set_font(&mut self, font: crate::FontRef) {
-        self.font = font;
-        self.reset_preferred_x = true;
-        self.reveal_caret = true;
     }
 }

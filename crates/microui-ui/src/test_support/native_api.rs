@@ -30,18 +30,21 @@
 
 use std::cell::Cell;
 
-use microui_ui::render::{FrameError, FrameInfo, RendererBackend, RendererFrame, Vertex};
-use microui_ui::retained::*;
-use microui_ui::prelude::{
+use crate::render::{FrameError, FrameInfo, RendererBackend, RendererFrame, Vertex};
+use crate::retained::*;
+use crate::prelude::{
     Dimensioni, Ui, Menu, MenuBar, MenuItem, MenuItemHandle, MenuItemMark, MenuItemParameters,
     MenuItemSubmitted, Recti, TextBlock, TextBlockParameters, TypedWidgetHandle, Vec2i, Window,
 };
-use microui_ui::{
-    color, rect, AtlasHandle, AtlasSource, AtlasUploadError, CaptionButtonSide, CharEntry, Constraints, Context, ControlRole, ControlState, Disclosure,
+use crate::{
+    color, rect, AtlasHandle, AtlasSource, AtlasUploadError, CaptionButtonSide, CharEntry, Constraints, ControlRole, ControlState, Disclosure,
     DisclosureParameters, FontEntry, FontRef, FontRole, Grid, GridParameters, IconRef, IconRole, ImageError, Linear, LinearParameters, PointerState,
     ScrollArea, ScrollAreaOption, ScrollAreaParameters, Skin, SkinBundle, SourceFormat, SurfaceMutationError, TextureError, TextureId, WindowChromeSkin,
     WindowTitleAlignment,
 };
+
+use super::TestContext as Context;
+use crate::SubscribeError;
 
 struct TestBackend {
     atlas: AtlasHandle,
@@ -51,7 +54,7 @@ struct TestFrame;
 
 impl RendererFrame for TestFrame {
     /// Completes this backend fixture; it owns no fallible native submission.
-    fn finish(self) -> Result<(), microui_ui::render::FrameError> {
+    fn finish(self) -> Result<(), crate::render::FrameError> {
         Ok(())
     }
 
@@ -153,7 +156,7 @@ fn context() -> Context<TestBackend> {
 
 /// Downstream-only payload proves production needs no private event internals.
 struct ExternalEvent(u32);
-impl WidgetEvent for ExternalEvent {}
+
 
 /// Minimal custom widget owning the same concrete source as built-in controls.
 struct EventWidget {
@@ -359,7 +362,7 @@ fn downstream_skin_install_rejects_foreign_catalog_ids_and_preserves_live_widget
     let (_, content) = TextBlock::create(TextBlockParameters::new("retained").font(body));
     ctx.ui().create_window(Window::new("catalog", rect(0, 0, 200, 200), content));
     let foreign = context();
-    assert!(matches!(ctx.set_skin_bundle(foreign.skin_bundle()), Err(microui_ui::SkinInstallError::MissingFont { name, .. }) if name == "body"));
+    assert!(matches!(ctx.set_skin_bundle(foreign.skin_bundle()), Err(crate::SkinInstallError::MissingFont { name, .. }) if name == "body"));
     assert_eq!(ctx.atlas().font_id("body"), original.font_id("body"));
     // The original bug accepted this bundle and then panicked on the retained exact FontRef.
     ctx.update_ui(Dimensioni::new(300, 300));
@@ -369,7 +372,7 @@ fn downstream_skin_install_rejects_foreign_catalog_ids_and_preserves_live_widget
 /// A setter remains silent after actual Context updates, including on a stepped slider.
 #[test]
 fn downstream_slider_programmatic_values_are_not_normalized_by_eventless_updates() {
-    use microui_ui::{DecimalPrecision, Slider, SliderParameters};
+    use crate::{DecimalPrecision, Slider, SliderParameters};
     let mut ctx = context_with_state::<Vec<f32>>();
     let (slider, body) = Slider::create(SliderParameters::with_opt(2.4, 0.0, 10.0, 1.0, DecimalPrecision::ZERO, WidgetOption::FRAME).unwrap());
     ctx.ui().create_window(Window::new("slider", rect(0, 0, 200, 200), body));

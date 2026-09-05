@@ -51,6 +51,8 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y libsdl2-dev libvulkan-dev mesa-vulkan-drivers libgl1-mesa-dri xvfb
       - name: Independently package and execute the full application regression
         run: xvfb-run -a scripts/test-demo.sh ${{ matrix.backend }}
+      - name: Independently built custom widget and container
+        run: xvfb-run -a scripts/test-extension.sh ${{ matrix.backend }}
       - name: Backend-specific frame/resource checks
         run: xvfb-run -a cargo test -p microui-plugin-platform --lib --no-default-features --features ${{ matrix.backend }} -- --include-ignored
       - name: Check demo and platform warnings for this backend

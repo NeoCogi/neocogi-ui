@@ -70,153 +70,18 @@
     clippy::too_many_arguments,
     clippy::wildcard_imports
 )]
-//! `microui-redux` provides a GUI toolkit inspired by [rxi/microui](https://github.com/rxi/microui).
-//! The crate uses unique owning [`Node`] values as its public UI authoring input. Each
-//! [`Context`] root consumes one persistent node and remains its sole owner until explicit
-//! destruction. Leaf nodes retain erased widget cells; containers separately retain an erased
-//! concrete [`ContainerWidget`] and their authoritative child collection.
-//! Applications and coordinating composites may keep typed weak [`TypedWidgetHandle`] views of
-//! either concrete allocation. A handle never keeps a removed widget alive.
+//! Retained implementation used by the UI plugin and native rendering/asset assemblies.
 //!
-//! A concrete `*Parameters` value is one-shot initialization. Semantic values, interaction state,
-//! event ports, and [`Widget`] phases live in one concrete widget object rather than a parallel
-//! `*State` allocation. Handle-bearing built-in leaf and container constructors return
-//! `(TypedWidgetHandle<ConcreteWidget>, Node)`. The stateless [`Custom`] exception returns its
-//! concrete runtime from [`Custom::create`]; mount it with [`Node::widget`], [`Node::custom_render`],
-//! or [`Node::typed_custom_render`]. A concrete container holds only weak topology capabilities;
-//! the generic [`Container`] remains the sole strong owner of its heterogeneous children.
+//! Applications use `microui-redux`, whose concrete COM clients link no UI implementation.
+//! Each retained COM node owns the widget capabilities used for routing, layout and painting.
+//! The engine returns its traversal state before the application's `EventSession` dispatches
+//! concrete handlers, then commits their geometry edits before processing the next input event.
 //!
-//! Declarative menu items use the same non-owning capability rule without becoming widget nodes.
-//! [`MenuItemHandle`] carries private stable identity and separately projects its weak
-//! [`MenuItemSubmitted`] endpoint through [`MenuItemHandle::submitted`]; [`Ui::menu_item`] and
-//! [`Ui::menu_item_mut`] lend the authoritative mounted
-//! [`MenuItemParameters`]. Both return [`MenuItemAccessError::UnknownItem`] for an unmounted,
-//! destroyed, or foreign item capability. The same recursive [`Menu`] declaration installs below
-//! a [`MenuBar`] heading or becomes an application-addressable compact popup through
-//! [`Ui::create_menu_popup`]; both paths use the same manager-owned menu surface.
-//!
-//! # Update and paint boundary
-//!
-//! Input is appended through [`Context`] forwarding methods. [`Context::update_ui`] first
-//! synchronizes layout, then drains that one ordered queue. Each raw event is normalized, routed,
-//! applied by one full eligible-tree update traversal, and followed by layout before the next
-//! event. Calling it with an empty queue is the synchronization path after programmatic state or
-//! topology mutation. [`ContextFrame::render_ui`] is paint-only and returns
-//! [`render::RenderError::UiUpdateRequired`] before backend acquisition when the commit is missing,
-//! raw input is pending, an invalidating typed mutation succeeded in a visible tree, or the frame
-//! dimensions differ. Specialized measurement-preserving setters may leave the current commit
-//! renderable while derived state waits for the next update. Applications call `update_ui` after
-//! every programmatic mutation before relying on its visual or layout result. The runtime
-//! synthesizes no timer events and produces no generic frame-result/resource-state object.
-//!
-//! A `ContextFrame` serializes Context operations but does not lock independent typed handles, and
-//! there is no Context token. Typed access closures must finish before retained traversal reaches
-//! the same widget. Framework-controlled recursion through a container's opaque
-//! child visitor is the intentional exception. An invalidating handle mutation after the last
-//! commit makes `render_ui` reject that commit until `update_ui` consumes the marker and
-//! synchronizes layout again.
-//! Handles and Context are independent Rust values, so explicitly capturing Context inside
-//! `try_update` compiles; it is nevertheless unsupported because the closure retains the mutable
-//! widget borrow. If nested traversal reaches that allocation, runtime borrowing reports an
-//! invariant panic. End the closure before calling `update_ui` or `render_ui`.
-//!
-//! Event-driven applications construct `Context::<B, State>::new(backend)`, register each
-//! native widget endpoint through [`Context::subscribe`], and call
-//! [`Context::update_ui_state`]. The context owns the only application widget-event dispatcher for
-//! all retained windows. This semantic dispatcher is distinct from retained raw-input routing:
-//! each retained runtime owns an input router that targets pointer, keyboard, or text input to one
-//! node, and that widget may then emit a typed event for the application dispatcher.
-//! Standard COM components use `microui_redux::EventSession` with concrete owned handlers.
-//!
-//! Backends forward one logical [`KeyEvent`] per press or release and send composed UTF-8 through
-//! [`Context::text`] separately. Focus persists independently from pointer capture. In the active
-//! eligible window, Tab and Shift+Tab wrap through retained [`KeyboardBehavior::TAB_STOP`]
-//! surfaces; built-in controls derive Windows-style activation, adjustment, hierarchy, and popup
-//! actions from the same [`KeyboardAction`] mapping. Ctrl+F6 and Ctrl+Shift+F6 cycle visible
-//! ordinary windows while preserving each window's focused widget. F10 or an unchorded Alt tap
-//! transfers routing temporarily to the owning window's intrinsic menu without discarding
-//! application widget focus.
-//! Only the current keyboard scope paints that remembered focus. Each semantic role and
-//! interaction state resolves one complete [`Visual`] containing both background art and its
-//! matching semantic-content color. Focus and window activation therefore select ordinary role/state visuals
-//! instead of adding a second widget-independent paint effect.
-//!
-//! # Text encoding and glyph coverage
-//!
-//! Public text uses Rust [`str`] and [`String`] values and is therefore valid UTF-8. Textbox removes
-//! CR and LF at every ingress; text-area and text-block storage converts CRLF and lone CR to LF.
-//! Textbox and text-area cursors are byte indices kept on Unicode scalar-value boundaries;
-//! movement and deletion operate on scalar values rather than grapheme clusters.
-//!
-//! Rendering coverage belongs to the selected atlas font. The built-in atlas builder bakes
-//! printable ASCII (`U+0020` through `U+007E`). A missing character uses the font's required
-//! underscore glyph; validated custom [`AtlasSource`] tables may provide arbitrary Unicode scalar
-//! values but must include exactly one `_` per font. The renderer does not perform script shaping,
-//! bidirectional reordering, grapheme
-//! segmentation, kerning, or fallback-font selection.
-//!
-//! Update and paint traverse parent before children and siblings in forward order. Later work sees
-//! successful earlier cross-cell mutations, work already completed does not rerun, and each input
-//! transaction's final layout observes the resulting state and topology. Paint is observational and
-//! may update private rendering caches only. Custom-render callbacks may update callback-private
-//! rendering caches only.
-//!
-//! ```
-//! use microui_ui::prelude::*;
-//! use microui_ui::render::{RenderError, RendererBackend};
-//!
-//! fn install_and_draw<B: RendererBackend>(
-//!     context: &mut Context<B>,
-//!     dimensions: Dimensioni,
-//!     info: FrameInfo,
-//! ) -> Result<WindowHandle, RenderError> {
-//!     let (_button, button_node) = Button::create(ButtonParameters::new("Save"));
-//!     let window = context.ui().create_window(Window::new(
-//!         "main",
-//!         rect(20, 20, 180, 80),
-//!         button_node,
-//!     ));
-//!
-//!     context.update_ui(dimensions);
-//!     context.frame(info).render_ui()?;
-//!     Ok(window)
-//! }
-//! ```
-//!
-//! The crate exposes the context, child-owning containers, widgets, rendering types, styles, and
-//! image APIs needed to embed a UI inside custom render backends while remaining allocator- and
-//! platform-agnostic.
-//! Built-in widget placement is driven by each widget's `measure` result, so auto-sized rows can use
-//! per-widget intrinsic text/icon metrics instead of a single shared control size.
-//! Retained layout is resolved from context-owned UI nodes, container sizing policies, and widget
-//! measurement results.
-//! Retained application logic uses typed weak widget handles returned beside mounted nodes.
-//! The [`retained`] module and repository examples document the 0.8 retained-authoring API.
-//! This release is versioned `0.8.0` and uses one concrete surface forest. Sole parent
-//! edges encode structural child-window, dialog, and popup ownership; forest storage records
-//! chronological window order; and one deepest-popup identity derives the visible transient branch.
-//! Within a child family, parent content records below descendants while the parent's intrinsic menu
-//! and chrome record and handle above them. Window-intrinsic declarative menu surfaces share that
-//! ownership model without erased payloads.
-//!
-//! # Rendering pipeline
-//!
-//! Drawing is recorded before it reaches the backend:
-//!
-//! ```text
-//! Widget::paint
-//!      |
-//!      v
-//!   Painter  --->  DisplayList  --->  Context executor  --->  RendererBackend::Frame
-//! (records)         (owns ops)        (executes)            (submits/presents)
-//! ```
-//!
-//! Widgets obtain a [`render::Painter`] from [`WidgetPaintCtx::painter`] and record
-//! backend-neutral operations. A crate-private Context executor consumes the resulting display
-//! list, performs final clipping and tessellation, and submits final
-//! [`render::Vertex`] values through [`render::RendererBackend`]. Applications normally import
-//! retained UI types from [`prelude`], while backend integrations import frame contracts from
-//! [`render`].
+//! Measurement caches are invalidated by truthful update results, changed setters, constraints,
+//! topology and installed resource revisions. Rendering observes the last complete commit and
+//! rejects stale geometry before acquiring a native frame. Author obligations, deployment and
+//! independent extension examples are documented in the workspace's `docs/COM_AUTHORS.md`,
+//! `docs/COM_NATIVE.md` and `plugins/extension-example`.
 
 // Compile the Rust examples in standalone guides as part of `cargo test --doc` without publishing
 // duplicate guide modules in the normal API reference.
@@ -265,7 +130,7 @@ mod window_manager;
 /// This module groups the stable retained concepts used by application code without exposing
 /// low-level renderer details or manual container drawing helpers through default imports.
 pub mod retained {
-    pub use crate::event::{EventSource, SubscribeError, TypedWidget, WidgetEvent, WidgetEventPortHandle};
+    pub use crate::event::{EventSource, TypedWidget, WidgetEventPortHandle};
     pub use crate::menu::{Menu, MenuBar, MenuItem, MenuItemAccessError, MenuItemHandle, MenuItemMark, MenuItemParameters, MenuItemSubmitted};
     pub use crate::render::{CustomRenderArgs, CustomRenderHandle};
     pub use crate::ui_node::{
@@ -286,7 +151,7 @@ pub mod retained {
 /// The prelude intentionally favors retained authoring, widget state, skin/input/image types, and
 /// renderer integration. Low-level backend contracts live under [`render`].
 pub mod prelude {
-    pub use crate::event::{EventSource, SubscribeError, TypedWidget, WidgetEvent, WidgetEventPortHandle};
+    pub use crate::event::{EventSource, TypedWidget, WidgetEventPortHandle};
     pub use crate::atlas::{AtlasError, AtlasHandle, AtlasSource, CharEntry, FontEntry, FontId, IconId, SourceFormat};
     pub use crate::menu::{Menu, MenuBar, MenuItem, MenuItemAccessError, MenuItemHandle, MenuItemMark, MenuItemParameters, MenuItemSubmitted};
     pub use crate::image::{ImageError, ImageSource, ImageStorageError, MAX_DECODED_RGBA_BYTES, load_image_bytes};
@@ -330,7 +195,7 @@ pub use window_manager::{
     ChildWindowClip, DEFAULT_LAYER, LayerBinding, MAX_LAYER, MIN_LAYER, PopupEvent, PopupHandle, SurfaceCreationError, SurfaceMutationError, Window,
     WindowEvent, WindowHandle, WindowOption,
 };
-pub use event::{EventSource, SubscribeError, TypedWidget, WidgetEvent, WidgetEventPortHandle};
+pub use event::{EventSource, TypedWidget, WidgetEventPortHandle};
 pub use menu::{Menu, MenuBar, MenuItem, MenuItemAccessError, MenuItemHandle, MenuItemMark, MenuItemParameters, MenuItemSubmitted};
 pub use image::{ImageError, ImageSource, ImageStorageError, MAX_DECODED_RGBA_BYTES, load_image_bytes};
 pub use input::{Key, KeyEvent, KeyState, Modifiers, MouseButton};
@@ -368,3 +233,6 @@ pub(crate) use ui_node::UiRuntime;
 
 /// COM implementation entrypoints used by the UI plugin assembly.
 pub mod com;
+
+#[cfg(test)]
+pub use event::SubscribeError;

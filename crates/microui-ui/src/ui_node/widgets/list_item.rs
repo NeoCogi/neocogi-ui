@@ -132,7 +132,6 @@ pub struct ListItemSubmitted<Value = ()> {
     pub label: String,
 }
 
-impl<Value: 'static> crate::WidgetEvent for ListItemSubmitted<Value> {}
 
 /// Concrete retained list item, including its semantic state.
 pub struct ListItem<Value: Clone + 'static = ()> {
@@ -286,32 +285,7 @@ impl<Value: Clone + 'static> From<ListItemParameters<Value>> for ListItem<Value>
     }
 }
 
-#[cfg(test)]
-mod tests {
-    //! Boundary tests for retained list-item paint geometry.
 
-    use super::*;
-    use crate::render::DisplayList;
-    use crate::test_support::{test_atlas, test_skin};
-
-    /// Verifies application-provided maximum padding cannot overflow icon or label placement.
-    #[test]
-    fn extreme_padding_keeps_icon_paint_total() {
-        let atlas = test_atlas();
-        let mut style = test_skin(&atlas);
-        style.metrics.padding = i32::MAX;
-        let check = atlas.icon_id("check").expect("test atlas must contain the exact check resource");
-        let mut item = ListItem::from(ListItemParameters::with_icon("item", IconRef::named(check)));
-        let bounds = rect(0, 0, 20, 20);
-        let mut display_list = DisplayList::new();
-        let mut ctx = WidgetPaintCtx::new_with_content_geometry(bounds, &mut display_list, bounds, &style, &atlas, true, true, false, false, false, true);
-
-        item.paint(&mut ctx);
-
-        // Hover fill remains visible; extreme icon/text geometry may be clipped completely.
-        assert!(display_list.debug_operation_count() >= 1);
-    }
-}
 
 impl crate::com::widget::WidgetAlgorithm for ListItem {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
@@ -342,5 +316,32 @@ impl crate::com::widget::IconState for ListItem {
         let changed = self.icon != icon;
         self.icon = icon;
         changed
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Boundary tests for retained list-item paint geometry.
+
+    use super::*;
+    use crate::render::DisplayList;
+    use crate::test_support::{test_atlas, test_skin};
+
+    /// Verifies application-provided maximum padding cannot overflow icon or label placement.
+    #[test]
+    fn extreme_padding_keeps_icon_paint_total() {
+        let atlas = test_atlas();
+        let mut style = test_skin(&atlas);
+        style.metrics.padding = i32::MAX;
+        let check = atlas.icon_id("check").expect("test atlas must contain the exact check resource");
+        let mut item = ListItem::from(ListItemParameters::with_icon("item", IconRef::named(check)));
+        let bounds = rect(0, 0, 20, 20);
+        let mut display_list = DisplayList::new();
+        let mut ctx = WidgetPaintCtx::new_with_content_geometry(bounds, &mut display_list, bounds, &style, &atlas, true, true, false, false, false, true);
+
+        item.paint(&mut ctx);
+
+        // Hover fill remains visible; extreme icon/text geometry may be clipped completely.
+        assert!(display_list.debug_operation_count() >= 1);
     }
 }

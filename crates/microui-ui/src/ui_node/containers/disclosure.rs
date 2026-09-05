@@ -454,6 +454,49 @@ impl Disclosure {
     }
 }
 
+
+
+impl Disclosure {
+    /// Creates COM semantic state while its concrete class retains the actual typed body capability.
+    pub(crate) fn com_new(model: Rc<DisclosureState>, variant: DisclosureVariant) -> Self {
+        Self { content: None, model, variant }
+    }
+}
+impl DisclosureHeader {
+    /// Creates the real header leaf with its shared expansion value and initialized label.
+    pub(crate) fn com_new(model: Rc<DisclosureState>, label: String, variant: DisclosureVariant) -> Self {
+        let opt = if variant == DisclosureVariant::Header {
+            WidgetOption::FRAME
+        } else {
+            WidgetOption::NONE
+        };
+        Self { model, label, variant, opt }
+    }
+    /// Reads the label used by both preferred-size measurement and complete header painting.
+    pub(crate) fn com_label(&self) -> &str {
+        &self.label
+    }
+    /// Replaces the actual label without changing expansion or body ownership.
+    pub(crate) fn com_set_label(&mut self, label: &str) {
+        self.label.clear();
+        self.label.push_str(label);
+    }
+}
+impl crate::com::widget::WidgetAlgorithm for Disclosure {
+    /// Parent has no surface-specific option storage; common COM options remain authoritative.
+    fn set_options(&mut self, _options: WidgetOption) {}
+}
+impl crate::com::widget::WidgetAlgorithm for DisclosureHeader {
+    /// Header-owned internal framing and text alignment use these concrete options.
+    fn set_options(&mut self, options: WidgetOption) {
+        self.opt = options;
+    }
+    /// Header painting already owns its internal frame; generic traversal must not add a second inset.
+    fn effective_options(&self, options: WidgetOption) -> WidgetOption {
+        options & !WidgetOption::FRAME
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -531,46 +574,5 @@ mod tests {
         // The 10x5 collapse icon plus one vertical pixel on each side determines 10x7. Measuring
         // only the 1x1 expand icon would incorrectly return 3x3 and clip after expansion.
         assert_eq!((preferred.width, preferred.height), (10, 7));
-    }
-}
-
-impl Disclosure {
-    /// Creates COM semantic state while its concrete class retains the actual typed body capability.
-    pub(crate) fn com_new(model: Rc<DisclosureState>, variant: DisclosureVariant) -> Self {
-        Self { content: None, model, variant }
-    }
-}
-impl DisclosureHeader {
-    /// Creates the real header leaf with its shared expansion value and initialized label.
-    pub(crate) fn com_new(model: Rc<DisclosureState>, label: String, variant: DisclosureVariant) -> Self {
-        let opt = if variant == DisclosureVariant::Header {
-            WidgetOption::FRAME
-        } else {
-            WidgetOption::NONE
-        };
-        Self { model, label, variant, opt }
-    }
-    /// Reads the label used by both preferred-size measurement and complete header painting.
-    pub(crate) fn com_label(&self) -> &str {
-        &self.label
-    }
-    /// Replaces the actual label without changing expansion or body ownership.
-    pub(crate) fn com_set_label(&mut self, label: &str) {
-        self.label.clear();
-        self.label.push_str(label);
-    }
-}
-impl crate::com::widget::WidgetAlgorithm for Disclosure {
-    /// Parent has no surface-specific option storage; common COM options remain authoritative.
-    fn set_options(&mut self, _options: WidgetOption) {}
-}
-impl crate::com::widget::WidgetAlgorithm for DisclosureHeader {
-    /// Header-owned internal framing and text alignment use these concrete options.
-    fn set_options(&mut self, options: WidgetOption) {
-        self.opt = options;
-    }
-    /// Header painting already owns its internal frame; generic traversal must not add a second inset.
-    fn effective_options(&self, options: WidgetOption) -> WidgetOption {
-        options & !WidgetOption::FRAME
     }
 }

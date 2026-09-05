@@ -1,92 +1,74 @@
 # Architecture
 
-## Key concepts
+Applications link `microui-redux`, canonical `microui-contracts`, and nc-com support.
+The facade contains concrete typed clients and application-local generic adapters.
+The UI implementation, retained window manager, built-in widgets and layout policies
+are packaged in the UI plugin. Native platform and GPU objects share the selected
+platform plugin. PNG decoding and optional font/theme construction belong to the
+asset plugin. Several COM classes can share one assembly; a class is not a DLL.
 
-- **Context**: owns the crate-private render executor, the only ordered input queue, the concrete
-  retained surface forest, and typed application subscriptions. `Context<B>` applications call
-  `update_ui(dimensions)`, while `Context<B, State>` applications call
-  `update_ui_state(dimensions, state)` to dispatch typed events. Both commit layout before
-  `frame(FrameInfo).render_ui()?` paints and submits once; neither rebuilds windows or polls
-  transient UI commands per frame.
-- **Container**: the generic retained branch owner. It stores one erased concrete `ContainerWidget` and one authoritative opaque `Children` collection. The concrete widget owns semantic state, configuration, event ports, and layout policy; only the generic container owns children strongly.
-- **Layout engine + flows**: parent container widgets measure and assign child rectangles through scoped child-aware APIs and `ContainerLayoutCtx`. Linear, Grid, and Disclosure expose their layout configuration and topology through `TypedWidgetHandle<W>`; ScrollArea accepts one arbitrary content node and owns only viewport state.
-- **Widget**: the common update/paint contract. A leaf additionally implements `LeafWidget` for intrinsic measurement; a branch implements `ContainerWidget` for child-aware measurement and placement. Concrete widgets combine semantic values, interaction state, native event ports, and runtime phases; `*Parameters` are only one-shot initialization.
-- **Node**: the non-cloneable owner of one concrete leaf or container runtime. Each allocation wraps the concrete widget in private `WidgetStorage<W>`, which carries its measurement dirty marker; only the widget role is erased at the leaf/container boundary. Applications and coordinating widgets may retain a weak `TypedWidgetHandle<W>` without affecting node lifetime. A `Node` receives private process-unique identity when constructed and transfers exactly once into a window, an application popup, or an opaque `Children` collection; attached nodes cannot be detached or reparented.
-- **Rendering**: widgets obtain a local `Painter` from `WidgetPaintCtx`; retained traversal owns the internal display list, and Context's private executor submits it through one exclusively borrowed `RendererBackend::Frame`. The portable target supports drawables up to 8192x8192 and geometry up to four maximum drawable spans beyond the viewport; see the [render subsystem guide](RENDER.md#supported-coordinate-domain) for the complete coordinate contract and integration API.
-- **Typography**: atlases can bake multiple named fonts and sizes. `Skin` resolves semantic roles
-  (`body`, `small`, `title`, `heading`, `mono`) through stable `FontRef` values, while text-bearing
-  `*Parameters` select a per-widget font with `.font(...)`.
-- **Skin**: `Context` owns one complete value shared by manager-owned window chrome and every
-  retained node. The same value drives measurement, placement, input localization, update, and
-  paint; nodes and containers add no override or inheritance layer. See the [skin
-  architecture](SKINNING.md) for its concrete tables and ownership boundaries.
-- **Application components**: application state may coordinate multiple retained windows and
-  widgets behind a typed semantic API. `FileDialog` owns dialog behavior; a `Window` construction
-  value transfers its body and optional declarative `MenuBar` together. Each `MenuItemHandle`
-  carries private stable identity and projects its concrete item's submission port to the same
-  typed application dispatcher as every other widget event.
+`IButton: IWidget` is real single-base interface inheritance. One COM allocation
+contains the concrete state and all its projections. Inherited calls use the base
+vtable prefix without QueryInterface or AddRef. Acquiring a separately owned base
+capability is explicit. Generic Rust values stay local; a cross-plugin capability
+has one concrete declared interface and checked ABI identity.
 
-The public API is intentionally centered on `microui_ui::prelude` for applications and `microui_ui::retained` for retained concepts such as `Node`, `Children`, `Container`, `Linear`, `Disclosure`, typed widget handles, and `Context`. Low-level rendering lives under `microui_ui::render`, and atlas construction lives under `microui_ui::atlas::builder`.
+## Retained objects and frame phases
 
-## Rendering
+A UI owns a retained forest. Nodes own actual widget capabilities; callers can
+retain additional editing references without acquiring tree ownership. Attachment
+is single-use and authenticates the widget's host. Removing a subtree logically
+closes it, while retained handles keep the allocation memory-safe and return CLOSED
+for later editing. Final COM release frees the remaining allocation and resources.
 
-Widgets record backend-neutral drawing through a framework-created `Painter`; Context's private executor consumes the crate-owned display list and submits final geometry through `RendererBackend`. The [render subsystem guide](RENDER.md) covers architecture, clipping, textures, custom callbacks, backend implementation, and compiling code examples.
+The runtime synchronizes pending geometry, then handles each queued input event in
+order. It routes the event, updates eligible widgets, releases traversal state,
+dispatches concrete application handlers, and commits their geometry changes before
+routing the next event. An empty input queue still performs an eventless update.
+There is no production native `Context<State>` or second callback dispatcher.
 
-## Retained authoring model
-
-The supported authoring path is retained widget trees registered as context-owned windows and
-application popups. Applications pass `Window::new(name, rect, body)` to
-`Context::ui().create_window(...)`; the optional
-`.menu_bar(MenuBar::new(...))` builder installs the bar as part of that window. An ordinary window
-may own screen-space structural children created with `Ui::create_child_window(&parent, window)`;
-its `Window::child_window_clip(ChildWindowClip::Content)` construction policy optionally confines
-their complete descendant surfaces to its application body. An independent or child window may
-directly own dialogs created with `Ui::create_dialog(&parent, window)`. A window or dialog may retain
-generic widget popups created with `Ui::create_popup(&parent, name, content)` or compact popup menus
-created from the ordinary recursive `Menu` declaration with `Ui::create_menu_popup`. Applications
-mutate leaves and containers through weak
-`TypedWidgetHandle<W>` values, commit contexts without application callbacks through
-`Context::update_ui(...)` or subscriber-driven contexts through `Context::update_ui_state(...)`,
-and paint with `Context::frame(FrameInfo).render_ui()?`.
-
-The application constructs one complete skin and installs it on the context:
-
-```rust
-# use microui_ui::prelude::*;
-# fn customize<B: RendererBackend, State: 'static>(ctx: &mut Context<B, State>) {
-let mut skin = ctx.skin().clone().with_metrics(|metrics| {
-    metrics.spacing = 8;
-    metrics.padding = 6;
-});
-let button_state = ControlState::Enabled(PointerState::Normal);
-let mut button = skin.control(ControlRole::Button, button_state);
-button.content_color = color(55, 90, 160, 255);
-skin.set_control(ControlRole::Button, button_state, button);
-ctx.set_skin(skin);
-# }
+```rust,no_run
+use microui_redux::{EventSession, IRendererAbi, Size, Ui};
+use nc_com::{ComRef, NcStatus};
+fn frame<State: 'static>(ui: &Ui, events: &EventSession<State>, size: Size,
+    renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus>
+{
+    ui.update_with_events(size, events)?;
+    ui.render(size, renderer)
+}
 ```
 
-The context value styles manager-owned window chrome and every retained widget. Nodes, containers,
-windows, and typed widget handles do not own local overrides. Call `Context::update_ui` after a
-programmatic replacement and before relying on its visual or layout result. Custom widgets inspect the same value through
-`MeasureCtx::skin`, `ContainerLayoutCtx::skin`, `WidgetUpdateCtx::skin`, and `WidgetPaintCtx::skin`.
+Measurement caches include constraints and resource revisions. Changed setters,
+truthful CHANGED update results, topology edits, child changes and resize invalidate
+geometry independently. Paint is observational and rejects a missing or stale
+commit before acquiring a GPU frame. Animation and external-state scheduling remain
+explicit author responsibilities, including widgets skipped by hidden/clipped-tree
+update policy. See [COM_AUTHORS.md](../../../docs/COM_AUTHORS.md).
 
-Window and dialog creation consume one complete `Window` and return a non-owning `WindowHandle`;
-popup creation consumes one persistent application `Node` and returns the distinct non-owning
-`PopupHandle`. Creation validates the parent before transferring those unique values. A rejected
-child window or dialog therefore returns `SurfaceCreationError<Window>`, while a rejected popup
-returns `SurfaceCreationError<Node>`; `reason()` identifies the policy failure and `into_input()`
-returns the unchanged owner for retry. There is no public numeric window or popup identifier. Every
-checked `Ui` operation accepts the complete handle, whose private process-unique ID must belong to
-the receiving forest. Event endpoints remain separate weak subscription capabilities and are never
-used as object keys. Borrowed operations report a stale or foreign window as
-`SurfaceMutationError::UnknownWindow`; popup-only mutations analogously return
-`SurfaceMutationError::UnknownPopup`. The same concrete reason type reports ownership and policy
-failures as `InvalidDialogOwner`, `InvalidChildWindowParent`, `InvalidPopupParent`, `InvalidLayer`,
-or `ManagedLayer`.
+## Layout, painting and resource ownership
 
-Windows cannot be replaced while retaining their identity: mutate descendants through a container
-state's weak topology capability, or destroy and recreate the window.
+A container owns the host's `IChildrenEditor`; callers receive its distinct read-only
+view. Concrete edge metadata belongs to the container. Child edits commit topology
+before returning a separate old-child teardown status, so metadata must follow the
+committed topology even when teardown reports an error.
+
+Layout uses bounded indexed `ILayoutService` calls under an invocation token.
+Painting uses an expiring `IPainter` scope with copied geometry. Neither interface
+lends native tree, frame or application-state borrows across a dynamic call. Nested
+calls restore the parent scope; expired tokens cannot become valid again.
+
+Built-in text, frames and polygons share the UI's recording/tessellation code.
+Ordered atlas, immutable-image and custom-render-item batches preserve their display
+list positions. The renderer validates complete buffers and resource ownership
+before acquiring a frame. Owned images and scenes retain their device/window as
+needed; backend types remain local to their assembly.
+
+An immutable asset bundle supplies fonts, icons, styles and pixels. Installation
+validates the catalog, prepares CPU resources and uploads the GPU candidate before
+publishing the new revision. Failure preserves the prior working UI/resources.
+[COM_ASSETS.md](../../../docs/COM_ASSETS.md) specifies catalog identity and format limits.
+
+## Surface forest
 
 ### Concrete surface forest and parent edges
 
@@ -244,181 +226,20 @@ carets or fills. Each widget paints the focused state of its semantic role durin
 pass, while the active owner window selects the active state of its title and frame roles. During menu navigation
 the menu selection replaces the suspended widget cue while the owning window remains visibly active.
 
-A fullscreen application surface remains an ordinary independent window, not a special surface
-kind. Give its `Window` a content clip policy, put the root in the desired fixed layer, remove its
-title/resize/padding chrome, keep its rectangle synchronized with the drawable viewport, and create
-the floating surfaces as its children:
 
-```rust,ignore
-let surface = context.ui().create_window(
-    Window::new("desktop", rect(0, 0, 1, 1), desktop_content)
-        .menu_bar(desktop_menu)
-        .child_window_clip(ChildWindowClip::Content),
-);
-context.ui().set_window_layer(&surface, MIN_LAYER)?;
-context.ui().set_window_options(
-    &surface,
-    WindowOption::NO_TITLE
-        | WindowOption::NO_CLOSE
-        | WindowOption::NO_RESIZE
-        | WindowOption::NO_PADDING,
-)?;
-context
-    .ui()
-    .set_window_rect(&surface, rect(0, 0, dimensions.width, dimensions.height))?;
-let tool = context.ui().create_child_window(
-    &surface,
-    Window::new("tool", rect(40, 40, 300, 450), tool_content),
-)?;
-```
+An application desktop is an ordinary window with explicit layer, chrome and child
+clip policy. Its application updates the rectangle when the platform drawable
+changes. The full demo shows this composition through actual window capabilities.
 
-`ChildWindowClip::Content` intersects each direct child's inherited clip with the committed
-application-body rectangle. Root chrome removes the frame, title, and intrinsic menu bar in that
-order, then applies the window-owned content inset only to the remaining application body.
-Descendants accumulate clipping ancestors, but their authoritative rectangles stay in screen
-coordinates. `ChildWindowClip::None`, the default, preserves the inherited viewport clip while
-keeping the same content/children/overlay order. `NO_PADDING` removes only the window-owned content
-inset; descendant widgets still use the complete `Skin`, including ordinary control and container
-padding.
+## Extension and test boundaries
 
-`demo-full` applies this exact recipe to a menu-bearing perspective X-Y grid family root with
-left-drag arcball rotation, wheel zoom, and homogeneous line clipping. The original Demo Window and
-the other floating windows are content-clipped children: they render above the grid body, remain
-below the root's Grid/Help bar, and inherit the root's layer without a special desktop subsystem.
+The [extension example](../../../plugins/extension-example) is independently built
+and dynamically loaded. Its counter and inset container exercise inheritance,
+shared event delivery, scoped layout, measurement invalidation and logical closure
+without linking the UI implementation. [COM_NATIVE.md](../../../docs/COM_NATIVE.md)
+documents native and static-browser assembly.
 
-```rust
-# use microui_ui::prelude::*;
-#[derive(Default)]
-struct Model {
-    submitted_names: Vec<String>,
-}
-
-impl Model {
-    fn name_submitted(&mut self, event: &TextboxSubmitted) {
-        self.submitted_names.push(event.text.clone());
-    }
-}
-
-# fn render<B: RendererBackend>(
-#     ctx: &mut Context<B, Model>,
-# ) -> Result<(), Box<dyn std::error::Error>> {
-let (name, name_node) = Textbox::create(TextboxParameters::new(""));
-let name_submitted = name.submitted();
-let (_, label_node) = TextBlock::create(TextBlockParameters::new("Name"));
-let (_, tree) = Linear::create(LinearParameters::horizontal(
-    [
-        LinearItem::fixed(label_node, 120),
-        LinearItem::flex(name_node, 1.0),
-    ],
-));
-
-let _window = ctx.ui().create_window(Window::new("main", rect(20, 20, 240, 120), tree));
-let dimensions = Dimensioni::new(800, 600);
-let info = FrameInfo::try_new(dimensions, color(20, 22, 26, 255))?;
-ctx.subscribe(name_submitted, |state, _, event| Model::name_submitted(state, event))?;
-let mut model = Model::default();
-ctx.update_ui_state(dimensions, &mut model);
-ctx.frame(info).render_ui()?;
-# Ok(())
-# }
-```
-
-An event-driven context is constructed as `Context::<Backend, Model>::new(backend)`. It owns the
-sole application dispatcher for its complete retained window set. Each subscribed source queues
-its own typed payloads, and the context drains those queues into `Model` after retained widget
-borrows have ended. Library components can participate without entering the window manager:
-applications own `FileDialog` values in `Model`, while the component binds its controls through an
-accessor into that same model, creates a hidden modal dialog window, stores its `WindowHandle`, and
-matches `WindowEvent::CloseRequested` from the unified event port. A port still accepts exactly one
-state method; compose additional effects inside that method.
-
-Retained trees are the supported public authoring path. Each non-cloneable `Node` owns one concrete
-leaf or one generic `Container`. A container owns its opaque children and one concrete branch
-widget; the branch widget directly owns its semantic state, configuration, event ports, and weak
-`ChildrenHandle` capability. Successful insertion transfers a node, while removal, clearing, or
-replacement drops the removed runtime owner. Grid placement belongs to the concrete `Grid` widget,
-not to generic nodes: plain nodes occupy one cell, while `GridItem::spanned(node, columns, rows)`
-supplies an explicit parent-child span that can later be changed through
-`TypedWidgetHandle<Grid>::try_update` without replacing the child. Every concrete widget is
-accessed through `TypedWidgetHandle<W>`. Widgets implement `TypedWidget<E>` for native event
-payloads, and the typed handle projects the corresponding weak `WidgetEventPortHandle<E>` without
-exposing or owning the erased node. Disclosure headers remain real addressable leaf children, while
-the concrete `Disclosure` widget owns expansion state and the weak body-topology capability.
-
-## Retained identity and event endpoints
-
-Each owning `Node` receives a private, process-unique runtime identity before mounting. Moving a
-node, wrapping it in an unmounted `LinearItem` or `GridItem`, and inserting it into a container
-preserve that identity; applications cannot read or construct it.
-There is no public node ID or result lookup path. Weak typed widget handles expose event endpoints
-after node erasure.
-
-Windows and dialogs, every application or private menu popup, and menu items use a separate
-retained-object identity source. Every object receives a private non-zero `u64` from one
-process-wide monotonic allocator. Values are not reissued after destruction; checked advancement
-stops before wraparound. The IDs are process-local implementation keys, not persistent application
-identifiers. Concrete `RootId`, `PopupId`, and `MenuItemId` wrappers keep operations type-safe,
-while their shared namespace prevents collisions between Contexts.
-
-`WindowHandle`, `PopupHandle`, and `MenuItemHandle` aggregate one of those private IDs with the
-weak endpoint associated with the same object. Aggregation is only an application convenience:
-forest and menu lookup compares the ID, while `events()` or `submitted()` clones only the endpoint.
-No code casts, stores, or compares an event-port pointer as object identity. A retained object
-strongly owns its ports for the appropriate lifetime, so endpoint liveness normally follows object
-liveness without defining it. If an object later exposes several ports, each remains a separately
-named endpoint beside the same stable object ID.
-
-Window chrome is manager-owned rather than represented by a retained widget. `WindowHandle::events`
-projects concrete variants for geometry changes, close requests, minimization, maximization, and
-restoration; the manager applies the new geometry or visibility before queuing an observation.
-`PopupHandle::events` projects `PopupEvent::Dismissed` whenever policy removes that application
-popup from the active branch. Private menu popups instead publish the selected item's
-`MenuItemHandle::submitted` event.
-
-The stable handles select mutations through the short-lived `Ui<'_>` façade returned by
-`Context::ui()` and passed to context-aware event handlers. This keeps ordinary application code
-and event-time code on one API while preventing a handle from another Context from addressing a
-surface. For example:
-
-```rust,ignore
-fn window_event(&mut self, ui: &mut Ui<'_>, event: &WindowEvent) {
-    match event {
-        WindowEvent::GeometryChanged { rect } => self.last_rect = *rect,
-        WindowEvent::CloseRequested => {
-            ui.destroy_window(&self.window).expect("window must remain registered");
-        }
-        WindowEvent::Minimized { rect }
-        | WindowEvent::Maximized { rect }
-        | WindowEvent::Restored { rect } => {
-            self.last_rect = *rect;
-        }
-    }
-}
-
-fn popup_event(&mut self, event: &PopupEvent) {
-    if matches!(event, PopupEvent::Dismissed) {
-        self.popup_open = false;
-    }
-}
-
-context.subscribe(window.events(), Model::window_event).unwrap();
-context.subscribe(popup.events(), |state, _, event| Model::popup_event(state, event)).unwrap();
-context.ui().set_window_visible(&window, true).unwrap();
-context.ui().show_popup_at(&popup, anchor).unwrap();
-```
-
-Registered windows can be configured with `Ui::set_window_options(&window, ...)` and
-`WindowOption` to control chrome. Window overflow does not scroll implicitly; construct a
-`ScrollArea` with `ScrollAreaOption::ENABLE_SCROLL` around one content node and use its
-`TypedWidgetHandle<ScrollArea>` for offset changes. The content may be any leaf or container. It
-fills at least the viewport width and keeps its desired height; explicit descendant relationships
-remain in the content container.
-Every retained node caches preferred measurements and placement across layout passes. Widget
-`Change::Changed`, checked handle mutation, and child edits record local invalidation. Before
-measurement, synchronization walks the authoritative tree, consumes local dirty markers, and
-invalidates dependent ancestor caches on its return path. There are no weak parent-cache links.
-New constraints and installed skin revisions independently determine cache reuse. Custom
-containers receive a weak `ChildrenHandle` through `bind_children`; their authors coordinate
-per-child metadata and permitted mutation phases as described in the [widget guide](WIDGETS.md).
-Ordinary traversal rejects nodes whose retained rectangles do not intersect the inherited viewport,
-regardless of which container owns them.
+Unit fixtures under `src/test_support` also exercise individual native algorithms.
+Their borrowed-state callback driver uses the facade's test-only queue access;
+it is absent from normal application/plugin builds. Production event ownership and
+cross-assembly behavior are tested through COM sessions and staged deployments.

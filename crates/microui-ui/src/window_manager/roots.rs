@@ -157,7 +157,6 @@ pub enum PopupEvent {
     Dismissed,
 }
 
-impl crate::WidgetEvent for PopupEvent {}
 
 /// Process-unique identifier for one popup definition inside its owning window.
 ///
@@ -253,6 +252,8 @@ struct Surface {
 }
 
 /// Concrete content variants owned by a forest surface.
+// Unit-only traversal counters enlarge the inline runtime; production storage needs no extra allocation.
+#[cfg_attr(test, allow(clippy::large_enum_variant))]
 enum SurfaceBody {
     /// Ordinary application-authored retained widget tree.
     Widgets {

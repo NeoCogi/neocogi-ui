@@ -273,7 +273,6 @@ pub struct ScrollbarChanged {
     pub offset: i32,
 }
 
-impl crate::WidgetEvent for ScrollbarChanged {}
 
 /// Standalone one-axis scrollbar whose allocation supplies its complete track rectangle.
 pub struct Scrollbar {
@@ -532,6 +531,36 @@ impl crate::LeafWidget for Scrollbar {
     }
 }
 
+
+
+impl crate::com::widget::WidgetAlgorithm for Scrollbar {
+    /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
+    fn close_events(&mut self) {
+        self.changed_event.close_ordinary();
+    }
+
+    /// A zero range paints a full thumb but must not establish meaningless pointer capture.
+    fn effective_options(&self, options: WidgetOption) -> WidgetOption {
+        if self.max_offset() > 0 {
+            options
+        } else {
+            options | WidgetOption::NO_INTERACT
+        }
+    }
+    /// Synchronizes options inside the one concrete semantic state of a COM leaf.
+    fn set_options(&mut self, options: crate::WidgetOption) {
+        self.opt = options;
+    }
+}
+
+impl Scrollbar {
+    /// Copies range metadata without introducing a second source of scrollbar truth.
+    pub(crate) fn com_lengths(&self) -> (i32, i32) {
+        let values = self.axis_state.values.get();
+        (values.viewport, values.content)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -581,33 +610,5 @@ mod tests {
             "half-track drag must map back to half the content range"
         );
         assert!((i64::from(geometry.centered_offset(Vec2i::new(10 + 146 + 4, 20))) - i64::from(offset)).abs() <= 1);
-    }
-}
-
-impl crate::com::widget::WidgetAlgorithm for Scrollbar {
-    /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
-    fn close_events(&mut self) {
-        self.changed_event.close_ordinary();
-    }
-
-    /// A zero range paints a full thumb but must not establish meaningless pointer capture.
-    fn effective_options(&self, options: WidgetOption) -> WidgetOption {
-        if self.max_offset() > 0 {
-            options
-        } else {
-            options | WidgetOption::NO_INTERACT
-        }
-    }
-    /// Synchronizes options inside the one concrete semantic state of a COM leaf.
-    fn set_options(&mut self, options: crate::WidgetOption) {
-        self.opt = options;
-    }
-}
-
-impl Scrollbar {
-    /// Copies range metadata without introducing a second source of scrollbar truth.
-    pub(crate) fn com_lengths(&self) -> (i32, i32) {
-        let values = self.axis_state.values.get();
-        (values.viewport, values.content)
     }
 }

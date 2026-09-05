@@ -88,7 +88,6 @@ pub struct ListBoxSubmitted {
     pub label: String,
 }
 
-impl crate::WidgetEvent for ListBoxSubmitted {}
 
 /// Concrete retained list box, including its semantic and interaction state.
 pub struct ListBox {

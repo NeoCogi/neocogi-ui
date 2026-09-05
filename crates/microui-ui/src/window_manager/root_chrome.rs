@@ -115,7 +115,6 @@ pub enum WindowEvent {
     },
 }
 
-impl crate::WidgetEvent for WindowEvent {}
 
 /// Cloneable non-owning capability for one manager-owned window or dialog.
 ///

@@ -227,7 +227,7 @@ fn increment_event_counter<E>(count: &mut usize, _: &E) {
     *count += 1;
 }
 
-fn event_counter<E: crate::WidgetEvent>(port: crate::WidgetEventPortHandle<E>) -> crate::event::WidgetEventDispatcher<usize> {
+fn event_counter<E: 'static>(port: crate::WidgetEventPortHandle<E>) -> crate::event::WidgetEventDispatcher<usize> {
     let mut dispatcher = crate::event::WidgetEventDispatcher::new();
     dispatcher.subscribe(port, |state, _, event| increment_event_counter::<E>(state, event)).unwrap();
     dispatcher
@@ -1982,7 +1982,7 @@ fn widget_handle_events_invoke_state_methods_without_polling() {
     let second_submitted = second_widget.submitted();
     let second_id = second.id();
     let (_, content) = Linear::create(LinearParameters::horizontal([LinearItem::fixed(first, 60), LinearItem::fixed(second, 60)]));
-    let mut ctx: Context<NoopRenderer, Model> = Context::new_test_state(NoopRenderer { atlas: test_atlas() }, Dimensioni::new(320, 240));
+    let mut ctx: crate::test_support::TestContext<NoopRenderer, Model> = crate::test_support::TestContext::new_test_state(NoopRenderer { atlas: test_atlas() }, Dimensioni::new(320, 240));
     let root = ctx.ui().create_window(Window::new("signal", rect(0, 0, 140, 100), content));
     ctx.ui()
         .set_window_options(&root, WindowOption::FRAME | WindowOption::NO_TITLE | WindowOption::NO_RESIZE)
@@ -2039,7 +2039,7 @@ fn context_aware_handler_creates_and_mutates_every_root_kind_before_layout() {
     let (submitted, button) = button_content("create roots");
     let button_id = button.id();
     let dimensions = Dimensioni::new(320, 240);
-    let mut context: Context<NoopRenderer, Model> = Context::new_test_state(NoopRenderer { atlas: test_atlas() }, dimensions);
+    let mut context: crate::test_support::TestContext<NoopRenderer, Model> = crate::test_support::TestContext::new_test_state(NoopRenderer { atlas: test_atlas() }, dimensions);
     let source = context.ui().create_window(Window::new("source", rect(0, 0, 140, 100), button));
     context
         .ui()
@@ -2097,7 +2097,7 @@ fn typed_events_keep_composed_combo_and_popup_state_synchronized() {
     }
 
     let dimensions = Dimensioni::new(320, 240);
-    let mut context: Context<NoopRenderer, Model> = Context::new_test_state(NoopRenderer { atlas: test_atlas() }, dimensions);
+    let mut context: crate::test_support::TestContext<NoopRenderer, Model> = crate::test_support::TestContext::new_test_state(NoopRenderer { atlas: test_atlas() }, dimensions);
     let (combo, combo_node) = Combo::create(ComboParameters::new());
     let combo_id = combo_node.id();
     let (_, menu_item) = MenuItem::create(MenuItemParameters::new("Menu action"));
@@ -2266,7 +2266,7 @@ fn textbox_handle_event_dispatches_a_complete_snapshot_to_state() {
     let (widget, node) = Textbox::create(TextboxParameters::new(""));
     let changed = widget.changed();
     let node_id = node.id();
-    let mut ctx: Context<NoopRenderer, Model> = Context::new_test_state(NoopRenderer { atlas: test_atlas() }, Dimensioni::new(320, 240));
+    let mut ctx: crate::test_support::TestContext<NoopRenderer, Model> = crate::test_support::TestContext::new_test_state(NoopRenderer { atlas: test_atlas() }, Dimensioni::new(320, 240));
     let root = ctx.ui().create_window(Window::new("textbox signal", rect(0, 0, 140, 100), node));
     ctx.ui()
         .set_window_options(&root, WindowOption::FRAME | WindowOption::NO_TITLE | WindowOption::NO_RESIZE)
@@ -4336,7 +4336,7 @@ fn menu_items_dispatch_directly_after_close_while_disabled_items_leave_the_menu_
     let (disabled, disabled_item) = MenuItem::create(MenuItemParameters::new("Unavailable").disabled());
     let menu_bar = MenuBar::new([Menu::new("Actions").item(enabled_item).item(disabled_item)]);
     let dimensions = Dimensioni::new(320, 240);
-    let mut ctx: Context<NoopRenderer, Model> = Context::new_test_state(NoopRenderer { atlas: test_atlas() }, dimensions);
+    let mut ctx: crate::test_support::TestContext<NoopRenderer, Model> = crate::test_support::TestContext::new_test_state(NoopRenderer { atlas: test_atlas() }, dimensions);
     let root = ctx
         .ui()
         .create_window(Window::new("menu events", rect(20, 25, 180, 120), empty_content()).menu_bar(menu_bar));

@@ -211,7 +211,6 @@ pub struct TextboxChanged {
     pub cursor: usize,
 }
 
-impl crate::WidgetEvent for TextboxChanged {}
 
 /// Snapshot emitted when the user submits a textbox value.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -220,7 +219,6 @@ pub struct TextboxSubmitted {
     pub text: String,
 }
 
-impl crate::WidgetEvent for TextboxSubmitted {}
 
 impl Textbox {
     /// Constructs a retained node and a weak typed handle to its concrete textbox.
@@ -477,6 +475,32 @@ impl From<TextboxParameters> for Textbox {
     }
 }
 
+
+
+impl crate::com::widget::WidgetAlgorithm for Textbox {
+    /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
+    fn close_events(&mut self) {
+        self.changed_event.close_ordinary();
+        self.submitted_event.close_ordinary();
+    }
+
+    /// Synchronizes options inside the one concrete semantic state of a COM leaf.
+    fn set_options(&mut self, options: crate::WidgetOption) {
+        self.opt = options;
+    }
+}
+
+impl crate::com::widget::FontState for Textbox {
+    /// Borrows the semantic font reference already used by layout and painting.
+    fn font(&self) -> &crate::FontRef {
+        &self.font
+    }
+    /// Replaces the same field after the COM resource owner validates the selection.
+    fn set_font(&mut self, font: crate::FontRef) {
+        self.font = font;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -602,29 +626,5 @@ mod tests {
         update_textbox(&mut textbox, true, vec![UiInputEvent::Text { text: "g\r\nh\ri\n".into() }]);
         assert_eq!(textbox.text(), "defghi");
         assert_eq!(textbox.cursor(), 6);
-    }
-}
-
-impl crate::com::widget::WidgetAlgorithm for Textbox {
-    /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
-    fn close_events(&mut self) {
-        self.changed_event.close_ordinary();
-        self.submitted_event.close_ordinary();
-    }
-
-    /// Synchronizes options inside the one concrete semantic state of a COM leaf.
-    fn set_options(&mut self, options: crate::WidgetOption) {
-        self.opt = options;
-    }
-}
-
-impl crate::com::widget::FontState for Textbox {
-    /// Borrows the semantic font reference already used by layout and painting.
-    fn font(&self) -> &crate::FontRef {
-        &self.font
-    }
-    /// Replaces the same field after the COM resource owner validates the selection.
-    fn set_font(&mut self, font: crate::FontRef) {
-        self.font = font;
     }
 }

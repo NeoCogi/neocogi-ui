@@ -101,7 +101,6 @@ pub struct NumberChanged {
     pub value: Real,
 }
 
-impl crate::WidgetEvent for NumberChanged {}
 
 /// Concrete retained number input, including its semantic and editing state.
 pub struct Number {

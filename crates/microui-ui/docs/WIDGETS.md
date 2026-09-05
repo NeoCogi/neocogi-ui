@@ -1,285 +1,114 @@
 # Built-in widgets and containers
 
-Application code normally imports these types from `microui_ui::prelude`. This guide is a map
-of the built-in choices; the generated API reference remains the authority for every parameter and
-method.
+Applications use `microui_redux::Ui::widgets()` to construct actual COM objects.
+A thin `Widget<I>` client owns a checked editing interface, with no copied semantic
+state or native widget wrapper. Each concrete editing interface inherits `IWidget`,
+directly or through a more specialized base. The widget's one allocation supplies
+common options, lifecycle, update, measurement, painting and optional event families.
 
 ## Construction and ownership
 
-Most built-ins accept a one-shot `*Parameters` value and return
-`(TypedWidgetHandle<ConcreteType>, Node)`. Move the unique `Node` into a window or container and keep
-the weak typed handle only when later reads, mutations, or event subscriptions are needed. Removing
-the node expires its handles instead of keeping an invisible widget alive.
-
-Standalone controls also implement `From<TheirParameters>` when an unmounted concrete value is
-useful: `let button = Button::from(ButtonParameters::new("Save"));`. Mount that value with
-`Node::typed_widget(button)` or `Node::widget(button)`. Parameters are ordinary structs, and
-construction needs no marker trait or separate stateless builder type. Composed controls such as
-`TextArea` use `create()` to install their complete internal tree and weak coordination handles.
-
-```rust
-# use microui_ui::prelude::*;
-# struct Model { checked: bool }
-# impl Model {
-#     fn checkbox_changed(&mut self, event: &CheckboxChanged) {
-#         self.checked = event.checked;
-#     }
-# }
-# fn install<B: RendererBackend>(
-#     context: &mut Context<B, Model>,
-# ) -> Result<WindowHandle, SubscribeError> {
-let (checkbox, checkbox_node) =
-    Checkbox::create(CheckboxParameters::new("Enable preview", false));
-context.subscribe(checkbox.changed(), |state, _, event| Model::checkbox_changed(state, event))?;
-
-let (_, content) = Linear::create(LinearParameters::vertical([
-    LinearItem::content(checkbox_node),
-]));
-let window = context
-    .ui()
-    .create_window(Window::new("settings", rect(40, 40, 260, 120), content));
-# Ok(window)
-# }
+```rust,no_run
+use microui_redux::{CrossSize, EventHandler, EventSession, FlowDirection, IWindowAbi,
+    LayoutTrack, LinearEdge, Rect, Ui};
+use microui_redux::events::CheckboxChanged;
+use nc_com::{ComPtr, NcStatus};
+struct Preview;
+impl EventHandler<bool, CheckboxChanged> for Preview {
+    fn handle(&mut self, enabled: &mut bool, event: &CheckboxChanged) -> Result<(), NcStatus> {
+        *enabled = event.checked;
+        Ok(())
+    }
+}
+fn install(ui: &Ui, events: &EventSession<bool>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+    let checkbox = ui.widgets().checkbox("Enable preview", false)?;
+    events.subscribe_checkbox(&checkbox, Preview)?;
+    let column = ui.widgets().linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch)?;
+    column.insert(0, &checkbox, LinearEdge::new(LayoutTrack::Content))?.finish()?;
+    ui.window("Settings", Rect { x: 40, y: 40, width: 260, height: 120 }, &column)
+}
 ```
 
-`Custom` is the stateless exception: `Custom::create` returns its runtime directly. Mount it with
-`Node::widget`, or pair it with a registered backend callback through `Node::custom_render`.
+Attachment consumes the widget's sole mount claim, even while callers retain owned
+editing references. Nodes cannot be reparented or mounted twice. Removal logically
+closes the subtree, so retained handles report CLOSED without becoming dangling
+pointers. Final COM release frees the allocation separately.
 
-## Controls
+## Controls and standard events
 
-| Type | Purpose | Native event ports |
+| Client | Purpose | EventSession method |
 | --- | --- | --- |
-| `Button` | Labeled or visual action | `ButtonSubmitted` |
-| `Checkbox` | Boolean choice | `CheckboxChanged` |
-| `Combo` | Selected-item and popup-header state | `ComboChanged`, `ComboSubmitted` |
-| `ListBox` | Activatable label with an optional image | `ListBoxSubmitted` |
-| `ListItem` | Activatable row with an optional semantic icon | `ListItemSubmitted` |
-| `Slider` | Bounded scalar input | `SliderChanged` |
-| `Number` | Draggable and editable numeric input | `NumberChanged` |
-| `Textbox` | Single-line UTF-8 editor | `TextboxChanged`, `TextboxSubmitted` |
-| `TextArea` | Multiline UTF-8 editor with retained scrolling | `TextAreaChanged`, `TextAreaSubmitted` |
-| `Scrollbar` | Standalone horizontal or vertical range control | `ScrollbarChanged` |
-| `TextBlock` | Read-only, optionally wrapped text | None |
-| `ColorSwatch` | Color preview with an optional label | None |
-| `Custom` | Stateless input/measurement surface for custom painting | None |
+| `Button` | Text/image action | `subscribe_activation` |
+| `Checkbox` | Boolean choice | `subscribe_checkbox` |
+| `Combo` | Selection and popup header | `subscribe_combo_changed`, `subscribe_combo_popup` |
+| `ListBox` | Activatable label/image | `subscribe_activation` |
+| `ListItem` | Activatable text/icon row | `subscribe_activation` |
+| `Slider`, `Number` | Numeric controls | `subscribe_numeric` |
+| `Textbox`, `TextArea` | UTF-8 editors | `subscribe_text_changed`, `subscribe_text_submitted` |
+| `Scrollbar` | Horizontal/vertical range | `subscribe_scrollbar` |
+| `TextBlock` | Read-only text with explicit wrapping | None |
+| `ColorSwatch` | Color preview and optional label | None |
 
-Events contain owned or copied semantic snapshots, so handlers do not need to borrow the emitting
-widget. The [events guide](EVENTS.md) covers subscription forms, ordering, and context-aware
-handlers. Combo popup content remains application-owned: handle `ComboSubmitted`, present the
-choices, then call `select` on the combo handle.
+Events own the value captured at the interaction. Ordinary programmatic setters
+remain silent. The [events guide](EVENTS.md) describes delivery; exact interfaces and
+capabilities are documented in `microui-contracts` and the facade's API reference.
 
-## Containers
+Combo lists can keep generic Rust values in the application; selection indices and
+labels cross the concrete COM contract. Domain data crossing plugins requires its
+own declared interface or an owner-scoped key, without reconstructing identity from
+a display string. File-dialog rows retain exact native paths independently of lossy
+UTF-8 display labels.
 
-| Type | Use it for |
+## Containers and child edits
+
+| Client | Geometry policy |
 | --- | --- |
-| `Linear` | One row or column with content-sized, fixed, or weighted child tracks |
-| `Grid` | Explicit rows, columns, and spanning cells |
-| `Disclosure` | A header whose retained body participates only while expanded |
-| `ScrollArea` | A framed or unframed one-child viewport with retained scrollbars |
+| `Linear` | Row/column direction with content, fixed or weighted tracks |
+| `Grid` | Explicit rows, columns and spans |
+| `Disclosure` | Actual header/body widgets with expansion-controlled participation |
+| `ScrollArea` | A single replaceable content root with composed scrollbars |
+| `TextArea` | An actual editor with scrolling; its editor role cannot be replaced |
 
-Containers exclusively own their child nodes. Topology mutations consume new nodes and return an
-unaccepted value unchanged when insertion cannot occur; removed nodes are dropped rather than
-detached for reparenting.
+Each container owns one authoritative child sequence. Concrete edge metadata lives
+with its layout policy. A topology operation returns `ChildEditResult`: topology can
+commit even if closing a removed child fails. Call `finish()` when no additional
+metadata must be reconciled, and do not retry an already committed insertion or
+replacement as if it had rolled back.
 
-## Mutable custom containers
+## Geometry and external state
 
-`Container::new(widget, children)` calls `ContainerWidget::bind_children` once, before publishing
-the widget. Store the supplied `ChildrenHandle` in a private field initialized with `Default`.
-It offers `try_push`, `try_insert`, `try_remove_drop`, `try_clear`, `try_replace`, `len`, and
-`is_empty`. These operations share the built-in containers' checked child-storage access and
-invalidate geometry even when no typed widget setter runs and `update` returns `NoChange`.
+Setters retain a sticky geometry change when measurement or placement inputs change.
+`update` returns CHANGED for the same reason; painting-only changes and event emission
+alone may return NO_CHANGE. Returning NO_CHANGE cannot erase a prior setter's marker.
+Resize constraints, topology and installed asset revisions invalidate independently.
+Call `ui.update` or `ui.update_with_events` after edits and before rendering.
 
-```rust
-use microui_ui::retained::*;
-use microui_ui::Constraints;
-use microui_ui::prelude::{Dimensioni, Recti};
+Widgets skipped by hidden/clipped-tree update policy cannot report an unseen external
+change. Authors must synchronize such data through an authorized setter, arrange a
+later truthful update, and schedule any needed frame explicitly. Painting must not
+mutate semantic state or emit coordination events. The full obligations are in
+[COM_AUTHORS.md](../../../docs/COM_AUTHORS.md#update-measurement-and-external-state).
 
-/// An overlay places each child in the same allocation.
-#[derive(Default)]
-struct Overlay {
-    /// Weak editing access; the generic Container exclusively owns the actual nodes.
-    children: ChildrenHandle,
-}
-impl Widget for Overlay {
-    fn widget_opt(&self) -> &WidgetOption { &WidgetOption::NO_INTERACT }
-    fn paint(&mut self, _: &mut WidgetPaintCtx<'_>) {}
-}
-impl ContainerWidget for Overlay {
-    fn bind_children(&mut self, children: ChildrenHandle) { self.children = children; }
-    fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: Constraints) -> Dimensioni {
-        let mut size = Dimensioni::default();
-        for index in 0..ctx.child_count() {
-            if let Some(child) = ctx.measure_child(index, constraints) {
-                size.width = size.width.max(child.width);
-                size.height = size.height.max(child.height);
-            }
-        }
-        size
-    }
-    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) {
-        for index in 0..ctx.child_count() { ctx.layout_child(index, rect); }
-    }
-}
-let (overlay, container) = Container::new(Overlay::default(), []);
-let (_, child) = microui_ui::TextBlock::create(microui_ui::TextBlockParameters::new("Added"));
-// Recover the ownership-taking input if either the widget or the child collection is unavailable.
-let result = overlay.try_update_with(child, |overlay, child| overlay.children.try_push(child));
-assert!(matches!(result, Ok(Ok(()))));
-let node = Node::container(container);
-# drop(node);
-```
+## Custom widgets and containers
 
-A handle never exposes an attached `Node`, permits reparenting, or extends the container's lifetime.
-Mutations fail during a conflicting traversal borrow or after destruction. Insertion also rejects
-an index greater than the current length. Rejected nodes are returned intact; replacement returns
-its original, unconsumed iterator if access cannot be acquired. Removal drops the subtree and its
-weak widget/event handles expire. An invalid removal returns `Some(false)`; unavailable access
-returns `None`.
+A local leaf can implement the static `LeafContent` trait and call
+`ui.widgets().leaf(content, options)`. Its concrete content remains inline in one
+COM object; the helper shares common lifecycle and bounded paint/input validation.
+A widget with custom editing interfaces implements those declared COM interfaces
+and composes `WidgetState` directly.
 
-The container author owns parallel metadata such as spans or track policies: validate it before
-editing, update it only after success, and finish both before returning to the runtime. Keep the
-child handle private when exporting it would let callers bypass that coordination. Do not edit
-children from measurement, placement, or paint. Perform edits through container methods between
-runtime phases or from eligible update/event handlers, then call the ordinary context update to
-commit layout. Fixed-topology widgets can leave the binding hook at its default implementation.
+The [independent extension](../../../plugins/extension-example) demonstrates a real
+`ICounter: IWidget`, standard activation events, and an `IInset: IContainer` using
+`IChildrenEditor` and bounded `ILayoutService` calls. Neither widget imports the UI
+implementation, native atlas IDs, tree borrows, GPU contexts or backend callbacks.
+Custom drawing uses the painter's solid geometry/image methods or an owned
+`IRenderItem` implemented by the renderer assembly.
 
-## Retained mutation
+## Native text input and cancellation
 
-Convenience methods on `TypedWidgetHandle<W>` return `None` after the mounted widget has been
-removed. Use `try_read`, `try_update`, or `try_update_with` for behavior not exposed by a specialized
-method, and finish the access closure before starting retained traversal. After every programmatic
-mutation, call `Context::update_ui` or `Context::update_ui_state` before depending on its visual,
-interaction, or layout result. See the [layout guide](LAYOUT.md) for the synchronization contract.
-
-## Reporting geometry changes during update
-
-`Context::update_ui` (or `update_ui_state`) commits measurement and layout automatically. Widget
-and application authors do not call a separate measurement function. The runtime commits layout
-before routing the next queued input event, so an earlier event's size or topology change affects
-later hit testing in the same update.
-
-`Widget::update` returns `Change::Changed` when it changes inputs used by measurement or child
-placement. `Change::NoChange` means those inputs stayed the same. It is independent of semantic
-event emission: a button can submit an event while returning `NoChange`. The event handler still
-runs, and its checked widget or topology mutations still invalidate their owners. The return value
-also does not suppress painting or updates of children. Static widgets can use the default update.
-
-| Change | Who records invalidation? |
-| --- | --- |
-| Widget update changes text, preferred size, child participation, or child translation | Widget author returns `Changed`, including during `update(None)` |
-| Programmatic mutation through a public typed handle | Handle records invalidation before granting mutable access |
-| Controlled child insertion, removal, or replacement | Owning container's mutation API |
-| New available size or wrapping width | Runtime measurement cache compares constraints |
-| New installed skin/atlas bundle | Runtime measurement cache compares skin revision |
-| Origin-only move, unchanged available size | Placement moves the widget; intrinsic measurement can be reused |
-| Paint-only color, caret, animation, or private drawing cache | No geometry invalidation needed; paint observes current state |
-| External/shared state changed without going through a handle | Application/widget author must synchronize it explicitly |
-
-A widget that reads external data should copy the geometry-relevant data into its own retained state
-and compare it during update. For example:
-
-```rust
-use microui_ui::{Change, Widget, WidgetOption, WidgetUpdateCtx, WidgetPaintCtx, UiInputEvent};
-use std::{cell::Cell, rc::Rc};
-
-/// A widget that observes a height requested by application-owned shared state.
-struct HeightWidget {
-    /// Height committed for subsequent measurement and painting.
-    height: i32,
-    /// Desired geometry; the runtime cannot observe writes to this cell.
-    desired_height: Rc<Cell<i32>>,
-}
-impl Widget for HeightWidget {
-    fn widget_opt(&self) -> &WidgetOption { &WidgetOption::NONE }
-    fn update(&mut self, _: &mut WidgetUpdateCtx<'_>, _: Option<&UiInputEvent>) -> Change {
-        let next = self.desired_height.get().max(0);
-        let change = Change::from(next != self.height);
-        self.height = next;
-        change
-    }
-    fn paint(&mut self, _: &mut WidgetPaintCtx<'_>) { /* Paint committed state. */ }
-}
-```
-
-The author contract has deliberate limits:
-
-- **The widget author must report changes truthfully.** The runtime cannot inspect arbitrary fields,
-  compare previous widget values, or infer dependencies from event types. Returning `NoChange` after
-  changing measurement/placement inputs can leave stale geometry. Return `Changed` when uncertain;
-  this costs cache reuse but preserves correctness. Cursor-only edits can return `NoChange` when
-  measurement does not read the cursor. Committing numeric text on focus loss must report any
-  resulting value change even though that update may receive no input event.
-- **The application author owns synchronization of shared/external state.** An `Rc<Cell<_>>`,
-  `RefCell`, background result, or other application model can change without touching the widget.
-  The application must apply it through a typed handle before the relevant layout, or arrange an
-  eligible widget update that observes it and returns `Changed`. A widget that measures directly
-  from an externally mutated cell while always returning `NoChange` violates this contract.
-- **An update callback is not a universal watcher.** Hidden, clipped, or otherwise ineligible widgets
-  are not guaranteed to run. Changes that must affect layout while a widget is ineligible should
-  go through its public typed handle. Similarly, a widget watching another widget that updates
-  later in traversal sees that change only on a subsequent update; synchronize such dependencies
-  in application code or a typed event handler when same-transaction geometry is required.
-- **Painting must remain observational.** Do not change measurement inputs, topology, or application
-  coordination state from paint, including through captured handles. Private rendering caches are
-  allowed only when they do not change the current layout or emit coordination events.
-
-`Changed` is intentionally conservative and local. The runtime combines it with existing dirty
-markers and propagates invalidation to dependent ancestors. A parent's `NoChange` cannot hide a
-child's `Changed`, and a later `NoChange` cannot undo a prior handle mutation. No public dirty-bit
-API, global dependency registry, or automatic shared-state observer is required.
-
-Slider construction and programmatic `set_value` clamp finite values to the configured range but
-preserve values between steps. They never emit a user-change event, including during later updates.
-For example, setting `4.4` on a step-1 slider retains `4.4`. A subsequent user adjustment snaps
-relative to the lower bound and clamps to the range. Keyboard, wheel, pointer, and changed numeric
-text commits share this policy; a text commit on focus loss can emit `SliderChanged` and return
-`Changed` even without a routed event. An unchanged result emits nothing. Non-finite setter inputs
-or invalid numeric text preserve the previous finite value.
-## Typed list-row data
-
-List rows can carry explicit application data independently of display text:
-
-```rust
-use microui_ui::prelude::*;
-use std::path::PathBuf;
-
-let path = PathBuf::from("report.txt");
-let (row, node) = ListItem::create(ListItemParameters::new("Report").with_value(path));
-let submitted: WidgetEventPortHandle<ListItemSubmitted<PathBuf>> = row.submitted();
-// Subscribe to `submitted` and use event.value as the native path; event.label is presentation.
-# let _ = (node, submitted);
-```
-
-The payload remains concrete through the widget and event source. It must be `Clone + 'static`
-because each submission owns a clone. Ordinary rows use the default `()` payload. Prefer a concrete
-enum for several row actions; neither strings-as-keys nor type erasure are needed.
-
-## Native text input and host cancellation
-
-An editor returns `KeyboardBehavior::TEXT_INPUT` together with its focus/traversal flags while it
-accepts text. `Textbox` and `TextArea` do so continuously; `Number` and `Slider` do so only in their
-text editing mode. A custom editor must make the same choice itself. After `update_ui` or
-`update_ui_state`, `Context::text_input_area()` returns the focused editor's clipped content area
-in framebuffer coordinates, or `None`. Queued input invalidates that query until the next update.
-
-Hosts must deliver committed strings with `Context::text` independently of `Context::key`. A
-logical character key is useful for commands but is not a text insertion: one composed character
-can require several keys, and paste or speech input can insert text without any character key.
-Custom widgets apply their own normalization, editing, and measurement-change policy to those
-strings. Built-in editors share their existing single-line or multiline normalization.
-
-Call `Context::cancel_input()` when the host loses focus, receives pointer cancellation, or
-unexpectedly loses pointer capture. This boundary is processed in input order. It clears held
-buttons/modifiers, focus, hover, capture, and active popup/menu gestures. Widgets receive an update
-with no routed event and cleared held state, so editors apply their normal blur/commit policy.
-Cancellation never synthesizes a mouse release or rolls back an application value. Custom drag
-widgets must clear their private gesture state when capture/held state disappears; they cannot
-depend on always receiving `MouseUp`.
-
-The area query is deliberately an editor box, **not an exact caret rectangle**. Hosts requiring
-caret-accurate candidate positioning need an explicit editor-specific extension. The core stores
-committed text only: native hosts own preedit presentation, candidate selection, and composition
-cancellation. Selection synchronization, copy/cut of retained text, rich-text paste, surrounding
-text/reconversion, accessibility, and mobile virtual keyboard policy are application/host work;
-the textarea bridge in the demo does not supply those features. Atlas glyph coverage and shaping
-remain independent of accepting a Unicode string. See `TYPOGRAPHY.md` for rendering limitations.
+Committed text travels separately from logical key strokes. After updating, the host
+projects `ui.text_input_area()` to the platform's IME/composition area. Focus loss
+cancels active pointer/key interactions; platform integrations own composition and
+clipboard delivery. These responsibilities, physical scaling and browser limitations
+are documented in [COM_AUTHORS.md](../../../docs/COM_AUTHORS.md) and
+[WEB.md](../../../docs/WEB.md).

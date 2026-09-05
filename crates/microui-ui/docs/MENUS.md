@@ -1,177 +1,76 @@
 # Application menus
 
-Menus may be an intrinsic part of a [`Window`](../src/window_manager.rs) or a standalone popup shown
-through a `PopupHandle`. A window owns its body, compact [`MenuBar`](../src/menu.rs) data, and the
-surfaces that present that data. Applications describe either form with the same recursive `Menu`
-and keep only the `MenuItemHandle`s needed for later state changes.
-
-The persistent bar is root chrome rather than application content. Root geometry allocates the
-frame, title, and full-client-width menu bar before applying the independent content inset to the
-application body. The same committed menu rectangle drives heading layout, painting, hit testing,
-popup anchors, intrinsic sizing, and child-window clipping.
-
-The public composition types are deliberately small:
-
-| Type | Role |
-| --- | --- |
-| `MenuBar` | Ordered top-level menus installed on one window. |
-| `Menu` | One heading, submenu, or standalone popup, built with `item`, `separator`, and `submenu`. |
-| `MenuItem` | Uniquely owned actionable value moved into exactly one menu position. |
-| `MenuItemHandle` | Cloneable non-owning handle containing private stable identity and a separately projected submission endpoint. Mounted presentation is borrowed through `Ui`. |
-
-There is no menu-specific handle, coordinator, command enum, row widget, or parallel popup-menu
-model. A standalone menu uses the ordinary `PopupHandle` lifecycle API.
+Menus are compact UI-owned records presented in ordinary retained menu surfaces.
+An intrinsic bar belongs to window chrome; a standalone menu uses an ordinary
+`IPopup` capability. Applications construct either form with `MenuBuilder` and retain
+only the actual `MenuItem` capabilities needed for editing or event registration.
+There is no native row widget, copied application menu model, or erased command data.
 
 ## Construction and events
 
-`MenuItem::create` returns a handle and a uniquely owned item value. Subscribe through
-`handle.submitted()`, move the value into the declaration, and install the completed bar on its
-owning window:
+A root builder owns one declaration until the UI transfers it into a bar or popup.
+Its child builders append into that same declaration and cannot be mounted alone.
+After successful transfer, further appends return CLOSED. Validation failures leave
+the declaration available for correction. Item capabilities resolve the same record
+before and after mounting; they never keep a removed menu surface logically open.
 
-```rust
-use microui_ui::prelude::*;
-
-struct Model {
-    window: WindowHandle,
-    /// Retained because Save becomes enabled after a document has changed.
-    save: MenuItemHandle,
-}
-
-impl Model {
-    /// Handles the event source belonging only to the concrete Open item.
-    fn open(&mut self, _context: &mut Ui<'_>, _event: &MenuItemSubmitted) {
-        // Open the selected document.
+```rust,no_run
+use microui_redux::{EventHandler, EventSession, IWindowAbi, Rect, Ui};
+use microui_redux::events::Activation;
+use nc_com::{ComPtr, NcStatus};
+struct Open;
+impl EventHandler<Vec<String>, Activation> for Open {
+    fn handle(&mut self, opened: &mut Vec<String>, event: &Activation) -> Result<(), NcStatus> {
+        opened.push(event.label.clone());
+        Ok(())
     }
 }
-
-fn build_model<B: RendererBackend>(
-    context: &mut Context<B, Model>,
-) -> Result<Model, SubscribeError> {
-    // The handle projects the event port; the value moves into one menu below.
-    let (open, open_item) =
-        MenuItem::create(MenuItemParameters::new("Open...").shortcut_hint("Ctrl+O"));
-    context.subscribe(open.submitted(), Model::open)?;
-
-    // This command has the same handler but remains a distinct typed event source.
-    let (recent, recent_item) = MenuItem::create(MenuItemParameters::new("Recent Document"));
-    context.subscribe(recent.submitted(), Model::open)?;
-
-    // Keep this handle because application state will mutate the item after construction.
-    let (save, save_item) = MenuItem::create(
-        MenuItemParameters::new("Save")
-            .shortcut_hint("Ctrl+S")
-            .disabled(),
-    );
-    let body = TextBlock::create(TextBlockParameters::new("document")).1;
-    let menu_bar = MenuBar::new([
-        Menu::new("File")
-            .item(open_item)
-            .item(save_item)
-            .separator()
-            .submenu(Menu::new("Recent").item(recent_item)),
-    ]);
-    let window = context.ui().create_window(
-        Window::new("Document", rect(20, 20, 640, 480), body).menu_bar(menu_bar),
-    );
-
-    Ok(Model { window, save })
+fn install(ui: &Ui, events: &EventSession<Vec<String>>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+    let body = ui.widgets().button("Document")?;
+    let window = ui.window("Editor", Rect { x: 20, y: 20, width: 640, height: 480 }, &body)?;
+    let menus = ui.menus()?;
+    let bar = menus.create("Editor menu")?;
+    let file = bar.submenu("File")?;
+    let open = file.item("Open")?;
+    open.set_shortcut_hint("Ctrl+O")?;
+    events.subscribe_menu_item(&open, Open)?;
+    let save = file.item("Save")?;
+    save.set_enabled(false)?;
+    file.separator()?;
+    file.submenu("Recent")?.item("Document.txt")?;
+    menus.attach_bar(window.as_com_ref(), &bar)?;
+    Ok(window)
 }
 ```
 
-Consuming `MenuItem` in `Menu::item` makes the relationship unforgeable: a value can occupy only
-one declaration position, and a caller cannot accidentally pair one item's visible state with a
-different item's submission handle.
+The same builder creates a standalone popup:
 
-The same declaration creates a popup menu without a menu bar. Its label is a diagnostic popup name
-rather than a painted heading. `show_popup` places it at the pointer; `show_popup_at` accepts an
-explicit screen-space anchor:
-
-```rust
-# use microui_ui::prelude::*;
-# fn show_menu(
-#     ui: &mut Ui<'_>,
-#     window: &WindowHandle,
-# ) -> Result<(), Box<dyn std::error::Error>> {
-let (inspect, inspect_item) = MenuItem::create(MenuItemParameters::new("Inspect"));
-let (details, details_item) = MenuItem::create(MenuItemParameters::new("Details"));
-let popup = ui.create_menu_popup(
-    &window,
-    Menu::new("Object actions")
-        .item(inspect_item)
-        .submenu(Menu::new("More").item(details_item)),
-)?;
-
-ui.show_popup(&popup)?;
-# Ok(())
-# }
+```rust,no_run
+use microui_redux::{IWindowAbi, Rect, Ui};
+use nc_com::{ComRef, NcStatus};
+fn show(ui: &Ui, owner: ComRef<'_, IWindowAbi>, anchor: Rect) -> Result<(), NcStatus> {
+    let menus = ui.menus()?;
+    let menu = menus.create("Object actions")?;
+    let inspect = menu.item("Inspect")?;
+    let popup = menus.popup(owner, &menu)?;
+    popup.show(anchor)?;
+    // Applications retain item/popup capabilities when later editing or hiding is needed.
+    Ok(())
+}
 ```
 
-`inspect.submitted()`, `details.submitted()`, `ui.menu_item`, and `ui.menu_item_mut` work exactly as
-they do for bar-owned items. The popup handle additionally exposes the normal
-`PopupEvent::Dismissed` endpoint; private descendant submenus do not create separate application
-lifecycle events.
-
-The handle's private stable ID identifies its concrete item; the subscribed port only delivers
-`MenuItemSubmitted` and carries no copied command value. The manager closes an active menu before
-dispatch reaches the application handler. An enabled item without a subscriber still closes the
-menu when selected; its unobserved event is simply discarded.
-
-Use a `MenuItemHandle` as the stable identity for short-lived presentation borrows from `Ui`:
-
-```rust
-# use microui_ui::prelude::*;
-# fn update_items(
-#     ui: &mut Ui<'_>,
-#     save: &MenuItemHandle,
-#     auto_scroll: &MenuItemHandle,
-#     enabled: bool,
-# ) -> Result<(), Box<dyn std::error::Error>> {
-let save = ui.menu_item_mut(&save)?;
-save.enabled = true;
-save.label = "Save document".into();
-save.shortcut_hint = Some("Ctrl+Shift+S".into());
-
-ui.menu_item_mut(&auto_scroll)?.mark = MenuItemMark::Checked(enabled);
-# Ok(())
-# }
-```
-
-`Ui::menu_item` provides immutable inspection. Both accessors return
-`MenuItemAccessError::UnknownItem` when the item is unmounted, its owning window has been
-destroyed, or the handle originated in another context. A mutable borrow conservatively
-invalidates layout because every public field can affect geometry or presentation.
-
-Check and radio marks are presentation only. Application handlers own toggling and radio-group
-exclusivity. Shortcut hints also draw text only; they do not register accelerators.
-
-## Compact retained architecture
-
-Menu entries are data, not retained widget nodes. The manager owns one concrete `MenuSurface` for
-the persistent bar and one `SurfaceBody::Menu` forest node for each popup. A surface measures,
-hit-tests, and paints all of its headings or rows directly. Consequently, adding an item does not
-add a retained item, icon, label, shortcut, separator, or submenu-row node, and there is no
-`UiRuntime`, `MenuContainer`, controller, action bridge, or runtime node identity for menus.
-
-One geometry calculation supplies the rectangles used by measurement, hit testing, painting, and
-submenu placement. Each popup derives its leading mark column from its direct items. The column
-collapses completely when none of those items has a check or radio mark; otherwise every direct row
-uses the shared content offset. Nested submenu popups calculate their columns independently.
-
-Each `MenuSlot` directly owns its `MenuItemId`, `MenuItemParameters`, and strong submission port.
-`MenuItemHandle` carries the same private ID and a weak projection of that port; it does not mirror
-presentation state. IDs come from the process-wide non-reused retained-object namespace, so a
-destroyed item's endpoint allocation can be recycled after its weak endpoints are released without
-redirecting stale lookup. Mutation
-through `Ui::menu_item_mut` invalidates the owning layout transaction, ensuring that role and
-text-width changes resize and reanchor open popups correctly. Warm layout reuses the surface's
-slot-geometry vector and the forest's popup-path workspace.
+Use `set_label`, `set_enabled`, `set_mark`, `set_shortcut_hint`, and the font-style
+capability to edit a row. Setters are silent. Activation captures its label before
+callback delivery, and the manager closes the selected popup path before the
+application handler runs. Check/radio-group transitions belong to application
+handlers; a shortcut hint does not register an accelerator.
 
 ## Placement and interaction
 
 Menu topology and placement remain manager-private. Every menu popup is a concrete forest node with
 one parent edge. A bar-owned top-level popup adds a trigger-slot index and anchors below its heading;
 a submenu adds an index and anchors at the right edge of its parent row. A standalone popup instead
-uses the exact screen anchor retained by its public `PopupHandle`, while its descendants use the
+uses the exact screen anchor retained by its public `IPopup`, while its descendants use the
 same relational submenu edges as bar-owned menus. The manager resolves relational placement from
 current surface geometry, so open menus follow their window and parent rows without retained anchor
 widgets.
@@ -179,8 +78,8 @@ widgets.
 An intrinsic bar is also the overlay boundary for structural child windows. Within one window
 family the manager records the parent's background and application body, then its child families,
 then the parent bar and chrome. Pointer selection walks that relationship in reverse, so a root bar
-both renders and handles input above children that geometrically overlap it. If the parent `Window`
-uses `ChildWindowClip::Content`, each complete child surface is additionally clipped below the bar
+both renders and handles input above children that geometrically overlap it. If the parent window
+uses `ChildClip::CONTENT`, each complete child surface is additionally clipped below the bar
 to the parent's application body. The active menu-popup branch still occupies the transient tier of
 the owning window's inherited fixed or modal band.
 
@@ -194,7 +93,7 @@ visible heading-to-descendant chain:
 - opening or hovering a sibling submenu replaces only the older descendant branch;
 - selecting an enabled item or pressing outside the chain closes the complete path.
 
-A disabled item cannot be invoked: it emits no `MenuItemSubmitted` event and does not close the
+A disabled item cannot be invoked: it emits no `Activation` event and does not close the
 menu. The popup remains one retained input surface, so disabled rows and separators still occlude
 content behind it while resolving to no submission action. Hovering a bar heading while no menu is
 open changes presentation only. Once a click or keyboard command opens a menu, pointer movement
@@ -228,7 +127,7 @@ marks, and arrows in the row's exact interaction state. Checked and radio state 
 independent marker glyph. `MenuPopup` supplies the separator color. A theme can pair a dark selected PNG or
 flat highlight with a light hovered/focused content color without changing ordinary menu text.
 The `MenuBar` and `MenuPopup` visuals fill the persistent bar and popup surfaces. Menu surfaces
-receive the same context skin as window chrome and retained widgets and paint it directly. The
+receive the same installed asset revision as window chrome and retained widgets and paint it directly. The
 current keyboard-selected heading or row uses `MenuState::Focused`, an open title uses
 `MenuState::Open`, and active window states
 continue to mark the owner while menu scope suspends its application widget cue.

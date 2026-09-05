@@ -611,6 +611,27 @@ impl ScrollArea {
     }
 }
 
+
+
+impl crate::com::widget::WidgetAlgorithm for ScrollArea {
+    /// Keeps the concrete panel paint options synchronized with common COM options.
+    fn set_options(&mut self, options: WidgetOption) {
+        self.opt = options;
+    }
+    /// Dynamic wheel eligibility follows the same shared policy used by placement.
+    fn effective_options(&self, options: WidgetOption) -> WidgetOption {
+        if self.model.enabled.get() {
+            options | WidgetOption::GRAB_SCROLL
+        } else {
+            options | WidgetOption::NO_INTERACT
+        }
+    }
+}
+impl crate::com::widget::WidgetAlgorithm for ScrollSurface {
+    /// This transform surface paints nothing; common options remain in its WidgetState.
+    fn set_options(&mut self, _options: WidgetOption) {}
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1027,23 +1048,4 @@ mod tests {
         runtime.layout_tree_root(&mut root, &style, atlas.clone(), Recti::new(10, 20, 240, 260), UNCLIPPED_RECT);
         assert_eq!(scroll.try_read(|state| (state.offset().x, state.offset().y)), Some((0, 0)));
     }
-}
-
-impl crate::com::widget::WidgetAlgorithm for ScrollArea {
-    /// Keeps the concrete panel paint options synchronized with common COM options.
-    fn set_options(&mut self, options: WidgetOption) {
-        self.opt = options;
-    }
-    /// Dynamic wheel eligibility follows the same shared policy used by placement.
-    fn effective_options(&self, options: WidgetOption) -> WidgetOption {
-        if self.model.enabled.get() {
-            options | WidgetOption::GRAB_SCROLL
-        } else {
-            options | WidgetOption::NO_INTERACT
-        }
-    }
-}
-impl crate::com::widget::WidgetAlgorithm for ScrollSurface {
-    /// This transform surface paints nothing; common options remain in its WidgetState.
-    fn set_options(&mut self, _options: WidgetOption) {}
 }

@@ -152,3 +152,6 @@ pub trait IDemoScenes {
     /// Creates an empty scene with identity transforms; its resources retain this window/device.
     fn create_scene(&self) -> Result<ComPtr<IMeshSceneAbi>, NcStatus>;
 }
+
+/// Independent extension-plugin contracts, also used by the native acceptance host.
+pub mod extension;

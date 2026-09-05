@@ -95,6 +95,16 @@ once when subscribing. The session offers these concrete families:
 | `subscribe_menu_item` | Compact menu row | Submitted label |
 | `subscribe_file_dialog` | Standard file picker | Exact accepted native path or cancellation |
 
+Independent producers share `microui_redux::events::EventSource<E>` with built-ins.
+Standard facade snapshots implement `EventPayload`; custom snapshots implement it
+with their concrete sink interface and delivery method. Commit semantic state, then
+call `emit` with its owned snapshot. Implement the event capability by returning
+`source.subscribe(sink)`, and close ordinary sources when the widget logically closes.
+The [extension example](../plugins/extension-example) demonstrates the full object,
+its inherited editing interface, and an application callback across separate binaries.
+Raw queue leases are available only through the facade's internal `test-support`
+feature for algorithm fixtures; ordinary applications use COM subscriptions.
+
 A source permits one subscriber per port. Editor changed/submitted ports are
 independent. Subscribing to an occupied port returns `UI_E_BUSY`; subscribing to
 a closed producer returns `UI_E_CLOSED`. A failed registration does not replace

@@ -145,7 +145,6 @@ pub struct MenuItemSubmitted {
     pub label: String,
 }
 
-impl crate::WidgetEvent for MenuItemSubmitted {}
 
 /// Failure reported when a [`Ui`](crate::Ui) cannot resolve one menu-item capability.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]

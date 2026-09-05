@@ -32,6 +32,17 @@
 //! update (for example a newly requested caret reveal) waits for the next eligible
 //! update. Recursive update/render and session dispatch/registration report BUSY.
 //! See `docs/COM_AUTHORS.md` for lifecycle, bounded cascades and author obligations.
+/// Static producer queues shared by built-ins, independent plugins and application components.
+mod source;
+pub use source::{EventEndpoint, EventPayload, EventSource};
+
+/// Internal queue access for isolated semantic-algorithm tests, absent from normal builds.
+/// Applications and plugin authors subscribe through EventSource/EventEndpoint instead.
+#[cfg(feature = "test-support")]
+pub mod test_support {
+    pub use super::source::{EventBatch, EventLease, SubscribeError};
+}
+
 use crate::com::*;
 use nc_com::{com_class, ComInterface, ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcStatus, NC_E_INVALID_ARG};
 use std::{
@@ -736,3 +747,43 @@ impl<State: 'static> EventSession<State> {
         Ok(lease)
     }
 }
+impl source::EventPayload for FileDialogCompleted {
+    type Sink = IFileDialogSinkAbi;
+    /// Encodes native identity only at the boundary; lossy display text never becomes a selected path.
+    fn deliver(&self, sink: ComRef<'_, Self::Sink>) -> Result<(), NcStatus> {
+        match self {
+            FileDialogCompleted::Accepted(path) => sink.accepted(crate::NativePath::new(path).as_interface()),
+            FileDialogCompleted::Cancelled => sink.cancelled(),
+        }
+    }
+}
+
+
+/// One concrete serializer per standard snapshot; native Rust payloads never cross the ABI.
+macro_rules! event_payload {
+    ($event:ty, $sink:ty, $value:ident, $target:ident, $body:block) => {
+        impl source::EventPayload for $event {
+            type Sink = $sink;
+            /// Delivers the captured snapshot without reading the live producer.
+            fn deliver(&$value, $target: ComRef<'_, Self::Sink>) -> Result<(), NcStatus> $body
+        }
+    };
+}
+event_payload!(Activation, IActivationSinkAbi, self, sink, {
+    sink.submitted(nc_com::NcString::from_utf8_str(&self.label).as_com_ref())
+});
+event_payload!(CheckboxChanged, ICheckboxSinkAbi, self, sink, { sink.changed(self.checked) });
+event_payload!(NumericChanged, INumericSinkAbi, self, sink, { sink.changed(self.value) });
+event_payload!(ScrollbarChanged, IScrollbarSinkAbi, self, sink, { sink.changed(self.offset) });
+event_payload!(TextChanged, ITextChangedSinkAbi, self, sink, {
+    sink.changed(nc_com::NcString::from_utf8_str(&self.text).as_com_ref(), self.cursor)
+});
+event_payload!(TextSubmitted, ITextSubmittedSinkAbi, self, sink, {
+    sink.submitted(nc_com::NcString::from_utf8_str(&self.text).as_com_ref())
+});
+event_payload!(WindowEvent, IWindowSinkAbi, self, sink, { sink.event((*self).into()) });
+event_payload!(PopupDismissed, IPopupSinkAbi, self, sink, { sink.dismissed() });
+event_payload!(ComboChanged, IComboChangedSinkAbi, self, sink, {
+    sink.changed(self.selected, nc_com::NcString::from_utf8_str(&self.label).as_com_ref())
+});
+event_payload!(ComboSubmitted, IComboPopupSinkAbi, self, sink, { sink.submitted(self.open, self.anchor) });

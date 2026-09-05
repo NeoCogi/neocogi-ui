@@ -89,7 +89,6 @@ pub struct CheckboxChanged {
     pub checked: bool,
 }
 
-impl crate::WidgetEvent for CheckboxChanged {}
 
 /// Concrete retained checkbox, including its semantic and interaction state.
 pub struct Checkbox {

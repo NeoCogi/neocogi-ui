@@ -2,13 +2,16 @@
 use super::*;
 use microui_contracts::widget::WidgetState;
 
+/// Deliberately retained service/token pairs probe expiry after their real nested invocation.
+type RetainedScopes = Rc<RefCell<Vec<(ComPtr<ILayoutServiceAbi>, LayoutScope)>>>;
+
 /// Shared observations deliberately retain services and both active and expired authority tokens.
 #[derive(Default)]
 struct ContainerProbe {
     /// Optional direct leaf probe receives each active parent scope for deliberate reentry.
     leaf_probe: RefCell<Option<Rc<WidgetProbe>>>,
     /// All scopes from every nested container, used to test restoration and stale-token rejection.
-    scopes: Rc<RefCell<Vec<(ComPtr<ILayoutServiceAbi>, LayoutScope)>>>,
+    scopes: RetainedScopes,
     /// Actual policy invocations, independent of node-cache hits.
     measures: Cell<usize>,
     /// Actual placement invocations, including a failed partial pass.
@@ -174,7 +177,7 @@ impl IContainerLayout for TestContainer {
 /// Creates a custom container without any access to retained Node or runtime storage.
 fn container(
     runtime: &ComPtr<IUiRuntimeAbi>,
-    scopes: Rc<RefCell<Vec<(ComPtr<ILayoutServiceAbi>, LayoutScope)>>>,
+    scopes: RetainedScopes,
 ) -> (ComPtr<IWidgetAbi>, ComPtr<IChildrenEditorAbi>, Rc<ContainerProbe>) {
     let host = button(runtime).host().unwrap();
     let editor = host.create_children().unwrap();

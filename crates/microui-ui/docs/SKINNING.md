@@ -55,31 +55,26 @@ adjacent without erased values or a universal role/state cross-product.
 
 ## Programmatic construction
 
-Start from a skin whose atlas ownership is known, mutate its concrete fields, and install the
-completed value:
+Derive an immutable candidate from the UI's current catalog, then install it through
+the same transactional asset boundary used for a complete theme replacement:
 
-```rust
-use microui_ui::{Context, color, ControlRole, ControlState, PointerState, Visual};
-use microui_ui::render::RendererBackend;
-
-# fn customize<B: RendererBackend, State: 'static>(context: &mut Context<B, State>) {
-let mut skin = context.skin().clone();
-skin.metrics.padding = 8;
-let state = ControlState::Focused(PointerState::Normal);
-let focused_button = skin.control(ControlRole::Button, state);
-skin.set_control(
-    ControlRole::Button,
-    state,
-    Visual::new(focused_button.patch, color(255, 255, 255, 255)),
-);
-context.set_skin(skin);
-# }
+```rust,no_run
+use microui_redux::{FlatPalette, IRendererAbi, PaletteEdit, Ui};
+use nc_com::{ComRef, NcStatus};
+fn customize(ui: &Ui, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
+    let mut metrics = ui.assets()?.metrics()?;
+    metrics.padding = 8;
+    let candidate = ui.derive_style(metrics, PaletteEdit::Flat(FlatPalette::default()))?;
+    ui.install_assets(candidate.as_com_ref(), renderer)
+}
 ```
 
-The runtime retains only complete `Skin` values. `FlatPalette` is construction input for flat skins,
-and `Skin::apply_flat_palette` deliberately regenerates the complete flat visual catalog. It does
-not reinterpret or partially recolor an image-backed theme. JSON themes likewise
-compile their flat fallbacks first and then replace explicitly authored states with PNG visuals.
+`PaletteEdit::Flat` regenerates the complete flat visual catalog. Use
+`PaletteEdit::Preserve` to change metrics while retaining image-backed appearance
+families. Derivation does not install the candidate. An installation error preserves
+the old CPU and GPU resources. Successful installation requires a subsequent UI
+update before rendering. The full demo's style editor shows concrete handlers for
+all palette roles and metrics.
 
 ## Stable resources
 

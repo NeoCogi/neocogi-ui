@@ -13,6 +13,8 @@ nc-com = { workspace = true, features = ["macros", "std"] }
 
 [features]
 default = []
+# Internal behavior fixtures; ordinary plugin and application builds do not expose queue leases.
+test-support = []
 # Deployment policy belongs to the final application, not implementation plugins.
 runtime = ["nc-com/runtime"]
 static-runtime = ["nc-com/static-runtime"]

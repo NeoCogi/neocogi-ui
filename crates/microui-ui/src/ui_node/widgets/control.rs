@@ -194,6 +194,19 @@ pub(super) fn widget_fill_visible(ctx: &WidgetPaintCtx<'_>, fill: WidgetFillOpti
     }
 }
 
+
+
+/// Copies dimensions that were validated and cached before the image became widget content.
+pub(super) fn image_size(image: &microui_redux::Image) -> Dimensioni {
+    let size = image.size();
+    Dimensioni::new(size.width, size.height)
+}
+
+/// Equal retained interface projections preserve geometry; different aliases conservatively remeasure.
+pub(super) fn same_image(a: &Option<microui_redux::Image>, b: &Option<microui_redux::Image>) -> bool {
+    a.as_ref().map(|image| image.as_interface().as_ptr()) == b.as_ref().map(|image| image.as_interface().as_ptr())
+}
+
 #[cfg(test)]
 mod tests {
     //! Focused coverage for shared control geometry at the integer boundary.
@@ -211,15 +224,4 @@ mod tests {
         let visual = placement.visual.expect("positive image and bounds must produce a fitted rectangle");
         assert_eq!((visual.x, visual.y, visual.width, visual.height), (i32::MAX, i32::MAX, 1, i32::MAX));
     }
-}
-
-/// Copies dimensions that were validated and cached before the image became widget content.
-pub(super) fn image_size(image: &microui_redux::Image) -> Dimensioni {
-    let size = image.size();
-    Dimensioni::new(size.width, size.height)
-}
-
-/// Equal retained interface projections preserve geometry; different aliases conservatively remeasure.
-pub(super) fn same_image(a: &Option<microui_redux::Image>, b: &Option<microui_redux::Image>) -> bool {
-    a.as_ref().map(|image| image.as_interface().as_ptr()) == b.as_ref().map(|image| image.as_interface().as_ptr())
 }

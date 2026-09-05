@@ -330,15 +330,13 @@ impl<'a> Ui<'a> {
 /// mutation or another logical frame until it is rendered or cancelled. The diagnostic-matched
 /// `tests/ui/context_mutate_during_frame.rs` contract test verifies that rejection beside a passing
 /// complete frame lifecycle.
-pub struct Context<B: RendererBackend, State: 'static = ()> {
+pub struct Context<B: RendererBackend> {
     /// High-level renderer that replays root display lists.
     renderer: Renderer<B>,
     /// Immutable application fonts and icons from which every later theme is derived.
     resource_catalog: ResourceCatalog,
     /// Backend- and application-state-independent retained window manager.
     pub(crate) window_manager: WindowManager,
-    /// Sole semantic widget-event dispatcher for this context and its retained widget forest.
-    widget_event_dispatcher: crate::event::WidgetEventDispatcher<State>,
     /// Drawable size used by retained behavior tests that drive complete frames tersely.
     #[cfg(test)]
     test_dimensions: Dimensioni,
@@ -349,22 +347,22 @@ pub struct Context<B: RendererBackend, State: 'static = ()> {
 /// This value borrows `Context` to serialize paint/submission, but it does not lock independent
 /// [`crate::TypedWidgetHandle`] access. Programmatic mutation after the last update commit may make
 /// that commit semantically stale; drop the unsubmitted frame and call
-/// [`Context::update_ui`] or [`Context::update_ui_state`] again before painting. No separate
+/// [`Context::update_ui`] again before painting. No separate
 /// Context token exists.
 ///
 /// Submission consumes the frame, making a second submission unrepresentable. The
 /// diagnostic-matched `tests/ui/context_frame_submit_twice.rs` contract test verifies the move
 /// error rather than treating any unrelated compilation failure as success.
 #[must_use = "call render_ui() to submit this UI frame; dropping it cancels"]
-pub struct ContextFrame<'a, B: RendererBackend, State: 'static = ()> {
-    context: &'a mut Context<B, State>,
+pub struct ContextFrame<'a, B: RendererBackend> {
+    context: &'a mut Context<B>,
     info: FrameInfo,
     completed: bool,
 }
 
 // Construction and test fixtures.
 
-impl<B: RendererBackend, State: 'static> Context<B, State> {
+impl<B: RendererBackend> Context<B> {
     /// Creates a new UI context with unique ownership of the provided backend.
     ///
     /// The default style binds conventional semantic font and icon names from the backend atlas.
@@ -389,7 +387,6 @@ impl<B: RendererBackend, State: 'static> Context<B, State> {
             renderer,
             resource_catalog,
             window_manager: WindowManager::new(bundle),
-            widget_event_dispatcher: crate::event::WidgetEventDispatcher::new(),
             #[cfg(test)]
             test_dimensions: Dimensioni::new(1, 1),
         }
@@ -402,7 +399,7 @@ impl<B: RendererBackend, State: 'static> Context<B, State> {
     /// application code to keep those concerns separate without duplicating manager methods on
     /// `Context` itself.
     pub fn ui(&mut self) -> Ui<'_> {
-        // Restrict the borrow to WindowManager so the façade remains backend- and State-independent.
+        // Restrict the borrow to WindowManager so the façade remains backend- and application-independent.
         Ui::new(&mut self.window_manager)
     }
 
@@ -418,7 +415,7 @@ impl<B: RendererBackend, State: 'static> Context<B, State> {
 
     /// Creates a Context whose test-only frame helper uses `dimensions`.
     #[cfg(test)]
-    pub(crate) fn new_test_state(backend: B, dimensions: Dimensioni) -> Self {
+    pub(crate) fn new_test(backend: B, dimensions: Dimensioni) -> Self {
         let mut context = Self::new(backend);
         context.test_dimensions = dimensions;
         context
@@ -426,11 +423,6 @@ impl<B: RendererBackend, State: 'static> Context<B, State> {
 }
 
 impl<B: RendererBackend> Context<B> {
-    #[cfg(test)]
-    pub(crate) fn new_test(backend: B, dimensions: Dimensioni) -> Self {
-        Self::new_test_state(backend, dimensions)
-    }
-
     /// Updates and renders once for retained behavior tests.
     #[cfg(test)]
     pub(crate) fn update_and_render_ui(&mut self) {
@@ -451,69 +443,9 @@ impl<B: RendererBackend> Context<B> {
     }
 }
 
-impl<B: RendererBackend, State: 'static> Context<B, State> {
-    /// Drains ordered input, dispatches typed retained UI events, and commits layout for `dimensions`.
-    ///
-    /// One synchronization layout always runs first. Each queued input event then causes exactly
-    /// one route, one full eligible-tree update, and another layout commit. When the queue is empty,
-    /// one eventless eligible-tree update and a follow-up layout consume pending programmatic work
-    /// such as caret reveal. Geometry produced for one update is therefore authoritative when
-    /// routing the next event. This method performs no timer synthesis, painting, or backend
-    /// submission.
-    ///
-    /// Events retain FIFO order within each retained source port. When multiple ports are ready at one
-    /// dispatch boundary, they are drained in subscription order. Dispatch repeats until all
-    /// subscribed ports are empty, including events emitted by application-state methods.
-    /// Context-aware subscribers receive [`Ui`] only at these boundaries; their root and
-    /// root mutations complete before the layout commit for the current raw input event.
-    ///
-    /// Context-owned input, style, and root mutations invalidate a prior commit automatically.
-    /// Mutations made through weak typed widget handles cannot notify Context; callers
-    /// must invoke this method after those mutations, including when the input queue is empty.
-    /// Callers must finish every typed-access closure first. A closure retains its widget-cell borrow;
-    /// if this traversal reaches that cell and requests an incompatible borrow, built-in runtimes
-    /// panic with the retained-state invariant diagnostic rather than skipping work or committing
-    /// stale state.
-    #[track_caller]
-    pub fn update_ui_state(&mut self, dimensions: Dimensioni, state: &mut State) {
-        assert!(dimensions.width > 0 && dimensions.height > 0, "update_ui_state dimensions must be positive");
-        // Split the two Context-owned transaction participants before entering WindowManager. The
-        // dispatch closure can then lend the manager back through Ui without aliasing the
-        // independently borrowed application dispatcher.
-        let window_manager = &mut self.window_manager;
-        let widget_event_dispatcher = &mut self.widget_event_dispatcher;
-        window_manager.update_with(dimensions, state, |window_manager, state| {
-            // This closure runs only after complete retained traversals release widget borrows.
-            let mut ui = Ui::new(window_manager);
-            widget_event_dispatcher.dispatch_with_context(state, &mut ui)
-        });
-    }
-
-    /// Connects one typed event callback to this context's application state.
-    ///
-    /// The callback receives `(&mut State, &mut Ui<'_>, &E)` after retained widget borrows end.
-    /// Ignore `ui` when only state changes are needed, or use it to edit windows and popups;
-    /// resulting layout is committed at that dispatch boundary. Captures must be owned or
-    /// `'static`, may be mutable, and live until the subscription is dropped or pruned. Prefer
-    /// weak widget/surface handles when capturing UI references so callbacks do not retain owners.
-    /// Neither the borrowed event nor `Ui` may be retained beyond the invocation.
-    ///
-    /// Each source accepts one subscriber. A second registration returns
-    /// [`crate::SubscribeError::AlreadySubscribed`]; an expired source returns
-    /// [`crate::SubscribeError::WidgetExpired`]. Callbacks run in source FIFO and subscription
-    /// sweep order; emission remains deferred. See the events guide for cascade and panic policy.
-    pub fn subscribe<E: crate::WidgetEvent>(
-        &mut self,
-        port: crate::WidgetEventPortHandle<E>,
-        handler: impl FnMut(&mut State, &mut Ui<'_>, &E) + 'static,
-    ) -> Result<(), crate::SubscribeError> {
-        self.widget_event_dispatcher.subscribe(port, handler)
-    }
-}
-
 // Ordered input forwarding.
 
-impl<B: RendererBackend, State: 'static> Context<B, State> {
+impl<B: RendererBackend> Context<B> {
     /// Queues one mouse-pointer position transition without coalescing.
     pub fn mousemove(&mut self, x: i32, y: i32) {
         self.window_manager.mousemove(x, y);
@@ -573,7 +505,7 @@ impl<B: RendererBackend, State: 'static> Context<B, State> {
 
 // Skin, backend callbacks, and renderer resources.
 
-impl<B: RendererBackend, State: 'static> Context<B, State> {
+impl<B: RendererBackend> Context<B> {
     /// Registers one backend-specific callback for retained custom-render nodes.
     ///
     /// The callback is observational with respect to retained application state, topology,
@@ -771,7 +703,7 @@ impl<B: RendererBackend, State: 'static> Context<B, State> {
 // Test-only retained-state inspection.
 
 #[cfg(test)]
-impl<B: RendererBackend, State: 'static> Context<B, State> {
+impl<B: RendererBackend> Context<B> {
     /// Returns visible window and popup names in base-surface paint order for internal tests.
     pub(crate) fn debug_rendered_root_names(&self) -> Vec<String> {
         // Names expose ordering policy without leaking private stacking records.
@@ -936,15 +868,15 @@ impl<B: RendererBackend, State: 'static> Context<B, State> {
 
 // Logical frame ownership and submission.
 
-impl<B: RendererBackend, State: 'static> Context<B, State> {
+impl<B: RendererBackend> Context<B> {
     /// Starts one paint/submission frame for state previously committed by
-    /// [`Context::update_ui`] or [`Context::update_ui_state`].
-    pub fn frame(&mut self, info: FrameInfo) -> ContextFrame<'_, B, State> {
+    /// [`Context::update_ui`].
+    pub fn frame(&mut self, info: FrameInfo) -> ContextFrame<'_, B> {
         ContextFrame { context: self, info, completed: false }
     }
 }
 
-impl<B: RendererBackend, State: 'static> ContextFrame<'_, B, State> {
+impl<B: RendererBackend> ContextFrame<'_, B> {
     /// Consumes this logical frame, paints the last committed UI once, and submits it once.
     ///
     /// Returns [`RenderError::UiUpdateRequired`] before paint or backend acquisition when no commit
@@ -972,7 +904,7 @@ impl<B: RendererBackend, State: 'static> ContextFrame<'_, B, State> {
     }
 }
 
-impl<B: RendererBackend, State: 'static> Drop for ContextFrame<'_, B, State> {
+impl<B: RendererBackend> Drop for ContextFrame<'_, B> {
     fn drop(&mut self) {
         if !self.completed {
             self.context.window_manager.cancel_frame();

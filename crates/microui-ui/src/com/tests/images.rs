@@ -47,8 +47,7 @@ impl Drop for ImageTexture {
 fn image_controls_keep_owned_pixels_and_forward_ordered_cropped_paint_after_errors() {
     let atlas = crate::test_support::test_atlas();
     let mut skin = crate::Skin::from_atlas(&atlas);
-    let mut palette = crate::FlatPalette::default();
-    palette.text = crate::color(0, 0, 0, 255);
+    let palette = crate::FlatPalette { text: crate::color(0, 0, 0, 255), ..crate::FlatPalette::default() };
     skin.apply_flat_palette(palette);
     let assets = crate::assets::export_bundle(&crate::SkinBundle::new(atlas, skin)).unwrap();
     let ui = microui_redux::Ui::from_interface(create_runtime_from_assets(assets.as_com_ref()).unwrap()).unwrap();

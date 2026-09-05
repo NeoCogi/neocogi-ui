@@ -234,27 +234,7 @@ impl From<TextBlockParameters> for TextBlock {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    //! Storage-boundary regressions for static multiline text.
 
-    use super::*;
-
-    /// Verifies both public parameter forms and later replacements canonicalize line endings.
-    #[test]
-    fn text_block_stores_only_lf_line_endings() {
-        let mut block = TextBlock::from(TextBlockParameters {
-            text: "a\r\nb\rc\n".to_owned(),
-            wrap: TextWrap::None,
-            font: FontRef::Role(FontRole::Body),
-            opt: WidgetOption::NO_INTERACT,
-        });
-        assert_eq!(block.text(), "a\nb\nc\n");
-
-        block.set_text("d\r\ne\rf\n");
-        assert_eq!(block.text(), "d\ne\nf\n");
-    }
-}
 
 impl crate::com::widget::WidgetAlgorithm for TextBlock {
     /// Synchronizes options inside the one concrete semantic state of a COM leaf.
@@ -282,5 +262,27 @@ impl crate::com::widget::FontState for TextBlock {
     /// Replaces the same field after the COM resource owner validates the selection.
     fn set_font(&mut self, font: crate::FontRef) {
         self.font = font;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Storage-boundary regressions for static multiline text.
+
+    use super::*;
+
+    /// Verifies both public parameter forms and later replacements canonicalize line endings.
+    #[test]
+    fn text_block_stores_only_lf_line_endings() {
+        let mut block = TextBlock::from(TextBlockParameters {
+            text: "a\r\nb\rc\n".to_owned(),
+            wrap: TextWrap::None,
+            font: FontRef::Role(FontRole::Body),
+            opt: WidgetOption::NO_INTERACT,
+        });
+        assert_eq!(block.text(), "a\nb\nc\n");
+
+        block.set_text("d\r\ne\rf\n");
+        assert_eq!(block.text(), "d\ne\nf\n");
     }
 }

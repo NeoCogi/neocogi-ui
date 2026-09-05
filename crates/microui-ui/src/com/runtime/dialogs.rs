@@ -567,17 +567,6 @@ impl IFileDialogs for Runtime {
         Ok(FileDialog::from_value(FileDialog { dialog }).query().expect("file picker declares IFileDialog"))
     }
 }
-impl crate::WidgetEvent for FileDialogCompleted {}
-impl super::super::events::ComEvent for FileDialogCompleted {
-    type Sink = IFileDialogSinkAbi;
-    /// Encodes native identity only at the boundary; lossy display text never becomes a selected path.
-    fn deliver(&self, sink: ComRef<'_, Self::Sink>) -> Result<(), NcStatus> {
-        match self {
-            FileDialogCompleted::Accepted(path) => sink.accepted(microui_redux::NativePath::new(path).as_interface()),
-            FileDialogCompleted::Cancelled => sink.cancelled(),
-        }
-    }
-}
 
 /// Reads the platform home setting without converting its native encoding to Unicode.
 fn home_dir() -> Option<PathBuf> {

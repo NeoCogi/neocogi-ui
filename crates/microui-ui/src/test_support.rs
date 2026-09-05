@@ -552,3 +552,9 @@ impl microui_contracts::ITexture for TestImage {
 pub(crate) fn test_image(width:i32,height:i32) -> microui_redux::Image {
     microui_redux::Image::from_interface(TestImage::from_value(TestImage {size:microui_contracts::Size {width,height}}).query().unwrap()).unwrap()
 }
+
+/// Native algorithm fixtures keep their callback driver outside the production engine.
+pub(crate) mod events;
+mod context;
+pub(crate) use context::TestContext;
+mod native_api;

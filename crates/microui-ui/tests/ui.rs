@@ -32,4 +32,3 @@ fn public_api_contracts() {
     cases.compile_fail("tests/ui/context_mutate_during_frame.rs");
     cases.compile_fail("tests/ui/context_frame_submit_twice.rs");
 }
-

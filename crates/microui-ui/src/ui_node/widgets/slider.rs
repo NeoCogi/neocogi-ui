@@ -132,7 +132,6 @@ pub struct SliderChanged {
     pub value: Real,
 }
 
-impl crate::WidgetEvent for SliderChanged {}
 
 /// Concrete retained slider, including its semantic and editing state.
 pub struct Slider {
@@ -436,6 +435,31 @@ impl From<SliderParameters> for Slider {
             edit: NumberEditState::default(),
             changed_event: crate::EventSource::new(),
         }
+    }
+}
+
+
+
+impl crate::com::widget::WidgetAlgorithm for Slider {
+    /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
+    fn close_events(&mut self) {
+        self.changed_event.close_ordinary();
+    }
+
+    /// Synchronizes options inside the one concrete semantic state of a COM leaf.
+    fn set_options(&mut self, options: crate::WidgetOption) {
+        self.opt = options;
+    }
+}
+
+impl crate::com::widget::FontState for Slider {
+    /// Borrows the semantic font reference already used by layout and painting.
+    fn font(&self) -> &crate::FontRef {
+        &self.font
+    }
+    /// Replaces the same field after the COM resource owner validates the selection.
+    fn set_font(&mut self, font: crate::FontRef) {
+        self.font = font;
     }
 }
 
@@ -975,28 +999,5 @@ mod tests {
 
         // The base fill and numeric label remain valid even though the zero-width thumb is omitted.
         assert!(display_list.debug_operation_count() >= 1);
-    }
-}
-
-impl crate::com::widget::WidgetAlgorithm for Slider {
-    /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
-    fn close_events(&mut self) {
-        self.changed_event.close_ordinary();
-    }
-
-    /// Synchronizes options inside the one concrete semantic state of a COM leaf.
-    fn set_options(&mut self, options: crate::WidgetOption) {
-        self.opt = options;
-    }
-}
-
-impl crate::com::widget::FontState for Slider {
-    /// Borrows the semantic font reference already used by layout and painting.
-    fn font(&self) -> &crate::FontRef {
-        &self.font
-    }
-    /// Replaces the same field after the COM resource owner validates the selection.
-    fn set_font(&mut self, font: crate::FontRef) {
-        self.font = font;
     }
 }
