@@ -112,6 +112,8 @@ pub struct ListItem<Value: Clone + 'static = ()> {
     /// Initialization-only font.
     font: FontRef,
     /// Base widget options.
+    /// Native algorithm fixture policy; production options live only in WidgetState.
+    #[cfg(test)]
     opt: WidgetOption,
     /// Mutable label displayed for the item.
     label: String,
@@ -189,7 +191,7 @@ impl<Value: Clone + 'static> ListItem<Value> {
 
         if !self.label.is_empty() {
             let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
-            ctx.draw_control_text_with_font(font, &self.label, text_rect, ControlRole::Item, self.opt);
+            ctx.draw_control_text_with_font(font, &self.label, text_rect, ControlRole::Item, ctx.options());
         }
     }
 }
@@ -203,6 +205,7 @@ impl<Value: Clone + 'static> TypedWidgetHandle<ListItem<Value>> {
 }
 
 impl<Value: Clone + 'static> Widget for ListItem<Value> {
+    #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
         &self.opt
     }
@@ -240,6 +243,7 @@ impl<Value: Clone + 'static> From<ListItemParameters<Value>> for ListItem<Value>
         Self {
             icon: parameters.icon,
             font: parameters.font,
+            #[cfg(test)]
             opt: parameters.opt,
             label: parameters.label,
             value: parameters.value,
@@ -252,11 +256,6 @@ impl crate::com::widget::WidgetAlgorithm for ListItem {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
         self.submitted_event.close_ordinary();
-    }
-
-    /// Synchronizes options inside the one concrete semantic state of a COM leaf.
-    fn set_options(&mut self, options: crate::WidgetOption) {
-        self.opt = options;
     }
 }
 
@@ -298,7 +297,20 @@ mod tests {
         let mut item = ListItem::from(ListItemParameters::with_icon("item", IconRef::named(check)));
         let bounds = rect(0, 0, 20, 20);
         let mut display_list = DisplayList::new();
-        let mut ctx = WidgetPaintCtx::new_with_content_geometry(bounds, &mut display_list, bounds, &style, &atlas, true, true, false, false, false, true);
+        let mut ctx = WidgetPaintCtx::new_with_content_geometry(
+            bounds,
+            &mut display_list,
+            bounds,
+            &style,
+            &atlas,
+            true,
+            true,
+            false,
+            false,
+            false,
+            true,
+            *item.widget_opt(),
+        );
 
         item.paint(&mut ctx);
 

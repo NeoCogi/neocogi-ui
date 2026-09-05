@@ -269,7 +269,7 @@ pub(super) fn number_textbox_update(
     }
 
     if edit.editing {
-        let res = textbox_update(ctx, input, &mut edit.buf, &mut edit.cursor, WidgetOption::NONE, font);
+        let res = textbox_update(ctx, input, &mut edit.buf, &mut edit.cursor, font);
         if res.submitted || !ctx.focused() {
             commit_finite_number(edit.buf.as_str(), value);
             edit.editing = false;

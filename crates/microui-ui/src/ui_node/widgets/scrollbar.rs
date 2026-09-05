@@ -276,6 +276,8 @@ pub struct Scrollbar {
     /// One authoritative range/offset allocation, also shared by composed scroll layout when present.
     pub(crate) axis_state: std::rc::Rc<ScrollAxisState>,
     /// Caller-authored options; dynamic range policy is resolved from the same shared state.
+    /// Native algorithm fixture policy; production options live only in WidgetState.
+    #[cfg(test)]
     opt: WidgetOption,
     /// Typed source for user-originated movement; programmatic requests remain silent.
     changed_event: crate::EventSource<ScrollbarChanged>,
@@ -351,6 +353,7 @@ impl From<ScrollbarParameters> for Scrollbar {
         Self {
             axis: parameters.axis,
             axis_state,
+            #[cfg(test)]
             opt: parameters.opt,
             changed_event: crate::EventSource::new(),
         }
@@ -443,6 +446,7 @@ impl crate::TypedWidget<ScrollbarChanged> for Scrollbar {
 
 impl Widget for Scrollbar {
     /// Returns the base options used by generic retained input routing.
+    #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
         // The stored options already include focus preservation established during construction.
         &self.opt
@@ -526,10 +530,6 @@ impl crate::com::widget::WidgetAlgorithm for Scrollbar {
         } else {
             options | WidgetOption::NO_INTERACT
         }
-    }
-    /// Synchronizes options inside the one concrete semantic state of a COM leaf.
-    fn set_options(&mut self, options: crate::WidgetOption) {
-        self.opt = options;
     }
 }
 

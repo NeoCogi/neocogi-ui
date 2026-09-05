@@ -74,7 +74,7 @@ pub struct SliderParameters {
     /// Font used for the numeric label and editor.
     font: FontRef,
     /// Base widget options.
-    opt: WidgetOption,
+    pub(crate) opt: WidgetOption,
 }
 
 impl crate::LeafWidget for Slider {
@@ -135,6 +135,8 @@ pub struct Slider {
     /// Initialization-only font.
     font: FontRef,
     /// Base widget options.
+    /// Native algorithm fixture policy; production options live only in WidgetState.
+    #[cfg(test)]
     opt: WidgetOption,
     /// Current slider value.
     value: Real,
@@ -276,7 +278,7 @@ impl Slider {
         }
 
         let base = ctx.local_rect();
-        if !self.opt.intersects(WidgetOption::FRAME) {
+        if !ctx.options().intersects(WidgetOption::FRAME) {
             // Unframed sliders still retain the semantic track center without adding border space.
             ctx.draw_control_center(ControlRole::SliderTrack, base);
         }
@@ -297,7 +299,7 @@ impl Slider {
         let thumb = rect(base.x.saturating_add(x), base.y, width, base.height.max(0));
         let _ = ctx.draw_control(ControlRole::SliderThumb, thumb);
         let label = number_label(self.value, self.precision);
-        ctx.draw_control_text_with_font(font, label.as_str(), base, ControlRole::SliderTrack, self.opt);
+        ctx.draw_control_text_with_font(font, label.as_str(), base, ControlRole::SliderTrack, ctx.options());
     }
 }
 
@@ -382,6 +384,7 @@ fn clamp_slider_value(value: Real, low: Real, high: Real) -> Real {
 }
 
 impl Widget for Slider {
+    #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
         &self.opt
     }
@@ -419,6 +422,7 @@ impl From<SliderParameters> for Slider {
             step: parameters.step,
             precision: parameters.precision,
             font: parameters.font,
+            #[cfg(test)]
             opt: parameters.opt,
             value: clamp_slider_value(parameters.value, parameters.low, parameters.high),
             low: parameters.low,
@@ -433,11 +437,6 @@ impl crate::com::widget::WidgetAlgorithm for Slider {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
         self.changed_event.close_ordinary();
-    }
-
-    /// Synchronizes options inside the one concrete semantic state of a COM leaf.
-    fn set_options(&mut self, options: crate::WidgetOption) {
-        self.opt = options;
     }
 }
 
@@ -823,7 +822,20 @@ mod tests {
         let mut slider = Slider::from(SliderParameters::new(Real::MAX / 2.0, 0.0, Real::MAX).expect("a maximum finite range span must remain usable"));
         let bounds = rect(0, 0, 100, 20);
         let mut display_list = crate::render::DisplayList::new();
-        let mut ctx = WidgetPaintCtx::new_with_content_geometry(bounds, &mut display_list, bounds, &style, &atlas, true, false, false, false, false, true);
+        let mut ctx = WidgetPaintCtx::new_with_content_geometry(
+            bounds,
+            &mut display_list,
+            bounds,
+            &style,
+            &atlas,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true,
+            *slider.widget_opt(),
+        );
 
         slider.paint(&mut ctx);
 
@@ -982,7 +994,20 @@ mod tests {
         let mut slider = Slider::from(SliderParameters::new(0.5, 0.0, 1.0).expect("finite ascending slider parameters must validate"));
         let bounds = rect(0, 0, 100, 20);
         let mut display_list = crate::render::DisplayList::new();
-        let mut ctx = WidgetPaintCtx::new_with_content_geometry(bounds, &mut display_list, bounds, &style, &atlas, true, false, false, false, false, true);
+        let mut ctx = WidgetPaintCtx::new_with_content_geometry(
+            bounds,
+            &mut display_list,
+            bounds,
+            &style,
+            &atlas,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true,
+            *slider.widget_opt(),
+        );
 
         slider.paint(&mut ctx);
 

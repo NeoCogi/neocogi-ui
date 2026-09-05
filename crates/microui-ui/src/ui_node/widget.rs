@@ -250,7 +250,8 @@ impl From<bool> for Change {
 /// keyboard-eligibility query. Event-kind filtering belongs to the dispatcher for ordinary widgets
 /// and to [`crate::ContainerWidget`] for an overloaded container surface.
 pub trait Widget {
-    /// Returns the widget options for this state.
+    /// Returns native fixture options; deployed widgets own options in WidgetState.
+    #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption;
     /// Updates retained widget state for exactly one normalized input event.
     ///
@@ -331,6 +332,7 @@ pub trait LeafWidget: Widget {
 }
 
 impl Widget for WidgetOption {
+    #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
         self
     }
@@ -407,6 +409,7 @@ mod widget_tests {
     }
 
     impl Widget for TestWidget {
+        #[cfg(test)]
         fn widget_opt(&self) -> &WidgetOption {
             &self.opt
         }

@@ -664,6 +664,7 @@ fn textarea_paint(ctx: &mut WidgetPaintCtx<'_>, state: &TextArea, font: FontId) 
 
 impl Widget for TextArea {
     /// Returns the editable leaf's base options without outer framing or wheel policy.
+    #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
         // ScrollArea owns frame and GRAB_SCROLL. Keyboard focus is declared separately below.
         &WidgetOption::NONE
@@ -720,9 +721,6 @@ impl crate::com::widget::WidgetAlgorithm for TextArea {
         self.changed_event.close_ordinary();
         self.submitted_event.close_ordinary();
     }
-
-    /// The editor has no decorative options of its own; the common COM state controls input policy.
-    fn set_options(&mut self, _options: WidgetOption) {}
 }
 impl crate::com::widget::FontState for TextArea {
     /// Borrows the actual font selection used by text measurement and paint.

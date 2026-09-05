@@ -75,6 +75,8 @@ pub struct ColorSwatch {
     /// Initialization-only font.
     font: FontRef,
     /// Base widget options.
+    /// Native algorithm fixture policy; production options live only in WidgetState.
+    #[cfg(test)]
     opt: WidgetOption,
     /// Mutable fill color.
     fill: Color,
@@ -132,12 +134,13 @@ impl ColorSwatch {
         ctx.draw_rect(rect, self.fill);
         if !self.label.is_empty() {
             let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
-            ctx.draw_control_text_with_font(font, self.label.as_str(), rect, ControlRole::Button, self.opt);
+            ctx.draw_control_text_with_font(font, self.label.as_str(), rect, ControlRole::Button, ctx.options());
         }
     }
 }
 
 impl Widget for ColorSwatch {
+    #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
         &self.opt
     }
@@ -152,6 +155,7 @@ impl From<ColorSwatchParameters> for ColorSwatch {
     fn from(parameters: ColorSwatchParameters) -> Self {
         ColorSwatch {
             font: parameters.font,
+            #[cfg(test)]
             opt: parameters.opt,
             fill: parameters.fill,
             label: parameters.label,
@@ -159,12 +163,7 @@ impl From<ColorSwatchParameters> for ColorSwatch {
     }
 }
 
-impl crate::com::widget::WidgetAlgorithm for ColorSwatch {
-    /// Synchronizes options inside the one concrete semantic state of a COM leaf.
-    fn set_options(&mut self, options: crate::WidgetOption) {
-        self.opt = options;
-    }
-}
+impl crate::com::widget::WidgetAlgorithm for ColorSwatch {}
 
 impl crate::com::widget::FontState for ColorSwatch {
     /// Borrows the semantic font reference already used by layout and painting.

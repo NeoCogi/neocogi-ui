@@ -83,6 +83,8 @@ pub struct Combo {
     /// Initialization-only font.
     font: FontRef,
     /// Base widget options.
+    /// Native algorithm fixture policy; production options live only in WidgetState.
+    #[cfg(test)]
     opt: WidgetOption,
     /// Runtime-owned source for selection changes.
     changed_event: crate::EventSource<ComboChanged>,
@@ -299,7 +301,7 @@ impl Combo {
         let reserved_width = indicator_size.width;
         text_rect.width = (text_rect.width - reserved_width).max(0);
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
-        ctx.draw_control_text_with_font(font, self.label.as_str(), text_rect, ControlRole::Combo, self.opt);
+        ctx.draw_control_text_with_font(font, self.label.as_str(), text_rect, ControlRole::Combo, ctx.options());
 
         let indicator_content = ctx.draw_control(ControlRole::Button, indicator);
         let icon_color = ctx.control_content_color(ControlRole::Combo);
@@ -322,6 +324,7 @@ impl crate::TypedWidget<ComboSubmitted> for Combo {
 }
 
 impl Widget for Combo {
+    #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
         &self.opt
     }
@@ -355,6 +358,7 @@ impl From<ComboParameters> for Combo {
             open: false,
             label: String::new(),
             font: parameters.font,
+            #[cfg(test)]
             opt: parameters.opt,
             changed_event: crate::EventSource::new(),
             submitted_event: crate::EventSource::new(),
@@ -367,10 +371,6 @@ impl crate::com::widget::WidgetAlgorithm for Combo {
     fn close_events(&mut self) {
         self.changed_event.close_ordinary();
         self.submitted_event.close_ordinary();
-    }
-    /// Synchronizes common presentation options inside the one semantic value.
-    fn set_options(&mut self, options: WidgetOption) {
-        self.opt = options;
     }
 }
 impl crate::com::widget::FontState for Combo {

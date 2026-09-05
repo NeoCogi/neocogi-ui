@@ -101,6 +101,7 @@ impl Custom {
 }
 
 impl Widget for Custom {
+    #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
         &self.opt
     }

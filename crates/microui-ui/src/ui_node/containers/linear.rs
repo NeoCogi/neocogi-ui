@@ -35,9 +35,11 @@ use std::{cell::RefCell, rc::Rc};
 
 #[cfg(test)]
 use crate::ChildrenHandle;
+#[cfg(test)]
+use crate::WidgetOption;
 use crate::{
     AtlasHandle, AvailableSpace, Constraints, ContainerLayoutCtx, ContainerWidget, Dimensioni, MeasureCtx, Recti, Skin, TrackSize, UiInputEvent, Widget,
-    WidgetOption, WidgetPaintCtx, WidgetUpdateCtx,
+    WidgetPaintCtx, WidgetUpdateCtx,
 };
 #[cfg(test)]
 use crate::{Children, Node};
@@ -511,10 +513,7 @@ impl Linear {
     }
 }
 
-impl crate::com::widget::WidgetAlgorithm for Linear {
-    /// Linear has no surface painting or event state; common COM options live in WidgetState.
-    fn set_options(&mut self, _options: WidgetOption) {}
-}
+impl crate::com::widget::WidgetAlgorithm for Linear {}
 impl crate::com::containers::ContainerAlgorithm for Linear {
     type Edge = LinearItemSpec;
     /// Copies the same relationship used by the existing track resolver.
@@ -791,6 +790,7 @@ impl ContainerWidget for Linear {
 }
 
 impl Widget for Linear {
+    #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
         // Linear is a geometry-only branch surface; interaction belongs to retained descendants.
         &WidgetOption::NO_INTERACT

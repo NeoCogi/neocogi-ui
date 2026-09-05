@@ -101,6 +101,8 @@ pub struct Textbox {
     /// Initialization-only font.
     font: FontRef,
     /// Base widget options.
+    /// Native algorithm fixture policy; production options live only in WidgetState.
+    #[cfg(test)]
     opt: WidgetOption,
     /// Runtime-owned source for user-originated text changes.
     changed_event: crate::EventSource<TextboxChanged>,
@@ -213,7 +215,7 @@ impl Textbox {
     /// Applies input and cursor movement for this textbox.
     fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
-        let outcome = textbox_update(ctx, input, &mut self.buf, &mut self.cursor, self.opt, font);
+        let outcome = textbox_update(ctx, input, &mut self.buf, &mut self.cursor, font);
         let changed = outcome.changed.then(|| TextboxChanged {
             text: self.buf.clone(),
             cursor: self.cursor,
@@ -232,7 +234,7 @@ impl Textbox {
     /// Paints the textbox frame, text, and caret.
     fn paint_widget(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
-        textbox_paint(ctx, self.buf.as_str(), self.cursor, self.opt, font);
+        textbox_paint(ctx, self.buf.as_str(), self.cursor, ctx.options(), font);
     }
 }
 
@@ -254,7 +256,6 @@ pub(crate) fn textbox_update(
     input: Option<&UiInputEvent>,
     buf: &mut String,
     cursor: &mut usize,
-    _opt: WidgetOption,
     font: FontId,
 ) -> TextboxUpdateOutcome {
     let mut outcome = TextboxUpdateOutcome::default();
@@ -388,6 +389,7 @@ pub(crate) fn textbox_paint(ctx: &mut WidgetPaintCtx<'_>, buf: &str, cursor: usi
 }
 
 impl Widget for Textbox {
+    #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
         &self.opt
     }
@@ -421,6 +423,7 @@ impl From<TextboxParameters> for Textbox {
             buf,
             cursor,
             font: parameters.font,
+            #[cfg(test)]
             opt: parameters.opt,
             changed_event: crate::EventSource::new(),
             submitted_event: crate::EventSource::new(),
@@ -433,11 +436,6 @@ impl crate::com::widget::WidgetAlgorithm for Textbox {
     fn close_events(&mut self) {
         self.changed_event.close_ordinary();
         self.submitted_event.close_ordinary();
-    }
-
-    /// Synchronizes options inside the one concrete semantic state of a COM leaf.
-    fn set_options(&mut self, options: crate::WidgetOption) {
-        self.opt = options;
     }
 }
 

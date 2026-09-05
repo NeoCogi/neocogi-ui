@@ -41,7 +41,7 @@ macro_rules! container_class {
             pub(super) fn create(host: ComPtr<IWidgetHostAbi>, resources: Rc<Resources>, core: $core) -> Result<ComPtr<$abi>, NcStatus> {
                 let editor = host.create_children()?;
                 Ok(Self::from_value(Self {
-                    widget: WidgetCore::new(host, resources, core),
+                    widget: WidgetCore::new(host, resources, crate::WidgetOption::NO_INTERACT, core),
                     editor,
                 })
                 .query()

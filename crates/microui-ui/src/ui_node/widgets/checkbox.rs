@@ -84,6 +84,8 @@ pub struct Checkbox {
     /// Font used for the label.
     font: FontRef,
     /// Base widget options.
+    /// Native algorithm fixture policy; production options live only in WidgetState.
+    #[cfg(test)]
     opt: WidgetOption,
     /// Current checked value.
     checked: bool,
@@ -158,7 +160,7 @@ impl Checkbox {
         let text_rect = rect(bounds.x + box_rect.width, bounds.y, bounds.width - box_rect.width, bounds.height);
         if !self.label.is_empty() {
             let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
-            ctx.draw_control_text_with_font(font, &self.label, text_rect, ControlRole::Checkbox, self.opt);
+            ctx.draw_control_text_with_font(font, &self.label, text_rect, ControlRole::Checkbox, ctx.options());
         }
     }
 }
@@ -177,6 +179,7 @@ impl crate::TypedWidgetHandle<Checkbox> {
 }
 
 impl Widget for Checkbox {
+    #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
         &self.opt
     }
@@ -216,6 +219,7 @@ impl From<CheckboxParameters> for Checkbox {
         Checkbox {
             label: parameters.label,
             font: parameters.font,
+            #[cfg(test)]
             opt: parameters.opt,
             checked: parameters.checked,
             changed_event: crate::EventSource::new(),
@@ -227,11 +231,6 @@ impl crate::com::widget::WidgetAlgorithm for Checkbox {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
         self.changed_event.close_ordinary();
-    }
-
-    /// Synchronizes options inside the one concrete semantic state of a COM leaf.
-    fn set_options(&mut self, options: crate::WidgetOption) {
-        self.opt = options;
     }
 }
 

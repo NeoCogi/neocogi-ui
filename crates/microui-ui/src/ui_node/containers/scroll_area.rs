@@ -274,7 +274,8 @@ impl ScrollModel {
 pub struct ScrollArea {
     /// Same scrolling values used by the actual bars, transform surface and optional text editor.
     pub(crate) model: Rc<ScrollModel>,
-    /// Caller-authored frame options; dynamic routing follows the model's enablement.
+    /// Native fixture policy; deployed common state owns the authoritative frame options.
+    #[cfg(test)]
     opt: WidgetOption,
 }
 impl ScrollArea {
@@ -293,9 +294,13 @@ impl ScrollArea {
             enabled: self.model.enabled.get(),
         }
     }
-    /// Creates semantic state around already composed scalar data and concrete presentation options.
-    pub(crate) fn from_model(model: Rc<ScrollModel>, opt: WidgetOption) -> Self {
-        Self { model, opt }
+    /// Creates semantic state around already composed scalar data.
+    pub(crate) fn from_model(model: Rc<ScrollModel>) -> Self {
+        Self {
+            model,
+            #[cfg(test)]
+            opt: WidgetOption::NONE,
+        }
     }
     /// Returns the requested offsets owned by the actual scrollbar state.
     #[cfg(test)]
@@ -325,6 +330,7 @@ impl Widget for ScrollArea {
     fn take_shared_change(&self) -> bool {
         self.model.take_change()
     }
+    #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
         // These are presentation defaults; effective options below add dynamic scroll eligibility.
         &self.opt
@@ -406,6 +412,7 @@ impl ContainerWidget for ScrollSurface {
 
 impl Widget for ScrollSurface {
     /// Marks the transform-only surface as transparent to direct pointer targeting.
+    #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
         // Eligible content descendants remain targetable even though this structural surface has no
         // independent interaction behavior.
@@ -610,7 +617,10 @@ impl ScrollArea {
         let (_, vertical_node) = Node::typed_widget(vertical);
         let content = Rc::new(RefCell::new([parameters.content].into_iter().collect()));
         let (_, surface_container) = Container::from_shared(content, ScrollSurface { model: model.clone() });
-        let widget = ScrollArea::from_model(model, surface_opt);
+        let widget = ScrollArea {
+            opt: surface_opt,
+            ..ScrollArea::from_model(model)
+        };
         let children = Rc::new(RefCell::new(
             [Node::container(surface_container), horizontal_node, vertical_node].into_iter().collect(),
         ));
@@ -620,10 +630,6 @@ impl ScrollArea {
 }
 
 impl crate::com::widget::WidgetAlgorithm for ScrollArea {
-    /// Keeps the concrete panel paint options synchronized with common COM options.
-    fn set_options(&mut self, options: WidgetOption) {
-        self.opt = options;
-    }
     /// Dynamic wheel eligibility follows the same shared policy used by placement.
     fn effective_options(&self, options: WidgetOption) -> WidgetOption {
         if self.model.enabled.get() {
@@ -633,10 +639,7 @@ impl crate::com::widget::WidgetAlgorithm for ScrollArea {
         }
     }
 }
-impl crate::com::widget::WidgetAlgorithm for ScrollSurface {
-    /// This transform surface paints nothing; common options remain in its WidgetState.
-    fn set_options(&mut self, _options: WidgetOption) {}
-}
+impl crate::com::widget::WidgetAlgorithm for ScrollSurface {}
 
 #[cfg(test)]
 mod tests {

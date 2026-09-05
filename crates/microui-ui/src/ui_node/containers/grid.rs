@@ -33,7 +33,9 @@ use std::{cell::RefCell, rc::Rc};
 
 #[cfg(test)]
 use crate::ChildrenHandle;
-use crate::{AvailableSpace, ContainerWidget, Dimensioni, MeasureCtx, Recti, TrackSize, Widget, WidgetOption, WidgetPaintCtx};
+#[cfg(test)]
+use crate::WidgetOption;
+use crate::{AvailableSpace, ContainerWidget, Dimensioni, MeasureCtx, Recti, TrackSize, Widget, WidgetPaintCtx};
 #[cfg(test)]
 use crate::{Container, TypedWidgetHandle};
 
@@ -460,10 +462,7 @@ impl Grid {
     }
 }
 
-impl crate::com::widget::WidgetAlgorithm for Grid {
-    /// Grid has no surface painting or event state; common options belong to the COM WidgetState.
-    fn set_options(&mut self, _options: WidgetOption) {}
-}
+impl crate::com::widget::WidgetAlgorithm for Grid {}
 impl crate::com::containers::ContainerAlgorithm for Grid {
     type Edge = GridSpan;
     /// Returns the same span consumed by the existing row-major placement algorithm.
@@ -546,6 +545,7 @@ impl ContainerWidget for Grid {
 }
 
 impl Widget for Grid {
+    #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
         &WidgetOption::NO_INTERACT
     }

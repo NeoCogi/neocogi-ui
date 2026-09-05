@@ -115,6 +115,8 @@ pub struct TextBlock {
     /// Initialization-only font.
     font: FontRef,
     /// Base widget options.
+    /// Native algorithm fixture policy; production options live only in WidgetState.
+    #[cfg(test)]
     opt: WidgetOption,
     /// Mutable display text.
     text: String,
@@ -200,6 +202,7 @@ impl TypedWidgetHandle<TextBlock> {
 }
 
 impl Widget for TextBlock {
+    #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
         &self.opt
     }
@@ -215,6 +218,7 @@ impl From<TextBlockParameters> for TextBlock {
         TextBlock {
             wrap: parameters.wrap,
             font: parameters.font,
+            #[cfg(test)]
             opt: parameters.opt,
             // `text` is public construction data and may be supplied through a struct literal, so
             // enforce canonical storage at the concrete widget boundary rather than only in `new`.
@@ -223,12 +227,7 @@ impl From<TextBlockParameters> for TextBlock {
     }
 }
 
-impl crate::com::widget::WidgetAlgorithm for TextBlock {
-    /// Synchronizes options inside the one concrete semantic state of a COM leaf.
-    fn set_options(&mut self, options: crate::WidgetOption) {
-        self.opt = options;
-    }
-}
+impl crate::com::widget::WidgetAlgorithm for TextBlock {}
 
 impl TextBlock {
     /// Returns the existing concrete wrapping policy to its COM editing interface.

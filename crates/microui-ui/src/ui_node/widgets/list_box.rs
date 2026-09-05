@@ -82,6 +82,8 @@ pub struct ListBox {
     /// Initialization-only font.
     font: FontRef,
     /// Base widget options.
+    /// Native algorithm fixture policy; production options live only in WidgetState.
+    #[cfg(test)]
     opt: WidgetOption,
     /// Runtime-owned source for user submissions.
     submitted_event: crate::EventSource<ListBoxSubmitted>,
@@ -125,7 +127,7 @@ impl ListBox {
         };
         if !self.label.is_empty() {
             let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
-            ctx.draw_control_text_with_font(font, &self.label, placement.text, ControlRole::Button, self.opt);
+            ctx.draw_control_text_with_font(font, &self.label, placement.text, ControlRole::Button, ctx.options());
         }
         if let (Some(image), Some(visual)) = (self.image.as_ref(), placement.visual) {
             // List-box labels remain theme-colored while external image content preserves the
@@ -137,6 +139,7 @@ impl ListBox {
 }
 
 impl Widget for ListBox {
+    #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
         &self.opt
     }
@@ -177,6 +180,7 @@ impl From<ListBoxParameters> for ListBox {
             image: parameters.image,
             fit_width: false,
             font: parameters.font,
+            #[cfg(test)]
             opt: parameters.opt,
             submitted_event: crate::EventSource::new(),
         }
@@ -187,11 +191,6 @@ impl crate::com::widget::WidgetAlgorithm for ListBox {
     /// Logical COM closure cancels ordinary submissions while retained widget references remain safe.
     fn close_events(&mut self) {
         self.submitted_event.close_ordinary();
-    }
-
-    /// Synchronizes options inside the one concrete semantic state of a COM leaf.
-    fn set_options(&mut self, options: crate::WidgetOption) {
-        self.opt = options;
     }
 }
 

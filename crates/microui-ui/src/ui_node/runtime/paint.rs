@@ -122,6 +122,7 @@ impl UiRuntime {
                 node.state.clicked,
                 node.state.active,
                 window_active,
+                node.data.policy().0,
             );
             node.data.paint(&mut widget_ctx);
         }

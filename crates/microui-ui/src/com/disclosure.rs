@@ -38,6 +38,7 @@ impl Disclosure {
         let header = DisclosureHeader::create(
             host.clone(),
             resources.clone(),
+            variant.header_options(),
             crate::ui_node::DisclosureHeader::com_new(model.clone(), label.to_owned(), variant),
         );
         let body = super::containers::Linear::create(
@@ -49,7 +50,7 @@ impl Disclosure {
         editor.insert(0, header.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
         editor.insert(1, body.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
         Ok(Self::from_value(Self {
-            widget: WidgetCore::new(host, resources, crate::Disclosure::com_new(model, variant)),
+            widget: WidgetCore::new(host, resources, crate::WidgetOption::NO_INTERACT, crate::Disclosure::com_new(model, variant)),
             editor,
             header,
             body,

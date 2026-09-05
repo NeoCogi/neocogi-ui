@@ -152,10 +152,12 @@ impl IUiFactory for Runtime {
     /// Constructs the complete semantic combo header with the same host and immutable resources as other leaves.
     fn create_combo(&self) -> Result<ComPtr<IComboAbi>, NcStatus> {
         self.storage.factory.host.check_mutation()?;
+        let parameters = crate::ComboParameters::new();
         Ok(super::combo::Combo::create(
             self.storage.factory.host.clone(),
             self.storage.factory.resources.clone(),
-            crate::Combo::from(crate::ComboParameters::new()),
+            parameters.opt,
+            crate::Combo::from(parameters),
         ))
     }
 
@@ -216,6 +218,7 @@ impl IUiFactory for Runtime {
         Ok(super::leaves::Checkbox::create(
             self.storage.factory.host.clone(),
             self.storage.factory.resources.clone(),
+            parameters.opt,
             crate::Checkbox::from(parameters),
         ))
     }
@@ -226,6 +229,7 @@ impl IUiFactory for Runtime {
         Ok(super::leaves::Textbox::create(
             self.storage.factory.host.clone(),
             self.storage.factory.resources.clone(),
+            parameters.opt,
             crate::Textbox::from(parameters),
         ))
     }
@@ -236,6 +240,7 @@ impl IUiFactory for Runtime {
         Ok(super::leaves::TextBlock::create(
             self.storage.factory.host.clone(),
             self.storage.factory.resources.clone(),
+            parameters.opt,
             crate::TextBlock::from(parameters),
         ))
     }
@@ -254,6 +259,7 @@ impl IUiFactory for Runtime {
         Ok(super::leaves::Slider::create(
             self.storage.factory.host.clone(),
             self.storage.factory.resources.clone(),
+            parameters.opt,
             crate::Slider::from(parameters),
         ))
     }
@@ -269,6 +275,7 @@ impl IUiFactory for Runtime {
         Ok(super::leaves::Number::create(
             self.storage.factory.host.clone(),
             self.storage.factory.resources.clone(),
+            parameters.opt,
             crate::Number::from(parameters),
         ))
     }
@@ -279,6 +286,7 @@ impl IUiFactory for Runtime {
         Ok(super::leaves::ColorSwatch::create(
             self.storage.factory.host.clone(),
             self.storage.factory.resources.clone(),
+            parameters.opt,
             crate::ColorSwatch::from(parameters),
         ))
     }
@@ -289,6 +297,7 @@ impl IUiFactory for Runtime {
         Ok(super::leaves::ListItem::create(
             self.storage.factory.host.clone(),
             self.storage.factory.resources.clone(),
+            parameters.opt,
             crate::ListItem::from(parameters),
         ))
     }
@@ -299,6 +308,7 @@ impl IUiFactory for Runtime {
         Ok(super::leaves::ListBox::create(
             self.storage.factory.host.clone(),
             self.storage.factory.resources.clone(),
+            parameters.opt,
             crate::ListBox::from(parameters),
         ))
     }
@@ -317,6 +327,7 @@ impl IUiFactory for Runtime {
         Ok(super::leaves::Scrollbar::create(
             self.storage.factory.host.clone(),
             self.storage.factory.resources.clone(),
+            parameters.opt,
             crate::Scrollbar::from(parameters),
         ))
     }
@@ -324,10 +335,12 @@ impl IUiFactory for Runtime {
     /// Creates one unmounted button whose host has no reference back to this runtime.
     fn create_button(&self) -> Result<ComPtr<IButtonAbi>, NcStatus> {
         self.storage.factory.host.check_mutation()?;
+        let parameters = crate::ButtonParameters::new("");
         Ok(Button::create(
             self.storage.factory.host.clone(),
             self.storage.factory.resources.clone(),
-            crate::Button::from(crate::ButtonParameters::new("")),
+            parameters.opt,
+            crate::Button::from(parameters),
         ))
     }
 }

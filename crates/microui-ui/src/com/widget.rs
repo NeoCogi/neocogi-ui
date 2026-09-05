@@ -12,8 +12,6 @@ use crate::render::{DisplayList, Renderer};
 pub(crate) trait WidgetAlgorithm: crate::Widget {
     /// Ends semantic event production on logical close; states without event sources need no work.
     fn close_events(&mut self) {}
-    /// Copies common options into the algorithm's existing presentation state.
-    fn set_options(&mut self, options: WidgetOption);
     /// Adds concrete state-dependent routing policy to the common caller-authored options.
     fn effective_options(&self, options: WidgetOption) -> WidgetOption {
         options
@@ -102,8 +100,8 @@ impl<S: WidgetAlgorithm> WidgetCore<S> {
     }
 
     /// Composes an unmounted semantic value into its final COM allocation.
-    pub(super) fn new(host: ComPtr<IWidgetHostAbi>, resources: Rc<Resources>, core: S) -> Self {
-        let options = WidgetOptions { bits: core.widget_opt().bits() };
+    pub(super) fn new(host: ComPtr<IWidgetHostAbi>, resources: Rc<Resources>, options: WidgetOption, core: S) -> Self {
+        let options = WidgetOptions { bits: options.bits() };
         Self {
             state: WidgetState::new(host, options),
             core: RefCell::new(Some(core)),
@@ -133,16 +131,13 @@ impl<S: WidgetAlgorithm> WidgetCore<S> {
         })
     }
 
-    /// Commits shared options and concrete presentation together after validation.
+    /// Updates the sole option authority while rejecting reentry into an active algorithm.
     pub(super) fn set_options(&self, options: WidgetOptions) -> Result<(), NcStatus> {
         self.state.writable()?;
         options.validate()?;
-        let mut core = self.take()?;
-        // The second state check is local host authority, not an app callback.
-        // Commit it before the infallible algorithm assignment.
-        self.state.set_options(options)?;
-        core.set_options(WidgetOption::from_bits_retain(options.bits));
-        Ok(())
+        let _core = self.take()?;
+        // Retain the phase guard until the state has committed its sticky invalidation marker.
+        self.state.set_options(options)
     }
 
     /// Reconstructs a local update context from copied input and owned resources.
@@ -213,6 +208,7 @@ impl<S: WidgetAlgorithm> WidgetCore<S> {
                 state.clicked,
                 state.active,
                 state.window_active,
+                WidgetOption::from_bits_retain(self.state.options()?.bits),
             );
             self.take()?.paint(&mut ctx);
             let size = crate::Dimensioni::new(state.rect.width.max(1), state.rect.height.max(1));
@@ -221,7 +217,12 @@ impl<S: WidgetAlgorithm> WidgetCore<S> {
         }
         // All semantic and scratch RefCell guards have ended. Only owned storage
         // remains live if a custom recorder calls back into this object.
-        recording.scratch.as_ref().expect("active recording owns its workspace").storage.paint(scope, painter)
+        recording
+            .scratch
+            .as_ref()
+            .expect("active recording owns its workspace")
+            .storage
+            .paint(scope, painter)
     }
 }
 
@@ -396,8 +397,8 @@ macro_rules! leaf_class {
         }
         impl $name {
             /// Creates the unmounted final COM allocation after input validation.
-            pub(super) fn create(host: ComPtr<IWidgetHostAbi>, resources: Rc<super::widget::Resources>, core: $core) -> ComPtr<$abi> {
-                Self::from_value(Self { widget: super::widget::WidgetCore::new(host, resources, core) }).query().expect("class declares its editing interface")
+            pub(super) fn create(host: ComPtr<IWidgetHostAbi>, resources: Rc<super::widget::Resources>, options: crate::WidgetOption, core: $core) -> ComPtr<$abi> {
+                Self::from_value(Self { widget: super::widget::WidgetCore::new(host, resources, options, core) }).query().expect("class declares its editing interface")
             }
             /// Applies the complete existing semantic algorithm to copied input.
             fn update_widget(&self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {

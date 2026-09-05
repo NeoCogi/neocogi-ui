@@ -33,8 +33,7 @@ use crate::ControlRole;
 use std::rc::Rc;
 
 use crate::{
-    AtlasHandle, ChildParticipation, ContainerWidget, ControlState, Dimensioni, MeasureCtx, PointerState, Recti, Skin, UiInputEvent, Widget, WidgetOption,
-    WidgetPaintCtx, WidgetUpdateCtx,
+    AtlasHandle, ChildParticipation, ContainerWidget, Dimensioni, MeasureCtx, Recti, Skin, UiInputEvent, Widget, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx,
 };
 #[cfg(test)]
 use crate::{Container, TypedWidgetHandle};
@@ -56,6 +55,16 @@ pub(crate) enum DisclosureVariant {
     Header,
     /// Unframed tree row with an indented body.
     Tree,
+}
+
+impl DisclosureVariant {
+    /// Supplies construction defaults without retaining a second option value.
+    pub(crate) fn header_options(self) -> WidgetOption {
+        match self {
+            Self::Header => WidgetOption::FRAME,
+            Self::Tree => WidgetOption::NONE,
+        }
+    }
 }
 
 /// Explicit expansion data shared by the actual header and its layout parent, without object backpointers.
@@ -207,13 +216,17 @@ impl Disclosure {
 pub(crate) struct DisclosureHeader {
     /// Shared scalar state owns no parent widget or tree.
     model: Rc<DisclosureState>,
+    /// Owned text shared by measurement and painting.
     label: String,
+    /// Chooses indentation and the common frame appearance.
     variant: DisclosureVariant,
+    /// Native fixture policy; deployed options belong to WidgetState.
+    #[cfg(test)]
     opt: WidgetOption,
 }
 
 impl DisclosureHeader {
-    /// Measures the complete custom-painted header, including its optional internal frame.
+    /// Measures intrinsic header content; retained traversal adds the optional common frame.
     fn preferred(&self, style: &Skin, atlas: &AtlasHandle) -> Dimensioni {
         // Resolve icon and text metrics independently, then build the one-row content preference.
         let padding = style.metrics.padding.max(0);
@@ -234,22 +247,12 @@ impl DisclosureHeader {
         let content_height = font_height.max(icon.height).max(0).saturating_add(vertical_pad.saturating_mul(2));
         let icon_width = content_height.saturating_sub(padding).max(icon.width).max(0);
         let content_width = padding.saturating_mul(2).saturating_add(icon_width).saturating_add(text_width.max(0));
-        let content = Dimensioni::new(content_width, content_height);
-        // A header frame is internal to this child, so preferred size must include its inset here.
-        let frame = if self.opt.intersects(WidgetOption::FRAME) {
-            style
-                .control(ControlRole::Button, ControlState::Enabled(PointerState::Normal))
-                .patch
-                .insets
-                .normalized()
-        } else {
-            crate::SliceInsets::ZERO
-        };
-        crate::ui_node::frame::outer_preferred(content, frame)
+        Dimensioni::new(content_width, content_height)
     }
 }
 
 impl Widget for DisclosureHeader {
+    #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
         // Static options describe only the header child, never the complete disclosure allocation.
         &self.opt
@@ -277,22 +280,15 @@ impl Widget for DisclosureHeader {
     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
         // Expansion determines the icon, while presentation variant determines background/frame.
         let expanded = self.model.expanded.get();
-        let mut row = ctx.local_rect();
-        match self.variant {
-            DisclosureVariant::Header => {
-                if self.opt.intersects(WidgetOption::FRAME) {
-                    // The header owns this internal frame, so it resolves the complete button patch
-                    // rather than asking retained traversal to inset the disclosure container.
-                    row = ctx.draw_control(ControlRole::Button, row).unwrap_or_default();
-                } else {
-                    ctx.draw_control_center(ControlRole::Item, row);
-                }
-            }
-            DisclosureVariant::Tree => ctx.draw_control_center(ControlRole::Item, row),
+        let row = ctx.local_rect();
+        // Common traversal already paints and insets a requested frame. An unframed
+        // header supplies only the item center for hover/selection feedback.
+        if !ctx.options().intersects(WidgetOption::FRAME) {
+            ctx.draw_control_center(ControlRole::Item, row);
         }
 
         // Reserve a square icon cell from row height, then paint text in the remaining rectangle.
-        let content_role = if self.variant == DisclosureVariant::Header && self.opt.intersects(WidgetOption::FRAME) {
+        let content_role = if self.variant == DisclosureVariant::Header && ctx.options().intersects(WidgetOption::FRAME) {
             ControlRole::Button
         } else {
             ControlRole::Item
@@ -309,13 +305,15 @@ impl Widget for DisclosureHeader {
         // text_x = row_x + text_offset; text_width = row_width - text_offset.
         let text_rect = Recti::new(row.x.saturating_add(offset), row.y, row.width.saturating_sub(offset), row.height);
         let body_font = ctx.skin().resolve_font_role(ctx.atlas(), crate::FontRole::Body);
-        ctx.draw_control_text_with_font(body_font, &self.label, text_rect, content_role, self.opt);
+        ctx.draw_control_text_with_font(body_font, &self.label, text_rect, content_role, ctx.options());
     }
 
-    // Framing belongs to the header sub-rectangle, not the complete descendant allocation.
-    #[cfg(test)]
-    fn effective_widget_opt(&self) -> WidgetOption {
-        crate::com::widget::WidgetAlgorithm::effective_options(self, self.opt)
+    /// Selects one shared frame for measurement, hit geometry and painting.
+    fn frame_appearance_role(&self) -> crate::FrameRole {
+        crate::FrameRole::Control(match self.variant {
+            DisclosureVariant::Header => ControlRole::Button,
+            DisclosureVariant::Tree => ControlRole::Item,
+        })
     }
 
     fn keyboard_behavior(&self) -> crate::KeyboardBehavior {
@@ -393,6 +391,7 @@ impl Widget for Disclosure {
     fn take_shared_change(&self) -> bool {
         self.model.dirty.replace(false)
     }
+    #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
         &WidgetOption::NO_INTERACT
     }
@@ -447,12 +446,13 @@ impl Disclosure {
 impl DisclosureHeader {
     /// Creates the real header leaf with its shared expansion value and initialized label.
     pub(crate) fn com_new(model: Rc<DisclosureState>, label: String, variant: DisclosureVariant) -> Self {
-        let opt = if variant == DisclosureVariant::Header {
-            WidgetOption::FRAME
-        } else {
-            WidgetOption::NONE
-        };
-        Self { model, label, variant, opt }
+        Self {
+            model,
+            label,
+            variant,
+            #[cfg(test)]
+            opt: variant.header_options(),
+        }
     }
     /// Reads the label used by both preferred-size measurement and complete header painting.
     pub(crate) fn com_label(&self) -> &str {
@@ -464,20 +464,8 @@ impl DisclosureHeader {
         self.label.push_str(label);
     }
 }
-impl crate::com::widget::WidgetAlgorithm for Disclosure {
-    /// Parent has no surface-specific option storage; common COM options remain authoritative.
-    fn set_options(&mut self, _options: WidgetOption) {}
-}
-impl crate::com::widget::WidgetAlgorithm for DisclosureHeader {
-    /// Header-owned internal framing and text alignment use these concrete options.
-    fn set_options(&mut self, options: WidgetOption) {
-        self.opt = options;
-    }
-    /// Header painting already owns its internal frame; generic traversal must not add a second inset.
-    fn effective_options(&self, options: WidgetOption) -> WidgetOption {
-        options & !WidgetOption::FRAME
-    }
-}
+impl crate::com::widget::WidgetAlgorithm for Disclosure {}
+impl crate::com::widget::WidgetAlgorithm for DisclosureHeader {}
 
 #[cfg(test)]
 mod tests {

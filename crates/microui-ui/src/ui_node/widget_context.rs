@@ -159,9 +159,8 @@ impl<'a> WidgetContextData<'a> {
 /// carry rendering state through the update pass. Interaction and focus are dispatcher-produced
 /// snapshots; widgets can inspect them but cannot cooperatively assign or clear focus.
 ///
-/// The diagnostic-matched `tests/ui/widget_update_cannot_paint.rs` contract test verifies that an
-/// update context has no painter. Its adjacent passing fixture exercises the distinct public
-/// capabilities exposed by update and paint contexts.
+/// These private algorithm services mirror the external IWidget phase separation: update receives
+/// copied input, while paint alone receives a scoped recorder.
 pub struct WidgetUpdateCtx<'a> {
     /// Common read-only data, intentionally separated from phase capabilities.
     common: WidgetContextData<'a>,
@@ -328,6 +327,8 @@ pub struct WidgetPaintCtx<'a> {
     window_active: bool,
     /// Display list receiving this widget's paint operations.
     display_list: &'a mut DisplayList,
+    /// Copied caller-authored options from the widget's authoritative common state.
+    options: WidgetOption,
 }
 
 impl<'a> WidgetPaintCtx<'a> {
@@ -353,6 +354,7 @@ impl<'a> WidgetPaintCtx<'a> {
             self.common.clicked,
             self.common.active,
             self.window_active,
+            self.options,
         )
     }
 
@@ -370,13 +372,20 @@ impl<'a> WidgetPaintCtx<'a> {
         clicked: bool,
         active: bool,
         window_active: bool,
+        options: WidgetOption,
     ) -> Self {
         Self {
             common: WidgetContextData::new(content_rect, screen_clip, style, atlas, hovered, focused, clicked, active),
             enabled,
             window_active,
             display_list,
+            options,
         }
+    }
+
+    /// Reads one coherent option snapshot without retaining or borrowing widget state.
+    pub(crate) fn options(&self) -> WidgetOption {
+        self.options
     }
 
     /// Returns the derived content rectangle in widget-local coordinates.
@@ -592,22 +601,74 @@ mod tests {
         let mut list = DisplayList::new();
 
         {
-            let ctx = WidgetPaintCtx::new_with_content_geometry(bounds, &mut list, bounds, &style, &atlas, true, true, true, false, true, true);
+            let ctx = WidgetPaintCtx::new_with_content_geometry(
+                bounds,
+                &mut list,
+                bounds,
+                &style,
+                &atlas,
+                true,
+                true,
+                true,
+                false,
+                true,
+                true,
+                WidgetOption::NONE,
+            );
             assert_eq!(ctx.control_state(), ControlState::Focused(crate::PointerState::Pressed));
         }
         {
             // Capture remains active outside for release routing, but theme art is no longer pressed.
-            let ctx = WidgetPaintCtx::new_with_content_geometry(bounds, &mut list, bounds, &style, &atlas, true, false, true, false, true, true);
+            let ctx = WidgetPaintCtx::new_with_content_geometry(
+                bounds,
+                &mut list,
+                bounds,
+                &style,
+                &atlas,
+                true,
+                false,
+                true,
+                false,
+                true,
+                true,
+                WidgetOption::NONE,
+            );
             assert_eq!(ctx.control_state(), ControlState::Focused(crate::PointerState::Normal));
         }
         {
             // Disabled ancestry wins over stale retained interaction snapshots.
-            let ctx = WidgetPaintCtx::new_with_content_geometry(bounds, &mut list, bounds, &style, &atlas, false, true, true, true, true, true);
+            let ctx = WidgetPaintCtx::new_with_content_geometry(
+                bounds,
+                &mut list,
+                bounds,
+                &style,
+                &atlas,
+                false,
+                true,
+                true,
+                true,
+                true,
+                true,
+                WidgetOption::NONE,
+            );
             assert_eq!(ctx.control_state(), ControlState::Disabled);
         }
         {
             // Window activation does not turn an otherwise enabled widget into a disabled one.
-            let ctx = WidgetPaintCtx::new_with_content_geometry(bounds, &mut list, bounds, &style, &atlas, true, true, true, true, true, false);
+            let ctx = WidgetPaintCtx::new_with_content_geometry(
+                bounds,
+                &mut list,
+                bounds,
+                &style,
+                &atlas,
+                true,
+                true,
+                true,
+                true,
+                true,
+                false,
+                WidgetOption::NONE,
+            );
             assert_eq!(ctx.control_state(), ControlState::Focused(crate::PointerState::Pressed));
         }
     }

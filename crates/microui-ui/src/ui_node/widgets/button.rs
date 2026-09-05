@@ -129,6 +129,8 @@ pub struct Button {
     /// Initialization-only font.
     font: FontRef,
     /// Base widget options.
+    /// Native algorithm fixture policy; production options live only in WidgetState.
+    #[cfg(test)]
     opt: WidgetOption,
     /// Initialization-only fill behavior.
     fill: WidgetFillOption,
@@ -175,7 +177,7 @@ impl Button {
     /// Paints the button frame, text, and optional visual payload.
     fn paint_widget(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
         let rect = ctx.local_rect();
-        if !self.opt.intersects(WidgetOption::FRAME) && widget_fill_visible(ctx, self.fill) {
+        if !ctx.options().intersects(WidgetOption::FRAME) && widget_fill_visible(ctx, self.fill) {
             // Framed buttons are painted once by retained traversal across their complete outer
             // allocation. An unframed button asks for only the role's stretchable center payload.
             ctx.draw_control_center(ControlRole::Button, rect);
@@ -188,7 +190,7 @@ impl Button {
                 let visual_size = icon_id.map(|icon| ctx.atlas().get_icon_size(icon));
                 let placement = place_inline_content(rect, ctx.skin(), label, visual_size);
                 if !label.is_empty() {
-                    ctx.draw_control_text_with_font(font, label, placement.text, ControlRole::Button, self.opt);
+                    ctx.draw_control_text_with_font(font, label, placement.text, ControlRole::Button, ctx.options());
                 }
                 if let (Some(icon), Some(visual)) = (icon_id, placement.visual) {
                     let color = ctx.control_content_color(ControlRole::Button);
@@ -199,7 +201,7 @@ impl Button {
                 let visual_size = image.as_ref().map(image_size);
                 let placement = place_inline_content(rect, ctx.skin(), label, visual_size);
                 if !label.is_empty() {
-                    ctx.draw_control_text_with_font(font, label, placement.text, ControlRole::Button, self.opt);
+                    ctx.draw_control_text_with_font(font, label, placement.text, ControlRole::Button, ctx.options());
                 }
                 if let (Some(image), Some(visual)) = (image.as_ref(), placement.visual) {
                     // External image pixels carry their own color; the adjacent label alone uses
@@ -216,7 +218,7 @@ impl Button {
                     place_inline_content(rect, ctx.skin(), label, visual_size)
                 };
                 if !label.is_empty() {
-                    ctx.draw_control_text_with_font(font, label, placement.text, ControlRole::Button, self.opt);
+                    ctx.draw_control_text_with_font(font, label, placement.text, ControlRole::Button, ctx.options());
                 }
                 if let (Some(image), Some(visual)) = (image.as_ref(), placement.visual) {
                     // Scaling changes only destination geometry; it must not introduce a theme
@@ -238,6 +240,7 @@ impl crate::TypedWidgetHandle<Button> {
 }
 
 impl Widget for Button {
+    #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
         &self.opt
     }
@@ -283,6 +286,7 @@ impl From<ButtonParameters> for Button {
         Button {
             content: parameters.content,
             font: parameters.font,
+            #[cfg(test)]
             opt: parameters.opt,
             fill: parameters.fill,
             submitted_event: crate::EventSource::new(),
@@ -294,11 +298,6 @@ impl crate::com::widget::WidgetAlgorithm for Button {
     /// Logical COM closure cancels ordinary submissions while retained widget references remain safe.
     fn close_events(&mut self) {
         self.submitted_event.close_ordinary();
-    }
-
-    /// Synchronizes options inside the one concrete semantic state of a COM leaf.
-    fn set_options(&mut self, options: crate::WidgetOption) {
-        self.opt = options;
     }
 }
 

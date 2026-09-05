@@ -173,6 +173,7 @@ fn combo_submission_carries_update_anchor_while_paint_remains_observational() {
         false,
         false,
         true,
+        *combo.widget_opt(),
     );
     combo.paint(&mut paint);
     assert_eq!(combo.is_open(), open);

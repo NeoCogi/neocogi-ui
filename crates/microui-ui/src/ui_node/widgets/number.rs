@@ -47,7 +47,7 @@ pub struct NumberParameters {
     /// Font used for the numeric label and editor.
     font: FontRef,
     /// Base widget options.
-    opt: WidgetOption,
+    pub(crate) opt: WidgetOption,
 }
 
 impl crate::LeafWidget for Number {
@@ -103,6 +103,8 @@ pub struct Number {
     /// Initialization-only font.
     font: FontRef,
     /// Base widget options.
+    /// Native algorithm fixture policy; production options live only in WidgetState.
+    #[cfg(test)]
     opt: WidgetOption,
     /// Current number value.
     value: Real,
@@ -192,12 +194,12 @@ impl Number {
         }
 
         let base = ctx.local_rect();
-        if !self.opt.intersects(WidgetOption::FRAME) {
+        if !ctx.options().intersects(WidgetOption::FRAME) {
             // Unframed numeric editors retain the input role's center without structural borders.
             ctx.draw_control_center(ControlRole::TextInput, base);
         }
         let label = number_label(self.value, self.precision);
-        ctx.draw_control_text_with_font(font, label.as_str(), base, ControlRole::TextInput, self.opt);
+        ctx.draw_control_text_with_font(font, label.as_str(), base, ControlRole::TextInput, ctx.options());
     }
 }
 
@@ -217,6 +219,7 @@ fn add_number_delta(value: Real, delta: f64) -> Real {
 }
 
 impl Widget for Number {
+    #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
         &self.opt
     }
@@ -254,6 +257,7 @@ impl From<NumberParameters> for Number {
             step: parameters.step,
             precision: parameters.precision,
             font: parameters.font,
+            #[cfg(test)]
             opt: parameters.opt,
             value: parameters.value,
             edit: NumberEditState::default(),
@@ -266,11 +270,6 @@ impl crate::com::widget::WidgetAlgorithm for Number {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
         self.changed_event.close_ordinary();
-    }
-
-    /// Synchronizes options inside the one concrete semantic state of a COM leaf.
-    fn set_options(&mut self, options: crate::WidgetOption) {
-        self.opt = options;
     }
 }
 

@@ -84,7 +84,7 @@ impl TextArea {
         scrolling: bool,
     ) -> Result<ComPtr<ITextAreaAbi>, NcStatus> {
         let parts = super::scroll::ScrollParts::prepare(host.clone(), resources.clone(), scrolling)?;
-        let text = TextEditor::create(host, resources, crate::TextArea::com_new(text, wrap, parts.model));
+        let text = TextEditor::create(host, resources, crate::WidgetOption::NONE, crate::TextArea::com_new(text, wrap, parts.model));
         let font = text.query()?;
         let events = text.query()?;
         parts.content.insert(0, text.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;

@@ -697,6 +697,7 @@ impl MenuSurface {
             false,
             self.captured,
             window_active,
+            crate::WidgetOption::NONE,
         );
         // One uninterrupted semantic panel and one slot loop replace container, row, and cell
         // paint passes while allowing every row state to select its own PNG.

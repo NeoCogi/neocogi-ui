@@ -175,10 +175,7 @@ impl IContainerLayout for TestContainer {
 }
 
 /// Creates a custom container without any access to retained Node or runtime storage.
-fn container(
-    runtime: &ComPtr<IUiRuntimeAbi>,
-    scopes: RetainedScopes,
-) -> (ComPtr<IWidgetAbi>, ComPtr<IChildrenEditorAbi>, Rc<ContainerProbe>) {
+fn container(runtime: &ComPtr<IUiRuntimeAbi>, scopes: RetainedScopes) -> (ComPtr<IWidgetAbi>, ComPtr<IChildrenEditorAbi>, Rc<ContainerProbe>) {
     let host = button(runtime).host().unwrap();
     let editor = host.create_children().unwrap();
     let probe = Rc::new(ContainerProbe { scopes, ..ContainerProbe::default() });
@@ -714,4 +711,35 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
     assert_eq!(area.text(), Err(UI_E_CLOSED));
     assert_eq!(editor.cursor(), Err(UI_E_CLOSED));
     assert_eq!(scroll.info().unwrap_err(), UI_E_CLOSED);
+}
+
+/// Common frame policy remains observable on the actual header object and invalidates only on edits.
+#[test]
+fn disclosure_headers_use_the_common_frame_policy_for_both_variants() {
+    for (style, frame, defaults) in [
+        (DisclosureStyle::HEADER, WidgetFrame::BUTTON, WidgetOptions::FRAME),
+        (DisclosureStyle::TREE, WidgetFrame::ITEM, WidgetOptions::NONE),
+    ] {
+        let runtime = runtime();
+        let ui = microui_redux::Ui::from_interface(runtime.clone()).unwrap();
+        let disclosure = ui.widgets().disclosure("Header", style, false).unwrap();
+        let header = disclosure.header().unwrap().node_interface().unwrap();
+        assert_eq!(header.properties().unwrap().frame, frame);
+        assert_eq!(header.properties().unwrap().options, defaults);
+        let window = ui.window("framing", RECT, &disclosure).unwrap();
+        let (renderer, _) = renderer();
+        // The common traversal supplies the frame once; the content algorithm consumes its
+        // inset rectangle. A policy change must make render wait for the new measurement.
+        header.set_options(WidgetOptions::NONE).unwrap();
+        runtime.update(SIZE).unwrap();
+        runtime.render(SIZE, renderer.as_com_ref()).unwrap();
+        header.set_options(WidgetOptions::FRAME).unwrap();
+        assert_eq!(header.properties().unwrap().options, WidgetOptions::FRAME);
+        assert_eq!(runtime.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+        runtime.update(SIZE).unwrap();
+        runtime.render(SIZE, renderer.as_com_ref()).unwrap();
+        header.set_options(WidgetOptions::FRAME).unwrap();
+        assert_eq!(header.take_change().unwrap(), GeometryChange::NO_CHANGE);
+        window.close().unwrap();
+    }
 }
