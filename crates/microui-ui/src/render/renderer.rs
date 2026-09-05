@@ -213,7 +213,7 @@ impl<B: RendererBackend> Renderer<B> {
         self.validate_display_list(list)?;
         let viewport = Recti::new(0, 0, info.dimensions().width, info.dimensions().height);
         let frame = self.backend.frame(info)?;
-        let DisplayList { ops, solid_geometry } = list;
+        let DisplayList { ops, solid_geometry, atlas_vertices, text } = list;
         let solid_triangles = solid_geometry.triangles();
         let executor: DisplayListExecutor<'_, '_, B> = DisplayListExecutor {
             frame,
@@ -226,6 +226,8 @@ impl<B: RendererBackend> Renderer<B> {
             viewport,
             clipped_triangles: &mut self.clipped_triangles,
             solid_triangles,
+            atlas_vertices,
+            text,
         };
         executor.run(ops.drain(..))?;
         Ok(())
@@ -365,6 +367,10 @@ struct DisplayListExecutor<'frame, 'resources, B: RendererBackend> {
     clipped_triangles: &'resources mut Vec<Vertex>,
     /// Complete typed triangle arena referenced by operation ranges.
     solid_triangles: &'resources [SolidTriangle],
+    /// Frame-owned atlas vertices referenced by validated operation ranges.
+    atlas_vertices: &'resources [Vertex],
+    /// Frame-owned UTF-8 bytes remain available until all operations are drained.
+    text: &'resources str,
 }
 
 impl<B: RendererBackend> DisplayListExecutor<'_, '_, B> {
@@ -401,9 +407,9 @@ impl<B: RendererBackend> DisplayListExecutor<'_, '_, B> {
                     )?;
                 }
             }
-            DrawKind::AtlasTriangles { vertices } => self.draw_atlas_triangles(&vertices, clip),
+            DrawKind::AtlasTriangles { vertices } => self.draw_atlas_triangles(&self.atlas_vertices[vertices], clip),
             DrawKind::NinePatch { rect, patch } => self.draw_nine_patch(rect, patch, clip),
-            DrawKind::Text { font, pos, color, text } => self.draw_text(font, &text, pos, color, clip),
+            DrawKind::Text { font, pos, color, text } => self.draw_text(font, &self.text[text], pos, color, clip),
             DrawKind::Icon { id, rect, color } => self.draw_icon(id, rect, color, clip),
             DrawKind::Image { id, rect, color } => self.draw_texture(id, rect, color, clip),
             DrawKind::SolidTriangles { triangles } => {

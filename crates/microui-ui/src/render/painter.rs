@@ -136,17 +136,7 @@ impl<'a> Painter<'a> {
 
     /// Copies validated COM atlas geometry and applies this painter's local origin.
     pub(crate) fn atlas_triangles(&mut self, vertices: &[microui_contracts::RenderVertex]) {
-        let origin = self.origin;
-        let vertices = vertices
-            .iter()
-            .map(|v| {
-                super::Vertex::new(Vec2f::new(v.x + origin.x as f32, v.y + origin.y as f32), Vec2f::new(v.u, v.v), {
-                    let [r, g, b, a] = v.rgba.to_le_bytes();
-                    color4b(r, g, b, a)
-                })
-            })
-            .collect();
-        self.list.push_atlas_triangles(self.clip, vertices);
+        self.list.push_atlas_triangles(self.clip, self.origin, vertices);
     }
 
     /// Records a semantic filled rectangle.

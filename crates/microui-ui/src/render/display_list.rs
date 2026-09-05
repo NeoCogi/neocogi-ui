@@ -50,6 +50,10 @@ pub(crate) struct DisplayList {
     pub(super) ops: Vec<DrawOp>,
     /// Retained solid geometry and its reusable tessellation workspace.
     pub(super) solid_geometry: SolidGeometry,
+    /// Already expanded atlas geometry, shared by range-addressed operations in this frame.
+    pub(super) atlas_vertices: Vec<super::Vertex>,
+    /// Concatenated UTF-8 runs retain one allocation across frames; each operation owns a byte range.
+    pub(super) text: String,
 }
 
 /// One recorded operation and its final screen-space clip.
@@ -64,8 +68,8 @@ pub(super) struct DrawOp {
 pub(super) enum DrawKind {
     /// Atlas geometry already expanded by a COM widget's private UI algorithms.
     AtlasTriangles {
-        /// Owned triples translated to screen coordinates by Painter.
-        vertices: Vec<super::Vertex>,
+        /// Complete triples in this display list's screen-space atlas buffer.
+        vertices: core::ops::Range<usize>,
     },
     /// Owned external image used by the COM renderer path.
     ComTexture {
@@ -100,8 +104,8 @@ pub(super) enum DrawKind {
         pos: Vec2i,
         /// Text color.
         color: Color,
-        /// Owned UTF-8 text.
-        text: String,
+        /// UTF-8 byte range in this display list's owned text buffer.
+        text: core::ops::Range<usize>,
     },
     /// Draws one atlas icon.
     Icon {
@@ -142,6 +146,8 @@ impl DisplayList {
         Self {
             ops: Vec::new(),
             solid_geometry: SolidGeometry::new(),
+            atlas_vertices: Vec::new(),
+            text: String::new(),
         }
     }
 
@@ -149,17 +155,29 @@ impl DisplayList {
     pub(crate) fn clear(&mut self) {
         self.ops.clear();
         self.solid_geometry.clear();
+        self.atlas_vertices.clear();
+        self.text.clear();
     }
 
     /// Returns `true` when the list contains no operations or solid geometry.
     #[cfg(test)]
     pub(crate) fn is_empty(&self) -> bool {
-        self.ops.is_empty() && self.solid_geometry.is_empty()
+        self.ops.is_empty() && self.solid_geometry.is_empty() && self.atlas_vertices.is_empty() && self.text.is_empty()
     }
 
     /// Retains a complete atlas batch in painter order for final viewport clipping.
-    pub(super) fn push_atlas_triangles(&mut self, clip: Recti, vertices: Vec<super::Vertex>) {
-        self.push(clip, DrawKind::AtlasTriangles { vertices });
+    pub(super) fn push_atlas_triangles(&mut self, clip: Recti, origin: Vec2i, vertices: &[microui_contracts::RenderVertex]) {
+        let first = self.atlas_vertices.len();
+        // Translate directly into retained storage, with no intermediate per-operation vector.
+        for vertex in vertices {
+            let [r, g, b, a] = vertex.rgba.to_le_bytes();
+            self.atlas_vertices.push(super::Vertex::new(
+                Vec2f::new(vertex.x + origin.x as f32, vertex.y + origin.y as f32),
+                Vec2f::new(vertex.u, vertex.v),
+                rs_math3d::color4b(r, g, b, a),
+            ));
+        }
+        self.push(clip, DrawKind::AtlasTriangles { vertices: first..self.atlas_vertices.len() });
     }
 
     /// Retains an image in source order; final clipping remains centralized in the executor.
@@ -188,8 +206,10 @@ impl DisplayList {
     }
 
     /// Appends one owned text operation.
-    pub(super) fn push_text(&mut self, clip: Recti, font: FontId, pos: Vec2i, color: Color, text: impl Into<String>) {
-        self.push(clip, DrawKind::Text { font, pos, color, text: text.into() });
+    pub(super) fn push_text(&mut self, clip: Recti, font: FontId, pos: Vec2i, color: Color, text: &str) {
+        let first = self.text.len();
+        self.text.push_str(text);
+        self.push(clip, DrawKind::Text { font, pos, color, text: first..self.text.len() });
     }
 
     /// Appends one atlas icon operation.

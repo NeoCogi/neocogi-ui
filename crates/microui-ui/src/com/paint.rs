@@ -33,8 +33,8 @@ enum Drawing {
     Line(PaintPoint, PaintPoint, f32, u32),
     /// Owned finite polygon boundary uses the existing shared UI triangulation algorithm.
     Polygon(Vec<crate::Vec2f>, u32),
-    /// Complete, validated local atlas triangles copied before the call returns.
-    Triangles(Vec<RenderVertex>),
+    /// Complete validated triangles in this invocation's shared owned vertex buffer.
+    Triangles(core::ops::Range<usize>),
     /// Solid vertices retain their material meaning until the UI executor resolves the current atlas.
     ColoredTriangles(Vec<ColoredVertex>),
     /// Texture capability retained until the prepared frame has finished or been abandoned.
@@ -53,6 +53,22 @@ struct Command {
     drawing: Drawing,
 }
 
+/// Invocation-owned command and atlas storage; both allocations survive the next widget's recording.
+#[derive(Default)]
+struct Commands {
+    /// Ordered operations retain their own clips and foreign resource capabilities.
+    operations: Vec<Command>,
+    /// Range-addressed atlas vertices avoid allocating a separate vector for each widget batch.
+    vertices: Vec<RenderVertex>,
+}
+impl Commands {
+    /// Releases capabilities outside any recording borrow while retaining both buffers' capacity.
+    fn clear(&mut self) {
+        self.operations.clear();
+        self.vertices.clear();
+    }
+}
+
 /// One reusable command allocation and monotonically increasing invocation clock.
 #[derive(Default)]
 struct Recording {
@@ -61,7 +77,7 @@ struct Recording {
     /// Never wraps: exhaustion rejects the next invocation.
     next: Cell<u64>,
     /// Commands are drained without retaining any painter/context references.
-    commands: RefCell<Vec<Command>>,
+    commands: RefCell<Commands>,
 }
 
 #[com_class(interfaces(IPainter))]
@@ -91,6 +107,7 @@ impl Recorder {
             .commands
             .try_borrow_mut()
             .map_err(|_| UI_E_BUSY)?
+            .operations
             .push(Command { clip: scope.clip, drawing });
         Ok(())
     }
@@ -156,7 +173,12 @@ impl IPainter for Recorder {
         {
             return Err(NC_E_INVALID_ARG);
         }
-        self.push(scope, Drawing::Triangles(vertices.to_vec()))
+        let mut commands = self.recording.commands.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
+        let first = commands.vertices.len();
+        commands.vertices.extend_from_slice(vertices);
+        let end = commands.vertices.len();
+        commands.operations.push(Command { clip: scope.clip, drawing: Drawing::Triangles(first..end) });
+        Ok(())
     }
     /// Stores a checked fill command without accessing the calling stack's painter.
     fn fill(&self, scope: PaintScope, rect: Rect, rgba: u32) -> Result<(), NcStatus> {
@@ -236,7 +258,7 @@ impl PaintService {
             *self.recording.commands.borrow_mut() = commands;
             return Err(error);
         }
-        for Command { clip, drawing } in commands.drain(..) {
+        for Command { clip, drawing } in commands.operations.drain(..) {
             let mut clipped = ctx.clipped(local_rect(clip));
             let ctx = &mut clipped;
             match drawing {
@@ -252,7 +274,7 @@ impl PaintService {
                 }
                 Drawing::Item(rect, item) => ctx.painter().com_item(local_rect(rect), item),
                 Drawing::ColoredTriangles(vertices) => ctx.painter().colored_triangles(&vertices),
-                Drawing::Triangles(vertices) => ctx.painter().atlas_triangles(&vertices),
+                Drawing::Triangles(vertices) => ctx.painter().atlas_triangles(&commands.vertices[vertices]),
                 Drawing::Fill(rect, rgba) => ctx.painter().fill_rect(local_rect(rect), super::render::color(rgba)),
                 Drawing::Text(rect, label) => {
                     let font = ctx.skin().resolve_font_role(ctx.atlas(), FontRole::Body);
@@ -260,6 +282,7 @@ impl PaintService {
                 }
             }
         }
+        commands.vertices.clear();
         *self.recording.commands.borrow_mut() = commands;
         Ok(())
     }
