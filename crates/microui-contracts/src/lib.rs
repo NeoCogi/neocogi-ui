@@ -57,10 +57,13 @@ pub struct Size {
 }
 
 #[com_struct]
-/// Opaque identity of one active paint invocation, checked by the recording service.
+/// Active paint invocation plus a caller-narrowable local clip, checked by the recording service.
 pub struct PaintScope {
     /// Non-reused invocation number; zero never identifies an active call.
     pub invocation: u64,
+    /// Requested local clip. The service always intersects it with the widget's actual clip;
+    /// modifying this copied field cannot grant drawing authority outside the widget.
+    pub clip: Rect,
 }
 
 #[com_struct]
@@ -80,6 +83,15 @@ pub struct Rect {
 #[com_interface(auto_guid = "microui.Painter:v1")]
 /// Owned recording service; it never stores references into a caller's stack.
 pub trait IPainter {
+    /// Records a nonnegative-width solid line with finite local endpoints. Zero width draws nothing.
+    fn stroke_line(&self, scope: PaintScope, from: PaintPoint, to: PaintPoint, width: f32, rgba: u32) -> Result<(), NcStatus>;
+    /// Records finite local polygon points at offset zero; fewer than three points draw nothing.
+    /// Concave polygon tessellation and clipping use the same UI implementation as built-in drawing.
+    fn fill_polygon(&self, scope: PaintScope, points: NcCopyFromBufferOffset<'_, PaintPoint>, rgba: u32) -> Result<(), NcStatus>;
+    /// Records solid triangles in widget-local coordinates. The complete input starts at offset zero,
+    /// has a multiple of three vertices and contains only finite positions. Atlas mapping belongs
+    /// to the UI implementation and follows the currently installed resource revision.
+    fn colored_triangles(&self, scope: PaintScope, vertices: NcCopyFromBufferOffset<'_, ColoredVertex>) -> Result<(), NcStatus>;
     /// Records complete atlas triangles in local coordinates; offset is zero,
     /// length is divisible by three, and every position/UV component is finite.
     fn triangles(&self, scope: PaintScope, vertices: NcCopyFromBufferOffset<'_, RenderVertex>) -> Result<(), NcStatus>;

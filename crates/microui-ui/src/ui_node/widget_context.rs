@@ -327,6 +327,17 @@ pub struct WidgetPaintCtx<'a> {
 }
 
 impl<'a> WidgetPaintCtx<'a> {
+    /// Reborrows paint state with a narrower local clip. Common geometry and interaction are copied;
+    /// the authoritative traversal and the parent context remain unchanged after this borrow ends.
+    pub(crate) fn clipped(&mut self, rect: Recti) -> WidgetPaintCtx<'_> {
+        let origin = self.common.content_rect;
+        let requested = Recti::new(rect.x.saturating_add(origin.x), rect.y.saturating_add(origin.y), rect.width, rect.height);
+        let clip = self.common.screen_clip.positive_intersection(requested).unwrap_or_else(|| Recti::new(requested.x, requested.y, 0, 0));
+        WidgetPaintCtx::new_with_content_geometry(origin, &mut *self.display_list, clip,
+            self.common.style, self.common.atlas, self.enabled, self.common.hovered,
+            self.common.focused, self.common.clicked, self.common.active, self.window_active)
+    }
+
     /// Creates paint services for one traversal-derived content rectangle.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new_with_content_geometry(

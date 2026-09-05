@@ -28,3 +28,7 @@ pub use file_dialog::{FileDialog, FileDialogRequest};
 
 /// Immutable prebuilt and builder-produced resource objects using the same bulk contracts.
 pub mod assets;
+
+/// Static application leaf behavior stored inline in one concrete COM object.
+pub mod leaf;
+pub use leaf::LeafContent;

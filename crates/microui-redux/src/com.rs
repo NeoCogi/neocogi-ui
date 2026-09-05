@@ -321,6 +321,36 @@ impl<'a> Painter<'a> {
         Self { interface, scope }
     }
 
+    /// Narrows local clipping by value; no clip stack, callback, extra COM object or Drop-time
+    /// restoration is involved. The parent painter remains usable with its original clip.
+    pub fn clipped(&self, rect: Rect) -> Result<Self, NcStatus> {
+        if rect.width < 0 || rect.height < 0 { return Err(nc_com::NC_E_INVALID_ARG); }
+        let parent = self.scope.clip;
+        let x = parent.x.max(rect.x);
+        let y = parent.y.max(rect.y);
+        let right = (i64::from(parent.x) + i64::from(parent.width)).min(i64::from(rect.x) + i64::from(rect.width));
+        let bottom = (i64::from(parent.y) + i64::from(parent.height)).min(i64::from(rect.y) + i64::from(rect.height));
+        let clip = Rect { x, y, width: (right - i64::from(x)).max(0) as i32, height: (bottom - i64::from(y)).max(0) as i32 };
+        Ok(Self { interface: self.interface, scope: PaintScope { invocation: self.scope.invocation, clip } })
+    }
+    /// Records a finite solid line; the UI owns tessellation and the currently installed material.
+    pub fn stroke_line(&self, from: PaintPoint, to: PaintPoint, width: f32, rgba: u32) -> Result<(), NcStatus> {
+        self.interface.stroke_line(self.scope, from, to, width, rgba)
+    }
+    /// Records finite polygon positions with no application dependence on UI tessellation internals.
+    pub fn fill_polygon(&self, points: &[PaintPoint], rgba: u32) -> Result<(), NcStatus> {
+        self.interface.fill_polygon(self.scope, NcCopyFromBufferOffset::new(0, points), rgba)
+    }
+    /// Draws body text using the UI's current font and semantic content color.
+    pub fn text(&self, rect: Rect, text: &str) -> Result<(), NcStatus> {
+        self.interface.text(self.scope, rect, NcCopyFromBufferOffset::new(0, text.as_bytes()))
+    }
+
+    /// Records solid triangle geometry without exposing atlas packing to the application.
+    pub fn colored_triangles(&self, vertices: &[ColoredVertex]) -> Result<(), NcStatus> {
+        self.interface.colored_triangles(self.scope, NcCopyFromBufferOffset::new(0, vertices))
+    }
+
     /// Records a complete validated atlas triangle batch with one COM copy.
     pub fn triangles(&self, vertices: &[RenderVertex]) -> Result<(), NcStatus> {
         self.interface.triangles(self.scope, NcCopyFromBufferOffset::new(0, vertices))

@@ -142,6 +142,19 @@ impl<'a> Painter<'a> {
         self.list.push_com_item(self.clip, self.screen_rect(rect), item);
     }
 
+    /// Appends solid COM geometry directly to the reusable arena; the executor supplies the current
+    /// atlas material later, so theme replacement cannot invalidate application-side UV caches.
+    pub(crate) fn colored_triangles(&mut self, vertices: &[microui_contracts::ColoredVertex]) {
+        use super::geometry::{SolidTriangle, SolidVertex};
+        for triangle in vertices.as_chunks::<3>().0 {
+            let triangle = SolidTriangle::from(triangle.map(|vertex| {
+                let [r, g, b, a] = vertex.rgba.to_le_bytes();
+                SolidVertex { position: Vec2f::new(vertex.x + self.origin.x as f32, vertex.y + self.origin.y as f32), color: color4b(r, g, b, a) }
+            }));
+            self.list.push_solid_triangles(self.clip, &[triangle]);
+        }
+    }
+
     /// Copies validated COM atlas geometry and applies this painter's local origin.
     pub(crate) fn atlas_triangles(&mut self, vertices: &[microui_contracts::RenderVertex]) {
         let origin = self.origin;

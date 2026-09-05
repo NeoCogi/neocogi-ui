@@ -30,6 +30,8 @@ fn mount(runtime: &ComPtr<IUiRuntimeAbi>, root: &ComPtr<IWidgetAbi>) -> Result<C
 struct RenderProbe {
     /// Complete renderer invocations, including deliberately failing submissions.
     calls: Cell<u32>,
+    /// Last copied geometry lets independent tests inspect actual clipped output.
+    vertices: RefCell<Vec<RenderVertex>>,
     /// Old retained stream/token used to prove that expiry survives later reuse.
     streams: RefCell<Vec<(ComPtr<IRenderStreamAbi>, u64)>>,
     /// Test-controlled explicit renderer failure.
@@ -64,6 +66,7 @@ impl IRenderer for Renderer {
         assert_eq!(stream.item(info.invocation, 0).unwrap_err(), NC_E_INVALID_ARG);
         assert!(vertices.len() >= 6);
         assert!(vertices.iter().all(|v| v.x.is_finite() && v.y.is_finite()));
+        *self.probe.vertices.borrow_mut() = vertices;
         self.probe.calls.set(self.probe.calls.get() + 1);
         self.probe.streams.borrow_mut().push((stream.add_ref(), info.invocation));
         if self.probe.fail.get() { Err(UI_E_RENDER) } else { Ok(()) }
@@ -257,9 +260,22 @@ impl IWidget for RetainingWidget {
         for (old, expired) in self.probe.painters.borrow().iter() {
             assert_eq!(old.fill(*expired, state.rect, 0), Err(UI_E_EXPIRED_SCOPE));
             assert_eq!(old.triangles(*expired, NcCopyFromBufferOffset::new(0, &[])), Err(UI_E_EXPIRED_SCOPE));
+            assert_eq!(old.colored_triangles(*expired, NcCopyFromBufferOffset::new(0, &[])), Err(UI_E_EXPIRED_SCOPE));
+            assert_eq!(old.stroke_line(*expired, PaintPoint::default(), PaintPoint::default(), 1.0, 0), Err(UI_E_EXPIRED_SCOPE));
+            assert_eq!(old.fill_polygon(*expired, NcCopyFromBufferOffset::new(0, &[]), 0), Err(UI_E_EXPIRED_SCOPE));
         }
         // Malformed bulk batches fail transactionally before a valid command follows.
         assert_eq!(painter.triangles(scope, NcCopyFromBufferOffset::new(1, &[])), Err(NC_E_INVALID_ARG));
+        assert_eq!(painter.colored_triangles(scope, NcCopyFromBufferOffset::new(1, &[])), Err(NC_E_INVALID_ARG));
+        assert_eq!(painter.colored_triangles(scope, NcCopyFromBufferOffset::new(0, &[ColoredVertex::default()])), Err(NC_E_INVALID_ARG));
+        let malformed_solid = [ColoredVertex { x: f32::NAN, y: 0.0, rgba: 0 }; 3];
+        assert_eq!(painter.colored_triangles(scope, NcCopyFromBufferOffset::new(0, &malformed_solid)), Err(NC_E_INVALID_ARG));
+        assert_eq!(painter.stroke_line(scope, PaintPoint { x: f32::INFINITY, y: 0.0 }, PaintPoint::default(), 1.0, 0), Err(NC_E_INVALID_ARG));
+        assert_eq!(painter.stroke_line(scope, PaintPoint::default(), PaintPoint::default(), -1.0, 0), Err(NC_E_INVALID_ARG));
+        assert_eq!(painter.fill_polygon(scope, NcCopyFromBufferOffset::new(1, &[]), 0), Err(NC_E_INVALID_ARG));
+        assert_eq!(painter.fill_polygon(scope, NcCopyFromBufferOffset::new(0, &[PaintPoint { x: 0.0, y: f32::NAN }]), 0), Err(NC_E_INVALID_ARG));
+        let invalid_clip = PaintScope { invocation: scope.invocation, clip: Rect { x: 0, y: 0, width: -1, height: 1 } };
+        assert_eq!(painter.fill(invalid_clip, state.rect, 0), Err(NC_E_INVALID_ARG));
         assert_eq!(
             painter.triangles(scope, NcCopyFromBufferOffset::new(0, &[RenderVertex::default()])),
             Err(NC_E_INVALID_ARG)
@@ -883,6 +899,14 @@ struct BuiltinPainter {
     probe: Rc<BuiltinPaintProbe>,
 }
 impl IPainter for BuiltinPainter {
+    /// Built-ins send already resolved triangle batches to an external painter.
+    fn stroke_line(&self, _: PaintScope, _: PaintPoint, _: PaintPoint, _: f32, _: u32) -> Result<(), NcStatus> { panic!("expected atlas triangles") }
+    /// Polygon tessellation is already resolved by the built-in algorithm before this copy.
+    fn fill_polygon(&self, _: PaintScope, _: NcCopyFromBufferOffset<'_, PaintPoint>, _: u32) -> Result<(), NcStatus> { panic!("expected atlas triangles") }
+
+    /// Built-in semantic painting does not route through the independent solid-geometry recorder.
+    fn colored_triangles(&self, _scope: PaintScope, _vertices: NcCopyFromBufferOffset<'_, ColoredVertex>) -> Result<(), NcStatus> { panic!("expected resolved built-in atlas geometry") }
+
     /// This button contains no external image; receiving one would bypass the expected built-in atlas path.
     fn texture(&self, _scope: PaintScope, _rect: Rect, _rgba: u32, _texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
         panic!("unexpected external texture in button paint")
@@ -941,7 +965,7 @@ fn builtin_bulk_paint_preserves_alignment_icons_and_releases_semantic_borrows() 
         window_active: true,
         ..WidgetPaint::default()
     };
-    let scope = PaintScope { invocation: 1 };
+    let scope = PaintScope { invocation: 1, clip: RECT };
     probe.fail.set(true);
     assert_eq!(common.paint(scope, paint, painter.as_com_ref()), Err(UI_E_RENDER));
     common.paint(scope, paint, painter.as_com_ref()).unwrap();
@@ -1001,4 +1025,116 @@ fn platform_input_projection_and_committed_text_area_share_runtime_state() {
     ui.close().unwrap();
     assert_eq!(ui.text_input_area().err(), Some(UI_E_CLOSED));
     assert_eq!(input.input(UiInput::Cancel.into(), NcCopyFromBufferOffset::new(0, &[])), Err(UI_E_CLOSED));
+}
+
+
+/// Concrete external content observes ownership, geometry and lifecycle without retaining its COM self.
+struct LocalContent {
+    /// Weak application slot permits reentry tests without a self-owning widget cycle.
+    target: std::rc::Weak<RefCell<Option<ComPtr<IWidgetAbi>>>>,
+    /// Explicit model state survives temporary behavior ownership during calls.
+    probe: Rc<LocalContentProbe>,
+}
+#[derive(Default)]
+/// Application-visible counters and intentional one-shot failures for the static leaf adapter.
+struct LocalContentProbe {
+    /// Desired width changes before the intentionally failed update returns.
+    width: Cell<i32>,
+    /// Last committed content origin used to verify final drawable-space clipping.
+    origin: Cell<Point>,
+    /// Number of actual preferred-size observations.
+    measures: Cell<u32>,
+    /// Fails one measurement to prove detached behavior is restored on errors.
+    fail_measure: Cell<bool>,
+    /// Fails one update after a committed model change.
+    fail_update: Cell<bool>,
+    /// Logical closure must reach content exactly once despite retained COM handles.
+    closes: Cell<u32>,
+    /// Final content destruction must occur once after all COM references retire.
+    drops: Cell<u32>,
+}
+impl microui_redux::LeafContent for LocalContent {
+    /// Common observations remain available, but nested content measurement must reject safely.
+    fn measure(&self, bounds: LayoutLimits, metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
+        self.probe.measures.set(self.probe.measures.get() + 1);
+        let target = self.target.upgrade().unwrap().borrow().as_ref().unwrap().clone();
+        assert!(target.properties().is_ok());
+        assert_eq!(target.query::<ILeafLayoutAbi>().unwrap().measure(bounds, metrics), Err(UI_E_BUSY));
+        if self.probe.fail_measure.replace(false) { return Err(NC_E_INVALID_ARG); }
+        Ok(Size { width: self.probe.width.get(), height: 20 })
+    }
+    /// A failed partial update must invalidate the earlier preferred-size cache for recovery.
+    fn update(&mut self, state: WidgetUpdate, _: WidgetEvent, _: &str) -> Result<GeometryChange, NcStatus> {
+        self.probe.origin.set(Point { x: state.screen.x, y: state.screen.y });
+        if self.probe.fail_update.replace(false) {
+            self.probe.width.set(120);
+            return Err(NC_E_INVALID_ARG);
+        }
+        Ok(GeometryChange::NO_CHANGE)
+    }
+    /// Solid geometry reaches the ordinary display-list arena without an application UV lookup.
+    fn paint(&self, _: WidgetPaint, painter: &microui_redux::Painter<'_>) -> Result<(), NcStatus> {
+        let clipped = painter.clipped(Rect { x: 2, y: 2, width: 3, height: 3 })?;
+        clipped.colored_triangles(&[
+            ColoredVertex { x: 0.0, y: 0.0, rgba: 0xff030201 },
+            ColoredVertex { x: 10.0, y: 0.0, rgba: 0xff030201 },
+            ColoredVertex { x: 0.0, y: 10.0, rgba: 0xff030201 },
+        ])?;
+        // Returning to the parent must not inherit the smaller clip or need a restoring call.
+        painter.colored_triangles(&[
+            ColoredVertex { x: 8.0, y: 8.0, rgba: 0xff060504 },
+            ColoredVertex { x: 9.0, y: 8.0, rgba: 0xff060504 },
+            ColoredVertex { x: 8.0, y: 9.0, rgba: 0xff060504 },
+        ])
+    }
+    /// Closing content terminates activity while its retained allocation remains observable.
+    fn close(&mut self) -> Result<(), NcStatus> { self.probe.closes.set(self.probe.closes.get() + 1); Ok(()) }
+}
+impl Drop for LocalContent {
+    /// The final inline value has one destructor, independent of the number of COM projections.
+    fn drop(&mut self) { self.probe.drops.set(self.probe.drops.get() + 1); }
+}
+
+/// The generic local helper is one real COM object, survives failures and preserves normal cache rules.
+#[test]
+fn static_leaf_content_recovers_from_reentry_and_errors_with_one_owned_lifetime() {
+    let ui = microui_redux::Ui::from_interface(runtime()).unwrap();
+    let target = Rc::new(RefCell::new(None));
+    let probe = Rc::new(LocalContentProbe::default());
+    probe.width.set(80);
+    let widget = ui.widgets().leaf(LocalContent { target: Rc::downgrade(&target), probe: probe.clone() }, WidgetOptions::NO_INTERACT).unwrap();
+    let node = widget.node_interface().unwrap();
+    *target.borrow_mut() = Some(node.clone());
+    let window = ui.window("Local leaf", RECT, &widget).unwrap();
+    probe.fail_measure.set(true);
+    assert!(ui.update(SIZE).is_err());
+    ui.update(SIZE).unwrap();
+    let measured = probe.measures.get();
+    ui.update(SIZE).unwrap();
+    assert_eq!(probe.measures.get(), measured, "unchanged eventless updates must preserve measurement");
+    probe.fail_update.set(true);
+    assert!(ui.update(SIZE).is_err());
+    ui.update(SIZE).unwrap();
+    assert!(probe.measures.get() > measured, "recovery must remeasure the partially changed model");
+    let (renderer, rendered) = renderer();
+    ui.render(SIZE, renderer.as_com_ref()).unwrap();
+    let origin = probe.origin.get();
+    let vertices = rendered.vertices.borrow();
+    let clipped: Vec<_> = vertices.iter().filter(|vertex| vertex.rgba == 0xff030201).collect();
+    assert!(clipped.len() >= 3);
+    for vertex in clipped {
+        assert!((origin.x as f32 + 2.0..=origin.x as f32 + 5.0).contains(&vertex.x));
+        assert!((origin.y as f32 + 2.0..=origin.y as f32 + 5.0).contains(&vertex.y));
+    }
+    assert_eq!(vertices.iter().filter(|vertex| vertex.rgba == 0xff060504).count(), 3);
+    drop(vertices);
+    window.close().unwrap();
+    node.close().unwrap();
+    assert_eq!(probe.closes.get(), 1);
+    assert_eq!(probe.drops.get(), 0);
+    assert_eq!(node.properties().err(), Some(UI_E_CLOSED));
+    target.borrow_mut().take();
+    drop(node);
+    drop(widget);
+    assert_eq!(probe.drops.get(), 1);
 }

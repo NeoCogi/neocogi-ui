@@ -60,6 +60,28 @@ pub trait IRenderDiagnostics {
 
 #[com_struct]
 #[derive(Debug, Default)]
+/// Finite floating-point position used by widget-local line and polygon drawing.
+pub struct PaintPoint {
+    /// Horizontal widget-local coordinate in pixels.
+    pub x: f32,
+    /// Vertical widget-local coordinate in pixels.
+    pub y: f32,
+}
+
+#[com_struct]
+#[derive(Debug, Default)]
+/// Local solid vertex; applications never need the atlas's private white-pixel coordinates.
+pub struct ColoredVertex {
+    /// Horizontal widget-local position in pixels.
+    pub x: f32,
+    /// Vertical widget-local position in pixels.
+    pub y: f32,
+    /// Red in the least significant byte, then green, blue and alpha.
+    pub rgba: u32,
+}
+
+#[com_struct]
+#[derive(Debug, Default)]
 /// Final textured vertex; tessellation and clipping already happened in the UI.
 pub struct RenderVertex {
     /// Horizontal position in drawable pixels.

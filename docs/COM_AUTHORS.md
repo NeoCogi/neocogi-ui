@@ -329,6 +329,39 @@ not represent application GPU scenes or external texture ownership; those use
 the renderer capabilities specified in the renderer migration.
 
 
+## Local custom leaves and solid drawing
+
+`WidgetFactory::leaf(content, options)` stores a concrete `LeafContent` inline in
+one COM allocation implementing `IWidget` and `ILeafLayout`. Its common state
+supplies the same mount-once, closure, options and sticky invalidation rules as
+built-ins. Content methods use static Rust dispatch; there is no second widget
+tree or erased application value. Use a direct COM class with `WidgetState` when
+the component also needs its own public editing interfaces.
+
+Content is detached from its storage while measure, update, paint or close runs.
+Calling common observations during a content call is allowed; recursively entering
+content returns BUSY. The value is restored after errors. A failed update records
+a conservative geometry change because application code may have partly changed
+its model. Successful updates must still report CHANGED truthfully. The external
+state, hidden-widget and skipped-update obligations above apply equally to this
+helper. Animation that changes only drawing can return NO_CHANGE.
+
+`Painter::colored_triangles` takes local positions and packed RGBA colors. Solid
+content never needs the atlas's white-pixel location: the UI supplies it while
+executing its existing solid geometry commands. `stroke_line` and `fill_polygon`
+share that geometry path. All points must be finite; line widths are nonnegative,
+and triangle counts are multiples of three. Polygon filling retains the painter's
+existing simple-polygon policy; applications must supply a non-self-intersecting
+boundary in order.
+
+`let inner = painter.clipped(rect)?;` creates a borrowed painter value with a
+narrower clip. Commands issued through `inner` intersect that clip with the real
+widget clip; commands issued through the original painter keep the original clip.
+There is no mutable clip stack, callback, or restoration operation. The copied
+scope still expires after the widget paint call, including scopes or raw painter
+interfaces retained by a component. Negative extents are rejected and empty clips
+draw nothing. Coordinates remain content-local after clipping.
+
 ## Container topology and edge metadata
 
 An independently implemented container exposes `IWidget` and `IContainerLayout`

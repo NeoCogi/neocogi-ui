@@ -197,7 +197,6 @@ impl DisplayList {
     }
 
     /// Appends strongly typed solid triangles and records their valid contiguous range.
-    #[allow(dead_code)]
     pub(super) fn push_solid_triangles(&mut self, clip: Recti, triangles: &[SolidTriangle]) {
         if let Some(range) = self.solid_geometry.append_triangles(triangles, Vec2f::new(0.0, 0.0)) {
             self.push_solid_range(clip, range);
