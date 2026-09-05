@@ -448,7 +448,9 @@ pub trait IUiRuntime: IInputSink {
     fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus>;
     /// Validates compatible resources and prepares the renderer upload before publishing either UI
     /// projection. Failure preserves the old bundle. Success requires update before rendering.
-    /// Install outside an update/render transaction; the renderer is borrowed only for this call.
+    /// Application event handlers may install at the dispatch boundary; the enclosing update then
+    /// commits layout. Widget update/layout/paint and upload reentry reject with BUSY. The renderer
+    /// is borrowed only for this call.
     fn install_assets(&self, assets: ComRef<'_, IAssetBundleAbi>, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus>;
     /// Drains queued input, or one eventless update, and synchronizes setters/resize without an application dispatcher.
     fn update(&self, size: Size) -> Result<(), NcStatus>;

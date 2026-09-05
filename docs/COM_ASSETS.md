@@ -52,8 +52,12 @@ After a changed revision succeeds, call `update` or `update_with_events` before
 `render`. Old measurement entries, including hidden trees, are invalidated by the
 shared skin revision. Installing the identical bundle does not invalidate unchanged
 UI geometry, though the supplied renderer may need to switch back from another UI's
-atlas. Resource installation during an update, paint, layout or another installation
-returns `UI_E_BUSY`. Read-only access to the old installed bundle remains available
+atlas. Application event handlers may install a revision synchronously: dispatch returns
+the runtime context, and the enclosing update commits the changed layout before routing
+later input or returning. No extra update is required after that successful transaction.
+Manually dispatched handlers still require an ordinary update before rendering.
+Installation from widget update, paint, layout or another installation returns
+`UI_E_BUSY`. Read-only access to the old installed bundle remains available
 while upload is in progress. No foreign call runs with a live runtime or GPU
 `RefCell` guard.
 

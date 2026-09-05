@@ -378,9 +378,8 @@ impl IUiRuntime for Runtime {
     fn install_assets(&self, source: ComRef<'_, IAssetBundleAbi>, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
         let storage = &self.storage;
         storage.factory.host.check_mutation()?;
-        if storage.updating.get() {
-            return Err(UI_E_BUSY);
-        }
+        // Dispatch returns the context specifically to permit application edits. The active
+        // observation phase and exclusive context slot still reject layout/paint/upload reentry.
         let mut context = storage.context()?;
         let _phase = Observation::begin(&storage.factory.state);
         let previous = storage.factory.resources.current();

@@ -157,6 +157,8 @@ impl IRenderer for UploadRenderer {
         assert_eq!(self.0.button.host()?.assets()?.as_ptr(), self.0.runtime.assets()?.as_ptr());
         assert_eq!(self.0.runtime.update(SIZE), Err(UI_E_BUSY));
         assert_eq!(self.0.button.set_label(NcCopyFromBufferOffset::new(0, b"reentrant")), Err(UI_E_BUSY));
+        let recursive: ComPtr<IRendererAbi> = Self::from_value(Self(self.0.clone())).query()?;
+        assert_eq!(self.0.runtime.install_assets(source, recursive.as_com_ref()), Err(UI_E_BUSY));
         if self.0.fail.get() {
             return Err(UI_E_RENDER);
         }
@@ -179,6 +181,90 @@ impl IRenderer for UploadRenderer {
 }
 /// Drawable dimensions used by the complete runtime integration fixture.
 const SIZE: Size = Size { width: 640, height: 400 };
+
+/// A real activation owns the same capabilities used by an application's theme/style handler.
+struct ThemeState {
+    /// Ordinary facade may edit resources at the context-free dispatch boundary.
+    ui: microui_redux::Ui,
+    /// Validated candidate belongs to the current resource catalog.
+    candidate: ComPtr<IAssetBundleAbi>,
+    /// Test GPU upload also probes recursive update, installation and widget mutation.
+    renderer: ComPtr<IRendererAbi>,
+    /// Counts successful handler commits; failures must leave this unchanged.
+    installed: u32,
+}
+/// Concrete handler publishes a theme synchronously, with no deferred-work adapter.
+struct InstallTheme;
+impl microui_redux::EventHandler<ThemeState, microui_redux::events::Activation> for InstallTheme {
+    /// Upload failure propagates through the ordinary session; a later activation can retry.
+    fn handle(&mut self, state: &mut ThemeState, _: &microui_redux::events::Activation) -> Result<(), NcStatus> {
+        state.ui.install_assets(state.candidate.as_com_ref(), state.renderer.as_com_ref())?;
+        state.installed += 1;
+        Ok(())
+    }
+}
+
+/// Resource edits are legal inside application dispatch, while nested GPU preparation remains protected.
+#[test]
+fn event_callback_installs_resources_and_recovers_after_upload_failure() {
+    let source = export_bundle(&bundle()).unwrap();
+    let runtime = crate::com::create_runtime_from_assets(source.as_com_ref()).unwrap();
+    let ui = microui_redux::Ui::from_interface(runtime.clone()).unwrap();
+    let button = ui.widgets().button("switch theme").unwrap();
+    let probe = Rc::new(Probe {
+        runtime,
+        button: button.as_interface().add_ref(),
+        current: RefCell::new(source.clone()),
+        fail: Cell::new(true),
+        uploads: Cell::new(0),
+    });
+    let renderer: ComPtr<IRendererAbi> = UploadRenderer::from_value(UploadRenderer(probe.clone())).query().unwrap();
+    let _window = ui.window("theme callback", Rect { x: 0, y: 0, width: 400, height: 250 }, &button).unwrap();
+    let mut data = export_bundle_data(&bundle()).unwrap();
+    data.metrics.padding += 10;
+    let candidate = data.into_revision(source.as_com_ref()).unwrap();
+    let session = microui_redux::EventSession::new(ThemeState {
+        ui: ui.clone(),
+        candidate: candidate.clone(),
+        renderer: renderer.clone(),
+        installed: 0,
+    });
+    session.subscribe_activation(&button, InstallTheme).unwrap();
+    for key in [KeyCode::TAB, KeyCode::SPACE] {
+        ui.input(
+            UiInput::Key(KeyStroke {
+                key,
+                value: 0,
+                pressed: true,
+                repeat: false,
+                modifiers: 0,
+            }),
+            "",
+        )
+        .unwrap();
+    }
+    assert_eq!(ui.update_with_events(SIZE, &session), Err(UI_E_RENDER));
+    assert_eq!(ui.assets().unwrap().as_ptr(), source.as_ptr());
+    assert_eq!(session.state().unwrap().installed, 0);
+    probe.fail.set(false);
+    ui.input(
+        UiInput::Key(KeyStroke {
+            key: KeyCode::SPACE,
+            value: 0,
+            pressed: true,
+            repeat: false,
+            modifiers: 0,
+        }),
+        "",
+    )
+    .unwrap();
+    ui.update_with_events(SIZE, &session).unwrap();
+    assert_eq!(probe.uploads.get(), 2);
+    assert_eq!(session.state().unwrap().installed, 1);
+    assert_eq!(ui.assets().unwrap().as_ptr(), candidate.as_ptr());
+    // The enclosing update completes invalidation/layout; rendering needs no extra app update.
+    ui.render(SIZE, renderer.as_com_ref()).unwrap();
+}
 
 /// Failed validation/upload preserves UI and GPU state; success changes built-in measurement and requires update.
 #[test]
@@ -241,12 +327,20 @@ fn runtime_style_derivation_shares_flat_rules_and_preserves_the_installed_revisi
     let mut metrics = source.metrics().unwrap();
     metrics.padding += 4;
     let candidate = ui.derive_style(metrics, PaletteEdit::Preserve).unwrap();
-    assert_eq!(ui.assets().unwrap().as_ptr(), source.as_ptr(), "deriving a candidate cannot publish or schedule a UI edit");
+    assert_eq!(
+        ui.assets().unwrap().as_ptr(),
+        source.as_ptr(),
+        "deriving a candidate cannot publish or schedule a UI edit"
+    );
     let imported = ImportedAssets::read(candidate.as_com_ref(), Some(&original)).unwrap();
     let mut expected = export_bundle_data(original.bundle()).unwrap();
     expected.metrics = metrics;
     equivalent(&export_bundle_data(imported.bundle()).unwrap(), &expected);
-    let palette = crate::FlatPalette { text:crate::color(11,22,33,44), button:crate::color(51,62,73,84), ..crate::FlatPalette::default() };
+    let palette = crate::FlatPalette {
+        text: crate::color(11, 22, 33, 44),
+        button: crate::color(51, 62, 73, 84),
+        ..crate::FlatPalette::default()
+    };
     let flat = ui.derive_style(metrics, PaletteEdit::Flat(palette)).unwrap();
     let imported = ImportedAssets::read(flat.as_com_ref(), Some(&original)).unwrap();
     let mut skin = original.bundle().skin().clone();
@@ -254,12 +348,12 @@ fn runtime_style_derivation_shares_flat_rules_and_preserves_the_installed_revisi
     skin.apply_flat_palette(palette);
     let native = SkinBundle::new(original.bundle().atlas().clone(), skin);
     equivalent(&export_bundle_data(imported.bundle()).unwrap(), &export_bundle_data(&native).unwrap());
-    let invalid = AssetMetrics {padding:-1,..metrics};
+    let invalid = AssetMetrics { padding: -1, ..metrics };
     assert_eq!(ui.derive_style(invalid, PaletteEdit::Preserve).unwrap_err(), NC_E_INVALID_ARG);
-    let style:ComPtr<IUiStyleAbi> = crate::com::create_runtime_from_assets(source.as_com_ref()).unwrap().query().unwrap();
+    let style: ComPtr<IUiStyleAbi> = crate::com::create_runtime_from_assets(source.as_com_ref()).unwrap().query().unwrap();
     let invalid = PaletteEditAbi::from_unknown_tag(PaletteEditTag::from_raw(255)).unwrap();
-    assert_eq!(style.derive_style(metrics,invalid).unwrap_err(),NC_E_INVALID_ARG);
-    assert_eq!(ui.assets().unwrap().as_ptr(),source.as_ptr());
+    assert_eq!(style.derive_style(metrics, invalid).unwrap_err(), NC_E_INVALID_ARG);
+    assert_eq!(ui.assets().unwrap().as_ptr(), source.as_ptr());
     ui.close().unwrap();
-    assert_eq!(ui.derive_style(metrics,PaletteEdit::Preserve).unwrap_err(),UI_E_CLOSED);
+    assert_eq!(ui.derive_style(metrics, PaletteEdit::Preserve).unwrap_err(), UI_E_CLOSED);
 }

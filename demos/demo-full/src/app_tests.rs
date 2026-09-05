@@ -1,10 +1,57 @@
 //! Full application checks use the actual plugin graph, including GPU images and all compiled themes.
 use super::*;
 
+/// Selects Win 3.11 through the real nested menu and event session, rather than calling its handler directly.
+fn select_win311_from_menu(host: &Host, events: &EventSession<State>) -> Result<(), HostError> {
+    let size = host.window.size()?;
+    let demo = events.state()?.demo.clone();
+    demo.raise()?;
+    host.ui.update_with_events(size, events)?;
+    let area = demo.snapshot()?.rect;
+    let position = Point { x: area.x + 100, y: area.y + 10 };
+    for event in [
+        UiInput::Pointer(position),
+        UiInput::Down { position, buttons: 1 },
+        UiInput::Up { position, buttons: 1 },
+    ] {
+        host.ui.input(event, "")?;
+    }
+    // Focus the main window, open View -> Theme and activate its second radio item.
+    for key in [
+        KeyCode::FUNCTION,
+        KeyCode::ARROW_RIGHT,
+        KeyCode::ARROW_DOWN,
+        KeyCode::ARROW_DOWN,
+        KeyCode::ARROW_DOWN,
+        KeyCode::ARROW_DOWN,
+        KeyCode::ARROW_RIGHT,
+        KeyCode::ARROW_DOWN,
+        KeyCode::ENTER,
+    ] {
+        host.ui.input(
+            UiInput::Key(KeyStroke {
+                key,
+                value: if key == KeyCode::FUNCTION { 10 } else { 0 },
+                pressed: true,
+                repeat: false,
+                modifiers: 0,
+            }),
+            "",
+        )?;
+    }
+    host.ui.update_with_events(size, events)?;
+    let state = events.state()?;
+    assert_eq!(state.themes[1].1.mark()?, MenuMark::Radio { selected: true });
+    assert_eq!(state.ui.assets()?.metrics()?, Theme::ALL[1].data()?.metrics);
+    host.ui.render(size, host.renderer.as_com_ref())?;
+    Ok(())
+}
+
 /// Exercises application-level composition against real runtime, platform and decoder objects.
 fn exercise() -> Result<(Host, EventSession<State>), HostError> {
     let (host, events) = create()?;
     let size = host.window.size()?;
+    select_win311_from_menu(&host, &events)?;
     for theme in Theme::ALL {
         events.state_mut()?.select_theme(theme)?;
         // The photograph is below the initial viewport. Requesting the measured end guarantees
