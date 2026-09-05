@@ -48,7 +48,7 @@ const MAX_EVENT_DISPATCHES: usize = microui_contracts::EVENT_DISPATCH_LIMIT as u
 /// example, a textbox change contains the text as it existed when the change occurred rather than a
 /// reference into the mutable widget. This lets the port hold the payload until a safe context
 /// dispatch boundary. Application-owned retained components use the same contract for lifecycle
-/// events such as [`crate::FileDialogCompleted`]; no component-specific behavior enters the
+/// events such as [`microui_redux::events::FileDialogCompleted`]; no component-specific behavior enters the
 /// dispatcher.
 ///
 /// The `'static` bound is required because subscriptions of different concrete event types coexist

@@ -113,6 +113,48 @@ fn failed_open_and_overlapping_requests_preserve_previous_state_and_expose_nativ
     assert_eq!(fixture.handle.active(), Err(UI_E_CLOSED));
 }
 
+/// A dangling entry fails the complete candidate instead of publishing a partial directory.
+#[cfg(unix)]
+#[test]
+fn broken_entry_rejects_the_complete_directory_candidate() {
+    let fixture = Fixture::new();
+    let directory = tempfile::tempdir().unwrap();
+    std::fs::write(directory.path().join("readable"), b"ok").unwrap();
+    std::os::unix::fs::symlink("missing-target", directory.path().join("broken-link")).unwrap();
+    let previous = fixture.file_root();
+    assert_eq!(fixture.handle.open(&microui_redux::FileDialogRequest::new(directory.path())), Err(UI_E_IO));
+    assert_eq!(fixture.file_root().as_ptr(), previous.as_ptr());
+    assert_eq!(fixture.handle.active(), Ok(false));
+}
+
+/// Empty acceptance stays pending; separate picker capabilities retain independent request queues.
+#[test]
+fn empty_acceptance_and_independent_picker_requests_use_actual_controls() {
+    let fixture = Fixture::new();
+    let directory = tempfile::tempdir().unwrap();
+    let events = session(&fixture);
+    fixture.open(directory.path());
+    // Up, Home, Path, Go, Parent, Filename, Cancel, Open: activate Open with an empty filename.
+    fixture.tabs(8);
+    fixture.key(KeyCode::SPACE, 0);
+    fixture.ui.update_with_events(SIZE, &events).unwrap();
+    assert_eq!(fixture.handle.active(), Ok(true));
+    assert!(events.state().unwrap().is_empty());
+    assert_eq!(fixture.handle.cancel(), Ok(true));
+    assert_eq!(fixture.handle.cancel(), Ok(false));
+
+    let second = fixture.ui.file_dialog(fixture.owner.as_com_ref()).unwrap();
+    let second_events = EventSession::new(Vec::new());
+    second_events.subscribe_file_dialog(&second, Record).unwrap();
+    second.open(&microui_redux::FileDialogRequest::new(directory.path())).unwrap();
+    second.cancel().unwrap();
+    fixture.ui.update_with_events(SIZE, &events).unwrap();
+    second_events.dispatch().unwrap();
+    assert_eq!(&*events.state().unwrap(), &[FileDialogCompleted::Cancelled]);
+    assert_eq!(&*second_events.state().unwrap(), &[FileDialogCompleted::Cancelled]);
+    second.close().unwrap();
+}
+
 /// Actual keyboard text entry preserves leading/trailing spaces and completes in the same runtime transaction.
 #[test]
 fn typed_filename_acceptance_uses_real_controls_and_completes_before_update_returns() {

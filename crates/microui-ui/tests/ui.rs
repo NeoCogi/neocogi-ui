@@ -33,8 +33,3 @@ fn public_api_contracts() {
     cases.compile_fail("tests/ui/context_frame_submit_twice.rs");
 }
 
-/// Keeps the FileDialog guide's setup and event-handler pattern on the actual public API.
-#[test]
-fn documented_file_dialog_api_compiles() {
-    trybuild::TestCases::new().pass("tests/ui/file_dialog_public_api.rs");
-}

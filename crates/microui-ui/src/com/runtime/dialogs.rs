@@ -1,7 +1,7 @@
 //! Standard picker composes actual COM controls and owns only explicit request and native-path state.
 use super::*;
 use microui_redux::{EventHandler, EventSession, Linear, ScrollArea, Textbox, TextBlock, ListItem};
-use microui_redux::events::{Activation, TextChanged, TextSubmitted};
+use microui_redux::events::{Activation, FileDialogCompleted, TextChanged, TextSubmitted};
 use nc_com::{INcStringAbi, NcString};
 use std::{
     path::{Path, PathBuf},
@@ -15,19 +15,19 @@ struct Request {
     /// Permanent component/window closure prevents reopening independently of allocation lifetime.
     closed: Cell<bool>,
     /// Real native semantic queue; only external subscriptions retain application callbacks.
-    completed: crate::EventSource<crate::FileDialogCompleted>,
+    completed: crate::EventSource<FileDialogCompleted>,
 }
 impl Request {
     /// Emits one committed outcome after the modal has become idle.
-    fn finish(&self, status: crate::FileDialogStatus) {
+    fn finish(&self, status: FileDialogCompleted) {
         if self.active.replace(false) {
-            self.completed.emit(crate::FileDialogCompleted::new(status));
+            self.completed.emit(status);
         }
     }
     /// Runtime teardown cannot borrow an active handler model, so retirement uses this independent concrete state.
     fn retire(&self) {
         self.closed.set(true);
-        self.finish(crate::FileDialogStatus::Cancelled);
+        self.finish(FileDialogCompleted::Cancelled);
         // Every payload on this source completes one request, so closure must
         // preserve earlier outcomes as well as an active request's cancellation.
         self.completed.finish_pending();
@@ -94,7 +94,7 @@ impl Model {
         })
     }
     /// Hides before emitting the outcome so later callbacks observe an idle reusable component.
-    fn finish(&mut self, outcome: crate::FileDialogStatus) -> Result<(), NcStatus> {
+    fn finish(&mut self, outcome: FileDialogCompleted) -> Result<(), NcStatus> {
         if self.request.active.get() {
             if self.window.snapshot().is_ok() {
                 self.window.set_visibility(Visibility::HIDDEN)?;
@@ -114,7 +114,7 @@ impl Model {
             }
             self.directory.join(filename)
         };
-        self.finish(crate::FileDialogStatus::Accepted(path))
+        self.finish(FileDialogCompleted::Accepted(path))
     }
 }
 
@@ -143,10 +143,10 @@ impl EventHandler<Model, Activation> for Action {
         }
         match self {
             Self::Up => model.navigate = model.directory.parent().map(Path::to_owned),
-            Self::Home => model.navigate = crate::FileDialog::home_dir(),
+            Self::Home => model.navigate = home_dir(),
             Self::Go => model.navigate = model.resolve_path(&model.path.text()?),
             Self::Accept => model.accept()?,
-            Self::Cancel => model.finish(crate::FileDialogStatus::Cancelled)?,
+            Self::Cancel => model.finish(FileDialogCompleted::Cancelled)?,
             Self::Folder(path) => model.navigate = Some(path.clone()),
             Self::File(path) => {
                 model.filename.set_text(&path.file_name().unwrap_or(path.as_os_str()).to_string_lossy())?;
@@ -193,15 +193,12 @@ impl EventHandler<Model, WindowEvent> for Lifecycle {
             WindowEvent::Hidden | WindowEvent::CloseRequested
                 if model.request.active.get() && model.window.snapshot().is_ok_and(|snapshot| snapshot.visibility == Visibility::HIDDEN) =>
             {
-                model.finish(crate::FileDialogStatus::Cancelled)?;
+                model.finish(FileDialogCompleted::Cancelled)?;
             }
             WindowEvent::Destroyed => {
                 model.request.closed.set(true);
                 if model.request.active.replace(false) {
-                    model
-                        .request
-                        .completed
-                        .close(crate::FileDialogCompleted::new(crate::FileDialogStatus::Cancelled));
+                    model.request.completed.close(FileDialogCompleted::Cancelled);
                 }
             }
             _ => {}
@@ -414,7 +411,7 @@ impl Dialog {
     /// Prepares both complete columns without publishing a partial listing when any directory entry fails.
     fn candidate(&self, model: &mut Model, directory: &Path) -> Result<Listing, NcStatus> {
         let runtime = model.owner()?;
-        let entries = match crate::FileDialog::read_directory(directory) {
+        let entries = match read_directory(directory) {
             Ok(entries) => entries,
             Err(error) => {
                 model.diagnostic = format!("Cannot read {}: {error}", directory.display());
@@ -535,7 +532,7 @@ impl IFileDialog for FileDialog {
         let mut model = self.dialog.session.state_mut()?;
         model.owner()?;
         let active = self.dialog.request.active.get();
-        model.finish(crate::FileDialogStatus::Cancelled)?;
+        model.finish(FileDialogCompleted::Cancelled)?;
         Ok(active)
     }
     /// Actual window destruction produces the same lifecycle cancellation as destroying its owner.
@@ -546,10 +543,7 @@ impl IFileDialog for FileDialog {
         self.dialog.session.state()?.window.close()?;
         self.dialog.request.closed.set(true);
         if self.dialog.request.active.replace(false) {
-            self.dialog
-                .request
-                .completed
-                .close(crate::FileDialogCompleted::new(crate::FileDialogStatus::Cancelled));
+            self.dialog.request.completed.close(FileDialogCompleted::Cancelled);
         }
         Ok(())
     }
@@ -573,15 +567,46 @@ impl IFileDialogs for Runtime {
         Ok(FileDialog::from_value(FileDialog { dialog }).query().expect("file picker declares IFileDialog"))
     }
 }
-impl super::super::events::ComEvent for crate::FileDialogCompleted {
+impl crate::WidgetEvent for FileDialogCompleted {}
+impl super::super::events::ComEvent for FileDialogCompleted {
     type Sink = IFileDialogSinkAbi;
     /// Encodes native identity only at the boundary; lossy display text never becomes a selected path.
     fn deliver(&self, sink: ComRef<'_, Self::Sink>) -> Result<(), NcStatus> {
-        match self.status() {
-            crate::FileDialogStatus::Accepted(path) => sink.accepted(microui_redux::NativePath::new(path).as_interface()),
-            crate::FileDialogStatus::Cancelled => sink.cancelled(),
+        match self {
+            FileDialogCompleted::Accepted(path) => sink.accepted(microui_redux::NativePath::new(path).as_interface()),
+            FileDialogCompleted::Cancelled => sink.cancelled(),
         }
     }
+}
+
+/// Reads the platform home setting without converting its native encoding to Unicode.
+fn home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .filter(|home| !home.is_empty())
+        .or_else(|| std::env::var_os("USERPROFILE").filter(|home| !home.is_empty()))
+        .map(PathBuf::from)
+}
+
+/// Reads and sorts a complete native listing; no entry or metadata error is silently dropped.
+fn read_directory(path: &Path) -> std::io::Result<(Vec<PathBuf>, Vec<PathBuf>)> {
+    let mut folders = Vec::new();
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(path)? {
+        let path = entry?.path();
+        // Follow directory symlinks consistently with navigation. An unreadable or dangling
+        // target is an explicit listing failure instead of silently changing its row kind.
+        if path.metadata()?.is_dir() {
+            folders.push(path);
+        } else {
+            files.push(path);
+        }
+    }
+    folders.sort();
+    files.sort();
+    if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+        folders.insert(0, parent.to_path_buf());
+    }
+    Ok((folders, files))
 }
 
 #[cfg(test)]

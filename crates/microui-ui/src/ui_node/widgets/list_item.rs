@@ -156,22 +156,6 @@ impl<Value: Clone + 'static> ListItem<Value> {
         Node::typed_widget(Self::from(parameters))
     }
 
-    /// Constructs a list item that emits through an enclosing list view's shared port.
-    pub(crate) fn create_with_event_port(
-        parameters: ListItemParameters<Value>,
-        submitted_event: Rc<crate::EventSource<ListItemSubmitted<Value>>>,
-    ) -> (TypedWidgetHandle<Self>, Node) {
-        let widget = Self {
-            icon: parameters.icon,
-            font: parameters.font,
-            opt: parameters.opt,
-            label: parameters.label,
-            value: parameters.value,
-            submitted_event,
-        };
-        Node::typed_widget(widget)
-    }
-
     /// Returns the current label.
     pub fn label(&self) -> &str {
         &self.label

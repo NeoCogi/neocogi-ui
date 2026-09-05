@@ -33,7 +33,7 @@ use std::cell::Cell;
 use microui_ui::render::{FrameError, FrameInfo, RendererBackend, RendererFrame, Vertex};
 use microui_ui::retained::*;
 use microui_ui::prelude::{
-    Dimensioni, Ui, FileDialog, FileDialogRequest, FileDialogStatus, Menu, MenuBar, MenuItem, MenuItemHandle, MenuItemMark, MenuItemParameters,
+    Dimensioni, Ui, Menu, MenuBar, MenuItem, MenuItemHandle, MenuItemMark, MenuItemParameters,
     MenuItemSubmitted, Recti, TextBlock, TextBlockParameters, TypedWidgetHandle, Vec2i, Window,
 };
 use microui_ui::{
@@ -383,48 +383,6 @@ fn downstream_slider_programmatic_values_are_not_normalized_by_eventless_updates
     ctx.update_ui_state(dimensions, &mut values);
     assert_eq!(slider.value(), Some(4.4));
     assert!(values.is_empty());
-}
-
-struct FileDialogModel {
-    dialog: FileDialog,
-    /// Terminal result observed only through the component-owned typed source.
-    completion: Option<FileDialogStatus>,
-}
-
-impl FileDialogModel {
-    fn dialog_mut(state: &mut Self) -> &mut FileDialog {
-        &mut state.dialog
-    }
-
-    fn file_dialog_completed(&mut self, event: &FileDialogCompleted) {
-        self.completion = Some(event.status().clone());
-    }
-}
-
-#[test]
-fn downstream_file_dialog_completion_is_subscriber_driven_without_widget_access() {
-    let mut context = context_with_state::<FileDialogModel>();
-    let owner = context.ui().create_window(Window::new(
-        "file-dialog owner",
-        rect(0, 0, 1, 1),
-        TextBlock::create(TextBlockParameters::new("")).1,
-    ));
-    let mut dialog = FileDialog::new(&mut context, &owner, FileDialogModel::dialog_mut);
-    let completed = dialog.completed();
-    context
-        .subscribe(completed, |state, _, event| FileDialogModel::file_dialog_completed(state, event))
-        .unwrap();
-    dialog
-        .open(&mut context.ui(), FileDialogRequest::default())
-        .expect("dialog and owner must be available for this activation");
-    let mut model = FileDialogModel { dialog, completion: None };
-
-    // Explicit cancellation queues one event; the retained update delivers it without frame polling.
-    assert!(model.dialog.cancel(&mut context.ui()));
-    assert!(model.completion.is_none());
-    context.update_ui_state(Dimensioni::new(320, 240), &mut model);
-    assert_eq!(model.completion, Some(FileDialogStatus::Cancelled));
-    assert!(!model.dialog.is_open());
 }
 
 /// Minimal downstream application state retaining only concrete menu-item state.

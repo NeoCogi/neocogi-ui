@@ -126,9 +126,7 @@
 //! all retained windows. This semantic dispatcher is distinct from retained raw-input routing:
 //! each retained runtime owns an input router that targets pointer, keyboard, or text input to one
 //! node, and that widget may then emit a typed event for the application dispatcher.
-//! Application-owned library components such as [`FileDialog`] bind their controls to that same
-//! dispatcher through an accessor into application state. Each event port owns its pending
-//! payloads and accepts one state method.
+//! Standard COM components use `microui_redux::EventSession` with concrete owned handlers.
 //!
 //! Backends forward one logical [`KeyEvent`] per press or release and send composed UTF-8 through
 //! [`Context::text`] separately. Focus persists independently from pointer capture. In the active
@@ -248,7 +246,6 @@ pub mod atlas;
 pub mod assets;
 mod context;
 mod event;
-mod file_dialog;
 mod identity;
 pub mod image;
 mod input;
@@ -269,7 +266,6 @@ mod window_manager;
 /// low-level renderer details or manual container drawing helpers through default imports.
 pub mod retained {
     pub use crate::event::{EventSource, SubscribeError, TypedWidget, WidgetEvent, WidgetEventPortHandle};
-    pub use crate::file_dialog::{FileDialog, FileDialogCompleted, FileDialogOpenError, FileDialogRequest, FileDialogStatus};
     pub use crate::menu::{Menu, MenuBar, MenuItem, MenuItemAccessError, MenuItemHandle, MenuItemMark, MenuItemParameters, MenuItemSubmitted};
     pub use crate::render::{CustomRenderArgs, CustomRenderHandle};
     pub use crate::ui_node::{
@@ -292,7 +288,6 @@ pub mod retained {
 pub mod prelude {
     pub use crate::event::{EventSource, SubscribeError, TypedWidget, WidgetEvent, WidgetEventPortHandle};
     pub use crate::atlas::{AtlasError, AtlasHandle, AtlasSource, CharEntry, FontEntry, FontId, IconId, SourceFormat};
-    pub use crate::file_dialog::{FileDialog, FileDialogCompleted, FileDialogOpenError, FileDialogRequest, FileDialogStatus};
     pub use crate::menu::{Menu, MenuBar, MenuItem, MenuItemAccessError, MenuItemHandle, MenuItemMark, MenuItemParameters, MenuItemSubmitted};
     pub use crate::image::{ImageError, ImageSource, ImageStorageError, MAX_DECODED_RGBA_BYTES, load_image_bytes};
     pub use crate::input::{Key, KeyEvent, KeyState, Modifiers, MouseButton};
@@ -336,7 +331,6 @@ pub use window_manager::{
     WindowEvent, WindowHandle, WindowOption,
 };
 pub use event::{EventSource, SubscribeError, TypedWidget, WidgetEvent, WidgetEventPortHandle};
-pub use file_dialog::{FileDialog, FileDialogCompleted, FileDialogOpenError, FileDialogRequest, FileDialogStatus};
 pub use menu::{Menu, MenuBar, MenuItem, MenuItemAccessError, MenuItemHandle, MenuItemMark, MenuItemParameters, MenuItemSubmitted};
 pub use image::{ImageError, ImageSource, ImageStorageError, MAX_DECODED_RGBA_BYTES, load_image_bytes};
 pub use input::{Key, KeyEvent, KeyState, Modifiers, MouseButton};
