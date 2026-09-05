@@ -17,7 +17,9 @@ mod tests {
     impl IButton for TestButton {
         /// Validates the complete replacement before mutating retained text.
         fn set_label(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-            if label.offset() != 0 { return Err(NC_E_INVALID_ARG); }
+            if label.offset() != 0 {
+                return Err(NC_E_INVALID_ARG);
+            }
             let text = std::str::from_utf8(label.as_slice()).map_err(|_| NC_E_INVALID_ARG)?;
             let mut stored = self.label.try_borrow_mut().map_err(|_| NC_E_INVALID_ARG)?;
             if *stored != text {
@@ -37,7 +39,11 @@ mod tests {
     impl IWidget for TestButton {
         /// Clears one accumulated programmatic geometry change.
         fn take_change(&self) -> Result<GeometryChange, NcStatus> {
-            Ok(if self.changed.replace(false) { GeometryChange::CHANGED } else { GeometryChange::NO_CHANGE })
+            Ok(if self.changed.replace(false) {
+                GeometryChange::CHANGED
+            } else {
+                GeometryChange::NO_CHANGE
+            })
         }
 
         /// Delegates one illustrative fill to the scope-checked recorder.
@@ -52,7 +58,8 @@ mod tests {
     #[test]
     fn generic_proxy_calls_com_contract() -> Result<(), NcStatus> {
         let unknown: ComPtr<IUnknown> = TestButton::from_value(TestButton {
-            label: RefCell::new(String::new()), changed: Cell::new(false),
+            label: RefCell::new(String::new()),
+            changed: Cell::new(false),
         });
         let button = Button::from_interface(unknown.query::<IButtonAbi>()?);
         button.set_label("Save")?;
@@ -69,7 +76,8 @@ mod tests {
     #[test]
     fn concrete_proxy_rejects_wrong_capabilities_and_invalid_text() {
         let unknown = TestButton::from_value(TestButton {
-            label: RefCell::new(String::from("before")), changed: Cell::new(false),
+            label: RefCell::new(String::from("before")),
+            changed: Cell::new(false),
         });
         assert_eq!(unknown.query::<IChildrenAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
         let button: ComPtr<IButtonAbi> = unknown.query().unwrap();

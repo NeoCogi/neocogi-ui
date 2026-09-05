@@ -33,7 +33,7 @@
 //! demo host.
 use microui_redux_demo_assets as atlas_assets;
 use microui_redux_demo_host::Application;
-use microui_redux::prelude::*;
+use microui_ui::prelude::*;
 
 const DISPLAY_MAX_LEN: usize = 24;
 const DISPLAY_HEIGHT_FRACTION: f32 = 0.20;

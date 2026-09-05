@@ -8,7 +8,7 @@
 #![no_std]
 #![deny(missing_docs)]
 
-use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, com_interface, com_int_enum, com_struct};
+use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, com_interface, com_int_enum, com_struct};
 
 com_int_enum! {
     /// Whether preferred measurement or child placement inputs changed.
@@ -56,6 +56,8 @@ pub struct Rect {
 pub trait IPainter {
     /// Records a fill only while this exact invocation remains active.
     fn fill(&self, scope: PaintScope, rect: Rect, rgba: u32) -> Result<(), NcStatus>;
+    /// Records UTF-8 text with the current body font and button content style.
+    fn text(&self, scope: PaintScope, rect: Rect, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
 }
 
 #[com_interface(auto_guid = "microui.Widget:v1")]
@@ -115,7 +117,6 @@ pub trait IUiFactory {
     fn create_button(&self) -> Result<ComPtr<IButtonAbi>, NcStatus>;
 }
 
-
 /// An operation requires an object which has already been logically closed.
 pub const UI_E_CLOSED: NcStatus = NcStatus::from_code(-1000);
 /// An operation is forbidden in the current phase or would reenter a traversal.
@@ -126,3 +127,216 @@ pub const UI_E_OWNER: NcStatus = NcStatus::from_code(-1002);
 pub const UI_E_EXPIRED_SCOPE: NcStatus = NcStatus::from_code(-1003);
 /// Painting requires update/layout to be synchronized after a mutation or resize.
 pub const UI_E_UPDATE_REQUIRED: NcStatus = NcStatus::from_code(-1004);
+
+#[com_interface(auto_guid = "microui.TextMetrics:v1")]
+/// Immutable resource view shared for a complete layout transaction.
+pub trait ITextMetrics {
+    /// Measures a UTF-8 button label, including theme padding.
+    fn button_size(&self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<Size, NcStatus>;
+}
+
+com_int_enum! {
+    /// Whether an axis has a finite measurement maximum.
+    pub enum LimitKind: u8 {
+        /// Extent is a nonnegative maximum; zero remains a real bound.
+        FINITE = 0,
+        /// Preferred size is requested without a finite maximum; extent must be zero.
+        UNBOUNDED = 1,
+    }
+}
+
+#[com_struct]
+/// Copied axis constraint; the tag distinguishes zero from unbounded space.
+pub struct AxisLimit {
+    /// Explicit finite/unbounded interpretation.
+    pub kind: LimitKind,
+    /// Nonnegative bound for FINITE, zero for UNBOUNDED.
+    pub extent: i32,
+}
+
+impl AxisLimit {
+    /// Rejects malformed tags, negative bounds, and meaningless unbounded extents.
+    pub fn validate(self) -> Result<(), NcStatus> {
+        match self.kind {
+            LimitKind::FINITE if self.extent >= 0 => Ok(()),
+            LimitKind::UNBOUNDED if self.extent == 0 => Ok(()),
+            _ => Err(nc_com::NC_E_INVALID_ARG),
+        }
+    }
+}
+
+#[com_struct]
+/// Independent horizontal and vertical measurement constraints.
+pub struct LayoutLimits {
+    /// Available horizontal space.
+    pub width: AxisLimit,
+    /// Available vertical space.
+    pub height: AxisLimit,
+}
+
+#[com_interface(auto_guid = "microui.LeafLayout:v1")]
+/// Preferred-size capability for a leaf; measurement must not mutate UI state.
+pub trait ILeafLayout {
+    /// Computes preferred dimensions from explicit finite/unbounded axis constraints.
+    fn measure(&self, bounds: LayoutLimits, metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus>;
+}
+
+#[com_interface(auto_guid = "microui.Activatable:v1")]
+/// Semantic activation shared by pointer and keyboard routing.
+pub trait IActivatable {
+    /// Enqueues one user activation; programmatic setters never call this method.
+    fn activate(&self) -> Result<GeometryChange, NcStatus>;
+}
+
+#[com_struct]
+#[derive(Debug, Default)]
+/// Final atlas-backed vertex; tessellation and clipping already happened in the UI.
+pub struct RenderVertex {
+    /// Horizontal position in drawable pixels.
+    pub x: f32,
+    /// Vertical position in drawable pixels.
+    pub y: f32,
+    /// Normalized horizontal atlas coordinate.
+    pub u: f32,
+    /// Normalized vertical atlas coordinate.
+    pub v: f32,
+    /// Color packed as red in the least significant byte, then green, blue, alpha.
+    pub rgba: u32,
+}
+
+#[com_struct]
+/// Metadata for one synchronous renderer submission.
+pub struct RenderInfo {
+    /// Positive drawable dimensions.
+    pub size: Size,
+    /// Clear color in the same byte order as RenderVertex::rgba.
+    pub clear: u32,
+    /// Unique authority to read this frame's stream; expires when render returns.
+    pub invocation: u64,
+    /// Exact vertex count, always a multiple of three.
+    pub vertex_count: u32,
+}
+
+#[com_interface(auto_guid = "microui.RenderStream:v1")]
+/// Owned reusable vertex storage, readable only during its active submission.
+pub trait IRenderStream {
+    /// Copies a bounded range into caller-owned storage; offsets count vertices.
+    fn vertices(&self, invocation: u64, output: NcCopyToBufferOffset<'_, RenderVertex>) -> Result<u32, NcStatus>;
+}
+
+#[com_interface(auto_guid = "microui.Renderer:v1")]
+/// GPU resources and presentation belong to this object's native window.
+pub trait IRenderer {
+    /// Executes one complete frame synchronously; failure must not present it.
+    fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus>;
+}
+
+com_int_enum! {
+    /// Platform event kind; input stays explicit rather than using an erased payload.
+    pub enum PlatformEventKind: u8 {
+        /// No event is available.
+        NONE = 0,
+        /// The user requested application exit.
+        QUIT = 1,
+        /// Pointer motion in drawable coordinates.
+        POINTER_MOVE = 2,
+        /// Primary pointer button pressed.
+        POINTER_DOWN = 3,
+        /// Primary pointer button released.
+        POINTER_UP = 4,
+        /// Drawable size changed; the host must update before drawing again.
+        RESIZE = 5,
+        /// The focused control's primary keyboard action was requested.
+        ACTIVATE = 6,
+        /// Advance focus to the next tab stop.
+        TAB = 7,
+    }
+}
+
+#[com_struct]
+/// One copied platform event; x/y are pointer coordinates or resize dimensions.
+pub struct PlatformEvent {
+    /// Explicit interpretation of the remaining fields.
+    pub kind: PlatformEventKind,
+    /// Horizontal pointer coordinate or drawable width.
+    pub x: i32,
+    /// Vertical pointer coordinate or drawable height.
+    pub y: i32,
+}
+
+#[com_interface(auto_guid = "microui.PlatformWindow:v1")]
+/// Native window, event pump and renderer share one COM identity and lifetime.
+pub trait IPlatformWindow {
+    /// Returns current drawable dimensions, including device scaling.
+    fn size(&self) -> Result<Size, NcStatus>;
+    /// Removes one queued native event without calling application code.
+    fn poll(&self) -> Result<PlatformEvent, NcStatus>;
+}
+
+#[com_interface(auto_guid = "microui.Platform:v1")]
+/// Platform plugin's concrete window factory.
+pub trait IPlatform {
+    /// Creates an independent native window and renderer; title is UTF-8 at offset zero.
+    fn create_window(&self, title: NcCopyFromBufferOffset<'_, u8>, size: Size) -> Result<ComPtr<IPlatformWindowAbi>, NcStatus>;
+}
+
+#[com_interface(auto_guid = "microui.Window:v1")]
+/// Logical UI window retained independently of its runtime's tree membership.
+pub trait IWindow {
+    /// Changes allocation and schedules layout; negative extents are rejected.
+    fn set_rect(&self, rect: Rect) -> Result<(), NcStatus>;
+    /// Removes the subtree; retained capabilities subsequently report closure.
+    fn close(&self) -> Result<(), NcStatus>;
+}
+
+#[com_interface(auto_guid = "microui.WindowManager:v1")]
+/// Window policy and topology are owned by the UI runtime object.
+pub trait IWindowManager {
+    /// Mounts one previously unmounted root and creates its logical window.
+    fn create_window(&self, title: NcCopyFromBufferOffset<'_, u8>, rect: Rect, root: ComRef<'_, IWidgetAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus>;
+}
+
+#[com_interface(auto_guid = "microui.UiRuntime:v1")]
+/// One independent retained UI, also exposing its widget factory/window manager.
+pub trait IUiRuntime {
+    /// Processes one input event; NONE still synchronizes setters and resize.
+    fn update(&self, size: Size, event: PlatformEvent) -> Result<(), NcStatus>;
+    /// Paints only after update has synchronized geometry for this drawable size.
+    fn render(&self, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus>;
+    /// Logically closes every mounted subtree; COM allocations may outlive closure.
+    fn close(&self) -> Result<(), NcStatus>;
+}
+
+#[com_interface(auto_guid = "microui.UiProvider:v1")]
+/// UI plugin bootstrap; ordinary widgets are created by each returned runtime.
+pub trait IUiProvider {
+    /// Creates an independent UI with this plugin assembly's default resource bundle.
+    fn create_runtime(&self) -> Result<ComPtr<IUiRuntimeAbi>, NcStatus>;
+}
+
+/// Stable activation identity independent of Rust module paths.
+pub const UI_PROVIDER_CLASS: nc_com::NcGuid = nc_com::guid_from_qualified_name("microui.UiProvider");
+/// Stable platform activation identity independent of the selected native backend.
+pub const PLATFORM_CLASS: nc_com::NcGuid = nc_com::guid_from_qualified_name("microui.Platform");
+/// Backend failure; diagnostics belong to the platform implementation.
+pub const UI_E_RENDER: NcStatus = NcStatus::from_code(-1005);
+
+#[com_interface(auto_guid = "microui.WidgetHost:v1")]
+/// Runtime identity and mutation authority without a reference back to its tree.
+pub trait IWidgetHost {
+    /// Checks lifetime without forbidding observational reads during layout or painting.
+    fn check_open(&self) -> Result<(), NcStatus>;
+    /// Rejects closed runtimes and mutation during layout or painting.
+    fn check_mutation(&self) -> Result<(), NcStatus>;
+}
+
+#[com_interface(auto_guid = "microui.WidgetLifetime:v1")]
+/// Common lifecycle capability; attachment is mount-once even after detachment.
+pub trait IWidgetLifetime {
+    /// Returns the allocating runtime's identity service, which owns no tree.
+    fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus>;
+    /// Claims the only tree attachment; a second call fails without changing state.
+    fn mount(&self) -> Result<(), NcStatus>;
+    /// Logically closes the widget without requiring its final reference release.
+    fn close(&self) -> Result<(), NcStatus>;
+}

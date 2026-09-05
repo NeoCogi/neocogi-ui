@@ -52,7 +52,7 @@
 //
 //! Demo atlas loading from the shared recipe or Cargo-generated embedded data.
 
-use microui_redux::prelude::AtlasHandle;
+use microui_ui::prelude::AtlasHandle;
 
 /// Asset recipe also compiled directly into this package's Cargo build script.
 #[cfg(feature = "builder")]
@@ -63,7 +63,7 @@ pub use recipe::atlas_config;
 /// Builds and validates the shared recipe at startup when embedding was not selected.
 #[cfg(all(not(feature = "prebuilt-atlas"), feature = "builder"))]
 pub fn load_atlas() -> AtlasHandle {
-    use microui_redux::atlas::builder::Builder;
+    use microui_ui::atlas::builder::Builder;
     Builder::from_config(&atlas_config())
         .and_then(Builder::build)
         .expect("default atlas assets must load, pack, and satisfy the complete atlas contract")
@@ -72,7 +72,7 @@ pub fn load_atlas() -> AtlasHandle {
 /// Generated source stays private; callers receive the same validated AtlasHandle in either mode.
 #[cfg(feature = "prebuilt-atlas")]
 mod prebuilt {
-    use microui_redux::prelude::AtlasHandle;
+    use microui_ui::prelude::AtlasHandle;
     include!(concat!(env!("OUT_DIR"), "/prebuilt_atlas.rs"));
 
     /// Validates generated pixels and metadata again at the runtime ownership boundary.
@@ -94,7 +94,7 @@ compile_error!("demo assets require `builder` for runtime generation or `prebuil
 #[cfg(all(test, feature = "builder", feature = "prebuilt-atlas"))]
 mod tests {
     use super::*;
-    use microui_redux::atlas::builder::Builder;
+    use microui_ui::atlas::builder::Builder;
 
     /// Catch recipe/feature drift by validating both pixels and resource presentation metadata.
     #[test]

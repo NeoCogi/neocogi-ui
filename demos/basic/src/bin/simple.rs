@@ -55,7 +55,7 @@
 //! This example wires the common application runner to a small retained UI node set.
 use microui_redux_demo_assets as atlas_assets;
 use microui_redux_demo_host::Application;
-use microui_redux::prelude::*;
+use microui_ui::prelude::*;
 
 struct State {
     _window: WindowHandle,

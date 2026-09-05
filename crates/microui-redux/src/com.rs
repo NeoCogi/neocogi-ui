@@ -1,10 +1,9 @@
 //! Typed static clients for dynamically or statically linked COM implementations.
 //!
 //! Clients keep no shadow widget state or topology. Every edit crosses the
-//! checked interface and every returned snapshot owns its storage. This module
-//! will become the crate's primary facade as the retained implementation moves
-//! into the UI plugin; its dependencies already consist only of the contracts
-//! and COM object support.
+//! checked interface and every returned snapshot owns its storage. The retained implementation
+//! lives in the UI plugin; this facade depends only on the contracts and COM
+//! object support.
 
 pub use microui_contracts::*;
 use nc_com::{ComInterface, ComPtr, ComRef, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
@@ -17,15 +16,21 @@ pub struct Widget<I: ComInterface> {
 
 impl<I: ComInterface> Clone for Widget<I> {
     /// Clones the COM reference without copying widget state or topology.
-    fn clone(&self) -> Self { Self { interface: self.interface.clone() } }
+    fn clone(&self) -> Self {
+        Self { interface: self.interface.clone() }
+    }
 }
 
 impl<I: ComInterface> Widget<I> {
     /// Adopts a reference obtained through checked activation or QueryInterface.
-    pub fn from_interface(interface: ComPtr<I>) -> Self { Self { interface } }
+    pub fn from_interface(interface: ComPtr<I>) -> Self {
+        Self { interface }
+    }
 
     /// Borrows the exact typed editing interface without changing ownership.
-    pub fn as_interface(&self) -> ComRef<'_, I> { self.interface.as_com_ref() }
+    pub fn as_interface(&self) -> ComRef<'_, I> {
+        self.interface.as_com_ref()
+    }
 
     /// Obtains the common node capability for attachment; callers cache this at mount.
     pub fn node_interface(&self) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
@@ -44,7 +49,9 @@ impl Widget<IButtonAbi> {
     }
 
     /// Copies an immutable plugin snapshot into an ordinary application String.
-    pub fn label(&self) -> Result<String, NcStatus> { self.interface.label()?.to_string() }
+    pub fn label(&self) -> Result<String, NcStatus> {
+        self.interface.label()?.to_string()
+    }
 
     /// Connects a concrete typed sink and returns the caller-owned subscription.
     /// Retain this lease in the application event session; the runtime never owns
@@ -62,7 +69,9 @@ pub struct WidgetFactory {
 
 impl WidgetFactory {
     /// Adopts a typed factory obtained from UI runtime activation.
-    pub fn from_interface(interface: ComPtr<IUiFactoryAbi>) -> Self { Self { interface } }
+    pub fn from_interface(interface: ComPtr<IUiFactoryAbi>) -> Self {
+        Self { interface }
+    }
 
     /// Creates and initializes an unmounted button in one concrete API operation.
     pub fn button(&self, label: &str) -> Result<Button, NcStatus> {
@@ -91,5 +100,45 @@ impl<'a> Painter<'a> {
     /// Records a local rectangle within this invocation.
     pub fn fill(&self, rect: Rect, rgba: u32) -> Result<(), NcStatus> {
         self.interface.fill(self.scope, rect, rgba)
+    }
+}
+
+/// Retained UI client with cached, concrete factory and window-manager capabilities.
+pub struct Ui {
+    /// Authoritative runtime allocation; all state stays in the implementation plugin.
+    runtime: ComPtr<IUiRuntimeAbi>,
+    /// Factory shares the runtime's COM identity.
+    factory: WidgetFactory,
+    /// Window-management projection cached once at construction.
+    windows: ComPtr<IWindowManagerAbi>,
+}
+
+impl Ui {
+    /// Checks the complete runtime capability set before exposing a usable client.
+    pub fn from_interface(runtime: ComPtr<IUiRuntimeAbi>) -> Result<Self, NcStatus> {
+        let factory = WidgetFactory::from_interface(runtime.query()?);
+        let windows = runtime.query()?;
+        Ok(Self { runtime, factory, windows })
+    }
+    /// Returns the runtime-bound factory without retaining another interface reference.
+    pub fn widgets(&self) -> &WidgetFactory {
+        &self.factory
+    }
+    /// Mounts the actual widget object in a new logical window.
+    pub fn window<I: ComInterface>(&self, title: &str, rect: Rect, root: &Widget<I>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+        self.windows
+            .create_window(NcCopyFromBufferOffset::new(0, title.as_bytes()), rect, root.node_interface()?.as_com_ref())
+    }
+    /// Processes input and synchronizes independently recorded geometry changes.
+    pub fn update(&self, size: Size, event: PlatformEvent) -> Result<(), NcStatus> {
+        self.runtime.update(size, event)
+    }
+    /// Submits a synchronized UI frame to a native window's renderer capability.
+    pub fn render(&self, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
+        self.runtime.render(size, renderer)
+    }
+    /// Closes the runtime's complete retained forest while handles may remain allocated.
+    pub fn close(&self) -> Result<(), NcStatus> {
+        self.runtime.close()
     }
 }

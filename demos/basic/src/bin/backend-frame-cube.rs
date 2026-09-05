@@ -51,7 +51,7 @@
 
 use microui_redux_demo_assets as atlas_assets;
 use microui_redux_demo_host::Application;
-use microui_redux::{prelude::*, render::Vertex};
+use microui_ui::{prelude::*, render::Vertex};
 use rs_math3d::{EPS_F32, lookat, perspective, project3};
 use std::cell::Cell;
 use std::rc::Rc;

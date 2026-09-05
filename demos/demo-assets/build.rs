@@ -30,7 +30,7 @@
 //! Generates the embedded atlas through ordinary Cargo host build dependencies.
 
 use std::{env, error::Error, path::PathBuf};
-use microui_redux::{atlas::builder::Builder, SourceFormat};
+use microui_ui::{atlas::builder::Builder, SourceFormat};
 
 /// Compile exactly the same recipe used by runtime loading and the command-line exporter.
 #[path = "src/recipe.rs"]

@@ -37,7 +37,7 @@ mod browser_input;
 #[cfg(any(test, all(target_arch = "wasm32", target_os = "unknown")))]
 mod wheel;
 
-use microui_redux::{
+use microui_ui::{
     self as microui,
     prelude::{AtlasHandle, Dimensioni, FrameInfo, color},
 };

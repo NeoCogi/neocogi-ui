@@ -1,7 +1,7 @@
 //! DOM ownership and translation for the canvas host; widgets never depend on browser objects.
 
 use std::{cell::RefCell, rc::Rc};
-use microui_redux as microui;
+use microui_ui as microui;
 use wasm_bindgen::{JsCast, closure::Closure};
 use web_sys::{Event, EventTarget, FocusEvent, HtmlCanvasElement, HtmlTextAreaElement, KeyboardEvent, PointerEvent, WheelEvent};
 use crate::wheel::{WheelAccumulator, WheelUnit};

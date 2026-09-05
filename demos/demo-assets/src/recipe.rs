@@ -53,7 +53,7 @@
 //! One source of demo atlas names, paths, font sizes, and packing dimensions.
 
 use std::path::{Path, PathBuf};
-use microui_redux::atlas::builder;
+use microui_ui::atlas::builder;
 
 /// Builds the shared icon/font recipe used by runtime loading, Cargo generation, and the exporter.
 pub fn atlas_config() -> builder::Config {

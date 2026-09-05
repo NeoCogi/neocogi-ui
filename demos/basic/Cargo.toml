@@ -16,7 +16,7 @@ wgpu = ["microui-redux-demo-host/wgpu"]
 prebuilt-atlas = ["microui-redux-demo-assets/prebuilt-atlas"]
 
 [dependencies]
-microui-redux.workspace = true
+microui-ui.workspace = true
 microui-redux-demo-assets = { workspace = true, features = ["builder"] }
 microui-redux-demo-host.workspace = true
 rs-math3d.workspace = true
