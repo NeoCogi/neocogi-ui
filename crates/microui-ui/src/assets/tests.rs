@@ -231,3 +231,35 @@ fn runtime_install_is_atomic_and_updates_shared_widget_measurement() {
     ui.update(SIZE).unwrap();
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
 }
+
+/// Live editor recipes reuse the installed compiler while keeping derivation separate from publication.
+#[test]
+fn runtime_style_derivation_shares_flat_rules_and_preserves_the_installed_revision() {
+    let source = export_bundle(&bundle()).unwrap();
+    let ui = microui_redux::Ui::from_interface(crate::com::create_runtime_from_assets(source.as_com_ref()).unwrap()).unwrap();
+    let original = ImportedAssets::read(source.as_com_ref(), None).unwrap();
+    let mut metrics = source.metrics().unwrap();
+    metrics.padding += 4;
+    let candidate = ui.derive_style(metrics, PaletteEdit::Preserve).unwrap();
+    assert_eq!(ui.assets().unwrap().as_ptr(), source.as_ptr(), "deriving a candidate cannot publish or schedule a UI edit");
+    let imported = ImportedAssets::read(candidate.as_com_ref(), Some(&original)).unwrap();
+    let mut expected = export_bundle_data(original.bundle()).unwrap();
+    expected.metrics = metrics;
+    equivalent(&export_bundle_data(imported.bundle()).unwrap(), &expected);
+    let palette = crate::FlatPalette { text:crate::color(11,22,33,44), button:crate::color(51,62,73,84), ..crate::FlatPalette::default() };
+    let flat = ui.derive_style(metrics, PaletteEdit::Flat(palette)).unwrap();
+    let imported = ImportedAssets::read(flat.as_com_ref(), Some(&original)).unwrap();
+    let mut skin = original.bundle().skin().clone();
+    skin.metrics.padding = metrics.padding;
+    skin.apply_flat_palette(palette);
+    let native = SkinBundle::new(original.bundle().atlas().clone(), skin);
+    equivalent(&export_bundle_data(imported.bundle()).unwrap(), &export_bundle_data(&native).unwrap());
+    let invalid = AssetMetrics {padding:-1,..metrics};
+    assert_eq!(ui.derive_style(invalid, PaletteEdit::Preserve).unwrap_err(), NC_E_INVALID_ARG);
+    let style:ComPtr<IUiStyleAbi> = crate::com::create_runtime_from_assets(source.as_com_ref()).unwrap().query().unwrap();
+    let invalid = PaletteEditAbi::from_unknown_tag(PaletteEditTag::from_raw(255)).unwrap();
+    assert_eq!(style.derive_style(metrics,invalid).unwrap_err(),NC_E_INVALID_ARG);
+    assert_eq!(ui.assets().unwrap().as_ptr(),source.as_ptr());
+    ui.close().unwrap();
+    assert_eq!(ui.derive_style(metrics,PaletteEdit::Preserve).unwrap_err(),UI_E_CLOSED);
+}

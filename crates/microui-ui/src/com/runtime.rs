@@ -63,7 +63,7 @@ fn create_storage(assets: crate::assets::ImportedAssets) -> Rc<RuntimeStorage> {
     })
 }
 
-#[com_class(interfaces(IUiRuntime, IUiFactory, IWindowManager, IMenus, IFileDialogs))]
+#[com_class(interfaces(IUiRuntime, IUiFactory, IWindowManager, IMenus, IFileDialogs, IUiStyle))]
 /// One identity owns the runtime, its widget factory and window-management policy.
 struct Runtime {
     /// Window handles use Weak references so retaining them cannot form a tree cycle.
@@ -343,6 +343,14 @@ impl IInputSink for Runtime {
         Ok(())
     }
 
+}
+
+impl IUiStyle for Runtime {
+    /// Takes one immutable resource snapshot; derivation never borrows or mutates the retained tree.
+    fn derive_style(&self, metrics: AssetMetrics, palette: PaletteEditAbi) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
+        self.storage.open()?;
+        self.storage.factory.resources.current().assets.derive_style(metrics, palette)
+    }
 }
 
 impl IUiRuntime for Runtime {

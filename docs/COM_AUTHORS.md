@@ -354,6 +354,22 @@ the renderer capabilities specified in the renderer migration.
 
 ## Local custom leaves and solid drawing
 
+The runtime's `IUiStyle` capability supports typed palette and metric editors.
+`ui.derive_style(metrics, PaletteEdit::Preserve)` keeps the current theme artwork;
+`PaletteEdit::Flat(palette)` invokes the UI's existing complete flat-style compiler.
+Both return a new immutable bundle in the current catalog without installing it
+or changing the retained tree. Call `ui.install_assets(candidate, renderer)` to
+publish it through the same validation and GPU preparation as any other revision.
+Invalid metrics or unknown palette tags leave the installed resources unchanged.
+The shared `Color` and `FlatPalette` records are plain contract values; they carry
+no renderer or parser implementation. `Ui` and `WidgetFactory` clones retain their
+existing COM projections, allowing concrete event handlers to own this authority.
+
+Derived styles currently use the ordinary bundle export/install path, including
+its pixel copy and renderer preparation. This API does not promise a palette-only
+fast path. Applications should derive once per committed edit rather than every
+animation frame, and preserve image-backed artwork when only metrics are edited.
+
 `WidgetFactory::leaf(content, options)` stores a concrete `LeafContent` inline in
 one COM allocation implementing `IWidget` and `ILeafLayout`. Its common state
 supplies the same mount-once, closure, options and sticky invalidation rules as

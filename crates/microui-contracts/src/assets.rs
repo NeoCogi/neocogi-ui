@@ -339,3 +339,22 @@ pub trait IThemeLoader {
 pub const THEME_LOADER_CLASS: nc_com::NcGuid = nc_com::guid_from_qualified_name("microui.ThemeLoader");
 /// Activation identity for optional font and PNG construction.
 pub const ASSET_LOADER_CLASS: nc_com::NcGuid = nc_com::guid_from_qualified_name("microui.AssetLoader");
+
+#[com_enum(tag = u8)]
+#[derive(Clone, Copy, Debug)]
+/// Explicit choice between preserving authored artwork and replacing it with a flat recipe.
+pub enum PaletteEdit {
+    /// Keep the current role/state visuals, including image-backed theme artwork.
+    Preserve,
+    /// Compile this complete named palette through the UI's shared flat-style rules.
+    Flat(crate::FlatPalette),
+}
+
+#[com_interface(auto_guid = "microui.UiStyle:v1")]
+/// Observational authoring capability on the same UI runtime that owns the installed resource catalog.
+pub trait IUiStyle {
+    /// Derives an immutable resource revision from current assets without installing it or touching
+    /// the renderer. Invalid geometry or palette tags leave the installed revision unchanged.
+    /// The caller installs the result through the ordinary transactional install_assets boundary.
+    fn derive_style(&self, metrics: AssetMetrics, palette: PaletteEditAbi) -> Result<ComPtr<IAssetBundleAbi>, NcStatus>;
+}

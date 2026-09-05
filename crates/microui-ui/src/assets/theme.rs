@@ -111,28 +111,13 @@ pub(super) fn read(source: ComRef<'_, IAssetBundleAbi>, atlas: &AtlasHandle, ski
     Ok(())
 }
 
-/// Installs a complete scalar recipe after checking every externally supplied tag and extent.
-fn read_geometry(metrics: AssetMetrics, chrome: AssetChrome, skin: &mut Skin) -> Result<(), NcStatus> {
-    if [
-        metrics.default_cell_width,
-        metrics.padding,
-        metrics.spacing,
-        metrics.indent,
-        metrics.title_height,
-        metrics.scrollbar_size,
-        metrics.thumb_size,
-        chrome.vertical_spacing,
-        chrome.minimum_extent,
-        chrome.inner_spacing,
-        chrome.minimized_content_height,
-        chrome.backdrop_padding,
-    ]
-    .iter()
-    .any(|value| *value < 0)
-    {
+/// Validates and converts the one complete metric record for import and live style derivation alike.
+pub(super) fn read_metrics(metrics: AssetMetrics) -> Result<crate::SkinMetrics, NcStatus> {
+    if [metrics.default_cell_width, metrics.padding, metrics.spacing, metrics.indent,
+        metrics.title_height, metrics.scrollbar_size, metrics.thumb_size].iter().any(|value| *value < 0) {
         return Err(NC_E_INVALID_ARG);
     }
-    skin.metrics = crate::SkinMetrics {
+    Ok(crate::SkinMetrics {
         default_cell_width: metrics.default_cell_width,
         padding: metrics.padding,
         window_content_insets: in_insets(metrics.window_content_insets)?,
@@ -142,7 +127,16 @@ fn read_geometry(metrics: AssetMetrics, chrome: AssetChrome, skin: &mut Skin) ->
         window_border: in_insets(metrics.window_border)?,
         scrollbar_size: metrics.scrollbar_size,
         thumb_size: metrics.thumb_size,
-    };
+    })
+}
+
+/// Installs complete geometry into an unpublished candidate after validating scalar and enum domains.
+fn read_geometry(metrics: AssetMetrics, chrome: AssetChrome, skin: &mut Skin) -> Result<(), NcStatus> {
+    skin.metrics = read_metrics(metrics)?;
+    if [chrome.vertical_spacing, chrome.minimum_extent, chrome.inner_spacing,
+        chrome.minimized_content_height, chrome.backdrop_padding].iter().any(|value| *value < 0) {
+        return Err(NC_E_INVALID_ARG);
+    }
     skin.window_chrome = crate::WindowChromeSkin {
         title_alignment: match chrome.title_alignment {
             TitleAlignment::LEADING => crate::WindowTitleAlignment::Leading,

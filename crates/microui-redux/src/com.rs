@@ -223,7 +223,8 @@ impl Widget<IScrollbarAbi> {
     }
 }
 
-/// Runtime-bound factory client; generic application state is never stored here.
+/// Runtime-bound factory client; cloning retains its interface and copies no widget state.
+#[derive(Clone)]
 pub struct WidgetFactory {
     /// The plugin's factory on the same identity as its runtime/window manager.
     interface: ComPtr<IUiFactoryAbi>,
@@ -377,6 +378,8 @@ impl<'a> Painter<'a> {
 }
 
 /// Retained UI client with cached, concrete factory and window-manager capabilities.
+/// Clones retain those same projections so typed app handlers can own runtime authority.
+#[derive(Clone)]
 pub struct Ui {
     /// Authoritative runtime allocation; all state stays in the implementation plugin.
     runtime: ComPtr<IUiRuntimeAbi>,
@@ -468,6 +471,10 @@ impl Ui {
     /// Retains the current immutable bundle for restoration or another UI/renderer consumer.
     pub fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         self.runtime.assets()
+    }
+    /// Compiles a metric/palette edit through this runtime's existing style rules without installing it.
+    pub fn derive_style(&self, metrics: AssetMetrics, palette: PaletteEdit) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
+        self.runtime.query::<IUiStyleAbi>()?.derive_style(metrics, palette.into())
     }
     /// Validates compatible resources and uploads before publication; call update after success.
     pub fn install_assets(&self, assets: ComRef<'_, IAssetBundleAbi>, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {

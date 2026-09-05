@@ -86,6 +86,18 @@ impl ImportedAssets {
         export_bundle_data(bundle)?.into_revision(self.source())
     }
 
+    /// Compiles an authoring edit against already validated resources, preserving catalog identity.
+    pub(crate) fn derive_style(&self, metrics: AssetMetrics, palette: PaletteEditAbi) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
+        let palette = PaletteEdit::try_from(palette).map_err(|_| NC_E_INVALID_ARG)?;
+        let mut skin = self.bundle.skin().clone();
+        skin.metrics = theme::read_metrics(metrics)?;
+        if let PaletteEdit::Flat(palette) = palette {
+            // The existing compiler supplies every role/state rule; applications keep no copy.
+            skin.apply_flat_palette(palette);
+        }
+        self.export_derived(&SkinBundle::new(self.bundle.atlas().clone(), skin))
+    }
+
     /// Compiles a JSON theme locally against the pristine application atlas.
     /// The optional provider then calls export_derived on the result's bundle.
     #[cfg(feature = "theme-json")]

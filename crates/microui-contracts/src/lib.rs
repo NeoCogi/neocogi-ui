@@ -505,3 +505,10 @@ pub trait IPopup {
     /// Permanently removes this popup subtree and closes its retained widgets.
     fn close(&self) -> Result<(), NcStatus>;
 }
+
+/// Plain color values also used by renderer and optional JSON authoring code.
+mod color;
+pub use color::{Color, color};
+/// Named flat-palette authoring values; the UI owns their resolved appearance compiler.
+pub mod palette;
+pub use palette::FlatPalette;
