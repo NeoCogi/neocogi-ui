@@ -43,7 +43,7 @@ use microui_ui::{
 };
 
 #[cfg(any(feature = "webgl", feature = "glow"))]
-use std::sync::Arc;
+use std::rc::Rc;
 
 #[cfg(all(not(feature = "webgl"), feature = "glow"))]
 use microui_redux_renderer_glow as glow_renderer;
@@ -92,7 +92,7 @@ pub type SelectedBackend<ApplicationRenderer = ()> = wgpu_renderer::WgpuRenderer
 
 #[cfg(any(feature = "webgl", feature = "glow"))]
 /// Native graphics handle supplied to application state initialization on GL backends.
-pub type BackendInitContext = Arc<glow::Context>;
+pub type BackendInitContext = Rc<glow::Context>;
 #[cfg(any(
     all(not(feature = "webgl"), not(feature = "glow"), feature = "vulkan"),
     all(not(feature = "webgl"), not(feature = "glow"), not(feature = "vulkan"), feature = "wgpu"),
@@ -389,7 +389,7 @@ where
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 mod browser {
-    use std::{cell::RefCell, rc::Rc, sync::Arc};
+    use std::{cell::RefCell, rc::Rc};
 
     use wasm_bindgen::{JsCast, closure::Closure};
     use web_sys::{HtmlCanvasElement, HtmlElement};
@@ -447,7 +447,7 @@ mod browser {
                 .ok_or("WebGL 2 is unavailable in this browser")?
                 .dyn_into::<web_sys::WebGl2RenderingContext>()
                 .map_err(|_| "canvas returned a non-WebGL 2 context")?;
-            let gl = Arc::new(glow::Context::from_webgl2_context(webgl));
+            let gl = Rc::new(glow::Context::from_webgl2_context(webgl));
             let renderer =
                 webgl_canvas_renderer::WebGlCanvasRenderer::new_with_application(gl.clone(), atlas, canvas.width(), canvas.height(), application_renderer)?;
             let mut ctx = microui::Context::new(renderer);
@@ -610,7 +610,7 @@ where
     debug_assert_eq!(gl_attr.context_version(), (3, 0));
 
     let (width, height) = window.size();
-    let gl = Arc::new(gl);
+    let gl = Rc::new(gl);
     let renderer = glow_renderer::GLRenderer::new_with_application(gl.clone(), atlas, width, height, application_renderer)?;
 
     Ok((

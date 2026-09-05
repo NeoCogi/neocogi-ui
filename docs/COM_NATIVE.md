@@ -18,7 +18,7 @@ cargo run -p microui-redux-tools --bin com-build -- --backend vulkan
 cargo run -p microui-redux-tools --bin com-build -- --backend wgpu
 ```
 
-Packages are staged in `target/com-native/{debug,release}/{glow,vulkan,wgpu}/{prebuilt,builder,theme-json}`. Each contains the same host, runtime, UI plugin and `microui-plugin-platform-native`, plus an explicit `plugins.txt`. A native display is required for the Vulkan/WGPU smoke tests. The ordinary Cargo `glow`/`vulkan`/`wgpu` feature priority matches the existing demo renderer when features are unified; the packaging driver selects exactly one with default features disabled.
+Packages are staged in `target/com-native/{debug,release}/{glow,vulkan,wgpu}/{prebuilt,builder,theme-json}`. Each contains the same host, runtime, UI plugin and `microui-plugin-platform`, plus an explicit `plugins.txt`. A native display is required for the Vulkan/WGPU smoke tests. The ordinary Cargo `glow`/`vulkan`/`wgpu` feature priority matches the existing demo renderer when features are unified; the packaging driver selects exactly one with default features disabled.
 
 The host reads the staged `plugins.txt` in order, loads both trusted libraries from beside its executable, and activates their concrete bootstrap classes. `microui-redux` contains only static typed clients and contracts. `microui-ui` contains retained implementation code. The small crates under `plugins/` own descriptors and explicitly selected exports; an ordinary implementation-library dependency never exports a plugin entrypoint accidentally.
 
@@ -51,9 +51,9 @@ The native resource/ownership test is explicit because it creates real OS window
 
 ```sh
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
-  cargo test -p microui-plugin-platform-native --lib -- --ignored
-cargo test -p microui-plugin-platform-native --no-default-features --features vulkan --lib -- --ignored
-cargo test -p microui-plugin-platform-native --no-default-features --features wgpu --lib -- --ignored
+  cargo test -p microui-plugin-platform --lib -- --ignored
+cargo test -p microui-plugin-platform --no-default-features --features vulkan --lib -- --ignored
+cargo test -p microui-plugin-platform --no-default-features --features wgpu --lib -- --ignored
 ```
 
 `demos/com-slice/src/gpu.rs` demonstrates an independently implemented host widget with inline `WidgetState`, a typed immutable image and an inherited mesh render item. Its application logic uses only the facade and contracts. The demo's native shaders/pipelines remain co-packaged with the selected renderer. Factory `host()` supplies widget authority directly, without constructing a dummy built-in control.
@@ -77,3 +77,27 @@ The default mode is `prebuilt`. Optional modes add one asset library; JSON mode 
 stages the bundled theme/font sources. Relative theme paths resolve against the
 executable directory. Raw compiled atlas pixels occupy 512 KiB for the demo, before
 metadata; this explicit storage cost is included in the final installed-size budget.
+
+
+The platform assembly also builds with `--no-default-features --features webgl`
+for `wasm32-unknown-unknown`. It statically registers the same UI/platform COM
+contracts, with one linked nc-com runtime. DOM listeners, native composition,
+canvas ownership and WebGL stay in this assembly; bulk frame validation and
+texture/mesh ownership are shared with all native backends. Each platform window
+creates an independent canvas appended to the document body; applications supply
+page CSS. Releasing the public window removes the canvas/listeners while retained
+GPU resources keep their WebGL context alive until final release.
+
+Run `scripts/test-browser-input.sh` after installing the matching wasm-bindgen CLI
+(the script accepts `MICROUI_WASM_BINDGEN` and `CARGO_TARGET_DIR`). It checks actual
+DOM composition/paste, chorded pointer input, wheel scaling and teardown, then
+registers both static descriptors, edits a real COM textbox, positions native IME
+and renders WebGL frames before/after a CSS resize. Headless Chromium uses its
+software WebGL implementation so this is a real GPU-API execution gate rather
+than a compile-only check. The main demo host migration remains in progress.
+
+A lost WebGL context reports a renderer error before upload or submission. The
+application must recreate the platform window and its GPU resources; automatic
+context restoration and reusing old device capabilities are unsupported. This
+follows the ordinary renderer ownership contract instead of hiding a second,
+partially restored native device under existing texture identities.
