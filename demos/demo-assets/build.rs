@@ -30,7 +30,7 @@
 //! Generates the embedded atlas through ordinary Cargo host build dependencies.
 
 use std::{env, error::Error, path::PathBuf};
-use microui_ui::{atlas::builder::Builder, SourceFormat};
+use microui_ui::atlas::builder::Builder;
 
 /// Compile exactly the same recipe used by runtime loading and the command-line exporter.
 #[path = "src/recipe.rs"]
@@ -39,9 +39,6 @@ mod recipe;
 /// Tracks the recipe's actual inputs and writes validated embedded data only when requested.
 fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed=src/recipe.rs");
-    if env::var_os("CARGO_FEATURE_PREBUILT_ATLAS").is_none() && env::var_os("CARGO_FEATURE_PREBUILT_COM").is_none() {
-        return Ok(());
-    }
     let config = recipe::atlas_config();
     // Derive file tracking from the recipe itself so a new font/icon cannot silently omit a
     // build dependency. Repeated font paths are harmless repeated Cargo tracking directives.
@@ -51,20 +48,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     {
         println!("cargo:rerun-if-changed={}", path.display());
     }
-    let output = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo provides OUT_DIR")).join("prebuilt_atlas.rs");
+    let output = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo provides OUT_DIR")).join("prebuilt_bundle.rs");
     let atlas = Builder::from_config(&config)?.build()?;
-    // The core exporter writes the PNG and its metadata together; no nested Cargo process,
-    // separate target directory, or copied serialization format is needed.
-    if env::var_os("CARGO_FEATURE_PREBUILT_ATLAS").is_some() {
-        atlas.to_rust_files("PREBUILT_ATLAS", SourceFormat::Png, output)?;
-    }
-    if env::var_os("CARGO_FEATURE_PREBUILT_COM").is_some() {
-        let output = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo provides OUT_DIR")).join("prebuilt_bundle.rs");
-        let bundle = microui_ui::SkinBundle::from_atlas(atlas);
-        bundle.to_com_rust_files(output)?;
-        if env::var_os("CARGO_FEATURE_FULL_DEMO").is_some() {
-            full_demo_assets(&bundle)?;
-        }
+    // One atomic generated artifact replaces the native atlas and COM alternative paths.
+    let bundle = microui_ui::SkinBundle::from_atlas(atlas);
+    bundle.to_com_rust_files(output)?;
+    if env::var_os("CARGO_FEATURE_FULL_DEMO").is_some() {
+        full_demo_assets(&bundle)?;
     }
     Ok(())
 }
@@ -79,8 +69,10 @@ fn full_demo_assets(base: &microui_ui::SkinBundle) -> Result<(), Box<dyn Error>>
     let source = microui_ui::assets::export_bundle(base)?;
     let imported = microui_ui::assets::ImportedAssets::read(source.as_com_ref(), None)?;
     for (directory, generated) in [("windows-3.11", "windows_311"), ("windows-95", "windows_95"), ("mac-os-9", "mac_os_9")] {
-        imported.load_theme(&workspace.join("themes").join(directory).join("theme.json"))?
-            .bundle().to_com_rust_files(output.join(format!("{generated}.rs")))?;
+        imported
+            .load_theme(&workspace.join("themes").join(directory).join("theme.json"))?
+            .bundle()
+            .to_com_rust_files(output.join(format!("{generated}.rs")))?;
     }
     Ok(())
 }

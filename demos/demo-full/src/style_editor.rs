@@ -237,7 +237,7 @@ impl StyleEditor {
     }
     /// Installs a pristine compiled theme in the original catalog and resets the editor's controls.
     pub(super) fn select(&mut self, selected: Theme, ui: &Ui, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
-        let candidate = selected.data().into_revision(self.base.as_com_ref())?;
+        let candidate = selected.data()?.into_revision(self.base.as_com_ref())?;
         let metrics = candidate.metrics()?;
         ui.install_assets(candidate.as_com_ref(), renderer)?;
         self.selected = selected;
@@ -269,7 +269,11 @@ impl StyleEditor {
                 control.set_value(*channel.value(color) as f32)?;
                 let options = WidgetOptions::FRAME.bits
                     | WidgetOptions::ALIGN_CENTER.bits
-                    | if self.selected == Theme::Default { 0 } else { WidgetOptions::NO_INTERACT.bits };
+                    | if self.selected == Theme::Default {
+                        0
+                    } else {
+                        WidgetOptions::NO_INTERACT.bits
+                    };
                 control.set_options(WidgetOptions { bits: options })?;
             }
             row.swatch.set_fill(rgba(*color))?;

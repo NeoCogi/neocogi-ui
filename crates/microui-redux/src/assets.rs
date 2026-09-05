@@ -144,3 +144,61 @@ fn copy<T: Copy>(values: &[T], mut output: NcCopyToBufferOffset<'_, T>) -> Resul
     output.as_mut_slice().copy_from_slice(values.get(first..end).ok_or(NC_E_INVALID_ARG)?);
     Ok(())
 }
+
+/// Expands one generated zlib stream into exactly the declared RGBA byte count.
+///
+/// Enabled by `compiled-assets`; no font, image-file or theme parser is involved. The
+/// returned allocation belongs to AssetData and is freed with its immutable bundle.
+/// Malformed, truncated, trailing, checksum-invalid and size-mismatched data fail
+/// before publication. Output cannot grow past the shared 64 MiB asset limit.
+#[cfg(feature = "compiled-assets")]
+pub fn decode_pixels(compressed: &[u8], rgba_bytes: usize) -> Result<Vec<u8>, NcStatus> {
+    use miniz_oxide::inflate::{
+        TINFLStatus,
+        core::{decompress, DecompressorOxide, inflate_flags::*},
+    };
+    if rgba_bytes == 0 || !rgba_bytes.is_multiple_of(4) || rgba_bytes > MAX_ASSET_PIXELS_BYTES {
+        return Err(NC_E_INVALID_ARG);
+    }
+    // Decode directly into the final allocation: no growing buffer, temporary copy or global cache.
+    let mut pixels = vec![0; rgba_bytes];
+    let (status, consumed, written) = decompress(
+        &mut DecompressorOxide::new(),
+        compressed,
+        &mut pixels,
+        0,
+        TINFL_FLAG_PARSE_ZLIB_HEADER | TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF,
+    );
+    if status != TINFLStatus::Done || consumed != compressed.len() || written != rgba_bytes {
+        return Err(NC_E_INVALID_ARG);
+    }
+    Ok(pixels)
+}
+
+#[cfg(all(test, feature = "compiled-assets"))]
+mod compiled_tests {
+    use super::*;
+
+    /// Exact-size expansion rejects corruption and never accepts a partially decoded candidate.
+    #[test]
+    fn compressed_pixels_require_one_complete_exact_sized_stream() {
+        // Python zlib.compress(bytes([255, 255, 255, 255])) gives this independent stream.
+        let compressed = [120, 156, 251, 255, 255, 255, 127, 0, 9, 250, 3, 253];
+        assert_eq!(decode_pixels(&compressed, 4).unwrap(), [255; 4]);
+        for size in [0, 3, 8, MAX_ASSET_PIXELS_BYTES + 4, usize::MAX] {
+            assert_eq!(decode_pixels(&compressed, size), Err(NC_E_INVALID_ARG));
+        }
+        for end in 0..compressed.len() {
+            assert_eq!(decode_pixels(&compressed[..end], 4), Err(NC_E_INVALID_ARG));
+        }
+        // A valid stream that expands beyond the declared buffer must also fail.
+        assert_eq!(decode_pixels(&[120, 156, 251, 255, 31, 2, 0, 35, 228, 7, 249], 4), Err(NC_E_INVALID_ARG));
+        let mut extra = compressed.to_vec();
+        extra.push(0);
+        assert_eq!(decode_pixels(&extra, 4), Err(NC_E_INVALID_ARG));
+        let mut corrupt = compressed;
+        corrupt[11] ^= 1;
+        assert_eq!(decode_pixels(&corrupt, 4), Err(NC_E_INVALID_ARG));
+        assert_eq!(decode_pixels(&[0; 16], 4), Err(NC_E_INVALID_ARG));
+    }
+}

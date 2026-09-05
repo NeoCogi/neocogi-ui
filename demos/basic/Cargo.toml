@@ -17,7 +17,7 @@ wgpu = ["microui-redux-demo-host/wgpu"]
 [dependencies]
 microui-redux.workspace = true
 nc-com = { workspace = true, features = ["std", "macros"] }
-microui-redux-demo-assets = { workspace = true, features = ["prebuilt-com"] }
+microui-redux-demo-assets.workspace = true
 microui-redux-demo-host.workspace = true
 rs-math3d.workspace = true
 

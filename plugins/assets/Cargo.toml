@@ -21,4 +21,4 @@ microui-ui = { workspace = true, features = ["png_source"] }
 nc-com = { workspace = true, features = ["macros", "std"] }
 
 [dev-dependencies]
-microui-redux-demo-assets = { workspace = true, features = ["builder", "prebuilt-com"] }
+microui-redux-demo-assets = { workspace = true, features = ["builder"] }

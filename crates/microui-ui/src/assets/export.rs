@@ -8,7 +8,8 @@ use std::{
 
 impl SkinBundle {
     /// Atomically writes self-contained Rust `load_bundle` and `bundle_data` functions.
-    /// The generated function borrows static pixels/metadata and owns only resolved visual arrays.
+    /// Generated code requires facade `compiled-assets`: metadata stays static and pixels expand
+    /// once into bounded owned storage. Fonts, PNG files and JSON are processed only by the exporter.
     /// A sibling temporary file keeps the previous output intact until the complete replacement is flushed.
     pub fn to_com_rust_files(&self, destination: impl AsRef<Path>) -> io::Result<()> {
         let destination = destination.as_ref();
@@ -18,11 +19,17 @@ impl SkinBundle {
             .filter(|path| !path.as_os_str().is_empty())
             .unwrap_or_else(|| Path::new("."));
         let mut rust = io::BufWriter::new(tempfile::NamedTempFile::new_in(parent)?);
-        rust.write_all(b"// Generated immutable COM bundle; regenerate from the owning asset recipe.\nuse microui_redux::*;\nuse std::borrow::Cow;\n\n/// Publishes one compiled resource catalog without parsing fonts, PNG or JSON at runtime.\npub fn load_bundle() -> Result<nc_com::ComPtr<IAssetBundleAbi>, nc_com::NcStatus> {\n    bundle_data().into_bundle()\n}\n\n/// Returns compiled tables for a fresh bundle or a revision of an existing catalog.\npub fn bundle_data() -> microui_redux::assets::AssetData {\n    microui_redux::assets::AssetData {\n")?;
+        rust.write_all(b"// Generated immutable COM bundle; regenerate from the owning asset recipe.\nuse microui_redux::*;\nuse std::borrow::Cow;\n\n/// Publishes one compiled resource catalog without parsing fonts, PNG or JSON at runtime.\npub fn load_bundle() -> Result<nc_com::ComPtr<IAssetBundleAbi>, nc_com::NcStatus> {\n    bundle_data()?.into_bundle()\n}\n\n/// Returns compiled tables for a fresh bundle or a revision of an existing catalog.\npub fn bundle_data() -> Result<microui_redux::assets::AssetData, nc_com::NcStatus> {\n    Ok(microui_redux::assets::AssetData {\n")?;
         // Debug formatting is Rust source for these plain named scalar records. Tagged union
         // storage is never dumped; resolved artwork is reconstructed through its checked enum.
         writeln!(rust, "        size: {:?},", data.size)?;
-        writeln!(rust, "        pixels: Cow::Borrowed(&{:?}),", data.pixels)?;
+        let compressed = miniz_oxide::deflate::compress_to_vec_zlib(&data.pixels, 9);
+        writeln!(
+            rust,
+            "        pixels: Cow::Owned(microui_redux::assets::decode_pixels(&{:?}, {})?),",
+            compressed,
+            data.pixels.len()
+        )?;
         writeln!(rust, "        names: Cow::Borrowed(&{:?}),", data.names)?;
         writeln!(rust, "        fonts: Cow::Borrowed(&{:?}),", data.fonts)?;
         writeln!(rust, "        glyphs: Cow::Borrowed(&{:?}),", data.glyphs)?;
@@ -68,7 +75,7 @@ impl SkinBundle {
             }
             writeln!(rust, "        ]),")?;
         }
-        rust.write_all(b"    }\n}\n")?;
+        rust.write_all(b"    })\n}\n")?;
         // Atomic replacement publishes exactly one self-contained source artifact. Failed writes
         // leave both the previous file and every future build's visible input unchanged.
         rust.flush()?;

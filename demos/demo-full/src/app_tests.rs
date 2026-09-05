@@ -13,7 +13,7 @@ fn exercise() -> Result<(Host, EventSession<State>), HostError> {
         host.ui.update_with_events(size, &events)?;
         host.ui.render(size, host.renderer.as_com_ref())?;
         let state = events.state()?;
-        assert_eq!(state.ui.assets()?.metrics()?, theme.data().metrics);
+        assert_eq!(state.ui.assets()?.metrics()?, theme.data()?.metrics);
         for (choice, item) in &state.themes {
             assert_eq!(item.mark()?, MenuMark::Radio { selected: *choice == theme });
         }

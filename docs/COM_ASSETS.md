@@ -185,9 +185,10 @@ finish. Renderer upload details use `IRenderDiagnostics`.
 
 `SkinBundle::to_com_rust_files(path)` atomically writes one self-contained source
 file. `load_bundle()` creates a fresh catalog; `bundle_data()` supplies the same
-tables for `into_revision(base)` when exporting a compatible theme. Generated code
-borrows static pixels, names, glyphs and font/icon records. It owns the small resolved
-visual arrays because tagged conversions occur during construction. No generated
+tables for `into_revision(base)` when exporting a compatible theme. Both functions
+return `Result`; use `bundle_data()?.into_revision(base)`. Generated code requires
+facade `compiled-assets`, borrows names/glyphs/font/icon records, expands compressed
+pixels into one owned allocation, and owns the resolved visual arrays. No generated
 file exposes `AtlasHandle`, native IDs, UI implementation storage or parser APIs.
 
 ```sh
@@ -197,16 +198,23 @@ cargo run -p microui-redux-tools --bin com-build -- --backend glow --assets buil
 cargo run -p microui-redux-tools --bin com-build -- --backend glow --assets theme-json
 ```
 
-The stage is `target/com-native/{profile}/{backend}/{asset-mode}`. `prebuilt`
+The stage is `target/com-native/{profile}/{backend}/{asset-mode}/{demo}`. `prebuilt`
 contains the executable, runtime, UI and platform libraries. `builder` adds the
 font/PNG asset plugin. `theme-json` adds the same plugin with JSON support plus the
 bundled theme/font source files. The host accepts `--rebuild-assets` and
 `--theme themes/windows-95/theme.json`; relative theme paths resolve against its
 staged executable directory. Both can be combined with `--smoke` from another cwd.
 
-Compiled pixels are raw RGBA, trading parser dependencies for larger static data.
-The demo's 512×256 atlas occupies 512 KiB before metadata. This is an explicit size
-cost, not a binary-size reduction claim. Native executables, each shared library,
-theme source files and total installed bytes all count in the final deployment
-budget. Build-script dependencies compile parsers for the build host; they do not
-put those parsers into a compiled-only application target.
+Compiled pixels use zlib, while the COM asset contract still copies ordinary RGBA.
+The generated loader validates the exact output length and shared 64 MiB limit,
+checksum and stream completion before constructing a bundle. It rejects truncation,
+trailing bytes and shorter/longer output. Pixel storage is freed with the bundle;
+there is no process-global decoded cache. Each fresh load or theme candidate performs
+its own expansion, so applications should retain their installed bundle rather than
+reloading it per frame. The complete publication/upload path remains transactional.
+
+Build-host font/image/theme parsers remain absent from a compiled-only application
+target. The optional small inflater has an activation-time and owned-memory cost;
+executable bytes, every shared library, external assets, startup and loaded memory
+all belong in deployment accounting. The full demo's separate sample PNG is decoded
+by its asset plugin and is not part of the generated pixel-stream format.

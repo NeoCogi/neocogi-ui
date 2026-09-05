@@ -18,7 +18,7 @@ default = []
 builder = ["dep:fontdue", "dep:png"]
 png_source = ["dep:png"]
 theme-json = ["microui-contracts/theme-json", "builder", "dep:serde", "dep:serde_json", "png_source"]
-save-to-rust = ["dep:tempfile"]
+save-to-rust = ["dep:tempfile", "dep:miniz_oxide"]
 
 [dependencies]
 # Standard plugin-owned compositions reuse the static typed clients and owned event adapter.
@@ -32,6 +32,7 @@ rs-math3d.workspace = true
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
+miniz_oxide = { workspace = true, optional = true, features = ["with-alloc"] }
 
 [dev-dependencies]
 microui-redux = { workspace = true, features = ["test-support"] }

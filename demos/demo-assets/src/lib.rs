@@ -50,94 +50,65 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-//! Demo atlas loading from the shared recipe or Cargo-generated embedded data.
+//! Compiled immutable COM demo resources; all parsing and packing runs in Cargo's build host.
 
-#[cfg(any(feature = "builder", feature = "prebuilt-atlas"))]
-use microui_ui::prelude::AtlasHandle;
-
-/// Asset recipe also compiled directly into this package's Cargo build script.
+/// One shared recipe is exposed only to host tools and asset-provider tests.
 #[cfg(feature = "builder")]
 mod recipe;
 #[cfg(feature = "builder")]
 pub use recipe::atlas_config;
 
-/// Builds and validates the shared recipe at startup when embedding was not selected.
-#[cfg(all(not(feature = "prebuilt-atlas"), feature = "builder"))]
-pub fn load_atlas() -> AtlasHandle {
-    use microui_ui::atlas::builder::Builder;
-    Builder::from_config(&atlas_config())
-        .and_then(Builder::build)
-        .expect("default atlas assets must load, pack, and satisfy the complete atlas contract")
-}
-
-/// Generated source stays private; callers receive the same validated AtlasHandle in either mode.
-#[cfg(feature = "prebuilt-atlas")]
+/// Generated metadata and compressed pixels have no target dependency on the UI implementation.
 mod prebuilt {
-    use microui_ui::prelude::AtlasHandle;
-    include!(concat!(env!("OUT_DIR"), "/prebuilt_atlas.rs"));
-
-    /// Validates generated pixels and metadata again at the runtime ownership boundary.
-    pub fn load() -> AtlasHandle {
-        AtlasHandle::try_from(&PREBUILT_ATLAS).expect("generated prebuilt atlas must satisfy the complete atlas contract")
-    }
-}
-
-/// Loads the self-contained atlas produced by the host build script.
-#[cfg(feature = "prebuilt-atlas")]
-pub fn load_atlas() -> AtlasHandle {
-    prebuilt::load()
-}
-
-/// Compiled COM tables have no target dependency on the retained UI or any asset parser.
-#[cfg(feature = "prebuilt-com")]
-mod prebuilt_com {
     include!(concat!(env!("OUT_DIR"), "/prebuilt_bundle.rs"));
 }
-#[cfg(feature = "prebuilt-com")]
-pub use prebuilt_com::{load_bundle, bundle_data};
+pub use prebuilt::{load_bundle, bundle_data};
 
-#[cfg(all(not(feature = "prebuilt-atlas"), not(feature = "prebuilt-com"), not(feature = "builder")))]
-compile_error!("demo assets require `builder` for runtime generation or `prebuilt-atlas` for embedded data");
-
-/// Compare host generation with the runtime recipe after actual generated-data decoding.
-#[cfg(all(test, feature = "builder", feature = "prebuilt-atlas"))]
-mod tests {
-    use super::*;
-    use microui_ui::atlas::builder::Builder;
-
-    /// Catch recipe/feature drift by validating both pixels and resource presentation metadata.
-    #[test]
-    fn prebuilt_and_runtime_recipes_produce_equivalent_atlases() {
-        let built = Builder::from_config(&atlas_config()).unwrap().build().unwrap();
-        let embedded = load_atlas();
-        assert_eq!((built.width(), built.height()), (embedded.width(), embedded.height()));
-        let built_pixels: Vec<_> = built.pixels().iter().map(|pixel| [pixel.x, pixel.y, pixel.z, pixel.w]).collect();
-        let embedded_pixels: Vec<_> = embedded.pixels().iter().map(|pixel| [pixel.x, pixel.y, pixel.z, pixel.w]).collect();
-        assert_eq!(built_pixels, embedded_pixels);
-        let built_fonts = built.clone_font_table();
-        let embedded_fonts = embedded.clone_font_table();
-        assert_eq!(built_fonts.len(), embedded_fonts.len());
-        for (name, font) in built_fonts {
-            let other = embedded.font_id(&name).expect("generated font keeps its recipe name");
-            assert_eq!(built.get_font_height(font), embedded.get_font_height(other));
-            assert_eq!(built.get_font_baseline(font), embedded.get_font_baseline(other));
-            assert_eq!(built.get_font_size(font), embedded.get_font_size(other));
-        }
-        let built_icons = built.clone_icon_table();
-        assert_eq!(built_icons.len(), embedded.clone_icon_table().len());
-        for (name, icon) in built_icons {
-            let other = embedded.icon_id(&name).expect("generated icon keeps its recipe name");
-            let a = built.get_icon_rect(icon);
-            let b = embedded.get_icon_rect(other);
-            assert_eq!((a.x, a.y, a.width, a.height), (b.x, b.y, b.width, b.height));
-        }
-    }
-}
-
-/// Precompiled full-demo theme choices share the same canonical bulk bundle format.
+/// Additional theme choices use the same generated provider and immutable contract.
 #[cfg(feature = "full-demo")]
 pub mod themes;
 
-/// Compressed sample stays compact; the optional asset plugin owns PNG decoding and upload.
+/// The optional asset plugin decodes this complete PNG file and uploads its image.
 #[cfg(feature = "full-demo")]
 pub const FACEPALM_PNG: &[u8] = include_bytes!("../../demo-full/assets/FACEPALM.png");
+
+#[cfg(all(test, feature = "builder"))]
+mod tests {
+    use super::*;
+
+    /// Compare the actual compiled source with the independent runtime recipe before COM import.
+    #[test]
+    fn compiled_bundle_preserves_pixels_and_metadata() {
+        let atlas = microui_ui::atlas::builder::Builder::from_config(&atlas_config()).unwrap().build().unwrap();
+        let expected = microui_ui::assets::export_bundle_data(&microui_ui::SkinBundle::from_atlas(atlas)).unwrap();
+        let actual = bundle_data().unwrap();
+        assert_eq!(expected.size, actual.size);
+        assert_eq!(expected.pixels, actual.pixels);
+        assert_eq!(expected.fonts, actual.fonts);
+        assert_eq!(expected.glyphs, actual.glyphs);
+        assert_eq!(expected.icons, actual.icons);
+        assert_eq!(expected.names, actual.names);
+        assert_eq!(expected.metrics, actual.metrics);
+        assert_eq!(expected.chrome, actual.chrome);
+        for (expected, actual) in [
+            (&expected.surfaces, &actual.surfaces),
+            (&expected.controls, &actual.controls),
+            (&expected.menus, &actual.menus),
+            (&expected.window_chrome, &actual.window_chrome),
+        ] {
+            assert_eq!(expected.len(), actual.len());
+            for (expected, actual) in expected.iter().zip(actual.iter()) {
+                assert_eq!(expected.insets, actual.insets);
+                assert_eq!(expected.center_visible, actual.center_visible);
+                assert_eq!(expected.content_color, actual.content_color);
+                assert_eq!(
+                    microui_redux::AssetPatch::try_from(expected.patch).unwrap(),
+                    microui_redux::AssetPatch::try_from(actual.patch).unwrap()
+                );
+            }
+        }
+        // Import validates every generated visual and resource reference as an ordinary provider.
+        let source = actual.into_bundle().unwrap();
+        microui_ui::assets::ImportedAssets::read(source.as_com_ref(), None).unwrap();
+    }
+}

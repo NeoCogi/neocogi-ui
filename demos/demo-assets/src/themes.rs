@@ -39,7 +39,7 @@ impl Theme {
         }
     }
     /// Returns immutable tables suitable for into_revision(base), preserving the application's catalog.
-    pub fn data(self) -> AssetData {
+    pub fn data(self) -> Result<AssetData, nc_com::NcStatus> {
         match self {
             Self::Default => super::bundle_data(),
             Self::Windows311 => windows_311::bundle_data(),

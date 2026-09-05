@@ -9,10 +9,13 @@ description = "Static typed Rust facade for COM-based microui plugins"
 
 [dependencies]
 microui-contracts.workspace = true
+miniz_oxide = { workspace = true, optional = true }
 nc-com = { workspace = true, features = ["macros", "std"] }
 
 [features]
 default = []
+# Generated resource tables expand bounded zlib pixels; other clients need no decoder.
+compiled-assets = ["dep:miniz_oxide"]
 # Internal behavior fixtures; ordinary plugin and application builds do not expose queue leases.
 test-support = []
 # Deployment policy belongs to the final application, not implementation plugins.
