@@ -39,7 +39,7 @@ impl NativeSurface {
 }
 
 /// Converts concrete policy errors at the ABI boundary without conflating closure and policy.
-fn status(error: SurfaceMutationError) -> NcStatus {
+pub(super) fn status(error: SurfaceMutationError) -> NcStatus {
     match error {
         SurfaceMutationError::UnknownWindow | SurfaceMutationError::UnknownPopup => UI_E_CLOSED,
         SurfaceMutationError::InvalidLayer(_) => NC_E_INVALID_ARG,
@@ -61,7 +61,7 @@ enum Placement {
 
 impl RuntimeStorage {
     /// Resolves an actual manager-owned COM identity without trusting caller-provided numeric IDs.
-    fn parent(&self, parent: ComRef<'_, IWindowAbi>) -> Result<WindowHandle, NcStatus> {
+    pub(super) fn parent(&self, parent: ComRef<'_, IWindowAbi>) -> Result<WindowHandle, NcStatus> {
         let identity: ComPtr<IUnknown> = parent.add_ref().query()?;
         self.mounts
             .borrow()
@@ -203,11 +203,11 @@ enum WindowEdit {
 /// One retained COM window capability; all semantic state remains in the manager's forest.
 struct LogicalWindow {
     /// Weak owner access avoids a manager/window reference cycle.
-    runtime: Weak<RuntimeStorage>,
+    pub(super) runtime: Weak<RuntimeStorage>,
     /// Native identity never crosses the ABI or becomes an application property.
     window: WindowHandle,
     /// Explicit close is idempotent independently of parent destruction.
-    closed: Cell<bool>,
+    pub(super) closed: Cell<bool>,
 }
 
 impl LogicalWindow {
@@ -321,13 +321,13 @@ impl IWindow for LogicalWindow {
 
 #[com_class(interfaces(IPopup, IPopupEvents))]
 /// Popup projection has its own placement/lifetime methods and cannot impersonate a window.
-struct LogicalPopup {
+pub(super) struct LogicalPopup {
     /// Retaining the popup never retains the runtime through a strong cycle.
-    runtime: Weak<RuntimeStorage>,
+    pub(super) runtime: Weak<RuntimeStorage>,
     /// Private identity of the manager-owned popup definition.
-    popup: PopupHandle,
+    pub(super) popup: PopupHandle,
     /// Explicit close is idempotent after removal.
-    closed: Cell<bool>,
+    pub(super) closed: Cell<bool>,
 }
 
 /// Explicit popup mutation payloads use the same concrete dispatch pattern as window edits.

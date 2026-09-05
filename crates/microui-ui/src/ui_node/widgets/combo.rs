@@ -403,3 +403,40 @@ impl From<ComboParameters> for Combo {
         }
     }
 }
+
+impl crate::com::widget::WidgetAlgorithm for Combo {
+    /// Retained COM pointers cannot extend event delivery after logical widget closure.
+    fn close_events(&mut self) {
+        self.changed_event.close_ordinary();
+        self.submitted_event.close_ordinary();
+    }
+    /// Synchronizes common presentation options inside the one semantic value.
+    fn set_options(&mut self, options: WidgetOption) {
+        self.opt = options;
+    }
+}
+impl crate::com::widget::FontState for Combo {
+    /// Measurement and paint read this same existing font selection.
+    fn font(&self) -> &FontRef {
+        &self.font
+    }
+    /// The common COM helper validates ownership before installing this field.
+    fn set_font(&mut self, font: FontRef) {
+        self.font = font;
+    }
+}
+impl Combo {
+    /// Installs one complete selection; only an explicit user submission closes and publishes changed.
+    pub(crate) fn com_set_selection(&mut self, selected: usize, label: &str, submit: bool) {
+        let changed = self.selected != selected || self.label != label;
+        self.selected = selected;
+        self.label.clear();
+        self.label.push_str(label);
+        if submit {
+            self.close_popup();
+            if changed {
+                self.emit_changed();
+            }
+        }
+    }
+}

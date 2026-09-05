@@ -147,7 +147,7 @@ pub struct FileDialogCompleted {
 
 impl FileDialogCompleted {
     /// Owns the terminal snapshot before deferred dispatch begins.
-    fn new(status: FileDialogStatus) -> Self {
+    pub(crate) fn new(status: FileDialogStatus) -> Self {
         Self { status }
     }
 
@@ -428,7 +428,7 @@ impl FileDialog {
     }
 
     /// Reads and sorts a complete native listing; no entry or metadata error is silently dropped.
-    fn read_directory(path: &Path) -> std::io::Result<(Vec<PathBuf>, Vec<PathBuf>)> {
+    pub(crate) fn read_directory(path: &Path) -> std::io::Result<(Vec<PathBuf>, Vec<PathBuf>)> {
         let mut folders = Vec::new();
         let mut files = Vec::new();
         for entry in std::fs::read_dir(path)? {
@@ -619,7 +619,7 @@ impl FileDialog {
     }
 
     /// Reads the platform home setting without converting its native encoding to Unicode.
-    fn home_dir() -> Option<PathBuf> {
+    pub(crate) fn home_dir() -> Option<PathBuf> {
         std::env::var_os("HOME")
             .filter(|home| !home.is_empty())
             .or_else(|| std::env::var_os("USERPROFILE").filter(|home| !home.is_empty()))

@@ -338,6 +338,16 @@ pub struct Ui {
 }
 
 impl Ui {
+    /// Creates a hidden standard file picker using the actual runtime's modal and COM controls.
+    pub fn file_dialog(&self, parent: ComRef<'_, IWindowAbi>) -> Result<crate::FileDialog, NcStatus> {
+        Ok(crate::FileDialog::from_interface(self.runtime.query::<IFileDialogsAbi>()?.create(parent)?))
+    }
+
+    /// Queries compact menu construction on this same runtime identity without copying its forest.
+    pub fn menus(&self) -> Result<crate::Menus, NcStatus> {
+        Ok(crate::Menus::from_interface(self.runtime.query()?))
+    }
+
     /// Checks the complete runtime capability set before exposing a usable client.
     pub fn from_interface(runtime: ComPtr<IUiRuntimeAbi>) -> Result<Self, NcStatus> {
         let factory = WidgetFactory::from_interface(runtime.query()?);
@@ -462,3 +472,48 @@ impl Widget<IButtonAbi> {
         self.interface.query::<IButtonStyleAbi>()?.set_fill_states(states)
     }
 }
+
+/// Typed static proxy for the concrete combo header and its inherited widget state.
+pub type Combo = Widget<IComboAbi>;
+impl WidgetFactory {
+    /// Creates an empty header; application-local list data never enters the UI plugin.
+    pub fn combo(&self) -> Result<Combo, NcStatus> {
+        Ok(Combo::from_interface(self.interface.create_combo()?))
+    }
+}
+impl Widget<IComboAbi> {
+    /// Reads the selected position without interpreting it as a global identity.
+    pub fn selected(&self) -> Result<u64, NcStatus> {
+        self.interface.selected()
+    }
+    /// Copies the current display label independently of generic list values.
+    pub fn label(&self) -> Result<String, NcStatus> {
+        self.interface.label()?.to_string()
+    }
+    /// Reads the header's intended popup state.
+    pub fn is_open(&self) -> Result<bool, NcStatus> {
+        self.interface.is_open()
+    }
+    /// Synchronizes intent silently after actual popup visibility changes.
+    pub fn set_open(&self, open: bool) -> Result<(), NcStatus> {
+        self.interface.set_open(open)
+    }
+    /// Installs an already-resolved application selection without publishing a user event.
+    pub fn set_selection(&self, index: u64, label: &str) -> Result<(), NcStatus> {
+        self.interface.set_selection(index, NcCopyFromBufferOffset::new(0, label.as_bytes()))
+    }
+    /// Resolves and clamps local list state, sending only its selected position and label across COM.
+    pub fn update_items<Item: AsRef<str>>(&self, items: &[Item]) -> Result<(), NcStatus> {
+        let index = usize::try_from(self.selected()?).unwrap_or(usize::MAX).min(items.len().saturating_sub(1));
+        self.set_selection(index as u64, items.get(index).map_or("", AsRef::as_ref))
+    }
+    /// Commits an actual popup submission, closes the header and publishes changed when its snapshot differs.
+    pub fn select<Item: AsRef<str>>(&self, index: usize, items: &[Item]) -> Result<Option<String>, NcStatus> {
+        let index = index.min(items.len().saturating_sub(1));
+        let label = items.get(index).map(AsRef::as_ref);
+        self.interface
+            .submit_selection(index as u64, NcCopyFromBufferOffset::new(0, label.unwrap_or("").as_bytes()))?;
+        Ok(label.map(str::to_owned))
+    }
+}
+font_proxy!(IComboAbi);

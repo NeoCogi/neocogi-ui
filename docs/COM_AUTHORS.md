@@ -91,6 +91,9 @@ once when subscribing. The session offers these concrete families:
 | `subscribe_text_submitted` | Textbox, TextArea | Submitted normalized text |
 | `subscribe_window` | Logical window | Typed lifecycle/chrome event with copied geometry where relevant |
 | `subscribe_popup` | Popup | Dismissal fact |
+| `subscribe_combo_changed` / `subscribe_combo_popup` | Combo | Selected index/label or requested popup state/anchor |
+| `subscribe_menu_item` | Compact menu row | Submitted label |
+| `subscribe_file_dialog` | Standard file picker | Exact accepted native path or cancellation |
 
 A source permits one subscriber per port. Editor changed/submitted ports are
 independent. Subscribing to an occupied port returns `UI_E_BUSY`; subscribing to
@@ -121,7 +124,7 @@ an individual lease from its own handler is supported and stops the remainder
 of its batch. A cancelled old lease cannot disconnect a later replacement.
 
 `EVENT_DISPATCH_LIMIT` is 1,000,000 callbacks per runtime dispatch boundary,
-including all sources and cascade sweeps. `dispatch_bounded(limit)` selects an
+including standard-component and application sources and cascade sweeps. `dispatch_bounded(limit)` selects an
 explicit smaller budget for manual delivery. Exhaustion reports
 `UI_E_EVENT_LIMIT` (-1007) and preserves unattempted events. Delivering exactly
 the limit succeeds when nothing remains; limit zero succeeds only for empty
@@ -513,3 +516,143 @@ Closing a composite closes its real descendants. A retained header, body, editor
 or bar reference remains memory-safe and reports logical closure; it cannot keep
 an orphaned interactive subtree alive or be remounted elsewhere. Keeping such a
 reference never transfers the parent's topology authority.
+
+## Combo and compact menus
+
+`ICombo: IWidget` owns the actual header label, selected position and intended
+popup state. The static `Combo::update_items` resolves generic list data locally
+and silently installs only an index/label snapshot. `Combo::select` represents an
+actual popup selection: it closes the header and publishes `ComboChanged` only
+when that snapshot differs. Programmatic `set_selection` and `set_open` remain
+silent. Neither the generic list nor its Rust element layout crosses COM.
+
+Subscribe to `subscribe_combo_popup` to coordinate an ordinary popup using the
+captured `open` flag and screen anchor. Subscribe to that popup's dismissal to
+call `combo.set_open(false)`. The header does not observe a separately owned
+popup automatically. This is an explicit composition dependency owned by the
+widget/application writer. `subscribe_combo_changed` receives the selected
+position and label captured together; later list edits cannot change that event.
+
+Menus retain their compact representation: one surface owns direct row values,
+with no synthetic widget tree per row. The runtime exposes `IMenus` alongside its
+factory and window manager. A root `MenuBuilder` owns one native declaration;
+child builders address append-only submenus inside it. Keep the root alive until
+mounting. Dropping an unconsumed root expires its child builders and row sources.
+Only root builders can be mounted, in their creating runtime, once. Failed owner,
+shape or destination validation leaves the complete declaration usable.
+
+```rust
+let menus = ui.menus()?;
+let bar = menus.create("")?;
+let file = bar.submenu("File")?;
+let open = file.item("Open")?;
+open.set_shortcut_hint("Ctrl+O")?; // Presentation text, not a shortcut binding.
+open.set_mark(MenuMark::Checked { checked: false })?;
+file.separator()?;
+file.submenu("Recent")?.item("Document")?;
+menus.attach_bar(window.as_com_ref(), &bar)?;
+// The actual compact rows now belong exclusively to the manager's forest.
+open.set_label("Open file")?;
+events.subscribe_menu_item(&open, ConcreteOpenHandler)?;
+```
+
+A bar's direct entries must be submenus. `attach_bar` installs one intrinsic bar
+on a window; trying to attach another reports `UI_E_POLICY`. Dynamic bar
+replacement is not exposed. For an ordinary standalone popup, build a root with
+items/separators/submenus and call `menus.popup(window, &builder)`, then use the
+returned `IPopup` capability's normal show/hide/close methods. Successful mounting
+consumes declarations; subsequent builder appends report `UI_E_CLOSED`.
+
+Menu item interfaces resolve the same native row before and after that transfer.
+They expose label, enabled state, check/radio role, hint and validated font
+selection. Retaining an item keeps its COM projection allocated without keeping
+a menu surface alive. Closing its popup/window makes further edits report
+`UI_E_CLOSED` and ends its activation source. Radio-group exclusivity, command
+shortcuts and application actions remain application policy; presentation edits
+are silent and do not implement those behaviors implicitly.
+
+F10 and an unchorded Alt tap enter a window's bar; arrows navigate headings and
+submenus, skipping disabled rows and separators. Enter/Space submits the selected
+row and closes the active path, restoring ordinary application focus. A shown
+standalone menu starts with no row selected: Down selects its first actionable
+row before Enter. Submission captures the actual label at activation and uses
+the shared `Activation` payload. Cross-source registration order still applies.
+
+## Native paths and standard file pickers
+
+`NativePath` owns an immutable `INativePath` snapshot. Its `unit_count` counts
+Unix bytes or Windows UTF-16 code units, excluding any trailing terminator.
+The two copy methods validate their exact requested ranges before writing and
+reject a mismatched encoding. Unix invalid UTF-8 and Windows unpaired surrogates
+are preserved. Decoding a different platform encoding is an error. `display()`
+is explicitly display-only UTF-8; two distinct native names may produce identical
+replacement-character labels and must remain distinct selections.
+
+The native picker is a UI-owned COM component containing actual COM buttons,
+textboxes, list rows, Linear containers and scrolling composites. Its internal
+concrete handlers reuse the static `EventSession` implementation with weak
+runtime ownership. The runtime keeps active modal controllers functional even if
+the application releases a picker editing pointer. Close the picker or its owner
+to end that logical component. Retaining a picker cannot keep a closed runtime
+alive. The static facade still depends only on contracts and COM support; the UI
+plugin uses its ordinary owned adapters internally without passing Rust model
+state across the ABI.
+
+Create the component and subscribe before dispatch, then open it from an ordinary
+application handler:
+
+```rust
+let picker = ui.file_dialog(window.as_com_ref())?;
+events.subscribe_file_dialog(&picker, ConcreteSelectionHandler)?;
+let mut request = FileDialogRequest::new(native_directory);
+request.title = "Choose a document".to_owned();
+picker.open(&request)?;
+ui.update_with_events(drawable_size, &events)?;
+```
+
+The handler receives `FileDialogCompleted::Accepted(PathBuf)` or `Cancelled`.
+Acceptance is lexical: application code decides whether the path must exist or
+have a particular type before using it. A selected row retains its exact native
+path while the filename field displays a possibly lossy basename. A real user
+filename edit clears that selection; a programmatic display update does not.
+Leading and trailing spaces are filename content. An unedited lossy directory
+field still denotes the committed native directory; a real path edit makes its
+UTF-8 text authoritative for the next navigation request.
+
+Directory reads are synchronous and transactional. Every directory entry and
+metadata lookup must succeed before either new column is published. Broken
+symlinks and unreadable entries reject the whole candidate. A failed initial
+open reports `UI_E_IO` (-1008), leaves the picker idle with its prior listing,
+and exposes the OS error through `diagnostic()`. Failed navigation displays its
+diagnostic while preserving the previous native directory, rows and selected
+path. Successful navigation replaces only dynamic content; fixed controls and
+scroll models remain, with offsets clamped against the new content on layout.
+Overlapping opens report `UI_E_BUSY` without changing the active request.
+Browser targets have no native filesystem access; native directory operations
+there report the platform's unsupported-operation error rather than presenting
+a fabricated filesystem picker.
+
+Internal control events are swept in component creation order before application
+sources, and both share the runtime's finite callback budget. Navigation rebuilds
+rows after the component's current registration transaction ends. Application
+callbacks may open an already prepared picker through its ordinary interface;
+the following layout establishes its modal scope before later queued input.
+The picker owns its window's exclusive lifecycle subscription, so use its
+completion capability for application outcomes. Its returned window remains
+available for ordinary geometry, visibility and destruction operations.
+
+Cancellation hides the reusable modal and completes one active request. Reopening
+before a previously queued Hidden notification is delivered does not cancel the
+new visible request. Hiding/destroying an active modal or its owner cancels it
+once. Explicit picker close and runtime teardown also cancel an active request
+without invoking application callbacks during destruction.
+
+Each payload on the completion source is already a terminal outcome of a request.
+This source therefore finishes by preserving **all committed request outcomes**,
+including a currently detached delivery batch. It rejects further emission and
+new subscriptions after finishing; its existing lease can drain outcomes after
+the controller/runtime has been destroyed. Failed handlers consume the attempted
+outcome and preserve unattempted outcomes for retry. Cancellation of the lease
+still discards pending outcomes. Ordinary widget/window sources retain their
+separate rule: discard obsolete ordinary work and preserve only their explicitly
+specified terminal fact. No producer stores callbacks or retains the application.

@@ -7,11 +7,20 @@ use super::{
 };
 use crate::prelude::{AtlasHandle, Dimensioni};
 use crate::Context;
+mod dialogs;
+mod menus;
 mod windows;
 use windows::NativeSurface;
 
 /// Creates a runtime without registering individual ephemeral widgets as COM classes.
 pub fn create_runtime(atlas: AtlasHandle) -> ComPtr<IUiRuntimeAbi> {
+    Runtime::from_value(Runtime { storage: create_storage(atlas) })
+        .query()
+        .expect("runtime interface")
+}
+
+/// Creates the one authoritative storage allocation used by the public runtime and its weak internal controllers.
+fn create_storage(atlas: AtlasHandle) -> Rc<RuntimeStorage> {
     let state = Rc::new(HostState::default());
     let host: ComPtr<IWidgetHostAbi> = WidgetHost::from_value(WidgetHost { state: state.clone() }).query().expect("host interface");
     let resources = super::widget::Resources::new(atlas.clone(), state.clone());
@@ -31,22 +40,20 @@ pub fn create_runtime(atlas: AtlasHandle) -> ComPtr<IUiRuntimeAbi> {
         children: RefCell::default(),
     });
     *state.factory.borrow_mut() = Rc::downgrade(&factory);
-    Runtime::from_value(Runtime {
-        storage: Rc::new(RuntimeStorage {
-            context: RefCell::new(Some(Context::new(backend))),
-            mounts: RefCell::new(Vec::new()),
-            factory,
-            target,
-            dimensions: Cell::new(Size::default()),
-            pending: Cell::new(true),
-            updating: Cell::new(false),
-        }),
+    Rc::new(RuntimeStorage {
+        context: RefCell::new(Some(Context::new(backend))),
+        mounts: RefCell::new(Vec::new()),
+        factory,
+        target,
+        dimensions: Cell::new(Size::default()),
+        pending: Cell::new(true),
+        updating: Cell::new(false),
+        menus: RefCell::new(Vec::new()),
+        dialogs: RefCell::new(Vec::new()),
     })
-    .query()
-    .expect("runtime interface")
 }
 
-#[com_class(interfaces(IUiRuntime, IUiFactory, IWindowManager))]
+#[com_class(interfaces(IUiRuntime, IUiFactory, IWindowManager, IMenus, IFileDialogs))]
 /// One identity owns the runtime, its widget factory and window-management policy.
 struct Runtime {
     /// Window handles use Weak references so retaining them cannot form a tree cycle.
@@ -69,6 +76,10 @@ struct RuntimeStorage {
     pending: Cell<bool>,
     /// Spans the full input transaction while individual phases return the context for callback mutations.
     updating: Cell<bool>,
+    /// Weak declaration authentication retains no unused menu tree or application state.
+    menus: RefCell<Vec<(usize, std::rc::Weak<menus::Declaration>)>>,
+    /// Standard controllers own only weak runtime references, so runtime ownership keeps active modals functional without a cycle.
+    dialogs: RefCell<Vec<Rc<dialogs::Dialog>>>,
 }
 
 /// Temporary association between an actual COM widget and an existing retained root.
@@ -115,11 +126,24 @@ impl Drop for RuntimeStorage {
     /// Final release closes retained handles even without an explicit application close.
     fn drop(&mut self) {
         self.factory.state.closed.set(true);
+        for dialog in self.dialogs.get_mut().iter() {
+            dialog.retire();
+        }
         // Dropping the owned Context then closes every node in its authoritative forest.
     }
 }
 
 impl IUiFactory for Runtime {
+    /// Constructs the complete semantic combo header with the same host and immutable resources as other leaves.
+    fn create_combo(&self) -> Result<ComPtr<IComboAbi>, NcStatus> {
+        self.storage.factory.host.check_mutation()?;
+        Ok(super::combo::Combo::create(
+            self.storage.factory.host.clone(),
+            self.storage.factory.resources.clone(),
+            crate::Combo::from(crate::ComboParameters::new()),
+        ))
+    }
+
     /// Validates complete text and wrapping before constructing the fixed scroll/editor composition.
     fn create_text_area(&self, input: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping, scrolling: bool) -> Result<ComPtr<ITextAreaAbi>, NcStatus> {
         super::text_area::TextArea::create(
@@ -351,6 +375,9 @@ impl IUiRuntime for Runtime {
             surface.close(&mut context.window_manager)?;
         }
         storage.mounts.borrow_mut().clear();
+        for dialog in storage.dialog_snapshot() {
+            dialog.retire();
+        }
         storage.factory.state.error.take().map_or(Ok(()), Err)
     }
 }
@@ -447,22 +474,60 @@ impl Runtime {
 
     /// Runs one finite application sweep without retaining its borrowed capability or any context transaction.
     fn dispatch_boundary(&self, dispatcher: Option<ComRef<'_, IEventDispatcherAbi>>) -> Result<bool, NcStatus> {
-        let delivered = if let Some(dispatcher) = dispatcher {
-            // This bounds one native input's cascades across every registered source.
-            let delivered = dispatcher.dispatch(EVENT_DISPATCH_LIMIT)?;
-            if delivered > EVENT_DISPATCH_LIMIT {
-                return Err(NC_E_INVALID_ARG);
+        let mut delivered = 0;
+        loop {
+            let before = delivered;
+            // Internal standard components and application callbacks share one
+            // finite boundary. Neither owns a registry borrow across the other.
+            for dialog in self.storage.dialog_snapshot() {
+                let remaining = EVENT_DISPATCH_LIMIT - delivered;
+                let count = dialog.dispatch(remaining)?;
+                if count > remaining {
+                    return Err(NC_E_INVALID_ARG);
+                }
+                delivered += count;
+                self.storage.open()?;
             }
-            delivered
-        } else {
-            0
-        };
-        self.storage.open()?;
-        self.storage.phase_result()?;
+            if let Some(dispatcher) = dispatcher {
+                let remaining = EVENT_DISPATCH_LIMIT - delivered;
+                let count = dispatcher.dispatch(remaining)?;
+                if count > remaining {
+                    return Err(NC_E_INVALID_ARG);
+                }
+                delivered += count;
+            }
+            self.storage.open()?;
+            self.storage.phase_result()?;
+            if before == delivered {
+                break;
+            }
+        }
         Ok(delivered != 0)
     }
 }
 impl RuntimeStorage {
+    /// Takes a pure local Rc snapshot and retires closed controllers outside the short registry borrow.
+    fn dialog_snapshot(&self) -> Vec<Rc<dialogs::Dialog>> {
+        let mut retired = Vec::new();
+        let snapshot = {
+            let mut dialogs = self.dialogs.borrow_mut();
+            let mut index = 0;
+            while index < dialogs.len() {
+                if dialogs[index].finished() {
+                    retired.push(dialogs.remove(index));
+                } else {
+                    index += 1;
+                }
+            }
+            dialogs.clone()
+        };
+        for dialog in &retired {
+            dialog.retire();
+        }
+        drop(retired);
+        snapshot
+    }
+
     /// Returns the first component failure before any subsequent collection can clear the phase latch.
     fn phase_result(&self) -> Result<(), NcStatus> {
         self.factory.state.error.take().map_or(Ok(()), Err)

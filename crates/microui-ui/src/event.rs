@@ -97,6 +97,12 @@ impl<E: WidgetEvent> EventSource<E> {
         matches!(*self.port.borrow(), WidgetEventPort::Connected { .. })
     }
 
+    /// Finishes a source whose every payload is a completed request, preserving all committed outcomes.
+    /// Ordinary widget sources must use close/close_ordinary, which discard obsolete interaction work.
+    pub(crate) fn finish_pending(&self) {
+        self.port.borrow_mut().finish_pending();
+    }
+
     /// Logical widget closure discards ordinary events even while retained COM handles keep its semantic value alive.
     pub(crate) fn close_ordinary(&self) {
         let retired = self.port.borrow_mut().close(None);
@@ -146,14 +152,20 @@ impl<E: WidgetEvent> Default for EventSource<E> {
 
 /// One retained-producer-owned typed event queue and its connection state.
 ///
-/// Connected owns ordinary queued events; Closed may retain one explicit terminal fact.
-/// Disconnected is distinct from both, with no redundant liveness or connection boolean.
+/// Connected owns queued events; Closed may retain one explicit terminal fact.
+/// Finished preserves all completed-request outcomes while rejecting new emission.
+/// Disconnected owns no subscription; state is not mirrored by independent flags.
 enum WidgetEventPort<E: WidgetEvent> {
     /// No subscription exists; emitted events are discarded.
     Disconnected,
     /// Exactly one subscription exists and owns the right to drain this FIFO.
     Connected {
         /// Ordinary snapshots awaiting the next safe dispatch boundary.
+        pending: Vec<E>,
+    },
+    /// A request-completion source finished; every queued or already detached outcome remains valid.
+    Finished {
+        /// Committed request outcomes awaiting their existing consumer, without accepting new emission or subscription.
         pending: Vec<E>,
     },
     /// The producer closed or was dropped; only an explicitly published terminal event survives.
@@ -189,7 +201,7 @@ impl<E: WidgetEvent> WidgetEventPort<E> {
     ///
     /// The exclusive connection enforces the design's one-port/one-state-method rule.
     fn connect(&mut self) -> Result<(), SubscribeError> {
-        if matches!(self, Self::Closed { .. }) {
+        if matches!(self, Self::Closed { .. } | Self::Finished { .. }) {
             return Err(SubscribeError::WidgetExpired);
         }
         if matches!(self, Self::Connected { .. }) {
@@ -205,7 +217,7 @@ impl<E: WidgetEvent> WidgetEventPort<E> {
     /// by the exclusive subscription's [`Drop`] implementation.
     fn disconnect(&mut self) -> Self {
         // Return retired payload ownership for destruction after the caller releases its borrow.
-        let replacement = if matches!(self, Self::Closed { .. }) {
+        let replacement = if matches!(self, Self::Closed { .. } | Self::Finished { .. }) {
             Self::Closed { terminal: None }
         } else {
             Self::Disconnected
@@ -221,7 +233,19 @@ impl<E: WidgetEvent> WidgetEventPort<E> {
                 *self = Self::Closed { terminal: None };
                 Self::Closed { terminal } // Return an unobserved candidate for destruction outside the borrow.
             }
-            Self::Closed { .. } => Self::Closed { terminal }, // Preserve the first terminal fact; retire the unused candidate.
+            Self::Closed { .. } | Self::Finished { .. } => Self::Closed { terminal }, // Preserve committed terminal facts; retire the unused candidate.
+        }
+    }
+
+    /// Finishes committed request outcomes without changing their FIFO or dropping a detached delivery batch.
+    fn finish_pending(&mut self) {
+        match self {
+            Self::Connected { pending } => {
+                let pending = std::mem::take(pending);
+                *self = Self::Finished { pending };
+            }
+            Self::Disconnected => *self = Self::Finished { pending: Vec::new() },
+            Self::Closed { .. } | Self::Finished { .. } => {}
         }
     }
 
@@ -230,6 +254,7 @@ impl<E: WidgetEvent> WidgetEventPort<E> {
         let (pending, terminal) = match self {
             Self::Disconnected => (0, false),
             Self::Connected { pending } => (pending.len(), false),
+            Self::Finished { pending } => (pending.len(), true),
             Self::Closed { terminal } => (usize::from(terminal.is_some()), true),
         };
         if limit == 0 && pending != 0 {
@@ -237,7 +262,7 @@ impl<E: WidgetEvent> WidgetEventPort<E> {
         }
         let events = match self {
             Self::Disconnected => Vec::new(),
-            Self::Connected { pending } => {
+            Self::Connected { pending } | Self::Finished { pending } => {
                 if pending.len() <= limit {
                     std::mem::take(pending)
                 } else {
@@ -274,7 +299,15 @@ impl<E: WidgetEvent> EventLease<E> {
     }
     /// Live empty sources stay registered; closed sources survive only until their terminal fact is detached.
     pub(crate) fn active(&self) -> bool {
-        !self.cancelled.get() && !matches!(*self.port.borrow(), WidgetEventPort::Closed { terminal: None })
+        if self.cancelled.get() {
+            return false;
+        }
+        match &*self.port.borrow() {
+            WidgetEventPort::Connected { .. } => true,
+            WidgetEventPort::Finished { pending } => !pending.is_empty(),
+            WidgetEventPort::Closed { terminal } => terminal.is_some(),
+            WidgetEventPort::Disconnected => false,
+        }
     }
     /// Detaches a bounded batch without lending a producer/queue borrow to its eventual consumer.
     pub(crate) fn drain(&self, limit: usize) -> Result<EventBatch<E>, nc_com::NcStatus> {
@@ -283,12 +316,12 @@ impl<E: WidgetEvent> EventLease<E> {
         }
         self.port.borrow_mut().drain(limit)
     }
-    /// Restores unattempted ordinary snapshots ahead of callback emissions after a recoverable handler error.
+    /// Restores unattempted live events or finalized request outcomes ahead of later emissions after a callback error.
     pub(crate) fn restore(&self, remaining: std::vec::IntoIter<E>) {
         if self.cancelled.get() {
             return;
         }
-        if let WidgetEventPort::Connected { pending } = &mut *self.port.borrow_mut() {
+        if let WidgetEventPort::Connected { pending } | WidgetEventPort::Finished { pending } = &mut *self.port.borrow_mut() {
             let mut prefix: Vec<E> = remaining.collect();
             prefix.append(pending);
             *pending = prefix;
@@ -297,7 +330,7 @@ impl<E: WidgetEvent> EventLease<E> {
 
     /// Checks cancellation and ordinary-source closure before each detached snapshot is delivered.
     pub(crate) fn can_deliver(&self, terminal: bool) -> bool {
-        !self.cancelled.get() && (terminal || matches!(*self.port.borrow(), WidgetEventPort::Connected { .. }))
+        !self.cancelled.get() && (terminal || matches!(*self.port.borrow(), WidgetEventPort::Connected { .. } | WidgetEventPort::Finished { .. }))
     }
     /// Disconnects once and discards ordinary/terminal pending snapshots without invoking user code.
     pub(crate) fn cancel(&self) {
@@ -341,7 +374,9 @@ impl<E: WidgetEvent> WidgetEventPortHandle<E> {
     /// attempt to subscribe can still report [`SubscribeError::WidgetExpired`] if the producer is
     /// removed or closed between operations.
     pub fn is_alive(&self) -> bool {
-        self.0.upgrade().is_some_and(|port| !matches!(*port.borrow(), WidgetEventPort::Closed { .. }))
+        self.0
+            .upgrade()
+            .is_some_and(|port| !matches!(*port.borrow(), WidgetEventPort::Closed { .. } | WidgetEventPort::Finished { .. }))
     }
 }
 
@@ -787,6 +822,33 @@ mod lease_tests {
         assert!(lease.drain(1).unwrap().events.is_empty());
         lease.cancel();
         assert!(!lease.can_deliver(terminal.terminal));
+    }
+
+    /// Completed-request queues outlive their producer, including detached delivery and bounded retry after a handler error.
+    #[test]
+    fn finalized_request_outcomes_preserve_fifo_without_accepting_new_emission_or_subscribers() {
+        let source = EventSource::<i32>::new();
+        let endpoint = source.event();
+        let lease = EventLease::connect(endpoint.clone()).unwrap();
+        for value in [1, 2, 3] {
+            source.emit(value);
+        }
+        let first = lease.drain(1).unwrap();
+        source.finish_pending();
+        assert!(!endpoint.is_alive());
+        assert!(lease.can_deliver(first.terminal));
+        assert_eq!(first.events, [1]);
+        source.emit(4); // A finished producer cannot append another outcome.
+        source.close(99); // Repeated closure cannot replace already committed request results.
+        drop(source);
+        assert_eq!(EventLease::connect(endpoint).err(), Some(SubscribeError::WidgetExpired));
+        let mut batch = lease.drain(10).unwrap().events.into_iter();
+        assert_eq!(batch.next(), Some(2)); // This attempted callback is consumed even if it fails.
+        lease.restore(batch);
+        assert!(lease.active());
+        assert_eq!(lease.drain(1).unwrap().events, [3]);
+        assert!(!lease.active());
+        assert!(lease.drain(0).unwrap().events.is_empty());
     }
 }
 

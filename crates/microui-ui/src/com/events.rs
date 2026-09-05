@@ -26,6 +26,7 @@ macro_rules! activation_event {
 activation_event!(crate::ButtonSubmitted);
 activation_event!(crate::ListBoxSubmitted);
 activation_event!(crate::ListItemSubmitted);
+activation_event!(crate::MenuItemSubmitted);
 
 /// Captured scalar values require no snapshot allocation or live-widget read at delivery time.
 macro_rules! scalar_event {

@@ -13,3 +13,15 @@ pub use com::*;
 /// Application-owned typed semantic events and deterministic COM delivery.
 pub mod events;
 pub use events::{EventSession, EventHandler};
+
+/// Exact native-path snapshots and static platform conversion.
+pub mod path;
+pub use path::NativePath;
+
+/// Compact menu declarations and live item clients.
+pub mod menu;
+pub use menu::{Menus, MenuBuilder, MenuItem};
+
+/// Standard native-path file-picker requests and clients.
+pub mod file_dialog;
+pub use file_dialog::{FileDialog, FileDialogRequest};

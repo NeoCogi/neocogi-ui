@@ -152,3 +152,24 @@ pub trait IPopupEvents {
     /// Returns an exclusive application-owned dismissal lease without retaining application state on the producer.
     fn subscribe(&self, sink: ComRef<'_, IPopupSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
 }
+
+#[com_interface(auto_guid = "microui.ComboChangedSink:v1")]
+/// Captured user selection committed by a combo's composing popup owner.
+pub trait IComboChangedSink {
+    /// Receives the matching application-list position and display label from one selection.
+    fn changed(&self, selected: u64, label: ComRef<'_, INcStringAbi>) -> Result<(), NcStatus>;
+}
+#[com_interface(auto_guid = "microui.ComboPopupSink:v1")]
+/// Header activation requests ordinary popup coordination using copied routed geometry.
+pub trait IComboPopupSink {
+    /// Receives the desired open state and screen-space anchor captured at header activation.
+    fn submitted(&self, open: bool, anchor: crate::Rect) -> Result<(), NcStatus>;
+}
+#[com_interface(auto_guid = "microui.ComboEvents:v1")]
+/// Independent selection and popup-coordination event ports on the actual combo header.
+pub trait IComboEvents {
+    /// Connects one concrete selection consumer without claiming popup coordination.
+    fn subscribe_changed(&self, sink: ComRef<'_, IComboChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
+    /// Connects one concrete popup coordinator without claiming the changed source.
+    fn subscribe_popup(&self, sink: ComRef<'_, IComboPopupSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
+}

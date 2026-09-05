@@ -584,3 +584,155 @@ impl<State: 'static> EventSession<State> {
         Ok(lease)
     }
 }
+
+/// Matching application-list index and label after an explicitly submitted combo selection.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ComboChanged {
+    /// Application-owned list position, independent of the displayed text.
+    pub selected: u64,
+    /// Captured display value; generic list data never travels through this string.
+    pub label: String,
+}
+#[com_class(interfaces(IComboChangedSink))]
+/// Application-local specialization owns its concrete selection handler and shared state.
+struct ComboChangedSink<State: 'static, Handler: EventHandler<State, ComboChanged> + 'static> {
+    /// Shared owned invocation discipline used by every event family.
+    handler: HandlerState<State, Handler>,
+}
+impl<State: 'static, Handler: EventHandler<State, ComboChanged> + 'static> IComboChangedSink for ComboChangedSink<State, Handler> {
+    /// Validates the immutable UTF-8 snapshot before borrowing application state.
+    fn changed(&self, selected: u64, label: ComRef<'_, INcStringAbi>) -> Result<(), NcStatus> {
+        self.handler.deliver(ComboChanged { selected, label: label.to_string()? })
+    }
+}
+/// Desired popup state and routed screen anchor captured by the combo header.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ComboSubmitted {
+    /// True requests opening; false requests ordinary popup hiding.
+    pub open: bool,
+    /// Complete screen-space anchor, independent of subsequent header movement.
+    pub anchor: Rect,
+}
+#[com_class(interfaces(IComboPopupSink))]
+/// Concrete application coordinator can show/hide its selected popup at the safe runtime boundary.
+struct ComboPopupSink<State: 'static, Handler: EventHandler<State, ComboSubmitted> + 'static> {
+    /// One owned handler without a borrowed native state pointer.
+    handler: HandlerState<State, Handler>,
+}
+impl<State: 'static, Handler: EventHandler<State, ComboSubmitted> + 'static> IComboPopupSink for ComboPopupSink<State, Handler> {
+    /// Rejects malformed geometry before application popup coordination runs.
+    fn submitted(&self, open: bool, anchor: Rect) -> Result<(), NcStatus> {
+        if anchor.width < 0 || anchor.height < 0 {
+            return Err(NC_E_INVALID_ARG);
+        }
+        self.handler.deliver(ComboSubmitted { open, anchor })
+    }
+}
+impl<State: 'static> EventSession<State> {
+    /// Registers one captured-selection source without claiming the header's independent popup port.
+    pub fn subscribe_combo_changed<Handler: EventHandler<State, ComboChanged> + 'static>(
+        &self,
+        combo: &crate::Combo,
+        handler: Handler,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        let mut leases = self.registry.take()?;
+        let sink: ComPtr<IComboChangedSinkAbi> = ComboChangedSink::from_value(ComboChangedSink {
+            handler: HandlerState {
+                state: self.state.clone(),
+                handler: RefCell::new(Some(handler)),
+            },
+        })
+        .query()?;
+        let lease = combo
+            .as_interface()
+            .add_ref()
+            .query::<IComboEventsAbi>()?
+            .subscribe_changed(sink.as_com_ref())?;
+        leases.push(lease.clone());
+        Ok(lease)
+    }
+    /// Registers the header-to-popup coordinator; ordinary popup dismissal uses its separate family.
+    pub fn subscribe_combo_popup<Handler: EventHandler<State, ComboSubmitted> + 'static>(
+        &self,
+        combo: &crate::Combo,
+        handler: Handler,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        let mut leases = self.registry.take()?;
+        let sink: ComPtr<IComboPopupSinkAbi> = ComboPopupSink::from_value(ComboPopupSink {
+            handler: HandlerState {
+                state: self.state.clone(),
+                handler: RefCell::new(Some(handler)),
+            },
+        })
+        .query()?;
+        let lease = combo.as_interface().add_ref().query::<IComboEventsAbi>()?.subscribe_popup(sink.as_com_ref())?;
+        leases.push(lease.clone());
+        Ok(lease)
+    }
+}
+
+impl<State: 'static> EventSession<State> {
+    /// Registers a compact menu row's actual activation queue in the same deterministic sequence as widget events.
+    pub fn subscribe_menu_item<Handler: EventHandler<State, Activation> + 'static>(
+        &self,
+        item: &crate::MenuItem,
+        handler: Handler,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        let mut leases = self.registry.take()?;
+        let sink: ComPtr<IActivationSinkAbi> = ActivationSink::from_value(ActivationSink {
+            handler: HandlerState {
+                state: self.state.clone(),
+                handler: RefCell::new(Some(handler)),
+            },
+        })
+        .query()?;
+        let lease = item.as_interface().add_ref().query::<IActivationEventsAbi>()?.subscribe(sink.as_com_ref())?;
+        leases.push(lease.clone());
+        Ok(lease)
+    }
+}
+
+/// One completed file-picker request; accepted native identity remains independent of display text.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FileDialogCompleted {
+    /// Exact native path selected or lexically entered by the user.
+    Accepted(std::path::PathBuf),
+    /// The active request ended without a selected file.
+    Cancelled,
+}
+#[com_class(interfaces(IFileDialogSink))]
+/// Concrete local completion adapter owns the application's exact state and handler specialization.
+struct FileDialogSink<State: 'static, Handler: EventHandler<State, FileDialogCompleted> + 'static> {
+    /// Existing owned invocation helper; native Rust paths are decoded before borrowing application state.
+    handler: HandlerState<State, Handler>,
+}
+impl<State: 'static, Handler: EventHandler<State, FileDialogCompleted> + 'static> IFileDialogSink for FileDialogSink<State, Handler> {
+    /// Rejects an incompatible encoding and preserves exact native units when constructing the local event.
+    fn accepted(&self, path: ComRef<'_, INativePathAbi>) -> Result<(), NcStatus> {
+        self.handler.deliver(FileDialogCompleted::Accepted(crate::path::decode(path)?))
+    }
+    /// Emits the concrete cancellation outcome with no fabricated empty-path sentinel.
+    fn cancelled(&self) -> Result<(), NcStatus> {
+        self.handler.deliver(FileDialogCompleted::Cancelled)
+    }
+}
+impl<State: 'static> EventSession<State> {
+    /// Registers the picker's actual completion queue in the same deterministic application sequence.
+    pub fn subscribe_file_dialog<Handler: EventHandler<State, FileDialogCompleted> + 'static>(
+        &self,
+        dialog: &crate::FileDialog,
+        handler: Handler,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        let mut leases = self.registry.take()?;
+        let sink: ComPtr<IFileDialogSinkAbi> = FileDialogSink::from_value(FileDialogSink {
+            handler: HandlerState {
+                state: self.state.clone(),
+                handler: RefCell::new(Some(handler)),
+            },
+        })
+        .query()?;
+        let lease = dialog.as_interface().add_ref().query::<IFileDialogEventsAbi>()?.subscribe(sink.as_com_ref())?;
+        leases.push(lease.clone());
+        Ok(lease)
+    }
+}

@@ -13,6 +13,7 @@ use std::{
 #[macro_use]
 pub(crate) mod widget;
 mod button;
+mod combo;
 pub(crate) mod events;
 mod input;
 mod leaves;

@@ -404,14 +404,7 @@ impl<S: FontState> WidgetCore<S> {
     /// Resolves the finite semantic font vocabulary before committing any change.
     pub(super) fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
         self.state.writable()?;
-        let role = match role {
-            TextFontRole::BODY => crate::FontRole::Body,
-            TextFontRole::SMALL => crate::FontRole::Small,
-            TextFontRole::TITLE => crate::FontRole::Title,
-            TextFontRole::HEADING => crate::FontRole::Heading,
-            TextFontRole::MONO => crate::FontRole::Mono,
-            _ => return Err(NC_E_INVALID_ARG),
-        };
+        let role = local_font_role(role)?;
         self.commit_font(crate::FontRef::Role(role))
     }
     /// Resolves a font once against the exact bundle, never by name per glyph.
@@ -632,4 +625,16 @@ macro_rules! text_subscription_impl {
             }
         }
     };
+}
+
+/// Resolves one concrete font-role vocabulary for both widget and compact menu presentation.
+pub(super) fn local_font_role(role: TextFontRole) -> Result<crate::FontRole, NcStatus> {
+    match role {
+        TextFontRole::BODY => Ok(crate::FontRole::Body),
+        TextFontRole::SMALL => Ok(crate::FontRole::Small),
+        TextFontRole::TITLE => Ok(crate::FontRole::Title),
+        TextFontRole::HEADING => Ok(crate::FontRole::Heading),
+        TextFontRole::MONO => Ok(crate::FontRole::Mono),
+        _ => Err(NC_E_INVALID_ARG),
+    }
 }

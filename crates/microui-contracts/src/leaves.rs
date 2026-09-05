@@ -254,3 +254,20 @@ pub trait IMultilineEditor: ITextEditor {
 /// Fixed scrolling editor root. Inherited text methods edit its actual internal editor.
 /// Query IScrolling for offsets; IScrollArea is absent because the editor cannot be replaced.
 pub trait ITextArea: IMultilineEditor {}
+
+#[com_interface(auto_guid = "microui.Combo:v1")]
+/// Concrete combo header; generic list data and popup content remain with its composing owner.
+pub trait ICombo: crate::IWidget {
+    /// Returns the selected application-list position, with zero also used by an empty list.
+    fn selected(&self) -> Result<u64, NcStatus>;
+    /// Returns the captured display label, independently of generic application data.
+    fn label(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
+    /// Reports the header's intended popup state, not an independently observed window visibility.
+    fn is_open(&self) -> Result<bool, NcStatus>;
+    /// Synchronizes popup state silently after ordinary popup dismissal or programmatic coordination.
+    fn set_open(&self, open: bool) -> Result<(), NcStatus>;
+    /// Atomically installs a valid index/label snapshot without publishing user selection.
+    fn set_selection(&self, index: u64, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    /// Commits an actual popup selection, closes the header, and emits changed only when index or label differs.
+    fn submit_selection(&self, index: u64, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+}

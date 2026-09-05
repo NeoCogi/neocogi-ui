@@ -14,6 +14,12 @@ mod container;
 pub use container::*;
 mod events;
 pub use events::*;
+mod file_dialog;
+pub use file_dialog::*;
+mod menu;
+pub use menu::*;
+mod path;
+pub use path::*;
 mod leaves;
 pub use leaves::*;
 mod input;
@@ -123,6 +129,8 @@ pub trait IButton: IWidget {
 #[com_interface(auto_guid = "microui.UiFactory:v1")]
 /// Runtime-bound widget factory implemented by the UI plugin.
 pub trait IUiFactory {
+    /// Creates an empty combo header; its composing owner supplies generic list data and popup content.
+    fn create_combo(&self) -> Result<ComPtr<IComboAbi>, NcStatus>;
     /// Creates a fixed scrolling multiline editor; CRLF and CR normalize to LF and the cursor starts at the end.
     fn create_text_area(&self, text: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping, scrolling: bool) -> Result<ComPtr<ITextAreaAbi>, NcStatus>;
     /// Creates an empty disclosure with a real text header and editable vertical Linear body.
@@ -175,6 +183,8 @@ pub const UI_E_RENDER: NcStatus = NcStatus::from_code(-1005);
 pub const UI_E_POLICY: NcStatus = NcStatus::from_code(-1006);
 /// A bounded event transaction exhausted its callback budget; undispatched queued events remain pending.
 pub const UI_E_EVENT_LIMIT: NcStatus = NcStatus::from_code(-1007);
+/// A native file/directory operation failed; the component's diagnostic preserves the concrete OS error.
+pub const UI_E_IO: NcStatus = NcStatus::from_code(-1008);
 
 #[com_interface(auto_guid = "microui.TextMetrics:v1")]
 /// Immutable resource view shared for a complete layout transaction.

@@ -62,6 +62,7 @@ pub enum MenuItemMark {
 }
 
 /// One-shot construction input for a concrete menu item.
+#[derive(Clone)]
 pub struct MenuItemParameters {
     /// Initial user-visible label.
     pub label: String,
@@ -138,8 +139,11 @@ impl MenuItemParameters {
 }
 
 /// Event emitted by one specific menu item after an enabled pointer or keyboard submission.
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
-pub struct MenuItemSubmitted;
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct MenuItemSubmitted {
+    /// Label captured during enabled user activation, independent of later presentation edits.
+    pub label: String,
+}
 
 impl crate::WidgetEvent for MenuItemSubmitted {}
 
@@ -333,9 +337,9 @@ impl MenuBar {
 /// One menu declaration used as a bar heading, submenu, or standalone popup menu.
 pub struct Menu {
     /// User-visible heading/submenu label, or diagnostic name for a standalone popup menu.
-    label: String,
+    pub(crate) label: String,
     /// Ordered logical entries transferred into compact popup leaves.
-    entries: Vec<MenuEntry>,
+    pub(crate) entries: Vec<MenuEntry>,
 }
 
 impl Menu {
@@ -599,7 +603,9 @@ impl MenuSurface {
             MenuSlot::Item(item) if item.parameters.enabled => {
                 // Queue only the semantic event; WindowManager closes the complete path after this
                 // mutable surface borrow ends and before application dispatch begins.
-                item.submitted_event.emit(MenuItemSubmitted);
+                if item.submitted_event.connected() {
+                    item.submitted_event.emit(MenuItemSubmitted { label: item.parameters.label.clone() });
+                }
                 Some(MenuAction::SubmitAndClose)
             }
             MenuSlot::Item(_) | MenuSlot::Separator => None,
@@ -667,7 +673,9 @@ impl MenuSurface {
                 MenuSlot::Item(item) if item.parameters.enabled => {
                     // Emission only queues a typed value. Application code cannot run until the
                     // manager has consumed `SubmitAndClose` and released every surface borrow.
-                    item.submitted_event.emit(MenuItemSubmitted);
+                    if item.submitted_event.connected() {
+                        item.submitted_event.emit(MenuItemSubmitted { label: item.parameters.label.clone() });
+                    }
                     Some(MenuAction::SubmitAndClose)
                 }
                 MenuSlot::Item(_) | MenuSlot::Separator => None,

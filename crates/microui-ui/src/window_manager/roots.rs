@@ -1403,17 +1403,8 @@ impl WindowManager {
         unreachable!("a validated menu item must remain mounted during one exclusive manager borrow")
     }
 
-    /// Registers one concrete root after its optional structural owner has been validated.
-    fn register_window(&mut self, mode: RootMode, parent: Option<RootId>, window: Window, options: WindowOption, visible: bool) -> WindowHandle {
-        // Public child/dialog entry points authenticate and classify the owner before moving the
-        // Window here. Keep registration infallible after that transfer: this is the boundary that
-        // guarantees every returned creation error can still contain the untouched Window.
-        debug_assert!(
-            matches!((mode, parent), (RootMode::Normal { .. }, None) | (RootMode::Child | RootMode::Modal, Some(_))),
-            "root mode and structural owner must agree before registration"
-        );
-
-        let (name, rect, content, menu_bar, child_window_clip) = window.into_parts();
+    /// Separates a bar's compact heading surface and uniquely owned popup declarations once for both creation paths.
+    fn prepare_menu_bar(menu_bar: Option<crate::MenuBar>) -> (Option<MenuSurface>, Vec<Vec<MenuEntry>>) {
         // Move top-level labels into the bar while retaining only their row vectors until the root
         // exists. This flat transfer avoids constructing a recursive hierarchy beside the forest.
         let mut menu_popups = Vec::new();
@@ -1428,6 +1419,41 @@ impl WindowManager {
             }
             MenuSurface::new(headings, false)
         });
+
+        (menu_bar, menu_popups)
+    }
+
+    /// Checks whether a live window already owns its intrinsic bar before COM declaration transfer.
+    pub(crate) fn has_menu_bar(&self, window: &WindowHandle) -> Result<bool, SurfaceMutationError> {
+        let root = self.window_id(window)?;
+        Ok(self.surfaces.root_node(root).expect("authenticated root remains present").root().expect("window resolves root policy").menu_bar.is_some())
+    }
+
+    /// Installs a bar on an already authenticated bar-free window without duplicating menu topology.
+    pub(crate) fn attach_menu_bar(&mut self, window: &WindowHandle, bar: crate::MenuBar) -> Result<(), SurfaceMutationError> {
+        let root = self.window_id(window)?;
+        debug_assert!(!self.has_menu_bar(window)?);
+        let (bar, popups) = Self::prepare_menu_bar(Some(bar));
+        self.root_node_mut(root)?.root_mut().expect("window resolves root policy").menu_bar = bar;
+        for (slot, entries) in popups.into_iter().enumerate() {
+            self.register_menu_popup(SurfaceKey::Root(root), slot, entries);
+        }
+        self.invalidate_ui_commit();
+        Ok(())
+    }
+
+    /// Registers one concrete root after its optional structural owner has been validated.
+    fn register_window(&mut self, mode: RootMode, parent: Option<RootId>, window: Window, options: WindowOption, visible: bool) -> WindowHandle {
+        // Public child/dialog entry points authenticate and classify the owner before moving the
+        // Window here. Keep registration infallible after that transfer: this is the boundary that
+        // guarantees every returned creation error can still contain the untouched Window.
+        debug_assert!(
+            matches!((mode, parent), (RootMode::Normal { .. }, None) | (RootMode::Child | RootMode::Modal, Some(_))),
+            "root mode and structural owner must agree before registration"
+        );
+
+        let (name, rect, content, menu_bar, child_window_clip) = window.into_parts();
+        let (menu_bar, menu_popups) = Self::prepare_menu_bar(menu_bar);
 
         // Identity and event delivery are allocated separately, then paired once in the returned
         // application handle. The forest owns the same ID and the only strong event endpoint.
