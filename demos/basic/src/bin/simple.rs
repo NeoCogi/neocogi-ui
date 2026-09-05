@@ -60,6 +60,7 @@ impl AppState for State {}
 
 /// Builds the same small tree on native SDL and browser WebGL through the typed facade.
 fn main() -> Result<(), HostError> {
+    microui_redux_demo_host::initialize()?;
     let host = Host::new("Hello", Size { width: 640, height: 480 }, microui_redux_demo_assets::load_bundle()?)?;
     let hello = host.ui.widgets().button("Hello World!")?;
     hello.set_options(WidgetOptions {

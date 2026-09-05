@@ -23,7 +23,7 @@ Build a complete native package and run its staged executable:
 
 ```sh
 cargo com-build --demo full --backend glow
-./target/com-native/debug/glow/prebuilt/full/microui-redux-demo-full
+./target/com-native/debug/glow/files/full/microui-redux-demo-full
 ```
 
 Other backends are `vulkan` and `wgpu`; other demos are `simple`, `calculator`,

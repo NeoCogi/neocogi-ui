@@ -12,7 +12,7 @@ Build a complete native package, then run the staged executable:
 
 ```sh
 cargo run -p microui-redux-tools --bin com-build -- --demo calculator --backend glow
-./target/com-native/debug/glow/prebuilt/calculator/calculator
+./target/com-native/debug/glow/files/calculator/calculator
 ```
 
 Choose `full`, `simple`, `calculator`, `backend-frame-cube` or `smoke`, and one of

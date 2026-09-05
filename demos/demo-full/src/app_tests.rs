@@ -1,9 +1,10 @@
-//! Full application checks use the actual plugin graph, including GPU images and all compiled themes.
+//! Full application checks use the actual plugin graph, including GPU images and all theme choices.
 use super::*;
 
 /// Selects Win 3.11 through the real nested menu and event session, rather than calling its handler directly.
 fn select_win311_from_menu(host: &Host, events: &EventSession<State>) -> Result<(), HostError> {
     let size = host.window.size()?;
+    let base = host.ui.assets()?;
     let demo = events.state()?.demo.clone();
     demo.raise()?;
     host.ui.update_with_events(size, events)?;
@@ -42,7 +43,7 @@ fn select_win311_from_menu(host: &Host, events: &EventSession<State>) -> Result<
     host.ui.update_with_events(size, events)?;
     let state = events.state()?;
     assert_eq!(state.themes[1].1.mark()?, MenuMark::Radio { selected: true });
-    assert_eq!(state.ui.assets()?.metrics()?, Theme::ALL[1].data()?.metrics);
+    assert_eq!(state.ui.assets()?.metrics()?, Theme::ALL[1].load(base.as_com_ref())?.metrics()?);
     host.ui.render(size, host.renderer.as_com_ref())?;
     Ok(())
 }
@@ -51,6 +52,7 @@ fn select_win311_from_menu(host: &Host, events: &EventSession<State>) -> Result<
 fn exercise() -> Result<(Host, EventSession<State>), HostError> {
     let (host, events) = create()?;
     let size = host.window.size()?;
+    let base = host.ui.assets()?;
     select_win311_from_menu(&host, &events)?;
     for theme in Theme::ALL {
         events.state_mut()?.select_theme(theme)?;
@@ -60,7 +62,7 @@ fn exercise() -> Result<(Host, EventSession<State>), HostError> {
         host.ui.update_with_events(size, &events)?;
         host.ui.render(size, host.renderer.as_com_ref())?;
         let state = events.state()?;
-        assert_eq!(state.ui.assets()?.metrics()?, theme.data()?.metrics);
+        assert_eq!(state.ui.assets()?.metrics()?, theme.load(base.as_com_ref())?.metrics()?);
         for (choice, item) in &state.themes {
             assert_eq!(item.mark()?, MenuMark::Radio { selected: *choice == theme });
         }

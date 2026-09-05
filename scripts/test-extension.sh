@@ -7,7 +7,7 @@ backend=${1:-glow}
 cargo run -p microui-redux-tools --bin com-build -- --demo extension --backend "$backend"
 target=${CARGO_TARGET_DIR:-"$root/target"}
 if [[ "$target" != /* ]]; then target="$root/$target"; fi
-executable="$target/com-native/debug/$backend/prebuilt/extension/microui-demo-com"
+executable="$target/com-native/debug/$backend/files/extension/microui-demo-com"
 if [[ "${MICROUI_TEST_BUILD_ONLY:-0}" == 1 ]]; then
     printf '%s\n' "$executable"
     exit 0

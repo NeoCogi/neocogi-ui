@@ -10,7 +10,9 @@ repository.workspace = true
 [features]
 default = ["wgpu"]
 glow = ["microui-redux-demo-host/glow"]
-webgl = ["microui-redux-demo-host/webgl"]
+webgl = ["microui-redux-demo-host/webgl", "embed-assets"]
+# Native deployments read adjacent files unless this feature is explicitly requested.
+embed-assets = ["microui-redux-demo-assets/embed-assets"]
 vulkan = ["microui-redux-demo-host/vulkan"]
 wgpu = ["microui-redux-demo-host/wgpu"]
 

@@ -197,17 +197,26 @@ file exposes `AtlasHandle`, native IDs, UI implementation storage or parser APIs
 
 ```sh
 cargo run -p microui-redux-tools --bin atlas-export -- --output bundle.rs
-cargo run -p microui-redux-tools --bin com-build -- --backend glow --assets prebuilt
-cargo run -p microui-redux-tools --bin com-build -- --backend glow --assets builder
-cargo run -p microui-redux-tools --bin com-build -- --backend glow --assets theme-json
+cargo com-build --demo full --backend glow
+cargo com-build --demo full --backend glow --assets embedded
 ```
 
-The stage is `target/com-native/{profile}/{backend}/{asset-mode}/{demo}`. `prebuilt`
-contains the executable, runtime, UI and platform libraries. `builder` adds the
-font/PNG asset plugin. `theme-json` adds the same plugin with JSON support plus the
-bundled theme/font source files. The host accepts `--rebuild-assets` and
-`--theme themes/windows-95/theme.json`; relative theme paths resolve against its
-staged executable directory. Both can be combined with `--smoke` from another cwd.
+The stage is `target/com-native/{profile}/{backend}/{asset-mode}/{demo}`. Native
+`files` is the default: it contains the runtime, UI/platform/asset libraries and
+adjacent assets. The asset plugin builds the atlas from font/icon files and loads
+JSON themes; the host does not embed the photo, mesh or compiled atlases. Register
+the plugin catalog before loading a bundle. Resource paths resolve against the
+executable, so the complete staged directory can run from another working directory.
+
+`embedded` explicitly enables the demo's `embed-assets` Cargo feature. It compiles
+atlases and themes during the build and embeds the full demo's photo and mesh.
+The full demo still ships the PNG-only asset plugin for the photograph; simpler
+embedded demos need no asset plugin. Browser `webgl` explicitly enables embedding.
+The shared recipe gives both modes identical resource names and font sizes.
+
+The smoke executable's `--rebuild-assets` and `--theme themes/windows-95/theme.json`
+options require the file package's construction interfaces. Both can be combined
+with `--smoke` from another cwd.
 
 Compiled pixels use zlib, while the COM asset contract still copies ordinary RGBA.
 The generated loader validates the exact output length and shared 64 MiB limit,

@@ -235,9 +235,9 @@ impl StyleEditor {
         }
         Ok(())
     }
-    /// Installs a pristine compiled theme in the original catalog and resets the editor's controls.
+    /// Installs a pristine theme in the original catalog and resets the editor's controls.
     pub(super) fn select(&mut self, selected: Theme, ui: &Ui, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
-        let candidate = selected.data()?.into_revision(self.base.as_com_ref())?;
+        let candidate = selected.load(self.base.as_com_ref())?;
         let metrics = candidate.metrics()?;
         ui.install_assets(candidate.as_com_ref(), renderer)?;
         self.selected = selected;

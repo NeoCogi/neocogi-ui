@@ -6,7 +6,7 @@ loaded separately from the host, UI, and renderer; ordinary demo packages omit i
 
 ```sh
 cargo run -p microui-redux-tools --bin com-build -- --demo extension --backend glow
-target/com-native/debug/glow/prebuilt/extension/microui-demo-com --smoke
+target/com-native/debug/glow/files/extension/microui-demo-com --smoke
 ```
 
 Use `vulkan` or `wgpu` for the other native renderers. The same crate also compiles

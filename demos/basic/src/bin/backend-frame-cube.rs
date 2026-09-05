@@ -138,6 +138,7 @@ impl AppState for State {
 
 /// Creates one concrete COM leaf; standard host ownership handles all input/update/render phases.
 fn main() -> Result<(), HostError> {
+    microui_redux_demo_host::initialize()?;
     let host = Host::new("COM solid cube", Size { width: 640, height: 480 }, microui_redux_demo_assets::load_bundle()?)?;
     let angle = Rc::new(Cell::new(0.0));
     let cube = host.ui.widgets().leaf(Cube { angle: angle.clone() }, WidgetOptions::NO_INTERACT)?;

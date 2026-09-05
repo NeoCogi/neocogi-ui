@@ -26,11 +26,11 @@ PY
 )"
 # The fresh package is already independent of Cargo's build directories. Copy only the test runner
 # into it and launch from /tmp so neither source-tree assets nor working-directory lookup can help.
-package_dir="$target_dir/com-native/debug/$backend/prebuilt/full"
+package_dir="$target_dir/com-native/debug/$backend/files/full"
 test_dir="$target_dir/com-tests/$backend"
 rm -rf "$test_dir"
 mkdir -p "$test_dir"
-cp "$package_dir"/* "$test_dir/"
+cp -R "$package_dir"/. "$test_dir/"
 test_binary="$(basename -- "$artifact")"
 cp "$artifact" "$test_dir/$test_binary"
 echo "Staged application tests: $test_dir/$test_binary"

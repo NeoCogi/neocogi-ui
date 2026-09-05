@@ -358,6 +358,7 @@ impl EventHandler<State, events::Activation> for Action {
 
 /// Builds one COM grid of buttons; no separate CalcButton, event port or shadow node list is needed.
 fn main() -> Result<(), HostError> {
+    microui_redux_demo_host::initialize()?;
     let host = Host::new("Calculator", Size { width: 320, height: 420 }, microui_redux_demo_assets::load_bundle()?)?;
     let display = host.ui.widgets().textbox("0")?;
     display.set_named_font(DISPLAY_FONT)?;

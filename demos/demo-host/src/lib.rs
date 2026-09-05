@@ -77,7 +77,7 @@ pub struct Host {
 impl Host {
     /// Loads/registers trusted assemblies once and creates one complete demo host from immutable assets.
     pub fn new(title: &str, size: Size, assets: ComPtr<IAssetBundleAbi>) -> Result<Self, HostError> {
-        startup()?;
+        initialize()?;
         let runtime = nc_com::Runtime::global();
         runtime.require_interface_type::<IUiProviderAbi>(UI_PROVIDER_CLASS)?;
         runtime.require_interface_type::<IPlatformAbi>(PLATFORM_CLASS)?;
@@ -187,8 +187,9 @@ impl<State: AppState> Driver<State> {
     }
 }
 
-/// Initializes the one process/module catalog once, retaining startup failures for deterministic retries.
-fn startup() -> Result<(), HostError> {
+/// Registers the process plugin catalog before loading assets or constructing windows.
+/// Repeated calls reuse the first result; Host::new also calls this for callers supplying their own bundle.
+pub fn initialize() -> Result<(), HostError> {
     static STARTUP: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
     STARTUP
         .get_or_init(|| register().map_err(|error| error.to_string()))

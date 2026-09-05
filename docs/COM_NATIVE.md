@@ -4,7 +4,7 @@ Build every native binary independently and stage a complete executable-relative
 
 ```sh
 cargo com-build --demo full --backend glow
-./target/com-native/debug/glow/prebuilt/full/microui-redux-demo-full
+./target/com-native/debug/glow/files/full/microui-redux-demo-full
 ```
 
 `--demo` selects `full`, `simple`, `calculator`, `backend-frame-cube`, or `smoke`
@@ -21,7 +21,7 @@ its link search path or stage implementation plugins. `unable to find library
 
 ```sh
 cargo com-build --demo full --backend vulkan --release
-./target/com-native/release/vulkan/prebuilt/full/microui-redux-demo-full
+./target/com-native/release/vulkan/files/full/microui-redux-demo-full
 ```
 
 `cargo com-build` is a workspace alias for the driver invocation above. For a
@@ -33,10 +33,18 @@ manifest. Supplying a linker search path alone does not assemble a runnable demo
 
 Packages live in `target/com-native/{debug,release,min-size}/{backend}/{assets}/{demo}`.
 They contain the selected executable, one nc-com runtime library, UI and platform
-plugins, and a `plugins.txt` manifest. The full demo additionally ships the PNG-only
-asset plugin for its compressed photograph. Its font atlas and four themes are
-compiled by Cargo's host build; target-side font construction and JSON loading are
-absent. Do not build the workspace with all features to measure deployment size:
+plugins, and a `plugins.txt` manifest. The default `files` package also contains the
+asset plugin with atlas/theme construction, adjacent font/icon inputs and theme
+files. The full demo's photograph and mesh are external files too. All paths resolve
+against the executable directory; the host contains no embedded demo assets.
+Decoding, font rasterization and theme parsing run in the asset plugin. Call
+`microui_redux_demo_host::initialize()` before `load_bundle()` so its classes are registered.
+
+`--assets embedded` explicitly selects the demo's `embed-assets` Cargo feature.
+That package compiles atlases/themes on Cargo's host and embeds the photo/mesh;
+only the full demo needs the PNG asset plugin. Browser `webgl` selects this feature
+because its resources must reside in the wasm module. Do not build the workspace
+with all features to measure deployment size:
 that unifies optional implementation features that these independent builds avoid.
 
 The driver inspects the actual trusted plugin descriptors and uses nc-com's existing
@@ -56,15 +64,18 @@ GPU evidence collected in this workspace is Linux and browser evidence.
 The workspace's specialized Linux size profile applies to every shipped binary:
 
 ```sh
-cargo +nightly run -p microui-redux-tools --bin com-build -- --demo full --backend glow --min-size
+cargo +nightly com-build --demo full --backend vulkan --min-size
+./target/com-native/min-size/vulkan/files/full/microui-redux-demo-full
 ```
 
 This invokes the existing `build-min-size` alias for runtime, plugins and executable
 using its x86_64 Linux custom target and rebuilt standard library. Install nightly's
 `rust-src` component first. Count every shipped library and asset along with the
 executable; moving implementation code into a plugin does not eliminate its size.
-Final measurements and remaining migration cleanup are tracked in
-[COM_MIGRATION.md](COM_MIGRATION.md).
+The `min-size` profile inherits release. Use the same backend and nightly compiler
+on both sides of a size comparison. COM_PERFORMANCE.md records
+the complete deployment, loaded memory, startup and CPU/frame measurements;
+[COM_MIGRATION.md](COM_MIGRATION.md) records the completed migration sequence.
 
 ## Native verification
 
@@ -73,7 +84,7 @@ then releases its application session and host:
 
 ```sh
 cd /tmp
-MICROUI_DEMO_FRAMES=8 /absolute/path/to/target/com-native/debug/glow/prebuilt/full/microui-redux-demo-full
+MICROUI_DEMO_FRAMES=8 /absolute/path/to/target/com-native/debug/glow/files/full/microui-redux-demo-full
 ```
 
 Malformed or zero limits fail at startup. Omission runs until OS close or the
@@ -90,7 +101,8 @@ scripts/test-demo.sh wgpu
 These tests build plugins independently, stage a companion test executable, and run
 outside the repository. They exercise all four actual themes, the visible compressed
 image, custom geometry/mesh rendering, spacing changes, combo selection, Unicode log
-submission and retained-handle closure. Test executables are staged separately under
+submission and retained-handle closure. Win 3.11 is additionally selected through
+the real nested menu and event callback. Test executables are staged separately under
 `target/com-tests` so they cannot inflate the installed application size. Set
 `MICROUI_TEST_BUILD_ONLY=1` to stage tests for a separate display-enabled invocation.
 
@@ -98,7 +110,7 @@ The smaller boundary smoke remains available:
 
 ```sh
 cargo run -p microui-redux-tools --bin com-build -- --demo smoke --backend glow
-./target/com-native/debug/glow/prebuilt/smoke/microui-demo-com --smoke
+./target/com-native/debug/glow/files/smoke/microui-demo-com --smoke
 ```
 
 It covers typed input/events, inherited and composed controls, compact menus,
@@ -131,20 +143,20 @@ packages omit this assembly. See [its source and contracts](../plugins/extension
 
 ## Optional construction workflows
 
-The smoke executable can exercise runtime asset construction separately from the
-ordinary demos' compiled assets:
+The default file package exposes both construction interfaces. The smoke executable
+can derive a larger atlas or load a JSON theme through the same asset plugin:
 
 ```sh
-cargo run -p microui-redux-tools --bin com-build -- --assets builder
-./target/com-native/debug/glow/builder/smoke/microui-demo-com --smoke --rebuild-assets
-cargo run -p microui-redux-tools --bin com-build -- --assets theme-json
-./target/com-native/debug/glow/theme-json/smoke/microui-demo-com --smoke --theme themes/windows-95/theme.json
+cargo com-build --assets files
+./target/com-native/debug/glow/files/smoke/microui-demo-com --smoke --rebuild-assets
+./target/com-native/debug/glow/files/smoke/microui-demo-com --smoke --theme themes/windows-95/theme.json
 ```
 
-JSON mode stages recipe-relative font/artwork sources. Relative theme paths resolve
-against the executable directory. Other demos deliberately reject construction-mode
-packaging rather than shipping unused loaders. See [COM_ASSETS.md](COM_ASSETS.md) for
-immutable catalogs, bounded transfers, upload atomicity and decoder ownership.
+Relative theme paths resolve against the executable directory. Use
+`cargo com-build --demo full --assets embedded` for an explicit embedded deployment;
+its PNG-only plugin does not expose runtime atlas/theme construction. See
+[COM_ASSETS.md](COM_ASSETS.md) for immutable catalogs, bounded transfers, upload
+atomicity and decoder ownership.
 
 ## Browser
 

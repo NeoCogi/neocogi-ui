@@ -458,6 +458,7 @@ fn menu_item(menu: &MenuBuilder, pending: &mut Vec<(MenuItem, Action)>, text: &s
 
 /// Creates the complete demo with the same structural desktop and floating examples on every backend.
 fn create() -> Result<(Host, EventSession<State>), HostError> {
+    microui_redux_demo_host::initialize()?;
     let host = Host::new(
         "microui-redux COM Demo",
         Size { width: 1200, height: 800 },
@@ -683,7 +684,7 @@ fn build_controls(host: &Host, events: &EventSession<State>, content: &Linear) -
         control.set_image(image.as_com_ref(), false)?;
         append(&textures, &control, LayoutTrack::Content)?;
     }
-    let image = host.png_texture(microui_redux_demo_assets::FACEPALM_PNG)?;
+    let image = host.png_texture(&microui_redux_demo_assets::photo_png()?)?;
     let control = button(ui, events, "External Image", Action::Log)?;
     control.set_image(image.as_com_ref(), true)?;
     append(&textures, &control, LayoutTrack::Content)?;

@@ -53,86 +53,33 @@
 //! One source of demo atlas names, paths, font sizes, and packing dimensions.
 
 use std::path::{Path, PathBuf};
-use microui_ui::atlas::builder;
+use super::{recipe_data as data, ui::atlas::builder};
 
-/// Builds the shared icon/font recipe used by runtime loading, Cargo generation, and the exporter.
+/// Builds the shared recipe for Cargo generation, the exporter and provider equivalence tests.
 pub fn atlas_config() -> builder::Config {
-    // Config owns its recipes and platform paths, so this factory returns one self-contained value
-    // without static borrowed arrays or UTF-8-only path storage.
     builder::Config {
-        texture_height: 256,
-        texture_width: 512,
-        white_icon: workspace_path("assets/WHITE.png"),
-        icons: vec![
-            builder::IconAsset {
-                name: "close".into(),
-                path: workspace_path("assets/CLOSE.png"),
-            },
-            builder::IconAsset {
-                name: "expand".into(),
-                path: workspace_path("assets/PLUS.png"),
-            },
-            builder::IconAsset {
-                name: "collapse".into(),
-                path: workspace_path("assets/MINUS.png"),
-            },
-            builder::IconAsset {
-                name: "check".into(),
-                path: workspace_path("assets/CHECK.png"),
-            },
-            builder::IconAsset {
-                name: "expand_down".into(),
-                path: workspace_path("assets/EXPAND_DOWN.png"),
-            },
-            builder::IconAsset {
-                name: "open_folder".into(),
-                path: workspace_path("assets/OPEN_FOLDER_16.png"),
-            },
-            builder::IconAsset {
-                name: "closed_folder".into(),
-                path: workspace_path("assets/CLOSED_FOLDER_16.png"),
-            },
-            builder::IconAsset {
-                name: "file".into(),
-                path: workspace_path("assets/FILE_16.png"),
-            },
-        ],
-        fonts: vec![
-            builder::FontAsset {
-                name: "body".into(),
-                path: workspace_path("assets/NORMAL.ttf"),
-                size: 12,
-            },
-            builder::FontAsset {
-                name: "small".into(),
-                path: workspace_path("assets/NORMAL.ttf"),
-                size: 10,
-            },
-            builder::FontAsset {
-                name: "title".into(),
-                path: workspace_path("assets/BOLD.ttf"),
-                size: 12,
-            },
-            builder::FontAsset {
-                name: "heading".into(),
-                path: workspace_path("assets/NORMAL.ttf"),
-                size: 18,
-            },
-            builder::FontAsset {
-                name: "mono".into(),
-                path: workspace_path("assets/CONSOLE.ttf"),
-                size: 14,
-            },
-            builder::FontAsset {
-                name: "calculator-display".into(),
-                path: workspace_path("assets/CONSOLE.ttf"),
-                size: 28,
-            },
-        ],
+        texture_width: data::SIZE.0 as usize,
+        texture_height: data::SIZE.1 as usize,
+        white_icon: workspace_path(data::WHITE),
+        icons: data::ICONS
+            .iter()
+            .map(|&(name, path)| builder::IconAsset {
+                name: name.into(),
+                path: workspace_path(path),
+            })
+            .collect(),
+        fonts: data::FONTS
+            .iter()
+            .map(|&(name, path, size)| builder::FontAsset {
+                name: name.into(),
+                path: workspace_path(path),
+                size: size as usize,
+            })
+            .collect(),
     }
 }
 
-/// Resolves repository assets relative to this package for both its library and host build script.
+/// Host tools resolve source paths from the package; native demos resolve the same paths beside their executable.
 fn workspace_path(relative: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(relative)
 }
