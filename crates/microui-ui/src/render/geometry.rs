@@ -501,8 +501,12 @@ impl TriangleClippingResult {
     /// Creates a polygon containing exactly one complete triangle.
     fn from_triangle(triangle: [Vertex; 3]) -> Self {
         let mut polygon = Self::default();
-        polygon.vertices[..3].copy_from_slice(&triangle);
-        polygon.len = 3;
+        // Normalize once even when every clipping edge can be skipped. This preserves the
+        // same near-duplicate and closing-vertex policy as the general edge clipping path.
+        for vertex in triangle {
+            polygon.push_unique(vertex);
+        }
+        polygon.remove_duplicate_closing_vertex();
         polygon
     }
 
@@ -624,11 +628,19 @@ impl ClipRect {
     /// Clips one final backend triangle and appends zero or more flat output triangles.
     pub(crate) fn clip_triangle(&self, triangle: [Vertex; 3], output: &mut Vec<Vertex>) {
         let mut input = TriangleClippingResult::from_triangle(triangle);
+        if input.len() < 3 {
+            return;
+        }
         let mut scratch = TriangleClippingResult::default();
 
         // Each edge consumes the previous polygon and writes a new one. Swapping the two fixed
         // buffers avoids allocation and makes the output of one boundary the input of the next.
         for edge in self.edges() {
+            // Built-in atlas quads are usually already inside the widget and viewport clip.
+            // Keep their vertices untouched instead of rebuilding the same polygon four times.
+            if input.vertices().all(|vertex| edge.contains(vertex.position())) {
+                continue;
+            }
             edge.clip(&input, &mut scratch);
             if scratch.len() < 3 {
                 return;
@@ -809,6 +821,33 @@ mod tests {
         assert!((edge.tex_coord().x - 0.5).abs() <= GEOM_EPS);
         assert!((edge.color().x as i16 - 128).abs() <= 1);
         assert!((edge.color().z as i16 - 128).abs() <= 1);
+    }
+
+    /// Fully contained batches preserve exact attributes and winding while still rejecting degenerate edges.
+    #[test]
+    fn contained_triangles_preserve_vertices_and_drop_near_duplicates() {
+        let clip = ClipRect::new(Recti::new(0, 0, 100, 100)).unwrap();
+        let a = Vertex::new(Vec2f::new(10.0, 10.0), Vec2f::new(0.1, 0.2), color4b(10, 20, 30, 40));
+        let b = Vertex::new(Vec2f::new(90.0, 10.0), Vec2f::new(0.8, 0.2), color4b(50, 60, 70, 80));
+        let c = Vertex::new(Vec2f::new(10.0, 90.0), Vec2f::new(0.1, 0.9), color4b(90, 100, 110, 120));
+        for triangle in [[a, b, c], [a, c, b]] {
+            let mut output = Vec::new();
+            clip.clip_triangle(triangle, &mut output);
+            assert_eq!(output.len(), 3);
+            for (actual, expected) in output.iter().zip(triangle) {
+                assert_eq!([actual.position().x, actual.position().y], [expected.position().x, expected.position().y]);
+                assert_eq!([actual.tex_coord().x, actual.tex_coord().y], [expected.tex_coord().x, expected.tex_coord().y]);
+                let a = actual.color();
+                let b = expected.color();
+                assert_eq!([a.x, a.y, a.z, a.w], [b.x, b.y, b.z, b.w]);
+            }
+        }
+        let nearby = Vertex::new(a.position() + Vec2f::new(GEOM_EPS * 0.25, 0.0), b.tex_coord(), b.color());
+        for triangle in [[a, a, c], [a, nearby, c], [a, b, a]] {
+            let mut output = Vec::new();
+            clip.clip_triangle(triangle, &mut output);
+            assert!(output.is_empty());
+        }
     }
 
     #[test]
