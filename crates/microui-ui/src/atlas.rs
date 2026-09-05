@@ -188,6 +188,7 @@ struct AtlasCandidate {
 pub struct AtlasHandle(Rc<Atlas>);
 
 mod validation;
+pub(crate) mod transfer;
 pub use validation::AtlasError;
 
 #[cfg(feature = "builder")]

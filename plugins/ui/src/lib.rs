@@ -1,10 +1,10 @@
 //! UI assembly: one export packages runtime, window manager, widgets and layout.
 //!
-//! The demo default atlas is temporary packaging input until the assets milestone.
+//! Applications supply immutable resource bundles; this assembly contains no demo assets or parsers.
 //! The implementation library itself has no dynamic entrypoint.
 #![deny(missing_docs)]
 use microui_contracts::*;
-use nc_com::{ComPtr, NcStatus, com_class};
+use nc_com::{ComPtr, ComRef, NcStatus, com_class};
 
 #[com_class(class_id(UI_PROVIDER_CLASS), name = "microui.UiProvider", version = "0.9.0-alpha.0",
     constructor(args = none), interfaces(IUiProvider))]
@@ -13,8 +13,8 @@ pub struct UiProvider;
 
 impl IUiProvider for UiProvider {
     /// Installs one validated default bundle in a new retained runtime.
-    fn create_runtime(&self) -> Result<ComPtr<IUiRuntimeAbi>, NcStatus> {
-        Ok(microui_ui::com::create_runtime(microui_redux_demo_assets::load_atlas()))
+    fn create_runtime(&self, assets: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IUiRuntimeAbi>, NcStatus> {
+        microui_ui::com::create_runtime_from_assets(assets)
     }
 }
 

@@ -29,7 +29,7 @@ mod render;
 mod runtime;
 mod scroll;
 mod text_area;
-pub use runtime::create_runtime;
+pub use runtime::{create_runtime, create_runtime_from_assets};
 
 /// Validates a whole UTF-8 replacement before touching any live object state.
 fn text(input: NcCopyFromBufferOffset<'_, u8>) -> Result<&str, NcStatus> {
@@ -94,6 +94,13 @@ struct WidgetHost {
 }
 
 impl IWidgetHost for WidgetHost {
+    /// Exposes current metadata to independent widget implementations without granting tree ownership.
+    fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
+        self.check_open()?;
+        let factory = self.state.factory.borrow().upgrade().ok_or(UI_E_CLOSED)?;
+        let revision = factory.resources.current();
+        Ok(revision.assets.source().add_ref())
+    }
     /// Issues a private writer and distinct read-only view for a new empty collection.
     fn create_children(&self) -> Result<ComPtr<IChildrenEditorAbi>, NcStatus> {
         self.check_mutation()?;

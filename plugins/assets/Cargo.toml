@@ -1,0 +1,23 @@
+[package]
+name = "microui-plugin-assets"
+version = "0.9.0-alpha.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[features]
+default = []
+theme-json = ["microui-ui/theme-json"]
+dynamic-plugin = []
+
+[dependencies]
+microui-contracts.workspace = true
+microui-redux.workspace = true
+microui-ui = { workspace = true, features = ["builder", "png_source"] }
+nc-com = { workspace = true, features = ["macros", "std"] }
+
+[dev-dependencies]
+microui-redux-demo-assets = { workspace = true, features = ["builder", "prebuilt-com"] }

@@ -7,5 +7,9 @@ license.workspace = true
 repository.workspace = true
 description = "Typed COM contracts shared by microui hosts and implementation plugins"
 
+[features]
+theme-json = ["dep:serde"]
+
 [dependencies]
+serde = { workspace = true, optional = true }
 nc-com = { workspace = true, features = ["macros"] }

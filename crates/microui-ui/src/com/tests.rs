@@ -44,8 +44,12 @@ struct Renderer {
 }
 
 impl IRenderer for Renderer {
+    /// This CPU recorder accepts validated bundles without a GPU upload.
+    fn prepare_assets(&self, _assets: ComRef<'_, IAssetBundleAbi>) -> Result<(), NcStatus> {
+        Ok(())
+    }
     /// Copies bulk geometry during its valid scope and retains authority for later rejection tests.
-    fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
+    fn render(&self, info: RenderInfo, _assets: ComRef<'_, IAssetBundleAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         let mut vertices = vec![RenderVertex::default(); info.vertex_count as usize];
         assert_eq!(
             stream.vertices(info.invocation, NcCopyToBufferOffset::new(0, &mut vertices))?,

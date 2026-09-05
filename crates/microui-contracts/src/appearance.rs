@@ -42,7 +42,7 @@ macro_rules! indexed_role {
             pub const ALL: [Self; Self::COUNT] = [$(Self::$variant),+];
 
             /// Converts this closed role into its family-local array index.
-            pub(crate) const fn index(self) -> usize {
+            pub const fn index(self) -> usize {
                 // The macro emits contiguous variants without explicit discriminants, so the cast
                 // cannot escape the array whose length is generated from the same declaration.
                 self as usize
@@ -56,7 +56,7 @@ indexed_role! {
     pub enum SurfaceRole {
         /// Window or modal-dialog background below application content and chrome.
         Window,
-        /// Generic frame requested through [`crate::WidgetOption::FRAME`].
+        /// Generic frame requested through the common FRAME widget option.
         GenericFrame,
         /// Content panel or scroll-area viewport background.
         Panel,
@@ -208,7 +208,7 @@ impl ControlState {
     }
 
     /// Converts this closed state into its control-catalog array index.
-    pub(crate) const fn index(self) -> usize {
+    pub const fn index(self) -> usize {
         // Disabled occupies one slot; the two enabled branches then occupy equal contiguous spans.
         match self {
             Self::Disabled => 0,
@@ -241,7 +241,7 @@ impl SurfaceState {
     }
 
     /// Converts this closed state into its surface-catalog array index.
-    pub(crate) const fn index(self) -> usize {
+    pub const fn index(self) -> usize {
         // The match documents storage order rather than relying on a representation cast.
         match self {
             Self::Normal => 0,
@@ -294,7 +294,7 @@ impl MenuState {
     }
 
     /// Converts this closed state into its menu-catalog array index.
-    pub(crate) const fn index(self) -> usize {
+    pub const fn index(self) -> usize {
         // The explicit mapping keeps serialized field order irrelevant to runtime storage.
         match self {
             Self::Normal => 0,
@@ -338,7 +338,7 @@ impl ChromeState {
     }
 
     /// Converts this closed state into its chrome-catalog array index.
-    pub(crate) const fn index(self) -> usize {
+    pub const fn index(self) -> usize {
         // The explicit mapping avoids giving the word "inactive" two unrelated UI meanings.
         match self {
             Self::Base => 0,

@@ -423,6 +423,14 @@ impl Ui {
     pub fn render(&self, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
         self.runtime.render(size, renderer)
     }
+    /// Retains the current immutable bundle for restoration or another UI/renderer consumer.
+    pub fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
+        self.runtime.assets()
+    }
+    /// Validates compatible resources and uploads before publication; call update after success.
+    pub fn install_assets(&self, assets: ComRef<'_, IAssetBundleAbi>, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
+        self.runtime.install_assets(assets, renderer)
+    }
     /// Closes the runtime's complete retained forest while handles may remain allocated.
     pub fn close(&self) -> Result<(), NcStatus> {
         self.runtime.close()

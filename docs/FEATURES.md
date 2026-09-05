@@ -49,7 +49,7 @@ shared recipe to tools. CI decodes the generated atlas and compares its pixels a
 metadata with runtime generation using `cargo test -p microui-redux-demo-assets
 --no-default-features --features "builder prebuilt-atlas"`.
 
-To export an atlas as Rust, enable `save-to-rust` (and `png_source` when serializing PNG-backed atlas data) and call `AtlasHandle::to_rust_files`. The workspace helper enables its required library features in its own manifest:
+For COM applications, enable implementation-library `save-to-rust` at build time and call `SkinBundle::to_com_rust_files`. Generated `load_bundle()` and `bundle_data()` functions use only the facade/contracts at runtime, with raw static RGBA pixels. The legacy `AtlasHandle::to_rust_files` path remains for the direct Context API until migration cleanup. The workspace helper now emits COM bundles:
 `cargo run -p microui-redux-tools --bin atlas-export -- --output path/to/atlas.rs`
 
 
@@ -65,3 +65,10 @@ Native demos are checked separately with `--no-default-features --features glow`
 `wgpu`. WebGL compilation and DOM regressions run on pull requests independently of Pages
 deployment. `--all-features` is not a substitute for these backend selections: conditional backend
 aliases choose only one branch when several renderer features are enabled together.
+
+COM asset feature boundaries and packaging modes are documented in
+[COM_ASSETS.md](COM_ASSETS.md). `microui-redux-demo-assets/prebuilt-com` compiles the
+recipe through a Cargo host build dependency, while its application target depends
+only on the facade and COM types. UI/platform plugins have no embedded demo atlas.
+`microui-plugin-assets` provides font/PNG construction; its optional `theme-json`
+feature adds JSON compilation in that binary alone when packages are built separately.

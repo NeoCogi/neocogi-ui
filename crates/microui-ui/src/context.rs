@@ -375,11 +375,16 @@ impl<B: RendererBackend, State: 'static> Context<B, State> {
     /// [`crate::IconRole::ALL`]. Every constructible atlas already has a validated white
     /// rendering tile.
     pub fn new(backend: B) -> Self {
-        // Capture the renderer's initial resources before any replacement can occur. The default
-        // active bundle and every later loaded theme derive from this same immutable catalog.
+        let catalog = ResourceCatalog::new(backend.get_atlas());
+        Self::from_bundle(backend, catalog.default_skin_bundle())
+    }
+
+    /// Constructs retained traversal from the exact same immutable revision as COM widget services.
+    /// The caller initializes its backend from this bundle's atlas before publishing either owner.
+    pub(crate) fn from_bundle(backend: B, bundle: SkinBundle) -> Self {
         let renderer = Renderer::new(backend);
-        let resource_catalog = ResourceCatalog::new(renderer.atlas());
-        let bundle = resource_catalog.default_skin_bundle();
+        debug_assert!(renderer.atlas().ptr_eq(bundle.atlas()), "backend and retained bundle must share one atlas");
+        let resource_catalog = ResourceCatalog::new(bundle.atlas().clone());
         Self {
             renderer,
             resource_catalog,

@@ -52,6 +52,7 @@
 //
 //! Demo atlas loading from the shared recipe or Cargo-generated embedded data.
 
+#[cfg(any(feature = "builder", feature = "prebuilt-atlas"))]
 use microui_ui::prelude::AtlasHandle;
 
 /// Asset recipe also compiled directly into this package's Cargo build script.
@@ -87,7 +88,15 @@ pub fn load_atlas() -> AtlasHandle {
     prebuilt::load()
 }
 
-#[cfg(all(not(feature = "prebuilt-atlas"), not(feature = "builder")))]
+/// Compiled COM tables have no target dependency on the retained UI or any asset parser.
+#[cfg(feature = "prebuilt-com")]
+mod prebuilt_com {
+    include!(concat!(env!("OUT_DIR"), "/prebuilt_bundle.rs"));
+}
+#[cfg(feature = "prebuilt-com")]
+pub use prebuilt_com::load_bundle;
+
+#[cfg(all(not(feature = "prebuilt-atlas"), not(feature = "prebuilt-com"), not(feature = "builder")))]
 compile_error!("demo assets require `builder` for runtime generation or `prebuilt-atlas` for embedded data");
 
 /// Compare host generation with the runtime recipe after actual generated-data decoding.
@@ -102,8 +111,8 @@ mod tests {
         let built = Builder::from_config(&atlas_config()).unwrap().build().unwrap();
         let embedded = load_atlas();
         assert_eq!((built.width(), built.height()), (embedded.width(), embedded.height()));
-        let built_pixels: Vec<_> = built.pixels_clone().iter().map(|pixel| [pixel.x, pixel.y, pixel.z, pixel.w]).collect();
-        let embedded_pixels: Vec<_> = embedded.pixels_clone().iter().map(|pixel| [pixel.x, pixel.y, pixel.z, pixel.w]).collect();
+        let built_pixels: Vec<_> = built.pixels().iter().map(|pixel| [pixel.x, pixel.y, pixel.z, pixel.w]).collect();
+        let embedded_pixels: Vec<_> = embedded.pixels().iter().map(|pixel| [pixel.x, pixel.y, pixel.z, pixel.w]).collect();
         assert_eq!(built_pixels, embedded_pixels);
         let built_fonts = built.clone_font_table();
         let embedded_fonts = embedded.clone_font_table();

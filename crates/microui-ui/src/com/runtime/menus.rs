@@ -238,7 +238,14 @@ impl IFontStyle for Item {
     fn set_named_font(&self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         let runtime = self.owner()?;
         let name = text(input)?;
-        let font = runtime.factory.resources.atlas.font_id(name).ok_or(nc_com::NC_E_NOT_FOUND)?;
+        let font = runtime
+            .factory
+            .resources
+            .current()
+            .assets
+            .original()
+            .font_id(name)
+            .ok_or(nc_com::NC_E_NOT_FOUND)?;
         self.edit(Edit::Font(crate::FontRef::Named(font)))
     }
 }

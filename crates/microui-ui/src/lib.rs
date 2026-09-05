@@ -245,6 +245,7 @@ mod guide_doctests {
 }
 
 pub mod atlas;
+pub mod assets;
 mod context;
 mod event;
 mod file_dialog;

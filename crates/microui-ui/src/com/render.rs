@@ -144,12 +144,11 @@ impl IRenderStream for Stream {
 }
 
 /// Final destination of geometry prepared by the single concrete backend type.
-#[derive(Copy, Clone, Eq, PartialEq)]
 enum Destination {
     /// A built-in paint invocation returns its owned bulk vertices to a painter.
     Recording,
     /// A complete retained frame calls the selected external renderer once.
-    Renderer,
+    Renderer(Rc<super::widget::Resources>),
 }
 
 /// One concrete geometry backend for local paint recording and complete COM frame submission.
@@ -170,13 +169,17 @@ pub(super) struct Backend {
 
 impl Backend {
     /// Creates recording storage without acquiring a GPU frame.
-    pub(super) fn new(atlas: AtlasHandle, host: Rc<HostState>) -> Self {
+    pub(super) fn new(atlas: AtlasHandle, host: Rc<HostState>, resources: Rc<super::widget::Resources>) -> Self {
+        Self::create(atlas, host, Destination::Renderer(resources))
+    }
+    /// Creates the same executor with explicit recording or resource-owning submission behavior.
+    fn create(atlas: AtlasHandle, host: Rc<HostState>, destination: Destination) -> Self {
         let storage = Rc::new(Storage::default());
         let stream = Stream::from_value(Stream { storage: storage.clone() })
             .query()
             .expect("Stream declares IRenderStream");
         Self {
-            destination: Destination::Renderer,
+            destination,
             atlas,
             host,
             storage,
@@ -186,8 +189,7 @@ impl Backend {
     }
     /// Reuses the same backend/executor monomorphization for local widget geometry.
     pub(super) fn recording(atlas: AtlasHandle, host: Rc<HostState>) -> (Self, Rc<Storage>) {
-        let mut backend = Self::new(atlas, host);
-        backend.destination = Destination::Recording;
+        let backend = Self::create(atlas, host, Destination::Recording);
         let storage = backend.storage.clone();
         (backend, storage)
     }
@@ -218,9 +220,10 @@ impl RendererBackend for Backend {
     fn get_atlas(&self) -> AtlasHandle {
         self.atlas.clone()
     }
-    /// Atlas replacement is wired to the asset/renderer transaction in the assets milestone.
-    fn replace_atlas(&mut self, _atlas: AtlasHandle) -> Result<(), AtlasUploadError> {
-        Err(AtlasUploadError::new("COM atlas replacement is not installed"))
+    /// Publishes local geometry resources after Runtime has prepared the fallible GPU upload.
+    fn replace_atlas(&mut self, atlas: AtlasHandle) -> Result<(), AtlasUploadError> {
+        self.atlas = atlas;
+        Ok(())
     }
     /// Clears reused scratch; no native command executes before finish.
     fn frame(&mut self, info: FrameInfo) -> Result<Self::Frame<'_>, FrameError> {
@@ -245,7 +248,7 @@ impl RendererFrame for Frame<'_> {
         if let Some(error) = self.backend.host.error.get() {
             return Err(FrameError::new(error.to_string()));
         }
-        if self.backend.destination == Destination::Recording {
+        if matches!(self.backend.destination, Destination::Recording) {
             return Ok(());
         }
         let storage = &self.backend.storage;
@@ -258,6 +261,10 @@ impl RendererFrame for Frame<'_> {
         let _scope = ReadScope(storage);
         let size = self.info.dimensions();
         let clear = self.info.clear();
+        let Destination::Renderer(resources) = &self.backend.destination else {
+            unreachable!("recording returned above")
+        };
+        let revision = resources.current();
         renderer
             .render(
                 RenderInfo {
@@ -267,6 +274,7 @@ impl RendererFrame for Frame<'_> {
                     vertex_count,
                     batch_count,
                 },
+                revision.assets.source(),
                 self.backend.stream.as_com_ref(),
             )
             .map_err(|error| FrameError::new(error.to_string()))

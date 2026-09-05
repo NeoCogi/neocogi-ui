@@ -15,5 +15,4 @@ dynamic-plugin = []
 [dependencies]
 microui-contracts.workspace = true
 microui-ui.workspace = true
-microui-redux-demo-assets = { workspace = true, features = ["prebuilt-atlas"] }
 nc-com = { workspace = true, features = ["macros", "std"] }

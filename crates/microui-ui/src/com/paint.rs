@@ -13,9 +13,10 @@ impl ITextMetrics for Metrics {
     /// Uses the existing inline-content algorithm so migration preserves sizing.
     fn button_size(&self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<Size, NcStatus> {
         let label = text(input)?;
+        let resources = self.resources.current();
         let size = crate::ui_node::widgets::control::inline_content_size(
-            &self.resources.skin,
-            &self.resources.atlas,
+            resources.assets.bundle().skin(),
+            resources.assets.bundle().atlas(),
             &crate::FontRef::Role(FontRole::Body),
             label,
             None,

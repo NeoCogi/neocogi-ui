@@ -75,14 +75,11 @@ impl AtlasHandle {
     pub fn height(&self) -> usize {
         self.0.height
     }
-    /// Returns a clone of the atlas pixel data.
-    pub fn pixels_clone(&self) -> Vec<Color4b> {
-        self.0.pixels.clone()
-    }
-
-    /// Executes a closure with shared access to the atlas pixels.
-    pub fn apply_pixels<F: FnMut(usize, usize, &[Color4b])>(&self, mut f: F) {
-        f(self.0.width, self.0.height, &self.0.pixels);
+    /// Borrows the immutable RGBA pixels directly for local import/export and native upload.
+    /// The slice remains valid for this atlas borrow; COM consumers receive explicit copies.
+    pub fn pixels(&self) -> &[Color4b] {
+        // Immutable atlas ownership makes a callback or an intermediate full-image clone unnecessary.
+        &self.0.pixels
     }
 
     /// Returns a mapping from icon names to their identifiers.

@@ -14,20 +14,30 @@ use windows::NativeSurface;
 
 /// Creates a runtime without registering individual ephemeral widgets as COM classes.
 pub fn create_runtime(atlas: AtlasHandle) -> ComPtr<IUiRuntimeAbi> {
-    Runtime::from_value(Runtime { storage: create_storage(atlas) })
-        .query()
-        .expect("runtime interface")
+    let bundle = crate::SkinBundle::from_atlas(atlas);
+    let source = crate::assets::export_bundle(&bundle).expect("native test/source bundle is valid");
+    create_runtime_from_assets(source.as_com_ref()).expect("exported native bundle imports")
 }
 
-/// Creates the one authoritative storage allocation used by the public runtime and its weak internal controllers.
-fn create_storage(atlas: AtlasHandle) -> Rc<RuntimeStorage> {
+/// Imports application-supplied resources before constructing any live runtime or widget service.
+pub fn create_runtime_from_assets(source: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IUiRuntimeAbi>, NcStatus> {
+    let assets = crate::assets::ImportedAssets::read(source, None)?;
+    Ok(Runtime::from_value(Runtime { storage: create_storage(assets) })
+        .query()
+        .expect("runtime interface"))
+}
+
+/// Creates the one authoritative storage allocation used by the runtime and its weak controllers.
+fn create_storage(assets: crate::assets::ImportedAssets) -> Rc<RuntimeStorage> {
+    let bundle = assets.bundle().clone();
+    let atlas = bundle.atlas().clone();
     let state = Rc::new(HostState::default());
     let host: ComPtr<IWidgetHostAbi> = WidgetHost::from_value(WidgetHost { state: state.clone() }).query().expect("host interface");
-    let resources = super::widget::Resources::new(atlas.clone(), state.clone());
+    let resources = super::widget::Resources::new(assets, state.clone());
     let metrics = Metrics::from_value(Metrics { resources: resources.clone() })
         .query()
         .expect("metrics interface");
-    let backend = Backend::new(atlas, state.clone());
+    let backend = Backend::new(atlas, state.clone(), resources.clone());
     let target = backend.target.clone();
     let factory = Rc::new(super::factory::NodeFactory {
         layout: super::layout::LayoutService::new(resources.clone(), state.clone()),
@@ -41,7 +51,7 @@ fn create_storage(atlas: AtlasHandle) -> Rc<RuntimeStorage> {
     });
     *state.factory.borrow_mut() = Rc::downgrade(&factory);
     Rc::new(RuntimeStorage {
-        context: RefCell::new(Some(Context::new(backend))),
+        context: RefCell::new(Some(Context::from_bundle(backend, bundle))),
         mounts: RefCell::new(Vec::new()),
         factory,
         target,
@@ -323,6 +333,36 @@ impl IUiFactory for Runtime {
 }
 
 impl IUiRuntime for Runtime {
+    /// Exposes an owned immutable revision without borrowing mutable tree state.
+    fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
+        self.storage.open()?;
+        Ok(self.storage.factory.resources.current().assets.source().add_ref())
+    }
+    /// Prepares all CPU state and the fallible GPU upload before publishing a shared revision.
+    fn install_assets(&self, source: ComRef<'_, IAssetBundleAbi>, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
+        let storage = &self.storage;
+        storage.factory.host.check_mutation()?;
+        if storage.updating.get() {
+            return Err(UI_E_BUSY);
+        }
+        let mut context = storage.context()?;
+        let _phase = Observation::begin(&storage.factory.state);
+        let previous = storage.factory.resources.current();
+        if previous.assets.source().as_ptr() == source.as_ptr() {
+            // The UI revision is already current. Only the explicitly supplied renderer may
+            // need to switch back from another UI's atlas; do not invalidate unchanged geometry.
+            return renderer.prepare_assets(source);
+        }
+        let assets = crate::assets::ImportedAssets::read(source, Some(&previous.assets))?;
+        let next = super::widget::ResourceRevision::new(assets, storage.factory.state.clone());
+        renderer.prepare_assets(source)?;
+        // ImportedAssets has already proved every original identity survives. The COM backend's
+        // atlas replacement is a local assignment; this commit performs no further foreign calls.
+        context.set_skin_bundle(next.assets.bundle()).map_err(|_| NC_E_INVALID_ARG)?;
+        storage.factory.resources.install(next);
+        storage.pending.set(true);
+        Ok(())
+    }
     /// Validates before enqueueing and owns the copied text after this synchronous call.
     fn input(&self, event: UiInputAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         let storage = &self.storage;

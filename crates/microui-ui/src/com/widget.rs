@@ -5,7 +5,7 @@
 use super::*;
 use crate::math::RectExt;
 use microui_contracts::widget::WidgetState;
-use crate::{AtlasHandle, Skin, LeafWidget, WidgetOption, WidgetUpdateCtx, WidgetPaintCtx, Constraints, AvailableSpace};
+use crate::{LeafWidget, WidgetOption, WidgetUpdateCtx, WidgetPaintCtx, Constraints, AvailableSpace};
 use crate::render::{DisplayList, Renderer};
 
 /// Private semantic algorithms reused by each statically known built-in class.
@@ -20,29 +20,49 @@ pub(crate) trait WidgetAlgorithm: crate::Widget {
     }
 }
 
-/// One resource revision shared by built-ins, metrics and geometry expansion.
+/// One installed revision shared by every built-in, metrics service and scoped layout service.
 pub(super) struct Resources {
-    /// Immutable atlas allocation, shared without per-glyph COM calls.
-    pub(super) atlas: AtlasHandle,
-    /// Resolved skin for that same atlas revision.
-    pub(super) skin: Skin,
-    /// Idle reusable geometry workspace; taking it prevents reentrant recording.
+    /// Clone an owned snapshot before foreign calls; the slot never lends a RefCell guard to a component.
+    current: RefCell<Rc<ResourceRevision>>,
+}
+
+/// Immutable semantic resources and their private reusable geometry workspace.
+pub(super) struct ResourceRevision {
+    /// The exact bundle also installed in retained window/layout traversal.
+    pub(super) assets: crate::assets::ImportedAssets,
+    /// Taking the idle scratch rejects overlapping built-in paint without borrowing it across COM.
     scratch: RefCell<Option<PaintScratch>>,
 }
 
-impl Resources {
-    /// Creates one geometry executor for the entire runtime, not per widget.
-    pub(super) fn new(atlas: AtlasHandle, host: Rc<HostState>) -> Rc<Self> {
-        let (collector, storage) = super::render::Backend::recording(atlas.clone(), host);
+impl ResourceRevision {
+    /// Prepares complete geometry state before an installation can publish this revision.
+    pub(super) fn new(assets: crate::assets::ImportedAssets, host: Rc<HostState>) -> Rc<Self> {
+        let (collector, storage) = super::render::Backend::recording(assets.bundle().atlas().clone(), host);
         Rc::new(Self {
-            skin: Skin::from_atlas(&atlas),
-            atlas,
+            assets,
             scratch: RefCell::new(Some(PaintScratch {
                 list: DisplayList::new(),
                 renderer: Renderer::new(collector),
                 storage,
             })),
         })
+    }
+}
+impl Resources {
+    /// Creates the one runtime resource slot from the already validated, resolved bundle.
+    pub(super) fn new(assets: crate::assets::ImportedAssets, host: Rc<HostState>) -> Rc<Self> {
+        Rc::new(Self {
+            current: RefCell::new(ResourceRevision::new(assets, host)),
+        })
+    }
+    /// Publishes prepared local state; foreign final releases occur after the slot borrow ends.
+    pub(super) fn install(&self, revision: Rc<ResourceRevision>) {
+        let old = self.current.replace(revision);
+        drop(old);
+    }
+    /// Retains one immutable revision with no borrow surviving into layout, paint or foreign calls.
+    pub(super) fn current(&self) -> Rc<ResourceRevision> {
+        self.current.borrow().clone()
     }
 }
 
@@ -130,11 +150,12 @@ impl<S: WidgetAlgorithm> WidgetCore<S> {
         self.state.writable()?;
         state.validate()?;
         let input = super::input::local_event(event, bytes)?;
+        let resources = self.resources.current();
         let mut ctx = WidgetUpdateCtx::new_with_content_geometry(
             local_rect(state.screen),
             local_rect(state.clip).translated(crate::Vec2i::new(state.screen.x, state.screen.y)),
-            &self.resources.skin,
-            &self.resources.atlas,
+            resources.assets.bundle().skin(),
+            resources.assets.bundle().atlas(),
             state.in_hover_root,
             state.hovered,
             state.focused,
@@ -157,7 +178,10 @@ impl<S: WidgetAlgorithm> WidgetCore<S> {
     {
         self.state.readable()?;
         let constraints = Constraints::new(available(bounds.width)?, available(bounds.height)?);
-        let size = self.take()?.measure(&self.resources.skin, &self.resources.atlas, constraints);
+        let resources = self.resources.current();
+        let size = self
+            .take()?
+            .measure(resources.assets.bundle().skin(), resources.assets.bundle().atlas(), constraints);
         Ok(Size {
             width: size.width.max(0),
             height: size.height.max(0),
@@ -168,9 +192,10 @@ impl<S: WidgetAlgorithm> WidgetCore<S> {
     pub(super) fn paint(&self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
         self.state.readable()?;
         state.validate()?;
-        let scratch = self.resources.scratch.try_borrow_mut().map_err(|_| UI_E_BUSY)?.take().ok_or(UI_E_BUSY)?;
+        let resources = self.resources.current();
+        let scratch = resources.scratch.try_borrow_mut().map_err(|_| UI_E_BUSY)?.take().ok_or(UI_E_BUSY)?;
         let mut recording = PaintRecording {
-            resources: &self.resources,
+            resources: &resources,
             scratch: Some(scratch),
             vertices: Vec::new(),
         };
@@ -181,8 +206,8 @@ impl<S: WidgetAlgorithm> WidgetCore<S> {
                 local_rect(state.rect),
                 &mut scratch.list,
                 local_rect(state.clip),
-                &self.resources.skin,
-                &self.resources.atlas,
+                resources.assets.bundle().skin(),
+                resources.assets.bundle().atlas(),
                 state.enabled,
                 state.hovered,
                 state.focused,
@@ -237,7 +262,8 @@ impl<S: WidgetAlgorithm + crate::ContainerWidget> WidgetCore<S> {
         let constraints = super::layout::constraints(bounds)?;
         let core = self.take()?;
         let layout = super::layout::ScopedLayout::new(scope, service)?;
-        let mut ctx = crate::MeasureCtx::scoped(&self.resources.skin, &self.resources.atlas, layout);
+        let resources = self.resources.current();
+        let mut ctx = crate::MeasureCtx::scoped(resources.assets.bundle().skin(), resources.assets.bundle().atlas(), layout);
         let size = crate::ContainerWidget::measure(&*core, &mut ctx, constraints);
         ctx.result()?;
         Ok(Size {
@@ -254,7 +280,8 @@ impl<S: WidgetAlgorithm + crate::ContainerWidget> WidgetCore<S> {
         }
         let mut core = self.take()?;
         let layout = super::layout::ScopedLayout::new(scope, service)?;
-        let mut ctx = crate::ContainerLayoutCtx::scoped(&self.resources.skin, &self.resources.atlas, local_rect(rect), layout);
+        let resources = self.resources.current();
+        let mut ctx = crate::ContainerLayoutCtx::scoped(resources.assets.bundle().skin(), resources.assets.bundle().atlas(), local_rect(rect), layout);
         core.place(&mut ctx, local_rect(rect));
         ctx.result()
     }
@@ -294,7 +321,7 @@ struct PaintScratch {
 /// Owned paint transaction that restores scratch capacity on every return path.
 struct PaintRecording<'a> {
     /// Owner of the vacant workspace slot; contains no borrowed runtime context.
-    resources: &'a Resources,
+    resources: &'a ResourceRevision,
     /// Present until Drop returns the reusable workspace.
     scratch: Option<PaintScratch>,
     /// Detached final geometry, borrowed only for the synchronous bulk copy.
@@ -411,7 +438,7 @@ impl<S: FontState> WidgetCore<S> {
     pub(super) fn set_named_font(&self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.state.writable()?;
         let name = text(input)?;
-        let font = self.resources.atlas.font_id(name).ok_or(nc_com::NC_E_NOT_FOUND)?;
+        let font = self.resources.current().assets.original().font_id(name).ok_or(nc_com::NC_E_NOT_FOUND)?;
         self.commit_font(crate::FontRef::Named(font))
     }
     /// Commits an already validated selection and preserves pending setter changes.
@@ -468,7 +495,7 @@ impl<S: IconState> WidgetCore<S> {
     /// Looks up a named icon once against this widget's exact immutable resource owner.
     pub(super) fn set_named_icon(&self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.state.writable()?;
-        let icon = self.resources.atlas.icon_id(text(input)?).ok_or(nc_com::NC_E_NOT_FOUND)?;
+        let icon = self.resources.current().assets.original().icon_id(text(input)?).ok_or(nc_com::NC_E_NOT_FOUND)?;
         self.commit_icon(Some(crate::IconRef::Named(icon)))
     }
     /// Commits the selection and invalidates the inline visual's reserved size.

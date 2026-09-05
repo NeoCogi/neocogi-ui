@@ -275,7 +275,7 @@ impl Builder {
             replacement_font_ids: Vec::new(),
             replacement_icon_ids: Vec::new(),
         };
-        let source_pixels = atlas.pixels_clone();
+        let source_pixels = atlas.pixels();
         let source_width = atlas.width();
         for (name, icon) in atlas.clone_icon_table() {
             if excluded_icons.contains(&name.as_str()) {
@@ -332,7 +332,7 @@ impl Builder {
         // Begin with the existing icon-copy path so required semantic icon names, including the
         // opaque white tile, retain their table order and exact pixels in the new allocation.
         let mut builder = Self::from_atlas_icons_with_size_excluding(atlas, width, height, excluded_icons)?;
-        let source_pixels = atlas.pixels_clone();
+        let source_pixels = atlas.pixels();
         let source_width = atlas.width();
 
         for (name, source_font) in &atlas.0.fonts {

@@ -6,10 +6,10 @@ Build and stage the runtime, UI assembly, SDL/GPU assembly and small host:
 
 ```sh
 cargo run -p microui-redux-tools --bin com-build
-./target/com-native/debug/glow/microui-demo-com
+./target/com-native/debug/glow/prebuilt/microui-demo-com
 ```
 
-For release artifacts, pass `-- --release` to the driver and use `target/com-native/release/glow`. The driver uses the selected Cargo toolchain, builds each binary separately, and honors `CARGO_TARGET_DIR`. Its builds are offline, so dependencies must already be cached. It does not invoke Cargo from a build script.
+For release artifacts, pass `-- --release` to the driver and use `target/com-native/release/glow/prebuilt`. The driver uses the selected Cargo toolchain, builds each binary separately, and honors `CARGO_TARGET_DIR`. Its builds are offline, so dependencies must already be cached. It does not invoke Cargo from a build script.
 
 Select the native backend explicitly; each package includes only the selected implementation and the demo's matching native mesh renderer:
 
@@ -18,7 +18,7 @@ cargo run -p microui-redux-tools --bin com-build -- --backend vulkan
 cargo run -p microui-redux-tools --bin com-build -- --backend wgpu
 ```
 
-Packages are staged in `target/com-native/{debug,release}/{glow,vulkan,wgpu}`. Each contains the same host, runtime, UI plugin and `microui-plugin-platform-native`, plus an explicit `plugins.txt`. A native display is required for the Vulkan/WGPU smoke tests. The ordinary Cargo `glow`/`vulkan`/`wgpu` feature priority matches the existing demo renderer when features are unified; the packaging driver selects exactly one with default features disabled.
+Packages are staged in `target/com-native/{debug,release}/{glow,vulkan,wgpu}/{prebuilt,builder,theme-json}`. Each contains the same host, runtime, UI plugin and `microui-plugin-platform-native`, plus an explicit `plugins.txt`. A native display is required for the Vulkan/WGPU smoke tests. The ordinary Cargo `glow`/`vulkan`/`wgpu` feature priority matches the existing demo renderer when features are unified; the packaging driver selects exactly one with default features disabled.
 
 The host reads the staged `plugins.txt` in order, loads both trusted libraries from beside its executable, and activates their concrete bootstrap classes. `microui-redux` contains only static typed clients and contracts. `microui-ui` contains retained implementation code. The small crates under `plugins/` own descriptors and explicitly selected exports; an ordinary implementation-library dependency never exports a plugin entrypoint accidentally.
 
@@ -29,7 +29,7 @@ A deterministic input/render/teardown smoke run is available:
 ```sh
 cd /tmp
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
-  /absolute/path/to/target/com-native/debug/glow/microui-demo-com --smoke
+  /absolute/path/to/target/com-native/debug/glow/prebuilt/microui-demo-com --smoke
 ```
 
 This uses a real SDL GL context and Mesa rendering. It verifies separate-binary activation, real GPU painting, keyboard activation into application-owned handlers, inherited/composed controls, compact menus, native-path file-picker acceptance, invalidation, resize, explicit update-before-render and logical closure. Glow additionally has a GPU pixel-readback test for image/mesh/overlay order. Linux Vulkan and WGPU packages have passed the same smoke on the native Intel/Mesa display. This does not complete every input family or the browser/platform deployment gates.
@@ -39,9 +39,9 @@ The current slice has deliberate transitions with assigned removal milestones:
 - The retained engine is moved intact to `microui-ui`. Existing demos and behavior tests temporarily use that implementation crate while their public integration is converted. Item 17 removes obsolete integration APIs and documentation.
 - COM leaf nodes now own their widget/layout capabilities directly. The extra Bridge allocation, weak invalidation hook and duplicate mount-list widget owners are removed. Existing Node caches, window layout, routing, clipping, framing and display-list algorithms remain authoritative. Legacy demos still use local Node variants and public semantic constructors during migration. Item 17 removes them after the remaining container/composition/demo ports. Built-in COM classes own their concrete semantic values inline; temporary common-option copies inside the old algorithm structs must also be removed in that cleanup.
 - The manager mounts arbitrary leaves exposing IWidget and ILeafLayout. Lifetime, common properties, input/update, invalidation and paint belong to IWidget; the separate activation/lifetime interfaces have been removed. The manager now exposes child windows, hidden modal dialogs, typed popups, visibility, layering, title/options and child clipping. The basic built-in leaves now have concrete editing capabilities. Linear/Grid and the real ScrollArea, Disclosure and TextArea compositions expose transactional topology and scoped layout services.
-- Built-in buttons, checkboxes, textboxes, text blocks, sliders, numbers, color swatches, list entries and scrollbars reuse their complete semantic, measurement and theme-paint algorithms. Font/icon selection and button center-fill are concrete optional capabilities. Paint receives copied interaction state and records atlas geometry in bulk. The simple external ITextMetrics/IPainter text conveniences still use body-font button appearance; full external resource metadata arrives with item 15. Finite and unbounded constraints are explicit copied records.
-- UI and platform assemblies both use the same generated demo atlas. They do not yet negotiate arbitrary asset bundles. Item 15 replaces this packaging input with the shared immutable resource-bundle contract. The public application does not depend on the demo asset builder.
-- The renderer copies one complete vertex buffer and one ordered batch buffer into reusable owned storage, then authenticates image/scene capabilities before opening its native frame. Atlas triangles, clipped image quads and real native 3D commands preserve source order. Texture/scene resources keep their native window/device alive; diagnostics preserve backend failure text. Atlas replacement belongs to the immutable resource transaction in item 15. Temporary legacy-ID and custom-callback hooks disappear with the old direct Context API in item 17.
+- Built-in buttons, checkboxes, textboxes, text blocks, sliders, numbers, color swatches, list entries and scrollbars reuse their complete semantic, measurement and theme-paint algorithms. Font/icon selection and button center-fill are concrete optional capabilities. Paint receives copied interaction state and records atlas geometry in bulk. The simple external ITextMetrics/IPainter text conveniences use body-font button appearance; independent widgets obtain full immutable metadata through IWidgetHost::assets. Finite and unbounded constraints are explicit copied records.
+- The host supplies one immutable COM bundle to UI and native platform construction. Neither plugin embeds demo assets. Compiled tables require only facade/contracts at runtime; optional font/PNG/JSON construction lives in the asset plugin. See [COM_ASSETS.md](COM_ASSETS.md) for limits, catalog identity, atomic replacement and author obligations.
+- The renderer copies one complete vertex buffer and one ordered batch buffer into reusable owned storage, then authenticates image/scene capabilities before opening its native frame. Atlas triangles, clipped image quads and real native 3D commands preserve source order. Texture/scene resources keep their native window/device alive; diagnostics preserve backend failure text. Runtime installation validates compatible resources and uploads before publishing the UI revision; each frame explicitly identifies its bundle. Temporary legacy-ID and custom-callback hooks disappear with the old direct Context API in item 17.
 - The runtime accepts complete typed pointer/button/wheel/key/modifier/text/cancellation events through input(), then update(size) applies queued input and synchronizes layout. Widget updates receive copied router snapshots and content-local events. The native slice still translates its smaller SDL poll record; complete platform translation, text-input-area and IME integration are item 16.
 - The host owns an `EventSession` and concrete handler. `update_with_events` dispatches between input phases, releases the context for ordinary callback edits, and commits their geometry before routing later input. All current leaf, window and popup event families use the same queue/lease transport. Combo/menu actions and standard native-path picker completion use the same transport; internal component callbacks share the finite boundary budget. The producer never owns the sink or lease.
 
@@ -63,3 +63,17 @@ devices and `LIBGL_ALWAYS_SOFTWARE=1` crashed in `driCreateNewScreen3` during SD
 creation, before renderer construction. Normal hardware-display tests pass; the
 headless software tests pass with hardware devices unavailable. Use the ordinary
 native-display command on a desktop instead of forcing that EGL combination.
+
+Optional asset packaging uses an explicit mode:
+
+```sh
+cargo run -p microui-redux-tools --bin com-build -- --assets builder
+cargo run -p microui-redux-tools --bin com-build -- --assets theme-json
+./target/com-native/debug/glow/builder/microui-demo-com --smoke --rebuild-assets
+./target/com-native/debug/glow/theme-json/microui-demo-com --smoke --theme themes/windows-95/theme.json
+```
+
+The default mode is `prebuilt`. Optional modes add one asset library; JSON mode also
+stages the bundled theme/font sources. Relative theme paths resolve against the
+executable directory. Raw compiled atlas pixels occupy 512 KiB for the demo, before
+metadata; this explicit storage cost is included in the final installed-size budget.

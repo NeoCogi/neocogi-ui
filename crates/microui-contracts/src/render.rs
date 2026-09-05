@@ -105,6 +105,9 @@ pub trait IRenderStream {
 #[com_interface(auto_guid = "microui.Renderer:v1")]
 /// GPU resources and presentation belong to this object's native window.
 pub trait IRenderer {
+    /// Imports and transactionally uploads a complete immutable atlas. Repeated preparation of
+    /// the identical bundle is a cheap no-op; failure leaves the previous native atlas usable.
+    fn prepare_assets(&self, assets: ComRef<'_, crate::IAssetBundleAbi>) -> Result<(), NcStatus>;
     /// Executes one complete frame synchronously; failure must not present it.
-    fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus>;
+    fn render(&self, info: RenderInfo, assets: ComRef<'_, crate::IAssetBundleAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus>;
 }

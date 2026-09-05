@@ -25,3 +25,6 @@ pub use menu::{Menus, MenuBuilder, MenuItem};
 /// Standard native-path file-picker requests and clients.
 pub mod file_dialog;
 pub use file_dialog::{FileDialog, FileDialogRequest};
+
+/// Immutable prebuilt and builder-produced resource objects using the same bulk contracts.
+pub mod assets;

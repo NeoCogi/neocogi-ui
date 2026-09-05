@@ -39,7 +39,7 @@ mod recipe;
 /// Tracks the recipe's actual inputs and writes validated embedded data only when requested.
 fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed=src/recipe.rs");
-    if env::var_os("CARGO_FEATURE_PREBUILT_ATLAS").is_none() {
+    if env::var_os("CARGO_FEATURE_PREBUILT_ATLAS").is_none() && env::var_os("CARGO_FEATURE_PREBUILT_COM").is_none() {
         return Ok(());
     }
     let config = recipe::atlas_config();
@@ -55,6 +55,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let atlas = Builder::from_config(&config)?.build()?;
     // The core exporter writes the PNG and its metadata together; no nested Cargo process,
     // separate target directory, or copied serialization format is needed.
-    atlas.to_rust_files("PREBUILT_ATLAS", SourceFormat::Png, output)?;
+    if env::var_os("CARGO_FEATURE_PREBUILT_ATLAS").is_some() {
+        atlas.to_rust_files("PREBUILT_ATLAS", SourceFormat::Png, output)?;
+    }
+    if env::var_os("CARGO_FEATURE_PREBUILT_COM").is_some() {
+        let output = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo provides OUT_DIR")).join("prebuilt_bundle.rs");
+        microui_ui::SkinBundle::from_atlas(atlas).to_com_rust_files(output)?;
+    }
     Ok(())
 }

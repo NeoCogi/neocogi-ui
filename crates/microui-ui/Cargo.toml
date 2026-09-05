@@ -17,7 +17,7 @@ crate-type = ["rlib"]
 default = []
 builder = ["dep:fontdue", "dep:png"]
 png_source = ["dep:png"]
-theme-json = ["builder", "dep:serde", "dep:serde_json", "png_source"]
+theme-json = ["microui-contracts/theme-json", "builder", "dep:serde", "dep:serde_json", "png_source"]
 save-to-rust = ["dep:tempfile"]
 
 [dependencies]

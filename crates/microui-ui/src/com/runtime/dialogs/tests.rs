@@ -25,7 +25,9 @@ struct Fixture {
 impl Fixture {
     /// Uses the same storage constructor, COM Runtime class and public picker factory as normal plugin activation.
     fn new() -> Self {
-        let storage = create_storage(crate::test_support::test_atlas());
+        let bundle = crate::SkinBundle::from_atlas(crate::test_support::test_atlas());
+        let source = crate::assets::export_bundle(&bundle).unwrap();
+        let storage = create_storage(crate::assets::ImportedAssets::read(source.as_com_ref(), None).unwrap());
         let runtime: ComPtr<IUiRuntimeAbi> = Runtime::from_value(Runtime { storage: storage.clone() }).query().unwrap();
         let ui = microui_redux::Ui::from_interface(runtime.clone()).unwrap();
         let body = ui.widgets().button("background").unwrap();

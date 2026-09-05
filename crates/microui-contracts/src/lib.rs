@@ -8,6 +8,9 @@
 #![no_std]
 #![deny(missing_docs)]
 
+pub mod appearance;
+mod assets;
+pub use assets::*;
 pub mod widget;
 pub use widget::{WidgetOptions, WidgetProperties, WidgetFrame, WidgetPaint};
 mod container;
@@ -295,7 +298,7 @@ pub trait IPlatformWindow {
 /// Platform plugin's concrete window factory.
 pub trait IPlatform {
     /// Creates an independent native window and renderer; title is UTF-8 at offset zero.
-    fn create_window(&self, title: NcCopyFromBufferOffset<'_, u8>, size: Size) -> Result<ComPtr<IPlatformWindowAbi>, NcStatus>;
+    fn create_window(&self, title: NcCopyFromBufferOffset<'_, u8>, size: Size, assets: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IPlatformWindowAbi>, NcStatus>;
 }
 
 com_int_enum! {
@@ -476,6 +479,12 @@ pub trait IWindowManager {
 #[com_interface(auto_guid = "microui.UiRuntime:v1")]
 /// One independent retained UI, also exposing its widget factory/window manager.
 pub trait IUiRuntime {
+    /// Retains the currently installed immutable revision, suitable for restoration or another consumer.
+    fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus>;
+    /// Validates compatible resources and prepares the renderer upload before publishing either UI
+    /// projection. Failure preserves the old bundle. Success requires update before rendering.
+    /// Install outside an update/render transaction; the renderer is borrowed only for this call.
+    fn install_assets(&self, assets: ComRef<'_, IAssetBundleAbi>, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus>;
     /// Drains queued input, or one eventless update, and synchronizes setters/resize without an application dispatcher.
     fn update(&self, size: Size) -> Result<(), NcStatus>;
     /// Borrows application dispatch at each safe boundary; handlers may mutate windows/topology before the next input is routed.
@@ -493,8 +502,8 @@ pub trait IUiRuntime {
 #[com_interface(auto_guid = "microui.UiProvider:v1")]
 /// UI plugin bootstrap; ordinary widgets are created by each returned runtime.
 pub trait IUiProvider {
-    /// Creates an independent UI with this plugin assembly's default resource bundle.
-    fn create_runtime(&self) -> Result<ComPtr<IUiRuntimeAbi>, NcStatus>;
+    /// Imports the supplied immutable bundle into a new independent UI; invalid resources create no runtime.
+    fn create_runtime(&self, assets: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IUiRuntimeAbi>, NcStatus>;
 }
 
 /// Stable activation identity independent of Rust module paths.
@@ -505,6 +514,10 @@ pub const PLATFORM_CLASS: nc_com::NcGuid = nc_com::guid_from_qualified_name("mic
 #[com_interface(auto_guid = "microui.WidgetHost:v1")]
 /// Runtime identity and mutation authority without a reference back to its tree.
 pub trait IWidgetHost {
+    /// Retains the current immutable resource revision without owning the runtime tree.
+    /// Custom widgets cache bulk metadata by this bundle identity and refresh it during the next
+    /// measure/paint after replacement; never retain UVs or glyph metrics across a different revision.
+    fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus>;
     /// Creates an empty private child editor; containers expose only its read-only view.
     fn create_children(&self) -> Result<ComPtr<IChildrenEditorAbi>, NcStatus>;
     /// Checks lifetime without forbidding observational reads during layout or painting.
