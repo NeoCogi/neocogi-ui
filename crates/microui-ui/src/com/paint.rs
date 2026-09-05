@@ -6,7 +6,7 @@ use crate::prelude::{FontRole, WidgetOption, ControlRole};
 /// Immutable text metrics for one installed resource bundle.
 pub(super) struct Metrics {
     /// Exact immutable revision also shared by the concrete built-in objects.
-    pub(super) resources: Rc<super::leaf::Resources>,
+    pub(super) resources: Rc<super::widget::Resources>,
 }
 
 impl ITextMetrics for Metrics {

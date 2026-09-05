@@ -411,7 +411,9 @@ fn downstream_file_dialog_completion_is_subscriber_driven_without_widget_access(
     ));
     let mut dialog = FileDialog::new(&mut context, &owner, FileDialogModel::dialog_mut);
     let completed = dialog.completed();
-    context.subscribe(completed, |state, _, event| FileDialogModel::file_dialog_completed(state, event)).unwrap();
+    context
+        .subscribe(completed, |state, _, event| FileDialogModel::file_dialog_completed(state, event))
+        .unwrap();
     dialog
         .open(&mut context.ui(), FileDialogRequest::default())
         .expect("dialog and owner must be available for this activation");
@@ -595,11 +597,11 @@ impl ContainerWidget for ExternalContainer {
         ctx.measure_child(0, constraints).unwrap_or_else(|| Dimensioni::new(20, 20))
     }
 
-    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, children: &mut Children, rect: Recti) {
+    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) {
         self.layout_calls.set(self.layout_calls.get() + 1);
-        assert!(ctx.layout_child(children, usize::MAX, rect).is_none());
-        if !children.is_empty() {
-            self.allocated_child.set(ctx.layout_child(children, 0, rect));
+        assert!(ctx.layout_child(usize::MAX, rect).is_none());
+        if ctx.child_count() != 0 {
+            self.allocated_child.set(ctx.layout_child(0, rect));
         }
     }
 }

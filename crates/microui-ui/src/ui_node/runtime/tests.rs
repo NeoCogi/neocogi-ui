@@ -36,7 +36,7 @@ use std::rc::Rc;
 use super::*;
 use crate::test_support::test_atlas;
 use crate::ui_node::children::ChildrenHandle;
-use crate::{ChildParticipation, Children, ContainerWidget, TypedWidgetHandle, Widget, WidgetPaintCtx, WidgetUpdateCtx};
+use crate::{ChildParticipation, ContainerWidget, TypedWidgetHandle, Widget, WidgetPaintCtx, WidgetUpdateCtx};
 use crate::input::Input;
 
 #[derive(Default)]
@@ -201,13 +201,13 @@ impl ContainerWidget for TraversalContainer {
             })
     }
 
-    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, children: &mut Children, rect: Recti) {
+    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) {
         let visible = self.visible;
-        for index in 0..children.len() {
+        for index in 0..ctx.child_count() {
             let participation = if visible { ChildParticipation::Active } else { ChildParticipation::Hidden };
-            let _ = ctx.set_child_participation(children, index, participation);
+            let _ = ctx.set_child_participation(index, participation);
             if visible {
-                let _ = ctx.layout_child(children, index, rect);
+                let _ = ctx.layout_child(index, rect);
             }
         }
     }
@@ -255,7 +255,7 @@ impl ContainerWidget for CaptureContainer {
         Dimensioni::new(20, 20)
     }
 
-    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, _children: &mut Children, rect: Recti) {
+    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) {
         ctx.set_content_size(Dimensioni::new(rect.width.max(0), rect.height.max(0)));
     }
 }

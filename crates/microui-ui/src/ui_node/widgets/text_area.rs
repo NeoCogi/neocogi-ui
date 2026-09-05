@@ -133,8 +133,8 @@ pub struct TextArea {
     font: FontRef,
     /// Runtime-only derived editing state.
     interaction: TextAreaInteraction,
-    /// Weak capability for scroll queries and caret reveal requests after composition.
-    scroll_area: Option<TypedWidgetHandle<ScrollArea>>,
+    /// Shared scalar scroll data supports caret reveal without retaining a parent widget or tree.
+    scroll_area: Option<std::rc::Rc<crate::ui_node::ScrollModel>>,
     /// Runtime-owned source for user-originated text changes.
     changed_event: crate::EventSource<TextAreaChanged>,
     /// Runtime-owned source for user submissions.
@@ -180,10 +180,10 @@ impl TextArea {
         let (editor_handle, editor_node) = Node::typed_widget(editor);
         let (scroll_handle, root) = ScrollArea::create(ScrollAreaParameters::new(scroll_options, editor_node));
 
-        // Install the weak parent capability only after ScrollArea construction. Both handles are
-        // weak, so this internal back-reference cannot create an ownership cycle.
+        // Retain only the parent's explicit scalar model, which owns no widget or child collection.
+        let model = scroll_handle.try_read(|scroll| scroll.model.clone()).expect("newly composed scroll model");
         editor_handle
-            .try_update_without_measurement(|editor| editor.scroll_area = Some(scroll_handle))
+            .try_update_without_measurement(|editor| editor.scroll_area = Some(model))
             .expect("newly composed TextArea content must remain mounted in its ScrollArea");
         (editor_handle, root)
     }
@@ -229,7 +229,7 @@ impl TextArea {
     /// Clears text, cursor, navigation preference, and the containing scroll offset.
     pub fn clear(&mut self) {
         // Reset semantic state before synchronizing presentation so the next measure sees the empty
-        // document even if the weak scroll capability has already expired during teardown.
+        // document while the explicit shared scroll model receives the matching reset.
         self.buf.clear();
         self.cursor = 0;
         self.interaction.caret_affinity = CaretAffinity::Upstream;
@@ -268,10 +268,7 @@ impl TextArea {
     pub fn scroll(&self) -> Vec2i {
         // An unmounted editor exists only during construction or direct unit tests and therefore has
         // no viewport translation to report.
-        self.scroll_area
-            .as_ref()
-            .and_then(|scroll| scroll.try_read(ScrollArea::offset))
-            .unwrap_or_default()
+        self.scroll_area.as_ref().map(|scroll| scroll.offset()).unwrap_or_default()
     }
 
     /// Requests a non-negative offset through the containing scroll area.
@@ -279,9 +276,7 @@ impl TextArea {
         // Keep ScrollArea and its two scrollbar children as the only owners of scroll state. Direct
         // editor unit tests have no parent capability and intentionally treat this as a no-op.
         if let Some(scroll_area) = &self.scroll_area {
-            scroll_area
-                .try_update_without_measurement(|state| state.set_offset(scroll))
-                .expect("a retained TextArea's containing ScrollArea must remain available");
+            scroll_area.set_offset(scroll);
         }
     }
 
@@ -315,12 +310,10 @@ impl TextArea {
 
     /// Requests that the containing scroll area reveal one content-local caret rectangle.
     fn reveal_rect(&self, rect: Recti) {
-        // Mutate only the independently retained parent widget. ScrollArea's update has completed
-        // before child traversal reaches TextArea, and the weak capability cannot extend ownership.
+        // The shared scalar request marks the containing layout dirty without borrowing a parent
+        // widget or relying on whether that parent receives an ordinary update this pass.
         if let Some(scroll_area) = &self.scroll_area {
-            scroll_area
-                .try_update_without_measurement(|state| state.scroll_rect_into_view(rect))
-                .expect("a retained TextArea's containing ScrollArea must remain available");
+            scroll_area.reveal(rect);
         }
     }
 
@@ -751,8 +744,12 @@ mod tests {
     fn text_dispatcher(text_area: &TextArea) -> crate::event::WidgetEventDispatcher<Vec<RecordedEvent>> {
         // Register both ports against one ordered state log to characterize independent delivery.
         let mut dispatcher = crate::event::WidgetEventDispatcher::new();
-        dispatcher.subscribe(text_area.changed(), |state, _, event| record_changed(state, event)).unwrap();
-        dispatcher.subscribe(text_area.submitted(), |state, _, event| record_submitted(state, event)).unwrap();
+        dispatcher
+            .subscribe(text_area.changed(), |state, _, event| record_changed(state, event))
+            .unwrap();
+        dispatcher
+            .subscribe(text_area.submitted(), |state, _, event| record_submitted(state, event))
+            .unwrap();
         dispatcher
     }
 
@@ -1146,5 +1143,40 @@ mod tests {
         let scroll = text_area.scroll().unwrap();
         assert_eq!(scroll.x, 0);
         assert!(scroll.y > 0, "revealing the final caret must move the parent-owned vertical offset");
+    }
+}
+
+impl TextArea {
+    /// Constructs the actual COM editor using the same normalization and interaction initialization as local composition.
+    pub(crate) fn com_new(text: &str, wrap: TextWrap, model: std::rc::Rc<crate::ui_node::ScrollModel>) -> Self {
+        let mut editor = Self::new_editor(TextAreaParameters::new(text).wrap(wrap));
+        editor.scroll_area = Some(model);
+        editor
+    }
+    /// Reads the one wrapping choice consumed by both measurement and caret geometry.
+    pub(crate) fn com_wrap(&self) -> TextWrap {
+        self.wrap
+    }
+    /// Invalidates visual-column preference and reveals the caret after a wrapping change.
+    pub(crate) fn com_set_wrap(&mut self, wrap: TextWrap) {
+        self.wrap = wrap;
+        self.reset_preferred_x = true;
+        self.reveal_caret = true;
+    }
+}
+impl crate::com::widget::WidgetAlgorithm for TextArea {
+    /// The editor has no decorative options of its own; the common COM state controls input policy.
+    fn set_options(&mut self, _options: WidgetOption) {}
+}
+impl crate::com::widget::FontState for TextArea {
+    /// Borrows the actual font selection used by text measurement and paint.
+    fn font(&self) -> &crate::FontRef {
+        &self.font
+    }
+    /// Recomputes visual navigation and caret reveal after the shared resource helper validates the font.
+    fn set_font(&mut self, font: crate::FontRef) {
+        self.font = font;
+        self.reset_preferred_x = true;
+        self.reveal_caret = true;
     }
 }

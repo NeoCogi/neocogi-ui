@@ -28,22 +28,48 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 
-use crate::{ControlRole};
+use crate::ControlRole;
 
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
 
 use crate::{
     AtlasHandle, ChildParticipation, Container, ContainerWidget, ControlState, Dimensioni, MeasureCtx, PointerState, Recti, Skin, TypedWidgetHandle,
     UiInputEvent, Widget, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx,
 };
 
-use super::{Children, ContainerLayoutCtx, LinearItem, Node};
+use super::{ContainerLayoutCtx, LinearItem, Node};
 use crate::{Linear, LinearParameters};
 
+/// Immutable header presentation shared by disclosure layout and its actual interactive header.
 #[derive(Copy, Clone, Eq, PartialEq)]
-enum DisclosureVariant {
+pub(crate) enum DisclosureVariant {
+    /// Framed header row with a non-indented body.
     Header,
+    /// Unframed tree row with an indented body.
     Tree,
+}
+
+/// Explicit expansion data shared by the actual header and its layout parent, without object backpointers.
+pub(crate) struct DisclosureState {
+    /// Current body participation policy.
+    expanded: std::cell::Cell<bool>,
+    /// Shared edits persist until the parent collects them, even while its body is hidden.
+    dirty: std::cell::Cell<bool>,
+}
+impl DisclosureState {
+    /// Creates one authoritative expansion value for the composed widget.
+    pub(crate) fn new(expanded: bool) -> Rc<Self> {
+        Rc::new(Self {
+            expanded: std::cell::Cell::new(expanded),
+            dirty: std::cell::Cell::new(false),
+        })
+    }
+    /// Changes participation only when the requested value differs.
+    fn set(&self, expanded: bool) {
+        if self.expanded.replace(expanded) != expanded {
+            self.dirty.set(true);
+        }
+    }
 }
 
 /// One-shot construction input for a stateful disclosure container.
@@ -102,68 +128,75 @@ impl DisclosureParameters {
 /// Expansion gates descendant traversal while retaining every owned runtime and its state. It does
 /// not expose or mutate generic node visibility.
 pub struct Disclosure {
-    /// Weak access to content topology strongly owned by the vertical Linear body child.
-    content: TypedWidgetHandle<Linear>,
-    expanded: bool,
+    /// Temporary legacy editing link; COM composition owns its actual ILinear body projection directly.
+    content: Option<TypedWidgetHandle<Linear>>,
+    /// Same expansion scalar read by the actual header object and parent layout.
+    model: Rc<DisclosureState>,
     variant: DisclosureVariant,
 }
 
 impl Disclosure {
     /// Returns whether descendants participate in traversal.
     pub fn is_expanded(&self) -> bool {
-        self.expanded
+        self.model.expanded.get()
     }
 
     /// Returns whether descendants are currently gated.
     pub fn is_collapsed(&self) -> bool {
-        !self.expanded
+        !self.model.expanded.get()
     }
 
     /// Makes descendants participate in traversal.
     pub fn expand(&mut self) {
-        self.expanded = true;
+        self.model.set(true);
     }
 
     /// Gates descendants while retaining their ownership and state.
     pub fn collapse(&mut self) {
-        self.expanded = false;
+        self.model.set(false);
     }
 
     /// Reverses the current descendant gate.
     pub fn toggle(&mut self) {
-        self.expanded = !self.expanded;
+        self.model.set(!self.model.expanded.get());
     }
 
     /// Returns the number of owned child nodes.
     pub fn len(&self) -> Option<usize> {
-        self.content.try_read(Linear::len).flatten()
+        self.content.as_ref()?.try_read(Linear::len).flatten()
     }
 
     /// Returns whether the disclosure owns no children.
     pub fn is_empty(&self) -> Option<bool> {
-        self.content.try_read(Linear::is_empty).flatten()
+        self.content.as_ref()?.try_read(Linear::is_empty).flatten()
     }
 
     /// Appends one still-unmounted body item and its vertical Linear-owned height track.
     #[allow(clippy::result_large_err)] // Failure returns the exact unique node and its edge metadata.
     pub fn push(&mut self, item: impl Into<LinearItem>) -> Result<(), LinearItem> {
-        self.content.try_update_with(item.into(), Linear::push)?
+        match &self.content {
+            Some(content) => content.try_update_with(item.into(), Linear::push)?,
+            None => Err(item.into()),
+        }
     }
 
     /// Inserts an item, returning it unchanged when `index > len`.
     #[allow(clippy::result_large_err)] // The exact unboxed owner is the failure value by contract.
     pub fn insert(&mut self, index: usize, item: LinearItem) -> Result<(), LinearItem> {
-        self.content.try_update_with(item, |content, item| content.insert(index, item))?
+        match &self.content {
+            Some(content) => content.try_update_with(item, |content, item| content.insert(index, item))?,
+            None => Err(item),
+        }
     }
 
     /// Drops one indexed child owner and reports whether it existed.
     pub fn remove_drop(&mut self, index: usize) -> Option<bool> {
-        self.content.try_update(|content| content.remove_drop(index)).flatten()
+        self.content.as_ref()?.try_update(|content| content.remove_drop(index)).flatten()
     }
 
     /// Drops every child owner.
     pub fn clear(&mut self) -> Option<()> {
-        self.content.try_update(Linear::clear).flatten()
+        self.content.as_ref()?.try_update(Linear::clear).flatten()
     }
 
     /// Replaces all body items in iterator order.
@@ -172,7 +205,10 @@ impl Disclosure {
         T: Into<LinearItem>,
         I: IntoIterator<Item = T>,
     {
-        self.content.try_update_with(items, Linear::replace)?
+        match &self.content {
+            Some(content) => content.try_update_with(items, Linear::replace)?,
+            None => Err(items),
+        }
     }
 
     // Structural child order is also retained keyboard traversal order. Keeping the visible
@@ -191,9 +227,10 @@ impl Disclosure {
 
 /// Dispatcher-addressable disclosure header.
 ///
-/// The header owns no descendants and keeps only a weak typed handle to its parent widget.
-struct DisclosureHeader {
-    disclosure: TypedWidgetHandle<Disclosure>,
+/// The header owns no descendants and shares only expansion data with its layout parent.
+pub(crate) struct DisclosureHeader {
+    /// Shared scalar state owns no parent widget or tree.
+    model: Rc<DisclosureState>,
     label: String,
     variant: DisclosureVariant,
     opt: WidgetOption,
@@ -246,26 +283,24 @@ impl Widget for DisclosureHeader {
         // Pointer/Enter/Space toggle while directional keys expose the conventional tree behavior.
         match ctx.action(input, self.keyboard_behavior()) {
             Some(crate::KeyboardAction::Activate) => {
-                let _ = self.disclosure.try_update(Disclosure::toggle);
+                self.model.set(!self.model.expanded.get());
             }
             Some(crate::KeyboardAction::Expand) => {
-                let _ = self.disclosure.try_update(Disclosure::expand);
+                self.model.set(true);
             }
             Some(crate::KeyboardAction::Collapse) => {
-                let _ = self.disclosure.try_update(Disclosure::collapse);
+                self.model.set(false);
             }
             Some(crate::KeyboardAction::Decrease | crate::KeyboardAction::Increase) | None => {}
         }
 
-        // The header size is fixed; its checked ancestor handle records disclosure invalidation.
+        // The header size is fixed; the parent independently collects the shared expansion marker.
         crate::Change::NoChange
     }
 
     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
         // Expansion determines the icon, while presentation variant determines background/frame.
-        let Some(expanded) = self.disclosure.try_read(Disclosure::is_expanded) else {
-            return;
-        };
+        let expanded = self.model.expanded.get();
         let mut row = ctx.local_rect();
         match self.variant {
             DisclosureVariant::Header => {
@@ -303,7 +338,7 @@ impl Widget for DisclosureHeader {
 
     // Framing belongs to the header sub-rectangle, not the complete descendant allocation.
     fn effective_widget_opt(&self) -> WidgetOption {
-        self.opt & !WidgetOption::FRAME
+        crate::com::widget::WidgetAlgorithm::effective_options(self, self.opt)
     }
 
     fn keyboard_behavior(&self) -> crate::KeyboardBehavior {
@@ -328,7 +363,7 @@ impl ContainerWidget for Disclosure {
         // The header always contributes. Body measurement is conditional so collapsed content does
         // not influence root auto-size while its state and nodes remain retained.
         let header = ctx.measure_child(Self::HEADER, constraints).unwrap_or_default();
-        if !self.expanded {
+        if !self.model.expanded.get() {
             return header;
         }
         let indent = self.indent(ctx.skin());
@@ -344,24 +379,24 @@ impl ContainerWidget for Disclosure {
         )
     }
 
-    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, children: &mut Children, rect: Recti) {
+    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) {
         // Header is a fixed structural role and always occupies the first visible row.
         let preferred = ctx
-            .measure_child(children, Self::HEADER, crate::Constraints::bounded(Dimensioni::new(rect.width, rect.height)))
+            .measure_child(Self::HEADER, crate::Constraints::bounded(Dimensioni::new(rect.width, rect.height)))
             .unwrap_or_default();
         let header_height = preferred.height.min(rect.height.max(0));
-        let _ = ctx.set_child_participation(children, Self::HEADER, ChildParticipation::Active);
-        let _ = ctx.layout_child(children, Self::HEADER, Recti::new(rect.x, rect.y, rect.width, header_height));
+        let _ = ctx.set_child_participation(Self::HEADER, ChildParticipation::Active);
+        let _ = ctx.layout_child(Self::HEADER, Recti::new(rect.x, rect.y, rect.width, header_height));
 
         // Participation is the single gate consumed by update, paint, hit testing, and target
         // sanitation. No generic visibility bit or topology rewrite is needed for collapse.
-        let participation = if self.expanded {
+        let participation = if self.model.expanded.get() {
             ChildParticipation::Active
         } else {
             ChildParticipation::Hidden
         };
-        let _ = ctx.set_child_participation(children, Self::BODY, participation);
-        if self.expanded {
+        let _ = ctx.set_child_participation(Self::BODY, participation);
+        if self.model.expanded.get() {
             let indent = self.indent(ctx.skin());
             let spacing = ctx.skin().metrics.spacing.max(0);
             // body_origin = container_origin + (indent, header_height + spacing).
@@ -371,12 +406,16 @@ impl ContainerWidget for Disclosure {
             let body_width = rect.width.saturating_sub(indent);
             let body_height = rect.height.saturating_sub(header_height).saturating_sub(spacing);
             let body = Recti::new(body_x, body_y, body_width, body_height);
-            let _ = ctx.layout_child(children, Self::BODY, body);
+            let _ = ctx.layout_child(Self::BODY, body);
         }
     }
 }
 
 impl Widget for Disclosure {
+    /// Expansion changes made by the header invalidate this parent even when ordinary updates skip descendants.
+    fn take_shared_change(&self) -> bool {
+        self.model.dirty.replace(false)
+    }
     fn widget_opt(&self) -> &WidgetOption {
         &WidgetOption::NO_INTERACT
     }
@@ -387,23 +426,20 @@ impl Widget for Disclosure {
 /// Builds the fixed body/header structure before wrapping it in the public owning node.
 fn create_container(parameters: DisclosureParameters) -> (TypedWidgetHandle<Disclosure>, Container) {
     let (content, body) = Linear::create(LinearParameters::vertical(parameters.children));
-    let widget = Rc::new(RefCell::new(crate::ui_node::WidgetStorage::new(Disclosure {
-        content,
-        expanded: parameters.expanded,
+    let model = DisclosureState::new(parameters.expanded);
+    let widget = Disclosure {
+        content: Some(content),
+        model: model.clone(),
         variant: parameters.variant,
-    })));
-    let handle = TypedWidgetHandle::new(&widget);
+    };
     let header = DisclosureHeader {
-        disclosure: handle.clone(),
+        model,
         label: parameters.label,
         variant: parameters.variant,
         opt: parameters.opt,
     };
-    // Retained child order mirrors visual order so hit testing, paint, and Tab traversal share one
-    // authoritative topology. Role constants keep layout independent from representation details.
-    let children = Rc::new(RefCell::new([Node::widget_internal(header), body].into_iter().collect()));
-    let (_, container) = Container::from_shared_owner(children, widget);
-    (handle, container)
+    // Visual and keyboard order are the same authoritative fixed header/body order.
+    Container::new(widget, [Node::widget_internal(header), body])
 }
 
 impl Disclosure {
@@ -495,5 +531,46 @@ mod tests {
         // The 10x5 collapse icon plus one vertical pixel on each side determines 10x7. Measuring
         // only the 1x1 expand icon would incorrectly return 3x3 and clip after expansion.
         assert_eq!((preferred.width, preferred.height), (10, 7));
+    }
+}
+
+impl Disclosure {
+    /// Creates COM semantic state while its concrete class retains the actual typed body capability.
+    pub(crate) fn com_new(model: Rc<DisclosureState>, variant: DisclosureVariant) -> Self {
+        Self { content: None, model, variant }
+    }
+}
+impl DisclosureHeader {
+    /// Creates the real header leaf with its shared expansion value and initialized label.
+    pub(crate) fn com_new(model: Rc<DisclosureState>, label: String, variant: DisclosureVariant) -> Self {
+        let opt = if variant == DisclosureVariant::Header {
+            WidgetOption::FRAME
+        } else {
+            WidgetOption::NONE
+        };
+        Self { model, label, variant, opt }
+    }
+    /// Reads the label used by both preferred-size measurement and complete header painting.
+    pub(crate) fn com_label(&self) -> &str {
+        &self.label
+    }
+    /// Replaces the actual label without changing expansion or body ownership.
+    pub(crate) fn com_set_label(&mut self, label: &str) {
+        self.label.clear();
+        self.label.push_str(label);
+    }
+}
+impl crate::com::widget::WidgetAlgorithm for Disclosure {
+    /// Parent has no surface-specific option storage; common COM options remain authoritative.
+    fn set_options(&mut self, _options: WidgetOption) {}
+}
+impl crate::com::widget::WidgetAlgorithm for DisclosureHeader {
+    /// Header-owned internal framing and text alignment use these concrete options.
+    fn set_options(&mut self, options: WidgetOption) {
+        self.opt = options;
+    }
+    /// Header painting already owns its internal frame; generic traversal must not add a second inset.
+    fn effective_options(&self, options: WidgetOption) -> WidgetOption {
+        options & !WidgetOption::FRAME
     }
 }

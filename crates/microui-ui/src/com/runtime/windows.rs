@@ -86,7 +86,7 @@ impl RuntimeStorage {
         rect: Rect,
         root: ComRef<'_, IWidgetAbi>,
     ) -> Result<ComPtr<IUnknown>, NcStatus> {
-        self.host.check_mutation()?;
+        self.factory.host.check_mutation()?;
         if rect.width < 0 || rect.height < 0 {
             return Err(NC_E_INVALID_ARG);
         }
@@ -104,25 +104,8 @@ impl RuntimeStorage {
                 context.window_manager.window_visible(parent).map_err(status)?;
             }
         }
-        let widget = root.add_ref();
-        let owner: ComPtr<IUnknown> = widget.host()?.query()?;
-        if owner.as_ptr() != self.host.query::<IUnknown>()?.as_ptr() {
-            return Err(UI_E_OWNER);
-        }
-        let layout = widget.query()?;
-        let properties = widget.properties()?;
-        properties.validate()?;
-        // Every fallible external query and parent-policy check precedes the mount-once commit.
-        widget.mount()?;
-        let node = Node::com_widget(ComNode {
-            widget,
-            dirty: Cell::new(false),
-            layout,
-            properties: Cell::new(properties),
-            metrics: self.metrics.clone(),
-            painter: self.painter.clone(),
-            host: self.state.clone(),
-        });
+        // Root windows and child collections use the same checked mount boundary.
+        let node = self.factory.mount_node(root, None)?;
         let manager = &mut context.window_manager;
         let surface = match placement {
             Placement::Root => NativeSurface::Window(manager.create_window(Window::new(title, local_rect(rect), node))),
@@ -240,7 +223,7 @@ impl LogicalWindow {
     /// Applies one fully specified edit under the common phase/reentry checks.
     fn edit(&self, edit: WindowEdit) -> Result<(), NcStatus> {
         let runtime = self.owner()?;
-        runtime.host.check_mutation()?;
+        runtime.factory.host.check_mutation()?;
         let mut context = runtime.context()?;
         let manager = &mut context.window_manager;
         match edit {
@@ -321,18 +304,18 @@ impl IWindow for LogicalWindow {
             self.closed.set(true);
             return Ok(());
         };
-        if runtime.state.closed.get() {
+        if runtime.factory.state.closed.get() {
             self.closed.set(true);
             return Ok(());
         }
-        runtime.host.check_mutation()?;
+        runtime.factory.host.check_mutation()?;
         let mut context = runtime.context()?;
-        runtime.state.error.set(None);
+        runtime.factory.state.error.set(None);
         NativeSurface::Window(self.window.clone()).close(&mut context.window_manager)?;
         self.closed.set(true);
         runtime.pending.set(true);
         runtime.prune_mounts(&context.window_manager);
-        runtime.state.error.take().map_or(Ok(()), Err)
+        runtime.factory.state.error.take().map_or(Ok(()), Err)
     }
 }
 
@@ -370,7 +353,7 @@ impl LogicalPopup {
     /// Shares phase/reentry checks while keeping each mutation's data explicit.
     fn edit(&self, edit: PopupEdit) -> Result<(), NcStatus> {
         let runtime = self.owner()?;
-        runtime.host.check_mutation()?;
+        runtime.factory.host.check_mutation()?;
         let mut context = runtime.context()?;
         match edit {
             PopupEdit::Show(rect) => context.window_manager.show_popup_at(&self.popup, local_rect(rect)),
@@ -415,17 +398,17 @@ impl IPopup for LogicalPopup {
             self.closed.set(true);
             return Ok(());
         };
-        if runtime.state.closed.get() {
+        if runtime.factory.state.closed.get() {
             self.closed.set(true);
             return Ok(());
         }
-        runtime.host.check_mutation()?;
+        runtime.factory.host.check_mutation()?;
         let mut context = runtime.context()?;
-        runtime.state.error.set(None);
+        runtime.factory.state.error.set(None);
         NativeSurface::Popup(self.popup.clone()).close(&mut context.window_manager)?;
         self.closed.set(true);
         runtime.pending.set(true);
         runtime.prune_mounts(&context.window_manager);
-        runtime.state.error.take().map_or(Ok(()), Err)
+        runtime.factory.state.error.take().map_or(Ok(()), Err)
     }
 }

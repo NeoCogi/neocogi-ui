@@ -262,9 +262,11 @@ impl From<Node> for LinearItem {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-struct LinearItemSpec {
-    main: TrackSize,
-    fixed_cross: Option<i32>,
+pub(crate) struct LinearItemSpec {
+    /// Parent-owned extent policy along the main axis.
+    pub(crate) main: TrackSize,
+    /// Optional exact cross extent, otherwise the line's resolved cross size.
+    pub(crate) fixed_cross: Option<i32>,
 }
 
 /// Collects construction or replacement input into the runtime's split ownership representation.
@@ -371,6 +373,16 @@ pub struct Linear {
 }
 
 impl Linear {
+    /// Creates empty semantic state for a COM container whose host owns the actual children.
+    pub(crate) fn com_new(direction: LinearDirection, cross_size: LinearCrossSize) -> Self {
+        Self {
+            children: ChildrenHandle::default(),
+            specs: Vec::new(),
+            direction,
+            cross_size,
+            resolved_main: Vec::new(),
+        }
+    }
     /// Mounts ordered input and returns both a weak typed widget handle and its owning node.
     pub fn create(parameters: LinearParameters) -> (TypedWidgetHandle<Self>, Node) {
         // Split the one-shot parameters only at the ownership boundary: the generic Container keeps
@@ -574,6 +586,31 @@ impl Linear {
     }
 }
 
+impl crate::com::widget::WidgetAlgorithm for Linear {
+    /// Linear has no surface painting or event state; common COM options live in WidgetState.
+    fn set_options(&mut self, _options: WidgetOption) {}
+}
+impl crate::com::containers::ContainerAlgorithm for Linear {
+    type Edge = LinearItemSpec;
+    /// Copies the same relationship used by the existing track resolver.
+    fn edge(&self, index: usize) -> Option<Self::Edge> {
+        self.specs.get(index).copied()
+    }
+    /// Commits only validated metadata after the host's topology transaction, then discards derived scratch.
+    fn edit_edges(&mut self, edit: crate::com::containers::EdgeEdit<Self::Edge>) {
+        use crate::com::containers::EdgeEdit;
+        match edit {
+            EdgeEdit::Insert { index, edge } => self.specs.insert(index, edge),
+            EdgeEdit::Replace { index, edge } => self.specs[index] = edge,
+            EdgeEdit::Remove { index } => {
+                self.specs.remove(index);
+            }
+            EdgeEdit::Clear => self.specs.clear(),
+        }
+        self.resolved_main.clear();
+    }
+}
+
 #[derive(Copy, Clone)]
 enum LinearAxis {
     Horizontal,
@@ -719,11 +756,11 @@ fn measure_child(
 }
 
 /// Resolves and commits one exact linear allocation.
-fn place(ctx: &mut ContainerLayoutCtx<'_>, children: &mut Children, state: &mut Linear, rect: Recti) {
+fn place(ctx: &mut ContainerLayoutCtx<'_>, state: &mut Linear, rect: Recti) {
     // Snapshot axis and policy before mutably borrowing scratch fields below; these copied values
     // also make it explicit that one retained configuration drives the complete placement pass.
     let orientation = state.direction.axis();
-    let count = children.len();
+    let count = ctx.child_count();
     if count == 0 {
         ctx.set_content_size(Dimensioni::default());
         return;
@@ -741,7 +778,7 @@ fn place(ctx: &mut ContainerLayoutCtx<'_>, children: &mut Children, state: &mut 
     resolved_main.clear();
     for (index, spec) in specs.iter().copied().enumerate() {
         let content = if matches!(spec.main, TrackSize::Content) {
-            let desired = measure_layout_child(ctx, children, orientation, index, AvailableSpace::Unbounded, cross_space, spec);
+            let desired = measure_layout_child(ctx, orientation, index, AvailableSpace::Unbounded, cross_space, spec);
             orientation.main(desired)
         } else {
             0
@@ -768,7 +805,7 @@ fn place(ctx: &mut ContainerLayoutCtx<'_>, children: &mut Children, state: &mut 
     // by the runtime when each child rectangle is committed below.
     let mut cross_content = 0;
     for (index, (spec, main)) in specs.iter().copied().zip(resolved_main.iter().copied()).enumerate() {
-        let child = measure_layout_child(ctx, children, orientation, index, AvailableSpace::Bounded(main), cross_space, spec);
+        let child = measure_layout_child(ctx, orientation, index, AvailableSpace::Bounded(main), cross_space, spec);
         cross_content = cross_content.max(spec.fixed_cross.unwrap_or_else(|| orientation.cross(child)).max(0));
     }
     let cross_content = cross_content.max(minimum_content_cross(state.direction, ctx.skin(), ctx.atlas()));
@@ -786,7 +823,7 @@ fn place(ctx: &mut ContainerLayoutCtx<'_>, children: &mut Children, state: &mut 
         }
         let cross = spec.fixed_cross.unwrap_or(line_cross);
         let child_rect = orientation.rect(cursor, orientation.cross_origin(rect), main, cross);
-        let _ = ctx.layout_child(children, index, child_rect);
+        let _ = ctx.layout_child(index, child_rect);
         if reversed {
             cursor = cursor.saturating_sub(gap);
         } else {
@@ -798,7 +835,6 @@ fn place(ctx: &mut ContainerLayoutCtx<'_>, children: &mut Children, state: &mut 
 
 fn measure_layout_child(
     ctx: &mut ContainerLayoutCtx<'_>,
-    children: &mut Children,
     orientation: LinearAxis,
     index: usize,
     main: AvailableSpace,
@@ -806,7 +842,7 @@ fn measure_layout_child(
     placement: LinearItemSpec,
 ) -> Dimensioni {
     let cross = placement.fixed_cross.map(AvailableSpace::Bounded).unwrap_or(cross);
-    ctx.measure_child(children, index, orientation.constraints(main, cross)).unwrap_or_default()
+    ctx.measure_child(index, orientation.constraints(main, cross)).unwrap_or_default()
 }
 
 impl ContainerWidget for Linear {
@@ -821,10 +857,10 @@ impl ContainerWidget for Linear {
         measure(ctx, self, constraints)
     }
 
-    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, children: &mut Children, rect: Recti) {
-        // The generic Container lends its authoritative child collection only for this call, while
-        // Linear supplies the index-matched relationship metadata and reusable exact extents.
-        place(ctx, children, self, rect);
+    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) {
+        // Indexed context access keeps collection ownership private while Linear supplies
+        // matching relationship metadata and reusable exact extents.
+        place(ctx, self, rect);
     }
 }
 

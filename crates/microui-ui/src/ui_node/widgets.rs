@@ -72,6 +72,7 @@ mod list_item;
 mod number;
 mod numeric_edit;
 mod scrollbar;
+pub(crate) use scrollbar::ScrollAxisState;
 mod slider;
 mod text_area;
 mod text_block;

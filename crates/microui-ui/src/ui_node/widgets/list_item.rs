@@ -329,21 +329,29 @@ mod tests {
     }
 }
 
-impl crate::com::leaf::LeafState for ListItem {
+impl crate::com::widget::WidgetAlgorithm for ListItem {
     /// Synchronizes options inside the one concrete semantic state of a COM leaf.
-    fn set_options(&mut self, options: crate::WidgetOption) { self.opt = options; }
+    fn set_options(&mut self, options: crate::WidgetOption) {
+        self.opt = options;
+    }
 }
 
-impl crate::com::leaf::FontState for ListItem {
+impl crate::com::widget::FontState for ListItem {
     /// Borrows the semantic font reference already used by layout and painting.
-    fn font(&self) -> &crate::FontRef { &self.font }
+    fn font(&self) -> &crate::FontRef {
+        &self.font
+    }
     /// Replaces the same field after the COM resource owner validates the selection.
-    fn set_font(&mut self, font: crate::FontRef) { self.font = font; }
+    fn set_font(&mut self, font: crate::FontRef) {
+        self.font = font;
+    }
 }
 
-impl crate::com::leaf::IconState for ListItem {
+impl crate::com::widget::IconState for ListItem {
     /// Replaces the icon without changing row data, reporting only a changed selection.
     fn set_icon(&mut self, icon: Option<crate::IconRef>) -> bool {
-        let changed = self.icon != icon; self.icon = icon; changed
+        let changed = self.icon != icon;
+        self.icon = icon;
+        changed
     }
 }

@@ -10,6 +10,8 @@
 
 pub mod widget;
 pub use widget::{WidgetOptions, WidgetProperties, WidgetFrame, WidgetPaint};
+mod container;
+pub use container::*;
 mod leaves;
 pub use leaves::*;
 mod input;
@@ -142,6 +144,20 @@ pub trait IButtonEvents {
 #[com_interface(auto_guid = "microui.UiFactory:v1")]
 /// Runtime-bound widget factory implemented by the UI plugin.
 pub trait IUiFactory {
+    /// Creates a fixed scrolling multiline editor; CRLF and CR normalize to LF and the cursor starts at the end.
+    fn create_text_area(&self, text: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping, scrolling: bool) -> Result<ComPtr<ITextAreaAbi>, NcStatus>;
+    /// Creates an empty disclosure with a real text header and editable vertical Linear body.
+    fn create_disclosure(&self, label: NcCopyFromBufferOffset<'_, u8>, style: DisclosureStyle, expanded: bool) -> Result<ComPtr<IDisclosureAbi>, NcStatus>;
+    /// Creates a framed scroll composite around one unmounted content object; generic options can subsequently change its frame.
+    fn create_scroll_area(&self, content: ComRef<'_, IWidgetAbi>, enabled: bool) -> Result<ComPtr<IScrollAreaAbi>, NcStatus>;
+    /// Creates an empty directional container after validating its complete initial policy.
+    fn create_linear(&self, direction: FlowDirection, cross: CrossSizeAbi) -> Result<ComPtr<ILinearAbi>, NcStatus>;
+    /// Creates an empty Grid with validated complete column and row policies; input offsets must be zero.
+    fn create_grid(
+        &self,
+        columns: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
+        rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
+    ) -> Result<ComPtr<IGridAbi>, NcStatus>;
     /// Constructs an unmounted boolean control with body-font presentation.
     fn create_checkbox(&self, checked: bool, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ICheckboxAbi>, NcStatus>;
     /// Constructs an unmounted normalized single-line editor.
@@ -526,6 +542,8 @@ pub const UI_E_RENDER: NcStatus = NcStatus::from_code(-1005);
 #[com_interface(auto_guid = "microui.WidgetHost:v1")]
 /// Runtime identity and mutation authority without a reference back to its tree.
 pub trait IWidgetHost {
+    /// Creates an empty private child editor; containers expose only its read-only view.
+    fn create_children(&self) -> Result<ComPtr<IChildrenEditorAbi>, NcStatus>;
     /// Checks lifetime without forbidding observational reads during layout or painting.
     fn check_open(&self) -> Result<(), NcStatus>;
     /// Rejects closed runtimes and mutation during layout or painting.

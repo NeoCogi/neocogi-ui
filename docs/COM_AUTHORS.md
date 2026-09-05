@@ -200,3 +200,192 @@ algorithms before making this call; they release semantic and scratch borrows
 first. A recorder error restores the reusable workspace. This atlas path does
 not represent application GPU scenes or external texture ownership; those use
 the renderer capabilities specified in the renderer migration.
+
+
+## Container topology and edge metadata
+
+An independently implemented container exposes `IWidget` and `IContainerLayout`
+on one COM object. It exposes exactly one layout family: adding `ILeafLayout`
+to that object is rejected. Obtain a private `IChildrenEditor` from the widget's
+host during construction, retain it in the container, and return its `IChildren`
+view from `IContainerLayout::children`. That view's canonical identity must stay
+unchanged for the container's lifetime. The runtime accepts only collections
+issued by that exact host. One collection can belong to only one mounted
+container. Arbitrary look-alike collection objects and shared collections are
+rejected before attachment.
+
+The view and editor deliberately have different COM identities over one actual
+child sequence. Querying the view cannot recover edit authority. Expose concrete
+editing methods that keep Linear tracks, Grid spans or application-specific edge
+metadata synchronized; do not return the private editor to callers who are not
+responsible for that metadata. Child references do not transfer tree ownership.
+Insertion consumes the child's sole attachment opportunity after validation.
+Removal closes the entire subtree permanently. Retained application references
+remain memory-safe and report closure; they cannot detach or reparent a widget.
+Indices, owner identity, layout capabilities, collection ownership and prospective
+cycles are checked before a claim commits. Reentrant topology edits during
+attachment validation return `UI_E_BUSY`.
+
+`ChildEditResult` separates a successful topology commit from a removed child's
+fallible teardown. An editor call returning `Err` did not change topology. An
+editor call returning `Ok(outcome)` did change topology, even when
+`outcome.teardown` is an error. Publish matching metadata before calling
+`outcome.finish()` or returning the outcome. For example, the essential order
+inside a concrete replacement method is:
+
+```rust
+// The concrete model guard owns its state; it holds no RefCell borrow.
+let mut model = self.take_model()?;
+let edge = validate_edge(edge)?;
+let outcome = self.editor.replace(index, child)?;
+model.edges[index as usize] = edge;
+// Metadata now describes the new child even if the old child's close failed.
+outcome.finish()
+```
+
+Validate metadata before calling the editor. Acquire the concrete state guard
+before any operation can commit. Do not attempt to acquire fallible state access
+after the topology commit, and do not propagate teardown failure before updating
+metadata. A concrete read or edit that reenters an already active semantic state
+may return `UI_E_BUSY`. Common lifetime authority must remain separate from that
+state. Closing a container during an active semantic edit must reject before
+partially changing its lifetime.
+
+Final release of the private editor immediately closes the collection, including
+retained read-only views. If a layout invocation currently owns its children,
+those nodes are retired when the owned transaction returns and actually closed
+after the outer observational phase ends. They are no longer live tree edges.
+The runtime does not permit semantic mutation during layout to make teardown
+possible. Releasing the last editor during layout makes that layout result fail
+with `UI_E_CLOSED`; the host must not submit it as a valid frame. Explicit
+container removal closes its child storage even if a custom widget's own close
+implementation subsequently reports an error.
+
+## Scoped container layout
+
+`IContainerLayout::measure` and `place` receive an `ILayoutService` and a
+`LayoutScope`. The service owns the active child sequence. It never stores a
+borrowed runtime node, mutable tree reference, or pointer to the caller's stack.
+The container receives indexed operations and copied geometry only. The provided
+scope is valid for that synchronous call; retaining the COM service does not
+extend the scope. Tokens never wrap or become valid again.
+
+Measurement permits `child_count` and `measure_child` only. Placement also permits
+exact child allocation, copied content-extent reads, responsive participation and
+explicit reporting of a changed child placement dependency. Placement-only calls
+during measurement return `UI_E_BUSY`. A valid zero constraint remains different
+from an unbounded constraint. Preferred child sizes include each child's own
+frame. The container resolves tracks and relationships before passing an exact
+rectangle to `place_child`; the runtime does not reinterpret that policy.
+
+Nested child containers receive a fresh token. Their parent's token returns
+`UI_E_EXPIRED_SCOPE` while the child token is active, then becomes valid again
+when the child call returns. Direct reentry while a service method temporarily
+owns its frame returns `UI_E_BUSY`. After the overall invocation ends, every
+method rejects the old scope, including empty or otherwise harmless reads. All
+success and failure paths restore the parent frame and authority.
+
+Use the scoped service for child layout access. The separate `IChildren` view can
+report its stable copied count while a layout owns the sequence, but `child(index)`
+returns `UI_E_BUSY` then. A built-in algorithm validates the scoped count before
+running, so an access error cannot be mistaken for an empty child sequence while
+its edge metadata still contains entries.
+
+Placement returns one `ContainerGeometry`: logical content extent, descendant
+viewport and translation, and overflow propagation policy. The runtime clips the
+viewport to the container's content allocation and publishes the result only
+after the call succeeds. `HIDDEN` participation preserves ownership while gating
+update, paint, input and focus for the entire subtree; `DISABLED` preserves update
+and paint while excluding subtree input. Hidden children do not contribute active
+overflow. Setter-change collection still visits hidden owned descendants.
+
+Report every changed measurement or placement dependency through a truthful
+update result or sticky setter marker. This includes shared scrolling offsets,
+responsive participation policy, expanded/collapsed state, and layout inputs
+changed indirectly by another object. `child_placement_changed` is for an
+already active placement pass whose descendant depends on shared state despite
+receiving the same rectangle; it does not replace the writer's responsibility to
+request the initial layout. Independent plugins must honor these same ownership,
+phase and invalidation rules.
+
+A failed child measurement cannot become a cached zero preference. Failed
+container measurement and placement retain invalidation and require a successful
+retry before rendering. An implementation may have placed some children before
+an error, but that partial pass is never a valid renderable frame. Restore owned
+semantic state on all error paths and do not retain references obtained from
+short local context wrappers after returning through COM.
+
+## Composed controls and indirect invalidation
+
+A composed control owns ordinary COM children. It shares explicit scalar data
+only where two of those children need the same state. ScrollArea's viewport and
+its real scrollbars share offset/range data; Disclosure's header and layout share
+expansion data. TextArea's actual editor requests caret reveal through that same
+scroll model. These models hold no parent widget, runtime, application, or COM
+subscription reference. A child must not need to upgrade a weak parent handle to
+perform an ordinary edit.
+
+The public capabilities preserve each composition's structural roles:
+
+- `IScrollArea: IScrolling: IWidget` permits replacing its one application content
+  root. It does not expose `IContainer` methods that could remove the transform
+  surface or either scrollbar.
+- `IDisclosure: IWidget` returns its actual text header and actual Linear body.
+  Edit body children through the returned Linear capability, and edit the label
+  or header options through the returned text capability. The fixed header/body
+  pair itself cannot be removed through a generic container interface.
+- `ITextArea: IMultilineEditor: ITextEditor: ITextContent: IWidget` is the composed
+  root. Its inherited editing calls forward to one actual editor child. Querying
+  this root for `IScrolling` returns the same outer identity; querying it for
+  `IScrollArea` fails. There is no operation that replaces its fixed editor with
+  arbitrary content. The child exposes `IMultilineEditor`, has its own ordinary
+  widget identity, and is the composition's single keyboard Tab stop.
+
+For example, a static client can edit actual child capabilities without mirroring
+plugin state:
+
+```rust
+let section = ui.widgets().disclosure("Details", DisclosureStyle::TREE, false)?;
+let body = section.body()?;
+let editor = ui.widgets().text_area("first line\nsecond line", TextWrapping::WORD, true)?;
+body.insert(0, &editor, LinearEdge::new(LayoutTrack::Content))?.finish()?;
+section.header()?.set_text("Editable details")?;
+section.set_expanded(true)?;
+editor.set_cursor(0)?;
+// Synchronize geometry and pending caret reveal before rendering.
+ui.update(drawable_size)?;
+```
+
+`Changed | NoChange` from an ordinary update does not automatically detect changes
+in shared models. In particular, clicking a disclosure header need not change the
+header's own preferred size, and moving a text cursor need not change text size.
+Nevertheless, expansion and caret reveal can change an ancestor's placement.
+The writer of that shared model must retain a sticky notification, and the
+owning layout widget must collect it through `take_change`. That notification
+must survive skipped updates, collapsed ancestors, and intermediate render
+preflight checks. The built-in models do this explicitly; independent plugins
+must supply the same discipline for their own shared data.
+
+A requested scroll offset may temporarily exceed the previous maximum. Placement
+clamps it against freshly measured content. This lets `scroll_to_end` accompany a
+content replacement without losing the new end to the old range. `ScrollInfo`
+therefore distinguishes current requests from the last installed ranges and
+viewport. Programmatic setters are silent: they do not fabricate user events.
+The standalone scrollbar offset setter clamps immediately to its installed range.
+Disabling a scroll composite clears its requests and ranges and changes the
+structural children's participation on the next placement.
+
+TextArea normalizes CRLF and lone CR to LF. Cursor offsets count UTF-8 bytes and
+clamp to the preceding Unicode scalar boundary. Word wrapping breaks at ASCII
+spaces and preserves an oversized word as one span. Text replacement, including
+a text-identical replacement, requests caret reveal; so does cursor positioning.
+These setters conservatively invalidate geometry because reveal can move the
+viewport even when text dimensions are unchanged. Font and wrapping changes also
+reset the preferred visual column and request reveal. Visible ordinary updates
+resolve those pending requests; hidden editors retain them until eligible again.
+Widget/application writers must run update before rendering after these edits.
+
+Closing a composite closes its real descendants. A retained header, body, editor,
+or bar reference remains memory-safe and reports logical closure; it cannot keep
+an orphaned interactive subtree alive or be remounted elsewhere. Keeping such a
+reference never transfers the parent's topology authority.

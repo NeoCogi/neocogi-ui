@@ -279,16 +279,70 @@ impl crate::WidgetEvent for ScrollbarChanged {}
 pub struct Scrollbar {
     /// Immutable axis used to project pointer and layout coordinates.
     axis: ScrollbarAxis,
-    /// Nonnegative length currently visible through the scroll viewport.
-    viewport_len: i32,
-    /// Nonnegative total content extent on the selected axis.
-    content_len: i32,
-    /// Requested content offset, clamped whenever the authoritative lengths change.
-    offset: i32,
-    /// Caller-authored interaction options, augmented by the control's focus-preserving policy.
+    /// One authoritative range/offset allocation, also shared by composed scroll layout when present.
+    pub(crate) axis_state: std::rc::Rc<ScrollAxisState>,
+    /// Caller-authored options; dynamic range policy is resolved from the same shared state.
     opt: WidgetOption,
-    /// Typed source for user-originated offset changes; programmatic setters remain silent.
+    /// Typed source for user-originated movement; programmatic requests remain silent.
     changed_event: crate::EventSource<ScrollbarChanged>,
+}
+
+/// Coherent copied values shared by a real scrollbar and its co-packaged scroll layout.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+struct ScrollValues {
+    /// Nonnegative length visible through the viewport.
+    viewport: i32,
+    /// Nonnegative full content extent.
+    content: i32,
+    /// Nonnegative requested offset, clamped when a new authoritative range installs.
+    offset: i32,
+}
+
+/// Concrete scalar model has no widget, parent, runtime or child-collection references.
+/// Sharing this data within the UI plugin permits derived range installation during layout
+/// without invoking a semantic COM setter or creating a widget ownership cycle.
+#[derive(Default)]
+pub(crate) struct ScrollAxisState {
+    /// The complete range publishes in one copied assignment.
+    values: std::cell::Cell<ScrollValues>,
+    /// Semantic requests persist until the containing scroll layout collects them.
+    dirty: std::cell::Cell<bool>,
+}
+impl ScrollAxisState {
+    /// Returns the current request; layout may still clamp it against newly measured content.
+    pub(crate) fn offset(&self) -> i32 {
+        self.values.get().offset
+    }
+    /// Derives the maximum instead of retaining a second copy of the range.
+    pub(crate) fn maximum(&self) -> i32 {
+        let values = self.values.get();
+        scrollbar_max_scroll(values.content, values.viewport)
+    }
+    /// Records an ordinary semantic request, including requests above an old range.
+    pub(crate) fn request_offset(&self, offset: i32) {
+        let mut values = self.values.get();
+        let offset = offset.max(0);
+        if values.offset != offset {
+            values.offset = offset;
+            self.values.set(values);
+            self.dirty.set(true);
+        }
+    }
+    /// Installs parent-derived geometry without creating another layout request from its own output.
+    pub(crate) fn install(&self, viewport: i32, content: i32, requested: i32) {
+        let viewport = viewport.max(0);
+        let content = content.max(0);
+        let offset = requested.clamp(0, scrollbar_max_scroll(content, viewport));
+        self.values.set(ScrollValues { viewport, content, offset });
+    }
+    /// Clears a hidden structural bar's derived range and interaction offset.
+    pub(crate) fn deactivate(&self) {
+        self.install(0, 0, 0);
+    }
+    /// Drains semantic shared-state invalidation independently of ordinary widget update participation.
+    pub(crate) fn take_change(&self) -> bool {
+        self.dirty.replace(false)
+    }
 }
 
 impl From<ScrollbarParameters> for Scrollbar {
@@ -298,12 +352,11 @@ impl From<ScrollbarParameters> for Scrollbar {
         // observe one coherent range and offset.
         let viewport_len = parameters.viewport_len.max(0);
         let content_len = parameters.content_len.max(0);
-        let maximum = scrollbar_max_scroll(content_len, viewport_len);
+        let axis_state = std::rc::Rc::new(ScrollAxisState::default());
+        axis_state.install(viewport_len, content_len, parameters.offset);
         Self {
             axis: parameters.axis,
-            viewport_len,
-            content_len,
-            offset: parameters.offset.clamp(0, maximum),
+            axis_state,
             opt: parameters.opt,
             changed_event: crate::EventSource::new(),
         }
@@ -326,38 +379,30 @@ impl Scrollbar {
     pub fn set_lengths(&mut self, viewport_len: i32, content_len: i32) {
         // Normalize both external lengths together before deriving a maximum. This prevents paint
         // and pointer input from observing a partially updated range.
-        self.viewport_len = viewport_len.max(0);
-        self.content_len = content_len.max(0);
-        // offset = clamp(previous_offset, 0, maximum_offset).
-        self.offset = self.offset.clamp(0, self.max_offset());
-    }
-
-    /// Clears the range and offset before a containing layout hides this retained widget.
-    pub(crate) fn deactivate(&mut self) {
-        // Reset semantic range state synchronously. Runtime-owned pointer capture is invalidated by
-        // the subsequent hidden participation decision and needs no widget-local drag flag.
-        self.viewport_len = 0;
-        self.content_len = 0;
-        self.offset = 0;
+        let previous = self.axis_state.values.get();
+        self.axis_state.install(viewport_len, content_len, previous.offset);
+        if self.axis_state.values.get() != previous {
+            self.axis_state.dirty.set(true);
+        }
     }
 
     /// Returns the current clamped content offset on this axis.
-    pub const fn offset(&self) -> i32 {
+    pub fn offset(&self) -> i32 {
         // Offset is clamped by construction, range updates, and user interaction.
-        self.offset
+        self.axis_state.offset()
     }
 
     /// Requests a non-negative offset that the next range update can clamp further.
     pub fn set_offset(&mut self, offset: i32) {
         // Preserve an above-range request so a containing layout can set an offset before installing
         // newly measured lengths. The next set_lengths call performs the authoritative upper clamp.
-        self.offset = offset.max(0);
+        self.axis_state.request_offset(offset);
     }
 
     /// Returns the largest offset supported by the current viewport and content lengths.
     pub fn max_offset(&self) -> i32 {
         // Derive the maximum instead of retaining a second range value that could become stale.
-        scrollbar_max_scroll(self.content_len, self.viewport_len)
+        self.axis_state.maximum()
     }
 
     /// Returns the native event endpoint emitted after every user-originated offset change.
@@ -371,7 +416,8 @@ impl Scrollbar {
     fn geometry(&self, track: Recti, min_thumb_len: i32) -> ScrollbarGeometry {
         // The retained node allocation is the standalone widget's authoritative track. Range and
         // offset remain semantic state, so no containing layout must write widget-local rectangles.
-        ScrollbarGeometry::new(self.axis, track, self.viewport_len, self.content_len, self.offset, min_thumb_len)
+        let values = self.axis_state.values.get();
+        ScrollbarGeometry::new(self.axis, track, values.viewport, values.content, values.offset, min_thumb_len)
     }
 }
 
@@ -426,11 +472,7 @@ impl Widget for Scrollbar {
     fn effective_widget_opt(&self) -> WidgetOption {
         // A zero range can still paint a complete thumb when mounted standalone, but accepting a
         // press would create meaningless pointer capture.
-        if self.max_offset() > 0 {
-            self.opt
-        } else {
-            self.opt | WidgetOption::NO_INTERACT
-        }
+        crate::com::widget::WidgetAlgorithm::effective_options(self, self.opt)
     }
 
     /// Applies track clicks and captured thumb dragging to the current offset.
@@ -438,31 +480,32 @@ impl Widget for Scrollbar {
         // Resolve one geometry snapshot from this widget's local allocation so hit testing and drag
         // conversion use the exact same track and thumb for the complete event.
         let geometry = self.geometry(ctx.local_rect(), ctx.skin().metrics.thumb_size.max(0));
-        let previous = self.offset;
+        let previous = self.offset();
         match input {
             Some(UiInputEvent::MouseDown { pos, button }) if button.intersects(MouseButton::LEFT) && geometry.track().contains_point(*pos) => {
                 // Clicking outside the thumb recenters it. Runtime capture established for this
                 // press supplies the complete drag lease through `ctx.active()` below.
                 if !geometry.thumb().contains_point(*pos) {
-                    self.offset = geometry.centered_offset(*pos);
+                    self.axis_state.request_offset(geometry.centered_offset(*pos));
                 }
             }
             Some(UiInputEvent::MouseDrag { delta, .. }) if ctx.active() => {
                 // Only the router-owned capture recipient is active. This continues beyond
                 // the track rectangle without retaining a second widget-local capture flag.
                 // offset = clamp(previous_offset + drag_delta, 0, maximum_offset).
-                self.offset = self.offset.saturating_add(geometry.drag_delta(*delta)).clamp(0, self.max_offset());
+                self.axis_state
+                    .request_offset(self.offset().saturating_add(geometry.drag_delta(*delta)).clamp(0, self.max_offset()));
             }
             _ => {}
         }
-        if self.offset != previous {
+        if self.offset() != previous {
             // Publish only user-originated movement. Programmatic setters intentionally remain
             // silent so owners can synchronize range and offset without recursive notifications.
-            self.changed_event.emit(ScrollbarChanged { offset: self.offset });
+            self.changed_event.emit(ScrollbarChanged { offset: self.offset() });
         }
 
         // A containing ScrollArea reads this offset when placing its content.
-        crate::Change::from(self.offset != previous)
+        crate::Change::from(self.offset() != previous)
     }
 
     /// Paints the track and proportional thumb inside the complete local allocation.
@@ -541,12 +584,25 @@ mod tests {
     }
 }
 
-impl crate::com::leaf::LeafState for Scrollbar {
+impl crate::com::widget::WidgetAlgorithm for Scrollbar {
+    /// A zero range paints a full thumb but must not establish meaningless pointer capture.
+    fn effective_options(&self, options: WidgetOption) -> WidgetOption {
+        if self.max_offset() > 0 {
+            options
+        } else {
+            options | WidgetOption::NO_INTERACT
+        }
+    }
     /// Synchronizes options inside the one concrete semantic state of a COM leaf.
-    fn set_options(&mut self, options: crate::WidgetOption) { self.opt = options; }
+    fn set_options(&mut self, options: crate::WidgetOption) {
+        self.opt = options;
+    }
 }
 
 impl Scrollbar {
     /// Copies range metadata without introducing a second source of scrollbar truth.
-    pub(crate) fn com_lengths(&self) -> (i32, i32) { (self.viewport_len, self.content_len) }
+    pub(crate) fn com_lengths(&self) -> (i32, i32) {
+        let values = self.axis_state.values.get();
+        (values.viewport, values.content)
+    }
 }

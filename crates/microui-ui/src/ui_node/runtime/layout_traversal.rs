@@ -33,11 +33,24 @@
 use super::*;
 use crate::math::RectExt;
 
-impl UiRuntime {
+/// Geometry recursion contains no input router, runtime owner or borrowed tree.
+/// Production instances carry no state; test instances share only phase counters.
+#[derive(Clone)]
+pub(crate) struct LayoutTraversal {
+    /// Counts remain attached to their original root during scoped recursive calls.
+    #[cfg(test)]
+    pub(super) metrics: std::rc::Rc<std::cell::Cell<RuntimeMetrics>>,
+}
+
+impl LayoutTraversal {
     /// Measures one already-borrowed node through the authoritative private node path.
-    pub(in crate::ui_node) fn measure_node(&self, node: &mut Node, style: &Skin, atlas: &crate::AtlasHandle, constraints: Constraints) -> Dimensioni {
+    pub(crate) fn measure_node(&self, node: &mut Node, style: &Skin, atlas: &crate::AtlasHandle, constraints: Constraints) -> Dimensioni {
         #[cfg(test)]
-        self.bump_metric(|metrics| metrics.measures += 1);
+        {
+            let mut metrics = self.metrics.get();
+            metrics.measures += 1;
+            self.metrics.set(metrics);
+        }
         // Node::measure is the only place that adds frame geometry; containers receive the same
         // content-only measurement contract whether reached here or through Children.
         node.measure(style, atlas, constraints)
@@ -45,12 +58,16 @@ impl UiRuntime {
 
     fn measure_node_for_layout(&self, node: &mut Node, style: &Skin, atlas: &crate::AtlasHandle, constraints: Constraints) -> (Dimensioni, bool) {
         #[cfg(test)]
-        self.bump_metric(|metrics| metrics.measures += 1);
+        {
+            let mut metrics = self.metrics.get();
+            metrics.measures += 1;
+            self.metrics.set(metrics);
+        }
         node.measure_with_cache_status(style, atlas, constraints)
     }
 
     /// Assigns one exact parent-owned rectangle through direct widget/container dispatch.
-    pub(in crate::ui_node) fn layout_node_ref(&mut self, node: &mut Node, style: &Skin, atlas: &crate::AtlasHandle, rect: Recti) -> Dimensioni {
+    pub(crate) fn layout_node_ref(&mut self, node: &mut Node, style: &Skin, atlas: &crate::AtlasHandle, rect: Recti) -> Dimensioni {
         let frame_role = node_frame_role(node);
         // Preserve the measure/layout phase contract while keeping the parent's rectangle
         // authoritative. Sizing relationships live in the parent container, never on Node.
@@ -76,7 +93,11 @@ impl UiRuntime {
             return Dimensioni::new(outer.width, outer.height);
         }
         #[cfg(test)]
-        self.bump_metric(|metrics| metrics.layouts += 1);
+        {
+            let mut metrics = self.metrics.get();
+            metrics.layouts += 1;
+            self.metrics.set(metrics);
+        }
         // Store every rectangle in node-local coordinates except the outer allocation, which stays
         // parent-local. Transform traversal later composes those two coordinate spaces once.
         let local_outer = Recti::new(0, 0, outer.width, outer.height);
@@ -88,13 +109,17 @@ impl UiRuntime {
         // Leaves expose overflow when their preference exceeds allocation. Containers instead
         // author their child viewport and content extent through the scoped layout context.
         match &mut node.data {
+            NodeKind::Com(widget) if widget.is_container() => {
+                if !widget.place(self, content, &mut node.state) {
+                    return Dimensioni::new(outer.width, outer.height);
+                }
+            }
             NodeKind::Widget(_) | NodeKind::Com(_) => {
                 let content_size = Dimensioni::new(outer.width.max(preferred.width).max(0), outer.height.max(preferred.height).max(0));
                 node.state.set_layout(node.state.layout.with_content_size(content_size));
             }
             NodeKind::Container(container) => {
-                let mut ctx = ContainerLayoutCtx::new(self, style, atlas, content, &mut node.state);
-                container.place(&mut ctx, content);
+                container.place(self, style, atlas, content, &mut node.state);
             }
         }
 

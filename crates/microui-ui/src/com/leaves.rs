@@ -15,59 +15,33 @@ leaf_class!(Scrollbar, crate::Scrollbar, IScrollbar, IScrollbarAbi);
 impl ICheckbox for Checkbox {
     /// Reads the same boolean state used by pointer/Space updates and paint.
     fn checked(&self) -> Result<bool, NcStatus> {
-        self.leaf.state.readable()?;
-        Ok(self.leaf.core.try_borrow().map_err(|_| UI_E_BUSY)?.checked())
+        self.widget.state.readable()?;
+        Ok(self.widget.take()?.checked())
     }
     /// Checked state changes paint only; both states reserve the same glyph space.
     fn set_checked(&self, checked: bool) -> Result<(), NcStatus> {
-        self.leaf.state.writable()?;
-        self.leaf.core.try_borrow_mut().map_err(|_| UI_E_BUSY)?.set_checked(checked);
+        self.widget.state.writable()?;
+        self.widget.take()?.set_checked(checked);
         Ok(())
     }
     /// Copies a label into an independently owned immutable COM string.
     fn label(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
-        self.leaf.state.readable()?;
-        Ok(NcString::from_utf8_str(self.leaf.core.try_borrow().map_err(|_| UI_E_BUSY)?.com_label()))
+        self.widget.state.readable()?;
+        Ok(NcString::from_utf8_str(self.widget.take()?.com_label()))
     }
     /// Commits valid UTF-8 atomically and preserves a prior pending change.
     fn set_label(&self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        self.leaf.state.writable()?;
+        self.widget.state.writable()?;
         let input = text(input)?;
-        let mut core = self.leaf.core.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
+        let mut core = self.widget.take()?;
         if core.com_label() != input {
             core.com_set_label(input);
-            self.leaf.state.record_change(GeometryChange::CHANGED);
+            self.widget.state.record_change(GeometryChange::CHANGED);
         }
         Ok(())
     }
 }
 
-/// Shares whole-text snapshots/replacement while retaining each control's line policy.
-macro_rules! text_content {
-    ($name:ident, $get:ident, $set:ident) => {
-        impl ITextContent for $name {
-            /// Returns an immutable snapshot without exposing the semantic String allocation.
-            fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
-                self.leaf.state.readable()?;
-                Ok(NcString::from_utf8_str(self.leaf.core.try_borrow().map_err(|_| UI_E_BUSY)?.$get()))
-            }
-            /// Applies the existing normalization/cursor policy, then compares committed text.
-            fn set_text(&self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-                self.leaf.state.writable()?;
-                let input = text(input)?;
-                let mut core = self.leaf.core.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
-                // Compare normalized output, not raw CR/LF input. An editor may
-                // still reset its cursor on a text-identical replacement.
-                let previous = core.$get().to_owned();
-                core.$set(input);
-                if core.$get() != previous {
-                    self.leaf.state.record_change(GeometryChange::CHANGED);
-                }
-                Ok(())
-            }
-        }
-    };
-}
 text_content!(Textbox, text, set_text);
 text_content!(TextBlock, text, set_text);
 text_content!(ColorSwatch, label, set_label);
@@ -78,17 +52,13 @@ impl ITextbox for Textbox {}
 impl ITextEditor for Textbox {
     /// Reports a byte cursor rather than a glyph or grapheme index.
     fn cursor(&self) -> Result<u64, NcStatus> {
-        self.leaf.state.readable()?;
-        Ok(self.leaf.core.try_borrow().map_err(|_| UI_E_BUSY)?.cursor() as u64)
+        self.widget.state.readable()?;
+        Ok(self.widget.take()?.cursor() as u64)
     }
     /// Clamps oversize input before applying the shared Unicode-boundary algorithm.
     fn set_cursor(&self, cursor: u64) -> Result<(), NcStatus> {
-        self.leaf.state.writable()?;
-        self.leaf
-            .core
-            .try_borrow_mut()
-            .map_err(|_| UI_E_BUSY)?
-            .set_cursor(usize::try_from(cursor).unwrap_or(usize::MAX));
+        self.widget.state.writable()?;
+        self.widget.take()?.set_cursor(usize::try_from(cursor).unwrap_or(usize::MAX));
         Ok(())
     }
 }
@@ -96,20 +66,20 @@ impl ITextEditor for Textbox {
 impl ITextBlock for TextBlock {
     /// Encodes exactly the wrapping behavior used by existing text measurement.
     fn wrapping(&self) -> Result<TextWrapping, NcStatus> {
-        self.leaf.state.readable()?;
-        Ok(match self.leaf.core.try_borrow().map_err(|_| UI_E_BUSY)?.com_wrap() {
+        self.widget.state.readable()?;
+        Ok(match self.widget.take()?.com_wrap() {
             crate::TextWrap::None => TextWrapping::NONE,
             crate::TextWrap::Word => TextWrapping::WORD,
         })
     }
     /// Rejects unknown policies before mutating semantic state or its geometry marker.
     fn set_wrapping(&self, wrapping: TextWrapping) -> Result<(), NcStatus> {
-        self.leaf.state.writable()?;
+        self.widget.state.writable()?;
         let wrap = local_wrap(wrapping)?;
-        let mut core = self.leaf.core.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
+        let mut core = self.widget.take()?;
         if core.com_wrap() != wrap {
             core.com_set_wrap(wrap);
-            self.leaf.state.record_change(GeometryChange::CHANGED);
+            self.widget.state.record_change(GeometryChange::CHANGED);
         }
         Ok(())
     }
@@ -130,27 +100,27 @@ macro_rules! numeric_value {
         impl INumericValue for $name {
             /// Reads the finite value owned by the concrete semantic algorithm.
             fn value(&self) -> Result<f32, NcStatus> {
-                self.leaf.state.readable()?;
-                Ok(self.leaf.core.try_borrow().map_err(|_| UI_E_BUSY)?.value())
+                self.widget.state.readable()?;
+                Ok(self.widget.take()?.value())
             }
             /// Rejects nonfinite input and dirties only an actual committed value change.
             fn set_value(&self, value: f32) -> Result<(), NcStatus> {
-                self.leaf.state.writable()?;
+                self.widget.state.writable()?;
                 if !value.is_finite() {
                     return Err(NC_E_INVALID_ARG);
                 }
-                let mut core = self.leaf.core.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
+                let mut core = self.widget.take()?;
                 let previous = core.value();
                 core.set_value(value);
                 if core.value() != previous {
-                    self.leaf.state.record_change(GeometryChange::CHANGED);
+                    self.widget.state.record_change(GeometryChange::CHANGED);
                 }
                 Ok(())
             }
             /// Exposes the same edit mode that controls routed text input.
             fn is_editing(&self) -> Result<bool, NcStatus> {
-                self.leaf.state.readable()?;
-                Ok(self.leaf.core.try_borrow().map_err(|_| UI_E_BUSY)?.is_editing())
+                self.widget.state.readable()?;
+                Ok(self.widget.take()?.is_editing())
             }
         }
     };
@@ -165,14 +135,14 @@ impl IListBox for ListBox {}
 impl IColorSwatch for ColorSwatch {
     /// Packs canonical RGBA without relying on machine endianness.
     fn fill(&self) -> Result<u32, NcStatus> {
-        self.leaf.state.readable()?;
-        let c = self.leaf.core.try_borrow().map_err(|_| UI_E_BUSY)?.fill();
+        self.widget.state.readable()?;
+        let c = self.widget.take()?.fill();
         Ok(u32::from_le_bytes([c.r, c.g, c.b, c.a]))
     }
     /// Color is a paint-only input and emits no user event.
     fn set_fill(&self, rgba: u32) -> Result<(), NcStatus> {
-        self.leaf.state.writable()?;
-        self.leaf.core.try_borrow_mut().map_err(|_| UI_E_BUSY)?.set_fill(super::render::color(rgba));
+        self.widget.state.writable()?;
+        self.widget.take()?.set_fill(super::render::color(rgba));
         Ok(())
     }
 }
@@ -180,8 +150,8 @@ impl IColorSwatch for ColorSwatch {
 impl IScrollbar for Scrollbar {
     /// Reads all range fields from one semantic borrow.
     fn range(&self) -> Result<ScrollRange, NcStatus> {
-        self.leaf.state.readable()?;
-        let core = self.leaf.core.try_borrow().map_err(|_| UI_E_BUSY)?;
+        self.widget.state.readable()?;
+        let core = self.widget.take()?;
         let (viewport, content) = core.com_lengths();
         let axis = match core.axis() {
             crate::ScrollbarAxis::Horizontal => ScrollAxis::HORIZONTAL,
@@ -196,17 +166,19 @@ impl IScrollbar for Scrollbar {
     }
     /// Validates both lengths before clamping the existing offset in one commit.
     fn set_lengths(&self, viewport: i32, content: i32) -> Result<(), NcStatus> {
-        self.leaf.state.writable()?;
+        self.widget.state.writable()?;
         if viewport < 0 || content < 0 {
             return Err(NC_E_INVALID_ARG);
         }
-        self.leaf.core.try_borrow_mut().map_err(|_| UI_E_BUSY)?.set_lengths(viewport, content);
+        self.widget.take()?.set_lengths(viewport, content);
         Ok(())
     }
     /// Offset affects thumb paint only; the control's preferred size is fixed by its axis.
     fn set_offset(&self, offset: i32) -> Result<(), NcStatus> {
-        self.leaf.state.writable()?;
-        self.leaf.core.try_borrow_mut().map_err(|_| UI_E_BUSY)?.set_offset(offset);
+        self.widget.state.writable()?;
+        let mut core = self.widget.take()?;
+        let offset = offset.clamp(0, core.max_offset());
+        core.set_offset(offset);
         Ok(())
     }
 }

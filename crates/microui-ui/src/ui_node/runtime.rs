@@ -34,6 +34,7 @@ use super::*;
 
 mod input_router;
 mod layout_traversal;
+pub(crate) use layout_traversal::LayoutTraversal;
 mod paint;
 mod update;
 
@@ -67,6 +68,8 @@ pub(crate) struct RuntimeMetrics {
 /// with the authoritative tree and committed transform at explicit routing boundaries, then runs
 /// the complete update traversal that consumes the router's one staged node-local event.
 pub(crate) struct UiRuntime {
+    /// Stateless geometry recursion can be owned by a scoped COM layout invocation.
+    geometry: LayoutTraversal,
     /// Aggregate root content size in root body coordinates.
     root_content_size: Dimensioni,
     /// Transform from root body coordinates into screen coordinates.
@@ -75,17 +78,23 @@ pub(crate) struct UiRuntime {
     input_router: InputRouter,
     /// Structural phase counters used by retained runtime regression baselines.
     #[cfg(test)]
-    metrics: Cell<RuntimeMetrics>,
+    metrics: std::rc::Rc<Cell<RuntimeMetrics>>,
 }
 
 impl Default for UiRuntime {
     fn default() -> Self {
+        #[cfg(test)]
+        let metrics = std::rc::Rc::new(Cell::new(RuntimeMetrics::default()));
         Self {
+            geometry: LayoutTraversal {
+                #[cfg(test)]
+                metrics: metrics.clone(),
+            },
             root_content_size: Dimensioni::default(),
             root_transform: Transform::root(UNCLIPPED_RECT),
             input_router: InputRouter::default(),
             #[cfg(test)]
-            metrics: Cell::new(RuntimeMetrics::default()),
+            metrics,
         }
     }
 }
@@ -154,7 +163,7 @@ impl UiRuntime {
     /// Root chrome owns the conversion from application constraints to the final outer extent.
     pub(crate) fn measure_tree_root(&mut self, root: &mut Node, style: &Skin, atlas: &crate::AtlasHandle, constraints: Constraints) -> Dimensioni {
         root.synchronize_measurement_invalidation();
-        self.measure_node(root, style, atlas, constraints)
+        self.geometry.measure_node(root, style, atlas, constraints)
     }
 
     /// Lays out one persistent root node at its authoritative screen-space rectangle.
@@ -164,7 +173,7 @@ impl UiRuntime {
         root.synchronize_measurement_invalidation();
         // Root layout establishes the transform reused by subsequent routing, update, and paint.
         self.root_transform = Transform::root(viewport);
-        self.layout_node_ref(root, style, &atlas, outer);
+        self.geometry.layout_node_ref(root, style, &atlas, outer);
         // Cache only derived geometry; the persistent Node remains the authoritative tree.
         self.root_content_size = root.state.layout.content_size;
         // Layout may hide or remove the current transient target, so validate identities now.

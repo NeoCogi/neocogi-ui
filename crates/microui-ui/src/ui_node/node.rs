@@ -319,7 +319,9 @@ impl Node {
                 let (options, _, role) = widget.policy();
                 let insets = if options.intersects(crate::WidgetOption::FRAME) {
                     crate::ui_node::frame::normal_frame_visual(style, role).patch.insets.normalized()
-                } else { SliceInsets::ZERO };
+                } else {
+                    SliceInsets::ZERO
+                };
                 let measured = match widget.measure(style, atlas, crate::ui_node::frame::content_constraints(constraints, insets)) {
                     Ok(size) => size,
                     Err(_) => {
@@ -375,7 +377,11 @@ impl Node {
         // Treat a leaf as an empty collection for read-only generic traversal. This avoids a second
         // visitor abstraction while preserving the fact that only Container stores descendants.
         match &self.data {
-            NodeKind::Widget(_) | NodeKind::Com(_) => f(&Children::new()),
+            NodeKind::Widget(_) => f(&Children::new()),
+            NodeKind::Com(node) => match node.children() {
+                Some(children) => f(&children),
+                None => f(&Children::new()),
+            },
             NodeKind::Container(container) => container.with_children(f),
         }
     }
@@ -385,14 +391,19 @@ impl Node {
         // Mutable traversal distinguishes leaves explicitly because there is no persistent empty
         // collection that could safely accept topology changes.
         match &mut self.data {
-            NodeKind::Widget(_) | NodeKind::Com(_) => None,
+            NodeKind::Widget(_) => None,
+            NodeKind::Com(node) => node.children().map(|mut children| f(&mut children)),
             NodeKind::Container(container) => Some(container.with_children_mut(f)),
         }
     }
 
     /// Returns whether this node is a container.
     pub(crate) fn is_container(&self) -> bool {
-        matches!(self.data, NodeKind::Container(_))
+        match &self.data {
+            NodeKind::Container(_) => true,
+            NodeKind::Com(node) => node.is_container(),
+            NodeKind::Widget(_) => false,
+        }
     }
 
     /// Counts this node and every retained descendant.
@@ -464,7 +475,9 @@ impl NodeKind {
                 let widget = &storage.widget;
                 (widget.effective_widget_opt(), widget.keyboard_behavior(), widget.frame_appearance_role())
             }
-            Self::Container(container) => container.with_widget(|widget| (widget.effective_widget_opt(), widget.keyboard_behavior(), widget.frame_appearance_role())),
+            Self::Container(container) => {
+                container.with_widget(|widget| (widget.effective_widget_opt(), widget.keyboard_behavior(), widget.frame_appearance_role()))
+            }
         }
     }
 
@@ -472,7 +485,12 @@ impl NodeKind {
     pub(crate) fn update(&mut self, ctx: &mut crate::WidgetUpdateCtx<'_>, input: Option<&super::UiInputEvent>) -> crate::Change {
         match self {
             Self::Com(node) => node.update(ctx, input),
-            Self::Widget(node) => node.widget.try_borrow_mut().unwrap_or_else(|_| widget_borrow_conflict()).widget.update(ctx, input),
+            Self::Widget(node) => node
+                .widget
+                .try_borrow_mut()
+                .unwrap_or_else(|_| widget_borrow_conflict())
+                .widget
+                .update(ctx, input),
             Self::Container(container) => container.with_widget_mut(|widget| widget.update(ctx, input)),
         }
     }

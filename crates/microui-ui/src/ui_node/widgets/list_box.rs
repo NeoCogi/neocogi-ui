@@ -190,21 +190,32 @@ impl From<ListBoxParameters> for ListBox {
     }
 }
 
-impl crate::com::leaf::LeafState for ListBox {
+impl crate::com::widget::WidgetAlgorithm for ListBox {
     /// Synchronizes options inside the one concrete semantic state of a COM leaf.
-    fn set_options(&mut self, options: crate::WidgetOption) { self.opt = options; }
+    fn set_options(&mut self, options: crate::WidgetOption) {
+        self.opt = options;
+    }
 }
 
 impl ListBox {
     /// Borrows the existing semantic label for a synchronous immutable snapshot.
-    pub(crate) fn com_label(&self) -> &str { &self.label }
+    pub(crate) fn com_label(&self) -> &str {
+        &self.label
+    }
     /// Replaces the existing label without publishing a user submission.
-    pub(crate) fn com_set_label(&mut self, text: &str) { self.label.clear(); self.label.push_str(text); }
+    pub(crate) fn com_set_label(&mut self, text: &str) {
+        self.label.clear();
+        self.label.push_str(text);
+    }
 }
 
-impl crate::com::leaf::FontState for ListBox {
+impl crate::com::widget::FontState for ListBox {
     /// Borrows the semantic font reference already used by layout and painting.
-    fn font(&self) -> &crate::FontRef { &self.font }
+    fn font(&self) -> &crate::FontRef {
+        &self.font
+    }
     /// Replaces the same field after the COM resource owner validates the selection.
-    fn set_font(&mut self, font: crate::FontRef) { self.font = font; }
+    fn set_font(&mut self, font: crate::FontRef) {
+        self.font = font;
+    }
 }

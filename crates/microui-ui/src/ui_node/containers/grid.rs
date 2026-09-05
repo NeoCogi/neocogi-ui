@@ -363,6 +363,22 @@ pub struct Grid {
 }
 
 impl Grid {
+    /// Creates empty COM-owned semantic state; the host-issued editor owns its actual descendants.
+    pub(crate) fn com_new(column_tracks: Vec<TrackSize>, row_tracks: Vec<TrackSize>) -> Self {
+        let items = GridItems {
+            spans: Vec::new(),
+            placements: Vec::new(),
+            occupied: Vec::new(),
+            columns: column_tracks.len().max(1),
+        };
+        Self {
+            children: ChildrenHandle::default(),
+            items,
+            column_tracks,
+            row_tracks,
+            layout: GridLayout::default(),
+        }
+    }
     /// Returns the number of owned Grid children.
     pub fn len(&self) -> Option<usize> {
         self.children.len()
@@ -459,6 +475,31 @@ impl Grid {
     }
 }
 
+impl crate::com::widget::WidgetAlgorithm for Grid {
+    /// Grid has no surface painting or event state; common options belong to the COM WidgetState.
+    fn set_options(&mut self, _options: WidgetOption) {}
+}
+impl crate::com::containers::ContainerAlgorithm for Grid {
+    type Edge = GridSpan;
+    /// Returns the same span consumed by the existing row-major placement algorithm.
+    fn edge(&self, index: usize) -> Option<Self::Edge> {
+        self.items.span(index)
+    }
+    /// Commits validated metadata, rebuilding placements once after the matching topology commit.
+    fn edit_edges(&mut self, edit: crate::com::containers::EdgeEdit<Self::Edge>) {
+        use crate::com::containers::EdgeEdit;
+        match edit {
+            EdgeEdit::Insert { index, edge } => self.items.spans.insert(index, edge),
+            EdgeEdit::Replace { index, edge } => self.items.spans[index] = edge,
+            EdgeEdit::Remove { index } => {
+                self.items.spans.remove(index);
+            }
+            EdgeEdit::Clear => self.items.spans.clear(),
+        }
+        self.items.rebuild_placements(self.items.spans.len());
+    }
+}
+
 /// Reusable output buffers for one committed Grid layout.
 ///
 /// Measurement does not read or mutate these buffers. It follows the scalar path below; layout
@@ -487,18 +528,15 @@ impl GridMeasureCtx for MeasureCtx<'_> {
     }
 }
 
-struct GridLayoutMeasureCtx<'a, 'runtime> {
-    ctx: &'a mut ContainerLayoutCtx<'runtime>,
-    children: &'a mut Children,
-}
-
-impl GridMeasureCtx for GridLayoutMeasureCtx<'_, '_> {
+/// Placement supplies the same indexed measurement capability without an adapter struct.
+impl GridMeasureCtx for ContainerLayoutCtx<'_> {
+    /// Reads the common spacing policy used by both measurement phases.
     fn spacing(&self) -> i32 {
-        self.ctx.skin().metrics.spacing.max(0)
+        self.skin().metrics.spacing.max(0)
     }
-
+    /// Measures a direct child through the bounded placement context.
     fn measure_child(&mut self, index: usize, constraints: crate::Constraints) -> Option<Dimensioni> {
-        self.ctx.measure_child(self.children, index, constraints)
+        ContainerLayoutCtx::measure_child(self, index, constraints)
     }
 }
 
@@ -512,11 +550,11 @@ impl ContainerWidget for Grid {
         grid_size(ctx, self, constraints)
     }
 
-    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, children: &mut Children, rect: Recti) {
+    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) {
         // Move the reusable vectors out temporarily so layout can read the remaining Grid fields
         // without adding another RefCell or allocating per frame.
         let mut layout = std::mem::take(&mut self.layout);
-        layout_grid(self, children, ctx, rect, &mut layout);
+        layout_grid(self, ctx, rect, &mut layout);
         self.layout = layout;
     }
 }
@@ -533,17 +571,16 @@ impl Widget for Grid {
 ///
 /// Columns are resolved before rows because a child's allocated column span is its text-wrapping
 /// bound and therefore affects the preferred height contributed to row tracks.
-fn layout_grid(state: &Grid, children: &mut Children, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti, layout: &mut GridLayout) {
+fn layout_grid(state: &Grid, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti, layout: &mut GridLayout) {
     let spacing = ctx.skin().metrics.spacing.max(0);
     // Resolve and retain each column width once for both row measurement and final placement.
     let available_width = AvailableSpace::bounded(rect.width);
     let available_height = AvailableSpace::bounded(rect.height);
     {
-        let mut measure = GridLayoutMeasureCtx { ctx, children };
-        resolve_columns_into(&mut measure, state, available_width, &mut layout.columns);
+        resolve_columns_into(ctx, state, available_width, &mut layout.columns);
 
         // Row preferences are measured using the resolved column spans, then allocated vertically.
-        resolve_rows_into(&mut measure, state, available_height, &layout.columns, &mut layout.rows);
+        resolve_rows_into(ctx, state, available_height, &layout.columns, &mut layout.rows);
     }
 
     // Placement and both track vectors are now authoritative for this layout commit.
@@ -553,7 +590,7 @@ fn layout_grid(state: &Grid, children: &mut Children, ctx: &mut ContainerLayoutC
         let y = rect.y.saturating_add(track_offset(&layout.rows, placement.row, spacing));
         let width = track_span(&layout.columns, placement.column, placement.column_span, spacing);
         let height = track_span(&layout.rows, placement.row, placement.row_span, spacing);
-        let _ = ctx.layout_child(children, placement.child_index, Recti::new(x, y, width, height));
+        let _ = ctx.layout_child(placement.child_index, Recti::new(x, y, width, height));
     }
 }
 

@@ -11,15 +11,22 @@ use std::{
 };
 
 #[macro_use]
-pub(crate) mod leaf;
+pub(crate) mod widget;
 mod button;
+mod input;
 mod leaves;
 mod node;
-mod input;
 pub(crate) use node::ComNode;
+mod children;
+pub(crate) mod containers;
+mod disclosure;
+mod factory;
+pub(crate) mod layout;
 mod paint;
 mod render;
 mod runtime;
+mod scroll;
+mod text_area;
 pub use runtime::create_runtime;
 
 /// Validates a whole UTF-8 replacement before touching any live object state.
@@ -48,6 +55,10 @@ fn copied_rect(rect: crate::prelude::Recti) -> Rect {
 /// Phase state contains no tree or application references, so widget retention cannot cycle.
 #[derive(Default)]
 struct HostState {
+    /// Final writer release can retire a checked-out subtree during observation. Ownership waits here only until that phase ends.
+    retired: RefCell<Vec<crate::Children>>,
+    /// Construction is reached weakly so widgets cannot keep the owning runtime alive.
+    factory: RefCell<std::rc::Weak<factory::NodeFactory>>,
     /// Logical runtime lifetime, independent of reference counts.
     closed: Cell<bool>,
     /// Layout and paint temporarily forbid setters even on otherwise accessible widgets.
@@ -57,6 +68,14 @@ struct HostState {
 }
 
 impl HostState {
+    /// Defers destruction only while setters/close are observationally forbidden; no second live tree is created.
+    fn retire(&self, children: crate::Children) {
+        if self.observing.get() && !self.closed.get() {
+            self.retired.borrow_mut().push(children);
+        } else {
+            drop(children);
+        }
+    }
     /// Preserves the first failure so later callbacks cannot accidentally clear it.
     fn fail(&self, error: NcStatus) {
         if self.error.get().is_none() {
@@ -73,6 +92,12 @@ struct WidgetHost {
 }
 
 impl IWidgetHost for WidgetHost {
+    /// Issues a private writer and distinct read-only view for a new empty collection.
+    fn create_children(&self) -> Result<ComPtr<IChildrenEditorAbi>, NcStatus> {
+        self.check_mutation()?;
+        let factory = self.state.factory.try_borrow().map_err(|_| UI_E_BUSY)?.upgrade().ok_or(UI_E_CLOSED)?;
+        Ok(children::create(factory))
+    }
     /// Read-only operations remain legal in observational phases.
     fn check_open(&self) -> Result<(), NcStatus> {
         if self.state.closed.get() { Err(UI_E_CLOSED) } else { Ok(()) }
@@ -111,6 +136,12 @@ impl Drop for Observation<'_> {
     /// Ends the scope on every exit path.
     fn drop(&mut self) {
         self.host.observing.set(self.previous);
+        if !self.previous {
+            let retired = std::mem::take(&mut *self.host.retired.borrow_mut());
+            // Actual widget close calls happen after the outer phase ends and
+            // without retaining a RefCell guard or granting mutation during layout.
+            drop(retired);
+        }
     }
 }
 

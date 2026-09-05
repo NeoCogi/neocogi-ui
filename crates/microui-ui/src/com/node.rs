@@ -3,6 +3,25 @@ use super::*;
 use super::paint::PaintService;
 use crate::prelude::{AtlasHandle, Dimensioni, WidgetOption, KeyboardBehavior, WidgetUpdateCtx, WidgetPaintCtx, UiInputEvent, Constraints, Skin};
 use crate::Change;
+use super::{
+    children::{ChildStore, ChildTransaction},
+    layout::LayoutService,
+};
+
+/// Exactly one cached geometry capability per mounted widget, with one authoritative child store for branches.
+pub(super) enum NodeLayoutKind {
+    /// Leaves have no persistent children and return only their preferred size.
+    Leaf(ComPtr<ILeafLayoutAbi>),
+    /// Branch policy owns semantic edge metadata; this store owns the actual retained children.
+    Branch {
+        /// Cached external policy, queried and validated once before attachment.
+        policy: ComPtr<IContainerLayoutAbi>,
+        /// Keeps the authenticated read-only identity registered for the branch's full lifetime.
+        _view: ComPtr<IChildrenAbi>,
+        /// Exact storage behind view, never a copied tree or public runtime-node handle.
+        children: Rc<ChildStore>,
+    },
+}
 
 /// Node-owned COM capabilities; geometry caches remain in the surrounding node.
 pub(crate) struct ComNode {
@@ -10,14 +29,16 @@ pub(crate) struct ComNode {
     pub(super) widget: ComPtr<IWidgetAbi>,
     /// Runtime-returned changes persist until ancestor invalidation consumes them.
     pub(super) dirty: Cell<bool>,
-    /// Cached preferred-size capability.
-    pub(super) layout: ComPtr<ILeafLayoutAbi>,
+    /// Cached leaf or branch policy with runtime-owned geometry access.
+    pub(super) layout: NodeLayoutKind,
     /// Validated policy refreshed after updates and during setter collection.
     pub(super) properties: Cell<WidgetProperties>,
     /// Owned immutable resource metrics.
     pub(super) metrics: ComPtr<ITextMetricsAbi>,
     /// Owned scope-checked recorder, never a wrapper around WidgetPaintCtx.
     pub(super) painter: PaintService,
+    /// Shared owned service supports nested container calls and rejects retained stale tokens.
+    pub(super) layout_service: LayoutService,
     /// Error/phase state without a pointer back into the retained tree.
     pub(super) host: Rc<HostState>,
 }
@@ -92,11 +113,12 @@ impl ComNode {
     /// Preserves finite/unbounded constraints across the temporary ABI conversion.
     pub(crate) fn measure(&self, _skin: &Skin, _atlas: &AtlasHandle, constraints: Constraints) -> Result<Dimensioni, NcStatus> {
         let _phase = Observation::begin(&self.host);
-        let bounds = LayoutLimits {
-            width: axis_limit(constraints.width),
-            height: axis_limit(constraints.height),
+        let bounds = super::layout::limits(constraints);
+        let result = match &self.layout {
+            NodeLayoutKind::Leaf(layout) => layout.measure(bounds, self.metrics.as_com_ref()),
+            NodeLayoutKind::Branch { policy, children, .. } => self.layout_service.measure(children, policy, bounds),
         };
-        match self.layout.measure(bounds, self.metrics.as_com_ref()) {
+        match result {
             Ok(size) if size.width >= 0 && size.height >= 0 => Ok(Dimensioni::new(size.width, size.height)),
             result => {
                 let error = result.err().unwrap_or(NC_E_INVALID_ARG);
@@ -108,19 +130,75 @@ impl ComNode {
             }
         }
     }
-}
 
-/// Converts one legacy axis without losing the difference between zero and unbounded.
-fn axis_limit(space: crate::AvailableSpace) -> AxisLimit {
-    match space.bound() {
-        Some(extent) => AxisLimit { kind: LimitKind::FINITE, extent },
-        None => AxisLimit { kind: LimitKind::UNBOUNDED, extent: 0 },
+    /// Applies a successful complete branch result to private retained geometry; errors retain dirty state.
+    pub(crate) fn place(&self, traversal: &crate::ui_node::LayoutTraversal, rect: crate::Recti, current: &mut crate::ui_node::NodeRuntime) -> bool {
+        let NodeLayoutKind::Branch { policy, children, .. } = &self.layout else {
+            return true;
+        };
+        let _phase = Observation::begin(&self.host);
+        match self.layout_service.place(children, policy, traversal, copied_rect(rect)) {
+            Ok(output) => {
+                current.layout.content_size = Dimensioni::new(output.content.width, output.content.height);
+                current.layout.children.clip = local_rect(output.viewport);
+                current.layout.children.offset = crate::Vec2i::new(output.offset_x, output.offset_y);
+                current.layout.propagate_child_overflow = output.propagate_overflow;
+                true
+            }
+            Err(error) => {
+                self.host.fail(error);
+                self.dirty.set(true);
+                current.invalidate_measurement();
+                false
+            }
+        }
+    }
+
+    /// Takes branch storage without holding any interior borrow across the runtime's recursive traversal.
+    pub(crate) fn children(&self) -> Option<ChildTransaction> {
+        let NodeLayoutKind::Branch { children, .. } = &self.layout else {
+            return None;
+        };
+        match children.take() {
+            Ok(children) => Some(children),
+            Err(error) => {
+                self.host.fail(error);
+                self.dirty.set(true);
+                None
+            }
+        }
+    }
+
+    /// Identifies a branch without another COM query or child-count call.
+    pub(crate) fn is_container(&self) -> bool {
+        matches!(self.layout, NodeLayoutKind::Branch { .. })
+    }
+
+    /// Applies optional branch event policy under observational authority before router commitment.
+    pub(crate) fn accepts_event(&self, input: &UiInputEvent) -> bool {
+        let NodeLayoutKind::Branch { policy, .. } = &self.layout else {
+            return true;
+        };
+        let _phase = Observation::begin(&self.host);
+        let (event, bytes) = super::input::event(Some(input));
+        match policy.accepts_event(event, NcCopyFromBufferOffset::new(0, bytes)) {
+            Ok(accepts) => accepts,
+            Err(error) => {
+                self.host.fail(error);
+                false
+            }
+        }
     }
 }
 
 impl ComNode {
     /// Collects sticky setter changes without a second owner or weak mutation hook.
     pub(crate) fn is_dirty(&self) -> bool {
+        if let NodeLayoutKind::Branch { children, .. } = &self.layout
+            && children.dirty.replace(false)
+        {
+            self.dirty.set(true);
+        }
         let _phase = Observation::begin(&self.host);
         self.refresh_properties();
         match self.widget.take_change() {
@@ -153,6 +231,13 @@ impl ComNode {
 impl Drop for ComNode {
     /// Tree removal closes the widget while application COM references may remain.
     fn drop(&mut self) {
+        if let NodeLayoutKind::Branch { children, .. } = &self.layout {
+            // The retained view remains registered until descendants close, even
+            // when the external widget's own close implementation later fails.
+            if let Err(error) = children.close().and_then(ChildEditResult::finish) {
+                self.host.fail(error);
+            }
+        }
         if let Err(error) = self.widget.close() {
             self.host.fail(error);
         }

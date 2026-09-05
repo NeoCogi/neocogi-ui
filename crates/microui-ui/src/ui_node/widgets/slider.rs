@@ -523,13 +523,17 @@ mod tests {
 
     fn slider_dispatcher(slider: &Slider) -> crate::event::WidgetEventDispatcher<Vec<Real>> {
         let mut dispatcher = crate::event::WidgetEventDispatcher::new();
-        dispatcher.subscribe(slider.changed(), |state, _, event| record_slider_change(state, event)).unwrap();
+        dispatcher
+            .subscribe(slider.changed(), |state, _, event| record_slider_change(state, event))
+            .unwrap();
         dispatcher
     }
 
     fn number_dispatcher(number: &Number) -> crate::event::WidgetEventDispatcher<Vec<Real>> {
         let mut dispatcher = crate::event::WidgetEventDispatcher::new();
-        dispatcher.subscribe(number.changed(), |state, _, event| record_number_change(state, event)).unwrap();
+        dispatcher
+            .subscribe(number.changed(), |state, _, event| record_number_change(state, event))
+            .unwrap();
         dispatcher
     }
 
@@ -974,14 +978,20 @@ mod tests {
     }
 }
 
-impl crate::com::leaf::LeafState for Slider {
+impl crate::com::widget::WidgetAlgorithm for Slider {
     /// Synchronizes options inside the one concrete semantic state of a COM leaf.
-    fn set_options(&mut self, options: crate::WidgetOption) { self.opt = options; }
+    fn set_options(&mut self, options: crate::WidgetOption) {
+        self.opt = options;
+    }
 }
 
-impl crate::com::leaf::FontState for Slider {
+impl crate::com::widget::FontState for Slider {
     /// Borrows the semantic font reference already used by layout and painting.
-    fn font(&self) -> &crate::FontRef { &self.font }
+    fn font(&self) -> &crate::FontRef {
+        &self.font
+    }
     /// Replaces the same field after the COM resource owner validates the selection.
-    fn set_font(&mut self, font: crate::FontRef) { self.font = font; }
+    fn set_font(&mut self, font: crate::FontRef) {
+        self.font = font;
+    }
 }

@@ -5,9 +5,8 @@ use super::{
     paint::{Metrics, PaintService},
     render::Backend,
 };
-use crate::prelude::{AtlasHandle, Dimensioni, Node};
+use crate::prelude::{AtlasHandle, Dimensioni};
 use crate::Context;
-use super::node::ComNode;
 mod windows;
 use windows::NativeSurface;
 
@@ -15,21 +14,28 @@ use windows::NativeSurface;
 pub fn create_runtime(atlas: AtlasHandle) -> ComPtr<IUiRuntimeAbi> {
     let state = Rc::new(HostState::default());
     let host: ComPtr<IWidgetHostAbi> = WidgetHost::from_value(WidgetHost { state: state.clone() }).query().expect("host interface");
-    let resources = super::leaf::Resources::new(atlas.clone(), state.clone());
+    let resources = super::widget::Resources::new(atlas.clone(), state.clone());
     let metrics = Metrics::from_value(Metrics { resources: resources.clone() })
         .query()
         .expect("metrics interface");
     let backend = Backend::new(atlas, state.clone());
     let target = backend.target.clone();
+    let factory = Rc::new(super::factory::NodeFactory {
+        layout: super::layout::LayoutService::new(resources.clone(), state.clone()),
+        attaching: Cell::new(false),
+        state: state.clone(),
+        host,
+        metrics,
+        resources,
+        painter: PaintService::new(),
+        children: RefCell::default(),
+    });
+    *state.factory.borrow_mut() = Rc::downgrade(&factory);
     Runtime::from_value(Runtime {
         storage: Rc::new(RuntimeStorage {
             context: RefCell::new(Some(Context::new(backend))),
             mounts: RefCell::new(Vec::new()),
-            state,
-            host,
-            metrics,
-            resources,
-            painter: PaintService::new(),
+            factory,
             target,
             dimensions: Cell::new(Size::default()),
             pending: Cell::new(true),
@@ -52,16 +58,8 @@ struct RuntimeStorage {
     context: RefCell<Option<Context<Backend>>>,
     /// Surface capabilities authenticate parents; the forest alone owns widget nodes.
     mounts: RefCell<Vec<Mount>>,
-    /// Shared lifetime/phase state contains no references back to this allocation.
-    state: Rc<HostState>,
-    /// Canonical runtime owner identity checked before attachment.
-    host: ComPtr<IWidgetHostAbi>,
-    /// Immutable resource service cached once rather than allocated during measurement.
-    metrics: ComPtr<ITextMetricsAbi>,
-    /// Built-in semantic state and geometry share this immutable resource revision.
-    resources: Rc<super::leaf::Resources>,
-    /// Reusable owned recorder shared by sequential widget paint calls.
-    painter: PaintService,
+    /// Shared construction services retain no root forest or owning runtime.
+    factory: Rc<super::factory::NodeFactory>,
     /// Renderer is retained only during explicit synchronous submission.
     target: Rc<RefCell<Option<ComPtr<IRendererAbi>>>>,
     /// Last successfully synchronized drawable dimensions.
@@ -81,7 +79,7 @@ struct Mount {
 impl RuntimeStorage {
     /// Rejects all operations after logical closure.
     fn open(&self) -> Result<(), NcStatus> {
-        if self.state.closed.get() { Err(UI_E_CLOSED) } else { Ok(()) }
+        if self.factory.state.closed.get() { Err(UI_E_CLOSED) } else { Ok(()) }
     }
     /// Takes exclusive engine ownership while allowing foreign calls to reenter safely.
     fn context(&self) -> Result<ContextTransaction<'_>, NcStatus> {
@@ -97,12 +95,12 @@ impl RuntimeStorage {
     /// Drains setter changes throughout the forest, including hidden subtrees.
     fn collect_changes(&self, context: &mut Context<Backend>) -> Result<(), NcStatus> {
         self.prune_mounts(&context.window_manager);
-        let _phase = Observation::begin(&self.state);
-        self.state.error.set(None);
+        let _phase = Observation::begin(&self.factory.state);
+        self.factory.state.error.set(None);
         if context.window_manager.collect_widget_changes() {
             self.pending.set(true);
         }
-        if let Some(error) = self.state.error.take() {
+        if let Some(error) = self.factory.state.error.take() {
             self.pending.set(true);
             return Err(error);
         }
@@ -113,45 +111,95 @@ impl RuntimeStorage {
 impl Drop for RuntimeStorage {
     /// Final release closes retained handles even without an explicit application close.
     fn drop(&mut self) {
-        self.state.closed.set(true);
+        self.factory.state.closed.set(true);
         // Dropping the owned Context then closes every node in its authoritative forest.
     }
 }
 
 impl IUiFactory for Runtime {
+    /// Validates complete text and wrapping before constructing the fixed scroll/editor composition.
+    fn create_text_area(&self, input: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping, scrolling: bool) -> Result<ComPtr<ITextAreaAbi>, NcStatus> {
+        super::text_area::TextArea::create(
+            self.storage.factory.host.clone(),
+            self.storage.factory.resources.clone(),
+            text(input)?,
+            super::leaves::local_wrap(wrapping)?,
+            scrolling,
+        )
+    }
+    /// Validates text and presentation before constructing either fixed structural child.
+    fn create_disclosure(&self, label: NcCopyFromBufferOffset<'_, u8>, style: DisclosureStyle, expanded: bool) -> Result<ComPtr<IDisclosureAbi>, NcStatus> {
+        super::disclosure::Disclosure::create(
+            self.storage.factory.host.clone(),
+            self.storage.factory.resources.clone(),
+            text(label)?,
+            style,
+            expanded,
+        )
+    }
+    /// Composes real bars and a transform container around the validated application content root.
+    fn create_scroll_area(&self, content: ComRef<'_, IWidgetAbi>, enabled: bool) -> Result<ComPtr<IScrollAreaAbi>, NcStatus> {
+        super::scroll::ScrollArea::create(self.storage.factory.host.clone(), self.storage.factory.resources.clone(), content, enabled)
+    }
+    /// Validates both policies before creating the container's single COM allocation and host-owned child store.
+    fn create_linear(&self, direction: FlowDirection, cross: CrossSizeAbi) -> Result<ComPtr<ILinearAbi>, NcStatus> {
+        self.storage.factory.host.check_mutation()?;
+        let direction = super::containers::local_direction(direction)?;
+        let cross = super::containers::local_cross(cross)?;
+        super::containers::Linear::create(
+            self.storage.factory.host.clone(),
+            self.storage.factory.resources.clone(),
+            crate::Linear::com_new(direction, cross),
+        )
+    }
+    /// Validates complete typed track sequences before allocating any live Grid state.
+    fn create_grid(
+        &self,
+        columns: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
+        rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
+    ) -> Result<ComPtr<IGridAbi>, NcStatus> {
+        self.storage.factory.host.check_mutation()?;
+        let columns = super::containers::local_tracks(columns)?;
+        let rows = super::containers::local_tracks(rows)?;
+        super::containers::Grid::create(
+            self.storage.factory.host.clone(),
+            self.storage.factory.resources.clone(),
+            crate::Grid::com_new(columns, rows),
+        )
+    }
     /// Validates complete checkbox initialization before allocating its COM identity.
     fn create_checkbox(&self, checked: bool, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ICheckboxAbi>, NcStatus> {
-        self.storage.host.check_mutation()?;
+        self.storage.factory.host.check_mutation()?;
         let parameters = crate::CheckboxParameters::new(text(label)?, checked);
         Ok(super::leaves::Checkbox::create(
-            self.storage.host.clone(),
-            self.storage.resources.clone(),
+            self.storage.factory.host.clone(),
+            self.storage.factory.resources.clone(),
             crate::Checkbox::from(parameters),
         ))
     }
     /// Validates complete textbox initialization before allocating its COM identity.
     fn create_textbox(&self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ITextboxAbi>, NcStatus> {
-        self.storage.host.check_mutation()?;
+        self.storage.factory.host.check_mutation()?;
         let parameters = crate::TextboxParameters::new(text(input)?);
         Ok(super::leaves::Textbox::create(
-            self.storage.host.clone(),
-            self.storage.resources.clone(),
+            self.storage.factory.host.clone(),
+            self.storage.factory.resources.clone(),
             crate::Textbox::from(parameters),
         ))
     }
     /// Validates complete text block initialization before allocating its COM identity.
     fn create_text_block(&self, input: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping) -> Result<ComPtr<ITextBlockAbi>, NcStatus> {
-        self.storage.host.check_mutation()?;
+        self.storage.factory.host.check_mutation()?;
         let parameters = crate::TextBlockParameters::with_wrap(text(input)?, super::leaves::local_wrap(wrapping)?);
         Ok(super::leaves::TextBlock::create(
-            self.storage.host.clone(),
-            self.storage.resources.clone(),
+            self.storage.factory.host.clone(),
+            self.storage.factory.resources.clone(),
             crate::TextBlock::from(parameters),
         ))
     }
     /// Validates complete slider initialization before allocating its COM identity.
     fn create_slider(&self, options: SliderOptions) -> Result<ComPtr<ISliderAbi>, NcStatus> {
-        self.storage.host.check_mutation()?;
+        self.storage.factory.host.check_mutation()?;
         let parameters = crate::SliderParameters::with_opt(
             options.value,
             options.low,
@@ -162,14 +210,14 @@ impl IUiFactory for Runtime {
         )
         .map_err(|_| NC_E_INVALID_ARG)?;
         Ok(super::leaves::Slider::create(
-            self.storage.host.clone(),
-            self.storage.resources.clone(),
+            self.storage.factory.host.clone(),
+            self.storage.factory.resources.clone(),
             crate::Slider::from(parameters),
         ))
     }
     /// Validates complete number initialization before allocating its COM identity.
     fn create_number(&self, options: NumberOptions) -> Result<ComPtr<INumberAbi>, NcStatus> {
-        self.storage.host.check_mutation()?;
+        self.storage.factory.host.check_mutation()?;
         let parameters = crate::NumberParameters::new(
             options.value,
             options.step,
@@ -177,44 +225,44 @@ impl IUiFactory for Runtime {
         )
         .map_err(|_| NC_E_INVALID_ARG)?;
         Ok(super::leaves::Number::create(
-            self.storage.host.clone(),
-            self.storage.resources.clone(),
+            self.storage.factory.host.clone(),
+            self.storage.factory.resources.clone(),
             crate::Number::from(parameters),
         ))
     }
     /// Validates complete color swatch initialization before allocating its COM identity.
     fn create_color_swatch(&self, rgba: u32, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IColorSwatchAbi>, NcStatus> {
-        self.storage.host.check_mutation()?;
+        self.storage.factory.host.check_mutation()?;
         let parameters = crate::ColorSwatchParameters::new(super::render::color(rgba)).label(text(label)?);
         Ok(super::leaves::ColorSwatch::create(
-            self.storage.host.clone(),
-            self.storage.resources.clone(),
+            self.storage.factory.host.clone(),
+            self.storage.factory.resources.clone(),
             crate::ColorSwatch::from(parameters),
         ))
     }
     /// Validates complete list item initialization before allocating its COM identity.
     fn create_list_item(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IListItemAbi>, NcStatus> {
-        self.storage.host.check_mutation()?;
+        self.storage.factory.host.check_mutation()?;
         let parameters = crate::ListItemParameters::new(text(label)?);
         Ok(super::leaves::ListItem::create(
-            self.storage.host.clone(),
-            self.storage.resources.clone(),
+            self.storage.factory.host.clone(),
+            self.storage.factory.resources.clone(),
             crate::ListItem::from(parameters),
         ))
     }
     /// Validates complete list box initialization before allocating its COM identity.
     fn create_list_box(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IListBoxAbi>, NcStatus> {
-        self.storage.host.check_mutation()?;
+        self.storage.factory.host.check_mutation()?;
         let parameters = crate::ListBoxParameters::new(text(label)?, None);
         Ok(super::leaves::ListBox::create(
-            self.storage.host.clone(),
-            self.storage.resources.clone(),
+            self.storage.factory.host.clone(),
+            self.storage.factory.resources.clone(),
             crate::ListBox::from(parameters),
         ))
     }
     /// Validates the axis and complete range before constructing a scrollbar.
     fn create_scrollbar(&self, range: ScrollRange) -> Result<ComPtr<IScrollbarAbi>, NcStatus> {
-        self.storage.host.check_mutation()?;
+        self.storage.factory.host.check_mutation()?;
         let axis = match range.axis {
             ScrollAxis::HORIZONTAL => crate::ScrollbarAxis::Horizontal,
             ScrollAxis::VERTICAL => crate::ScrollbarAxis::Vertical,
@@ -225,16 +273,16 @@ impl IUiFactory for Runtime {
         }
         let parameters = crate::ScrollbarParameters::new(axis).range(range.viewport, range.content, range.offset);
         Ok(super::leaves::Scrollbar::create(
-            self.storage.host.clone(),
-            self.storage.resources.clone(),
+            self.storage.factory.host.clone(),
+            self.storage.factory.resources.clone(),
             crate::Scrollbar::from(parameters),
         ))
     }
 
     /// Creates one unmounted button whose host has no reference back to this runtime.
     fn create_button(&self) -> Result<ComPtr<IButtonAbi>, NcStatus> {
-        self.storage.host.check_mutation()?;
-        Ok(Button::create(self.storage.host.clone(), self.storage.resources.clone()))
+        self.storage.factory.host.check_mutation()?;
+        Ok(Button::create(self.storage.factory.host.clone(), self.storage.factory.resources.clone()))
     }
 }
 
@@ -258,9 +306,9 @@ impl IUiRuntime for Runtime {
         }
         let mut context = storage.context()?;
         storage.collect_changes(&mut context)?;
-        storage.state.error.set(None);
+        storage.factory.state.error.set(None);
         context.update_ui(Dimensioni::new(size.width, size.height));
-        if let Some(error) = storage.state.error.take() {
+        if let Some(error) = storage.factory.state.error.take() {
             storage.pending.set(true);
             return Err(error);
         }
@@ -280,12 +328,12 @@ impl IUiRuntime for Runtime {
         let info =
             crate::render::FrameInfo::try_new(Dimensioni::new(size.width, size.height), super::render::color(0xff302820)).map_err(|_| NC_E_INVALID_ARG)?;
         // The complete submission is observational, including calls into the native renderer.
-        let _phase = Observation::begin(&storage.state);
-        storage.state.error.set(None);
+        let _phase = Observation::begin(&storage.factory.state);
+        storage.factory.state.error.set(None);
         *storage.target.borrow_mut() = Some(renderer.add_ref());
         let result = context.frame(info).render_ui();
         storage.target.borrow_mut().take();
-        if let Some(error) = storage.state.error.take() {
+        if let Some(error) = storage.factory.state.error.take() {
             return Err(error);
         }
         result.map_err(|_| UI_E_RENDER)
@@ -293,18 +341,18 @@ impl IUiRuntime for Runtime {
     /// Removes every root while leaving independent retained COM handles safely closed.
     fn close(&self) -> Result<(), NcStatus> {
         let storage = &self.storage;
-        if storage.state.closed.get() {
+        if storage.factory.state.closed.get() {
             return Ok(());
         }
         let mut context = storage.context()?;
         let surfaces: Vec<_> = storage.mounts.borrow().iter().map(|m| m.surface.clone()).collect();
-        storage.state.closed.set(true);
-        storage.state.error.set(None);
+        storage.factory.state.closed.set(true);
+        storage.factory.state.error.set(None);
         for surface in surfaces {
             surface.close(&mut context.window_manager)?;
         }
         storage.mounts.borrow_mut().clear();
-        storage.state.error.take().map_or(Ok(()), Err)
+        storage.factory.state.error.take().map_or(Ok(()), Err)
     }
 }
 

@@ -34,9 +34,12 @@ use super::container::ContainerLayoutCtx;
 use super::{Children, Node};
 
 mod disclosure;
+pub(crate) use disclosure::{DisclosureState, DisclosureHeader, DisclosureVariant};
 mod grid;
 mod linear;
+pub(crate) use linear::LinearItemSpec;
 mod scroll_area;
+pub(crate) use scroll_area::{ScrollModel, ScrollSurface};
 
 pub use disclosure::{Disclosure, DisclosureParameters};
 pub use grid::{Grid, GridItem, GridParameters, GridSpan};

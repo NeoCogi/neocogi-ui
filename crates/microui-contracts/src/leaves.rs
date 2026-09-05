@@ -240,3 +240,17 @@ pub trait IButtonStyle {
     /// Replaces the validated paint-only center-fill mask.
     fn set_fill_states(&self, states: FillStates) -> Result<(), NcStatus>;
 }
+
+#[com_interface(auto_guid = "microui.MultilineEditor:v1")]
+/// Multiline editing and wrapping, implemented by the real editor and forwarded by its composed root.
+pub trait IMultilineEditor: ITextEditor {
+    /// Returns the current explicit wrapping policy.
+    fn wrapping(&self) -> Result<TextWrapping, NcStatus>;
+    /// Changes wrapping and schedules both geometry refresh and caret reveal.
+    fn set_wrapping(&self, wrapping: TextWrapping) -> Result<(), NcStatus>;
+}
+
+#[com_interface(auto_guid = "microui.TextArea:v1")]
+/// Fixed scrolling editor root. Inherited text methods edit its actual internal editor.
+/// Query IScrolling for offsets; IScrollArea is absent because the editor cannot be replaced.
+pub trait ITextArea: IMultilineEditor {}

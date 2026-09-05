@@ -116,8 +116,8 @@ impl ContainerWidget for Overlay {
         }
         size
     }
-    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, children: &mut Children, rect: Recti) {
-        for index in 0..children.len() { ctx.layout_child(children, index, rect); }
+    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) {
+        for index in 0..ctx.child_count() { ctx.layout_child(index, rect); }
     }
 }
 let (overlay, container) = Container::new(Overlay::default(), []);

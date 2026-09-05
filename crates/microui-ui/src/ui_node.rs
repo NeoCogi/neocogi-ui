@@ -79,12 +79,13 @@ mod node;
 pub use node::Node;
 pub(crate) use node::{NodeKind, NodeRuntime};
 mod runtime;
-pub(crate) use runtime::UiRuntime;
+pub(crate) use runtime::{UiRuntime, LayoutTraversal};
 #[cfg(test)]
 pub(crate) use runtime::RuntimeMetrics;
 mod container;
 pub use container::{Container, ContainerLayoutCtx, ContainerWidget, MeasureCtx};
 mod containers;
+pub(crate) use containers::{LinearItemSpec, ScrollModel, ScrollSurface, DisclosureState, DisclosureHeader, DisclosureVariant};
 pub use containers::{
     Disclosure, DisclosureParameters, Grid, GridItem, GridParameters, GridSpan, Linear, LinearCrossSize, LinearDirection, LinearItem, LinearParameters,
     ScrollArea, ScrollAreaParameters,

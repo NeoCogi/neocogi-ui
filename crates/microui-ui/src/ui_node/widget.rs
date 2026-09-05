@@ -54,7 +54,7 @@
 
 use crate::{FrameRole, SurfaceRole};
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::cmp::max;
 use std::rc::{Rc, Weak};
 
@@ -74,7 +74,7 @@ pub use super::widget_context::{WidgetPaintCtx, WidgetUpdateCtx};
 /// traversal later consumes it and invalidates node-local caches on the recursive call stack.
 pub(crate) struct WidgetStorage<W: ?Sized> {
     /// Whether typed application mutation invalidated this widget's preferred measurement.
-    measurement_dirty: bool,
+    measurement_dirty: Cell<bool>,
     /// Concrete or erased widget behavior stored behind this one common retained record.
     pub(crate) widget: W,
 }
@@ -83,21 +83,31 @@ impl<W> WidgetStorage<W> {
     /// Wraps one newly mounted concrete widget with clean derived state.
     pub(crate) fn new(widget: W) -> Self {
         // A new node has no cached measurement to invalidate.
-        Self { measurement_dirty: false, widget }
+        Self {
+            measurement_dirty: Cell::new(false),
+            widget,
+        }
     }
 }
 
 impl<W: ?Sized> WidgetStorage<W> {
     pub(crate) fn mark_measurement_dirty(&mut self) {
-        self.measurement_dirty = true;
+        self.measurement_dirty.set(true);
     }
+}
 
+impl<W: Widget + ?Sized> WidgetStorage<W> {
+    /// Collects shared-model changes into this node's ordinary sticky marker before reporting it.
     pub(crate) fn is_measurement_dirty(&self) -> bool {
-        self.measurement_dirty
+        if self.widget.take_shared_change() {
+            self.measurement_dirty.set(true);
+        }
+        self.measurement_dirty.get()
     }
-
+    /// Consumes both handle mutations and independently shared semantic requests once.
     pub(crate) fn take_measurement_dirty(&mut self) -> bool {
-        std::mem::take(&mut self.measurement_dirty)
+        self.is_measurement_dirty();
+        self.measurement_dirty.replace(false)
     }
 }
 
@@ -398,6 +408,13 @@ pub trait Widget {
     /// retained UI through an independently captured typed widget handle is a contract violation
     /// rather than a deferred-next-frame operation.
     fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>);
+    /// Drains geometry changes from explicit shared semantic models owned by a composite.
+    /// This hook only consumes notification flags; it must not edit UI state or topology.
+    /// Ordinary widgets report changes through update/setters and keep the default false.
+    fn take_shared_change(&self) -> bool {
+        false
+    }
+
     /// Returns the effective widget options used by generic dispatch.
     ///
     /// Widgets can override this to apply dynamic option adjustments.

@@ -528,8 +528,7 @@ impl InputRouter {
     fn pointer_hits_node(&self, node: &Node, parent_transform: Transform, pos: Vec2i) -> bool {
         // NO_INTERACT makes only this node's own surface transparent; eligible descendants were
         // already considered by the caller.
-        if node.data.policy().0.intersects(WidgetOption::NO_INTERACT)
-        {
+        if node.data.policy().0.intersects(WidgetOption::NO_INTERACT) {
             return false;
         }
 
@@ -656,7 +655,14 @@ impl InputRouter {
             }
             NodeKind::Com(widget) => {
                 let (options, keyboard, _) = widget.policy();
-                self.route_widget_input(&node.state, local_rect, local_clip, options, keyboard, true, &local_event)
+                let captured_continuation = captured && matches!(&local_event, UiInputEvent::MouseDrag { .. } | UiInputEvent::MouseUp { .. });
+                let accepts_event = captured_continuation || widget.accepts_event(&local_event);
+                let (rect, clip) = if widget.is_container() {
+                    (content_rect, content_clip)
+                } else {
+                    (local_rect, local_clip)
+                };
+                self.route_widget_input(&node.state, rect, clip, options, keyboard, accepts_event, &local_event)
             }
             NodeKind::Container(container) => {
                 // An overloaded container surface may add a state-dependent filter after target

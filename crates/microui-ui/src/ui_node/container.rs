@@ -33,7 +33,11 @@ use std::{cell::RefCell, rc::Rc};
 use crate::math::RectExt;
 use crate::{Constraints, Dimensioni, Recti, SliceInsets, Skin, TypedWidgetHandle, UiInputEvent, Vec2i, Widget, WidgetOption};
 
-use super::{ChildParticipation, Children, ChildrenHandle, NodeLayout, NodeRuntime, UiRuntime, WidgetStorage};
+use crate::com::layout::ScopedLayout;
+use microui_contracts::{ContainerGeometry, LayoutParticipation};
+use nc_com::NcStatus;
+
+use super::{ChildParticipation, Children, ChildrenHandle, NodeLayout, NodeRuntime, LayoutTraversal, WidgetStorage};
 
 /// Scoped services for measuring one retained container's children.
 ///
@@ -46,14 +50,43 @@ pub struct MeasureCtx<'a> {
     /// Immutable atlas paired with `skin` for concrete font and icon resolution.
     atlas: &'a crate::AtlasHandle,
     /// Authoritative direct children available only for this scoped measure call.
-    children: &'a mut Children,
+    children: MeasureChildren<'a>,
+}
+
+/// Private transition between the existing local baseline and owned COM child geometry.
+enum MeasureChildren<'a> {
+    /// Local nodes remain borrowed only inside the existing baseline implementation.
+    Local(&'a mut Children),
+    /// COM calls access runtime-owned storage through a validated scoped service.
+    Scoped(ScopedLayout<'a>),
 }
 
 impl<'a> MeasureCtx<'a> {
     /// Creates one runtime-scoped measurement context.
     pub(crate) fn new(skin: &'a Skin, atlas: &'a crate::AtlasHandle, children: &'a mut Children) -> Self {
         // Store the complete resolved skin and matching atlas borrowed for this measurement scope.
-        Self { skin, atlas, children }
+        Self {
+            skin,
+            atlas,
+            children: MeasureChildren::Local(children),
+        }
+    }
+
+    /// Reuses concrete built-in measurement against the same public service used by independent containers.
+    pub(crate) fn scoped(skin: &'a Skin, atlas: &'a crate::AtlasHandle, layout: ScopedLayout<'a>) -> Self {
+        Self {
+            skin,
+            atlas,
+            children: MeasureChildren::Scoped(layout),
+        }
+    }
+
+    /// Returns any child-service error before the enclosing implementation publishes a size.
+    pub(crate) fn result(&self) -> Result<(), NcStatus> {
+        match &self.children {
+            MeasureChildren::Local(_) => Ok(()),
+            MeasureChildren::Scoped(layout) => layout.result(),
+        }
     }
 
     /// Returns the active UI skin.
@@ -68,14 +101,18 @@ impl<'a> MeasureCtx<'a> {
 
     /// Returns the number of direct retained children.
     pub fn child_count(&self) -> usize {
-        self.children.len()
+        match &self.children {
+            MeasureChildren::Local(children) => children.len(),
+            MeasureChildren::Scoped(layout) => layout.count,
+        }
     }
 
     /// Measures one indexed child's desired size under explicit constraints.
     pub fn measure_child(&mut self, index: usize, constraints: Constraints) -> Option<Dimensioni> {
-        // Reborrow exactly one node for the recursive call; only copied geometry leaves this scope.
-        let node = self.children.get_mut(index)?;
-        Some(node.measure(self.skin, self.atlas, constraints))
+        match &mut self.children {
+            MeasureChildren::Local(children) => Some(children.get_mut(index)?.measure(self.skin, self.atlas, constraints)),
+            MeasureChildren::Scoped(layout) => layout.measure(index, constraints),
+        }
     }
 }
 
@@ -97,7 +134,7 @@ pub trait ContainerWidget: Widget {
     fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: Constraints) -> Dimensioni;
 
     /// Places retained children and commits descendant viewport/content geometry.
-    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, children: &mut Children, rect: Recti);
+    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti);
 
     /// Returns whether this container accepts an already-selected event.
     ///
@@ -184,7 +221,7 @@ impl Container {
     }
 
     /// Invokes the geometry implementation for one placement pass.
-    pub(crate) fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) {
+    pub(crate) fn place(&mut self, runtime: &mut LayoutTraversal, skin: &Skin, atlas: &crate::AtlasHandle, rect: Recti, current: &mut NodeRuntime) {
         // The widget receives the authoritative collection only for this call. A typed mutation
         // attempted against the same container while this borrow is active is rejected cleanly by
         // ChildrenHandle rather than invalidating indices during placement.
@@ -192,11 +229,12 @@ impl Container {
             .children
             .try_borrow_mut()
             .unwrap_or_else(|_| panic!("retained child invariant violated: collection is already borrowed during layout"));
+        let mut ctx = ContainerLayoutCtx::new(runtime, skin, atlas, rect, current, &mut children);
         self.widget
             .try_borrow_mut()
             .unwrap_or_else(|_| typed_container_borrow_conflict())
             .widget
-            .place(ctx, &mut children, rect);
+            .place(&mut ctx, rect);
     }
 
     /// Resolves frame insets and measures content under one typed-runtime borrow.
@@ -282,30 +320,81 @@ fn typed_container_borrow_conflict() -> ! {
 /// The context measures or places indexed children and commits derived viewport/participation
 /// results. It never lends a node or permits topology mutation.
 pub struct ContainerLayoutCtx<'a> {
-    /// Runtime recursion services used to measure and place selected direct children.
-    runtime: &'a mut UiRuntime,
-    /// Complete context skin used by this active placement call.
+    /// Complete immutable skin for this invocation's resource revision.
     skin: &'a Skin,
-    /// Immutable atlas paired with `skin` for child measurement and placement.
+    /// Atlas paired with the skin for concrete algorithms.
     atlas: &'a crate::AtlasHandle,
-    /// Exact node-local content rectangle assigned to the container.
+    /// Parent-owned content allocation limits descendant clipping.
     content: Recti,
-    /// Common runtime state on which this container publishes derived geometry.
-    current: &'a mut NodeRuntime,
+    /// Runtime geometry is either locally borrowed or reached through the scoped COM service.
+    target: PlacementTarget<'a>,
 }
 
-impl ContainerLayoutCtx<'_> {
-    /// Creates one runtime-scoped placement context.
-    pub(crate) fn new<'a>(
-        runtime: &'a mut UiRuntime,
+/// Private placement transition; neither variant crosses a COM boundary.
+enum PlacementTarget<'a> {
+    /// Local baseline retains its existing direct traversal until final migration cleanup.
+    Local {
+        /// Geometry-only recursion contains no input/runtime ownership.
+        runtime: &'a mut LayoutTraversal,
+        /// Current retained node receives derived output after each local algorithm operation.
+        current: &'a mut NodeRuntime,
+        /// Indexed authoritative children for the local baseline.
+        children: &'a mut Children,
+    },
+    /// COM implementations call the public service and return one copied complete parent result.
+    Scoped {
+        /// Expiring child geometry authority with first-error propagation.
+        layout: ScopedLayout<'a>,
+        /// No runtime node is borrowed or stored; geometry is plain copied output.
+        geometry: ContainerGeometry,
+    },
+}
+
+impl<'a> ContainerLayoutCtx<'a> {
+    /// Creates the existing local placement context without exposing the child collection to policy.
+    pub(crate) fn new(
+        runtime: &'a mut LayoutTraversal,
         skin: &'a Skin,
         atlas: &'a crate::AtlasHandle,
         content: Recti,
         current: &'a mut NodeRuntime,
-    ) -> ContainerLayoutCtx<'a> {
-        // All references share one placement lifetime, preventing the context from escaping the
-        // runtime call that owns the mutable current-node state.
-        ContainerLayoutCtx { runtime, skin, atlas, content, current }
+        children: &'a mut Children,
+    ) -> Self {
+        Self {
+            skin,
+            atlas,
+            content,
+            target: PlacementTarget::Local { runtime, current, children },
+        }
+    }
+
+    /// Creates a synchronous Rust adapter over the runtime-owned COM frame.
+    pub(crate) fn scoped(skin: &'a Skin, atlas: &'a crate::AtlasHandle, content: Recti, layout: ScopedLayout<'a>) -> Self {
+        Self {
+            skin,
+            atlas,
+            content,
+            target: PlacementTarget::Scoped {
+                layout,
+                geometry: ContainerGeometry::new(microui_contracts::Rect {
+                    x: content.x,
+                    y: content.y,
+                    width: content.width,
+                    height: content.height,
+                }),
+            },
+        }
+    }
+
+    /// Returns complete output only after all child calls succeeded.
+    pub(crate) fn result(&self) -> Result<ContainerGeometry, NcStatus> {
+        match &self.target {
+            PlacementTarget::Scoped { layout, geometry } => {
+                layout.result()?;
+                Ok(*geometry)
+            }
+            PlacementTarget::Local { .. } => unreachable!("local baseline publishes directly into retained node geometry"),
+        }
     }
 
     /// Returns the active UI skin.
@@ -313,69 +402,140 @@ impl ContainerLayoutCtx<'_> {
         self.skin
     }
 
-    /// Returns the active atlas.
+    /// Returns the immutable atlas paired with this skin.
     pub fn atlas(&self) -> &crate::AtlasHandle {
         self.atlas
     }
 
-    /// Measures one indexed child under `available` during placement.
-    pub fn measure_child(&mut self, children: &mut Children, index: usize, constraints: Constraints) -> Option<Dimensioni> {
-        // Placement participates in the same runtime epoch as the measure phase immediately before
-        // it, so identical child queries reuse the node-local preferred-size result.
-        let node = children.get_mut(index)?;
-        Some(self.runtime.measure_node(node, self.skin, self.atlas, constraints))
+    /// Returns the direct child count validated before entering a scoped algorithm.
+    pub fn child_count(&self) -> usize {
+        match &self.target {
+            PlacementTarget::Local { children, .. } => children.len(),
+            PlacementTarget::Scoped { layout, .. } => layout.count,
+        }
     }
 
-    /// Assigns one exact indexed child rectangle and returns its allocated size.
-    ///
-    /// A container must resolve every content, fixed, or flexible relationship before this call.
-    /// Runtime does not reinterpret the rectangle or inspect the concrete parent type.
-    pub fn layout_child(&mut self, children: &mut Children, index: usize, rect: Recti) -> Option<Dimensioni> {
-        // Resolve the child internally, recurse immediately, and return only copied geometry.
-        let node = children.get_mut(index)?;
-        Some(self.runtime.layout_node_ref(node, self.skin, self.atlas, rect))
+    /// Measures one indexed child with exact finite/unbounded constraints.
+    pub fn measure_child(&mut self, index: usize, constraints: Constraints) -> Option<Dimensioni> {
+        match &mut self.target {
+            PlacementTarget::Local { runtime, children, .. } => Some(runtime.measure_node(children.get_mut(index)?, self.skin, self.atlas, constraints)),
+            PlacementTarget::Scoped { layout, .. } => layout.measure(index, constraints),
+        }
     }
 
-    /// Reads one child's content extent from its most recent placement in this pass.
-    pub fn child_content_size(&self, children: &Children, index: usize) -> Option<Dimensioni> {
-        // Content size is a copy of committed layout output, never a borrow of child runtime state.
-        children.get(index).map(|node| node.state.layout.content_size)
+    /// Assigns one exact parent-owned rectangle; the runtime does not reinterpret sizing policy.
+    pub fn layout_child(&mut self, index: usize, rect: Recti) -> Option<Dimensioni> {
+        match &mut self.target {
+            PlacementTarget::Local { runtime, children, .. } => Some(runtime.layout_node_ref(children.get_mut(index)?, self.skin, self.atlas, rect)),
+            PlacementTarget::Scoped { layout, .. } => {
+                let index = layout.index(index)?;
+                let rect = microui_contracts::Rect {
+                    x: rect.x,
+                    y: rect.y,
+                    width: rect.width,
+                    height: rect.height,
+                };
+                layout
+                    .capture(layout.service.place_child(layout.scope, index, rect))
+                    .map(|size| Dimensioni::new(size.width, size.height))
+            }
+        }
     }
 
-    /// Commits whether one retained child participates after this layout pass.
-    pub fn set_child_participation(&mut self, children: &mut Children, index: usize, participation: ChildParticipation) -> bool {
-        // Participation is parent-authored derived state and remains attached to the child between
-        // passes so update, paint, hit testing, and target sanitation observe the same decision.
-        let Some(node) = children.get_mut(index) else { return false };
-        node.state.participation = participation;
-        true
+    /// Reads one child's copied logical extent without exposing any layout cache.
+    pub fn child_content_size(&self, index: usize) -> Option<Dimensioni> {
+        match &self.target {
+            PlacementTarget::Local { children, .. } => children.get(index).map(|node| node.state.layout.content_size),
+            PlacementTarget::Scoped { layout, .. } => {
+                let index = layout.index(index)?;
+                layout
+                    .capture(layout.service.child_content_size(layout.scope, index))
+                    .map(|size| Dimensioni::new(size.width, size.height))
+            }
+        }
     }
 
-    /// Replaces the current container's derived logical content size.
+    /// Commits responsive parent-controlled participation for the complete indexed subtree.
+    pub fn set_child_participation(&mut self, index: usize, participation: ChildParticipation) -> bool {
+        match &mut self.target {
+            PlacementTarget::Local { children, .. } => {
+                let Some(node) = children.get_mut(index) else {
+                    return false;
+                };
+                node.state.participation = participation;
+                true
+            }
+            PlacementTarget::Scoped { layout, .. } => {
+                let Some(index) = layout.index(index) else {
+                    return false;
+                };
+                let participation = match participation {
+                    ChildParticipation::Active => LayoutParticipation::ACTIVE,
+                    ChildParticipation::Disabled => LayoutParticipation::DISABLED,
+                    ChildParticipation::Hidden => LayoutParticipation::HIDDEN,
+                };
+                layout.capture(layout.service.set_participation(layout.scope, index, participation)).is_some()
+            }
+        }
+    }
+
+    /// Invalidates a shared placement dependency even when the assigned rectangle is unchanged.
+    pub fn child_placement_changed(&mut self, index: usize) -> bool {
+        match &mut self.target {
+            PlacementTarget::Local { children, .. } => {
+                let Some(node) = children.get_mut(index) else {
+                    return false;
+                };
+                node.state.invalidate_layout();
+                true
+            }
+            PlacementTarget::Scoped { layout, .. } => {
+                let Some(index) = layout.index(index) else {
+                    return false;
+                };
+                layout.capture(layout.service.child_placement_changed(layout.scope, index)).is_some()
+            }
+        }
+    }
+
+    /// Replaces this container's derived logical extent while preserving viewport policy.
     pub fn set_content_size(&mut self, size: Dimensioni) {
-        // Preserve allocation and viewport while replacing only the logical overflow extent.
-        self.current.set_layout(self.current.layout.with_content_size(size));
+        match &mut self.target {
+            PlacementTarget::Local { current, .. } => current.set_layout(current.layout.with_content_size(size)),
+            PlacementTarget::Scoped { geometry, .. } => geometry.content = microui_contracts::Size { width: size.width, height: size.height },
+        }
     }
 
-    /// Installs the current container's descendant viewport and translation.
+    /// Narrows descendant clipping to the content allocation and installs a copied translation.
     pub fn set_children_viewport(&mut self, viewport: Recti, offset: Vec2i) {
-        // A layout may narrow its descendant viewport but cannot reveal pixels outside its framed
-        // content rectangle. Disjoint input is represented by a stable empty rectangle at content
-        // origin rather than by an invalid rectangle.
         let viewport = viewport
             .positive_intersection(self.content)
             .unwrap_or_else(|| Recti::new(self.content.x, self.content.y, 0, 0));
-        // Rebuild the child transform while retaining the current logical content size.
-        let outer = self.current.layout.allocation;
-        let mut layout = NodeLayout::from_parts(outer, viewport, self.current.layout.content_size);
-        layout.children.offset = offset;
-        self.current.set_layout(layout);
+        match &mut self.target {
+            PlacementTarget::Local { current, .. } => {
+                let mut layout = NodeLayout::from_parts(current.layout.allocation, viewport, current.layout.content_size);
+                layout.children.offset = offset;
+                current.set_layout(layout);
+            }
+            PlacementTarget::Scoped { geometry, .. } => {
+                geometry.viewport = microui_contracts::Rect {
+                    x: viewport.x,
+                    y: viewport.y,
+                    width: viewport.width,
+                    height: viewport.height,
+                };
+                geometry.offset_x = offset.x;
+                geometry.offset_y = offset.y;
+            }
+        }
     }
 
-    /// Controls whether descendant overflow contributes to the parent-visible extent.
+    /// Controls whether visible descendant overflow contributes to the parent-visible extent.
     pub fn set_child_overflow_propagation(&mut self, propagate: bool) {
-        // This flag affects only the parent's derived content bounds; it does not clip children.
-        self.current.set_layout(self.current.layout.with_child_overflow_propagation(propagate));
+        match &mut self.target {
+            PlacementTarget::Local { current, .. } => current.set_layout(current.layout.with_child_overflow_propagation(propagate)),
+            PlacementTarget::Scoped { geometry, .. } => geometry.propagate_overflow = propagate,
+        }
     }
 }
 
@@ -399,7 +559,7 @@ mod tests {
             Dimensioni::new(ctx.child_count() as i32, 1)
         }
 
-        fn place(&mut self, _ctx: &mut ContainerLayoutCtx<'_>, _children: &mut Children, _rect: Recti) {}
+        fn place(&mut self, _ctx: &mut ContainerLayoutCtx<'_>, _rect: Recti) {}
     }
 
     /// Creates one real unique node for ownership checks.

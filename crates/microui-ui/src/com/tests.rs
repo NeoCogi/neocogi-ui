@@ -1,6 +1,7 @@
 //! Boundary regressions use the real runtime and deliberately retaining/reentrant components.
 use super::*;
 use nc_com::{NcCopyToBufferOffset, INcStringComPtrExt};
+mod containers;
 
 /// Positive drawable size shared by the deterministic headless fixtures.
 const SIZE: Size = Size { width: 640, height: 400 };
@@ -117,6 +118,12 @@ fn rendering_requires_synchronized_geometry_and_streams_expire_after_success_and
 /// A component can retain COM services; the runtime must enforce phase and scope at runtime.
 #[derive(Default)]
 struct WidgetProbe {
+    /// Most recent copied update geometry, used to verify concrete container allocations.
+    latest: Cell<Option<WidgetUpdate>>,
+    /// One-shot attempt to close an actively editing parent during child mounting.
+    close_on_mount: RefCell<Option<ComPtr<IWidgetAbi>>>,
+    /// Active parent authority deliberately reentered from a leaf measurement.
+    parent_layout: RefCell<Option<(ComPtr<ILayoutServiceAbi>, LayoutScope)>>,
     /// Every update, including eventless updates and routed text/key transactions.
     updates: Cell<u32>,
     /// Next content width to commit during update, rather than before traversal.
@@ -160,6 +167,10 @@ impl ILeafLayout for RetainingWidget {
     /// Checks reentry and mutation rejection while returning deterministic preferred geometry.
     fn measure(&self, _bounds: LayoutLimits, _metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
         self.probe.measures.set(self.probe.measures.get() + 1);
+        let parent = self.probe.parent_layout.borrow().clone();
+        if let Some((service, scope)) = parent {
+            assert_eq!(service.child_count(scope), Err(UI_E_BUSY));
+        }
         if self.probe.fail_measure.get() {
             return Err(NC_E_INVALID_ARG);
         }
@@ -179,6 +190,10 @@ impl IWidget for RetainingWidget {
     }
     /// Delegates mount-once state to its independent lifetime fixture.
     fn mount(&self) -> Result<(), NcStatus> {
+        let parent = self.probe.close_on_mount.borrow_mut().take();
+        if let Some(parent) = parent {
+            assert_eq!(parent.close(), Err(UI_E_BUSY));
+        }
         self.lifetime.mount()
     }
     /// Delegates logical closure to its lifetime fixture.
@@ -201,8 +216,9 @@ impl IWidget for RetainingWidget {
         self.button.set_options(options)
     }
     /// Eventless updates do not change this fixture's fixed content geometry.
-    fn update(&self, _state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
+    fn update(&self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
         let (event, text) = decode_widget_event(event, text)?;
+        self.probe.latest.set(Some(state));
         self.probe.updates.set(self.probe.updates.get() + 1);
         self.probe.events.borrow_mut().push(event);
         if matches!(event, WidgetEvent::Text) {
@@ -547,6 +563,71 @@ fn failed_com_measurement_retries_after_component_recovery() {
     window.close().unwrap();
 }
 
+/// Invalid edits leave mount claims intact; the public view cannot recover private edit authority.
+#[test]
+fn child_editor_validates_before_claiming_and_closes_retained_views() {
+    let runtime = runtime();
+    let other_runtime = self::runtime();
+    let first = button(&runtime);
+    let second = button(&runtime);
+    let foreign = button(&other_runtime);
+    let editor = first.host().unwrap().create_children().unwrap();
+    let view = editor.view().unwrap();
+    assert_eq!(view.query::<IChildrenEditorAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
+    assert_eq!(
+        editor.insert(1, first.query::<IWidgetAbi>().unwrap().as_com_ref()),
+        Err(nc_com::NC_E_OUT_OF_RANGE)
+    );
+    assert_eq!(editor.insert(0, foreign.query::<IWidgetAbi>().unwrap().as_com_ref()), Err(UI_E_OWNER));
+    editor.insert(0, first.query::<IWidgetAbi>().unwrap().as_com_ref()).unwrap().finish().unwrap();
+    assert_eq!(editor.insert(1, first.query::<IWidgetAbi>().unwrap().as_com_ref()), Err(UI_E_OWNER));
+    assert_eq!(
+        editor.replace(1, second.query::<IWidgetAbi>().unwrap().as_com_ref()),
+        Err(nc_com::NC_E_OUT_OF_RANGE)
+    );
+    assert_eq!(view.child_count().unwrap(), 1);
+    let held_child = view.child(0).unwrap();
+    editor.replace(0, second.query::<IWidgetAbi>().unwrap().as_com_ref()).unwrap().finish().unwrap();
+    assert_eq!(held_child.properties(), Err(UI_E_CLOSED));
+    assert_eq!(view.child_count().unwrap(), 1);
+    drop(editor);
+    assert_eq!(view.child_count(), Err(UI_E_CLOSED));
+    assert_eq!(view.child(0).unwrap_err(), UI_E_CLOSED);
+    assert_eq!(second.label().unwrap_err(), UI_E_CLOSED);
+    // The wrong-owner attempt did not consume the legitimate foreign mount.
+    mount(&other_runtime, &foreign.query().unwrap()).unwrap().close().unwrap();
+}
+
+/// A failed old-child close reports a committed replacement, so matching metadata can still commit.
+#[test]
+fn child_edit_reports_committed_topology_separately_from_teardown_failure() {
+    let runtime = runtime();
+    let button = button(&runtime);
+    let editor = button.host().unwrap().create_children().unwrap();
+    let view = editor.view().unwrap();
+    let probe = Rc::new(WidgetProbe::default());
+    probe.fail_close.set(true);
+    let object = RetainingWidget::from_value(RetainingWidget {
+        lifetime: button.query().unwrap(),
+        button,
+        runtime: runtime.clone(),
+        probe: probe.clone(),
+    });
+    editor.insert(0, object.query::<IWidgetAbi>().unwrap().as_com_ref()).unwrap().finish().unwrap();
+    let replacement = self::button(&runtime);
+    let outcome = editor.replace(0, replacement.query::<IWidgetAbi>().unwrap().as_com_ref()).unwrap();
+    assert_eq!(outcome.finish(), Err(NC_E_INVALID_ARG));
+    assert_eq!(probe.closes.get(), 1);
+    assert_eq!(view.child_count().unwrap(), 1);
+    assert_eq!(
+        view.child(0).unwrap().query::<IUnknown>().unwrap().as_ptr(),
+        replacement.query::<IUnknown>().unwrap().as_ptr()
+    );
+    editor.clear().unwrap().finish().unwrap();
+    assert_eq!(view.child_count().unwrap(), 0);
+    assert_eq!(replacement.label().unwrap_err(), UI_E_CLOSED);
+}
+
 /// The static facade observes one inherited state, normalized text and honest setter markers.
 #[test]
 fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validation() {
@@ -657,9 +738,13 @@ fn builtin_numeric_and_scrollbar_facades_reject_invalid_inputs_without_losing_st
     assert_eq!(scrollbar.range().unwrap().viewport, 50);
     scrollbar.set_lengths(90, 100).unwrap();
     assert_eq!(scrollbar.range().unwrap().offset, 10);
+    scrollbar.set_offset(i32::MAX).unwrap();
+    assert_eq!(scrollbar.range().unwrap().offset, 10);
     scrollbar.set_offset(-1).unwrap();
     assert_eq!(scrollbar.range().unwrap().offset, 0);
     assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
+    scrollbar.set_lengths(100, 100).unwrap();
+    assert_ne!(common.properties().unwrap().options.bits & WidgetOptions::NO_INTERACT.bits, 0);
     let swatch = ui.widgets().color_swatch(0xff102030, "RGBA").unwrap();
     let common = swatch.node_interface().unwrap();
     common.take_change().unwrap();

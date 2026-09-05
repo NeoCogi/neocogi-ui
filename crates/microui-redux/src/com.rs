@@ -7,6 +7,8 @@
 
 pub use microui_contracts::*;
 use nc_com::{ComInterface, ComPtr, ComRef, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
+mod containers;
+pub use containers::{Linear, Grid, ScrollArea, Disclosure};
 
 /// Generic static proxy for one concrete widget editing capability.
 pub struct Widget<I: ComInterface> {
@@ -70,6 +72,8 @@ impl Widget<IButtonAbi> {
 pub type Checkbox = Widget<ICheckboxAbi>;
 /// Static Textbox proxy; semantic storage belongs to its plugin object.
 pub type Textbox = Widget<ITextboxAbi>;
+/// Static proxy for the fixed scrolling editor; inherited text edits reach its actual content leaf.
+pub type TextArea = Widget<ITextAreaAbi>;
 /// Static TextBlock proxy; semantic storage belongs to its plugin object.
 pub type TextBlock = Widget<ITextBlockAbi>;
 /// Static Slider proxy; semantic storage belongs to its plugin object.
@@ -104,7 +108,10 @@ macro_rules! text_proxy {
         }
     };
 }
+text_proxy!(ITextContentAbi);
 text_proxy!(ITextboxAbi);
+text_proxy!(ITextAreaAbi);
+text_proxy!(IMultilineEditorAbi);
 text_proxy!(ITextBlockAbi);
 text_proxy!(IColorSwatchAbi);
 text_proxy!(IListItemAbi);
@@ -128,24 +135,46 @@ impl Widget<ICheckboxAbi> {
         self.interface.set_label(NcCopyFromBufferOffset::new(0, label.as_bytes()))
     }
 }
-impl Widget<ITextboxAbi> {
-    /// Returns the Unicode scalar-boundary byte cursor.
-    pub fn cursor(&self) -> Result<u64, NcStatus> {
-        self.interface.cursor()
-    }
-    /// Clamps to text length and the preceding Unicode scalar boundary.
-    pub fn set_cursor(&self, cursor: u64) -> Result<(), NcStatus> {
-        self.interface.set_cursor(cursor)
-    }
+/// Shares byte-cursor editing conveniences across concrete single-line and multiline capabilities.
+macro_rules! editor_proxy {
+    ($interface:ty) => {
+        impl Widget<$interface> {
+            /// Returns the Unicode scalar-boundary byte cursor.
+            pub fn cursor(&self) -> Result<u64, NcStatus> {
+                self.interface.cursor()
+            }
+            /// Clamps to text length and the preceding Unicode scalar boundary.
+            pub fn set_cursor(&self, cursor: u64) -> Result<(), NcStatus> {
+                self.interface.set_cursor(cursor)
+            }
+        }
+    };
 }
-impl Widget<ITextBlockAbi> {
-    /// Returns the current explicit wrapping policy.
-    pub fn wrapping(&self) -> Result<TextWrapping, NcStatus> {
-        self.interface.wrapping()
-    }
-    /// Updates wrapping and invalidates preferred size when the policy changes.
-    pub fn set_wrapping(&self, wrapping: TextWrapping) -> Result<(), NcStatus> {
-        self.interface.set_wrapping(wrapping)
+editor_proxy!(ITextboxAbi);
+editor_proxy!(ITextAreaAbi);
+editor_proxy!(IMultilineEditorAbi);
+/// Shares explicit wrapping calls without inferring policy from the resulting geometry.
+macro_rules! wrapping_proxy {
+    ($interface:ty) => {
+        impl Widget<$interface> {
+            /// Returns the current explicit wrapping policy.
+            pub fn wrapping(&self) -> Result<TextWrapping, NcStatus> {
+                self.interface.wrapping()
+            }
+            /// Updates wrapping and invalidates preferred size when the policy changes.
+            pub fn set_wrapping(&self, wrapping: TextWrapping) -> Result<(), NcStatus> {
+                self.interface.set_wrapping(wrapping)
+            }
+        }
+    };
+}
+wrapping_proxy!(ITextBlockAbi);
+wrapping_proxy!(ITextAreaAbi);
+wrapping_proxy!(IMultilineEditorAbi);
+impl Widget<ITextAreaAbi> {
+    /// Queries scrolling on this same root identity; it cannot replace the fixed editor content.
+    pub fn scrolling(&self) -> Result<Widget<IScrollingAbi>, NcStatus> {
+        Ok(Widget::from_interface(self.interface.query()?))
     }
 }
 /// Shares numeric convenience methods while each plugin retains its arithmetic rules.
@@ -201,6 +230,14 @@ pub struct WidgetFactory {
 }
 
 impl WidgetFactory {
+    /// Creates a fixed multiline editor and its real scroll children with one shared offset model.
+    pub fn text_area(&self, text: &str, wrapping: TextWrapping, scrolling: bool) -> Result<TextArea, NcStatus> {
+        Ok(TextArea::from_interface(self.interface.create_text_area(
+            NcCopyFromBufferOffset::new(0, text.as_bytes()),
+            wrapping,
+            scrolling,
+        )?))
+    }
     /// Constructs an initialized, unmounted checkbox in this runtime.
     pub fn checkbox(&self, label: &str, checked: bool) -> Result<Checkbox, NcStatus> {
         Ok(Checkbox::from_interface(
@@ -383,6 +420,8 @@ macro_rules! font_proxy {
 font_proxy!(IButtonAbi);
 font_proxy!(ICheckboxAbi);
 font_proxy!(ITextboxAbi);
+font_proxy!(ITextAreaAbi);
+font_proxy!(IMultilineEditorAbi);
 font_proxy!(ITextBlockAbi);
 font_proxy!(ISliderAbi);
 font_proxy!(INumberAbi);
