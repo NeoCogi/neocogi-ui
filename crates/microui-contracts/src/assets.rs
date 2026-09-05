@@ -1,6 +1,6 @@
 //! Immutable resource transfer: bulk copies during installation, local lookup during frames.
 use crate::{Rect, Size};
-use nc_com::{ComPtr, ComRef, NcCopyToBufferOffset, NcStatus, com_enum, com_interface, com_int_enum, com_struct};
+use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, com_enum, com_interface, com_int_enum, com_struct};
 
 /// Bulk asset semantic schema, including canonical appearance role/state table order.
 /// Bump when table ordering, mandatory resource names or implicit interpretation changes.
@@ -357,4 +357,16 @@ pub trait IUiStyle {
     /// the renderer. Invalid geometry or palette tags leave the installed revision unchanged.
     /// The caller installs the result through the ordinary transactional install_assets boundary.
     fn derive_style(&self, metrics: AssetMetrics, palette: PaletteEditAbi) -> Result<ComPtr<IAssetBundleAbi>, NcStatus>;
+}
+
+/// Optional compressed-image provider, available without font construction or theme JSON.
+pub const PNG_DECODER_CLASS: nc_com::NcGuid = nc_com::guid_from_qualified_name("microui.PngDecoder");
+
+#[com_interface(auto_guid = "microui.PngDecoder:v1")]
+/// Optional CPU decoder uploads through the target renderer's ordinary owned-image factory.
+pub trait IPngDecoder {
+    /// Decodes one static PNG and uploads exact normalized RGBA through a borrowed factory.
+    /// The complete input starts at offset zero; encoded and decoded data are bounded to 64 MiB.
+    /// Decoder failures never call the factory. Upload failures preserve their original status.
+    fn upload(&self, png: NcCopyFromBufferOffset<'_, u8>, target: ComRef<'_, crate::ITextureFactoryAbi>) -> Result<ComPtr<crate::ITextureAbi>, NcStatus>;
 }

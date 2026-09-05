@@ -1,5 +1,20 @@
 # Immutable COM assets and themes
 
+`microui-plugin-assets` without features now registers only `IPngDecoder`. Its
+`upload` method accepts one complete, nonempty PNG at offset zero and borrows an
+`ITextureFactory` for the upload. Encoded input and decoded RGBA storage each have
+a 64 MiB ceiling; dimensions are checked before pixel allocation and animated PNG
+is rejected. Invalid input never calls the factory. Factory errors preserve their
+original status, and `IAssetDiagnostics` returns an owned failure snapshot. No
+factory or temporary decoded buffer is retained after the call. Calls may reenter
+diagnostics because the decoder holds no mutable borrow across the upload.
+
+Enable `builder` to add font/atlas construction, or `theme-json` to add that builder
+and JSON themes. Native applications can ship a PNG-only plugin independently of
+their precompiled atlas. Browser assemblies register the same decoder descriptor
+statically. This separation keeps optional construction code out of PNG-only
+deployments while using the existing bounded image decoder.
+
 Applications supply one `IAssetBundle` to `IUiProvider::create_runtime` and
 `IPlatform::create_window`. Neither implementation embeds demo assets. The UI imports
 metadata into its local font/icon tables once; the renderer imports and uploads its
