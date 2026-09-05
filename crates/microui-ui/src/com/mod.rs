@@ -29,7 +29,9 @@ mod render;
 mod runtime;
 mod scroll;
 mod text_area;
-pub use runtime::{create_runtime, create_runtime_from_assets};
+pub use runtime::create_runtime_from_assets;
+#[cfg(test)]
+use runtime::create_runtime;
 
 /// Validates a whole UTF-8 replacement before touching any live object state.
 fn text(input: NcCopyFromBufferOffset<'_, u8>) -> Result<&str, NcStatus> {
@@ -39,7 +41,7 @@ fn text(input: NcCopyFromBufferOffset<'_, u8>) -> Result<&str, NcStatus> {
     std::str::from_utf8(input.as_slice()).map_err(|_| NC_E_INVALID_ARG)
 }
 
-/// Converts the canonical ABI rectangle at the temporary retained-engine boundary.
+/// Copies canonical ABI geometry into the implementation's concrete math type.
 pub(crate) fn local_rect(rect: Rect) -> crate::Recti {
     crate::rect(rect.x, rect.y, rect.width, rect.height)
 }

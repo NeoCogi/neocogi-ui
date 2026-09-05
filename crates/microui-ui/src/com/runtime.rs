@@ -1,19 +1,22 @@
-//! Runtime/window ownership with a temporary adapter over existing retained traversal.
+//! COM runtime/window ownership over the authoritative retained traversal.
 use super::*;
 use super::{
     button::Button,
     paint::{Metrics, PaintService},
     render::Backend,
 };
-use crate::{AtlasHandle, Dimensioni};
+use crate::Dimensioni;
+#[cfg(test)]
+use crate::AtlasHandle;
 use crate::Context;
 mod dialogs;
 mod menus;
 mod windows;
 use windows::NativeSurface;
 
-/// Creates a runtime without registering individual ephemeral widgets as COM classes.
-pub fn create_runtime(atlas: AtlasHandle) -> ComPtr<IUiRuntimeAbi> {
+/// Builds a native atlas fixture through the same immutable COM import boundary.
+#[cfg(test)]
+pub(super) fn create_runtime(atlas: AtlasHandle) -> ComPtr<IUiRuntimeAbi> {
     let bundle = crate::SkinBundle::from_atlas(atlas);
     let source = crate::assets::export_bundle(&bundle).expect("native test/source bundle is valid");
     create_runtime_from_assets(source.as_com_ref()).expect("exported native bundle imports")

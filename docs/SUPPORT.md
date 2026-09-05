@@ -12,24 +12,32 @@ release may therefore require a newer stable compiler.
 
 ## Platforms and renderers
 
-The library owns retained UI behavior but does not create an operating-system window, graphics
-device, or event loop. Those responsibilities belong to the application through
-`RendererBackend` and the input-forwarding methods on `Context`.
+The UI plugin owns retained widget/window-manager behavior. The platform plugin
+owns the OS window, device and native renderer together. Applications retain typed
+COM capabilities and drive the copied input/update/render sequence; Rust SDL/GPU
+owners stay inside the platform implementation.
 
-The repository includes SDL-based Glow, Vulkan, and WGPU integrations as native executable
-examples, plus a `web-sys` WebGL 2 integration for an HTML canvas. The automated project
-workflows test isolated core features, check each native backend on Linux, and build/test the
-browser host on pull requests. Publishing to GitHub Pages is a separate trusted deployment. Windows and
-macOS portability are intended, but they are not currently a CI-backed platform guarantee. Treat
-the example integrations as reference code to adapt to an application's own renderer and
-lifecycle.
+The workspace includes native SDL/Glow, Vulkan and WGPU assemblies and a static
+browser assembly using WebGL2 and DOM input/IME. Linux CI runs the real packaged
+full-demo and independent-extension tests for all three native renderers. Browser
+CI checks actual Chromium input and lifecycle behavior. macOS/Windows packaging
+jobs are configured, but local Linux results do not establish those OSes' runtime
+behavior. The [native guide](COM_NATIVE.md) records dependencies and driver limits;
+the [browser guide](WEB.md) records text input and native-filesystem restrictions.
+GitHub Pages publication is a separate trusted deployment workflow.
 
 ## API compatibility
 
 During pre-alpha, APIs and data formats may change whenever a simpler, consistent design warrants
 it. There is no compatibility or long-term-support commitment. Pin the checkout revision used by
-your application and review the [changelog](CHANGELOG.md) before upgrading. The manifest version
+your application and every plugin together, and review the [changelog](CHANGELOG.md) before upgrading. The manifest version
 is not a promise that the unreleased checkout matches a published package.
+
+The forked nc-com sources in `crates/com` are part of this checkout. Core ABI 3,
+runtime API table version 1 and hash grammar version 2 are separate discriminators.
+Use the workspace sources for both producer and consumer; a crates.io dependency
+with the same pre-alpha package version is not a substitute for this fork. Native
+modules stay loaded for the process lifetime; hot reload/unload is unsupported.
 
 ## Reporting a problem
 

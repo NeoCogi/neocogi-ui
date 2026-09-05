@@ -1,6 +1,34 @@
 # Changelog
 
-## 0.8.0 (unreleased)
+## 0.9.0-alpha.0 (unreleased)
+
+The application API now consists of a thin static facade over actual COM objects.
+This replaces the 0.8 native node/weak-handle authoring API without compatibility
+wrappers. The accepted migration and outstanding validation are recorded in
+[COM_MIGRATION.md](COM_MIGRATION.md).
+
+- Import and maintain nc-com locally: checked recursive interface identities,
+  borrowed clients, `IButton: IWidget` inheritance, generic owned local classes,
+  static runtime binding and explicit dynamic plugin exports.
+- Co-package built-in widgets, containers and window-manager policy in the UI
+  plugin; keep each renderer and its OS/device owners together in the platform
+  plugin. An optional asset plugin and independently built extension demonstrate
+  additional deployment boundaries.
+- Keep common lifecycle/options/invalidation in WidgetState, authoritative child
+  ownership behind scoped layout services, and semantic widget state concrete.
+  Native authoring/closure-renderer support remains only in behavior fixtures.
+- Share one typed EventSource transport between built-ins and independent widgets;
+  EventSession owns app state and concrete handlers outside the producer graph.
+- Preserve menus, native-path file dialogs, immutable resources, full/basic demos,
+  browser input/IME and ordered typed image/mesh/custom drawing.
+- Compile font/theme resources on the build host. Generated COM bundles compress
+  pixels and validate exact bounded expansion; all demo loaders use this path.
+
+See [author contracts](COM_AUTHORS.md) for explicit external-state, skipped-update,
+painting, lifecycle and callback responsibilities. Resize and retained setter
+invalidation remain independent of a widget's ordinary update return value.
+
+## 0.8.0
 
 Version 0.8 is a deliberate retained-API redesign. It unifies application authoring, input,
 events, surfaces, menus, and rendering around uniquely owned retained values. Superseded alpha APIs

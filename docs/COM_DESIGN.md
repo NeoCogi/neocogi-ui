@@ -251,7 +251,8 @@ pub struct ButtonObject {
 
 `ButtonState`, `EventSource<E>` and their Rust fields are implementation helpers inside the plugin. Their layout is never part of the ABI. The façade does not contain a second button state, text-layout cache, event queue or shadow widget tree.
 
-The complete compile-tested sketch is [src/lib.rs](/tmp/microui-com-plan-r10f3k23/src/lib.rs). It compiles the separate Widget/Children/Button/event capabilities and tests that a generic proxy edits a COM object, reads its text and observes the same geometry invalidation flag. This validates the contract/façade pattern with current nc-com; it is not a dynamic UI implementation or proof of the proposed nc-com ABI changes.
+The original temporary compile-tested sketch is superseded by the checked-in
+[facade regressions](../crates/microui-redux/tests/com_facade.rs). The sketch compiled the separate Widget/Children/Button/event capabilities and tests that a generic proxy edits a COM object, reads its text and observes the same geometry invalidation flag. This validates the contract/façade pattern with current nc-com; it is not a dynamic UI implementation or proof of the proposed nc-com ABI changes.
 
 Generics may also remain in a local `ListModel<T>`, renderer implementation or callback adapter. Arbitrary T does not become a wire payload. A generic list model keeps T in the application and sends scoped typed row keys to the UI; its queue/removal policy must retain or reject stale rows consistently. If payload ownership must cross plugins, define a domain interface such as `IFileEntry` with explicit path operations. Do not introduce `IValue`, `get_property(string)`, `Any`, or an IUnknown payload bag as a substitute for typed contracts.
 
