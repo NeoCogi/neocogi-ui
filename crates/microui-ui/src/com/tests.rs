@@ -968,3 +968,37 @@ mod events;
 
 mod combo;
 mod menus;
+
+/// Input is a real inherited capability and IME placement never exposes uncommitted geometry.
+#[test]
+fn platform_input_projection_and_committed_text_area_share_runtime_state() {
+    let runtime = runtime();
+    let ui = microui_redux::Ui::from_interface(runtime.clone()).unwrap();
+    let input = ui.input_sink().unwrap();
+    let identity: ComPtr<nc_com::IUnknown> = input.query().unwrap();
+    assert_eq!(identity.as_ptr(), runtime.query::<nc_com::IUnknown>().unwrap().as_ptr());
+    let editor = ui.widgets().textbox("start").unwrap();
+    let window = ui.window("IME", RECT, &editor).unwrap();
+    assert_eq!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::None);
+    input.input(UiInput::Key(KeyStroke { key: KeyCode::TAB, value: 0, pressed: true, repeat: false, modifiers: 0 }).into(), NcCopyFromBufferOffset::new(0, &[])).unwrap();
+    ui.update(SIZE).unwrap();
+    let TextInputArea::Area(first) = TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap() else { panic!("focused editor must request IME") };
+    assert!(first.width > 0 && first.height > 0);
+    input.input(UiInput::Text.into(), NcCopyFromBufferOffset::new(0, "é☃".as_bytes())).unwrap();
+    assert_eq!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::None);
+    ui.update(SIZE).unwrap();
+    assert_eq!(editor.text().unwrap(), "starté☃");
+    let mut rect = RECT;
+    rect.x += 30;
+    window.set_rect(rect).unwrap();
+    assert_eq!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::None);
+    ui.update(SIZE).unwrap();
+    let TextInputArea::Area(moved) = TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap() else { panic!("moved editor keeps focus") };
+    assert_eq!(moved.x, first.x + 30);
+    window.close().unwrap();
+    ui.update(SIZE).unwrap();
+    assert_eq!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::None);
+    ui.close().unwrap();
+    assert_eq!(ui.text_input_area().err(), Some(UI_E_CLOSED));
+    assert_eq!(input.input(UiInput::Cancel.into(), NcCopyFromBufferOffset::new(0, &[])), Err(UI_E_CLOSED));
+}

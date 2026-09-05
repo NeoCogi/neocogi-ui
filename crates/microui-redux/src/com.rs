@@ -411,6 +411,14 @@ impl Ui {
     pub fn input(&self, event: UiInput, text: &str) -> Result<(), NcStatus> {
         self.runtime.input(event.into(), NcCopyFromBufferOffset::new(0, text.as_bytes()))
     }
+    /// Retains the runtime's input projection once for a host loop or concrete input interceptor.
+    pub fn input_sink(&self) -> Result<ComPtr<IInputSinkAbi>, NcStatus> {
+        self.runtime.query()
+    }
+    /// Reads the committed editor area used by the platform's native text input service.
+    pub fn text_input_area(&self) -> Result<TextInputAreaAbi, NcStatus> {
+        self.runtime.text_input_area()
+    }
     /// Processes input and synchronizes independently recorded geometry changes.
     pub fn update(&self, size: Size) -> Result<(), NcStatus> {
         self.runtime.update(size)

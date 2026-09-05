@@ -733,3 +733,42 @@ render passes remain private Rust values inside that binary. An independently
 loaded GPU extension cannot borrow these native Rust objects through the generic
 COM API. Such an extension would need a separately designed backend-specific ABI;
 this migration intentionally provides typed scene/resource capabilities instead.
+
+## Platform input and native composition
+
+`IUiRuntime: IInputSink` exposes the same ordered input queue through inherited
+calls or a separately retained input projection. Cache that projection once in
+the host loop. `IPlatformWindow::poll(destination)` borrows it only for the
+synchronous call; the platform never owns an application input destination.
+An application interceptor can implement `IInputSink` as a concrete COM class,
+retain the runtime input projection and forward accepted events explicitly.
+
+Drain `PollStatus::EVENT` until `IDLE`; `CLOSE` requests host shutdown. A failed
+input delivery consumes the attempted event and preserves later queued events.
+Do not replay the failed event automatically: a destination may have committed
+part of its work before returning an error. Recursive polling of the same window
+returns `UI_E_BUSY`, including during delivery. Native queues are per-window;
+process quit is broadcast. Consecutive pointer motion may be coalesced within one
+window's queue, but a button/key/text transition always separates motion runs.
+
+After draining, read `size()`, call `update`/`update_with_events`, synchronize
+`text_input(ui.text_input_area()?)`, and render. A changed physical size triggers
+measurement through the ordinary update contract. Skip rendering zero-sized
+or minimized drawables. Pointer positions and IME rectangles use physical
+pixels, including captured positions outside the drawable; the platform converts
+logical SDL or CSS coordinates at its own boundary.
+
+`text_input_area()` reports only committed editable focus. Pending input,
+geometry edits and removed focus must not expose stale rectangles. It is a
+placement hint, not editor content or an editable text buffer. Synchronize it
+after successful updates. Repeated activation preserves an in-progress native
+composition. SDL's process-wide IME is controlled only by the focused native
+window, so synchronizing an unfocused window cannot disable another's editor.
+
+Logical key presses/releases carry the complete modifier snapshot and repeat
+state. They never synthesize committed text. SDL TextInput and the DOM text
+commit are authoritative, including complete Unicode strings; composition
+previews remain platform-owned. Widget/app authors must not insert key scalars
+again on the text path. Focus/capture cancellation is queued in input order and
+resets held state. Fractional wheel motion is accumulated in physical pixels;
+focus cancellation discards the previous gesture's remainder.

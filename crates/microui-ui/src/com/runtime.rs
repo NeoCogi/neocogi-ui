@@ -332,6 +332,19 @@ impl IUiFactory for Runtime {
     }
 }
 
+impl IInputSink for Runtime {
+    /// Validates before enqueueing and owns the copied text after this synchronous call.
+    fn input(&self, event: UiInputAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        let storage = &self.storage;
+        storage.open()?;
+        let mut context = storage.context()?;
+        super::input::enqueue(&mut context, event, text)?;
+        storage.pending.set(true);
+        Ok(())
+    }
+
+}
+
 impl IUiRuntime for Runtime {
     /// Exposes an owned immutable revision without borrowing mutable tree state.
     fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
@@ -363,14 +376,16 @@ impl IUiRuntime for Runtime {
         storage.pending.set(true);
         Ok(())
     }
-    /// Validates before enqueueing and owns the copied text after this synchronous call.
-    fn input(&self, event: UiInputAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        let storage = &self.storage;
-        storage.open()?;
-        let mut context = storage.context()?;
-        super::input::enqueue(&mut context, event, text)?;
-        storage.pending.set(true);
-        Ok(())
+    /// Exposes only committed geometry; pending setters or input hide stale IME placement.
+    fn text_input_area(&self) -> Result<TextInputAreaAbi, NcStatus> {
+        self.storage.open()?;
+        let mut context = self.storage.context()?;
+        self.storage.collect_changes(&mut context)?;
+        let area = if self.storage.pending.get() { None } else { context.text_input_area() };
+        Ok(match area {
+            Some(area) => TextInputArea::Area(Rect { x: area.x, y: area.y, width: area.width, height: area.height }),
+            None => TextInputArea::None,
+        }.into())
     }
 
     /// Polling and eventful updates execute the same concrete phase sequence.

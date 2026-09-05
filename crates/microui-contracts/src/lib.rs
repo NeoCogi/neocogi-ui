@@ -27,6 +27,8 @@ mod path;
 pub use path::*;
 mod leaves;
 pub use leaves::*;
+mod platform;
+pub use platform::*;
 mod input;
 pub use input::{
     KeyCode, KeyStroke, Point, WidgetEvent, WidgetEventAbi, WidgetEventTag, WidgetUpdate, WidgetAction, decode_widget_event, UiInput, UiInputAbi, UiInputTag,
@@ -253,55 +255,6 @@ pub trait ILeafLayout {
 }
 
 com_int_enum! {
-    /// Platform event kind; input stays explicit rather than using an erased payload.
-    pub enum PlatformEventKind: u8 {
-        /// No event is available.
-        NONE = 0,
-        /// The user requested application exit.
-        QUIT = 1,
-        /// Pointer motion in drawable coordinates.
-        POINTER_MOVE = 2,
-        /// Primary pointer button pressed.
-        POINTER_DOWN = 3,
-        /// Primary pointer button released.
-        POINTER_UP = 4,
-        /// Drawable size changed; the host must update before drawing again.
-        RESIZE = 5,
-        /// The focused control's primary keyboard action was requested.
-        ACTIVATE = 6,
-        /// Advance focus to the next tab stop.
-        TAB = 7,
-    }
-}
-
-#[com_struct]
-/// One copied platform event; x/y are pointer coordinates or resize dimensions.
-pub struct PlatformEvent {
-    /// Explicit interpretation of the remaining fields.
-    pub kind: PlatformEventKind,
-    /// Horizontal pointer coordinate or drawable width.
-    pub x: i32,
-    /// Vertical pointer coordinate or drawable height.
-    pub y: i32,
-}
-
-#[com_interface(auto_guid = "microui.PlatformWindow:v1")]
-/// Native window, event pump and renderer share one COM identity and lifetime.
-pub trait IPlatformWindow {
-    /// Returns current drawable dimensions, including device scaling.
-    fn size(&self) -> Result<Size, NcStatus>;
-    /// Removes one queued native event without calling application code.
-    fn poll(&self) -> Result<PlatformEvent, NcStatus>;
-}
-
-#[com_interface(auto_guid = "microui.Platform:v1")]
-/// Platform plugin's concrete window factory.
-pub trait IPlatform {
-    /// Creates an independent native window and renderer; title is UTF-8 at offset zero.
-    fn create_window(&self, title: NcCopyFromBufferOffset<'_, u8>, size: Size, assets: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IPlatformWindowAbi>, NcStatus>;
-}
-
-com_int_enum! {
     /// Visibility intent or effective surface visibility, as documented by the operation.
     pub enum Visibility: u8 {
         /// Excluded from rendering and input.
@@ -478,7 +431,7 @@ pub trait IWindowManager {
 
 #[com_interface(auto_guid = "microui.UiRuntime:v1")]
 /// One independent retained UI, also exposing its widget factory/window manager.
-pub trait IUiRuntime {
+pub trait IUiRuntime: IInputSink {
     /// Retains the currently installed immutable revision, suitable for restoration or another consumer.
     fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus>;
     /// Validates compatible resources and prepares the renderer upload before publishing either UI
@@ -490,9 +443,9 @@ pub trait IUiRuntime {
     /// Borrows application dispatch at each safe boundary; handlers may mutate windows/topology before the next input is routed.
     /// The runtime never retains dispatcher; update/render reentry returns BUSY even while the context is available to handlers.
     fn update_with_events(&self, size: Size, dispatcher: ComRef<'_, IEventDispatcherAbi>) -> Result<(), NcStatus>;
-    /// Queues one copied host event; Text borrows complete UTF-8 bytes only for this call.
-    /// The next update applies queued events in order and synchronizes each input transaction.
-    fn input(&self, event: UiInputAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    /// Returns the committed editable focus rectangle in drawable coordinates, or None while
+    /// geometry/input is pending. Hosts synchronize native IME after each successful update.
+    fn text_input_area(&self) -> Result<TextInputAreaAbi, NcStatus>;
     /// Paints only after update has synchronized geometry for this drawable size.
     fn render(&self, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus>;
     /// Logically closes every mounted subtree; COM allocations may outlive closure.
