@@ -13,11 +13,11 @@ glow = ["microui-redux-demo-host/glow"]
 webgl = ["microui-redux-demo-host/webgl"]
 vulkan = ["microui-redux-demo-host/vulkan"]
 wgpu = ["microui-redux-demo-host/wgpu"]
-prebuilt-atlas = ["microui-redux-demo-assets/prebuilt-atlas"]
 
 [dependencies]
-microui-ui.workspace = true
-microui-redux-demo-assets = { workspace = true, features = ["builder"] }
+microui-redux.workspace = true
+nc-com = { workspace = true, features = ["std", "macros"] }
+microui-redux-demo-assets = { workspace = true, features = ["prebuilt-com"] }
 microui-redux-demo-host.workspace = true
 rs-math3d.workspace = true
 

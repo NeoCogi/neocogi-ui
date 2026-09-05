@@ -27,62 +27,70 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 //
-//! Calculator retained-mode example.
-//!
-//! This example builds a small calculator UI with the retained UI node set API and the shared SDL
-//! demo host.
-use microui_redux_demo_assets as atlas_assets;
-use microui_redux_demo_host::Application;
-use microui_ui::prelude::*;
+//! Calculator with concrete application state and typed COM button handlers.
+use microui_redux::*;
+use microui_redux_demo_host::{AppState, Host, HostError};
+use nc_com::{ComPtr, NcStatus};
 
+/// Maximum typed display length; calculated results retain the existing decimal formatting policy.
 const DISPLAY_MAX_LEN: usize = 24;
+/// Fraction of the client height reserved for the result field.
 const DISPLAY_HEIGHT_FRACTION: f32 = 0.20;
+/// Every keypad row receives an equal share of the remaining height.
 const KEYPAD_ROW_HEIGHT_WEIGHT: f32 = 1.0;
+/// Named recipe font selected once through the COM font capability.
 const DISPLAY_FONT: &str = "calculator-display";
 
 #[derive(Copy, Clone)]
+/// Explicit pending arithmetic operation; no function pointer hides its behavior.
 enum Operator {
+    /// Add the right operand.
     Add,
+    /// Subtract the right operand.
     Subtract,
+    /// Multiply by the right operand.
     Multiply,
+    /// Divide, rejecting a zero divisor.
     Divide,
 }
 
 #[derive(Copy, Clone)]
+/// Concrete data carried by each typed button subscription.
 enum Action {
+    /// Append this decimal digit.
     Digit(char),
+    /// Insert one decimal separator.
     Dot,
+    /// Toggle the current entry sign.
     ToggleSign,
+    /// Commit the current operand and select the next operation.
     Op(Operator),
+    /// Evaluate the pending binary operation once.
     Equals,
+    /// Reset both operands and the pending operation.
     ClearAll,
+    /// Reset only the current editable entry.
     ClearEntry,
+    /// Remove the final typed character.
     Backspace,
 }
 
-struct CalcButton {
-    action: Action,
-    submitted: WidgetEventPortHandle<ButtonSubmitted>,
-    widget: Option<Node>,
-}
-
-impl CalcButton {
-    fn new(label: &str, action: Action) -> Self {
-        let (button, node) = Button::create(ButtonParameters::with_opt(label, WidgetOption::FRAME | WidgetOption::ALIGN_CENTER));
-        let submitted = button.submitted();
-        Self { action, submitted, widget: Some(node) }
-    }
-}
-
+/// Arithmetic model owns the single authoritative entry string and pending operand state.
 struct Calculator {
+    /// Current entry or formatted result, copied to the textbox only after actions.
     display: String,
+    /// Committed left operand while a binary operation is pending.
     accumulator: Option<f64>,
+    /// Operation awaiting the current right operand.
     pending: Option<Operator>,
+    /// The next digit begins a fresh entry after an operator or result.
     clear_on_input: bool,
+    /// Arithmetic failure requires reset before another operation can run.
     error: bool,
 }
 
 impl Calculator {
+    /// Initializes a zero entry without a pending operation.
     fn new() -> Self {
         Self {
             display: "0".to_string(),
@@ -93,10 +101,12 @@ impl Calculator {
         }
     }
 
+    /// Borrows the authoritative text for one silent textbox synchronization.
     fn display_text(&self) -> &str {
         &self.display
     }
 
+    /// Dispatches one explicit action and preserves the calculator error/reset rules.
     fn apply(&mut self, action: Action) {
         match action {
             Action::ClearAll => {
@@ -134,6 +144,7 @@ impl Calculator {
         }
     }
 
+    /// Resets the complete arithmetic transaction.
     fn clear_all(&mut self) {
         self.display = "0".to_string();
         self.accumulator = None;
@@ -142,18 +153,21 @@ impl Calculator {
         self.error = false;
     }
 
+    /// Resets the right-hand entry while retaining a pending left operand.
     fn clear_entry(&mut self) {
         self.display = "0".to_string();
         self.clear_on_input = false;
         self.error = false;
     }
 
+    /// Starts fresh when editing resumes after a failed calculation.
     fn recover_from_error(&mut self) {
         if self.error {
             self.clear_all();
         }
     }
 
+    /// Starts a new entry when needed and enforces the typed character budget.
     fn insert_digit(&mut self, digit: char) {
         if !digit.is_ascii_digit() {
             return;
@@ -178,6 +192,7 @@ impl Calculator {
         }
     }
 
+    /// Keeps at most one decimal separator in the active entry.
     fn insert_dot(&mut self) {
         if self.clear_on_input {
             self.display = "0".to_string();
@@ -192,6 +207,7 @@ impl Calculator {
         }
     }
 
+    /// Changes sign without manufacturing a negative zero entry.
     fn toggle_sign(&mut self) {
         if self.display == "0" || self.display == "0." {
             return;
@@ -204,6 +220,7 @@ impl Calculator {
         }
     }
 
+    /// Removes one typed character while preserving a valid zero fallback.
     fn backspace(&mut self) {
         if self.clear_on_input {
             self.display = "0".to_string();
@@ -218,6 +235,7 @@ impl Calculator {
         }
     }
 
+    /// Evaluates an existing pending operation before installing the next operator.
     fn set_operator(&mut self, op: Operator) {
         let rhs = self.current_value();
 
@@ -243,6 +261,7 @@ impl Calculator {
         self.clear_on_input = true;
     }
 
+    /// Consumes the pending operation and makes its result the next left operand.
     fn evaluate(&mut self) {
         let Some(pending) = self.pending else {
             return;
@@ -264,10 +283,12 @@ impl Calculator {
         }
     }
 
+    /// Parses the entry maintained by the concrete editing rules.
     fn current_value(&self) -> f64 {
         self.display.parse::<f64>().unwrap_or(0.0)
     }
 
+    /// Rejects zero division and nonfinite arithmetic before publishing a result.
     fn compute(lhs: f64, rhs: f64, op: Operator) -> Option<f64> {
         let result = match op {
             Operator::Add => lhs + rhs,
@@ -284,6 +305,7 @@ impl Calculator {
         if result.is_finite() { Some(result) } else { None }
     }
 
+    /// Formats decimal output, removes redundant fractional zeros and normalizes negative zero.
     fn format_value(value: f64) -> String {
         let mut out = format!("{value:.10}");
         while out.contains('.') && out.ends_with('0') {
@@ -295,6 +317,7 @@ impl Calculator {
         if out == "-0" || out.is_empty() { "0".to_string() } else { out }
     }
 
+    /// Terminates the failed operation and leaves an explicit recoverable display state.
     fn set_error(&mut self) {
         self.display = "Error".to_string();
         self.accumulator = None;
@@ -304,90 +327,92 @@ impl Calculator {
     }
 }
 
+/// Local calculator model and editing capability; topology remains in the UI plugin.
 struct State {
-    window: WindowHandle,
-    display: TypedWidgetHandle<Textbox>,
+    /// The fixed calculator panel follows the platform drawable rectangle.
+    window: ComPtr<IWindowAbi>,
+    /// The result field is edited only after a calculator action changes the display.
+    display: Textbox,
+    /// Arithmetic and formatting are ordinary concrete Rust state, independent of any plugin.
     calculator: Calculator,
-    buttons: [CalcButton; 20],
+}
+impl AppState for State {
+    /// Resizing updates the actual logical window; unchanged geometry is an inexpensive no-op.
+    fn frame(&mut self, _host: &Host, size: Size, _seconds: f64) -> Result<bool, NcStatus> {
+        self.window.set_rect(Rect {
+            x: 0,
+            y: 0,
+            width: size.width,
+            height: size.height,
+        })?;
+        Ok(true)
+    }
+}
+impl EventHandler<State, events::Activation> for Action {
+    /// Each button stores its concrete action inline and edits the display in the same input transaction.
+    fn handle(&mut self, state: &mut State, _event: &events::Activation) -> Result<(), NcStatus> {
+        state.calculator.apply(*self);
+        state.display.set_text(state.calculator.display_text())
+    }
 }
 
-fn main() {
-    let atlas = atlas_assets::load_atlas();
-    let fw = Application::new(atlas, |_gl, ctx| {
-        // Resolve the application name once through the catalog. Derived theme atlases preserve
-        // this exact FontId when copying or replacing the display font.
-        let display_font = ctx
-            .resource_catalog()
-            .font_ref(DISPLAY_FONT)
-            .expect("calculator display font should be baked into the application resource catalog");
-        let (display_state, display_runtime) =
-            Textbox::create(TextboxParameters::with_opt("0", WidgetOption::FRAME | WidgetOption::ALIGN_RIGHT | WidgetOption::NO_INTERACT).font(display_font));
-        let mut buttons = [
-            CalcButton::new("AC", Action::ClearAll),
-            CalcButton::new("CE", Action::ClearEntry),
-            CalcButton::new("BS", Action::Backspace),
-            CalcButton::new("/", Action::Op(Operator::Divide)),
-            CalcButton::new("7", Action::Digit('7')),
-            CalcButton::new("8", Action::Digit('8')),
-            CalcButton::new("9", Action::Digit('9')),
-            CalcButton::new("*", Action::Op(Operator::Multiply)),
-            CalcButton::new("4", Action::Digit('4')),
-            CalcButton::new("5", Action::Digit('5')),
-            CalcButton::new("6", Action::Digit('6')),
-            CalcButton::new("-", Action::Op(Operator::Subtract)),
-            CalcButton::new("1", Action::Digit('1')),
-            CalcButton::new("2", Action::Digit('2')),
-            CalcButton::new("3", Action::Digit('3')),
-            CalcButton::new("+", Action::Op(Operator::Add)),
-            CalcButton::new("+/-", Action::ToggleSign),
-            CalcButton::new("0", Action::Digit('0')),
-            CalcButton::new(".", Action::Dot),
-            CalcButton::new("=", Action::Equals),
-        ];
-        let (_, display_row) = Linear::create(LinearParameters::horizontal([LinearItem::flex(display_runtime, 1.0)]).stretch_cross());
-        let columns = [TrackSize::Flex(1.0); 4];
-        let rows = [TrackSize::Flex(KEYPAD_ROW_HEIGHT_WEIGHT); 5];
-        let button_nodes = buttons
-            .iter_mut()
-            .map(|button| button.widget.take().expect("calculator tree is built once"))
-            .collect::<Vec<_>>();
-        let (_, grid) = Grid::create(GridParameters::new(columns, rows, button_nodes));
-        let (_, keypad_column) = Linear::create(LinearParameters::vertical([LinearItem::flex(grid, 1.0)]));
-        let (_, keypad_row) = Linear::create(LinearParameters::horizontal([LinearItem::flex(keypad_column, 1.0)]).stretch_cross());
-        let display_weight = DISPLAY_HEIGHT_FRACTION;
-        let (_, tree) = Linear::create(LinearParameters::vertical([
-            LinearItem::flex(display_row, display_weight),
-            LinearItem::flex(keypad_row, 1.0 - display_weight),
-        ]));
-        let window = ctx.ui().create_window(Window::new("Calculator", rect(0, 0, 320, 420), tree));
-        ctx.ui()
-            .set_window_options(&window, WindowOption::FRAME | WindowOption::NO_RESIZE | WindowOption::NO_TITLE)
-            .expect("calculator window should remain registered");
-        State {
-            window,
-            display: display_state,
-            calculator: Calculator::new(),
-            buttons,
-        }
-    })
-    .unwrap();
-
-    fw.event_loop_events(
-        |state, context| {
-            for button in &state.buttons {
-                context
-                    .subscribe(button.submitted.clone(), {
-                        let action = button.action;
-                        move |state, _, _| state.calculator.apply(action)
-                    })
-                    .expect("calculator button should remain alive");
-            }
-        },
-        |ctx, state, dim| {
-            ctx.ui()
-                .set_window_rect(&state.window, rect(0, 0, dim.width, dim.height))
-                .expect("calculator window should remain registered");
-            let _ = state.display.set_text(state.calculator.display_text());
-        },
-    );
+/// Builds one COM grid of buttons; no separate CalcButton, event port or shadow node list is needed.
+fn main() -> Result<(), HostError> {
+    let host = Host::new("Calculator", Size { width: 320, height: 420 }, microui_redux_demo_assets::load_bundle()?)?;
+    let display = host.ui.widgets().textbox("0")?;
+    display.set_named_font(DISPLAY_FONT)?;
+    display.set_options(WidgetOptions {
+        bits: WidgetOptions::FRAME.bits | WidgetOptions::ALIGN_RIGHT.bits | WidgetOptions::NO_INTERACT.bits,
+    })?;
+    let grid = host.ui.widgets().grid(
+        &[LayoutTrack::Flex { weight: 1.0 }; 4],
+        &[LayoutTrack::Flex { weight: KEYPAD_ROW_HEIGHT_WEIGHT }; 5],
+    )?;
+    let tree = host.ui.widgets().linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch)?;
+    tree.insert(0, &display, LinearEdge::new(LayoutTrack::Flex { weight: DISPLAY_HEIGHT_FRACTION }))?
+        .finish()?;
+    tree.insert(1, &grid, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 - DISPLAY_HEIGHT_FRACTION }))?
+        .finish()?;
+    let window = host.ui.window("Calculator", Rect { x: 0, y: 0, width: 320, height: 420 }, &tree)?;
+    window.set_options(WindowOptions {
+        bits: WindowOptions::FRAME.bits | WindowOptions::NO_RESIZE.bits | WindowOptions::NO_TITLE.bits,
+    })?;
+    let events = EventSession::new(State {
+        window,
+        display,
+        calculator: Calculator::new(),
+    });
+    for (index, (label, action)) in [
+        ("AC", Action::ClearAll),
+        ("CE", Action::ClearEntry),
+        ("BS", Action::Backspace),
+        ("/", Action::Op(Operator::Divide)),
+        ("7", Action::Digit('7')),
+        ("8", Action::Digit('8')),
+        ("9", Action::Digit('9')),
+        ("*", Action::Op(Operator::Multiply)),
+        ("4", Action::Digit('4')),
+        ("5", Action::Digit('5')),
+        ("6", Action::Digit('6')),
+        ("-", Action::Op(Operator::Subtract)),
+        ("1", Action::Digit('1')),
+        ("2", Action::Digit('2')),
+        ("3", Action::Digit('3')),
+        ("+", Action::Op(Operator::Add)),
+        ("+/-", Action::ToggleSign),
+        ("0", Action::Digit('0')),
+        (".", Action::Dot),
+        ("=", Action::Equals),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let button = host.ui.widgets().button(label)?;
+        button.set_options(WidgetOptions {
+            bits: WidgetOptions::FRAME.bits | WidgetOptions::ALIGN_CENTER.bits,
+        })?;
+        grid.insert(index as u32, &button, GridExtent { columns: 1, rows: 1 })?.finish()?;
+        events.subscribe_activation(&button, action)?;
+    }
+    host.run(events)
 }

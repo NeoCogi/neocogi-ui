@@ -30,8 +30,8 @@
 //
 //! View state and interaction handling for the 3D demo viewport.
 
-use super::*;
-use camera::*;
+use rs_math3d::*;
+use super::camera::*;
 
 pub enum UpdateResult {
     Handled,

@@ -9,15 +9,18 @@ repository.workspace = true
 
 [features]
 default = ["wgpu"]
-glow = ["microui-redux-demo-host/glow", "microui-redux-demo-renderer/glow"]
-webgl = ["microui-redux-demo-host/webgl", "microui-redux-demo-renderer/webgl"]
-vulkan = ["microui-redux-demo-host/vulkan", "microui-redux-demo-renderer/vulkan"]
-wgpu = ["microui-redux-demo-host/wgpu", "microui-redux-demo-renderer/wgpu"]
-prebuilt-atlas = ["microui-redux-demo-assets/prebuilt-atlas"]
+glow = ["microui-redux-demo-host/glow"]
+webgl = ["microui-redux-demo-host/webgl"]
+vulkan = ["microui-redux-demo-host/vulkan"]
+wgpu = ["microui-redux-demo-host/wgpu"]
 
 [dependencies]
-microui-ui = { workspace = true, features = ["theme-json"] }
-microui-redux-demo-assets = { workspace = true, features = ["builder"] }
-microui-redux-demo-host.workspace = true
-microui-redux-demo-renderer.workspace = true
+microui-redux.workspace = true
+nc-com = { workspace = true, features = ["std", "macros"] }
+microui-demo-contracts.workspace = true
+microui-redux-demo-assets = { workspace = true, features = ["full-demo"] }
+microui-redux-demo-host = { workspace = true, features = ["png-assets"] }
 rs-math3d.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen.workspace = true

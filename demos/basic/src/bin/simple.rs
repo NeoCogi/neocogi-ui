@@ -50,29 +50,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-//! Minimal retained-mode application example.
-//!
-//! This example wires the common application runner to a small retained UI node set.
-use microui_redux_demo_assets as atlas_assets;
-use microui_redux_demo_host::Application;
-use microui_ui::prelude::*;
+//! Minimal facade-only application over dynamically or statically assembled COM plugins.
+use microui_redux::*;
+use microui_redux_demo_host::{AppState, Host, HostError};
 
-struct State {
-    _window: WindowHandle,
-}
+/// This example has no mutable application state; the tree and button belong to the UI plugin.
+struct State;
+impl AppState for State {}
 
-fn main() {
-    let atlas = atlas_assets::load_atlas();
-    let fw = Application::new(atlas.clone(), move |_gl, ctx| {
-        let (_, hello) = Button::create(ButtonParameters::with_opt("Hello World!", WidgetOption::FRAME | WidgetOption::ALIGN_CENTER));
-        let (_, tree) = Linear::create(LinearParameters::horizontal([LinearItem::flex(hello, 1.0)]));
-        State {
-            _window: ctx.ui().create_window(Window::new("Hello Window", rect(40, 40, 300, 450), tree)),
-        }
-    })
-    .unwrap();
-
-    fw.event_loop(|_ctx, state, _dimensions| {
-        let _ = state;
-    });
+/// Builds the same small tree on native SDL and browser WebGL through the typed facade.
+fn main() -> Result<(), HostError> {
+    let host = Host::new("Hello", Size { width: 640, height: 480 }, microui_redux_demo_assets::load_bundle()?)?;
+    let hello = host.ui.widgets().button("Hello World!")?;
+    hello.set_options(WidgetOptions {
+        bits: WidgetOptions::FRAME.bits | WidgetOptions::ALIGN_CENTER.bits,
+    })?;
+    let tree = host.ui.widgets().linear(FlowDirection::LEFT_TO_RIGHT, CrossSize::Stretch)?;
+    tree.insert(0, &hello, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))?.finish()?;
+    host.ui.window("Hello Window", Rect { x: 40, y: 40, width: 300, height: 400 }, &tree)?;
+    host.run(EventSession::new(State))
 }

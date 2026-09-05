@@ -4,17 +4,26 @@ set -euo pipefail
 workspace_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 target="wasm32-unknown-unknown"
 artifact_name="microui-redux-demo-full"
-artifact_dir="$workspace_root/target/$target/release"
-site_dir="$workspace_root/target/web-demo"
-staging_dir="$workspace_root/target/web-demo-staging"
-web_tools_dir="$workspace_root/target/web-tools"
-wasm_bindgen="$web_tools_dir/bin/wasm-bindgen"
+target_dir="${CARGO_TARGET_DIR:-$workspace_root/target}"
+if [[ "$target_dir" != /* ]]; then target_dir="$workspace_root/$target_dir"; fi
+profile="${MICROUI_WEB_PROFILE:-release}"
+artifact_dir="$target_dir/$target/$profile"
+site_dir="$target_dir/web-demo"
+staging_dir="$target_dir/web-demo-staging"
+web_tools_dir="$target_dir/web-tools"
+wasm_bindgen="${MICROUI_WASM_BINDGEN:-$web_tools_dir/bin/wasm-bindgen}"
 wasm_bindgen_version="0.2.127"
 command="${1:-serve}"
 port="${2:-8000}"
 
 build() {
-  rustup target add "$target"
+  cd "$workspace_root"
+  if [[ "$profile" != release && "$profile" != debug ]]; then
+    echo "MICROUI_WEB_PROFILE must be release or debug" >&2; exit 2
+  fi
+  if ! rustup target list --installed | rg -q "^$target$"; then rustup target add "$target"; fi
+  profile_args=()
+  if [[ "$profile" == release ]]; then profile_args+=(--release); fi
   if [[ ! -x "$wasm_bindgen" ]] || [[ "$($wasm_bindgen --version)" != "wasm-bindgen $wasm_bindgen_version" ]]; then
     cargo install \
       --root "$web_tools_dir" \
@@ -27,9 +36,9 @@ build() {
     -p microui-redux-demo-full \
     --bin "$artifact_name" \
     --target "$target" \
-    --release \
+    "${profile_args[@]}" \
     --no-default-features \
-    --features "webgl prebuilt-atlas"
+    --features webgl
 
   rm -rf "$staging_dir"
   mkdir -p "$staging_dir"

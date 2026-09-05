@@ -27,64 +27,40 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 //
-//! A small rotating cube that demonstrates typed backend-frame custom rendering.
+//! A concrete COM leaf draws a CPU-projected cube through solid painter geometry.
 //!
-//! The cube geometry is intentionally small, while `rs_math3d` supplies its vectors, quaternion
-//! rotation, view/projection matrices, and screen projection. The important part of the example
-//! is the ownership path used to submit the resulting triangles:
-//!
-//! 1. one Cargo feature selects a concrete renderer as `SelectedBackend`;
-//! 2. a retained `CubeWidget` reserves layout space and provides normal widget state;
-//! 3. a custom-render callback receives the already-active concrete backend frame;
-//! 4. the callback calls an inherent method implemented by all three example frame types.
-//!
-//! No backend handle is captured and no second frame is opened. The supplied frame already owns
-//! the backend's exclusive mutable borrow and is finalized by `Drop` after display-list execution.
-//!
-//! Run with one backend, for example:
-//!
-//! ```text
-//! cargo run -p microui-redux-basic-demos --bin backend-frame-cube --no-default-features --features glow
-//! cargo run -p microui-redux-basic-demos --bin backend-frame-cube --no-default-features --features vulkan
-//! cargo run -p microui-redux-basic-demos --bin backend-frame-cube --no-default-features --features wgpu
-//! ```
+//! The application owns only camera/animation data. No backend frame, native handle, callback or
+//! atlas packing detail crosses the widget boundary. The same code runs on every platform backend.
+use microui_redux::*;
+use microui_redux_demo_host::{AppState, Host, HostError};
+use nc_com::{ComRef, NcStatus};
+use rs_math3d::{EPS_F32, Vec2f, Vec3f, Quatf, lookat, perspective, project3};
+use std::{cell::Cell, rc::Rc};
 
-use microui_redux_demo_assets as atlas_assets;
-use microui_redux_demo_host::Application;
-use microui_ui::{prelude::*, render::Vertex};
-use rs_math3d::{EPS_F32, lookat, perspective, project3};
-use std::cell::Cell;
-use std::rc::Rc;
-
-/// Minimal persistent widget state for the custom-render node.
-///
-/// Rendering is intentionally absent from `paint`: the typed callback registered on `Context`
-/// records the cube at the correct display-list ordering point. A real interactive viewport could
-/// process mouse input in `update` and share camera state with that callback.
-struct CubeWidget {
-    opt: WidgetOption,
+/// Stateless drawing behavior reads the application's concrete paint-only animation value.
+struct Cube {
+    /// External animation affects paint, so preferred size never needs to change with the angle.
+    angle: Rc<Cell<f32>>,
 }
-
-impl Default for CubeWidget {
-    /// Creates the CubeWidget runtime with its fixed input policy.
-    fn default() -> Self {
-        CubeWidget { opt: WidgetOption::NO_INTERACT }
+impl LeafContent for Cube {
+    /// The preferred square honors bounded zero and independent finite constraints.
+    fn measure(&self, bounds: LayoutLimits, _metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
+        Ok(Size {
+            width: if bounds.width.kind == LimitKind::FINITE {
+                300.min(bounds.width.extent)
+            } else {
+                300
+            },
+            height: if bounds.height.kind == LimitKind::FINITE {
+                300.min(bounds.height.extent)
+            } else {
+                300
+            },
+        })
     }
-}
-
-impl Widget for CubeWidget {
-    fn widget_opt(&self) -> &WidgetOption {
-        &self.opt
-    }
-
-    fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {
-        // The custom-render callback is the paint path for this node.
-    }
-}
-
-impl LeafWidget for CubeWidget {
-    fn measure(&self, _style: &Skin, _atlas: &AtlasHandle, _constraints: Constraints) -> Dimensioni {
-        Dimensioni::new(300, 300)
+    /// Observational projection records one solid batch in normal painter order and clipping.
+    fn paint(&self, state: WidgetPaint, painter: &Painter<'_>) -> Result<(), NcStatus> {
+        painter.colored_triangles(&build_cube_vertices(state.rect, self.angle.get()))
     }
 }
 
@@ -101,24 +77,22 @@ const CUBE_POINTS: [Vec3f; 8] = [
 
 // Each quad is emitted as two triangles. Opaque faces are sorted from far to near because this
 // simple example deliberately uses the UI colored-triangle path rather than a depth buffer.
-const CUBE_FACES: [([usize; 4], Color4b); 6] = [
-    ([0, 1, 2, 3], Color4b { x: 70, y: 105, z: 210, w: 255 }),
-    ([4, 5, 6, 7], Color4b { x: 220, y: 82, z: 82, w: 255 }),
-    ([0, 4, 7, 3], Color4b { x: 72, y: 180, z: 112, w: 255 }),
-    ([1, 5, 6, 2], Color4b { x: 230, y: 172, z: 62, w: 255 }),
-    ([0, 1, 5, 4], Color4b { x: 142, y: 92, z: 205, w: 255 }),
-    ([3, 2, 6, 7], Color4b { x: 60, y: 185, z: 205, w: 255 }),
+const CUBE_FACES: [([usize; 4], u32); 6] = [
+    ([0, 1, 2, 3], 0xffd26946),
+    ([4, 5, 6, 7], 0xff5252dc),
+    ([0, 4, 7, 3], 0xff70b448),
+    ([1, 5, 6, 2], 0xff3eace6),
+    ([0, 1, 5, 4], 0xffcd5c8e),
+    ([3, 2, 6, 7], 0xffcdb93c),
 ];
 
+/// Sorts opaque faces by average projected depth for this intentionally CPU-rendered example.
 fn face_depth(corners: &[usize; 4], points: &[Vec3f; 8]) -> f32 {
     corners.iter().map(|&index| points[index].z).sum::<f32>() / 4.0
 }
 
-/// CPU-projects a cube into screen-space `Vertex` triangles.
-///
-/// `enqueue_colored_vertices` uses the normal UI shader, so every vertex points at the center of
-/// the atlas's white icon and its packed color supplies the visible face color.
-fn build_cube_vertices(area: Recti, white_uv: Vec2f, angle: f32) -> Vec<Vertex> {
+/// CPU-projects colored faces into local coordinates; the UI supplies its own atlas material.
+fn build_cube_vertices(area: Rect, angle: f32) -> Vec<ColoredVertex> {
     let rotate_y = Quatf::of_axis_angle(&Vec3f::new(0.0, 1.0, 0.0), angle, EPS_F32).expect("valid Y rotation");
     let rotate_x = Quatf::of_axis_angle(&Vec3f::new(1.0, 0.0, 0.0), angle * 0.63, EPS_F32).expect("valid X rotation");
     let model = (rotate_x * rotate_y).mat4();
@@ -139,59 +113,34 @@ fn build_cube_vertices(area: Recti, white_uv: Vec2f, angle: f32) -> Vec<Vertex> 
     for (corners, color) in faces {
         let [a, b, c, d] = corners;
         for index in [a, b, c, a, c, d] {
-            vertices.push(Vertex::new(Vec2f::new(projected[index].x, projected[index].y), white_uv, color));
+            vertices.push(ColoredVertex {
+                x: projected[index].x,
+                y: projected[index].y,
+                rgba: color,
+            });
         }
     }
     vertices
 }
 
-/// Returns the atlas coordinate sampled by solid colored triangles.
-fn white_uv(atlas: &AtlasHandle) -> Vec2f {
-    let white = atlas.get_icon_rect(atlas.white_icon());
-    let texture = atlas.get_texture_dimension();
-    Vec2f::new(
-        (white.x as f32 + white.width as f32 * 0.5) / texture.width.max(1) as f32,
-        (white.y as f32 + white.height as f32 * 0.5) / texture.height.max(1) as f32,
-    )
-}
-
+/// Application-owned animation is shared explicitly with the inline COM leaf content.
 struct State {
-    /// Shared application state is updated before `Context::frame` and read by the callback later
-    /// during display-list execution. Only the angle is shared; the frame itself never is.
+    /// Rotation is a paint-only external value; the widget always reports unchanged measurement.
     angle: Rc<Cell<f32>>,
 }
+impl AppState for State {
+    /// Time-based motion stays consistent across native and browser refresh rates.
+    fn frame(&mut self, _host: &Host, _size: Size, seconds: f64) -> Result<bool, NcStatus> {
+        self.angle.set((seconds * 1.08 % f64::from(std::f32::consts::TAU)) as f32);
+        Ok(true)
+    }
+}
 
-fn main() {
-    let atlas = atlas_assets::load_atlas();
-
-    let app = Application::new(atlas, |_backend, ctx| {
-        let angle = Rc::new(Cell::new(0.0_f32));
-        let callback_angle = angle.clone();
-        let white_uv = white_uv(&ctx.atlas());
-
-        let cube_renderer = ctx
-            .register_custom_renderer(move |frame, args: CustomRenderArgs| {
-                // Context's executor invokes this callback only for the authoritative visible view.
-                let vertices = build_cube_vertices(args.content_area, white_uv, callback_angle.get());
-
-                // This method is specific to the concrete example frame types. It is available
-                // here precisely because Context infers the concrete associated frame rather than
-                // passing a `dyn RendererFrame` or opaque backend handle.
-                frame.enqueue_colored_vertices(args, vertices);
-            })
-            .expect("register cube renderer");
-
-        let cube = CubeWidget::default();
-        let tree = Node::custom_render(cube, cube_renderer);
-        ctx.ui().create_window(Window::new("Typed backend-frame cube", rect(40, 40, 360, 360), tree));
-
-        State { angle }
-    })
-    .expect("initialize cube example");
-
-    app.event_loop(|_ctx, state, _dimensions| {
-        // Application state changes before Application creates ContextFrame. The typed callback
-        // reads this value later while Context executes that frame's custom-render command.
-        state.angle.set((state.angle.get() + 0.018) % std::f32::consts::TAU);
-    });
+/// Creates one concrete COM leaf; standard host ownership handles all input/update/render phases.
+fn main() -> Result<(), HostError> {
+    let host = Host::new("COM solid cube", Size { width: 640, height: 480 }, microui_redux_demo_assets::load_bundle()?)?;
+    let angle = Rc::new(Cell::new(0.0));
+    let cube = host.ui.widgets().leaf(Cube { angle: angle.clone() }, WidgetOptions::NO_INTERACT)?;
+    host.ui.window("Solid painter cube", Rect { x: 40, y: 40, width: 360, height: 360 }, &cube)?;
+    host.run(EventSession::new(State { angle }))
 }

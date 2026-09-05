@@ -9,40 +9,25 @@ repository.workspace = true
 
 [features]
 default = []
-glow = ["dep:glow", "dep:microui-redux-renderer-glow"]
-webgl = ["dep:glow", "dep:microui-redux-renderer-webgl-canvas"]
-vulkan = ["dep:microui-redux-renderer-vulkan"]
-wgpu = ["dep:microui-redux-renderer-wgpu"]
+# Native selection belongs to the separately built platform package.
+glow = []
+vulkan = []
+wgpu = []
+webgl = ["microui-plugin-platform/webgl"]
+# Browser modules link the same optional decoder descriptor staged as a native PNG-only plugin.
+png-assets = ["dep:microui-plugin-assets"]
 
 [dependencies]
-microui-redux-renderer-support.workspace = true
-glow = { workspace = true, optional = true }
-microui-ui.workspace = true
-microui-redux-renderer-glow = { workspace = true, optional = true }
-microui-redux-renderer-webgl-canvas = { workspace = true, optional = true }
-microui-redux-renderer-vulkan = { workspace = true, optional = true }
-microui-redux-renderer-wgpu = { workspace = true, optional = true }
+microui-redux.workspace = true
+nc-com = { workspace = true, features = ["std", "macros"] }
 
-[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
-sdl2.workspace = true
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+nc-com = { workspace = true, features = ["runtime"] }
 
-[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+nc-com = { workspace = true, features = ["static-runtime"] }
+microui-plugin-ui = { path = "../../plugins/ui" }
+microui-plugin-platform = { path = "../../plugins/platform", default-features = false }
+microui-plugin-assets = { path = "../../plugins/assets", optional = true, default-features = false }
 wasm-bindgen.workspace = true
-web-sys = { workspace = true, features = [
-    "Document",
-    "DomRect",
-    "Element",
-    "Event",
-    "EventTarget",
-    "FocusEvent",
-    "CssStyleDeclaration",
-    "HtmlTextAreaElement",
-    "HtmlCanvasElement",
-    "HtmlElement",
-    "KeyboardEvent",
-    "Performance",
-    "PointerEvent",
-    "WebGl2RenderingContext",
-    "WheelEvent",
-    "Window",
-] }
+web-sys = { workspace = true, features = ["Window", "Performance", "Location", "UrlSearchParams", "console"] }

@@ -3,7 +3,13 @@
 set -euo pipefail
 workspace_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$workspace_root"
-site_dir="${CARGO_TARGET_DIR:-$workspace_root/target}/browser-input-tests"
+suite="${1:-input}"
+case "$suite" in
+  input) package="microui-plugin-platform"; fixture="plugins/platform/tests/browser-input.html" ;;
+  full) package="microui-redux-demo-full"; fixture="demos/demo-full/tests/browser-full.html" ;;
+  *) echo "usage: $0 [input|full]" >&2; exit 2 ;;
+esac
+site_dir="${CARGO_TARGET_DIR:-$workspace_root/target}/browser-$suite-tests"
 build_log="$(mktemp)"
 server_pid=""
 trap 'if [[ -n "$server_pid" ]]; then kill "$server_pid" 2>/dev/null || true; fi; rm -f "$build_log"' EXIT
@@ -22,7 +28,7 @@ fi
 if [[ -z "$browser" ]]; then echo "Set CHROME_BIN to a Chromium-compatible browser." >&2; exit 1; fi
 
 # Cargo's artifact message avoids selecting a stale test executable left by another feature set.
-cargo test -p microui-plugin-platform --lib --no-run --no-default-features --features webgl \
+cargo test -p "$package" --lib --no-run --no-default-features --features webgl \
   --target wasm32-unknown-unknown --message-format=json > "$build_log"
 artifact="$(python3 - "$build_log" <<'PY'
 import json, sys
@@ -34,7 +40,7 @@ PY
 )"
 mkdir -p "$site_dir"
 "$wasm_bindgen" --target web --out-dir "$site_dir" --out-name input-test "$artifact"
-cp plugins/platform/tests/browser-input.html "$site_dir/index.html"
+cp "$fixture" "$site_dir/index.html"
 python3 -m http.server "$port" --bind 127.0.0.1 --directory "$site_dir" > "$site_dir/server.log" 2>&1 &
 server_pid=$!
 curl --retry-connrefused --retry 10 --retry-delay 1 --fail --silent "http://127.0.0.1:$port" > /dev/null
@@ -48,4 +54,4 @@ if ! rg -q '<pre id="result">PASS</pre>' "$site_dir/result.html"; then
   cat "$site_dir/result.html" >&2
   exit 1
 fi
-echo "Browser DOM input, static COM registration, inherited editing, IME and WebGL regression passed."
+echo "Browser $suite regression passed."

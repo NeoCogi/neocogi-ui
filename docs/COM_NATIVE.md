@@ -1,103 +1,149 @@
-# Native COM development package
+# Native COM packages and browser assembly
 
-The incremental migration is tracked in [COM_MIGRATION.md](COM_MIGRATION.md). The accepted final design is [COM_DESIGN.md](COM_DESIGN.md); this document describes the currently executable slice, not completion of that design.
-
-Build and stage the runtime, UI assembly, SDL/GPU assembly and small host:
+Build every native binary independently and stage a complete executable-relative package:
 
 ```sh
-cargo run -p microui-redux-tools --bin com-build
-./target/com-native/debug/glow/prebuilt/microui-demo-com
+cargo run -p microui-redux-tools --bin com-build -- --demo full --backend glow
+./target/com-native/debug/glow/prebuilt/full/microui-redux-demo-full
 ```
 
-For release artifacts, pass `-- --release` to the driver and use `target/com-native/release/glow/prebuilt`. The driver uses the selected Cargo toolchain, builds each binary separately, and honors `CARGO_TARGET_DIR`. Its builds are offline, so dependencies must already be cached. It does not invoke Cargo from a build script.
+`--demo` selects `full`, `simple`, `calculator`, `backend-frame-cube`, or `smoke`
+(the default). `--backend` selects exactly one of `glow`, `vulkan`, or `wgpu`.
+`--release` selects ordinary release builds. The driver honors `CARGO_TARGET_DIR`,
+the selected Cargo toolchain, and `CARGO_NET_OFFLINE`; it does not run Cargo from a
+build script. Native demo feature flags are markers: implementation selection
+belongs to the separately built platform package.
 
-Select the native backend explicitly; each package includes only the selected implementation and the demo's matching native mesh renderer:
+Packages live in `target/com-native/{debug,release,min-size}/{backend}/{assets}/{demo}`.
+They contain the selected executable, one nc-com runtime library, UI and platform
+plugins, and a `plugins.txt` manifest. The full demo additionally ships the PNG-only
+asset plugin for its compressed photograph. Its font atlas and four themes are
+compiled by Cargo's host build; target-side font construction and JSON loading are
+absent. Do not build the workspace with all features to measure deployment size:
+that unifies optional implementation features that these independent builds avoid.
+
+The driver inspects the actual trusted plugin descriptors and uses nc-com's existing
+planner to reject duplicate identities, missing dependencies and cycles. It writes
+filenames in the resulting dependency-first order. The host loads that exact list
+relative to its executable. No source-tree path, current working directory, directory
+scan, hot reload or dynamic unload participates in activation. `microui-redux` is the
+static typed facade; it has no native UI or renderer implementation dependency.
+
+On Linux `$ORIGIN` locates the adjacent runtime without `LD_LIBRARY_PATH`. macOS
+uses `@executable_path`; Windows uses normal adjacent-DLL lookup. The driver handles
+native filenames and linking; SDL 2.26+ and the selected graphics API's system
+libraries remain installed system dependencies. Packaging does not redistribute
+those system libraries. CI includes macOS and Windows package builds, while actual
+GPU evidence collected in this workspace is Linux and browser evidence.
+
+The workspace's specialized Linux size profile applies to every shipped binary:
 
 ```sh
-cargo run -p microui-redux-tools --bin com-build -- --backend vulkan
-cargo run -p microui-redux-tools --bin com-build -- --backend wgpu
+cargo +nightly run -p microui-redux-tools --bin com-build -- --demo full --backend glow --min-size
 ```
 
-Packages are staged in `target/com-native/{debug,release}/{glow,vulkan,wgpu}/{prebuilt,builder,theme-json}`. Each contains the same host, runtime, UI plugin and `microui-plugin-platform`, plus an explicit `plugins.txt`. A native display is required for the Vulkan/WGPU smoke tests. The ordinary Cargo `glow`/`vulkan`/`wgpu` feature priority matches the existing demo renderer when features are unified; the packaging driver selects exactly one with default features disabled.
+This invokes the existing `build-min-size` alias for runtime, plugins and executable
+using its x86_64 Linux custom target and rebuilt standard library. Install nightly's
+`rust-src` component first. Count every shipped library and asset along with the
+executable; moving implementation code into a plugin does not eliminate its size.
+Final measurements and remaining migration cleanup are tracked in
+[COM_MIGRATION.md](COM_MIGRATION.md).
 
-The host reads the staged `plugins.txt` in order, loads both trusted libraries from beside its executable, and activates their concrete bootstrap classes. `microui-redux` contains only static typed clients and contracts. `microui-ui` contains retained implementation code. The small crates under `plugins/` own descriptors and explicitly selected exports; an ordinary implementation-library dependency never exports a plugin entrypoint accidentally.
+## Native verification
 
-On Linux the executable uses an `$ORIGIN` runtime search path. It can start outside the source tree without `LD_LIBRARY_PATH`. The driver includes native filename/search-path handling for macOS and Windows, but those packages have not yet passed the platform deployment gates. Native SDL 2.26+ and the selected graphics API system dependencies still need to be installed; this is not a system-library bundler.
-
-A deterministic input/render/teardown smoke run is available:
+A finite ordinary demo run renders the requested number of successful frames and
+then releases its application session and host:
 
 ```sh
 cd /tmp
-SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
-  /absolute/path/to/target/com-native/debug/glow/prebuilt/microui-demo-com --smoke
+MICROUI_DEMO_FRAMES=8 /absolute/path/to/target/com-native/debug/glow/prebuilt/full/microui-redux-demo-full
 ```
 
-This uses a real SDL GL context and Mesa rendering. It verifies separate-binary activation, real GPU painting, keyboard activation into application-owned handlers, inherited/composed controls, compact menus, native-path file-picker acceptance, invalidation, resize, explicit update-before-render and logical closure. Glow additionally has a GPU pixel-readback test for image/mesh/overlay order. Linux Vulkan and WGPU packages have passed the same smoke on the native Intel/Mesa display. The complete native input vocabulary and IME placement use the same COM input destination; browser and cross-platform deployment gates remain item 16.
-
-The current slice has deliberate transitions with assigned removal milestones:
-
-- The retained engine is moved intact to `microui-ui`. Existing demos and behavior tests temporarily use that implementation crate while their public integration is converted. Item 17 removes obsolete integration APIs and documentation.
-- COM leaf nodes now own their widget/layout capabilities directly. The extra Bridge allocation, weak invalidation hook and duplicate mount-list widget owners are removed. Existing Node caches, window layout, routing, clipping, framing and display-list algorithms remain authoritative. Legacy demos still use local Node variants and public semantic constructors during migration. Item 17 removes them after the remaining container/composition/demo ports. Built-in COM classes own their concrete semantic values inline; temporary common-option copies inside the old algorithm structs must also be removed in that cleanup.
-- The manager mounts arbitrary leaves exposing IWidget and ILeafLayout. Lifetime, common properties, input/update, invalidation and paint belong to IWidget; the separate activation/lifetime interfaces have been removed. The manager now exposes child windows, hidden modal dialogs, typed popups, visibility, layering, title/options and child clipping. The basic built-in leaves now have concrete editing capabilities. Linear/Grid and the real ScrollArea, Disclosure and TextArea compositions expose transactional topology and scoped layout services.
-- Built-in buttons, checkboxes, textboxes, text blocks, sliders, numbers, color swatches, list entries and scrollbars reuse their complete semantic, measurement and theme-paint algorithms. Font/icon selection and button center-fill are concrete optional capabilities. Paint receives copied interaction state and records atlas geometry in bulk. The simple external ITextMetrics/IPainter text conveniences use body-font button appearance; independent widgets obtain full immutable metadata through IWidgetHost::assets. Finite and unbounded constraints are explicit copied records.
-- The host supplies one immutable COM bundle to UI and native platform construction. Neither plugin embeds demo assets. Compiled tables require only facade/contracts at runtime; optional font/PNG/JSON construction lives in the asset plugin. See [COM_ASSETS.md](COM_ASSETS.md) for limits, catalog identity, atomic replacement and author obligations.
-- The renderer copies one complete vertex buffer and one ordered batch buffer into reusable owned storage, then authenticates image/scene capabilities before opening its native frame. Atlas triangles, clipped image quads and real native 3D commands preserve source order. Texture/scene resources keep their native window/device alive; diagnostics preserve backend failure text. Runtime installation validates compatible resources and uploads before publishing the UI revision; each frame explicitly identifies its bundle. Temporary legacy-ID and custom-callback hooks disappear with the old direct Context API in item 17.
-- The runtime accepts complete typed pointer/button/wheel/key/modifier/text/cancellation events through input(), then update(size) applies queued input and synchronizes layout. Widget updates receive copied router snapshots and content-local events. The native platform borrows the runtime’s inherited IInputSink during polling and forwards the complete SDL input vocabulary. After update, text_input_area()/text_input() synchronize committed IME placement without restarting active composition. See the platform author obligations.
-- The host owns an `EventSession` and concrete handler. `update_with_events` dispatches between input phases, releases the context for ordinary callback edits, and commits their geometry before routing later input. All current leaf, window and popup event families use the same queue/lease transport. Combo/menu actions and standard native-path picker completion use the same transport; internal component callbacks share the finite boundary budget. The producer never owns the sink or lease.
-
-Painter and render-stream objects own storage. Their monotonically increasing invocation identities expire on every return path and are never reused; retaining an interface is safe but retaining an old token does not extend authority. Tests also exercise reentrant update, mutation during observation, failed paint before backend submission, malformed input, foreign ownership, duplicate mounts and retained handles after closure. See [COM_AUTHORS.md](COM_AUTHORS.md) for the complete author obligations.
-
-The native resource/ownership test is explicit because it creates real OS windows:
+Malformed or zero limits fail at startup. Omission runs until OS close or the
+application's `AppState::frame` returns false. Frame errors propagate to the native
+entry point. The host closes the UI logically before releasing its capabilities;
+retained widget handles then report `UI_E_CLOSED`.
 
 ```sh
-SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
-  cargo test -p microui-plugin-platform --lib -- --ignored
-cargo test -p microui-plugin-platform --no-default-features --features vulkan --lib -- --ignored
-cargo test -p microui-plugin-platform --no-default-features --features wgpu --lib -- --ignored
+scripts/test-demo.sh glow
+scripts/test-demo.sh vulkan
+scripts/test-demo.sh wgpu
 ```
 
-`demos/com-slice/src/gpu.rs` demonstrates an independently implemented host widget with inline `WidgetState`, a typed immutable image and an inherited mesh render item. Its application logic uses only the facade and contracts. The demo's native shaders/pipelines remain co-packaged with the selected renderer. Factory `host()` supplies widget authority directly, without constructing a dummy built-in control.
+These tests build plugins independently, stage a companion test executable, and run
+outside the repository. They exercise all four actual themes, the visible compressed
+image, custom geometry/mesh rendering, spacing changes, combo selection, Unicode log
+submission and retained-handle closure. Test executables are staged separately under
+`target/com-tests` so they cannot inflate the installed application size. Set
+`MICROUI_TEST_BUILD_ONLY=1` to stage tests for a separate display-enabled invocation.
 
-On the tested Mesa 25.2.8 installation, combining offscreen EGL, accessible hardware
-devices and `LIBGL_ALWAYS_SOFTWARE=1` crashed in `driCreateNewScreen3` during SDL window
-creation, before renderer construction. Normal hardware-display tests pass; the
-headless software tests pass with hardware devices unavailable. Use the ordinary
-native-display command on a desktop instead of forcing that EGL combination.
+The smaller boundary smoke remains available:
 
-Optional asset packaging uses an explicit mode:
+```sh
+cargo run -p microui-redux-tools --bin com-build -- --demo smoke --backend glow
+./target/com-native/debug/glow/prebuilt/smoke/microui-demo-com --smoke
+```
+
+It covers typed input/events, inherited and composed controls, compact menus,
+native-path file-picker acceptance, invalidation, resize and explicit teardown.
+Platform resource tests create real windows and remain explicitly opt-in:
+
+```sh
+cargo test -p microui-plugin-platform --lib --no-default-features --features glow -- --include-ignored
+```
+
+On a desktop use its ordinary display. A previous Mesa 25.2.8 offscreen EGL setup
+crashed inside `driCreateNewScreen3` when accessible hardware was combined with
+`LIBGL_ALWAYS_SOFTWARE=1`, before renderer construction. The ordinary native display
+passed; CI uses Xvfb with its available software GPU drivers.
+
+## Optional construction workflows
+
+The smoke executable can exercise runtime asset construction separately from the
+ordinary demos' compiled assets:
 
 ```sh
 cargo run -p microui-redux-tools --bin com-build -- --assets builder
+./target/com-native/debug/glow/builder/smoke/microui-demo-com --smoke --rebuild-assets
 cargo run -p microui-redux-tools --bin com-build -- --assets theme-json
-./target/com-native/debug/glow/builder/microui-demo-com --smoke --rebuild-assets
-./target/com-native/debug/glow/theme-json/microui-demo-com --smoke --theme themes/windows-95/theme.json
+./target/com-native/debug/glow/theme-json/smoke/microui-demo-com --smoke --theme themes/windows-95/theme.json
 ```
 
-The default mode is `prebuilt`. Optional modes add one asset library; JSON mode also
-stages the bundled theme/font sources. Relative theme paths resolve against the
-executable directory. Raw compiled atlas pixels occupy 512 KiB for the demo, before
-metadata; this explicit storage cost is included in the final installed-size budget.
+JSON mode stages recipe-relative font/artwork sources. Relative theme paths resolve
+against the executable directory. Other demos deliberately reject construction-mode
+packaging rather than shipping unused loaders. See [COM_ASSETS.md](COM_ASSETS.md) for
+immutable catalogs, bounded transfers, upload atomicity and decoder ownership.
 
+## Browser
 
-The platform assembly also builds with `--no-default-features --features webgl`
-for `wasm32-unknown-unknown`. It statically registers the same UI/platform COM
-contracts, with one linked nc-com runtime. DOM listeners, native composition,
-canvas ownership and WebGL stay in this assembly; bulk frame validation and
-texture/mesh ownership are shared with all native backends. Each platform window
-creates an independent canvas appended to the document body; applications supply
-page CSS. Releasing the public window removes the canvas/listeners while retained
-GPU resources keep their WebGL context alive until final release.
+```sh
+scripts/web-demo.sh serve
+scripts/test-browser-input.sh input
+scripts/test-browser-input.sh full
+```
 
-Run `scripts/test-browser-input.sh` after installing the matching wasm-bindgen CLI
-(the script accepts `MICROUI_WASM_BINDGEN` and `CARGO_TARGET_DIR`). It checks actual
-DOM composition/paste, chorded pointer input, wheel scaling and teardown, then
-registers both static descriptors, edits a real COM textbox, positions native IME
-and renders WebGL frames before/after a CSS resize. Headless Chromium uses its
-software WebGL implementation so this is a real GPU-API execution gate rather
-than a compile-only check. The main demo host migration remains in progress.
+The browser statically registers the same UI, platform and optional PNG descriptors
+with one nc-com runtime in the wasm module. DOM listeners, IME, canvas and WebGL2
+ownership stay in the platform assembly. The host owns only application state and
+one `requestAnimationFrame` scheduling adapter. Every platform window appends its
+own canvas; page CSS controls its logical dimensions, and input/frame coordinates
+use physical pixels. Do not create an extra placeholder canvas in the page.
 
-A lost WebGL context reports a renderer error before upload or submission. The
-application must recreate the platform window and its GPU resources; automatic
-context restoration and reusing old device capabilities are unsupported. This
-follows the ordinary renderer ownership contract instead of hiding a second,
-partially restored native device under existing texture identities.
+`web-demo.sh` honors `CARGO_TARGET_DIR`, `MICROUI_WASM_BINDGEN` and
+`MICROUI_WEB_PROFILE=debug|release` (release by default). It installs the matching
+binding CLI when needed. A `?frames=8` query runs eight frames and stops, using the
+same finite-run policy as native. Normal stop and asynchronous errors release the
+RAF closure, application session, canvas, input textarea and listeners. GPU
+capabilities retained outside that application still own their device until their
+last release.
+
+The input suite checks actual DOM composition/paste, pointer chords, wheel scaling,
+static registration, inherited editing, IME placement and WebGL resize. The full
+suite exercises theme/image/action behavior and verifies both normal and failed RAF
+cleanup in Chromium. Set `CHROME_BIN` and `MICROUI_BROWSER_TEST_PORT` where needed.
+
+A lost WebGL context reports a renderer error. Applications must recreate the
+platform window and its GPU resources; old image/scene capabilities cannot migrate
+to a replacement device. Browser file browsing is disabled because this demo's
+native-path picker requires an OS filesystem. The same text editing, layout, menus,
+style controls and custom rendering remain available.

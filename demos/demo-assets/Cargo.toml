@@ -12,6 +12,8 @@ default = ["builder"]
 builder = ["dep:microui-ui", "microui-ui/builder"]
 prebuilt-atlas = ["dep:microui-ui", "microui-ui/png_source"]
 prebuilt-com = ["dep:microui-redux", "dep:nc-com"]
+# Four compiled theme choices and the external-image sample used only by demo-full.
+full-demo = ["prebuilt-com"]
 
 [dependencies]
 microui-ui = { workspace = true, optional = true }
@@ -20,4 +22,4 @@ nc-com = { workspace = true, optional = true }
 
 # Cargo builds these APIs for the host even when the demo target is WebAssembly.
 [build-dependencies]
-microui-ui = { workspace = true, features = ["builder", "save-to-rust", "png_source"] }
+microui-ui = { workspace = true, features = ["builder", "save-to-rust", "png_source", "theme-json"] }

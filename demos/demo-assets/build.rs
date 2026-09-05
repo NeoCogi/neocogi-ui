@@ -60,7 +60,27 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     if env::var_os("CARGO_FEATURE_PREBUILT_COM").is_some() {
         let output = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo provides OUT_DIR")).join("prebuilt_bundle.rs");
-        microui_ui::SkinBundle::from_atlas(atlas).to_com_rust_files(output)?;
+        let bundle = microui_ui::SkinBundle::from_atlas(atlas);
+        bundle.to_com_rust_files(output)?;
+        if env::var_os("CARGO_FEATURE_FULL_DEMO").is_some() {
+            full_demo_assets(&bundle)?;
+        }
+    }
+    Ok(())
+}
+
+/// Compiles complete theme choices on Cargo's host, keeping target theme/font parsers out.
+fn full_demo_assets(base: &microui_ui::SkinBundle) -> Result<(), Box<dyn Error>> {
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let output = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo provides OUT_DIR"));
+    // Tracking the complete authored directories includes every JSON-relative PNG/font dependency.
+    println!("cargo:rerun-if-changed={}", workspace.join("themes").display());
+    println!("cargo:rerun-if-changed={}", workspace.join("assets").display());
+    let source = microui_ui::assets::export_bundle(base)?;
+    let imported = microui_ui::assets::ImportedAssets::read(source.as_com_ref(), None)?;
+    for (directory, generated) in [("windows-3.11", "windows_311"), ("windows-95", "windows_95"), ("mac-os-9", "mac_os_9")] {
+        imported.load_theme(&workspace.join("themes").join(directory).join("theme.json"))?
+            .bundle().to_com_rust_files(output.join(format!("{generated}.rs")))?;
     }
     Ok(())
 }

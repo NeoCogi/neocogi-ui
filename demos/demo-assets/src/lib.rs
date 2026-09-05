@@ -94,7 +94,7 @@ mod prebuilt_com {
     include!(concat!(env!("OUT_DIR"), "/prebuilt_bundle.rs"));
 }
 #[cfg(feature = "prebuilt-com")]
-pub use prebuilt_com::load_bundle;
+pub use prebuilt_com::{load_bundle, bundle_data};
 
 #[cfg(all(not(feature = "prebuilt-atlas"), not(feature = "prebuilt-com"), not(feature = "builder")))]
 compile_error!("demo assets require `builder` for runtime generation or `prebuilt-atlas` for embedded data");
@@ -133,3 +133,11 @@ mod tests {
         }
     }
 }
+
+/// Precompiled full-demo theme choices share the same canonical bulk bundle format.
+#[cfg(feature = "full-demo")]
+pub mod themes;
+
+/// Compressed sample stays compact; the optional asset plugin owns PNG decoding and upload.
+#[cfg(feature = "full-demo")]
+pub const FACEPALM_PNG: &[u8] = include_bytes!("../../demo-full/assets/FACEPALM.png");

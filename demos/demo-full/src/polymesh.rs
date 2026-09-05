@@ -33,7 +33,7 @@
 //
 //! Simple polygon mesh container used by OBJ loading and 3D demo rendering.
 
-use super::*;
+use rs_math3d::*;
 
 use std::iter::*;
 

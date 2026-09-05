@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Full COM demo regression</title>
+<style>html,body {margin:0;width:1200px;height:800px}canvas {width:1200px;height:800px}</style>
+<pre id="result">RUNNING</pre>
+<script type="module">
+const result = document.getElementById('result');
+try {
+  const test = await import('./input-test.js');
+  await test.default();
+  test.full_demo_checks();
+  let attempts = 0;
+  function complete() {
+    if (test.demo_loops_released()) {
+      result.textContent = document.querySelectorAll('canvas, textarea').length === 0
+        ? 'PASS' : 'FAIL: platform DOM objects survived final release';
+    } else if (++attempts < 120) {
+      requestAnimationFrame(complete);
+    } else {
+      result.textContent = 'FAIL: normal/error animation loops did not release their application state';
+    }
+  }
+  requestAnimationFrame(complete);
+} catch (error) {
+  result.textContent = `FAIL: ${error?.stack ?? error}`;
+}
+</script>
