@@ -88,7 +88,7 @@ impl UiRuntime {
         // Leaves expose overflow when their preference exceeds allocation. Containers instead
         // author their child viewport and content extent through the scoped layout context.
         match &mut node.data {
-            NodeKind::Widget(_) => {
+            NodeKind::Widget(_) | NodeKind::Com(_) => {
                 let content_size = Dimensioni::new(outer.width.max(preferred.width).max(0), outer.height.max(preferred.height).max(0));
                 node.state.set_layout(node.state.layout.with_content_size(content_size));
             }

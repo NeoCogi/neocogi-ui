@@ -83,7 +83,7 @@ impl UiRuntime {
             input.mouse_buttons,
             input.modifiers,
         );
-        let change = node.data.with_widget_mut(|widget| widget.update(&mut widget_ctx, event.as_ref()));
+        let change = node.data.update(&mut widget_ctx, event.as_ref());
         if change == crate::Change::Changed {
             // An eventless update can change intrinsic geometry just as a routed event can. Use
             // the widget's result and preserve any marker already recorded by a handle mutation;

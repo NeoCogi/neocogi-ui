@@ -123,7 +123,7 @@ impl UiRuntime {
                 node.state.active,
                 window_active,
             );
-            node.data.with_widget_mut(|widget| widget.paint(&mut widget_ctx));
+            node.data.paint(&mut widget_ctx);
         }
 
         if let NodeKind::Widget(widget) = &node.data

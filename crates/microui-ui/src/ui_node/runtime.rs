@@ -384,19 +384,13 @@ fn node_accepts_input(node: &Node) -> bool {
 
 /// Resolves the semantic role used by a node's optional shared frame geometry.
 fn node_frame_role(node: &Node) -> Option<crate::FrameRole> {
-    // Read dynamic options and the concrete role under one widget borrow. Returning `None` keeps
-    // unframed nodes on the same zero-inset geometry path in layout, routing, update, and paint.
-    node.data.with_widget(|widget| {
-        widget
-            .effective_widget_opt()
-            .intersects(WidgetOption::FRAME)
-            .then(|| widget.frame_appearance_role())
-    })
+    let (options, _, role) = node.data.policy();
+    options.intersects(WidgetOption::FRAME).then_some(role)
 }
 
 /// Resolves effective pointer options and keyboard behavior for the current update pass.
 fn node_interaction_config(node: &Node) -> (WidgetOption, KeyboardBehavior) {
-    let (mut opt, keyboard) = node.data.with_widget(|widget| (widget.effective_widget_opt(), widget.keyboard_behavior()));
+    let (mut opt, keyboard, _) = node.data.policy();
     if !node_accepts_input(node) {
         // Keep layout eligibility authoritative without mutating the concrete widget's options.
         opt |= WidgetOption::NO_INTERACT;

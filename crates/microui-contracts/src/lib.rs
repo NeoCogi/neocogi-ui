@@ -8,6 +8,13 @@
 #![no_std]
 #![deny(missing_docs)]
 
+pub mod widget;
+pub use widget::{WidgetOptions, WidgetProperties, WidgetFrame};
+mod input;
+pub use input::{
+    KeyCode, KeyStroke, Point, WidgetEvent, WidgetEventAbi, WidgetEventTag, WidgetUpdate, WidgetAction, decode_widget_event, UiInput, UiInputAbi, UiInputTag,
+};
+
 use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, com_interface, com_int_enum, com_struct};
 
 com_int_enum! {
@@ -63,6 +70,21 @@ pub trait IPainter {
 #[com_interface(auto_guid = "microui.Widget:v1")]
 /// Common retained widget capability shared by all concrete widget interfaces.
 pub trait IWidget {
+    /// Returns the allocating runtime's identity service, which owns no tree.
+    fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus>;
+    /// Claims the only tree attachment; a second call fails without changing state.
+    fn mount(&self) -> Result<(), NcStatus>;
+    /// Logically closes the widget without requiring its final reference release.
+    fn close(&self) -> Result<(), NcStatus>;
+
+    /// Returns current frame, focus and pointer-routing policy as one copied record.
+    fn properties(&self) -> Result<WidgetProperties, NcStatus>;
+    /// Changes common options and records sticky geometry invalidation when they differ.
+    fn set_options(&self, options: WidgetOptions) -> Result<(), NcStatus>;
+    /// Processes one router-owned snapshot; the text argument is UTF-8 only for Text events.
+    /// Return CHANGED for every modification to measurement or child placement inputs.
+    fn update(&self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus>;
+
     /// Drains sticky geometry invalidation recorded by programmatic setters.
     fn take_change(&self) -> Result<GeometryChange, NcStatus>;
     /// Records this widget's visual output within a validated paint invocation.
@@ -181,13 +203,6 @@ pub struct LayoutLimits {
 pub trait ILeafLayout {
     /// Computes preferred dimensions from explicit finite/unbounded axis constraints.
     fn measure(&self, bounds: LayoutLimits, metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus>;
-}
-
-#[com_interface(auto_guid = "microui.Activatable:v1")]
-/// Semantic activation shared by pointer and keyboard routing.
-pub trait IActivatable {
-    /// Enqueues one user activation; programmatic setters never call this method.
-    fn activate(&self) -> Result<GeometryChange, NcStatus>;
 }
 
 #[com_struct]
@@ -461,7 +476,10 @@ pub trait IWindowManager {
 /// One independent retained UI, also exposing its widget factory/window manager.
 pub trait IUiRuntime {
     /// Processes one input event; NONE still synchronizes setters and resize.
-    fn update(&self, size: Size, event: PlatformEvent) -> Result<(), NcStatus>;
+    fn update(&self, size: Size) -> Result<(), NcStatus>;
+    /// Queues one copied host event; Text borrows complete UTF-8 bytes only for this call.
+    /// The next update applies queued events in order and synchronizes each input transaction.
+    fn input(&self, event: UiInputAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Paints only after update has synchronized geometry for this drawable size.
     fn render(&self, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus>;
     /// Logically closes every mounted subtree; COM allocations may outlive closure.
@@ -489,17 +507,6 @@ pub trait IWidgetHost {
     fn check_open(&self) -> Result<(), NcStatus>;
     /// Rejects closed runtimes and mutation during layout or painting.
     fn check_mutation(&self) -> Result<(), NcStatus>;
-}
-
-#[com_interface(auto_guid = "microui.WidgetLifetime:v1")]
-/// Common lifecycle capability; attachment is mount-once even after detachment.
-pub trait IWidgetLifetime {
-    /// Returns the allocating runtime's identity service, which owns no tree.
-    fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus>;
-    /// Claims the only tree attachment; a second call fails without changing state.
-    fn mount(&self) -> Result<(), NcStatus>;
-    /// Logically closes the widget without requiring its final reference release.
-    fn close(&self) -> Result<(), NcStatus>;
 }
 
 #[com_interface(auto_guid = "microui.Popup:v1")]

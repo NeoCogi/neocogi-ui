@@ -3768,6 +3768,19 @@ impl WindowManager {
 
 
 impl WindowManager {
+    /// Collects sticky widget changes even in hidden surfaces before a cache can be reused.
+    /// Every tree is visited; a changed earlier root never short-circuits later roots.
+    pub(crate) fn collect_widget_changes(&mut self) -> bool {
+        let mut changed = false;
+        for node in &mut self.surfaces.nodes {
+            if let SurfaceBody::Widgets { root, .. } = &mut node.surface.body {
+                changed |= root.synchronize_measurement_invalidation();
+            }
+        }
+        changed
+    }
+
+
     /// Copies current window policy into the canonical COM snapshot without a second state store.
     pub(crate) fn window_snapshot(
         &self,

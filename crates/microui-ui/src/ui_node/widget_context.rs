@@ -241,6 +241,9 @@ impl<'a> WidgetUpdateCtx<'a> {
         self.common.content_rect
     }
 
+    /// Returns the effective content-local clip committed for this update.
+    pub fn local_clip(&self) -> Recti { self.common.local_clip() }
+
     /// Returns whether the pointer is currently over this widget.
     pub fn hovered(&self) -> bool {
         self.common.hovered

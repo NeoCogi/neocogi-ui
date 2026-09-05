@@ -87,3 +87,72 @@ projection. The static generic facade hides these checked projections from app
 code. Use distinct names for base and specialized methods; local names take
 precedence during Rust method lookup. Definitions across crates should name a
 base through its module path so generated companion types resolve together.
+
+## Common state, input and node ownership
+
+`microui_contracts::widget::WidgetState` is a static implementation helper stored
+inside a widget class. It owns the host authority, common options, mount-once
+claim, logical closed flag and sticky geometry flag. It owns no runtime tree,
+children, application callback or additional widget allocation. Specialized
+interfaces inherit IWidget; IWidget itself now includes host/mount/close,
+properties/set_options, update, take_change and paint. Leaf measurement remains
+a separately cached ILeafLayout capability. No activation-only or separate
+widget-lifetime interface is required.
+
+A semantic setter checks `state.writable()` before borrowing its data, validates
+all replacement inputs, commits atomically, and calls
+`state.record_change(GeometryChange::CHANGED)` when measurement/placement inputs
+actually differ. Common option setters use `state.set_options`. Return the
+update's own geometry result; NO_CHANGE must never erase a prior setter marker.
+The runtime collects markers across the authoritative forest, including hidden
+surfaces and descendants, before using measurement caches. Hidden/clipped widgets
+still skip their ordinary update; authors must not rely on that update to notice
+externally shared mutations or to flush a setter's pending marker.
+
+The app queues raw input and then updates explicitly:
+
+```rust,ignore
+ui.input(UiInput::Key(KeyStroke {
+    key: KeyCode::TAB, value: 0, pressed: true, repeat: false, modifiers: 0,
+}), "")?;
+ui.input(UiInput::Text, "complete Unicode commit ☃")?;
+ui.update(drawable_size)?;
+ui.render(drawable_size, renderer.as_com_ref())?;
+```
+
+UiInput uses drawable coordinates and carries no invented drag or pointer delta.
+The runtime preserves queue order, computes held state/deltas, selects recipients
+and localizes WidgetEvent pointer payloads to content coordinates. Modifier bits
+are Alt=1, Ctrl=2, Shift=4, Super=8; printable logical keys are separate from text
+commits. Function keys use numbers 1–24. Key-repeat is valid only on presses.
+A cancel event clears held/focus/capture state in order; widgets must also handle
+an eventless update with changed focus/active snapshots. Update every visible
+widget even when it received no routed event: animation, shared-state
+synchronization and editor blur commits can change geometry then.
+
+Widget update implementations call `decode_widget_event(event, text)` before
+using input. This checks the ABI tag, complete UTF-8 with offset zero, key and
+button values, and the rule that only Text has a nonempty text argument. A text
+borrow expires on return; copy it if it must be retained. WidgetUpdate is an
+owned snapshot of content geometry, clipping, interaction and the runtime's
+shared semantic action. It contains no painter or pointer into the runtime.
+Properties are refreshed after update even when geometry is unchanged, so
+mode-dependent focus/text-input policy is visible to the next routed event.
+
+The runtime takes ownership of its Context for each transaction and restores it
+on every return path. No runtime RefCell guard spans a foreign call. Reentrant
+runtime operations receive BUSY while the slot is occupied; ordinary peer
+widget setters remain available during update. Measurement, painting and
+property/change observation reject mutation through the common host authority.
+Explicit close also respects observational phases. Node removal invokes logical
+widget closure once; retained COM handles then report CLOSED. A component close
+failure is returned by explicit window/runtime teardown after the logical
+removal has committed. Final COM destruction cannot report an error and must
+infallibly mark its event source closed, including when it happens during an
+observational phase.
+
+A failed measurement does not publish a zero-size preference. The runtime reports
+the component error, leaves the node and its ancestor path dirty, and retries on
+a later update. Widget authors should return an error for temporarily unavailable
+measurement inputs and resume returning a valid nonnegative size after recovery.
+Do not return a fabricated successful size to hide a failed resource lookup.

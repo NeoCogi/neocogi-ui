@@ -17,6 +17,14 @@ pub(super) enum NativeSurface {
 }
 
 impl NativeSurface {
+    /// Resolves lifetime from the forest rather than retaining a shadow widget owner.
+    pub(super) fn is_alive(&self, manager: &WindowManager) -> bool {
+        match self {
+            Self::Window(window) => manager.window_visible(window).is_ok(),
+            Self::Popup(popup) => manager.popup_visible(popup).is_ok(),
+        }
+    }
+
     /// Idempotently removes the native subtree; an ancestor may already have removed it.
     pub(super) fn close(&self, manager: &mut WindowManager) -> Result<(), NcStatus> {
         let result = match self {
@@ -83,8 +91,8 @@ impl RuntimeStorage {
             return Err(NC_E_INVALID_ARG);
         }
         let title = text(title)?.to_owned();
-        let mut context = self.context.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
-        self.prune_mounts()?;
+        let mut context = self.context()?;
+        self.prune_mounts(&context.window_manager);
         match &placement {
             Placement::Root => {}
             Placement::Child(parent) | Placement::Dialog(parent) => {
@@ -97,23 +105,23 @@ impl RuntimeStorage {
             }
         }
         let widget = root.add_ref();
-        let lifetime: ComPtr<IWidgetLifetimeAbi> = widget.query()?;
-        let owner: ComPtr<IUnknown> = lifetime.host()?.query()?;
+        let owner: ComPtr<IUnknown> = widget.host()?.query()?;
         if owner.as_ptr() != self.host.query::<IUnknown>()?.as_ptr() {
             return Err(UI_E_OWNER);
         }
         let layout = widget.query()?;
-        let activation = widget.query()?;
+        let properties = widget.properties()?;
+        properties.validate()?;
         // Every fallible external query and parent-policy check precedes the mount-once commit.
-        lifetime.mount()?;
-        let (bridge, node) = Node::typed_widget(Bridge {
-            widget: widget.clone(),
+        widget.mount()?;
+        let node = Node::com_widget(ComNode {
+            widget,
+            dirty: Cell::new(false),
             layout,
-            activation,
+            properties: Cell::new(properties),
             metrics: self.metrics.clone(),
             painter: self.painter.clone(),
             host: self.state.clone(),
-            opt: WidgetOption::FRAME,
         });
         let manager = &mut context.window_manager;
         let surface = match placement {
@@ -146,13 +154,7 @@ impl RuntimeStorage {
                 closed: Cell::new(false),
             }),
         };
-        self.mounts.borrow_mut().push(Mount {
-            surface,
-            identity: identity.clone(),
-            widget,
-            lifetime,
-            bridge,
-        });
+        self.mounts.borrow_mut().push(Mount { surface, identity: identity.clone() });
         self.pending.set(true);
         Ok(identity)
     }
@@ -239,7 +241,7 @@ impl LogicalWindow {
     fn edit(&self, edit: WindowEdit) -> Result<(), NcStatus> {
         let runtime = self.owner()?;
         runtime.host.check_mutation()?;
-        let mut context = runtime.context.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
+        let mut context = runtime.context()?;
         let manager = &mut context.window_manager;
         match edit {
             WindowEdit::Rect(rect) => manager.set_window_rect(&self.window, local_rect(rect)),
@@ -260,18 +262,12 @@ impl IWindow for LogicalWindow {
     /// Copies authoritative policy rather than a facade-maintained shadow.
     fn snapshot(&self) -> Result<WindowSnapshot, NcStatus> {
         let runtime = self.owner()?;
-        runtime
-            .context
-            .try_borrow()
-            .map_err(|_| UI_E_BUSY)?
-            .window_manager
-            .window_snapshot(&self.window)
-            .map_err(status)
+        runtime.context()?.window_manager.window_snapshot(&self.window).map_err(status)
     }
     /// Owns the returned text snapshot beyond this short manager borrow.
     fn title(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         let runtime = self.owner()?;
-        let context = runtime.context.try_borrow().map_err(|_| UI_E_BUSY)?;
+        let context = runtime.context()?;
         Ok(NcString::from_utf8_str(context.window_manager.window_title(&self.window).map_err(status)?))
     }
     /// Validates a complete UTF-8 replacement before entering mutation.
@@ -330,11 +326,13 @@ impl IWindow for LogicalWindow {
             return Ok(());
         }
         runtime.host.check_mutation()?;
-        let mut context = runtime.context.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
+        let mut context = runtime.context()?;
+        runtime.state.error.set(None);
         NativeSurface::Window(self.window.clone()).close(&mut context.window_manager)?;
         self.closed.set(true);
         runtime.pending.set(true);
-        runtime.prune_mounts()
+        runtime.prune_mounts(&context.window_manager);
+        runtime.state.error.take().map_or(Ok(()), Err)
     }
 }
 
@@ -373,7 +371,7 @@ impl LogicalPopup {
     fn edit(&self, edit: PopupEdit) -> Result<(), NcStatus> {
         let runtime = self.owner()?;
         runtime.host.check_mutation()?;
-        let mut context = runtime.context.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
+        let mut context = runtime.context()?;
         match edit {
             PopupEdit::Show(rect) => context.window_manager.show_popup_at(&self.popup, local_rect(rect)),
             PopupEdit::Hide => context.window_manager.hide_popup(&self.popup),
@@ -389,13 +387,7 @@ impl IPopup for LogicalPopup {
     /// Reads actual active-path membership, including modal and owner eligibility.
     fn visibility(&self) -> Result<Visibility, NcStatus> {
         let runtime = self.owner()?;
-        let visible = runtime
-            .context
-            .try_borrow()
-            .map_err(|_| UI_E_BUSY)?
-            .window_manager
-            .popup_visible(&self.popup)
-            .map_err(status)?;
+        let visible = runtime.context()?.window_manager.popup_visible(&self.popup).map_err(status)?;
         Ok(if visible { Visibility::VISIBLE } else { Visibility::HIDDEN })
     }
     /// Validates allocation before atomically changing anchor and input scope.
@@ -428,10 +420,12 @@ impl IPopup for LogicalPopup {
             return Ok(());
         }
         runtime.host.check_mutation()?;
-        let mut context = runtime.context.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
+        let mut context = runtime.context()?;
+        runtime.state.error.set(None);
         NativeSurface::Popup(self.popup.clone()).close(&mut context.window_manager)?;
         self.closed.set(true);
         runtime.pending.set(true);
-        runtime.prune_mounts()
+        runtime.prune_mounts(&context.window_manager);
+        runtime.state.error.take().map_or(Ok(()), Err)
     }
 }

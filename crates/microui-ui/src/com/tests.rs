@@ -7,15 +7,6 @@ const SIZE: Size = Size { width: 640, height: 400 };
 /// Logical window allocation with room for retained chrome and the test leaf.
 const RECT: Rect = Rect { x: 20, y: 20, width: 400, height: 200 };
 
-/// Idle still performs the complete setter/resize synchronization transaction.
-fn idle() -> PlatformEvent {
-    PlatformEvent {
-        kind: PlatformEventKind::NONE,
-        x: 0,
-        y: 0,
-    }
-}
-
 /// Creates the production runtime with a small deterministic atlas.
 fn runtime() -> ComPtr<IUiRuntimeAbi> {
     create_runtime(crate::test_support::test_atlas())
@@ -92,7 +83,7 @@ fn mount_validation_is_transactional_and_closure_outlives_tree_storage() {
     drop(first);
     assert_eq!(unmounted.label().unwrap_err(), UI_E_CLOSED);
     assert_eq!(window.set_rect(RECT), Err(UI_E_CLOSED));
-    second.update(SIZE, idle()).unwrap();
+    second.update(SIZE).unwrap();
 }
 
 /// Setter and resize invalidation are independent of user activation's NoChange result.
@@ -104,18 +95,18 @@ fn rendering_requires_synchronized_geometry_and_streams_expire_after_success_and
     let _window = mount(&runtime, &node).unwrap();
     let (renderer, probe) = renderer();
     assert_eq!(runtime.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
-    runtime.update(SIZE, idle()).unwrap();
+    runtime.update(SIZE).unwrap();
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     button.set_label(NcCopyFromBufferOffset::new(0, b"longer")).unwrap();
     assert_eq!(runtime.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
     assert_eq!(probe.calls.get(), 1);
-    runtime.update(SIZE, idle()).unwrap();
+    runtime.update(SIZE).unwrap();
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     button.set_label(NcCopyFromBufferOffset::new(0, b"longer")).unwrap();
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     let resized = Size { width: 800, height: 480 };
     assert_eq!(runtime.render(resized, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
-    runtime.update(resized, idle()).unwrap();
+    runtime.update(resized).unwrap();
     probe.fail.set(true);
     assert_eq!(runtime.render(resized, renderer.as_com_ref()), Err(UI_E_RENDER));
     for (stream, scope) in probe.streams.borrow().iter() {
@@ -126,6 +117,24 @@ fn rendering_requires_synchronized_geometry_and_streams_expire_after_success_and
 /// A component can retain COM services; the runtime must enforce phase and scope at runtime.
 #[derive(Default)]
 struct WidgetProbe {
+    /// Every update, including eventless updates and routed text/key transactions.
+    updates: Cell<u32>,
+    /// Next content width to commit during update, rather than before traversal.
+    requested_width: Cell<i32>,
+    /// Authoritative preferred width after an update has committed it.
+    width: Cell<i32>,
+    /// Decoded input snapshots prove that the whole typed payload arrived once.
+    events: RefCell<Vec<WidgetEvent>>,
+    /// Independently owned text observations survive the original borrowed buffer.
+    texts: RefCell<Vec<String>>,
+    /// Whether this custom widget currently accepts committed text.
+    text_input: Cell<bool>,
+    /// Logical closure must follow node removal once, even with retained COM handles.
+    closes: Cell<u32>,
+    /// Deliberate close failure verifies explicit teardown reports component errors.
+    fail_close: Cell<bool>,
+    /// A transient geometry error must be retried without a second setter change.
+    fail_measure: Cell<bool>,
     /// Paint calls retain these values beyond their valid invocation.
     painters: RefCell<Vec<(ComPtr<IPainterAbi>, PaintScope)>>,
     /// Number of actual preferred measurement calls after cache handling.
@@ -134,11 +143,11 @@ struct WidgetProbe {
     fail_paint: Cell<bool>,
 }
 
-#[com_class(interfaces(IWidget, ILeafLayout, IActivatable, IWidgetLifetime))]
+#[com_class(interfaces(IWidget, ILeafLayout))]
 /// Independently implemented leaf delegates lifetime only to a factory-owned fixture object.
 struct RetainingWidget {
     /// Gives the custom implementation the same runtime ownership identity and mount-once rules.
-    lifetime: ComPtr<IWidgetLifetimeAbi>,
+    lifetime: ComPtr<IWidgetAbi>,
     /// Actual concrete setter used to test observational mutation rejection.
     button: ComPtr<IButtonAbi>,
     /// Retained runtime deliberately tries to reenter during measurement and painting.
@@ -147,7 +156,21 @@ struct RetainingWidget {
     probe: Rc<WidgetProbe>,
 }
 
-impl IWidgetLifetime for RetainingWidget {
+impl ILeafLayout for RetainingWidget {
+    /// Checks reentry and mutation rejection while returning deterministic preferred geometry.
+    fn measure(&self, _bounds: LayoutLimits, _metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
+        self.probe.measures.set(self.probe.measures.get() + 1);
+        if self.probe.fail_measure.get() { return Err(NC_E_INVALID_ARG); }
+        assert_eq!(self.runtime.update(SIZE), Err(UI_E_BUSY));
+        assert_eq!(self.button.set_label(NcCopyFromBufferOffset::new(0, b"forbidden")), Err(UI_E_BUSY));
+        assert_eq!(self.lifetime.close(), Err(UI_E_BUSY));
+        Ok(Size {
+            width: self.probe.width.get().max(100),
+            height: 30,
+        })
+    }
+}
+impl IWidget for RetainingWidget {
     /// Returns the shared owner without exposing runtime storage.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
         self.lifetime.host()
@@ -158,32 +181,46 @@ impl IWidgetLifetime for RetainingWidget {
     }
     /// Delegates logical closure to its lifetime fixture.
     fn close(&self) -> Result<(), NcStatus> {
-        self.lifetime.close()
+        self.probe.closes.set(self.probe.closes.get() + 1);
+        self.lifetime.close()?;
+        if self.probe.fail_close.get() { Err(NC_E_INVALID_ARG) } else { Ok(()) }
     }
-}
-impl IActivatable for RetainingWidget {
-    /// This custom leaf has no activation-dependent geometry.
-    fn activate(&self) -> Result<GeometryChange, NcStatus> {
-        Ok(GeometryChange::NO_CHANGE)
+
+    /// Reuses real common widget policy in this deliberately retaining implementation.
+    fn properties(&self) -> Result<WidgetProperties, NcStatus> {
+        let mut properties = self.button.properties()?;
+        if self.probe.text_input.get() {
+            properties.keyboard |= 256;
+        }
+        Ok(properties)
     }
-}
-impl ILeafLayout for RetainingWidget {
-    /// Checks reentry and mutation rejection while returning deterministic preferred geometry.
-    fn measure(&self, _bounds: LayoutLimits, _metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
-        self.probe.measures.set(self.probe.measures.get() + 1);
-        assert_eq!(self.runtime.update(SIZE, idle()), Err(UI_E_BUSY));
-        assert_eq!(self.button.set_label(NcCopyFromBufferOffset::new(0, b"forbidden")), Err(UI_E_BUSY));
-        Ok(Size { width: 100, height: 30 })
+    /// Common options are delegated to the shared fixture state.
+    fn set_options(&self, options: WidgetOptions) -> Result<(), NcStatus> {
+        self.button.set_options(options)
     }
-}
-impl IWidget for RetainingWidget {
-    /// No setter changes are needed by this deliberate retention fixture.
+    /// Eventless updates do not change this fixture's fixed content geometry.
+    fn update(&self, _state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
+        let (event, text) = decode_widget_event(event, text)?;
+        self.probe.updates.set(self.probe.updates.get() + 1);
+        self.probe.events.borrow_mut().push(event);
+        if matches!(event, WidgetEvent::Text) {
+            self.probe.texts.borrow_mut().push(text.to_owned());
+        }
+        let width = self.probe.requested_width.replace(0);
+        if width > 0 && self.probe.width.replace(width) != width {
+            Ok(GeometryChange::CHANGED)
+        } else {
+            Ok(GeometryChange::NO_CHANGE)
+        }
+    }
+
+    /// Setter changes stay sticky even when this custom widget is hidden.
     fn take_change(&self) -> Result<GeometryChange, NcStatus> {
-        Ok(GeometryChange::NO_CHANGE)
+        self.button.take_change()
     }
     /// Retains authority and probes old tokens while a later scope is active.
     fn paint(&self, scope: PaintScope, rect: Rect, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
-        assert_eq!(self.runtime.update(SIZE, idle()), Err(UI_E_BUSY));
+        assert_eq!(self.runtime.update(SIZE), Err(UI_E_BUSY));
         assert_eq!(self.button.set_label(NcCopyFromBufferOffset::new(0, b"forbidden")), Err(UI_E_BUSY));
         for (old, expired) in self.probe.painters.borrow().iter() {
             assert_eq!(old.fill(*expired, rect, 0), Err(UI_E_EXPIRED_SCOPE));
@@ -208,9 +245,9 @@ fn external_widget_cannot_reenter_mutate_during_observation_or_reuse_a_paint_sco
     });
     let window = mount(&runtime, &widget.query().unwrap()).unwrap();
     let (renderer, backend) = renderer();
-    runtime.update(SIZE, idle()).unwrap();
+    runtime.update(SIZE).unwrap();
     let measured = probe.measures.get();
-    runtime.update(SIZE, idle()).unwrap();
+    runtime.update(SIZE).unwrap();
     assert_eq!(probe.measures.get(), measured);
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
@@ -277,7 +314,7 @@ fn window_com_capabilities_preserve_hierarchy_layers_visibility_and_subtree_clos
     assert_eq!(root.snapshot().unwrap().layer.number, 2);
     root.set_title(NcCopyFromBufferOffset::new(0, b"new title")).unwrap();
     assert_eq!(root.title().unwrap().to_string().unwrap(), "new title");
-    runtime.update(SIZE, idle()).unwrap();
+    runtime.update(SIZE).unwrap();
     root.close().unwrap();
     for button in [root_button, child_button, dialog_button] {
         assert_eq!(button.set_label(NcCopyFromBufferOffset::new(0, b"closed")), Err(UI_E_CLOSED));
@@ -287,7 +324,7 @@ fn window_com_capabilities_preserve_hierarchy_layers_visibility_and_subtree_clos
     // Parent destruction has already removed these definitions; close remains idempotent.
     child.close().unwrap();
     dialog.close().unwrap();
-    runtime.update(SIZE, idle()).unwrap();
+    runtime.update(SIZE).unwrap();
 }
 
 /// A rejected parent/policy must leave the child available for a legitimate later attachment.
@@ -344,7 +381,7 @@ fn popup_com_capability_enforces_active_owner_policy_and_permanent_removal() {
         .unwrap();
     assert_eq!(popup.query::<IWindowAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
     assert_eq!(popup.visibility().unwrap(), Visibility::HIDDEN);
-    runtime.update(SIZE, idle()).unwrap();
+    runtime.update(SIZE).unwrap();
     popup.show(RECT).unwrap();
     assert_eq!(popup.visibility().unwrap(), Visibility::VISIBLE);
     popup.hide().unwrap();
@@ -365,8 +402,133 @@ fn popup_com_capability_enforces_active_owner_policy_and_permanent_removal() {
     popup.close().unwrap();
     assert_eq!(popup.visibility(), Err(UI_E_CLOSED));
     assert_eq!(popup_button.label().unwrap_err(), UI_E_CLOSED);
-    runtime.update(SIZE, idle()).unwrap();
+    runtime.update(SIZE).unwrap();
     let (renderer, _) = renderer();
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     runtime.close().unwrap();
+}
+
+/// Eventless geometry changes, queued text, dynamic options and hidden setters share one path.
+#[test]
+fn com_nodes_update_without_activation_and_collect_hidden_widget_changes() {
+    let runtime = runtime();
+    let button = button(&runtime);
+    let probe = Rc::new(WidgetProbe::default());
+    probe.text_input.set(true);
+    let object = RetainingWidget::from_value(RetainingWidget {
+        lifetime: button.query().unwrap(),
+        button: button.clone(),
+        runtime: runtime.clone(),
+        probe: probe.clone(),
+    });
+    let window = mount(&runtime, &object.query().unwrap()).unwrap();
+    runtime.update(SIZE).unwrap();
+    let measured = probe.measures.get();
+    probe.requested_width.set(240);
+    runtime.update(SIZE).unwrap();
+    assert!(probe.measures.get() > measured);
+    assert_eq!(probe.width.get(), 240);
+
+    let tab = UiInput::Key(KeyStroke {
+        key: KeyCode::TAB,
+        value: 0,
+        pressed: true,
+        repeat: false,
+        modifiers: 0,
+    });
+    runtime.input(tab.into(), NcCopyFromBufferOffset::new(0, &[])).unwrap();
+    runtime.update(SIZE).unwrap();
+    let measured = probe.measures.get();
+    runtime
+        .input(UiInput::Text.into(), NcCopyFromBufferOffset::new(0, "hello ☃".as_bytes()))
+        .unwrap();
+    let (renderer, _) = renderer();
+    assert_eq!(runtime.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+    runtime.update(SIZE).unwrap();
+    assert_eq!(&*probe.texts.borrow(), &["hello ☃"]);
+    assert_eq!(probe.measures.get(), measured, "NoChange text processing must preserve measurement");
+
+    let before = button.properties().unwrap().options;
+    assert_eq!(button.set_options(WidgetOptions { bits: 8 }), Err(NC_E_INVALID_ARG));
+    assert_eq!(button.properties().unwrap().options, before);
+    window.set_visibility(Visibility::HIDDEN).unwrap();
+    runtime.update(SIZE).unwrap();
+    let updates = probe.updates.get();
+    let measured = probe.measures.get();
+    button.set_options(WidgetOptions::NONE).unwrap();
+    runtime.update(SIZE).unwrap();
+    assert_eq!(probe.updates.get(), updates, "hidden widgets skip update but retain setter invalidation");
+    window.set_visibility(Visibility::VISIBLE).unwrap();
+    runtime.update(SIZE).unwrap();
+    assert!(probe.measures.get() > measured);
+    window.close().unwrap();
+    assert_eq!(probe.closes.get(), 1);
+    runtime.close().unwrap();
+    assert_eq!(probe.closes.get(), 1);
+}
+
+/// Malformed input changes no queue state, and a component's teardown error reaches the caller.
+#[test]
+fn input_validation_and_explicit_teardown_preserve_their_error_boundaries() {
+    let runtime = runtime();
+    let button = button(&runtime);
+    let probe = Rc::new(WidgetProbe::default());
+    let object = RetainingWidget::from_value(RetainingWidget {
+        lifetime: button.query().unwrap(),
+        button,
+        runtime: runtime.clone(),
+        probe: probe.clone(),
+    });
+    let window = mount(&runtime, &object.query().unwrap()).unwrap();
+    runtime.update(SIZE).unwrap();
+    let bad_key = UiInput::Key(KeyStroke {
+        key: KeyCode::CHARACTER,
+        value: 0xd800,
+        pressed: true,
+        repeat: false,
+        modifiers: 0,
+    });
+    assert_eq!(runtime.input(bad_key.into(), NcCopyFromBufferOffset::new(0, &[])), Err(NC_E_INVALID_ARG));
+    assert_eq!(
+        runtime.input(UiInput::Text.into(), NcCopyFromBufferOffset::new(1, b"bad")),
+        Err(NC_E_INVALID_ARG)
+    );
+    assert_eq!(
+        runtime.input(UiInput::Text.into(), NcCopyFromBufferOffset::new(0, &[0xff])),
+        Err(NC_E_INVALID_ARG)
+    );
+    assert_eq!(
+        runtime.input(UiInput::Cancel.into(), NcCopyFromBufferOffset::new(0, b"unexpected")),
+        Err(NC_E_INVALID_ARG)
+    );
+    let (renderer, _) = renderer();
+    runtime.render(SIZE, renderer.as_com_ref()).unwrap();
+    probe.fail_close.set(true);
+    assert_eq!(window.close(), Err(NC_E_INVALID_ARG));
+    assert_eq!(probe.closes.get(), 1);
+    window.close().unwrap();
+    assert_eq!(probe.closes.get(), 1);
+    runtime.update(SIZE).unwrap();
+}
+
+/// A failed measure never commits a zero-size cache entry or suppresses the retry.
+#[test]
+fn failed_com_measurement_retries_after_component_recovery() {
+    let runtime = runtime();
+    let button = button(&runtime);
+    let probe = Rc::new(WidgetProbe::default());
+    probe.fail_measure.set(true);
+    let object = RetainingWidget::from_value(RetainingWidget {
+        lifetime: button.query().unwrap(), button, runtime: runtime.clone(), probe: probe.clone(),
+    });
+    let window = mount(&runtime, &object.query().unwrap()).unwrap();
+    assert_eq!(runtime.update(SIZE), Err(NC_E_INVALID_ARG));
+    let failed = probe.measures.get();
+    assert!(failed > 0);
+    probe.fail_measure.set(false);
+    runtime.update(SIZE).unwrap();
+    assert!(probe.measures.get() > failed, "component recovery must call measure again");
+    let (renderer, _) = renderer();
+    runtime.render(SIZE, renderer.as_com_ref()).unwrap();
+    window.close().unwrap();
 }

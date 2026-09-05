@@ -33,7 +33,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::math::RectExt;
-use crate::{AtlasHandle, Constraints, Dimensioni, LeafWidget, Recti, SliceInsets, Skin, TypedWidgetHandle, Widget};
+use crate::{AtlasHandle, Constraints, Dimensioni, LeafWidget, Recti, SliceInsets, Skin, TypedWidgetHandle};
 
 use super::{ChildParticipation, Children, Container, NodeLayout, RuntimeNodeId, WidgetStorage};
 
@@ -183,6 +183,11 @@ pub struct Node {
 }
 
 impl Node {
+    /// Mounts an already authenticated COM leaf without another widget allocation.
+    pub(crate) fn com_widget(widget: crate::com::ComNode) -> Self {
+        Self::from_kind(NodeKind::Com(widget))
+    }
+
     /// Creates a leaf node without retaining a typed application handle.
     pub fn widget<W: LeafWidget + 'static>(widget: W) -> Self {
         Self::mount_widget(widget, None).1
@@ -310,6 +315,22 @@ impl Node {
                     .measure(style, atlas, crate::ui_node::frame::content_constraints(constraints, frame_insets));
                 (frame_insets, measured_content)
             }
+            NodeKind::Com(widget) => {
+                let (options, _, role) = widget.policy();
+                let insets = if options.intersects(crate::WidgetOption::FRAME) {
+                    crate::ui_node::frame::normal_frame_visual(style, role).patch.insets.normalized()
+                } else { SliceInsets::ZERO };
+                let measured = match widget.measure(style, atlas, crate::ui_node::frame::content_constraints(constraints, insets)) {
+                    Ok(size) => size,
+                    Err(_) => {
+                        // The component already latched its error and retained
+                        // dirtiness. Do not publish a failed preference to cache.
+                        self.state.invalidate_measurement();
+                        return (Dimensioni::default(), false);
+                    }
+                };
+                (insets, measured)
+            }
             NodeKind::Container(container) => container.measure_content_with_frame(style, atlas, constraints),
         };
         // Widgets cannot return negative geometry. Node placement policy is intentionally absent:
@@ -354,7 +375,7 @@ impl Node {
         // Treat a leaf as an empty collection for read-only generic traversal. This avoids a second
         // visitor abstraction while preserving the fact that only Container stores descendants.
         match &self.data {
-            NodeKind::Widget(_) => f(&Children::new()),
+            NodeKind::Widget(_) | NodeKind::Com(_) => f(&Children::new()),
             NodeKind::Container(container) => container.with_children(f),
         }
     }
@@ -364,7 +385,7 @@ impl Node {
         // Mutable traversal distinguishes leaves explicitly because there is no persistent empty
         // collection that could safely accept topology changes.
         match &mut self.data {
-            NodeKind::Widget(_) => None,
+            NodeKind::Widget(_) | NodeKind::Com(_) => None,
             NodeKind::Container(container) => Some(container.with_children_mut(f)),
         }
     }
@@ -425,38 +446,50 @@ impl WidgetNode {
 
 /// Private runtime payload for an owning [`Node`].
 pub(crate) enum NodeKind {
-    /// Direct erased leaf widget runtime.
+    /// Node-owned external widget capabilities; no Rust object or weak handle wraps them.
+    Com(crate::com::ComNode),
+    /// Local built-ins still awaiting conversion in the next migration item.
     Widget(WidgetNode),
     /// Direct concrete container owner with one erased geometry implementation.
     Container(Container),
 }
 
 impl NodeKind {
-    /// Runs a read-only operation against the common widget phase object.
-    pub(crate) fn with_widget<R>(&self, f: impl FnOnce(&dyn Widget) -> R) -> R {
+    /// Reads one concrete policy snapshot for routing and frame geometry.
+    pub(crate) fn policy(&self) -> (crate::WidgetOption, crate::KeyboardBehavior, crate::FrameRole) {
         match self {
+            Self::Com(node) => node.policy(),
             Self::Widget(node) => {
-                let widget = node.widget.try_borrow().unwrap_or_else(|_| widget_borrow_conflict());
-                f(&widget.widget)
+                let storage = node.widget.try_borrow().unwrap_or_else(|_| widget_borrow_conflict());
+                let widget = &storage.widget;
+                (widget.effective_widget_opt(), widget.keyboard_behavior(), widget.frame_appearance_role())
             }
-            Self::Container(container) => container.with_widget(f),
+            Self::Container(container) => container.with_widget(|widget| (widget.effective_widget_opt(), widget.keyboard_behavior(), widget.frame_appearance_role())),
         }
     }
 
-    /// Runs a mutable operation against the common widget phase object.
-    pub(crate) fn with_widget_mut<R>(&mut self, f: impl FnOnce(&mut dyn Widget) -> R) -> R {
+    /// Delivers an update directly to the owning representation.
+    pub(crate) fn update(&mut self, ctx: &mut crate::WidgetUpdateCtx<'_>, input: Option<&super::UiInputEvent>) -> crate::Change {
         match self {
-            Self::Widget(node) => {
-                let mut widget = node.widget.try_borrow_mut().unwrap_or_else(|_| widget_borrow_conflict());
-                f(&mut widget.widget)
-            }
-            Self::Container(container) => container.with_widget_mut(f),
+            Self::Com(node) => node.update(ctx, input),
+            Self::Widget(node) => node.widget.try_borrow_mut().unwrap_or_else(|_| widget_borrow_conflict()).widget.update(ctx, input),
+            Self::Container(container) => container.with_widget_mut(|widget| widget.update(ctx, input)),
+        }
+    }
+
+    /// Paints without exposing a Rust widget trait object for COM-owned nodes.
+    pub(crate) fn paint(&mut self, ctx: &mut crate::WidgetPaintCtx<'_>) {
+        match self {
+            Self::Com(node) => node.paint(ctx),
+            Self::Widget(node) => node.widget.try_borrow_mut().unwrap_or_else(|_| widget_borrow_conflict()).widget.paint(ctx),
+            Self::Container(container) => container.with_widget_mut(|widget| widget.paint(ctx)),
         }
     }
 
     pub(crate) fn is_measurement_dirty(&self) -> bool {
         match self {
             Self::Widget(node) => node.widget.try_borrow().unwrap_or_else(|_| widget_borrow_conflict()).is_measurement_dirty(),
+            Self::Com(widget) => widget.is_dirty(),
             Self::Container(container) => container.is_measurement_dirty(),
         }
     }
@@ -468,6 +501,7 @@ impl NodeKind {
                 .try_borrow_mut()
                 .unwrap_or_else(|_| widget_borrow_conflict())
                 .take_measurement_dirty(),
+            Self::Com(widget) => widget.take_dirty(),
             Self::Container(container) => container.take_measurement_dirty(),
         }
     }
@@ -479,6 +513,7 @@ impl NodeKind {
                 .try_borrow_mut()
                 .unwrap_or_else(|_| widget_borrow_conflict())
                 .mark_measurement_dirty(),
+            Self::Com(widget) => widget.mark_dirty(),
             Self::Container(container) => container.mark_measurement_dirty(),
         }
     }

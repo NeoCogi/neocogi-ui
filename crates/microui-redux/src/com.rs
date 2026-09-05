@@ -32,6 +32,11 @@ impl<I: ComInterface> Widget<I> {
         self.interface.as_com_ref()
     }
 
+    /// Replaces common options through the same widget object used by the runtime.
+    pub fn set_options(&self, options: WidgetOptions) -> Result<(), NcStatus> {
+        self.node_interface()?.set_options(options)
+    }
+
     /// Obtains the common node capability for attachment; callers cache this at mount.
     pub fn node_interface(&self) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
         // Querying preserves object identity and validates the full projected ABI.
@@ -158,9 +163,13 @@ impl Ui {
         self.windows
             .create_popup(parent, NcCopyFromBufferOffset::new(0, title.as_bytes()), root.node_interface()?.as_com_ref())
     }
+    /// Queues a typed host event while keeping its text buffer local to this call.
+    pub fn input(&self, event: UiInput, text: &str) -> Result<(), NcStatus> {
+        self.runtime.input(event.into(), NcCopyFromBufferOffset::new(0, text.as_bytes()))
+    }
     /// Processes input and synchronizes independently recorded geometry changes.
-    pub fn update(&self, size: Size, event: PlatformEvent) -> Result<(), NcStatus> {
-        self.runtime.update(size, event)
+    pub fn update(&self, size: Size) -> Result<(), NcStatus> {
+        self.runtime.update(size)
     }
     /// Submits a synchronized UI frame to a native window's renderer capability.
     pub fn render(&self, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {

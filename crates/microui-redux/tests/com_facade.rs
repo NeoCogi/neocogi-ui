@@ -37,6 +37,37 @@ mod tests {
     }
 
     impl IWidget for TestButton {
+        /// This standalone facade fixture deliberately has no mountable runtime owner.
+        fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
+            Err(nc_com::NC_E_NOINTERFACE)
+        }
+        /// Attachment is outside this editing-only fixture's supported behavior.
+        fn mount(&self) -> Result<(), NcStatus> {
+            Err(nc_com::NC_E_NOINTERFACE)
+        }
+        /// Its test-owned state needs no external teardown.
+        fn close(&self) -> Result<(), NcStatus> {
+            Ok(())
+        }
+
+        /// Fixture policy is independent of any native runtime or theme implementation.
+        fn properties(&self) -> Result<WidgetProperties, NcStatus> {
+            Ok(WidgetProperties {
+                options: WidgetOptions::NONE,
+                keyboard: 0,
+                frame: WidgetFrame::GENERIC,
+            })
+        }
+        /// This fixed fixture permits only its supported inert option policy.
+        fn set_options(&self, options: WidgetOptions) -> Result<(), NcStatus> {
+            if options == WidgetOptions::NONE { Ok(()) } else { Err(NC_E_INVALID_ARG) }
+        }
+        /// Input validation remains typed even in a facade-only fake component.
+        fn update(&self, _state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
+            decode_widget_event(event, text)?;
+            Ok(GeometryChange::NO_CHANGE)
+        }
+
         /// Clears one accumulated programmatic geometry change.
         fn take_change(&self) -> Result<GeometryChange, NcStatus> {
             Ok(if self.changed.replace(false) {

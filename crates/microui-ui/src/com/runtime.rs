@@ -5,11 +5,9 @@ use super::{
     paint::{Metrics, PaintService},
     render::Backend,
 };
-use crate::prelude::{
-    AtlasHandle, Dimensioni, Node, WidgetOption, KeyboardBehavior, KeyboardAction, WidgetUpdateCtx, WidgetPaintCtx, UiInputEvent, ControlRole, Constraints,
-    Skin, Key, KeyEvent, KeyState, Modifiers, MouseButton,
-};
-use crate::{Context, TypedWidgetHandle, LeafWidget, Widget, Change};
+use crate::prelude::{AtlasHandle, Dimensioni, Node, Skin};
+use crate::Context;
+use super::node::ComNode;
 mod windows;
 use windows::NativeSurface;
 
@@ -27,7 +25,7 @@ pub fn create_runtime(atlas: AtlasHandle) -> ComPtr<IUiRuntimeAbi> {
     let target = backend.target.clone();
     Runtime::from_value(Runtime {
         storage: Rc::new(RuntimeStorage {
-            context: RefCell::new(Context::new(backend)),
+            context: RefCell::new(Some(Context::new(backend))),
             mounts: RefCell::new(Vec::new()),
             state,
             host,
@@ -51,9 +49,9 @@ struct Runtime {
 
 /// All authoritative runtime state is private to the UI plugin.
 struct RuntimeStorage {
-    /// Existing retained engine, temporarily bridged until COM node ownership replaces its handles.
-    context: RefCell<Context<Backend>>,
-    /// Mounted root capabilities and legacy invalidation hooks, removed with the node migration.
+    /// Idle engine slot; transactions take ownership so no RefCell borrow spans a COM call.
+    context: RefCell<Option<Context<Backend>>>,
+    /// Surface capabilities authenticate parents; the forest alone owns widget nodes.
     mounts: RefCell<Vec<Mount>>,
     /// Shared lifetime/phase state contains no references back to this allocation.
     state: Rc<HostState>,
@@ -77,12 +75,6 @@ struct Mount {
     surface: NativeSurface,
     /// Manager-owned COM surface identity authenticates parent capabilities without exposing IDs.
     identity: ComPtr<IUnknown>,
-    /// Actual common widget object; no mirrored label or semantic state.
-    widget: ComPtr<IWidgetAbi>,
-    /// Cached lifecycle interface avoids repeated QueryInterface during teardown.
-    lifetime: ComPtr<IWidgetLifetimeAbi>,
-    /// Weak invalidation hook for the temporary retained adapter.
-    bridge: TypedWidgetHandle<Bridge>,
 }
 
 impl RuntimeStorage {
@@ -90,41 +82,30 @@ impl RuntimeStorage {
     fn open(&self) -> Result<(), NcStatus> {
         if self.state.closed.get() { Err(UI_E_CLOSED) } else { Ok(()) }
     }
-    /// Closes capabilities removed by any manager subtree operation, including descendants.
-    fn prune_mounts(&self) -> Result<(), NcStatus> {
-        let removed: Vec<_> = self.mounts.borrow_mut().extract_if(.., |mount| !mount.bridge.is_alive()).collect();
-        let mut failure = None;
-        for mount in removed {
-            if let Err(error) = mount.lifetime.close() {
-                failure.get_or_insert(error);
-            }
-        }
-        failure.map_or(Ok(()), Err)
+    /// Takes exclusive engine ownership while allowing foreign calls to reenter safely.
+    fn context(&self) -> Result<ContextTransaction<'_>, NcStatus> {
+        let value = self.context.try_borrow_mut().map_err(|_| UI_E_BUSY)?.take().ok_or(UI_E_BUSY)?;
+        Ok(ContextTransaction { slot: &self.context, value: Some(value) })
     }
-    /// Drains sticky setter dirtiness before any parent can return cached measurement.
-    fn collect_changes(&self) -> Result<(), NcStatus> {
-        // Snapshot capabilities first: external implementations may reenter, so no mounts borrow
-        // survives a call. The Context borrow owned by the transaction rejects such reentry.
-        self.prune_mounts()?;
-        let widgets: Vec<_> = self.mounts.borrow().iter().map(|mount| (mount.widget.clone(), mount.bridge.clone())).collect();
-        for (widget, bridge) in widgets {
-            if widget.take_change()? == GeometryChange::CHANGED {
-                bridge.try_update(|_| ()).ok_or(UI_E_CLOSED)?;
-                self.pending.set(true);
-            }
+
+    /// Removes surface projections whose authoritative forest entries were destroyed.
+    fn prune_mounts(&self, manager: &crate::window_manager::WindowManager) {
+        self.mounts.borrow_mut().retain(|mount| mount.surface.is_alive(manager));
+    }
+
+    /// Drains setter changes throughout the forest, including hidden subtrees.
+    fn collect_changes(&self, context: &mut Context<Backend>) -> Result<(), NcStatus> {
+        self.prune_mounts(&context.window_manager);
+        let _phase = Observation::begin(&self.state);
+        self.state.error.set(None);
+        if context.window_manager.collect_widget_changes() {
+            self.pending.set(true);
+        }
+        if let Some(error) = self.state.error.take() {
+            self.pending.set(true);
+            return Err(error);
         }
         Ok(())
-    }
-    /// Closes every mounted capability after the caller has secured exclusive traversal access.
-    fn close_mounts(&self) -> Result<(), NcStatus> {
-        let mounts = std::mem::take(&mut *self.mounts.borrow_mut());
-        let mut failure = None;
-        for mount in mounts {
-            if let Err(error) = mount.lifetime.close() {
-                failure.get_or_insert(error);
-            }
-        }
-        failure.map_or(Ok(()), Err)
     }
 }
 
@@ -132,7 +113,7 @@ impl Drop for RuntimeStorage {
     /// Final release closes retained handles even without an explicit application close.
     fn drop(&mut self) {
         self.state.closed.set(true);
-        let _ = self.close_mounts();
+        // Dropping the owned Context then closes every node in its authoritative forest.
     }
 }
 
@@ -145,28 +126,25 @@ impl IUiFactory for Runtime {
 }
 
 impl IUiRuntime for Runtime {
+    /// Validates before enqueueing and owns the copied text after this synchronous call.
+    fn input(&self, event: UiInputAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        let storage = &self.storage;
+        storage.open()?;
+        let mut context = storage.context()?;
+        super::input::enqueue(&mut context, event, text)?;
+        storage.pending.set(true);
+        Ok(())
+    }
+
     /// Processes a normalized event using the existing retained router and layout algorithms.
-    fn update(&self, size: Size, event: PlatformEvent) -> Result<(), NcStatus> {
+    fn update(&self, size: Size) -> Result<(), NcStatus> {
         let storage = &self.storage;
         storage.open()?;
         if size.width <= 0 || size.height <= 0 {
             return Err(NC_E_INVALID_ARG);
         }
-        let mut context = storage.context.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
-        storage.collect_changes()?;
-        match event.kind {
-            PlatformEventKind::NONE | PlatformEventKind::RESIZE | PlatformEventKind::QUIT => {}
-            PlatformEventKind::POINTER_MOVE => context.mousemove(event.x, event.y),
-            PlatformEventKind::POINTER_DOWN => context.mousedown(event.x, event.y, MouseButton::LEFT),
-            PlatformEventKind::POINTER_UP => context.mouseup(event.x, event.y, MouseButton::LEFT),
-            PlatformEventKind::TAB | PlatformEventKind::ACTIVATE => context.key(KeyEvent {
-                key: if event.kind == PlatformEventKind::TAB { Key::Tab } else { Key::Enter },
-                state: KeyState::Pressed,
-                modifiers: Modifiers::empty(),
-                repeat: false,
-            }),
-            _ => return Err(NC_E_INVALID_ARG),
-        }
+        let mut context = storage.context()?;
+        storage.collect_changes(&mut context)?;
         storage.state.error.set(None);
         context.update_ui(Dimensioni::new(size.width, size.height));
         if let Some(error) = storage.state.error.take() {
@@ -181,8 +159,8 @@ impl IUiRuntime for Runtime {
     fn render(&self, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
         let storage = &self.storage;
         storage.open()?;
-        let mut context = storage.context.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
-        storage.collect_changes()?;
+        let mut context = storage.context()?;
+        storage.collect_changes(&mut context)?;
         if storage.pending.get() || storage.dimensions.get() != size {
             return Err(UI_E_UPDATE_REQUIRED);
         }
@@ -205,88 +183,44 @@ impl IUiRuntime for Runtime {
         if storage.state.closed.get() {
             return Ok(());
         }
-        let mut context = storage.context.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
+        let mut context = storage.context()?;
         let surfaces: Vec<_> = storage.mounts.borrow().iter().map(|m| m.surface.clone()).collect();
         storage.state.closed.set(true);
+        storage.state.error.set(None);
         for surface in surfaces {
             surface.close(&mut context.window_manager)?;
         }
-        storage.close_mounts()
+        storage.mounts.borrow_mut().clear();
+        storage.state.error.take().map_or(Ok(()), Err)
     }
 }
 
-/// Temporary leaf adapter: derived geometry stays in Node, semantics in the COM widget.
-struct Bridge {
-    /// Actual common widget capability, also retained by the application proxy.
-    widget: ComPtr<IWidgetAbi>,
-    /// Cached preferred-size capability.
-    layout: ComPtr<ILeafLayoutAbi>,
-    /// Cached semantic activation; the slice currently mounts button-like leaves.
-    activation: ComPtr<IActivatableAbi>,
-    /// Owned immutable resource metrics.
-    metrics: ComPtr<ITextMetricsAbi>,
-    /// Owned scope-checked recorder, never a wrapper around WidgetPaintCtx.
-    painter: PaintService,
-    /// Error/phase state without a pointer back into the retained tree.
-    host: Rc<HostState>,
-    /// Temporary legacy routing configuration, removed by common-widget contracts.
-    opt: WidgetOption,
+/// Owns one synchronous transaction instead of lending runtime storage across COM.
+struct ContextTransaction<'a> {
+    /// Empty while calls are active; reentry sees BUSY instead of a borrow panic.
+    slot: &'a RefCell<Option<Context<Backend>>>,
+    /// Owned engine restored on every return path, including error unwinding.
+    value: Option<Context<Backend>>,
 }
 
-impl Widget for Bridge {
-    /// Uses the existing generic frame and hit-target policy.
-    fn widget_opt(&self) -> &WidgetOption {
-        &self.opt
-    }
-    /// Declares button keyboard behavior to the existing shared input router.
-    fn keyboard_behavior(&self) -> KeyboardBehavior {
-        KeyboardBehavior::TAB_STOP | KeyboardBehavior::ACTIVATE_ENTER | KeyboardBehavior::ACTIVATE_SPACE
-    }
-    /// Lets the shared retained traversal draw the same theme-owned outer frame.
-    fn frame_appearance_role(&self) -> crate::FrameRole {
-        crate::FrameRole::Control(ControlRole::Button)
-    }
-    /// Sends activation to the concrete COM widget without a producer borrow or callback.
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Change {
-        if ctx.action(input, self.keyboard_behavior()) == Some(KeyboardAction::Activate) {
-            match self.activation.activate() {
-                Ok(change) => return Change::from(change == GeometryChange::CHANGED),
-                Err(error) => self.host.fail(error),
-            }
-        }
-        Change::NoChange
-    }
-    /// Starts an observational scope and records/replays complete owned commands.
-    fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
-        let _phase = Observation::begin(&self.host);
-        if let Err(error) = self.painter.paint(&self.widget, ctx) {
-            self.host.fail(error);
-        }
+impl core::ops::Deref for ContextTransaction<'_> {
+    type Target = Context<Backend>;
+    /// Borrows the engine owned by this transaction, never its empty storage slot.
+    fn deref(&self) -> &Self::Target {
+        self.value.as_ref().expect("live transaction owns its context")
     }
 }
 
-impl LeafWidget for Bridge {
-    /// Preserves finite/unbounded constraints across the temporary ABI conversion.
-    fn measure(&self, _skin: &Skin, _atlas: &AtlasHandle, constraints: Constraints) -> Dimensioni {
-        let _phase = Observation::begin(&self.host);
-        let bounds = LayoutLimits {
-            width: axis_limit(constraints.width),
-            height: axis_limit(constraints.height),
-        };
-        match self.layout.measure(bounds, self.metrics.as_com_ref()) {
-            Ok(size) if size.width >= 0 && size.height >= 0 => Dimensioni::new(size.width, size.height),
-            result => {
-                self.host.fail(result.err().unwrap_or(NC_E_INVALID_ARG));
-                Dimensioni::default()
-            }
-        }
+impl core::ops::DerefMut for ContextTransaction<'_> {
+    /// Allows local algorithms to mutate the owned engine without a RefCell guard.
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.value.as_mut().expect("live transaction owns its context")
     }
 }
 
-/// Converts one legacy axis without losing the difference between zero and unbounded.
-fn axis_limit(space: crate::AvailableSpace) -> AxisLimit {
-    match space.bound() {
-        Some(extent) => AxisLimit { kind: LimitKind::FINITE, extent },
-        None => AxisLimit { kind: LimitKind::UNBOUNDED, extent: 0 },
+impl Drop for ContextTransaction<'_> {
+    /// Reentry never receives the slot, so it is empty and unborrowed here.
+    fn drop(&mut self) {
+        *self.slot.borrow_mut() = self.value.take();
     }
 }

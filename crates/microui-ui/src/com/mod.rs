@@ -1,7 +1,7 @@
 //! COM implementation boundary. Rust UI storage never crosses this module's ABI.
 //!
-//! The temporary leaf bridge reuses the retained engine while its node ownership
-//! is migrated. It must disappear when Node directly retains COM capabilities.
+//! Retained nodes directly own COM widget capabilities. Runtime geometry remains
+//! private and foreign calls receive only copied values or owned scoped services.
 
 use microui_contracts::*;
 use nc_com::{ComPtr, ComRef, IUnknown, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, com_class};
@@ -11,6 +11,9 @@ use std::{
 };
 
 mod button;
+mod node;
+mod input;
+pub(crate) use node::ComNode;
 mod paint;
 mod render;
 mod runtime;
