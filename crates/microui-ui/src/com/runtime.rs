@@ -6,11 +6,12 @@ use super::{
     render::Backend,
 };
 use crate::prelude::{
-    AtlasHandle, Dimensioni, WindowHandle, Window, Node, WidgetOption, KeyboardBehavior, KeyboardAction, WidgetUpdateCtx, WidgetPaintCtx, UiInputEvent,
-    ControlRole, Constraints, Skin, Key, KeyEvent, KeyState, Modifiers, MouseButton,
+    AtlasHandle, Dimensioni, Node, WidgetOption, KeyboardBehavior, KeyboardAction, WidgetUpdateCtx, WidgetPaintCtx, UiInputEvent, ControlRole, Constraints,
+    Skin, Key, KeyEvent, KeyState, Modifiers, MouseButton,
 };
 use crate::{Context, TypedWidgetHandle, LeafWidget, Widget, Change};
-use std::rc::Weak;
+mod windows;
+use windows::NativeSurface;
 
 /// Creates a runtime without registering individual ephemeral widgets as COM classes.
 pub fn create_runtime(atlas: AtlasHandle) -> ComPtr<IUiRuntimeAbi> {
@@ -72,8 +73,10 @@ struct RuntimeStorage {
 
 /// Temporary association between an actual COM widget and an existing retained root.
 struct Mount {
-    /// Native window identity used only inside this implementation binary.
-    window: WindowHandle,
+    /// Native identity remains in the manager; this record carries no duplicate parent edges.
+    surface: NativeSurface,
+    /// Manager-owned COM surface identity authenticates parent capabilities without exposing IDs.
+    identity: ComPtr<IUnknown>,
     /// Actual common widget object; no mirrored label or semantic state.
     widget: ComPtr<IWidgetAbi>,
     /// Cached lifecycle interface avoids repeated QueryInterface during teardown.
@@ -87,10 +90,22 @@ impl RuntimeStorage {
     fn open(&self) -> Result<(), NcStatus> {
         if self.state.closed.get() { Err(UI_E_CLOSED) } else { Ok(()) }
     }
+    /// Closes capabilities removed by any manager subtree operation, including descendants.
+    fn prune_mounts(&self) -> Result<(), NcStatus> {
+        let removed: Vec<_> = self.mounts.borrow_mut().extract_if(.., |mount| !mount.bridge.is_alive()).collect();
+        let mut failure = None;
+        for mount in removed {
+            if let Err(error) = mount.lifetime.close() {
+                failure.get_or_insert(error);
+            }
+        }
+        failure.map_or(Ok(()), Err)
+    }
     /// Drains sticky setter dirtiness before any parent can return cached measurement.
     fn collect_changes(&self) -> Result<(), NcStatus> {
         // Snapshot capabilities first: external implementations may reenter, so no mounts borrow
         // survives a call. The Context borrow owned by the transaction rejects such reentry.
+        self.prune_mounts()?;
         let widgets: Vec<_> = self.mounts.borrow().iter().map(|mount| (mount.widget.clone(), mount.bridge.clone())).collect();
         for (widget, bridge) in widgets {
             if widget.take_change()? == GeometryChange::CHANGED {
@@ -126,54 +141,6 @@ impl IUiFactory for Runtime {
     fn create_button(&self) -> Result<ComPtr<IButtonAbi>, NcStatus> {
         self.storage.host.check_mutation()?;
         Ok(Button::create(self.storage.host.clone()))
-    }
-}
-
-impl IWindowManager for Runtime {
-    /// Validates owner and all required capabilities before committing mount-once topology.
-    fn create_window(&self, title: NcCopyFromBufferOffset<'_, u8>, rect: Rect, root: ComRef<'_, IWidgetAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-        let storage = &self.storage;
-        storage.host.check_mutation()?;
-        if rect.width < 0 || rect.height < 0 {
-            return Err(NC_E_INVALID_ARG);
-        }
-        let title = text(title)?.to_owned();
-        let mut context = storage.context.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
-        let widget = root.add_ref();
-        let lifetime: ComPtr<IWidgetLifetimeAbi> = widget.query()?;
-        let actual_owner: ComPtr<IUnknown> = lifetime.host()?.query()?;
-        let expected_owner: ComPtr<IUnknown> = storage.host.query()?;
-        if actual_owner.as_ptr() != expected_owner.as_ptr() {
-            return Err(UI_E_OWNER);
-        }
-        let layout = widget.query()?;
-        let activation = widget.query()?;
-        // All fallible capability and input checks precede the sole topology commit.
-        lifetime.mount()?;
-        let (bridge, node) = Node::typed_widget(Bridge {
-            widget: widget.clone(),
-            layout,
-            activation,
-            metrics: storage.metrics.clone(),
-            painter: storage.painter.clone(),
-            host: storage.state.clone(),
-            opt: WidgetOption::FRAME,
-        });
-        let window = context.ui().create_window(Window::new(title, local_rect(rect), node));
-        storage.mounts.borrow_mut().push(Mount {
-            window: window.clone(),
-            widget,
-            lifetime,
-            bridge,
-        });
-        storage.pending.set(true);
-        Ok(LogicalWindow::from_value(LogicalWindow {
-            runtime: Rc::downgrade(storage),
-            window,
-            closed: Cell::new(false),
-        })
-        .query()
-        .expect("window interface"))
     }
 }
 
@@ -221,6 +188,8 @@ impl IUiRuntime for Runtime {
         }
         let info =
             crate::render::FrameInfo::try_new(Dimensioni::new(size.width, size.height), super::render::color(0xff302820)).map_err(|_| NC_E_INVALID_ARG)?;
+        // The complete submission is observational, including calls into the native renderer.
+        let _phase = Observation::begin(&storage.state);
         storage.state.error.set(None);
         *storage.target.borrow_mut() = Some(renderer.add_ref());
         let result = context.frame(info).render_ui();
@@ -237,73 +206,12 @@ impl IUiRuntime for Runtime {
             return Ok(());
         }
         let mut context = storage.context.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
-        let windows: Vec<_> = storage.mounts.borrow().iter().map(|m| m.window.clone()).collect();
+        let surfaces: Vec<_> = storage.mounts.borrow().iter().map(|m| m.surface.clone()).collect();
         storage.state.closed.set(true);
-        for window in windows {
-            context.ui().destroy_window(&window).map_err(|_| UI_E_CLOSED)?;
+        for surface in surfaces {
+            surface.close(&mut context.window_manager)?;
         }
         storage.close_mounts()
-    }
-}
-
-#[com_class(interfaces(IWindow))]
-/// Retained logical window handle, independent of the runtime allocation's lifetime.
-struct LogicalWindow {
-    /// Weak runtime access prevents a manager/window ownership cycle.
-    runtime: Weak<RuntimeStorage>,
-    /// Legacy root identity remains entirely inside the UI plugin.
-    window: WindowHandle,
-    /// Explicit close is idempotent on this object.
-    closed: Cell<bool>,
-}
-
-impl IWindow for LogicalWindow {
-    /// Changes the authoritative allocation and marks geometry pending.
-    fn set_rect(&self, rect: Rect) -> Result<(), NcStatus> {
-        if self.closed.get() {
-            return Err(UI_E_CLOSED);
-        }
-        if rect.width < 0 || rect.height < 0 {
-            return Err(NC_E_INVALID_ARG);
-        }
-        let runtime = self.runtime.upgrade().ok_or(UI_E_CLOSED)?;
-        runtime.host.check_mutation()?;
-        runtime
-            .context
-            .try_borrow_mut()
-            .map_err(|_| UI_E_BUSY)?
-            .ui()
-            .set_window_rect(&self.window, local_rect(rect))
-            .map_err(|_| UI_E_CLOSED)?;
-        runtime.pending.set(true);
-        Ok(())
-    }
-    /// Removes the tree before closing the component; callbacks cannot observe half a detach.
-    fn close(&self) -> Result<(), NcStatus> {
-        if self.closed.get() {
-            return Ok(());
-        }
-        let Some(runtime) = self.runtime.upgrade() else {
-            self.closed.set(true);
-            return Ok(());
-        };
-        if runtime.state.closed.get() {
-            self.closed.set(true);
-            return Ok(());
-        }
-        runtime.host.check_mutation()?;
-        let mut context = runtime.context.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
-        context.ui().destroy_window(&self.window).map_err(|_| UI_E_CLOSED)?;
-        let index = runtime
-            .mounts
-            .borrow()
-            .iter()
-            .position(|m| m.window.id() == self.window.id())
-            .ok_or(UI_E_CLOSED)?;
-        let mount = runtime.mounts.borrow_mut().remove(index);
-        self.closed.set(true);
-        runtime.pending.set(true);
-        mount.lifetime.close()
     }
 }
 

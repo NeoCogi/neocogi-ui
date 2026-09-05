@@ -223,3 +223,150 @@ fn external_widget_cannot_reenter_mutate_during_observation_or_reuse_a_paint_sco
         assert_eq!(painter.fill(*scope, RECT, 0), Err(UI_E_EXPIRED_SCOPE));
     }
 }
+
+/// Concrete window projections preserve modal, structural visibility and fixed-layer policy.
+#[test]
+fn window_com_capabilities_preserve_hierarchy_layers_visibility_and_subtree_closure() {
+    let runtime = runtime();
+    let manager: ComPtr<IWindowManagerAbi> = runtime.query().unwrap();
+    // Runtime, factory and manager are projections of one object, not service-owned peers.
+    let identity: ComPtr<IUnknown> = runtime.query().unwrap();
+    assert_eq!(identity.as_ptr(), manager.query::<IUnknown>().unwrap().as_ptr());
+    assert_eq!(
+        identity.as_ptr(),
+        runtime.query::<IUiFactoryAbi>().unwrap().query::<IUnknown>().unwrap().as_ptr()
+    );
+    let root_button = button(&runtime);
+    let root = mount(&runtime, &root_button.query().unwrap()).unwrap();
+    let child_button = button(&runtime);
+    let child = manager
+        .create_child(
+            root.as_com_ref(),
+            NcCopyFromBufferOffset::new(0, b"child"),
+            RECT,
+            child_button.query::<IWidgetAbi>().unwrap().as_com_ref(),
+        )
+        .unwrap();
+    let dialog_button = button(&runtime);
+    let dialog = manager
+        .create_dialog(
+            child.as_com_ref(),
+            NcCopyFromBufferOffset::new(0, b"dialog"),
+            RECT,
+            dialog_button.query::<IWidgetAbi>().unwrap().as_com_ref(),
+        )
+        .unwrap();
+    root.set_layer(2).unwrap();
+    assert_eq!(child.snapshot().unwrap().layer.number, 2);
+    assert_eq!(child.set_layer(4), Err(UI_E_POLICY));
+    assert_eq!(dialog.snapshot().unwrap().layer.kind, LayerKind::MODAL);
+    assert_eq!(dialog.snapshot().unwrap().visibility, Visibility::HIDDEN);
+    dialog.set_visibility(Visibility::VISIBLE).unwrap();
+    root.set_visibility(Visibility::HIDDEN).unwrap();
+    assert_eq!(child.snapshot().unwrap().visibility, Visibility::HIDDEN);
+    root.set_visibility(Visibility::VISIBLE).unwrap();
+    assert_eq!(child.snapshot().unwrap().visibility, Visibility::VISIBLE);
+    // Hiding an owner closes modal visibility intent; showing it must not resurrect a dialog.
+    assert_eq!(dialog.snapshot().unwrap().visibility, Visibility::HIDDEN);
+    root.set_child_clip(ChildClip::CONTENT).unwrap();
+    assert_eq!(root.snapshot().unwrap().child_clip, ChildClip::CONTENT);
+    let before = root.snapshot().unwrap().options.bits;
+    assert_eq!(root.set_options(WindowOptions { bits: 32 }), Err(NC_E_INVALID_ARG));
+    assert_eq!(root.snapshot().unwrap().options.bits, before);
+    assert_eq!(root.set_layer(16), Err(NC_E_INVALID_ARG));
+    assert_eq!(root.snapshot().unwrap().layer.number, 2);
+    root.set_title(NcCopyFromBufferOffset::new(0, b"new title")).unwrap();
+    assert_eq!(root.title().unwrap().to_string().unwrap(), "new title");
+    runtime.update(SIZE, idle()).unwrap();
+    root.close().unwrap();
+    for button in [root_button, child_button, dialog_button] {
+        assert_eq!(button.set_label(NcCopyFromBufferOffset::new(0, b"closed")), Err(UI_E_CLOSED));
+    }
+    assert_eq!(child.snapshot().unwrap_err(), UI_E_CLOSED);
+    assert_eq!(dialog.set_visibility(Visibility::VISIBLE), Err(UI_E_CLOSED));
+    // Parent destruction has already removed these definitions; close remains idempotent.
+    child.close().unwrap();
+    dialog.close().unwrap();
+    runtime.update(SIZE, idle()).unwrap();
+}
+
+/// A rejected parent/policy must leave the child available for a legitimate later attachment.
+#[test]
+fn child_creation_rejects_foreign_and_modal_parents_before_mounting() {
+    let first = runtime();
+    let second = runtime();
+    let manager: ComPtr<IWindowManagerAbi> = first.query().unwrap();
+    let root = mount(&first, &button(&first).query().unwrap()).unwrap();
+    let foreign = mount(&second, &button(&second).query().unwrap()).unwrap();
+    let content = button(&first);
+    let node: ComPtr<IWidgetAbi> = content.query().unwrap();
+    assert_eq!(
+        manager
+            .create_child(foreign.as_com_ref(), NcCopyFromBufferOffset::new(0, b"foreign"), RECT, node.as_com_ref())
+            .unwrap_err(),
+        UI_E_OWNER
+    );
+    let dialog = manager
+        .create_dialog(
+            root.as_com_ref(),
+            NcCopyFromBufferOffset::new(0, b"modal"),
+            RECT,
+            button(&first).query::<IWidgetAbi>().unwrap().as_com_ref(),
+        )
+        .unwrap();
+    assert_eq!(
+        manager
+            .create_child(dialog.as_com_ref(), NcCopyFromBufferOffset::new(0, b"invalid"), RECT, node.as_com_ref())
+            .unwrap_err(),
+        UI_E_POLICY
+    );
+    let valid = manager
+        .create_child(root.as_com_ref(), NcCopyFromBufferOffset::new(0, b"valid"), RECT, node.as_com_ref())
+        .unwrap();
+    assert_eq!(valid.snapshot().unwrap().visibility, Visibility::VISIBLE);
+    first.close().unwrap();
+    second.close().unwrap();
+}
+
+/// Popups remain independent typed capabilities while obeying their owner's active/modal policy.
+#[test]
+fn popup_com_capability_enforces_active_owner_policy_and_permanent_removal() {
+    let runtime = runtime();
+    let manager: ComPtr<IWindowManagerAbi> = runtime.query().unwrap();
+    let root = mount(&runtime, &button(&runtime).query().unwrap()).unwrap();
+    let popup_button = button(&runtime);
+    let popup = manager
+        .create_popup(
+            root.as_com_ref(),
+            NcCopyFromBufferOffset::new(0, b"popup"),
+            popup_button.query::<IWidgetAbi>().unwrap().as_com_ref(),
+        )
+        .unwrap();
+    assert_eq!(popup.query::<IWindowAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
+    assert_eq!(popup.visibility().unwrap(), Visibility::HIDDEN);
+    runtime.update(SIZE, idle()).unwrap();
+    popup.show(RECT).unwrap();
+    assert_eq!(popup.visibility().unwrap(), Visibility::VISIBLE);
+    popup.hide().unwrap();
+    assert_eq!(popup.visibility().unwrap(), Visibility::HIDDEN);
+    let dialog = manager
+        .create_dialog(
+            root.as_com_ref(),
+            NcCopyFromBufferOffset::new(0, b"modal"),
+            RECT,
+            button(&runtime).query::<IWidgetAbi>().unwrap().as_com_ref(),
+        )
+        .unwrap();
+    dialog.set_visibility(Visibility::VISIBLE).unwrap();
+    assert_eq!(popup.show(RECT), Err(UI_E_POLICY));
+    dialog.set_visibility(Visibility::HIDDEN).unwrap();
+    popup.show(RECT).unwrap();
+    popup.close().unwrap();
+    popup.close().unwrap();
+    assert_eq!(popup.visibility(), Err(UI_E_CLOSED));
+    assert_eq!(popup_button.label().unwrap_err(), UI_E_CLOSED);
+    runtime.update(SIZE, idle()).unwrap();
+    let (renderer, _) = renderer();
+    runtime.render(SIZE, renderer.as_com_ref()).unwrap();
+    runtime.close().unwrap();
+}

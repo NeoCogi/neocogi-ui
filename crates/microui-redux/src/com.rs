@@ -129,6 +129,35 @@ impl Ui {
         self.windows
             .create_window(NcCopyFromBufferOffset::new(0, title.as_bytes()), rect, root.node_interface()?.as_com_ref())
     }
+    /// Mounts a structural child under a live window from this UI.
+    pub fn child_window<I: ComInterface>(
+        &self,
+        parent: ComRef<'_, IWindowAbi>,
+        title: &str,
+        rect: Rect,
+        root: &Widget<I>,
+    ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+        self.windows.create_child(
+            parent,
+            NcCopyFromBufferOffset::new(0, title.as_bytes()),
+            rect,
+            root.node_interface()?.as_com_ref(),
+        )
+    }
+    /// Mounts a hidden modal dialog; show it after initialization with set_visibility.
+    pub fn dialog<I: ComInterface>(&self, parent: ComRef<'_, IWindowAbi>, title: &str, rect: Rect, root: &Widget<I>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+        self.windows.create_dialog(
+            parent,
+            NcCopyFromBufferOffset::new(0, title.as_bytes()),
+            rect,
+            root.node_interface()?.as_com_ref(),
+        )
+    }
+    /// Mounts a hidden auto-sized popup with a distinct popup capability.
+    pub fn popup<I: ComInterface>(&self, parent: ComRef<'_, IWindowAbi>, title: &str, root: &Widget<I>) -> Result<ComPtr<IPopupAbi>, NcStatus> {
+        self.windows
+            .create_popup(parent, NcCopyFromBufferOffset::new(0, title.as_bytes()), root.node_interface()?.as_com_ref())
+    }
     /// Processes input and synchronizes independently recorded geometry changes.
     pub fn update(&self, size: Size, event: PlatformEvent) -> Result<(), NcStatus> {
         self.runtime.update(size, event)

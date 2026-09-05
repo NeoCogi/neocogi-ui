@@ -280,9 +280,145 @@ pub trait IPlatform {
     fn create_window(&self, title: NcCopyFromBufferOffset<'_, u8>, size: Size) -> Result<ComPtr<IPlatformWindowAbi>, NcStatus>;
 }
 
+com_int_enum! {
+    /// Visibility intent or effective surface visibility, as documented by the operation.
+    pub enum Visibility: u8 {
+        /// Excluded from rendering and input.
+        HIDDEN = 0,
+        /// Eligible when structural and modal owner policy also permits it.
+        VISIBLE = 1,
+    }
+}
+
+com_int_enum! {
+    /// How a parent clips its structural child windows.
+    pub enum ChildClip: u8 {
+        /// Inherit the ancestor/viewport clip without narrowing to the parent's body.
+        NONE = 0,
+        /// Clip complete child surfaces to the parent's application content area.
+        CONTENT = 1,
+    }
+}
+
+com_int_enum! {
+    /// Structural layer category for a window or dialog.
+    pub enum LayerKind: u8 {
+        /// An independent or inherited application layer in 0..=15.
+        FIXED = 0,
+        /// Dedicated modal band above all application layers; number is zero.
+        MODAL = 1,
+    }
+}
+
+#[com_struct]
+#[derive(Debug, PartialEq, Eq)]
+/// Explicit fixed or manager-controlled modal stacking band.
+pub struct WindowLayer {
+    /// Interpretation of the numeric field.
+    pub kind: LayerKind,
+    /// Fixed application layer, or zero when modal.
+    pub number: u8,
+}
+
+#[com_struct]
+#[derive(Debug, PartialEq, Eq)]
+/// Concrete window presentation bits; unknown bits are rejected before mutation.
+pub struct WindowOptions {
+    /// Union of the documented constants on this type.
+    pub bits: u32,
+}
+
+impl WindowOptions {
+    /// No optional presentation behavior.
+    pub const NONE: Self = Self { bits: 0 };
+    /// Show the minimize caption button.
+    pub const MINIMIZE_BUTTON: Self = Self { bits: 1 };
+    /// Show the maximize caption button.
+    pub const MAXIMIZE_BUTTON: Self = Self { bits: 2 };
+    /// Keep visible while disabling the complete structural family.
+    pub const DISABLED: Self = Self { bits: 4 };
+    /// Remove the ordinary content inset.
+    pub const NO_PADDING: Self = Self { bits: 8 };
+    /// Prevent interactive resizing.
+    pub const NO_RESIZE: Self = Self { bits: 16 };
+    /// Hide the close caption button.
+    pub const NO_CLOSE: Self = Self { bits: 64 };
+    /// Hide the title bar.
+    pub const NO_TITLE: Self = Self { bits: 128 };
+    /// Derive width from preferred content measurement.
+    pub const AUTO_WIDTH: Self = Self { bits: 256 };
+    /// Derive height from preferred content measurement.
+    pub const AUTO_HEIGHT: Self = Self { bits: 512 };
+    /// Derive both dimensions from preferred content measurement.
+    pub const AUTO_SIZE: Self = Self { bits: 768 };
+    /// Use the theme-owned outer border and content inset.
+    pub const FRAME: Self = Self { bits: 1024 };
+
+    /// Every declared presentation bit; aliases such as AUTO_SIZE introduce no new bits.
+    const KNOWN_BITS: u32 = Self::MINIMIZE_BUTTON.bits
+        | Self::MAXIMIZE_BUTTON.bits
+        | Self::DISABLED.bits
+        | Self::NO_PADDING.bits
+        | Self::NO_RESIZE.bits
+        | Self::NO_CLOSE.bits
+        | Self::NO_TITLE.bits
+        | Self::AUTO_WIDTH.bits
+        | Self::AUTO_HEIGHT.bits
+        | Self::FRAME.bits;
+
+    /// Validates the complete bit set at the component boundary.
+    pub fn validate(self) -> Result<(), NcStatus> {
+        if self.bits & !Self::KNOWN_BITS == 0 {
+            Ok(())
+        } else {
+            Err(nc_com::NC_E_INVALID_ARG)
+        }
+    }
+}
+
+impl core::ops::BitOr for WindowOptions {
+    type Output = Self;
+    /// Combines concrete options without exposing a typeless property collection.
+    fn bitor(self, rhs: Self) -> Self {
+        Self { bits: self.bits | rhs.bits }
+    }
+}
+
+#[com_struct]
+#[derive(Debug, PartialEq, Eq)]
+/// Immutable copied observation of the manager's authoritative window state.
+pub struct WindowSnapshot {
+    /// Current outer screen rectangle.
+    pub rect: Rect,
+    /// Current presentation options.
+    pub options: WindowOptions,
+    /// Effective visibility including structural ancestors.
+    pub visibility: Visibility,
+    /// Fixed, inherited or modal stacking policy.
+    pub layer: WindowLayer,
+    /// Parent-owned clipping applied to this window's structural children.
+    pub child_clip: ChildClip,
+}
+
 #[com_interface(auto_guid = "microui.Window:v1")]
 /// Logical UI window retained independently of its runtime's tree membership.
 pub trait IWindow {
+    /// Copies current authoritative geometry, visibility and policy without caching app-side state.
+    fn snapshot(&self) -> Result<WindowSnapshot, NcStatus>;
+    /// Returns an immutable UTF-8 title snapshot.
+    fn title(&self) -> Result<ComPtr<nc_com::INcStringAbi>, NcStatus>;
+    /// Replaces the complete title silently; UTF-8 input offset must be zero.
+    fn set_title(&self, title: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    /// Changes local visibility intent; ancestors and modal policy determine effective visibility.
+    fn set_visibility(&self, visibility: Visibility) -> Result<(), NcStatus>;
+    /// Changes concrete presentation options and reconciles capture/disabled descendants.
+    fn set_options(&self, options: WindowOptions) -> Result<(), NcStatus>;
+    /// Selects a fixed layer in 0..=15; child/dialog layers are manager-controlled.
+    fn set_layer(&self, layer: u8) -> Result<(), NcStatus>;
+    /// Raises within the permitted structural stacking band.
+    fn raise(&self) -> Result<(), NcStatus>;
+    /// Changes the clipping applied to structural child windows.
+    fn set_child_clip(&self, clip: ChildClip) -> Result<(), NcStatus>;
     /// Changes allocation and schedules layout; negative extents are rejected.
     fn set_rect(&self, rect: Rect) -> Result<(), NcStatus>;
     /// Removes the subtree; retained capabilities subsequently report closure.
@@ -292,6 +428,29 @@ pub trait IWindow {
 #[com_interface(auto_guid = "microui.WindowManager:v1")]
 /// Window policy and topology are owned by the UI runtime object.
 pub trait IWindowManager {
+    /// Creates a visible structural child; a modal parent is rejected before claiming the widget.
+    fn create_child(
+        &self,
+        parent: ComRef<'_, IWindowAbi>,
+        title: NcCopyFromBufferOffset<'_, u8>,
+        rect: Rect,
+        root: ComRef<'_, IWidgetAbi>,
+    ) -> Result<ComPtr<IWindowAbi>, NcStatus>;
+    /// Creates a hidden modal dialog owned by an ordinary window.
+    fn create_dialog(
+        &self,
+        parent: ComRef<'_, IWindowAbi>,
+        title: NcCopyFromBufferOffset<'_, u8>,
+        rect: Rect,
+        root: ComRef<'_, IWidgetAbi>,
+    ) -> Result<ComPtr<IWindowAbi>, NcStatus>;
+    /// Creates a hidden auto-sized popup owned by a live window or dialog.
+    fn create_popup(
+        &self,
+        parent: ComRef<'_, IWindowAbi>,
+        title: NcCopyFromBufferOffset<'_, u8>,
+        root: ComRef<'_, IWidgetAbi>,
+    ) -> Result<ComPtr<IPopupAbi>, NcStatus>;
     /// Mounts one previously unmounted root and creates its logical window.
     fn create_window(&self, title: NcCopyFromBufferOffset<'_, u8>, rect: Rect, root: ComRef<'_, IWidgetAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus>;
 }
@@ -340,3 +499,21 @@ pub trait IWidgetLifetime {
     /// Logically closes the widget without requiring its final reference release.
     fn close(&self) -> Result<(), NcStatus>;
 }
+
+#[com_interface(auto_guid = "microui.Popup:v1")]
+/// A popup has transient placement and cannot be passed to ordinary window operations.
+pub trait IPopup {
+    /// Reports whether this popup belongs to the manager's active visible branch.
+    fn visibility(&self) -> Result<Visibility, NcStatus>;
+    /// Atomically sets the screen anchor and activates the popup's input scope.
+    fn show(&self, anchor: Rect) -> Result<(), NcStatus>;
+    /// Dismisses this active branch while preserving the definition for later reuse.
+    fn hide(&self) -> Result<(), NcStatus>;
+    /// Changes popup framing, padding and preferred-size policy.
+    fn set_options(&self, options: WindowOptions) -> Result<(), NcStatus>;
+    /// Permanently removes this popup subtree and closes its retained widgets.
+    fn close(&self) -> Result<(), NcStatus>;
+}
+
+/// A live surface rejects the requested structural, modal or managed-layer operation.
+pub const UI_E_POLICY: NcStatus = NcStatus::from_code(-1006);
