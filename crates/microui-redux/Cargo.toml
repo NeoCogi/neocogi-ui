@@ -20,6 +20,8 @@ theme-json = ["builder", "dep:serde", "dep:serde_json", "png_source"]
 save-to-rust = ["dep:tempfile"]
 
 [dependencies]
+microui-contracts.workspace = true
+nc-com = { workspace = true, features = ["macros", "std"] }
 bitflags.workspace = true
 fontdue = { workspace = true, optional = true }
 png = { workspace = true, optional = true }

@@ -245,6 +245,8 @@ mod guide_doctests {
 }
 
 pub mod atlas;
+/// Statically linked COM clients; implementation objects live in UI plugins.
+pub mod com;
 mod context;
 mod event;
 mod file_dialog;
