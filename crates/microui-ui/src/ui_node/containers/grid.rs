@@ -620,7 +620,11 @@ fn grid_dimensions(state: &Grid) -> (usize, usize) {
 
 /// Computes one column's intrinsic minimum from its explicit track and spanning children.
 fn preferred_column(ctx: &mut impl GridMeasureCtx, state: &Grid, index: usize, spacing: i32) -> i32 {
-    let mut preferred = fixed_track_extent(track(&state.column_tracks, index));
+    // A fixed track is an overflow boundary. Measuring children cannot change its extent.
+    if let TrackSize::Fixed(extent) = track(&state.column_tracks, index) {
+        return extent.max(0);
+    }
+    let mut preferred = 0;
 
     // Only children whose spans cover this column can increase its minimum.
     for placement in state.items.placements.iter().copied() {
@@ -651,7 +655,11 @@ fn preferred_column(ctx: &mut impl GridMeasureCtx, state: &Grid, index: usize, s
 /// scalar resolver. Keeping that choice at the call site prevents this helper from knowing about
 /// caches, phases, or mutable container state.
 fn preferred_row<C: GridMeasureCtx>(ctx: &mut C, state: &Grid, index: usize, spacing: i32, mut child_width: impl FnMut(&mut C, GridPlacement) -> i32) -> i32 {
-    let mut preferred = fixed_track_extent(track(&state.row_tracks, index));
+    // Skip both child measurement and column-span resolution when neither can affect this row.
+    if let TrackSize::Fixed(extent) = track(&state.row_tracks, index) {
+        return extent.max(0);
+    }
+    let mut preferred = 0;
     // Measure only children crossing this row, at the width of their complete column span.
     for placement in state.items.placements.iter().copied() {
         // row_end = first_row + row_span.
@@ -1105,5 +1113,30 @@ mod tests {
         let tracks = [TrackSize::Fixed(10), TrackSize::Fixed(12)];
         assert_eq!(contribution_for_track(&tracks, 0, 0, 2, 2, 50), 10);
         assert_eq!(contribution_for_track(&tracks, 1, 0, 2, 2, 50), 12);
+    }
+
+    /// Fixed grid measurement must not cross into any child's measurement service.
+    struct FixedGridMetrics;
+    impl GridMeasureCtx for FixedGridMetrics {
+        /// Spacing contributes only between the explicitly sized tracks.
+        fn spacing(&self) -> i32 {
+            2
+        }
+        /// Even one request is redundant: child content cannot change either fixed axis.
+        fn measure_child(&mut self, _: usize, _: crate::Constraints) -> Option<Dimensioni> {
+            panic!("fixed track measured child content");
+        }
+    }
+
+    /// Wide fixed grids resolve their configured extents without work proportional to child content.
+    #[test]
+    fn fixed_grid_resolves_both_axes_without_measuring_children() {
+        let mut grid = Grid::com_new(vec![TrackSize::Fixed(24); 32], vec![TrackSize::Fixed(24); 32]);
+        grid_placements_into(1024, 32, &[], &mut grid.items.placements, &mut grid.items.occupied);
+        let mut layout = GridLayout::default();
+        resolve_columns_into(&mut FixedGridMetrics, &grid, AvailableSpace::bounded(1000), &mut layout.columns);
+        resolve_rows_into(&mut FixedGridMetrics, &grid, AvailableSpace::bounded(1000), &layout.columns, &mut layout.rows);
+        assert_eq!(layout.columns, vec![24; 32]);
+        assert_eq!(layout.rows, vec![24; 32]);
     }
 }
