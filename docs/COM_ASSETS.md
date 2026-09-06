@@ -1,7 +1,7 @@
 # Immutable COM assets and themes
 
-`microui-plugin-assets` without features now registers only `IPngDecoder`. Its
-`upload` method accepts one complete, nonempty PNG at offset zero and borrows an
+`microui-plugin-assets` without features registers `IPngDecoder` and
+`IStyleCompiler`. The decoder's `upload` method accepts one complete, nonempty PNG at offset zero and borrows an
 `ITextureFactory` for the upload. Encoded input and decoded RGBA storage each have
 a 64 MiB ceiling; dimensions are checked before pixel allocation and animated PNG
 is rejected. Invalid input never calls the factory. Factory errors preserve their
@@ -10,7 +10,7 @@ factory or temporary decoded buffer is retained after the call. Calls may reente
 diagnostics because the decoder holds no mutable borrow across the upload.
 
 Enable `builder` to add font/atlas construction, or `theme-json` to add that builder
-and JSON themes. Native applications can ship a PNG-only plugin independently of
+and JSON themes. Native applications can ship PNG and style services independently of
 their precompiled atlas. Browser assemblies register the same decoder descriptor
 statically. The [asset plugin's decoder](../plugins/assets/src/png.rs) produces
 packed RGBA bytes directly. None of the asset plugin's production feature sets
@@ -195,6 +195,16 @@ Recoverable failures return statuses. `IAssetDiagnostics` retains actual native,
 decoder or compiler detail; argument validation may supply no additional text.
 Diagnostics are immutable snapshots and remain inspectable after a consuming failed
 finish. Renderer upload details use `IRenderDiagnostics`.
+
+## Live metric and palette edits
+
+Activate `STYLE_COMPILER_CLASS` as `IStyleCompiler`. Its `derive_style` method takes
+an explicit base bundle, complete metrics and a closed `PaletteEdit` value.
+`Preserve` retains existing appearance tables; `Flat` compiles all role/state
+values using the base frame geometry and updates an enabled title backdrop.
+The result retains the base catalog and does not install itself. Applications
+pass it to `ui.install_assets` through the same transaction as any loaded theme.
+Compilation remains usable after a UI closes because the service owns no UI state.
 
 ## Compiled resources and packaging
 

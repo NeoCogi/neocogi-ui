@@ -38,7 +38,7 @@ use super::*;
             size: Size { width: 1, height: 1 }, pixels: vec![255; 4].into(), names: names.into_bytes().into(),
             fonts: vec![AssetFont { name: AssetRange { first: 0, count: 4 }, glyphs: AssetRange { first: 0, count: 3 },
                 line_size: 10, baseline: 8, font_size: 10 }].into(), glyphs: glyphs.into(), icons: icons.into(),
-            metrics: AssetMetrics::default(), chrome: crate::style::default_chrome(),
+            metrics: AssetMetrics::default(), chrome: crate::style::compile_chrome(WindowChromeSkin::default()),
             surfaces: vec![].into(), controls: vec![].into(), menus: vec![].into(), window_chrome: vec![].into(),
         };
         // The same flat compiler supplies all omitted appearances in real theme construction.

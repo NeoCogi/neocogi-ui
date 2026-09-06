@@ -22,6 +22,7 @@ bitflags.workspace = true
 rs-math3d.workspace = true
 
 [dev-dependencies]
+microui-plugin-assets.workspace = true
 microui-redux = { workspace = true, features = ["test-support"] }
 rand.workspace = true
 tempfile.workspace = true

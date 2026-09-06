@@ -472,10 +472,6 @@ impl Ui {
     pub fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         self.runtime.assets()
     }
-    /// Compiles a metric/palette edit through this runtime's existing style rules without installing it.
-    pub fn derive_style(&self, metrics: AssetMetrics, palette: PaletteEdit) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
-        self.runtime.query::<IUiStyleAbi>()?.derive_style(metrics, palette.into())
-    }
     /// Validates compatible resources and uploads before publication; call update after success.
     pub fn install_assets(&self, assets: ComRef<'_, IAssetBundleAbi>, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
         self.runtime.install_assets(assets, renderer)

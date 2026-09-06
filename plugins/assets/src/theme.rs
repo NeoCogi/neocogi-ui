@@ -43,7 +43,7 @@ use microui_contracts::appearance::*;
 use microui_contracts::Insets as SliceInsets;
 use microui_redux::assets::AssetData;
 use crate::atlas::Builder;
-use crate::style::{apply_flat, rgba};
+use crate::style::{apply_flat, compile_chrome, rgba};
 
 /// Explicit byte source for a theme's referenced fonts and images.
 pub trait AssetSource {
@@ -1009,32 +1009,6 @@ fn flat_patch(border: Color, center: Color) -> AssetPatch {
     let center = if center.a == 0 { 0 } else { rgba(center) };
     AssetPatch::Flat { top_left: border, top: border, top_right: border, left: border,
         center, right: border, bottom_left: border, bottom: border, bottom_right: border }
-}
-
-/// Converts authorable caption geometry to the checked transfer record.
-fn compile_chrome(chrome: WindowChromeSkin) -> AssetChrome {
-    // The wire record uses bounded integer tags and explicit presence bits, never Rust options.
-    let captions = chrome.captions;
-    AssetChrome {
-        title_alignment: match chrome.title_alignment {
-            WindowTitleAlignment::Leading => TitleAlignment::LEADING,
-            WindowTitleAlignment::Centered => TitleAlignment::CENTERED,
-        },
-        close_side: compile_side(captions.close_side), minimize_side: compile_side(captions.minimize_side),
-        maximize_side: compile_side(captions.maximize_side), vertical_spacing: captions.vertical_spacing,
-        minimum_extent: captions.minimum_extent, inner_spacing: captions.inner_spacing,
-        show_without_activation: u8::from(captions.show_without_activation),
-        minimized_content_height: chrome.minimized_content_height,
-        has_backdrop: u8::from(chrome.active_title_backdrop.is_some()),
-        backdrop_rgba: chrome.active_title_backdrop.map_or(0, |value| rgba(value.color)),
-        backdrop_padding: chrome.active_title_backdrop.map_or(0, |value| value.horizontal_padding),
-    }
-}
-
-/// Stores the exact declared caption bank in its wire representation.
-fn compile_side(side: CaptionButtonSide) -> CaptionSide {
-    // Exhaustive matching makes new policies require an explicit transfer decision.
-    match side { CaptionButtonSide::Leading => CaptionSide::LEADING, CaptionButtonSide::Trailing => CaptionSide::TRAILING }
 }
 
 #[cfg(test)]

@@ -77,7 +77,8 @@ impl ResourceCatalog {
     /// # Panics
     ///
     /// Panics when the catalog lacks the required `body` font or a built-in semantic icon.
-    pub fn default_skin_bundle(&self) -> SkinBundle {
+    #[cfg(test)]
+    pub(crate) fn default_skin_bundle(&self) -> SkinBundle {
         // Clone only the immutable handle. SkinBundle performs the complete semantic-resource and
         // image-capability validation before the pair can become active.
         SkinBundle::from_atlas(self.atlas.clone())

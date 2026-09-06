@@ -43,31 +43,32 @@ pub(crate) fn apply_flat(data: &mut AssetData, insets: Insets, palette: &FlatPal
     data.window_chrome = chrome.into();
 }
 
-/// Returns the authored default geometry used by fresh bundles.
-pub(crate) fn default_metrics() -> AssetMetrics {
-    // Authoring and installed geometry use one concrete default record.
-    AssetMetrics::default()
-}
-
-/// Returns the authored default caption policy used by fresh bundles.
-pub(crate) fn default_chrome() -> AssetChrome {
+/// Converts authorable caption geometry to the checked transfer record.
+#[cfg(feature = "builder")]
+pub(crate) fn compile_chrome(chrome: WindowChromeSkin) -> AssetChrome {
+    // The wire record uses bounded integer tags and explicit presence bits, never Rust options.
+    let captions = chrome.captions;
     AssetChrome {
-        title_alignment: TitleAlignment::LEADING,
-        close_side: CaptionSide::TRAILING, minimize_side: CaptionSide::TRAILING, maximize_side: CaptionSide::TRAILING,
-        vertical_spacing: 2, minimum_extent: 0, inner_spacing: 0,
-        show_without_activation: 1, minimized_content_height: 2,
-        has_backdrop: 0, backdrop_rgba: 0, backdrop_padding: 0,
+        title_alignment: match chrome.title_alignment {
+            WindowTitleAlignment::Leading => TitleAlignment::LEADING,
+            WindowTitleAlignment::Centered => TitleAlignment::CENTERED,
+        },
+        close_side: compile_side(captions.close_side), minimize_side: compile_side(captions.minimize_side),
+        maximize_side: compile_side(captions.maximize_side), vertical_spacing: captions.vertical_spacing,
+        minimum_extent: captions.minimum_extent, inner_spacing: captions.inner_spacing,
+        show_without_activation: u8::from(captions.show_without_activation),
+        minimized_content_height: chrome.minimized_content_height,
+        has_backdrop: u8::from(chrome.active_title_backdrop.is_some()),
+        backdrop_rgba: chrome.active_title_backdrop.map_or(0, |value| rgba(value.color)),
+        backdrop_padding: chrome.active_title_backdrop.map_or(0, |value| value.horizontal_padding),
     }
 }
 
-/// Stores four equal inset values without a second geometry type.
-pub(crate) const fn uniform(value: i32) -> Insets {
-    Insets { left: value, top: value, right: value, bottom: value }
-}
-
-/// Makes every active frame edge visible while preserving thicker authored edges.
-fn at_least_one(value: Insets) -> Insets {
-    Insets { left: value.left.max(1), top: value.top.max(1), right: value.right.max(1), bottom: value.bottom.max(1) }
+/// Stores the exact declared caption bank in its wire representation.
+#[cfg(feature = "builder")]
+fn compile_side(side: CaptionButtonSide) -> CaptionSide {
+    // Exhaustive matching makes new policies require an explicit transfer decision.
+    match side { CaptionButtonSide::Leading => CaptionSide::LEADING, CaptionButtonSide::Trailing => CaptionSide::TRAILING }
 }
 
 /// Packs channels in the renderer's explicit little-endian RGBA convention.
@@ -215,7 +216,7 @@ fn flat_chrome_visual(frame_insets: Insets, palette: &FlatPalette, role: ChromeR
     let mut patch = match role {
         ChromeRole::WindowFrame | ChromeRole::DialogFrame => match state {
             ChromeState::Base | ChromeState::Disabled => framed(frame_insets, palette.border, None),
-            ChromeState::Active => framed(at_least_one(frame_insets), palette.window_active, None),
+            ChromeState::Active => framed(frame_insets.at_least(1), palette.window_active, None),
         },
         ChromeRole::Title => match state {
             ChromeState::Base => solid(palette.title_background),
@@ -233,3 +234,40 @@ fn flat_chrome_visual(frame_insets: Insets, palette: &FlatPalette, role: ChromeR
     patch
 }
 
+
+#[nc_com::com_class(class_id(STYLE_COMPILER_CLASS), name = "microui.StyleCompiler", version = "0.9.0-alpha.0",
+    constructor(args = none, default), interfaces(IStyleCompiler, IAssetDiagnostics))]
+#[derive(Default)]
+/// Compiles resource revisions without borrowing a UI or retaining a renderer.
+pub struct StyleCompiler {
+    /// Owned diagnostics remain inspectable independently of each immutable result.
+    diagnostic: crate::Diagnostic,
+}
+
+impl IStyleCompiler for StyleCompiler {
+    /// Copies the base once, applies the explicit edit, validates and publishes in its catalog.
+    fn derive_style(&self, base: nc_com::ComRef<'_, IAssetBundleAbi>, metrics: AssetMetrics, palette: PaletteEditAbi)
+        -> Result<nc_com::ComPtr<IAssetBundleAbi>, nc_com::NcStatus> {
+        // Validate foreign records and the closed edit tag before using their geometry or artwork.
+        let edit = PaletteEdit::try_from(palette).map_err(|_| nc_com::NC_E_INVALID_ARG)?;
+        let mut data = AssetData::read(base)?;
+        data.metrics = metrics;
+        if let PaletteEdit::Flat(palette) = edit {
+            let insets = data.surfaces[SurfaceRole::GenericFrame.index() * SurfaceState::COUNT + SurfaceState::Normal.index()].insets;
+            apply_flat(&mut data, insets, &palette);
+            if data.chrome.has_backdrop == 1 {
+                data.chrome.backdrop_rgba = rgba(palette.title_background);
+            }
+        }
+        // A rejected candidate leaves both the source and every UI using it unchanged.
+        data.validate().inspect_err(|error| { self.diagnostic.failure(error); })?;
+        data.into_revision(base)
+    }
+}
+
+impl IAssetDiagnostics for StyleCompiler {
+    /// Returns an owned failure snapshot without a borrow into the compiler.
+    fn diagnostic(&self) -> Result<nc_com::ComPtr<nc_com::INcStringAbi>, nc_com::NcStatus> {
+        Ok(self.diagnostic.snapshot())
+    }
+}

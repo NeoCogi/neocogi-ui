@@ -356,10 +356,10 @@ impl Builder {
         let mut data = AssetData {
             size: self.image.size, pixels: self.image.pixels.into(),
             fonts: fonts.into(), glyphs: glyphs.into(), icons: icons.into(), names: names.into(),
-            metrics: style::default_metrics(), chrome: style::default_chrome(),
+            metrics: AssetMetrics::default(), chrome: style::compile_chrome(WindowChromeSkin::default()),
             surfaces: Vec::new().into(), controls: Vec::new().into(), menus: Vec::new().into(), window_chrome: Vec::new().into(),
         };
-        style::apply_flat(&mut data, style::uniform(1), &FlatPalette::default());
+        style::apply_flat(&mut data, Insets::uniform(1), &FlatPalette::default());
         data.validate().map_err(io::Error::other)?;
         Ok(data)
     }

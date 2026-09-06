@@ -53,11 +53,15 @@
 //! Resolved, structured, atlas-bound skin values used across the crate.
 
 use super::{
-    ChromeRole, ChromeState, ControlRole, ControlState, FlatPalette, FontRef, FontRole, IconRole, MenuRole, MenuState, SurfaceRole, SurfaceState,
+    ChromeRole, ChromeState, ControlRole, ControlState, FontRef, FontRole, IconRole, MenuRole, MenuState, SurfaceRole, SurfaceState,
     Visual, catalog::AppearanceCatalog,
 };
 use crate::atlas::{AtlasHandle, FontId};
-use crate::render::{NinePatch, SliceInsets};
+use crate::render::NinePatch;
+#[cfg(test)]
+use crate::SliceInsets;
+#[cfg(test)]
+use super::FlatPalette;
 
 /// Opaque identity of one immutable skin value installed through a [`crate::SkinBundle`].
 ///
@@ -110,15 +114,9 @@ pub struct Skin {
 }
 
 impl Skin {
-    /// Constructs the default visual metrics and resolves every retained asset from `atlas`.
-    ///
-    /// The required `body` font and semantic theme icon names form the standard Context atlas
-    /// contract. Optional font roles fall back to that same atlas's body font.
-    ///
-    /// # Panics
-    ///
-    /// Panics when `body` or any icon required by [`IconRole::ALL`] is absent.
-    pub fn from_atlas(atlas: &AtlasHandle) -> Self {
+    /// Binds validated semantic resources to already compiled geometry and appearance arrays.
+    /// The caller proves required names before this one-time local ID resolution.
+    pub(crate) fn from_resolved(atlas: &AtlasHandle, metrics: SkinMetrics, window_chrome: WindowChromeSkin, appearances: AppearanceCatalog) -> Self {
         // Resolve names once at construction. Every retained value below is a stable resource ID,
         // so layout and paint perform only typed table lookup against the selected atlas.
         let body = atlas.font_id(FontRole::Body.atlas_name()).expect("atlas does not contain required font `body`");
@@ -129,18 +127,22 @@ impl Skin {
                 .icon_id(name)
                 .unwrap_or_else(|| panic!("atlas does not contain required skin icon `{name}`"))
         });
-        let palette = FlatPalette::default();
-        // Build complete visuals from the same concrete flat values stored below. JSON theme
-        // loading follows this identical fallback constructor before replacing authored states.
-        let appearances = AppearanceCatalog::from_flat_palette(SliceInsets::uniform(1), &palette);
         Self {
             revision: SkinRevision::allocate(),
-            metrics: SkinMetrics::default(),
+            metrics,
             appearances,
             font_roles,
             icon_roles,
-            window_chrome: WindowChromeSkin::trailing_buttons(),
+            window_chrome,
         }
+    }
+
+    /// Builds the historical flat fixture only for native runtime regression tests.
+    #[cfg(test)]
+    pub(crate) fn from_atlas(atlas: &AtlasHandle) -> Self {
+        // Test defaults provide an independent oracle for the asset compiler's portable output.
+        Self::from_resolved(atlas, SkinMetrics::default(), WindowChromeSkin::default(),
+            AppearanceCatalog::from_flat_palette(SliceInsets::uniform(1), &FlatPalette::default()))
     }
 
     /// Returns the opaque generation associated with this complete skin value.
@@ -160,7 +162,8 @@ impl Skin {
     ///
     /// This operation is intended for builders and live skin editors. It compiles the palette
     /// immediately into the resolved catalog rather than retaining the palette as shadow state.
-    pub fn apply_flat_palette(&mut self, palette: FlatPalette) {
+    #[cfg(test)]
+    pub(crate) fn apply_flat_palette(&mut self, palette: FlatPalette) {
         // Preserve the currently selected generic frame geometry while replacing all flat paint
         // values. Callers that need different frame geometry can update that typed visual after.
         let frame_insets = self.frame_insets();
@@ -172,7 +175,8 @@ impl Skin {
     ///
     /// The closure keeps grouped metrics construction concise in programmatic skins and tests
     /// without restoring a flat duplicate field surface on `Skin`.
-    pub fn with_metrics(mut self, configure: impl FnOnce(&mut SkinMetrics)) -> Self {
+    #[cfg(test)]
+    pub(crate) fn with_metrics(mut self, configure: impl FnOnce(&mut SkinMetrics)) -> Self {
         // Metrics are plain concrete values, so configuration is immediate and cannot be retained
         // as an erased callback or deferred mutation.
         configure(&mut self.metrics);
@@ -194,6 +198,7 @@ impl Skin {
     }
 
     /// Returns normalized structural frame insets shared by measurement and placement.
+    #[cfg(test)]
     pub(crate) fn frame_insets(&self) -> SliceInsets {
         // NinePatch owns normalization so layout and renderer geometry cannot disagree on negative
         // application-provided style components.

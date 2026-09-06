@@ -163,6 +163,8 @@ struct ColorRow {
 pub(super) struct StyleEditor {
     /// Original catalog makes all theme selections valid revisions of the same application assets.
     base: ComPtr<IAssetBundleAbi>,
+    /// Asset-owned compiler remains independent of the currently selected UI tree.
+    compiler: ComPtr<IStyleCompilerAbi>,
     /// Selected pristine theme determines whether flat palette editing is meaningful.
     selected: Theme,
     /// Application-owned flat recipe, never a second live renderer appearance table.
@@ -178,6 +180,8 @@ impl StyleEditor {
     /// Builds the same 72 color sliders and five metrics inside one ordinary scrolling tree.
     pub(super) fn new(ui: &Ui) -> Result<(Self, ScrollArea), NcStatus> {
         let base = ui.assets()?;
+        // Activation belongs to this application; the UI runtime has no asset-provider dependency.
+        let compiler = unsafe { nc_com::Runtime::global().construct_class_as(STYLE_COMPILER_CLASS, std::ptr::null_mut())? };
         let mut metrics = base.metrics()?;
         let mut palette = FlatPalette::default();
         let content = column(ui)?;
@@ -214,6 +218,7 @@ impl StyleEditor {
         Ok((
             Self {
                 base,
+                compiler,
                 selected: Theme::Default,
                 palette,
                 metrics,
@@ -252,7 +257,8 @@ impl StyleEditor {
         } else {
             PaletteEdit::Preserve
         };
-        let candidate = ui.derive_style(self.metrics, palette)?;
+        let current = ui.assets()?;
+        let candidate = self.compiler.derive_style(current.as_com_ref(), self.metrics, palette.into())?;
         ui.install_assets(candidate.as_com_ref(), renderer)
     }
     /// Spacing menu actions share the editor's exact metric and revision path.

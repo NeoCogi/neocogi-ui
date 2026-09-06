@@ -1,9 +1,11 @@
 //! Bulk resolved appearance transfer; parsing and per-frame lookup stay outside this module.
 use super::*;
-use crate::{Color, SliceInsets, NinePatch, NinePatchCell, NinePatchCells, NinePatchContent, NinePatchImage, Visual};
+use crate::{Color, SliceInsets, NinePatch, NinePatchCell, NinePatchCells, NinePatchImage, Visual};
+#[cfg(test)]
 use microui_contracts::appearance::*;
 
 /// Complete exported geometry and role-major appearance arrays.
+#[cfg(test)]
 pub(super) struct ExportedTheme {
     /// Scalar layout geometry copied together with artwork.
     pub metrics: AssetMetrics,
@@ -19,6 +21,7 @@ pub(super) struct ExportedTheme {
     pub(super) window_chrome: Vec<AssetVisual>,
 }
 
+#[cfg(test)]
 impl ExportedTheme {
     /// Expands already-resolved values once; no fallback interpretation crosses the ABI.
     pub(super) fn new(bundle: &SkinBundle) -> Result<Self, NcStatus> {
@@ -77,8 +80,7 @@ impl ExportedTheme {
         family!(window_chrome, ChromeRole, ChromeState, chrome);
         // Native programmatic skins can contain negative author input normalized on use. The
         // portable resolved form has stricter geometry, so validate it before publishing too.
-        let mut checked = skin.clone();
-        read_geometry(result.metrics, result.chrome, &mut checked)?;
+        read_geometry(result.metrics, result.chrome)?;
         for values in [&result.surfaces, &result.controls, &result.menus, &result.window_chrome] {
             for visual in values {
                 in_visual(*visual, bundle.atlas(), &icons)?;
@@ -88,26 +90,29 @@ impl ExportedTheme {
     }
 }
 
-/// Copies all resolved families into one unpublished native skin after bounded metadata import.
-pub(super) fn read(data: &microui_redux::assets::AssetData, atlas: &AtlasHandle, skin: &mut Skin) -> Result<(), NcStatus> {
-    read_geometry(data.metrics, data.chrome, skin)?;
+/// Imports complete appearance arrays and geometry before binding local semantic IDs.
+pub(super) fn read(data: &microui_redux::assets::AssetData, atlas: &AtlasHandle) -> Result<Skin, NcStatus> {
+    let (metrics, chrome) = read_geometry(data.metrics, data.chrome)?;
     let icons = atlas.clone_icon_table();
-    macro_rules! family {
-        ($field:ident, $role:ident, $state:ident, $set:ident) => {{
-            let values = &data.$field;
-            for role in $role::ALL {
-                for state in $state::ALL {
-                    let value = values[role.index() * $state::COUNT + state.index()];
-                    skin.$set(role, state, in_visual(value, atlas, &icons)?);
-                }
-            }
-        }};
+    let appearances = crate::theme::catalog::AppearanceCatalog::from_values(
+        read_family(&data.surfaces, atlas, &icons)?, read_family(&data.controls, atlas, &icons)?,
+        read_family(&data.menus, atlas, &icons)?, read_family(&data.window_chrome, atlas, &icons)?,
+    );
+    // Each appearance is already resolved. Skin construction performs only semantic name binding.
+    Ok(Skin::from_resolved(atlas, metrics, chrome, appearances))
+}
+
+/// Resolves one bounded role-major table into its concrete native array shape.
+fn read_family<const ROLES: usize, const STATES: usize>(values: &[AssetVisual], atlas: &AtlasHandle, icons: &[(String, crate::IconId)])
+    -> Result<[[Visual; STATES]; ROLES], NcStatus> {
+    if values.len() != ROLES * STATES { return Err(NC_E_INVALID_ARG); }
+    let empty = Visual::new(NinePatch::solid(Color::default()), Color::default());
+    let mut result = [[empty; STATES]; ROLES];
+    // Initialized scratch never escapes before every source slot passes local image-ID resolution.
+    for (destination, source) in result.iter_mut().flatten().zip(values) {
+        *destination = in_visual(*source, atlas, icons)?;
     }
-    family!(surfaces, SurfaceRole, SurfaceState, set_surface);
-    family!(controls, ControlRole, ControlState, set_control);
-    family!(menus, MenuRole, MenuState, set_menu);
-    family!(window_chrome, ChromeRole, ChromeState, set_chrome);
-    Ok(())
+    Ok(result)
 }
 
 /// Validates and converts the one complete metric record for import and live style derivation alike.
@@ -130,13 +135,13 @@ pub(super) fn read_metrics(metrics: AssetMetrics) -> Result<crate::SkinMetrics, 
 }
 
 /// Installs complete geometry into an unpublished candidate after validating scalar and enum domains.
-fn read_geometry(metrics: AssetMetrics, chrome: AssetChrome, skin: &mut Skin) -> Result<(), NcStatus> {
-    skin.metrics = read_metrics(metrics)?;
+fn read_geometry(metrics: AssetMetrics, chrome: AssetChrome) -> Result<(crate::SkinMetrics, crate::WindowChromeSkin), NcStatus> {
+    let metrics = read_metrics(metrics)?;
     if [chrome.vertical_spacing, chrome.minimum_extent, chrome.inner_spacing,
         chrome.minimized_content_height, chrome.backdrop_padding].iter().any(|value| *value < 0) {
         return Err(NC_E_INVALID_ARG);
     }
-    skin.window_chrome = crate::WindowChromeSkin {
+    let window_chrome = crate::WindowChromeSkin {
         title_alignment: match chrome.title_alignment {
             TitleAlignment::LEADING => crate::WindowTitleAlignment::Leading,
             TitleAlignment::CENTERED => crate::WindowTitleAlignment::Centered,
@@ -161,10 +166,11 @@ fn read_geometry(metrics: AssetMetrics, chrome: AssetChrome, skin: &mut Skin) ->
             None
         },
     };
-    Ok(())
+    Ok((metrics, window_chrome))
 }
 
 /// Copies named flat cells or resolves an exact native icon to its bundle-local table position.
+#[cfg(test)]
 fn out_visual(visual: Visual, icons: &[(String, crate::IconId)]) -> Result<AssetVisual, NcStatus> {
     let patch = match visual.patch.content {
         NinePatchContent::Flat { cells } => AssetPatch::Flat {
@@ -237,6 +243,7 @@ fn in_visual(value: AssetVisual, atlas: &AtlasHandle, icons: &[(String, crate::I
 }
 
 /// Copies four named native geometry fields without changing their author-supplied values.
+#[cfg(test)]
 fn out_insets(value: SliceInsets) -> Insets {
     Insets {
         left: value.left,
@@ -255,6 +262,7 @@ fn in_insets(value: Insets) -> Result<SliceInsets, NcStatus> {
 }
 
 /// Encodes one native caption edge through the concrete shared domain.
+#[cfg(test)]
 fn out_side(value: crate::CaptionButtonSide) -> CaptionSide {
     match value {
         crate::CaptionButtonSide::Leading => CaptionSide::LEADING,
@@ -281,6 +289,7 @@ fn boolean(value: u8) -> Result<bool, NcStatus> {
 }
 
 /// Packs color channels independently of native endianness.
+#[cfg(test)]
 fn rgba(value: Color) -> u32 {
     u32::from_le_bytes([value.r, value.g, value.b, value.a])
 }
@@ -292,9 +301,13 @@ fn color(value: u32) -> Color {
 }
 
 /// Flat transparent cells and explicit emptiness share one canonical wire representation.
+#[cfg(test)]
 fn cell(value: NinePatchCell) -> u32 {
     match value {
         NinePatchCell::Empty => 0,
         NinePatchCell::Color { color } => rgba(color),
     }
 }
+
+#[cfg(test)]
+use crate::NinePatchContent;

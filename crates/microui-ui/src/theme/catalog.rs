@@ -9,7 +9,10 @@
 
 use std::rc::Rc;
 
-use super::{ChromeRole, ChromeState, ControlRole, ControlState, FlatPalette, MenuRole, MenuState, PointerState, SurfaceRole, SurfaceState, Visual};
+use super::{ChromeRole, ChromeState, ControlRole, ControlState, MenuRole, MenuState, SurfaceRole, SurfaceState, Visual};
+#[cfg(test)]
+use super::{FlatPalette, PointerState};
+#[cfg(test)]
 use crate::{Color, NinePatch, SliceInsets};
 
 /// Complete resolved appearance values grouped by their meaningful role and state domains.
@@ -36,7 +39,19 @@ struct AppearanceValues {
 }
 
 impl AppearanceCatalog {
+    /// Stores four fully resolved families without interpreting authoring defaults.
+    pub(crate) fn from_values(
+        surfaces: [[Visual; SurfaceState::COUNT]; SurfaceRole::COUNT],
+        controls: [[Visual; ControlState::COUNT]; ControlRole::COUNT],
+        menus: [[Visual; MenuState::COUNT]; MenuRole::COUNT],
+        chrome: [[Visual; ChromeState::COUNT]; ChromeRole::COUNT],
+    ) -> Self {
+        // The importer has resolved every image slot into its local typed resource identity.
+        Self { values: Rc::new(AppearanceValues { surfaces, controls, menus, chrome }) }
+    }
+
     /// Compiles the one concrete flat-palette representation into complete runtime arrays.
+    #[cfg(test)]
     pub(crate) fn from_flat_palette(frame_insets: SliceInsets, palette: &FlatPalette) -> Self {
         // Local closures only drive array initialization; they are not retained, accepted through
         // an API, or treated as interchangeable appearance sources. Each invokes one concrete,
@@ -126,6 +141,7 @@ impl AppearanceCatalog {
 }
 
 /// Resolves one structural surface from the flat fallback palette.
+#[cfg(test)]
 fn flat_surface_visual(frame_insets: SliceInsets, palette: &FlatPalette, role: SurfaceRole, state: SurfaceState) -> Visual {
     // Surfaces react only to inherited availability. Window owns the root fill independently of
     // activation, GenericFrame remains hollow, and Panel combines its border with its own fill.
@@ -144,6 +160,7 @@ fn flat_surface_visual(frame_insets: SliceInsets, palette: &FlatPalette, role: S
 }
 
 /// Resolves one interactive control from its concrete role and nested control state.
+#[cfg(test)]
 fn flat_control_visual(frame_insets: SliceInsets, palette: &FlatPalette, role: ControlRole, state: ControlState) -> Visual {
     // Each role group spells out its meaningful fill policy. A newly added role therefore fails
     // this exhaustive match instead of inheriting a generic button or body fallback.
@@ -207,6 +224,7 @@ fn flat_control_visual(frame_insets: SliceInsets, palette: &FlatPalette, role: C
 }
 
 /// Resolves one menu surface or entry from the menu-specific state domain.
+#[cfg(test)]
 fn flat_menu_visual(frame_insets: SliceInsets, palette: &FlatPalette, role: MenuRole, state: MenuState) -> Visual {
     // Open is a menu state rather than a duplicate title role. Popup owners and selected submenu
     // entries consequently share the same explicit selection precedence.
@@ -238,6 +256,7 @@ fn flat_menu_visual(frame_insets: SliceInsets, palette: &FlatPalette, role: Menu
 }
 
 /// Resolves one window-chrome visual from activation and availability only.
+#[cfg(test)]
 fn flat_chrome_visual(frame_insets: SliceInsets, palette: &FlatPalette, role: ChromeRole, state: ChromeState) -> Visual {
     // Window activation belongs solely to chrome. Control descendants continue resolving their
     // own enabled, focus, and pointer states independently of the active window.

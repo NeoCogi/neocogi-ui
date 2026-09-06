@@ -32,7 +32,7 @@
 
 mod appearance;
 mod bundle;
-mod catalog;
+pub(crate) mod catalog;
 mod icons;
 mod palette;
 mod resources;

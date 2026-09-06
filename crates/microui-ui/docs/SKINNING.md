@@ -42,16 +42,17 @@ adjacent without erased values or a universal role/state cross-product.
 
 ## Programmatic construction
 
-Derive an immutable candidate from the UI's current catalog, then install it through
+Ask the asset compiler for an immutable candidate in the UI's current catalog, then install it through
 the same transactional asset boundary used for a complete theme replacement:
 
 ```rust,no_run
-use microui_redux::{FlatPalette, IRendererAbi, PaletteEdit, Ui};
+use microui_redux::{FlatPalette, IRendererAbi, IStyleCompilerAbi, PaletteEdit, Ui};
 use nc_com::{ComRef, NcStatus};
-fn customize(ui: &Ui, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
+fn customize(ui: &Ui, renderer: ComRef<'_, IRendererAbi>, compiler: ComRef<'_, IStyleCompilerAbi>) -> Result<(), NcStatus> {
     let mut metrics = ui.assets()?.metrics()?;
     metrics.padding = 8;
-    let candidate = ui.derive_style(metrics, PaletteEdit::Flat(FlatPalette::default()))?;
+    let current = ui.assets()?;
+    let candidate = compiler.derive_style(current.as_com_ref(), metrics, PaletteEdit::Flat(FlatPalette::default()).into())?;
     ui.install_assets(candidate.as_com_ref(), renderer)
 }
 ```

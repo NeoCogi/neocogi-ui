@@ -116,7 +116,8 @@ impl SkinBundle {
     /// # Panics
     ///
     /// Panics when `atlas` does not satisfy the standard semantic resource contract.
-    pub fn from_atlas(atlas: AtlasHandle) -> Self {
+    #[cfg(test)]
+    pub(crate) fn from_atlas(atlas: AtlasHandle) -> Self {
         // Construct before moving the handle so Skin::from_atlas and the resulting bundle validate
         // the exact same immutable allocation.
         let skin = Skin::from_atlas(&atlas);

@@ -7,8 +7,8 @@ use std::cell::RefCell;
 
 #[cfg(feature = "builder")]
 pub mod atlas;
-#[cfg(feature = "builder")]
 mod style;
+pub use style::StyleCompiler;
 #[cfg(feature = "builder")]
 mod builder;
 #[cfg(feature = "builder")]
@@ -39,17 +39,17 @@ impl Diagnostic {
 #[cfg(not(feature = "builder"))]
 nc_com::plugin! {
     plugin_id(auto_guid = "microui.plugin.assets"), name = "microui.plugin.assets",
-    version = "0.9.0-alpha.0", classes = [PngDecoder],
+    version = "0.9.0-alpha.0", classes = [PngDecoder, StyleCompiler],
 }
 #[cfg(all(feature = "builder", not(feature = "theme-json")))]
 nc_com::plugin! {
     plugin_id(auto_guid = "microui.plugin.assets"), name = "microui.plugin.assets",
-    version = "0.9.0-alpha.0", classes = [PngDecoder, AssetLoader],
+    version = "0.9.0-alpha.0", classes = [PngDecoder, StyleCompiler, AssetLoader],
 }
 #[cfg(feature = "theme-json")]
 nc_com::plugin! {
     plugin_id(auto_guid = "microui.plugin.assets"), name = "microui.plugin.assets",
-    version = "0.9.0-alpha.0", classes = [PngDecoder, AssetLoader, ThemeLoader],
+    version = "0.9.0-alpha.0", classes = [PngDecoder, StyleCompiler, AssetLoader, ThemeLoader],
 }
 #[cfg(feature = "dynamic-plugin")]
 nc_com::export_plugin!();

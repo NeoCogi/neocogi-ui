@@ -364,9 +364,9 @@ the renderer capabilities specified in the renderer migration.
 
 ## Local custom leaves and solid drawing
 
-The runtime's `IUiStyle` capability supports typed palette and metric editors.
-`ui.derive_style(metrics, PaletteEdit::Preserve)` keeps the current theme artwork;
-`PaletteEdit::Flat(palette)` invokes the UI's existing complete flat-style compiler.
+The asset plugin's `IStyleCompiler` supports typed palette and metric editors.
+`compiler.derive_style(base, metrics, PaletteEdit::Preserve.into())` keeps the base
+theme artwork; `PaletteEdit::Flat(palette)` compiles complete flat appearance tables.
 Both return a new immutable bundle in the current catalog without installing it
 or changing the retained tree. Call `ui.install_assets(candidate, renderer)` to
 publish it through the same validation and GPU preparation as any other revision.
@@ -375,7 +375,7 @@ The shared `Color` and `FlatPalette` records are plain contract values; they car
 no renderer or parser implementation. `Ui` and `WidgetFactory` clones retain their
 existing COM projections, allowing concrete event handlers to own this authority.
 
-Derived styles currently use the ordinary bundle export/install path, including
+Derived styles use the ordinary portable bundle publication/install path, including
 its pixel copy and renderer preparation. This API does not promise a palette-only
 fast path. Applications should derive once per committed edit rather than every
 animation frame, and preserve image-backed artwork when only metrics are edited.

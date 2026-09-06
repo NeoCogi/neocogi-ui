@@ -17,6 +17,7 @@ pub(crate) struct Tables {
 }
 
 /// Copies one local rectangle into the shared pixel record.
+#[cfg(test)]
 fn rect(value: Recti) -> microui_contracts::Rect {
     microui_contracts::Rect {
         x: value.x,
@@ -28,6 +29,7 @@ fn rect(value: Recti) -> microui_contracts::Rect {
 
 impl Tables {
     /// Writes deterministic typed metadata without exposing hash maps or Rust references through COM.
+    #[cfg(test)]
     pub(crate) fn export(atlas: &AtlasHandle) -> Result<Self, NcStatus> {
         // Check before narrowing any offset or allocating the wire tables.
         let glyphs = atlas
@@ -81,6 +83,7 @@ impl Tables {
     }
 
     /// Appends one name while deriving its byte range from the actual storage.
+    #[cfg(test)]
     fn name(&mut self, name: &str) -> AssetRange {
         let range = AssetRange {
             first: self.names.len() as u32,

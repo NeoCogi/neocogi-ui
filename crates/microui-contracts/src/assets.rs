@@ -428,14 +428,16 @@ pub enum PaletteEdit {
     Flat(crate::FlatPalette),
 }
 
-#[com_interface(auto_guid = "microui.UiStyle:v1")]
-/// Observational authoring capability on the same UI runtime that owns the installed resource catalog.
-pub trait IUiStyle {
-    /// Derives an immutable resource revision from current assets without installing it or touching
-    /// the renderer. Invalid geometry or palette tags leave the installed revision unchanged.
-    /// The caller installs the result through the ordinary transactional install_assets boundary.
-    fn derive_style(&self, metrics: AssetMetrics, palette: PaletteEditAbi) -> Result<ComPtr<IAssetBundleAbi>, NcStatus>;
+#[com_interface(auto_guid = "microui.StyleCompiler:v1")]
+/// Asset-owned authoring service independent of UI trees and renderer resources.
+pub trait IStyleCompiler {
+    /// Derives a complete immutable revision in the base catalog without installing it.
+    /// Preserve retains artwork; Flat recompiles every appearance from one concrete palette.
+    fn derive_style(&self, base: ComRef<'_, IAssetBundleAbi>, metrics: AssetMetrics, palette: PaletteEditAbi) -> Result<ComPtr<IAssetBundleAbi>, NcStatus>;
 }
+
+/// Activation identity for resource-only style compilation, including embedded deployments.
+pub const STYLE_COMPILER_CLASS: nc_com::NcGuid = nc_com::guid_from_qualified_name("microui.StyleCompiler");
 
 /// Optional compressed-image provider, available without font construction or theme JSON.
 pub const PNG_DECODER_CLASS: nc_com::NcGuid = nc_com::guid_from_qualified_name("microui.PngDecoder");

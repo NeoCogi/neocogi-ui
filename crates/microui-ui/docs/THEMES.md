@@ -210,7 +210,7 @@ succeed before the resource revision is published. Keep the original bundle inte
 when a selector needs to restore the initial theme.
 
 For programmatic changes, copy the current AssetMetrics, edit explicit fields, derive a
-revision with `Ui::derive_style`, then install it. Stable named font/icon identities belong
+revision with the asset plugin's `IStyleCompiler::derive_style`, then install it. Stable named font/icon identities belong
 to the bundle catalog; a derived revision cannot reinterpret existing resource meanings.
 See [asset authoring and export](../../../docs/COM_ASSETS.md) and the full demo style editor.
 The palette editor is enabled only for the flat theme, while image-backed themes retain

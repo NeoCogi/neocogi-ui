@@ -9,7 +9,7 @@ facade has no renderer, font-builder or JSON feature. Its defaults are empty:
 | `microui-redux` | `static-runtime` | Link one ordinary runtime implementation, including browser deployments. |
 | `microui-redux` | `compiled-assets` | Expand bounded zlib pixels from generated asset tables. |
 | `microui-ui` | none | Imports resolved resources for layout and painting; contains no asset compiler. |
-| `microui-plugin-assets` | none | PNG decoding without font or JSON compilation. |
+| `microui-plugin-assets` | none | PNG decoding and live metric/palette compilation, without font or JSON parsing. |
 | `microui-plugin-assets` | `builder` | Font rasterization and PNG atlas construction into portable tables. |
 | `microui-plugin-assets` | `theme-json` | Strict JSON compilation, including the atlas builder. |
 | `microui-plugin-assets` | `save-to-rust` | Atomic source export from validated portable tables. |
