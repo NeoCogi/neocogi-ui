@@ -5,6 +5,7 @@
 use crate::{AtlasHandle, FontRole, IconRole, ResourceCatalog, Skin, SkinBundle};
 use crate::atlas::transfer::Tables;
 use microui_contracts::*;
+use microui_redux::assets::AssetTables;
 use nc_com::{ComPtr, ComRef, IUnknown, NcStatus, NC_E_INVALID_ARG};
 
 mod theme;
@@ -17,7 +18,7 @@ pub struct ImportedAssets {
     identity: ComPtr<IUnknown>,
     /// Original local resources; private theme artwork never enters the application catalog.
     original: AtlasHandle,
-    /// Complete validated local skin and matching pixel/font/icon storage.
+    /// Complete validated local skin and matching font/icon lookup metadata.
     bundle: SkinBundle,
 }
 
@@ -30,18 +31,29 @@ impl ImportedAssets {
         if previous.is_some_and(|previous| previous.identity.as_ptr() != identity.as_ptr()) {
             return Err(UI_E_OWNER);
         }
-        // Shared table validation belongs to the portable data representation. The UI
-        // then creates only its own lookup IDs and resolved painting state.
-        let mut data = microui_redux::assets::AssetData::read(source)?;
-        let info = data.info()?;
+        // Shared table validation belongs to the portable data representation. Production UI
+        // import reads metadata and only the required white-tile rows; the platform is the sole
+        // owner of the complete RGBA transfer and GPU upload. Tests retain pixels because their
+        // native atlas fixtures deliberately exercise local round-trip export.
+        let mut data = AssetTables::read(source)?;
+        let size = data.size;
+        #[cfg(test)]
+        let pixels = {
+            let info = data.info()?;
+            let mut pixels = filled(info.rgba_bytes()?, 0)?;
+            source.pixels(nc_com::NcCopyToBufferOffset::new(0, &mut pixels))?;
+            pixels
+        };
         let tables = Tables {
             fonts: std::mem::take(&mut data.fonts).into_owned(),
             glyphs: std::mem::take(&mut data.glyphs).into_owned(),
             icons: std::mem::take(&mut data.icons).into_owned(),
             names: std::mem::take(&mut data.names).into_owned(),
         };
-        let pixels = std::mem::take(&mut data.pixels).into_owned();
-        let atlas = tables.import(info, pixels, previous.map(|previous| &previous.original))?;
+        #[cfg(test)]
+        let atlas = tables.import(size, pixels, previous.map(|previous| &previous.original))?;
+        #[cfg(not(test))]
+        let atlas = tables.import(size, previous.map(|previous| &previous.original))?;
         // Skin's native constructor assumes the semantic resources exist. Prove that before
         // calling it so malformed plugins produce a status, never a panic across the ABI.
         semantic_resources(&atlas)?;
@@ -80,8 +92,6 @@ impl ImportedAssets {
             .map_err(|_| NC_E_INVALID_ARG)?;
         export_bundle_data(bundle)?.into_revision(self.source())
     }
-
-
 }
 
 /// Exports a validated native bundle into a fresh logical catalog, with no parser dependency.
@@ -112,18 +122,20 @@ pub(crate) fn export_bundle_data(bundle: &SkinBundle) -> Result<microui_redux::a
     }
     let theme = theme::ExportedTheme::new(bundle)?;
     Ok(microui_redux::assets::AssetData {
-        size: info.size,
         pixels: pixels.into(),
-        fonts: tables.fonts.into(),
-        glyphs: tables.glyphs.into(),
-        icons: tables.icons.into(),
-        names: tables.names.into(),
-        metrics: theme.metrics,
-        chrome: theme.chrome,
-        surfaces: theme.surfaces.into(),
-        controls: theme.controls.into(),
-        menus: theme.menus.into(),
-        window_chrome: theme.window_chrome.into(),
+        tables: AssetTables {
+            size: info.size,
+            fonts: tables.fonts.into(),
+            glyphs: tables.glyphs.into(),
+            icons: tables.icons.into(),
+            names: tables.names.into(),
+            metrics: theme.metrics,
+            chrome: theme.chrome,
+            surfaces: theme.surfaces.into(),
+            controls: theme.controls.into(),
+            menus: theme.menus.into(),
+            window_chrome: theme.window_chrome.into(),
+        },
     })
 }
 
@@ -135,7 +147,6 @@ fn filled<T: Clone>(count: usize, value: T) -> Result<Vec<T>, NcStatus> {
     values.resize(count, value);
     Ok(values)
 }
-
 
 /// Proves the required default skin lookups are total before invoking native constructors.
 fn semantic_resources(atlas: &AtlasHandle) -> Result<(), NcStatus> {

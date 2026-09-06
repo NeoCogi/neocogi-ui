@@ -1,4 +1,5 @@
 use super::*;
+use microui_redux::assets::AssetTables;
 
 /// Consumer adapter keeping runtime rendering assertions outside asset production code.
 struct TestTheme {
@@ -50,25 +51,27 @@ fn test_atlas() -> AssetData {
         })
         .to_vec();
     let mut data = AssetData {
-        size: Size { width: 1, height: 1 },
         pixels: vec![255; 4].into(),
-        names: names.into_bytes().into(),
-        fonts: vec![AssetFont {
-            name: AssetRange { first: 0, count: 4 },
-            glyphs: AssetRange { first: 0, count: 3 },
-            line_size: 10,
-            baseline: 8,
-            font_size: 10,
-        }]
-        .into(),
-        glyphs: glyphs.into(),
-        icons: icons.into(),
-        metrics: AssetMetrics::default(),
-        chrome: crate::style::compile_chrome(WindowChromeSkin::default()),
-        surfaces: vec![].into(),
-        controls: vec![].into(),
-        menus: vec![].into(),
-        window_chrome: vec![].into(),
+        tables: AssetTables {
+            size: Size { width: 1, height: 1 },
+            names: names.into_bytes().into(),
+            fonts: vec![AssetFont {
+                name: AssetRange { first: 0, count: 4 },
+                glyphs: AssetRange { first: 0, count: 3 },
+                line_size: 10,
+                baseline: 8,
+                font_size: 10,
+            }]
+            .into(),
+            glyphs: glyphs.into(),
+            icons: icons.into(),
+            metrics: AssetMetrics::default(),
+            chrome: crate::style::compile_chrome(WindowChromeSkin::default()),
+            surfaces: vec![].into(),
+            controls: vec![].into(),
+            menus: vec![].into(),
+            window_chrome: vec![].into(),
+        },
     };
     // The same flat compiler supplies all omitted appearances in real theme construction.
     apply_flat(&mut data, Insets::uniform(1), &FlatPalette::default());
@@ -224,7 +227,7 @@ fn solid_patch_compiles_without_rebuilding_the_atlas() {
     let base = test_atlas();
     let theme_atlas = document.build_atlas(&base).expect("solid patch must not require atlas work");
     assert_eq!(theme_atlas.atlas.pixels, base.pixels);
-    assert_eq!(theme_atlas.atlas.icons, base.icons);
+    assert_eq!(theme_atlas.atlas.tables.icons, base.tables.icons);
     assert!(theme_atlas.images.is_empty());
     let loaded = document.install(theme_atlas).expect("solid patch must install");
     let loaded = TestTheme::new(loaded);

@@ -1,6 +1,6 @@
 //! Conversion from validated portable tables to UI-local lookup storage.
 use super::*;
-use microui_contracts::{AssetFont, AssetGlyph, AssetIcon, AssetInfo, AssetRange};
+use microui_contracts::{AssetFont, AssetGlyph, AssetIcon, AssetRange, Size};
 use nc_com::NcStatus;
 #[cfg(test)]
 use nc_com::NC_E_INVALID_ARG;
@@ -95,12 +95,12 @@ impl Tables {
         range
     }
 
-    /// Reconstructs local identities from tables already checked by `AssetData::read`.
+    /// Reconstructs local identities from tables already checked by `AssetTables::read`.
     ///
     /// Original catalog names preserve exact local IDs; revision-private artwork receives fresh
     /// IDs. Portable validation remains singular: this conversion cannot be called before the
     /// facade has checked name partitions, scalar values, metrics, rectangles and the white tile.
-    pub(crate) fn import(&self, info: AssetInfo, pixels: Vec<u8>, catalog: Option<&AtlasHandle>) -> Result<AtlasHandle, NcStatus> {
+    pub(crate) fn import(&self, size: Size, #[cfg(test)] pixels: Vec<u8>, catalog: Option<&AtlasHandle>) -> Result<AtlasHandle, NcStatus> {
         let mut fonts = Vec::with_capacity(self.fonts.len());
         for font in &self.fonts {
             let name = self.validated_name(font.name);
@@ -110,7 +110,7 @@ impl Tables {
                 .iter()
                 .map(|glyph| {
                     (
-                        char::from_u32(glyph.scalar).expect("AssetData::read validated every glyph scalar"),
+                        char::from_u32(glyph.scalar).expect("AssetTables::read validated every glyph scalar"),
                         CharEntry {
                             offset: Vec2i::new(glyph.offset_x, glyph.offset_y),
                             advance: Vec2i::new(glyph.advance_x, glyph.advance_y),
@@ -141,16 +141,23 @@ impl Tables {
                 },
             ));
         }
-        let pixels = pixels.as_chunks::<4>().0.iter().map(|pixel| crate::color4b(pixel[0], pixel[1], pixel[2], pixel[3])).collect();
+        #[cfg(test)]
+        let pixels = pixels
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|pixel| crate::color4b(pixel[0], pixel[1], pixel[2], pixel[3]))
+            .collect();
         let font_slots = fonts.iter().enumerate().map(|(slot, (_, font))| (font.id, slot)).collect::<HashMap<_, _>>();
         let icon_slots = icons.iter().enumerate().map(|(slot, (_, icon))| (icon.id, slot)).collect::<HashMap<_, _>>();
         let white_icon = icons
             .iter()
             .find_map(|(name, icon)| (name == "white").then_some(icon.id))
-            .expect("AssetData::read validated the required white icon");
+            .expect("AssetTables::read validated the required white icon");
         Ok(AtlasHandle(Rc::new(Atlas {
-            width: info.size.width as usize,
-            height: info.size.height as usize,
+            width: size.width as usize,
+            height: size.height as usize,
+            #[cfg(test)]
             pixels,
             fonts,
             icons,
@@ -163,7 +170,6 @@ impl Tables {
     /// Borrows one name whose range and UTF-8 encoding were checked before local conversion.
     fn validated_name(&self, range: AssetRange) -> &str {
         let last = range.first + range.count;
-        std::str::from_utf8(&self.names[range.first as usize..last as usize])
-            .expect("AssetData::read validated every resource name")
+        std::str::from_utf8(&self.names[range.first as usize..last as usize]).expect("AssetTables::read validated every resource name")
     }
 }

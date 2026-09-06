@@ -37,10 +37,10 @@ pub(crate) fn apply_flat(data: &mut AssetData, insets: Insets, palette: &FlatPal
             chrome.push(flat_chrome_visual(insets, palette, role, state));
         }
     }
-    data.surfaces = surfaces.into();
-    data.controls = controls.into();
-    data.menus = menus.into();
-    data.window_chrome = chrome.into();
+    data.tables.surfaces = surfaces.into();
+    data.tables.controls = controls.into();
+    data.tables.menus = menus.into();
+    data.tables.window_chrome = chrome.into();
 }
 
 /// Converts authorable caption geometry to the checked transfer record.
@@ -273,12 +273,12 @@ impl IStyleCompiler for StyleCompiler {
         // Validate foreign records and the closed edit tag before using their geometry or artwork.
         let edit = PaletteEdit::try_from(palette).map_err(|_| nc_com::NC_E_INVALID_ARG)?;
         let mut data = AssetData::read(base)?;
-        data.metrics = metrics;
+        data.tables.metrics = metrics;
         if let PaletteEdit::Flat(palette) = edit {
-            let insets = data.surfaces[SurfaceRole::GenericFrame.index() * SurfaceState::COUNT + SurfaceState::Normal.index()].insets;
+            let insets = data.tables.surfaces[SurfaceRole::GenericFrame.index() * SurfaceState::COUNT + SurfaceState::Normal.index()].insets;
             apply_flat(&mut data, insets, &palette);
-            if data.chrome.has_backdrop == 1 {
-                data.chrome.backdrop_rgba = rgba(palette.title_background);
+            if data.tables.chrome.has_backdrop == 1 {
+                data.tables.chrome.backdrop_rgba = rgba(palette.title_background);
             }
         }
         // A rejected candidate leaves both the source and every UI using it unchanged.

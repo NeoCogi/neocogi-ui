@@ -54,7 +54,10 @@
 
 /// Native loading and host construction share one catalog recipe.
 #[cfg(any(not(feature = "embed-assets"), test))]
-#[cfg_attr(feature = "embed-assets", allow(dead_code, reason = "compiled metadata tests do not open the white tile source path"))]
+#[cfg_attr(
+    feature = "embed-assets",
+    allow(dead_code, reason = "compiled metadata tests do not open the white tile source path")
+)]
 mod recipe_data;
 
 /// Generated metadata and compressed pixels have no target dependency on the UI implementation.
@@ -110,17 +113,17 @@ mod tests {
     fn compiled_bundle_contains_the_complete_recipe() {
         let data = bundle_data().unwrap();
         data.validate().unwrap();
-        assert_eq!((data.size.width as u32, data.size.height as u32), recipe_data::SIZE);
-        assert_eq!(data.fonts.len(), recipe_data::FONTS.len());
-        assert_eq!(data.icons.len(), recipe_data::ICONS.len() + 1);
-        for (font, &(name, _, size)) in data.fonts.iter().zip(recipe_data::FONTS) {
+        assert_eq!((data.tables.size.width as u32, data.tables.size.height as u32), recipe_data::SIZE);
+        assert_eq!(data.tables.fonts.len(), recipe_data::FONTS.len());
+        assert_eq!(data.tables.icons.len(), recipe_data::ICONS.len() + 1);
+        for (font, &(name, _, size)) in data.tables.fonts.iter().zip(recipe_data::FONTS) {
             assert_eq!(data.name(font.name).unwrap(), name);
             assert_eq!(font.font_size, size as i32);
             assert_eq!(font.glyphs.count, 95);
         }
         // The white tile precedes named recipe artwork in both the direct and COM builders.
-        assert_eq!(data.name(data.icons[0].name).unwrap(), "white");
-        for (icon, &(name, _)) in data.icons[1..].iter().zip(recipe_data::ICONS) {
+        assert_eq!(data.name(data.tables.icons[0].name).unwrap(), "white");
+        for (icon, &(name, _)) in data.tables.icons[1..].iter().zip(recipe_data::ICONS) {
             assert_eq!(data.name(icon.name).unwrap(), name);
         }
         data.into_bundle().unwrap();

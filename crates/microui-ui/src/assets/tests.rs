@@ -14,19 +14,19 @@ fn bundle() -> SkinBundle {
 
 /// Compares complete portable values while deliberately ignoring new binary-local resource IDs.
 fn equivalent(a: &AssetData, b: &AssetData) {
-    assert_eq!(a.size, b.size);
+    assert_eq!(a.tables.size, b.tables.size);
     assert_eq!(a.pixels, b.pixels);
-    assert_eq!(a.fonts, b.fonts);
-    assert_eq!(a.glyphs, b.glyphs);
-    assert_eq!(a.icons, b.icons);
-    assert_eq!(a.names, b.names);
-    assert_eq!(a.metrics, b.metrics);
-    assert_eq!(a.chrome, b.chrome);
+    assert_eq!(a.tables.fonts, b.tables.fonts);
+    assert_eq!(a.tables.glyphs, b.tables.glyphs);
+    assert_eq!(a.tables.icons, b.tables.icons);
+    assert_eq!(a.tables.names, b.tables.names);
+    assert_eq!(a.tables.metrics, b.tables.metrics);
+    assert_eq!(a.tables.chrome, b.tables.chrome);
     for (a, b) in [
-        (&a.surfaces, &b.surfaces),
-        (&a.controls, &b.controls),
-        (&a.menus, &b.menus),
-        (&a.window_chrome, &b.window_chrome),
+        (&a.tables.surfaces, &b.tables.surfaces),
+        (&a.tables.controls, &b.tables.controls),
+        (&a.tables.menus, &b.tables.menus),
+        (&a.tables.window_chrome, &b.tables.window_chrome),
     ] {
         assert_eq!(a.len(), b.len());
         for (a, b) in a.iter().zip(b.iter()) {
@@ -95,31 +95,31 @@ fn malformed_portable_metadata_never_reaches_a_live_skin() {
     for case in 0..11 {
         let mut data = export_bundle_data(&bundle()).unwrap();
         match case {
-            0 => data.glyphs.to_mut()[0].scalar = 0xd800,       // Invalid Unicode surrogate.
-            1 => data.fonts.to_mut()[0].glyphs.first = 1,       // Gap before the first font.
-            2 => data.icons.to_mut()[0].name.first = u32::MAX,  // Overflowing name span.
-            3 => data.names.to_mut()[0] = 0xff,                 // Invalid UTF-8.
-            4 => data.glyphs.to_mut()[0].rect.width = i32::MAX, // Out-of-atlas glyph.
-            5 => data.pixels.to_mut().fill(0),                  // Required white tile is no longer opaque white.
-            6 => data.metrics.padding = -1,
-            7 => data.chrome.has_backdrop = 2,
-            8 => data.controls.to_mut()[0].patch = AssetPatchAbi::from_unknown_tag(AssetPatchTag::from_raw(255)).unwrap(),
+            0 => data.tables.glyphs.to_mut()[0].scalar = 0xd800,       // Invalid Unicode surrogate.
+            1 => data.tables.fonts.to_mut()[0].glyphs.first = 1,       // Gap before the first font.
+            2 => data.tables.icons.to_mut()[0].name.first = u32::MAX,  // Overflowing name span.
+            3 => data.tables.names.to_mut()[0] = 0xff,                 // Invalid UTF-8.
+            4 => data.tables.glyphs.to_mut()[0].rect.width = i32::MAX, // Out-of-atlas glyph.
+            5 => data.pixels.to_mut().fill(0),                         // Required white tile is no longer opaque white.
+            6 => data.tables.metrics.padding = -1,
+            7 => data.tables.chrome.has_backdrop = 2,
+            8 => data.tables.controls.to_mut()[0].patch = AssetPatchAbi::from_unknown_tag(AssetPatchTag::from_raw(255)).unwrap(),
             9 => {
-                data.controls.to_mut()[0].patch = AssetPatch::Image {
+                data.tables.controls.to_mut()[0].patch = AssetPatch::Image {
                     icon: u32::MAX,
                     source: Insets::default(),
                     tint: 0,
                 }
                 .into()
             }
-            10 => data.controls.to_mut()[0].center_visible = 2,
+            10 => data.tables.controls.to_mut()[0].center_visible = 2,
             _ => unreachable!(),
         }
         let source = data.into_bundle().unwrap();
         assert!(matches!(ImportedAssets::read(source.as_com_ref(), None), Err(NC_E_INVALID_ARG)), "case {case}");
     }
     let mut data = export_bundle_data(&bundle()).unwrap();
-    data.size.width = i32::MAX;
+    data.tables.size.width = i32::MAX;
     assert_eq!(data.into_bundle().unwrap_err(), NC_E_INVALID_ARG);
 }
 
@@ -221,7 +221,7 @@ fn event_callback_installs_resources_and_recovers_after_upload_failure() {
     let renderer: ComPtr<IRendererAbi> = UploadRenderer::from_value(UploadRenderer(probe.clone())).query().unwrap();
     let _window = ui.window("theme callback", Rect { x: 0, y: 0, width: 400, height: 250 }, &button).unwrap();
     let mut data = export_bundle_data(&bundle()).unwrap();
-    data.metrics.padding += 10;
+    data.tables.metrics.padding += 10;
     let candidate = data.into_revision(source.as_com_ref()).unwrap();
     let session = microui_redux::EventSession::new(ThemeState {
         ui: ui.clone(),
@@ -294,7 +294,7 @@ fn runtime_install_is_atomic_and_updates_shared_widget_measurement() {
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
 
     let mut data = export_bundle_data(&bundle()).unwrap();
-    data.metrics.padding += 10;
+    data.tables.metrics.padding += 10;
     let candidate = data.into_revision(source.as_com_ref()).unwrap();
     probe.fail.set(true);
     assert_eq!(ui.install_assets(candidate.as_com_ref(), renderer.as_com_ref()), Err(UI_E_RENDER));
@@ -322,7 +322,9 @@ fn runtime_install_is_atomic_and_updates_shared_widget_measurement() {
 #[test]
 fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision() {
     let source = export_bundle(&bundle()).unwrap();
-    let compiler: ComPtr<IStyleCompilerAbi> = microui_plugin_assets::StyleCompiler::from_value(microui_plugin_assets::StyleCompiler::default()).query().unwrap();
+    let compiler: ComPtr<IStyleCompilerAbi> = microui_plugin_assets::StyleCompiler::from_value(microui_plugin_assets::StyleCompiler::default())
+        .query()
+        .unwrap();
     let ui = microui_redux::Ui::from_interface(crate::com::create_runtime_from_assets(source.as_com_ref()).unwrap()).unwrap();
     let original = ImportedAssets::read(source.as_com_ref(), None).unwrap();
     let mut metrics = source.metrics().unwrap();
@@ -335,7 +337,7 @@ fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision
     );
     let imported = ImportedAssets::read(candidate.as_com_ref(), Some(&original)).unwrap();
     let mut expected = export_bundle_data(original.bundle()).unwrap();
-    expected.metrics = metrics;
+    expected.tables.metrics = metrics;
     equivalent(&export_bundle_data(imported.bundle()).unwrap(), &expected);
     let palette = crate::FlatPalette {
         text: crate::color(11, 22, 33, 44),
@@ -350,7 +352,10 @@ fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision
     let native = SkinBundle::new(original.bundle().atlas().clone(), skin);
     equivalent(&export_bundle_data(imported.bundle()).unwrap(), &export_bundle_data(&native).unwrap());
     let invalid = AssetMetrics { padding: -1, ..metrics };
-    assert_eq!(compiler.derive_style(source.as_com_ref(), invalid, PaletteEdit::Preserve.into()).unwrap_err(), NC_E_INVALID_ARG);
+    assert_eq!(
+        compiler.derive_style(source.as_com_ref(), invalid, PaletteEdit::Preserve.into()).unwrap_err(),
+        NC_E_INVALID_ARG
+    );
     let invalid = PaletteEditAbi::from_unknown_tag(PaletteEditTag::from_raw(255)).unwrap();
     assert_eq!(compiler.derive_style(source.as_com_ref(), metrics, invalid).unwrap_err(), NC_E_INVALID_ARG);
     assert_eq!(ui.assets().unwrap().as_ptr(), source.as_ptr());

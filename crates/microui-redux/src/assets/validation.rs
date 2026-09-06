@@ -4,14 +4,53 @@ use std::collections::HashSet;
 use nc_com::NC_E_OUT_OF_MEMORY;
 
 impl AssetData {
-    /// Copies and validates one immutable resource revision without constructing UI objects.
+    /// Copies and validates one complete immutable resource revision.
     pub fn read(source: ComRef<'_, IAssetBundleAbi>) -> Result<Self, NcStatus> {
-        // Read allocation bounds first. Each foreign copy receives an initialized local
-        // buffer, and no partially read candidate becomes visible to another consumer.
+        // Construction consumers need both representations. Allocate each from the same checked
+        // header, then publish neither until metadata, pixel length and white-tile contents agree.
         let info = source.info()?;
-        let mut data = Self {
+        let tables = AssetTables::read_from(source, info)?;
+        let mut pixels = filled(info.rgba_bytes()?, 0)?;
+        source.pixels(NcCopyToBufferOffset::new(0, &mut pixels))?;
+        let data = Self { pixels: pixels.into(), tables };
+        data.validate()?;
+        Ok(data)
+    }
+
+    /// Checks table semantics, exact pixel storage and the required opaque-white tile.
+    pub fn validate(&self) -> Result<(), NcStatus> {
+        self.info()?;
+        self.tables.validate_contents()?;
+        self.tables.validate_white_pixels(&self.pixels)
+    }
+
+    /// Resolves a bounded UTF-8 name from this revision's metadata.
+    pub fn name(&self, range: AssetRange) -> Result<&str, NcStatus> {
+        self.tables.name(range)
+    }
+}
+
+impl AssetTables {
+    /// Copies and validates metadata without allocating or retaining the complete RGBA image.
+    pub fn read(source: ComRef<'_, IAssetBundleAbi>) -> Result<Self, NcStatus> {
+        // Validate every table before using its white rectangle to address the foreign pixel
+        // method. Only those rows are copied, so UI import cost does not scale with empty texture
+        // space or with artwork that only the platform uploads.
+        let info = source.info()?;
+        let tables = Self::read_from(source, info)?;
+        tables.validate()?;
+        tables.validate_white_source(source)?;
+        Ok(tables)
+    }
+
+    /// Copies bounded metadata after the common header has fixed every allocation size.
+    fn read_from(source: ComRef<'_, IAssetBundleAbi>, info: AssetInfo) -> Result<Self, NcStatus> {
+        // Checking the complete header first rejects schema, dimension and count errors before any
+        // allocation. Each foreign copy writes an initialized local buffer which remains private
+        // until every requested table has been returned successfully.
+        info.rgba_bytes()?;
+        let mut tables = Self {
             size: info.size,
-            pixels: filled(info.rgba_bytes()?, 0)?.into(),
             fonts: filled(info.fonts as usize, AssetFont::default())?.into(),
             glyphs: filled(info.glyphs as usize, AssetGlyph::default())?.into(),
             icons: filled(info.icons as usize, AssetIcon::default())?.into(),
@@ -23,23 +62,25 @@ impl AssetData {
             menus: filled(MenuRole::COUNT * MenuState::COUNT, transparent())?.into(),
             window_chrome: filled(ChromeRole::COUNT * ChromeState::COUNT, transparent())?.into(),
         };
-        source.pixels(NcCopyToBufferOffset::new(0, data.pixels.to_mut()))?;
-        source.fonts(NcCopyToBufferOffset::new(0, data.fonts.to_mut()))?;
-        source.glyphs(NcCopyToBufferOffset::new(0, data.glyphs.to_mut()))?;
-        source.icons(NcCopyToBufferOffset::new(0, data.icons.to_mut()))?;
-        source.names(NcCopyToBufferOffset::new(0, data.names.to_mut()))?;
-        source.visuals(AppearanceFamily::SURFACE, NcCopyToBufferOffset::new(0, data.surfaces.to_mut()))?;
-        source.visuals(AppearanceFamily::CONTROL, NcCopyToBufferOffset::new(0, data.controls.to_mut()))?;
-        source.visuals(AppearanceFamily::MENU, NcCopyToBufferOffset::new(0, data.menus.to_mut()))?;
-        source.visuals(AppearanceFamily::CHROME, NcCopyToBufferOffset::new(0, data.window_chrome.to_mut()))?;
-        data.validate()?;
-        Ok(data)
+        source.fonts(NcCopyToBufferOffset::new(0, tables.fonts.to_mut()))?;
+        source.glyphs(NcCopyToBufferOffset::new(0, tables.glyphs.to_mut()))?;
+        source.icons(NcCopyToBufferOffset::new(0, tables.icons.to_mut()))?;
+        source.names(NcCopyToBufferOffset::new(0, tables.names.to_mut()))?;
+        source.visuals(AppearanceFamily::SURFACE, NcCopyToBufferOffset::new(0, tables.surfaces.to_mut()))?;
+        source.visuals(AppearanceFamily::CONTROL, NcCopyToBufferOffset::new(0, tables.controls.to_mut()))?;
+        source.visuals(AppearanceFamily::MENU, NcCopyToBufferOffset::new(0, tables.menus.to_mut()))?;
+        source.visuals(AppearanceFamily::CHROME, NcCopyToBufferOffset::new(0, tables.window_chrome.to_mut()))?;
+        Ok(tables)
     }
 
-    /// Checks all portable resource invariants before packing, installation or publication.
+    /// Checks every metadata and resolved-appearance invariant without inspecting image bytes.
     pub fn validate(&self) -> Result<(), NcStatus> {
         self.info()?;
+        self.validate_contents()
+    }
 
+    /// Checks metadata contents after their storage lengths and dimensions are known to be valid.
+    fn validate_contents(&self) -> Result<(), NcStatus> {
         // Names and glyphs form exact partitions. Preserve duplicates until this check;
         // silently collecting into maps would discard malformed records.
         let mut next_name = 0;
@@ -79,16 +120,6 @@ impl AssetData {
                 return Err(NC_E_INVALID_ARG);
             }
             self.validate_rect(icon.rect, false)?;
-            if name == "white" {
-                // Rectangle validation proved every row is in the exact RGBA buffer.
-                for y in icon.rect.y..icon.rect.y + icon.rect.height {
-                    let start = (y as usize * self.size.width as usize + icon.rect.x as usize) * 4;
-                    let end = start + icon.rect.width as usize * 4;
-                    if self.pixels[start..end].iter().any(|channel| *channel != 255) {
-                        return Err(NC_E_INVALID_ARG);
-                    }
-                }
-            }
         }
         for name in core::iter::once("white").chain(IconRole::ALL.map(IconRole::atlas_name)) {
             if !icon_names.contains(name) {
@@ -173,6 +204,43 @@ impl AssetData {
             || rect.y.checked_add(rect.height).ok_or(NC_E_INVALID_ARG)? > self.size.height
         {
             return Err(NC_E_INVALID_ARG);
+        }
+        Ok(())
+    }
+
+    /// Returns the required white-tile rectangle after metadata validation has proved it exists.
+    fn white_rect(&self) -> Rect {
+        self.icons
+            .iter()
+            .find(|icon| self.name(icon.name) == Ok("white"))
+            .expect("AssetTables::validate requires the white icon")
+            .rect
+    }
+
+    /// Checks white-tile channels in a complete, exact-size RGBA allocation.
+    fn validate_white_pixels(&self, pixels: &[u8]) -> Result<(), NcStatus> {
+        let rect = self.white_rect();
+        for y in rect.y..rect.y + rect.height {
+            let first = (y as usize * self.size.width as usize + rect.x as usize) * 4;
+            let last = first + rect.width as usize * 4;
+            if pixels[first..last].iter().any(|channel| *channel != 255) {
+                return Err(NC_E_INVALID_ARG);
+            }
+        }
+        Ok(())
+    }
+
+    /// Reads only the white tile rows required to authenticate solid-color rendering.
+    fn validate_white_source(&self, source: ComRef<'_, IAssetBundleAbi>) -> Result<(), NcStatus> {
+        let rect = self.white_rect();
+        let row_bytes = rect.width as usize * 4;
+        let mut row = filled(row_bytes, 0)?;
+        for y in rect.y..rect.y + rect.height {
+            let first = (y as usize * self.size.width as usize + rect.x as usize) * 4;
+            source.pixels(NcCopyToBufferOffset::new(first as u64, &mut row))?;
+            if row.iter().any(|channel| *channel != 255) {
+                return Err(NC_E_INVALID_ARG);
+            }
         }
         Ok(())
     }

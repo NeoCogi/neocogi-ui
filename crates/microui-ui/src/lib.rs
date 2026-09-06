@@ -137,8 +137,8 @@ pub mod prelude {
     pub use crate::math::{expand_rect, rect, vec2};
     pub use crate::theme::{
         CaptionButtonSide, CaptionButtonsSkin, ChromeRole, ChromeState, Color, ControlRole, ControlState, FlatPalette, FontRef, FontRole, FrameRole, IconRef,
-        IconRole, MenuRole, MenuState, PointerState, ResourceCatalog, Skin, SkinBundle, SkinInstallError, SkinMetrics, SurfaceRole, SurfaceState,
-        TitleBackdropSkin, Visual, WindowChromeSkin, WindowTitleAlignment, color,
+        IconRole, MenuRole, MenuState, PointerState, ResourceCatalog, Skin, SkinBundle, SkinMetrics, SurfaceRole, SurfaceState, TitleBackdropSkin, Visual,
+        WindowChromeSkin, WindowTitleAlignment, color,
     };
     pub use rs_math3d::{
         Box3f, Color4b, CrossProduct, Dimension, Dimensioni, FloatVector, Mat4f, Quat, Quatf, Rect, Recti, Vec2f, Vec2i, Vec3f, Vec4f, Vector, Vector3,
@@ -163,9 +163,10 @@ pub use math::{expand_rect, rect, vec2};
 pub use render::{AtlasUploadError, NinePatch, NinePatchCell, NinePatchCells, NinePatchContent, NinePatchImage, SliceInsets, TextureError, TextureId};
 pub use theme::{
     CaptionButtonSide, CaptionButtonsSkin, ChromeRole, ChromeState, Color, ControlRole, ControlState, FlatPalette, FontRef, FontRole, FrameRole, IconRef,
-    IconRole, MenuRole, MenuState, PointerState, ResourceCatalog, Skin, SkinBundle, SkinInstallError, SkinMetrics, SurfaceRole, SurfaceState,
-    TitleBackdropSkin, Visual, WindowChromeSkin, WindowTitleAlignment, color,
+    IconRole, MenuRole, MenuState, PointerState, ResourceCatalog, Skin, SkinBundle, SkinMetrics, SurfaceRole, SurfaceState, TitleBackdropSkin, Visual,
+    WindowChromeSkin, WindowTitleAlignment, color,
 };
+pub(crate) use theme::SkinInstallError;
 pub(crate) use ui_node::{
     AvailableSpace, Change, ChildParticipation, Children, Constraints, ContainerLayoutCtx, ContainerWidget, Disclosure, Grid, GridSpan, KeyboardAction,
     KeyboardBehavior, LeafWidget, Linear, LinearCrossSize, LinearDirection, MeasureCtx, Node, ScrollArea, Scrollbar, ScrollbarAxis, ScrollbarChanged,

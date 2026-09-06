@@ -280,7 +280,7 @@ impl Drop for ReadScope<'_> {
 
 impl RendererBackend for Backend {
     type Frame<'a> = Frame<'a>;
-    /// Resource metadata is committed by the enclosing UI renderer after platform preparation.
+    /// Pixel replacement belongs to the external platform renderer, never this recorder backend.
     fn replace_atlas(&mut self, _atlas: ImageSource<'_>) -> Result<(), AtlasUploadError> {
         // This backend records geometry only. The platform already performed the GPU transaction.
         Ok(())

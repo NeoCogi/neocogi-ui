@@ -35,7 +35,7 @@ use super::{IconRole, Skin};
 
 /// Failure to install a bundle without invalidating the Context's application resource catalog.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum SkinInstallError {
+pub(crate) enum SkinInstallError {
     /// The candidate omits a logical font from the original application catalog.
     MissingFont {
         /// Catalog spelling for diagnostics; matching is by the exact typed identity below.
@@ -50,29 +50,6 @@ pub enum SkinInstallError {
         /// Stable icon identity that existing retained widgets may reference.
         id: crate::IconId,
     },
-    /// Resources were compatible, but the backend rejected the transactional atlas upload.
-    Upload(crate::AtlasUploadError),
-}
-
-impl std::fmt::Display for SkinInstallError {
-    /// Describes the failed boundary while keeping exact resource IDs available for typed handling.
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::MissingFont { name, .. } => write!(f, "skin bundle omits application font {name:?}"),
-            Self::MissingIcon { name, .. } => write!(f, "skin bundle omits application icon {name:?}"),
-            Self::Upload(source) => write!(f, "skin atlas upload failed: {source}"),
-        }
-    }
-}
-
-impl std::error::Error for SkinInstallError {
-    /// Exposes the backend cause only when the upload stage was reached.
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Upload(source) => Some(source),
-            Self::MissingFont { .. } | Self::MissingIcon { .. } => None,
-        }
-    }
 }
 
 /// One resolved [`Skin`] paired with the exact immutable [`AtlasHandle`] it uses.
@@ -83,7 +60,7 @@ impl std::error::Error for SkinInstallError {
 /// [`crate::FontRef`] and [`crate::IconRef`] values validate through this same pair.
 #[derive(Clone)]
 pub struct SkinBundle {
-    /// Immutable pixels, font metrics, and icon rectangles used by the paired skin.
+    /// Immutable font metrics, image rectangles and local resource identities used by the skin.
     atlas: AtlasHandle,
     /// Complete resolved geometry and visuals whose image capabilities belong to `atlas`.
     skin: Skin,
@@ -132,8 +109,8 @@ impl SkinBundle {
 
     /// Borrows the immutable atlas paired with this skin.
     pub fn atlas(&self) -> &AtlasHandle {
-        // The handle exposes immutable pixels and metadata, so a shared borrow is sufficient for
-        // layout, paint, renderer replacement, and application name lookup.
+        // The handle exposes immutable metadata, so a shared borrow is sufficient for layout,
+        // paint, renderer synchronization, and application name lookup.
         &self.atlas
     }
 }

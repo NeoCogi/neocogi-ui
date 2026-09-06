@@ -400,7 +400,7 @@ An independently loaded GPU extension that must access native internals would ne
 
 Keep JSON parsing and font/PNG construction in the optional asset plugin. The size investigation found roughly 167 KiB attributable to bundled JSON theme loading in the current demo; loading this code only when requested is a useful packaging boundary, but dynamic libraries still count toward total installed size.
 
-A runtime asset bundle should be immutable and expose bulk typed metadata plus owned pixel data. The UI imports/caches font glyph tables, icon metadata and resolved theme roles once per bundle revision; avoid a COM call for every glyph during normal measurement or drawing. The builder and JSON loader produce the same runtime bundle form. Prebuilt tools produce that form without linking fontdue/Serde into the shipped UI plugin.
+A runtime asset bundle should be immutable and expose bulk typed metadata plus owned pixel data. The UI imports and caches font glyph tables, icon metadata and resolved theme roles once per bundle revision, while the platform alone copies the complete RGBA image for upload. The UI reads only the white-tile rows needed to validate solid rendering and does not retain a second CPU image. Avoid a COM call for every glyph during normal measurement or drawing. The builder and JSON loader produce the same runtime bundle form. Prebuilt tools produce that form without linking fontdue/Serde into the shipped UI plugin.
 
 Use shared ABI-safe small values as canonical UI geometry/color/input records wherever practical. Avoid parallel Rect/ComRect/ForeignRect families and repetitive conversion layers. Keep rs-math3d-specific 3D types local to the demo/GPU implementation, or give app-specific scene records an explicit contract representation.
 

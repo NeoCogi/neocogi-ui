@@ -150,7 +150,8 @@ struct Atlas {
     width: usize,
     /// Height of the atlas texture in pixels.
     height: usize,
-    /// RGBA pixel data in row-major order.
+    /// RGBA pixel data retained only by native test fixtures that round-trip an atlas locally.
+    #[cfg(test)]
     pixels: Vec<Color4b>,
     /// Named fonts available to text layout and rendering.
     fonts: Vec<(String, Font)>,
@@ -184,15 +185,17 @@ struct AtlasCandidate {
 }
 
 #[derive(Clone)]
-/// Shared read-only handle to a fully validated atlas.
+/// Shared read-only handle to fully validated UI lookup metadata.
 ///
 /// Handles are created only while the UI imports a validated portable asset revision. Applications
 /// obtain typed resource references through the COM facade rather than constructing native atlases.
+/// Production handles contain dimensions, glyph metrics and icon rectangles; complete RGBA storage
+/// remains at the asset-to-platform upload boundary.
 pub struct AtlasHandle(Rc<Atlas>);
 
+pub(crate) mod transfer;
 #[cfg(test)]
 mod validation;
-pub(crate) mod transfer;
 #[cfg(test)]
 pub use validation::AtlasError;
 

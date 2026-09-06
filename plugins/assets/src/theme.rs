@@ -337,7 +337,7 @@ impl ThemeDefinition {
             .fonts
             .as_ref()
             .map(|fonts| (fonts.texture_width, fonts.texture_height))
-            .unwrap_or_else(|| (base.size.width as usize, base.size.height as usize));
+            .unwrap_or_else(|| (base.tables.size.width as usize, base.tables.size.height as usize));
         // Replacement is expressed entirely in the atlas's two resource namespaces. The builder
         // copies application-owned resources and replaces only the declared semantic names.
         // UI-local identities are assigned by the consumer when this revision is installed.
@@ -385,12 +385,16 @@ impl ThemeDefinition {
         let ThemeAtlas { atlas, images } = theme_atlas;
         let mut data = atlas;
         // Compile directly into the transfer records; no native UI skin or atlas is constructed.
-        data.metrics = self.skin.metrics;
-        data.chrome = compile_chrome(self.skin.window_chrome);
+        data.tables.metrics = self.skin.metrics;
+        data.tables.chrome = compile_chrome(self.skin.window_chrome);
         let frame_insets = self.skin.fallback_frame_insets;
         validate_non_negative("generic_frame", "skin.fallback_frame_insets", frame_insets)?;
-        validate_non_negative("window_content", "skin.metrics.window_content_insets", data.metrics.window_content_insets)?;
-        validate_non_negative("window_frame", "skin.metrics.window_border", data.metrics.window_border)?;
+        validate_non_negative(
+            "window_content",
+            "skin.metrics.window_content_insets",
+            data.tables.metrics.window_content_insets,
+        )?;
+        validate_non_negative("window_frame", "skin.metrics.window_border", data.tables.metrics.window_border)?;
         apply_flat(&mut data, frame_insets, &self.skin.palette);
         for (role, document) in &self.appearances.surface {
             // Shared role/state enums determine the wire-table order. Every authored override
@@ -399,12 +403,12 @@ impl ThemeDefinition {
             let destination_insets = destination_insets(
                 &name,
                 document.insets,
-                data.surfaces[role.index() * SurfaceState::COUNT + SurfaceState::Normal.index()].insets,
+                data.tables.surfaces[role.index() * SurfaceState::COUNT + SurfaceState::Normal.index()].insets,
             )?;
             for (state, authored) in document.states() {
                 let index = role.index() * SurfaceState::COUNT + state.index();
-                let visual = compile_visual(&data.icons, &images, &name, destination_insets, authored, data.surfaces[index])?;
-                data.surfaces.to_mut()[index] = visual;
+                let visual = compile_visual(&data.tables.icons, &images, &name, destination_insets, authored, data.tables.surfaces[index])?;
+                data.tables.surfaces.to_mut()[index] = visual;
             }
         }
         for (role, document) in &self.appearances.control {
@@ -413,12 +417,12 @@ impl ThemeDefinition {
             let destination_insets = destination_insets(
                 &name,
                 document.insets,
-                data.controls[role.index() * ControlState::COUNT + base_state.index()].insets,
+                data.tables.controls[role.index() * ControlState::COUNT + base_state.index()].insets,
             )?;
             for (state, authored) in document.states() {
                 let index = role.index() * ControlState::COUNT + state.index();
-                let visual = compile_visual(&data.icons, &images, &name, destination_insets, authored, data.controls[index])?;
-                data.controls.to_mut()[index] = visual;
+                let visual = compile_visual(&data.tables.icons, &images, &name, destination_insets, authored, data.tables.controls[index])?;
+                data.tables.controls.to_mut()[index] = visual;
             }
         }
         for (role, document) in &self.appearances.menu {
@@ -426,12 +430,12 @@ impl ThemeDefinition {
             let destination_insets = destination_insets(
                 &name,
                 document.insets,
-                data.menus[role.index() * MenuState::COUNT + MenuState::Normal.index()].insets,
+                data.tables.menus[role.index() * MenuState::COUNT + MenuState::Normal.index()].insets,
             )?;
             for (state, authored) in document.states() {
                 let index = role.index() * MenuState::COUNT + state.index();
-                let visual = compile_visual(&data.icons, &images, &name, destination_insets, authored, data.menus[index])?;
-                data.menus.to_mut()[index] = visual;
+                let visual = compile_visual(&data.tables.icons, &images, &name, destination_insets, authored, data.tables.menus[index])?;
+                data.tables.menus.to_mut()[index] = visual;
             }
         }
         for (role, document) in &self.appearances.chrome {
@@ -439,12 +443,19 @@ impl ThemeDefinition {
             let destination_insets = destination_insets(
                 &name,
                 document.insets,
-                data.window_chrome[role.index() * ChromeState::COUNT + ChromeState::Base.index()].insets,
+                data.tables.window_chrome[role.index() * ChromeState::COUNT + ChromeState::Base.index()].insets,
             )?;
             for (state, authored) in document.states() {
                 let index = role.index() * ChromeState::COUNT + state.index();
-                let visual = compile_visual(&data.icons, &images, &name, destination_insets, authored, data.window_chrome[index])?;
-                data.window_chrome.to_mut()[index] = visual;
+                let visual = compile_visual(
+                    &data.tables.icons,
+                    &images,
+                    &name,
+                    destination_insets,
+                    authored,
+                    data.tables.window_chrome[index],
+                )?;
+                data.tables.window_chrome.to_mut()[index] = visual;
             }
         }
 

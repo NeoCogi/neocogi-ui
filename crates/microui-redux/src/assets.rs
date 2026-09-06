@@ -7,14 +7,15 @@ use microui_contracts::appearance::*;
 
 mod validation;
 
-/// Portable owned-or-static tables used by both runtime builders and generated source files.
-/// Creation checks storage lengths; consumers validate semantic contents before installation.
+/// Portable metadata and resolved appearances, independent of atlas pixel storage.
+///
+/// UI consumers copy this value to create local resource identities and painting state. Keeping
+/// pixels out of the type prevents a metadata consumer from allocating or retaining the GPU's
+/// complete upload input.
 #[derive(Clone)]
-pub struct AssetData {
-    /// Positive atlas dimensions with bounded tightly packed RGBA storage.
+pub struct AssetTables {
+    /// Positive atlas dimensions whose bundle supplies bounded tightly packed RGBA storage.
     pub size: Size,
-    /// Row-major RGBA bytes; compiled bundles may borrow a static include_bytes array.
-    pub pixels: Cow<'static, [u8]>,
     /// Font records partition the glyph table in declaration order.
     pub fonts: Cow<'static, [AssetFont]>,
     /// Unicode scalar metrics; underscore fallback and duplicates are checked by consumers.
@@ -37,6 +38,18 @@ pub struct AssetData {
     pub window_chrome: Cow<'static, [AssetVisual]>,
 }
 
+/// Complete portable asset revision used by compilers and immutable bundle publication.
+///
+/// Construction services own both halves. UI consumers read [`AssetTables`] alone, while the
+/// platform copies the packed RGBA bytes directly to its selected GPU backend.
+#[derive(Clone)]
+pub struct AssetData {
+    /// Row-major RGBA bytes; compiled bundles may borrow a static include-bytes array.
+    pub pixels: Cow<'static, [u8]>,
+    /// Resource metadata and resolved appearances paired with these pixels.
+    pub tables: AssetTables,
+}
+
 impl AssetData {
     /// Publishes this immutable data in a new logical resource namespace.
     pub fn into_bundle(self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
@@ -50,22 +63,10 @@ impl AssetData {
         self.publish(base.catalog()?)
     }
 
-    /// Derives bounded counts and verifies actual storage lengths without interpreting records.
+    /// Derives bounded counts and verifies the exact paired pixel length.
     pub fn info(&self) -> Result<AssetInfo, NcStatus> {
-        let info = AssetInfo {
-            schema: ASSET_SCHEMA_VERSION,
-            size: self.size,
-            fonts: u32::try_from(self.fonts.len()).map_err(|_| NC_E_INVALID_ARG)?,
-            glyphs: u32::try_from(self.glyphs.len()).map_err(|_| NC_E_INVALID_ARG)?,
-            icons: u32::try_from(self.icons.len()).map_err(|_| NC_E_INVALID_ARG)?,
-            names: u32::try_from(self.names.len()).map_err(|_| NC_E_INVALID_ARG)?,
-        };
-        if info.rgba_bytes()? != self.pixels.len()
-            || self.surfaces.len() != SurfaceRole::COUNT * SurfaceState::COUNT
-            || self.controls.len() != ControlRole::COUNT * ControlState::COUNT
-            || self.menus.len() != MenuRole::COUNT * MenuState::COUNT
-            || self.window_chrome.len() != ChromeRole::COUNT * ChromeState::COUNT
-        {
+        let info = self.tables.info()?;
+        if info.rgba_bytes()? != self.pixels.len() {
             return Err(NC_E_INVALID_ARG);
         }
         Ok(info)
@@ -77,6 +78,29 @@ impl AssetData {
         Ok(Bundle::from_value(Bundle { catalog, info, data: self })
             .query()
             .expect("Bundle declares IAssetBundle"))
+    }
+}
+
+impl AssetTables {
+    /// Derives bounded counts and verifies fixed appearance-table lengths.
+    pub fn info(&self) -> Result<AssetInfo, NcStatus> {
+        let info = AssetInfo {
+            schema: ASSET_SCHEMA_VERSION,
+            size: self.size,
+            fonts: u32::try_from(self.fonts.len()).map_err(|_| NC_E_INVALID_ARG)?,
+            glyphs: u32::try_from(self.glyphs.len()).map_err(|_| NC_E_INVALID_ARG)?,
+            icons: u32::try_from(self.icons.len()).map_err(|_| NC_E_INVALID_ARG)?,
+            names: u32::try_from(self.names.len()).map_err(|_| NC_E_INVALID_ARG)?,
+        };
+        info.rgba_bytes()?;
+        if self.surfaces.len() != SurfaceRole::COUNT * SurfaceState::COUNT
+            || self.controls.len() != ControlRole::COUNT * ControlState::COUNT
+            || self.menus.len() != MenuRole::COUNT * MenuState::COUNT
+            || self.window_chrome.len() != ChromeRole::COUNT * ChromeState::COUNT
+        {
+            return Err(NC_E_INVALID_ARG);
+        }
+        Ok(info)
     }
 }
 
@@ -111,35 +135,35 @@ impl IAssetBundle for Bundle {
     }
     /// Copies font metrics without exposing a borrowed Rust slice.
     fn fonts(&self, output: NcCopyToBufferOffset<'_, AssetFont>) -> Result<(), NcStatus> {
-        copy(&self.data.fonts, output)
+        copy(&self.data.tables.fonts, output)
     }
     /// Copies exact Unicode records in the producer's immutable order.
     fn glyphs(&self, output: NcCopyToBufferOffset<'_, AssetGlyph>) -> Result<(), NcStatus> {
-        copy(&self.data.glyphs, output)
+        copy(&self.data.tables.glyphs, output)
     }
     /// Copies named image rectangles in bundle-local table order.
     fn icons(&self, output: NcCopyToBufferOffset<'_, AssetIcon>) -> Result<(), NcStatus> {
-        copy(&self.data.icons, output)
+        copy(&self.data.tables.icons, output)
     }
     /// Copies UTF-8 bytes, with byte offsets and no implicit terminator.
     fn names(&self, output: NcCopyToBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        copy(&self.data.names, output)
+        copy(&self.data.tables.names, output)
     }
     /// Returns complete geometry without parser-specific defaults.
     fn metrics(&self) -> Result<AssetMetrics, NcStatus> {
-        Ok(self.data.metrics)
+        Ok(self.data.tables.metrics)
     }
     /// Returns the complete concrete caption recipe.
     fn chrome(&self) -> Result<AssetChrome, NcStatus> {
-        Ok(self.data.chrome)
+        Ok(self.data.tables.chrome)
     }
     /// Resolves a closed family tag before copying any caller-owned output.
     fn visuals(&self, family: AppearanceFamily, output: NcCopyToBufferOffset<'_, AssetVisual>) -> Result<(), NcStatus> {
         let values = match family {
-            AppearanceFamily::SURFACE => &self.data.surfaces,
-            AppearanceFamily::CONTROL => &self.data.controls,
-            AppearanceFamily::MENU => &self.data.menus,
-            AppearanceFamily::CHROME => &self.data.window_chrome,
+            AppearanceFamily::SURFACE => &self.data.tables.surfaces,
+            AppearanceFamily::CONTROL => &self.data.tables.controls,
+            AppearanceFamily::MENU => &self.data.tables.menus,
+            AppearanceFamily::CHROME => &self.data.tables.window_chrome,
             _ => return Err(NC_E_INVALID_ARG),
         };
         copy(values, output)

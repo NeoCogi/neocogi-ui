@@ -33,7 +33,7 @@
 //! Construction owns CPU pixels and file input. Runtime font identities and UI skins
 //! are deliberately absent: consumers create their local lookup state from the result.
 use microui_contracts::*;
-use microui_redux::assets::AssetData;
+use microui_redux::assets::{AssetData, AssetTables};
 use fontdue::{Font as RasterFont, FontSettings, Metrics};
 use std::{
     fs::File,
@@ -158,7 +158,7 @@ impl Builder {
         // rather than producer-local numeric IDs, identify resources across revisions.
         base.validate().map_err(io::Error::other)?;
         let mut builder = Self::new(width, height)?;
-        for icon in base.icons.iter() {
+        for icon in base.tables.icons.iter() {
             let name = base.name(icon.name).map_err(io::Error::other)?;
             if !excluded_icons.contains(&name) {
                 let pixels = Self::extract(base, icon.rect);
@@ -166,14 +166,14 @@ impl Builder {
                 builder.icons.push(Icon { name: name.into(), rect });
             }
         }
-        for font in base.fonts.iter() {
+        for font in base.tables.fonts.iter() {
             let name = base.name(font.name).map_err(io::Error::other)?;
             if excluded_fonts.contains(&name) {
                 continue;
             }
             let first = font.glyphs.first as usize;
             let end = first + font.glyphs.count as usize;
-            let mut glyphs = base.glyphs[first..end].to_vec();
+            let mut glyphs = base.tables.glyphs[first..end].to_vec();
             // Deterministic scalar order gives repacking the same result for any producer.
             glyphs.sort_unstable_by_key(|glyph| glyph.scalar);
             for glyph in &mut glyphs {
@@ -195,7 +195,7 @@ impl Builder {
     fn extract(base: &AssetData, rect: Rect) -> Vec<u8> {
         let mut pixels = Vec::with_capacity(rect.width as usize * rect.height as usize * 4);
         for row in rect.y..rect.y + rect.height {
-            let start = (row as usize * base.size.width as usize + rect.x as usize) * 4;
+            let start = (row as usize * base.tables.size.width as usize + rect.x as usize) * 4;
             pixels.extend_from_slice(&base.pixels[start..start + rect.width as usize * 4]);
         }
         pixels
@@ -404,18 +404,20 @@ impl Builder {
             });
         }
         let mut data = AssetData {
-            size: self.image.size,
             pixels: self.image.pixels.into(),
-            fonts: fonts.into(),
-            glyphs: glyphs.into(),
-            icons: icons.into(),
-            names: names.into(),
-            metrics: AssetMetrics::default(),
-            chrome: style::compile_chrome(WindowChromeSkin::default()),
-            surfaces: Vec::new().into(),
-            controls: Vec::new().into(),
-            menus: Vec::new().into(),
-            window_chrome: Vec::new().into(),
+            tables: AssetTables {
+                size: self.image.size,
+                fonts: fonts.into(),
+                glyphs: glyphs.into(),
+                icons: icons.into(),
+                names: names.into(),
+                metrics: AssetMetrics::default(),
+                chrome: style::compile_chrome(WindowChromeSkin::default()),
+                surfaces: Vec::new().into(),
+                controls: Vec::new().into(),
+                menus: Vec::new().into(),
+                window_chrome: Vec::new().into(),
+            },
         };
         style::apply_flat(&mut data, Insets::uniform(1), &FlatPalette::default());
         data.validate().map_err(io::Error::other)?;

@@ -40,12 +40,15 @@ mod skin;
 mod typography;
 
 pub use appearance::Visual;
-pub use bundle::{SkinBundle, SkinInstallError};
+pub use bundle::SkinBundle;
+pub(crate) use bundle::SkinInstallError;
 pub use crate::render::{Color, color};
 pub use icons::{IconRef, IconRole};
 pub use palette::FlatPalette;
 pub use resources::ResourceCatalog;
-pub use microui_contracts::appearance::{ChromeRole, ChromeState, ControlRole, ControlState, FrameRole, MenuRole, MenuState, PointerState, SurfaceRole, SurfaceState};
+pub use microui_contracts::appearance::{
+    ChromeRole, ChromeState, ControlRole, ControlState, FrameRole, MenuRole, MenuState, PointerState, SurfaceRole, SurfaceState,
+};
 pub use skin::{CaptionButtonSide, CaptionButtonsSkin, Skin, SkinMetrics, TitleBackdropSkin, WindowChromeSkin, WindowTitleAlignment};
 pub(crate) use skin::SkinRevision;
 pub use typography::{FontRef, FontRole};

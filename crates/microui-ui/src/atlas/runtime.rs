@@ -41,7 +41,6 @@ fn clamp_text_coordinate(value: i128) -> i32 {
 }
 
 impl AtlasHandle {
-
     /// Reports whether two handles reference the same immutable atlas allocation.
     pub(crate) fn ptr_eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.0, &other.0)
@@ -55,23 +54,11 @@ impl AtlasHandle {
     pub fn height(&self) -> usize {
         self.0.height
     }
-    /// Borrows the immutable RGBA pixels directly for local import/export and native upload.
-    /// The slice remains valid for this atlas borrow; COM consumers receive explicit copies.
+    /// Borrows fixture RGBA pixels for test-only local round-trip export.
+    #[cfg(test)]
     pub fn pixels(&self) -> &[Color4b] {
-        // Immutable atlas ownership makes a callback or an intermediate full-image clone unnecessary.
+        // Test atlases retain immutable pixels so exporter tests can compare exact round trips.
         &self.0.pixels
-    }
-
-    /// Borrows the initialized native RGBA pixels as packed bytes without another allocation.
-    pub(crate) fn image(&self) -> crate::ImageSource<'_> {
-        // rs-math3d's Color4b is repr(C) with four u8 fields in RGBA order. These assertions
-        // reject layout drift before any byte view can be constructed.
-        const { assert!(core::mem::size_of::<Color4b>() == 4); assert!(core::mem::align_of::<Color4b>() == 1); }
-        let colors = &self.0.pixels;
-        // SAFETY: Every channel is initialized, the C layout contains no padding, and the
-        // validated atlas bounds make len * 4 addressable. The borrow cannot outlive the atlas.
-        let pixels = unsafe { core::slice::from_raw_parts(colors.as_ptr().cast::<u8>(), colors.len() * 4) };
-        crate::ImageSource { width: self.width() as i32, height: self.height() as i32, pixels }
     }
 
     /// Returns a mapping from icon names to their identifiers.
@@ -339,7 +326,6 @@ mod tests {
             pixels: &pixels,
             icons: &icons,
             fonts: &fonts,
-
         })
         .expect("runtime fixture atlas must pass structural validation")
     }
@@ -450,7 +436,6 @@ mod tests {
             pixels: &pixels,
             icons: &icons,
             fonts: &fonts,
-
         })
         .expect("extreme but representable text metrics must validate");
         let font = atlas.font_id("body").unwrap();

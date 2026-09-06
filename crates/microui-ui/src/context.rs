@@ -93,13 +93,16 @@ impl<B: RendererBackend> Context<B> {
     /// [`crate::IconRole::ALL`]. Every constructible atlas already has a validated white
     /// rendering tile.
     #[cfg(test)]
-    pub fn new(backend: B) -> Self where B: crate::test_support::TestAtlas {
+    pub fn new(backend: B) -> Self
+    where
+        B: crate::test_support::TestAtlas,
+    {
         let catalog = ResourceCatalog::new(crate::test_support::TestAtlas::initial_atlas(&backend));
         Self::from_bundle(backend, catalog.default_skin_bundle())
     }
 
     /// Constructs retained traversal from the exact same immutable revision as COM widget services.
-    /// The caller initializes its backend from this bundle's atlas before publishing either owner.
+    /// The caller prepares external GPU pixels before publishing this metadata-only coordinator.
     pub(crate) fn from_bundle(backend: B, bundle: SkinBundle) -> Self {
         let renderer = Renderer::from_atlas(backend, bundle.atlas().clone());
         debug_assert!(renderer.atlas().ptr_eq(bundle.atlas()), "backend and retained bundle must share one atlas");
@@ -138,7 +141,10 @@ impl<B: RendererBackend> Context<B> {
 
     /// Creates a Context whose test-only frame helper uses `dimensions`.
     #[cfg(test)]
-    pub(crate) fn new_test(backend: B, dimensions: Dimensioni) -> Self where B: crate::test_support::TestAtlas {
+    pub(crate) fn new_test(backend: B, dimensions: Dimensioni) -> Self
+    where
+        B: crate::test_support::TestAtlas,
+    {
         let mut context = Self::new(backend);
         context.test_dimensions = dimensions;
         context
@@ -265,25 +271,26 @@ impl<B: RendererBackend> Context<B> {
         self.window_manager.set_skin_bundle(bundle);
     }
 
-    /// Uploads and installs one complete skin bundle as a single context transaction.
+    /// Installs one complete skin bundle after its external renderer preparation succeeds.
     ///
-    /// The backend receives the atlas before the retained manager publishes either projection. If
-    /// upload fails, the previous bundle remains active and renderable.
+    /// The COM runtime owns the fallible pixel upload because the platform renderer is the sole
+    /// pixel consumer. This local commit validates application identities, replaces renderer lookup
+    /// metadata and publishes the matching retained skin without another image copy or upload.
     ///
     /// # Errors
     ///
-    /// Returns [`crate::SkinInstallError`] if any original catalog identity is missing, or if the
-    /// backend rejects the upload. Matching names alone do not establish resource compatibility.
-    pub fn set_skin_bundle(&mut self, bundle: &SkinBundle) -> Result<(), crate::SkinInstallError> {
+    /// Returns [`crate::SkinInstallError`] if any original catalog identity is missing. Matching
+    /// names alone do not establish resource compatibility.
+    pub(crate) fn set_skin_bundle(&mut self, bundle: &SkinBundle) -> Result<(), crate::SkinInstallError> {
         // A valid standalone bundle can still omit resources used by this Context's widgets.
-        // Reject that case before invoking the backend, then publish only after a successful upload.
+        // Reject that case before changing either local projection. External preparation has
+        // already succeeded, so the remaining metadata and manager assignments are infallible.
         self.resource_catalog.validate_bundle(bundle)?;
-        self.renderer.replace_atlas(bundle.atlas().clone()).map_err(crate::SkinInstallError::Upload)?;
+        self.renderer.replace_atlas(bundle.atlas().clone());
         debug_assert!(self.renderer.atlas().ptr_eq(bundle.atlas()));
         self.window_manager.set_skin_bundle(bundle.clone());
         Ok(())
     }
-
 
     /// Borrows the complete resolved skin and matching immutable atlas.
     #[cfg(test)]
@@ -324,7 +331,6 @@ impl<B: RendererBackend> Context<B> {
     pub fn try_load_image_rgba(&mut self, width: i32, height: i32, pixels: &[u8]) -> Result<TextureId, TextureError> {
         self.renderer.try_load_texture_rgba(width, height, pixels)
     }
-
 }
 
 // Test-only retained-state inspection.

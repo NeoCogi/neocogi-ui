@@ -77,19 +77,19 @@ fn com_builder_matches_direct_pixels_metrics_and_resolved_visuals() {
     assert_eq!(builder.finish().unwrap_err(), UI_E_CLOSED);
     let runtime = data(&runtime);
     let direct = data(&test_bundle());
-    assert_eq!(runtime.size, direct.size);
+    assert_eq!(runtime.tables.size, direct.tables.size);
     assert_eq!(runtime.pixels, direct.pixels);
-    assert_eq!(runtime.fonts, direct.fonts);
-    assert_eq!(runtime.glyphs, direct.glyphs);
-    assert_eq!(runtime.icons, direct.icons);
-    assert_eq!(runtime.names, direct.names);
-    assert_eq!(runtime.metrics, direct.metrics);
-    assert_eq!(runtime.chrome, direct.chrome);
+    assert_eq!(runtime.tables.fonts, direct.tables.fonts);
+    assert_eq!(runtime.tables.glyphs, direct.tables.glyphs);
+    assert_eq!(runtime.tables.icons, direct.tables.icons);
+    assert_eq!(runtime.tables.names, direct.tables.names);
+    assert_eq!(runtime.tables.metrics, direct.tables.metrics);
+    assert_eq!(runtime.tables.chrome, direct.tables.chrome);
     for (a, b) in [
-        (&runtime.surfaces, &direct.surfaces),
-        (&runtime.controls, &direct.controls),
-        (&runtime.menus, &direct.menus),
-        (&runtime.window_chrome, &direct.window_chrome),
+        (&runtime.tables.surfaces, &direct.tables.surfaces),
+        (&runtime.tables.controls, &direct.tables.controls),
+        (&runtime.tables.menus, &direct.tables.menus),
+        (&runtime.tables.window_chrome, &direct.tables.window_chrome),
     ] {
         assert_eq!(a.len(), b.len());
         for (a, b) in a.iter().zip(b.iter()) {
@@ -187,5 +187,10 @@ fn bundled_json_themes_preserve_original_resources_and_surface_diagnostics() {
 /// Constructs one standalone catalog without importing application deployment machinery.
 fn test_bundle() -> ComPtr<IAssetBundleAbi> {
     // Each invocation owns a distinct catalog so revision authentication tests remain meaningful.
-    Builder::from_config(&crate::test_recipe::atlas_config()).unwrap().build().unwrap().into_bundle().unwrap()
+    Builder::from_config(&crate::test_recipe::atlas_config())
+        .unwrap()
+        .build()
+        .unwrap()
+        .into_bundle()
+        .unwrap()
 }

@@ -91,21 +91,28 @@ impl ExportedTheme {
 }
 
 /// Imports complete appearance arrays and geometry before binding local semantic IDs.
-pub(super) fn read(data: &microui_redux::assets::AssetData, atlas: &AtlasHandle) -> Result<Skin, NcStatus> {
+pub(super) fn read(data: &microui_redux::assets::AssetTables, atlas: &AtlasHandle) -> Result<Skin, NcStatus> {
     let (metrics, chrome) = read_geometry(data.metrics, data.chrome)?;
     let icons = atlas.clone_icon_table();
     let appearances = crate::theme::catalog::AppearanceCatalog::from_values(
-        read_family(&data.surfaces, atlas, &icons)?, read_family(&data.controls, atlas, &icons)?,
-        read_family(&data.menus, atlas, &icons)?, read_family(&data.window_chrome, atlas, &icons)?,
+        read_family(&data.surfaces, atlas, &icons)?,
+        read_family(&data.controls, atlas, &icons)?,
+        read_family(&data.menus, atlas, &icons)?,
+        read_family(&data.window_chrome, atlas, &icons)?,
     );
     // Each appearance is already resolved. Skin construction performs only semantic name binding.
     Ok(Skin::from_resolved(atlas, metrics, chrome, appearances))
 }
 
 /// Resolves one bounded role-major table into its concrete native array shape.
-fn read_family<const ROLES: usize, const STATES: usize>(values: &[AssetVisual], atlas: &AtlasHandle, icons: &[(String, crate::IconId)])
-    -> Result<[[Visual; STATES]; ROLES], NcStatus> {
-    if values.len() != ROLES * STATES { return Err(NC_E_INVALID_ARG); }
+fn read_family<const ROLES: usize, const STATES: usize>(
+    values: &[AssetVisual],
+    atlas: &AtlasHandle,
+    icons: &[(String, crate::IconId)],
+) -> Result<[[Visual; STATES]; ROLES], NcStatus> {
+    if values.len() != ROLES * STATES {
+        return Err(NC_E_INVALID_ARG);
+    }
     let empty = Visual::new(NinePatch::solid(Color::default()), Color::default());
     let mut result = [[empty; STATES]; ROLES];
     // Initialized scratch never escapes before every source slot passes local image-ID resolution.
@@ -117,8 +124,18 @@ fn read_family<const ROLES: usize, const STATES: usize>(values: &[AssetVisual], 
 
 /// Validates and converts the one complete metric record for import and live style derivation alike.
 pub(super) fn read_metrics(metrics: AssetMetrics) -> Result<crate::SkinMetrics, NcStatus> {
-    if [metrics.default_cell_width, metrics.padding, metrics.spacing, metrics.indent,
-        metrics.title_height, metrics.scrollbar_size, metrics.thumb_size].iter().any(|value| *value < 0) {
+    if [
+        metrics.default_cell_width,
+        metrics.padding,
+        metrics.spacing,
+        metrics.indent,
+        metrics.title_height,
+        metrics.scrollbar_size,
+        metrics.thumb_size,
+    ]
+    .iter()
+    .any(|value| *value < 0)
+    {
         return Err(NC_E_INVALID_ARG);
     }
     Ok(crate::SkinMetrics {
@@ -137,8 +154,16 @@ pub(super) fn read_metrics(metrics: AssetMetrics) -> Result<crate::SkinMetrics, 
 /// Installs complete geometry into an unpublished candidate after validating scalar and enum domains.
 fn read_geometry(metrics: AssetMetrics, chrome: AssetChrome) -> Result<(crate::SkinMetrics, crate::WindowChromeSkin), NcStatus> {
     let metrics = read_metrics(metrics)?;
-    if [chrome.vertical_spacing, chrome.minimum_extent, chrome.inner_spacing,
-        chrome.minimized_content_height, chrome.backdrop_padding].iter().any(|value| *value < 0) {
+    if [
+        chrome.vertical_spacing,
+        chrome.minimum_extent,
+        chrome.inner_spacing,
+        chrome.minimized_content_height,
+        chrome.backdrop_padding,
+    ]
+    .iter()
+    .any(|value| *value < 0)
+    {
         return Err(NC_E_INVALID_ARG);
     }
     let window_chrome = crate::WindowChromeSkin {

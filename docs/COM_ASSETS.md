@@ -31,17 +31,20 @@ links the UI implementation. Font and theme construction remain optional feature
 
 Applications supply one `IAssetBundle` to `IUiProvider::create_runtime` and
 `IPlatform::create_window`. Neither implementation embeds demo assets. The UI imports
-metadata into its local font/icon tables once. The platform reads only the bundle
-header and packed RGBA bytes, then uploads them without importing a native atlas
-or skin. GPU backends retain textures and the platform retains the source revision
-identity; temporary CPU upload bytes are released after the synchronous upload. Frames pass the exact bundle used to expand their geometry, and
-the renderer skips import/upload when that bundle is already current.
+metadata into its local font/icon tables once and samples only the required white-tile
+rows while validating it. It never copies or retains the complete image. The platform
+reads the bundle header and packed RGBA bytes, then uploads them without importing a
+native atlas or skin. GPU backends retain textures and the platform retains the source
+revision identity; temporary CPU upload bytes are released after the synchronous
+upload. Frames pass the exact bundle used to expand their geometry, and the renderer
+skips import/upload when that bundle is already current.
 
-The facade's concrete `assets::AssetData` produces the same `IAssetBundle` object
-from borrowed static tables or owned builder output. It contains no UI implementation,
-font rasterizer, PNG decoder or JSON parser. `plugins/assets` packages the optional
-native builder and, with `theme-json`, the theme compiler. Its objects expose ordinary
-typed interfaces and keep all native builder/path/decoder state in that binary.
+The facade separates `assets::AssetTables` metadata from complete `assets::AssetData`
+pixel-bearing compiler output. `AssetData` produces the same `IAssetBundle` object from
+borrowed static tables or owned builder output. Neither type contains a UI implementation,
+font rasterizer, PNG decoder or JSON parser. `plugins/assets` packages the optional native
+builder and, with `theme-json`, the theme compiler. Its objects expose ordinary typed
+interfaces and keep all native builder/path/decoder state in that binary.
 The [JSON compiler](../plugins/assets/src/theme.rs) reads a validated `AssetData`,
 rebuilds declared resources, and writes complete appearance tables directly.
 Plain geometry and semantic resource names live in contracts. The UI resolves
@@ -63,12 +66,12 @@ let ui = Ui::from_interface(provider.create_runtime(assets.as_com_ref())?)?;
 ## Installation and ownership
 
 `ui.install_assets(candidate, renderer)` owns one runtime transaction. It validates
-the complete candidate, prepares its built-in painting workspace, then asks the
-renderer to upload. Only success publishes the new revision to the window manager,
-built-in widgets, text metrics and scoped layout services together. Failed validation
-or upload leaves the previous UI resources and GPU atlas usable. The renderer is
-borrowed for the call; the UI does not retain a platform/window merely to remember
-its resources.
+and imports bounded metadata, asks the renderer to copy and upload the complete image,
+then publishes only local lookup tables and resolved painting state. Only success
+publishes the new revision to the window manager, built-in widgets, text metrics and
+scoped layout services together. Failed validation or upload leaves the previous UI
+resources and GPU atlas usable. The renderer is borrowed for the call; the UI retains
+neither a platform/window nor a second CPU image merely to remember its resources.
 
 After a changed revision succeeds, call `update` or `update_with_events` before
 `render`. Old measurement entries, including hidden trees, are invalidated by the
@@ -153,10 +156,11 @@ bundle-local icon table position, never an opaque native handle.
 All copy offsets and lengths count elements of the declared type; name/pixel offsets
 therefore count bytes. Producers validate the entire range before writing any
 destination element, then write the exact requested count. Tables remain owned by
-their binary. `AssetData::read` copies and validates portable tables before a
-consumer builds local lookup state. Its validation covers duplicate keys,
-fallback glyphs, rectangle bounds, the white tile and resolved theme records
-without depending on the UI implementation. UI installation additionally
+their binary. Construction services use `AssetData::read` when they need metadata and
+the complete RGBA allocation. The UI uses `AssetTables::read`, which copies and validates
+portable metadata and reads only white-tile rows from the pixel method. Both paths cover
+duplicate keys, fallback glyphs, rectangle bounds, the white tile and resolved theme
+records without depending on the UI implementation. UI installation additionally
 authenticates its catalog and preserves its local resource identities.
 
 The native builder currently rasterizes printable ASCII. Prebuilt/other producers

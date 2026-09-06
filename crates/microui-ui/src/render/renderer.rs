@@ -169,7 +169,10 @@ pub(crate) struct Renderer<B: RendererBackend> {
 impl<B: RendererBackend> Renderer<B> {
     /// Builds a test renderer from its explicit native resource fixture.
     #[cfg(test)]
-    pub(crate) fn new(backend: B) -> Self where B: crate::test_support::TestAtlas {
+    pub(crate) fn new(backend: B) -> Self
+    where
+        B: crate::test_support::TestAtlas,
+    {
         // Production callers supply their resolved atlas independently of the backend.
         let atlas = crate::test_support::TestAtlas::initial_atlas(&backend);
         Self::from_atlas(backend, atlas)
@@ -220,7 +223,12 @@ impl<B: RendererBackend> Renderer<B> {
         self.validate_display_list(list)?;
         let viewport = Recti::new(0, 0, info.dimensions().width, info.dimensions().height);
         let frame = self.backend.frame(info)?;
-        let DisplayList { ops, solid_geometry, atlas_vertices, text } = list;
+        let DisplayList {
+            ops,
+            solid_geometry,
+            atlas_vertices,
+            text,
+        } = list;
         let solid_triangles = solid_geometry.triangles();
         let executor: DisplayListExecutor<'_, '_, B> = DisplayListExecutor {
             frame,
@@ -278,32 +286,28 @@ impl<B: RendererBackend> Renderer<B> {
         self.atlas.clone()
     }
 
-    /// Replaces the backend atlas and every renderer-side metric derived from it.
+    /// Replaces UI lookup metadata after the platform has uploaded the matching asset revision.
     ///
-    /// The backend commits first so an upload failure cannot expose CPU metadata for pixels that
-    /// were never published. Once that transaction succeeds, resolving the required white icon and
-    /// its normalized UV is infallible under the validated [`AtlasHandle`] contract.
-    pub(crate) fn replace_atlas(&mut self, atlas: AtlasHandle) -> Result<(), super::backend::AtlasUploadError> {
-        // Do not re-upload a bundle that is already active. Atlas allocation identity remains
-        // distinct from stable resource identity because several derived atlases may contain the
-        // same FontId and IconId values.
+    /// The COM runtime calls the external renderer's `prepare_assets` transaction before reaching
+    /// this infallible local commit. The UI therefore derives only dimensions and white-tile UVs;
+    /// it neither stores the complete RGBA image nor repeats the platform upload.
+    pub(crate) fn replace_atlas(&mut self, atlas: AtlasHandle) {
+        // Preserve the active derived values when the exact local metadata allocation is already
+        // installed. Several revisions may retain equal logical IDs but use distinct rectangles.
         if self.atlas.ptr_eq(&atlas) {
-            return Ok(());
+            return;
         }
-        self.backend.replace_atlas(atlas.image())?;
         let atlas_dim = atlas.get_texture_dimension();
         let white_icon_rect = atlas.get_icon_rect(atlas.white_icon());
         let white_icon_min = Vec2f::new(white_icon_rect.x as f32, white_icon_rect.y as f32);
         let white_icon_extent = Vec2f::new(white_icon_rect.width as f32, white_icon_rect.height as f32);
         let atlas_extent = Vec2f::new(atlas_dim.width.max(1) as f32, atlas_dim.height.max(1) as f32);
 
-        // Publish all CPU-side atlas state together only after the backend owns the matching
-        // texture. Later layout, validation, and rendering therefore observe one coherent atlas.
+        // Publish all CPU-side atlas state together after deriving every dependent scalar.
         self.atlas = atlas;
         self.atlas_dim = atlas_dim;
         self.white_icon_rect = white_icon_rect;
         self.white_uv = (white_icon_min + white_icon_extent * 0.5) / atlas_extent;
-        Ok(())
     }
 
     /// Registers one persistent custom renderer specialized for this backend.
