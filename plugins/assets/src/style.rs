@@ -53,9 +53,12 @@ pub(crate) fn compile_chrome(chrome: WindowChromeSkin) -> AssetChrome {
             WindowTitleAlignment::Leading => TitleAlignment::LEADING,
             WindowTitleAlignment::Centered => TitleAlignment::CENTERED,
         },
-        close_side: compile_side(captions.close_side), minimize_side: compile_side(captions.minimize_side),
-        maximize_side: compile_side(captions.maximize_side), vertical_spacing: captions.vertical_spacing,
-        minimum_extent: captions.minimum_extent, inner_spacing: captions.inner_spacing,
+        close_side: compile_side(captions.close_side),
+        minimize_side: compile_side(captions.minimize_side),
+        maximize_side: compile_side(captions.maximize_side),
+        vertical_spacing: captions.vertical_spacing,
+        minimum_extent: captions.minimum_extent,
+        inner_spacing: captions.inner_spacing,
         show_without_activation: u8::from(captions.show_without_activation),
         minimized_content_height: chrome.minimized_content_height,
         has_backdrop: u8::from(chrome.active_title_backdrop.is_some()),
@@ -68,7 +71,10 @@ pub(crate) fn compile_chrome(chrome: WindowChromeSkin) -> AssetChrome {
 #[cfg(feature = "builder")]
 fn compile_side(side: CaptionButtonSide) -> CaptionSide {
     // Exhaustive matching makes new policies require an explicit transfer decision.
-    match side { CaptionButtonSide::Leading => CaptionSide::LEADING, CaptionButtonSide::Trailing => CaptionSide::TRAILING }
+    match side {
+        CaptionButtonSide::Leading => CaptionSide::LEADING,
+        CaptionButtonSide::Trailing => CaptionSide::TRAILING,
+    }
 }
 
 /// Packs channels in the renderer's explicit little-endian RGBA convention.
@@ -85,13 +91,26 @@ fn solid(fill: Color) -> AssetVisual {
 fn framed(insets: Insets, border: Color, fill: Option<Color>) -> AssetVisual {
     // Canonicalize fully transparent cells just like the runtime drawing vocabulary.
     let border = if border.a == 0 { 0 } else { rgba(border) };
-    let center = match fill { Some(color) if color.a != 0 => rgba(color), _ => 0 };
+    let center = match fill {
+        Some(color) if color.a != 0 => rgba(color),
+        _ => 0,
+    };
     AssetVisual {
-        insets, center_visible: 1, content_color: 0,
+        insets,
+        center_visible: 1,
+        content_color: 0,
         patch: AssetPatch::Flat {
-            top_left: border, top: border, top_right: border, left: border, center,
-            right: border, bottom_left: border, bottom: border, bottom_right: border,
-        }.into(),
+            top_left: border,
+            top: border,
+            top_right: border,
+            left: border,
+            center,
+            right: border,
+            bottom_left: border,
+            bottom: border,
+            bottom_right: border,
+        }
+        .into(),
     }
 }
 
@@ -234,7 +253,6 @@ fn flat_chrome_visual(frame_insets: Insets, palette: &FlatPalette, role: ChromeR
     patch
 }
 
-
 #[nc_com::com_class(class_id(STYLE_COMPILER_CLASS), name = "microui.StyleCompiler", version = "0.9.0-alpha.0",
     constructor(args = none, default), interfaces(IStyleCompiler, IAssetDiagnostics))]
 #[derive(Default)]
@@ -246,8 +264,12 @@ pub struct StyleCompiler {
 
 impl IStyleCompiler for StyleCompiler {
     /// Copies the base once, applies the explicit edit, validates and publishes in its catalog.
-    fn derive_style(&self, base: nc_com::ComRef<'_, IAssetBundleAbi>, metrics: AssetMetrics, palette: PaletteEditAbi)
-        -> Result<nc_com::ComPtr<IAssetBundleAbi>, nc_com::NcStatus> {
+    fn derive_style(
+        &self,
+        base: nc_com::ComRef<'_, IAssetBundleAbi>,
+        metrics: AssetMetrics,
+        palette: PaletteEditAbi,
+    ) -> Result<nc_com::ComPtr<IAssetBundleAbi>, nc_com::NcStatus> {
         // Validate foreign records and the closed edit tag before using their geometry or artwork.
         let edit = PaletteEdit::try_from(palette).map_err(|_| nc_com::NC_E_INVALID_ARG)?;
         let mut data = AssetData::read(base)?;
@@ -260,7 +282,9 @@ impl IStyleCompiler for StyleCompiler {
             }
         }
         // A rejected candidate leaves both the source and every UI using it unchanged.
-        data.validate().inspect_err(|error| { self.diagnostic.failure(error); })?;
+        data.validate().inspect_err(|error| {
+            self.diagnostic.failure(error);
+        })?;
         data.into_revision(base)
     }
 }

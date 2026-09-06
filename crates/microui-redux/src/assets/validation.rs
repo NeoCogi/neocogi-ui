@@ -47,9 +47,12 @@ impl AssetData {
         let mut font_names = HashSet::new();
         for font in self.fonts.iter() {
             let name = self.partitioned_name(font.name, &mut next_name)?;
-            if !font_names.insert(name) || font.glyphs.first != next_glyph
-                || font.line_size <= 0 || font.font_size <= 0
-                || font.baseline < 0 || font.baseline > font.line_size
+            if !font_names.insert(name)
+                || font.glyphs.first != next_glyph
+                || font.line_size <= 0
+                || font.font_size <= 0
+                || font.baseline < 0
+                || font.baseline > font.line_size
             {
                 return Err(NC_E_INVALID_ARG);
             }
@@ -98,13 +101,30 @@ impl AssetData {
         validate_metrics(self.metrics)?;
         let chrome = self.chrome;
         if !matches!(chrome.title_alignment, TitleAlignment::LEADING | TitleAlignment::CENTERED)
-            || [chrome.close_side, chrome.minimize_side, chrome.maximize_side].iter().any(|side| !matches!(*side, CaptionSide::LEADING | CaptionSide::TRAILING))
-            || chrome.show_without_activation > 1 || chrome.has_backdrop > 1
-            || [chrome.vertical_spacing, chrome.minimum_extent, chrome.inner_spacing, chrome.minimized_content_height, chrome.backdrop_padding].iter().any(|n| *n < 0)
+            || [chrome.close_side, chrome.minimize_side, chrome.maximize_side]
+                .iter()
+                .any(|side| !matches!(*side, CaptionSide::LEADING | CaptionSide::TRAILING))
+            || chrome.show_without_activation > 1
+            || chrome.has_backdrop > 1
+            || [
+                chrome.vertical_spacing,
+                chrome.minimum_extent,
+                chrome.inner_spacing,
+                chrome.minimized_content_height,
+                chrome.backdrop_padding,
+            ]
+            .iter()
+            .any(|n| *n < 0)
         {
             return Err(NC_E_INVALID_ARG);
         }
-        for visual in self.surfaces.iter().chain(self.controls.iter()).chain(self.menus.iter()).chain(self.window_chrome.iter()) {
+        for visual in self
+            .surfaces
+            .iter()
+            .chain(self.controls.iter())
+            .chain(self.menus.iter())
+            .chain(self.window_chrome.iter())
+        {
             validate_insets(visual.insets)?;
             if visual.center_visible > 1 {
                 return Err(NC_E_INVALID_ARG);
@@ -145,7 +165,10 @@ impl AssetData {
     /// Checks source rectangles with empty glyphs allowed and positive icons required.
     fn validate_rect(&self, rect: Rect, allow_empty: bool) -> Result<(), NcStatus> {
         let minimum = i32::from(!allow_empty);
-        if rect.x < 0 || rect.y < 0 || rect.width < minimum || rect.height < minimum
+        if rect.x < 0
+            || rect.y < 0
+            || rect.width < minimum
+            || rect.height < minimum
             || rect.x.checked_add(rect.width).ok_or(NC_E_INVALID_ARG)? > self.size.width
             || rect.y.checked_add(rect.height).ok_or(NC_E_INVALID_ARG)? > self.size.height
         {
@@ -159,7 +182,18 @@ impl AssetData {
 pub fn validate_metrics(metrics: AssetMetrics) -> Result<(), NcStatus> {
     validate_insets(metrics.window_content_insets)?;
     validate_insets(metrics.window_border)?;
-    if [metrics.default_cell_width, metrics.padding, metrics.spacing, metrics.indent, metrics.title_height, metrics.scrollbar_size, metrics.thumb_size].iter().any(|n| *n < 0) {
+    if [
+        metrics.default_cell_width,
+        metrics.padding,
+        metrics.spacing,
+        metrics.indent,
+        metrics.title_height,
+        metrics.scrollbar_size,
+        metrics.thumb_size,
+    ]
+    .iter()
+    .any(|n| *n < 0)
+    {
         return Err(NC_E_INVALID_ARG);
     }
     Ok(())
@@ -184,7 +218,20 @@ fn filled<T: Clone>(count: usize, value: T) -> Result<Vec<T>, NcStatus> {
 /// Initializes a tagged output slot with a valid, fully transparent visual.
 fn transparent() -> AssetVisual {
     AssetVisual {
-        insets: Insets::default(), center_visible: 0, content_color: 0,
-        patch: AssetPatch::Flat { top_left: 0, top: 0, top_right: 0, left: 0, center: 0, right: 0, bottom_left: 0, bottom: 0, bottom_right: 0 }.into(),
+        insets: Insets::default(),
+        center_visible: 0,
+        content_color: 0,
+        patch: AssetPatch::Flat {
+            top_left: 0,
+            top: 0,
+            top_right: 0,
+            left: 0,
+            center: 0,
+            right: 0,
+            bottom_left: 0,
+            bottom: 0,
+            bottom_right: 0,
+        }
+        .into(),
     }
 }

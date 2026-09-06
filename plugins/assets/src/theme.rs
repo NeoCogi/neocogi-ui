@@ -27,7 +27,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-//! Versioned JSON theme decoding and typed appearance installation.
+//! Versioned JSON theme decoding and compilation into portable appearance tables.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -94,7 +94,7 @@ impl LoadedTheme {
     }
 }
 
-/// Concrete failure produced while reading, decoding, validating, or installing a theme.
+/// Concrete failure produced while reading, decoding, validating, or compiling a theme.
 #[derive(Debug)]
 pub enum ThemeLoadError {
     /// The JSON definition file could not be read.
@@ -345,8 +345,7 @@ impl ThemeDefinition {
         let semantic_icon_names = IconRole::ALL.map(IconRole::atlas_name);
         let excluded_fonts = self.fonts.as_ref().map(|_| semantic_font_names.as_slice()).unwrap_or(&[]);
         let excluded_icons = self.icons.as_ref().map(|_| semantic_icon_names.as_slice()).unwrap_or(&[]);
-        let mut builder = Builder::from_data(base, width, height, excluded_fonts, excluded_icons)
-            .map_err(|source| ThemeLoadError::AtlasBuild { source })?;
+        let mut builder = Builder::from_data(base, width, height, excluded_fonts, excluded_icons).map_err(|source| ThemeLoadError::AtlasBuild { source })?;
 
         if let Some(fonts) = &self.fonts {
             for (role, font) in fonts.entries() {
@@ -397,7 +396,11 @@ impl ThemeDefinition {
             // Shared role/state enums determine the wire-table order. Every authored override
             // replaces one concrete record without an intermediate runtime object.
             let name = format!("surface.{role:?}");
-            let destination_insets = destination_insets(&name, document.insets, data.surfaces[role.index() * SurfaceState::COUNT + SurfaceState::Normal.index()].insets)?;
+            let destination_insets = destination_insets(
+                &name,
+                document.insets,
+                data.surfaces[role.index() * SurfaceState::COUNT + SurfaceState::Normal.index()].insets,
+            )?;
             for (state, authored) in document.states() {
                 let index = role.index() * SurfaceState::COUNT + state.index();
                 let visual = compile_visual(&data.icons, &images, &name, destination_insets, authored, data.surfaces[index])?;
@@ -407,7 +410,11 @@ impl ThemeDefinition {
         for (role, document) in &self.appearances.control {
             let name = format!("control.{role:?}");
             let base_state = ControlState::Enabled(PointerState::Normal);
-            let destination_insets = destination_insets(&name, document.insets, data.controls[role.index() * ControlState::COUNT + base_state.index()].insets)?;
+            let destination_insets = destination_insets(
+                &name,
+                document.insets,
+                data.controls[role.index() * ControlState::COUNT + base_state.index()].insets,
+            )?;
             for (state, authored) in document.states() {
                 let index = role.index() * ControlState::COUNT + state.index();
                 let visual = compile_visual(&data.icons, &images, &name, destination_insets, authored, data.controls[index])?;
@@ -416,7 +423,11 @@ impl ThemeDefinition {
         }
         for (role, document) in &self.appearances.menu {
             let name = format!("menu.{role:?}");
-            let destination_insets = destination_insets(&name, document.insets, data.menus[role.index() * MenuState::COUNT + MenuState::Normal.index()].insets)?;
+            let destination_insets = destination_insets(
+                &name,
+                document.insets,
+                data.menus[role.index() * MenuState::COUNT + MenuState::Normal.index()].insets,
+            )?;
             for (state, authored) in document.states() {
                 let index = role.index() * MenuState::COUNT + state.index();
                 let visual = compile_visual(&data.icons, &images, &name, destination_insets, authored, data.menus[index])?;
@@ -425,7 +436,11 @@ impl ThemeDefinition {
         }
         for (role, document) in &self.appearances.chrome {
             let name = format!("chrome.{role:?}");
-            let destination_insets = destination_insets(&name, document.insets, data.window_chrome[role.index() * ChromeState::COUNT + ChromeState::Base.index()].insets)?;
+            let destination_insets = destination_insets(
+                &name,
+                document.insets,
+                data.window_chrome[role.index() * ChromeState::COUNT + ChromeState::Base.index()].insets,
+            )?;
             for (state, authored) in document.states() {
                 let index = role.index() * ChromeState::COUNT + state.index();
                 let visual = compile_visual(&data.icons, &images, &name, destination_insets, authored, data.window_chrome[index])?;
@@ -434,7 +449,9 @@ impl ThemeDefinition {
         }
 
         // Validate the complete revision before publication or source export.
-        data.validate().map_err(|status| ThemeLoadError::AtlasBuild { source: io::Error::other(status.to_string()) })?;
+        data.validate().map_err(|status| ThemeLoadError::AtlasBuild {
+            source: io::Error::other(status.to_string()),
+        })?;
         Ok(LoadedTheme { name: self.name, data })
     }
 
@@ -952,7 +969,11 @@ impl PatchDocument {
                 let image_size = icons[icon as usize].rect;
                 validate_source_insets(appearance, source_insets, image_size.width, image_size.height)?;
                 let tint = tint.unwrap_or(Color { r: 255, g: 255, b: 255, a: 255 });
-                Ok(AssetPatch::Image { icon, source: source_insets, tint: rgba(tint) })
+                Ok(AssetPatch::Image {
+                    icon,
+                    source: source_insets,
+                    tint: rgba(tint),
+                })
             }
         }
     }
@@ -1007,8 +1028,17 @@ fn flat_patch(border: Color, center: Color) -> AssetPatch {
     // Flat cells use alpha zero for absence, so discard invisible RGB values at compilation.
     let border = if border.a == 0 { 0 } else { rgba(border) };
     let center = if center.a == 0 { 0 } else { rgba(center) };
-    AssetPatch::Flat { top_left: border, top: border, top_right: border, left: border,
-        center, right: border, bottom_left: border, bottom: border, bottom_right: border }
+    AssetPatch::Flat {
+        top_left: border,
+        top: border,
+        top_right: border,
+        left: border,
+        center,
+        right: border,
+        bottom_left: border,
+        bottom: border,
+        bottom_right: border,
+    }
 }
 
 #[cfg(test)]

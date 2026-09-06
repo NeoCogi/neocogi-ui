@@ -35,7 +35,11 @@
 use microui_contracts::*;
 use microui_redux::assets::AssetData;
 use fontdue::{Font as RasterFont, FontSettings, Metrics};
-use std::{fs::File, io::{self, Read}, path::{Path, PathBuf}};
+use std::{
+    fs::File,
+    io::{self, Read},
+    path::{Path, PathBuf},
+};
 use crate::{png::RgbaImage, style};
 
 mod packer;
@@ -135,11 +139,16 @@ impl Builder {
 
     /// Allocates one empty bounded atlas, without reading files or assigning runtime IDs.
     pub fn new(width: usize, height: usize) -> io::Result<Self> {
-        let size = Size { width: i32::try_from(width).map_err(io::Error::other)?, height: i32::try_from(height).map_err(io::Error::other)? };
+        let size = Size {
+            width: i32::try_from(width).map_err(io::Error::other)?,
+            height: i32::try_from(height).map_err(io::Error::other)?,
+        };
         let bytes = RgbaImage::byte_count(size)?;
         Ok(Self {
             image: RgbaImage { size, pixels: vec![0; bytes] },
-            packer: Packer::new(size.width, size.height), fonts: Vec::new(), icons: Vec::new(),
+            packer: Packer::new(size.width, size.height),
+            fonts: Vec::new(),
+            icons: Vec::new(),
         })
     }
 
@@ -171,7 +180,13 @@ impl Builder {
                 let pixels = Self::extract(base, glyph.rect);
                 glyph.rect = builder.add_tile(glyph.rect.width as usize, glyph.rect.height as usize, &pixels)?;
             }
-            builder.fonts.push(Font { name: name.into(), line_size: font.line_size, baseline: font.baseline, size: font.font_size, glyphs });
+            builder.fonts.push(Font {
+                name: name.into(),
+                line_size: font.line_size,
+                baseline: font.baseline,
+                size: font.font_size,
+                glyphs,
+            });
         }
         Ok(builder)
     }
@@ -205,7 +220,11 @@ impl Builder {
 
     /// Rejects duplicate and unrepresentable icon names before file I/O or packing.
     fn check_icon_name(&self, name: &str) -> io::Result<()> {
-        if name.is_empty() || name.len() > MAX_ASSET_NAMES as usize || self.icons.len() >= MAX_ASSET_ICONS as usize || self.icons.iter().any(|icon| icon.name == name) {
+        if name.is_empty()
+            || name.len() > MAX_ASSET_NAMES as usize
+            || self.icons.len() >= MAX_ASSET_ICONS as usize
+            || self.icons.iter().any(|icon| icon.name == name)
+        {
             return Err(io::Error::other(format!("invalid or duplicate icon name `{name}`")));
         }
         Ok(())
@@ -264,22 +283,36 @@ impl Builder {
             }
             bitmaps.push(rgba);
             glyphs.push(AssetGlyph {
-                scalar: u32::from(glyph.character), offset_x: metrics.xmin, offset_y: metrics.ymin,
-                advance_x: metrics.advance_width as i32, advance_y: metrics.advance_height as i32, rect: glyph.rect,
+                scalar: u32::from(glyph.character),
+                offset_x: metrics.xmin,
+                offset_y: metrics.ymin,
+                advance_x: metrics.advance_width as i32,
+                advance_y: metrics.advance_height as i32,
+                rect: glyph.rect,
             });
         }
         for (glyph, pixels) in planned.iter().zip(&bitmaps) {
             self.copy_tile(glyph.rect, pixels);
         }
         self.packer = next_packer;
-        self.fonts.push(Font { name: name.into(), line_size, baseline, size: size as i32, glyphs });
+        self.fonts.push(Font {
+            name: name.into(),
+            line_size,
+            baseline,
+            size: size as i32,
+            glyphs,
+        });
         Ok(())
     }
 
     /// Rejects unusable font names and sizes before opening files or reserving rectangles.
     fn check_font(&self, name: &str, size: usize) -> io::Result<()> {
-        if name.is_empty() || name.len() > MAX_ASSET_NAMES as usize || self.fonts.len() >= MAX_ASSET_FONTS as usize
-            || size == 0 || size > i32::MAX as usize || self.fonts.iter().any(|font| font.name == name)
+        if name.is_empty()
+            || name.len() > MAX_ASSET_NAMES as usize
+            || self.fonts.len() >= MAX_ASSET_FONTS as usize
+            || size == 0
+            || size > i32::MAX as usize
+            || self.fonts.iter().any(|font| font.name == name)
         {
             return Err(io::Error::other(format!("invalid or duplicate font `{name}` at size {size}")));
         }
@@ -307,8 +340,13 @@ impl Builder {
         if width == 0 || height == 0 {
             return Ok(Rect::default());
         }
-        let rect = packer.pack(width, height, false).ok_or_else(|| io::Error::other("atlas has no room for the requested tile"))?;
-        if rect.x < 0 || rect.y < 0 || rect.width != width || rect.height != height
+        let rect = packer
+            .pack(width, height, false)
+            .ok_or_else(|| io::Error::other("atlas has no room for the requested tile"))?;
+        if rect.x < 0
+            || rect.y < 0
+            || rect.width != width
+            || rect.height != height
             || i64::from(rect.x) + i64::from(width) > i64::from(self.image.size.width)
             || i64::from(rect.y) + i64::from(height) > i64::from(self.image.size.height)
         {
@@ -346,18 +384,38 @@ impl Builder {
         let mut icons = Vec::new();
         for font in self.fonts {
             let name = append_name(&mut names, &font.name)?;
-            let range = AssetRange { first: glyphs.len() as u32, count: font.glyphs.len() as u32 };
+            let range = AssetRange {
+                first: glyphs.len() as u32,
+                count: font.glyphs.len() as u32,
+            };
             glyphs.extend(font.glyphs);
-            fonts.push(AssetFont { name, glyphs: range, line_size: font.line_size, baseline: font.baseline, font_size: font.size });
+            fonts.push(AssetFont {
+                name,
+                glyphs: range,
+                line_size: font.line_size,
+                baseline: font.baseline,
+                font_size: font.size,
+            });
         }
         for icon in self.icons {
-            icons.push(AssetIcon { name: append_name(&mut names, &icon.name)?, rect: icon.rect });
+            icons.push(AssetIcon {
+                name: append_name(&mut names, &icon.name)?,
+                rect: icon.rect,
+            });
         }
         let mut data = AssetData {
-            size: self.image.size, pixels: self.image.pixels.into(),
-            fonts: fonts.into(), glyphs: glyphs.into(), icons: icons.into(), names: names.into(),
-            metrics: AssetMetrics::default(), chrome: style::compile_chrome(WindowChromeSkin::default()),
-            surfaces: Vec::new().into(), controls: Vec::new().into(), menus: Vec::new().into(), window_chrome: Vec::new().into(),
+            size: self.image.size,
+            pixels: self.image.pixels.into(),
+            fonts: fonts.into(),
+            glyphs: glyphs.into(),
+            icons: icons.into(),
+            names: names.into(),
+            metrics: AssetMetrics::default(),
+            chrome: style::compile_chrome(WindowChromeSkin::default()),
+            surfaces: Vec::new().into(),
+            controls: Vec::new().into(),
+            menus: Vec::new().into(),
+            window_chrome: Vec::new().into(),
         };
         style::apply_flat(&mut data, Insets::uniform(1), &FlatPalette::default());
         data.validate().map_err(io::Error::other)?;
@@ -367,11 +425,17 @@ impl Builder {
 
 /// Appends one bounded UTF-8 name while deriving its exact contiguous range.
 fn append_name(names: &mut Vec<u8>, name: &str) -> io::Result<AssetRange> {
-    let end = names.len().checked_add(name.len()).ok_or_else(|| io::Error::other("asset name pool overflow"))?;
+    let end = names
+        .len()
+        .checked_add(name.len())
+        .ok_or_else(|| io::Error::other("asset name pool overflow"))?;
     if end > MAX_ASSET_NAMES as usize {
         return Err(io::Error::other("asset name pool exceeds 4 MiB"));
     }
-    let range = AssetRange { first: names.len() as u32, count: name.len() as u32 };
+    let range = AssetRange {
+        first: names.len() as u32,
+        count: name.len() as u32,
+    };
     names.extend_from_slice(name.as_bytes());
     Ok(range)
 }
