@@ -14,7 +14,7 @@ glow = []
 vulkan = []
 wgpu = []
 webgl = ["microui-plugin-platform/webgl"]
-# Browser modules link the same optional decoder descriptor staged as a native PNG-only plugin.
+# Browser modules link the same optional decoder/style descriptor staged as a native asset plugin.
 png-assets = ["dep:microui-plugin-assets"]
 
 [dependencies]

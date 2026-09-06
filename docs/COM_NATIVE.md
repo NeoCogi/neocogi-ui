@@ -162,7 +162,8 @@ cargo com-build --assets files
 
 Relative theme paths resolve against the executable directory. Use
 `cargo com-build --demo full --assets embedded` for an explicit embedded deployment;
-its PNG-only plugin does not expose runtime atlas/theme construction. See
+its asset plugin exposes PNG decoding and live style edits without runtime atlas
+building or JSON loading. See
 [COM_ASSETS.md](COM_ASSETS.md) for immutable catalogs, bounded transfers, upload
 atomicity and decoder ownership.
 

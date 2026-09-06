@@ -1,14 +1,17 @@
 # JSON themes
 
-The `theme-json` feature is enabled by default. It adds `Context::load_theme_file`, which reads one
-theme and its assets from disk, and `Context::load_theme_bytes`, which resolves the same relative
-paths through a caller-supplied embedded or virtual asset provider. Each API compiles one
-strict, versioned JSON definition and bakes each referenced PNG into the theme's immutable atlas.
-The returned `LoadedTheme` owns a validated `SkinBundle`: one rebuilt resource atlas and its
-complete matching `Skin`. Install both with `context.set_theme(&theme)`. Loading does not change
-the active renderer, so several themes can be prepared before the user selects one. Selection
-uploads the replacement atlas first and publishes the bundle only after that backend transaction
-succeeds.
+Enable `theme-json` on `microui-plugin-assets` to compile strict, versioned JSON
+and bake referenced fonts and PNGs into portable resource tables. It is optional;
+the UI implementation has no JSON feature or file-loading API. Native applications
+activate `IThemeLoader` and pass an explicit original base bundle. Build tools call
+`microui_plugin_assets::theme::load` or `load_bytes`; the latter reads referenced
+assets through an explicit `AssetSource` implementation. `LoadedTheme` contains a
+display name and validated `AssetData`, with no native UI skin or resource IDs.
+
+Loading prepares an immutable candidate. `Ui::install_assets` validates its catalog
+and resources, asks the renderer to upload its pixels, then publishes the complete
+revision. Loading alone never changes a UI, so applications can prepare several
+choices before selection.
 
 All PNG paths are relative to the JSON file. Repeated state entries that resolve to the same path
 share one decoded atlas region; their source insets, destination insets, and tints remain
@@ -27,8 +30,10 @@ files were copied.
 
 `demo-full` loads the Default Skin and every bundled file once at startup. Choose them from
 `View > Theme`; each selection installs a pristine editable copy, so the existing Skin Editor can
-modify it without changing the stored base theme. The example requires the `theme-json` feature and
-the theme directories must remain available beside the repository sources at runtime.
+modify it without changing the stored base theme. Native file packages enable the
+asset plugin's `theme-json` feature and stage the theme directories beside the
+executable. Embedded and browser packages compile
+those same themes on Cargo's host and ship resolved tables.
 
 ## Minimal schema
 
@@ -118,20 +123,21 @@ and exact file/size recipes for the five semantic roles: `body`, `small`, `title
 `mono`. The optional `icons` object is likewise all-or-nothing and supplies the eight closed
 `IconRole` recipes: `close`, `expand`, `collapse`, `check`, `expand_down`, `open_folder`,
 `closed_folder`, and `file`. All paths are relative to the JSON file. Loading copies application
-resources that are not being replaced into a fresh atlas, preserves the stable IDs of replaced
-semantic resources, then rasterizes fonts and packs semantic icons and unique image-patch sources.
+resources that are not being replaced into a fresh atlas, preserves their catalog
+names, then rasterizes fonts and packs semantic icons and unique image sources.
+The UI assigns or preserves its local IDs when it imports the resulting revision.
 Without a font recipe, an artwork-bearing theme reuses the application resource catalog's atlas
 dimensions and repacks its baked glyphs. Without an icon recipe, it preserves every base icon. A
-flat palette-only theme reuses the source atlas allocation exactly. Every load starts from the
-immutable `ResourceCatalog` captured by `Context::new`, not from the currently selected theme. The
+flat palette-only theme retains the source pixels and metadata without decoding or
+repacking files. Pass the original application bundle to each independent theme
+load so previously selected theme-private artwork is not accumulated. The
 bundled classic themes all provide explicit font recipes and dimensions.
 
-Atlas-scoped IDs are intentionally concrete capabilities and are not retained by widgets.
-Use `FontRef::role(FontRole::Heading)` for theme-controlled typography or create a checked named
-reference with `context.resource_catalog().font_ref("caption")` for application typography copied
-into every derived atlas. `IconRef` follows the same semantic/named model. Custom rendering code
-that caches raw atlas UV coordinates must refresh those coordinates after installing another
-bundle.
+Local `FontId` and `IconId` values belong to the UI consumer. Semantic font roles
+select a baked variant from the active theme; named resource references preserve
+the same local identity when a compatible revision retains their catalog names.
+Custom rendering code that caches UVs must refresh them after installing a new
+revision. No native ID is transferred between plugins.
 
 An appearance or state may be omitted. Every omitted state keeps its own flat-color fallback; it
 does not borrow another state's patch. A state may set `content_color` without a patch to recolor
@@ -319,22 +325,20 @@ emits `WindowEvent::Restored`.
 
 ## Compatibility with retained application resources
 
-`Context::set_skin_bundle` and `set_theme` return `SkinInstallError`. Before uploading anything,
-Context verifies that the candidate contains **every exact font and icon ID from its original
-ResourceCatalog**, including optional resources that the candidate skin itself does not use.
-Missing IDs return `MissingFont` or `MissingIcon`; backend failures return `Upload`. Either failure
-preserves the previous active skin and atlas. A separate atlas containing the same names is not
-compatible: names do not recreate existing logical IDs.
+`Ui::install_assets` authenticates the candidate's catalog identity and verifies
+that every original application font and icon is still present before requesting
+GPU work. An unrelated bundle with identical names is rejected with `UI_E_OWNER`;
+a missing required resource is rejected with `NC_E_INVALID_ARG`. Failed validation
+or upload preserves the previous UI resources and GPU image.
 
-Derive theme bundles from `context.resource_catalog()` through the theme loader, or repack the
-catalog's resources using the atlas builder's copy operations, which preserve logical IDs. A new
-atlas allocation is allowed; allocation identity is not the compatibility rule. For scalar edits,
-clone `context.skin()` and use `set_skin` with the current atlas.
+`IAssetLoader::derive_builder` and `IThemeLoader::load_theme` publish in the base
+bundle's catalog. `IStyleCompiler::derive_style` changes metrics or compiles a flat
+palette in that same namespace. Build tools publish `AssetData::into_revision(base)`
+when producing a compatible replacement. These services do not install their output.
 
-Application authors should obtain persistent exact references from the ResourceCatalog, or use
-semantic `FontRef::role` / `IconRef::role` references. Theme-private resources exist only in their
-specific bundles. Authors who retain exact IDs for theme-private artwork must replace those widget
-references when switching to a bundle that omits that artwork. Context intentionally protects the
-stable application catalog; it does not scan arbitrary widget fields to discover private resource
-dependencies. A valid standalone `SkinBundle` proves that its own skin can resolve its resources,
-while installation additionally proves compatibility with the receiving application's catalog.
+The UI preserves typed local IDs for original application resources. Theme-private
+artwork may disappear when another theme is selected; application references or
+cached UVs for that artwork must change with its owning revision. Installation
+protects the original catalog and does not inspect arbitrary application fields
+to discover private dependencies. See [COM assets](../../../docs/COM_ASSETS.md) for
+the complete validation and publication contract.

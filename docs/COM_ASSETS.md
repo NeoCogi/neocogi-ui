@@ -1,5 +1,18 @@
 # Immutable COM assets and themes
 
+| Owner | Responsibility |
+| --- | --- |
+| `microui-contracts` | Plain resource records, semantic roles and typed COM interfaces. |
+| `microui-redux::assets` | Bounded portable data validation and immutable bundle publication. |
+| `plugins/assets` | PNG decoding, font rasterization, packing, theme/style compilation and source export. |
+| `microui-ui` | Local IDs, text metrics, resolved appearances and retained layout/painting. |
+| `plugins/platform` and renderers | Pixel upload, GPU resources and ordered frame execution. |
+
+The asset plugin has no production dependency on `microui-ui`. UI construction
+fixtures and a native flat-palette reference remain test-only; they provide an
+independent check of portable compiler output. Runtime UI code only imports
+resolved resources.
+
 `microui-plugin-assets` without features registers `IPngDecoder` and
 `IStyleCompiler`. The decoder's `upload` method accepts one complete, nonempty PNG at offset zero and borrows an
 `ITextureFactory` for the upload. Encoded input and decoded RGBA storage each have
@@ -236,8 +249,9 @@ executable, so the complete staged directory can run from another working direct
 
 `embedded` explicitly enables the demo's `embed-assets` Cargo feature. It compiles
 atlases and themes during the build and embeds the full demo's photo and mesh.
-The full demo still ships the PNG-only asset plugin for the photograph; simpler
-embedded demos need no asset plugin. Browser `webgl` explicitly enables embedding.
+The full demo still ships the asset plugin's PNG decoder for the photograph and
+style compiler for live edits; simpler embedded demos need no asset plugin.
+Browser `webgl` explicitly enables embedding.
 The shared recipe gives both modes identical resource names and font sizes.
 
 The smoke executable's `--rebuild-assets` and `--theme themes/windows-95/theme.json`

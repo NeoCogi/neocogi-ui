@@ -93,7 +93,7 @@ impl RgbaImage {
 #[com_class(class_id(PNG_DECODER_CLASS), name = "microui.PngDecoder", version = "0.9.0-alpha.0",
     constructor(args = none, default), interfaces(IPngDecoder, IAssetDiagnostics))]
 #[derive(Default)]
-/// PNG-only deployments need neither font rasterization nor JSON constructors in their descriptor.
+/// Decodes PNGs independently of the optional font rasterizer and JSON compiler.
 pub struct PngDecoder {
     /// Last failed decode or upload; no diagnostic borrow spans the foreign factory call.
     diagnostic: Diagnostic,

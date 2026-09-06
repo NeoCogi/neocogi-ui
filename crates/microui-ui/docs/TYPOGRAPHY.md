@@ -1,6 +1,6 @@
 # Fonts and typography
 
-- Atlas building supports multiple baked fonts and sizes through `atlas::builder::FontAsset`, and the same config can drive both runtime atlas construction and offline/prebuilt atlas export.
+- Atlas building supports multiple baked fonts and sizes through `microui_plugin_assets::atlas::FontAsset`, and the same config can drive both runtime atlas construction and offline/prebuilt atlas export.
 - A compiled UI bundle resolves conventional `body`, `small`, `title`, `heading` and `mono`
   font roles and the standard semantic icon roles. The assets plugin creates the bundle;
   `Ui::install_assets` installs it transactionally with the renderer.
@@ -32,11 +32,11 @@ scalar values and use the same lookup rules:
 - a character present in the selected atlas font uses its own glyph metrics and rectangle;
 - a missing character uses the selected font's mandatory underscore (`_`) entry.
 
-The built-in atlas builder bakes only printable ASCII (`U+0020` through `U+007E`), which includes
-underscore. `AtlasSource` can describe arbitrary Unicode scalar values, so applications needing
+The asset plugin's atlas builder bakes only printable ASCII (`U+0020` through `U+007E`), which includes
+underscore. `AssetGlyph` tables can describe arbitrary Unicode scalar values, so applications needing
 broader coverage must provide their own glyph table and must include `_` in every font. Atlas
 construction rejects a font without that explicit fallback. There is not yet a configurable
-glyph-range option in `builder::Config`.
+glyph-range option in `microui_plugin_assets::atlas::Config`.
 
 The text pipeline does not perform grapheme segmentation, script shaping, bidirectional
 reordering, kerning, or fallback-font selection. `TextWrap::Word` wraps only at ASCII space
@@ -44,18 +44,16 @@ boundaries; an individual word is not split when it exceeds the available width.
 
 A compiled UI atlas must have a `body` font and the standard semantic icon names
 `close`, `expand`, `collapse`, `check`, `expand_down`, `open_folder`, `closed_folder`, and `file`.
-Every atlas, including a fontless atlas prepared before UI construction, has a validated opaque
-white tile named `white` for solid geometry; no resource depends on a numeric table position.
-`AtlasHandle::try_from` validates dimensions, decoded pixels, unique names and glyphs, font
-metrics, the mandatory underscore entries, every glyph/icon rectangle, and the opaque white tile
-before returning a handle. `Skin::from_atlas` and `SkinBundle::new` enforce the standard UI's
-semantic font/icon naming policy and validate that image visuals belong to the paired atlas.
+Every installable bundle has a validated opaque white tile named `white` for solid
+geometry. `AssetData::read` validates bounded storage, names, font metrics,
+underscore fallbacks, rectangles and appearances before the UI creates its local
+lookup state. The asset compiler performs the same validation before publication.
 
-`FontId` and `IconId` identify logical resources, independently of atlas allocation or table position.
-Cloning an `AtlasHandle` retains those IDs. A builder derived from an existing atlas preserves IDs
-when copying or replacing its named resources; independently loading even identical serialized
-metadata allocates different IDs. A display list is valid only if the installed atlas contains its
-exact IDs, and preflight rejects absent IDs before issuing draws.
+`FontId` and `IconId` are local UI resource identities. A compatible COM revision
+preserves them after catalog authentication and name matching; independently
+created catalogs remain unrelated even with identical names and pixels. Display
+lists require the installed atlas's exact local IDs before issuing draws. GPU
+backends receive already expanded geometry and raw pixels, without font metadata.
 
 Retained `FontRef` and `IconRef` values choose semantic roles or explicit catalog IDs. Semantic
 roles resolve through the active skin; named catalog references keep the checked logical ID instead
@@ -64,69 +62,26 @@ application catalog font or icon before asking the backend to upload. Applicatio
 references to theme-private artwork must replace those references with the theme that owns them.
 See the [theme replacement contract](THEMES.md) for that author responsibility.
 
-```rust
-# #[cfg(feature = "builder")]
-# {
-use microui_ui::{atlas::builder, prelude::*};
+Applications can add a baked variant to an asset-builder draft without linking a
+font parser into the host. The draft must also contain the required body font and
+semantic icons before `finish` can publish it:
 
-let icons = vec![
-    builder::IconAsset { name: "close".into(), path: "assets/CLOSE.png".into() },
-    builder::IconAsset { name: "expand".into(), path: "assets/PLUS.png".into() },
-    builder::IconAsset { name: "collapse".into(), path: "assets/MINUS.png".into() },
-    builder::IconAsset { name: "check".into(), path: "assets/CHECK.png".into() },
-    builder::IconAsset { name: "expand_down".into(), path: "assets/EXPAND_DOWN.png".into() },
-    builder::IconAsset { name: "open_folder".into(), path: "assets/OPEN_FOLDER_16.png".into() },
-    builder::IconAsset { name: "closed_folder".into(), path: "assets/CLOSED_FOLDER_16.png".into() },
-    builder::IconAsset { name: "file".into(), path: "assets/FILE_16.png".into() },
-];
-
-let fonts = vec![
-    builder::FontAsset {
-        name: "body".into(),
-        path: "assets/NORMAL.ttf".into(),
-        size: 12,
-    },
-    builder::FontAsset {
-        name: "small".into(),
-        path: "assets/NORMAL.ttf".into(),
-        size: 10,
-    },
-    builder::FontAsset {
-        name: "title".into(),
-        path: "assets/BOLD.ttf".into(),
-        size: 12,
-    },
-    builder::FontAsset {
-        name: "heading".into(),
-        path: "assets/NORMAL.ttf".into(),
-        size: 18,
-    },
-    builder::FontAsset {
-        name: "mono".into(),
-        path: "assets/CONSOLE.ttf".into(),
-        size: 14,
-    },
-    builder::FontAsset {
-        name: "calculator-display".into(),
-        path: "assets/CONSOLE.ttf".into(),
-        size: 28,
-    },
-];
-
-let config = builder::Config {
-    texture_width: 512,
-    texture_height: 256,
-    white_icon: "assets/WHITE.png".into(),
-    icons,
-    fonts,
-};
-
-# }
+```rust,no_run
+use microui_redux::{IAssetBuilderAbi, NativePath};
+use nc_com::{ComRef, NcCopyFromBufferOffset, NcStatus};
+use std::path::Path;
+fn add_heading(draft: ComRef<'_, IAssetBuilderAbi>, font: &Path) -> Result<(), NcStatus> {
+    draft.add_font(
+        NcCopyFromBufferOffset::new(0, b"heading"),
+        NativePath::new(font).as_interface(),
+        18,
+    )
+}
 ```
 
-`builder::Config::fonts` may be empty when an application needs to prepare atlas data separately.
-A UI atlas must name one entry `body`; optional roles that are absent fall back to that same
-atlas-owned body font.
+Optional semantic roles that are absent resolve to the same bundle's required
+body font. See [asset construction](../../../docs/COM_ASSETS.md) for complete
+recipes and host-side source generation.
 
 After installing the compiled bundle, select a font on an actual COM widget:
 
