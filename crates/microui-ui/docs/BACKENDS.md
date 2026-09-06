@@ -75,3 +75,11 @@ load order, feature choices and smoke commands. [Author obligations](../../../do
 cover phase authority, callback reentrancy, lifecycle and geometry invalidation.
 Run `scripts/test-demo.sh BACKEND` for the full application and
 `scripts/test-extension.sh BACKEND` for a separately built widget/container plugin.
+
+GPU atlas input is a borrowed `ImageSource` containing positive dimensions and
+packed RGBA bytes. Backends validate it, upload a complete candidate texture and
+publish that texture only on success. They retain no native atlas, font/icon IDs
+or skin. `RendererBackend::replace_atlas` uses this raw input; the UI's geometry
+executor owns its resolved resource tables independently. The COM platform reads
+only `IAssetBundle::info` and `pixels` for uploads and caches the source identity
+to skip unchanged revisions.

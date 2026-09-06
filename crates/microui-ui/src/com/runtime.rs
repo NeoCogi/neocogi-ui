@@ -33,14 +33,13 @@ pub fn create_runtime_from_assets(source: ComRef<'_, IAssetBundleAbi>) -> Result
 /// Creates the one authoritative storage allocation used by the runtime and its weak controllers.
 fn create_storage(assets: crate::assets::ImportedAssets) -> Rc<RuntimeStorage> {
     let bundle = assets.bundle().clone();
-    let atlas = bundle.atlas().clone();
     let state = Rc::new(HostState::default());
     let host: ComPtr<IWidgetHostAbi> = WidgetHost::from_value(WidgetHost { state: state.clone() }).query().expect("host interface");
     let resources = super::widget::Resources::new(assets, state.clone());
     let metrics = Metrics::from_value(Metrics { resources: resources.clone() })
         .query()
         .expect("metrics interface");
-    let backend = Backend::new(atlas, state.clone(), resources.clone());
+    let backend = Backend::new(state.clone(), resources.clone());
     let target = backend.target.clone();
     let factory = Rc::new(super::factory::NodeFactory {
         layout: super::layout::LayoutService::new(resources.clone(), state.clone()),

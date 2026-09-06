@@ -167,13 +167,20 @@ pub(crate) struct Renderer<B: RendererBackend> {
 }
 
 impl<B: RendererBackend> Renderer<B> {
+    /// Builds a test renderer from its explicit native resource fixture.
+    #[cfg(test)]
+    pub(crate) fn new(backend: B) -> Self where B: crate::test_support::TestAtlas {
+        // Production callers supply their resolved atlas independently of the backend.
+        let atlas = crate::test_support::TestAtlas::initial_atlas(&backend);
+        Self::from_atlas(backend, atlas)
+    }
+
     /// Creates a renderer with unique ownership of the provided backend.
-    pub(crate) fn new(backend: B) -> Self {
+    pub(crate) fn from_atlas(backend: B, atlas: AtlasHandle) -> Self {
         // Allocate provenance once at the concrete Renderer ownership boundary. Textures and custom
         // callbacks copy this same identity rather than maintaining independent global namespaces.
         #[cfg(test)]
         let id = RendererId::allocate();
-        let atlas = backend.get_atlas();
         let atlas_dim = atlas.get_texture_dimension();
         // Atlas finalization has already resolved the required white resource into a stable ID;
         // cache only its allocation-specific rectangle for submission.
@@ -283,7 +290,7 @@ impl<B: RendererBackend> Renderer<B> {
         if self.atlas.ptr_eq(&atlas) {
             return Ok(());
         }
-        self.backend.replace_atlas(atlas.clone())?;
+        self.backend.replace_atlas(atlas.image())?;
         let atlas_dim = atlas.get_texture_dimension();
         let white_icon_rect = atlas.get_icon_rect(atlas.white_icon());
         let white_icon_min = Vec2f::new(white_icon_rect.x as f32, white_icon_rect.y as f32);

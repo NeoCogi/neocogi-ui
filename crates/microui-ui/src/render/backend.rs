@@ -53,7 +53,7 @@
 //! Public renderer integration types.
 
 use super::texture::TextureError;
-use crate::atlas::AtlasHandle;
+use crate::ImageSource;
 use crate::render::{Color, TextureId};
 use rs_math3d::{Color4b, Dimensioni, Rect, Vec2f, color4b};
 use std::{error::Error, fmt};
@@ -316,12 +316,11 @@ pub trait RendererFrame {
 ///
 /// ```
 /// use microui_ui::{
-///     prelude::{AtlasHandle, Color, TextureId},
+///     prelude::{ImageSource, Color, TextureId},
 ///     render::{FrameError, FrameInfo, RendererBackend, RendererFrame, TextureError, Vertex},
 /// };
 ///
 /// struct Backend {
-///     atlas: AtlasHandle,
 /// }
 ///
 /// #[must_use]
@@ -340,12 +339,8 @@ pub trait RendererFrame {
 /// impl RendererBackend for Backend {
 ///     type Frame<'a> = BackendFrame<'a>;
 ///
-///     fn get_atlas(&self) -> AtlasHandle {
-///         self.atlas.clone()
-///     }
-///
-///     fn replace_atlas(&mut self, atlas: AtlasHandle) -> Result<(), microui_ui::render::AtlasUploadError> {
-///         self.atlas = atlas;
+///     fn replace_atlas(&mut self, atlas: ImageSource<'_>) -> Result<(), microui_ui::render::AtlasUploadError> {
+///         atlas.validate().map_err(|error| microui_ui::render::AtlasUploadError::new(error.to_string()))?;
 ///         Ok(())
 ///     }
 ///
@@ -375,19 +370,12 @@ pub trait RendererBackend: 'static {
     where
         Self: 'a;
 
-    /// Returns the atlas backing the UI renderer.
-    ///
-    /// Every constructible [`AtlasHandle`] already contains a validated opaque white rendering tile
-    /// named `white`, which the renderer samples for solid geometry. Backends used with
-    /// [`crate::Context`] must additionally return a handle containing the `body` font and every
-    /// lowercase semantic icon required by [`crate::IconRole::ALL`].
-    fn get_atlas(&self) -> AtlasHandle;
     /// Uploads and publishes one replacement UI atlas transactionally.
     ///
     /// Implementations must create and populate every replacement GPU resource before discarding
-    /// the currently active atlas. Returning an error promises that [`Self::get_atlas`] and later
-    /// frames still use the previous atlas. This operation is called only between frames.
-    fn replace_atlas(&mut self, atlas: AtlasHandle) -> Result<(), AtlasUploadError>;
+    /// the currently active texture. An error leaves later frames using the previous GPU image.
+    /// The borrowed pixels are not retained; this operation is called only between frames.
+    fn replace_atlas(&mut self, atlas: ImageSource<'_>) -> Result<(), AtlasUploadError>;
     /// Acquires and initializes one backend frame.
     fn frame(&mut self, info: FrameInfo) -> Result<Self::Frame<'_>, FrameError>;
     /// Creates a texture owned by the backend.

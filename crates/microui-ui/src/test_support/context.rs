@@ -13,14 +13,14 @@ pub(crate) struct TestContext<B: RendererBackend, State: 'static = ()> {
 }
 impl<B: RendererBackend, State: 'static> TestContext<B, State> {
     /// Builds the same engine with an initially disconnected test callback driver.
-    pub(crate) fn new(backend: B) -> Self {
+    pub(crate) fn new(backend: B) -> Self where B: super::TestAtlas {
         Self {
             context: Context::new(backend),
             events: WidgetEventDispatcher::new(),
         }
     }
     /// Uses explicit dimensions for the existing terse frame fixtures.
-    pub(crate) fn new_test_state(backend: B, dimensions: Dimensioni) -> Self {
+    pub(crate) fn new_test_state(backend: B, dimensions: Dimensioni) -> Self where B: super::TestAtlas {
         Self {
             context: Context::new_test(backend, dimensions),
             events: WidgetEventDispatcher::new(),

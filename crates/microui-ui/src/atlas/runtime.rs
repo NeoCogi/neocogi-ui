@@ -62,6 +62,18 @@ impl AtlasHandle {
         &self.0.pixels
     }
 
+    /// Borrows the initialized native RGBA pixels as packed bytes without another allocation.
+    pub(crate) fn image(&self) -> crate::ImageSource<'_> {
+        // rs-math3d's Color4b is repr(C) with four u8 fields in RGBA order. These assertions
+        // reject layout drift before any byte view can be constructed.
+        const { assert!(core::mem::size_of::<Color4b>() == 4); assert!(core::mem::align_of::<Color4b>() == 1); }
+        let colors = &self.0.pixels;
+        // SAFETY: Every channel is initialized, the C layout contains no padding, and the
+        // validated atlas bounds make len * 4 addressable. The borrow cannot outlive the atlas.
+        let pixels = unsafe { core::slice::from_raw_parts(colors.as_ptr().cast::<u8>(), colors.len() * 4) };
+        crate::ImageSource { width: self.width() as i32, height: self.height() as i32, pixels }
+    }
+
     /// Returns a mapping from icon names to their identifiers.
     pub fn clone_icon_table(&self) -> Vec<(String, IconId)> {
         // Copy the baked identity stored with each icon. A derived builder uses this exact value

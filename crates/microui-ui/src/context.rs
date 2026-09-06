@@ -93,15 +93,15 @@ impl<B: RendererBackend> Context<B> {
     /// [`crate::IconRole::ALL`]. Every constructible atlas already has a validated white
     /// rendering tile.
     #[cfg(test)]
-    pub fn new(backend: B) -> Self {
-        let catalog = ResourceCatalog::new(backend.get_atlas());
+    pub fn new(backend: B) -> Self where B: crate::test_support::TestAtlas {
+        let catalog = ResourceCatalog::new(crate::test_support::TestAtlas::initial_atlas(&backend));
         Self::from_bundle(backend, catalog.default_skin_bundle())
     }
 
     /// Constructs retained traversal from the exact same immutable revision as COM widget services.
     /// The caller initializes its backend from this bundle's atlas before publishing either owner.
     pub(crate) fn from_bundle(backend: B, bundle: SkinBundle) -> Self {
-        let renderer = Renderer::new(backend);
+        let renderer = Renderer::from_atlas(backend, bundle.atlas().clone());
         debug_assert!(renderer.atlas().ptr_eq(bundle.atlas()), "backend and retained bundle must share one atlas");
         let resource_catalog = ResourceCatalog::new(bundle.atlas().clone());
         Self {
@@ -138,7 +138,7 @@ impl<B: RendererBackend> Context<B> {
 
     /// Creates a Context whose test-only frame helper uses `dimensions`.
     #[cfg(test)]
-    pub(crate) fn new_test(backend: B, dimensions: Dimensioni) -> Self {
+    pub(crate) fn new_test(backend: B, dimensions: Dimensioni) -> Self where B: crate::test_support::TestAtlas {
         let mut context = Self::new(backend);
         context.test_dimensions = dimensions;
         context

@@ -54,17 +54,18 @@ impl RendererFrame for TestFrame {
     fn draw_texture(&mut self, _id: TextureId, _vertices: [Vertex; 4]) {}
 }
 
+impl crate::test_support::TestAtlas for TestBackend {
+    /// Returns the native fixture allocation before renderer construction.
+    fn initial_atlas(&self) -> crate::AtlasHandle {
+        self.atlas.clone()
+    }
+}
+
 impl RendererBackend for TestBackend {
     type Frame<'a> = TestFrame;
 
-    fn get_atlas(&self) -> AtlasHandle {
-        self.atlas.clone()
-    }
-
-    fn replace_atlas(&mut self, atlas: AtlasHandle) -> Result<(), AtlasUploadError> {
-        // This public-API fixture has no native renderer resource; the handle assignment is its
-        // complete successful atlas transaction.
-        self.atlas = atlas;
+    fn replace_atlas(&mut self, _atlas: crate::ImageSource<'_>) -> Result<(), AtlasUploadError> {
+        // This fixture models a successful pixel upload; the UI renderer owns resource metadata.
         Ok(())
     }
 

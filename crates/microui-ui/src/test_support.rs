@@ -39,6 +39,12 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::alloc::{GlobalAlloc, Layout, System};
 
+/// Native metadata supplied only while constructing an in-process renderer fixture.
+pub(crate) trait TestAtlas {
+    /// Borrows the fixture's initial resource allocation independently of backend uploads.
+    fn initial_atlas(&self) -> AtlasHandle;
+}
+
 /// Test-process allocator whose counters are enabled only inside an explicit measurement window.
 pub(crate) struct CountingAllocator;
 
@@ -304,17 +310,18 @@ impl RendererFrame for NoopFrame {
     fn draw_texture(&mut self, _id: TextureId, _vertices: [Vertex; 4]) {}
 }
 
+impl crate::test_support::TestAtlas for NoopRenderer {
+    /// Returns the native fixture allocation before renderer construction.
+    fn initial_atlas(&self) -> crate::AtlasHandle {
+        self.atlas.clone()
+    }
+}
+
 impl RendererBackend for NoopRenderer {
     type Frame<'a> = NoopFrame;
 
-    fn get_atlas(&self) -> AtlasHandle {
-        self.atlas.clone()
-    }
-
-    fn replace_atlas(&mut self, atlas: AtlasHandle) -> Result<(), AtlasUploadError> {
-        // The no-op backend has no GPU allocation; publishing the validated capability completes
-        // its entire replacement transaction.
-        self.atlas = atlas;
+    fn replace_atlas(&mut self, _atlas: crate::ImageSource<'_>) -> Result<(), AtlasUploadError> {
+        // This fixture models a successful pixel upload; the UI renderer owns resource metadata.
         Ok(())
     }
 
@@ -493,16 +500,18 @@ impl RendererFrame for RecordingFrame<'_> {
     }
 }
 
+impl crate::test_support::TestAtlas for RecordingRenderer {
+    /// Returns the native fixture allocation before renderer construction.
+    fn initial_atlas(&self) -> crate::AtlasHandle {
+        self.atlas.clone()
+    }
+}
+
 impl RendererBackend for RecordingRenderer {
     type Frame<'a> = RecordingFrame<'a>;
 
-    fn get_atlas(&self) -> AtlasHandle {
-        self.atlas.clone()
-    }
-
-    fn replace_atlas(&mut self, atlas: AtlasHandle) -> Result<(), AtlasUploadError> {
-        // Recording tests model a successful backend upload by changing the authoritative handle.
-        self.atlas = atlas;
+    fn replace_atlas(&mut self, _atlas: crate::ImageSource<'_>) -> Result<(), AtlasUploadError> {
+        // This fixture models a successful pixel upload; the UI renderer owns resource metadata.
         Ok(())
     }
 

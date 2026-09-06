@@ -18,8 +18,10 @@ links the UI implementation. Font and theme construction remain optional feature
 
 Applications supply one `IAssetBundle` to `IUiProvider::create_runtime` and
 `IPlatform::create_window`. Neither implementation embeds demo assets. The UI imports
-metadata into its local font/icon tables once; the renderer imports and uploads its
-own native atlas. Frames pass the exact bundle used to expand their geometry, and
+metadata into its local font/icon tables once. The platform reads only the bundle
+header and packed RGBA bytes, then uploads them without importing a native atlas
+or skin. GPU backends retain textures and the platform retains the source revision
+identity; temporary CPU upload bytes are released after the synchronous upload. Frames pass the exact bundle used to expand their geometry, and
 the renderer skips import/upload when that bundle is already current.
 
 The facade's concrete `assets::AssetData` produces the same `IAssetBundle` object

@@ -46,6 +46,14 @@ pub struct ImageSource<'a> {
     pub pixels: &'a [u8],
 }
 
+impl ImageSource<'_> {
+    /// Checks the complete raw storage contract without copying pixels.
+    pub fn validate(self) -> Result<(), ImageError> {
+        // All renderer entry points apply the same dimensions, byte count and allocation bound.
+        validate_rgba_buffer(self.width, self.height, self.pixels.len())
+    }
+}
+
 /// Concrete failure returned before a raw image is copied or uploaded.
 /// Atlas and texture consumers share these checks so their storage bounds cannot diverge.
 #[derive(Debug)]

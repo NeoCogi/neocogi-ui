@@ -1,6 +1,6 @@
 //! Coarse COM submission adapter over the existing display-list executor.
 use super::*;
-use crate::{AtlasHandle, TextureId};
+use crate::{ImageSource, TextureId};
 use crate::render::{AtlasUploadError, FrameError, FrameInfo, RendererBackend, RendererFrame, TextureError, Vertex, RenderItemArgs};
 use nc_com::NcCopyToBufferOffset;
 
@@ -220,8 +220,6 @@ enum Destination {
 pub(super) struct Backend {
     /// Selects local recording or final submission without duplicating the executor type.
     destination: Destination,
-    /// Current validated resource atlas used by both measurement and display-list execution.
-    atlas: AtlasHandle,
     /// Widget recording failures prevent submitting even a partially built frame.
     host: Rc<HostState>,
     /// Owned scratch survives across frames and is never lent through a COM object.
@@ -234,18 +232,17 @@ pub(super) struct Backend {
 
 impl Backend {
     /// Creates recording storage without acquiring a GPU frame.
-    pub(super) fn new(atlas: AtlasHandle, host: Rc<HostState>, resources: Rc<super::widget::Resources>) -> Self {
-        Self::create(atlas, host, Destination::Renderer(resources))
+    pub(super) fn new(host: Rc<HostState>, resources: Rc<super::widget::Resources>) -> Self {
+        Self::create(host, Destination::Renderer(resources))
     }
     /// Creates the same executor with explicit recording or resource-owning submission behavior.
-    fn create(atlas: AtlasHandle, host: Rc<HostState>, destination: Destination) -> Self {
+    fn create(host: Rc<HostState>, destination: Destination) -> Self {
         let storage = Rc::new(Storage::default());
         let stream = Stream::from_value(Stream { storage: storage.clone() })
             .query()
             .expect("Stream declares IRenderStream");
         Self {
             destination,
-            atlas,
             host,
             storage,
             stream,
@@ -253,8 +250,8 @@ impl Backend {
         }
     }
     /// Reuses the same backend/executor monomorphization for local widget geometry.
-    pub(super) fn recording(atlas: AtlasHandle, host: Rc<HostState>) -> (Self, Rc<Storage>) {
-        let backend = Self::create(atlas, host, Destination::Recording);
+    pub(super) fn recording(host: Rc<HostState>) -> (Self, Rc<Storage>) {
+        let backend = Self::create(host, Destination::Recording);
         let storage = backend.storage.clone();
         (backend, storage)
     }
@@ -283,13 +280,9 @@ impl Drop for ReadScope<'_> {
 
 impl RendererBackend for Backend {
     type Frame<'a> = Frame<'a>;
-    /// Returns the same resource allocation used by the retained engine.
-    fn get_atlas(&self) -> AtlasHandle {
-        self.atlas.clone()
-    }
-    /// Publishes local geometry resources after Runtime has prepared the fallible GPU upload.
-    fn replace_atlas(&mut self, atlas: AtlasHandle) -> Result<(), AtlasUploadError> {
-        self.atlas = atlas;
+    /// Resource metadata is committed by the enclosing UI renderer after platform preparation.
+    fn replace_atlas(&mut self, _atlas: ImageSource<'_>) -> Result<(), AtlasUploadError> {
+        // This backend records geometry only. The platform already performed the GPU transaction.
         Ok(())
     }
     /// Clears reused scratch; no native command executes before finish.

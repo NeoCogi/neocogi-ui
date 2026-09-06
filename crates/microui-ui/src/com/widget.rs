@@ -35,12 +35,13 @@ pub(super) struct ResourceRevision {
 impl ResourceRevision {
     /// Prepares complete geometry state before an installation can publish this revision.
     pub(super) fn new(assets: crate::assets::ImportedAssets, host: Rc<HostState>) -> Rc<Self> {
-        let (collector, storage) = super::render::Backend::recording(assets.bundle().atlas().clone(), host);
+        let atlas = assets.bundle().atlas().clone();
+        let (collector, storage) = super::render::Backend::recording(host);
         Rc::new(Self {
             assets,
             scratch: RefCell::new(Some(PaintScratch {
                 list: DisplayList::new(),
-                renderer: Renderer::new(collector),
+                renderer: Renderer::from_atlas(collector, atlas),
                 storage,
             })),
         })

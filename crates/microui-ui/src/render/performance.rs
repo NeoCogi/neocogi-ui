@@ -116,16 +116,18 @@ impl RendererFrame for MeasurementFrame<'_> {
     }
 }
 
+impl crate::test_support::TestAtlas for MeasurementBackend {
+    /// Returns the native fixture allocation before renderer construction.
+    fn initial_atlas(&self) -> crate::AtlasHandle {
+        self.atlas.clone()
+    }
+}
+
 impl RendererBackend for MeasurementBackend {
     type Frame<'a> = MeasurementFrame<'a>;
 
-    fn get_atlas(&self) -> crate::AtlasHandle {
-        self.atlas.clone()
-    }
-
-    fn replace_atlas(&mut self, atlas: crate::AtlasHandle) -> Result<(), AtlasUploadError> {
-        // Performance fixtures have no native texture, so one assignment is the complete commit.
-        self.atlas = atlas;
+    fn replace_atlas(&mut self, _atlas: crate::ImageSource<'_>) -> Result<(), AtlasUploadError> {
+        // This fixture models a successful pixel upload; the UI renderer owns resource metadata.
         Ok(())
     }
 

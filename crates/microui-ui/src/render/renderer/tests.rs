@@ -96,18 +96,19 @@ impl Drop for CountingFrame<'_> {
     }
 }
 
-impl RendererBackend for CountingRenderer {
-    type Frame<'a> = CountingFrame<'a>;
-
-    fn get_atlas(&self) -> AtlasHandle {
+impl crate::test_support::TestAtlas for CountingRenderer {
+    /// Returns the native fixture allocation before renderer construction.
+    fn initial_atlas(&self) -> crate::AtlasHandle {
         self.stats.atlas_reads.set(self.stats.atlas_reads.get() + 1);
         self.atlas.clone()
     }
+}
 
-    fn replace_atlas(&mut self, atlas: AtlasHandle) -> Result<(), AtlasUploadError> {
-        // This backend records frame behavior only; replacing the capability models a successful
-        // native upload without adding unrelated counters to existing characterization tests.
-        self.atlas = atlas;
+impl RendererBackend for CountingRenderer {
+    type Frame<'a> = CountingFrame<'a>;
+
+    fn replace_atlas(&mut self, _atlas: crate::ImageSource<'_>) -> Result<(), AtlasUploadError> {
+        // This fixture models a successful pixel upload; the UI renderer owns resource metadata.
         Ok(())
     }
 
@@ -145,16 +146,18 @@ impl RendererFrame for EmptyFrame {
     fn draw_texture(&mut self, _id: TextureId, _vertices: [Vertex; 4]) {}
 }
 
+impl crate::test_support::TestAtlas for TextureUploadRenderer {
+    /// Returns the native fixture allocation before renderer construction.
+    fn initial_atlas(&self) -> crate::AtlasHandle {
+        self.atlas.clone()
+    }
+}
+
 impl RendererBackend for TextureUploadRenderer {
     type Frame<'a> = EmptyFrame;
 
-    fn get_atlas(&self) -> AtlasHandle {
-        self.atlas.clone()
-    }
-
-    fn replace_atlas(&mut self, atlas: AtlasHandle) -> Result<(), AtlasUploadError> {
-        // Texture-upload tests do not exercise atlas failures, so publish the candidate directly.
-        self.atlas = atlas;
+    fn replace_atlas(&mut self, _atlas: crate::ImageSource<'_>) -> Result<(), AtlasUploadError> {
+        // This fixture models a successful pixel upload; the UI renderer owns resource metadata.
         Ok(())
     }
 
@@ -1077,18 +1080,19 @@ fn frame_acquisition_failure_discards_the_list_without_finalization() {
         attempts: Rc<Cell<usize>>,
     }
 
+    impl crate::test_support::TestAtlas for FailingBackend {
+        /// Returns the native fixture allocation before renderer construction.
+        fn initial_atlas(&self) -> crate::AtlasHandle {
+            self.atlas.clone()
+        }
+    }
+
     impl RendererBackend for FailingBackend {
         type Frame<'a> = EmptyFrame;
 
-        fn get_atlas(&self) -> AtlasHandle {
-            self.atlas.clone()
-        }
-
-        fn replace_atlas(&mut self, atlas: AtlasHandle) -> Result<(), AtlasUploadError> {
-            // Frame acquisition is the sole failure under test; atlas replacement remains a plain
-            // successful transaction so it cannot obscure that behavior.
-            self.atlas = atlas;
-            Ok(())
+        fn replace_atlas(&mut self, _atlas: crate::ImageSource<'_>) -> Result<(), AtlasUploadError> {
+        // This fixture models a successful pixel upload; the UI renderer owns resource metadata.
+                Ok(())
         }
 
         fn frame(&mut self, _info: FrameInfo) -> Result<Self::Frame<'_>, FrameError> {
