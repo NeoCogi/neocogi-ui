@@ -32,7 +32,9 @@
 #[cfg(feature = "embed-assets")]
 use std::{env, error::Error, path::PathBuf};
 #[cfg(feature = "embed-assets")]
-use microui_ui::{self as ui, atlas::builder::Builder};
+use microui_plugin_assets::{atlas::{self, Builder}, export::write_rust, theme};
+#[cfg(feature = "embed-assets")]
+use microui_redux::assets::AssetData;
 
 /// Shared source paths are compiled only for explicitly embedded builds.
 #[cfg(feature = "embed-assets")]
@@ -59,10 +61,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("cargo:rerun-if-changed={}", path.display());
     }
     let output = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo provides OUT_DIR")).join("prebuilt_bundle.rs");
-    let atlas = Builder::from_config(&config)?.build()?;
+    let bundle = Builder::from_config(&config)?.build()?;
     // One atomic generated artifact replaces the native atlas and COM alternative paths.
-    let bundle = ui::SkinBundle::from_atlas(atlas);
-    bundle.to_com_rust_files(output)?;
+    write_rust(&bundle, &output)?;
     if env::var_os("CARGO_FEATURE_FULL_DEMO").is_some() {
         full_demo_assets(&bundle)?;
     }
@@ -71,19 +72,15 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 /// Compiles complete theme choices on Cargo's host, keeping target theme/font parsers out.
 #[cfg(feature = "embed-assets")]
-fn full_demo_assets(base: &ui::SkinBundle) -> Result<(), Box<dyn Error>> {
+fn full_demo_assets(base: &AssetData) -> Result<(), Box<dyn Error>> {
     let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let output = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo provides OUT_DIR"));
     // Tracking the complete authored directories includes every JSON-relative PNG/font dependency.
     println!("cargo:rerun-if-changed={}", workspace.join("themes").display());
     println!("cargo:rerun-if-changed={}", workspace.join("assets").display());
-    let source = ui::assets::export_bundle(base)?;
-    let imported = ui::assets::ImportedAssets::read(source.as_com_ref(), None)?;
     for (directory, generated) in [("windows-3.11", "windows_311"), ("windows-95", "windows_95"), ("mac-os-9", "mac_os_9")] {
-        imported
-            .load_theme(&workspace.join("themes").join(directory).join("theme.json"))?
-            .bundle()
-            .to_com_rust_files(output.join(format!("{generated}.rs")))?;
+        let loaded = theme::load(&workspace.join("themes").join(directory).join("theme.json"), base)?;
+        write_rust(loaded.data(), &output.join(format!("{generated}.rs")))?;
     }
     Ok(())
 }

@@ -248,13 +248,6 @@ impl Skin {
         self.appearances.set_chrome(role, state, visual);
     }
 
-    /// Rebuilds all visual roles from a flat palette and a shared fallback frame geometry.
-    #[cfg(feature = "theme-json")]
-    pub(crate) fn replace_flat_visuals(&mut self, frame_insets: SliceInsets, palette: &FlatPalette) {
-        // Theme loading compiles authoring data into the same private concrete table as defaults.
-        // The serialized representation is never retained as a second source of runtime truth.
-        self.appearances = AppearanceCatalog::from_flat_palette(frame_insets, palette);
-    }
 
     /// Returns the active atlas capability for one semantic font role.
     ///
@@ -287,6 +280,7 @@ impl Skin {
 
 #[cfg(test)]
 mod tests {
+    use crate::Color;
     use super::*;
     use crate::ControlRole;
     use crate::test_support::test_atlas_with_font_sizes as make_test_atlas;

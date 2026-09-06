@@ -510,7 +510,7 @@ mod tests {
             pixels: &pixels,
             icons: &icons,
             fonts: &fonts,
-            format: crate::SourceFormat::Raw,
+
         };
 
         AtlasHandle::try_from(&source).expect("asymmetric disclosure fixture must satisfy the atlas contract")

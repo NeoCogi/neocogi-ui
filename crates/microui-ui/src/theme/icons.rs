@@ -92,7 +92,7 @@ impl IconRef {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{AtlasSource, CharEntry, FontEntry, Recti, SourceFormat, Vec2i};
+    use crate::{AtlasSource, CharEntry, FontEntry, Recti, Vec2i};
 
     /// Verifies semantic names are compiled once into IDs independent of table position.
     #[test]
@@ -135,7 +135,7 @@ mod tests {
             pixels: &pixels,
             icons: &icons,
             fonts: &fonts,
-            format: SourceFormat::Raw,
+
         })
         .expect("semantic-icon fixture atlas must satisfy the complete atlas contract");
 

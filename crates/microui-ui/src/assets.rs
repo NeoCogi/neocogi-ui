@@ -93,12 +93,6 @@ impl ImportedAssets {
         self.export_derived(&SkinBundle::new(self.bundle.atlas().clone(), skin))
     }
 
-    /// Compiles a JSON theme locally against the pristine application atlas.
-    /// The optional provider then calls export_derived on the result's bundle.
-    #[cfg(feature = "theme-json")]
-    pub fn load_theme(&self, path: &std::path::Path) -> Result<crate::LoadedTheme, crate::ThemeLoadError> {
-        crate::theme::loader::load(path, &self.original)
-    }
 }
 
 /// Exports a validated native bundle into a fresh logical catalog, with no parser dependency.
@@ -150,8 +144,6 @@ fn filled<T: Clone>(count: usize, value: T) -> Result<Vec<T>, NcStatus> {
     Ok(values)
 }
 
-#[cfg(feature = "save-to-rust")]
-mod export;
 
 /// Exports a freshly built atlas with the standard resolved skin, rejecting missing semantics.
 pub fn export_atlas(atlas: AtlasHandle) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {

@@ -48,17 +48,7 @@ pub struct FontEntry<'a> {
     pub entries: &'a [(char, CharEntry)],
 }
 
-/// Encodes how atlas pixel data is stored.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum SourceFormat {
-    /// Raw RGBA byte array.
-    Raw,
-    #[cfg(feature = "png_source")]
-    /// Static PNG-formatted byte array; animated PNG data is rejected.
-    Png,
-}
-
-/// Serializable representation of an atlas that can be shipped with the binary.
+/// Borrowed raw metadata used to construct a validated local atlas.
 pub struct AtlasSource<'a> {
     /// Positive width of the atlas texture, representable by an `i32` rectangle coordinate.
     ///
@@ -69,7 +59,7 @@ pub struct AtlasSource<'a> {
     ///
     /// The combined allocation limit is documented on [`AtlasSource::width`].
     pub height: usize,
-    /// Pixel data matching [`AtlasSource::format`].
+    /// Packed raw RGBA bytes filling the declared dimensions.
     pub pixels: &'a [u8],
     /// Icon lookup table.
     ///
@@ -82,37 +72,29 @@ pub struct AtlasSource<'a> {
     ///
     /// Font names and per-font characters must be unique. Metrics must fit runtime coordinates,
     /// rectangles must be nonnegative and in bounds, and every font must contain `_`. Unlike the
-    /// built-in builder's printable-ASCII output, these tables may contain arbitrary Unicode scalar
+    /// asset compiler's printable-ASCII output, these tables may contain arbitrary Unicode scalar
     /// values.
     pub fonts: &'a [(&'a str, FontEntry<'a>)],
-    /// Encoding of [`AtlasSource::pixels`].
-    pub format: SourceFormat,
 }
 
 impl<'source> TryFrom<&AtlasSource<'source>> for AtlasHandle {
     type Error = AtlasError;
 
-    /// Decodes and validates one serialized atlas without a panic or lossy fallback path.
+    /// Copies and validates one raw atlas without a panic or lossy fallback path.
     ///
     /// # Errors
     ///
-    /// Returns the precise [`AtlasError`] for invalid dimensions or pixels, image decode and
-    /// dimension failures, duplicate resource keys, invalid metrics or rectangles, a missing glyph
+    /// Returns the precise [`AtlasError`] for invalid dimensions or pixels, raw storage failures, duplicate resource keys, invalid metrics or rectangles, a missing glyph
     /// fallback, or an absent/non-white rendering tile.
     fn try_from(source: &AtlasSource<'source>) -> Result<Self, Self::Error> {
-        // Validate all dimension arithmetic before converting to i32, decoding compressed pixels,
-        // or allocating runtime tables. This is also the bound supplied to checked PNG loading.
+        // Validate dimension arithmetic before converting coordinates or allocating runtime tables.
         let dimensions = super::validation::checked_atlas_dimensions(source.width, source.height)?;
 
-        let image = match source.format {
-            SourceFormat::Raw => ImageSource::Raw {
-                // CheckedImageDimensions proved both values fit i32 exactly.
-                width: source.width as i32,
-                height: source.height as i32,
-                pixels: source.pixels,
-            },
-            #[cfg(feature = "png_source")]
-            SourceFormat::Png => ImageSource::Png { bytes: source.pixels },
+        let image = ImageSource {
+            // CheckedImageDimensions proved both values fit i32 exactly.
+            width: source.width as i32,
+            height: source.height as i32,
+            pixels: source.pixels,
         };
         let (_, _, pixels) = load_image_bytes_checked(image, dimensions).map_err(AtlasError::from)?;
 
@@ -122,8 +104,8 @@ impl<'source> TryFrom<&AtlasSource<'source>> for AtlasHandle {
             .icons
             .iter()
             .map(|(name, rectangle)| {
-                // Serialized metadata introduces a fresh logical resource set. Runtime atlas
-                // derivation will preserve these IDs even when it repacks the corresponding pixels.
+                // Raw metadata introduces a fresh local resource set. COM import separately
+                // authenticates catalogs before preserving IDs across a replacement.
                 (name.to_string(), Icon { id: IconId::allocate(), rect: *rectangle })
             })
             .collect();

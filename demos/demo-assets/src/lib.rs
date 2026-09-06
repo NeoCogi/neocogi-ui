@@ -53,16 +53,9 @@
 //! Demo resources use adjacent native files by default; `embed-assets` explicitly selects compiled resources.
 
 /// Native loading and host construction share one catalog recipe.
-#[cfg(any(not(feature = "embed-assets"), feature = "builder"))]
+#[cfg(any(not(feature = "embed-assets"), test))]
+#[cfg_attr(feature = "embed-assets", allow(dead_code, reason = "compiled metadata tests do not open the white tile source path"))]
 mod recipe_data;
-#[cfg(feature = "builder")]
-use microui_ui as ui;
-
-/// One shared recipe is exposed only to host tools and asset-provider tests.
-#[cfg(feature = "builder")]
-mod recipe;
-#[cfg(feature = "builder")]
-pub use recipe::atlas_config;
 
 /// Generated metadata and compressed pixels have no target dependency on the UI implementation.
 #[cfg(feature = "embed-assets")]
@@ -108,43 +101,28 @@ pub fn suzanne_obj() -> std::io::Result<std::borrow::Cow<'static, [u8]>> {
     }
 }
 
-#[cfg(all(test, feature = "builder", feature = "embed-assets"))]
+#[cfg(all(test, feature = "embed-assets"))]
 mod tests {
     use super::*;
 
-    /// Compare the actual compiled source with the independent runtime recipe before COM import.
+    /// Generated source retains every recipe name and font metric before COM publication.
     #[test]
-    fn compiled_bundle_preserves_pixels_and_metadata() {
-        let atlas = microui_ui::atlas::builder::Builder::from_config(&atlas_config()).unwrap().build().unwrap();
-        let expected = microui_ui::assets::export_bundle_data(&microui_ui::SkinBundle::from_atlas(atlas)).unwrap();
-        let actual = bundle_data().unwrap();
-        assert_eq!(expected.size, actual.size);
-        assert_eq!(expected.pixels, actual.pixels);
-        assert_eq!(expected.fonts, actual.fonts);
-        assert_eq!(expected.glyphs, actual.glyphs);
-        assert_eq!(expected.icons, actual.icons);
-        assert_eq!(expected.names, actual.names);
-        assert_eq!(expected.metrics, actual.metrics);
-        assert_eq!(expected.chrome, actual.chrome);
-        for (expected, actual) in [
-            (&expected.surfaces, &actual.surfaces),
-            (&expected.controls, &actual.controls),
-            (&expected.menus, &actual.menus),
-            (&expected.window_chrome, &actual.window_chrome),
-        ] {
-            assert_eq!(expected.len(), actual.len());
-            for (expected, actual) in expected.iter().zip(actual.iter()) {
-                assert_eq!(expected.insets, actual.insets);
-                assert_eq!(expected.center_visible, actual.center_visible);
-                assert_eq!(expected.content_color, actual.content_color);
-                assert_eq!(
-                    microui_redux::AssetPatch::try_from(expected.patch).unwrap(),
-                    microui_redux::AssetPatch::try_from(actual.patch).unwrap()
-                );
-            }
+    fn compiled_bundle_contains_the_complete_recipe() {
+        let data = bundle_data().unwrap();
+        data.validate().unwrap();
+        assert_eq!((data.size.width as u32, data.size.height as u32), recipe_data::SIZE);
+        assert_eq!(data.fonts.len(), recipe_data::FONTS.len());
+        assert_eq!(data.icons.len(), recipe_data::ICONS.len() + 1);
+        for (font, &(name, _, size)) in data.fonts.iter().zip(recipe_data::FONTS) {
+            assert_eq!(data.name(font.name).unwrap(), name);
+            assert_eq!(font.font_size, size as i32);
+            assert_eq!(font.glyphs.count, 95);
         }
-        // Import validates every generated visual and resource reference as an ordinary provider.
-        let source = actual.into_bundle().unwrap();
-        microui_ui::assets::ImportedAssets::read(source.as_com_ref(), None).unwrap();
+        // The white tile precedes named recipe artwork in both the direct and COM builders.
+        assert_eq!(data.name(data.icons[0].name).unwrap(), "white");
+        for (icon, &(name, _)) in data.icons[1..].iter().zip(recipe_data::ICONS) {
+            assert_eq!(data.name(icon.name).unwrap(), name);
+        }
+        data.into_bundle().unwrap();
     }
 }

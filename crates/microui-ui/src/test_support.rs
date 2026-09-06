@@ -33,7 +33,7 @@
 use crate::render::{FrameError, FrameInfo, RendererBackend, RendererFrame, TextureError, Vertex};
 use crate::{
     AtlasHandle, AtlasSource, AtlasUploadError, CharEntry, ChromeRole, ChromeState, Color, ControlRole, ControlState, FontEntry, MenuRole, MenuState,
-    NinePatch, Recti, Skin, SourceFormat, SurfaceRole, SurfaceState, TextureId, Vec2i, Visual,
+    NinePatch, Recti, Skin, SurfaceRole, SurfaceState, TextureId, Vec2i, Visual,
 };
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -192,7 +192,7 @@ pub(crate) fn test_atlas_with_font_sizes(fonts: &[(&str, usize)]) -> AtlasHandle
         pixels: &pixels,
         icons: &icons,
         fonts: &fonts,
-        format: SourceFormat::Raw,
+
     };
     // Shared fixtures use the public fallible loader so malformed test metadata cannot bypass the
     // same validation boundary required of downstream applications.

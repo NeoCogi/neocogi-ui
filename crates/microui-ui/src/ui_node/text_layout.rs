@@ -221,7 +221,7 @@ mod tests {
     //! Boundary tests for shared text measurement and wrapping arithmetic.
 
     use super::*;
-    use crate::{AtlasSource, CharEntry, FontEntry, SourceFormat};
+    use crate::{AtlasSource, CharEntry, FontEntry};
 
     /// Constructs a valid atlas whose fallback advance occupies the complete positive i32 range.
     fn extreme_advance_atlas() -> AtlasHandle {
@@ -253,7 +253,7 @@ mod tests {
             pixels: &pixels,
             icons: &icons,
             fonts: &fonts,
-            format: SourceFormat::Raw,
+
         })
         .expect("the extreme-advance fixture must satisfy the complete atlas contract")
     }

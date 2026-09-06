@@ -1,4 +1,4 @@
-//! The runtime COM builder and generated prebuilt exporter must publish equivalent portable data.
+//! The runtime COM builder and generated direct exporter must publish equivalent portable data.
 use super::*;
 use microui_ui::assets::ImportedAssets;
 use nc_com::INcStringComPtrExt;
@@ -41,14 +41,14 @@ impl INativePath for ReenterPath {
 
 /// Copies complete portable values out of an imported revision for deterministic comparisons.
 fn data(source: &ComPtr<IAssetBundleAbi>) -> microui_redux::assets::AssetData {
-    microui_ui::assets::export_bundle_data(ImportedAssets::read(source.as_com_ref(), None).unwrap().bundle()).unwrap()
+    AssetData::read(source.as_com_ref()).unwrap()
 }
 
 /// Both producer modes share the exact recipe and immutable object representation.
 #[test]
-fn runtime_builder_matches_prebuilt_pixels_metrics_and_resolved_visuals() {
+fn com_builder_matches_direct_pixels_metrics_and_resolved_visuals() {
     let loader: ComPtr<IAssetLoaderAbi> = AssetLoader::from_value(AssetLoader::default()).query().unwrap();
-    let config = microui_redux_demo_assets::atlas_config();
+    let config = crate::test_recipe::atlas_config();
     let white = NativePath::new(&config.white_icon);
     let builder = loader
         .create_builder(
@@ -76,20 +76,20 @@ fn runtime_builder_matches_prebuilt_pixels_metrics_and_resolved_visuals() {
     let runtime = builder.finish().unwrap();
     assert_eq!(builder.finish().unwrap_err(), UI_E_CLOSED);
     let runtime = data(&runtime);
-    let prebuilt = data(&microui_redux_demo_assets::load_bundle().unwrap());
-    assert_eq!(runtime.size, prebuilt.size);
-    assert_eq!(runtime.pixels, prebuilt.pixels);
-    assert_eq!(runtime.fonts, prebuilt.fonts);
-    assert_eq!(runtime.glyphs, prebuilt.glyphs);
-    assert_eq!(runtime.icons, prebuilt.icons);
-    assert_eq!(runtime.names, prebuilt.names);
-    assert_eq!(runtime.metrics, prebuilt.metrics);
-    assert_eq!(runtime.chrome, prebuilt.chrome);
+    let direct = data(&test_bundle());
+    assert_eq!(runtime.size, direct.size);
+    assert_eq!(runtime.pixels, direct.pixels);
+    assert_eq!(runtime.fonts, direct.fonts);
+    assert_eq!(runtime.glyphs, direct.glyphs);
+    assert_eq!(runtime.icons, direct.icons);
+    assert_eq!(runtime.names, direct.names);
+    assert_eq!(runtime.metrics, direct.metrics);
+    assert_eq!(runtime.chrome, direct.chrome);
     for (a, b) in [
-        (&runtime.surfaces, &prebuilt.surfaces),
-        (&runtime.controls, &prebuilt.controls),
-        (&runtime.menus, &prebuilt.menus),
-        (&runtime.window_chrome, &prebuilt.window_chrome),
+        (&runtime.surfaces, &direct.surfaces),
+        (&runtime.controls, &direct.controls),
+        (&runtime.menus, &direct.menus),
+        (&runtime.window_chrome, &direct.window_chrome),
     ] {
         assert_eq!(a.len(), b.len());
         for (a, b) in a.iter().zip(b.iter()) {
@@ -105,7 +105,7 @@ fn runtime_builder_matches_prebuilt_pixels_metrics_and_resolved_visuals() {
 #[test]
 fn failed_edit_can_retry_and_failed_finish_is_terminal() {
     let loader: ComPtr<IAssetLoaderAbi> = AssetLoader::from_value(AssetLoader::default()).query().unwrap();
-    let config = microui_redux_demo_assets::atlas_config();
+    let config = crate::test_recipe::atlas_config();
     let white = NativePath::new(&config.white_icon);
     assert_eq!(
         loader.create_builder(Size { width: i32::MAX, height: 5 }, white.as_interface()).unwrap_err(),
@@ -145,11 +145,11 @@ fn failed_edit_can_retry_and_failed_finish_is_terminal() {
 /// Repacking into a larger atlas retains exact application resource identities at the receiving UI.
 #[test]
 fn derived_builder_preserves_catalog_and_can_add_private_resources() {
-    let base = microui_redux_demo_assets::load_bundle().unwrap();
+    let base = test_bundle();
     let imported = ImportedAssets::read(base.as_com_ref(), None).unwrap();
     let loader: ComPtr<IAssetLoaderAbi> = AssetLoader::from_value(AssetLoader::default()).query().unwrap();
     let builder = loader.derive_builder(Size { width: 1024, height: 512 }, base.as_com_ref()).unwrap();
-    let config = microui_redux_demo_assets::atlas_config();
+    let config = crate::test_recipe::atlas_config();
     builder
         .add_icon(
             NcCopyFromBufferOffset::new(0, b"theme-private"),
@@ -163,11 +163,11 @@ fn derived_builder_preserves_catalog_and_can_add_private_resources() {
     assert!(changed.original().icon_id("theme-private").is_none());
 }
 
-/// Actual bundled JSON/PNG/font themes cross the same bulk boundary as prebuilt data.
+/// Actual bundled JSON/PNG/font themes cross the same bulk boundary as direct data.
 #[cfg(feature = "theme-json")]
 #[test]
 fn bundled_json_themes_preserve_original_resources_and_surface_diagnostics() {
-    let base = microui_redux_demo_assets::load_bundle().unwrap();
+    let base = test_bundle();
     let imported = ImportedAssets::read(base.as_com_ref(), None).unwrap();
     let loader: ComPtr<IThemeLoaderAbi> = ThemeLoader::from_value(ThemeLoader::default()).query().unwrap();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -182,4 +182,10 @@ fn bundled_json_themes_preserve_original_resources_and_surface_diagnostics() {
     assert_eq!(loader.load_theme(missing.as_interface(), base.as_com_ref()).unwrap_err(), NC_E_INVALID_ARG);
     let detail = loader.query::<IAssetDiagnosticsAbi>().unwrap().diagnostic().unwrap().to_string().unwrap();
     assert!(detail.contains("missing-theme.json"));
+}
+
+/// Constructs one standalone catalog without importing application deployment machinery.
+fn test_bundle() -> ComPtr<IAssetBundleAbi> {
+    // Each invocation owns a distinct catalog so revision authentication tests remain meaningful.
+    Builder::from_config(&crate::test_recipe::atlas_config()).unwrap().build().unwrap().into_bundle().unwrap()
 }

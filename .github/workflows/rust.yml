@@ -12,18 +12,23 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # UI implementation features belong here; the public facade has no builder/renderer switches.
+  # The UI consumes resolved resources; optional construction features belong to assets.
   ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: cargo test -p microui-ui
+      - run: cargo test -p microui-redux -p microui-contracts
+
+  assets:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        features: ["", "builder", "png_source", "theme-json", "save-to-rust"]
+        features: ["", "builder", "theme-json", "save-to-rust"]
     steps:
       - uses: actions/checkout@v6
-      - run: cargo test -p microui-ui --no-default-features --features '${{ matrix.features }}'
-      - run: cargo test -p microui-redux -p microui-contracts
-      - run: cargo test -p microui-plugin-assets --features theme-json --lib
+      - run: cargo test -p microui-plugin-assets --no-default-features --features '${{ matrix.features }}' --lib
 
   com:
     runs-on: ubuntu-latest

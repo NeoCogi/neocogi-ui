@@ -34,8 +34,6 @@ mod appearance;
 mod bundle;
 mod catalog;
 mod icons;
-#[cfg(feature = "theme-json")]
-pub(crate) mod loader;
 mod palette;
 mod resources;
 mod skin;
@@ -45,8 +43,6 @@ pub use appearance::Visual;
 pub use bundle::{SkinBundle, SkinInstallError};
 pub use crate::render::{Color, color};
 pub use icons::{IconRef, IconRole};
-#[cfg(feature = "theme-json")]
-pub use loader::{LoadedTheme, THEME_SCHEMA_VERSION, ThemeLoadError};
 pub use palette::FlatPalette;
 pub use resources::ResourceCatalog;
 pub use microui_contracts::appearance::{ChromeRole, ChromeState, ControlRole, ControlState, FrameRole, MenuRole, MenuState, PointerState, SurfaceRole, SurfaceState};

@@ -9,18 +9,16 @@ repository.workspace = true
 
 [features]
 default = []
-# The recipe is exposed only to construction tools and asset-provider tests.
-builder = ["dep:microui-ui", "microui-ui/builder"]
 # Additional themes, photo and mesh are exclusive to the full demo.
 full-demo = []
 # Explicit opt-in for self-contained resources, including browser deployments.
-embed-assets = ["microui-redux/compiled-assets"]
+embed-assets = ["microui-redux/compiled-assets", "dep:microui-plugin-assets"]
 
 [dependencies]
-microui-ui = { workspace = true, optional = true }
 microui-redux.workspace = true
 nc-com = { workspace = true, features = ["runtime"] }
 
 # Cargo builds these APIs for the host even when the demo target is WebAssembly.
 [build-dependencies]
-microui-ui = { workspace = true, features = ["builder", "save-to-rust", "png_source", "theme-json"] }
+microui-redux.workspace = true
+microui-plugin-assets = { workspace = true, optional = true, features = ["builder", "save-to-rust", "theme-json"] }

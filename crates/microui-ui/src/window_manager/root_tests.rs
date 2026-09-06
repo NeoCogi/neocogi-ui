@@ -94,7 +94,7 @@ fn extreme_metric_atlas() -> AtlasHandle {
         pixels: &pixels,
         icons: &icons,
         fonts: &fonts,
-        format: crate::SourceFormat::Raw,
+
     };
 
     AtlasHandle::try_from(&source).expect("maximal representable font metrics must form a valid atlas")

@@ -190,19 +190,6 @@ pub(super) fn checked_atlas_dimensions(width: usize, height: usize) -> Result<Ch
 }
 
 impl AtlasCandidate {
-    /// Creates a blank candidate for the incremental builder after validating allocation sizes.
-    #[cfg(feature = "builder")]
-    pub(super) fn blank(width: usize, height: usize) -> Result<Self, AtlasError> {
-        let dimensions = checked_atlas_dimensions(width, height)?;
-        // Allocate only after dimensions and byte counts pass all representability checks.
-        let pixels = vec![Color4b::default(); dimensions.pixel_count];
-        Ok(Self {
-            dimensions,
-            pixels,
-            fonts: Vec::new(),
-            icons: Vec::new(),
-        })
-    }
 
     /// Creates a source-backed candidate while preserving all metadata until validation.
     pub(super) fn from_decoded(
@@ -435,7 +422,7 @@ mod tests {
             pixels,
             icons,
             fonts,
-            format: SourceFormat::Raw,
+
         }
     }
 
@@ -544,29 +531,6 @@ mod tests {
         ));
     }
 
-    /// Verifies the blank builder candidate applies the same budget before allocating its pixels.
-    #[cfg(feature = "builder")]
-    #[test]
-    fn blank_candidate_shares_the_decoded_image_storage_budget() {
-        let error = match AtlasCandidate::blank(4096, 4097) {
-            Ok(_) => panic!("an oversized blank atlas unexpectedly allocated"),
-            Err(error) => error,
-        };
-
-        assert!(matches!(
-            error,
-            AtlasError::Image {
-                source: ImageError::Storage {
-                    source: ImageStorageError::TooLarge {
-                        width: 4096,
-                        height: 4097,
-                        required_bytes: 67_125_248,
-                        maximum_bytes: crate::image::MAX_DECODED_RGBA_BYTES,
-                    },
-                },
-            }
-        ));
-    }
 
     /// Verifies raw RGBA input rejects both truncation and ignored trailing bytes.
     #[test]
@@ -864,123 +828,9 @@ mod tests {
         assert_eq!(atlas.clone_icon_table().len(), icons.len());
     }
 
-    /// Encodes a compact RGBA PNG for checked atlas-header tests.
-    #[cfg(feature = "png_source")]
-    fn encode_rgba_png(width: u32, height: u32, pixels: &[u8]) -> Vec<u8> {
-        // The encoder is scoped so its mutable borrow ends before the owned byte vector is returned.
-        let mut encoded = Vec::new();
-        {
-            let mut encoder = png::Encoder::new(&mut encoded, width, height);
-            encoder.set_color(png::ColorType::Rgba);
-            encoder.set_depth(png::BitDepth::Eight);
-            let mut writer = encoder.write_header().expect("test PNG header must encode");
-            writer.write_image_data(pixels).expect("test PNG pixels must encode");
-        }
-        encoded
-    }
 
-    /// Encodes one animated PNG frame so static-atlas rejection is exercised with valid bytes.
-    #[cfg(feature = "png_source")]
-    fn encode_rgba_apng(width: u32, height: u32, pixels: &[u8]) -> Vec<u8> {
-        let mut encoded = Vec::new();
-        {
-            let mut encoder = png::Encoder::new(&mut encoded, width, height);
-            encoder.set_color(png::ColorType::Rgba);
-            encoder.set_depth(png::BitDepth::Eight);
-            encoder.set_animated(1, 0).expect("test animation metadata must encode");
-            let mut writer = encoder.write_header().expect("test APNG header must encode");
-            writer.write_image_data(pixels).expect("test APNG frame must encode");
-        }
-        encoded
-    }
 
-    /// Verifies a valid static PNG reaches complete metadata validation and runtime finalization.
-    #[cfg(feature = "png_source")]
-    #[test]
-    fn valid_png_source_constructs_the_complete_atlas() {
-        let pixels = valid_pixels();
-        let encoded = encode_rgba_png(2, 2, &pixels);
-        let icons = valid_icons();
-        let entries = [('_', glyph(Recti::new(0, 1, 1, 1)))];
-        let fonts = [("body", valid_font(&entries))];
-        let source = AtlasSource {
-            width: 2,
-            height: 2,
-            pixels: &encoded,
-            icons: &icons,
-            fonts: &fonts,
-            format: SourceFormat::Png,
-        };
 
-        let atlas = AtlasHandle::try_from(&source).expect("valid static PNG bytes and metadata must finalize");
 
-        assert_eq!((atlas.width(), atlas.height()), (2, 2));
-        assert!(atlas.font_id("body").is_some());
-        assert!(atlas.icon_id("white").is_some());
-    }
 
-    /// Verifies malformed compressed bytes retain a concrete decoder source.
-    #[cfg(feature = "png_source")]
-    #[test]
-    fn malformed_png_returns_a_typed_decode_error() {
-        let source = AtlasSource {
-            width: 1,
-            height: 1,
-            pixels: &[],
-            icons: &[],
-            fonts: &[],
-            format: SourceFormat::Png,
-        };
-
-        assert!(matches!(construction_error(&source), AtlasError::Image { source: ImageError::Decode { .. } }));
-    }
-
-    /// Verifies APNG input is rejected by format rather than misread as a partial static texture.
-    #[cfg(feature = "png_source")]
-    #[test]
-    fn animated_png_is_rejected_with_its_own_typed_error() {
-        let encoded = encode_rgba_apng(1, 1, &[0xFF; 4]);
-        let source = AtlasSource {
-            width: 1,
-            height: 1,
-            pixels: &encoded,
-            icons: &[],
-            fonts: &[],
-            format: SourceFormat::Png,
-        };
-
-        assert!(matches!(
-            construction_error(&source),
-            AtlasError::Image {
-                source: ImageError::AnimatedPngUnsupported,
-            }
-        ));
-    }
-
-    /// Verifies PNG dimensions are compared at the header boundary before normalized allocation.
-    #[cfg(feature = "png_source")]
-    #[test]
-    fn png_header_dimensions_must_match_serialized_metadata() {
-        let encoded = encode_rgba_png(1, 1, &[0xFF; 4]);
-        let source = AtlasSource {
-            width: 2,
-            height: 1,
-            pixels: &encoded,
-            icons: &[],
-            fonts: &[],
-            format: SourceFormat::Png,
-        };
-
-        assert!(matches!(
-            construction_error(&source),
-            AtlasError::Image {
-                source: ImageError::DimensionMismatch {
-                    expected_width: 2,
-                    expected_height: 1,
-                    actual_width: 1,
-                    actual_height: 1,
-                },
-            }
-        ));
-    }
 }

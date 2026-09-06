@@ -36,7 +36,7 @@ use crate::render::{
     geometry::{SolidTriangle, SolidVertex},
 };
 use crate::test_support::{RecordedVertex, RenderEvent, recording_backend};
-use crate::{AtlasSource, AtlasUploadError, CharEntry, FontEntry, SourceFormat, color, color4b};
+use crate::{AtlasSource, AtlasUploadError, CharEntry, FontEntry, color, color4b};
 use std::{
     cell::{Cell, RefCell},
     collections::HashSet,
@@ -214,7 +214,7 @@ fn make_atlas() -> AtlasHandle {
         pixels: &pixels,
         icons: &icons,
         fonts: &fonts,
-        format: SourceFormat::Raw,
+
     })
     .expect("renderer fixture atlas must satisfy the complete atlas contract")
 }
@@ -249,7 +249,7 @@ fn make_extreme_metric_atlas() -> AtlasHandle {
         pixels: &pixels,
         icons: &icons,
         fonts: &fonts,
-        format: SourceFormat::Raw,
+
     })
     .expect("extreme but representable metrics must remain structurally valid")
 }

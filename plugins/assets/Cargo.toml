@@ -12,9 +12,12 @@ crate-type = ["rlib", "cdylib"]
 default = []
 builder = ["dep:fontdue"]
 theme-json = ["builder", "microui-contracts/theme-json", "dep:serde", "dep:serde_json"]
+save-to-rust = ["dep:tempfile", "dep:miniz_oxide"]
 dynamic-plugin = []
 
 [dependencies]
+tempfile = { workspace = true, optional = true }
+miniz_oxide = { workspace = true, optional = true, features = ["with-alloc"] }
 microui-contracts.workspace = true
 microui-redux.workspace = true
 serde = { workspace = true, optional = true }
@@ -24,5 +27,4 @@ fontdue = { workspace = true, optional = true }
 nc-com = { workspace = true, features = ["macros", "std"] }
 
 [dev-dependencies]
-microui-ui = { workspace = true, features = ["builder"] }
-microui-redux-demo-assets = { workspace = true, features = ["builder", "embed-assets"] }
+microui-ui.workspace = true

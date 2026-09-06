@@ -53,7 +53,7 @@
 //! One source of demo atlas names, paths, font sizes, and packing dimensions.
 
 use std::path::{Path, PathBuf};
-use super::{recipe_data as data, ui::atlas::builder};
+use super::{recipe_data as data, atlas as builder};
 
 /// Builds the shared recipe for Cargo generation, the exporter and provider equivalence tests.
 pub fn atlas_config() -> builder::Config {

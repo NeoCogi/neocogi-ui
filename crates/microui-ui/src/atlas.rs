@@ -191,13 +191,8 @@ mod validation;
 pub(crate) mod transfer;
 pub use validation::AtlasError;
 
-#[cfg(feature = "builder")]
-/// Helpers for constructing atlas textures at build time.
-pub mod builder;
 
 mod source;
-pub use source::{AtlasSource, FontEntry, SourceFormat};
+pub use source::{AtlasSource, FontEntry};
 
-#[cfg(feature = "save-to-rust")]
-mod export;
 mod runtime;

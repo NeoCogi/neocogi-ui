@@ -198,8 +198,11 @@ finish. Renderer upload details use `IRenderDiagnostics`.
 
 ## Compiled resources and packaging
 
-`SkinBundle::to_com_rust_files(path)` atomically writes one self-contained source
-file. `load_bundle()` creates a fresh catalog; `bundle_data()` supplies the same
+`microui_plugin_assets::export::write_rust(&data, path)` (feature `save-to-rust`)
+atomically writes one self-contained source
+file from validated `AssetData`. The UI crate has no builder, PNG, JSON or source
+export features. Cargo build scripts and command-line tools call the same asset
+compiler directly. `load_bundle()` creates a fresh catalog; `bundle_data()` supplies the same
 tables for `into_revision(base)` when exporting a compatible theme. Both functions
 return `Result`; use `bundle_data()?.into_revision(base)`. Generated code requires
 facade `compiled-assets`, borrows names/glyphs/font/icon records, expands compressed

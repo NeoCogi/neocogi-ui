@@ -97,10 +97,6 @@ mod guide_doctests {
     mod menus {}
     #[doc = include_str!("../docs/SKINNING.md")]
     mod skinning {}
-    // This guide's API is supplied entirely by the optional JSON theme loader.
-    #[cfg(feature = "theme-json")]
-    #[doc = include_str!("../docs/THEMES.md")]
-    mod themes {}
     #[doc = include_str!("../docs/TYPOGRAPHY.md")]
     mod typography {}
     #[doc = include_str!("../docs/WIDGETS.md")]
@@ -127,7 +123,7 @@ mod window_manager;
 /// Resource, geometry and backend imports for implementation crates.
 /// Applications and extension widgets use the microui-redux facade and canonical COM contracts.
 pub mod prelude {
-    pub use crate::atlas::{AtlasError, AtlasHandle, AtlasSource, CharEntry, FontEntry, FontId, IconId, SourceFormat};
+    pub use crate::atlas::{AtlasError, AtlasHandle, AtlasSource, CharEntry, FontEntry, FontId, IconId};
     pub use crate::image::{ImageError, ImageSource, ImageStorageError, MAX_DECODED_RGBA_BYTES, load_image_bytes};
     pub use crate::input::{Key, KeyEvent, KeyState, Modifiers, MouseButton};
     pub use crate::render::{
@@ -142,15 +138,13 @@ pub mod prelude {
         IconRole, MenuRole, MenuState, PointerState, ResourceCatalog, Skin, SkinBundle, SkinInstallError, SkinMetrics, SurfaceRole, SurfaceState,
         TitleBackdropSkin, Visual, WindowChromeSkin, WindowTitleAlignment, color,
     };
-    #[cfg(feature = "theme-json")]
-    pub use crate::theme::{LoadedTheme, THEME_SCHEMA_VERSION, ThemeLoadError};
     pub use rs_math3d::{
         Box3f, Color4b, CrossProduct, Dimension, Dimensioni, FloatVector, Mat4f, Quat, Quatf, Rect, Recti, Vec2f, Vec2i, Vec3f, Vec4f, Vector, Vector3,
         color4b, ortho4,
     };
 }
 
-pub use atlas::{AtlasError, AtlasHandle, AtlasSource, CharEntry, FontEntry, FontId, IconId, SourceFormat};
+pub use atlas::{AtlasError, AtlasHandle, AtlasSource, CharEntry, FontEntry, FontId, IconId};
 pub(crate) use context::{Context};
 #[cfg(test)]
 pub(crate) use test_support::ui::Ui;
@@ -168,8 +162,6 @@ pub use theme::{
     IconRole, MenuRole, MenuState, PointerState, ResourceCatalog, Skin, SkinBundle, SkinInstallError, SkinMetrics, SurfaceRole, SurfaceState,
     TitleBackdropSkin, Visual, WindowChromeSkin, WindowTitleAlignment, color,
 };
-#[cfg(feature = "theme-json")]
-pub use theme::{LoadedTheme, THEME_SCHEMA_VERSION, ThemeLoadError};
 pub(crate) use ui_node::{
     AvailableSpace, Change, ChildParticipation, Children, Constraints, ContainerLayoutCtx, ContainerWidget, Disclosure, Grid, GridSpan, KeyboardAction,
     KeyboardBehavior, LeafWidget, Linear, LinearCrossSize, LinearDirection, MeasureCtx, Node, ScrollArea, Scrollbar, ScrollbarAxis, ScrollbarChanged,

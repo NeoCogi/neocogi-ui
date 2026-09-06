@@ -36,7 +36,7 @@ use microui_ui::{ImageError, ImageSource, ImageStorageError, load_image_bytes};
 fn image_errors_are_matchable_through_the_public_root_api() {
     // Empty pixel storage keeps the regression allocation-free. Dimension policy runs before raw
     // byte-length validation, so the nested storage variant must still win.
-    let error: ImageError = load_image_bytes(ImageSource::Raw { width: 4096, height: 4097, pixels: &[] })
+    let error: ImageError = load_image_bytes(ImageSource { width: 4096, height: 4097, pixels: &[] })
         .expect_err("the public loader must reject an image beyond its allocation policy");
 
     assert!(matches!(

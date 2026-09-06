@@ -57,3 +57,16 @@ nc_com::export_plugin!();
 /// Optional JSON authoring compiler producing ordinary portable resource tables.
 #[cfg(feature = "theme-json")]
 pub mod theme;
+
+/// Optional atomic Rust source generation for already resolved resource tables.
+#[cfg(feature = "save-to-rust")]
+pub mod export;
+
+/// Test inputs share the demo's names and file paths without its runtime loader dependency.
+#[cfg(all(test, feature = "builder"))]
+#[path = "../../../demos/demo-assets/src/recipe_data.rs"]
+mod recipe_data;
+/// The same recipe exercises both direct and COM construction in asset tests.
+#[cfg(all(test, feature = "builder"))]
+#[path = "../../../demos/demo-assets/src/recipe.rs"]
+mod test_recipe;

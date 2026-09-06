@@ -115,7 +115,7 @@ fn context_with_state<State: 'static>() -> Context<TestBackend, State> {
         pixels: &pixels,
         icons: &icons,
         fonts: &fonts,
-        format: SourceFormat::Raw,
+
     };
     // Context infers the application state type from this helper's return value. Loading remains
     // explicit and fallible so this downstream fixture exercises the same validated public API an

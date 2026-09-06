@@ -383,7 +383,7 @@ mod tests {
     /// A partially planned font must not consume atlas space or alter any live pixels.
     #[test]
     fn failed_font_reservation_leaves_pixels_and_packing_unchanged() {
-        let recipe = microui_redux_demo_assets::atlas_config();
+        let recipe = crate::test_recipe::atlas_config();
         let mut attempted = Builder::new(64, 64).unwrap();
         let mut original = Builder::new(64, 64).unwrap();
         attempted.add_icon_named("white", &recipe.white_icon).unwrap();

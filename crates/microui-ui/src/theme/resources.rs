@@ -100,14 +100,6 @@ impl ResourceCatalog {
         Ok(())
     }
 
-    /// Borrows the pristine source atlas for internal deterministic theme derivation.
-    #[cfg(feature = "theme-json")]
-    #[cfg(test)]
-    pub(crate) fn atlas(&self) -> &AtlasHandle {
-        // Restrict the pristine atlas to theme derivation so application code cannot bypass the
-        // active bundle merely because copied logical resource IDs remain valid in both atlases.
-        &self.atlas
-    }
 }
 
 #[cfg(test)]
@@ -131,23 +123,4 @@ mod tests {
         assert!(catalog.icon_ref("missing-icon").is_none());
     }
 
-    /// Verifies exact retained references survive repacking without returning to their names.
-    #[cfg(feature = "builder")]
-    #[test]
-    fn exact_references_resolve_in_an_atlas_derived_from_the_catalog() {
-        let source = crate::test_support::test_atlas();
-        let catalog = ResourceCatalog::new(source.clone());
-        let body = catalog.font_ref("body").expect("source catalog must contain body");
-        let close = catalog.icon_ref("close").expect("source catalog must contain close");
-        let derived = crate::atlas::builder::Builder::from_atlas_with_size(&source, 64, 64)
-            .expect("fixture resources must fit while repacking")
-            .build()
-            .expect("derived fixture atlas must validate");
-        let skin = crate::Skin::from_atlas(&derived);
-
-        // Resolution checks only stable typed membership. The retained references contain no
-        // spelling that could trigger another name-table scan.
-        assert_eq!(body.resolve(&skin, &derived), derived.font_id("body").unwrap());
-        assert_eq!(close.resolve(&skin, &derived), derived.icon_id("close").unwrap());
-    }
 }

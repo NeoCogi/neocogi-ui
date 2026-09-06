@@ -41,26 +41,6 @@ fn clamp_text_coordinate(value: i128) -> i32 {
 }
 
 impl AtlasHandle {
-    /// Encodes this immutable atlas texture as one static RGBA PNG payload.
-    ///
-    /// # Errors
-    ///
-    /// Returns the concrete encoder I/O failure if the in-memory PNG stream cannot be completed.
-    #[cfg(any(feature = "builder", feature = "png_source"))]
-    pub fn png_image_bytes(&self) -> std::io::Result<Vec<u8>> {
-        // Encode directly into the returned vector. The scoped writer releases its mutable borrow
-        // before return, avoiding the former cursor seek and second full-payload copy.
-        let mut bytes = Vec::new();
-        let pixels = self.0.pixels.iter().flat_map(|pixel| [pixel.x, pixel.y, pixel.z, pixel.w]).collect::<Vec<_>>();
-        {
-            let mut encoder = png::Encoder::new(&mut bytes, self.width() as u32, self.height() as u32);
-            encoder.set_color(png::ColorType::Rgba);
-            encoder.set_depth(png::BitDepth::Eight);
-            let mut writer = encoder.write_header()?;
-            writer.write_image_data(&pixels)?;
-        }
-        Ok(bytes)
-    }
 
     /// Reports whether two handles reference the same immutable atlas allocation.
     pub(crate) fn ptr_eq(&self, other: &Self) -> bool {
@@ -317,7 +297,7 @@ impl AtlasHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{AtlasSource, FontEntry, SourceFormat};
+    use crate::{AtlasSource, FontEntry};
 
     /// Rehydrates one minimal valid atlas so each call creates a distinct ownership domain.
     fn make_atlas() -> AtlasHandle {
@@ -347,7 +327,7 @@ mod tests {
             pixels: &pixels,
             icons: &icons,
             fonts: &fonts,
-            format: SourceFormat::Raw,
+
         })
         .expect("runtime fixture atlas must pass structural validation")
     }
@@ -458,7 +438,7 @@ mod tests {
             pixels: &pixels,
             icons: &icons,
             fonts: &fonts,
-            format: SourceFormat::Raw,
+
         })
         .expect("extreme but representable text metrics must validate");
         let font = atlas.font_id("body").unwrap();

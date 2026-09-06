@@ -250,4 +250,40 @@ mod tests {
         assert_eq!(calls.get(), 2);
         assert_eq!(failure.to_string().unwrap(), message);
     }
+    /// Computes the CRC-32 checksum used by PNG chunks without adding a test-only dependency.
+    fn png_crc32(bytes: &[u8]) -> u32 {
+        // PNG uses the reflected IEEE polynomial. Applying its eight bit steps explicitly keeps the
+        // malicious-header fixture local and avoids involving the image decoder in fixture creation.
+        let mut crc = !0_u32;
+        for byte in bytes {
+            crc ^= u32::from(*byte);
+            for _ in 0..8 {
+                let low_bit_mask = (crc & 1).wrapping_neg();
+                crc = (crc >> 1) ^ (0xEDB8_8320 & low_bit_mask);
+            }
+        }
+        !crc
+    }
+
+    /// Rewrites a PNG fixture's IHDR extent and repairs that chunk's checksum.
+    fn rewrite_png_dimensions(bytes: &mut [u8], width: u32, height: u32) {
+        // Every PNG begins with an eight-byte signature followed by the fixed 13-byte IHDR chunk. The
+        // encoded fixture therefore has stable offsets for width, height, and the four-byte checksum.
+        assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n");
+        assert_eq!(&bytes[12..16], b"IHDR");
+        bytes[16..20].copy_from_slice(&width.to_be_bytes());
+        bytes[20..24].copy_from_slice(&height.to_be_bytes());
+        let checksum = png_crc32(&bytes[12..29]);
+        bytes[29..33].copy_from_slice(&checksum.to_be_bytes());
+    }
+
+    /// Rejects an oversized, checksummed IHDR before decompressing the tiny frame payload.
+    #[test]
+    fn oversized_header_is_rejected_before_frame_allocation() {
+        let mut bytes = encoded(::png::ColorType::Rgba, &[1, 2, 3, 255], false);
+        rewrite_png_dimensions(&mut bytes, 4096, 4097);
+        // The diagnostic must come from the allocation bound, not the mismatched IDAT payload.
+        let error = RgbaImage::decode(&bytes).unwrap_err();
+        assert!(error.to_string().contains("exceeds 64 MiB"), "{error}");
+    }
 }
