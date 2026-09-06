@@ -466,7 +466,7 @@ fn create() -> Result<(Host, EventSession<State>), HostError> {
     )?;
     let ui = &host.ui;
     let grid = Rc::new(RefCell::new(GridState::default()));
-    let grid_widget = ui.widgets().leaf(GridWidget { data: grid.clone() }, WidgetOptions::NONE)?;
+    let grid_widget = ui.widgets().leaf(GridWidget::new(grid.clone()), WidgetOptions::NONE)?;
     let desktop = ui.window("X-Y Grid Surface", rect(0, 0, 1200, 800), &grid_widget)?;
     desktop.set_layer(0)?;
     desktop.set_child_clip(ChildClip::CONTENT)?;

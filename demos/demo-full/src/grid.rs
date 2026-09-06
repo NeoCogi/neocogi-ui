@@ -87,7 +87,15 @@ impl Default for GridState {
 /// One local COM leaf owns an explicit shared application model.
 pub(super) struct GridWidget {
     /// Menus reset this same camera, avoiding a rendering-state mirror.
-    pub(super) data: Rc<RefCell<GridState>>,
+    data: Rc<RefCell<GridState>>,
+    /// Paint-only workspace is detached before a foreign call and restored even on a returned error.
+    vertices: std::cell::Cell<Vec<ColoredVertex>>,
+}
+impl GridWidget {
+    /// Binds the shared camera model and starts one reusable geometry buffer for this leaf.
+    pub(super) fn new(data: Rc<RefCell<GridState>>) -> Self {
+        Self { data, vertices: std::cell::Cell::new(Vec::new()) }
+    }
 }
 impl LeafContent for GridWidget {
     /// Pointer focus supports orbit capture but has no discrete keyboard action.
@@ -117,17 +125,19 @@ impl LeafContent for GridWidget {
         }
         Ok(GeometryChange::NO_CHANGE)
     }
-    /// Builds owned geometry before making the foreign painter call.
+    /// Reuses owned geometry without holding model or cache borrows across painter calls.
     fn paint(&self, state: WidgetPaint, painter: &Painter<'_>) -> Result<(), NcStatus> {
-        let (vertices, background) = {
+        let (pvm, minor_lines, background) = {
             let grid = self.data.borrow();
-            (
-                build_xy_grid_vertices(local_rect(state.rect), grid.minor_lines, grid.view.pvm()),
-                grid.background,
-            )
+            (grid.view.pvm(), grid.minor_lines, grid.background)
         };
         painter.fill(state.rect, background)?;
-        painter.colored_triangles(&vertices)
+        // Own the workspace during the COM call; no cache or application-model borrow crosses it.
+        let mut vertices = self.vertices.take();
+        write_xy_grid_vertices(local_rect(state.rect), minor_lines, pvm, &mut vertices);
+        let result = painter.colored_triangles(&vertices);
+        self.vertices.set(vertices);
+        result
     }
 }
 
@@ -275,14 +285,14 @@ fn clip_plane_distances(point: Vec4f) -> [f32; 6] {
     ]
 }
 
-/// Builds a perspective X-Y ground grid for the dedicated fullscreen background window.
-fn build_xy_grid_vertices(area: Recti, show_minor_lines: bool, pvm: Mat4f) -> Vec<ColoredVertex> {
+/// Replaces the perspective grid geometry while retaining the caller's allocation, including empty viewports.
+fn write_xy_grid_vertices(area: Recti, show_minor_lines: bool, pvm: Mat4f, vertices: &mut Vec<ColoredVertex>) {
+    vertices.clear();
     if area.width <= 0 || area.height <= 0 {
-        return Vec::new();
+        return;
     }
 
     let projection = GridProjection::new(area, pvm);
-    let mut vertices = Vec::with_capacity((GRID_HALF_EXTENT as usize * 4 + 2) * 6);
 
     // Draw non-axis lines first so the red X and green Y axes remain visually authoritative at the
     // origin. Major divisions survive when the menu disables the denser unit-spaced lines.
@@ -302,14 +312,14 @@ fn build_xy_grid_vertices(area: Recti, show_minor_lines: bool, pvm: Mat4f) -> Ve
             (1.0, color(48, 58, 76, 180))
         };
         projection.push_line(
-            &mut vertices,
+            vertices,
             Vec3f::new(coordinate, -extent, 0.0),
             Vec3f::new(coordinate, extent, 0.0),
             width,
             line_color,
         );
         projection.push_line(
-            &mut vertices,
+            vertices,
             Vec3f::new(-extent, coordinate, 0.0),
             Vec3f::new(extent, coordinate, 0.0),
             width,
@@ -321,25 +331,31 @@ fn build_xy_grid_vertices(area: Recti, show_minor_lines: bool, pvm: Mat4f) -> Ve
     // the non-interactive rendering surface.
     let extent = GRID_HALF_EXTENT as f32;
     projection.push_line(
-        &mut vertices,
+        vertices,
         Vec3f::new(-extent, 0.0, 0.0),
         Vec3f::new(extent, 0.0, 0.0),
         2.5,
         color(220, 72, 72, 255),
     );
     projection.push_line(
-        &mut vertices,
+        vertices,
         Vec3f::new(0.0, -extent, 0.0),
         Vec3f::new(0.0, extent, 0.0),
         2.5,
         color(72, 205, 112, 255),
     );
-    vertices
 }
 
 #[cfg(test)]
 mod grid_tests {
     use super::*;
+
+    /// Independent output vectors keep geometry comparisons readable while production reuses its buffer.
+    fn build_xy_grid_vertices(area: Recti, show_minor_lines: bool, pvm: Mat4f) -> Vec<ColoredVertex> {
+        let mut vertices = Vec::new();
+        write_xy_grid_vertices(area, show_minor_lines, pvm, &mut vertices);
+        vertices
+    }
 
     /// Produces the same aspect-correct initial PVM used by the live fullscreen widget.
     fn initial_grid_pvm(area: Recti) -> Mat4f {
@@ -376,6 +392,11 @@ mod grid_tests {
     fn empty_grid_viewport_emits_no_custom_geometry() {
         assert!(build_xy_grid_vertices(rect(0, 0, 0, 600), true, Mat4f::identity()).is_empty());
         assert!(build_xy_grid_vertices(rect(0, 0, 800, 0), true, Mat4f::identity()).is_empty());
+        // An empty repaint must erase the previous frame, not replay retained stale geometry.
+        let mut vertices = build_xy_grid_vertices(rect(0, 0, 800, 600), true, initial_grid_pvm(rect(0, 0, 800, 600)));
+        assert!(!vertices.is_empty());
+        write_xy_grid_vertices(rect(0, 0, 0, 0), true, Mat4f::identity(), &mut vertices);
+        assert!(vertices.is_empty());
     }
 
     #[test]

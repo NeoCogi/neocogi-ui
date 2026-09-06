@@ -31,18 +31,18 @@ enum Drawing {
     Fill(Rect, u32),
     /// Finite endpoints, nonnegative width and packed RGBA for UI-owned line tessellation.
     Line(PaintPoint, PaintPoint, f32, u32),
-    /// Owned finite polygon boundary uses the existing shared UI triangulation algorithm.
-    Polygon(Vec<crate::Vec2f>, u32),
+    /// Range of finite points in the invocation buffer, triangulated by the shared UI algorithm.
+    Polygon(core::ops::Range<usize>, u32),
     /// Complete validated triangles in this invocation's shared owned vertex buffer.
     Triangles(core::ops::Range<usize>),
     /// Solid vertices retain their material meaning until the UI executor resolves the current atlas.
-    ColoredTriangles(Vec<ColoredVertex>),
+    ColoredTriangles(core::ops::Range<usize>),
     /// Texture capability retained until the prepared frame has finished or been abandoned.
     Texture(Rect, TextureRegion, u32, ComPtr<ITextureAbi>),
     /// Application GPU work retains its precise position among ordinary primitives.
     Item(Rect, ComPtr<IRenderItemAbi>),
-    /// Owned UTF-8 text and its local allocation.
-    Text(Rect, String),
+    /// UTF-8 byte range in the invocation text buffer and its local allocation.
+    Text(Rect, core::ops::Range<usize>),
 }
 
 /// Each operation owns its clip by value; later nested drawing cannot mutate earlier commands.
@@ -53,19 +53,28 @@ struct Command {
     drawing: Drawing,
 }
 
-/// Invocation-owned command and atlas storage; both allocations survive the next widget's recording.
+/// Invocation-owned command storage retains each typed buffer across widget calls and frames.
 #[derive(Default)]
 struct Commands {
     /// Ordered operations retain their own clips and foreign resource capabilities.
     operations: Vec<Command>,
     /// Range-addressed atlas vertices avoid allocating a separate vector for each widget batch.
     vertices: Vec<RenderVertex>,
+    /// Polygon boundaries share one buffer; operations keep disjoint ranges until replay completes.
+    points: Vec<crate::Vec2f>,
+    /// Solid material stays explicit until replay resolves the installed atlas's white tile.
+    colored_vertices: Vec<ColoredVertex>,
+    /// Complete UTF-8 runs share one allocation; range endpoints always lie on character boundaries.
+    text: String,
 }
 impl Commands {
-    /// Releases capabilities outside any recording borrow while retaining both buffers' capacity.
+    /// Releases capabilities outside any recording borrow while retaining all buffer capacities.
     fn clear(&mut self) {
         self.operations.clear();
         self.vertices.clear();
+        self.points.clear();
+        self.colored_vertices.clear();
+        self.text.clear();
     }
 }
 
@@ -128,8 +137,12 @@ impl IPainter for Recorder {
         if input.offset() != 0 || input.as_slice().iter().any(|p| !p.x.is_finite() || !p.y.is_finite()) {
             return Err(NC_E_INVALID_ARG);
         }
-        let points = input.as_slice().iter().map(|p| crate::Vec2f::new(p.x, p.y)).collect();
-        self.push(scope, Drawing::Polygon(points, rgba))
+        let mut commands = self.recording.commands.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
+        let first = commands.points.len();
+        commands.points.extend(input.as_slice().iter().map(|p| crate::Vec2f::new(p.x, p.y)));
+        let end = commands.points.len();
+        commands.operations.push(Command { clip: scope.clip, drawing: Drawing::Polygon(first..end, rgba) });
+        Ok(())
     }
 
     /// Validates a complete solid batch before recording; invalid or expired calls publish nothing.
@@ -139,7 +152,12 @@ impl IPainter for Recorder {
         if input.offset() != 0 || !vertices.len().is_multiple_of(3) || vertices.iter().any(|v| !v.x.is_finite() || !v.y.is_finite()) {
             return Err(NC_E_INVALID_ARG);
         }
-        self.push(scope, Drawing::ColoredTriangles(vertices.to_vec()))
+        let mut commands = self.recording.commands.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
+        let first = commands.colored_vertices.len();
+        commands.colored_vertices.extend_from_slice(vertices);
+        let end = commands.colored_vertices.len();
+        commands.operations.push(Command { clip: scope.clip, drawing: Drawing::ColoredTriangles(first..end) });
+        Ok(())
     }
 
     /// Retains the resource outside the command borrow; validation at submission authenticates its owner.
@@ -194,8 +212,13 @@ impl IPainter for Recorder {
         if rect.width < 0 || rect.height < 0 {
             return Err(NC_E_INVALID_ARG);
         }
-        let label = text(input)?.to_owned();
-        self.push(scope, Drawing::Text(rect, label))
+        let label = text(input)?;
+        let mut commands = self.recording.commands.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
+        let first = commands.text.len();
+        commands.text.push_str(label);
+        let end = commands.text.len();
+        commands.operations.push(Command { clip: scope.clip, drawing: Drawing::Text(rect, first..end) });
+        Ok(())
     }
 }
 
@@ -268,21 +291,21 @@ impl PaintService {
                     width,
                     super::render::color(rgba),
                 ),
-                Drawing::Polygon(points, rgba) => ctx.painter().fill_polygon(&points, super::render::color(rgba)),
+                Drawing::Polygon(points, rgba) => ctx.painter().fill_polygon(&commands.points[points], super::render::color(rgba)),
                 Drawing::Texture(rect, source, rgba, texture) => {
                     ctx.painter().com_texture_region(local_rect(rect), source, super::render::color(rgba), texture)
                 }
                 Drawing::Item(rect, item) => ctx.painter().com_item(local_rect(rect), item),
-                Drawing::ColoredTriangles(vertices) => ctx.painter().colored_triangles(&vertices),
+                Drawing::ColoredTriangles(vertices) => ctx.painter().colored_triangles(&commands.colored_vertices[vertices]),
                 Drawing::Triangles(vertices) => ctx.painter().atlas_triangles(&commands.vertices[vertices]),
                 Drawing::Fill(rect, rgba) => ctx.painter().fill_rect(local_rect(rect), super::render::color(rgba)),
                 Drawing::Text(rect, label) => {
                     let font = ctx.skin().resolve_font_role(ctx.atlas(), FontRole::Body);
-                    ctx.draw_control_text_with_font(font, &label, local_rect(rect), ControlRole::Button, WidgetOption::NONE);
+                    ctx.draw_control_text_with_font(font, &commands.text[label], local_rect(rect), ControlRole::Button, WidgetOption::NONE);
                 }
             }
         }
-        commands.vertices.clear();
+        commands.clear();
         *self.recording.commands.borrow_mut() = commands;
         Ok(())
     }
