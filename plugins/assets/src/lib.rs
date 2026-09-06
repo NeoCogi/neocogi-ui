@@ -53,3 +53,7 @@ nc_com::plugin! {
 }
 #[cfg(feature = "dynamic-plugin")]
 nc_com::export_plugin!();
+
+/// Optional JSON authoring compiler producing ordinary portable resource tables.
+#[cfg(feature = "theme-json")]
+pub mod theme;

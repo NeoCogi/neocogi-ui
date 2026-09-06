@@ -511,6 +511,13 @@ pub trait IPopup {
 /// Plain color values also used by renderer and optional JSON authoring code.
 mod color;
 pub use color::{Color, color};
-/// Named flat-palette authoring values; the UI owns their resolved appearance compiler.
+/// Named flat-palette authoring values; the asset plugin owns their resolved appearance compiler.
 pub mod palette;
 pub use palette::FlatPalette;
+
+/// Semantic names shared by asset recipes and runtime resource resolution.
+mod resource_roles;
+pub use resource_roles::{FontRole, IconRole};
+/// Plain layout and window geometry used by theme authoring and resolved skins.
+mod skin;
+pub use skin::{CaptionButtonSide, CaptionButtonsSkin, SkinMetrics, TitleBackdropSkin, WindowChromeSkin, WindowTitleAlignment};

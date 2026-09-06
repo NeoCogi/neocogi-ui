@@ -34,75 +34,8 @@ use crate::atlas::{AtlasHandle, IconId};
 
 use super::Skin;
 
-/// Semantic icon roles required by built-in components.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub enum IconRole {
-    /// Window and dialog close affordance.
-    Close,
-    /// Collapsed disclosure affordance.
-    Expand,
-    /// Expanded disclosure affordance.
-    Collapse,
-    /// Checked checkbox and menu-item mark.
-    Check,
-    /// Combo-box dropdown affordance.
-    ExpandDown,
-    /// Open-folder file-dialog item.
-    OpenFolder,
-    /// Closed-folder file-dialog item.
-    ClosedFolder,
-    /// Regular file-dialog item.
-    File,
-}
-
-impl IconRole {
-    /// Every semantic icon role in declaration order.
-    pub const ALL: [Self; 8] = [
-        Self::Close,
-        Self::Expand,
-        Self::Collapse,
-        Self::Check,
-        Self::ExpandDown,
-        Self::OpenFolder,
-        Self::ClosedFolder,
-        Self::File,
-    ];
-
-    /// Number of semantic icon roles stored by a complete skin.
-    pub const COUNT: usize = Self::ALL.len();
-
-    /// Returns this role's position in the skin's resolved icon table.
-    pub(crate) const fn index(self) -> usize {
-        // Exhaustive positions prevent declaration-order casts from silently changing persisted
-        // meaning if the enum is later reorganized for readability.
-        match self {
-            Self::Close => 0,
-            Self::Expand => 1,
-            Self::Collapse => 2,
-            Self::Check => 3,
-            Self::ExpandDown => 4,
-            Self::OpenFolder => 5,
-            Self::ClosedFolder => 6,
-            Self::File => 7,
-        }
-    }
-
-    /// Returns the conventional atlas name for this semantic icon.
-    pub const fn atlas_name(self) -> &'static str {
-        // Exhaustive matching makes a newly added role choose its exact resource spelling before
-        // the crate compiles, avoiding parallel string lists in loaders and widgets.
-        match self {
-            Self::Close => "close",
-            Self::Expand => "expand",
-            Self::Collapse => "collapse",
-            Self::Check => "check",
-            Self::ExpandDown => "expand_down",
-            Self::OpenFolder => "open_folder",
-            Self::ClosedFolder => "closed_folder",
-            Self::File => "file",
-        }
-    }
-}
+/// Shared semantic role; concrete atlas capabilities remain local to the UI.
+pub use microui_contracts::IconRole;
 
 /// Stable reference to an icon used by retained UI state.
 ///

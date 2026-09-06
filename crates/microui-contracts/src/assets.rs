@@ -117,6 +117,8 @@ pub struct AssetIcon {
 
 #[com_struct]
 #[derive(Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "theme-json", derive(serde::Deserialize))]
+#[cfg_attr(feature = "theme-json", serde(deny_unknown_fields))]
 /// Four nonnegative pixel insets used by resolved theme geometry.
 pub struct Insets {
     /// Leading horizontal thickness.
@@ -130,7 +132,9 @@ pub struct Insets {
 }
 
 #[com_struct]
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "theme-json", derive(serde::Deserialize))]
+#[cfg_attr(feature = "theme-json", serde(default, deny_unknown_fields))]
 /// Complete scalar layout recipe; installation rejects negative dimensions.
 pub struct AssetMetrics {
     /// Preferred width when a layout supplies none.
@@ -151,6 +155,80 @@ pub struct AssetMetrics {
     pub scrollbar_size: i32,
     /// Minimum scrollbar and slider thumb size.
     pub thumb_size: i32,
+}
+
+impl Insets {
+    /// Insets that leave the complete destination to the center cell.
+    pub const ZERO: Self = Self::uniform(0);
+
+    /// Creates four equal insets from one convenient scalar value.
+    pub const fn uniform(value: i32) -> Self {
+        // Store the caller's exact value. Geometry normalization is intentionally deferred so
+        // public skin mutation remains transparent and every consumer applies the same policy.
+        Self {
+            left: value,
+            top: value,
+            right: value,
+            bottom: value,
+        }
+    }
+
+    /// Creates independently configurable left, top, right, and bottom insets.
+    pub const fn new(left: i32, top: i32, right: i32, bottom: i32) -> Self {
+        // A plain constructor keeps theme deserialization and programmatic skin construction on
+        // the same concrete representation without introducing builder-only mirror types.
+        Self { left, top, right, bottom }
+    }
+
+    /// Returns an equivalent value whose four components are non-negative.
+    pub fn normalized(self) -> Self {
+        // Clamp once before either layout or painting arithmetic. This prevents the two paths from
+        // disagreeing when an application installs a skin containing a negative inset.
+        Self {
+            left: self.left.max(0),
+            top: self.top.max(0),
+            right: self.right.max(0),
+            bottom: self.bottom.max(0),
+        }
+    }
+
+    /// Returns the combined horizontal inset using saturating arithmetic.
+    pub fn horizontal_extent(self) -> i32 {
+        // Normalization makes both operands non-negative; saturation still protects the public i32
+        // style domain from overflowing while constraints are derived.
+        let insets = self.normalized();
+        insets.left.saturating_add(insets.right)
+    }
+
+    /// Returns the combined vertical inset using saturating arithmetic.
+    pub fn vertical_extent(self) -> i32 {
+        // Match horizontal extent policy so measurement cannot produce axis-dependent overflow
+        // behavior for otherwise equivalent theme values.
+        let insets = self.normalized();
+        insets.top.saturating_add(insets.bottom)
+    }
+
+    /// Returns the widest component for scalar effects such as a focus outline.
+    pub fn maximum_component(self) -> i32 {
+        // The maximum is derived after normalization because a negative style component contributes
+        // no visible or structural thickness anywhere else in the patch pipeline.
+        let insets = self.normalized();
+        insets.left.max(insets.top).max(insets.right).max(insets.bottom)
+    }
+
+    /// Raises every normalized component to at least `minimum`.
+    pub fn at_least(self, minimum: i32) -> Self {
+        // Active outlines use this to remain visible when an ordinary frame has zero thickness.
+        // Normalize both inputs so the helper cannot reintroduce negative patch geometry.
+        let insets = self.normalized();
+        let minimum = minimum.max(0);
+        Self {
+            left: insets.left.max(minimum),
+            top: insets.top.max(minimum),
+            right: insets.right.max(minimum),
+            bottom: insets.bottom.max(minimum),
+        }
+    }
 }
 
 com_int_enum! {

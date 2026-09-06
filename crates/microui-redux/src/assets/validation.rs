@@ -87,7 +87,7 @@ impl AssetData {
                 }
             }
         }
-        for name in ["white", "close", "expand", "collapse", "check", "expand_down", "open_folder", "closed_folder", "file"] {
+        for name in core::iter::once("white").chain(IconRole::ALL.map(IconRole::atlas_name)) {
             if !icon_names.contains(name) {
                 return Err(NC_E_INVALID_ARG);
             }

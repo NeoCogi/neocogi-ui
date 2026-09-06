@@ -34,55 +34,8 @@ use crate::atlas::{AtlasHandle, FontId};
 
 use super::Skin;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Default)]
-/// Semantic font roles used by built-in widgets and skins.
-pub enum FontRole {
-    /// Default body text used by most widgets.
-    #[default]
-    Body,
-    /// Compact supporting text.
-    Small,
-    /// Window titles and similar chrome text.
-    Title,
-    /// Larger display text.
-    Heading,
-    /// Monospace-style text.
-    Mono,
-}
-
-impl FontRole {
-    /// Every semantic font role in declaration order.
-    pub const ALL: [Self; 5] = [Self::Body, Self::Small, Self::Title, Self::Heading, Self::Mono];
-
-    /// Number of semantic font roles stored by a complete skin.
-    pub const COUNT: usize = Self::ALL.len();
-
-    /// Returns this role's position in the skin's resolved font table.
-    pub(crate) const fn index(self) -> usize {
-        // Spell positions out so enum declaration changes cannot silently alter the private table
-        // contract through a numeric cast.
-        match self {
-            Self::Body => 0,
-            Self::Small => 1,
-            Self::Title => 2,
-            Self::Heading => 3,
-            Self::Mono => 4,
-        }
-    }
-
-    /// Returns the conventional atlas font name resolved by [`Skin::from_atlas`].
-    pub const fn atlas_name(self) -> &'static str {
-        // Exhaustive matching keeps the typed role catalog and atlas spellings synchronized when
-        // theme loaders need to replace only these semantic entries.
-        match self {
-            Self::Body => "body",
-            Self::Small => "small",
-            Self::Title => "title",
-            Self::Heading => "heading",
-            Self::Mono => "mono",
-        }
-    }
-}
+/// Shared semantic role; concrete atlas capabilities remain local to the UI.
+pub use microui_contracts::FontRole;
 
 /// Stable reference to a font used by retained UI state.
 ///

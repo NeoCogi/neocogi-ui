@@ -45,11 +45,8 @@ pub(crate) fn apply_flat(data: &mut AssetData, insets: Insets, palette: &FlatPal
 
 /// Returns the authored default geometry used by fresh bundles.
 pub(crate) fn default_metrics() -> AssetMetrics {
-    AssetMetrics {
-        default_cell_width: 68, padding: 5, window_content_insets: uniform(5),
-        spacing: 4, indent: 24, title_height: 24, window_border: uniform(1),
-        scrollbar_size: 12, thumb_size: 8,
-    }
+    // Authoring and installed geometry use one concrete default record.
+    AssetMetrics::default()
 }
 
 /// Returns the authored default caption policy used by fresh bundles.

@@ -175,9 +175,9 @@ impl IThemeLoader for ThemeLoader {
     /// Reads a complete theme against immutable base resources and returns ordinary portable tables.
     fn load_theme(&self, path: ComRef<'_, INativePathAbi>, base: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         let path = microui_redux::path::decode(path)?;
-        let base = microui_ui::assets::ImportedAssets::read(base, None)?;
-        let loaded = base.load_theme(&path).map_err(|error| self.diagnostic.failure(error))?;
-        base.export_derived(loaded.bundle()).inspect_err(|error| {
+        let data = AssetData::read(base)?;
+        let loaded = crate::theme::load(&path, &data).map_err(|error| self.diagnostic.failure(error))?;
+        loaded.into_data().into_revision(base).inspect_err(|error| {
             self.diagnostic.failure(error);
         })
     }

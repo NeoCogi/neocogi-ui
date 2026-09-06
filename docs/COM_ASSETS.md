@@ -13,8 +13,8 @@ Enable `builder` to add font/atlas construction, or `theme-json` to add that bui
 and JSON themes. Native applications can ship a PNG-only plugin independently of
 their precompiled atlas. Browser assemblies register the same decoder descriptor
 statically. The [asset plugin's decoder](../plugins/assets/src/png.rs) produces
-packed RGBA bytes directly, without linking the UI implementation in PNG-only
-deployments. Font and theme construction remain optional features.
+packed RGBA bytes directly. None of the asset plugin's production feature sets
+links the UI implementation. Font and theme construction remain optional features.
 
 Applications supply one `IAssetBundle` to `IUiProvider::create_runtime` and
 `IPlatform::create_window`. Neither implementation embeds demo assets. The UI imports
@@ -27,6 +27,12 @@ from borrowed static tables or owned builder output. It contains no UI implement
 font rasterizer, PNG decoder or JSON parser. `plugins/assets` packages the optional
 native builder and, with `theme-json`, the theme compiler. Its objects expose ordinary
 typed interfaces and keep all native builder/path/decoder state in that binary.
+The [JSON compiler](../plugins/assets/src/theme.rs) reads a validated `AssetData`,
+rebuilds declared resources, and writes complete appearance tables directly.
+Plain geometry and semantic resource names live in contracts. The UI resolves
+those records into its own runtime IDs only when a bundle is installed.
+In-memory compilation accepts an explicit `AssetSource` implementation for
+referenced files; filesystem compilation uses the bounded `FileAssets` source.
 
 ```rust,ignore
 let assets = microui_redux_demo_assets::load_bundle()?;
