@@ -10,14 +10,15 @@ crate-type = ["rlib", "cdylib"]
 
 [features]
 default = []
-builder = ["microui-ui/builder"]
+builder = ["dep:microui-ui", "microui-ui/builder"]
 theme-json = ["builder", "microui-ui/theme-json"]
 dynamic-plugin = []
 
 [dependencies]
 microui-contracts.workspace = true
 microui-redux.workspace = true
-microui-ui = { workspace = true, features = ["png_source"] }
+microui-ui = { workspace = true, optional = true }
+png.workspace = true
 nc-com = { workspace = true, features = ["macros", "std"] }
 
 [dev-dependencies]

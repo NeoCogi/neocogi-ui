@@ -12,8 +12,9 @@ diagnostics because the decoder holds no mutable borrow across the upload.
 Enable `builder` to add font/atlas construction, or `theme-json` to add that builder
 and JSON themes. Native applications can ship a PNG-only plugin independently of
 their precompiled atlas. Browser assemblies register the same decoder descriptor
-statically. This separation keeps optional construction code out of PNG-only
-deployments while using the existing bounded image decoder.
+statically. The [asset plugin's decoder](../plugins/assets/src/png.rs) produces
+packed RGBA bytes directly, without linking the UI implementation in PNG-only
+deployments. Font and theme construction remain optional features.
 
 Applications supply one `IAssetBundle` to `IUiProvider::create_runtime` and
 `IPlatform::create_window`. Neither implementation embeds demo assets. The UI imports
