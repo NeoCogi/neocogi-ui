@@ -70,7 +70,9 @@ rectangle and final visible region. There is no production native callback regis
 | `render/display_list.rs` | Owned ordered operations and reusable geometry |
 | `render/renderer.rs` | Atlas expansion, final clipping and execution |
 | `render/backend.rs` | Concrete backend frame contracts |
-| `plugins/platform` | Window/device ownership and checked COM GPU submission |
+| [plugins/platform](../../../plugins/platform) | Window/device ownership and checked COM GPU submission |
+| [plugins/renderer-*](BACKENDS.md#backend-sources) | Concrete GPU backends linked into the platform plugin |
+| [plugins/renderer-support](../../../plugins/renderer-support) | Shared renderer and platform helpers |
 
 A backend acquires one exclusive frame through `RendererBackend::frame`. Its quad and
 triangle methods may batch geometry, `flush` preserves operation order, and consuming

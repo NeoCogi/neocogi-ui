@@ -14,6 +14,11 @@ the selected Cargo toolchain, and `CARGO_NET_OFFLINE`; it does not run Cargo fro
 build script. Native demo feature flags are markers: implementation selection
 belongs to the separately built platform package.
 
+The [platform package](../plugins/platform) selects its backend from the renderer
+crates under `plugins/`; see the [backend source map](../crates/microui-ui/docs/BACKENDS.md#backend-sources).
+The selected renderer and shared support code are compiled into the platform plugin's
+library (`libmicroui_plugin_platform.so` on Linux).
+
 A direct `cargo build -p microui-redux-demo-full --features vulkan --release`
 builds only the host executable. It does not build the shared runtime, configure
 its link search path or stage implementation plugins. `unable to find library

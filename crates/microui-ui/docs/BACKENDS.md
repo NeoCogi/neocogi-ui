@@ -12,6 +12,22 @@ it. There is no production custom callback registration or native Context app AP
 The actual implementation and compile fixtures demonstrate acquire/use/drop and reject
 two simultaneous backend frames.
 
+## Backend sources
+
+Renderer implementation crates live alongside [the platform plugin](../../../plugins/platform)
+under `plugins/`. The platform plugin links the selected backend and shared helpers
+into its native library; browser builds link them into the wasm module. The renderer
+crates are Rust libraries without separate COM plugin descriptors or shared libraries.
+
+| Source | Responsibility |
+| --- | --- |
+| [plugins/platform](../../../plugins/platform) | Window, input and device ownership; COM renderer integration |
+| [plugins/renderer-glow](../../../plugins/renderer-glow) | Glow rendering shared by native OpenGL and WebGL |
+| [plugins/renderer-vulkan](../../../plugins/renderer-vulkan) | Vulkan rendering and UI shaders |
+| [plugins/renderer-wgpu](../../../plugins/renderer-wgpu) | WGPU rendering |
+| [plugins/renderer-webgl-canvas](../../../plugins/renderer-webgl-canvas) | Browser canvas backend using the Glow renderer |
+| [plugins/renderer-support](../../../plugins/renderer-support) | Shared renderer and platform helpers |
+
 ## Ordered application drawing
 
 A widget records an owned `IRenderItem` in its paint stream. After preceding UI batches
