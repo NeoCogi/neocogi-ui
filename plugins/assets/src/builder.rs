@@ -1,10 +1,8 @@
 //! Optional font/atlas construction and JSON theme assembly.
 use super::Diagnostic;
 use microui_contracts::*;
-use microui_ui::{
-    assets::ImportedAssets,
-    atlas::builder::{Builder, Config},
-};
+use crate::atlas::{Builder, Config};
+use microui_redux::assets::AssetData;
 use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, INcStringAbi, NC_E_INVALID_ARG, com_class};
 use std::cell::RefCell;
 
@@ -32,13 +30,13 @@ impl IAssetLoader for AssetLoader {
         .map_err(|error| self.diagnostic.failure(error))?;
         Ok(BuildSession::create(Draft { builder, base: None }))
     }
-    /// Imports once before native packing; the draft retains the original catalog for publication.
+    /// Copies validated records before packing; the draft retains the original catalog for publication.
     fn derive_builder(&self, size: Size, base: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IAssetBuilderAbi>, NcStatus> {
         dimensions(size)?;
-        let base = ImportedAssets::read(base, None)?;
-        let builder =
-            Builder::from_atlas_with_size(base.original(), size.width as usize, size.height as usize).map_err(|error| self.diagnostic.failure(error))?;
-        Ok(BuildSession::create(Draft { builder, base: Some(base) }))
+        let data = AssetData::read(base)?;
+        let builder = Builder::from_data(&data, size.width as usize, size.height as usize, &[], &[])
+            .map_err(|error| self.diagnostic.failure(error))?;
+        Ok(BuildSession::create(Draft { builder, base: Some(base.add_ref()) }))
     }
 }
 impl IAssetDiagnostics for AssetLoader {
@@ -53,7 +51,7 @@ struct Draft {
     /// Native packing and rasterization state, always private to this binary.
     builder: Builder,
     /// A derived session must retain the original resource namespace through successful finish.
-    base: Option<ImportedAssets>,
+    base: Option<ComPtr<IAssetBundleAbi>>,
 }
 
 /// Exclusive mutable session lifecycle, including an observable terminal finish state.
@@ -130,7 +128,7 @@ impl IAssetBuilder for BuildSession {
             .map(|_| ())
             .map_err(|error| self.diagnostic.failure(error))
     }
-    /// Reuses native font rasterization; font IDs stay inside the plugin's validated catalog.
+    /// Rasterizes named font data without constructing any UI runtime resource IDs.
     fn add_font(&self, name: NcCopyFromBufferOffset<'_, u8>, path: ComRef<'_, INativePathAbi>, pixels: u32) -> Result<(), NcStatus> {
         let mut edit = self.edit()?;
         let name = text(name)?;
@@ -148,15 +146,11 @@ impl IAssetBuilder for BuildSession {
     fn finish(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         let mut edit = self.edit()?;
         let draft = edit.draft.take().expect("finish consumes the taken draft once");
-        let atlas = draft.builder.build().map_err(|error| self.diagnostic.failure(error))?;
-        if let Some(base) = draft.base {
-            // A derived builder already contains every original semantic resource, and replacement
-            // operations preserve IDs. SkinBundle's constructor is therefore total here.
-            base.export_derived(&microui_ui::SkinBundle::from_atlas(atlas))
-        } else {
-            microui_ui::assets::export_atlas(atlas).inspect_err(|error| {
-                self.diagnostic.failure(error);
-            })
+        let data = draft.builder.build().map_err(|error| self.diagnostic.failure(error))?;
+        // Publication retains the catalog capability; no producer-local UI IDs are needed.
+        match draft.base {
+            Some(base) => data.into_revision(base.as_com_ref()),
+            None => data.into_bundle(),
         }
     }
 }
@@ -181,7 +175,7 @@ impl IThemeLoader for ThemeLoader {
     /// Reads a complete theme against immutable base resources and returns ordinary portable tables.
     fn load_theme(&self, path: ComRef<'_, INativePathAbi>, base: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         let path = microui_redux::path::decode(path)?;
-        let base = ImportedAssets::read(base, None)?;
+        let base = microui_ui::assets::ImportedAssets::read(base, None)?;
         let loaded = base.load_theme(&path).map_err(|error| self.diagnostic.failure(error))?;
         base.export_derived(loaded.bundle()).inspect_err(|error| {
             self.diagnostic.failure(error);

@@ -147,6 +147,8 @@ The receiving GPU may impose a smaller texture dimension limit than the portable
 ## Optional construction and themes
 
 `IAssetLoader::create_builder(size, white_path)` starts a native builder.
+Its [implementation](../plugins/assets/src/atlas.rs) packs RGBA pixels and font
+records directly into `AssetData`; it constructs no UI atlas handles or skins.
 `add_icon(name, path)` and `add_font(name, path, pixels)` add distinct names;
 duplicates are rejected. Native filesystem paths retain exact Unix bytes or Windows
 UTF-16. A failed edit restores the draft. `finish()` consumes it even when final

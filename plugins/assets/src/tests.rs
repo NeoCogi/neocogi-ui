@@ -1,5 +1,6 @@
 //! The runtime COM builder and generated prebuilt exporter must publish equivalent portable data.
 use super::*;
+use microui_ui::assets::ImportedAssets;
 use nc_com::INcStringComPtrExt;
 use microui_redux::NativePath;
 

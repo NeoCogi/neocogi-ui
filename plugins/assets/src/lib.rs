@@ -6,6 +6,10 @@ use nc_com::{ComPtr, INcStringAbi, NcStatus, NcString, NC_E_INVALID_ARG};
 use std::cell::RefCell;
 
 #[cfg(feature = "builder")]
+pub mod atlas;
+#[cfg(feature = "builder")]
+mod style;
+#[cfg(feature = "builder")]
 mod builder;
 #[cfg(feature = "builder")]
 pub use builder::AssetLoader;
