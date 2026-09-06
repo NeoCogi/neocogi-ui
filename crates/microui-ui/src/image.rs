@@ -260,6 +260,7 @@ pub fn load_image_bytes(source: ImageSource) -> Result<(usize, usize, Vec<Color4
 }
 
 /// Copies raw pixels only when their dimensions match the caller's validated atlas extent.
+#[cfg(test)]
 pub(crate) fn load_image_bytes_checked(source: ImageSource, expected: CheckedImageDimensions) -> Result<(usize, usize, Vec<Color4b>), ImageError> {
     // The caller supplies the same checked token it will retain with the decoded pixels. Matching
     // sources therefore reuse its cached counts instead of evaluating the allocation policy twice.

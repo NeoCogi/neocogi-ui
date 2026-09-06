@@ -28,16 +28,18 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 
-//! Texture atlas handles, baked icon/font metadata, and construction helpers.
+//! UI-local atlas handles and baked icon/font lookup metadata.
 //!
-//! Text is indexed by Rust [`char`] values. The built-in `builder` module bakes printable ASCII only;
-//! serialized [`AtlasSource`] values can provide any Unicode scalar values. Runtime measurement
-//! and drawing substitute the selected font's underscore entry for a missing character.
+//! Portable construction and validation belong to the asset boundary. This module only stores the
+//! local identities and lookup tables created while importing a validated asset revision. Runtime
+//! measurement and drawing substitute the selected font's underscore entry for a missing character.
 
 use std::collections::HashMap;
 
 use super::*;
-use crate::{identity::ProcessUniqueId, image::CheckedImageDimensions};
+use crate::identity::ProcessUniqueId;
+#[cfg(test)]
+use crate::image::CheckedImageDimensions;
 
 #[derive(Debug, Clone)]
 /// Metrics and atlas coordinates for a glyph.
@@ -71,6 +73,7 @@ struct Font {
 ///
 /// A vector deliberately preserves duplicate characters from serialized input. Converting to the
 /// runtime [`HashMap`] before validation would silently replace one duplicate with another.
+#[cfg(test)]
 struct FontCandidate {
     /// Stable identity published with this font after the candidate passes validation.
     id: FontId,
@@ -168,6 +171,7 @@ struct Atlas {
 ///
 /// Serialized sources and the build-time atlas builder both produce this concrete representation.
 /// Only atlas validation may convert it into the immutable runtime [`Atlas`].
+#[cfg(test)]
 struct AtlasCandidate {
     /// Prevalidated dimensions and allocation counts for the texture.
     dimensions: CheckedImageDimensions,
@@ -182,17 +186,19 @@ struct AtlasCandidate {
 #[derive(Clone)]
 /// Shared read-only handle to a fully validated atlas.
 ///
-/// Construct a handle with [`AtlasHandle::try_from`] and handle the concrete [`AtlasError`]. The
-/// crate provides no infallible or lossy source conversion because malformed metadata must never
-/// become a renderer-visible resource table.
+/// Handles are created only while the UI imports a validated portable asset revision. Applications
+/// obtain typed resource references through the COM facade rather than constructing native atlases.
 pub struct AtlasHandle(Rc<Atlas>);
 
+#[cfg(test)]
 mod validation;
 pub(crate) mod transfer;
+#[cfg(test)]
 pub use validation::AtlasError;
 
-
+#[cfg(test)]
 mod source;
+#[cfg(test)]
 pub use source::{AtlasSource, FontEntry};
 
 mod runtime;

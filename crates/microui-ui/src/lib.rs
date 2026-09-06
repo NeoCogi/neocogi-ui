@@ -123,7 +123,9 @@ mod window_manager;
 /// Resource, geometry and backend imports for implementation crates.
 /// Applications and extension widgets use the microui-redux facade and canonical COM contracts.
 pub mod prelude {
-    pub use crate::atlas::{AtlasError, AtlasHandle, AtlasSource, CharEntry, FontEntry, FontId, IconId};
+    pub use crate::atlas::{AtlasHandle, CharEntry, FontId, IconId};
+    #[cfg(test)]
+    pub use crate::atlas::{AtlasError, AtlasSource, FontEntry};
     pub use crate::image::{ImageError, ImageSource, ImageStorageError, MAX_DECODED_RGBA_BYTES, load_image_bytes};
     pub use crate::input::{Key, KeyEvent, KeyState, Modifiers, MouseButton};
     pub use crate::render::{
@@ -144,7 +146,9 @@ pub mod prelude {
     };
 }
 
-pub use atlas::{AtlasError, AtlasHandle, AtlasSource, CharEntry, FontEntry, FontId, IconId};
+pub use atlas::{AtlasHandle, CharEntry, FontId, IconId};
+#[cfg(test)]
+pub use atlas::{AtlasError, AtlasSource, FontEntry};
 pub(crate) use context::{Context};
 #[cfg(test)]
 pub(crate) use test_support::ui::Ui;

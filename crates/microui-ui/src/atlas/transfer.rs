@@ -1,7 +1,9 @@
-//! Bulk COM metadata joins the same duplicate-preserving validation path as native sources.
+//! Conversion from validated portable tables to UI-local lookup storage.
 use super::*;
 use microui_contracts::{AssetFont, AssetGlyph, AssetIcon, AssetInfo, AssetRange};
-use nc_com::{NcStatus, NC_E_INVALID_ARG};
+use nc_com::NcStatus;
+#[cfg(test)]
+use nc_com::NC_E_INVALID_ARG;
 
 /// Owned wire tables prepared once by an exporter or copied once by an importer.
 #[derive(Default)]
@@ -93,35 +95,33 @@ impl Tables {
         range
     }
 
-    /// Reconstructs local identities only after the caller authenticates the catalog namespace.
-    /// Original catalog names preserve exact local IDs; revision-private artwork receives fresh IDs.
+    /// Reconstructs local identities from tables already checked by `AssetData::read`.
+    ///
+    /// Original catalog names preserve exact local IDs; revision-private artwork receives fresh
+    /// IDs. Portable validation remains singular: this conversion cannot be called before the
+    /// facade has checked name partitions, scalar values, metrics, rectangles and the white tile.
     pub(crate) fn import(&self, info: AssetInfo, pixels: Vec<u8>, catalog: Option<&AtlasHandle>) -> Result<AtlasHandle, NcStatus> {
-        let mut next_name = 0;
-        let mut next_glyph = 0;
         let mut fonts = Vec::with_capacity(self.fonts.len());
         for font in &self.fonts {
-            let name = self.read_name(font.name, &mut next_name)?;
-            if font.glyphs.first != next_glyph || font.line_size <= 0 || font.font_size <= 0 {
-                return Err(NC_E_INVALID_ARG);
-            }
-            next_glyph = next_glyph.checked_add(font.glyphs.count).ok_or(NC_E_INVALID_ARG)?;
-            let glyphs = self.glyphs.get(font.glyphs.first as usize..next_glyph as usize).ok_or(NC_E_INVALID_ARG)?;
+            let name = self.validated_name(font.name);
+            let last = font.glyphs.first + font.glyphs.count;
+            let glyphs = &self.glyphs[font.glyphs.first as usize..last as usize];
             let entries = glyphs
                 .iter()
                 .map(|glyph| {
-                    Ok((
-                        char::from_u32(glyph.scalar).ok_or(NC_E_INVALID_ARG)?,
+                    (
+                        char::from_u32(glyph.scalar).expect("AssetData::read validated every glyph scalar"),
                         CharEntry {
                             offset: Vec2i::new(glyph.offset_x, glyph.offset_y),
                             advance: Vec2i::new(glyph.advance_x, glyph.advance_y),
                             rect: crate::rect(glyph.rect.x, glyph.rect.y, glyph.rect.width, glyph.rect.height),
                         },
-                    ))
+                    )
                 })
-                .collect::<Result<Vec<_>, NcStatus>>()?;
+                .collect();
             fonts.push((
                 name.to_owned(),
-                FontCandidate {
+                Font {
                     id: catalog.and_then(|atlas| atlas.font_id(name)).unwrap_or_else(FontId::allocate),
                     line_size: font.line_size as usize,
                     baseline: font.baseline,
@@ -132,7 +132,7 @@ impl Tables {
         }
         let mut icons = Vec::with_capacity(self.icons.len());
         for icon in &self.icons {
-            let name = self.read_name(icon.name, &mut next_name)?;
+            let name = self.validated_name(icon.name);
             icons.push((
                 name.to_owned(),
                 Icon {
@@ -141,23 +141,29 @@ impl Tables {
                 },
             ));
         }
-        if next_name as usize != self.names.len() || next_glyph as usize != self.glyphs.len() {
-            return Err(NC_E_INVALID_ARG);
-        }
-        // Atlas finalization remains the authority for duplicate keys, glyph fallback, rectangle
-        // bounds and the opaque white tile. Wire decoding does not duplicate those rules.
-        let dimensions = validation::checked_atlas_dimensions(info.size.width as usize, info.size.height as usize).map_err(|_| NC_E_INVALID_ARG)?;
-        let pixels = pixels.as_chunks::<4>().0.iter().map(|p| crate::color4b(p[0], p[1], p[2], p[3])).collect();
-        AtlasHandle::finish(AtlasCandidate::from_decoded(dimensions, pixels, fonts, icons)).map_err(|_| NC_E_INVALID_ARG)
+        let pixels = pixels.as_chunks::<4>().0.iter().map(|pixel| crate::color4b(pixel[0], pixel[1], pixel[2], pixel[3])).collect();
+        let font_slots = fonts.iter().enumerate().map(|(slot, (_, font))| (font.id, slot)).collect::<HashMap<_, _>>();
+        let icon_slots = icons.iter().enumerate().map(|(slot, (_, icon))| (icon.id, slot)).collect::<HashMap<_, _>>();
+        let white_icon = icons
+            .iter()
+            .find_map(|(name, icon)| (name == "white").then_some(icon.id))
+            .expect("AssetData::read validated the required white icon");
+        Ok(AtlasHandle(Rc::new(Atlas {
+            width: info.size.width as usize,
+            height: info.size.height as usize,
+            pixels,
+            fonts,
+            icons,
+            white_icon,
+            font_slots,
+            icon_slots,
+        })))
     }
 
-    /// Rejects gaps, aliases, empty names and invalid UTF-8 before building native maps.
-    fn read_name(&self, range: AssetRange, next: &mut u32) -> Result<&str, NcStatus> {
-        if range.first != *next || range.count == 0 {
-            return Err(NC_E_INVALID_ARG);
-        }
-        *next = next.checked_add(range.count).ok_or(NC_E_INVALID_ARG)?;
-        let bytes = self.names.get(range.first as usize..*next as usize).ok_or(NC_E_INVALID_ARG)?;
-        std::str::from_utf8(bytes).map_err(|_| NC_E_INVALID_ARG)
+    /// Borrows one name whose range and UTF-8 encoding were checked before local conversion.
+    fn validated_name(&self, range: AssetRange) -> &str {
+        let last = range.first + range.count;
+        std::str::from_utf8(&self.names[range.first as usize..last as usize])
+            .expect("AssetData::read validated every resource name")
     }
 }
