@@ -498,7 +498,7 @@ struct TriangleClippingResult {
 }
 
 impl TriangleClippingResult {
-    /// Creates a polygon containing exactly one complete triangle.
+    /// Creates a triangle polygon with adjacent and closing near-duplicates removed.
     fn from_triangle(triangle: [Vertex; 3]) -> Self {
         let mut polygon = Self::default();
         // Normalize once even when every clipping edge can be skipped. This preserves the

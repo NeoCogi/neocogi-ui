@@ -21,8 +21,14 @@ wrappers. The accepted migration and outstanding validation are recorded in
   EventSession owns app state and concrete handlers outside the producer graph.
 - Preserve menus, native-path file dialogs, immutable resources, full/basic demos,
   browser input/IME and ordered typed image/mesh/custom drawing.
-- Compile font/theme resources on the build host. Generated COM bundles compress
-  pixels and validate exact bounded expansion; all demo loaders use this path.
+- Load native demo assets from adjacent files through the asset plugin by default.
+  `embed-assets` explicitly selects build-host compilation and embedded resource
+  bytes; browser `webgl` enables it. Generated COM bundles retain bounded pixel expansion.
+- Remove the native 8 ms frame delay, permit transactional theme installation from
+  event callbacks, and flush preceding atlas geometry before image draws.
+- Skip discarded fixed-grid measurements and retain paint/text/custom-geometry
+  buffers. Remaining native throughput and deployment-size overhead are recorded
+  in COM_PERFORMANCE.md.
 
 See [author contracts](COM_AUTHORS.md) for explicit external-state, skipped-update,
 painting, lifecycle and callback responsibilities. Resize and retained setter

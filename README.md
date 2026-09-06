@@ -28,6 +28,8 @@ cargo com-build --demo full --backend glow
 
 Other backends are `vulkan` and `wgpu`; other demos are `simple`, `calculator`,
 `backend-frame-cube` and `smoke`. Use `--release` for an ordinary release package.
+Native assets are external by default; keep the staged `assets` and `themes`
+directories with the executable. `--assets embedded` is an explicit alternative.
 The [package guide](docs/COM_NATIVE.md) covers dependencies, nightly min-size builds,
 optional assets, actual GPU tests and executable-relative loading. A native demo
 needs its adjacent runtime and plugin manifest; direct `cargo run` on the demo

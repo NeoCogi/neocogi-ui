@@ -12,7 +12,12 @@ cover the retained UI model, integration details, and repository workflows.
 - [Local COM implementation](../crates/com/README.md) and [ABI specification](../crates/com/docs/abi-v3.md).
 - [Accepted design](COM_DESIGN.md) and [implementation progress](COM_MIGRATION.md).
 
-## Core concepts
+## UI implementation notes
+
+The guides below describe the UI plugin's internal algorithms and native behavior
+fixtures. Their native node/context examples are implementation references, not the
+current application facade API. Application and independent plugin authors should
+start with [COM_AUTHORS.md](COM_AUTHORS.md) and the working [examples](EXAMPLES.md).
 
 - [Architecture](../crates/microui-ui/docs/ARCHITECTURE.md) — retained trees, concrete surfaces, ownership, and stable identity.
 - [Events](../crates/microui-ui/docs/EVENTS.md) — typed widget events, dispatch ordering, roots, and retained services.

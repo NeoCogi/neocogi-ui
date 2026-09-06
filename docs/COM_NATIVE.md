@@ -43,9 +43,11 @@ Decoding, font rasterization and theme parsing run in the asset plugin. Call
 `--assets embedded` explicitly selects the demo's `embed-assets` Cargo feature.
 That package compiles atlases/themes on Cargo's host and embeds the photo/mesh;
 only the full demo needs the PNG asset plugin. Browser `webgl` selects this feature
-because its resources must reside in the wasm module. Do not build the workspace
+because this browser deployment includes its resources in the wasm module. Do not build the workspace
 with all features to measure deployment size:
 that unifies optional implementation features that these independent builds avoid.
+Older `prebuilt` output directories are obsolete and are not refreshed by these
+commands; the default executable is under `files`, as shown above.
 
 The driver inspects the actual trusted plugin descriptors and uses nc-com's existing
 planner to reject duplicate identities, missing dependencies and cycles. It writes
@@ -99,10 +101,11 @@ scripts/test-demo.sh wgpu
 ```
 
 These tests build plugins independently, stage a companion test executable, and run
-outside the repository. They exercise all four actual themes, the visible compressed
-image, custom geometry/mesh rendering, spacing changes, combo selection, Unicode log
+outside the repository. They exercise all four actual themes, image command submission, custom
+geometry/mesh rendering, spacing changes, combo selection, Unicode log
 submission and retained-handle closure. Win 3.11 is additionally selected through
-the real nested menu and event callback. Test executables are staged separately under
+the real nested menu and event callback. These application tests do not read back
+every backend's pixels; actual-window image checks supplement them. Test executables are staged separately under
 `target/com-tests` so they cannot inflate the installed application size. Set
 `MICROUI_TEST_BUILD_ONLY=1` to stage tests for a separate display-enabled invocation.
 

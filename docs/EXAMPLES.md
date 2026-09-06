@@ -32,12 +32,14 @@ cascading theme/spacing menus and a separate Popup button. Menu shortcuts are
 presentation hints; they do not automatically register keyboard accelerators.
 View > Show Textures scrolls to the sampler's images. The sample includes native
 RGBA images, a compressed photograph and a deterministic noise texture. Images and
-the Suzanne mesh are embedded, so native deployment has no source-directory paths.
+the Suzanne mesh are external by default, resolved beside the native executable.
+The explicit `embed-assets` feature includes their bytes; browser `webgl` enables it.
 
 The palette editor exposes 18 RGBA roles and five layout metrics. Default Skin
 permits palette edits; image themes make those color controls inert and retain
 their authored artwork. Scalar metrics remain editable. All four themes are
-compiled by Cargo's build host and available on native and browser targets.
+available on native and browser targets. Native file packages use the asset plugin's
+JSON loader; embedded builds compile them on Cargo's build host.
 Accepted edits publish one immutable revision; animation frames do not repeatedly
 reinstall unchanged styles. The log uses the actual TextBlock as its stored text,
 and Enter/Submit share the concrete submission operation.
