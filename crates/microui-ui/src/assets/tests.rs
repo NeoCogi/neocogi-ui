@@ -1,7 +1,7 @@
 //! Boundary tests use real generated COM calls, malformed producer tables and an upload-failing renderer.
 use super::*;
 use microui_redux::assets::AssetData;
-use nc_com::{com_class, NcCopyFromBufferOffset};
+use nc_com::{com_class, NcCopyFromBufferOffset, NcCopyToBufferOffset};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,

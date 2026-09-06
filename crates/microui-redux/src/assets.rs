@@ -5,8 +5,11 @@ use nc_com::{ComPtr, ComRef, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG, c
 use std::borrow::Cow;
 use microui_contracts::appearance::*;
 
+mod validation;
+
 /// Portable owned-or-static tables used by both runtime builders and generated source files.
 /// Creation checks storage lengths; consumers validate semantic contents before installation.
+#[derive(Clone)]
 pub struct AssetData {
     /// Positive atlas dimensions with bounded tightly packed RGBA storage.
     pub size: Size,
@@ -47,8 +50,8 @@ impl AssetData {
         self.publish(base.catalog()?)
     }
 
-    /// Validates actual storage lengths before exposing immutable table access.
-    fn publish(self, catalog: ComPtr<IAssetCatalogAbi>) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
+    /// Derives bounded counts and verifies actual storage lengths without interpreting records.
+    pub fn info(&self) -> Result<AssetInfo, NcStatus> {
         let info = AssetInfo {
             schema: ASSET_SCHEMA_VERSION,
             size: self.size,
@@ -65,6 +68,12 @@ impl AssetData {
         {
             return Err(NC_E_INVALID_ARG);
         }
+        Ok(info)
+    }
+
+    /// Publishes exact table storage; receiving consumers validate record semantics.
+    fn publish(self, catalog: ComPtr<IAssetCatalogAbi>) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
+        let info = self.info()?;
         Ok(Bundle::from_value(Bundle { catalog, info, data: self })
             .query()
             .expect("Bundle declares IAssetBundle"))

@@ -89,13 +89,12 @@ impl ExportedTheme {
 }
 
 /// Copies all resolved families into one unpublished native skin after bounded metadata import.
-pub(super) fn read(source: ComRef<'_, IAssetBundleAbi>, atlas: &AtlasHandle, skin: &mut Skin) -> Result<(), NcStatus> {
-    read_geometry(source.metrics()?, source.chrome()?, skin)?;
+pub(super) fn read(data: &microui_redux::assets::AssetData, atlas: &AtlasHandle, skin: &mut Skin) -> Result<(), NcStatus> {
+    read_geometry(data.metrics, data.chrome, skin)?;
     let icons = atlas.clone_icon_table();
     macro_rules! family {
-        ($family:ident, $role:ident, $state:ident, $set:ident) => {{
-            let mut values = filled($role::COUNT * $state::COUNT, empty_visual())?;
-            source.visuals(AppearanceFamily::$family, NcCopyToBufferOffset::new(0, &mut values))?;
+        ($field:ident, $role:ident, $state:ident, $set:ident) => {{
+            let values = &data.$field;
             for role in $role::ALL {
                 for state in $state::ALL {
                     let value = values[role.index() * $state::COUNT + state.index()];
@@ -104,10 +103,10 @@ pub(super) fn read(source: ComRef<'_, IAssetBundleAbi>, atlas: &AtlasHandle, ski
             }
         }};
     }
-    family!(SURFACE, SurfaceRole, SurfaceState, set_surface);
-    family!(CONTROL, ControlRole, ControlState, set_control);
-    family!(MENU, MenuRole, MenuState, set_menu);
-    family!(CHROME, ChromeRole, ChromeState, set_chrome);
+    family!(surfaces, SurfaceRole, SurfaceState, set_surface);
+    family!(controls, ControlRole, ControlState, set_control);
+    family!(menus, MenuRole, MenuState, set_menu);
+    family!(window_chrome, ChromeRole, ChromeState, set_chrome);
     Ok(())
 }
 
@@ -235,27 +234,6 @@ fn in_visual(value: AssetVisual, atlas: &AtlasHandle, icons: &[(String, crate::I
     };
     patch.center_visible = boolean(value.center_visible)?;
     Ok(Visual::new(patch, color(value.content_color)))
-}
-
-/// Initializes caller-owned wire output with a valid transparent tagged value.
-fn empty_visual() -> AssetVisual {
-    AssetVisual {
-        insets: Insets::default(),
-        center_visible: 0,
-        content_color: 0,
-        patch: AssetPatch::Flat {
-            top_left: 0,
-            top: 0,
-            top_right: 0,
-            left: 0,
-            center: 0,
-            right: 0,
-            bottom_left: 0,
-            bottom: 0,
-            bottom_right: 0,
-        }
-        .into(),
-    }
 }
 
 /// Copies four named native geometry fields without changing their author-supplied values.

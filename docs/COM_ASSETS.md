@@ -132,9 +132,11 @@ bundle-local icon table position, never an opaque native handle.
 All copy offsets and lengths count elements of the declared type; name/pixel offsets
 therefore count bytes. Producers validate the entire range before writing any
 destination element, then write the exact requested count. Tables remain owned by
-their binary. Importers use the common atlas finalizer for duplicate keys, fallback
-glyphs, rectangle bounds and white-tile validation, rather than maintaining another
-semantic validator for COM.
+their binary. `AssetData::read` copies and validates portable tables before a
+consumer builds local lookup state. Its validation covers duplicate keys,
+fallback glyphs, rectangle bounds, the white tile and resolved theme records
+without depending on the UI implementation. UI installation additionally
+authenticates its catalog and preserves its local resource identities.
 
 The native builder currently rasterizes printable ASCII. Prebuilt/other producers
 may supply any Unicode scalar, and runtime text substitutes `_` for a missing glyph.

@@ -5,7 +5,7 @@
 use crate::{AtlasHandle, FontRole, IconRole, ResourceCatalog, Skin, SkinBundle};
 use crate::atlas::transfer::Tables;
 use microui_contracts::*;
-use nc_com::{ComPtr, ComRef, IUnknown, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG, NC_E_OUT_OF_MEMORY};
+use nc_com::{ComPtr, ComRef, IUnknown, NcStatus, NC_E_INVALID_ARG, NC_E_OUT_OF_MEMORY};
 
 mod theme;
 
@@ -30,28 +30,23 @@ impl ImportedAssets {
         if previous.is_some_and(|previous| previous.identity.as_ptr() != identity.as_ptr()) {
             return Err(UI_E_OWNER);
         }
-        let info = source.info()?;
-        let byte_count = info.rgba_bytes()?;
-        // Counts are bounded before allocating. Explicit copy buffers are owned until every
-        // nested metadata and pixel check succeeds; foreign calls never borrow live UI state.
-        let mut pixels = filled(byte_count, 0)?;
-        let mut tables = Tables {
-            fonts: filled(info.fonts as usize, AssetFont::default())?,
-            glyphs: filled(info.glyphs as usize, AssetGlyph::default())?,
-            icons: filled(info.icons as usize, AssetIcon::default())?,
-            names: filled(info.names as usize, 0)?,
+        // Shared table validation belongs to the portable data representation. The UI
+        // then creates only its own lookup IDs and resolved painting state.
+        let mut data = microui_redux::assets::AssetData::read(source)?;
+        let info = data.info()?;
+        let tables = Tables {
+            fonts: std::mem::take(&mut data.fonts).into_owned(),
+            glyphs: std::mem::take(&mut data.glyphs).into_owned(),
+            icons: std::mem::take(&mut data.icons).into_owned(),
+            names: std::mem::take(&mut data.names).into_owned(),
         };
-        source.pixels(NcCopyToBufferOffset::new(0, &mut pixels))?;
-        source.fonts(NcCopyToBufferOffset::new(0, &mut tables.fonts))?;
-        source.glyphs(NcCopyToBufferOffset::new(0, &mut tables.glyphs))?;
-        source.icons(NcCopyToBufferOffset::new(0, &mut tables.icons))?;
-        source.names(NcCopyToBufferOffset::new(0, &mut tables.names))?;
+        let pixels = std::mem::take(&mut data.pixels).into_owned();
         let atlas = tables.import(info, pixels, previous.map(|previous| &previous.original))?;
         // Skin's native constructor assumes the semantic resources exist. Prove that before
         // calling it so malformed plugins produce a status, never a panic across the ABI.
         semantic_resources(&atlas)?;
         let mut skin = Skin::from_atlas(&atlas);
-        theme::read(source, &atlas, &mut skin)?;
+        theme::read(&data, &atlas, &mut skin)?;
         let bundle = SkinBundle::new(atlas.clone(), skin);
         let original = previous.map_or(atlas, |previous| previous.original.clone());
         ResourceCatalog::new(original.clone()).validate_bundle(&bundle).map_err(|_| NC_E_INVALID_ARG)?;
