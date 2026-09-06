@@ -52,7 +52,7 @@
 //
 //! Suzanne is one local COM widget driving one renderer-owned COM scene.
 use super::{camera::Camera, graphics::*, obj_loader::Obj, polymesh::PolyMesh, view3d::View3D};
-use microui_demo_contracts::{IDemoScenesAbi, IMeshSceneAbi, Matrix4, MeshVertex, SceneTransforms};
+use microui_demo_contracts::{IDemoScenesAbi, IMeshSceneAbi, MeshVertex, SceneTransforms};
 
 /// Concrete camera behavior and cached interface projections share one renderer scene.
 pub(super) struct Suzanne {
@@ -142,8 +142,8 @@ impl LeafContent for Suzanne {
             _ => {}
         }
         self.scene.set_transforms(SceneTransforms {
-            pvm: matrix(self.view.pvm()),
-            view_model: matrix(self.view.view_matrix()),
+            pvm: self.view.pvm(),
+            view_model: self.view.view_matrix(),
         })?;
         Ok(GeometryChange::NO_CHANGE)
     }
@@ -151,12 +151,6 @@ impl LeafContent for Suzanne {
     fn paint(&self, state: WidgetPaint, painter: &Painter<'_>) -> Result<(), NcStatus> {
         painter.item(state.rect, self.item.as_com_ref())
     }
-}
-
-/// Converts columns explicitly; the math crate's layout is never assumed to be the ABI layout.
-fn matrix(value: Mat4f) -> Matrix4 {
-    let [c0, c1, c2, c3] = value.col.map(|v| [v.x, v.y, v.z, v.w].into());
-    Matrix4 { c0, c1, c2, c3 }
 }
 
 /// Triangulates each bundled OBJ face while preserving per-corner positions, normals and UVs.
@@ -167,13 +161,10 @@ fn mesh_buffers(mesh: &PolyMesh) -> (Vec<MeshVertex>, Vec<u32>) {
         let start = vertices.len() as u32;
         let mut count = 0;
         for v in poly {
-            let position = mesh.vertex_position(v.pos);
-            let normal = mesh.vertex_normal(v.normal);
-            let uv = mesh.vertex_uv(v.tex);
             vertices.push(MeshVertex {
-                position: [position.x, position.y, position.z].into(),
-                normal: [normal.x, normal.y, normal.z].into(),
-                uv: [uv.x, uv.y].into(),
+                position: mesh.vertex_position(v.pos),
+                normal: mesh.vertex_normal(v.normal),
+                uv: mesh.vertex_uv(v.tex),
             });
             count += 1;
         }
