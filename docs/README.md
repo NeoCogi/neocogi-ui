@@ -6,10 +6,11 @@ cover the retained UI model, integration details, and repository workflows.
 ## COM authors and deployment
 
 - [Author contracts](COM_AUTHORS.md) — change reporting, external state, phase limits, scopes, ownership and error recovery.
-- [Native packaging](COM_NATIVE.md) — independent plugin builds, startup order and actual renderer tests.
+- [Native packaging](COM_NATIVE.md) — shared component builds, startup order and actual renderer tests.
 - [cargo nc-com](../tools/cargo-nc-com/README.md) — installable assembly command, typed TOML configuration, local/registry components, and build policies.
 - [Assets](COM_ASSETS.md) — immutable catalogs, generated resources and transactional installation.
 - Measured deployment and performance — complete package sizes, memory, startup, tree costs and external counters.
+- Assembly build performance — compiler reuse, shared-library LTO, and measured build times.
 - [Local COM implementation](../crates/com/README.md) and [ABI specification](../crates/com/docs/abi-v3.md).
 - [Accepted design](COM_DESIGN.md) and [implementation progress](COM_MIGRATION.md).
 
