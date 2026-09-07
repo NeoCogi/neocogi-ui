@@ -7,6 +7,9 @@ This replaces the 0.8 native node/weak-handle authoring API without compatibilit
 wrappers. The accepted migration and outstanding validation are recorded in
 [COM_MIGRATION.md](COM_MIGRATION.md).
 
+- Use `nc_com_shared_runtime` as the runtime library name in direct builds,
+  native bindings, and generated LTO roots. Assemblies deploy one runtime library
+  without the former duplicate filename. The Cargo package remains `nc-com-runtime`.
 - Import and maintain nc-com locally: checked recursive interface identities,
   borrowed clients, `IButton: IWidget` inheritance, generic owned local classes,
   static runtime binding and explicit dynamic plugin exports.
