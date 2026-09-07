@@ -12,7 +12,7 @@ default = []
 # Additional themes, photo and mesh are exclusive to the full demo.
 full-demo = []
 # Explicit opt-in for self-contained resources, including browser deployments.
-embed-assets = ["microui-redux/compiled-assets", "dep:microui-plugin-assets"]
+embed-assets = ["microui-redux/compiled-assets", "dep:microui-plugin-assets", "dep:microui-redux"]
 
 [dependencies]
 microui-redux.workspace = true
@@ -20,5 +20,6 @@ nc-com = { workspace = true, features = ["runtime"] }
 
 # Cargo builds these APIs for the host even when the demo target is WebAssembly.
 [build-dependencies]
-microui-redux.workspace = true
+# Resolve the host facade only when the asset generator actually runs.
+microui-redux = { workspace = true, optional = true }
 microui-plugin-assets = { workspace = true, optional = true, features = ["builder", "save-to-rust", "theme-json"] }

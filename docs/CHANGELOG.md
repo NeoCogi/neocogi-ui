@@ -29,6 +29,8 @@ wrappers. The accepted migration and outstanding validation are recorded in
   Cargo, discovers artifacts from JSON, validates plugin load order, and preserves
   the last assembly on failed updates. Package/workspace metadata and standalone
   TOML support named applications, renderer variants, resources, and lock policies.
+- Resolve the asset generator's host facade only for `embed-assets`, and keep demo
+  runtime default features consistent between assembly and application builds.
 - Remove the native 8 ms frame delay, permit transactional theme installation from
   event callbacks, and flush preceding atlas geometry before image draws.
 - Skip discarded fixed-grid measurements and retain paint/text/custom-geometry
