@@ -19,17 +19,23 @@ object and shared state, including inherited interface calls.
 
 ## Run the demos
 
-Build a complete native package and run its staged executable:
+Install the assembly tool from this checkout, then build and run a complete native package:
 
 ```sh
-cargo com-build --demo full --backend glow
-./target/com-native/debug/glow/files/full/microui-redux-demo-full
+cargo install --path tools/cargo-nc-com
+cargo nc-com run --assembly full
 ```
 
-Other backends are `vulkan` and `wgpu`; other demos are `simple`, `calculator`,
-`backend-frame-cube` and `smoke`. Use `--release` for an ordinary release package.
+Use `--variant vulkan` or `--variant wgpu` to select another renderer; the default
+is Glow. Other assemblies are `simple`, `calculator`, `backend-frame-cube`, and
+`smoke`. Use `--release` for an ordinary release package, or `build` instead of
+`run` to stage without launching. The command prints the resulting directory.
 Native assets are external by default; keep the staged `assets` and `themes`
-directories with the executable. `--assets embedded` is an explicit alternative.
+directories with the executable. Add `--variant embedded` after the renderer
+variant for an explicit embedded deployment. Assembly definitions live in
+`[workspace.metadata.nc-com]` in [Cargo.toml](Cargo.toml).
+The [tool reference](tools/cargo-nc-com/README.md) documents configuration,
+versioned crates.io components, standalone TOML, and lockfiles.
 The [package guide](docs/COM_NATIVE.md) covers dependencies, nightly min-size builds,
 optional assets, actual GPU tests and executable-relative loading. A native demo
 needs its adjacent runtime and plugin manifest; direct `cargo run` on the demo

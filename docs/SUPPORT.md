@@ -10,6 +10,14 @@ The crate uses Rust 2024 edition but does not publish a minimum supported Rust v
 Development and CI target the current stable Rust toolchain. Dependency updates or a pre-1.0 minor
 release may therefore require a newer stable compiler.
 
+The [cargo-nc-com command](../tools/cargo-nc-com/README.md) builds ordinary native
+assemblies with stable or explicitly selected nightly Cargo. Its bundled `min-size`
+preset requires nightly plus `rust-src` and currently targets x86_64 Linux GNU.
+Foreign-target assembly is rejected because descriptor validation loads native
+plugins. Registry components are supported through ordinary Cargo resolution;
+the repository's pre-alpha component releases must be published separately before
+users can select those versions from crates.io.
+
 ## Platforms and renderers
 
 The UI plugin owns retained widget/window-manager behavior. The platform plugin

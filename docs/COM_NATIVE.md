@@ -1,109 +1,144 @@
 # Native COM packages and browser assembly
 
-Build every native binary independently and stage a complete executable-relative package:
+Install the command from this checkout and build a runnable assembly:
+
+```sh
+cargo install --path tools/cargo-nc-com
+cargo nc-com build --assembly full
+cargo nc-com run --assembly full
+```
+
+`cargo nc-com` builds the runtime, selected plugins, and application in order,
+then stages the executable, native libraries, plugin manifest, and assets. It
+reads the assembly definitions in `[workspace.metadata.nc-com]` in the root
+[Cargo.toml](../Cargo.toml). Users of a published tool can instead install with
+`cargo install cargo-nc-com --locked`; publishing the tool and its component
+prerequisites is a separate release operation.
+
+`--assembly` selects `full` (the default), `simple`, `calculator`,
+`backend-frame-cube`, or `smoke`. Glow is the default backend. Renderer variants
+select matching application and platform features explicitly:
+
+```sh
+cargo nc-com run --assembly full --variant vulkan --release
+cargo nc-com run --assembly calculator --variant wgpu
+cargo nc-com run --assembly smoke --variant extension -- --smoke
+```
+
+These commands build selected packages rather than the entire workspace, so a
+Glow build does not select the Vulkan/WGPU renderer packages. `--workspace` on
+ordinary Cargo still selects every renderer root, including their mandatory
+Ash/WGPU dependencies; `--no-default-features` does not deselect those packages.
+
+For contributors, the equivalent command without installation is
+`cargo run -p cargo-nc-com -- build --assembly full`. The installed command needs
+no workspace alias. Run `cargo nc-com plan --assembly full --variant vulkan` to
+review the selected typed configuration without compiling or inspecting plugins.
+The [tool reference](../tools/cargo-nc-com/README.md) describes package metadata,
+standalone `--config` files, per-component features, registry version requirements,
+resource paths, and lockfile behavior.
+
+## Profiles and output
+
+```sh
+cargo nc-com build --assembly full                       # Debug
+cargo nc-com build --assembly full --release
+cargo nc-com build --assembly full --toolchain nightly --release
+rustup component add rust-src --toolchain nightly
+cargo nc-com build --assembly full --profile min-size
+```
+
+The `min-size` preset selects nightly automatically and includes its x86_64 Linux
+GNU target JSON, size-oriented compiler settings, and rebuilt standard library.
+Consumers do not need our `build-min-size` alias or a custom profile definition.
+Use `--toolchain nightly-YYYY-MM-DD` to select an installed dated toolchain. Custom
+nightly targets can change with the compiler, so pin and test the toolchain used
+for a release. Ordinary custom profiles remain defined by the application's
+workspace. Identical settings share Cargo's cache; separate compilation graphs
+can require different std artifacts on a clean build.
+
+The command prints the completed output directory. Its layout is:
+
+```text
+TARGET/nc-com/APPLICATION/ASSEMBLY/VARIANTS/dist/COMPILER/TARGET/PROFILE/
+```
+
+`TARGET` at the start is Cargo's configured build directory, or `--target-dir`.
+`COMPILER` identifies the selected compiler; the second `TARGET` identifies the
+compilation platform. `dev` outputs use the `debug` directory name. Keep every
+staged runtime/plugin library and resource with the executable. `run` launches
+the staged binary and forwards arguments after `--`, preserving its exit code.
+
+The command discovers artifacts from Cargo's JSON output and snapshots each
+component before a later build can replace a shared artifact filename with a
+different feature combination. Runtime linker aliases handle hashed registry
+artifacts; originals are retained for platform loader identities. A child process
+inspects trusted plugin descriptors and uses nc-com's planner to reject missing
+dependencies, duplicate identities, and cycles. It exits before staging directories
+are renamed, releasing Windows library handles. Failed compilation, inspection,
+or resource copying preserves the previous completed assembly.
+
+On Linux `$ORIGIN` locates the adjacent runtime without `LD_LIBRARY_PATH`. macOS
+uses `@loader_path`; Windows uses adjacent DLLs and the appropriate import
+library. The tool preserves environment rustflags and adds these loader settings.
+SDL 2.26+ and the selected graphics API's system libraries remain system
+prerequisites; they are not automatically redistributed. Foreign targets are
+rejected because native descriptor inspection cannot execute their libraries.
+Linux is locally verified; CI exercises macOS and Windows independently.
+
+## Resources and component boundaries
+
+The default assemblies include the asset plugin, `assets`, and `themes`.
+Full-demo packaging also places its photograph at `assets/FACEPALM.png`. Inputs
+resolve relative to the owning manifest/configuration file; staged paths resolve
+relative to the application executable. Theme parsing, image decoding, and font
+rasterization run in the asset plugin. Call
+`microui_redux_demo_host::initialize()` before `load_bundle()`.
+
+```sh
+cargo nc-com run --assembly full --variant vulkan --variant embedded
+cargo nc-com run --assembly smoke -- --smoke --theme themes/windows-95/theme.json
+```
+
+Place `--variant embedded` after the renderer variant. It adds the application's
+`embed-assets` feature and removes external resources. The full demo retains its
+PNG asset plugin; other embedded demos omit the asset plugin. The smoke assembly's
+`extension` variant adds the independent example plugin. Browser `webgl` selects
+embedded resources and retains its separate static registration workflow.
+
+Native demos still declare shared runtime/plugin crates as ordinary dependencies.
+Their native code uses the runtime C ABI and loads plugin files; it does not call
+the implementation crates through Rust. An ordinary demo `cargo build` can emit
+those libraries but still needs a runtime linker search path and does not produce
+a runnable assembly. The new command supplies `NC_COM_RUNTIME_LINK_DIR`, builds
+explicit component features, and stages the descriptor-planned manifest.
+`microui-redux` remains the static typed facade without native UI/renderer
+implementation dependencies. See the [backend source map](../crates/microui-ui/docs/BACKENDS.md#backend-sources).
+
+Package metadata is our tool's configuration, not a Cargo execution hook. Ordinary
+`cargo build` and `cargo install` do not automatically run the assembly command.
+The generic tool supports versioned registry components using generated Cargo
+projects, but this checkout's pre-alpha plugins are not thereby published.
+Generated component lockfiles currently live under the target directory; retain
+those `sources` directories when using `--locked`, since `cargo clean` removes them.
+
+## Existing regression driver
+
+`cargo com-build` remains available for the existing regression scripts and their
+established `target/com-native/PROFILE/BACKEND/ASSETS/DEMO` paths. Its options remain
+`--demo`, `--backend`, `--assets files|embedded`, `--release`, and `--min-size`:
 
 ```sh
 cargo com-build --demo full --backend glow
 ./target/com-native/debug/glow/files/full/microui-redux-demo-full
 ```
 
-`--demo` selects `full`, `simple`, `calculator`, `backend-frame-cube`, or `smoke`
-(the default). `--backend` selects exactly one of `glow`, `vulkan`, or `wgpu`.
-`--release` selects ordinary release builds. The driver honors `CARGO_TARGET_DIR`,
-the selected Cargo toolchain, and `CARGO_NET_OFFLINE`; it does not run Cargo from a
-build script. Native demo feature flags also select the matching platform plugin
-dependency; the driver passes the same backend to its separate platform build.
-
-The [platform package](../plugins/platform) selects its backend from the renderer
-crates under `plugins/`; see the [backend source map](../crates/microui-ui/docs/BACKENDS.md#backend-sources).
-The selected renderer and shared support code are compiled into the platform plugin's
-library (`libmicroui_plugin_platform.so` on Linux).
-
-The full, basic and COM smoke demos declare the shared runtime, UI, platform and
-asset plugins as native Cargo dependencies. The smoke demo's `extension` feature
-also builds the example plugin. These dependencies produce `rlib` and `cdylib`
-artifacts; the native applications continue using the runtime's C ABI and loading
-the plugin files, without calling the implementation crates through Rust.
-
-A direct `cargo build -p microui-redux-demo-full --no-default-features --features
-vulkan --release` now builds those dependencies too. It still needs a native
-runtime link search path and does not stage a runnable package. Dependency shared
-libraries stay in Cargo's internal output directories unless their packages are
-also selected explicitly with `-p`. Selecting multiple packages does not order
-otherwise independent builds. In addition, the combined graph unifies the host's
-`nc-com/runtime` feature into the plugin dependencies, so plugin links can also
-require the runtime search path. `unable to find library -lnc_com_runtime` can mean
-the runtime has been built but its directory was not supplied to the linker. Use
-the existing driver for a complete package:
-
-```sh
-cargo com-build --demo full --backend vulkan --release
-./target/com-native/release/vulkan/files/full/microui-redux-demo-full
-```
-
-`cargo com-build` is a workspace alias for the driver invocation above. For a
-custom build system, build `nc-com-runtime` first, set `NC_COM_RUNTIME_LINK_DIR`
-to the directory containing its shared/import library when linking the host,
-and configure the executable-relative runtime lookup. Independently build the
-selected UI/platform/asset plugins and stage them with their descriptor-planned
-manifest. Supplying a linker search path alone does not assemble a runnable demo.
-
-Packages live in `target/com-native/{debug,release,min-size}/{backend}/{assets}/{demo}`.
-They contain the selected executable, one nc-com runtime library, UI and platform
-plugins, and a `plugins.txt` manifest. The default `files` package also contains the
-asset plugin with atlas/theme construction, adjacent font/icon inputs and theme
-files. The full demo's photograph and mesh are external files too. All paths resolve
-against the executable directory; the host contains no embedded demo assets.
-Decoding, font rasterization and theme parsing run in the asset plugin. Call
-`microui_redux_demo_host::initialize()` before `load_bundle()` so its classes are registered.
-
-`--assets embedded` explicitly selects the demo's `embed-assets` Cargo feature.
-That package compiles atlases/themes on Cargo's host and embeds the photo/mesh;
-only the full demo needs the PNG asset plugin. Browser `webgl` selects this feature
-because this browser deployment includes its resources in the wasm module. Do not build the workspace
-with all features to measure deployment size:
-that unifies optional implementation features that these independent builds avoid.
-Older `prebuilt` output directories are obsolete and are not refreshed by these
-commands; the default executable is under `files`, as shown above.
-
-The driver inspects the actual trusted plugin descriptors and uses nc-com's existing
-planner to reject duplicate identities, missing dependencies and cycles. It writes
-filenames in the resulting dependency-first order. The host loads that exact list
-relative to its executable. No source-tree path, current working directory, directory
-scan, hot reload or dynamic unload participates in activation. `microui-redux` is the
-static typed facade; it has no native UI or renderer implementation dependency.
-
-On Linux `$ORIGIN` locates the adjacent runtime without `LD_LIBRARY_PATH`. macOS
-uses `@executable_path`; Windows uses normal adjacent-DLL lookup. The driver handles
-native filenames and linking; SDL 2.26+ and the selected graphics API's system
-libraries remain installed system dependencies. Packaging does not redistribute
-those system libraries. CI includes macOS and Windows package builds, while actual
-GPU evidence collected in this workspace is Linux and browser evidence.
-
-The workspace's specialized Linux size profile applies to every shipped binary:
-
-```sh
-cargo +nightly com-build --demo full --backend vulkan --min-size
-./target/com-native/min-size/vulkan/files/full/microui-redux-demo-full
-```
-
-This invokes the existing `build-min-size` alias for runtime, plugins and executable
-using its x86_64 Linux custom target and rebuilt standard library. Install nightly's
-`rust-src` component first. Count every shipped library and asset along with the
-executable; moving implementation code into a plugin does not eliminate its size.
-The `min-size` profile inherits release. Use the same backend and nightly compiler
-on both sides of a size comparison. COM_PERFORMANCE.md records
-the complete deployment, loaded memory, startup and CPU/frame measurements;
-[COM_MIGRATION.md](COM_MIGRATION.md) records the completed migration sequence.
-
-`--workspace` selects every renderer package, including the Vulkan and WGPU
-implementations whose Ash/WGPU dependencies are mandatory. Even
-`--no-default-features --features glow` does not deselect those packages. A
-single-backend build must select the desired packages with `-p`, or exclude the
-other renderer packages with `--exclude`. The full/basic demos default to WGPU,
-while the platform and COM smoke demo default to Glow; disable those defaults
-when choosing one backend across multiple packages. Direct builds still need
-the runtime library search path described above.
+That workspace-local driver requires `cargo +nightly com-build ... --min-size`
+for its older min-size alias. New applications should use `cargo nc-com` and
+configuration instead of adding more demo-specific branches to that driver.
+The regression examples below retain the driver's established paths.
+COM_PERFORMANCE.md records whole-deployment measurements;
+[COM_MIGRATION.md](COM_MIGRATION.md) records the component migration history.
 
 ## Native verification
 

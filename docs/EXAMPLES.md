@@ -8,15 +8,15 @@
 | [full](../demos/demo-full/src/app.rs) | Menus, dialogs, editing, images, themes, containers and custom graphics. |
 | [smoke](../demos/com-slice/src/main.rs) | Independent dynamic loading and explicit runtime/renderer boundary checks. |
 
-Build a complete native package, then run the staged executable:
+After installing the [assembly tool](../tools/cargo-nc-com), build and run a complete native package:
 
 ```sh
-cargo run -p microui-redux-tools --bin com-build -- --demo calculator --backend glow
-./target/com-native/debug/glow/files/calculator/calculator
+cargo nc-com run --assembly calculator
 ```
 
-Choose `full`, `simple`, `calculator`, `backend-frame-cube` or `smoke`, and one of
-`glow`, `vulkan`, or `wgpu`. A direct `cargo run` on a native demo does not assemble
+Choose `full`, `simple`, `calculator`, `backend-frame-cube` or `smoke` with
+`--assembly`. Glow is the default; `--variant vulkan` and `--variant wgpu` select
+the other renderers. A direct `cargo run` on a native demo does not assemble
 its required adjacent plugins. The [package guide](COM_NATIVE.md) is the canonical
 reference for release/min-size builds, system dependencies, optional assets,
 finite runs, independent test packaging and browser workflows.

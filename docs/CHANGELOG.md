@@ -24,6 +24,11 @@ wrappers. The accepted migration and outstanding validation are recorded in
 - Load native demo assets from adjacent files through the asset plugin by default.
   `embed-assets` explicitly selects build-host compilation and embedded resource
   bytes; browser `webgl` enables it. Generated COM bundles retain bounded pixel expansion.
+- Add the installable `cargo-nc-com` command for configured debug, release, and
+  nightly min-size assemblies. It resolves local/registry component sources through
+  Cargo, discovers artifacts from JSON, validates plugin load order, and preserves
+  the last assembly on failed updates. Package/workspace metadata and standalone
+  TOML support named applications, renderer variants, resources, and lock policies.
 - Remove the native 8 ms frame delay, permit transactional theme installation from
   event callbacks, and flush preceding atlas geometry before image draws.
 - Skip discarded fixed-grid measurements and retain paint/text/custom-geometry
