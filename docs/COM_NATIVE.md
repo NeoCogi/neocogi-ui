@@ -54,8 +54,12 @@ Consumers do not need our `build-min-size` alias or a custom profile definition.
 Use `--toolchain nightly-YYYY-MM-DD` to select an installed dated toolchain. Custom
 nightly targets can change with the compiler, so pin and test the toolchain used
 for a release. Ordinary custom profiles remain defined by the application's
-workspace. Identical settings share Cargo's cache; separate compilation graphs
-can require different std artifacts on a clean build.
+workspace. Compatible plugins and the application build in one Cargo feature
+graph after preparing the runtime. Generated pure cdylib roots re-export Rust
+implementations, allowing the shared libraries to receive the profile's LTO.
+Existing cdylib-only components build directly. `isolated = true` on a plugin
+retains an independent feature graph where required. Identical settings share
+Cargo's cache; genuinely different graphs can still require different std artifacts.
 
 The command prints the completed output directory. Its layout is:
 
@@ -69,9 +73,10 @@ compilation platform. `dev` outputs use the `debug` directory name. Keep every
 staged runtime/plugin library and resource with the executable. `run` launches
 the staged binary and forwards arguments after `--`, preserving its exit code.
 
-The command discovers artifacts from Cargo's JSON output and snapshots each
-component before a later build can replace a shared artifact filename with a
-different feature combination. Runtime linker aliases handle hashed registry
+The command discovers artifacts from Cargo's JSON output and snapshots the runtime
+and explicitly isolated plugins before later builds can replace their files.
+Grouped plugins are collected from the application's Cargo invocation. The phase
+summary distinguishes compiled targets from cache hits. Runtime linker aliases handle hashed registry
 artifacts; originals are retained for platform loader identities. A child process
 inspects trusted plugin descriptors and uses nc-com's planner to reject missing
 dependencies, duplicate identities, and cycles. It exits before staging directories
@@ -119,8 +124,10 @@ Package metadata is our tool's configuration, not a Cargo execution hook. Ordina
 `cargo build` and `cargo install` do not automatically run the assembly command.
 The generic tool supports versioned registry components using generated Cargo
 projects, but this checkout's pre-alpha plugins are not thereby published.
-Generated component lockfiles currently live under the target directory; retain
-those `sources` directories when using `--locked`, since `cargo clean` removes them.
+Generated component and assembly lockfiles live under the target directory and
+are initially seeded from the application's lockfile. Retain their `sources`
+directories when using `--locked`, since `cargo clean` removes them. Changes to
+the application lock require an unlocked build to refresh the generated locks.
 
 ## Existing regression driver
 

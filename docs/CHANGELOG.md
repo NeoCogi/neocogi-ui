@@ -31,6 +31,10 @@ wrappers. The accepted migration and outstanding validation are recorded in
   TOML support named applications, renderer variants, resources, and lock policies.
 - Resolve the asset generator's host facade only for `embed-assets`, and keep demo
   runtime default features consistent between assembly and application builds.
+- Build compatible plugins and applications in one Cargo feature graph, with an
+  explicit isolation option. Generated pure cdylib roots receive profile LTO while
+  reusing Rust implementations. Preserve application lock selections and workspace
+  source overrides, and report actual compilation versus cache hits.
 - Remove the native 8 ms frame delay, permit transactional theme installation from
   event callbacks, and flush preceding atlas geometry before image draws.
 - Skip discarded fixed-grid measurements and retain paint/text/custom-geometry
