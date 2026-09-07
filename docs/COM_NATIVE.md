@@ -11,18 +11,30 @@ cargo com-build --demo full --backend glow
 (the default). `--backend` selects exactly one of `glow`, `vulkan`, or `wgpu`.
 `--release` selects ordinary release builds. The driver honors `CARGO_TARGET_DIR`,
 the selected Cargo toolchain, and `CARGO_NET_OFFLINE`; it does not run Cargo from a
-build script. Native demo feature flags are markers: implementation selection
-belongs to the separately built platform package.
+build script. Native demo feature flags also select the matching platform plugin
+dependency; the driver passes the same backend to its separate platform build.
 
 The [platform package](../plugins/platform) selects its backend from the renderer
 crates under `plugins/`; see the [backend source map](../crates/microui-ui/docs/BACKENDS.md#backend-sources).
 The selected renderer and shared support code are compiled into the platform plugin's
 library (`libmicroui_plugin_platform.so` on Linux).
 
-A direct `cargo build -p microui-redux-demo-full --features vulkan --release`
-builds only the host executable. It does not build the shared runtime, configure
-its link search path or stage implementation plugins. `unable to find library
--lnc_com_runtime` means that native link dependency is missing. Use:
+The full, basic and COM smoke demos declare the shared runtime, UI, platform and
+asset plugins as native Cargo dependencies. The smoke demo's `extension` feature
+also builds the example plugin. These dependencies produce `rlib` and `cdylib`
+artifacts; the native applications continue using the runtime's C ABI and loading
+the plugin files, without calling the implementation crates through Rust.
+
+A direct `cargo build -p microui-redux-demo-full --no-default-features --features
+vulkan --release` now builds those dependencies too. It still needs a native
+runtime link search path and does not stage a runnable package. Dependency shared
+libraries stay in Cargo's internal output directories unless their packages are
+also selected explicitly with `-p`. Selecting multiple packages does not order
+otherwise independent builds. In addition, the combined graph unifies the host's
+`nc-com/runtime` feature into the plugin dependencies, so plugin links can also
+require the runtime search path. `unable to find library -lnc_com_runtime` can mean
+the runtime has been built but its directory was not supplied to the linker. Use
+the existing driver for a complete package:
 
 ```sh
 cargo com-build --demo full --backend vulkan --release
@@ -83,6 +95,15 @@ The `min-size` profile inherits release. Use the same backend and nightly compil
 on both sides of a size comparison. COM_PERFORMANCE.md records
 the complete deployment, loaded memory, startup and CPU/frame measurements;
 [COM_MIGRATION.md](COM_MIGRATION.md) records the completed migration sequence.
+
+`--workspace` selects every renderer package, including the Vulkan and WGPU
+implementations whose Ash/WGPU dependencies are mandatory. Even
+`--no-default-features --features glow` does not deselect those packages. A
+single-backend build must select the desired packages with `-p`, or exclude the
+other renderer packages with `--exclude`. The full/basic demos default to WGPU,
+while the platform and COM smoke demo default to Glow; disable those defaults
+when choosing one backend across multiple packages. Direct builds still need
+the runtime library search path described above.
 
 ## Native verification
 

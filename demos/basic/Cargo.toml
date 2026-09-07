@@ -9,12 +9,12 @@ repository.workspace = true
 
 [features]
 default = ["wgpu"]
-glow = ["microui-redux-demo-host/glow"]
+glow = ["microui-redux-demo-host/glow", "microui-plugin-platform/glow"]
 webgl = ["microui-redux-demo-host/webgl", "embed-assets"]
 # Native deployments read adjacent files unless this feature is explicitly requested.
 embed-assets = ["microui-redux-demo-assets/embed-assets"]
-vulkan = ["microui-redux-demo-host/vulkan"]
-wgpu = ["microui-redux-demo-host/wgpu"]
+vulkan = ["microui-redux-demo-host/vulkan", "microui-plugin-platform/vulkan"]
+wgpu = ["microui-redux-demo-host/wgpu", "microui-plugin-platform/wgpu"]
 
 [dependencies]
 microui-redux.workspace = true
@@ -22,6 +22,13 @@ nc-com = { workspace = true, features = ["std", "macros"] }
 microui-redux-demo-assets.workspace = true
 microui-redux-demo-host.workspace = true
 rs-math3d.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Build the shared artifacts as dependencies; native startup still loads their C ABI.
+nc-com-runtime.workspace = true
+microui-plugin-ui = { path = "../../plugins/ui", features = ["dynamic-plugin"] }
+microui-plugin-platform = { path = "../../plugins/platform", default-features = false, features = ["dynamic-plugin"] }
+microui-plugin-assets = { workspace = true, features = ["dynamic-plugin", "theme-json"] }
 
 [[bin]]
 name = "backend-frame-cube"
