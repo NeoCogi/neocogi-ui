@@ -178,7 +178,7 @@ pub(super) struct StyleEditor {
 }
 impl StyleEditor {
     /// Builds the same 72 color sliders and five metrics inside one ordinary scrolling tree.
-    pub(super) fn new(ui: &Ui) -> Result<(Self, ScrollArea), NcStatus> {
+    pub(super) fn new(ui: &Ui) -> Result<(Self, ScrollAreaWidget), NcStatus> {
         let base = ui.assets()?;
         // Activation belongs to this application; the UI runtime has no asset-provider dependency.
         let compiler = nc_com::Runtime::global().construct_class_as(STYLE_COMPILER_CLASS, ())?;

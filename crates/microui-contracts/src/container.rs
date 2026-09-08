@@ -322,9 +322,12 @@ pub trait IScrolling: crate::IWidget {
     fn reveal(&self, rect: Rect) -> Result<(), NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.ScrollArea:v1")]
-/// Scroll composite with one replaceable application content root and private structural roles.
-pub trait IScrollArea: IScrolling {
+#[com_class(auto_guid = "microui.ScrollArea:v1")]
+/// Constructible scroll composite with one replaceable content root and private structural roles.
+pub trait ScrollArea: crate::IWidget + IContainerLayout + IScrolling {
+    /// Creates a framed unmounted scroll tree around one unmounted application content object.
+    #[constructor]
+    fn new(host: ComRef<'_, crate::IWidgetHostAbi>, content: ComRef<'_, crate::IWidgetAbi>, enabled: bool) -> Result<Self, NcStatus>;
     /// Returns the actual application content widget, without its surrounding transform surface.
     fn content(&self) -> Result<ComPtr<crate::IWidgetAbi>, NcStatus>;
     /// Validates replacement before closing old content; structural roles and model identity stay fixed.
@@ -341,9 +344,17 @@ com_int_enum! {
     }
 }
 
-#[com_interface(auto_guid = "microui.Disclosure:v1")]
-/// Fixed header/body composition; callers edit the actual header and Linear body objects.
-pub trait IDisclosure: crate::IWidget {
+#[com_class(auto_guid = "microui.Disclosure:v1")]
+/// Constructible fixed header/body composition exposing its actual editable child objects.
+pub trait Disclosure: crate::IWidget + IContainerLayout {
+    /// Creates a complete unmounted composition with immutable presentation and initial expansion.
+    #[constructor]
+    fn new(
+        host: ComRef<'_, crate::IWidgetHostAbi>,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        style: DisclosureStyle,
+        expanded: bool,
+    ) -> Result<Self, NcStatus>;
     /// Returns shared expansion state also changed by header activation and keyboard input.
     fn expanded(&self) -> Result<bool, NcStatus>;
     /// Changes expansion and retains layout invalidation even while this subtree is hidden.

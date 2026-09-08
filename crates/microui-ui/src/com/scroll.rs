@@ -12,9 +12,9 @@ struct ScrollSurface {
 }
 fixed_phases!(ScrollSurface);
 
-#[com_object(interfaces(IScrollArea, IContainerLayout))]
+#[com_object(microui_contracts::ScrollArea)]
 /// One scroll-area COM identity owns its three structural nodes and shares no parent-widget backpointer.
-pub(super) struct ScrollArea {
+pub struct ScrollAreaObject {
     /// Existing convergence, wheel routing, padding and panel paint algorithms remain authoritative.
     widget: WidgetCore<crate::ScrollArea>,
     /// Exactly three owned children: transform surface, horizontal bar and vertical bar.
@@ -22,7 +22,7 @@ pub(super) struct ScrollArea {
     /// Private authority for the surface's one replaceable application child, not a duplicate tree.
     content: ComPtr<IChildrenEditorAbi>,
 }
-fixed_phases!(ScrollArea);
+fixed_phases!(ScrollAreaObject);
 
 /// Prepared fixed scroll tree, shared by ordinary ScrollArea and TextArea construction.
 /// This value is consumed into one final object; it never becomes a second live owner or widget.
@@ -68,26 +68,31 @@ impl ScrollParts {
         Ok(Self { widget, editor, content, model })
     }
 }
-impl ScrollArea {
-    /// Completes internal construction before consuming the application's sole content attachment.
+impl ScrollAreaObject {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
     pub(super) fn create(
         host: ComPtr<IWidgetHostAbi>,
         content: ComRef<'_, IWidgetAbi>,
         enabled: bool,
-    ) -> Result<ComPtr<IScrollAreaAbi>, NcStatus> {
-        let parts = ScrollParts::prepare(host, enabled)?;
+    ) -> Result<ComPtr<ScrollAreaAbi>, NcStatus> {
+        let value = <Self as ScrollArea>::new(host.as_com_ref(), content, enabled)?;
+        Ok(Self::from_value(value)
+            .query()
+            .expect("ScrollAreaObject declares the ScrollArea class contract"))
+    }
+}
+
+impl ScrollArea for ScrollAreaObject {
+    /// Completes internal construction before consuming the application's sole content attachment.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, content: ComRef<'_, IWidgetAbi>, enabled: bool) -> Result<Self, NcStatus> {
+        let parts = ScrollParts::prepare(host.add_ref(), enabled)?;
         parts.content.insert(0, content)?.finish()?;
-        Ok(Self::from_value(Self {
+        Ok(Self {
             widget: parts.widget,
             editor: parts.editor,
             content: parts.content,
         })
-        .query()
-        .expect("scroll area declares IScrollArea"))
     }
-}
-
-impl IScrollArea for ScrollArea {
     /// Reads the actual content identity through its fixed one-child editor view.
     fn content(&self) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
         self.widget.state.readable()?;
@@ -101,4 +106,4 @@ impl IScrollArea for ScrollArea {
     }
 }
 
-scrolling_impl!(ScrollArea);
+scrolling_impl!(ScrollAreaObject);

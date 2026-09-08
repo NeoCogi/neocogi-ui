@@ -6,13 +6,13 @@ use nc_com::NcCopyToBufferOffset;
 pub type LinearWidget = Widget<LinearAbi>;
 /// Static convenience wrapper around the dynamically constructed Grid class projection.
 pub type GridWidget = Widget<GridAbi>;
-/// Static scroll-composite proxy; its private structural children stay owned by the plugin.
-pub type ScrollArea = Widget<IScrollAreaAbi>;
+/// Static convenience wrapper around the dynamically constructed ScrollArea class projection.
+pub type ScrollAreaWidget = Widget<ScrollAreaAbi>;
 
-/// Static disclosure proxy; the header and Linear body are actual child COM objects.
-pub type Disclosure = Widget<IDisclosureAbi>;
+/// Static convenience wrapper around the dynamically constructed Disclosure class projection.
+pub type DisclosureWidget = Widget<DisclosureAbi>;
 
-impl Widget<IDisclosureAbi> {
+impl Widget<DisclosureAbi> {
     /// Reads expansion shared by the containing layout and its interactive header.
     pub fn expanded(&self) -> Result<bool, NcStatus> {
         self.interface.expanded()
@@ -58,10 +58,29 @@ macro_rules! scrolling_proxy {
         }
     };
 }
-scrolling_proxy!(IScrollAreaAbi);
 scrolling_proxy!(IScrollingAbi);
 
-impl Widget<IScrollAreaAbi> {
+impl Widget<ScrollAreaAbi> {
+    /// Reads actual offset requests through this class's shared scrolling protocol.
+    pub fn info(&self) -> Result<ScrollInfo, NcStatus> {
+        self.interface.query::<IScrollingAbi>()?.info()
+    }
+    /// Requests offsets through this class's shared scrolling protocol.
+    pub fn set_offset(&self, offset: Point) -> Result<(), NcStatus> {
+        self.interface.query::<IScrollingAbi>()?.set_offset(offset)
+    }
+    /// Enables or disables scrolling and both actual scrollbar children.
+    pub fn set_enabled(&self, enabled: bool) -> Result<(), NcStatus> {
+        self.interface.query::<IScrollingAbi>()?.set_enabled(enabled)
+    }
+    /// Requests the next measured vertical end without losing the horizontal request.
+    pub fn scroll_to_end(&self) -> Result<(), NcStatus> {
+        self.interface.query::<IScrollingAbi>()?.scroll_to_end()
+    }
+    /// Requests the nearest offsets revealing the given content-local rectangle.
+    pub fn reveal(&self, rect: Rect) -> Result<(), NcStatus> {
+        self.interface.query::<IScrollingAbi>()?.reveal(rect)
+    }
     /// Returns the actual content capability without exposing edit authority over structural roles.
     pub fn content(&self) -> Result<Widget<IWidgetAbi>, NcStatus> {
         Ok(Widget::from_interface(self.interface.content()?))
@@ -181,16 +200,16 @@ fn encoded_tracks(tracks: &[LayoutTrack]) -> Vec<LayoutTrackAbi> {
 
 impl WidgetFactory {
     /// Creates a disclosure whose body starts empty and whose header owns the supplied label.
-    pub fn disclosure(&self, label: &str, style: DisclosureStyle, expanded: bool) -> Result<Disclosure, NcStatus> {
-        Ok(Disclosure::from_interface(self.interface.create_disclosure(
+    pub fn disclosure(&self, label: &str, style: DisclosureStyle, expanded: bool) -> Result<DisclosureWidget, NcStatus> {
+        Ok(DisclosureWidget::from_interface(self.interface.create_disclosure(
             NcCopyFromBufferOffset::new(0, label.as_bytes()),
             style,
             expanded,
         )?))
     }
     /// Constructs a framed scroll composite around one unmounted application widget.
-    pub fn scroll_area<I: ComInterface>(&self, content: &Widget<I>, enabled: bool) -> Result<ScrollArea, NcStatus> {
-        Ok(ScrollArea::from_interface(
+    pub fn scroll_area<I: ComInterface>(&self, content: &Widget<I>, enabled: bool) -> Result<ScrollAreaWidget, NcStatus> {
+        Ok(ScrollAreaWidget::from_interface(
             self.interface.create_scroll_area(content.node_interface()?.as_com_ref(), enabled)?,
         ))
     }

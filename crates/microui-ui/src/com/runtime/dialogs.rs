@@ -1,6 +1,6 @@
 //! Standard picker composes actual COM controls and owns only explicit request and native-path state.
 use super::*;
-use microui_redux::{EventHandler, EventSession, LinearWidget, ListItemWidget, ScrollArea, TextBlockWidget, TextboxWidget};
+use microui_redux::{EventHandler, EventSession, LinearWidget, ListItemWidget, ScrollAreaWidget, TextBlockWidget, TextboxWidget};
 use microui_redux::events::{Activation, FileDialogCompleted, TextChanged, TextSubmitted};
 use nc_com::{INcStringAbi, NcString};
 use std::{
@@ -63,9 +63,9 @@ struct Model {
     /// Persistent visible error display; read failures preserve the prior listing and selection.
     error: TextBlockWidget,
     /// Persistent scrolling controllers; refreshing replaces only their application content roots.
-    folders: ScrollArea,
+    folders: ScrollAreaWidget,
     /// Separate file column keeps its own retained scroll request and clamping behavior.
-    files: ScrollArea,
+    files: ScrollAreaWidget,
     /// Navigation is installed after the private session finishes its current registration transaction.
     navigate: Option<PathBuf>,
     /// Complete most recent directory-read diagnostic, also available through the component interface.
@@ -293,8 +293,8 @@ impl Dialog {
         let cancel = button(runtime, "Cancel")?;
         let folder_content = column(runtime, Path::new(""), Vec::new(), true)?;
         let file_content = column(runtime, Path::new(""), Vec::new(), false)?;
-        let folders = ScrollArea::from_interface(runtime.widget_factory().create_scroll_area(folder_content.root.node_interface()?.as_com_ref(), true)?);
-        let files = ScrollArea::from_interface(runtime.widget_factory().create_scroll_area(file_content.root.node_interface()?.as_com_ref(), true)?);
+        let folders = ScrollAreaWidget::from_interface(runtime.widget_factory().create_scroll_area(folder_content.root.node_interface()?.as_com_ref(), true)?);
+        let files = ScrollAreaWidget::from_interface(runtime.widget_factory().create_scroll_area(file_content.root.node_interface()?.as_com_ref(), true)?);
         let error = label(runtime, "")?;
         let toolbar = line(
             runtime,

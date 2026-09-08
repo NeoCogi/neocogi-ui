@@ -38,6 +38,9 @@ wrappers. The accepted migration and outstanding validation are recorded in
 - Make Linear and Grid registered class contracts. Their constructors, topology
   edits, and relationship policies now share the concrete class projection;
   only runtime-facing `IContainerLayout` remains required.
+- Make ScrollArea and Disclosure registered class contracts. Their fixed
+  compositions retain shared scrolling/container protocols while content,
+  expansion, header, and body access live on the concrete class projections.
 - Replace `IUiFactory` with a separately registered `UiFactory` class. The
   runtime returns a host-bound instance for convenience, while hosts can construct
   `Button` and other registered classes directly from typed argument frames.

@@ -632,7 +632,7 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
     let concrete = area.as_interface().add_ref();
     assert_eq!(concrete.query::<IUnknown>().unwrap().as_ptr(), identity.as_ptr());
     assert_eq!(root.query::<ITextEditorAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
-    assert_eq!(root.query::<IScrollAreaAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
+    assert_eq!(root.query::<ScrollAreaAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
     let scroll = area.scrolling().unwrap();
     assert_eq!(scroll.node_interface().unwrap().query::<IUnknown>().unwrap().as_ptr(), identity.as_ptr());
     let structural = root.query::<IContainerLayoutAbi>().unwrap().children().unwrap();

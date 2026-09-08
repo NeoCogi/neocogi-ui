@@ -144,7 +144,7 @@ pub(super) struct State {
     /// Movable main window can be hidden and restored through the persistent grid menu.
     demo: ComPtr<IWindowAbi>,
     /// Actual sampler scrolling is retained for navigation and complete-frame image verification.
-    sample_scroll: ScrollArea,
+    sample_scroll: ScrollAreaWidget,
     /// Position, dimensions and sampled frame-rate presentations belong to this main window.
     info: [TextBlockWidget; 3],
     /// Minimized geometry must not be clamped back to the normal minimum size.
@@ -152,7 +152,7 @@ pub(super) struct State {
     /// Actual log text is the only stored log buffer; appends read it only when an action writes.
     log: TextBlockWidget,
     /// Scroll requests survive measurement changes caused by log appends and style edits.
-    log_scroll: ScrollArea,
+    log_scroll: ScrollAreaWidget,
     /// Enter and Submit edit and clear this actual single-line control.
     entry: TextboxWidget,
     /// User-owned policy for following new output.

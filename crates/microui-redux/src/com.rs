@@ -8,7 +8,7 @@
 pub use microui_contracts::*;
 use nc_com::{ComInterface, ComPtr, ComRef, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
 mod containers;
-pub use containers::{LinearWidget, GridWidget, ScrollArea, Disclosure};
+pub use containers::{DisclosureWidget, GridWidget, LinearWidget, ScrollAreaWidget};
 
 /// Generic static proxy for one concrete widget editing capability.
 pub struct Widget<I: ComInterface> {

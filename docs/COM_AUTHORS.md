@@ -549,17 +549,17 @@ perform an ordinary edit.
 
 The public capabilities preserve each composition's structural roles:
 
-- `IScrollArea: IScrolling: IWidget` permits replacing its one application content
-  root. It does not expose `IContainer` methods that could remove the transform
-  surface or either scrollbar.
-- `IDisclosure: IWidget` returns its actual text header and actual Linear body.
+- The `ScrollArea` class permits replacing its one application content root and
+  requires the shared `IScrolling` protocol. It does not expose `IContainer`
+  methods that could remove the transform surface or either scrollbar.
+- The `Disclosure` class returns its actual text header and actual Linear body.
   Edit body children through the returned Linear capability, and edit the label
   or header options through the returned text capability. The fixed header/body
   pair itself cannot be removed through a generic container interface.
-- `ITextArea: IMultilineEditor: ITextEditor: ITextContent: IWidget` is the composed
-  root. Its inherited editing calls forward to one actual editor child. Querying
-  this root for `IScrolling` returns the same outer identity; querying it for
-  `IScrollArea` fails. There is no operation that replaces its fixed editor with
+- The `TextArea` class is the composed root. Its direct editing calls forward to
+  one actual editor child. Querying this root for `IScrolling` returns the same
+  outer identity; querying it for the `ScrollArea` class projection fails. There
+  is no operation that replaces its fixed editor with
   arbitrary content. The child exposes `IMultilineEditor`, has its own ordinary
   widget identity, and is the composition's single keyboard Tab stop.
 

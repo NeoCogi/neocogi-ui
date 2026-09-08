@@ -53,8 +53,8 @@ impl UiFactory for UiFactoryObject {
         label: NcCopyFromBufferOffset<'_, u8>,
         style: DisclosureStyle,
         expanded: bool,
-    ) -> Result<ComPtr<IDisclosureAbi>, NcStatus> {
-        super::disclosure::Disclosure::create(self.host.clone(), text(label)?, style, expanded)
+    ) -> Result<ComPtr<DisclosureAbi>, NcStatus> {
+        super::disclosure::DisclosureObject::create(self.host.clone(), label, style, expanded)
     }
 
     /// Composes real bars and a transform container around validated application content.
@@ -62,8 +62,8 @@ impl UiFactory for UiFactoryObject {
         &self,
         content: ComRef<'_, IWidgetAbi>,
         enabled: bool,
-    ) -> Result<ComPtr<IScrollAreaAbi>, NcStatus> {
-        super::scroll::ScrollArea::create(self.host.clone(), content, enabled)
+    ) -> Result<ComPtr<ScrollAreaAbi>, NcStatus> {
+        super::scroll::ScrollAreaObject::create(self.host.clone(), content, enabled)
     }
 
     /// Validates both policies before creating a container and its host-owned child store.

@@ -199,9 +199,9 @@ pub trait UiFactory {
     /// Creates a fixed scrolling multiline editor; CRLF and CR normalize to LF and the cursor starts at the end.
     fn create_text_area(&self, text: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping, scrolling: bool) -> Result<ComPtr<TextAreaAbi>, NcStatus>;
     /// Creates an empty disclosure with a real text header and editable vertical Linear body.
-    fn create_disclosure(&self, label: NcCopyFromBufferOffset<'_, u8>, style: DisclosureStyle, expanded: bool) -> Result<ComPtr<IDisclosureAbi>, NcStatus>;
+    fn create_disclosure(&self, label: NcCopyFromBufferOffset<'_, u8>, style: DisclosureStyle, expanded: bool) -> Result<ComPtr<DisclosureAbi>, NcStatus>;
     /// Creates a framed scroll composite around one unmounted content object; generic options can subsequently change its frame.
-    fn create_scroll_area(&self, content: ComRef<'_, IWidgetAbi>, enabled: bool) -> Result<ComPtr<IScrollAreaAbi>, NcStatus>;
+    fn create_scroll_area(&self, content: ComRef<'_, IWidgetAbi>, enabled: bool) -> Result<ComPtr<ScrollAreaAbi>, NcStatus>;
     /// Creates an empty directional container after validating its complete initial policy.
     fn create_linear(&self, direction: FlowDirection, cross: CrossSizeAbi) -> Result<ComPtr<LinearAbi>, NcStatus>;
     /// Creates an empty Grid with validated complete column and row policies; input offsets must be zero.

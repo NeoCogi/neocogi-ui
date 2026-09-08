@@ -24,6 +24,8 @@ nc_com::plugin! {
         microui_ui::com::ListBoxObject,
         microui_ui::com::LinearObject,
         microui_ui::com::GridObject,
+        microui_ui::com::ScrollAreaObject,
+        microui_ui::com::DisclosureObject,
     ],
 }
 
