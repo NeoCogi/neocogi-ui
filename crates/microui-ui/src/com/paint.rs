@@ -15,8 +15,8 @@ impl ITextMetrics for Metrics {
         let label = text(input)?;
         let resources = self.resources.current();
         let size = crate::ui_node::widgets::control::inline_content_size(
-            resources.assets.bundle().skin(),
-            resources.assets.bundle().atlas(),
+            resources.bundle().skin(),
+            resources.bundle().atlas(),
             &crate::FontRef::Role(FontRole::Body),
             label,
             None,

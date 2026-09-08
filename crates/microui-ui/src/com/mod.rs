@@ -101,7 +101,7 @@ impl IWidgetHost for WidgetHost {
         self.check_open()?;
         let factory = self.state.factory.borrow().upgrade().ok_or(UI_E_CLOSED)?;
         let revision = factory.resources.current();
-        Ok(revision.assets.source().add_ref())
+        Ok(revision.source().add_ref())
     }
     /// Issues a private writer and distinct read-only view for a new empty collection.
     fn create_children(&self) -> Result<ComPtr<IChildrenEditorAbi>, NcStatus> {

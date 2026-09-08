@@ -69,7 +69,7 @@ let ui = Ui::from_interface(nc_com::Runtime::global().construct::<UiRuntimeAbi>(
 `ui.install_assets(candidate, renderer)` owns one runtime transaction. It validates
 and imports bounded metadata, asks the renderer to copy and upload the complete image,
 then publishes only local lookup tables and resolved painting state. Only success
-publishes the new revision to the window manager, built-in widgets, text metrics and
+publishes the new revision to `IWidgetHost`, the window manager, text metrics, and
 scoped layout services together. Failed validation or upload leaves the previous UI
 resources and GPU atlas usable. The renderer is borrowed for the call; the UI retains
 neither a platform/window nor a second CPU image merely to remember its resources.
@@ -90,9 +90,10 @@ while upload is in progress. No foreign call runs with a live runtime or GPU
 `Ui::assets()` and `IWidgetHost::assets()` retain the current immutable revision.
 Independent widget implementations can obtain the latter through their
 `WidgetState::host()`. They must refresh any locally cached glyph metrics, icon
-rectangles, colors or UVs when that bundle identity changes. Built-in widgets share
-the runtime's cache; independent widgets may share a concrete local cache among
-themselves. Fetch a bundle/table per revision, not per glyph. The ordinary
+rectangles, colors or UVs when that bundle identity changes. Built-in widgets follow
+this same public host boundary and keep a local cache per immutable revision;
+independent widgets may share their own concrete cache. Fetch a bundle/table per
+revision, not per glyph. The ordinary
 `ITextMetrics::button_size` and `IPainter::text` conveniences still use body-font
 button styling; custom typography uses the full bundle records and bulk triangles.
 

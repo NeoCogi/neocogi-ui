@@ -220,8 +220,8 @@ enum Destination {
 pub(super) struct Backend {
     /// Selects local recording or final submission without duplicating the executor type.
     destination: Destination,
-    /// Widget recording failures prevent submitting even a partially built frame.
-    host: Rc<HostState>,
+    /// Runtime submissions observe component failures; detached widget recording needs no private host.
+    host: Option<Rc<HostState>>,
     /// Owned scratch survives across frames and is never lent through a COM object.
     storage: Rc<Storage>,
     /// Stable stream object reused for every synchronous submission.
@@ -233,10 +233,10 @@ pub(super) struct Backend {
 impl Backend {
     /// Creates recording storage without acquiring a GPU frame.
     pub(super) fn new(host: Rc<HostState>, resources: Rc<super::widget::Resources>) -> Self {
-        Self::create(host, Destination::Renderer(resources))
+        Self::create(Some(host), Destination::Renderer(resources))
     }
     /// Creates the same executor with explicit recording or resource-owning submission behavior.
-    fn create(host: Rc<HostState>, destination: Destination) -> Self {
+    fn create(host: Option<Rc<HostState>>, destination: Destination) -> Self {
         let storage = Rc::new(Storage::default());
         let stream = Stream::from_value(Stream { storage: storage.clone() })
             .query()
@@ -250,8 +250,8 @@ impl Backend {
         }
     }
     /// Reuses the same backend/executor monomorphization for local widget geometry.
-    pub(super) fn recording(host: Rc<HostState>) -> (Self, Rc<Storage>) {
-        let backend = Self::create(host, Destination::Recording);
+    pub(super) fn recording() -> (Self, Rc<Storage>) {
+        let backend = Self::create(None, Destination::Recording);
         let storage = backend.storage.clone();
         (backend, storage)
     }
@@ -310,7 +310,7 @@ impl RendererFrame for Frame<'_> {
         if let Some(error) = self.error.take() {
             return Err(error);
         }
-        if let Some(error) = self.backend.host.error.get() {
+        if let Some(error) = self.backend.host.as_ref().and_then(|host| host.error.get()) {
             return Err(FrameError::new(error.to_string()));
         }
         if matches!(self.backend.destination, Destination::Recording) {
@@ -340,7 +340,7 @@ impl RendererFrame for Frame<'_> {
                     vertex_count,
                     batch_count,
                 },
-                revision.assets.source(),
+                revision.source(),
                 self.backend.stream.as_com_ref(),
             )
             .map_err(|error| FrameError::new(error.to_string()))

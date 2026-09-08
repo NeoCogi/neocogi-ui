@@ -1,6 +1,6 @@
 //! Disclosure owns two real COM children; its header shares only explicit expansion data with layout.
 use super::*;
-use super::widget::{Resources, WidgetCore};
+use super::widget::WidgetCore;
 
 leaf_class!(DisclosureHeader, crate::ui_node::DisclosureHeader, ITextContent, ITextContentAbi);
 text_content!(DisclosureHeader, com_label, com_set_label);
@@ -23,7 +23,6 @@ impl Disclosure {
     /// Validates immutable presentation, then constructs the complete fixed composition before returning it.
     pub(super) fn create(
         host: ComPtr<IWidgetHostAbi>,
-        resources: Rc<Resources>,
         label: &str,
         style: DisclosureStyle,
         expanded: bool,
@@ -37,20 +36,18 @@ impl Disclosure {
         let model = crate::ui_node::DisclosureState::new(expanded);
         let header = DisclosureHeader::create(
             host.clone(),
-            resources.clone(),
             variant.header_options(),
             crate::ui_node::DisclosureHeader::com_new(model.clone(), label.to_owned(), variant),
-        );
+        )?;
         let body = super::containers::Linear::create(
             host.clone(),
-            resources.clone(),
             crate::Linear::com_new(crate::LinearDirection::TopToBottom, crate::LinearCrossSize::Stretch),
         )?;
         let editor = host.create_children()?;
         editor.insert(0, header.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
         editor.insert(1, body.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
         Ok(Self::from_value(Self {
-            widget: WidgetCore::new(host, resources, crate::WidgetOption::NO_INTERACT, crate::Disclosure::com_new(model, variant)),
+            widget: WidgetCore::new(host, crate::WidgetOption::NO_INTERACT, crate::Disclosure::com_new(model, variant))?,
             editor,
             header,
             body,

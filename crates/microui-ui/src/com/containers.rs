@@ -1,6 +1,6 @@
 //! Concrete container editing reuses existing layout algorithms and one host-owned child sequence.
 use super::*;
-use super::widget::{Resources, WidgetAlgorithm, WidgetCore};
+use super::widget::{WidgetAlgorithm, WidgetCore};
 use nc_com::NcCopyToBufferOffset;
 
 /// Metadata-only edit applied after the host editor commits the corresponding topology operation.
@@ -38,10 +38,10 @@ macro_rules! container_class {
         }
         impl $name {
             /// Creates an empty container after validating all concrete configuration.
-            pub(super) fn create(host: ComPtr<IWidgetHostAbi>, resources: Rc<Resources>, core: $core) -> Result<ComPtr<$abi>, NcStatus> {
+            pub(super) fn create(host: ComPtr<IWidgetHostAbi>, core: $core) -> Result<ComPtr<$abi>, NcStatus> {
                 let editor = host.create_children()?;
                 Ok(Self::from_value(Self {
-                    widget: WidgetCore::new(host, resources, crate::WidgetOption::NO_INTERACT, core),
+                    widget: WidgetCore::new(host, crate::WidgetOption::NO_INTERACT, core)?,
                     editor,
                 })
                 .query()

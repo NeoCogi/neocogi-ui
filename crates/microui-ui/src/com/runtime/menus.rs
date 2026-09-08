@@ -242,7 +242,6 @@ impl IFontStyle for Item {
             .factory
             .resources
             .current()
-            .assets
             .original()
             .font_id(name)
             .ok_or(nc_com::NC_E_NOT_FOUND)?;

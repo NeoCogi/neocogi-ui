@@ -91,7 +91,7 @@ impl ILayoutService for Layout {
         let constraints = constraints(limits)?;
         let node = access.frame().children.get_mut(index as usize).ok_or(nc_com::NC_E_OUT_OF_RANGE)?;
         let resources = self.storage.resources.current();
-        let size = node.measure(resources.assets.bundle().skin(), resources.assets.bundle().atlas(), constraints);
+        let size = node.measure(resources.bundle().skin(), resources.bundle().atlas(), constraints);
         self.storage.size(size)
     }
     /// Recurses with owned child storage and no runtime or node reference stored in COM.
@@ -105,8 +105,8 @@ impl ILayoutService for Layout {
         let resources = self.storage.resources.current();
         let size = frame.placement.as_mut().expect("placement was checked").layout_node_ref(
             node,
-            resources.assets.bundle().skin(),
-            resources.assets.bundle().atlas(),
+            resources.bundle().skin(),
+            resources.bundle().atlas(),
             local_rect(rect),
         );
         self.storage.size(size)

@@ -1,6 +1,6 @@
 //! Fixed scroll composition uses real COM children and explicit shared scalar data within this plugin.
 use super::*;
-use super::widget::{Resources, WidgetCore};
+use super::widget::WidgetCore;
 
 #[com_class(interfaces(IWidget, IContainerLayout))]
 /// Transform-only COM container owning the ordinary application content widget.
@@ -38,7 +38,7 @@ pub(super) struct ScrollParts {
 }
 impl ScrollParts {
     /// Builds every structural role before attaching application content or the internal editor.
-    pub(super) fn prepare(host: ComPtr<IWidgetHostAbi>, resources: Rc<Resources>, enabled: bool) -> Result<Self, NcStatus> {
+    pub(super) fn prepare(host: ComPtr<IWidgetHostAbi>, enabled: bool) -> Result<Self, NcStatus> {
         host.check_mutation()?;
         let horizontal_parameters = crate::ScrollbarParameters::new(crate::ScrollbarAxis::Horizontal);
         let horizontal_options = horizontal_parameters.opt;
@@ -47,16 +47,15 @@ impl ScrollParts {
         let vertical_options = vertical_parameters.opt;
         let vertical = crate::Scrollbar::from(vertical_parameters);
         let model = crate::ui_node::ScrollModel::new(horizontal.axis_state.clone(), vertical.axis_state.clone(), enabled);
-        let horizontal = super::leaves::Scrollbar::create(host.clone(), resources.clone(), horizontal_options, horizontal);
-        let vertical = super::leaves::Scrollbar::create(host.clone(), resources.clone(), vertical_options, vertical);
+        let horizontal = super::leaves::Scrollbar::create(host.clone(), horizontal_options, horizontal)?;
+        let vertical = super::leaves::Scrollbar::create(host.clone(), vertical_options, vertical)?;
         let content = host.create_children()?;
         let surface: ComPtr<IWidgetAbi> = ScrollSurface::from_value(ScrollSurface {
             widget: WidgetCore::new(
                 host.clone(),
-                resources.clone(),
                 crate::WidgetOption::NO_INTERACT,
                 crate::ui_node::ScrollSurface { model: model.clone() },
-            ),
+            )?,
             editor: content.clone(),
         })
         .query()
@@ -65,7 +64,7 @@ impl ScrollParts {
         editor.insert(0, surface.as_com_ref())?.finish()?;
         editor.insert(1, horizontal.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
         editor.insert(2, vertical.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
-        let widget = WidgetCore::new(host, resources, crate::WidgetOption::FRAME, crate::ScrollArea::from_model(model.clone()));
+        let widget = WidgetCore::new(host, crate::WidgetOption::FRAME, crate::ScrollArea::from_model(model.clone()))?;
         Ok(Self { widget, editor, content, model })
     }
 }
@@ -73,11 +72,10 @@ impl ScrollArea {
     /// Completes internal construction before consuming the application's sole content attachment.
     pub(super) fn create(
         host: ComPtr<IWidgetHostAbi>,
-        resources: Rc<Resources>,
         content: ComRef<'_, IWidgetAbi>,
         enabled: bool,
     ) -> Result<ComPtr<IScrollAreaAbi>, NcStatus> {
-        let parts = ScrollParts::prepare(host, resources, enabled)?;
+        let parts = ScrollParts::prepare(host, enabled)?;
         parts.content.insert(0, content)?.finish()?;
         Ok(Self::from_value(Self {
             widget: parts.widget,

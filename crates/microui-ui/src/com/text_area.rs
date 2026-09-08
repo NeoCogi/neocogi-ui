@@ -1,6 +1,6 @@
 //! Fixed multiline composition forwards editing to one actual content leaf, sharing scalar scrolling only.
 use super::*;
-use super::widget::{Resources, WidgetCore};
+use super::widget::WidgetCore;
 use nc_com::{INcStringAbi, NcString};
 
 leaf_class!(TextEditor, crate::TextArea, IMultilineEditor, IMultilineEditorAbi, IFontStyle, ITextEvents);
@@ -78,13 +78,12 @@ impl TextArea {
     /// Prepares the fixed scroll structure, attaches one real editor, and consumes all state into the final root.
     pub(super) fn create(
         host: ComPtr<IWidgetHostAbi>,
-        resources: Rc<Resources>,
         text: &str,
         wrap: crate::TextWrap,
         scrolling: bool,
     ) -> Result<ComPtr<ITextAreaAbi>, NcStatus> {
-        let parts = super::scroll::ScrollParts::prepare(host.clone(), resources.clone(), scrolling)?;
-        let text = TextEditor::create(host, resources, crate::WidgetOption::NONE, crate::TextArea::com_new(text, wrap, parts.model));
+        let parts = super::scroll::ScrollParts::prepare(host.clone(), scrolling)?;
+        let text = TextEditor::create(host, crate::WidgetOption::NONE, crate::TextArea::com_new(text, wrap, parts.model))?;
         let font = text.query()?;
         let events = text.query()?;
         parts.content.insert(0, text.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
