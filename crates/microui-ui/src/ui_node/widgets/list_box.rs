@@ -71,8 +71,11 @@ pub struct ListBoxSubmitted {
     pub label: String,
 }
 
-/// Concrete retained list box, including its semantic and interaction state.
+#[nc_com::com_object(microui_contracts::ListBox)]
+/// Concrete retained list box and dynamically constructible COM object.
 pub struct ListBox {
+    /// Non-semantic COM lifecycle and host-backed phase resources.
+    runtime: crate::com::widget::WidgetRuntime,
     /// Initialization-only label.
     label: String,
     /// Initialization-only image.
@@ -95,6 +98,20 @@ impl ListBox {
     pub fn create(parameters: ListBoxParameters) -> (crate::TypedWidgetHandle<Self>, crate::Node) {
         let widget = ListBox::from(parameters);
         crate::Node::typed_widget(widget)
+    }
+
+    /// Combines validated semantic parameters with one already bound common runtime.
+    pub(crate) fn from_runtime(runtime: crate::com::widget::WidgetRuntime, parameters: ListBoxParameters) -> Self {
+        Self {
+            runtime,
+            label: parameters.label,
+            image: parameters.image,
+            fit_width: false,
+            font: parameters.font,
+            #[cfg(test)]
+            opt: parameters.opt,
+            submitted_event: crate::EventSource::new(),
+        }
     }
 
     /// Returns the native event endpoint emitted once for every user submission.
@@ -172,18 +189,12 @@ impl crate::TypedWidget<ListBoxSubmitted> for ListBox {
     }
 }
 
+#[cfg(test)]
 impl From<ListBoxParameters> for ListBox {
     /// Transfers one-shot parameters into the concrete ListBox runtime.
     fn from(parameters: ListBoxParameters) -> Self {
-        ListBox {
-            label: parameters.label,
-            image: parameters.image,
-            fit_width: false,
-            font: parameters.font,
-            #[cfg(test)]
-            opt: parameters.opt,
-            submitted_event: crate::EventSource::new(),
-        }
+        let runtime = crate::com::widget::WidgetRuntime::for_test(parameters.opt);
+        Self::from_runtime(runtime, parameters)
     }
 }
 
@@ -191,6 +202,18 @@ impl crate::com::widget::WidgetAlgorithm for ListBox {
     /// Logical COM closure cancels ordinary submissions while retained widget references remain safe.
     fn close_events(&mut self) {
         self.submitted_event.close_ordinary();
+    }
+}
+
+impl crate::com::widget::HostedWidget for ListBox {
+    /// Borrows common lifecycle and resource state without a second list-box representation.
+    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+        &self.runtime
+    }
+
+    /// Exclusively borrows common lifecycle and resource state for a COM mutation or phase.
+    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+        &mut self.runtime
     }
 }
 

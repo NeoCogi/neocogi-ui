@@ -709,44 +709,6 @@ pub(crate) trait IconState: WidgetAlgorithm {
     fn set_icon(&mut self, icon: Option<crate::IconRef>) -> bool;
 }
 
-impl<S: IconState> WidgetCore<S> {
-    /// Resolves a semantic icon selection before borrowing the concrete state.
-    pub(super) fn set_icon_role(&mut self, icon: ContentIcon) -> Result<(), NcStatus> {
-        self.state.writable()?;
-        let icon = match icon {
-            ContentIcon::NONE => None,
-            ContentIcon::CLOSE => Some(crate::IconRole::Close),
-            ContentIcon::EXPAND => Some(crate::IconRole::Expand),
-            ContentIcon::COLLAPSE => Some(crate::IconRole::Collapse),
-            ContentIcon::CHECK => Some(crate::IconRole::Check),
-            ContentIcon::EXPAND_DOWN => Some(crate::IconRole::ExpandDown),
-            ContentIcon::OPEN_FOLDER => Some(crate::IconRole::OpenFolder),
-            ContentIcon::CLOSED_FOLDER => Some(crate::IconRole::ClosedFolder),
-            ContentIcon::FILE => Some(crate::IconRole::File),
-            _ => return Err(NC_E_INVALID_ARG),
-        };
-        self.commit_icon(icon.map(crate::IconRef::Role))
-    }
-    /// Looks up a named icon once against this widget's exact immutable resource owner.
-    pub(super) fn set_named_icon(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        self.state.writable()?;
-        let name = text(input)?;
-        let resources = self.resources.current(self.state.host())?;
-        let icon = resources.assets.original().icon_id(name).ok_or(nc_com::NC_E_NOT_FOUND)?;
-        if self.core.set_icon(Some(crate::IconRef::Named(icon))) {
-            self.state.record_change(GeometryChange::CHANGED);
-        }
-        Ok(())
-    }
-    /// Commits the selection and invalidates the inline visual's reserved size.
-    fn commit_icon(&mut self, icon: Option<crate::IconRef>) -> Result<(), NcStatus> {
-        if self.core.set_icon(icon) {
-            self.state.record_change(GeometryChange::CHANGED);
-        }
-        Ok(())
-    }
-}
-
 /// Shares only scoped container geometry; fixed composites need not expose mutable generic topology.
 macro_rules! container_layout_impl {
     ($name:ident) => {

@@ -30,17 +30,14 @@
 
 //! Retained list-item widget.
 //!
-//! `ListItem` represents one selectable row in a retained list.
+//! `ListItem` represents one selectable row in a retained list. Application payloads stay in the
+//! statically linked caller and are mapped from the row's typed activation event.
 
 use crate::{ControlRole};
 
 use super::*;
-use std::rc::Rc;
-
 /// One-shot construction input for a [`ListItem`].
-pub struct ListItemParameters<Value = ()> {
-    /// Application data carried unchanged by the row and cloned into each submission.
-    pub value: Value,
+pub struct ListItemParameters {
     /// Initial label displayed for the list item.
     pub label: String,
     /// Optional atlas icon rendered alongside the label.
@@ -51,7 +48,7 @@ pub struct ListItemParameters<Value = ()> {
     pub opt: WidgetOption,
 }
 
-impl<Value: Clone + 'static> crate::LeafWidget for ListItem<Value> {
+impl crate::LeafWidget for ListItem {
     fn measure(&self, style: &Skin, atlas: &AtlasHandle, constraints: Constraints) -> Dimensioni {
         self.preferred_size_widget(style, atlas, constraints)
     }
@@ -61,7 +58,6 @@ impl ListItemParameters {
     /// Creates list-item parameters with default widget options.
     pub fn new(label: impl Into<String>) -> Self {
         Self {
-            value: (),
             label: label.into(),
             icon: None,
             font: FontRef::Role(FontRole::Body),
@@ -73,7 +69,6 @@ impl ListItemParameters {
     #[cfg(test)]
     pub fn with_opt(label: impl Into<String>, opt: WidgetOption) -> Self {
         Self {
-            value: (),
             label: label.into(),
             icon: None,
             font: FontRef::Role(FontRole::Body),
@@ -85,7 +80,6 @@ impl ListItemParameters {
     #[cfg(test)]
     pub fn with_icon(label: impl Into<String>, icon: IconRef) -> Self {
         Self {
-            value: (),
             label: label.into(),
             icon: Some(icon),
             font: FontRef::Role(FontRole::Body),
@@ -96,17 +90,16 @@ impl ListItemParameters {
 
 /// Snapshot emitted when the user submits a list item.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ListItemSubmitted<Value = ()> {
-    /// Concrete application data at submission time, independent of lossy display text.
-    pub value: Value,
+pub struct ListItemSubmitted {
     /// Item label at submission time.
     pub label: String,
 }
 
-/// Concrete retained list item, including its semantic state.
-pub struct ListItem<Value: Clone + 'static = ()> {
-    /// Typed row payload; changing the displayed label never changes this value.
-    value: Value,
+#[nc_com::com_object(microui_contracts::ListItem)]
+/// Concrete retained list item and dynamically constructible COM object.
+pub struct ListItem {
+    /// Non-semantic COM lifecycle and host-backed phase resources.
+    runtime: crate::com::widget::WidgetRuntime,
     /// Initialization-only icon.
     icon: Option<IconRef>,
     /// Initialization-only font.
@@ -118,14 +111,27 @@ pub struct ListItem<Value: Clone + 'static = ()> {
     /// Mutable label displayed for the item.
     label: String,
     /// Runtime-owned source for user submissions.
-    submitted_event: Rc<crate::EventSource<ListItemSubmitted<Value>>>,
+    submitted_event: crate::EventSource<ListItemSubmitted>,
 }
 
-impl<Value: Clone + 'static> ListItem<Value> {
+impl ListItem {
     /// Constructs a retained node and a weak typed handle to its concrete list item.
     #[cfg(test)]
-    pub fn create(parameters: ListItemParameters<Value>) -> (TypedWidgetHandle<Self>, Node) {
+    pub fn create(parameters: ListItemParameters) -> (TypedWidgetHandle<Self>, Node) {
         Node::typed_widget(Self::from(parameters))
+    }
+
+    /// Combines validated semantic parameters with one already bound common runtime.
+    pub(crate) fn from_runtime(runtime: crate::com::widget::WidgetRuntime, parameters: ListItemParameters) -> Self {
+        Self {
+            runtime,
+            icon: parameters.icon,
+            font: parameters.font,
+            #[cfg(test)]
+            opt: parameters.opt,
+            label: parameters.label,
+            submitted_event: crate::EventSource::new(),
+        }
     }
 
     /// Returns the current label.
@@ -140,8 +146,8 @@ impl<Value: Clone + 'static> ListItem<Value> {
 
     /// Returns the native event endpoint emitted once for every user submission.
     #[cfg(test)]
-    pub fn submitted(&self) -> crate::WidgetEventPortHandle<ListItemSubmitted<Value>> {
-        <Self as crate::TypedWidget<ListItemSubmitted<Value>>>::event(self)
+    pub fn submitted(&self) -> crate::WidgetEventPortHandle<ListItemSubmitted> {
+        <Self as crate::TypedWidget<ListItemSubmitted>>::event(self)
     }
 
     /// Measures the row label and optional icon.
@@ -197,14 +203,14 @@ impl<Value: Clone + 'static> ListItem<Value> {
 }
 
 #[cfg(test)]
-impl<Value: Clone + 'static> TypedWidgetHandle<ListItem<Value>> {
+impl TypedWidgetHandle<ListItem> {
     /// Returns the list item's native submission endpoint.
-    pub fn submitted(&self) -> WidgetEventPortHandle<ListItemSubmitted<Value>> {
+    pub fn submitted(&self) -> WidgetEventPortHandle<ListItemSubmitted> {
         self.widget_event()
     }
 }
 
-impl<Value: Clone + 'static> Widget for ListItem<Value> {
+impl Widget for ListItem {
     #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
         &self.opt
@@ -216,7 +222,7 @@ impl<Value: Clone + 'static> Widget for ListItem<Value> {
         }
         // Clone before emission so observers receive an immutable selection snapshot.
         let label = self.label.clone();
-        self.submitted_event.emit(ListItemSubmitted { label, value: self.value.clone() });
+        self.submitted_event.emit(ListItemSubmitted { label });
 
         // Submitting preserves the label and icon used by intrinsic measurement.
         crate::Change::NoChange
@@ -231,24 +237,18 @@ impl<Value: Clone + 'static> Widget for ListItem<Value> {
     }
 }
 
-impl<Value: Clone + 'static> crate::TypedWidget<ListItemSubmitted<Value>> for ListItem<Value> {
-    fn event(&self) -> crate::WidgetEventPortHandle<ListItemSubmitted<Value>> {
+impl crate::TypedWidget<ListItemSubmitted> for ListItem {
+    fn event(&self) -> crate::WidgetEventPortHandle<ListItemSubmitted> {
         self.submitted_event.event()
     }
 }
 
-impl<Value: Clone + 'static> From<ListItemParameters<Value>> for ListItem<Value> {
+#[cfg(test)]
+impl From<ListItemParameters> for ListItem {
     /// Transfers construction data into one concrete row and its typed event source.
-    fn from(parameters: ListItemParameters<Value>) -> Self {
-        Self {
-            icon: parameters.icon,
-            font: parameters.font,
-            #[cfg(test)]
-            opt: parameters.opt,
-            label: parameters.label,
-            value: parameters.value,
-            submitted_event: Rc::new(crate::EventSource::new()),
-        }
+    fn from(parameters: ListItemParameters) -> Self {
+        let runtime = crate::com::widget::WidgetRuntime::for_test(parameters.opt);
+        Self::from_runtime(runtime, parameters)
     }
 }
 
@@ -256,6 +256,18 @@ impl crate::com::widget::WidgetAlgorithm for ListItem {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
         self.submitted_event.close_ordinary();
+    }
+}
+
+impl crate::com::widget::HostedWidget for ListItem {
+    /// Borrows common lifecycle and resource state without a second list-item representation.
+    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+        &self.runtime
+    }
+
+    /// Exclusively borrows common lifecycle and resource state for a COM mutation or phase.
+    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+        &mut self.runtime
     }
 }
 

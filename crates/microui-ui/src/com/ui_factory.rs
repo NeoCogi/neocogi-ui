@@ -137,19 +137,19 @@ impl UiFactory for UiFactoryObject {
     /// Validates the label before allocating a standalone list-row identity.
     fn create_list_item(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ListItemAbi>, NcStatus> {
         self.host.check_mutation()?;
-        super::leaves::ListItemObject::create(self.host.clone(), label)
+        super::ListItem::create_com(self.host.clone(), label)
     }
 
     /// Validates the label before allocating a button-like list entry.
     fn create_list_box(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ListBoxAbi>, NcStatus> {
         self.host.check_mutation()?;
-        super::leaves::ListBoxObject::create(self.host.clone(), label)
+        super::ListBox::create_com(self.host.clone(), label)
     }
 
     /// Validates axis and range arithmetic before allocating the scrollbar.
     fn create_scrollbar(&self, range: ScrollRange) -> Result<ComPtr<ScrollbarAbi>, NcStatus> {
         self.host.check_mutation()?;
-        super::leaves::ScrollbarObject::create(self.host.clone(), range)
+        super::Scrollbar::create_com(self.host.clone(), range)
     }
 
     /// Constructs a complete Button in one call through its concrete class implementation.

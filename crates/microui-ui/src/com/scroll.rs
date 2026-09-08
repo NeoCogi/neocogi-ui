@@ -42,13 +42,15 @@ impl ScrollParts {
         host.check_mutation()?;
         let horizontal_parameters = crate::ScrollbarParameters::new(crate::ScrollbarAxis::Horizontal);
         let horizontal_options = horizontal_parameters.opt;
-        let horizontal = crate::Scrollbar::from(horizontal_parameters);
+        let horizontal_runtime = super::widget::WidgetRuntime::new(host.clone(), horizontal_options)?;
+        let horizontal = crate::Scrollbar::from_runtime(horizontal_runtime, horizontal_parameters);
         let vertical_parameters = crate::ScrollbarParameters::new(crate::ScrollbarAxis::Vertical);
         let vertical_options = vertical_parameters.opt;
-        let vertical = crate::Scrollbar::from(vertical_parameters);
+        let vertical_runtime = super::widget::WidgetRuntime::new(host.clone(), vertical_options)?;
+        let vertical = crate::Scrollbar::from_runtime(vertical_runtime, vertical_parameters);
         let model = crate::ui_node::ScrollModel::new(horizontal.axis_state.clone(), vertical.axis_state.clone(), enabled);
-        let horizontal = super::leaves::ScrollbarObject::from_core(host.clone(), horizontal_options, horizontal)?;
-        let vertical = super::leaves::ScrollbarObject::from_core(host.clone(), vertical_options, vertical)?;
+        let horizontal = horizontal.into_com();
+        let vertical = vertical.into_com();
         let content = host.create_children()?;
         let surface: ComPtr<IWidgetAbi> = ScrollSurface::from_value(ScrollSurface {
             widget: WidgetCore::new(

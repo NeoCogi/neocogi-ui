@@ -269,8 +269,11 @@ pub struct ScrollbarChanged {
     pub offset: i32,
 }
 
-/// Standalone one-axis scrollbar whose allocation supplies its complete track rectangle.
+#[nc_com::com_object(microui_contracts::Scrollbar)]
+/// Standalone one-axis scrollbar and dynamically constructible COM object.
 pub struct Scrollbar {
+    /// Non-semantic COM lifecycle and host-backed phase resources.
+    runtime: crate::com::widget::WidgetRuntime,
     /// Immutable axis used to project pointer and layout coordinates.
     axis: ScrollbarAxis,
     /// One authoritative range/offset allocation, also shared by composed scroll layout when present.
@@ -341,9 +344,9 @@ impl ScrollAxisState {
     }
 }
 
-impl From<ScrollbarParameters> for Scrollbar {
-    /// Normalizes the complete initial range before publishing the standalone control.
-    fn from(parameters: ScrollbarParameters) -> Self {
+impl Scrollbar {
+    /// Normalizes a complete range and combines it with one already bound common runtime.
+    pub(crate) fn from_runtime(runtime: crate::com::widget::WidgetRuntime, parameters: ScrollbarParameters) -> Self {
         // Normalize all range inputs before mounting so the first measure, update, and paint phases
         // observe one coherent range and offset.
         let viewport_len = parameters.viewport_len.max(0);
@@ -351,12 +354,22 @@ impl From<ScrollbarParameters> for Scrollbar {
         let axis_state = std::rc::Rc::new(ScrollAxisState::default());
         axis_state.install(viewport_len, content_len, parameters.offset);
         Self {
+            runtime,
             axis: parameters.axis,
             axis_state,
             #[cfg(test)]
             opt: parameters.opt,
             changed_event: crate::EventSource::new(),
         }
+    }
+}
+
+#[cfg(test)]
+impl From<ScrollbarParameters> for Scrollbar {
+    /// Builds the same concrete scrollbar against a valid native test host.
+    fn from(parameters: ScrollbarParameters) -> Self {
+        let runtime = crate::com::widget::WidgetRuntime::for_test(parameters.opt);
+        Self::from_runtime(runtime, parameters)
     }
 }
 
@@ -530,6 +543,18 @@ impl crate::com::widget::WidgetAlgorithm for Scrollbar {
         } else {
             options | WidgetOption::NO_INTERACT
         }
+    }
+}
+
+impl crate::com::widget::HostedWidget for Scrollbar {
+    /// Borrows common lifecycle and resource state without a second scrollbar representation.
+    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+        &self.runtime
+    }
+
+    /// Exclusively borrows common lifecycle and resource state for a COM mutation or phase.
+    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+        &mut self.runtime
     }
 }
 
