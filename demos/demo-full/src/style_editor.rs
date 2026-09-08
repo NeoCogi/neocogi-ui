@@ -181,7 +181,7 @@ impl StyleEditor {
     pub(super) fn new(ui: &Ui) -> Result<(Self, ScrollArea), NcStatus> {
         let base = ui.assets()?;
         // Activation belongs to this application; the UI runtime has no asset-provider dependency.
-        let compiler = unsafe { nc_com::Runtime::global().construct_class_as(STYLE_COMPILER_CLASS, std::ptr::null_mut())? };
+        let compiler = nc_com::Runtime::global().construct_class_as(STYLE_COMPILER_CLASS, ())?;
         let mut metrics = base.metrics()?;
         let mut palette = FlatPalette::default();
         let content = column(ui)?;

@@ -69,7 +69,7 @@ impl Theme {
             };
             let path = super::files::asset_path(path).map_err(|_| nc_com::NC_E_LOAD_FAILED)?;
             // SAFETY: The trusted theme plugin declares a no-argument constructor.
-            let loader: ComPtr<IThemeLoaderAbi> = unsafe { nc_com::Runtime::global().construct_class_as(THEME_LOADER_CLASS, std::ptr::null_mut())? };
+            let loader: ComPtr<IThemeLoaderAbi> = nc_com::Runtime::global().construct_class_as(THEME_LOADER_CLASS, ())?;
             loader.load_theme(NativePath::new(&path).as_interface(), base)
         }
     }

@@ -82,8 +82,8 @@ impl Host {
         runtime.require_interface_type::<IUiProviderAbi>(UI_PROVIDER_CLASS)?;
         runtime.require_interface_type::<IPlatformAbi>(PLATFORM_CLASS)?;
         // SAFETY: Both validated classes declare no constructor arguments.
-        let provider: ComPtr<IUiProviderAbi> = unsafe { runtime.construct_class_as(UI_PROVIDER_CLASS, std::ptr::null_mut())? };
-        let platform: ComPtr<IPlatformAbi> = unsafe { runtime.construct_class_as(PLATFORM_CLASS, std::ptr::null_mut())? };
+        let provider: ComPtr<IUiProviderAbi> = runtime.construct_class_as(UI_PROVIDER_CLASS, ())?;
+        let platform: ComPtr<IPlatformAbi> = runtime.construct_class_as(PLATFORM_CLASS, ())?;
         let window = platform.create_window(NcCopyFromBufferOffset::new(0, title.as_bytes()), size, assets.as_com_ref())?;
         let renderer = window.query()?;
         let ui = Ui::from_interface(provider.create_runtime(assets.as_com_ref())?)?;
@@ -119,7 +119,7 @@ impl Host {
         let runtime = nc_com::Runtime::global();
         runtime.require_interface_type::<IPngDecoderAbi>(PNG_DECODER_CLASS)?;
         // SAFETY: The checked decoder class has the documented argument-free constructor.
-        let decoder: ComPtr<IPngDecoderAbi> = unsafe { runtime.construct_class_as(PNG_DECODER_CLASS, std::ptr::null_mut())? };
+        let decoder: ComPtr<IPngDecoderAbi> = runtime.construct_class_as(PNG_DECODER_CLASS, ())?;
         let target = self.renderer.query::<ITextureFactoryAbi>()?;
         decoder.upload(NcCopyFromBufferOffset::new(0, png), target.as_com_ref()).map_err(|status| {
             let detail = decoder

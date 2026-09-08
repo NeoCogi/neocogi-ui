@@ -15,7 +15,7 @@ pub(super) fn asset_path(relative: &str) -> std::io::Result<std::path::PathBuf> 
 pub fn load_bundle() -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
     let directory = asset_path("").map_err(|_| nc_com::NC_E_LOAD_FAILED)?;
     // SAFETY: The trusted asset plugin declares a no-argument constructor for this class.
-    let loader: ComPtr<IAssetLoaderAbi> = unsafe { nc_com::Runtime::global().construct_class_as(ASSET_LOADER_CLASS, std::ptr::null_mut())? };
+    let loader: ComPtr<IAssetLoaderAbi> = nc_com::Runtime::global().construct_class_as(ASSET_LOADER_CLASS, ())?;
     let builder = loader.create_builder(
         Size {
             width: data::SIZE.0 as i32,
