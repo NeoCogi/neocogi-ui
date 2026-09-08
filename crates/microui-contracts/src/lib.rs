@@ -441,11 +441,7 @@ pub trait IWindowManager {
     fn create_window(&self, title: NcCopyFromBufferOffset<'_, u8>, rect: Rect, root: ComRef<'_, IWidgetAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus>;
 }
 
-#[com_class(
-    class_id(auto_guid = "microui.UiRuntime:v1"),
-    name = "microui.UiRuntime:v1",
-    version = "0.9.0-alpha.0"
-)]
+#[com_class(auto_guid = "microui.UiRuntime:v1")]
 /// One constructible retained UI with input, rendering, and resource ownership.
 pub trait UiRuntime: IInputSink {
     /// Imports one immutable asset bundle into a new independent UI.
