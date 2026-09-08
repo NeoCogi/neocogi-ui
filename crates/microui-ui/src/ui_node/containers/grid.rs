@@ -423,6 +423,13 @@ impl Grid {
         self.children.len()
     }
 
+    /// Returns whether this Grid has no children while its native storage is accessible.
+    #[cfg(test)]
+    pub fn is_empty(&self) -> Option<bool> {
+        // Reuse the child handle's checked read so traversal conflicts remain observable as None.
+        self.children.is_empty()
+    }
+
     /// Appends one still-unmounted node and its Grid placement.
     #[allow(clippy::result_large_err)] // Failure returns the exact unique node and its edge metadata.
     #[cfg(test)]

@@ -70,12 +70,12 @@ impl microui_contracts::Disclosure for crate::Disclosure {
         };
         let model = crate::ui_node::DisclosureState::new(expanded);
         let runtime = WidgetRuntime::new(host.add_ref(), crate::WidgetOption::NO_INTERACT)?;
-        let (editor, header, body) = prepare_children(host.add_ref(), model.clone(), label.to_owned(), variant)?;
+        let children = prepare_children(host.add_ref(), model.clone(), label.to_owned(), variant)?;
         Ok(Self::from_runtime(
             runtime,
-            editor,
-            header,
-            body,
+            children.editor,
+            children.header,
+            children.body,
             model,
             variant,
         ))
@@ -107,13 +107,23 @@ impl microui_contracts::Disclosure for crate::Disclosure {
     }
 }
 
+/// Completed fixed disclosure topology consumed by either construction path.
+pub(crate) struct DisclosureChildren {
+    /// Writer owning the header and body in their permanent traversal order.
+    pub(crate) editor: ComPtr<IChildrenEditorAbi>,
+    /// Text capability of the actual header child returned by the public class.
+    pub(crate) header: ComPtr<ITextContentAbi>,
+    /// Concrete Linear capability of the actual body child returned by the public class.
+    pub(crate) body: ComPtr<LinearAbi>,
+}
+
 /// Builds the two real structural children and their fixed authoritative sequence.
 pub(crate) fn prepare_children(
     host: ComPtr<IWidgetHostAbi>,
     model: Rc<crate::ui_node::DisclosureState>,
     label: String,
     variant: crate::ui_node::DisclosureVariant,
-) -> Result<(ComPtr<IChildrenEditorAbi>, ComPtr<ITextContentAbi>, ComPtr<LinearAbi>), NcStatus> {
+) -> Result<DisclosureChildren, NcStatus> {
     // Construct both children before publishing the sequence, so callers never observe a partial
     // disclosure. The shared scalar model contains no parent or child object backpointer.
     let header = crate::ui_node::DisclosureHeader::create_com(
@@ -127,5 +137,5 @@ pub(crate) fn prepare_children(
     let editor = host.create_children()?;
     editor.insert(0, header.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
     editor.insert(1, body.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
-    Ok((editor, header, body))
+    Ok(DisclosureChildren { editor, header, body })
 }

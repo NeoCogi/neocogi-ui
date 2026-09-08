@@ -220,6 +220,13 @@ impl Disclosure {
         self.content.as_ref()?.try_read(Linear::len).flatten()
     }
 
+    /// Returns whether the owned body has no child nodes while its storage is accessible.
+    #[cfg(test)]
+    pub fn is_empty(&self) -> Option<bool> {
+        // Delegate to the actual body so absence and active-borrow behavior remain identical to len.
+        self.content.as_ref()?.try_read(Linear::is_empty).flatten()
+    }
+
     /// Drops every child owner.
     #[cfg(test)]
     pub fn clear(&mut self) -> Option<()> {
@@ -439,7 +446,7 @@ fn create_container(parameters: DisclosureParameters) -> (TypedWidgetHandle<Disc
     let model = DisclosureState::new(parameters.expanded);
     let runtime = crate::com::widget::WidgetRuntime::for_test(crate::WidgetOption::NO_INTERACT);
     let host = runtime.state.host().add_ref();
-    let (editor, header_capability, body_capability) = crate::com::disclosure::prepare_children(
+    let children = crate::com::disclosure::prepare_children(
         host,
         model.clone(),
         parameters.label.clone(),
@@ -448,9 +455,9 @@ fn create_container(parameters: DisclosureParameters) -> (TypedWidgetHandle<Disc
     .expect("native disclosure fixture builds the same fixed COM topology");
     let mut widget = Disclosure::from_runtime(
         runtime,
-        editor,
-        header_capability,
-        body_capability,
+        children.editor,
+        children.header,
+        children.body,
         model.clone(),
         parameters.variant,
     );
