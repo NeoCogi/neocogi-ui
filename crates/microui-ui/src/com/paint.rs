@@ -1,6 +1,7 @@
-//! Owned recording services keep COM retention independent of stack borrows.
+//! Runtime-owned paint state lets COM widgets append directly to the one frame display list.
 use super::*;
 use crate::{FontRole, WidgetOption, ControlRole};
+use crate::math::RectExt;
 
 #[com_object(interfaces(ITextMetrics))]
 /// Immutable text metrics for one installed resource bundle.
@@ -25,79 +26,80 @@ impl ITextMetrics for Metrics {
     }
 }
 
-/// Commands contain only owned values and are replayed after the component call.
-enum Drawing {
-    /// Solid geometry in the current widget's local coordinates.
-    Fill(Rect, u32),
-    /// Finite endpoints, nonnegative width and packed RGBA for UI-owned line tessellation.
-    Line(PaintPoint, PaintPoint, f32, u32),
-    /// Range of finite points in the invocation buffer, triangulated by the shared UI algorithm.
-    Polygon(core::ops::Range<usize>, u32),
-    /// Complete validated triangles in this invocation's shared owned vertex buffer.
-    Triangles(core::ops::Range<usize>),
-    /// Solid vertices retain their material meaning until the UI executor resolves the current atlas.
-    ColoredTriangles(core::ops::Range<usize>),
-    /// Texture capability retained until the prepared frame has finished or been abandoned.
-    Texture(Rect, TextureRegion, u32, ComPtr<ITextureAbi>),
-    /// Application GPU work retains its precise position among ordinary primitives.
-    Item(Rect, ComPtr<IRenderItemAbi>),
-    /// UTF-8 byte range in the invocation text buffer and its local allocation.
-    Text(Rect, core::ops::Range<usize>),
+/// The one frame display list while control is inside a COM widget's paint method.
+struct PaintContext {
+    /// Runtime-owned output buffers, moved here without moving or copying their allocations.
+    display_list: crate::render::DisplayList,
+    /// Widget content allocation used to translate local primitives into screen coordinates.
+    content_rect: crate::Recti,
+    /// Traversal-derived screen clip which caller-provided scopes may only narrow.
+    screen_clip: crate::Recti,
 }
 
-/// Each operation owns its clip by value; later nested drawing cannot mutate earlier commands.
-struct Command {
-    /// Requested local clip is intersected with the authoritative widget clip during replay.
-    clip: Rect,
-    /// Owned typed drawing payload, including retained resources where needed.
-    drawing: Drawing,
-}
-
-/// Invocation-owned command storage retains each typed buffer across widget calls and frames.
-#[derive(Default)]
-struct Commands {
-    /// Ordered operations retain their own clips and foreign resource capabilities.
-    operations: Vec<Command>,
-    /// Range-addressed atlas vertices avoid allocating a separate vector for each widget batch.
-    vertices: Vec<RenderVertex>,
-    /// Polygon boundaries share one buffer; operations keep disjoint ranges until replay completes.
-    points: Vec<crate::Vec2f>,
-    /// Solid material stays explicit until replay resolves the installed atlas's white tile.
-    colored_vertices: Vec<ColoredVertex>,
-    /// Complete UTF-8 runs share one allocation; range endpoints always lie on character boundaries.
-    text: String,
-}
-impl Commands {
-    /// Releases capabilities outside any recording borrow while retaining all buffer capacities.
-    fn clear(&mut self) {
-        self.operations.clear();
-        self.vertices.clear();
-        self.points.clear();
-        self.colored_vertices.clear();
-        self.text.clear();
-    }
-}
-
-/// One reusable command allocation and monotonically increasing invocation clock.
-#[derive(Default)]
+/// One runtime paint context and its monotonically increasing invocation clock.
 struct Recording {
     /// Zero means no caller currently has authority to record.
     active: Cell<u64>,
     /// Never wraps: exhaustion rejects the next invocation.
     next: Cell<u64>,
-    /// Commands are drained without retaining any painter/context references.
-    commands: RefCell<Commands>,
+    /// Owned state is temporarily taken by each primitive, then restored before returning to COM.
+    context: Cell<Option<PaintContext>>,
+    /// Installed resources resolve the legacy convenience text operation without per-widget import.
+    resources: super::widget::SharedAssets,
+}
+
+impl Recording {
+    /// Creates an idle runtime paint context over the runtime's one installed asset value.
+    fn new(resources: super::widget::SharedAssets) -> Self {
+        Self {
+            active: Cell::new(0),
+            next: Cell::new(0),
+            context: Cell::new(None),
+            resources,
+        }
+    }
 }
 
 #[com_object(interfaces(IPainter))]
-/// Retainable COM service owning only recording storage.
+/// Retainable COM facade over the runtime-owned paint context.
 struct Recorder {
-    /// Shared storage also retained by the runtime's private driver.
+    /// Shared scope authority and temporarily installed frame state.
     recording: Rc<Recording>,
 }
 
+/// Exclusive owned access to the active context, restored on every ordinary or error return.
+struct ContextAccess<'a> {
+    /// Slot from which the state was taken without creating a runtime borrow.
+    slot: &'a Cell<Option<PaintContext>>,
+    /// Owned active state; `Some` until [`Drop`] restores it.
+    context: Option<PaintContext>,
+}
+
+impl<'a> ContextAccess<'a> {
+    /// Takes the active state or rejects reentry while another primitive is recording.
+    fn take(slot: &'a Cell<Option<PaintContext>>) -> Result<Self, NcStatus> {
+        let context = slot.take().ok_or(UI_E_BUSY)?;
+        Ok(Self {
+            slot,
+            context: Some(context),
+        })
+    }
+
+    /// Borrows the exclusively owned state for one direct display-list operation.
+    fn context(&mut self) -> &mut PaintContext {
+        self.context.as_mut().expect("active paint context is restored only by Drop")
+    }
+}
+
+impl Drop for ContextAccess<'_> {
+    /// Returns the complete frame buffers before control crosses COM again.
+    fn drop(&mut self) {
+        self.slot.set(self.context.take());
+    }
+}
+
 impl Recorder {
-    /// Validates authority before touching the queue, including empty operations.
+    /// Validates authority before touching the active frame, including empty operations.
     fn check(&self, scope: PaintScope) -> Result<(), NcStatus> {
         if scope.invocation == 0 || self.recording.active.get() != scope.invocation {
             Err(UI_E_EXPIRED_SCOPE)
@@ -110,84 +112,73 @@ impl Recorder {
 }
 
 impl Recorder {
-    /// Publishes one fully owned operation after validation, without calling out under the queue borrow.
-    fn push(&self, scope: PaintScope, drawing: Drawing) -> Result<(), NcStatus> {
-        self.recording
-            .commands
-            .try_borrow_mut()
-            .map_err(|_| UI_E_BUSY)?
-            .operations
-            .push(Command { clip: scope.clip, drawing });
+    /// Appends one operation directly to the active frame with an authoritative narrowed clip.
+    fn with_painter(&self, scope: PaintScope, draw: impl FnOnce(&mut crate::render::Painter<'_>)) -> Result<(), NcStatus> {
+        self.check(scope)?;
+        let mut access = ContextAccess::take(&self.recording.context)?;
+        let context = access.context();
+        let requested = local_rect(scope.clip).translated(crate::Vec2i::new(context.content_rect.x, context.content_rect.y));
+        let clip = context
+            .screen_clip
+            .positive_intersection(requested)
+            .unwrap_or_else(|| crate::Recti::new(requested.x, requested.y, 0, 0));
+        let mut painter = crate::render::Painter::for_widget(&mut context.display_list, context.content_rect, clip);
+        draw(&mut painter);
         Ok(())
     }
 }
 
 impl IPainter for Recorder {
-    /// Validates complete scalar geometry before any command is visible to replay.
+    /// Validates complete scalar geometry before appending anything to the frame.
     fn stroke_line(&self, scope: PaintScope, from: PaintPoint, to: PaintPoint, width: f32, rgba: u32) -> Result<(), NcStatus> {
-        self.check(scope)?;
         if !from.x.is_finite() || !from.y.is_finite() || !to.x.is_finite() || !to.y.is_finite() || !width.is_finite() || width < 0.0 {
             return Err(NC_E_INVALID_ARG);
         }
-        self.push(scope, Drawing::Line(from, to, width, rgba))
+        self.with_painter(scope, |painter| {
+            painter.stroke_line(crate::Vec2f::new(from.x, from.y), crate::Vec2f::new(to.x, to.y), width, super::render::color(rgba));
+        })
     }
     /// Copies a whole finite boundary; native geometry code owns all triangulation and clipping.
     fn fill_polygon(&self, scope: PaintScope, input: NcCopyFromBufferOffset<'_, PaintPoint>, rgba: u32) -> Result<(), NcStatus> {
-        self.check(scope)?;
         if input.offset() != 0 || input.as_slice().iter().any(|p| !p.x.is_finite() || !p.y.is_finite()) {
             return Err(NC_E_INVALID_ARG);
         }
-        let mut commands = self.recording.commands.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
-        let first = commands.points.len();
-        commands.points.extend(input.as_slice().iter().map(|p| crate::Vec2f::new(p.x, p.y)));
-        let end = commands.points.len();
-        commands.operations.push(Command {
-            clip: scope.clip,
-            drawing: Drawing::Polygon(first..end, rgba),
-        });
-        Ok(())
+        let points = input.as_slice();
+        self.with_painter(scope, |painter| painter.fill_contract_polygon(points, super::render::color(rgba)))
     }
 
-    /// Validates a complete solid batch before recording; invalid or expired calls publish nothing.
+    /// Validates a complete solid batch before appending; invalid or expired calls publish nothing.
     fn colored_triangles(&self, scope: PaintScope, input: NcCopyFromBufferOffset<'_, ColoredVertex>) -> Result<(), NcStatus> {
-        self.check(scope)?;
         let vertices = input.as_slice();
         if input.offset() != 0 || !vertices.len().is_multiple_of(3) || vertices.iter().any(|v| !v.x.is_finite() || !v.y.is_finite()) {
             return Err(NC_E_INVALID_ARG);
         }
-        let mut commands = self.recording.commands.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
-        let first = commands.colored_vertices.len();
-        commands.colored_vertices.extend_from_slice(vertices);
-        let end = commands.colored_vertices.len();
-        commands.operations.push(Command {
-            clip: scope.clip,
-            drawing: Drawing::ColoredTriangles(first..end),
-        });
-        Ok(())
+        self.with_painter(scope, |painter| painter.colored_triangles(vertices))
     }
 
     /// Retains the resource outside the command borrow; validation at submission authenticates its owner.
     fn texture(&self, scope: PaintScope, rect: Rect, source: TextureRegion, rgba: u32, texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
-        self.check(scope)?;
         if rect.width < 0 || rect.height < 0 {
             return Err(NC_E_INVALID_ARG);
         }
         source.validate()?;
+        self.check(scope)?;
+        // AddRef can execute foreign code, so retain the texture before taking the paint context.
         let texture = texture.add_ref();
-        self.push(scope, Drawing::Texture(rect, source, rgba, texture))
+        self.with_painter(scope, |painter| painter.com_texture_region(local_rect(rect), source, super::render::color(rgba), texture))
     }
     /// Records a capability rather than a callback lending mutable GPU state across COM.
     fn item(&self, scope: PaintScope, rect: Rect, item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
-        self.check(scope)?;
         if rect.width < 0 || rect.height < 0 {
             return Err(NC_E_INVALID_ARG);
         }
+        self.check(scope)?;
+        // AddRef can execute foreign code, so retain the item before taking the paint context.
         let item = item.add_ref();
-        self.push(scope, Drawing::Item(rect, item))
+        self.with_painter(scope, |painter| painter.com_item(local_rect(rect), item))
     }
     /// Validates the whole batch before publishing any geometry to this scope.
     fn triangles(&self, scope: PaintScope, input: NcCopyFromBufferOffset<'_, RenderVertex>) -> Result<(), NcStatus> {
-        self.check(scope)?;
         let vertices = input.as_slice();
         if input.offset() != 0
             || !vertices.len().is_multiple_of(3)
@@ -197,47 +188,39 @@ impl IPainter for Recorder {
         {
             return Err(NC_E_INVALID_ARG);
         }
-        let mut commands = self.recording.commands.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
-        let first = commands.vertices.len();
-        commands.vertices.extend_from_slice(vertices);
-        let end = commands.vertices.len();
-        commands.operations.push(Command {
-            clip: scope.clip,
-            drawing: Drawing::Triangles(first..end),
-        });
-        Ok(())
+        self.with_painter(scope, |painter| painter.atlas_triangles(vertices))
     }
-    /// Stores a checked fill command without accessing the calling stack's painter.
+    /// Appends a checked fill without accessing the caller's stack.
     fn fill(&self, scope: PaintScope, rect: Rect, rgba: u32) -> Result<(), NcStatus> {
-        self.check(scope)?;
         if rect.width < 0 || rect.height < 0 {
             return Err(NC_E_INVALID_ARG);
         }
-        self.push(scope, Drawing::Fill(rect, rgba))
+        self.with_painter(scope, |painter| painter.fill_rect(local_rect(rect), super::render::color(rgba)))
     }
-    /// Copies text while its input buffer is valid; replay uses only the owned copy.
+    /// Appends text while its borrowed UTF-8 input remains valid for this synchronous call.
     fn text(&self, scope: PaintScope, rect: Rect, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        self.check(scope)?;
         if rect.width < 0 || rect.height < 0 {
             return Err(NC_E_INVALID_ARG);
         }
         let label = text(input)?;
-        let mut commands = self.recording.commands.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
-        let first = commands.text.len();
-        commands.text.push_str(label);
-        let end = commands.text.len();
-        commands.operations.push(Command {
-            clip: scope.clip,
-            drawing: Drawing::Text(rect, first..end),
-        });
-        Ok(())
+        // Resource lookup is local and immutable; the borrow ends before returning across COM.
+        let resources = self.recording.resources.borrow();
+        let skin = resources.bundle().skin();
+        let atlas = resources.bundle().atlas();
+        let font = skin.resolve_font_role(atlas, FontRole::Body);
+        let color = skin.control(ControlRole::Button, crate::ControlState::Enabled(crate::PointerState::Normal)).content_color;
+        let rect = local_rect(rect);
+        let position = crate::ui_node::text_layout::control_text_position_with_font(skin, atlas, font, label, rect, WidgetOption::NONE);
+        self.with_painter(scope, |painter| {
+            painter.with_clip(rect, |painter| painter.text(font, label, position, color));
+        })
     }
 }
 
 /// Reusable driver; one instance serves sequential widget paint calls in a runtime.
 #[derive(Clone)]
 pub(super) struct PaintService {
-    /// Storage is independent of the COM object's allocation and every stack frame.
+    /// Runtime-owned context and scope authority shared with the COM facade.
     recording: Rc<Recording>,
     /// Checked capability passed to widgets without an AddRef per primitive.
     painter: ComPtr<IPainterAbi>,
@@ -246,32 +229,33 @@ pub(super) struct PaintService {
 /// Private scope guard expires authority on both success and error paths.
 struct Invocation<'a>(&'a Recording);
 impl Drop for Invocation<'_> {
-    /// Invalidate before commands are replayed or a later widget is invoked.
+    /// Invalidates authority before the frame list returns to traversal or a later widget runs.
     fn drop(&mut self) {
         self.0.active.set(0);
     }
 }
 
 impl PaintService {
-    /// Allocates one service for the runtime, not one object per primitive.
-    pub(super) fn new() -> Self {
-        let recording = Rc::new(Recording::default());
+    /// Allocates one service for the runtime, sharing its one installed resource value.
+    pub(super) fn new(resources: super::widget::SharedAssets) -> Self {
+        let recording = Rc::new(Recording::new(resources));
         let painter = Recorder::from_value(Recorder { recording: recording.clone() })
             .query()
             .expect("Recorder declares IPainter");
         Self { recording, painter }
     }
-    /// Calls a component and then replays its complete command batch into the legacy executor.
+    /// Moves the frame list into the scoped context, calls a component, then restores the list.
     pub(super) fn paint(&self, widget: &ComPtr<IWidgetAbi>, ctx: &mut crate::WidgetPaintCtx<'_>) -> Result<(), NcStatus> {
-        if self.recording.active.get() != 0 {
+        if self.recording.active.get() != 0 || self.recording.context.take().is_some() {
             return Err(UI_E_BUSY);
         }
         let invocation = self.recording.next.get().checked_add(1).ok_or(nc_com::NC_E_OUT_OF_RANGE)?;
         self.recording.next.set(invocation);
-        // Resource Release may reenter. Detach old values before destruction and preserve the allocation.
-        let mut commands = std::mem::take(&mut *self.recording.commands.borrow_mut());
-        commands.clear();
-        *self.recording.commands.borrow_mut() = commands;
+        self.recording.context.set(Some(PaintContext {
+            display_list: ctx.take_display_list(),
+            content_rect: ctx.paint_content_rect(),
+            screen_clip: ctx.paint_screen_clip(),
+        }));
         self.recording.active.set(invocation);
         let guard = Invocation(&self.recording);
         let state = WidgetPaint {
@@ -287,39 +271,8 @@ impl PaintService {
         let mut widget = widget.clone();
         let result = widget.paint(PaintScope { invocation, clip: state.clip }, state, self.painter.as_com_ref());
         drop(guard);
-        // Failed paint abandons every retained resource as well; never run Release under the queue borrow.
-        let mut commands = std::mem::take(&mut *self.recording.commands.borrow_mut());
-        if let Err(error) = result {
-            commands.clear();
-            *self.recording.commands.borrow_mut() = commands;
-            return Err(error);
-        }
-        for Command { clip, drawing } in commands.operations.drain(..) {
-            let mut clipped = ctx.clipped(local_rect(clip));
-            let ctx = &mut clipped;
-            match drawing {
-                Drawing::Line(from, to, width, rgba) => ctx.painter().stroke_line(
-                    crate::Vec2f::new(from.x, from.y),
-                    crate::Vec2f::new(to.x, to.y),
-                    width,
-                    super::render::color(rgba),
-                ),
-                Drawing::Polygon(points, rgba) => ctx.painter().fill_polygon(&commands.points[points], super::render::color(rgba)),
-                Drawing::Texture(rect, source, rgba, texture) => {
-                    ctx.painter().com_texture_region(local_rect(rect), source, super::render::color(rgba), texture)
-                }
-                Drawing::Item(rect, item) => ctx.painter().com_item(local_rect(rect), item),
-                Drawing::ColoredTriangles(vertices) => ctx.painter().colored_triangles(&commands.colored_vertices[vertices]),
-                Drawing::Triangles(vertices) => ctx.painter().atlas_triangles(&commands.vertices[vertices]),
-                Drawing::Fill(rect, rgba) => ctx.painter().fill_rect(local_rect(rect), super::render::color(rgba)),
-                Drawing::Text(rect, label) => {
-                    let font = ctx.skin().resolve_font_role(ctx.atlas(), FontRole::Body);
-                    ctx.draw_control_text_with_font(font, &commands.text[label], local_rect(rect), ControlRole::Button, WidgetOption::NONE);
-                }
-            }
-        }
-        commands.clear();
-        *self.recording.commands.borrow_mut() = commands;
-        Ok(())
+        let context = self.recording.context.take().ok_or(UI_E_BUSY)?;
+        ctx.restore_display_list(context.display_list);
+        result
     }
 }

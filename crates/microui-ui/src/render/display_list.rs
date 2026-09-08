@@ -249,6 +249,20 @@ impl DisplayList {
         }
     }
 
+    /// Converts copied COM polygon points directly into the reusable tessellation workspace.
+    pub(super) fn push_contract_polygon(
+        &mut self,
+        clip: Recti,
+        points: &[microui_contracts::PaintPoint],
+        color: Color4b,
+        offset: Vec2f,
+    ) {
+        let points = points.iter().map(|point| Vec2f::new(point.x, point.y));
+        if let Some(range) = self.solid_geometry.append_polygon_points(points, color, offset) {
+            self.push_solid_range(clip, range);
+        }
+    }
+
     /// Associates one newly appended geometry range with operation ordering and clipping.
     fn push_solid_range(&mut self, clip: Recti, range: SolidTriangleRange) {
         if let Some(DrawOp {

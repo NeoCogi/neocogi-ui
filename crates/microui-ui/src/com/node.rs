@@ -100,7 +100,7 @@ impl ComNode {
         self.refresh_properties();
         change
     }
-    /// Starts an observational scope and records/replays complete owned commands.
+    /// Starts an observational scope and gives the widget direct scoped frame recording access.
     pub(crate) fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
         let _phase = Observation::begin(&self.host);
         if let Err(error) = self.painter.paint(&self.widget, ctx) {

@@ -1,20 +1,24 @@
 # Rendering
 
 Applications and extension widgets paint through the static `microui-redux` facade.
-Its painter sends typed calls to the scoped COM recorder. Built-ins use private Rust
-algorithms to produce the same ordered operations. Neither path lends a widget, tree,
-backend frame or Rust trait object across the ABI.
+Its painter sends typed calls to the scoped COM paint context. The runtime temporarily
+moves its one frame display list into that context while invoking a COM widget, so a
+foreign call holds no Rust borrow and every primitive appends to the final operation
+sequence immediately. Neither path lends a widget, tree, backend frame or Rust trait
+object across the ABI.
 
 ```text
-IWidget.paint -> scoped IPainter -> owned recording -> clipping and expansion
-             -> ordered IRenderer submission -> concrete platform backend frame
+IWidget.paint -> scoped IPainter -> runtime frame display list
+             -> one clipping/expansion pass -> one ordered IRenderer submission
 ```
 
 The display list owns text, solid geometry and retained image/render-item interfaces.
-No command borrows widget memory. The executor clears reusable storage after submission
-or failure. Adjacent compatible geometry batches together; images and application
-render items preserve painter order. Commands are validated before GPU work, including
-buffer bounds, finite values, resource provenance and supported batch kinds.
+There is no per-widget COM command queue and no replay into a second display list. The
+executor clears reusable storage after submission or failure. Adjacent compatible
+geometry batches together; images and application render items preserve painter order.
+Inputs are validated before entering the list and the completed frame is validated
+before GPU work, including buffer bounds, finite values, resource provenance and
+supported batch kinds.
 
 ## Update and frame validity
 
@@ -65,7 +69,7 @@ rectangle and final visible region. There is no production native callback regis
 
 | Source | Responsibility |
 | --- | --- |
-| `com/paint.rs` | Owned scoped COM recording and validation |
+| `com/paint.rs` | Scoped COM access to the runtime-owned frame paint context |
 | `render/painter.rs` | Private built-in geometry recording |
 | `render/display_list.rs` | Owned ordered operations and reusable geometry |
 | `render/renderer.rs` | Atlas expansion, final clipping and execution |

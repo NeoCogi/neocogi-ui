@@ -229,6 +229,16 @@ impl<'a> Painter<'a> {
         self.list.push_polygon(self.clip, points, color4b(color.r, color.g, color.b, color.a), offset);
     }
 
+    /// Tessellates copied COM polygon points directly into this painter's retained frame storage.
+    pub(crate) fn fill_contract_polygon(&mut self, points: &[microui_contracts::PaintPoint], color: Color) {
+        if points.len() < 3 || color.a == 0 || !self.clip.has_positive_area() {
+            return;
+        }
+        let offset = Vec2f::new(self.origin.x as f32, self.origin.y as f32);
+        self.list
+            .push_contract_polygon(self.clip, points, color4b(color.r, color.g, color.b, color.a), offset);
+    }
+
     /// Executes `paint` with a clip narrowed by a local rectangle.
     ///
     /// The parent Painter is unchanged after the closure returns. There is no mutable clip stack,

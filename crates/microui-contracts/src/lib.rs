@@ -57,7 +57,7 @@ pub struct Size {
 }
 
 #[com_struct]
-/// Active paint invocation plus a caller-narrowable local clip, checked by the recording service.
+/// Active paint invocation plus a caller-narrowable local clip, checked by the runtime paint context.
 pub struct PaintScope {
     /// Non-reused invocation number; zero never identifies an active call.
     pub invocation: u64,
@@ -81,7 +81,7 @@ pub struct Rect {
 }
 
 #[com_interface(auto_guid = "microui.Painter:v1")]
-/// Owned recording service; it never stores references into a caller's stack.
+/// Scoped facade which appends typed operations to the runtime's current frame paint context.
 pub trait IPainter {
     /// Records a nonnegative-width solid line with finite local endpoints. Zero width draws nothing.
     fn stroke_line(&self, scope: PaintScope, from: PaintPoint, to: PaintPoint, width: f32, rgba: u32) -> Result<(), NcStatus>;

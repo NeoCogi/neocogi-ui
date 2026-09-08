@@ -46,8 +46,8 @@ fn create_storage(assets: crate::assets::ImportedAssets) -> Rc<RuntimeStorage> {
         state: state.clone(),
         host,
         metrics,
-        resources,
-        painter: PaintService::new(),
+        resources: resources.clone(),
+        painter: PaintService::new(resources),
         children: RefCell::default(),
     });
     *state.factory.borrow_mut() = Rc::downgrade(&factory);

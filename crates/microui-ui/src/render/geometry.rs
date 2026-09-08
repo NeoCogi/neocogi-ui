@@ -191,6 +191,19 @@ impl SolidGeometry {
     /// `polygon_boundary` workspace. Both paths append strongly typed triangles directly, so no
     /// flat triangle-position buffer escapes this object.
     pub(crate) fn append_polygon(&mut self, points: &[Vec2f], color: Color4b, offset: Vec2f) -> Option<SolidTriangleRange> {
+        self.append_polygon_points(points.iter().copied(), color, offset)
+    }
+
+    /// Cleans, triangulates, and appends copied points from a typed boundary iterator.
+    ///
+    /// COM points can therefore enter the retained tessellation workspace directly instead of
+    /// allocating a temporary vector merely to change between equivalent coordinate structs.
+    pub(crate) fn append_polygon_points(
+        &mut self,
+        points: impl ExactSizeIterator<Item = Vec2f>,
+        color: Color4b,
+        offset: Vec2f,
+    ) -> Option<SolidTriangleRange> {
         let start = self.triangles.len();
         if points.len() < 3 || !self.prepare_polygon(points) {
             return None;
@@ -287,14 +300,14 @@ impl SolidGeometry {
     }
 
     /// Copies a finite polygon into the reusable workspace and removes redundant vertices.
-    fn prepare_polygon(&mut self, points: &[Vec2f]) -> bool {
+    fn prepare_polygon(&mut self, points: impl ExactSizeIterator<Item = Vec2f>) -> bool {
         self.polygon_boundary.clear();
         // The second pass appends a simplified boundary behind the copied input, so reserve both
         // spans up front and avoid a growth allocation halfway through tessellation.
         // workspace_capacity = copied_point_count + simplified_point_count = point_count * 2.
         let workspace_capacity = points.len().saturating_mul(2);
         self.polygon_boundary.reserve(workspace_capacity);
-        for point in points.iter().copied() {
+        for point in points {
             if !point_is_finite(point) {
                 self.polygon_boundary.clear();
                 return false;
