@@ -162,7 +162,7 @@ impl Widget for EventWidget {
         &self.options
     }
     /// Event production does not require paint commands.
-    fn paint(&mut self, _: &mut WidgetPaintCtx<'_>) {}
+    fn paint(&self, _: &mut WidgetPaintCtx<'_>) {}
 }
 
 impl LeafWidget for EventWidget {
@@ -237,7 +237,7 @@ impl Widget for GrowingWidget {
     }
 
     /// Records only a paint observation; it never changes the geometry being painted.
-    fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
         self.painted.set(ctx.local_rect().height);
     }
 }
@@ -562,7 +562,7 @@ impl Widget for ExternalContainer {
         &self.options
     }
 
-    fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
+    fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }
 
 fn external_container(children: impl IntoIterator<Item = Node>) -> (TypedWidgetHandle<ExternalContainer>, Container) {
@@ -593,7 +593,7 @@ impl Widget for ExternalLeaf {
         &self.options
     }
 
-    fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
+    fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }
 
 impl LeafWidget for ExternalLeaf {

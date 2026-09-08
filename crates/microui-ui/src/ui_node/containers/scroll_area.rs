@@ -355,7 +355,7 @@ impl Widget for ScrollArea {
         }
     }
 
-    fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
         // The parent paints only its panel and non-interactive corner; scrollbar children paint
         // their own tracks and thumbs afterward in ordinary child paint order.
         let fallback = ctx.local_rect();
@@ -420,7 +420,7 @@ impl Widget for ScrollSurface {
     }
 
     /// Emits no paint operations because clipping and translation are traversal geometry.
-    fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
+    fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }
 
 impl ScrollArea {
@@ -660,7 +660,7 @@ mod tests {
             &WidgetOption::NONE
         }
 
-        fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
+        fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {}
     }
 
     impl crate::LeafWidget for FixedContent {
@@ -696,7 +696,7 @@ mod tests {
             &WidgetOption::NONE
         }
 
-        fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
+        fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {}
     }
 
     /// Lays out one fixed content node and returns the parent layout's committed summary.

@@ -270,7 +270,7 @@ impl Slider {
     }
 
     /// Paints either the inline numeric editor or the slider track/thumb/value label.
-    fn paint_widget(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint_widget(&self, ctx: &mut WidgetPaintCtx<'_>) {
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
         if self.edit.editing {
             number_textbox_paint(ctx, &self.edit, font);
@@ -398,7 +398,7 @@ impl Widget for Slider {
         self.update_widget(ctx, input)
     }
 
-    fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
         self.paint_widget(ctx);
     }
 
@@ -819,7 +819,7 @@ mod tests {
             .patch
             .with_insets(crate::SliceInsets::ZERO);
         crate::test_support::replace_control_patches(&mut style, ControlRole::SliderThumb, |_| frame);
-        let mut slider = Slider::from(SliderParameters::new(Real::MAX / 2.0, 0.0, Real::MAX).expect("a maximum finite range span must remain usable"));
+        let slider = Slider::from(SliderParameters::new(Real::MAX / 2.0, 0.0, Real::MAX).expect("a maximum finite range span must remain usable"));
         let bounds = rect(0, 0, 100, 20);
         let mut display_list = crate::render::DisplayList::new();
         let mut ctx = WidgetPaintCtx::new_with_content_geometry(
@@ -991,7 +991,7 @@ mod tests {
         let atlas = make_test_atlas();
         let mut style = test_skin(&atlas);
         style.metrics.thumb_size = i32::MIN;
-        let mut slider = Slider::from(SliderParameters::new(0.5, 0.0, 1.0).expect("finite ascending slider parameters must validate"));
+        let slider = Slider::from(SliderParameters::new(0.5, 0.0, 1.0).expect("finite ascending slider parameters must validate"));
         let bounds = rect(0, 0, 100, 20);
         let mut display_list = crate::render::DisplayList::new();
         let mut ctx = WidgetPaintCtx::new_with_content_geometry(

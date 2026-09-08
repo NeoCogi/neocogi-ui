@@ -18,7 +18,7 @@ impl Widget for Probe {
         &WidgetOption::NO_INTERACT
     }
     /// The clip trims all four texture edges without changing its UV projection.
-    fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
         self.origin.set(Some(ctx.screen_content_rect()));
         let white = color(255, 255, 255, 255);
         let mut painter = ctx.painter();

@@ -277,7 +277,7 @@ impl Widget for DisclosureHeader {
         crate::Change::NoChange
     }
 
-    fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
         // Expansion determines the icon, while presentation variant determines background/frame.
         let expanded = self.model.expanded.get();
         let row = ctx.local_rect();
@@ -396,7 +396,7 @@ impl Widget for Disclosure {
         &WidgetOption::NO_INTERACT
     }
 
-    fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
+    fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }
 
 /// Builds the fixed body/header structure before wrapping it in the public owning node.

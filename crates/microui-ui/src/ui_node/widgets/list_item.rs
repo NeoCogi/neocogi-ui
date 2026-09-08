@@ -162,7 +162,7 @@ impl<Value: Clone + 'static> ListItem<Value> {
     }
 
     /// Paints row highlight, optional icon, and label.
-    fn paint_widget(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint_widget(&self, ctx: &mut WidgetPaintCtx<'_>) {
         let bounds = ctx.local_rect();
 
         // The default normal role is transparent; image themes may still provide ordinary row art.
@@ -222,7 +222,7 @@ impl<Value: Clone + 'static> Widget for ListItem<Value> {
         crate::Change::NoChange
     }
 
-    fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
         self.paint_widget(ctx);
     }
 
@@ -294,7 +294,7 @@ mod tests {
         let mut style = test_skin(&atlas);
         style.metrics.padding = i32::MAX;
         let check = atlas.icon_id("check").expect("test atlas must contain the exact check resource");
-        let mut item = ListItem::from(ListItemParameters::with_icon("item", IconRef::named(check)));
+        let item = ListItem::from(ListItemParameters::with_icon("item", IconRef::named(check)));
         let bounds = rect(0, 0, 20, 20);
         let mut display_list = DisplayList::new();
         let mut ctx = WidgetPaintCtx::new_with_content_geometry(

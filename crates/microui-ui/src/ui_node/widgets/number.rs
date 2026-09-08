@@ -186,7 +186,7 @@ impl Number {
     }
 
     /// Paints either the inline numeric editor or the formatted value.
-    fn paint_widget(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint_widget(&self, ctx: &mut WidgetPaintCtx<'_>) {
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
         if self.edit.editing {
             number_textbox_paint(ctx, &self.edit, font);
@@ -233,7 +233,7 @@ impl Widget for Number {
         self.update_widget(ctx, input)
     }
 
-    fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
         self.paint_widget(ctx);
     }
 

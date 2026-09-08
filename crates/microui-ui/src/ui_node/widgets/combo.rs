@@ -341,7 +341,7 @@ impl Widget for Combo {
         crate::Change::NoChange
     }
 
-    fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
         self.paint_widget(ctx);
     }
 

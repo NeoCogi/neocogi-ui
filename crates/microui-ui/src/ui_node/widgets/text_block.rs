@@ -159,7 +159,7 @@ impl TextBlock {
     }
 
     /// Paints each measured display line with baseline alignment.
-    fn paint_widget(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint_widget(&self, ctx: &mut WidgetPaintCtx<'_>) {
         if self.text.is_empty() {
             return;
         }
@@ -207,7 +207,7 @@ impl Widget for TextBlock {
         &self.opt
     }
 
-    fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
         self.paint_widget(ctx);
     }
 }

@@ -182,7 +182,7 @@ impl Widget for DesiredSize {
         &WidgetOption::NONE
     }
 
-    fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
+    fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }
 
 impl crate::LeafWidget for DesiredSize {
@@ -206,7 +206,7 @@ impl Widget for CompleteSkinMeasureProbe {
     }
 
     /// Rendering is irrelevant to the measurement-cache contract under test.
-    fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
+    fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }
 
 impl crate::LeafWidget for CompleteSkinMeasureProbe {
@@ -239,7 +239,8 @@ struct OrderedProbe {
     held_keys: Vec<u8>,
     measures: Cell<usize>,
     updates: usize,
-    paints: usize,
+    /// Counts observational paint visits without granting paint semantic write access.
+    paints: Cell<usize>,
     hovered: bool,
     opt: WidgetOption,
 }
@@ -252,7 +253,7 @@ impl OrderedProbe {
             held_keys: Vec::new(),
             measures: Cell::new(0),
             updates: 0,
-            paints: 0,
+            paints: Cell::new(0),
             hovered: false,
             opt,
         })
@@ -287,8 +288,9 @@ impl Widget for OrderedProbe {
         crate::Change::NoChange
     }
 
-    fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {
-        self.paints += 1;
+    fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {
+        // The counter is test instrumentation rather than retained widget state.
+        self.paints.set(self.paints.get() + 1);
     }
 
     fn keyboard_behavior(&self) -> KeyboardBehavior {
@@ -348,7 +350,7 @@ impl Widget for CommitProbe {
         crate::Change::from(self.intrinsic_height != previous_height)
     }
 
-    fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
         // This is deliberately a rendering-only test cache: semantic state remains observational.
         self.painted_rects.borrow_mut().push(ctx.screen_content_rect());
     }
@@ -396,7 +398,7 @@ impl Widget for SiblingMutationProbe {
         crate::Change::NoChange
     }
 
-    fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
+    fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }
 
 impl crate::LeafWidget for SiblingMutationProbe {
@@ -428,7 +430,7 @@ impl Widget for CountedProbe {
         crate::Change::NoChange
     }
 
-    fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
+    fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }
 
 impl crate::LeafWidget for CountedProbe {
@@ -480,7 +482,7 @@ impl Widget for TopologyMutator {
         crate::Change::NoChange
     }
 
-    fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
+    fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }
 
 impl crate::LeafWidget for TopologyMutator {
@@ -1665,7 +1667,7 @@ fn collapsed_disclosure_skips_descendant_phases_and_drops_targets_only_on_remova
     ctx.mouseup(probe_rect.x + 2, probe_rect.y + 2, MouseButton::LEFT);
     ctx.update_and_render_ui();
     let visible_counts = probe_state
-        .try_read(|state| (state.measures.get(), state.updates, state.paints, state.events.clone()))
+        .try_read(|state| (state.measures.get(), state.updates, state.paints.get(), state.events.clone()))
         .unwrap();
     assert_eq!(visible_counts.3, ["down", "up"]);
 
@@ -1675,7 +1677,7 @@ fn collapsed_disclosure_skips_descendant_phases_and_drops_targets_only_on_remova
     ctx.update_and_render_ui();
 
     assert_eq!(
-        probe_state.try_read(|state| (state.measures.get(), state.updates, state.paints)),
+        probe_state.try_read(|state| (state.measures.get(), state.updates, state.paints.get())),
         Some((visible_counts.0, visible_counts.1, visible_counts.2)),
         "collapsed descendants must skip measure, update, and paint"
     );

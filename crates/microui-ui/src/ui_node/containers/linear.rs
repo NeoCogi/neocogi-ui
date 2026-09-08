@@ -804,7 +804,7 @@ impl Widget for Linear {
         crate::Change::NoChange
     }
 
-    fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {
         // The container emits no drawing commands of its own; child widgets paint their allocations.
     }
 }

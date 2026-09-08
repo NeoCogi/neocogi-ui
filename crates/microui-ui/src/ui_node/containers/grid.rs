@@ -550,7 +550,7 @@ impl Widget for Grid {
         &WidgetOption::NO_INTERACT
     }
 
-    fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
+    fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }
 
 /// Resolves both Grid axes and commits every child at its derived placement.

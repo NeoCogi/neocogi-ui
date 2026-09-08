@@ -129,7 +129,7 @@ impl ColorSwatch {
     }
 
     /// Paints the swatch fill, border, and optional label.
-    fn paint_widget(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint_widget(&self, ctx: &mut WidgetPaintCtx<'_>) {
         let rect = ctx.local_rect();
         ctx.draw_rect(rect, self.fill);
         if !self.label.is_empty() {
@@ -145,7 +145,7 @@ impl Widget for ColorSwatch {
         &self.opt
     }
 
-    fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
         self.paint_widget(ctx);
     }
 }

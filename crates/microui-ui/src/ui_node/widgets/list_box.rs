@@ -114,7 +114,7 @@ impl ListBox {
     }
 
     /// Paints list-box frame, label, and optional image.
-    fn paint_widget(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint_widget(&self, ctx: &mut WidgetPaintCtx<'_>) {
         let rect = ctx.local_rect();
         if widget_fill_visible(ctx, WidgetFillOption::HOVER | WidgetFillOption::CLICK) {
             ctx.draw_control_center(ControlRole::Button, rect);
@@ -157,7 +157,7 @@ impl Widget for ListBox {
         crate::Change::NoChange
     }
 
-    fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
         self.paint_widget(ctx);
     }
 

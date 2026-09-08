@@ -177,7 +177,7 @@ impl Button {
     }
 
     /// Paints the button frame, text, and optional visual payload.
-    fn paint_widget(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint_widget(&self, ctx: &mut WidgetPaintCtx<'_>) {
         let rect = ctx.local_rect();
         if !ctx.options().intersects(WidgetOption::FRAME) && widget_fill_visible(ctx, self.fill) {
             // Framed buttons are painted once by retained traversal across their complete outer
@@ -265,7 +265,7 @@ impl Widget for Button {
         crate::Change::NoChange
     }
 
-    fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
         self.paint_widget(ctx);
     }
 

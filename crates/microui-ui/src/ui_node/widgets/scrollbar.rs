@@ -494,7 +494,7 @@ impl Widget for Scrollbar {
     }
 
     /// Paints the track and proportional thumb inside the complete local allocation.
-    fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
         // Rebuild geometry from the paint allocation and the same semantic range used by update.
         // Hidden composite children never reach this phase, while mounted zero-range bars display a
         // full-length thumb that communicates the absence of overflow.

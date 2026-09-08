@@ -106,7 +106,7 @@ impl Widget for Custom {
         &self.opt
     }
 
-    fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
+    fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {}
 
     fn keyboard_behavior(&self) -> KeyboardBehavior {
         self.keyboard

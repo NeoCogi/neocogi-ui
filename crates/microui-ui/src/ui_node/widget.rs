@@ -283,11 +283,12 @@ pub trait Widget {
     /// Records paint commands through paint-only capabilities.
     ///
     /// Paint is observational with respect to application-authored semantic state, topology,
-    /// interaction, and committed layout. Implementations may maintain private rendering caches or
-    /// neither may alter the current commit nor publish application-coordination events. Mutating
+    /// interaction, and committed layout. Rendering caches belong to the owning COM object's
+    /// phase machinery rather than the semantic widget implementation. Painting may therefore
+    /// neither alter the current commit nor publish application-coordination events. Mutating
     /// retained UI through an independently captured typed widget handle is a contract violation
     /// rather than a deferred-next-frame operation.
-    fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>);
+    fn paint(&self, ctx: &mut WidgetPaintCtx<'_>);
     /// Drains geometry changes from explicit shared semantic models owned by a composite.
     /// This hook only consumes notification flags; it must not edit UI state or topology.
     /// Ordinary widgets report changes through update/setters and keep the default false.
@@ -337,7 +338,7 @@ impl Widget for WidgetOption {
         self
     }
 
-    fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
+    fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }
 
 impl LeafWidget for WidgetOption {
@@ -421,7 +422,7 @@ mod widget_tests {
             crate::Change::NoChange
         }
 
-        fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {
+        fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {
             let _ = self.value;
         }
     }

@@ -342,7 +342,7 @@ impl TextArea {
     }
 
     /// Paints editable content and its caret in stable content-local coordinates.
-    fn paint_widget(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint_widget(&self, ctx: &mut WidgetPaintCtx<'_>) {
         // ScrollArea has already applied translation and clipping before this child paint phase, so
         // the editor records no offset arithmetic or scrollbar operations.
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
@@ -677,7 +677,7 @@ impl Widget for TextArea {
     }
 
     /// Records text and caret paint operations in content-local coordinates.
-    fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
         // Keep the trait boundary thin so direct paint tests and traversal share one implementation.
         self.paint_widget(ctx);
     }

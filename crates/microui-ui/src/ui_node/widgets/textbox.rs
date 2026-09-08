@@ -232,7 +232,7 @@ impl Textbox {
     }
 
     /// Paints the textbox frame, text, and caret.
-    fn paint_widget(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint_widget(&self, ctx: &mut WidgetPaintCtx<'_>) {
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
         textbox_paint(ctx, self.buf.as_str(), self.cursor, ctx.options(), font);
     }
@@ -403,7 +403,7 @@ impl Widget for Textbox {
         self.update_widget(ctx, input)
     }
 
-    fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
         self.paint_widget(ctx);
     }
 

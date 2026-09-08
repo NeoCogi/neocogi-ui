@@ -208,7 +208,7 @@ mod tests {
             &WidgetOption::NO_INTERACT
         }
 
-        fn paint(&mut self, _ctx: &mut crate::WidgetPaintCtx<'_>) {}
+        fn paint(&self, _ctx: &mut crate::WidgetPaintCtx<'_>) {}
     }
 
     impl ContainerWidget for GeometryOnly {

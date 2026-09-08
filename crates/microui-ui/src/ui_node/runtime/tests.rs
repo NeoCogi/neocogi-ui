@@ -89,7 +89,7 @@ impl Widget for SkinProbe {
         crate::Change::NoChange
     }
 
-    fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
         self.observations.paint.set(Self::observe(ctx.skin()));
     }
 }
@@ -132,7 +132,7 @@ impl Widget for Probe {
         crate::Change::NoChange
     }
 
-    fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {
         self.counts.paints.set(self.counts.paints.get() + 1);
         self.log.borrow_mut().push(format!("{}:paint", self.name));
     }
@@ -158,7 +158,7 @@ impl Widget for FocusProbe {
         &self.opt
     }
 
-    fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
+    fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {}
 
     fn keyboard_behavior(&self) -> KeyboardBehavior {
         KeyboardBehavior::TAB_STOP
@@ -228,7 +228,7 @@ impl Widget for TraversalContainer {
         crate::Change::NoChange
     }
 
-    fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {
+    fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {
         self.log.borrow_mut().push("container:paint".to_owned());
     }
 }
@@ -286,7 +286,7 @@ impl Widget for CaptureContainer {
         crate::Change::NoChange
     }
 
-    fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
+    fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {}
 
     fn keyboard_behavior(&self) -> KeyboardBehavior {
         // This overloaded container accepts pointer drag focus but is not a sequential Tab stop.
@@ -317,7 +317,7 @@ impl Widget for CrossSubtreeRemover {
         crate::Change::NoChange
     }
 
-    fn paint(&mut self, _ctx: &mut WidgetPaintCtx<'_>) {}
+    fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }
 
 impl crate::LeafWidget for CrossSubtreeRemover {
