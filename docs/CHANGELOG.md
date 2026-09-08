@@ -41,6 +41,9 @@ wrappers. The accepted migration and outstanding validation are recorded in
 - Make ScrollArea and Disclosure registered class contracts. Their fixed
   compositions retain shared scrolling/container protocols while content,
   expansion, header, and body access live on the concrete class projections.
+- Replace the registered platform root's `IPlatform` plus separate class-ID
+  declaration with a callable `Platform` class contract. Renderer diagnostics
+  remain a shared capability on the same native bootstrap object.
 - Replace `IUiFactory` with a separately registered `UiFactory` class. The
   runtime returns a host-bound instance for convenience, while hosts can construct
   `Button` and other registered classes directly from typed argument frames.

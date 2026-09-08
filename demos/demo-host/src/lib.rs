@@ -79,9 +79,8 @@ impl Host {
     pub fn new(title: &str, size: Size, assets: ComPtr<IAssetBundleAbi>) -> Result<Self, HostError> {
         initialize()?;
         let runtime = nc_com::Runtime::global();
-        runtime.require_interface_type::<IPlatformAbi>(PLATFORM_CLASS)?;
-        // SAFETY: The validated platform class declares no constructor arguments.
-        let platform: ComPtr<IPlatformAbi> = runtime.construct_class_as(PLATFORM_CLASS, ())?;
+        runtime.require_interface_type::<PlatformAbi>(PlatformAbi::CLASS_ID)?;
+        let platform: ComPtr<PlatformAbi> = runtime.construct(())?;
         let window = platform.create_window(NcCopyFromBufferOffset::new(0, title.as_bytes()), size, assets.as_com_ref())?;
         let renderer = window.query()?;
         let arguments = UiRuntimeAbi::arguments(assets.as_com_ref())?;

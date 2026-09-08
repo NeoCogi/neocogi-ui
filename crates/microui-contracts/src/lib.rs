@@ -515,9 +515,6 @@ pub trait UiRuntime: IInputSink + IWindowManager + IMenus + IFileDialogs {
     fn close(&self) -> Result<(), NcStatus>;
 }
 
-/// Stable platform activation identity independent of the selected native backend.
-pub const PLATFORM_CLASS: nc_com::NcGuid = nc_com::guid_from_qualified_name("microui.Platform");
-
 #[com_interface(auto_guid = "microui.WidgetHost:v1")]
 /// Runtime identity and mutation authority without a reference back to its tree.
 pub trait IWidgetHost {

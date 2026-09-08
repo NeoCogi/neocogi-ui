@@ -1,6 +1,6 @@
 //! Platform input uses the same copied vocabulary as UI injection. OS objects stay in the host.
 use crate::*;
-use nc_com::{com_enum, com_interface, com_int_enum};
+use nc_com::{com_class, com_enum, com_interface, com_int_enum};
 
 #[com_interface(auto_guid = "microui.InputSink:v1")]
 /// Synchronous input destination, implemented by the UI runtime or a concrete application adapter.
@@ -47,9 +47,12 @@ pub trait IPlatformWindow {
     fn text_input(&self, area: TextInputAreaAbi) -> Result<(), NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.Platform:v1")]
-/// Platform plugin's concrete window factory.
-pub trait IPlatform {
+#[com_class(auto_guid = "microui.Platform:v1")]
+/// Constructible platform root whose native-window factory is its concrete class API.
+pub trait Platform: crate::IRenderDiagnostics {
+    /// Initializes the build-selected native platform backend without creating a window.
+    #[constructor]
+    fn new() -> Result<Self, NcStatus>;
     /// Creates an independent window and renderer; title is UTF-8 at offset zero.
     fn create_window(
         &self,
