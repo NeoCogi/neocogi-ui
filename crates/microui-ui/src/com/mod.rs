@@ -13,6 +13,7 @@ use std::{
 #[macro_use]
 pub(crate) mod widget;
 mod button;
+pub use crate::ui_node::{Grid, Linear};
 pub use crate::ui_node::widgets::{Button, Checkbox, ColorSwatch, Combo, ListBox, ListItem, Number, Scrollbar, Slider, TextBlock, Textbox};
 mod combo;
 pub(crate) mod events;
@@ -22,7 +23,6 @@ mod node;
 pub(crate) use node::ComNode;
 mod children;
 pub(crate) mod containers;
-pub use containers::{GridObject, LinearObject};
 mod disclosure;
 pub use disclosure::DisclosureObject;
 mod factory;

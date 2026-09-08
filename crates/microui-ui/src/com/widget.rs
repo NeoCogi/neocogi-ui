@@ -139,6 +139,20 @@ impl WidgetRuntime {
         runtime
     }
 
+    /// Creates test-only common state together with a valid host-owned child writer.
+    #[cfg(test)]
+    pub(crate) fn for_test_container(options: WidgetOption) -> (Self, ComPtr<IChildrenEditorAbi>) {
+        // Container algorithm tests still use the native tree harness. Supplying a real writer keeps
+        // the concrete type structurally identical to its dynamically constructed COM allocation.
+        let runtime = Self::for_test(options);
+        let editor = runtime
+            .state
+            .host()
+            .create_children()
+            .expect("test widget host creates a child collection");
+        (runtime, editor)
+    }
+
     /// Returns an owned resource snapshot so no cache borrow crosses semantic widget execution.
     pub(super) fn resources(&mut self) -> Result<Rc<crate::assets::ImportedAssets>, NcStatus> {
         self.resources.snapshot(self.state.host())
@@ -187,6 +201,13 @@ pub(crate) trait HostedWidget: WidgetAlgorithm {
     fn runtime(&self) -> &WidgetRuntime;
     /// Borrows common state exclusively for mutation, resource refresh, or rendering.
     fn runtime_mut(&mut self) -> &mut WidgetRuntime;
+    /// Closes resources owned specifically by this widget after its common lifetime ends.
+    fn close_contents(&mut self) -> Result<(), NcStatus> {
+        // Leaf controls own only their semantic event sources. Containers override this hook to
+        // close their child writer without making the common runtime aware of topology.
+        self.close_events();
+        Ok(())
+    }
 }
 
 /// Commits one validated semantic font role on a concrete widget allocation.
@@ -514,7 +535,7 @@ macro_rules! direct_widget_phase_impl {
             fn close(&mut self) -> Result<(), NcStatus> {
                 let closed = <$name as super::widget::HostedWidget>::runtime_mut(self).state.close()?;
                 if closed {
-                    <$name as super::widget::WidgetAlgorithm>::close_events(self);
+                    <$name as super::widget::HostedWidget>::close_contents(self)?;
                 }
                 Ok(())
             }

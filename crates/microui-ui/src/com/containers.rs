@@ -1,6 +1,6 @@
 //! Concrete container editing reuses existing layout algorithms and one host-owned child sequence.
 use super::*;
-use super::widget::{WidgetAlgorithm, WidgetCore};
+use super::widget::{HostedWidget, WidgetAlgorithm, WidgetRuntime};
 use nc_com::NcCopyToBufferOffset;
 
 /// Metadata-only edit applied after the host editor commits the corresponding topology operation.
@@ -25,40 +25,70 @@ pub(crate) trait ContainerAlgorithm: WidgetAlgorithm + crate::ContainerWidget {
     fn edit_edges(&mut self, edit: EdgeEdit<Self::Edge>);
 }
 
-/// Shares concrete storage, lifecycle, and scoped layout plumbing across callable containers.
-macro_rules! container_object {
-    ($name:ident, $core:ty, $contract:path) => {
-        #[com_object($contract)]
-        /// One concrete container COM allocation, including inherited common widget state.
-        pub struct $name {
-            /// Concrete semantic state and shared phase execution, with no Rust dynamic widget vtable.
-            widget: WidgetCore<$core>,
-            /// Private writer owns the one authoritative tree; public callers receive its distinct read-only view.
-            editor: ComPtr<IChildrenEditorAbi>,
-        }
-        impl $name {
-            /// Allocates common widget and child storage from already validated concrete policy.
-            fn from_core(host: ComPtr<IWidgetHostAbi>, core: $core) -> Result<Self, NcStatus> {
-                let editor = host.create_children()?;
-                Ok(Self {
-                    widget: WidgetCore::new(host, crate::WidgetOption::NO_INTERACT, core)?,
-                    editor,
+/// Implements scoped layout directly on a concrete container allocation.
+macro_rules! direct_container_layout_impl {
+    ($name:ty) => {
+        impl IContainerLayout for $name {
+            /// Returns the read-only view paired with this concrete container's private writer.
+            fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
+                <$name as HostedWidget>::runtime(self).state.readable()?;
+                self.editor.view()
+            }
+
+            /// Measures the concrete container against the caller's scoped child service.
+            fn measure(
+                &mut self,
+                scope: LayoutScope,
+                bounds: LayoutLimits,
+                service: ComRef<'_, ILayoutServiceAbi>,
+            ) -> Result<Size, NcStatus> {
+                <$name as HostedWidget>::runtime(self).state.readable()?;
+                let constraints = super::layout::constraints(bounds)?;
+                let layout = super::layout::ScopedLayout::new(scope, service)?;
+                let assets = <$name as HostedWidget>::runtime_mut(self).resources()?;
+                let mut ctx = crate::MeasureCtx::scoped(assets.bundle().skin(), assets.bundle().atlas(), layout);
+                let size = crate::ContainerWidget::measure(self, &mut ctx, constraints);
+                ctx.result()?;
+                Ok(Size {
+                    width: size.width.max(0),
+                    height: size.height.max(0),
                 })
             }
-            /// Closes logical widget state and all descendant ownership before final COM release.
-            fn close_widget(&mut self) -> Result<(), NcStatus> {
-                if self.widget.state.close()? {
-                    self.editor.close()?.finish()?;
+
+            /// Places the concrete container and returns only its copied child geometry.
+            fn place(
+                &mut self,
+                scope: LayoutScope,
+                rect: Rect,
+                service: ComRef<'_, ILayoutServiceAbi>,
+            ) -> Result<ContainerGeometry, NcStatus> {
+                <$name as HostedWidget>::runtime(self).state.readable()?;
+                if rect.width < 0 || rect.height < 0 {
+                    return Err(NC_E_INVALID_ARG);
                 }
-                Ok(())
+                let layout = super::layout::ScopedLayout::new(scope, service)?;
+                let assets = <$name as HostedWidget>::runtime_mut(self).resources()?;
+                let mut ctx = crate::ContainerLayoutCtx::scoped(
+                    assets.bundle().skin(),
+                    assets.bundle().atlas(),
+                    local_rect(rect),
+                    layout,
+                );
+                crate::ContainerWidget::place(self, &mut ctx, local_rect(rect));
+                ctx.result()
             }
-            /// Reuses the concrete container's full input and eventless update algorithm.
-            fn update_widget(&mut self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
-                self.widget.update(state, event, text)
+
+            /// Applies the concrete container's post-target event filtering policy.
+            fn accepts_event(
+                &self,
+                event: WidgetEventAbi,
+                text: NcCopyFromBufferOffset<'_, u8>,
+            ) -> Result<bool, NcStatus> {
+                <$name as HostedWidget>::runtime(self).state.readable()?;
+                let event = super::input::local_event(event, text)?;
+                Ok(event.is_some_and(|event| crate::ContainerWidget::accepts_event(self, &event)))
             }
         }
-        widget_phase_impl!($name);
-        container_layout_impl!($name);
     };
 }
 
@@ -67,23 +97,21 @@ macro_rules! container_methods {
     () => {
         /// Exposes read-only topology without allowing callers to bypass concrete edge metadata.
         fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
-            self.widget.state.readable()?;
+            <Self as HostedWidget>::runtime(self).state.readable()?;
             self.editor.view()
         }
         /// Publishes matching metadata even when the removed child's close reports an error.
         fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus> {
-            self.widget.state.writable()?;
-            let core = &mut self.widget.core;
+            <Self as HostedWidget>::runtime(self).state.writable()?;
             let outcome = self.editor.remove(index)?;
-            core.edit_edges(EdgeEdit::Remove { index: index as usize });
+            <Self as ContainerAlgorithm>::edit_edges(self, EdgeEdit::Remove { index: index as usize });
             Ok(outcome)
         }
         /// Clears topology and metadata in the same guarded concrete operation.
         fn clear(&mut self) -> Result<ChildEditResult, NcStatus> {
-            self.widget.state.writable()?;
-            let core = &mut self.widget.core;
+            <Self as HostedWidget>::runtime(self).state.writable()?;
             let outcome = self.editor.clear()?;
-            core.edit_edges(EdgeEdit::Clear);
+            <Self as ContainerAlgorithm>::edit_edges(self, EdgeEdit::Clear);
             Ok(outcome)
         }
     };
@@ -94,106 +122,108 @@ macro_rules! container_edges {
     ($edge:ty, $decode:ident, $encode:ident) => {
         /// Returns one copied relationship after checking the container's logical lifetime.
         fn edge(&self, index: u32) -> Result<$edge, NcStatus> {
-            self.widget.state.readable()?;
-            Ok($encode(self.widget.core.edge(index as usize).ok_or(nc_com::NC_E_OUT_OF_RANGE)?))
+            <Self as HostedWidget>::runtime(self).state.readable()?;
+            Ok($encode(<Self as ContainerAlgorithm>::edge(self, index as usize).ok_or(nc_com::NC_E_OUT_OF_RANGE)?))
         }
         /// Validates metadata before replacing it, retaining invalidation only for an actual change.
         fn set_edge(&mut self, index: u32, edge: $edge) -> Result<(), NcStatus> {
-            self.widget.state.writable()?;
+            <Self as HostedWidget>::runtime(self).state.writable()?;
             let edge = $decode(edge)?;
-            let core = &mut self.widget.core;
-            let previous = core.edge(index as usize).ok_or(nc_com::NC_E_OUT_OF_RANGE)?;
+            let previous = <Self as ContainerAlgorithm>::edge(self, index as usize).ok_or(nc_com::NC_E_OUT_OF_RANGE)?;
             if previous != edge {
-                core.edit_edges(EdgeEdit::Replace { index: index as usize, edge });
-                self.widget.state.record_change(GeometryChange::CHANGED);
+                <Self as ContainerAlgorithm>::edit_edges(self, EdgeEdit::Replace { index: index as usize, edge });
+                <Self as HostedWidget>::runtime_mut(self).state.record_change(GeometryChange::CHANGED);
             }
             Ok(())
         }
         /// Validates the complete relationship before the child can consume its sole attachment claim.
         fn insert(&mut self, index: u32, child: ComRef<'_, IWidgetAbi>, edge: $edge) -> Result<ChildEditResult, NcStatus> {
-            self.widget.state.writable()?;
+            <Self as HostedWidget>::runtime(self).state.writable()?;
             let edge = $decode(edge)?;
-            let core = &mut self.widget.core;
             let outcome = self.editor.insert(index, child)?;
-            core.edit_edges(EdgeEdit::Insert { index: index as usize, edge });
+            <Self as ContainerAlgorithm>::edit_edges(self, EdgeEdit::Insert { index: index as usize, edge });
             Ok(outcome)
         }
         /// Commits replacement metadata before returning any old-child teardown failure in the outcome.
         fn replace(&mut self, index: u32, child: ComRef<'_, IWidgetAbi>, edge: $edge) -> Result<ChildEditResult, NcStatus> {
-            self.widget.state.writable()?;
+            <Self as HostedWidget>::runtime(self).state.writable()?;
             let edge = $decode(edge)?;
-            let core = &mut self.widget.core;
             let outcome = self.editor.replace(index, child)?;
-            core.edit_edges(EdgeEdit::Replace { index: index as usize, edge });
+            <Self as ContainerAlgorithm>::edit_edges(self, EdgeEdit::Replace { index: index as usize, edge });
             Ok(outcome)
         }
     };
 }
 
-container_object!(LinearObject, crate::Linear, microui_contracts::Linear);
-impl LinearObject {
+direct_widget_phase_impl!(crate::Linear);
+direct_container_layout_impl!(crate::Linear);
+
+impl crate::Linear {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(super) fn create(host: ComPtr<IWidgetHostAbi>, direction: FlowDirection, cross: CrossSizeAbi) -> Result<ComPtr<LinearAbi>, NcStatus> {
-        let value = <Self as Linear>::new(host.as_com_ref(), direction, cross)?;
-        Ok(Self::from_value(value).query().expect("LinearObject declares the Linear class contract"))
+    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, direction: FlowDirection, cross: CrossSizeAbi) -> Result<ComPtr<LinearAbi>, NcStatus> {
+        let value = <Self as microui_contracts::Linear>::new(host.as_com_ref(), direction, cross)?;
+        Ok(Self::from_value(value).query().expect("Linear declares its callable class contract"))
     }
 }
-impl Linear for LinearObject {
+impl microui_contracts::Linear for crate::Linear {
     /// Validates both layout policies before allocating child ownership or widget state.
     fn new(host: ComRef<'_, IWidgetHostAbi>, direction: FlowDirection, cross: CrossSizeAbi) -> Result<Self, NcStatus> {
         let direction = local_direction(direction)?;
         let cross = local_cross(cross)?;
-        Self::from_core(host.add_ref(), crate::Linear::com_new(direction, cross))
+        let host = host.add_ref();
+        let editor = host.create_children()?;
+        let runtime = WidgetRuntime::new(host, crate::WidgetOption::NO_INTERACT)?;
+        Ok(Self::from_runtime(runtime, editor, direction, cross))
     }
     container_methods!();
     /// Returns the exact retained axis and leading-edge policy.
     fn direction(&self) -> Result<FlowDirection, NcStatus> {
-        self.widget.state.readable()?;
-        Ok(flow_direction(self.widget.core.direction()))
+        self.runtime().state.readable()?;
+        Ok(flow_direction(crate::Linear::direction(self)))
     }
     /// Validates before changing direction and conservatively invalidating derived placement.
     fn set_direction(&mut self, direction: FlowDirection) -> Result<(), NcStatus> {
-        self.widget.state.writable()?;
+        self.runtime().state.writable()?;
         let direction = local_direction(direction)?;
-        let core = &mut self.widget.core;
-        if core.direction() != direction {
-            core.set_direction(direction);
-            self.widget.state.record_change(GeometryChange::CHANGED);
+        if crate::Linear::direction(self) != direction {
+            crate::Linear::set_direction(self, direction);
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
         }
         Ok(())
     }
     /// Returns the line's cross size independently of per-child cross relationships.
     fn cross_size(&self) -> Result<CrossSizeAbi, NcStatus> {
-        self.widget.state.readable()?;
-        Ok(cross_size(self.widget.core.cross_size()))
+        self.runtime().state.readable()?;
+        Ok(cross_size(crate::Linear::cross_size(self)))
     }
     /// Changes cross size only after validating its typed payload.
     fn set_cross_size(&mut self, cross: CrossSizeAbi) -> Result<(), NcStatus> {
-        self.widget.state.writable()?;
+        self.runtime().state.writable()?;
         let cross = local_cross(cross)?;
-        let core = &mut self.widget.core;
-        if core.cross_size() != cross {
-            core.set_cross_size(cross);
-            self.widget.state.record_change(GeometryChange::CHANGED);
+        if crate::Linear::cross_size(self) != cross {
+            crate::Linear::set_cross_size(self, cross);
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
         }
         Ok(())
     }
     container_edges!(LinearEdge, local_linear_edge, linear_edge);
 }
 
-container_object!(GridObject, crate::Grid, microui_contracts::Grid);
-impl GridObject {
+direct_widget_phase_impl!(crate::Grid);
+direct_container_layout_impl!(crate::Grid);
+
+impl crate::Grid {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(super) fn create(
+    pub(super) fn create_com(
         host: ComPtr<IWidgetHostAbi>,
         columns: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
         rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
     ) -> Result<ComPtr<GridAbi>, NcStatus> {
-        let value = <Self as Grid>::new(host.as_com_ref(), columns, rows)?;
-        Ok(Self::from_value(value).query().expect("GridObject declares the Grid class contract"))
+        let value = <Self as microui_contracts::Grid>::new(host.as_com_ref(), columns, rows)?;
+        Ok(Self::from_value(value).query().expect("Grid declares its callable class contract"))
     }
 }
-impl Grid for GridObject {
+impl microui_contracts::Grid for crate::Grid {
     /// Validates both complete track sequences before allocating child ownership or widget state.
     fn new(
         host: ComRef<'_, IWidgetHostAbi>,
@@ -202,38 +232,39 @@ impl Grid for GridObject {
     ) -> Result<Self, NcStatus> {
         let columns = local_tracks(columns)?;
         let rows = local_tracks(rows)?;
-        Self::from_core(host.add_ref(), crate::Grid::com_new(columns, rows))
+        let host = host.add_ref();
+        let editor = host.create_children()?;
+        let runtime = WidgetRuntime::new(host, crate::WidgetOption::NO_INTERACT)?;
+        Ok(Self::from_runtime(runtime, editor, columns, rows))
     }
     container_methods!();
     /// Bulk-copies column policy from the one concrete Grid state.
     fn columns(&self, output: NcCopyToBufferOffset<'_, LayoutTrackAbi>) -> Result<u32, NcStatus> {
-        self.widget.state.readable()?;
-        copy_tracks(self.widget.core.column_tracks(), output)
+        self.runtime().state.readable()?;
+        copy_tracks(self.column_tracks(), output)
     }
     /// Validates the complete input before rebuilding column-dependent span placement.
     fn set_columns(&mut self, tracks: NcCopyFromBufferOffset<'_, LayoutTrackAbi>) -> Result<(), NcStatus> {
-        self.widget.state.writable()?;
+        self.runtime().state.writable()?;
         let tracks = local_tracks(tracks)?;
-        let core = &mut self.widget.core;
-        if core.column_tracks() != tracks {
-            core.set_column_tracks(tracks);
-            self.widget.state.record_change(GeometryChange::CHANGED);
+        if self.column_tracks() != tracks {
+            self.set_column_tracks(tracks);
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
         }
         Ok(())
     }
     /// Bulk-copies row policy without exposing Grid's scratch or span vectors.
     fn rows(&self, output: NcCopyToBufferOffset<'_, LayoutTrackAbi>) -> Result<u32, NcStatus> {
-        self.widget.state.readable()?;
-        copy_tracks(self.widget.core.row_tracks(), output)
+        self.runtime().state.readable()?;
+        copy_tracks(self.row_tracks(), output)
     }
     /// Replaces row policies only after the entire typed input passes validation.
     fn set_rows(&mut self, tracks: NcCopyFromBufferOffset<'_, LayoutTrackAbi>) -> Result<(), NcStatus> {
-        self.widget.state.writable()?;
+        self.runtime().state.writable()?;
         let tracks = local_tracks(tracks)?;
-        let core = &mut self.widget.core;
-        if core.row_tracks() != tracks {
-            core.set_row_tracks(tracks);
-            self.widget.state.record_change(GeometryChange::CHANGED);
+        if self.row_tracks() != tracks {
+            self.set_row_tracks(tracks);
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
         }
         Ok(())
     }

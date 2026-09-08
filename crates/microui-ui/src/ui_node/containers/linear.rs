@@ -327,7 +327,12 @@ where
 /// consumes only an exact placement allocation and does not manufacture desired size during
 /// measurement. Content and Fixed overflow remain visible, and every geometry accumulation uses
 /// saturating arithmetic.
+#[nc_com::com_object(microui_contracts::Linear)]
 pub struct Linear {
+    /// Non-semantic COM lifecycle and host-backed phase resources.
+    runtime: crate::com::widget::WidgetRuntime,
+    /// Sole writer for children mounted through this container's COM contract.
+    pub(crate) editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
     /// Weak topology capability supplied by generic container construction.
     #[cfg(test)]
     children: ChildrenHandle,
@@ -342,9 +347,16 @@ pub struct Linear {
 }
 
 impl Linear {
-    /// Creates empty semantic state for a COM container whose host owns the actual children.
-    pub(crate) fn com_new(direction: LinearDirection, cross_size: LinearCrossSize) -> Self {
+    /// Combines validated layout policy with its runtime and authoritative COM child writer.
+    pub(crate) fn from_runtime(
+        runtime: crate::com::widget::WidgetRuntime,
+        editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+        direction: LinearDirection,
+        cross_size: LinearCrossSize,
+    ) -> Self {
         Self {
+            runtime,
+            editor,
             #[cfg(test)]
             children: ChildrenHandle::default(),
             specs: Vec::new(),
@@ -369,7 +381,10 @@ impl Linear {
         // Build children and relationship metadata together before either can become observable.
         let (children, specs) = collect_items(parameters.items);
         let children = Rc::new(RefCell::new(children));
+        let (runtime, editor) = crate::com::widget::WidgetRuntime::for_test_container(crate::WidgetOption::NO_INTERACT);
         let widget = Self {
+            runtime,
+            editor,
             #[cfg(test)]
             children: ChildrenHandle::default(),
             specs,
@@ -514,6 +529,24 @@ impl Linear {
 }
 
 impl crate::com::widget::WidgetAlgorithm for Linear {}
+
+impl crate::com::widget::HostedWidget for Linear {
+    /// Borrows common phase state stored directly beside Linear's layout fields.
+    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+        &self.runtime
+    }
+
+    /// Exclusively borrows common phase state for mutation or resource refresh.
+    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+        &mut self.runtime
+    }
+
+    /// Closes the authoritative COM child sequence when this Linear is retired.
+    fn close_contents(&mut self) -> Result<(), nc_com::NcStatus> {
+        self.editor.close()?.finish()
+    }
+}
+
 impl crate::com::containers::ContainerAlgorithm for Linear {
     type Edge = LinearItemSpec;
     /// Copies the same relationship used by the existing track resolver.

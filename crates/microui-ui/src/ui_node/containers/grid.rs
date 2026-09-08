@@ -366,20 +366,33 @@ impl GridParameters {
 ///
 /// Grid always has an effective track on each axis, but an implicit empty Content track contributes
 /// zero. An empty generic Grid remains zero-sized unless an explicit Fixed track contributes extent.
+#[nc_com::com_object(microui_contracts::Grid)]
 pub struct Grid {
+    /// Non-semantic COM lifecycle and host-backed phase resources.
+    runtime: crate::com::widget::WidgetRuntime,
+    /// Sole writer for children mounted through this container's COM contract.
+    pub(crate) editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
     /// Weak topology access coordinated with Grid-owned edge metadata below.
     #[cfg(test)]
     children: ChildrenHandle,
+    /// Grid-owned spans and their derived row-major placements.
     items: GridItems,
+    /// Horizontal track policies used by measurement and placement.
     column_tracks: Vec<TrackSize>,
+    /// Vertical track policies used by measurement and placement.
     row_tracks: Vec<TrackSize>,
     /// Bound-dependent track extents reused only by the mutable layout phase.
     layout: GridLayout,
 }
 
 impl Grid {
-    /// Creates empty COM-owned semantic state; the host-issued editor owns its actual descendants.
-    pub(crate) fn com_new(column_tracks: Vec<TrackSize>, row_tracks: Vec<TrackSize>) -> Self {
+    /// Combines validated tracks with the runtime and authoritative COM child writer.
+    pub(crate) fn from_runtime(
+        runtime: crate::com::widget::WidgetRuntime,
+        editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+        column_tracks: Vec<TrackSize>,
+        row_tracks: Vec<TrackSize>,
+    ) -> Self {
         let items = GridItems {
             spans: Vec::new(),
             placements: Vec::new(),
@@ -387,6 +400,8 @@ impl Grid {
             columns: column_tracks.len().max(1),
         };
         Self {
+            runtime,
+            editor,
             #[cfg(test)]
             children: ChildrenHandle::default(),
             items,
@@ -394,6 +409,13 @@ impl Grid {
             row_tracks,
             layout: GridLayout::default(),
         }
+    }
+
+    /// Creates an empty host-bound Grid for native algorithm tests.
+    #[cfg(test)]
+    pub(crate) fn com_new(column_tracks: Vec<TrackSize>, row_tracks: Vec<TrackSize>) -> Self {
+        let (runtime, editor) = crate::com::widget::WidgetRuntime::for_test_container(crate::WidgetOption::NO_INTERACT);
+        Self::from_runtime(runtime, editor, column_tracks, row_tracks)
     }
     /// Returns the number of owned Grid children.
     #[cfg(test)]
@@ -449,7 +471,10 @@ impl Grid {
         let mut items = parameters.items;
         items.set_columns(parameters.column_tracks.len());
         let children = Rc::new(RefCell::new(parameters.children));
+        let (runtime, editor) = crate::com::widget::WidgetRuntime::for_test_container(crate::WidgetOption::NO_INTERACT);
         let widget = Self {
+            runtime,
+            editor,
             #[cfg(test)]
             children: ChildrenHandle::default(),
             items,
@@ -463,6 +488,24 @@ impl Grid {
 }
 
 impl crate::com::widget::WidgetAlgorithm for Grid {}
+
+impl crate::com::widget::HostedWidget for Grid {
+    /// Borrows common phase state stored directly beside Grid's layout fields.
+    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+        &self.runtime
+    }
+
+    /// Exclusively borrows common phase state for mutation or resource refresh.
+    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+        &mut self.runtime
+    }
+
+    /// Closes the authoritative COM child sequence when this Grid is retired.
+    fn close_contents(&mut self) -> Result<(), nc_com::NcStatus> {
+        self.editor.close()?.finish()
+    }
+}
+
 impl crate::com::containers::ContainerAlgorithm for Grid {
     type Edge = GridSpan;
     /// Returns the same span consumed by the existing row-major placement algorithm.
@@ -1089,13 +1132,11 @@ mod tests {
 
         let mut children = Children::new();
         let topology = Rc::new(RefCell::new(Children::new()));
-        let empty = Grid {
-            children: ChildrenHandle::new(&topology),
-            items: GridItems::default(),
-            column_tracks: vec![TrackSize::Fixed(10), TrackSize::Content],
-            row_tracks: vec![TrackSize::Fixed(8), TrackSize::Content],
-            layout: GridLayout::default(),
-        };
+        let mut empty = Grid::com_new(
+            vec![TrackSize::Fixed(10), TrackSize::Content],
+            vec![TrackSize::Fixed(8), TrackSize::Content],
+        );
+        empty.children = ChildrenHandle::new(&topology);
         let mut ctx = MeasureCtx::new(&style, &atlas, &mut children);
         let measured = grid_size(&mut ctx, &empty, crate::Constraints::unbounded());
         assert_eq!(measured.width, 12);

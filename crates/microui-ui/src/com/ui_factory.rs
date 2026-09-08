@@ -73,7 +73,7 @@ impl UiFactory for UiFactoryObject {
         cross: CrossSizeAbi,
     ) -> Result<ComPtr<LinearAbi>, NcStatus> {
         self.host.check_mutation()?;
-        super::containers::LinearObject::create(self.host.clone(), direction, cross)
+        super::Linear::create_com(self.host.clone(), direction, cross)
     }
 
     /// Validates complete typed track sequences before allocating Grid state.
@@ -83,7 +83,7 @@ impl UiFactory for UiFactoryObject {
         rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
     ) -> Result<ComPtr<GridAbi>, NcStatus> {
         self.host.check_mutation()?;
-        super::containers::GridObject::create(self.host.clone(), columns, rows)
+        super::Grid::create_com(self.host.clone(), columns, rows)
     }
 
     /// Validates complete checkbox initialization before allocating its COM identity.

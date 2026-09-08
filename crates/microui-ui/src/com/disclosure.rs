@@ -50,7 +50,7 @@ impl Disclosure for DisclosureObject {
             variant.header_options(),
             crate::ui_node::DisclosureHeader::com_new(model.clone(), label.to_owned(), variant),
         )?;
-        let body = super::containers::LinearObject::create(host.add_ref(), FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch.into())?;
+        let body = super::Linear::create_com(host.add_ref(), FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch.into())?;
         let editor = host.create_children()?;
         editor.insert(0, header.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
         editor.insert(1, body.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
