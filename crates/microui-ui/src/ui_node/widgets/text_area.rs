@@ -147,6 +147,122 @@ pub struct TextEditor {
     submitted_event: crate::EventSource<TextAreaSubmitted>,
 }
 
+/// Concrete fixed scrolling text-area class with one actual editor child.
+#[nc_com::com_object(microui_contracts::TextArea)]
+pub struct TextArea {
+    /// Non-semantic COM lifecycle and host-backed phase resources.
+    runtime: crate::com::widget::WidgetRuntime,
+    /// Exactly three owned structural children: surface and both scrollbar objects.
+    pub(crate) editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+    /// Multiline editing capability of the sole content child.
+    pub(crate) text: nc_com::ComPtr<microui_contracts::IMultilineEditorAbi>,
+    /// Font capability queried from that same content child.
+    pub(crate) font: nc_com::ComPtr<microui_contracts::IFontStyleAbi>,
+    /// Event capability queried from that same content child.
+    pub(crate) events: nc_com::ComPtr<microui_contracts::ITextEventsAbi>,
+    /// Scalar scrolling state shared with the surface, scrollbars, and editor caret requests.
+    pub(crate) model: std::rc::Rc<crate::ui_node::ScrollModel>,
+    /// Native fixture policy; deployed options belong to the embedded runtime.
+    #[cfg(test)]
+    opt: WidgetOption,
+}
+
+impl TextArea {
+    /// Combines the completed fixed topology and its queried editor capabilities in one class value.
+    pub(crate) fn from_runtime(
+        runtime: crate::com::widget::WidgetRuntime,
+        editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+        text: nc_com::ComPtr<microui_contracts::IMultilineEditorAbi>,
+        font: nc_com::ComPtr<microui_contracts::IFontStyleAbi>,
+        events: nc_com::ComPtr<microui_contracts::ITextEventsAbi>,
+        model: std::rc::Rc<crate::ui_node::ScrollModel>,
+    ) -> Self {
+        #[cfg(test)]
+        let opt = WidgetOption::from_bits_retain(
+            runtime
+                .state
+                .options()
+                .expect("new test widget runtime exposes its validated options")
+                .bits,
+        );
+        Self {
+            runtime,
+            editor,
+            text,
+            font,
+            events,
+            model,
+            #[cfg(test)]
+            opt,
+        }
+    }
+}
+
+impl Widget for TextArea {
+    /// Drains shared caret, scrollbar, and enablement requests even when ordinary update is skipped.
+    fn take_shared_change(&self) -> bool {
+        crate::ui_node::ScrollComposition::take_scroll_change(self)
+    }
+
+    /// Supplies the native fixture's frame policy.
+    #[cfg(test)]
+    fn widget_opt(&self) -> &WidgetOption {
+        &self.opt
+    }
+
+    /// Uses the same panel appearance as an ordinary ScrollArea.
+    fn frame_appearance_role(&self) -> FrameRole {
+        crate::ui_node::ScrollComposition::scroll_frame_role(self)
+    }
+
+    /// Adds dynamic wheel routing to the native fixture policy.
+    #[cfg(test)]
+    fn effective_widget_opt(&self) -> WidgetOption {
+        crate::com::widget::WidgetAlgorithm::effective_options(self, self.opt)
+    }
+
+    /// Applies wheel input to the scroll model shared with the actual editor and bars.
+    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
+        crate::ui_node::ScrollComposition::update_scroll(self, input)
+    }
+
+    /// Paints only the outer panel and scrollbar corner; the editor child paints text and caret.
+    fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
+        crate::ui_node::ScrollComposition::paint_scroll(self, ctx);
+    }
+}
+
+impl crate::ui_node::ScrollComposition for TextArea {
+    /// Supplies the exact model shared by every member of the fixed text-area composition.
+    fn scroll_model(&self) -> &crate::ui_node::ScrollModel {
+        &self.model
+    }
+}
+
+impl crate::com::widget::WidgetAlgorithm for TextArea {
+    /// Adds or removes wheel routing from the class's current common options.
+    fn effective_options(&self, options: WidgetOption) -> WidgetOption {
+        crate::ui_node::ScrollComposition::scroll_options(self, options)
+    }
+}
+
+impl crate::com::widget::HostedWidget for TextArea {
+    /// Borrows common phase state stored directly beside the fixed composition capabilities.
+    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+        &self.runtime
+    }
+
+    /// Exclusively borrows common phase state for mutation or resource refresh.
+    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+        &mut self.runtime
+    }
+
+    /// Closes the surface, editor, and both scrollbar children through their fixed writer.
+    fn close_contents(&mut self) -> Result<(), nc_com::NcStatus> {
+        self.editor.close()?.finish()
+    }
+}
+
 /// Snapshot emitted after a user-originated text-area value change.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TextAreaChanged {

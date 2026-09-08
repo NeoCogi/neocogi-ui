@@ -87,7 +87,7 @@ pub(crate) use runtime::RuntimeMetrics;
 mod container;
 pub use container::{ContainerLayoutCtx, ContainerWidget, MeasureCtx};
 mod containers;
-pub(crate) use containers::{LinearItemSpec, ScrollModel, ScrollSurface, DisclosureState, DisclosureHeader, DisclosureVariant};
+pub(crate) use containers::{LinearItemSpec, ScrollComposition, ScrollModel, ScrollSurface, DisclosureState, DisclosureHeader, DisclosureVariant};
 pub use containers::{Disclosure, Grid, GridSpan, Linear, LinearCrossSize, LinearDirection, ScrollArea};
 #[cfg(test)]
 pub use containers::{DisclosureParameters, GridParameters, LinearItem, LinearParameters, ScrollAreaParameters};

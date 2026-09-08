@@ -44,7 +44,7 @@ impl UiFactory for UiFactoryObject {
         wrapping: TextWrapping,
         scrolling: bool,
     ) -> Result<ComPtr<TextAreaAbi>, NcStatus> {
-        super::text_area::TextAreaObject::create(self.host.clone(), input, wrapping, scrolling)
+        super::TextArea::create_com(self.host.clone(), input, wrapping, scrolling)
     }
 
     /// Validates text and presentation before constructing either fixed structural child.
@@ -63,7 +63,7 @@ impl UiFactory for UiFactoryObject {
         content: ComRef<'_, IWidgetAbi>,
         enabled: bool,
     ) -> Result<ComPtr<ScrollAreaAbi>, NcStatus> {
-        super::scroll::ScrollAreaObject::create(self.host.clone(), content, enabled)
+        super::ScrollArea::create_com(self.host.clone(), content, enabled)
     }
 
     /// Validates both policies before creating a container and its host-owned child store.

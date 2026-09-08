@@ -16,7 +16,7 @@ nc_com::plugin! {
         microui_ui::com::Combo,
         microui_ui::com::Textbox,
         microui_ui::com::TextBlock,
-        microui_ui::com::TextAreaObject,
+        microui_ui::com::TextArea,
         microui_ui::com::Slider,
         microui_ui::com::Number,
         microui_ui::com::ColorSwatch,
@@ -24,7 +24,7 @@ nc_com::plugin! {
         microui_ui::com::ListBox,
         microui_ui::com::Linear,
         microui_ui::com::Grid,
-        microui_ui::com::ScrollAreaObject,
+        microui_ui::com::ScrollArea,
         microui_ui::com::Disclosure,
     ],
 }

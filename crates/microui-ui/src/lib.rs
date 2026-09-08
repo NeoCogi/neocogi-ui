@@ -179,7 +179,7 @@ pub(crate) use ui_node::{ChildrenHandle, Container, DisclosureParameters, GridPa
 pub(crate) use widgets::{
     Button, ButtonParameters, ButtonSubmitted, Checkbox, CheckboxChanged, CheckboxParameters, ColorSwatch, ColorSwatchParameters, Combo, ComboChanged,
     ComboParameters, ComboSubmitted, DecimalPrecision, ListBox, ListBoxParameters, ListBoxSubmitted, ListItem, ListItemParameters, ListItemSubmitted, Number,
-    NumberChanged, NumberParameters, Slider, SliderChanged, SliderParameters, TextAreaChanged, TextAreaSubmitted, TextEditor, Real, TextBlock,
+    NumberChanged, NumberParameters, Slider, SliderChanged, SliderParameters, TextArea, TextAreaChanged, TextAreaSubmitted, TextEditor, Real, TextBlock,
     TextBlockParameters, Textbox, TextboxChanged, TextboxParameters, TextboxSubmitted,
 };
 #[cfg(test)]

@@ -40,7 +40,7 @@ mod grid;
 mod linear;
 pub(crate) use linear::LinearItemSpec;
 mod scroll_area;
-pub(crate) use scroll_area::{ScrollModel, ScrollSurface};
+pub(crate) use scroll_area::{ScrollComposition, ScrollModel, ScrollSurface};
 
 pub use disclosure::{Disclosure};
 #[cfg(test)]

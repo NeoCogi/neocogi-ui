@@ -52,7 +52,7 @@
 //
 //! Built-in retained widgets.
 //!
-//! Each COM leaf stores its concrete semantic algorithm inline in WidgetCore.
+//! Each registered COM leaf is the concrete semantic widget allocation itself.
 //! Application construction and editing use the facade's typed interface projections.
 //! Native constructors and weak accessors exist only for algorithm fixtures.
 
@@ -98,7 +98,7 @@ pub use number::{Number, NumberChanged, NumberParameters};
 pub use numeric_edit::{DecimalPrecision};
 pub use scrollbar::{Scrollbar, ScrollbarAxis, ScrollbarChanged, ScrollbarParameters};
 pub use slider::{Slider, SliderChanged, SliderParameters};
-pub use text_area::{TextAreaChanged, TextAreaSubmitted, TextEditor};
+pub use text_area::{TextArea, TextAreaChanged, TextAreaSubmitted, TextEditor};
 #[cfg(test)]
 pub use text_area::{TextAreaParameters};
 pub use text_block::{TextBlock, TextBlockParameters};

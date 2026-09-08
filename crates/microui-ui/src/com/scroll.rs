@@ -1,37 +1,27 @@
 //! Fixed scroll composition uses real COM children and explicit shared scalar data within this plugin.
 use super::*;
-use super::widget::WidgetCore;
+use super::widget::{HostedWidget, WidgetRuntime};
 
 direct_widget_phase_impl!(crate::ui_node::ScrollSurface);
 direct_container_layout_impl!(crate::ui_node::ScrollSurface);
 
-#[com_object(microui_contracts::ScrollArea)]
-/// One scroll-area COM identity owns its three structural nodes and shares no parent-widget backpointer.
-pub struct ScrollAreaObject {
-    /// Existing convergence, wheel routing, padding and panel paint algorithms remain authoritative.
-    widget: WidgetCore<crate::ScrollArea>,
-    /// Exactly three owned children: transform surface, horizontal bar and vertical bar.
-    editor: ComPtr<IChildrenEditorAbi>,
-    /// Private authority for the surface's one replaceable application child, not a duplicate tree.
-    content: ComPtr<IChildrenEditorAbi>,
-}
-fixed_phases!(ScrollAreaObject);
+direct_widget_phase_impl!(crate::ScrollArea);
+direct_container_layout_impl!(crate::ScrollArea);
+direct_scrolling_impl!(crate::ScrollArea);
 
 /// Prepared fixed scroll tree, shared by ordinary ScrollArea and TextArea construction.
 /// This value is consumed into one final object; it never becomes a second live owner or widget.
-pub(super) struct ScrollParts {
-    /// Existing scalar scroll/layout state for the final outer COM identity.
-    pub(super) widget: WidgetCore<crate::ScrollArea>,
+pub(crate) struct ScrollParts {
     /// Fixed surface and actual bar topology.
-    pub(super) editor: ComPtr<IChildrenEditorAbi>,
+    pub(crate) editor: ComPtr<IChildrenEditorAbi>,
     /// Private insertion authority for the prepared surface's single content child.
-    pub(super) content: ComPtr<IChildrenEditorAbi>,
+    pub(crate) content: ComPtr<IChildrenEditorAbi>,
     /// Explicit scalar model supplied to an editor before its content attachment.
-    pub(super) model: Rc<crate::ui_node::ScrollModel>,
+    pub(crate) model: Rc<crate::ui_node::ScrollModel>,
 }
 impl ScrollParts {
     /// Builds every structural role before attaching application content or the internal editor.
-    pub(super) fn prepare(host: ComPtr<IWidgetHostAbi>, enabled: bool) -> Result<Self, NcStatus> {
+    pub(crate) fn prepare(host: ComPtr<IWidgetHostAbi>, enabled: bool) -> Result<Self, NcStatus> {
         host.check_mutation()?;
         let horizontal_parameters = crate::ScrollbarParameters::new(crate::ScrollbarAxis::Horizontal);
         let horizontal_options = horizontal_parameters.opt;
@@ -54,41 +44,35 @@ impl ScrollParts {
         editor.insert(0, surface.as_com_ref())?.finish()?;
         editor.insert(1, horizontal.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
         editor.insert(2, vertical.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
-        let widget = WidgetCore::new(host, crate::WidgetOption::FRAME, crate::ScrollArea::from_model(model.clone()))?;
-        Ok(Self { widget, editor, content, model })
+        Ok(Self { editor, content, model })
     }
 }
-impl ScrollAreaObject {
+impl crate::ScrollArea {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(super) fn create(host: ComPtr<IWidgetHostAbi>, content: ComRef<'_, IWidgetAbi>, enabled: bool) -> Result<ComPtr<ScrollAreaAbi>, NcStatus> {
-        let value = <Self as ScrollArea>::new(host.as_com_ref(), content, enabled)?;
+    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, content: ComRef<'_, IWidgetAbi>, enabled: bool) -> Result<ComPtr<ScrollAreaAbi>, NcStatus> {
+        let value = <Self as microui_contracts::ScrollArea>::new(host.as_com_ref(), content, enabled)?;
         Ok(Self::from_value(value)
             .query()
-            .expect("ScrollAreaObject declares the ScrollArea class contract"))
+            .expect("ScrollArea declares its callable class contract"))
     }
 }
 
-impl ScrollArea for ScrollAreaObject {
+impl microui_contracts::ScrollArea for crate::ScrollArea {
     /// Completes internal construction before consuming the application's sole content attachment.
     fn new(host: ComRef<'_, IWidgetHostAbi>, content: ComRef<'_, IWidgetAbi>, enabled: bool) -> Result<Self, NcStatus> {
         let parts = ScrollParts::prepare(host.add_ref(), enabled)?;
         parts.content.insert(0, content)?.finish()?;
-        Ok(Self {
-            widget: parts.widget,
-            editor: parts.editor,
-            content: parts.content,
-        })
+        let runtime = WidgetRuntime::new(host.add_ref(), crate::WidgetOption::FRAME)?;
+        Ok(Self::from_runtime(runtime, parts.editor, parts.content, parts.model))
     }
     /// Reads the actual content identity through its fixed one-child editor view.
     fn content(&self) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
-        self.widget.state.readable()?;
+        self.runtime().state.readable()?;
         self.content.view()?.child(0)
     }
     /// Guards the parent state before replacing the actual content subtree, preserving fixed internal roles.
     fn replace_content(&mut self, content: ComRef<'_, IWidgetAbi>) -> Result<ChildEditResult, NcStatus> {
-        self.widget.state.writable()?;
+        self.runtime().state.writable()?;
         self.content.replace(0, content)
     }
 }
-
-scrolling_impl!(ScrollAreaObject);

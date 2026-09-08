@@ -196,6 +196,21 @@ impl ScrollModel {
     pub(crate) fn offset(&self) -> Vec2i {
         Vec2i::new(self.horizontal.offset(), self.vertical.offset())
     }
+    /// Copies a coherent ABI snapshot from the actual axis requests and committed viewport.
+    pub(crate) fn com_info(&self) -> microui_contracts::ScrollInfo {
+        let requested = self.offset();
+        let maximum = self.maximum();
+        let viewport = self.geometry.get().viewport;
+        microui_contracts::ScrollInfo {
+            requested: microui_contracts::Point { x: requested.x, y: requested.y },
+            maximum: microui_contracts::Point { x: maximum.x, y: maximum.y },
+            viewport: microui_contracts::Size {
+                width: viewport.width,
+                height: viewport.height,
+            },
+            enabled: self.enabled.get(),
+        }
+    }
     /// Requests offsets that the next placement clamps against newly measured content.
     pub(crate) fn set_offset(&self, offset: Vec2i) {
         let offset = if self.enabled.get() { offset } else { Vec2i::default() };
@@ -221,7 +236,7 @@ impl ScrollModel {
         ));
     }
     /// Changes responsive policy and synchronously clears disabled interaction requests.
-    fn set_enabled(&self, enabled: bool) {
+    pub(crate) fn set_enabled(&self, enabled: bool) {
         if self.enabled.replace(enabled) != enabled {
             self.dirty.set(true);
         }
@@ -271,7 +286,14 @@ impl ScrollModel {
 }
 
 /// Concrete three-child scroll composite; its model owns data but no widget or tree backpointer.
+#[nc_com::com_object(microui_contracts::ScrollArea)]
 pub struct ScrollArea {
+    /// Non-semantic COM lifecycle and host-backed phase resources.
+    runtime: crate::com::widget::WidgetRuntime,
+    /// Exactly three owned structural children: surface and both scrollbar objects.
+    pub(crate) editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+    /// Private writer for the surface's single replaceable application child.
+    pub(crate) content: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
     /// Same scrolling values used by the actual bars, transform surface and optional text editor.
     pub(crate) model: Rc<ScrollModel>,
     /// Native fixture policy; deployed common state owns the authoritative frame options.
@@ -279,27 +301,28 @@ pub struct ScrollArea {
     opt: WidgetOption,
 }
 impl ScrollArea {
-    /// Copies a coherent ABI snapshot from actual requests and one committed geometry summary.
-    pub(crate) fn com_info(&self) -> microui_contracts::ScrollInfo {
-        let requested = self.model.offset();
-        let maximum = self.model.maximum();
-        let viewport = self.model.geometry.get().viewport;
-        microui_contracts::ScrollInfo {
-            requested: microui_contracts::Point { x: requested.x, y: requested.y },
-            maximum: microui_contracts::Point { x: maximum.x, y: maximum.y },
-            viewport: microui_contracts::Size {
-                width: viewport.width,
-                height: viewport.height,
-            },
-            enabled: self.model.enabled.get(),
-        }
-    }
-    /// Creates semantic state around already composed scalar data.
-    pub(crate) fn from_model(model: Rc<ScrollModel>) -> Self {
+    /// Combines the fixed structural tree and shared scroll model with one concrete runtime.
+    pub(crate) fn from_runtime(
+        runtime: crate::com::widget::WidgetRuntime,
+        editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+        content: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+        model: Rc<ScrollModel>,
+    ) -> Self {
+        #[cfg(test)]
+        let opt = WidgetOption::from_bits_retain(
+            runtime
+                .state
+                .options()
+                .expect("new test widget runtime exposes its validated options")
+                .bits,
+        );
         Self {
+            runtime,
+            editor,
+            content,
             model,
             #[cfg(test)]
-            opt: WidgetOption::NONE,
+            opt,
         }
     }
     /// Returns the requested offsets owned by the actual scrollbar state.
@@ -328,7 +351,7 @@ impl ScrollArea {
 impl Widget for ScrollArea {
     /// Shared offset/caret/enablement requests remain observable even if update skipped this subtree.
     fn take_shared_change(&self) -> bool {
-        self.model.take_change()
+        self.take_scroll_change()
     }
     #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
@@ -337,8 +360,7 @@ impl Widget for ScrollArea {
     }
 
     fn frame_appearance_role(&self) -> FrameRole {
-        // A framed scroll area uses the same panel patch whose center fills its viewport.
-        FrameRole::Surface(SurfaceRole::Panel)
+        self.scroll_frame_role()
     }
 
     #[cfg(test)]
@@ -348,27 +370,18 @@ impl Widget for ScrollArea {
 
     /// Reports scrolling because child placement reads the scrollbar-owned offsets.
     fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
-        // The child handles preserve intrinsic measurement; this result invalidates placement.
-        match input {
-            Some(UiInputEvent::Scroll { delta, .. }) => crate::Change::from(self.model.scroll_by(*delta)),
-            _ => crate::Change::NoChange,
-        }
+        self.update_scroll(input)
     }
 
     fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
-        // The parent paints only its panel and non-interactive corner; scrollbar children paint
-        // their own tracks and thumbs afterward in ordinary child paint order.
-        let fallback = ctx.local_rect();
-        let (surface, corner) = (self.model.geometry.get().surface, self.model.geometry.get().corner);
-        // Before first placement the summary is empty; the update/layout contract normally commits
-        // geometry before paint, while the fallback keeps direct widget tests well-defined.
-        let surface = if surface.width > 0 || surface.height > 0 { surface } else { fallback };
-        // Panel fill is noninteractive container structure. Scrollbars remain independently interactive,
-        // but hovering or dragging anywhere inside the viewport must not recolor its background.
-        ctx.draw_surface_center_state(SurfaceRole::Panel, crate::SurfaceState::Normal, surface);
-        if let Some(corner) = corner {
-            ctx.draw_surface_center_state(SurfaceRole::Panel, crate::SurfaceState::Normal, corner);
-        }
+        self.paint_scroll(ctx);
+    }
+}
+
+impl ScrollComposition for ScrollArea {
+    /// Supplies the exact model used by ScrollArea's input, paint, and public scrolling methods.
+    fn scroll_model(&self) -> &ScrollModel {
+        &self.model
     }
 }
 
@@ -439,16 +452,64 @@ impl Widget for ScrollSurface {
     fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }
 
-impl ScrollArea {
+/// Statically shares fixed scroll-composition layout without storing another widget value.
+pub(crate) trait ScrollComposition: Widget {
     /// Transform surface containing the application-provided content node.
     const SURFACE: usize = 0;
     /// Independently targetable horizontal scrollbar widget.
     const HORIZONTAL: usize = 1;
     /// Independently targetable vertical scrollbar widget.
     const VERTICAL: usize = 2;
+
+    /// Borrows the scalar model already shared with the surface and both scrollbar children.
+    fn scroll_model(&self) -> &ScrollModel;
+
+    /// Drains requests emitted by the parent, editor, or either actual scrollbar child.
+    fn take_scroll_change(&self) -> bool {
+        self.scroll_model().take_change()
+    }
+
+    /// Returns the common panel appearance used by every fixed scrolling composition.
+    fn scroll_frame_role(&self) -> FrameRole {
+        FrameRole::Surface(SurfaceRole::Panel)
+    }
+
+    /// Applies wheel input to the shared model and reports whether placement must run again.
+    fn update_scroll(&self, input: Option<&UiInputEvent>) -> crate::Change {
+        match input {
+            Some(UiInputEvent::Scroll { delta, .. }) => crate::Change::from(self.scroll_model().scroll_by(*delta)),
+            _ => crate::Change::NoChange,
+        }
+    }
+
+    /// Paints the noninteractive panel and any corner left between visible scrollbar children.
+    fn paint_scroll(&self, ctx: &mut WidgetPaintCtx<'_>) {
+        let fallback = ctx.local_rect();
+        let geometry = self.scroll_model().geometry.get();
+        // Before first placement the summary is empty; direct widget tests use the supplied local
+        // rectangle while ordinary traversal always paints committed geometry.
+        let surface = if geometry.surface.width > 0 || geometry.surface.height > 0 {
+            geometry.surface
+        } else {
+            fallback
+        };
+        ctx.draw_surface_center_state(SurfaceRole::Panel, crate::SurfaceState::Normal, surface);
+        if let Some(corner) = geometry.corner {
+            ctx.draw_surface_center_state(SurfaceRole::Panel, crate::SurfaceState::Normal, corner);
+        }
+    }
+
+    /// Adds dynamic wheel routing without duplicating the caller-authored common options.
+    fn scroll_options(&self, options: WidgetOption) -> WidgetOption {
+        if self.scroll_model().enabled.get() {
+            options | WidgetOption::GRAB_SCROLL
+        } else {
+            options | WidgetOption::NO_INTERACT
+        }
+    }
 }
 
-impl ContainerWidget for ScrollArea {
+impl<T: ScrollComposition> ContainerWidget for T {
     /// Measures content through the surface and includes Skin-owned viewport padding.
     fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: crate::Constraints) -> Dimensioni {
         // Scrollbars are responsive affordances and do not inflate intrinsic composite size.
@@ -468,16 +529,17 @@ impl ContainerWidget for ScrollArea {
 
     /// Places Skin-padded content and any required scrollbars inside the local surface.
     fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) {
+        let model = self.scroll_model();
         // All committed summary geometry is parent-local; child scrollbar geometry passed to each
         // widget is normalized to that child's own local track by configure_bar.
         let surface = Recti::new(0, 0, rect.width.max(0), rect.height.max(0));
         let padding = ctx.skin().metrics.padding.max(0);
         let bar_size = ctx.skin().metrics.scrollbar_size.max(0);
-        let enabled = self.model.enabled.get();
-        let requested = self.model.offset();
+        let enabled = model.enabled.get();
+        let requested = model.offset();
         let bars_usable = enabled && bar_size > 0 && surface.width > 0 && surface.height > 0;
-        let mut has_horizontal = bars_usable && self.model.geometry.get().horizontal.is_some();
-        let mut has_vertical = bars_usable && self.model.geometry.get().vertical.is_some();
+        let mut has_horizontal = bars_usable && model.geometry.get().horizontal.is_some();
+        let mut has_vertical = bars_usable && model.geometry.get().vertical.is_some();
         let mut visited_states = 0_u8;
 
         // Start from the last committed state so an unchanged retained tree keeps the same width
@@ -543,7 +605,7 @@ impl ContainerWidget for ScrollArea {
 
         if vertical_visible {
             // The scrollbar remains a real independently targetable child when active.
-            self.model.vertical.install(view.height, extent.height, requested.y);
+            model.vertical.install(view.height, extent.height, requested.y);
             let _ = ctx.set_child_participation(Self::VERTICAL, ChildParticipation::Active);
             let _ = ctx.layout_child(
                 Self::VERTICAL,
@@ -556,12 +618,12 @@ impl ContainerWidget for ScrollArea {
             );
         } else {
             // Hidden participation removes the retained bar from all ordinary runtime phases.
-            self.model.vertical.deactivate();
+            model.vertical.deactivate();
             let _ = ctx.set_child_participation(Self::VERTICAL, ChildParticipation::Hidden);
         }
 
         if horizontal_visible {
-            self.model.horizontal.install(view.width, extent.width, requested.x);
+            model.horizontal.install(view.width, extent.width, requested.x);
             let _ = ctx.set_child_participation(Self::HORIZONTAL, ChildParticipation::Active);
             let _ = ctx.layout_child(
                 Self::HORIZONTAL,
@@ -573,15 +635,15 @@ impl ContainerWidget for ScrollArea {
                 ),
             );
         } else {
-            self.model.horizontal.deactivate();
+            model.horizontal.deactivate();
             let _ = ctx.set_child_participation(Self::HORIZONTAL, ChildParticipation::Hidden);
         }
 
-        let offset = self.model.offset();
+        let offset = model.offset();
         // The surface reads the clamped scrollbar offsets while assigning its content. Mark only a
         // changed translation dirty so an unchanged exact allocation may still use the retained
         // layout fast path.
-        if offset.x != self.model.geometry.get().offset.x || offset.y != self.model.geometry.get().offset.y {
+        if offset.x != model.geometry.get().offset.x || offset.y != model.geometry.get().offset.y {
             ctx.child_placement_changed(Self::SURFACE);
         }
         let child_rect = Recti::new(rect.x + view.x, rect.y + view.y, view.width, view.height);
@@ -589,7 +651,7 @@ impl ContainerWidget for ScrollArea {
 
         let corner = (vertical_visible && horizontal_visible)
             .then(|| Recti::new(body.x + body.width, body.y + body.height, vertical_track.width, horizontal_track.height));
-        self.model.geometry.set(ScrollAreaGeometry {
+        model.geometry.set(ScrollAreaGeometry {
             surface,
             offset,
             viewport: Dimensioni::new(view.width, view.height),
@@ -606,7 +668,7 @@ impl ContainerWidget for ScrollArea {
 
     fn accepts_event(&self, event: &UiInputEvent) -> bool {
         let UiInputEvent::Scroll { delta, .. } = event else { return false };
-        self.model.accepts_delta(*delta)
+        self.scroll_model().accepts_delta(*delta)
     }
 }
 
@@ -635,10 +697,11 @@ impl ScrollArea {
         let (surface_runtime, surface_editor) = crate::com::widget::WidgetRuntime::for_test_container(WidgetOption::NO_INTERACT);
         let surface = ScrollSurface::from_runtime(surface_runtime, surface_editor, model.clone());
         let (_, surface_container) = Container::from_shared(content, surface);
-        let widget = ScrollArea {
-            opt: surface_opt,
-            ..ScrollArea::from_model(model)
-        };
+        let runtime = crate::com::widget::WidgetRuntime::for_test(surface_opt);
+        let host = runtime.state.host().add_ref();
+        let parts = crate::com::scroll::ScrollParts::prepare(host, enabled)
+            .expect("native scroll fixture builds the same fixed COM topology");
+        let widget = ScrollArea::from_runtime(runtime, parts.editor, parts.content, model);
         let children = Rc::new(RefCell::new(
             [Node::container(surface_container), horizontal_node, vertical_node].into_iter().collect(),
         ));
@@ -650,11 +713,24 @@ impl ScrollArea {
 impl crate::com::widget::WidgetAlgorithm for ScrollArea {
     /// Dynamic wheel eligibility follows the same shared policy used by placement.
     fn effective_options(&self, options: WidgetOption) -> WidgetOption {
-        if self.model.enabled.get() {
-            options | WidgetOption::GRAB_SCROLL
-        } else {
-            options | WidgetOption::NO_INTERACT
-        }
+        self.scroll_options(options)
+    }
+}
+
+impl crate::com::widget::HostedWidget for ScrollArea {
+    /// Borrows common phase state stored directly beside ScrollArea's model and child writers.
+    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+        &self.runtime
+    }
+
+    /// Exclusively borrows common phase state for mutation or resource refresh.
+    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+        &mut self.runtime
+    }
+
+    /// Closes the surface and both actual scrollbar children through their fixed writer.
+    fn close_contents(&mut self) -> Result<(), nc_com::NcStatus> {
+        self.editor.close()?.finish()
     }
 }
 impl crate::com::widget::WidgetAlgorithm for ScrollSurface {}

@@ -2,12 +2,9 @@
 //!
 //! Concrete widget types own their semantic fields directly. [`WidgetRuntime`] contains only the
 //! common host, lifecycle, option, resource, and rendering machinery required by every class.
-//! [`WidgetCore`] remains temporarily for widgets that have not yet moved their fields onto their
-//! COM allocation; it is deleted after the incremental migration completes.
 use super::*;
-use crate::math::RectExt;
 use microui_contracts::widget::WidgetState;
-use crate::{WidgetOption, WidgetUpdateCtx, WidgetPaintCtx, AvailableSpace};
+use crate::{AvailableSpace, WidgetOption};
 use crate::render::{DisplayList, Renderer};
 
 /// Private semantic algorithms reused by each statically known built-in class.
@@ -58,7 +55,6 @@ impl WidgetRevision {
         Ok(Self {
             assets,
             scratch: PaintScratch {
-                list: DisplayList::new(),
                 renderer: Renderer::from_atlas(collector, atlas),
                 storage,
             },
@@ -255,155 +251,6 @@ pub(super) fn set_direct_named_icon<S: HostedWidget + IconState>(
     Ok(())
 }
 
-/// Inline common state plus the one concrete semantic state of a COM widget.
-pub(super) struct WidgetCore<S: WidgetAlgorithm> {
-    /// Shared lifecycle, options and pending setter invalidation.
-    pub(super) state: WidgetState,
-    /// Concrete algorithm state; no Any or dynamically selected Rust widget.
-    pub(super) core: S,
-    /// Host-backed resource cache contains no runtime implementation pointer or type erasure.
-    resources: WidgetResources,
-}
-
-impl<S: WidgetAlgorithm> WidgetCore<S> {
-    /// Composes an unmounted semantic value into its final COM allocation.
-    pub(super) fn new(host: ComPtr<IWidgetHostAbi>, options: WidgetOption, core: S) -> Result<Self, NcStatus> {
-        host.check_mutation()?;
-        let resources = WidgetResources::new(host.as_com_ref())?;
-        let options = WidgetOptions { bits: options.bits() };
-        Ok(Self {
-            state: WidgetState::new(host, options),
-            core,
-            resources,
-        })
-    }
-
-    /// Combines common setter markers with the composite's explicitly shared semantic notifications.
-    pub(super) fn take_change(&mut self) -> Result<GeometryChange, NcStatus> {
-        self.state.readable()?;
-        if self.core.take_shared_change() {
-            self.state.record_change(GeometryChange::CHANGED);
-        }
-        self.state.take_change()
-    }
-
-    /// Refreshes routing policy from the same state that handles update and paint.
-    pub(super) fn properties(&self) -> Result<WidgetProperties, NcStatus> {
-        let options = self.state.options()?;
-        Ok(WidgetProperties {
-            options: WidgetOptions {
-                bits: self.core.effective_options(WidgetOption::from_bits_retain(options.bits)).bits(),
-            },
-            keyboard: self.core.keyboard_behavior().bits(),
-            frame: super::node::frame_contract(self.core.frame_appearance_role()),
-        })
-    }
-
-    /// Updates the sole option authority while rejecting reentry into an active algorithm.
-    pub(super) fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus> {
-        self.state.writable()?;
-        options.validate()?;
-        self.state.set_options(options)
-    }
-
-    /// Reconstructs a local update context from copied input and owned resources.
-    pub(super) fn update(&mut self, state: WidgetUpdate, event: WidgetEventAbi, bytes: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
-        self.state.writable()?;
-        state.validate()?;
-        let input = super::input::local_event(event, bytes)?;
-        let resources = self.resources.current(self.state.host())?;
-        let mut ctx = WidgetUpdateCtx::new_with_content_geometry(
-            local_rect(state.screen),
-            local_rect(state.clip).translated(crate::Vec2i::new(state.screen.x, state.screen.y)),
-            resources.assets.bundle().skin(),
-            resources.assets.bundle().atlas(),
-            state.in_hover_root,
-            state.hovered,
-            state.focused,
-            state.clicked,
-            state.active,
-            crate::MouseButton::from_bits(u32::from(state.mouse_buttons)).ok_or(NC_E_INVALID_ARG)?,
-            crate::Modifiers::from_bits(state.modifiers).ok_or(NC_E_INVALID_ARG)?,
-        );
-        let change = self.core.update(&mut ctx, input.as_ref());
-        Ok(match change {
-            crate::Change::Changed => GeometryChange::CHANGED,
-            crate::Change::NoChange => GeometryChange::NO_CHANGE,
-        })
-    }
-
-    /// Runs private paint algorithms before calling the provided foreign recorder.
-    pub(super) fn paint(&mut self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
-        self.state.readable()?;
-        state.validate()?;
-        let options = self.state.options()?;
-        let resources = self.resources.current(self.state.host())?;
-        {
-            let scratch = &mut resources.scratch;
-            scratch.list.clear();
-            let mut ctx = WidgetPaintCtx::new_with_content_geometry(
-                local_rect(state.rect),
-                &mut scratch.list,
-                local_rect(state.clip),
-                resources.assets.bundle().skin(),
-                resources.assets.bundle().atlas(),
-                state.enabled,
-                state.hovered,
-                state.focused,
-                state.clicked,
-                state.active,
-                state.window_active,
-                WidgetOption::from_bits_retain(options.bits),
-            );
-            self.core.paint(&mut ctx);
-            let size = crate::Dimensioni::new(state.rect.width.max(1), state.rect.height.max(1));
-            let info = crate::render::FrameInfo::try_new(size, crate::color(0, 0, 0, 0)).map_err(|_| NC_E_INVALID_ARG)?;
-            scratch.renderer.render(info, &mut scratch.list).map_err(|_| UI_E_RENDER)?;
-        }
-        resources.scratch.storage.paint(scope, painter)
-    }
-}
-
-impl<S: WidgetAlgorithm + crate::ContainerWidget> WidgetCore<S> {
-    /// Runs the existing concrete container algorithm through validated indexed COM measurements.
-    pub(super) fn measure_container(&mut self, scope: LayoutScope, bounds: LayoutLimits, service: ComRef<'_, ILayoutServiceAbi>) -> Result<Size, NcStatus> {
-        self.state.readable()?;
-        let constraints = super::layout::constraints(bounds)?;
-        let layout = super::layout::ScopedLayout::new(scope, service)?;
-        let resources = self.resources.current(self.state.host())?;
-        let mut ctx = crate::MeasureCtx::scoped(resources.assets.bundle().skin(), resources.assets.bundle().atlas(), layout);
-        let size = crate::ContainerWidget::measure(&self.core, &mut ctx, constraints);
-        ctx.result()?;
-        Ok(Size {
-            width: size.width.max(0),
-            height: size.height.max(0),
-        })
-    }
-
-    /// Runs exact placement with owned semantic state, returning one complete copied result.
-    pub(super) fn place_container(&mut self, scope: LayoutScope, rect: Rect, service: ComRef<'_, ILayoutServiceAbi>) -> Result<ContainerGeometry, NcStatus> {
-        self.state.readable()?;
-        if rect.width < 0 || rect.height < 0 {
-            return Err(NC_E_INVALID_ARG);
-        }
-        let layout = super::layout::ScopedLayout::new(scope, service)?;
-        let resources = self.resources.current(self.state.host())?;
-        let mut ctx = crate::ContainerLayoutCtx::scoped(resources.assets.bundle().skin(), resources.assets.bundle().atlas(), local_rect(rect), layout);
-        self.core.place(&mut ctx, local_rect(rect));
-        ctx.result()
-    }
-
-    /// Reuses concrete post-target event filtering without exposing any semantic state.
-    pub(super) fn accepts_event(&self, event: WidgetEventAbi, bytes: NcCopyFromBufferOffset<'_, u8>) -> Result<bool, NcStatus> {
-        self.state.readable()?;
-        let event = super::input::local_event(event, bytes)?;
-        Ok(match event {
-            Some(event) => self.core.accepts_event(&event),
-            None => false,
-        })
-    }
-}
-
 /// Converts one checked contract axis without treating finite zero as unbounded.
 pub(super) fn available(axis: AxisLimit) -> Result<AvailableSpace, NcStatus> {
     axis.validate()?;
@@ -414,55 +261,12 @@ pub(super) fn available(axis: AxisLimit) -> Result<AvailableSpace, NcStatus> {
     })
 }
 
-/// One reused local display list and the ordinary UI geometry executor.
+/// Reusable local rendering backend for one independently constructible widget.
 struct PaintScratch {
-    /// Owned semantic commands cleared after each built-in invocation.
-    list: DisplayList,
     /// The same text/nine-patch/clipping implementation used by retained painting.
     renderer: Renderer<super::render::Backend>,
     /// Final local atlas geometry produced by the collector.
     storage: Rc<super::render::Storage>,
-}
-
-/// Expands the identical COM lifecycle/phase plumbing for one concrete class.
-/// Specialized editing implementations remain ordinary explicit Rust impl blocks.
-macro_rules! widget_phase_impl {
-    ($name:ident) => {
-        impl IWidget for $name {
-            /// Returns the runtime authority without retaining a tree or parent.
-            fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
-                Ok(self.widget.state.host().add_ref())
-            }
-            /// Claims the only attachment after runtime validation succeeds.
-            fn mount(&mut self) -> Result<(), NcStatus> {
-                self.widget.state.mount()
-            }
-            /// Closes semantic capabilities and the class's concrete event sources.
-            fn close(&mut self) -> Result<(), NcStatus> {
-                self.close_widget()
-            }
-            /// Copies policy from the same state used by update and painting.
-            fn properties(&self) -> Result<WidgetProperties, NcStatus> {
-                self.widget.properties()
-            }
-            /// Commits validated common and semantic presentation options together.
-            fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus> {
-                self.widget.set_options(options)
-            }
-            /// Reuses the concrete control's full pointer/key/text update algorithm.
-            fn update(&mut self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
-                self.update_widget(state, event, text)
-            }
-            /// Drains the sticky setter marker without erasing unconsumed changes.
-            fn take_change(&mut self) -> Result<GeometryChange, NcStatus> {
-                self.widget.take_change()
-            }
-            /// Records complete owned geometry before calling a foreign painter.
-            fn paint(&mut self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
-                self.widget.paint(scope, state, painter)
-            }
-        }
-    };
 }
 
 /// Implements the shared COM lifecycle and update/paint phases for one concrete widget type.
@@ -704,86 +508,44 @@ pub(crate) trait IconState: WidgetAlgorithm {
     fn set_icon(&mut self, icon: Option<crate::IconRef>) -> bool;
 }
 
-/// Shares only scoped container geometry; fixed composites need not expose mutable generic topology.
-macro_rules! container_layout_impl {
-    ($name:ident) => {
-        impl IContainerLayout for $name {
-            /// Returns the same lifetime-stable read-only identity as the editing base.
-            fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
-                self.widget.state.readable()?;
-                self.editor.view()
-            }
-            /// Runs the existing measurement algorithm through owned scoped child access.
-            fn measure(&mut self, scope: LayoutScope, bounds: LayoutLimits, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<Size, NcStatus> {
-                self.widget.measure_container(scope, bounds, layout)
-            }
-            /// Publishes only copied geometry after the complete concrete placement algorithm succeeds.
-            fn place(&mut self, scope: LayoutScope, rect: Rect, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<ContainerGeometry, NcStatus> {
-                self.widget.place_container(scope, rect, layout)
-            }
-            /// Retains each concrete container's state-dependent event policy.
-            fn accepts_event(&self, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<bool, NcStatus> {
-                self.widget.accepts_event(event, text)
-            }
-        }
-    };
-}
-
-/// Common phase methods for fixed composites retain one editor without exposing generic topology edits.
-macro_rules! fixed_phases {
-    ($name:ident) => {
-        impl $name {
-            /// Rejects active-state reentry before logically closing this widget and its authoritative child store.
-            fn close_widget(&mut self) -> Result<(), NcStatus> {
-                if self.widget.state.close()? {
-                    self.editor.close()?.finish()?;
-                }
-                Ok(())
-            }
-            /// Reuses the complete concrete update algorithm with copied input and owned state.
-            fn update_widget(&mut self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
-                self.widget.update(state, event, text)
-            }
-        }
-        widget_phase_impl!($name);
-        container_layout_impl!($name);
-    };
-}
-
-/// Shares scrolling access for concrete composites while retaining their separate content-editing authority.
-macro_rules! scrolling_impl {
-    ($name:ident) => {
+/// Implements shared scrolling calls directly on a concrete fixed-composition class.
+macro_rules! direct_scrolling_impl {
+    ($name:ty) => {
         impl IScrolling for $name {
-            /// Reads actual axis requests and one shared committed viewport summary.
+            /// Reads one coherent snapshot from the scalar model shared with both scrollbar children.
             fn info(&self) -> Result<ScrollInfo, NcStatus> {
-                self.widget.state.readable()?;
-                Ok(self.widget.core.com_info())
+                <$name as super::widget::HostedWidget>::runtime(self).state.readable()?;
+                Ok(self.model.com_info())
             }
-            /// Records a sticky shared request so hidden/skipped updates cannot lose the needed placement.
+
+            /// Records a sticky nonnegative request for the next concrete placement.
             fn set_offset(&mut self, offset: Point) -> Result<(), NcStatus> {
-                self.widget.state.writable()?;
-                self.widget.core.set_offset(crate::Vec2i::new(offset.x, offset.y));
+                <$name as super::widget::HostedWidget>::runtime(self).state.writable()?;
+                self.model.set_offset(crate::Vec2i::new(offset.x, offset.y));
                 Ok(())
             }
-            /// Disabling clears ranges and requests synchronously; the next layout gates structural children.
+
+            /// Changes wheel and scrollbar participation through the shared scalar model.
             fn set_enabled(&mut self, enabled: bool) -> Result<(), NcStatus> {
-                self.widget.state.writable()?;
-                self.widget.core.set_scrolling_enabled(enabled);
+                <$name as super::widget::HostedWidget>::runtime(self).state.writable()?;
+                self.model.set_enabled(enabled);
                 Ok(())
             }
-            /// Preserves an above-old-range end request until fresh content geometry is measured.
+
+            /// Preserves an end request until placement installs the freshly measured range.
             fn scroll_to_end(&mut self) -> Result<(), NcStatus> {
-                self.widget.state.writable()?;
-                self.widget.core.scroll_to_end();
+                <$name as super::widget::HostedWidget>::runtime(self).state.writable()?;
+                self.model.scroll_to_end();
                 Ok(())
             }
-            /// Validates the complete reveal rectangle before changing either shared axis request.
+
+            /// Validates one content-local rectangle before changing either requested axis.
             fn reveal(&mut self, rect: Rect) -> Result<(), NcStatus> {
-                self.widget.state.writable()?;
+                <$name as super::widget::HostedWidget>::runtime(self).state.writable()?;
                 if rect.x < 0 || rect.y < 0 || rect.width < 0 || rect.height < 0 {
                     return Err(NC_E_INVALID_ARG);
                 }
-                self.widget.core.scroll_rect_into_view(local_rect(rect));
+                self.model.reveal(local_rect(rect));
                 Ok(())
             }
         }
