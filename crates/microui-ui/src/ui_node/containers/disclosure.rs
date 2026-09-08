@@ -213,7 +213,10 @@ impl Disclosure {
 /// Dispatcher-addressable disclosure header.
 ///
 /// The header owns no descendants and shares only expansion data with its layout parent.
+#[nc_com::com_object(interfaces(microui_contracts::ITextContent, microui_contracts::ILeafLayout))]
 pub(crate) struct DisclosureHeader {
+    /// Non-semantic COM lifecycle and host-backed phase resources.
+    runtime: crate::com::widget::WidgetRuntime,
     /// Shared scalar state owns no parent widget or tree.
     model: Rc<DisclosureState>,
     /// Owned text shared by measurement and painting.
@@ -409,7 +412,9 @@ fn create_container(parameters: DisclosureParameters) -> (TypedWidgetHandle<Disc
         model: model.clone(),
         variant: parameters.variant,
     };
+    let runtime = crate::com::widget::WidgetRuntime::for_test(parameters.opt);
     let header = DisclosureHeader {
+        runtime,
         model,
         label: parameters.label,
         variant: parameters.variant,
@@ -444,9 +449,15 @@ impl Disclosure {
     }
 }
 impl DisclosureHeader {
-    /// Creates the real header leaf with its shared expansion value and initialized label.
-    pub(crate) fn com_new(model: Rc<DisclosureState>, label: String, variant: DisclosureVariant) -> Self {
+    /// Combines the shared expansion value and label with one concrete header runtime.
+    pub(crate) fn from_runtime(
+        runtime: crate::com::widget::WidgetRuntime,
+        model: Rc<DisclosureState>,
+        label: String,
+        variant: DisclosureVariant,
+    ) -> Self {
         Self {
+            runtime,
             model,
             label,
             variant,
@@ -466,6 +477,18 @@ impl DisclosureHeader {
 }
 impl crate::com::widget::WidgetAlgorithm for Disclosure {}
 impl crate::com::widget::WidgetAlgorithm for DisclosureHeader {}
+
+impl crate::com::widget::HostedWidget for DisclosureHeader {
+    /// Borrows common phase state stored directly beside the header's semantic fields.
+    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+        &self.runtime
+    }
+
+    /// Exclusively borrows common phase state for mutation or resource refresh.
+    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+        &mut self.runtime
+    }
+}
 
 #[cfg(test)]
 mod tests {

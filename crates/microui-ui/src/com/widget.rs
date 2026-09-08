@@ -670,6 +670,73 @@ macro_rules! direct_leaf_layout_impl {
     };
 }
 
+/// Implements scoped layout directly on a concrete container allocation.
+macro_rules! direct_container_layout_impl {
+    ($name:ty) => {
+        impl IContainerLayout for $name {
+            /// Returns the read-only view paired with this concrete container's private writer.
+            fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
+                <$name as super::widget::HostedWidget>::runtime(self).state.readable()?;
+                self.editor.view()
+            }
+
+            /// Measures the concrete container against the caller's scoped child service.
+            fn measure(
+                &mut self,
+                scope: LayoutScope,
+                bounds: LayoutLimits,
+                service: ComRef<'_, ILayoutServiceAbi>,
+            ) -> Result<Size, NcStatus> {
+                <$name as super::widget::HostedWidget>::runtime(self).state.readable()?;
+                let constraints = super::layout::constraints(bounds)?;
+                let layout = super::layout::ScopedLayout::new(scope, service)?;
+                let assets = <$name as super::widget::HostedWidget>::runtime_mut(self).resources()?;
+                let mut ctx = crate::MeasureCtx::scoped(assets.bundle().skin(), assets.bundle().atlas(), layout);
+                let size = crate::ContainerWidget::measure(self, &mut ctx, constraints);
+                ctx.result()?;
+                Ok(Size {
+                    width: size.width.max(0),
+                    height: size.height.max(0),
+                })
+            }
+
+            /// Places the concrete container and returns only its copied child geometry.
+            fn place(
+                &mut self,
+                scope: LayoutScope,
+                rect: Rect,
+                service: ComRef<'_, ILayoutServiceAbi>,
+            ) -> Result<ContainerGeometry, NcStatus> {
+                <$name as super::widget::HostedWidget>::runtime(self).state.readable()?;
+                if rect.width < 0 || rect.height < 0 {
+                    return Err(NC_E_INVALID_ARG);
+                }
+                let layout = super::layout::ScopedLayout::new(scope, service)?;
+                let assets = <$name as super::widget::HostedWidget>::runtime_mut(self).resources()?;
+                let mut ctx = crate::ContainerLayoutCtx::scoped(
+                    assets.bundle().skin(),
+                    assets.bundle().atlas(),
+                    local_rect(rect),
+                    layout,
+                );
+                crate::ContainerWidget::place(self, &mut ctx, local_rect(rect));
+                ctx.result()
+            }
+
+            /// Applies the concrete container's post-target event filtering policy.
+            fn accepts_event(
+                &self,
+                event: WidgetEventAbi,
+                text: NcCopyFromBufferOffset<'_, u8>,
+            ) -> Result<bool, NcStatus> {
+                <$name as super::widget::HostedWidget>::runtime(self).state.readable()?;
+                let event = super::input::local_event(event, text)?;
+                Ok(event.is_some_and(|event| crate::ContainerWidget::accepts_event(self, &event)))
+            }
+        }
+    };
+}
+
 /// Declares one non-generic COM allocation with a statically known semantic state.
 macro_rules! leaf_object {
     ($visibility:vis $name:ident, $core:ty, $($object:tt)+) => {
@@ -811,32 +878,6 @@ macro_rules! fixed_phases {
         }
         widget_phase_impl!($name);
         container_layout_impl!($name);
-    };
-}
-
-/// Shares whole-text snapshots/replacement while retaining each control's line policy.
-macro_rules! text_content {
-    ($name:ident, $get:ident, $set:ident) => {
-        impl ITextContent for $name {
-            /// Returns an immutable snapshot without exposing the semantic String allocation.
-            fn text(&self) -> Result<ComPtr<nc_com::INcStringAbi>, NcStatus> {
-                self.widget.state.readable()?;
-                Ok(nc_com::NcString::from_utf8_str(self.widget.core.$get()))
-            }
-            /// Applies the existing normalization/cursor policy, then compares committed text.
-            fn set_text(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-                self.widget.state.writable()?;
-                let input = text(input)?;
-                // Compare normalized output, not raw CR/LF input. An editor may
-                // still reset its cursor on a text-identical replacement.
-                let previous = self.widget.core.$get().to_owned();
-                self.widget.core.$set(input);
-                if self.widget.core.$get() != previous {
-                    self.widget.state.record_change(GeometryChange::CHANGED);
-                }
-                Ok(())
-            }
-        }
     };
 }
 

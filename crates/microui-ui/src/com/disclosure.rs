@@ -1,9 +1,45 @@
 //! Disclosure owns two real COM children; its header shares only explicit expansion data with layout.
 use super::*;
+use super::widget::{HostedWidget, WidgetRuntime};
 use super::widget::WidgetCore;
 
-leaf_class!(DisclosureHeader, crate::ui_node::DisclosureHeader, ITextContent, ITextContentAbi);
-text_content!(DisclosureHeader, com_label, com_set_label);
+direct_widget_phase_impl!(crate::ui_node::DisclosureHeader);
+direct_leaf_layout_impl!(crate::ui_node::DisclosureHeader);
+
+impl crate::ui_node::DisclosureHeader {
+    /// Creates the internal header capability without introducing a wrapper allocation.
+    fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        options: crate::WidgetOption,
+        model: Rc<crate::ui_node::DisclosureState>,
+        label: String,
+        variant: crate::ui_node::DisclosureVariant,
+    ) -> Result<ComPtr<ITextContentAbi>, NcStatus> {
+        let runtime = WidgetRuntime::new(host, options)?;
+        Ok(Self::from_value(Self::from_runtime(runtime, model, label, variant))
+            .query()
+            .expect("DisclosureHeader declares its text and leaf capabilities"))
+    }
+}
+
+impl ITextContent for crate::ui_node::DisclosureHeader {
+    /// Copies the label used by this same header's measurement and painting.
+    fn text(&self) -> Result<ComPtr<nc_com::INcStringAbi>, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(nc_com::NcString::from_utf8_str(self.com_label()))
+    }
+
+    /// Replaces the concrete header label and records intrinsic geometry invalidation.
+    fn set_text(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        let label = text(input)?;
+        if self.com_label() != label {
+            self.com_set_label(label);
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
+}
 
 #[com_object(microui_contracts::Disclosure)]
 /// One fixed disclosure identity retains its actual header and editable body capabilities.
@@ -45,10 +81,12 @@ impl Disclosure for DisclosureObject {
             _ => return Err(NC_E_INVALID_ARG),
         };
         let model = crate::ui_node::DisclosureState::new(expanded);
-        let header = DisclosureHeader::create(
+        let header = crate::ui_node::DisclosureHeader::create_com(
             host.add_ref(),
             variant.header_options(),
-            crate::ui_node::DisclosureHeader::com_new(model.clone(), label.to_owned(), variant),
+            model.clone(),
+            label.to_owned(),
+            variant,
         )?;
         let body = super::Linear::create_com(host.add_ref(), FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch.into())?;
         let editor = host.create_children()?;
