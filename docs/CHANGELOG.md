@@ -14,6 +14,10 @@ wrappers. The accepted migration and outstanding validation are recorded in
   borrowed clients, callable class contracts with typed constructor frames,
   class-required shared protocols, generic owned local classes, static runtime
   binding and explicit dynamic plugin exports.
+- Reserve `#[com_class]` for callable contract traits and use
+  `#[com_object(Class)]` or `#[com_object(interfaces(...))]` for concrete Rust
+  implementations. Class declarations therefore describe the public boundary,
+  while object declarations describe private storage and threading.
 - Replace the redundant `IButton` and `IButtonStyle` capabilities with the
   constructible `Button` class contract. Its constructor and concrete editing,
   activation, font, icon, fill, and image operations now share one class
