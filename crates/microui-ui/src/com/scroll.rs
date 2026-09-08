@@ -2,15 +2,8 @@
 use super::*;
 use super::widget::WidgetCore;
 
-#[com_object(interfaces(IWidget, IContainerLayout))]
-/// Transform-only COM container owning the ordinary application content widget.
-struct ScrollSurface {
-    /// The existing transform/layout algorithm reads the same scalar axes as the actual bar objects.
-    widget: WidgetCore<crate::ui_node::ScrollSurface>,
-    /// Fixed one-child topology; replacement authority is retained by the outer scroll object.
-    editor: ComPtr<IChildrenEditorAbi>,
-}
-fixed_phases!(ScrollSurface);
+direct_widget_phase_impl!(crate::ui_node::ScrollSurface);
+direct_container_layout_impl!(crate::ui_node::ScrollSurface);
 
 #[com_object(microui_contracts::ScrollArea)]
 /// One scroll-area COM identity owns its three structural nodes and shares no parent-widget backpointer.
@@ -52,16 +45,11 @@ impl ScrollParts {
         let horizontal = horizontal.into_com();
         let vertical = vertical.into_com();
         let content = host.create_children()?;
-        let surface: ComPtr<IWidgetAbi> = ScrollSurface::from_value(ScrollSurface {
-            widget: WidgetCore::new(
-                host.clone(),
-                crate::WidgetOption::NO_INTERACT,
-                crate::ui_node::ScrollSurface { model: model.clone() },
-            )?,
-            editor: content.clone(),
-        })
+        let surface_runtime = super::widget::WidgetRuntime::new(host.clone(), crate::WidgetOption::NO_INTERACT)?;
+        let surface = crate::ui_node::ScrollSurface::from_runtime(surface_runtime, content.clone(), model.clone());
+        let surface: ComPtr<IWidgetAbi> = crate::ui_node::ScrollSurface::from_value(surface)
         .query()
-        .expect("surface declares IWidget");
+        .expect("ScrollSurface declares its widget and container-layout capabilities");
         let editor = host.create_children()?;
         editor.insert(0, surface.as_com_ref())?.finish()?;
         editor.insert(1, horizontal.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;

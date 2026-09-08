@@ -373,9 +373,25 @@ impl Widget for ScrollArea {
 }
 
 /// The transform boundary between the viewport and its ordinary content node.
+#[nc_com::com_object(interfaces(microui_contracts::IWidget, microui_contracts::IContainerLayout))]
 pub(crate) struct ScrollSurface {
+    /// Non-semantic COM lifecycle and host-backed phase resources.
+    runtime: crate::com::widget::WidgetRuntime,
+    /// Sole writer for the one application content child mounted through COM.
+    pub(crate) editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
     /// Shares actual axis requests without a reference to the owning parent widget.
     pub(crate) model: Rc<ScrollModel>,
+}
+
+impl ScrollSurface {
+    /// Combines one fixed content writer with the shared scroll scalar model.
+    pub(crate) fn from_runtime(
+        runtime: crate::com::widget::WidgetRuntime,
+        editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+        model: Rc<ScrollModel>,
+    ) -> Self {
+        Self { runtime, editor, model }
+    }
 }
 
 impl ContainerWidget for ScrollSurface {
@@ -616,7 +632,9 @@ impl ScrollArea {
         let (_, horizontal_node) = Node::typed_widget(horizontal);
         let (_, vertical_node) = Node::typed_widget(vertical);
         let content = Rc::new(RefCell::new([parameters.content].into_iter().collect()));
-        let (_, surface_container) = Container::from_shared(content, ScrollSurface { model: model.clone() });
+        let (surface_runtime, surface_editor) = crate::com::widget::WidgetRuntime::for_test_container(WidgetOption::NO_INTERACT);
+        let surface = ScrollSurface::from_runtime(surface_runtime, surface_editor, model.clone());
+        let (_, surface_container) = Container::from_shared(content, surface);
         let widget = ScrollArea {
             opt: surface_opt,
             ..ScrollArea::from_model(model)
@@ -640,6 +658,23 @@ impl crate::com::widget::WidgetAlgorithm for ScrollArea {
     }
 }
 impl crate::com::widget::WidgetAlgorithm for ScrollSurface {}
+
+impl crate::com::widget::HostedWidget for ScrollSurface {
+    /// Borrows common phase state stored directly beside the transform model.
+    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+        &self.runtime
+    }
+
+    /// Exclusively borrows common phase state for mutation or resource refresh.
+    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+        &mut self.runtime
+    }
+
+    /// Closes the sole content child when this structural surface is retired.
+    fn close_contents(&mut self) -> Result<(), nc_com::NcStatus> {
+        self.editor.close()?.finish()
+    }
+}
 
 #[cfg(test)]
 mod tests {
