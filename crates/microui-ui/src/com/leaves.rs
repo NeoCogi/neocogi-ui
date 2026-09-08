@@ -1,6 +1,9 @@
 //! Concrete editing implementations over each built-in's one semantic state.
 use super::*;
-use super::widget::{FontState, HostedWidget, IconState, ImageState};
+use super::widget::{
+    HostedWidget, ImageState, set_direct_font_role, set_direct_icon_role, set_direct_named_font,
+    set_direct_named_icon,
+};
 use nc_com::{INcStringAbi, NcString};
 
 direct_widget_phase_impl!(crate::Checkbox);
@@ -77,45 +80,6 @@ impl microui_contracts::Checkbox for crate::Checkbox {
         let endpoint = <Self as crate::TypedWidget<crate::CheckboxChanged>>::event(self);
         super::events::subscribe(endpoint, sink)
     }
-}
-
-/// Commits one validated semantic font role directly on a concrete widget allocation.
-fn set_direct_font_role<S: HostedWidget + FontState>(widget: &mut S, role: TextFontRole) -> Result<(), NcStatus> {
-    widget.runtime().state.writable()?;
-    let font = crate::FontRef::Role(super::widget::local_font_role(role)?);
-    if widget.font() != &font {
-        widget.set_font(font);
-        widget.runtime_mut().state.record_change(GeometryChange::CHANGED);
-    }
-    Ok(())
-}
-
-/// Resolves one application font name against the widget host's current resource revision.
-fn set_direct_named_font<S: HostedWidget + FontState>(widget: &mut S, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-    let font = widget.runtime_mut().named_font(name)?;
-    if widget.font() != &font {
-        widget.set_font(font);
-        widget.runtime_mut().state.record_change(GeometryChange::CHANGED);
-    }
-    Ok(())
-}
-
-/// Commits one validated semantic icon directly on a concrete widget allocation.
-fn set_direct_icon_role<S: HostedWidget + IconState>(widget: &mut S, icon: ContentIcon) -> Result<(), NcStatus> {
-    widget.runtime().state.writable()?;
-    if widget.set_icon(super::widget::local_content_icon(icon)?) {
-        widget.runtime_mut().state.record_change(GeometryChange::CHANGED);
-    }
-    Ok(())
-}
-
-/// Resolves and commits one exact named icon directly on a concrete widget allocation.
-fn set_direct_named_icon<S: HostedWidget + IconState>(widget: &mut S, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-    let icon = widget.runtime_mut().named_icon(name)?;
-    if widget.set_icon(Some(icon)) {
-        widget.runtime_mut().state.record_change(GeometryChange::CHANGED);
-    }
-    Ok(())
 }
 
 impl crate::Textbox {

@@ -72,8 +72,11 @@ impl Default for ComboParameters {
     }
 }
 
-/// Concrete retained combo, including its semantic and popup state.
+#[nc_com::com_object(microui_contracts::Combo)]
+/// Concrete retained combo and dynamically constructible COM object.
 pub struct Combo {
+    /// Non-semantic COM lifecycle and host-backed phase resources.
+    runtime: crate::com::widget::WidgetRuntime,
     /// Currently selected item index.
     selected: usize,
     /// Whether the combo popup should be open.
@@ -93,6 +96,21 @@ pub struct Combo {
 }
 
 impl Combo {
+    /// Combines validated semantic parameters with one already bound common runtime.
+    pub(crate) fn from_runtime(runtime: crate::com::widget::WidgetRuntime, parameters: ComboParameters) -> Self {
+        Self {
+            runtime,
+            selected: 0,
+            open: false,
+            label: String::new(),
+            font: parameters.font,
+            #[cfg(test)]
+            opt: parameters.opt,
+            changed_event: crate::EventSource::new(),
+            submitted_event: crate::EventSource::new(),
+        }
+    }
+
     /// Returns the currently selected item index.
     pub fn selected(&self) -> usize {
         self.selected
@@ -350,19 +368,12 @@ impl Widget for Combo {
     }
 }
 
+#[cfg(test)]
 impl From<ComboParameters> for Combo {
     /// Transfers one-shot parameters into the concrete Combo runtime.
     fn from(parameters: ComboParameters) -> Self {
-        Combo {
-            selected: 0,
-            open: false,
-            label: String::new(),
-            font: parameters.font,
-            #[cfg(test)]
-            opt: parameters.opt,
-            changed_event: crate::EventSource::new(),
-            submitted_event: crate::EventSource::new(),
-        }
+        let runtime = crate::com::widget::WidgetRuntime::for_test(parameters.opt);
+        Self::from_runtime(runtime, parameters)
     }
 }
 
@@ -371,6 +382,18 @@ impl crate::com::widget::WidgetAlgorithm for Combo {
     fn close_events(&mut self) {
         self.changed_event.close_ordinary();
         self.submitted_event.close_ordinary();
+    }
+}
+
+impl crate::com::widget::HostedWidget for Combo {
+    /// Borrows common lifecycle and resource state without a second combo representation.
+    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+        &self.runtime
+    }
+
+    /// Exclusively borrows common lifecycle and resource state for a COM mutation or phase.
+    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+        &mut self.runtime
     }
 }
 impl crate::com::widget::FontState for Combo {

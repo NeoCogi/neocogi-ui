@@ -34,7 +34,7 @@ impl UiFactory for UiFactoryObject {
     /// Constructs the complete semantic combo header with this factory's host.
     fn create_combo(&self) -> Result<ComPtr<ComboAbi>, NcStatus> {
         self.host.check_mutation()?;
-        super::combo::ComboObject::create(self.host.clone())
+        super::Combo::create_com(self.host.clone())
     }
 
     /// Validates complete text and wrapping before constructing the fixed scroll/editor composition.

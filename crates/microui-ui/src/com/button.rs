@@ -3,7 +3,10 @@
 //! This module contains boundary translation only. The registered COM allocation and all semantic
 //! state are the single `Button` type declared in `ui_node/widgets/button.rs`.
 use super::*;
-use super::widget::{FontState, HostedWidget, IconState, ImageState};
+use super::widget::{
+    HostedWidget, ImageState, set_direct_font_role, set_direct_icon_role, set_direct_named_font,
+    set_direct_named_icon,
+};
 use nc_com::{INcStringAbi, NcString};
 
 impl crate::Button {
@@ -53,41 +56,22 @@ impl microui_contracts::Button for crate::Button {
 
     /// Validates a semantic role before changing the Button's font selection.
     fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
-        self.runtime().state.writable()?;
-        let font = crate::FontRef::Role(super::widget::local_font_role(role)?);
-        if self.font() != &font {
-            self.set_font(font);
-            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
-        }
-        Ok(())
+        set_direct_font_role(self, role)
     }
 
     /// Resolves and retains a stable named font identity at the setter boundary.
     fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        let font = self.runtime_mut().named_font(name)?;
-        if self.font() != &font {
-            self.set_font(font);
-            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
-        }
-        Ok(())
+        set_direct_named_font(self, name)
     }
 
     /// Validates a semantic icon before replacing the Button's adjacent visual.
     fn set_icon_role(&mut self, icon: ContentIcon) -> Result<(), NcStatus> {
-        self.runtime().state.writable()?;
-        if self.set_icon(super::widget::local_content_icon(icon)?) {
-            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
-        }
-        Ok(())
+        set_direct_icon_role(self, icon)
     }
 
     /// Resolves one exact named icon before replacing the Button's adjacent visual.
     fn set_named_icon(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        let icon = self.runtime_mut().named_icon(name)?;
-        if self.set_icon(Some(icon)) {
-            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
-        }
-        Ok(())
+        set_direct_named_icon(self, name)
     }
 
     /// Reports the current fill mask from the sole concrete Button state.

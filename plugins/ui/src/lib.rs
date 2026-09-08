@@ -13,7 +13,7 @@ nc_com::plugin! {
         microui_ui::com::Button,
         microui_ui::com::Checkbox,
         microui_ui::com::Scrollbar,
-        microui_ui::com::ComboObject,
+        microui_ui::com::Combo,
         microui_ui::com::Textbox,
         microui_ui::com::TextBlock,
         microui_ui::com::TextAreaObject,

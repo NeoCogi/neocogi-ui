@@ -1,48 +1,48 @@
 //! The full existing combo header remains one concrete COM widget; popup data stays with its composing owner.
 use super::*;
+use super::widget::{HostedWidget, set_direct_font_role, set_direct_named_font};
 use nc_com::{INcStringAbi, NcString};
 
-callable_leaf_class!(ComboObject, crate::Combo, microui_contracts::Combo);
+direct_widget_phase_impl!(crate::Combo);
+direct_leaf_layout_impl!(crate::Combo);
 
-impl ComboObject {
+impl crate::Combo {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(super) fn create(host: ComPtr<IWidgetHostAbi>) -> Result<ComPtr<ComboAbi>, NcStatus> {
-        let value = <Self as Combo>::new(host.as_com_ref())?;
-        Ok(Self::from_value(value).query().expect("ComboObject declares the Combo class contract"))
+    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>) -> Result<ComPtr<ComboAbi>, NcStatus> {
+        let value = <Self as microui_contracts::Combo>::new(host.as_com_ref())?;
+        Ok(Self::from_value(value).query().expect("Combo declares its callable class contract"))
     }
 }
 
-impl Combo for ComboObject {
+impl microui_contracts::Combo for crate::Combo {
     /// Initializes the established empty Combo state after validating host mutation authority.
     fn new(host: ComRef<'_, IWidgetHostAbi>) -> Result<Self, NcStatus> {
         let parameters = crate::ComboParameters::new();
-        Ok(Self {
-            widget: super::widget::WidgetCore::new(host.add_ref(), parameters.opt, crate::Combo::from(parameters))?,
-        })
+        let runtime = super::widget::WidgetRuntime::new(host.add_ref(), parameters.opt)?;
+        Ok(Self::from_runtime(runtime, parameters))
     }
     /// Reads the same position used by the semantic selection algorithm.
     fn selected(&self) -> Result<u64, NcStatus> {
-        self.widget.state.readable()?;
-        Ok(self.widget.core.selected() as u64)
+        self.runtime().state.readable()?;
+        Ok(self.selected() as u64)
     }
     /// Copies the current header label without exposing the plugin's string allocation.
     fn label(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
-        self.widget.state.readable()?;
-        Ok(NcString::from_utf8_str(self.widget.core.label()))
+        self.runtime().state.readable()?;
+        Ok(NcString::from_utf8_str(self.label()))
     }
     /// Reports semantic popup intent independently of the application's actual popup capability.
     fn is_open(&self) -> Result<bool, NcStatus> {
-        self.widget.state.readable()?;
-        Ok(self.widget.core.is_open())
+        self.runtime().state.readable()?;
+        Ok(self.is_open())
     }
     /// Ordinary popup dismissal can synchronize intent without fabricating another request.
     fn set_open(&mut self, open: bool) -> Result<(), NcStatus> {
-        self.widget.state.writable()?;
-        let core = &mut self.widget.core;
+        self.runtime().state.writable()?;
         if open {
-            core.open_popup();
+            self.open_popup();
         } else {
-            core.close_popup();
+            self.close_popup();
         }
         Ok(())
     }
@@ -56,31 +56,34 @@ impl Combo for ComboObject {
     }
     /// Validates a semantic font role before changing the Combo's measurement input.
     fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
-        self.widget.set_font_role(role)
+        set_direct_font_role(self, role)
     }
     /// Resolves one exact named font before replacing the Combo's selection.
     fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        self.widget.set_named_font(name)
+        set_direct_named_font(self, name)
     }
     /// Connects the Combo's captured-selection source directly through its class contract.
     fn subscribe_changed(&mut self, sink: ComRef<'_, IComboChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.widget.subscribe::<crate::ComboChanged>(sink)
+        self.runtime().state.writable()?;
+        let endpoint = <Self as crate::TypedWidget<crate::ComboChanged>>::event(self);
+        super::events::subscribe(endpoint, sink)
     }
     /// Connects popup coordination independently from captured selection delivery.
     fn subscribe_popup(&mut self, sink: ComRef<'_, IComboPopupSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.widget.subscribe::<crate::ComboSubmitted>(sink)
+        self.runtime().state.writable()?;
+        let endpoint = <Self as crate::TypedWidget<crate::ComboSubmitted>>::event(self);
+        super::events::subscribe(endpoint, sink)
     }
 }
-impl ComboObject {
+impl crate::Combo {
     /// One replacement path validates the complete snapshot and preserves sticky geometry invalidation.
     fn selection(&mut self, index: u64, label: NcCopyFromBufferOffset<'_, u8>, submit: bool) -> Result<(), NcStatus> {
-        self.widget.state.writable()?;
+        self.runtime().state.writable()?;
         let index = usize::try_from(index).map_err(|_| NC_E_INVALID_ARG)?;
         let label = text(label)?;
-        let core = &mut self.widget.core;
-        let changed_label = core.label() != label;
-        core.com_set_selection(index, label, submit);
-        self.widget
+        let changed_label = self.label() != label;
+        self.com_set_selection(index, label, submit);
+        self.runtime_mut()
             .state
             .record_change(if changed_label { GeometryChange::CHANGED } else { GeometryChange::NO_CHANGE });
         Ok(())

@@ -189,6 +189,51 @@ pub(crate) trait HostedWidget: WidgetAlgorithm {
     fn runtime_mut(&mut self) -> &mut WidgetRuntime;
 }
 
+/// Commits one validated semantic font role on a concrete widget allocation.
+pub(super) fn set_direct_font_role<S: HostedWidget + FontState>(widget: &mut S, role: TextFontRole) -> Result<(), NcStatus> {
+    widget.runtime().state.writable()?;
+    let font = crate::FontRef::Role(local_font_role(role)?);
+    if widget.font() != &font {
+        widget.set_font(font);
+        widget.runtime_mut().state.record_change(GeometryChange::CHANGED);
+    }
+    Ok(())
+}
+
+/// Resolves and commits one named font against the concrete widget's current host resources.
+pub(super) fn set_direct_named_font<S: HostedWidget + FontState>(
+    widget: &mut S,
+    name: NcCopyFromBufferOffset<'_, u8>,
+) -> Result<(), NcStatus> {
+    let font = widget.runtime_mut().named_font(name)?;
+    if widget.font() != &font {
+        widget.set_font(font);
+        widget.runtime_mut().state.record_change(GeometryChange::CHANGED);
+    }
+    Ok(())
+}
+
+/// Commits one validated semantic icon on a concrete widget allocation.
+pub(super) fn set_direct_icon_role<S: HostedWidget + IconState>(widget: &mut S, icon: ContentIcon) -> Result<(), NcStatus> {
+    widget.runtime().state.writable()?;
+    if widget.set_icon(local_content_icon(icon)?) {
+        widget.runtime_mut().state.record_change(GeometryChange::CHANGED);
+    }
+    Ok(())
+}
+
+/// Resolves and commits one named icon against the concrete widget's current host resources.
+pub(super) fn set_direct_named_icon<S: HostedWidget + IconState>(
+    widget: &mut S,
+    name: NcCopyFromBufferOffset<'_, u8>,
+) -> Result<(), NcStatus> {
+    let icon = widget.runtime_mut().named_icon(name)?;
+    if widget.set_icon(Some(icon)) {
+        widget.runtime_mut().state.record_change(GeometryChange::CHANGED);
+    }
+    Ok(())
+}
+
 /// Inline common state plus the one concrete semantic state of a COM widget.
 pub(super) struct WidgetCore<S: WidgetAlgorithm> {
     /// Shared lifecycle, options and pending setter invalidation.
@@ -640,13 +685,6 @@ macro_rules! leaf_class {
                 .expect("object declares its concrete editing interface"))
             }
         }
-    };
-}
-
-/// Declares public storage for one dynamically registered callable leaf class.
-macro_rules! callable_leaf_class {
-    ($name:ident, $core:ty, $contract:path) => {
-        leaf_object!(pub $name, $core, $contract);
     };
 }
 
