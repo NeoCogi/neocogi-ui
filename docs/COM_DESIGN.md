@@ -59,7 +59,7 @@ The existing project already has most of the necessary foundation:
 
 Its current rules also matter:
 
-- Interface methods use `&self` and `Result<T, NcStatus>`; generic interface methods, associated types, arbitrary Rust references and containers do not cross the ABI.
+- Interface and callable-class methods explicitly choose `&self` or `&mut self` and return `Result<T, NcStatus>`; generic methods, associated types, arbitrary Rust references and containers do not cross the ABI. Receiver kind is checked ABI metadata, and generated objects reject overlapping mutable calls with `NC_E_BUSY` before creating a Rust reference.
 - The public `Runtime` facade is process-global and expects a separately built nc-com runtime shared library.
 - Loaded plugins remain mapped until process exit. Live activation failures abort; plugin dependency entries do not discover or recursively load files.
 - Panics are not converted into error statuses. A panic at the C boundary aborts.
@@ -205,7 +205,7 @@ pub type ButtonWidget = Widget<ButtonAbi>;
 
 impl Widget<ButtonAbi> {
     /// Presents a Rust string API while using an explicit ABI buffer for the call.
-    pub fn set_label(&self, label: &str) -> Result<(), NcStatus> {
+    pub fn set_label(&mut self, label: &str) -> Result<(), NcStatus> {
         self.interface.set_label(NcCopyFromBufferOffset::new(
             0, label.as_bytes(),
         ))
@@ -245,7 +245,7 @@ pub trait Button: IWidget + ILeafLayout {
     ) -> Result<Self, NcStatus>;
 
     /// Replaces the complete UTF-8 label. Offset must be zero; copy before returning.
-    fn set_label(&self, label: NcCopyFromBufferOffset<'_, u8>)
+    fn set_label(&mut self, label: NcCopyFromBufferOffset<'_, u8>)
         -> Result<(), NcStatus>;
 
     /// Returns an owned immutable label snapshot.
@@ -349,7 +349,7 @@ Preserve the agreed geometry semantics:
 - NoChange does not mean no events, no paint or no descendant work.
 - Application/widget authors remain responsible for externally mutated state, truthful change reporting, hidden/clipped updates and observational painting.
 
-The COM migration removes the old typed-handle mutation hook, so it cannot silently remain responsible for dirtying setters. Put a small concrete `WidgetState` helper inside each implementation. Setters mark its pending change; update returns its own geometry result. A runtime dirty-collection pass drains pending setter changes, including nodes whose update was skipped, and propagates them to ancestors before committing layout. Check pending changes before returning a parent cache hit. No per-widget heap-allocated invalidator object is needed just for this flag.
+The COM migration removes the old typed-handle mutation hook, so it cannot silently remain responsible for dirtying setters. Put a small concrete `WidgetState` value inside each implementation. Its options and lifecycle flags are ordinary fields updated through `&mut self`; it is not a `RefCell`, lock, or take-out slot. Setters mark its pending change, and update returns its own geometry result. A runtime dirty-collection pass drains pending setter changes, including nodes whose update was skipped, and propagates them to ancestors before committing layout. Check pending changes before returning a parent cache hit. No per-widget heap-allocated invalidator object is needed just for this flag.
 
 Keep measurement constraints distinct from allocated rectangles. Translate the current finite/unbounded constraints, child participation, viewport, scroll transform and content extent to explicit records/tagged ABI values. Linear/grid sizing belongs to parent-child edges, not a generic property bag on every node.
 
@@ -380,7 +380,7 @@ The service is reusable; do not allocate a COM object per primitive. Private gua
 
 The static façade can wrap the interface and token in `Painter<'a>` or `LayoutCtx<'a>` so widget authors write ordinary `painter.fill(...)` calls. The token is mechanical ABI plumbing; the façade hides it, while the implementation enforces it for direct COM callers too.
 
-Release mutable RefCell/lock borrows before invoking another component. UI mutation during paint/layout or reentrant update must produce a clear contract error rather than unwind across the ABI. Normal setters and topology changes remain allowed at defined input/dispatch boundaries.
+Declare every state-changing operation with `&mut self` and keep the widget's semantic state in ordinary fields. Generated COM objects apply one object-wide call gate: shared calls may overlap, while a conflicting mutable or recursively entered call returns `NC_E_BUSY` before Rust references are formed. Interior mutability remains appropriate only for genuinely shared infrastructure such as event queues or runtime registries; release those short borrows before invoking another component. Normal setters and topology changes remain allowed at defined input/dispatch boundaries.
 
 **9. Typed events and application state**
 

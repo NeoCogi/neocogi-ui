@@ -36,16 +36,16 @@ pub trait Counter: IWidget + ILeafLayout + IActivationEvents + IWidgetProbe {
     fn count(&self) -> Result<u32, NcStatus>;
 
     /// Silently replaces the displayed count and invalidates its preferred text size when changed.
-    fn set_count(&self, value: u32) -> Result<(), NcStatus>;
+    fn set_count(&mut self, value: u32) -> Result<(), NcStatus>;
 }
 
 #[com_interface(auto_guid = "microui.example.Inset:v1")]
 /// A one-child container demonstrates a domain-specific layout policy over the shared child editor.
 pub trait IInset: IContainer {
     /// Installs or replaces its one child; removed-child teardown uses the ordinary committed outcome.
-    fn set_child(&self, child: ComRef<'_, IWidgetAbi>) -> Result<ChildEditResult, NcStatus>;
+    fn set_child(&mut self, child: ComRef<'_, IWidgetAbi>) -> Result<ChildEditResult, NcStatus>;
     /// Sets a nonnegative inset, bounded to avoid arithmetic overflow in doubled extents.
-    fn set_padding(&self, padding: i32) -> Result<(), NcStatus>;
+    fn set_padding(&mut self, padding: i32) -> Result<(), NcStatus>;
 }
 
 #[com_class(auto_guid = "microui.example.ExtensionProvider:v1")]

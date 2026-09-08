@@ -1,6 +1,6 @@
 //! Boundary regressions use the real runtime and deliberately retaining/reentrant components.
 use super::*;
-use nc_com::{NcCopyToBufferOffset, INcStringComPtrExt};
+use nc_com::{INcStringComPtrExt, NC_E_BUSY, NcCopyToBufferOffset};
 mod containers;
 
 /// Positive drawable size shared by the deterministic headless fixtures.
@@ -88,7 +88,7 @@ fn renderer() -> (ComPtr<IRendererAbi>, Rc<RenderProbe>) {
 fn mount_validation_is_transactional_and_closure_outlives_tree_storage() {
     let first = runtime();
     let second = runtime();
-    let button = button(&first);
+    let mut button = button(&first);
     let node = button.query().unwrap();
     assert_eq!(mount(&second, &node).unwrap_err(), UI_E_OWNER);
     let window = mount(&first, &node).unwrap();
@@ -109,7 +109,7 @@ fn mount_validation_is_transactional_and_closure_outlives_tree_storage() {
 #[test]
 fn rendering_requires_synchronized_geometry_and_streams_expire_after_success_and_failure() {
     let runtime = runtime();
-    let button = button(&runtime);
+    let mut button = button(&runtime);
     let node = button.query().unwrap();
     let _window = mount(&runtime, &node).unwrap();
     let (renderer, probe) = renderer();
@@ -186,7 +186,7 @@ struct RetainingWidget {
 
 impl ILeafLayout for RetainingWidget {
     /// Checks reentry and mutation rejection while returning deterministic preferred geometry.
-    fn measure(&self, _bounds: LayoutLimits, _metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
+    fn measure(&mut self, _bounds: LayoutLimits, _metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
         self.probe.measures.set(self.probe.measures.get() + 1);
         let parent = self.probe.parent_layout.borrow().clone();
         if let Some((service, scope)) = parent {
@@ -210,15 +210,15 @@ impl IWidget for RetainingWidget {
         self.lifetime.host()
     }
     /// Delegates mount-once state to its independent lifetime fixture.
-    fn mount(&self) -> Result<(), NcStatus> {
+    fn mount(&mut self) -> Result<(), NcStatus> {
         let parent = self.probe.close_on_mount.borrow_mut().take();
-        if let Some(parent) = parent {
-            assert_eq!(parent.close(), Err(UI_E_BUSY));
+        if let Some(mut parent) = parent {
+            assert_eq!(parent.close(), Err(NC_E_BUSY));
         }
         self.lifetime.mount()
     }
     /// Delegates logical closure to its lifetime fixture.
-    fn close(&self) -> Result<(), NcStatus> {
+    fn close(&mut self) -> Result<(), NcStatus> {
         self.probe.closes.set(self.probe.closes.get() + 1);
         self.lifetime.close()?;
         if self.probe.fail_close.get() { Err(NC_E_INVALID_ARG) } else { Ok(()) }
@@ -233,11 +233,11 @@ impl IWidget for RetainingWidget {
         Ok(properties)
     }
     /// Common options are delegated to the shared fixture state.
-    fn set_options(&self, options: WidgetOptions) -> Result<(), NcStatus> {
+    fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus> {
         self.button.set_options(options)
     }
     /// Eventless updates do not change this fixture's fixed content geometry.
-    fn update(&self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
+    fn update(&mut self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
         let (event, text) = decode_widget_event(event, text)?;
         self.probe.latest.set(Some(state));
         self.probe.updates.set(self.probe.updates.get() + 1);
@@ -254,35 +254,67 @@ impl IWidget for RetainingWidget {
     }
 
     /// Setter changes stay sticky even when this custom widget is hidden.
-    fn take_change(&self) -> Result<GeometryChange, NcStatus> {
+    fn take_change(&mut self) -> Result<GeometryChange, NcStatus> {
         self.button.take_change()
     }
     /// Retains authority and probes old tokens while a later scope is active.
-    fn paint(&self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
+    fn paint(&mut self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
         assert_eq!(self.runtime.update(SIZE), Err(UI_E_BUSY));
         assert_eq!(self.button.set_label(NcCopyFromBufferOffset::new(0, b"forbidden")), Err(UI_E_BUSY));
         for (old, expired) in self.probe.painters.borrow().iter() {
             assert_eq!(old.fill(*expired, state.rect, 0), Err(UI_E_EXPIRED_SCOPE));
             assert_eq!(old.triangles(*expired, NcCopyFromBufferOffset::new(0, &[])), Err(UI_E_EXPIRED_SCOPE));
             assert_eq!(old.colored_triangles(*expired, NcCopyFromBufferOffset::new(0, &[])), Err(UI_E_EXPIRED_SCOPE));
-            assert_eq!(old.stroke_line(*expired, PaintPoint::default(), PaintPoint::default(), 1.0, 0), Err(UI_E_EXPIRED_SCOPE));
+            assert_eq!(
+                old.stroke_line(*expired, PaintPoint::default(), PaintPoint::default(), 1.0, 0),
+                Err(UI_E_EXPIRED_SCOPE)
+            );
             assert_eq!(old.fill_polygon(*expired, NcCopyFromBufferOffset::new(0, &[]), 0), Err(UI_E_EXPIRED_SCOPE));
         }
         // Malformed bulk batches fail transactionally before a valid command follows.
         assert_eq!(painter.triangles(scope, NcCopyFromBufferOffset::new(1, &[])), Err(NC_E_INVALID_ARG));
         assert_eq!(painter.colored_triangles(scope, NcCopyFromBufferOffset::new(1, &[])), Err(NC_E_INVALID_ARG));
-        assert_eq!(painter.colored_triangles(scope, NcCopyFromBufferOffset::new(0, &[ColoredVertex::default()])), Err(NC_E_INVALID_ARG));
+        assert_eq!(
+            painter.colored_triangles(scope, NcCopyFromBufferOffset::new(0, &[ColoredVertex::default()])),
+            Err(NC_E_INVALID_ARG)
+        );
         let image = crate::test_support::test_image(1, 1);
-        for source in [TextureRegion {u0:f32::NAN,..TextureRegion::FULL},TextureRegion {u1:2.,..TextureRegion::FULL},TextureRegion {u0:0.75,u1:0.25,..TextureRegion::FULL}] {
-            assert_eq!(painter.texture(scope,state.rect,source,u32::MAX,image.as_interface()),Err(NC_E_INVALID_ARG));
+        for source in [
+            TextureRegion { u0: f32::NAN, ..TextureRegion::FULL },
+            TextureRegion { u1: 2., ..TextureRegion::FULL },
+            TextureRegion {
+                u0: 0.75,
+                u1: 0.25,
+                ..TextureRegion::FULL
+            },
+        ] {
+            assert_eq!(
+                painter.texture(scope, state.rect, source, u32::MAX, image.as_interface()),
+                Err(NC_E_INVALID_ARG)
+            );
         }
         let malformed_solid = [ColoredVertex { x: f32::NAN, y: 0.0, rgba: 0 }; 3];
-        assert_eq!(painter.colored_triangles(scope, NcCopyFromBufferOffset::new(0, &malformed_solid)), Err(NC_E_INVALID_ARG));
-        assert_eq!(painter.stroke_line(scope, PaintPoint { x: f32::INFINITY, y: 0.0 }, PaintPoint::default(), 1.0, 0), Err(NC_E_INVALID_ARG));
-        assert_eq!(painter.stroke_line(scope, PaintPoint::default(), PaintPoint::default(), -1.0, 0), Err(NC_E_INVALID_ARG));
+        assert_eq!(
+            painter.colored_triangles(scope, NcCopyFromBufferOffset::new(0, &malformed_solid)),
+            Err(NC_E_INVALID_ARG)
+        );
+        assert_eq!(
+            painter.stroke_line(scope, PaintPoint { x: f32::INFINITY, y: 0.0 }, PaintPoint::default(), 1.0, 0),
+            Err(NC_E_INVALID_ARG)
+        );
+        assert_eq!(
+            painter.stroke_line(scope, PaintPoint::default(), PaintPoint::default(), -1.0, 0),
+            Err(NC_E_INVALID_ARG)
+        );
         assert_eq!(painter.fill_polygon(scope, NcCopyFromBufferOffset::new(1, &[]), 0), Err(NC_E_INVALID_ARG));
-        assert_eq!(painter.fill_polygon(scope, NcCopyFromBufferOffset::new(0, &[PaintPoint { x: 0.0, y: f32::NAN }]), 0), Err(NC_E_INVALID_ARG));
-        let invalid_clip = PaintScope { invocation: scope.invocation, clip: Rect { x: 0, y: 0, width: -1, height: 1 } };
+        assert_eq!(
+            painter.fill_polygon(scope, NcCopyFromBufferOffset::new(0, &[PaintPoint { x: 0.0, y: f32::NAN }]), 0),
+            Err(NC_E_INVALID_ARG)
+        );
+        let invalid_clip = PaintScope {
+            invocation: scope.invocation,
+            clip: Rect { x: 0, y: 0, width: -1, height: 1 },
+        };
         assert_eq!(painter.fill(invalid_clip, state.rect, 0), Err(NC_E_INVALID_ARG));
         assert_eq!(
             painter.triangles(scope, NcCopyFromBufferOffset::new(0, &[RenderVertex::default()])),
@@ -384,7 +416,7 @@ fn window_com_capabilities_preserve_hierarchy_layers_visibility_and_subtree_clos
     assert_eq!(root.title().unwrap().to_string().unwrap(), "new title");
     runtime.update(SIZE).unwrap();
     root.close().unwrap();
-    for button in [root_button, child_button, dialog_button] {
+    for mut button in [root_button, child_button, dialog_button] {
         assert_eq!(button.set_label(NcCopyFromBufferOffset::new(0, b"closed")), Err(UI_E_CLOSED));
     }
     assert_eq!(child.snapshot().unwrap_err(), UI_E_CLOSED);
@@ -480,7 +512,7 @@ fn popup_com_capability_enforces_active_owner_policy_and_permanent_removal() {
 #[test]
 fn com_nodes_update_without_activation_and_collect_hidden_widget_changes() {
     let runtime = runtime();
-    let button = button(&runtime);
+    let mut button = button(&runtime);
     let probe = Rc::new(WidgetProbe::default());
     probe.text_input.set(true);
     let object = RetainingWidget::from_value(RetainingWidget {
@@ -674,8 +706,8 @@ fn child_edit_reports_committed_topology_separately_from_teardown_failure() {
 fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validation() {
     let runtime = runtime();
     let ui = microui_redux::com::Ui::from_interface(runtime.clone()).unwrap();
-    let checkbox = ui.widgets().checkbox("Check", false).unwrap();
-    let common = checkbox.node_interface().unwrap();
+    let mut checkbox = ui.widgets().checkbox("Check", false).unwrap();
+    let mut common = checkbox.node_interface().unwrap();
     common.take_change().unwrap();
     checkbox.set_checked(true).unwrap();
     assert!(checkbox.checked().unwrap());
@@ -690,12 +722,12 @@ fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validati
     checkbox.set_named_font("body").unwrap();
     assert_eq!(common.take_change().unwrap(), GeometryChange::CHANGED);
 
-    let textbox = ui.widgets().textbox("é\r\n☃").unwrap();
+    let mut textbox = ui.widgets().textbox("é\r\n☃").unwrap();
     assert_eq!(textbox.text().unwrap(), "é☃");
     assert_eq!(textbox.cursor().unwrap(), 5);
     textbox.set_cursor(4).unwrap();
     assert_eq!(textbox.cursor().unwrap(), 2);
-    let common = textbox.node_interface().unwrap();
+    let mut common = textbox.node_interface().unwrap();
     let concrete = textbox.as_interface().add_ref();
     assert_eq!(concrete.query::<IUnknown>().unwrap().as_ptr(), common.query::<IUnknown>().unwrap().as_ptr());
     assert_eq!(common.query::<ITextEditorAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
@@ -710,9 +742,9 @@ fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validati
     assert_eq!(textbox.cursor().unwrap(), 0);
     assert_eq!(common.take_change().unwrap(), GeometryChange::CHANGED);
 
-    let block = ui.widgets().text_block("one\r\ntwo", TextWrapping::NONE).unwrap();
+    let mut block = ui.widgets().text_block("one\r\ntwo", TextWrapping::NONE).unwrap();
     assert_eq!(block.text().unwrap(), "one\ntwo");
-    let common = block.node_interface().unwrap();
+    let mut common = block.node_interface().unwrap();
     common.take_change().unwrap();
     block.set_wrapping(TextWrapping::WORD).unwrap();
     assert_eq!(block.wrapping().unwrap(), TextWrapping::WORD);
@@ -729,7 +761,7 @@ fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validati
 fn builtin_numeric_and_scrollbar_facades_reject_invalid_inputs_without_losing_state() {
     let runtime = runtime();
     let ui = microui_redux::com::Ui::from_interface(runtime).unwrap();
-    let slider = ui
+    let mut slider = ui
         .widgets()
         .slider(SliderOptions {
             value: 5.0,
@@ -739,7 +771,7 @@ fn builtin_numeric_and_scrollbar_facades_reject_invalid_inputs_without_losing_st
             precision: 1,
         })
         .unwrap();
-    let common = slider.node_interface().unwrap();
+    let mut common = slider.node_interface().unwrap();
     common.take_change().unwrap();
     assert_eq!(slider.set_value(f32::NAN), Err(NC_E_INVALID_ARG));
     assert_eq!(slider.value().unwrap(), 5.0);
@@ -759,12 +791,12 @@ fn builtin_numeric_and_scrollbar_facades_reject_invalid_inputs_without_losing_st
             .is_err()
     );
     assert!(ui.widgets().number(NumberOptions { value: 0.0, step: 1.0, precision: 255 }).is_err());
-    let number = ui.widgets().number(NumberOptions { value: 4.0, step: 0.5, precision: 2 }).unwrap();
+    let mut number = ui.widgets().number(NumberOptions { value: 4.0, step: 0.5, precision: 2 }).unwrap();
     number.set_value(-100.0).unwrap();
     assert_eq!(number.value().unwrap(), -100.0);
     assert!(!number.is_editing().unwrap());
 
-    let scrollbar = ui
+    let mut scrollbar = ui
         .widgets()
         .scrollbar(ScrollRange {
             axis: ScrollAxis::VERTICAL,
@@ -774,7 +806,7 @@ fn builtin_numeric_and_scrollbar_facades_reject_invalid_inputs_without_losing_st
         })
         .unwrap();
     assert_eq!(scrollbar.range().unwrap().offset, 50);
-    let common = scrollbar.node_interface().unwrap();
+    let mut common = scrollbar.node_interface().unwrap();
     common.take_change().unwrap();
     assert_eq!(scrollbar.set_lengths(-1, 100), Err(NC_E_INVALID_ARG));
     assert_eq!(scrollbar.range().unwrap().viewport, 50);
@@ -787,8 +819,8 @@ fn builtin_numeric_and_scrollbar_facades_reject_invalid_inputs_without_losing_st
     assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
     scrollbar.set_lengths(100, 100).unwrap();
     assert_ne!(common.properties().unwrap().options.bits & WidgetOptions::NO_INTERACT.bits, 0);
-    let swatch = ui.widgets().color_swatch(0xff102030, "RGBA").unwrap();
-    let common = swatch.node_interface().unwrap();
+    let mut swatch = ui.widgets().color_swatch(0xff102030, "RGBA").unwrap();
+    let mut common = swatch.node_interface().unwrap();
     common.take_change().unwrap();
     swatch.set_fill(0xffaabbcc).unwrap();
     assert_eq!(swatch.fill().unwrap(), 0xffaabbcc);
@@ -918,16 +950,22 @@ struct BuiltinPainter {
 }
 impl IPainter for BuiltinPainter {
     /// Built-ins send already resolved triangle batches to an external painter.
-    fn stroke_line(&self, _: PaintScope, _: PaintPoint, _: PaintPoint, _: f32, _: u32) -> Result<(), NcStatus> { panic!("expected atlas triangles") }
+    fn stroke_line(&self, _: PaintScope, _: PaintPoint, _: PaintPoint, _: f32, _: u32) -> Result<(), NcStatus> {
+        panic!("expected atlas triangles")
+    }
     /// Polygon tessellation is already resolved by the built-in algorithm before this copy.
-    fn fill_polygon(&self, _: PaintScope, _: NcCopyFromBufferOffset<'_, PaintPoint>, _: u32) -> Result<(), NcStatus> { panic!("expected atlas triangles") }
+    fn fill_polygon(&self, _: PaintScope, _: NcCopyFromBufferOffset<'_, PaintPoint>, _: u32) -> Result<(), NcStatus> {
+        panic!("expected atlas triangles")
+    }
 
     /// Built-in semantic painting does not route through the independent solid-geometry recorder.
-    fn colored_triangles(&self, _scope: PaintScope, _vertices: NcCopyFromBufferOffset<'_, ColoredVertex>) -> Result<(), NcStatus> { panic!("expected resolved built-in atlas geometry") }
+    fn colored_triangles(&self, _scope: PaintScope, _vertices: NcCopyFromBufferOffset<'_, ColoredVertex>) -> Result<(), NcStatus> {
+        panic!("expected resolved built-in atlas geometry")
+    }
 
-    /// Captures the ordered image barrier after checking read-only reentry into its button.
+    /// Captures the ordered image barrier after verifying that paint holds exclusive object access.
     fn texture(&self, _scope: PaintScope, _rect: Rect, _source: TextureRegion, _rgba: u32, _texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
-        assert_eq!(self.button.label()?.to_string()?, "AB");
+        assert_eq!(self.button.label().err(), Some(NC_E_BUSY));
         self.probe.images.borrow_mut().push((_rect, _source, _rgba));
         self.probe.order.borrow_mut().push(true);
         if self.probe.fail_image.replace(false) { Err(UI_E_RENDER) } else { Ok(()) }
@@ -936,9 +974,9 @@ impl IPainter for BuiltinPainter {
     fn item(&self, _scope: PaintScope, _rect: Rect, _item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
         panic!("unexpected custom item in button paint")
     }
-    /// Confirms no semantic RefCell guard spans this outward COM call.
+    /// Confirms bulk recording can call outward while the widget owns ordinary inline state.
     fn triangles(&self, _scope: PaintScope, vertices: NcCopyFromBufferOffset<'_, RenderVertex>) -> Result<(), NcStatus> {
-        assert_eq!(self.button.label()?.to_string()?, "AB");
+        assert_eq!(self.button.label().err(), Some(NC_E_BUSY));
         *self.probe.vertices.borrow_mut() = vertices.as_slice().to_vec();
         self.probe.order.borrow_mut().push(false);
         if self.probe.fail.replace(false) { Err(UI_E_RENDER) } else { Ok(()) }
@@ -955,12 +993,12 @@ impl IPainter for BuiltinPainter {
 
 /// Button style changes retain the full algorithm and failed copying does not poison reuse.
 #[test]
-fn builtin_bulk_paint_preserves_alignment_icons_and_releases_semantic_borrows() {
+fn builtin_bulk_paint_preserves_alignment_icons_with_inline_semantic_state() {
     let ui = microui_redux::com::Ui::from_interface(runtime()).unwrap();
-    let button = ui.widgets().button("AB").unwrap();
+    let mut button = ui.widgets().button("AB").unwrap();
     button.set_options(WidgetOptions::NONE).unwrap();
     button.set_fill_states(FillStates::NONE).unwrap();
-    let common = button.node_interface().unwrap();
+    let mut common = button.node_interface().unwrap();
     common.take_change().unwrap();
     assert_eq!(button.set_fill_states(FillStates { bits: 8 }), Err(NC_E_INVALID_ARG));
     assert_eq!(button.fill_states().unwrap(), FillStates::NONE);
@@ -1028,9 +1066,23 @@ fn platform_input_projection_and_committed_text_area_share_runtime_state() {
     let editor = ui.widgets().textbox("start").unwrap();
     let window = ui.window("IME", RECT, &editor).unwrap();
     assert_eq!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::None);
-    input.input(UiInput::Key(KeyStroke { key: KeyCode::TAB, value: 0, pressed: true, repeat: false, modifiers: 0 }).into(), NcCopyFromBufferOffset::new(0, &[])).unwrap();
+    input
+        .input(
+            UiInput::Key(KeyStroke {
+                key: KeyCode::TAB,
+                value: 0,
+                pressed: true,
+                repeat: false,
+                modifiers: 0,
+            })
+            .into(),
+            NcCopyFromBufferOffset::new(0, &[]),
+        )
+        .unwrap();
     ui.update(SIZE).unwrap();
-    let TextInputArea::Area(first) = TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap() else { panic!("focused editor must request IME") };
+    let TextInputArea::Area(first) = TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap() else {
+        panic!("focused editor must request IME")
+    };
     assert!(first.width > 0 && first.height > 0);
     input.input(UiInput::Text.into(), NcCopyFromBufferOffset::new(0, "é☃".as_bytes())).unwrap();
     assert_eq!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::None);
@@ -1041,7 +1093,9 @@ fn platform_input_projection_and_committed_text_area_share_runtime_state() {
     window.set_rect(rect).unwrap();
     assert_eq!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::None);
     ui.update(SIZE).unwrap();
-    let TextInputArea::Area(moved) = TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap() else { panic!("moved editor keeps focus") };
+    let TextInputArea::Area(moved) = TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap() else {
+        panic!("moved editor keeps focus")
+    };
     assert_eq!(moved.x, first.x + 30);
     window.close().unwrap();
     ui.update(SIZE).unwrap();
@@ -1051,12 +1105,11 @@ fn platform_input_projection_and_committed_text_area_share_runtime_state() {
     assert_eq!(input.input(UiInput::Cancel.into(), NcCopyFromBufferOffset::new(0, &[])), Err(UI_E_CLOSED));
 }
 
-
 /// Concrete external content observes ownership, geometry and lifecycle without retaining its COM self.
 struct LocalContent {
     /// Weak application slot permits reentry tests without a self-owning widget cycle.
     target: std::rc::Weak<RefCell<Option<ComPtr<IWidgetAbi>>>>,
-    /// Explicit model state survives temporary behavior ownership during calls.
+    /// Explicit model state remains independently observable during calls.
     probe: Rc<LocalContentProbe>,
 }
 #[derive(Default)]
@@ -1068,7 +1121,7 @@ struct LocalContentProbe {
     origin: Cell<Point>,
     /// Number of actual preferred-size observations.
     measures: Cell<u32>,
-    /// Fails one measurement to prove detached behavior is restored on errors.
+    /// Fails one measurement to prove an error releases the generated shared-call gate.
     fail_measure: Cell<bool>,
     /// Fails one update after a committed model change.
     fail_update: Cell<bool>,
@@ -1078,14 +1131,19 @@ struct LocalContentProbe {
     drops: Cell<u32>,
 }
 impl microui_redux::LeafContent for LocalContent {
-    /// Common observations remain available, but nested content measurement must reject safely.
+    /// Recursive calls through any projection reject while mutable measurement owns the object.
     fn measure(&self, bounds: LayoutLimits, metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
         self.probe.measures.set(self.probe.measures.get() + 1);
         let target = self.target.upgrade().unwrap().borrow().as_ref().unwrap().clone();
-        assert!(target.properties().is_ok());
-        assert_eq!(target.query::<ILeafLayoutAbi>().unwrap().measure(bounds, metrics), Err(UI_E_BUSY));
-        if self.probe.fail_measure.replace(false) { return Err(NC_E_INVALID_ARG); }
-        Ok(Size { width: self.probe.width.get(), height: 20 })
+        assert_eq!(target.properties(), Err(NC_E_BUSY));
+        assert_eq!(target.query::<ILeafLayoutAbi>().unwrap().measure(bounds, metrics), Err(NC_E_BUSY));
+        if self.probe.fail_measure.replace(false) {
+            return Err(NC_E_INVALID_ARG);
+        }
+        Ok(Size {
+            width: self.probe.width.get(),
+            height: 20,
+        })
     }
     /// A failed partial update must invalidate the earlier preferred-size cache for recovery.
     fn update(&mut self, state: WidgetUpdate, _: WidgetEvent, _: &str) -> Result<GeometryChange, NcStatus> {
@@ -1112,11 +1170,16 @@ impl microui_redux::LeafContent for LocalContent {
         ])
     }
     /// Closing content terminates activity while its retained allocation remains observable.
-    fn close(&mut self) -> Result<(), NcStatus> { self.probe.closes.set(self.probe.closes.get() + 1); Ok(()) }
+    fn close(&mut self) -> Result<(), NcStatus> {
+        self.probe.closes.set(self.probe.closes.get() + 1);
+        Ok(())
+    }
 }
 impl Drop for LocalContent {
     /// The final inline value has one destructor, independent of the number of COM projections.
-    fn drop(&mut self) { self.probe.drops.set(self.probe.drops.get() + 1); }
+    fn drop(&mut self) {
+        self.probe.drops.set(self.probe.drops.get() + 1);
+    }
 }
 
 /// The generic local helper is one real COM object, survives failures and preserves normal cache rules.
@@ -1126,8 +1189,17 @@ fn static_leaf_content_recovers_from_reentry_and_errors_with_one_owned_lifetime(
     let target = Rc::new(RefCell::new(None));
     let probe = Rc::new(LocalContentProbe::default());
     probe.width.set(80);
-    let widget = ui.widgets().leaf(LocalContent { target: Rc::downgrade(&target), probe: probe.clone() }, WidgetOptions::NO_INTERACT).unwrap();
-    let node = widget.node_interface().unwrap();
+    let widget = ui
+        .widgets()
+        .leaf(
+            LocalContent {
+                target: Rc::downgrade(&target),
+                probe: probe.clone(),
+            },
+            WidgetOptions::NO_INTERACT,
+        )
+        .unwrap();
+    let mut node = widget.node_interface().unwrap();
     *target.borrow_mut() = Some(node.clone());
     let window = ui.window("Local leaf", RECT, &widget).unwrap();
     probe.fail_measure.set(true);

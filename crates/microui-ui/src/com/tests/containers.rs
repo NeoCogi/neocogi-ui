@@ -62,7 +62,7 @@ impl IWidget for TestContainer {
         Ok(self.state.host().add_ref())
     }
     /// Attachment must reject nested edge edits before committing the mount-once claim.
-    fn mount(&self) -> Result<(), NcStatus> {
+    fn mount(&mut self) -> Result<(), NcStatus> {
         let editor = self.probe.mount_edit.borrow().clone();
         if let Some(editor) = editor {
             assert_eq!(editor.clear(), Err(UI_E_BUSY));
@@ -70,7 +70,7 @@ impl IWidget for TestContainer {
         self.state.mount()
     }
     /// Explicit container closure closes its private editor, while retained public views remain safe.
-    fn close(&self) -> Result<(), NcStatus> {
+    fn close(&mut self) -> Result<(), NcStatus> {
         if self.state.close()? {
             let editor = self.editor.borrow().clone();
             if let Some(editor) = editor {
@@ -88,20 +88,20 @@ impl IWidget for TestContainer {
         })
     }
     /// Common option changes share the same sticky invalidation as built-in widgets.
-    fn set_options(&self, options: WidgetOptions) -> Result<(), NcStatus> {
+    fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus> {
         self.state.set_options(options)
     }
     /// This fixture's layout inputs change through setters only.
-    fn update(&self, _state: WidgetUpdate, _event: WidgetEventAbi, _text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
+    fn update(&mut self, _state: WidgetUpdate, _event: WidgetEventAbi, _text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
         self.state.writable()?;
         Ok(GeometryChange::NO_CHANGE)
     }
     /// Returns sticky setter changes without exporting its concrete state.
-    fn take_change(&self) -> Result<GeometryChange, NcStatus> {
+    fn take_change(&mut self) -> Result<GeometryChange, NcStatus> {
         self.state.take_change()
     }
     /// The fixture has no surface geometry; actual leaf children exercise the renderer.
-    fn paint(&self, _scope: PaintScope, _state: WidgetPaint, _painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
+    fn paint(&mut self, _scope: PaintScope, _state: WidgetPaint, _painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
         self.state.readable()
     }
 }
@@ -111,7 +111,7 @@ impl IContainerLayout for TestContainer {
         self.editor()?.view()
     }
     /// A simple test column probes read-only phases, nested authority and measured leaf reuse.
-    fn measure(&self, scope: LayoutScope, bounds: LayoutLimits, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<Size, NcStatus> {
+    fn measure(&mut self, scope: LayoutScope, bounds: LayoutLimits, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<Size, NcStatus> {
         self.state.readable()?;
         self.observe(scope, layout);
         self.probe.measures.set(self.probe.measures.get() + 1);
@@ -135,7 +135,7 @@ impl IContainerLayout for TestContainer {
         Ok(size)
     }
     /// Places children through exact copied rectangles, then publishes one complete viewport result.
-    fn place(&self, scope: LayoutScope, rect: Rect, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<ContainerGeometry, NcStatus> {
+    fn place(&mut self, scope: LayoutScope, rect: Rect, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<ContainerGeometry, NcStatus> {
         self.observe(scope, layout);
         self.probe.placements.set(self.probe.placements.get() + 1);
         let count = layout.child_count(scope)?;
@@ -196,7 +196,7 @@ fn nested_container_layout_scopes_expire_and_teardown_closes_descendants() {
     let history = Rc::default();
     let (parent, parent_editor, parent_probe) = container(&runtime, Rc::clone(&history));
     let (child, child_editor, child_probe) = container(&runtime, Rc::clone(&history));
-    let leaf = button(&runtime);
+    let mut leaf = button(&runtime);
     child_editor
         .insert(0, leaf.query::<IWidgetAbi>().unwrap().as_com_ref())
         .unwrap()
@@ -290,7 +290,7 @@ fn final_child_writer_release_during_layout_closes_retained_descendants() {
 
 /// Creates a custom leaf with copied geometry observations and no frame inset to obscure its assigned rectangle.
 fn recorded_leaf(runtime: &ComPtr<UiRuntimeAbi>) -> (microui_redux::Widget<IWidgetAbi>, Rc<WidgetProbe>) {
-    let button = button(runtime);
+    let mut button = button(runtime);
     button.set_options(WidgetOptions::NONE).unwrap();
     let probe = Rc::new(WidgetProbe::default());
     let object = RetainingWidget::from_value(RetainingWidget {
@@ -323,7 +323,7 @@ fn layout_service_rejects_direct_reentry_without_holding_an_interior_borrow() {
 fn builtin_linear_reuses_track_resolution_and_validates_edges_before_mounting() {
     let runtime = runtime();
     let ui = microui_redux::Ui::from_interface(runtime.clone()).unwrap();
-    let row = ui.widgets().linear(FlowDirection::LEFT_TO_RIGHT, CrossSize::Stretch).unwrap();
+    let mut row = ui.widgets().linear(FlowDirection::LEFT_TO_RIGHT, CrossSize::Stretch).unwrap();
     let (first, a) = recorded_leaf(&runtime);
     let (second, b) = recorded_leaf(&runtime);
     let (third, c) = recorded_leaf(&runtime);
@@ -343,11 +343,11 @@ fn builtin_linear_reuses_track_resolution_and_validates_edges_before_mounting() 
         .unwrap();
     let common = row.node_interface().unwrap();
     assert_eq!(common.query::<IContainerAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
-    assert_eq!(common.query::<IUnknown>().unwrap().as_ptr(), row.as_interface().add_ref().query::<IUnknown>().unwrap().as_ptr());
     assert_eq!(
-        row.children().unwrap().query::<IChildrenEditorAbi>().unwrap_err(),
-        nc_com::NC_E_NOINTERFACE
+        common.query::<IUnknown>().unwrap().as_ptr(),
+        row.as_interface().add_ref().query::<IUnknown>().unwrap().as_ptr()
     );
+    assert_eq!(row.children().unwrap().query::<IChildrenEditorAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
     let window = ui.window("Linear", RECT, &row).unwrap();
     runtime.update(SIZE).unwrap();
     let (first_rect, second_rect, third_rect) = (a.latest.get().unwrap().screen, b.latest.get().unwrap().screen, c.latest.get().unwrap().screen);
@@ -381,7 +381,7 @@ fn builtin_grid_reuses_span_placement_and_bulk_track_validation() {
     let ui = microui_redux::Ui::from_interface(runtime.clone()).unwrap();
     let columns = [LayoutTrack::Fixed { extent: 40 }, LayoutTrack::Fixed { extent: 60 }];
     let rows = [LayoutTrack::Fixed { extent: 20 }, LayoutTrack::Fixed { extent: 30 }];
-    let grid = ui.widgets().grid(&columns, &rows).unwrap();
+    let mut grid = ui.widgets().grid(&columns, &rows).unwrap();
     let (first, a) = recorded_leaf(&runtime);
     let (second, b) = recorded_leaf(&runtime);
     let (third, c) = recorded_leaf(&runtime);
@@ -423,7 +423,7 @@ fn builtin_grid_reuses_span_placement_and_bulk_track_validation() {
 fn builtin_container_commits_replacement_metadata_before_reporting_failed_teardown() {
     let runtime = runtime();
     let ui = microui_redux::Ui::from_interface(runtime.clone()).unwrap();
-    let row = ui.widgets().linear(FlowDirection::LEFT_TO_RIGHT, CrossSize::Stretch).unwrap();
+    let mut row = ui.widgets().linear(FlowDirection::LEFT_TO_RIGHT, CrossSize::Stretch).unwrap();
     let (first, previous) = recorded_leaf(&runtime);
     previous.fail_close.set(true);
     row.insert(0, &first, LinearEdge::new(LayoutTrack::Fixed { extent: 40 }))
@@ -452,13 +452,13 @@ fn builtin_scroll_area_uses_real_children_and_shared_sticky_invalidation() {
     let runtime = runtime();
     let ui = microui_redux::Ui::from_interface(runtime.clone()).unwrap();
     let text = format!("{}\n{}", "wide".repeat(80), "another line\n".repeat(50));
-    let content = ui.widgets().text_block(&text, TextWrapping::NONE).unwrap();
-    let scroll = ui.widgets().scroll_area(&content, true).unwrap();
+    let mut content = ui.widgets().text_block(&text, TextWrapping::NONE).unwrap();
+    let mut scroll = ui.widgets().scroll_area(&content, true).unwrap();
     let root = scroll.node_interface().unwrap();
     assert_eq!(root.query::<IContainerAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
     let structural = root.query::<IContainerLayoutAbi>().unwrap().children().unwrap();
     assert_eq!(structural.child_count().unwrap(), 3);
-    let horizontal = structural.child(1).unwrap().query::<ScrollbarAbi>().unwrap();
+    let mut horizontal = structural.child(1).unwrap().query::<ScrollbarAbi>().unwrap();
     let vertical = structural.child(2).unwrap().query::<ScrollbarAbi>().unwrap();
     assert_eq!(horizontal.range().unwrap().axis, ScrollAxis::HORIZONTAL);
     assert_eq!(vertical.range().unwrap().axis, ScrollAxis::VERTICAL);
@@ -515,9 +515,9 @@ fn nested_com_scroll_areas_preserve_boundary_bubbling() {
     let runtime = runtime();
     let ui = microui_redux::Ui::from_interface(runtime.clone()).unwrap();
     let text = ui.widgets().text_block(&"nested content\n".repeat(60), TextWrapping::NONE).unwrap();
-    let inner = ui.widgets().scroll_area(&text, true).unwrap();
+    let mut inner = ui.widgets().scroll_area(&text, true).unwrap();
     let tail = ui.widgets().text_block(&"outer content\n".repeat(60), TextWrapping::NONE).unwrap();
-    let column = ui.widgets().linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch).unwrap();
+    let mut column = ui.widgets().linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch).unwrap();
     column
         .insert(0, &inner, LinearEdge::new(LayoutTrack::Fixed { extent: 110 }))
         .unwrap()
@@ -557,9 +557,9 @@ fn nested_com_scroll_areas_preserve_boundary_bubbling() {
 fn disclosure_com_header_controls_the_actual_body_without_a_parent_backpointer() {
     let runtime = runtime();
     let ui = microui_redux::Ui::from_interface(runtime.clone()).unwrap();
-    let disclosure = ui.widgets().disclosure("Tree", DisclosureStyle::TREE, false).unwrap();
-    let header = disclosure.header().unwrap();
-    let body = disclosure.body().unwrap();
+    let mut disclosure = ui.widgets().disclosure("Tree", DisclosureStyle::TREE, false).unwrap();
+    let mut header = disclosure.header().unwrap();
+    let mut body = disclosure.body().unwrap();
     let root = disclosure.node_interface().unwrap();
     assert_eq!(root.query::<IContainerAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
     let children = root.query::<IContainerLayoutAbi>().unwrap().children().unwrap();
@@ -625,7 +625,7 @@ fn disclosure_com_header_controls_the_actual_body_without_a_parent_backpointer()
 fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_identity() {
     let runtime = runtime();
     let ui = microui_redux::Ui::from_interface(runtime.clone()).unwrap();
-    let area = ui.widgets().text_area("a☃\r\nb\r", TextWrapping::NONE, true).unwrap();
+    let mut area = ui.widgets().text_area("a☃\r\nb\r", TextWrapping::NONE, true).unwrap();
     assert_eq!(area.text().unwrap(), "a☃\nb\n");
     let root = area.node_interface().unwrap();
     let identity = root.query::<IUnknown>().unwrap();
@@ -633,7 +633,7 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
     assert_eq!(concrete.query::<IUnknown>().unwrap().as_ptr(), identity.as_ptr());
     assert_eq!(root.query::<ITextEditorAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
     assert_eq!(root.query::<ScrollAreaAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
-    let scroll = area.scrolling().unwrap();
+    let mut scroll = area.scrolling().unwrap();
     assert_eq!(scroll.node_interface().unwrap().query::<IUnknown>().unwrap().as_ptr(), identity.as_ptr());
     let structural = root.query::<IContainerLayoutAbi>().unwrap().children().unwrap();
     assert_eq!(structural.child_count().unwrap(), 3);
@@ -724,7 +724,7 @@ fn disclosure_headers_use_the_common_frame_policy_for_both_variants() {
         let runtime = runtime();
         let ui = microui_redux::Ui::from_interface(runtime.clone()).unwrap();
         let disclosure = ui.widgets().disclosure("Header", style, false).unwrap();
-        let header = disclosure.header().unwrap().node_interface().unwrap();
+        let mut header = disclosure.header().unwrap().node_interface().unwrap();
         assert_eq!(header.properties().unwrap().frame, frame);
         assert_eq!(header.properties().unwrap().options, defaults);
         let window = ui.window("framing", RECT, &disclosure).unwrap();

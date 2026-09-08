@@ -32,9 +32,9 @@ impl EventHandler<Vec<String>, Activation> for RecordActivation {
 fn static_session_preserves_registration_order_snapshot_values_and_bounded_progress() {
     let runtime = runtime();
     let ui = microui_redux::Ui::from_interface(runtime.clone()).unwrap();
-    let a = ui.widgets().button("a").unwrap();
-    let b = ui.widgets().button("b").unwrap();
-    let column = ui.widgets().linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch).unwrap();
+    let mut a = ui.widgets().button("a").unwrap();
+    let mut b = ui.widgets().button("b").unwrap();
+    let mut column = ui.widgets().linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch).unwrap();
     column.insert(0, &a, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     column.insert(1, &b, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let window = ui.window("order", RECT, &column).unwrap();
@@ -207,7 +207,7 @@ fn record_scroll(state: &mut Vec<String>, event: &microui_redux::events::Scrollb
 fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters_silent() {
     let ui = microui_redux::Ui::from_interface(runtime()).unwrap();
     let session = EventSession::new(Vec::<String>::new());
-    let checkbox = ui.widgets().checkbox("check", false).unwrap();
+    let mut checkbox = ui.widgets().checkbox("check", false).unwrap();
     let window = ui.window("checkbox", RECT, &checkbox).unwrap();
     session.subscribe_checkbox(&checkbox, record_checkbox).unwrap();
     checkbox.set_checked(true).unwrap();
@@ -219,7 +219,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
     assert_eq!(&*session.state().unwrap(), &["checked:false"]);
     window.close().unwrap();
 
-    let slider = ui
+    let mut slider = ui
         .widgets()
         .slider(SliderOptions {
             value: 1.0,
@@ -252,7 +252,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
 
     let item = ui.widgets().list_item("item").unwrap();
     let list_box = ui.widgets().list_box("box").unwrap();
-    let column = ui.widgets().linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch).unwrap();
+    let mut column = ui.widgets().linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch).unwrap();
     column.insert(0, &item, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     column.insert(1, &list_box, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let window = ui.window("lists", RECT, &column).unwrap();
@@ -265,7 +265,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
     assert!(session.state().unwrap().ends_with(&["item".to_owned(), "box".to_owned()]));
     window.close().unwrap();
 
-    let bar = ui
+    let mut bar = ui
         .widgets()
         .scrollbar(ScrollRange {
             axis: ScrollAxis::HORIZONTAL,
@@ -315,7 +315,7 @@ fn record_popup(state: &mut Vec<String>, _event: &microui_redux::events::PopupDi
 fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_sources() {
     let ui = microui_redux::Ui::from_interface(runtime()).unwrap();
     let session = EventSession::new(Vec::<String>::new());
-    let textbox = ui.widgets().textbox("").unwrap();
+    let mut textbox = ui.widgets().textbox("").unwrap();
     let window = ui.window("textbox", RECT, &textbox).unwrap();
     session.subscribe_text_changed(&textbox, record_text_change).unwrap();
     assert_eq!(session.subscribe_text_changed(&textbox, record_text_change).unwrap_err(), UI_E_BUSY);
@@ -385,7 +385,7 @@ fn failed_callback_recovers_on_next_update_and_preserves_remaining_native_input(
     let ui = microui_redux::Ui::from_interface(runtime()).unwrap();
     let button = ui.widgets().button("fail once").unwrap();
     let editor = ui.widgets().textbox("").unwrap();
-    let column = ui.widgets().linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch).unwrap();
+    let mut column = ui.widgets().linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch).unwrap();
     column.insert(0, &button, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     column.insert(1, &editor, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let window = ui.window("recovery", RECT, &column).unwrap();

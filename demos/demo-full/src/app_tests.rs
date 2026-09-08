@@ -58,7 +58,7 @@ fn exercise() -> Result<(Host, EventSession<State>), HostError> {
         events.state_mut()?.select_theme(theme)?;
         // The photograph is below the initial viewport. Requesting the measured end guarantees
         // every theme crosses real image forwarding, clipping, validation and native GPU upload.
-        events.state()?.sample_scroll.scroll_to_end()?;
+        events.state_mut()?.sample_scroll.scroll_to_end()?;
         host.ui.update_with_events(size, &events)?;
         host.ui.render(size, host.renderer.as_com_ref())?;
         let state = events.state()?;

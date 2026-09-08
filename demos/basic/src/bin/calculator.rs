@@ -360,16 +360,16 @@ impl EventHandler<State, events::Activation> for Action {
 fn main() -> Result<(), HostError> {
     microui_redux_demo_host::initialize()?;
     let host = Host::new("Calculator", Size { width: 320, height: 420 }, microui_redux_demo_assets::load_bundle()?)?;
-    let display = host.ui.widgets().textbox("0")?;
+    let mut display = host.ui.widgets().textbox("0")?;
     display.set_named_font(DISPLAY_FONT)?;
     display.set_options(WidgetOptions {
         bits: WidgetOptions::FRAME.bits | WidgetOptions::ALIGN_RIGHT.bits | WidgetOptions::NO_INTERACT.bits,
     })?;
-    let grid = host.ui.widgets().grid(
+    let mut grid = host.ui.widgets().grid(
         &[LayoutTrack::Flex { weight: 1.0 }; 4],
         &[LayoutTrack::Flex { weight: KEYPAD_ROW_HEIGHT_WEIGHT }; 5],
     )?;
-    let tree = host.ui.widgets().linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch)?;
+    let mut tree = host.ui.widgets().linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch)?;
     tree.insert(0, &display, LinearEdge::new(LayoutTrack::Flex { weight: DISPLAY_HEIGHT_FRACTION }))?
         .finish()?;
     tree.insert(1, &grid, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 - DISPLAY_HEIGHT_FRACTION }))?
@@ -408,7 +408,7 @@ fn main() -> Result<(), HostError> {
     .into_iter()
     .enumerate()
     {
-        let button = host.ui.widgets().button(label)?;
+        let mut button = host.ui.widgets().button(label)?;
         button.set_options(WidgetOptions {
             bits: WidgetOptions::FRAME.bits | WidgetOptions::ALIGN_CENTER.bits,
         })?;

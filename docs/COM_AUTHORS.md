@@ -44,7 +44,7 @@ Paint/layout services own their storage and issue invocation tokens. The static 
 
 Scoped layout permits a container to measure/place its indexed children. It does not permit topology edits during layout or unrestricted access to the runtime tree. Recursive child calls restore the enclosing scope correctly before continuing the parent. Applications and plugins must not fabricate authority or treat an invocation token as a durable resource identifier.
 
-Release mutable RefCell/lock borrows before calling an external widget, container, painter, or application handler. Reentrant traversal and edits forbidden during painting/layout produce a contract error. An implementation must not trigger a RefCell panic across the C ABI while trying to reject such a call. Panics are implementation faults and follow the COM abort policy; they are not converted into recoverable statuses.
+Use `&mut self` for methods that change object state and store that state in ordinary fields. The generated object-wide call gate permits overlapping shared calls and returns `NC_E_BUSY` for conflicting mutable or recursive entry before it creates a Rust reference. Interior mutability is reserved for genuinely shared infrastructure such as event queues and runtime registries; release those short borrows before calling an external widget, container, painter, or application handler. Panics are implementation faults and follow the COM abort policy; they are not converted into recoverable statuses.
 
 ## Typed events and application state
 
@@ -242,6 +242,12 @@ the shared ILeafLayout protocol. Button activation and button-specific styling
 live directly on `Button`; no activation-only, style-only, or lifetime interface
 is required for that class.
 
+`WidgetState` contains plain fields. Mutating contract methods receive `&mut self`,
+and the generated COM object provides the exclusivity needed to reach them. Do not
+wrap ordinary widget fields in `RefCell<Option<T>>`, temporarily remove the value,
+or add a second implementation-level busy flag; those mechanisms duplicate the
+receiver contract and make state flow harder to follow.
+
 A semantic setter checks `state.writable()` before borrowing its data, validates
 all replacement inputs, commits atomically, and calls
 `state.record_change(GeometryChange::CHANGED)` when measurement/placement inputs
@@ -348,7 +354,7 @@ independently of the theme's label foreground. For example:
 ```rust,ignore
 let images = host.renderer.query::<ITextureFactoryAbi>()?;
 let image = images.create_texture(size, NcCopyFromBufferOffset::new(0, &rgba))?;
-let button = host.ui.widgets().button("Preview")?;
+let mut button = host.ui.widgets().button("Preview")?;
 button.set_image(image.as_com_ref(), true)?;
 // The button owns a reference; this local image reference may now be dropped.
 ```
@@ -400,13 +406,15 @@ built-ins. Content methods use static Rust dispatch; there is no second widget
 tree or erased application value. Use a direct COM class with `WidgetState` when
 the component also needs its own public editing interfaces.
 
-Content is detached from its storage while measure, update, paint or close runs.
-Calling common observations during a content call is allowed; recursively entering
-content returns BUSY. The value is restored after errors. A failed update records
-a conservative geometry change because application code may have partly changed
-its model. Successful updates must still report CHANGED truthfully. The external
-state, hidden-widget and skipped-update obligations above apply equally to this
-helper. Animation that changes only drawing can return NO_CHANGE.
+Content is stored directly in the COM allocation. Widget phases receive an
+ordinary mutable object reference, while the adapter may call a content method
+with the narrower receiver declared by `LeafContent`. Recursive entry through any
+projection returns `NC_E_BUSY` while that outer mutable COM phase is active. A
+failed update records a conservative geometry change
+because application code may have partly changed its model. Successful updates
+must still report CHANGED truthfully. The external state, hidden-widget and
+skipped-update obligations above apply equally to this helper. Animation that
+changes only drawing can return NO_CHANGE.
 
 `Painter::colored_triangles` takes local positions and packed RGBA colors. Solid
 content never needs the atlas's white-pixel location: the UI supplies it while

@@ -233,15 +233,18 @@ fn line(runtime: &Runtime, direction: FlowDirection, cross: CrossSize, children:
 /// Constructs a text display through the ordinary widget factory.
 fn label(runtime: &Runtime, value: &str) -> Result<TextBlockWidget, NcStatus> {
     Ok(TextBlockWidget::from_interface(
-        runtime.widget_factory().create_text_block(NcCopyFromBufferOffset::new(0, value.as_bytes()), TextWrapping::NONE)?,
+        runtime
+            .widget_factory()
+            .create_text_block(NcCopyFromBufferOffset::new(0, value.as_bytes()), TextWrapping::NONE)?,
     ))
 }
 /// Constructs a complete command Button through the dynamically implemented factory shorthand.
 fn button(runtime: &Runtime, value: &str) -> Result<microui_redux::ButtonWidget, NcStatus> {
-    Ok(microui_redux::ButtonWidget::from_interface(runtime.widget_factory().create_button(
-        NcCopyFromBufferOffset::new(0, value.as_bytes()),
-        WidgetOptions::FRAME,
-    )?))
+    Ok(microui_redux::ButtonWidget::from_interface(
+        runtime
+            .widget_factory()
+            .create_button(NcCopyFromBufferOffset::new(0, value.as_bytes()), WidgetOptions::FRAME)?,
+    ))
 }
 /// Builds a complete column with exact path actions and fixed ordinary list-row measurements.
 fn column(runtime: &Runtime, directory: &Path, paths: Vec<PathBuf>, folder: bool) -> Result<Column, NcStatus> {
@@ -256,7 +259,7 @@ fn column(runtime: &Runtime, directory: &Path, paths: Vec<PathBuf>, folder: bool
         } else {
             path.file_name().unwrap_or(path.as_os_str()).to_string_lossy()
         };
-        let item = ListItemWidget::from_interface(runtime.widget_factory().create_list_item(NcCopyFromBufferOffset::new(0, display.as_bytes()))?);
+        let mut item = ListItemWidget::from_interface(runtime.widget_factory().create_list_item(NcCopyFromBufferOffset::new(0, display.as_bytes()))?);
         item.set_icon_role(if folder { ContentIcon::CLOSED_FOLDER } else { ContentIcon::FILE })?;
         children.push((item.node_interface()?, LayoutTrack::Content));
         rows.push((item, if folder { Action::Folder(path) } else { Action::File(path) }));
@@ -293,8 +296,16 @@ impl Dialog {
         let cancel = button(runtime, "Cancel")?;
         let folder_content = column(runtime, Path::new(""), Vec::new(), true)?;
         let file_content = column(runtime, Path::new(""), Vec::new(), false)?;
-        let folders = ScrollAreaWidget::from_interface(runtime.widget_factory().create_scroll_area(folder_content.root.node_interface()?.as_com_ref(), true)?);
-        let files = ScrollAreaWidget::from_interface(runtime.widget_factory().create_scroll_area(file_content.root.node_interface()?.as_com_ref(), true)?);
+        let folders = ScrollAreaWidget::from_interface(
+            runtime
+                .widget_factory()
+                .create_scroll_area(folder_content.root.node_interface()?.as_com_ref(), true)?,
+        );
+        let files = ScrollAreaWidget::from_interface(
+            runtime
+                .widget_factory()
+                .create_scroll_area(file_content.root.node_interface()?.as_com_ref(), true)?,
+        );
         let error = label(runtime, "")?;
         let toolbar = line(
             runtime,
@@ -398,7 +409,13 @@ impl Dialog {
     }
 
     /// Connects fixed controls exactly once; dynamic rows use the same typed activation helper when refreshed.
-    fn connect(&self, path: &TextboxWidget, filename: &TextboxWidget, window: &ComPtr<IWindowAbi>, buttons: [(microui_redux::ButtonWidget, Action); 5]) -> Result<(), NcStatus> {
+    fn connect(
+        &self,
+        path: &TextboxWidget,
+        filename: &TextboxWidget,
+        window: &ComPtr<IWindowAbi>,
+        buttons: [(microui_redux::ButtonWidget, Action); 5],
+    ) -> Result<(), NcStatus> {
         self.session.subscribe_text_changed(path, Edited::Path)?;
         self.session.subscribe_text_submitted(path, Navigate)?;
         self.session.subscribe_text_changed(filename, Edited::Filename)?;
@@ -480,9 +497,11 @@ impl Dialog {
                 Err(UI_E_IO) => {
                     // A failed read changes only diagnostics, preserving prior native
                     // directory, rows, selection and their actual COM capabilities.
-                    model.error.set_text(&model.diagnostic)?;
+                    let diagnostic = model.diagnostic.clone();
+                    model.error.set_text(&diagnostic)?;
                     model.path_dirty = false;
-                    model.path.set_text(&model.directory.to_string_lossy())?;
+                    let directory = model.directory.to_string_lossy().into_owned();
+                    model.path.set_text(&directory)?;
                 }
                 Err(error) => return Err(error),
             }

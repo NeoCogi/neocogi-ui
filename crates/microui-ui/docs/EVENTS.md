@@ -6,7 +6,7 @@ The UI runtime borrows the session's dispatcher between traversal phases and
 commits callback edits before routing the next input event.
 
 ```rust,no_run
-use microui_redux::{Button, EventHandler, EventSession, Size, Ui};
+use microui_redux::{ButtonWidget, EventHandler, EventSession, Size, Ui};
 use microui_redux::events::Activation;
 use nc_com::NcStatus;
 
@@ -17,7 +17,7 @@ impl EventHandler<u32, Activation> for Count {
         Ok(())
     }
 }
-fn update(ui: &Ui, button: &Button, size: Size) -> Result<(), NcStatus> {
+fn update(ui: &Ui, button: &ButtonWidget, size: Size) -> Result<(), NcStatus> {
     let events = EventSession::new(0u32);
     events.subscribe_activation(button, Count)?;
     ui.update_with_events(size, &events)

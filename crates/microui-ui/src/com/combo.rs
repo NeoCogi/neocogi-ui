@@ -8,9 +8,7 @@ impl ComboObject {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
     pub(super) fn create(host: ComPtr<IWidgetHostAbi>) -> Result<ComPtr<ComboAbi>, NcStatus> {
         let value = <Self as Combo>::new(host.as_com_ref())?;
-        Ok(Self::from_value(value)
-            .query()
-            .expect("ComboObject declares the Combo class contract"))
+        Ok(Self::from_value(value).query().expect("ComboObject declares the Combo class contract"))
     }
 }
 
@@ -25,22 +23,22 @@ impl Combo for ComboObject {
     /// Reads the same position used by the semantic selection algorithm.
     fn selected(&self) -> Result<u64, NcStatus> {
         self.widget.state.readable()?;
-        Ok(self.widget.take()?.selected() as u64)
+        Ok(self.widget.core.selected() as u64)
     }
     /// Copies the current header label without exposing the plugin's string allocation.
     fn label(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.widget.state.readable()?;
-        Ok(NcString::from_utf8_str(self.widget.take()?.label()))
+        Ok(NcString::from_utf8_str(self.widget.core.label()))
     }
     /// Reports semantic popup intent independently of the application's actual popup capability.
     fn is_open(&self) -> Result<bool, NcStatus> {
         self.widget.state.readable()?;
-        Ok(self.widget.take()?.is_open())
+        Ok(self.widget.core.is_open())
     }
     /// Ordinary popup dismissal can synchronize intent without fabricating another request.
-    fn set_open(&self, open: bool) -> Result<(), NcStatus> {
+    fn set_open(&mut self, open: bool) -> Result<(), NcStatus> {
         self.widget.state.writable()?;
-        let mut core = self.widget.take()?;
+        let core = &mut self.widget.core;
         if open {
             core.open_popup();
         } else {
@@ -49,37 +47,37 @@ impl Combo for ComboObject {
         Ok(())
     }
     /// Programmatic list synchronization remains silent and validates before changing either field.
-    fn set_selection(&self, index: u64, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+    fn set_selection(&mut self, index: u64, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.selection(index, label, false)
     }
     /// An actual popup action explicitly publishes the captured user selection after committing it.
-    fn submit_selection(&self, index: u64, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+    fn submit_selection(&mut self, index: u64, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.selection(index, label, true)
     }
     /// Validates a semantic font role before changing the Combo's measurement input.
-    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
         self.widget.set_font_role(role)
     }
     /// Resolves one exact named font before replacing the Combo's selection.
-    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.widget.set_named_font(name)
     }
     /// Connects the Combo's captured-selection source directly through its class contract.
-    fn subscribe_changed(&self, sink: ComRef<'_, IComboChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_changed(&mut self, sink: ComRef<'_, IComboChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.widget.subscribe::<crate::ComboChanged>(sink)
     }
     /// Connects popup coordination independently from captured selection delivery.
-    fn subscribe_popup(&self, sink: ComRef<'_, IComboPopupSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_popup(&mut self, sink: ComRef<'_, IComboPopupSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.widget.subscribe::<crate::ComboSubmitted>(sink)
     }
 }
 impl ComboObject {
     /// One replacement path validates the complete snapshot and preserves sticky geometry invalidation.
-    fn selection(&self, index: u64, label: NcCopyFromBufferOffset<'_, u8>, submit: bool) -> Result<(), NcStatus> {
+    fn selection(&mut self, index: u64, label: NcCopyFromBufferOffset<'_, u8>, submit: bool) -> Result<(), NcStatus> {
         self.widget.state.writable()?;
         let index = usize::try_from(index).map_err(|_| NC_E_INVALID_ARG)?;
         let label = text(label)?;
-        let mut core = self.widget.take()?;
+        let core = &mut self.widget.core;
         let changed_label = core.label() != label;
         core.com_set_selection(index, label, submit);
         self.widget

@@ -113,22 +113,22 @@ pub trait IWidget {
     /// Returns the allocating runtime's identity service, which owns no tree.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus>;
     /// Claims the only tree attachment; a second call fails without changing state.
-    fn mount(&self) -> Result<(), NcStatus>;
+    fn mount(&mut self) -> Result<(), NcStatus>;
     /// Logically closes the widget without requiring its final reference release.
-    fn close(&self) -> Result<(), NcStatus>;
+    fn close(&mut self) -> Result<(), NcStatus>;
 
     /// Returns current frame, focus and pointer-routing policy as one copied record.
     fn properties(&self) -> Result<WidgetProperties, NcStatus>;
     /// Changes common options and records sticky geometry invalidation when they differ.
-    fn set_options(&self, options: WidgetOptions) -> Result<(), NcStatus>;
+    fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus>;
     /// Processes one router-owned snapshot; the text argument is UTF-8 only for Text events.
     /// Return CHANGED for every modification to measurement or child placement inputs.
-    fn update(&self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus>;
+    fn update(&mut self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus>;
 
     /// Drains sticky geometry invalidation recorded by programmatic setters.
-    fn take_change(&self) -> Result<GeometryChange, NcStatus>;
+    fn take_change(&mut self) -> Result<GeometryChange, NcStatus>;
     /// Records this widget's visual output within a validated paint invocation.
-    fn paint(&self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus>;
+    fn paint(&mut self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus>;
 }
 
 #[com_interface(auto_guid = "microui.Children:v1")]
@@ -145,44 +145,40 @@ pub trait IChildren {
 pub trait Button: IWidget + ILeafLayout {
     /// Creates an unmounted button owned by `host` from complete initial state.
     #[constructor]
-    fn new(
-        host: ComRef<'_, IWidgetHostAbi>,
-        label: NcCopyFromBufferOffset<'_, u8>,
-        options: WidgetOptions,
-    ) -> Result<Self, NcStatus>;
+    fn new(host: ComRef<'_, IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>, options: WidgetOptions) -> Result<Self, NcStatus>;
 
     /// Replaces the complete UTF-8 label; the logical input offset must be zero.
-    fn set_label(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_label(&mut self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
 
     /// Returns the current label as an independently owned immutable string object.
     fn label(&self) -> Result<ComPtr<nc_com::INcStringAbi>, NcStatus>;
 
     /// Connects the exclusive activation subscriber and returns its ownership lease.
-    fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
+    fn subscribe(&mut self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
 
     /// Selects a semantic font role and invalidates measurement only when it differs.
-    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus>;
 
     /// Resolves an exact named font in the current host bundle before committing.
-    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
 
     /// Selects a semantic icon or removes it while retaining the label.
-    fn set_icon_role(&self, icon: ContentIcon) -> Result<(), NcStatus>;
+    fn set_icon_role(&mut self, icon: ContentIcon) -> Result<(), NcStatus>;
 
     /// Resolves an exact named icon in the current host bundle before committing.
-    fn set_named_icon(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_named_icon(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
 
     /// Returns the interaction states that fill an unframed button's center.
     fn fill_states(&self) -> Result<FillStates, NcStatus>;
 
     /// Replaces the validated paint-only center-fill mask.
-    fn set_fill_states(&self, states: FillStates) -> Result<(), NcStatus>;
+    fn set_fill_states(&mut self, states: FillStates) -> Result<(), NcStatus>;
 
     /// Installs a positive-sized renderer-owned image, optionally fitted to width.
-    fn set_image(&self, image: ComRef<'_, ITextureAbi>, fit_width: bool) -> Result<(), NcStatus>;
+    fn set_image(&mut self, image: ComRef<'_, ITextureAbi>, fit_width: bool) -> Result<(), NcStatus>;
 
     /// Removes image content while retaining the current label and font.
-    fn clear_image(&self) -> Result<(), NcStatus>;
+    fn clear_image(&mut self) -> Result<(), NcStatus>;
 }
 
 #[com_class(auto_guid = "microui.UiFactory:v1")]
@@ -229,11 +225,7 @@ pub trait UiFactory {
     /// Constructs a scrollbar with a validated orientation and normalized range.
     fn create_scrollbar(&self, range: ScrollRange) -> Result<ComPtr<ScrollbarAbi>, NcStatus>;
     /// Constructs an initialized, unmounted Button through its concrete class contract.
-    fn create_button(
-        &self,
-        label: NcCopyFromBufferOffset<'_, u8>,
-        options: WidgetOptions,
-    ) -> Result<ComPtr<ButtonAbi>, NcStatus>;
+    fn create_button(&self, label: NcCopyFromBufferOffset<'_, u8>, options: WidgetOptions) -> Result<ComPtr<ButtonAbi>, NcStatus>;
 }
 
 /// An operation requires an object which has already been logically closed.
@@ -302,10 +294,10 @@ pub struct LayoutLimits {
 }
 
 #[com_interface(auto_guid = "microui.LeafLayout:v1")]
-/// Preferred-size capability for a leaf; measurement must not mutate UI state.
+/// Preferred-size capability for a leaf; measurement may refresh private resource caches.
 pub trait ILeafLayout {
     /// Computes preferred dimensions from explicit finite/unbounded axis constraints.
-    fn measure(&self, bounds: LayoutLimits, metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus>;
+    fn measure(&mut self, bounds: LayoutLimits, metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus>;
 }
 
 com_int_enum! {

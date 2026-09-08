@@ -70,11 +70,7 @@ impl ScrollParts {
 }
 impl ScrollAreaObject {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(super) fn create(
-        host: ComPtr<IWidgetHostAbi>,
-        content: ComRef<'_, IWidgetAbi>,
-        enabled: bool,
-    ) -> Result<ComPtr<ScrollAreaAbi>, NcStatus> {
+    pub(super) fn create(host: ComPtr<IWidgetHostAbi>, content: ComRef<'_, IWidgetAbi>, enabled: bool) -> Result<ComPtr<ScrollAreaAbi>, NcStatus> {
         let value = <Self as ScrollArea>::new(host.as_com_ref(), content, enabled)?;
         Ok(Self::from_value(value)
             .query()
@@ -99,9 +95,8 @@ impl ScrollArea for ScrollAreaObject {
         self.content.view()?.child(0)
     }
     /// Guards the parent state before replacing the actual content subtree, preserving fixed internal roles.
-    fn replace_content(&self, content: ComRef<'_, IWidgetAbi>) -> Result<ChildEditResult, NcStatus> {
+    fn replace_content(&mut self, content: ComRef<'_, IWidgetAbi>) -> Result<ChildEditResult, NcStatus> {
         self.widget.state.writable()?;
-        let _core = self.widget.take()?;
         self.content.replace(0, content)
     }
 }

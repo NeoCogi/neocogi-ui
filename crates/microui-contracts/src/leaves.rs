@@ -7,7 +7,7 @@ pub trait ITextContent: crate::IWidget {
     /// Returns an independently owned immutable UTF-8 snapshot.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
     /// Replaces complete UTF-8 text at offset zero, applying the control's line policy.
-    fn set_text(&self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_text(&mut self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
 }
 
 #[com_interface(auto_guid = "microui.TextEditor:v1")]
@@ -16,7 +16,7 @@ pub trait ITextEditor: ITextContent {
     /// Returns the byte offset at a Unicode scalar boundary, independent of glyph width.
     fn cursor(&self) -> Result<u64, NcStatus>;
     /// Clamps to the preceding Unicode scalar boundary and the current text length.
-    fn set_cursor(&self, cursor: u64) -> Result<(), NcStatus>;
+    fn set_cursor(&mut self, cursor: u64) -> Result<(), NcStatus>;
 }
 
 #[com_class(auto_guid = "microui.Textbox:v1")]
@@ -28,19 +28,19 @@ pub trait Textbox: crate::IWidget + crate::ILeafLayout {
     /// Returns an independently owned immutable UTF-8 snapshot.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
     /// Replaces complete UTF-8 text after applying the single-line normalization policy.
-    fn set_text(&self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_text(&mut self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Returns the byte cursor at a Unicode scalar boundary.
     fn cursor(&self) -> Result<u64, NcStatus>;
     /// Clamps to the preceding Unicode scalar boundary and current text length.
-    fn set_cursor(&self, cursor: u64) -> Result<(), NcStatus>;
+    fn set_cursor(&mut self, cursor: u64) -> Result<(), NcStatus>;
     /// Selects a semantic font role and invalidates measurement only when it differs.
-    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus>;
     /// Resolves an exact named font in the current host bundle before committing.
-    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Connects the independent changed-text subscriber.
-    fn subscribe_changed(&self, sink: ComRef<'_, crate::ITextChangedSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
+    fn subscribe_changed(&mut self, sink: ComRef<'_, crate::ITextChangedSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
     /// Connects the independent submitted-text subscriber.
-    fn subscribe_submitted(&self, sink: ComRef<'_, crate::ITextSubmittedSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
+    fn subscribe_submitted(&mut self, sink: ComRef<'_, crate::ITextSubmittedSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
 }
 
 com_int_enum! {
@@ -58,23 +58,19 @@ com_int_enum! {
 pub trait TextBlock: crate::IWidget + crate::ILeafLayout {
     /// Creates unmounted display text with an explicit wrapping policy.
     #[constructor]
-    fn new(
-        host: ComRef<'_, crate::IWidgetHostAbi>,
-        text: NcCopyFromBufferOffset<'_, u8>,
-        wrapping: TextWrapping,
-    ) -> Result<Self, NcStatus>;
+    fn new(host: ComRef<'_, crate::IWidgetHostAbi>, text: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping) -> Result<Self, NcStatus>;
     /// Returns an independently owned immutable UTF-8 snapshot.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
     /// Replaces complete UTF-8 text at offset zero.
-    fn set_text(&self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_text(&mut self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Returns the current wrapping policy.
     fn wrapping(&self) -> Result<TextWrapping, NcStatus>;
     /// Changes wrapping and records a sticky measurement change when it differs.
-    fn set_wrapping(&self, wrapping: TextWrapping) -> Result<(), NcStatus>;
+    fn set_wrapping(&mut self, wrapping: TextWrapping) -> Result<(), NcStatus>;
     /// Selects a semantic font role and invalidates measurement only when it differs.
-    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus>;
     /// Resolves an exact named font in the current host bundle before committing.
-    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
 }
 
 #[com_class(auto_guid = "microui.Checkbox:v1")]
@@ -82,26 +78,22 @@ pub trait TextBlock: crate::IWidget + crate::ILeafLayout {
 pub trait Checkbox: crate::IWidget + crate::ILeafLayout {
     /// Creates complete unmounted state owned by the supplied UI host.
     #[constructor]
-    fn new(
-        host: ComRef<'_, crate::IWidgetHostAbi>,
-        checked: bool,
-        label: NcCopyFromBufferOffset<'_, u8>,
-    ) -> Result<Self, NcStatus>;
+    fn new(host: ComRef<'_, crate::IWidgetHostAbi>, checked: bool, label: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus>;
 
     /// Returns the current boolean value.
     fn checked(&self) -> Result<bool, NcStatus>;
     /// Replaces the value without publishing user interaction or dirtying geometry.
-    fn set_checked(&self, checked: bool) -> Result<(), NcStatus>;
+    fn set_checked(&mut self, checked: bool) -> Result<(), NcStatus>;
     /// Returns an owned immutable label snapshot.
     fn label(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
     /// Replaces the complete UTF-8 label and invalidates preferred size when changed.
-    fn set_label(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_label(&mut self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Selects a semantic font role and invalidates measurement only when it differs.
-    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus>;
     /// Resolves an exact named font in the current host bundle before committing.
-    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Connects the exclusive checked-state subscriber and returns its ownership lease.
-    fn subscribe(&self, sink: ComRef<'_, crate::ICheckboxSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
+    fn subscribe(&mut self, sink: ComRef<'_, crate::ICheckboxSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
 }
 
 #[com_struct]
@@ -139,15 +131,15 @@ pub trait Slider: crate::IWidget + crate::ILeafLayout {
     /// Returns the current finite value after range clamping and step snapping.
     fn value(&self) -> Result<f32, NcStatus>;
     /// Replaces a finite value silently after applying the configured range and step.
-    fn set_value(&self, value: f32) -> Result<(), NcStatus>;
+    fn set_value(&mut self, value: f32) -> Result<(), NcStatus>;
     /// Reports whether the control currently accepts inline text editing.
     fn is_editing(&self) -> Result<bool, NcStatus>;
     /// Selects a semantic font role and invalidates measurement only when it differs.
-    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus>;
     /// Resolves an exact named font in the current host bundle before committing.
-    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Connects the exclusive finite-value subscriber and returns its ownership lease.
-    fn subscribe(&self, sink: ComRef<'_, crate::INumericSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
+    fn subscribe(&mut self, sink: ComRef<'_, crate::INumericSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
 }
 
 #[com_class(auto_guid = "microui.Number:v1")]
@@ -159,15 +151,15 @@ pub trait Number: crate::IWidget + crate::ILeafLayout {
     /// Returns the current finite value.
     fn value(&self) -> Result<f32, NcStatus>;
     /// Replaces a finite value silently using the configured precision.
-    fn set_value(&self, value: f32) -> Result<(), NcStatus>;
+    fn set_value(&mut self, value: f32) -> Result<(), NcStatus>;
     /// Reports whether the control currently accepts inline text editing.
     fn is_editing(&self) -> Result<bool, NcStatus>;
     /// Selects a semantic font role and invalidates measurement only when it differs.
-    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus>;
     /// Resolves an exact named font in the current host bundle before committing.
-    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Connects the exclusive finite-value subscriber and returns its ownership lease.
-    fn subscribe(&self, sink: ComRef<'_, crate::INumericSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
+    fn subscribe(&mut self, sink: ComRef<'_, crate::INumericSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
 }
 
 #[com_class(auto_guid = "microui.ColorSwatch:v1")]
@@ -179,15 +171,15 @@ pub trait ColorSwatch: crate::IWidget + crate::ILeafLayout {
     /// Returns an independently owned immutable UTF-8 label snapshot.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
     /// Replaces the complete UTF-8 label and invalidates preferred size when changed.
-    fn set_text(&self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_text(&mut self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Returns RGBA packed with red in the least significant byte.
     fn fill(&self) -> Result<u32, NcStatus>;
     /// Changes paint only and does not publish a user event.
-    fn set_fill(&self, rgba: u32) -> Result<(), NcStatus>;
+    fn set_fill(&mut self, rgba: u32) -> Result<(), NcStatus>;
     /// Selects a semantic font role and invalidates measurement only when it differs.
-    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus>;
     /// Resolves an exact named font in the current host bundle before committing.
-    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
 }
 
 #[com_class(auto_guid = "microui.ListItem:v1")]
@@ -199,17 +191,17 @@ pub trait ListItem: crate::IWidget + crate::ILeafLayout {
     /// Returns an independently owned immutable UTF-8 label snapshot.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
     /// Replaces the complete UTF-8 label and invalidates preferred size when changed.
-    fn set_text(&self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_text(&mut self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Selects a semantic font role and invalidates measurement only when it differs.
-    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus>;
     /// Resolves an exact named font in the current host bundle before committing.
-    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Selects a semantic icon or removes it while retaining the label.
-    fn set_icon_role(&self, icon: ContentIcon) -> Result<(), NcStatus>;
+    fn set_icon_role(&mut self, icon: ContentIcon) -> Result<(), NcStatus>;
     /// Resolves an exact named icon before replacing the existing selection.
-    fn set_named_icon(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_named_icon(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Connects the exclusive activation subscriber and returns its ownership lease.
-    fn subscribe(&self, sink: ComRef<'_, crate::IActivationSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
+    fn subscribe(&mut self, sink: ComRef<'_, crate::IActivationSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
 }
 
 #[com_class(auto_guid = "microui.ListBox:v1")]
@@ -221,17 +213,17 @@ pub trait ListBox: crate::IWidget + crate::ILeafLayout {
     /// Returns an independently owned immutable UTF-8 label snapshot.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
     /// Replaces the complete UTF-8 label and invalidates preferred size when changed.
-    fn set_text(&self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_text(&mut self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Selects a semantic font role and invalidates measurement only when it differs.
-    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus>;
     /// Resolves an exact named font in the current host bundle before committing.
-    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Installs a positive-sized immutable texture and optionally fits it to content width.
-    fn set_image(&self, image: ComRef<'_, crate::ITextureAbi>, fit_width: bool) -> Result<(), NcStatus>;
+    fn set_image(&mut self, image: ComRef<'_, crate::ITextureAbi>, fit_width: bool) -> Result<(), NcStatus>;
     /// Removes image content while retaining the current label and font.
-    fn clear_image(&self) -> Result<(), NcStatus>;
+    fn clear_image(&mut self) -> Result<(), NcStatus>;
     /// Connects the exclusive activation subscriber and returns its ownership lease.
-    fn subscribe(&self, sink: ComRef<'_, crate::IActivationSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
+    fn subscribe(&mut self, sink: ComRef<'_, crate::IActivationSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
 }
 
 com_int_enum! {
@@ -263,19 +255,16 @@ pub struct ScrollRange {
 pub trait Scrollbar: crate::IWidget + crate::ILeafLayout {
     /// Creates complete unmounted scrollbar state owned by the supplied UI host.
     #[constructor]
-    fn new(
-        host: ComRef<'_, crate::IWidgetHostAbi>,
-        range: ScrollRange,
-    ) -> Result<Self, NcStatus>;
+    fn new(host: ComRef<'_, crate::IWidgetHostAbi>, range: ScrollRange) -> Result<Self, NcStatus>;
 
     /// Returns a coherent copied range snapshot.
     fn range(&self) -> Result<ScrollRange, NcStatus>;
     /// Replaces nonnegative lengths together and clamps the existing offset.
-    fn set_lengths(&self, viewport: i32, content: i32) -> Result<(), NcStatus>;
+    fn set_lengths(&mut self, viewport: i32, content: i32) -> Result<(), NcStatus>;
     /// Clamps a requested offset to the current range without publishing user input.
-    fn set_offset(&self, offset: i32) -> Result<(), NcStatus>;
+    fn set_offset(&mut self, offset: i32) -> Result<(), NcStatus>;
     /// Connects the exclusive offset subscriber and returns its ownership lease.
-    fn subscribe(&self, sink: ComRef<'_, crate::IScrollbarSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
+    fn subscribe(&mut self, sink: ComRef<'_, crate::IScrollbarSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
 }
 
 com_int_enum! {
@@ -298,10 +287,10 @@ com_int_enum! {
 /// Optional typography capability on concrete text-bearing widget objects.
 pub trait IFontStyle {
     /// Selects a semantic role and invalidates measurement only when it differs.
-    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus>;
     /// Resolves an exact font in this widget's runtime bundle before committing.
     /// Unknown names fail without replacing the previous selection.
-    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
 }
 
 com_int_enum! {
@@ -355,7 +344,7 @@ pub trait IMultilineEditor: ITextEditor {
     /// Returns the current explicit wrapping policy.
     fn wrapping(&self) -> Result<TextWrapping, NcStatus>;
     /// Changes wrapping and schedules both geometry refresh and caret reveal.
-    fn set_wrapping(&self, wrapping: TextWrapping) -> Result<(), NcStatus>;
+    fn set_wrapping(&mut self, wrapping: TextWrapping) -> Result<(), NcStatus>;
 }
 
 #[com_class(auto_guid = "microui.TextArea:v1")]
@@ -363,32 +352,27 @@ pub trait IMultilineEditor: ITextEditor {
 pub trait TextArea: crate::IWidget + crate::IContainerLayout + crate::IScrolling {
     /// Creates a fixed editor composition with normalized text and explicit wrapping/scroll policy.
     #[constructor]
-    fn new(
-        host: ComRef<'_, crate::IWidgetHostAbi>,
-        text: NcCopyFromBufferOffset<'_, u8>,
-        wrapping: TextWrapping,
-        scrolling: bool,
-    ) -> Result<Self, NcStatus>;
+    fn new(host: ComRef<'_, crate::IWidgetHostAbi>, text: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping, scrolling: bool) -> Result<Self, NcStatus>;
     /// Returns an independently owned immutable UTF-8 snapshot from the actual editor.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
     /// Replaces normalized text on the actual editor and schedules caret reveal.
-    fn set_text(&self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_text(&mut self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Returns the actual editor's scalar-aligned byte cursor.
     fn cursor(&self) -> Result<u64, NcStatus>;
     /// Clamps and installs the actual editor's byte cursor.
-    fn set_cursor(&self, cursor: u64) -> Result<(), NcStatus>;
+    fn set_cursor(&mut self, cursor: u64) -> Result<(), NcStatus>;
     /// Returns the actual editor's wrapping policy.
     fn wrapping(&self) -> Result<TextWrapping, NcStatus>;
     /// Changes wrapping and schedules text geometry and caret refresh.
-    fn set_wrapping(&self, wrapping: TextWrapping) -> Result<(), NcStatus>;
+    fn set_wrapping(&mut self, wrapping: TextWrapping) -> Result<(), NcStatus>;
     /// Selects a semantic font role on the actual editor.
-    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus>;
     /// Resolves an exact named font in the current host bundle before committing.
-    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Connects the actual editor's independent changed-text subscriber.
-    fn subscribe_changed(&self, sink: ComRef<'_, crate::ITextChangedSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
+    fn subscribe_changed(&mut self, sink: ComRef<'_, crate::ITextChangedSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
     /// Connects the actual editor's independent submitted-text subscriber.
-    fn subscribe_submitted(&self, sink: ComRef<'_, crate::ITextSubmittedSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
+    fn subscribe_submitted(&mut self, sink: ComRef<'_, crate::ITextSubmittedSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
 }
 
 #[com_class(auto_guid = "microui.Combo:v1")]
@@ -405,17 +389,17 @@ pub trait Combo: crate::IWidget + crate::ILeafLayout {
     /// Reports the header's intended popup state, not an independently observed window visibility.
     fn is_open(&self) -> Result<bool, NcStatus>;
     /// Synchronizes popup state silently after ordinary popup dismissal or programmatic coordination.
-    fn set_open(&self, open: bool) -> Result<(), NcStatus>;
+    fn set_open(&mut self, open: bool) -> Result<(), NcStatus>;
     /// Atomically installs a valid index/label snapshot without publishing user selection.
-    fn set_selection(&self, index: u64, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_selection(&mut self, index: u64, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Commits an actual popup selection, closes the header, and emits changed only when index or label differs.
-    fn submit_selection(&self, index: u64, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn submit_selection(&mut self, index: u64, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Selects a semantic font role and invalidates measurement only when it differs.
-    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus>;
     /// Resolves an exact named font in the current host bundle before committing.
-    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Connects the independent captured-selection subscriber.
-    fn subscribe_changed(&self, sink: ComRef<'_, crate::IComboChangedSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
+    fn subscribe_changed(&mut self, sink: ComRef<'_, crate::IComboChangedSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
     /// Connects the independent popup-coordination subscriber.
-    fn subscribe_popup(&self, sink: ComRef<'_, crate::IComboPopupSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
+    fn subscribe_popup(&mut self, sink: ComRef<'_, crate::IComboPopupSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
 }

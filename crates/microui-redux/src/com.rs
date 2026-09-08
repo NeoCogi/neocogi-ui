@@ -35,7 +35,7 @@ impl<I: ComInterface> Widget<I> {
     }
 
     /// Replaces common options through the same widget object used by the runtime.
-    pub fn set_options(&self, options: WidgetOptions) -> Result<(), NcStatus> {
+    pub fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus> {
         self.node_interface()?.set_options(options)
     }
 
@@ -51,7 +51,7 @@ pub type ButtonWidget = Widget<ButtonAbi>;
 
 impl Widget<ButtonAbi> {
     /// Replaces the label with a synchronous UTF-8 copy owned by the plugin.
-    pub fn set_label(&self, label: &str) -> Result<(), NcStatus> {
+    pub fn set_label(&mut self, label: &str) -> Result<(), NcStatus> {
         self.interface.set_label(NcCopyFromBufferOffset::new(0, label.as_bytes()))
     }
 
@@ -63,7 +63,7 @@ impl Widget<ButtonAbi> {
     /// Connects a concrete typed sink and returns the caller-owned subscription.
     /// Retain this lease in the application event session; the runtime never owns
     /// an application handler. A second live subscriber is rejected by the source.
-    pub fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    pub fn subscribe(&mut self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.interface.subscribe(sink)
     }
 }
@@ -98,11 +98,11 @@ macro_rules! text_proxy {
                 self.interface.text()?.to_string()
             }
             /// Replaces text through the control's documented normalization policy.
-            pub fn set_text(&self, text: &str) -> Result<(), NcStatus> {
+            pub fn set_text(&mut self, text: &str) -> Result<(), NcStatus> {
                 self.interface.set_text(NcCopyFromBufferOffset::new(0, text.as_bytes()))
             }
             /// Clears text using the same cursor and invalidation rules as replacement.
-            pub fn clear(&self) -> Result<(), NcStatus> {
+            pub fn clear(&mut self) -> Result<(), NcStatus> {
                 self.set_text("")
             }
         }
@@ -123,7 +123,7 @@ impl Widget<CheckboxAbi> {
         self.interface.checked()
     }
     /// Changes checked state silently without invalidating fixed checkbox geometry.
-    pub fn set_checked(&self, checked: bool) -> Result<(), NcStatus> {
+    pub fn set_checked(&mut self, checked: bool) -> Result<(), NcStatus> {
         self.interface.set_checked(checked)
     }
     /// Copies the current label snapshot.
@@ -131,15 +131,15 @@ impl Widget<CheckboxAbi> {
         self.interface.label()?.to_string()
     }
     /// Replaces label text and records a sticky preferred-size change when needed.
-    pub fn set_label(&self, label: &str) -> Result<(), NcStatus> {
+    pub fn set_label(&mut self, label: &str) -> Result<(), NcStatus> {
         self.interface.set_label(NcCopyFromBufferOffset::new(0, label.as_bytes()))
     }
     /// Selects typography directly through the Checkbox class contract.
-    pub fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
+    pub fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
         self.interface.set_font_role(role)
     }
     /// Resolves a named font directly through the Checkbox class contract.
-    pub fn set_named_font(&self, name: &str) -> Result<(), NcStatus> {
+    pub fn set_named_font(&mut self, name: &str) -> Result<(), NcStatus> {
         self.interface.set_named_font(NcCopyFromBufferOffset::new(0, name.as_bytes()))
     }
 }
@@ -152,7 +152,7 @@ macro_rules! editor_proxy {
                 self.interface.cursor()
             }
             /// Clamps to text length and the preceding Unicode scalar boundary.
-            pub fn set_cursor(&self, cursor: u64) -> Result<(), NcStatus> {
+            pub fn set_cursor(&mut self, cursor: u64) -> Result<(), NcStatus> {
                 self.interface.set_cursor(cursor)
             }
         }
@@ -170,7 +170,7 @@ macro_rules! wrapping_proxy {
                 self.interface.wrapping()
             }
             /// Updates wrapping and invalidates preferred size when the policy changes.
-            pub fn set_wrapping(&self, wrapping: TextWrapping) -> Result<(), NcStatus> {
+            pub fn set_wrapping(&mut self, wrapping: TextWrapping) -> Result<(), NcStatus> {
                 self.interface.set_wrapping(wrapping)
             }
         }
@@ -194,7 +194,7 @@ macro_rules! numeric_proxy {
                 self.interface.value()
             }
             /// Replaces a finite value silently, applying slider bounds where relevant.
-            pub fn set_value(&self, value: f32) -> Result<(), NcStatus> {
+            pub fn set_value(&mut self, value: f32) -> Result<(), NcStatus> {
                 self.interface.set_value(value)
             }
             /// Reports the inline edit mode which controls routed text input.
@@ -212,7 +212,7 @@ impl Widget<ColorSwatchAbi> {
         self.interface.fill()
     }
     /// Replaces color without publishing a user event or changing preferred size.
-    pub fn set_fill(&self, rgba: u32) -> Result<(), NcStatus> {
+    pub fn set_fill(&mut self, rgba: u32) -> Result<(), NcStatus> {
         self.interface.set_fill(rgba)
     }
 }
@@ -222,11 +222,11 @@ impl Widget<ScrollbarAbi> {
         self.interface.range()
     }
     /// Replaces nonnegative range lengths atomically.
-    pub fn set_lengths(&self, viewport: i32, content: i32) -> Result<(), NcStatus> {
+    pub fn set_lengths(&mut self, viewport: i32, content: i32) -> Result<(), NcStatus> {
         self.interface.set_lengths(viewport, content)
     }
     /// Silently clamps a requested offset to the current range.
-    pub fn set_offset(&self, offset: i32) -> Result<(), NcStatus> {
+    pub fn set_offset(&mut self, offset: i32) -> Result<(), NcStatus> {
         self.interface.set_offset(offset)
     }
 }
@@ -308,10 +308,10 @@ impl WidgetFactory {
 
     /// Creates and initializes an unmounted button in one concrete API operation.
     pub fn button(&self, label: &str) -> Result<ButtonWidget, NcStatus> {
-        Ok(ButtonWidget::from_interface(self.interface.create_button(
-            NcCopyFromBufferOffset::new(0, label.as_bytes()),
-            WidgetOptions::FRAME,
-        )?))
+        Ok(ButtonWidget::from_interface(
+            self.interface
+                .create_button(NcCopyFromBufferOffset::new(0, label.as_bytes()), WidgetOptions::FRAME)?,
+        ))
     }
 }
 
@@ -334,14 +334,24 @@ impl<'a> Painter<'a> {
     /// Narrows local clipping by value; no clip stack, callback, extra COM object or Drop-time
     /// restoration is involved. The parent painter remains usable with its original clip.
     pub fn clipped(&self, rect: Rect) -> Result<Self, NcStatus> {
-        if rect.width < 0 || rect.height < 0 { return Err(nc_com::NC_E_INVALID_ARG); }
+        if rect.width < 0 || rect.height < 0 {
+            return Err(nc_com::NC_E_INVALID_ARG);
+        }
         let parent = self.scope.clip;
         let x = parent.x.max(rect.x);
         let y = parent.y.max(rect.y);
         let right = (i64::from(parent.x) + i64::from(parent.width)).min(i64::from(rect.x) + i64::from(rect.width));
         let bottom = (i64::from(parent.y) + i64::from(parent.height)).min(i64::from(rect.y) + i64::from(rect.height));
-        let clip = Rect { x, y, width: (right - i64::from(x)).max(0) as i32, height: (bottom - i64::from(y)).max(0) as i32 };
-        Ok(Self { interface: self.interface, scope: PaintScope { invocation: self.scope.invocation, clip } })
+        let clip = Rect {
+            x,
+            y,
+            width: (right - i64::from(x)).max(0) as i32,
+            height: (bottom - i64::from(y)).max(0) as i32,
+        };
+        Ok(Self {
+            interface: self.interface,
+            scope: PaintScope { invocation: self.scope.invocation, clip },
+        })
     }
     /// Records a finite solid line; the UI owns tessellation and the currently installed material.
     pub fn stroke_line(&self, from: PaintPoint, to: PaintPoint, width: f32, rgba: u32) -> Result<(), NcStatus> {
@@ -496,11 +506,11 @@ macro_rules! font_proxy {
     (direct $interface:ty) => {
         impl Widget<$interface> {
             /// Selects typography directly through the concrete class contract.
-            pub fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
+            pub fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
                 self.interface.set_font_role(role)
             }
             /// Resolves a named font directly through the concrete class contract.
-            pub fn set_named_font(&self, name: &str) -> Result<(), NcStatus> {
+            pub fn set_named_font(&mut self, name: &str) -> Result<(), NcStatus> {
                 self.interface.set_named_font(NcCopyFromBufferOffset::new(0, name.as_bytes()))
             }
         }
@@ -508,11 +518,11 @@ macro_rules! font_proxy {
     ($interface:ty) => {
         impl Widget<$interface> {
             /// Selects typography through this same widget object's optional capability.
-            pub fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
+            pub fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
                 self.interface.query::<IFontStyleAbi>()?.set_font_role(role)
             }
             /// Resolves a named font once in this widget's resource bundle.
-            pub fn set_named_font(&self, name: &str) -> Result<(), NcStatus> {
+            pub fn set_named_font(&mut self, name: &str) -> Result<(), NcStatus> {
                 self.interface
                     .query::<IFontStyleAbi>()?
                     .set_named_font(NcCopyFromBufferOffset::new(0, name.as_bytes()))
@@ -532,29 +542,29 @@ font_proxy!(direct ListItemAbi);
 
 impl Widget<ListItemAbi> {
     /// Selects an icon role directly through the concrete ListItem class contract.
-    pub fn set_icon_role(&self, icon: ContentIcon) -> Result<(), NcStatus> {
+    pub fn set_icon_role(&mut self, icon: ContentIcon) -> Result<(), NcStatus> {
         self.interface.set_icon_role(icon)
     }
     /// Resolves a named icon directly through the concrete ListItem class contract.
-    pub fn set_named_icon(&self, name: &str) -> Result<(), NcStatus> {
+    pub fn set_named_icon(&mut self, name: &str) -> Result<(), NcStatus> {
         self.interface.set_named_icon(NcCopyFromBufferOffset::new(0, name.as_bytes()))
     }
 }
 impl Widget<ButtonAbi> {
     /// Selects typography directly through the Button class contract.
-    pub fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
+    pub fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
         self.interface.set_font_role(role)
     }
     /// Resolves a named font directly through the Button class contract.
-    pub fn set_named_font(&self, name: &str) -> Result<(), NcStatus> {
+    pub fn set_named_font(&mut self, name: &str) -> Result<(), NcStatus> {
         self.interface.set_named_font(NcCopyFromBufferOffset::new(0, name.as_bytes()))
     }
     /// Selects an adjacent semantic icon directly through the Button class contract.
-    pub fn set_icon_role(&self, icon: ContentIcon) -> Result<(), NcStatus> {
+    pub fn set_icon_role(&mut self, icon: ContentIcon) -> Result<(), NcStatus> {
         self.interface.set_icon_role(icon)
     }
     /// Resolves a named adjacent icon directly through the Button class contract.
-    pub fn set_named_icon(&self, name: &str) -> Result<(), NcStatus> {
+    pub fn set_named_icon(&mut self, name: &str) -> Result<(), NcStatus> {
         self.interface.set_named_icon(NcCopyFromBufferOffset::new(0, name.as_bytes()))
     }
     /// Reads the current mask controlling center fill on an unframed button.
@@ -562,15 +572,15 @@ impl Widget<ButtonAbi> {
         self.interface.fill_states()
     }
     /// Changes the validated paint-only fill mask.
-    pub fn set_fill_states(&self, states: FillStates) -> Result<(), NcStatus> {
+    pub fn set_fill_states(&mut self, states: FillStates) -> Result<(), NcStatus> {
         self.interface.set_fill_states(states)
     }
     /// Installs a renderer-owned image directly through the Button class contract.
-    pub fn set_image(&self, image: ComRef<'_, ITextureAbi>, fit_width: bool) -> Result<(), NcStatus> {
+    pub fn set_image(&mut self, image: ComRef<'_, ITextureAbi>, fit_width: bool) -> Result<(), NcStatus> {
         self.interface.set_image(image, fit_width)
     }
     /// Returns to label-only content without generating an activation event.
-    pub fn clear_image(&self) -> Result<(), NcStatus> {
+    pub fn clear_image(&mut self) -> Result<(), NcStatus> {
         self.interface.clear_image()
     }
 }
@@ -597,20 +607,20 @@ impl Widget<ComboAbi> {
         self.interface.is_open()
     }
     /// Synchronizes intent silently after actual popup visibility changes.
-    pub fn set_open(&self, open: bool) -> Result<(), NcStatus> {
+    pub fn set_open(&mut self, open: bool) -> Result<(), NcStatus> {
         self.interface.set_open(open)
     }
     /// Installs an already-resolved application selection without publishing a user event.
-    pub fn set_selection(&self, index: u64, label: &str) -> Result<(), NcStatus> {
+    pub fn set_selection(&mut self, index: u64, label: &str) -> Result<(), NcStatus> {
         self.interface.set_selection(index, NcCopyFromBufferOffset::new(0, label.as_bytes()))
     }
     /// Resolves and clamps local list state, sending only its selected position and label across COM.
-    pub fn update_items<Item: AsRef<str>>(&self, items: &[Item]) -> Result<(), NcStatus> {
+    pub fn update_items<Item: AsRef<str>>(&mut self, items: &[Item]) -> Result<(), NcStatus> {
         let index = usize::try_from(self.selected()?).unwrap_or(usize::MAX).min(items.len().saturating_sub(1));
         self.set_selection(index as u64, items.get(index).map_or("", AsRef::as_ref))
     }
     /// Commits an actual popup submission, closes the header and publishes changed when its snapshot differs.
-    pub fn select<Item: AsRef<str>>(&self, index: usize, items: &[Item]) -> Result<Option<String>, NcStatus> {
+    pub fn select<Item: AsRef<str>>(&mut self, index: usize, items: &[Item]) -> Result<Option<String>, NcStatus> {
         let index = index.min(items.len().saturating_sub(1));
         let label = items.get(index).map(AsRef::as_ref);
         self.interface
@@ -618,22 +628,22 @@ impl Widget<ComboAbi> {
         Ok(label.map(str::to_owned))
     }
     /// Selects typography directly through the Combo class contract.
-    pub fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
+    pub fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
         self.interface.set_font_role(role)
     }
     /// Resolves a named font directly through the Combo class contract.
-    pub fn set_named_font(&self, name: &str) -> Result<(), NcStatus> {
+    pub fn set_named_font(&mut self, name: &str) -> Result<(), NcStatus> {
         self.interface.set_named_font(NcCopyFromBufferOffset::new(0, name.as_bytes()))
     }
 }
 
 impl ListBoxWidget {
     /// Installs this renderer-owned image directly through the concrete class contract.
-    pub fn set_image(&self, image: ComRef<'_, ITextureAbi>, fit_width: bool) -> Result<(), NcStatus> {
+    pub fn set_image(&mut self, image: ComRef<'_, ITextureAbi>, fit_width: bool) -> Result<(), NcStatus> {
         self.interface.set_image(image, fit_width)
     }
     /// Returns to label-only content without generating an activation event.
-    pub fn clear_image(&self) -> Result<(), NcStatus> {
+    pub fn clear_image(&mut self) -> Result<(), NcStatus> {
         self.interface.clear_image()
     }
 }

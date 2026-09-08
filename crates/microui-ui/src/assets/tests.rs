@@ -156,7 +156,8 @@ impl IRenderer for UploadRenderer {
         // Observational resource reads still expose the old, fully installed UI revision.
         assert_eq!(self.0.button.host()?.assets()?.as_ptr(), self.0.runtime.assets()?.as_ptr());
         assert_eq!(self.0.runtime.update(SIZE), Err(UI_E_BUSY));
-        assert_eq!(self.0.button.set_label(NcCopyFromBufferOffset::new(0, b"reentrant")), Err(UI_E_BUSY));
+        let mut button = self.0.button.clone();
+        assert_eq!(button.set_label(NcCopyFromBufferOffset::new(0, b"reentrant")), Err(UI_E_BUSY));
         let recursive: ComPtr<IRendererAbi> = Self::from_value(Self(self.0.clone())).query()?;
         assert_eq!(self.0.runtime.install_assets(source, recursive.as_com_ref()), Err(UI_E_BUSY));
         if self.0.fail.get() {
@@ -283,7 +284,7 @@ fn runtime_install_is_atomic_and_updates_shared_widget_measurement() {
     });
     let renderer: ComPtr<IRendererAbi> = UploadRenderer::from_value(UploadRenderer(probe.clone())).query().unwrap();
     let _window = ui.window("assets", Rect { x: 0, y: 0, width: 400, height: 250 }, &button).unwrap();
-    let leaf: ComPtr<ILeafLayoutAbi> = button_interface.query().unwrap();
+    let mut leaf: ComPtr<ILeafLayoutAbi> = button_interface.query().unwrap();
     let metrics: ComPtr<ITextMetricsAbi> = UnusedMetrics::from_value(UnusedMetrics).query().unwrap();
     let limits = LayoutLimits {
         width: AxisLimit { kind: LimitKind::UNBOUNDED, extent: 0 },

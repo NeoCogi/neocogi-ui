@@ -231,20 +231,14 @@ impl IMenuItem for Item {
 }
 impl IFontStyle for Item {
     /// Uses the same validated font-role mapping as ordinary COM text widgets.
-    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
         self.edit(Edit::Font(crate::FontRef::Role(super::super::widget::local_font_role(role)?)))
     }
     /// Resolves a named font once against the exact owning runtime resource bundle.
-    fn set_named_font(&self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+    fn set_named_font(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         let runtime = self.owner()?;
         let name = text(input)?;
-        let font = runtime
-            .factory
-            .resources
-            .current()
-            .original()
-            .font_id(name)
-            .ok_or(nc_com::NC_E_NOT_FOUND)?;
+        let font = runtime.factory.resources.current().original().font_id(name).ok_or(nc_com::NC_E_NOT_FOUND)?;
         self.edit(Edit::Font(crate::FontRef::Named(font)))
     }
 }

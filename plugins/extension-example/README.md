@@ -27,7 +27,7 @@ once and shares the same event transport as built-ins:
 submitted: EventSource<Activation>,
 
 // After committing the count:
-self.submitted.emit(Activation { label: self.count.get().to_string() });
+self.submitted.emit(Activation { label: self.count.to_string() });
 
 // IActivationEvents::subscribe returns the application-owned lease:
 self.submitted.subscribe(sink)
@@ -41,8 +41,9 @@ measurement before returning from the same update.
 The inset retains one `IChildrenEditor` and exposes its read-only view. It reads
 the authoritative child count instead of maintaining a second topology flag. Its
 layout methods call indexed `ILayoutService` operations using only the supplied
-scope; they retain neither that service nor its invocation token. A reentry guard
-protects content across outward calls without holding a native mutable borrow.
+scope; they retain neither that service nor its invocation token. Mutable contract
+receivers and the generated object-wide call gate protect the object's inline state
+across outward calls without an implementation-specific guard.
 
 `IWidgetProbe` counts actual phase attempts for acceptance and measurement. Counts
 remain readable after logical closure, so the host can verify each subtree closes

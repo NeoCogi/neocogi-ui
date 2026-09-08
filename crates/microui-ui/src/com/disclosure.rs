@@ -36,12 +36,7 @@ impl DisclosureObject {
 
 impl Disclosure for DisclosureObject {
     /// Validates presentation and label before constructing the complete fixed composition.
-    fn new(
-        host: ComRef<'_, IWidgetHostAbi>,
-        label: NcCopyFromBufferOffset<'_, u8>,
-        style: DisclosureStyle,
-        expanded: bool,
-    ) -> Result<Self, NcStatus> {
+    fn new(host: ComRef<'_, IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>, style: DisclosureStyle, expanded: bool) -> Result<Self, NcStatus> {
         let label = text(label)?;
         host.check_mutation()?;
         let variant = match style {
@@ -55,11 +50,7 @@ impl Disclosure for DisclosureObject {
             variant.header_options(),
             crate::ui_node::DisclosureHeader::com_new(model.clone(), label.to_owned(), variant),
         )?;
-        let body = super::containers::LinearObject::create(
-            host.add_ref(),
-            FlowDirection::TOP_TO_BOTTOM,
-            CrossSize::Stretch.into(),
-        )?;
+        let body = super::containers::LinearObject::create(host.add_ref(), FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch.into())?;
         let editor = host.create_children()?;
         editor.insert(0, header.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
         editor.insert(1, body.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
@@ -73,12 +64,12 @@ impl Disclosure for DisclosureObject {
     /// Observes the same expansion bit used by header input and container layout.
     fn expanded(&self) -> Result<bool, NcStatus> {
         self.widget.state.readable()?;
-        Ok(self.widget.take()?.is_expanded())
+        Ok(self.widget.core.is_expanded())
     }
     /// Changes the shared bit through the concrete algorithm; its sticky marker survives skipped updates.
-    fn set_expanded(&self, expanded: bool) -> Result<(), NcStatus> {
+    fn set_expanded(&mut self, expanded: bool) -> Result<(), NcStatus> {
         self.widget.state.writable()?;
-        let mut core = self.widget.take()?;
+        let core = &mut self.widget.core;
         if expanded {
             core.expand();
         } else {

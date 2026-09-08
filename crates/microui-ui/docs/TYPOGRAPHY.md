@@ -86,10 +86,10 @@ recipes and host-side source generation.
 After installing the compiled bundle, select a font on an actual COM widget:
 
 ```rust,no_run
-use microui_redux::{TextBlock, TextFontRole, TextWrapping, Ui};
+use microui_redux::{TextBlockWidget, TextFontRole, TextWrapping, Ui};
 use nc_com::NcStatus;
-fn heading(ui: &Ui) -> Result<TextBlock, NcStatus> {
-    let title = ui.widgets().text_block("Inspector", TextWrapping::NONE)?;
+fn heading(ui: &Ui) -> Result<TextBlockWidget, NcStatus> {
+    let mut title = ui.widgets().text_block("Inspector", TextWrapping::NONE)?;
     title.set_font_role(TextFontRole::HEADING)?;
     Ok(title)
 }

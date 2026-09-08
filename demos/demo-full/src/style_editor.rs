@@ -184,11 +184,11 @@ impl StyleEditor {
         let compiler = nc_com::Runtime::global().construct(())?;
         let mut metrics = base.metrics()?;
         let mut palette = FlatPalette::default();
-        let content = column(ui)?;
+        let mut content = column(ui)?;
         let mut colors = Vec::new();
         for role in ColorRole::ALL {
-            let line = row(ui)?;
-            append(&line, &label(ui, role.label())?, LayoutTrack::Fixed { extent: 80 })?;
+            let mut line = row(ui)?;
+            append(&mut line, &label(ui, role.label())?, LayoutTrack::Fixed { extent: 80 })?;
             let color = role.value(&mut palette);
             let channels = [
                 slider(ui, color.r as f32, 255.)?,
@@ -197,21 +197,21 @@ impl StyleEditor {
                 slider(ui, color.a as f32, 255.)?,
             ];
             for control in &channels {
-                append(&line, control, LayoutTrack::Flex { weight: 1. })?;
+                append(&mut line, control, LayoutTrack::Flex { weight: 1. })?;
             }
             let swatch = ui.widgets().color_swatch(rgba(*color), "")?;
-            append(&line, &swatch, LayoutTrack::Flex { weight: 1. })?;
-            append(&content, &line, LayoutTrack::Content)?;
+            append(&mut line, &swatch, LayoutTrack::Flex { weight: 1. })?;
+            append(&mut content, &line, LayoutTrack::Content)?;
             colors.push(ColorRow { role, channels, swatch });
         }
         let mut values = Vec::new();
         for metric in Metric::ALL {
             let (name, high) = metric.presentation();
-            let line = row(ui)?;
+            let mut line = row(ui)?;
             let control = slider(ui, *metric.value(&mut metrics) as f32, high)?;
-            append(&line, &label(ui, name)?, LayoutTrack::Fixed { extent: 80 })?;
-            append(&line, &control, LayoutTrack::Flex { weight: 1. })?;
-            append(&content, &line, LayoutTrack::Content)?;
+            append(&mut line, &label(ui, name)?, LayoutTrack::Fixed { extent: 80 })?;
+            append(&mut line, &control, LayoutTrack::Flex { weight: 1. })?;
+            append(&mut content, &line, LayoutTrack::Content)?;
             values.push((metric, control));
         }
         let root = ui.widgets().scroll_area(&content, true)?;
@@ -269,9 +269,9 @@ impl StyleEditor {
     }
     /// Silent control updates neither synthesize user events nor continuously reinstall a theme.
     fn refresh(&mut self) -> Result<(), NcStatus> {
-        for row in &self.colors {
+        for row in &mut self.colors {
             let color = row.role.value(&mut self.palette);
-            for (channel, control) in Channel::ALL.into_iter().zip(&row.channels) {
+            for (channel, control) in Channel::ALL.into_iter().zip(&mut row.channels) {
                 control.set_value(*channel.value(color) as f32)?;
                 let options = WidgetOptions::FRAME.bits
                     | WidgetOptions::ALIGN_CENTER.bits
@@ -284,7 +284,7 @@ impl StyleEditor {
             }
             row.swatch.set_fill(rgba(*color))?;
         }
-        for (metric, control) in &self.values {
+        for (metric, control) in &mut self.values {
             control.set_value(*metric.value(&mut self.metrics) as f32)?;
         }
         Ok(())

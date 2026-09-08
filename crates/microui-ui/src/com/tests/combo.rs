@@ -52,7 +52,7 @@ impl EventHandler<Selection, microui_redux::events::ComboChanged> for RecordSele
 #[test]
 fn combo_coordinates_real_popup_and_keeps_generic_list_data_in_the_static_caller() {
     let ui = microui_redux::Ui::from_interface(runtime()).unwrap();
-    let combo = ui.widgets().combo().unwrap();
+    let mut combo = ui.widgets().combo().unwrap();
     let items = vec!["first".to_owned(), "second".to_owned()];
     combo.update_items(&items).unwrap();
     let window = ui.window("combo", RECT, &combo).unwrap();

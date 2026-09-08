@@ -6,10 +6,6 @@
 use crate::*;
 use microui_contracts::widget::WidgetState;
 use nc_com::{com_object, ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
-use std::{
-    cell::RefCell,
-    ops::{Deref, DerefMut},
-};
 
 /// Statically dispatched behavior stored inline in one application-owned COM widget.
 pub trait LeafContent: 'static {
@@ -39,15 +35,8 @@ pub trait LeafContent: 'static {
 struct LeafObject<Content: LeafContent> {
     /// One common options, mount, closure and geometry-invalidation state.
     state: WidgetState,
-    /// Behavior moves out for each call so no RefCell guard survives an outward interface call.
-    content: RefCell<Option<Content>>,
-}
-impl<Content: LeafContent> LeafObject<Content> {
-    /// Takes exclusive behavior ownership, rejecting nested measurement/update/painting as BUSY.
-    fn content(&self) -> Result<ContentAccess<'_, Content>, NcStatus> {
-        let value = self.content.try_borrow_mut().map_err(|_| UI_E_BUSY)?.take().ok_or(UI_E_BUSY)?;
-        Ok(ContentAccess { slot: &self.content, value: Some(value) })
-    }
+    /// Statically dispatched application behavior owned directly by this COM object.
+    content: Content,
 }
 impl<Content: LeafContent> IWidget for LeafObject<Content> {
     /// Supplies the same runtime authority used by built-in COM objects.
@@ -55,18 +44,17 @@ impl<Content: LeafContent> IWidget for LeafObject<Content> {
         Ok(self.state.host().add_ref())
     }
     /// Mount-once semantics come from the single common state, not the content behavior.
-    fn mount(&self) -> Result<(), NcStatus> {
+    fn mount(&mut self) -> Result<(), NcStatus> {
         self.state.mount()
     }
     /// Commits logical closure once and then lets the concrete content terminate its own activity.
-    fn close(&self) -> Result<(), NcStatus> {
-        let mut content = self.content()?;
+    fn close(&mut self) -> Result<(), NcStatus> {
         if self.state.close()? {
-            content.close()?;
+            self.content.close()?;
         }
         Ok(())
     }
-    /// Common observations need no behavior borrow and remain safe during content call-outs.
+    /// Common observations read only lifecycle state and remain safe during shared content calls.
     fn properties(&self) -> Result<WidgetProperties, NcStatus> {
         Ok(WidgetProperties {
             options: self.state.options()?,
@@ -75,15 +63,15 @@ impl<Content: LeafContent> IWidget for LeafObject<Content> {
         })
     }
     /// Options and their sticky geometry effect follow the standard widget contract.
-    fn set_options(&self, options: WidgetOptions) -> Result<(), NcStatus> {
+    fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus> {
         self.state.set_options(options)
     }
-    /// Validates all copied input before taking behavior; changes remain sticky until collected.
-    fn update(&self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
+    /// Validates all copied input before mutating content; changes remain sticky until collected.
+    fn update(&mut self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
         self.state.writable()?;
         state.validate()?;
         let (event, text) = decode_widget_event(event, text)?;
-        let change = self.content()?.update(state, event, text).inspect_err(|_| {
+        let change = self.content.update(state, event, text).inspect_err(|_| {
             // A failed behavior update may have committed part of its local state. Retain a
             // conservative geometry marker so recovery cannot reuse an earlier measurement.
             self.state.record_change(GeometryChange::CHANGED);
@@ -96,50 +84,23 @@ impl<Content: LeafContent> IWidget for LeafObject<Content> {
         Ok(change)
     }
     /// Setter and update invalidation use the same collection path.
-    fn take_change(&self) -> Result<GeometryChange, NcStatus> {
+    fn take_change(&mut self) -> Result<GeometryChange, NcStatus> {
         self.state.take_change()
     }
     /// Content receives a borrowing convenience; retaining raw paint authority still expires normally.
-    fn paint(&self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
+    fn paint(&mut self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
         self.state.readable()?;
         state.validate()?;
-        self.content()?.paint(state, &Painter::from_call(painter, scope))
+        self.content.paint(state, &Painter::from_call(painter, scope))
     }
 }
 impl<Content: LeafContent> ILeafLayout for LeafObject<Content> {
     /// Observational preferred-size calls reject stale lifetime, malformed limits and content reentry.
-    fn measure(&self, bounds: LayoutLimits, metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
+    fn measure(&mut self, bounds: LayoutLimits, metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
         self.state.readable()?;
         bounds.width.validate()?;
         bounds.height.validate()?;
-        self.content()?.measure(bounds, metrics)
-    }
-}
-
-/// Stack-owned behavior transaction restores the value on ordinary errors and unwinding alike.
-struct ContentAccess<'a, Content> {
-    /// The object's slot remains empty while foreign code can reenter it.
-    slot: &'a RefCell<Option<Content>>,
-    /// Exactly one live behavior value is owned by this transaction.
-    value: Option<Content>,
-}
-impl<Content> Deref for ContentAccess<'_, Content> {
-    type Target = Content;
-    /// Observational methods borrow only the detached value owned by this stack transaction.
-    fn deref(&self) -> &Content {
-        self.value.as_ref().expect("live content transaction")
-    }
-}
-impl<Content> DerefMut for ContentAccess<'_, Content> {
-    /// Update/closure receives exclusive access without a guard into the COM allocation's slot.
-    fn deref_mut(&mut self) -> &mut Content {
-        self.value.as_mut().expect("live content transaction")
-    }
-}
-impl<Content> Drop for ContentAccess<'_, Content> {
-    /// Restores without calling content code or dropping another value under a slot borrow.
-    fn drop(&mut self) {
-        *self.slot.borrow_mut() = self.value.take();
+        self.content.measure(bounds, metrics)
     }
 }
 
@@ -149,7 +110,7 @@ impl WidgetFactory {
         options.validate()?;
         let object = LeafObject::from_value(LeafObject {
             state: WidgetState::new(self.host()?, options),
-            content: RefCell::new(Some(content)),
+            content,
         });
         Ok(Widget::from_interface(object.query()?))
     }

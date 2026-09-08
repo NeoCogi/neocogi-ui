@@ -115,7 +115,10 @@ impl ComNode {
         let _phase = Observation::begin(&self.host);
         let bounds = super::layout::limits(constraints);
         let result = match &self.layout {
-            NodeLayoutKind::Leaf(layout) => layout.measure(bounds, self.metrics.as_com_ref()),
+            NodeLayoutKind::Leaf(layout) => {
+                let mut layout = layout.clone();
+                layout.measure(bounds, self.metrics.as_com_ref())
+            }
             NodeLayoutKind::Branch { policy, children, .. } => self.layout_service.measure(children, policy, bounds),
         };
         match result {
@@ -208,7 +211,8 @@ impl ComNode {
         }
         let _phase = Observation::begin(&self.host);
         self.refresh_properties();
-        match self.widget.take_change() {
+        let mut widget = self.widget.clone();
+        match widget.take_change() {
             Ok(GeometryChange::CHANGED) => self.dirty.set(true),
             Ok(GeometryChange::NO_CHANGE) => {}
             Ok(_) => {

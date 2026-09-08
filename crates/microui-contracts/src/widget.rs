@@ -3,7 +3,6 @@
 //! This helper lives inside the widget's COM allocation. Its Rust layout never
 //! crosses an interface boundary and it owns no children, runtime or app sink.
 
-use core::cell::Cell;
 use nc_com::{ComPtr, ComRef, NcStatus, NC_E_INVALID_ARG, com_int_enum, com_struct};
 use crate::{GeometryChange, IWidgetHostAbi, UI_E_CLOSED, UI_E_OWNER};
 
@@ -17,13 +16,13 @@ pub struct WidgetState {
     /// Runtime authority is shared across widgets without an ownership cycle.
     host: ComPtr<IWidgetHostAbi>,
     /// Mutable common presentation/routing options shared by all concrete controls.
-    options: Cell<WidgetOptions>,
+    options: WidgetOptions,
     /// Geometry changes persist until the runtime collects them before layout.
-    dirty: Cell<bool>,
+    dirty: bool,
     /// Attachment is a one-way transition for the lifetime of this allocation.
-    mounted: Cell<bool>,
+    mounted: bool,
     /// Logical closure invalidates retained handles before final COM release.
-    closed: Cell<bool>,
+    closed: bool,
 }
 
 impl WidgetState {
@@ -31,24 +30,25 @@ impl WidgetState {
     pub fn new(host: ComPtr<IWidgetHostAbi>, options: WidgetOptions) -> Self {
         Self {
             host,
-            options: Cell::new(options),
-            dirty: Cell::new(false),
-            mounted: Cell::new(false),
-            closed: Cell::new(false),
+            options,
+            dirty: false,
+            mounted: false,
+            closed: false,
         }
     }
 
     /// Reads the current copied options without exposing a reference into state.
     pub fn options(&self) -> Result<WidgetOptions, NcStatus> {
         self.readable()?;
-        Ok(self.options.get())
+        Ok(self.options)
     }
 
     /// Validates an option replacement before mutation and retains its geometry marker.
-    pub fn set_options(&self, options: WidgetOptions) -> Result<(), NcStatus> {
+    pub fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus> {
         self.writable()?;
         options.validate()?;
-        if self.options.replace(options) != options {
+        if self.options != options {
+            self.options = options;
             self.record_change(GeometryChange::CHANGED);
         }
         Ok(())
@@ -61,7 +61,7 @@ impl WidgetState {
 
     /// Allows observations during layout/paint while rejecting logical closure.
     pub fn readable(&self) -> Result<(), NcStatus> {
-        if self.closed.get() {
+        if self.closed {
             return Err(UI_E_CLOSED);
         }
         self.host.check_open()
@@ -69,7 +69,7 @@ impl WidgetState {
 
     /// Authorizes an ordinary mutation before the implementation borrows state.
     pub fn writable(&self) -> Result<(), NcStatus> {
-        if self.closed.get() {
+        if self.closed {
             return Err(UI_E_CLOSED);
         }
         self.host.check_mutation()
@@ -80,26 +80,29 @@ impl WidgetState {
     /// `NO_CHANGE` preserves an earlier setter's pending marker. Event-only or
     /// visual-only changes need no measurement invalidation. External state must
     /// be synchronized through an authorized setter or a truthful update result.
-    pub fn record_change(&self, change: GeometryChange) {
+    pub fn record_change(&mut self, change: GeometryChange) {
         if change == GeometryChange::CHANGED {
-            self.dirty.set(true);
+            self.dirty = true;
         }
     }
 
     /// Drains the marker once, including when update was skipped for this widget.
-    pub fn take_change(&self) -> Result<GeometryChange, NcStatus> {
+    pub fn take_change(&mut self) -> Result<GeometryChange, NcStatus> {
         self.readable()?;
-        Ok(if self.dirty.replace(false) {
-            GeometryChange::CHANGED
-        } else {
-            GeometryChange::NO_CHANGE
-        })
+        let dirty = self.dirty;
+        self.dirty = false;
+        Ok(if dirty { GeometryChange::CHANGED } else { GeometryChange::NO_CHANGE })
     }
 
     /// Commits attachment after all owner, capability and topology checks pass.
-    pub fn mount(&self) -> Result<(), NcStatus> {
+    pub fn mount(&mut self) -> Result<(), NcStatus> {
         self.writable()?;
-        if self.mounted.replace(true) { Err(UI_E_OWNER) } else { Ok(()) }
+        if self.mounted {
+            Err(UI_E_OWNER)
+        } else {
+            self.mounted = true;
+            Ok(())
+        }
     }
 
     /// Closes this widget once and reports whether ordinary event queues need clearing.
@@ -107,16 +110,16 @@ impl WidgetState {
     /// Runtime teardown may already have closed the host. Otherwise observational
     /// phases still reject closure, just as they reject semantic setters. The
     /// implementation clears its typed queues after this method returns `true`.
-    pub fn close(&self) -> Result<bool, NcStatus> {
-        if self.closed.get() {
+    pub fn close(&mut self) -> Result<bool, NcStatus> {
+        if self.closed {
             return Ok(false);
         }
         match self.host.check_mutation() {
             Ok(()) | Err(UI_E_CLOSED) => {}
             Err(error) => return Err(error),
         }
-        self.closed.set(true);
-        self.dirty.set(false);
+        self.closed = true;
+        self.dirty = false;
         Ok(true)
     }
 }

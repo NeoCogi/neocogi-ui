@@ -18,7 +18,7 @@ impl Widget<DisclosureAbi> {
         self.interface.expanded()
     }
     /// Retains geometry invalidation when expansion actually changes.
-    pub fn set_expanded(&self, expanded: bool) -> Result<(), NcStatus> {
+    pub fn set_expanded(&mut self, expanded: bool) -> Result<(), NcStatus> {
         self.interface.set_expanded(expanded)
     }
     /// Returns the actual header for text and common widget-option edits.
@@ -40,19 +40,19 @@ macro_rules! scrolling_proxy {
                 self.interface.info()
             }
             /// Requests offsets that the next placement clamps against freshly measured content.
-            pub fn set_offset(&self, offset: Point) -> Result<(), NcStatus> {
+            pub fn set_offset(&mut self, offset: Point) -> Result<(), NcStatus> {
                 self.interface.set_offset(offset)
             }
             /// Enables or disables scrolling and both actual scrollbar children.
-            pub fn set_enabled(&self, enabled: bool) -> Result<(), NcStatus> {
+            pub fn set_enabled(&mut self, enabled: bool) -> Result<(), NcStatus> {
                 self.interface.set_enabled(enabled)
             }
             /// Requests the next measured vertical end without losing the horizontal request.
-            pub fn scroll_to_end(&self) -> Result<(), NcStatus> {
+            pub fn scroll_to_end(&mut self) -> Result<(), NcStatus> {
                 self.interface.scroll_to_end()
             }
             /// Requests the nearest offsets revealing the given content-local rectangle.
-            pub fn reveal(&self, rect: Rect) -> Result<(), NcStatus> {
+            pub fn reveal(&mut self, rect: Rect) -> Result<(), NcStatus> {
                 self.interface.reveal(rect)
             }
         }
@@ -66,19 +66,19 @@ impl Widget<ScrollAreaAbi> {
         self.interface.query::<IScrollingAbi>()?.info()
     }
     /// Requests offsets through this class's shared scrolling protocol.
-    pub fn set_offset(&self, offset: Point) -> Result<(), NcStatus> {
+    pub fn set_offset(&mut self, offset: Point) -> Result<(), NcStatus> {
         self.interface.query::<IScrollingAbi>()?.set_offset(offset)
     }
     /// Enables or disables scrolling and both actual scrollbar children.
-    pub fn set_enabled(&self, enabled: bool) -> Result<(), NcStatus> {
+    pub fn set_enabled(&mut self, enabled: bool) -> Result<(), NcStatus> {
         self.interface.query::<IScrollingAbi>()?.set_enabled(enabled)
     }
     /// Requests the next measured vertical end without losing the horizontal request.
-    pub fn scroll_to_end(&self) -> Result<(), NcStatus> {
+    pub fn scroll_to_end(&mut self) -> Result<(), NcStatus> {
         self.interface.query::<IScrollingAbi>()?.scroll_to_end()
     }
     /// Requests the nearest offsets revealing the given content-local rectangle.
-    pub fn reveal(&self, rect: Rect) -> Result<(), NcStatus> {
+    pub fn reveal(&mut self, rect: Rect) -> Result<(), NcStatus> {
         self.interface.query::<IScrollingAbi>()?.reveal(rect)
     }
     /// Returns the actual content capability without exposing edit authority over structural roles.
@@ -86,7 +86,7 @@ impl Widget<ScrollAreaAbi> {
         Ok(Widget::from_interface(self.interface.content()?))
     }
     /// Replaces and closes application content while retaining the same outer scroll object and model.
-    pub fn replace_content<I: ComInterface>(&self, content: &Widget<I>) -> Result<ChildEditResult, NcStatus> {
+    pub fn replace_content<I: ComInterface>(&mut self, content: &Widget<I>) -> Result<ChildEditResult, NcStatus> {
         self.interface.replace_content(content.node_interface()?.as_com_ref())
     }
 }
@@ -104,24 +104,24 @@ macro_rules! container_proxy {
                 self.interface.edge(index)
             }
             /// Replaces sizing metadata without replacing the child's identity.
-            pub fn set_edge(&self, index: u32, edge: $edge) -> Result<(), NcStatus> {
+            pub fn set_edge(&mut self, index: u32, edge: $edge) -> Result<(), NcStatus> {
                 self.interface.set_edge(index, edge)
             }
             /// Inserts the actual child object after validating the complete relationship.
             /// Err leaves topology unchanged; Ok requires inspecting its separate teardown status when relevant.
-            pub fn insert<I: ComInterface>(&self, index: u32, child: &Widget<I>, edge: $edge) -> Result<ChildEditResult, NcStatus> {
+            pub fn insert<I: ComInterface>(&mut self, index: u32, child: &Widget<I>, edge: $edge) -> Result<ChildEditResult, NcStatus> {
                 self.interface.insert(index, child.node_interface()?.as_com_ref(), edge)
             }
             /// Replaces one subtree and relationship together. Ok reports committed replacement even if old-child teardown failed.
-            pub fn replace<I: ComInterface>(&self, index: u32, child: &Widget<I>, edge: $edge) -> Result<ChildEditResult, NcStatus> {
+            pub fn replace<I: ComInterface>(&mut self, index: u32, child: &Widget<I>, edge: $edge) -> Result<ChildEditResult, NcStatus> {
                 self.interface.replace(index, child.node_interface()?.as_com_ref(), edge)
             }
             /// Removes and closes one subtree; call the returned outcome's finish after observing the committed edit.
-            pub fn remove(&self, index: u32) -> Result<ChildEditResult, NcStatus> {
+            pub fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus> {
                 self.interface.remove(index)
             }
             /// Removes all descendants and matching edge metadata while preserving the container object.
-            pub fn clear(&self) -> Result<ChildEditResult, NcStatus> {
+            pub fn clear(&mut self) -> Result<ChildEditResult, NcStatus> {
                 self.interface.clear()
             }
         }
@@ -136,7 +136,7 @@ impl Widget<LinearAbi> {
         self.interface.direction()
     }
     /// Changes direction without changing child ownership order.
-    pub fn set_direction(&self, direction: FlowDirection) -> Result<(), NcStatus> {
+    pub fn set_direction(&mut self, direction: FlowDirection) -> Result<(), NcStatus> {
         self.interface.set_direction(direction)
     }
     /// Returns the typed cross policy, rejecting any unknown external ABI tag.
@@ -144,7 +144,7 @@ impl Widget<LinearAbi> {
         CrossSize::try_from(self.interface.cross_size()?)
     }
     /// Replaces the line's complete typed cross policy.
-    pub fn set_cross_size(&self, cross: CrossSize) -> Result<(), NcStatus> {
+    pub fn set_cross_size(&mut self, cross: CrossSize) -> Result<(), NcStatus> {
         self.interface.set_cross_size(cross.into())
     }
 }
@@ -178,7 +178,7 @@ impl Widget<GridAbi> {
         Axis::Columns.read(&self.interface)
     }
     /// Replaces every column policy after the plugin validates the complete sequence.
-    pub fn set_columns(&self, tracks: &[LayoutTrack]) -> Result<(), NcStatus> {
+    pub fn set_columns(&mut self, tracks: &[LayoutTrack]) -> Result<(), NcStatus> {
         let tracks = encoded_tracks(tracks);
         self.interface.set_columns(NcCopyFromBufferOffset::new(0, &tracks))
     }
@@ -187,7 +187,7 @@ impl Widget<GridAbi> {
         Axis::Rows.read(&self.interface)
     }
     /// Replaces every row policy while preserving child identities and Grid spans.
-    pub fn set_rows(&self, tracks: &[LayoutTrack]) -> Result<(), NcStatus> {
+    pub fn set_rows(&mut self, tracks: &[LayoutTrack]) -> Result<(), NcStatus> {
         let tracks = encoded_tracks(tracks);
         self.interface.set_rows(NcCopyFromBufferOffset::new(0, &tracks))
     }

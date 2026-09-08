@@ -292,7 +292,7 @@ fn successful_navigation_reuses_fixed_controls_and_replaces_the_complete_dynamic
     fixture.open(directory.path());
     let old_root = fixture.file_root();
     let path = fixture.controller.session.state().unwrap().path.clone();
-    let scroll = fixture.controller.session.state().unwrap().files.clone();
+    let mut scroll = fixture.controller.session.state().unwrap().files.clone();
     scroll.set_offset(Point { x: 0, y: i32::MAX }).unwrap();
     fixture.ui.update(SIZE).unwrap();
     assert!(scroll.info().unwrap().requested.y > 0);

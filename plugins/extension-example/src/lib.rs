@@ -10,50 +10,21 @@ use microui_redux::{
     events::{Activation, EventSource},
 };
 use nc_com::{com_object, ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
-use std::cell::Cell;
 
 /// Common state is inline; the example adds no second widget allocation or type-erased data.
 struct Common {
     /// The canonical lifecycle/options/invalidation implementation used by independent authors.
     state: WidgetState,
     /// Phase counters observe actual calls rather than estimates from a shadow tree.
-    calls: Cell<WidgetCalls>,
-    /// Outward calls can synchronously reenter; overlapping behavior reports BUSY.
-    busy: Cell<bool>,
+    calls: WidgetCalls,
 }
 impl Common {
     /// Retains exactly the explicit owner capability supplied by the caller.
     fn new(host: ComRef<'_, IWidgetHostAbi>, options: WidgetOptions) -> Self {
         Self {
             state: WidgetState::new(host.add_ref(), options),
-            calls: Cell::new(WidgetCalls::default()),
-            busy: Cell::new(false),
+            calls: WidgetCalls::default(),
         }
-    }
-    /// Reserves behavior without lending a RefCell guard across any foreign call.
-    fn enter(&self) -> Result<Guard<'_>, NcStatus> {
-        if self.busy.replace(true) { Err(UI_E_BUSY) } else { Ok(Guard(&self.busy)) }
-    }
-    /// Observational phases still reject a closed owner before entering behavior.
-    fn read(&self) -> Result<Guard<'_>, NcStatus> {
-        self.state.readable()?;
-        self.enter()
-    }
-    /// Mutation requires host authority as well as exclusive behavior access.
-    fn write(&self) -> Result<Guard<'_>, NcStatus> {
-        self.state.writable()?;
-        self.enter()
-    }
-}
-/// Stack-only recursion reservation, restored after ordinary errors and unwinding alike.
-struct Guard<'a>(
-    /// The busy bit belongs to the same live COM allocation for this complete call.
-    &'a Cell<bool>,
-);
-impl Drop for Guard<'_> {
-    /// Failed outward calls cannot leave an otherwise live object permanently busy.
-    fn drop(&mut self) {
-        self.0.set(false);
     }
 }
 
@@ -66,22 +37,18 @@ macro_rules! widget {
                 Ok(self.common.state.host().add_ref())
             }
             /// The shared state accepts exactly one attachment over the object's lifetime.
-            fn mount(&self) -> Result<(), NcStatus> {
-                let _guard = self.common.write()?;
+            fn mount(&mut self) -> Result<(), NcStatus> {
                 self.common.state.mount()
             }
             /// Logical closure precedes descendant/event teardown and remains distinct from final release.
-            fn close(&self) -> Result<(), NcStatus> {
-                let _guard = self.common.enter()?;
+            fn close(&mut self) -> Result<(), NcStatus> {
                 if self.common.state.close()? {
-                    let mut calls = self.common.calls.get();
-                    calls.closes += 1;
-                    self.common.calls.set(calls);
+                    self.common.calls.closes += 1;
                     self.close_content()?;
                 }
                 Ok(())
             }
-            /// Policy observation is safe during outward behavior calls and has no mutable content borrow.
+            /// Policy observation reads only common state and remains available during shared calls.
             fn properties(&self) -> Result<WidgetProperties, NcStatus> {
                 Ok(WidgetProperties {
                     options: self.common.state.options()?,
@@ -90,40 +57,35 @@ macro_rules! widget {
                 })
             }
             /// Common option edits retain a geometry marker without copying options into content state.
-            fn set_options(&self, options: WidgetOptions) -> Result<(), NcStatus> {
-                let _guard = self.common.write()?;
+            fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus> {
                 self.common.state.set_options(options)
             }
             /// Validate complete copied input before the concrete behavior can mutate or emit.
-            fn update(&self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
-                let _guard = self.common.write()?;
+            fn update(&mut self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
+                self.common.state.writable()?;
                 state.validate()?;
                 decode_widget_event(event, text)?;
-                let mut calls = self.common.calls.get();
-                calls.updates += 1;
-                self.common.calls.set(calls);
+                self.common.calls.updates += 1;
                 let change = self.update_content(state);
                 self.common.state.record_change(change);
                 Ok(change)
             }
             /// Hidden-tree collection sees the same sticky marker as ordinary updates.
-            fn take_change(&self) -> Result<GeometryChange, NcStatus> {
+            fn take_change(&mut self) -> Result<GeometryChange, NcStatus> {
                 self.common.state.take_change()
             }
             /// The borrowed painter is valid only for this invocation; content retains neither service nor scope.
-            fn paint(&self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
-                let _guard = self.common.read()?;
+            fn paint(&mut self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
+                self.common.state.readable()?;
                 state.validate()?;
-                let mut calls = self.common.calls.get();
-                calls.paints += 1;
-                self.common.calls.set(calls);
+                self.common.calls.paints += 1;
                 self.paint_content(state, &Painter::from_call(painter, scope))
             }
         }
         impl IWidgetProbe for $name {
             /// Diagnostics deliberately remain readable after logical closure.
             fn calls(&self) -> Result<WidgetCalls, NcStatus> {
-                Ok(self.common.calls.get())
+                Ok(self.common.calls)
             }
         }
     };
@@ -135,16 +97,16 @@ struct CounterObject {
     /// Common options are authoritative here, without a duplicate presentation copy.
     common: Common,
     /// The one semantic counter value; labels are short-lived snapshots of it.
-    count: Cell<u32>,
+    count: u32,
     /// The shared static producer retains queued snapshots, never the application's callback.
     submitted: EventSource<Activation>,
 }
 impl CounterObject {
     /// User activation commits before emission, capturing the matching label for deferred delivery.
-    fn update_content(&self, state: WidgetUpdate) -> GeometryChange {
+    fn update_content(&mut self, state: WidgetUpdate) -> GeometryChange {
         if state.clicked || state.action == WidgetAction::ACTIVATE {
-            self.count.set(self.count.get().saturating_add(1));
-            self.submitted.emit(Activation { label: self.count.get().to_string() });
+            self.count = self.count.saturating_add(1);
+            self.submitted.emit(Activation { label: self.count.to_string() });
             GeometryChange::CHANGED
         } else {
             GeometryChange::NO_CHANGE
@@ -152,10 +114,10 @@ impl CounterObject {
     }
     /// Standard body text requires no knowledge of native fonts, atlas packing or GPU types.
     fn paint_content(&self, state: WidgetPaint, painter: &Painter<'_>) -> Result<(), NcStatus> {
-        painter.text(state.rect, &self.count.get().to_string())
+        painter.text(state.rect, &self.count.to_string())
     }
     /// Ordinary interaction work expires even if callers retain the closed control.
-    fn close_content(&self) -> Result<(), NcStatus> {
+    fn close_content(&mut self) -> Result<(), NcStatus> {
         self.submitted.close_ordinary();
         Ok(())
     }
@@ -168,7 +130,7 @@ impl Counter for CounterObject {
         host.check_mutation()?;
         Ok(Self {
             common: Common::new(host, WidgetOptions::FRAME),
-            count: Cell::new(0),
+            count: 0,
             submitted: EventSource::new(),
         })
     }
@@ -176,12 +138,13 @@ impl Counter for CounterObject {
     /// Reads the committed scalar directly from the real object.
     fn count(&self) -> Result<u32, NcStatus> {
         self.common.state.readable()?;
-        Ok(self.count.get())
+        Ok(self.count)
     }
     /// Silent programmatic edits invalidate only when the scalar actually changes.
-    fn set_count(&self, value: u32) -> Result<(), NcStatus> {
-        let _guard = self.common.write()?;
-        if self.count.replace(value) != value {
+    fn set_count(&mut self, value: u32) -> Result<(), NcStatus> {
+        self.common.state.writable()?;
+        if self.count != value {
+            self.count = value;
             self.common.state.record_change(GeometryChange::CHANGED);
         }
         Ok(())
@@ -190,20 +153,18 @@ impl Counter for CounterObject {
 impl IActivationEvents for CounterObject {
     /// Subscription uses the exact same producer/lease implementation as built-in controls.
     fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        let _guard = self.common.write()?;
+        self.common.state.writable()?;
         self.submitted.subscribe(sink)
     }
 }
 impl ILeafLayout for CounterObject {
     /// The host's current metrics supply button text geometry; constraints are checked before call-out.
-    fn measure(&self, bounds: LayoutLimits, metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
-        let _guard = self.common.read()?;
+    fn measure(&mut self, bounds: LayoutLimits, metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
+        self.common.state.readable()?;
         bounds.width.validate()?;
         bounds.height.validate()?;
-        let mut calls = self.common.calls.get();
-        calls.measures += 1;
-        self.common.calls.set(calls);
-        metrics.button_size(NcCopyFromBufferOffset::new(0, self.count.get().to_string().as_bytes()))
+        self.common.calls.measures += 1;
+        metrics.button_size(NcCopyFromBufferOffset::new(0, self.count.to_string().as_bytes()))
     }
 }
 
@@ -213,13 +174,13 @@ struct Inset {
     /// Common lifecycle has no parent backpointer or mirrored geometry.
     common: Common,
     /// Authored inset; child measurement and placement use this same scalar.
-    padding: Cell<i32>,
+    padding: i32,
     /// Private writer; public children() returns its distinct read-only view.
     editor: ComPtr<IChildrenEditorAbi>,
 }
 impl Inset {
     /// This layout-only container has no input-dependent semantic state.
-    fn update_content(&self, _state: WidgetUpdate) -> GeometryChange {
+    fn update_content(&mut self, _state: WidgetUpdate) -> GeometryChange {
         GeometryChange::NO_CHANGE
     }
     /// Children paint through ordinary retained traversal, without a second recursive paint path.
@@ -227,7 +188,7 @@ impl Inset {
         Ok(())
     }
     /// Child teardown can fail after topology commits; preserve the ordinary committed result.
-    fn close_content(&self) -> Result<(), NcStatus> {
+    fn close_content(&mut self) -> Result<(), NcStatus> {
         self.editor.close()?.finish()
     }
 }
@@ -239,20 +200,20 @@ impl IContainer for Inset {
         self.editor.view()
     }
     /// The underlying editor rejects invalid indices and closes only the removed subtree.
-    fn remove(&self, index: u32) -> Result<ChildEditResult, NcStatus> {
-        let _guard = self.common.write()?;
+    fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus> {
+        self.common.state.writable()?;
         self.editor.remove(index)
     }
     /// Emptying preserves the container allocation and its authored padding for future attachment.
-    fn clear(&self) -> Result<ChildEditResult, NcStatus> {
-        let _guard = self.common.write()?;
+    fn clear(&mut self) -> Result<ChildEditResult, NcStatus> {
+        self.common.state.writable()?;
         self.editor.clear()
     }
 }
 impl IInset for Inset {
     /// Read cardinality from its authoritative sequence; no second has-child flag can become stale.
-    fn set_child(&self, child: ComRef<'_, IWidgetAbi>) -> Result<ChildEditResult, NcStatus> {
-        let _guard = self.common.write()?;
+    fn set_child(&mut self, child: ComRef<'_, IWidgetAbi>) -> Result<ChildEditResult, NcStatus> {
+        self.common.state.writable()?;
         if self.editor.view()?.child_count()? == 0 {
             self.editor.insert(0, child)
         } else {
@@ -260,12 +221,13 @@ impl IInset for Inset {
         }
     }
     /// Validate before mutation so rejected layout settings preserve the old committed geometry.
-    fn set_padding(&self, padding: i32) -> Result<(), NcStatus> {
-        let _guard = self.common.write()?;
+    fn set_padding(&mut self, padding: i32) -> Result<(), NcStatus> {
+        self.common.state.writable()?;
         if !(0..=i32::MAX / 2).contains(&padding) {
             return Err(nc_com::NC_E_INVALID_ARG);
         }
-        if self.padding.replace(padding) != padding {
+        if self.padding != padding {
+            self.padding = padding;
             self.common.state.record_change(GeometryChange::CHANGED);
         }
         Ok(())
@@ -277,14 +239,12 @@ impl IContainerLayout for Inset {
         IContainer::children(self)
     }
     /// Bounded indexed services recurse into the child without lending it a native tree borrow.
-    fn measure(&self, scope: LayoutScope, bounds: LayoutLimits, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<Size, NcStatus> {
-        let _guard = self.common.read()?;
+    fn measure(&mut self, scope: LayoutScope, bounds: LayoutLimits, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<Size, NcStatus> {
+        self.common.state.readable()?;
         bounds.width.validate()?;
         bounds.height.validate()?;
-        let mut calls = self.common.calls.get();
-        calls.measures += 1;
-        self.common.calls.set(calls);
-        let inset = self.padding.get() * 2;
+        self.common.calls.measures += 1;
+        let inset = self.padding * 2;
         let child = if layout.child_count(scope)? == 0 {
             Size::default()
         } else {
@@ -303,15 +263,13 @@ impl IContainerLayout for Inset {
         })
     }
     /// All child coordinates are local; runtime supplies final clipping/translation and validates complete placement.
-    fn place(&self, scope: LayoutScope, rect: Rect, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<ContainerGeometry, NcStatus> {
-        let _guard = self.common.read()?;
+    fn place(&mut self, scope: LayoutScope, rect: Rect, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<ContainerGeometry, NcStatus> {
+        self.common.state.readable()?;
         if rect.width < 0 || rect.height < 0 {
             return Err(nc_com::NC_E_INVALID_ARG);
         }
-        let mut calls = self.common.calls.get();
-        calls.placements += 1;
-        self.common.calls.set(calls);
-        let padding = self.padding.get();
+        self.common.calls.placements += 1;
+        let padding = self.padding;
         if layout.child_count(scope)? != 0 {
             layout.place_child(
                 scope,
@@ -355,7 +313,7 @@ impl ExtensionProvider for ExtensionProviderObject {
         let editor = host.create_children()?;
         Inset::from_value(Inset {
             common: Common::new(host, WidgetOptions::NONE),
-            padding: Cell::new(4),
+            padding: 4,
             editor,
         })
         .query()

@@ -30,7 +30,7 @@ impl NodeFactory {
         self.check_edit()?;
         self.attaching.set(true);
         let _attachment = Attachment(&self.attaching);
-        let widget = root.add_ref();
+        let mut widget = root.add_ref();
         let owner: ComPtr<IUnknown> = widget.host()?.query()?;
         if owner.as_ptr() != self.host.query::<IUnknown>()?.as_ptr() {
             return Err(UI_E_OWNER);

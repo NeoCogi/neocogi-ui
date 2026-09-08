@@ -82,9 +82,9 @@ pub trait IContainerLayout {
     /// The implementation retains its matching editor privately and publishes metadata after every committed edit.
     fn children(&self) -> Result<ComPtr<crate::IChildrenAbi>, NcStatus>;
     /// Measures content through indexed scoped access; semantic and topology mutations are forbidden.
-    fn measure(&self, scope: LayoutScope, bounds: LayoutLimits, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<Size, NcStatus>;
+    fn measure(&mut self, scope: LayoutScope, bounds: LayoutLimits, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<Size, NcStatus>;
     /// Places direct children and returns complete copied viewport/content policy.
-    fn place(&self, scope: LayoutScope, rect: Rect, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<ContainerGeometry, NcStatus>;
+    fn place(&mut self, scope: LayoutScope, rect: Rect, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<ContainerGeometry, NcStatus>;
     /// Filters a router-selected event; false permits ancestor bubbling without exposing covered siblings.
     /// The runtime bypasses this filter for captured drag/release continuation.
     fn accepts_event(&self, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<bool, NcStatus>;
@@ -224,9 +224,9 @@ pub trait IContainer: crate::IWidget {
     /// Returns the stable read-only view; editing stays on the concrete container to preserve edge metadata.
     fn children(&self) -> Result<ComPtr<crate::IChildrenAbi>, NcStatus>;
     /// Removes one complete subtree and matching edge metadata; Ok reports a committed edit.
-    fn remove(&self, index: u32) -> Result<ChildEditResult, NcStatus>;
+    fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus>;
     /// Removes all owned subtrees and their matching metadata while retaining reusable capacity.
-    fn clear(&self) -> Result<ChildEditResult, NcStatus>;
+    fn clear(&mut self) -> Result<ChildEditResult, NcStatus>;
 }
 
 #[com_class(auto_guid = "microui.Linear:v1")]
@@ -238,25 +238,25 @@ pub trait Linear: crate::IWidget + IContainerLayout {
     /// Returns the stable read-only topology view for this container's lifetime.
     fn children(&self) -> Result<ComPtr<crate::IChildrenAbi>, NcStatus>;
     /// Removes one complete subtree and matching edge metadata.
-    fn remove(&self, index: u32) -> Result<ChildEditResult, NcStatus>;
+    fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus>;
     /// Removes all owned subtrees and matching metadata while retaining reusable capacity.
-    fn clear(&self) -> Result<ChildEditResult, NcStatus>;
+    fn clear(&mut self) -> Result<ChildEditResult, NcStatus>;
     /// Returns its complete axis and leading-edge policy.
     fn direction(&self) -> Result<FlowDirection, NcStatus>;
     /// Replaces the direction without reordering child ownership.
-    fn set_direction(&self, direction: FlowDirection) -> Result<(), NcStatus>;
+    fn set_direction(&mut self, direction: FlowDirection) -> Result<(), NcStatus>;
     /// Returns the shared cross-axis size policy.
     fn cross_size(&self) -> Result<CrossSizeAbi, NcStatus>;
     /// Validates and replaces the shared cross-axis policy.
-    fn set_cross_size(&self, cross: CrossSizeAbi) -> Result<(), NcStatus>;
+    fn set_cross_size(&mut self, cross: CrossSizeAbi) -> Result<(), NcStatus>;
     /// Returns one child's exact parent-owned sizing relationship.
     fn edge(&self, index: u32) -> Result<LinearEdge, NcStatus>;
     /// Replaces sizing metadata without replacing the child's identity.
-    fn set_edge(&self, index: u32, edge: LinearEdge) -> Result<(), NcStatus>;
+    fn set_edge(&mut self, index: u32, edge: LinearEdge) -> Result<(), NcStatus>;
     /// Validates child and relationship before committing insertion at index, including count.
-    fn insert(&self, index: u32, child: ComRef<'_, crate::IWidgetAbi>, edge: LinearEdge) -> Result<ChildEditResult, NcStatus>;
+    fn insert(&mut self, index: u32, child: ComRef<'_, crate::IWidgetAbi>, edge: LinearEdge) -> Result<ChildEditResult, NcStatus>;
     /// Validates replacement before permanently closing the previous indexed subtree.
-    fn replace(&self, index: u32, child: ComRef<'_, crate::IWidgetAbi>, edge: LinearEdge) -> Result<ChildEditResult, NcStatus>;
+    fn replace(&mut self, index: u32, child: ComRef<'_, crate::IWidgetAbi>, edge: LinearEdge) -> Result<ChildEditResult, NcStatus>;
 }
 
 #[com_class(auto_guid = "microui.Grid:v1")]
@@ -272,25 +272,25 @@ pub trait Grid: crate::IWidget + IContainerLayout {
     /// Returns the stable read-only topology view for this container's lifetime.
     fn children(&self) -> Result<ComPtr<crate::IChildrenAbi>, NcStatus>;
     /// Removes one complete subtree and matching span metadata.
-    fn remove(&self, index: u32) -> Result<ChildEditResult, NcStatus>;
+    fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus>;
     /// Removes all owned subtrees and matching metadata while retaining reusable capacity.
-    fn clear(&self) -> Result<ChildEditResult, NcStatus>;
+    fn clear(&mut self) -> Result<ChildEditResult, NcStatus>;
     /// Copies a range of column policies; offset indexes tracks and the return value is total count.
     fn columns(&self, output: nc_com::NcCopyToBufferOffset<'_, LayoutTrackAbi>) -> Result<u32, NcStatus>;
     /// Replaces the complete column sequence after validating every track; input offset must be zero.
-    fn set_columns(&self, tracks: NcCopyFromBufferOffset<'_, LayoutTrackAbi>) -> Result<(), NcStatus>;
+    fn set_columns(&mut self, tracks: NcCopyFromBufferOffset<'_, LayoutTrackAbi>) -> Result<(), NcStatus>;
     /// Copies a range of row policies; offset indexes tracks and the return value is total count.
     fn rows(&self, output: nc_com::NcCopyToBufferOffset<'_, LayoutTrackAbi>) -> Result<u32, NcStatus>;
     /// Replaces the complete row sequence after validating every track; input offset must be zero.
-    fn set_rows(&self, tracks: NcCopyFromBufferOffset<'_, LayoutTrackAbi>) -> Result<(), NcStatus>;
+    fn set_rows(&mut self, tracks: NcCopyFromBufferOffset<'_, LayoutTrackAbi>) -> Result<(), NcStatus>;
     /// Returns one child's positive Grid-owned span.
     fn edge(&self, index: u32) -> Result<GridExtent, NcStatus>;
     /// Changes span without replacing the child's identity.
-    fn set_edge(&self, index: u32, edge: GridExtent) -> Result<(), NcStatus>;
+    fn set_edge(&mut self, index: u32, edge: GridExtent) -> Result<(), NcStatus>;
     /// Validates a positive span and unmounted child before committing insertion.
-    fn insert(&self, index: u32, child: ComRef<'_, crate::IWidgetAbi>, edge: GridExtent) -> Result<ChildEditResult, NcStatus>;
+    fn insert(&mut self, index: u32, child: ComRef<'_, crate::IWidgetAbi>, edge: GridExtent) -> Result<ChildEditResult, NcStatus>;
     /// Validates replacement before permanently closing the previous indexed subtree.
-    fn replace(&self, index: u32, child: ComRef<'_, crate::IWidgetAbi>, edge: GridExtent) -> Result<ChildEditResult, NcStatus>;
+    fn replace(&mut self, index: u32, child: ComRef<'_, crate::IWidgetAbi>, edge: GridExtent) -> Result<ChildEditResult, NcStatus>;
 }
 
 #[com_struct]
@@ -313,13 +313,13 @@ pub trait IScrolling: crate::IWidget {
     /// Returns one coherent request/range/viewport observation without a parent-widget backpointer.
     fn info(&self) -> Result<ScrollInfo, NcStatus>;
     /// Requests nonnegative offsets; next placement clamps against freshly measured content.
-    fn set_offset(&self, offset: crate::Point) -> Result<(), NcStatus>;
+    fn set_offset(&mut self, offset: crate::Point) -> Result<(), NcStatus>;
     /// Enables or disables wheel input and both structural scrollbar children.
-    fn set_enabled(&self, enabled: bool) -> Result<(), NcStatus>;
+    fn set_enabled(&mut self, enabled: bool) -> Result<(), NcStatus>;
     /// Requests the next measured vertical end while preserving the horizontal request.
-    fn scroll_to_end(&self) -> Result<(), NcStatus>;
+    fn scroll_to_end(&mut self) -> Result<(), NcStatus>;
     /// Requests the nearest offsets that reveal a nonnegative content-local rectangle.
-    fn reveal(&self, rect: Rect) -> Result<(), NcStatus>;
+    fn reveal(&mut self, rect: Rect) -> Result<(), NcStatus>;
 }
 
 #[com_class(auto_guid = "microui.ScrollArea:v1")]
@@ -331,7 +331,7 @@ pub trait ScrollArea: crate::IWidget + IContainerLayout + IScrolling {
     /// Returns the actual application content widget, without its surrounding transform surface.
     fn content(&self) -> Result<ComPtr<crate::IWidgetAbi>, NcStatus>;
     /// Validates replacement before closing old content; structural roles and model identity stay fixed.
-    fn replace_content(&self, content: ComRef<'_, crate::IWidgetAbi>) -> Result<ChildEditResult, NcStatus>;
+    fn replace_content(&mut self, content: ComRef<'_, crate::IWidgetAbi>) -> Result<ChildEditResult, NcStatus>;
 }
 
 com_int_enum! {
@@ -349,16 +349,11 @@ com_int_enum! {
 pub trait Disclosure: crate::IWidget + IContainerLayout {
     /// Creates a complete unmounted composition with immutable presentation and initial expansion.
     #[constructor]
-    fn new(
-        host: ComRef<'_, crate::IWidgetHostAbi>,
-        label: NcCopyFromBufferOffset<'_, u8>,
-        style: DisclosureStyle,
-        expanded: bool,
-    ) -> Result<Self, NcStatus>;
+    fn new(host: ComRef<'_, crate::IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>, style: DisclosureStyle, expanded: bool) -> Result<Self, NcStatus>;
     /// Returns shared expansion state also changed by header activation and keyboard input.
     fn expanded(&self) -> Result<bool, NcStatus>;
     /// Changes expansion and retains layout invalidation even while this subtree is hidden.
-    fn set_expanded(&self, expanded: bool) -> Result<(), NcStatus>;
+    fn set_expanded(&mut self, expanded: bool) -> Result<(), NcStatus>;
     /// Returns the real header's text capability, including its inherited widget options.
     fn header(&self) -> Result<ComPtr<crate::ITextContentAbi>, NcStatus>;
     /// Returns the real body container; its child editor keeps topology and edge metadata consistent.

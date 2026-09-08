@@ -46,17 +46,14 @@ macro_rules! container_object {
                 })
             }
             /// Closes logical widget state and all descendant ownership before final COM release.
-            fn close_widget(&self) -> Result<(), NcStatus> {
-                // A child attachment may call out while this container owns its
-                // semantic state. Reject reentrant closure before changing lifetime.
-                let _core = self.widget.take()?;
+            fn close_widget(&mut self) -> Result<(), NcStatus> {
                 if self.widget.state.close()? {
                     self.editor.close()?.finish()?;
                 }
                 Ok(())
             }
             /// Reuses the concrete container's full input and eventless update algorithm.
-            fn update_widget(&self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
+            fn update_widget(&mut self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
                 self.widget.update(state, event, text)
             }
         }
@@ -74,17 +71,17 @@ macro_rules! container_methods {
             self.editor.view()
         }
         /// Publishes matching metadata even when the removed child's close reports an error.
-        fn remove(&self, index: u32) -> Result<ChildEditResult, NcStatus> {
+        fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus> {
             self.widget.state.writable()?;
-            let mut core = self.widget.take()?;
+            let core = &mut self.widget.core;
             let outcome = self.editor.remove(index)?;
             core.edit_edges(EdgeEdit::Remove { index: index as usize });
             Ok(outcome)
         }
         /// Clears topology and metadata in the same guarded concrete operation.
-        fn clear(&self) -> Result<ChildEditResult, NcStatus> {
+        fn clear(&mut self) -> Result<ChildEditResult, NcStatus> {
             self.widget.state.writable()?;
-            let mut core = self.widget.take()?;
+            let core = &mut self.widget.core;
             let outcome = self.editor.clear()?;
             core.edit_edges(EdgeEdit::Clear);
             Ok(outcome)
@@ -98,13 +95,13 @@ macro_rules! container_edges {
         /// Returns one copied relationship after checking the container's logical lifetime.
         fn edge(&self, index: u32) -> Result<$edge, NcStatus> {
             self.widget.state.readable()?;
-            Ok($encode(self.widget.take()?.edge(index as usize).ok_or(nc_com::NC_E_OUT_OF_RANGE)?))
+            Ok($encode(self.widget.core.edge(index as usize).ok_or(nc_com::NC_E_OUT_OF_RANGE)?))
         }
         /// Validates metadata before replacing it, retaining invalidation only for an actual change.
-        fn set_edge(&self, index: u32, edge: $edge) -> Result<(), NcStatus> {
+        fn set_edge(&mut self, index: u32, edge: $edge) -> Result<(), NcStatus> {
             self.widget.state.writable()?;
             let edge = $decode(edge)?;
-            let mut core = self.widget.take()?;
+            let core = &mut self.widget.core;
             let previous = core.edge(index as usize).ok_or(nc_com::NC_E_OUT_OF_RANGE)?;
             if previous != edge {
                 core.edit_edges(EdgeEdit::Replace { index: index as usize, edge });
@@ -113,19 +110,19 @@ macro_rules! container_edges {
             Ok(())
         }
         /// Validates the complete relationship before the child can consume its sole attachment claim.
-        fn insert(&self, index: u32, child: ComRef<'_, IWidgetAbi>, edge: $edge) -> Result<ChildEditResult, NcStatus> {
+        fn insert(&mut self, index: u32, child: ComRef<'_, IWidgetAbi>, edge: $edge) -> Result<ChildEditResult, NcStatus> {
             self.widget.state.writable()?;
             let edge = $decode(edge)?;
-            let mut core = self.widget.take()?;
+            let core = &mut self.widget.core;
             let outcome = self.editor.insert(index, child)?;
             core.edit_edges(EdgeEdit::Insert { index: index as usize, edge });
             Ok(outcome)
         }
         /// Commits replacement metadata before returning any old-child teardown failure in the outcome.
-        fn replace(&self, index: u32, child: ComRef<'_, IWidgetAbi>, edge: $edge) -> Result<ChildEditResult, NcStatus> {
+        fn replace(&mut self, index: u32, child: ComRef<'_, IWidgetAbi>, edge: $edge) -> Result<ChildEditResult, NcStatus> {
             self.widget.state.writable()?;
             let edge = $decode(edge)?;
-            let mut core = self.widget.take()?;
+            let core = &mut self.widget.core;
             let outcome = self.editor.replace(index, child)?;
             core.edit_edges(EdgeEdit::Replace { index: index as usize, edge });
             Ok(outcome)
@@ -136,15 +133,9 @@ macro_rules! container_edges {
 container_object!(LinearObject, crate::Linear, microui_contracts::Linear);
 impl LinearObject {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(super) fn create(
-        host: ComPtr<IWidgetHostAbi>,
-        direction: FlowDirection,
-        cross: CrossSizeAbi,
-    ) -> Result<ComPtr<LinearAbi>, NcStatus> {
+    pub(super) fn create(host: ComPtr<IWidgetHostAbi>, direction: FlowDirection, cross: CrossSizeAbi) -> Result<ComPtr<LinearAbi>, NcStatus> {
         let value = <Self as Linear>::new(host.as_com_ref(), direction, cross)?;
-        Ok(Self::from_value(value)
-            .query()
-            .expect("LinearObject declares the Linear class contract"))
+        Ok(Self::from_value(value).query().expect("LinearObject declares the Linear class contract"))
     }
 }
 impl Linear for LinearObject {
@@ -158,13 +149,13 @@ impl Linear for LinearObject {
     /// Returns the exact retained axis and leading-edge policy.
     fn direction(&self) -> Result<FlowDirection, NcStatus> {
         self.widget.state.readable()?;
-        Ok(flow_direction(self.widget.take()?.direction()))
+        Ok(flow_direction(self.widget.core.direction()))
     }
     /// Validates before changing direction and conservatively invalidating derived placement.
-    fn set_direction(&self, direction: FlowDirection) -> Result<(), NcStatus> {
+    fn set_direction(&mut self, direction: FlowDirection) -> Result<(), NcStatus> {
         self.widget.state.writable()?;
         let direction = local_direction(direction)?;
-        let mut core = self.widget.take()?;
+        let core = &mut self.widget.core;
         if core.direction() != direction {
             core.set_direction(direction);
             self.widget.state.record_change(GeometryChange::CHANGED);
@@ -174,13 +165,13 @@ impl Linear for LinearObject {
     /// Returns the line's cross size independently of per-child cross relationships.
     fn cross_size(&self) -> Result<CrossSizeAbi, NcStatus> {
         self.widget.state.readable()?;
-        Ok(cross_size(self.widget.take()?.cross_size()))
+        Ok(cross_size(self.widget.core.cross_size()))
     }
     /// Changes cross size only after validating its typed payload.
-    fn set_cross_size(&self, cross: CrossSizeAbi) -> Result<(), NcStatus> {
+    fn set_cross_size(&mut self, cross: CrossSizeAbi) -> Result<(), NcStatus> {
         self.widget.state.writable()?;
         let cross = local_cross(cross)?;
-        let mut core = self.widget.take()?;
+        let core = &mut self.widget.core;
         if core.cross_size() != cross {
             core.set_cross_size(cross);
             self.widget.state.record_change(GeometryChange::CHANGED);
@@ -199,9 +190,7 @@ impl GridObject {
         rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
     ) -> Result<ComPtr<GridAbi>, NcStatus> {
         let value = <Self as Grid>::new(host.as_com_ref(), columns, rows)?;
-        Ok(Self::from_value(value)
-            .query()
-            .expect("GridObject declares the Grid class contract"))
+        Ok(Self::from_value(value).query().expect("GridObject declares the Grid class contract"))
     }
 }
 impl Grid for GridObject {
@@ -219,13 +208,13 @@ impl Grid for GridObject {
     /// Bulk-copies column policy from the one concrete Grid state.
     fn columns(&self, output: NcCopyToBufferOffset<'_, LayoutTrackAbi>) -> Result<u32, NcStatus> {
         self.widget.state.readable()?;
-        copy_tracks(self.widget.take()?.column_tracks(), output)
+        copy_tracks(self.widget.core.column_tracks(), output)
     }
     /// Validates the complete input before rebuilding column-dependent span placement.
-    fn set_columns(&self, tracks: NcCopyFromBufferOffset<'_, LayoutTrackAbi>) -> Result<(), NcStatus> {
+    fn set_columns(&mut self, tracks: NcCopyFromBufferOffset<'_, LayoutTrackAbi>) -> Result<(), NcStatus> {
         self.widget.state.writable()?;
         let tracks = local_tracks(tracks)?;
-        let mut core = self.widget.take()?;
+        let core = &mut self.widget.core;
         if core.column_tracks() != tracks {
             core.set_column_tracks(tracks);
             self.widget.state.record_change(GeometryChange::CHANGED);
@@ -235,13 +224,13 @@ impl Grid for GridObject {
     /// Bulk-copies row policy without exposing Grid's scratch or span vectors.
     fn rows(&self, output: NcCopyToBufferOffset<'_, LayoutTrackAbi>) -> Result<u32, NcStatus> {
         self.widget.state.readable()?;
-        copy_tracks(self.widget.take()?.row_tracks(), output)
+        copy_tracks(self.widget.core.row_tracks(), output)
     }
     /// Replaces row policies only after the entire typed input passes validation.
-    fn set_rows(&self, tracks: NcCopyFromBufferOffset<'_, LayoutTrackAbi>) -> Result<(), NcStatus> {
+    fn set_rows(&mut self, tracks: NcCopyFromBufferOffset<'_, LayoutTrackAbi>) -> Result<(), NcStatus> {
         self.widget.state.writable()?;
         let tracks = local_tracks(tracks)?;
-        let mut core = self.widget.take()?;
+        let core = &mut self.widget.core;
         if core.row_tracks() != tracks {
             core.set_row_tracks(tracks);
             self.widget.state.record_change(GeometryChange::CHANGED);

@@ -64,9 +64,9 @@ pub trait ITextSubmittedSink {
 /// Shared editor event family; changed and submitted are independent exclusive ports.
 pub trait ITextEvents {
     /// Connects one changed consumer without claiming the separate submitted port.
-    fn subscribe_changed(&self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
+    fn subscribe_changed(&mut self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
     /// Connects one submitted consumer without claiming the separate changed port.
-    fn subscribe_submitted(&self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
+    fn subscribe_submitted(&mut self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
 }
 
 #[com_interface(auto_guid = "microui.EventDispatcher:v1")]

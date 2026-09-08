@@ -141,7 +141,10 @@ impl IPainter for Recorder {
         let first = commands.points.len();
         commands.points.extend(input.as_slice().iter().map(|p| crate::Vec2f::new(p.x, p.y)));
         let end = commands.points.len();
-        commands.operations.push(Command { clip: scope.clip, drawing: Drawing::Polygon(first..end, rgba) });
+        commands.operations.push(Command {
+            clip: scope.clip,
+            drawing: Drawing::Polygon(first..end, rgba),
+        });
         Ok(())
     }
 
@@ -156,7 +159,10 @@ impl IPainter for Recorder {
         let first = commands.colored_vertices.len();
         commands.colored_vertices.extend_from_slice(vertices);
         let end = commands.colored_vertices.len();
-        commands.operations.push(Command { clip: scope.clip, drawing: Drawing::ColoredTriangles(first..end) });
+        commands.operations.push(Command {
+            clip: scope.clip,
+            drawing: Drawing::ColoredTriangles(first..end),
+        });
         Ok(())
     }
 
@@ -195,7 +201,10 @@ impl IPainter for Recorder {
         let first = commands.vertices.len();
         commands.vertices.extend_from_slice(vertices);
         let end = commands.vertices.len();
-        commands.operations.push(Command { clip: scope.clip, drawing: Drawing::Triangles(first..end) });
+        commands.operations.push(Command {
+            clip: scope.clip,
+            drawing: Drawing::Triangles(first..end),
+        });
         Ok(())
     }
     /// Stores a checked fill command without accessing the calling stack's painter.
@@ -217,7 +226,10 @@ impl IPainter for Recorder {
         let first = commands.text.len();
         commands.text.push_str(label);
         let end = commands.text.len();
-        commands.operations.push(Command { clip: scope.clip, drawing: Drawing::Text(rect, first..end) });
+        commands.operations.push(Command {
+            clip: scope.clip,
+            drawing: Drawing::Text(rect, first..end),
+        });
         Ok(())
     }
 }
@@ -272,6 +284,7 @@ impl PaintService {
             active: ctx.active(),
             window_active: ctx.window_active(),
         };
+        let mut widget = widget.clone();
         let result = widget.paint(PaintScope { invocation, clip: state.clip }, state, self.painter.as_com_ref());
         drop(guard);
         // Failed paint abandons every retained resource as well; never run Release under the queue borrow.

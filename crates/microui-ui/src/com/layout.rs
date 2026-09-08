@@ -181,6 +181,7 @@ impl LayoutService {
     /// Measures the external policy with an owned frame, expiring its scope before returning.
     pub(super) fn measure(&self, children: &Rc<ChildStore>, policy: &ComPtr<IContainerLayoutAbi>, bounds: LayoutLimits) -> Result<Size, NcStatus> {
         let guard = self.begin(children, None)?;
+        let mut policy = policy.clone();
         let result = policy.measure(guard.scope, bounds, self.service.as_com_ref());
         // A component may accidentally ignore a failed child call; its error still prevents caching.
         result.and_then(|size| {
@@ -198,6 +199,7 @@ impl LayoutService {
         rect: Rect,
     ) -> Result<ContainerGeometry, NcStatus> {
         let guard = self.begin(children, Some(traversal.clone()))?;
+        let mut policy = policy.clone();
         let geometry = policy.place(guard.scope, rect, self.service.as_com_ref())?;
         children.open()?;
         geometry.validate()?;

@@ -25,8 +25,8 @@ impl ITexture for ImageTexture {
         self.probe.reads.set(self.probe.reads.get() + 1);
         if let Some(slot) = self.probe.target.upgrade() {
             let target = slot.borrow().clone();
-            if let Some(target) = target {
-                assert_eq!(target.clear_image(), Err(UI_E_BUSY));
+            if let Some(mut target) = target {
+                assert_eq!(target.clear_image(), Err(NC_E_BUSY));
             }
         }
         Ok(Size {
@@ -47,14 +47,17 @@ impl Drop for ImageTexture {
 fn image_controls_keep_owned_pixels_and_forward_ordered_cropped_paint_after_errors() {
     let atlas = crate::test_support::test_atlas();
     let mut skin = crate::Skin::from_atlas(&atlas);
-    let palette = crate::FlatPalette { text: crate::color(0, 0, 0, 255), ..crate::FlatPalette::default() };
+    let palette = crate::FlatPalette {
+        text: crate::color(0, 0, 0, 255),
+        ..crate::FlatPalette::default()
+    };
     skin.apply_flat_palette(palette);
     let assets = crate::assets::export_bundle(&crate::SkinBundle::new(atlas, skin)).unwrap();
     let ui = microui_redux::Ui::from_interface(create_runtime_from_assets(assets.as_com_ref()).unwrap()).unwrap();
-    let button = ui.widgets().button("AB").unwrap();
+    let mut button = ui.widgets().button("AB").unwrap();
     button.set_options(WidgetOptions::NONE).unwrap();
     button.set_fill_states(FillStates::NONE).unwrap();
-    let common = button.node_interface().unwrap();
+    let mut common = button.node_interface().unwrap();
     let target = Rc::new(RefCell::new(Some(button.as_interface().add_ref())));
     let image_probe = Rc::new(ImageProbe {
         target: Rc::downgrade(&target),
@@ -108,7 +111,7 @@ fn image_controls_keep_owned_pixels_and_forward_ordered_cropped_paint_after_erro
     assert_eq!(&*paint_probe.order.borrow(), &[false, true]);
     // The inherited list-box editing path retains exactly the same immutable resource.
     target.borrow_mut().take();
-    let list = ui.widgets().list_box("list image").unwrap();
+    let mut list = ui.widgets().list_box("list image").unwrap();
     list.set_image(texture.as_com_ref(), true).unwrap();
     drop(texture);
     button.clear_image().unwrap();
@@ -152,7 +155,7 @@ impl IRenderer for ImageFrameRenderer {
 #[test]
 fn image_buttons_survive_both_builtin_and_runtime_clipping_in_a_complete_frame() {
     let ui = microui_redux::Ui::from_interface(runtime()).unwrap();
-    let button = ui.widgets().button("AB").unwrap();
+    let mut button = ui.widgets().button("AB").unwrap();
     button.set_options(WidgetOptions::NONE).unwrap();
     let image_probe = Rc::new(ImageProbe::default());
     let image: ComPtr<ITextureAbi> = ImageTexture::from_value(ImageTexture { probe: image_probe.clone() }).query().unwrap();
@@ -162,7 +165,9 @@ fn image_buttons_survive_both_builtin_and_runtime_clipping_in_a_complete_frame()
     let parent = ui.window("clip owner", Rect { x: 20, y: 20, width: 32, height: 40 }, &background).unwrap();
     parent.set_options(WindowOptions::NO_TITLE | WindowOptions::NO_PADDING).unwrap();
     parent.set_child_clip(ChildClip::CONTENT).unwrap();
-    let window = ui.child_window(parent.as_com_ref(), "image", Rect {x:20,y:20,width:100,height:40}, &button).unwrap();
+    let window = ui
+        .child_window(parent.as_com_ref(), "image", Rect { x: 20, y: 20, width: 100, height: 40 }, &button)
+        .unwrap();
     window.set_options(WindowOptions::NO_TITLE | WindowOptions::NO_PADDING).unwrap();
     let quads = Rc::new(RefCell::new(Vec::new()));
     let renderer: ComPtr<IRendererAbi> = ImageFrameRenderer::from_value(ImageFrameRenderer { quads: quads.clone() }).query().unwrap();
