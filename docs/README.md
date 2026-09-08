@@ -11,7 +11,7 @@ cover the retained UI model, integration details, and repository workflows.
 - [Assets](COM_ASSETS.md) — immutable catalogs, generated resources and transactional installation.
 - Measured deployment and performance — complete package sizes, memory, startup, tree costs and external counters.
 - Assembly build performance — compiler reuse, shared-library LTO, and measured build times.
-- [Local COM implementation](../crates/com/README.md) and [ABI specification](../crates/com/docs/abi-v3.md).
+- [Local COM implementation](../crates/com/README.md) and [ABI specification](../crates/com/docs/abi-v4.md).
 - [Accepted design](COM_DESIGN.md) and [implementation progress](COM_MIGRATION.md).
 
 ## UI implementation notes
