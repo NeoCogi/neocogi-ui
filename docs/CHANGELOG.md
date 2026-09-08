@@ -41,6 +41,8 @@ wrappers. The accepted migration and outstanding validation are recorded in
 - Make ScrollArea and Disclosure registered class contracts. Their fixed
   compositions retain shared scrolling/container protocols while content,
   expansion, header, and body access live on the concrete class projections.
+- Make the always-present PngDecoder and StyleCompiler asset roots callable
+  classes; diagnostics remain a reusable interface on both objects.
 - Replace the registered platform root's `IPlatform` plus separate class-ID
   declaration with a callable `Platform` class contract. Renderer diagnostics
   remain a shared capability on the same native bootstrap object.

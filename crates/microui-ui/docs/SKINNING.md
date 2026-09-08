@@ -46,9 +46,9 @@ Ask the asset compiler for an immutable candidate in the UI's current catalog, t
 the same transactional asset boundary used for a complete theme replacement:
 
 ```rust,no_run
-use microui_redux::{FlatPalette, IRendererAbi, IStyleCompilerAbi, PaletteEdit, Ui};
+use microui_redux::{FlatPalette, IRendererAbi, StyleCompilerAbi, PaletteEdit, Ui};
 use nc_com::{ComRef, NcStatus};
-fn customize(ui: &Ui, renderer: ComRef<'_, IRendererAbi>, compiler: ComRef<'_, IStyleCompilerAbi>) -> Result<(), NcStatus> {
+fn customize(ui: &Ui, renderer: ComRef<'_, IRendererAbi>, compiler: ComRef<'_, StyleCompilerAbi>) -> Result<(), NcStatus> {
     let mut metrics = ui.assets()?.metrics()?;
     metrics.padding = 8;
     let current = ui.assets()?;

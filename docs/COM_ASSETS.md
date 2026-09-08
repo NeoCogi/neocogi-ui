@@ -13,8 +13,8 @@ fixtures and a native flat-palette reference remain test-only; they provide an
 independent check of portable compiler output. Runtime UI code only imports
 resolved resources.
 
-`microui-plugin-assets` without features registers `IPngDecoder` and
-`IStyleCompiler`. The decoder's `upload` method accepts one complete, nonempty PNG at offset zero and borrows an
+`microui-plugin-assets` without features registers the `PngDecoder` and
+`StyleCompiler` classes. The decoder's `upload` method accepts one complete, nonempty PNG at offset zero and borrows an
 `ITextureFactory` for the upload. Encoded input and decoded RGBA storage each have
 a 64 MiB ceiling; dimensions are checked before pixel allocation and animated PNG
 is rejected. Invalid input never calls the factory. Factory errors preserve their
@@ -219,7 +219,7 @@ finish. Renderer upload details use `IRenderDiagnostics`.
 
 ## Live metric and palette edits
 
-Activate `STYLE_COMPILER_CLASS` as `IStyleCompiler`. Its `derive_style` method takes
+Construct `StyleCompilerAbi` through its callable class contract. Its `derive_style` method takes
 an explicit base bundle, complete metrics and a closed `PaletteEdit` value.
 `Preserve` retains existing appearance tables; `Flat` compiles all role/state
 values using the base frame geometry and updates an enabled title backdrop.

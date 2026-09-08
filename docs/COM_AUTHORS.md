@@ -377,7 +377,7 @@ the renderer capabilities specified in the renderer migration.
 
 ## Local custom leaves and solid drawing
 
-The asset plugin's `IStyleCompiler` supports typed palette and metric editors.
+The asset plugin's `StyleCompiler` class supports typed palette and metric editors.
 `compiler.derive_style(base, metrics, PaletteEdit::Preserve.into())` keeps the base
 theme artwork; `PaletteEdit::Flat(palette)` compiles complete flat appearance tables.
 Both return a new immutable bundle in the current catalog without installing it

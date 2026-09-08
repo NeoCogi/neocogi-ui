@@ -1,6 +1,6 @@
 //! Immutable resource transfer: bulk copies during installation, local lookup during frames.
 use crate::{Rect, Size};
-use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, com_enum, com_interface, com_int_enum, com_struct};
+use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, com_class, com_enum, com_interface, com_int_enum, com_struct};
 
 /// Bulk asset semantic schema, including canonical appearance role/state table order.
 /// Bump when table ordering, mandatory resource names or implicit interpretation changes.
@@ -428,23 +428,23 @@ pub enum PaletteEdit {
     Flat(crate::FlatPalette),
 }
 
-#[com_interface(auto_guid = "microui.StyleCompiler:v1")]
-/// Asset-owned authoring service independent of UI trees and renderer resources.
-pub trait IStyleCompiler {
+#[com_class(auto_guid = "microui.StyleCompiler:v1")]
+/// Constructible asset authoring root independent of UI trees and renderer resources.
+pub trait StyleCompiler: IAssetDiagnostics {
+    /// Creates an empty compiler with independently owned diagnostic state.
+    #[constructor]
+    fn new() -> Result<Self, NcStatus>;
     /// Derives a complete immutable revision in the base catalog without installing it.
     /// Preserve retains artwork; Flat recompiles every appearance from one concrete palette.
     fn derive_style(&self, base: ComRef<'_, IAssetBundleAbi>, metrics: AssetMetrics, palette: PaletteEditAbi) -> Result<ComPtr<IAssetBundleAbi>, NcStatus>;
 }
 
-/// Activation identity for resource-only style compilation, including embedded deployments.
-pub const STYLE_COMPILER_CLASS: nc_com::NcGuid = nc_com::guid_from_qualified_name("microui.StyleCompiler");
-
-/// Optional compressed-image provider, available without font construction or theme JSON.
-pub const PNG_DECODER_CLASS: nc_com::NcGuid = nc_com::guid_from_qualified_name("microui.PngDecoder");
-
-#[com_interface(auto_guid = "microui.PngDecoder:v1")]
-/// Optional CPU decoder uploads through the target renderer's ordinary owned-image factory.
-pub trait IPngDecoder {
+#[com_class(auto_guid = "microui.PngDecoder:v1")]
+/// Constructible CPU decoder uploading through the target renderer's owned-image factory.
+pub trait PngDecoder: IAssetDiagnostics {
+    /// Creates an empty decoder with independently owned diagnostic state.
+    #[constructor]
+    fn new() -> Result<Self, NcStatus>;
     /// Decodes one static PNG and uploads exact normalized RGBA through a borrowed factory.
     /// The complete input starts at offset zero; encoded and decoded data are bounded to 64 MiB.
     /// Decoder failures never call the factory. Upload failures preserve their original status.

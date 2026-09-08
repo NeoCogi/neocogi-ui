@@ -115,9 +115,9 @@ impl Host {
     #[cfg(feature = "png-assets")]
     pub fn png_texture(&self, png: &[u8]) -> Result<ComPtr<ITextureAbi>, HostError> {
         let runtime = nc_com::Runtime::global();
-        runtime.require_interface_type::<IPngDecoderAbi>(PNG_DECODER_CLASS)?;
+        runtime.require_interface_type::<PngDecoderAbi>(PngDecoderAbi::CLASS_ID)?;
         // SAFETY: The checked decoder class has the documented argument-free constructor.
-        let decoder: ComPtr<IPngDecoderAbi> = runtime.construct_class_as(PNG_DECODER_CLASS, ())?;
+        let decoder: ComPtr<PngDecoderAbi> = runtime.construct(())?;
         let target = self.renderer.query::<ITextureFactoryAbi>()?;
         decoder.upload(NcCopyFromBufferOffset::new(0, png), target.as_com_ref()).map_err(|status| {
             let detail = decoder

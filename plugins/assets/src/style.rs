@@ -253,16 +253,19 @@ fn flat_chrome_visual(frame_insets: Insets, palette: &FlatPalette, role: ChromeR
     patch
 }
 
-#[nc_com::com_object(class_id(STYLE_COMPILER_CLASS), name = "microui.StyleCompiler", version = "0.9.0-alpha.0",
-    constructor(args = none, default), interfaces(IStyleCompiler, IAssetDiagnostics))]
+#[nc_com::com_object(microui_contracts::StyleCompiler)]
 #[derive(Default)]
 /// Compiles resource revisions without borrowing a UI or retaining a renderer.
-pub struct StyleCompiler {
+pub struct StyleCompilerObject {
     /// Owned diagnostics remain inspectable independently of each immutable result.
     diagnostic: crate::Diagnostic,
 }
 
-impl IStyleCompiler for StyleCompiler {
+impl StyleCompiler for StyleCompilerObject {
+    /// Creates an empty compiler whose first failed operation may populate diagnostics.
+    fn new() -> Result<Self, nc_com::NcStatus> {
+        Ok(Self::default())
+    }
     /// Copies the base once, applies the explicit edit, validates and publishes in its catalog.
     fn derive_style(
         &self,
@@ -289,7 +292,7 @@ impl IStyleCompiler for StyleCompiler {
     }
 }
 
-impl IAssetDiagnostics for StyleCompiler {
+impl IAssetDiagnostics for StyleCompilerObject {
     /// Returns an owned failure snapshot without a borrow into the compiler.
     fn diagnostic(&self) -> Result<nc_com::ComPtr<nc_com::INcStringAbi>, nc_com::NcStatus> {
         Ok(self.diagnostic.snapshot())

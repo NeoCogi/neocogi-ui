@@ -322,7 +322,7 @@ fn runtime_install_is_atomic_and_updates_shared_widget_measurement() {
 #[test]
 fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision() {
     let source = export_bundle(&bundle()).unwrap();
-    let compiler: ComPtr<IStyleCompilerAbi> = microui_plugin_assets::StyleCompiler::from_value(microui_plugin_assets::StyleCompiler::default())
+    let compiler: ComPtr<StyleCompilerAbi> = microui_plugin_assets::StyleCompilerObject::from_value(microui_plugin_assets::StyleCompilerObject::default())
         .query()
         .unwrap();
     let ui = microui_redux::Ui::from_interface(crate::com::create_runtime_from_assets(source.as_com_ref()).unwrap()).unwrap();

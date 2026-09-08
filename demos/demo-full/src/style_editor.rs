@@ -164,7 +164,7 @@ pub(super) struct StyleEditor {
     /// Original catalog makes all theme selections valid revisions of the same application assets.
     base: ComPtr<IAssetBundleAbi>,
     /// Asset-owned compiler remains independent of the currently selected UI tree.
-    compiler: ComPtr<IStyleCompilerAbi>,
+    compiler: ComPtr<StyleCompilerAbi>,
     /// Selected pristine theme determines whether flat palette editing is meaningful.
     selected: Theme,
     /// Application-owned flat recipe, never a second live renderer appearance table.
@@ -181,7 +181,7 @@ impl StyleEditor {
     pub(super) fn new(ui: &Ui) -> Result<(Self, ScrollAreaWidget), NcStatus> {
         let base = ui.assets()?;
         // Activation belongs to this application; the UI runtime has no asset-provider dependency.
-        let compiler = nc_com::Runtime::global().construct_class_as(STYLE_COMPILER_CLASS, ())?;
+        let compiler = nc_com::Runtime::global().construct(())?;
         let mut metrics = base.metrics()?;
         let mut palette = FlatPalette::default();
         let content = column(ui)?;

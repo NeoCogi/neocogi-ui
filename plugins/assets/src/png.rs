@@ -90,15 +90,18 @@ impl RgbaImage {
     }
 }
 
-#[com_object(class_id(PNG_DECODER_CLASS), name = "microui.PngDecoder", version = "0.9.0-alpha.0",
-    constructor(args = none, default), interfaces(IPngDecoder, IAssetDiagnostics))]
+#[com_object(microui_contracts::PngDecoder)]
 #[derive(Default)]
 /// Decodes PNGs independently of the optional font rasterizer and JSON compiler.
-pub struct PngDecoder {
+pub struct PngDecoderObject {
     /// Last failed decode or upload; no diagnostic borrow spans the foreign factory call.
     diagnostic: Diagnostic,
 }
-impl IPngDecoder for PngDecoder {
+impl PngDecoder for PngDecoderObject {
+    /// Creates an empty decoder whose first operation may populate its diagnostics.
+    fn new() -> Result<Self, NcStatus> {
+        Ok(Self::default())
+    }
     /// Decodes fully before invoking the renderer, retaining all temporary buffers for the call only.
     fn upload(&self, png: NcCopyFromBufferOffset<'_, u8>, target: ComRef<'_, ITextureFactoryAbi>) -> Result<ComPtr<ITextureAbi>, NcStatus> {
         if png.offset() != 0 {
@@ -113,7 +116,7 @@ impl IPngDecoder for PngDecoder {
             })
     }
 }
-impl IAssetDiagnostics for PngDecoder {
+impl IAssetDiagnostics for PngDecoderObject {
     /// Returns an immutable failure snapshot that remains usable through later uploads.
     fn diagnostic(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         Ok(self.diagnostic.snapshot())
@@ -216,7 +219,7 @@ mod tests {
     /// Invalid input never reaches a foreign factory; failed uploads preserve status and allow retry.
     #[test]
     fn bounded_png_upload_reentry_failure_and_recovery() {
-        let decoder: ComPtr<IPngDecoderAbi> = PngDecoder::from_value(PngDecoder::default()).query().unwrap();
+        let decoder: ComPtr<PngDecoderAbi> = PngDecoderObject::from_value(PngDecoderObject::default()).query().unwrap();
         let diagnostics: ComPtr<IAssetDiagnosticsAbi> = decoder.query().unwrap();
         let calls = Rc::new(Cell::new(0));
         let fail = Rc::new(Cell::new(false));

@@ -8,7 +8,7 @@ use std::cell::RefCell;
 #[cfg(feature = "builder")]
 pub mod atlas;
 mod style;
-pub use style::StyleCompiler;
+pub use style::StyleCompilerObject;
 #[cfg(feature = "builder")]
 mod builder;
 #[cfg(feature = "builder")]
@@ -16,7 +16,7 @@ pub use builder::AssetLoader;
 #[cfg(feature = "theme-json")]
 pub use builder::ThemeLoader;
 mod png;
-pub use png::PngDecoder;
+pub use png::PngDecoderObject;
 
 /// Shared owned diagnostics contain no decoder borrow or platform-native error object.
 #[derive(Default)]
@@ -39,17 +39,17 @@ impl Diagnostic {
 #[cfg(not(feature = "builder"))]
 nc_com::plugin! {
     plugin_id(auto_guid = "microui.plugin.assets"), name = "microui.plugin.assets",
-    version = "0.9.0-alpha.0", classes = [PngDecoder, StyleCompiler],
+    version = "0.9.0-alpha.0", classes = [PngDecoderObject, StyleCompilerObject],
 }
 #[cfg(all(feature = "builder", not(feature = "theme-json")))]
 nc_com::plugin! {
     plugin_id(auto_guid = "microui.plugin.assets"), name = "microui.plugin.assets",
-    version = "0.9.0-alpha.0", classes = [PngDecoder, StyleCompiler, AssetLoader],
+    version = "0.9.0-alpha.0", classes = [PngDecoderObject, StyleCompilerObject, AssetLoader],
 }
 #[cfg(feature = "theme-json")]
 nc_com::plugin! {
     plugin_id(auto_guid = "microui.plugin.assets"), name = "microui.plugin.assets",
-    version = "0.9.0-alpha.0", classes = [PngDecoder, StyleCompiler, AssetLoader, ThemeLoader],
+    version = "0.9.0-alpha.0", classes = [PngDecoderObject, StyleCompilerObject, AssetLoader, ThemeLoader],
 }
 #[cfg(feature = "dynamic-plugin")]
 nc_com::export_plugin!();
