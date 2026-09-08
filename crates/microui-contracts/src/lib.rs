@@ -443,7 +443,7 @@ pub trait IWindowManager {
 
 #[com_class(auto_guid = "microui.UiRuntime:v1")]
 /// One constructible retained UI with input, rendering, and resource ownership.
-pub trait UiRuntime: IInputSink {
+pub trait UiRuntime: IInputSink + IUiFactory + IWindowManager + IMenus + IFileDialogs {
     /// Imports one immutable asset bundle into a new independent UI.
     #[constructor]
     fn new(assets: ComRef<'_, IAssetBundleAbi>) -> Result<Self, NcStatus>;
