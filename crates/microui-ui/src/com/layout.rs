@@ -2,7 +2,7 @@
 use super::*;
 use super::{
     children::{ChildStore, ChildTransaction},
-    widget::Resources,
+    widget::SharedAssets,
 };
 use crate::{Constraints, Dimensioni};
 use crate::ui_node::LayoutTraversal;
@@ -23,8 +23,8 @@ struct Storage {
     next: Cell<u64>,
     /// Methods take the frame before calling a child, permitting safe nested scopes.
     frame: RefCell<Option<Frame>>,
-    /// The complete immutable resource revision used by all children in this pass.
-    resources: Rc<Resources>,
+    /// Current imported assets borrowed consistently while measuring or placing one child.
+    resources: SharedAssets,
     /// First-error authority shared with retained geometry caches.
     host: Rc<HostState>,
 }
@@ -90,7 +90,7 @@ impl ILayoutService for Layout {
         let mut access = self.storage.take(scope)?;
         let constraints = constraints(limits)?;
         let node = access.frame().children.get_mut(index as usize).ok_or(nc_com::NC_E_OUT_OF_RANGE)?;
-        let resources = self.storage.resources.current();
+        let resources = self.storage.resources.borrow();
         let size = node.measure(resources.bundle().skin(), resources.bundle().atlas(), constraints);
         self.storage.size(size)
     }
@@ -102,7 +102,7 @@ impl ILayoutService for Layout {
         }
         let frame = access.placement()?;
         let node = frame.children.get_mut(index as usize).ok_or(nc_com::NC_E_OUT_OF_RANGE)?;
-        let resources = self.storage.resources.current();
+        let resources = self.storage.resources.borrow();
         let size = frame.placement.as_mut().expect("placement was checked").layout_node_ref(
             node,
             resources.bundle().skin(),
@@ -148,8 +148,8 @@ pub(super) struct LayoutService {
     service: ComPtr<ILayoutServiceAbi>,
 }
 impl LayoutService {
-    /// Allocates one service tied to the runtime's immutable resource revision.
-    pub(super) fn new(resources: Rc<Resources>, host: Rc<HostState>) -> Self {
+    /// Allocates one service observing the runtime's single replaceable asset value.
+    pub(super) fn new(resources: SharedAssets, host: Rc<HostState>) -> Self {
         let storage = Rc::new(Storage {
             active: Cell::new(0),
             next: Cell::new(0),

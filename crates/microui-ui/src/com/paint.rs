@@ -5,15 +5,15 @@ use crate::{FontRole, WidgetOption, ControlRole};
 #[com_object(interfaces(ITextMetrics))]
 /// Immutable text metrics for one installed resource bundle.
 pub(super) struct Metrics {
-    /// Exact immutable revision also shared by the concrete built-in objects.
-    pub(super) resources: Rc<super::widget::Resources>,
+    /// Current imported assets shared with concrete built-ins in this runtime.
+    pub(super) resources: super::widget::SharedAssets,
 }
 
 impl ITextMetrics for Metrics {
     /// Uses the existing inline-content algorithm so migration preserves sizing.
     fn button_size(&self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<Size, NcStatus> {
         let label = text(input)?;
-        let resources = self.resources.current();
+        let resources = self.resources.borrow();
         let size = crate::ui_node::widgets::control::inline_content_size(
             resources.bundle().skin(),
             resources.bundle().atlas(),

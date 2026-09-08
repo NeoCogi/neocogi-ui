@@ -1,6 +1,6 @@
 //! Shared construction authority, independent of any root forest or runtime transaction.
 use super::*;
-use super::{widget::Resources, paint::PaintService};
+use super::{widget::SharedAssets, paint::PaintService};
 use super::{children::ChildStore, node::NodeLayoutKind, layout::LayoutService};
 
 /// Runtime-bound services shared by root attachment and owned child collections.
@@ -14,8 +14,8 @@ pub(super) struct NodeFactory {
     pub(super) state: Rc<HostState>,
     /// Canonical host identity used to reject objects from another UI instance.
     pub(super) host: ComPtr<IWidgetHostAbi>,
-    /// One immutable resource revision for built-in state and layout services.
-    pub(super) resources: Rc<Resources>,
+    /// One current imported asset value observed by built-in state and layout services.
+    pub(super) resources: SharedAssets,
     /// Borrowed measurement service supplied to independent leaf implementations.
     pub(super) metrics: ComPtr<ITextMetricsAbi>,
     /// Reusable scope-checked owned painter service.

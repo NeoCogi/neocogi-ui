@@ -17,26 +17,8 @@ pub(crate) trait WidgetAlgorithm: crate::Widget {
     }
 }
 
-/// One installed revision shared by runtime traversal and its retained services.
-pub(super) struct Resources {
-    /// Clone an owned snapshot before foreign calls; the slot never lends a RefCell guard to a component.
-    current: RefCell<Rc<crate::assets::ImportedAssets>>,
-}
-impl Resources {
-    /// Creates the one runtime resource slot from the already validated, resolved bundle.
-    pub(super) fn new(assets: crate::assets::ImportedAssets) -> Rc<Self> {
-        Rc::new(Self { current: RefCell::new(Rc::new(assets)) })
-    }
-    /// Publishes prepared local state; foreign final releases occur after the slot borrow ends.
-    pub(super) fn install(&self, revision: Rc<crate::assets::ImportedAssets>) {
-        let old = self.current.replace(revision);
-        drop(old);
-    }
-    /// Retains one immutable revision with no borrow surviving into layout, paint or foreign calls.
-    pub(super) fn current(&self) -> Rc<crate::assets::ImportedAssets> {
-        self.current.borrow().clone()
-    }
-}
+/// One current imported asset value shared by the runtime services that observe installation.
+pub(super) type SharedAssets = Rc<RefCell<crate::assets::ImportedAssets>>;
 
 /// One built-in widget's imported resources and reusable local paint workspace.
 struct WidgetRevision {

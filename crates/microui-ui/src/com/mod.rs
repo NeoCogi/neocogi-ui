@@ -107,7 +107,7 @@ impl IWidgetHost for WidgetHost {
     fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         self.check_open()?;
         let factory = self.state.factory.borrow().upgrade().ok_or(UI_E_CLOSED)?;
-        let revision = factory.resources.current();
+        let revision = factory.resources.borrow();
         Ok(revision.source().add_ref())
     }
     /// Issues a private writer and distinct read-only view for a new empty collection.

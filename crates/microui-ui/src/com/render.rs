@@ -213,7 +213,7 @@ enum Destination {
     /// A built-in paint invocation returns its owned bulk vertices to a painter.
     Recording,
     /// A complete retained frame calls the selected external renderer once.
-    Renderer(Rc<super::widget::Resources>),
+    Renderer(super::widget::SharedAssets),
 }
 
 /// One concrete geometry backend for local paint recording and complete COM frame submission.
@@ -232,7 +232,7 @@ pub(super) struct Backend {
 
 impl Backend {
     /// Creates recording storage without acquiring a GPU frame.
-    pub(super) fn new(host: Rc<HostState>, resources: Rc<super::widget::Resources>) -> Self {
+    pub(super) fn new(host: Rc<HostState>, resources: super::widget::SharedAssets) -> Self {
         Self::create(Some(host), Destination::Renderer(resources))
     }
     /// Creates the same executor with explicit recording or resource-owning submission behavior.
@@ -330,7 +330,7 @@ impl RendererFrame for Frame<'_> {
         let Destination::Renderer(resources) = &self.backend.destination else {
             unreachable!("recording returned above")
         };
-        let revision = resources.current();
+        let revision = resources.borrow();
         renderer
             .render(
                 RenderInfo {

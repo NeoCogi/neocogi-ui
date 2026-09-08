@@ -34,7 +34,7 @@ fn create_storage(assets: crate::assets::ImportedAssets) -> Rc<RuntimeStorage> {
     let bundle = assets.bundle().clone();
     let state = Rc::new(HostState::default());
     let host: ComPtr<IWidgetHostAbi> = WidgetHost::from_value(WidgetHost { state: state.clone() }).query().expect("host interface");
-    let resources = super::widget::Resources::new(assets);
+    let resources = Rc::new(RefCell::new(assets));
     let metrics = Metrics::from_value(Metrics { resources: resources.clone() })
         .query()
         .expect("metrics interface");
@@ -175,7 +175,7 @@ impl UiRuntime for Runtime {
     /// Exposes an owned immutable revision without borrowing mutable tree state.
     fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         self.storage.open()?;
-        Ok(self.storage.factory.resources.current().source().add_ref())
+        Ok(self.storage.factory.resources.borrow().source().add_ref())
     }
     /// Prepares all CPU state and the fallible GPU upload before publishing a shared revision.
     fn install_assets(&self, source: ComRef<'_, IAssetBundleAbi>, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
@@ -185,19 +185,24 @@ impl UiRuntime for Runtime {
         // observation phase and exclusive context slot still reject layout/paint/upload reentry.
         let mut context = storage.context()?;
         let _phase = Observation::begin(&storage.factory.state);
-        let previous = storage.factory.resources.current();
-        if previous.source().as_ptr() == source.as_ptr() {
+        let next = {
+            let previous = storage.factory.resources.borrow();
+            if previous.source().as_ptr() == source.as_ptr() {
+                None
+            } else {
+                Some(crate::assets::ImportedAssets::read(source, Some(&previous))?)
+            }
+        };
+        let Some(next) = next else {
             // The UI revision is already current. Only the explicitly supplied renderer may
             // need to switch back from another UI's atlas; do not invalidate unchanged geometry.
             return renderer.prepare_assets(source);
-        }
-        let assets = crate::assets::ImportedAssets::read(source, Some(&previous))?;
-        let next = Rc::new(assets);
+        };
         renderer.prepare_assets(source)?;
         // ImportedAssets has already proved every original identity survives. The COM backend's
         // atlas replacement is a local assignment; this commit performs no further foreign calls.
         context.set_skin_bundle(next.bundle()).map_err(|_| NC_E_INVALID_ARG)?;
-        storage.factory.resources.install(next);
+        storage.factory.resources.replace(next);
         storage.pending.set(true);
         Ok(())
     }
