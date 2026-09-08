@@ -17,6 +17,8 @@ nc_com::plugin! {
         microui_ui::com::TextboxObject,
         microui_ui::com::TextBlockObject,
         microui_ui::com::TextAreaObject,
+        microui_ui::com::SliderObject,
+        microui_ui::com::NumberObject,
     ],
 }
 

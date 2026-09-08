@@ -44,7 +44,7 @@ pub mod test_support {
 }
 
 use crate::com::*;
-use nc_com::{com_object, ComInterface, ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcStatus, NC_E_INVALID_ARG};
+use nc_com::{com_object, ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcStatus, NC_E_INVALID_ARG};
 use std::{
     cell::{Cell, RefCell, Ref, RefMut},
     rc::Rc,
@@ -384,6 +384,27 @@ pub struct NumericChanged {
     /// Copied semantic value owned by this event snapshot.
     pub value: f32,
 }
+
+/// Static facade hook shared by the concrete Slider and Number class wrappers.
+pub trait NumericEventSource {
+    /// Connects a numeric sink through the concrete class contract.
+    fn subscribe_numeric_sink(&self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
+}
+
+impl NumericEventSource for crate::SliderWidget {
+    /// Delegates directly to the Slider class projection without an event-interface query.
+    fn subscribe_numeric_sink(&self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.as_interface().subscribe(sink)
+    }
+}
+
+impl NumericEventSource for crate::NumberWidget {
+    /// Delegates directly to the Number class projection without an event-interface query.
+    fn subscribe_numeric_sink(&self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.as_interface().subscribe(sink)
+    }
+}
+
 #[com_object(interfaces(INumericSink))]
 /// Concrete local sink specialization stores application state and its exact handler type directly.
 struct NumericSink<State: 'static, Handler: EventHandler<State, NumericChanged> + 'static> {
@@ -402,9 +423,9 @@ impl<State: 'static, Handler: EventHandler<State, NumericChanged> + 'static> INu
 impl<State: 'static> EventSession<State> {
     /// Connects the widget's concrete event capability and registers its lease in deterministic order.
     /// Registration during an active session transaction reports BUSY before claiming the producer's port.
-    pub fn subscribe_numeric<I: ComInterface, Handler: EventHandler<State, NumericChanged> + 'static>(
+    pub fn subscribe_numeric<Source: NumericEventSource, Handler: EventHandler<State, NumericChanged> + 'static>(
         &self,
-        widget: &Widget<I>,
+        widget: &Source,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         let mut leases = self.registry.take()?;
@@ -415,7 +436,7 @@ impl<State: 'static> EventSession<State> {
             },
         })
         .query()?;
-        let lease = widget.as_interface().add_ref().query::<INumericEventsAbi>()?.subscribe(sink.as_com_ref())?;
+        let lease = widget.subscribe_numeric_sink(sink.as_com_ref())?;
         leases.push(lease.clone());
         Ok(lease)
     }

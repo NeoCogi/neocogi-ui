@@ -29,6 +29,9 @@ wrappers. The accepted migration and outstanding validation are recorded in
   contracts. Text, cursor, wrapping, typography, and editor subscriptions now
   live on those concrete class projections; TextArea retains only shared
   scrolling and container-layout protocols.
+- Make Slider and Number registered class contracts. Their value editing,
+  typography, and numeric subscriptions now live directly on the concrete class
+  projections instead of three overlapping numeric interfaces.
 - Replace `IUiFactory` with a separately registered `UiFactory` class. The
   runtime returns a host-bound instance for convenience, while hosts can construct
   `Button` and other registered classes directly from typed argument frames.

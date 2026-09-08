@@ -19,7 +19,7 @@ pub use combo::ComboObject;
 pub(crate) mod events;
 mod input;
 mod leaves;
-pub use leaves::{CheckboxObject, ScrollbarObject, TextBlockObject, TextboxObject};
+pub use leaves::{CheckboxObject, NumberObject, ScrollbarObject, SliderObject, TextBlockObject, TextboxObject};
 mod node;
 pub(crate) use node::ComNode;
 mod children;

@@ -104,25 +104,6 @@ pub trait Checkbox: crate::IWidget + crate::ILeafLayout {
     fn subscribe(&self, sink: ComRef<'_, crate::ICheckboxSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.NumericValue:v1")]
-/// Shared concrete numeric editing on the same widget allocation.
-pub trait INumericValue: crate::IWidget {
-    /// Returns the current finite numeric value.
-    fn value(&self) -> Result<f32, NcStatus>;
-    /// Replaces the finite value silently; sliders clamp it to their configured range.
-    fn set_value(&self, value: f32) -> Result<(), NcStatus>;
-    /// Reports whether the control currently accepts inline text editing.
-    fn is_editing(&self) -> Result<bool, NcStatus>;
-}
-
-#[com_interface(auto_guid = "microui.Slider:v1")]
-/// Bounded numeric control supporting drag, wheel, keyboard and inline text editing.
-pub trait ISlider: INumericValue {}
-
-#[com_interface(auto_guid = "microui.Number:v1")]
-/// Numeric entry without a slider range; step and precision are validated at construction.
-pub trait INumber: INumericValue {}
-
 #[com_struct]
 /// Complete slider arithmetic inputs, validated together before object construction.
 pub struct SliderOptions {
@@ -147,6 +128,46 @@ pub struct NumberOptions {
     pub step: f32,
     /// Fractional decimal digits, from zero through f32::DIGITS.
     pub precision: u8,
+}
+
+#[com_class(auto_guid = "microui.Slider:v1")]
+/// Constructible bounded numeric control whose concrete API is one class contract.
+pub trait Slider: crate::IWidget + crate::ILeafLayout {
+    /// Validates all arithmetic inputs and creates an unmounted framed slider.
+    #[constructor]
+    fn new(host: ComRef<'_, crate::IWidgetHostAbi>, options: SliderOptions) -> Result<Self, NcStatus>;
+    /// Returns the current finite value after range clamping and step snapping.
+    fn value(&self) -> Result<f32, NcStatus>;
+    /// Replaces a finite value silently after applying the configured range and step.
+    fn set_value(&self, value: f32) -> Result<(), NcStatus>;
+    /// Reports whether the control currently accepts inline text editing.
+    fn is_editing(&self) -> Result<bool, NcStatus>;
+    /// Selects a semantic font role and invalidates measurement only when it differs.
+    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+    /// Resolves an exact named font in the current host bundle before committing.
+    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    /// Connects the exclusive finite-value subscriber and returns its ownership lease.
+    fn subscribe(&self, sink: ComRef<'_, crate::INumericSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
+}
+
+#[com_class(auto_guid = "microui.Number:v1")]
+/// Constructible unbounded numeric editor whose concrete API is one class contract.
+pub trait Number: crate::IWidget + crate::ILeafLayout {
+    /// Validates arithmetic inputs and creates an unmounted numeric editor.
+    #[constructor]
+    fn new(host: ComRef<'_, crate::IWidgetHostAbi>, options: NumberOptions) -> Result<Self, NcStatus>;
+    /// Returns the current finite value.
+    fn value(&self) -> Result<f32, NcStatus>;
+    /// Replaces a finite value silently using the configured precision.
+    fn set_value(&self, value: f32) -> Result<(), NcStatus>;
+    /// Reports whether the control currently accepts inline text editing.
+    fn is_editing(&self) -> Result<bool, NcStatus>;
+    /// Selects a semantic font role and invalidates measurement only when it differs.
+    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+    /// Resolves an exact named font in the current host bundle before committing.
+    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    /// Connects the exclusive finite-value subscriber and returns its ownership lease.
+    fn subscribe(&self, sink: ComRef<'_, crate::INumericSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
 }
 
 #[com_interface(auto_guid = "microui.ColorSwatch:v1")]

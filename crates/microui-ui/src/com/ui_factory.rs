@@ -117,30 +117,15 @@ impl UiFactory for UiFactoryObject {
     }
 
     /// Validates every arithmetic field before allocating a slider identity.
-    fn create_slider(&self, options: SliderOptions) -> Result<ComPtr<ISliderAbi>, NcStatus> {
+    fn create_slider(&self, options: SliderOptions) -> Result<ComPtr<SliderAbi>, NcStatus> {
         self.host.check_mutation()?;
-        let parameters = crate::SliderParameters::with_opt(
-            options.value,
-            options.low,
-            options.high,
-            options.step,
-            crate::DecimalPrecision::try_from(usize::from(options.precision)).map_err(|_| NC_E_INVALID_ARG)?,
-            crate::WidgetOption::FRAME,
-        )
-        .map_err(|_| NC_E_INVALID_ARG)?;
-        super::leaves::Slider::create(self.host.clone(), parameters.opt, crate::Slider::from(parameters))
+        super::leaves::SliderObject::create(self.host.clone(), options)
     }
 
     /// Validates every arithmetic field before allocating a number identity.
-    fn create_number(&self, options: NumberOptions) -> Result<ComPtr<INumberAbi>, NcStatus> {
+    fn create_number(&self, options: NumberOptions) -> Result<ComPtr<NumberAbi>, NcStatus> {
         self.host.check_mutation()?;
-        let parameters = crate::NumberParameters::new(
-            options.value,
-            options.step,
-            crate::DecimalPrecision::try_from(usize::from(options.precision)).map_err(|_| NC_E_INVALID_ARG)?,
-        )
-        .map_err(|_| NC_E_INVALID_ARG)?;
-        super::leaves::Number::create(self.host.clone(), parameters.opt, crate::Number::from(parameters))
+        super::leaves::NumberObject::create(self.host.clone(), options)
     }
 
     /// Validates the label before allocating a color swatch with copied RGBA state.

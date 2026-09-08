@@ -94,7 +94,7 @@ pub(super) fn label(ui: &Ui, text: &str) -> Result<TextBlockWidget, NcStatus> {
     ui.widgets().text_block(text, TextWrapping::NONE)
 }
 /// Shared framed, centered numeric control used by the palette and background editors.
-pub(super) fn slider(ui: &Ui, value: f32, high: f32) -> Result<Slider, NcStatus> {
+pub(super) fn slider(ui: &Ui, value: f32, high: f32) -> Result<SliderWidget, NcStatus> {
     let control = ui.widgets().slider(SliderOptions {
         value,
         low: 0.,

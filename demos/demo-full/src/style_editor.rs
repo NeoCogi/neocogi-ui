@@ -154,7 +154,7 @@ struct ColorRow {
     /// The palette field controlled by this row.
     role: ColorRole,
     /// Real RGBA sliders used for both subscriptions and silent refreshes.
-    channels: [Slider; 4],
+    channels: [SliderWidget; 4],
     /// Real color preview painted by the UI plugin.
     swatch: ColorSwatch,
 }
@@ -174,7 +174,7 @@ pub(super) struct StyleEditor {
     /// Concrete rows retain only the controls needed by application handlers.
     colors: Vec<ColorRow>,
     /// Concrete scalar controls paired with their named metric.
-    values: Vec<(Metric, Slider)>,
+    values: Vec<(Metric, SliderWidget)>,
 }
 impl StyleEditor {
     /// Builds the same 72 color sliders and five metrics inside one ordinary scrolling tree.

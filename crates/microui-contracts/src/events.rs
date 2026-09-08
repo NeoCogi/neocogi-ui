@@ -42,13 +42,6 @@ pub trait INumericSink {
     /// Receives the captured value after retained traversal releases its owned state.
     fn changed(&self, value: f32) -> Result<(), NcStatus>;
 }
-#[com_interface(auto_guid = "microui.NumericEvents:v1")]
-/// Exclusive typed subscription capability for this concrete event shape.
-pub trait INumericEvents {
-    /// Returns an application-owned queue/sink lease; the producer retains neither callback nor application state.
-    fn subscribe(&self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
-}
-
 #[com_interface(auto_guid = "microui.ScrollbarSink:v1")]
 /// Committed clamped scrollbar offset from pointer input; programmatic setters do not publish it.
 pub trait IScrollbarSink {

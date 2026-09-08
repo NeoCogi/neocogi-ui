@@ -5,8 +5,8 @@ use nc_com::{INcStringAbi, NcString};
 callable_leaf_class!(CheckboxObject, crate::Checkbox, microui_contracts::Checkbox);
 callable_leaf_class!(TextboxObject, crate::Textbox, microui_contracts::Textbox);
 callable_leaf_class!(TextBlockObject, crate::TextBlock, microui_contracts::TextBlock);
-leaf_class!(Slider, crate::Slider, ISlider, ISliderAbi, IFontStyle, INumericEvents);
-leaf_class!(Number, crate::Number, INumber, INumberAbi, IFontStyle, INumericEvents);
+callable_leaf_class!(SliderObject, crate::Slider, microui_contracts::Slider);
+callable_leaf_class!(NumberObject, crate::Number, microui_contracts::Number);
 leaf_class!(ColorSwatch, crate::ColorSwatch, IColorSwatch, IColorSwatchAbi, IFontStyle);
 leaf_class!(ListItem, crate::ListItem, IListItem, IListItemAbi, IFontStyle, IIconContent, IActivationEvents);
 leaf_class!(ListBox, crate::ListBox, IListBox, IListBoxAbi, IFontStyle, IActivationEvents, IImageContent);
@@ -231,41 +231,127 @@ pub(super) fn local_wrap(wrap: TextWrapping) -> Result<crate::TextWrap, NcStatus
     }
 }
 
-/// Shares finite-value editing without duplicating slider/number arithmetic policy.
-macro_rules! numeric_value {
-    ($name:ident) => {
-        impl INumericValue for $name {
-            /// Reads the finite value owned by the concrete semantic algorithm.
-            fn value(&self) -> Result<f32, NcStatus> {
-                self.widget.state.readable()?;
-                Ok(self.widget.take()?.value())
-            }
-            /// Rejects nonfinite input and dirties only an actual committed value change.
-            fn set_value(&self, value: f32) -> Result<(), NcStatus> {
-                self.widget.state.writable()?;
-                if !value.is_finite() {
-                    return Err(NC_E_INVALID_ARG);
-                }
-                let mut core = self.widget.take()?;
-                let previous = core.value();
-                core.set_value(value);
-                if core.value() != previous {
-                    self.widget.state.record_change(GeometryChange::CHANGED);
-                }
-                Ok(())
-            }
-            /// Exposes the same edit mode that controls routed text input.
-            fn is_editing(&self) -> Result<bool, NcStatus> {
-                self.widget.state.readable()?;
-                Ok(self.widget.take()?.is_editing())
-            }
-        }
-    };
+impl SliderObject {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(super) fn create(host: ComPtr<IWidgetHostAbi>, options: SliderOptions) -> Result<ComPtr<SliderAbi>, NcStatus> {
+        let value = <Self as Slider>::new(host.as_com_ref(), options)?;
+        Ok(Self::from_value(value).query().expect("SliderObject declares the Slider class contract"))
+    }
 }
-numeric_value!(Slider);
-numeric_value!(Number);
-impl ISlider for Slider {}
-impl INumber for Number {}
+
+impl Slider for SliderObject {
+    /// Validates the complete arithmetic tuple before allocating the established framed control.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, options: SliderOptions) -> Result<Self, NcStatus> {
+        let parameters = crate::SliderParameters::with_opt(
+            options.value,
+            options.low,
+            options.high,
+            options.step,
+            crate::DecimalPrecision::try_from(usize::from(options.precision)).map_err(|_| NC_E_INVALID_ARG)?,
+            crate::WidgetOption::FRAME,
+        )
+        .map_err(|_| NC_E_INVALID_ARG)?;
+        Ok(Self {
+            widget: super::widget::WidgetCore::new(host.add_ref(), parameters.opt, crate::Slider::from(parameters))?,
+        })
+    }
+    /// Reads the finite value owned by the slider's concrete semantic algorithm.
+    fn value(&self) -> Result<f32, NcStatus> {
+        self.widget.state.readable()?;
+        Ok(self.widget.take()?.value())
+    }
+    /// Rejects nonfinite input and dirties geometry only when clamping or snapping changes the value.
+    fn set_value(&self, value: f32) -> Result<(), NcStatus> {
+        self.widget.state.writable()?;
+        if !value.is_finite() {
+            return Err(NC_E_INVALID_ARG);
+        }
+        let mut core = self.widget.take()?;
+        let previous = core.value();
+        core.set_value(value);
+        if core.value() != previous {
+            self.widget.state.record_change(GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
+    /// Exposes the same edit mode that controls routed text input.
+    fn is_editing(&self) -> Result<bool, NcStatus> {
+        self.widget.state.readable()?;
+        Ok(self.widget.take()?.is_editing())
+    }
+    /// Validates a semantic font role before changing the slider's measurement input.
+    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
+        self.widget.set_font_role(role)
+    }
+    /// Resolves one exact named font before replacing the slider's selection.
+    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.widget.set_named_font(name)
+    }
+    /// Connects the slider's existing semantic event source directly through the class contract.
+    fn subscribe(&self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.widget.subscribe::<crate::SliderChanged>(sink)
+    }
+}
+
+impl NumberObject {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(super) fn create(host: ComPtr<IWidgetHostAbi>, options: NumberOptions) -> Result<ComPtr<NumberAbi>, NcStatus> {
+        let value = <Self as Number>::new(host.as_com_ref(), options)?;
+        Ok(Self::from_value(value).query().expect("NumberObject declares the Number class contract"))
+    }
+}
+
+impl Number for NumberObject {
+    /// Validates the complete arithmetic tuple before allocating the numeric editor.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, options: NumberOptions) -> Result<Self, NcStatus> {
+        let parameters = crate::NumberParameters::new(
+            options.value,
+            options.step,
+            crate::DecimalPrecision::try_from(usize::from(options.precision)).map_err(|_| NC_E_INVALID_ARG)?,
+        )
+        .map_err(|_| NC_E_INVALID_ARG)?;
+        Ok(Self {
+            widget: super::widget::WidgetCore::new(host.add_ref(), parameters.opt, crate::Number::from(parameters))?,
+        })
+    }
+    /// Reads the finite value owned by the number editor's concrete semantic algorithm.
+    fn value(&self) -> Result<f32, NcStatus> {
+        self.widget.state.readable()?;
+        Ok(self.widget.take()?.value())
+    }
+    /// Rejects nonfinite input and dirties geometry only when the committed value changes.
+    fn set_value(&self, value: f32) -> Result<(), NcStatus> {
+        self.widget.state.writable()?;
+        if !value.is_finite() {
+            return Err(NC_E_INVALID_ARG);
+        }
+        let mut core = self.widget.take()?;
+        let previous = core.value();
+        core.set_value(value);
+        if core.value() != previous {
+            self.widget.state.record_change(GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
+    /// Exposes the same edit mode that controls routed text input.
+    fn is_editing(&self) -> Result<bool, NcStatus> {
+        self.widget.state.readable()?;
+        Ok(self.widget.take()?.is_editing())
+    }
+    /// Validates a semantic font role before changing the number editor's measurement input.
+    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
+        self.widget.set_font_role(role)
+    }
+    /// Resolves one exact named font before replacing the number editor's selection.
+    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.widget.set_named_font(name)
+    }
+    /// Connects the number editor's existing semantic event source directly through the class contract.
+    fn subscribe(&self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.widget.subscribe::<crate::NumberChanged>(sink)
+    }
+}
+
 impl IListItem for ListItem {}
 impl IListBox for ListBox {}
 
@@ -362,10 +448,6 @@ impl Scrollbar for ScrollbarObject {
     }
 }
 
-font_style_impl!(Slider);
-
-font_style_impl!(Number);
-
 font_style_impl!(ColorSwatch);
 
 font_style_impl!(ListBox);
@@ -373,20 +455,6 @@ font_style_impl!(ListBox);
 font_style_impl!(ListItem);
 
 icon_content_impl!(ListItem);
-
-impl INumericEvents for Slider {
-    /// Connects the one existing native semantic port without creating a parallel event source.
-    fn subscribe(&self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.widget.subscribe::<crate::SliderChanged>(sink)
-    }
-}
-
-impl INumericEvents for Number {
-    /// Connects the one existing native semantic port without creating a parallel event source.
-    fn subscribe(&self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.widget.subscribe::<crate::NumberChanged>(sink)
-    }
-}
 
 impl IActivationEvents for ListBox {
     /// Connects the one existing native semantic port without creating a parallel event source.

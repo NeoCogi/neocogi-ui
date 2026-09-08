@@ -303,10 +303,11 @@ Do not return a fabricated successful size to hide a failed resource lookup.
 ## Built-in editing and painting
 
 Built-in leaf classes compose one concrete semantic value into their COM
-allocation. `ITextContent` shares text snapshots/replacement; `ITextEditor` adds
-byte-cursor editing, and `ITextbox` inherits both before reaching `IWidget`.
-Slider and Number similarly inherit `INumericValue`. Calls through those bases
-edit the same state used by input, measurement and painting.
+allocation. Concrete `Textbox`, `TextBlock`, `Slider`, and `Number` operations
+live directly on their callable class projections. Shared protocols such as
+`ITextContent` and `ITextEditor` remain only where independently handled internal
+content needs the same behavior. Every call edits the same state used by input,
+measurement, and painting.
 
 A Textbox removes CR and LF during construction, replacement and committed text
 input. Its cursor is a byte offset at a Unicode scalar boundary, not a glyph,

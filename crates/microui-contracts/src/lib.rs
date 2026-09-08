@@ -217,9 +217,9 @@ pub trait UiFactory {
     /// Constructs multiline display text using the explicit wrapping policy.
     fn create_text_block(&self, text: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping) -> Result<ComPtr<TextBlockAbi>, NcStatus>;
     /// Constructs a slider after validating every arithmetic input.
-    fn create_slider(&self, options: SliderOptions) -> Result<ComPtr<ISliderAbi>, NcStatus>;
+    fn create_slider(&self, options: SliderOptions) -> Result<ComPtr<SliderAbi>, NcStatus>;
     /// Constructs standalone numeric entry after validating arithmetic inputs.
-    fn create_number(&self, options: NumberOptions) -> Result<ComPtr<INumberAbi>, NcStatus>;
+    fn create_number(&self, options: NumberOptions) -> Result<ComPtr<NumberAbi>, NcStatus>;
     /// Constructs an RGBA swatch with an optional label.
     fn create_color_swatch(&self, rgba: u32, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IColorSwatchAbi>, NcStatus>;
     /// Constructs one list row; application data is attached in its static adapter.

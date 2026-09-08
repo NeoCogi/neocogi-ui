@@ -76,10 +76,10 @@ pub type TextboxWidget = Widget<TextboxAbi>;
 pub type TextAreaWidget = Widget<TextAreaAbi>;
 /// Static TextBlock proxy; semantic storage belongs to its plugin object.
 pub type TextBlockWidget = Widget<TextBlockAbi>;
-/// Static Slider proxy; semantic storage belongs to its plugin object.
-pub type Slider = Widget<ISliderAbi>;
-/// Static Number proxy; semantic storage belongs to its plugin object.
-pub type Number = Widget<INumberAbi>;
+/// Static convenience wrapper around the dynamically constructed Slider class projection.
+pub type SliderWidget = Widget<SliderAbi>;
+/// Static convenience wrapper around the dynamically constructed Number class projection.
+pub type NumberWidget = Widget<NumberAbi>;
 /// Static ColorSwatch proxy; semantic storage belongs to its plugin object.
 pub type ColorSwatch = Widget<IColorSwatchAbi>;
 /// Static ListItem proxy; semantic storage belongs to its plugin object.
@@ -204,8 +204,8 @@ macro_rules! numeric_proxy {
         }
     };
 }
-numeric_proxy!(ISliderAbi);
-numeric_proxy!(INumberAbi);
+numeric_proxy!(SliderAbi);
+numeric_proxy!(NumberAbi);
 impl Widget<IColorSwatchAbi> {
     /// Reads the packed RGBA paint color.
     pub fn fill(&self) -> Result<u32, NcStatus> {
@@ -271,12 +271,12 @@ impl WidgetFactory {
         ))
     }
     /// Constructs an initialized, unmounted slider in this runtime.
-    pub fn slider(&self, options: SliderOptions) -> Result<Slider, NcStatus> {
-        Ok(Slider::from_interface(self.interface.create_slider(options)?))
+    pub fn slider(&self, options: SliderOptions) -> Result<SliderWidget, NcStatus> {
+        Ok(SliderWidget::from_interface(self.interface.create_slider(options)?))
     }
     /// Constructs an initialized, unmounted number in this runtime.
-    pub fn number(&self, options: NumberOptions) -> Result<Number, NcStatus> {
-        Ok(Number::from_interface(self.interface.create_number(options)?))
+    pub fn number(&self, options: NumberOptions) -> Result<NumberWidget, NcStatus> {
+        Ok(NumberWidget::from_interface(self.interface.create_number(options)?))
     }
     /// Constructs an initialized, unmounted color swatch in this runtime.
     pub fn color_swatch(&self, rgba: u32, label: &str) -> Result<ColorSwatch, NcStatus> {
@@ -524,8 +524,8 @@ font_proxy!(direct TextboxAbi);
 font_proxy!(direct TextAreaAbi);
 font_proxy!(IMultilineEditorAbi);
 font_proxy!(direct TextBlockAbi);
-font_proxy!(ISliderAbi);
-font_proxy!(INumberAbi);
+font_proxy!(direct SliderAbi);
+font_proxy!(direct NumberAbi);
 font_proxy!(IColorSwatchAbi);
 font_proxy!(IListBoxAbi);
 font_proxy!(IListItemAbi);
