@@ -131,10 +131,8 @@ fn floating<I: ComInterface>(ui: &Ui, desktop: ComRef<'_, IWindowAbi>, title: &s
 
 /// Application state owns only models and editing/event capabilities needed by its actions.
 pub(super) struct State {
-    /// A retained runtime projection permits typed handlers to create and install UI values.
+    /// A retained runtime projection reads during handlers and installs after dispatch returns.
     pub(super) ui: Ui,
-    /// The selected renderer accepts theme revisions through one transactional capability.
-    pub(super) renderer: ComPtr<IRendererAbi>,
     /// Named palette authoring and the actual retained editor controls.
     pub(super) style: StyleEditor,
     /// Background drawing and grid actions share this exact camera/color model.
@@ -218,9 +216,9 @@ impl State {
         }
         self.open_item.set_enabled(false)
     }
-    /// Successful theme publication precedes every radio/check presentation update.
+    /// Prepares a theme candidate before updating its corresponding application presentation.
     fn select_theme(&mut self, selected: Theme) -> Result<(), NcStatus> {
-        self.style.select(selected, &self.ui, self.renderer.as_com_ref())?;
+        self.style.select(selected)?;
         for (theme, item) in &self.themes {
             item.set_mark(MenuMark::Radio { selected: *theme == selected })?;
         }
@@ -228,8 +226,9 @@ impl State {
     }
 }
 impl AppState for State {
-    /// Geometry follows the platform; animations keep fixed intrinsic size and only repaint.
-    fn frame(&mut self, _: &Host, size: Size, seconds: f64) -> Result<bool, NcStatus> {
+    /// Publishes prepared assets after dispatch; geometry then follows the platform drawable.
+    fn frame(&mut self, host: &Host, size: Size, seconds: f64) -> Result<bool, NcStatus> {
+        self.style.install(&mut self.ui, host.renderer.as_com_ref())?;
         let area = rect(0, 0, size.width, size.height);
         if self.desktop.snapshot()?.rect != area {
             self.desktop.set_rect(area)?;
@@ -308,7 +307,7 @@ impl EventHandler<State, Activation> for Action {
             }
             Self::Theme(theme) => state.select_theme(theme),
             Self::Spacing(comfortable) => {
-                state.style.spacing(if comfortable { 8 } else { 2 }, &state.ui, state.renderer.as_com_ref())?;
+                state.style.spacing(if comfortable { 8 } else { 2 }, &state.ui)?;
                 state.spacing[0].set_mark(MenuMark::Radio { selected: comfortable })?;
                 state.spacing[1].set_mark(MenuMark::Radio { selected: !comfortable })
             }
@@ -537,7 +536,6 @@ fn create() -> Result<(Host, EventSession<State>), HostError> {
     open_item.set_enabled(file_dialog.is_some())?;
     let events = EventSession::new(State {
         ui: ui.clone(),
-        renderer: host.renderer.clone(),
         style,
         grid,
         desktop,

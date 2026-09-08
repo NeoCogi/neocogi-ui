@@ -171,6 +171,8 @@ pub(super) struct StyleEditor {
     palette: FlatPalette,
     /// Current editable scalar geometry, copied from the installed revision.
     metrics: AssetMetrics,
+    /// Latest immutable candidate awaits the exclusive runtime boundary after event dispatch.
+    pending: Option<ComPtr<IAssetBundleAbi>>,
     /// Concrete rows retain only the controls needed by application handlers.
     colors: Vec<ColorRow>,
     /// Concrete scalar controls paired with their named metric.
@@ -222,6 +224,7 @@ impl StyleEditor {
                 selected: Theme::Default,
                 palette,
                 metrics,
+                pending: None,
                 colors,
                 values,
             },
@@ -240,31 +243,48 @@ impl StyleEditor {
         }
         Ok(())
     }
-    /// Installs a pristine theme in the original catalog and resets the editor's controls.
-    pub(super) fn select(&mut self, selected: Theme, ui: &Ui, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
+    /// Prepares a pristine theme in the original catalog and resets the editor's controls.
+    pub(super) fn select(&mut self, selected: Theme) -> Result<(), NcStatus> {
         let candidate = selected.load(self.base.as_com_ref())?;
         let metrics = candidate.metrics()?;
-        ui.install_assets(candidate.as_com_ref(), renderer)?;
         self.selected = selected;
         self.palette = FlatPalette::default();
         self.metrics = metrics;
+        self.pending = Some(candidate);
         self.refresh()
     }
-    /// Publishes one changed style immediately so later input sees its committed layout.
-    fn publish(&self, ui: &Ui, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
+    /// Compiles one changed style against the latest prepared or installed revision.
+    fn prepare(&mut self, ui: &Ui) -> Result<(), NcStatus> {
         let palette = if self.selected == Theme::Default {
             PaletteEdit::Flat(self.palette)
         } else {
             PaletteEdit::Preserve
         };
-        let current = ui.assets()?;
-        let candidate = self.compiler.derive_style(current.as_com_ref(), self.metrics, palette.into())?;
-        ui.install_assets(candidate.as_com_ref(), renderer)
+        let installed;
+        let current = if let Some(candidate) = &self.pending {
+            candidate.as_com_ref()
+        } else {
+            installed = ui.assets()?;
+            installed.as_com_ref()
+        };
+        self.pending = Some(self.compiler.derive_style(current, self.metrics, palette.into())?);
+        Ok(())
     }
-    /// Spacing menu actions share the editor's exact metric and revision path.
-    pub(super) fn spacing(&mut self, spacing: i32, ui: &Ui, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
+    /// Installs the latest candidate only after the active event-dispatch call has returned.
+    pub(super) fn install(&mut self, ui: &mut Ui, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
+        let Some(candidate) = self.pending.take() else {
+            return Ok(());
+        };
+        if let Err(error) = ui.install_assets(candidate.as_com_ref(), renderer) {
+            self.pending = Some(candidate);
+            return Err(error);
+        }
+        Ok(())
+    }
+    /// Spacing menu actions share the editor's exact metric and candidate path.
+    pub(super) fn spacing(&mut self, spacing: i32, ui: &Ui) -> Result<(), NcStatus> {
         self.metrics.spacing = spacing;
-        self.publish(ui, renderer)?;
+        self.prepare(ui)?;
         self.refresh()
     }
     /// Silent control updates neither synthesize user events nor continuously reinstall a theme.
@@ -299,7 +319,7 @@ enum Edit {
     Metric(Metric),
 }
 impl EventHandler<State, NumericChanged> for Edit {
-    /// Applies the candidate, installs it, and refreshes previews before returning to input routing.
+    /// Prepares the newest candidate and refreshes previews before returning to input routing.
     fn handle(&mut self, state: &mut State, event: &NumericChanged) -> Result<(), NcStatus> {
         let editor = &mut state.style;
         match *self {
@@ -309,7 +329,7 @@ impl EventHandler<State, NumericChanged> for Edit {
             Self::Color(..) => return editor.refresh(),
             Self::Metric(metric) => *metric.value(&mut editor.metrics) = event.value as i32,
         }
-        editor.publish(&state.ui, state.renderer.as_com_ref())?;
+        editor.prepare(&state.ui)?;
         editor.refresh()
     }
 }

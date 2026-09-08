@@ -491,8 +491,8 @@ impl Ui {
     pub fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         self.runtime.assets()
     }
-    /// Validates compatible resources and uploads before publication; call update after success.
-    pub fn install_assets(&self, assets: ComRef<'_, IAssetBundleAbi>, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
+    /// Replaces this UI's runtime-wide resources through exclusive access; call update after success.
+    pub fn install_assets(&mut self, assets: ComRef<'_, IAssetBundleAbi>, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
         self.runtime.install_assets(assets, renderer)
     }
     /// Closes the runtime's complete retained forest while handles may remain allocated.

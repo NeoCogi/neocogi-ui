@@ -57,6 +57,9 @@ wrappers. The accepted migration and outstanding validation are recorded in
 - Replace `IUiFactory` with a separately registered `UiFactory` class. The
   runtime returns a host-bound instance for convenience, while hosts can construct
   `Button` and other registered classes directly from typed argument frames.
+- Store the runtime's current imported assets as one shared value instead of a
+  wrapper around nested reference-counted snapshots. Installing a replacement now
+  requires a mutable `UiRuntime` receiver, making runtime-wide mutation explicit.
 - Co-package built-in widgets, containers and window-manager policy in the UI
   plugin; keep each renderer and its OS/device owners together in the platform
   plugin. An optional asset plugin and independently built extension demonstrate

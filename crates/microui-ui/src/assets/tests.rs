@@ -1,7 +1,7 @@
 //! Boundary tests use real generated COM calls, malformed producer tables and an upload-failing renderer.
 use super::*;
 use microui_redux::assets::AssetData;
-use nc_com::{com_object, NcCopyFromBufferOffset, NcCopyToBufferOffset};
+use nc_com::{com_object, NcCopyFromBufferOffset, NcCopyToBufferOffset, NC_E_BUSY};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -153,13 +153,15 @@ impl IRenderer for UploadRenderer {
     /// Confirms mutation/reentry gates, then commits only a successful fake GPU upload.
     fn prepare_assets(&self, source: ComRef<'_, IAssetBundleAbi>) -> Result<(), NcStatus> {
         self.0.uploads.set(self.0.uploads.get() + 1);
-        // Observational resource reads still expose the old, fully installed UI revision.
-        assert_eq!(self.0.button.host()?.assets()?.as_ptr(), self.0.runtime.assets()?.as_ptr());
-        assert_eq!(self.0.runtime.update(SIZE), Err(UI_E_BUSY));
+        // The independently allocated host still exposes the old, fully installed UI revision.
+        assert_eq!(self.0.button.host()?.assets()?.as_ptr(), self.0.current.borrow().as_ptr());
+        // The mutable runtime call excludes every overlapping call on that same COM allocation.
+        assert_eq!(self.0.runtime.update(SIZE), Err(NC_E_BUSY));
         let mut button = self.0.button.clone();
         assert_eq!(button.set_label(NcCopyFromBufferOffset::new(0, b"reentrant")), Err(UI_E_BUSY));
         let recursive: ComPtr<IRendererAbi> = Self::from_value(Self(self.0.clone())).query()?;
-        assert_eq!(self.0.runtime.install_assets(source, recursive.as_com_ref()), Err(UI_E_BUSY));
+        let mut runtime = self.0.runtime.clone();
+        assert_eq!(runtime.install_assets(source, recursive.as_com_ref()), Err(NC_E_BUSY));
         if self.0.fail.get() {
             return Err(UI_E_RENDER);
         }
@@ -185,7 +187,7 @@ const SIZE: Size = Size { width: 640, height: 400 };
 
 /// A real activation owns the same capabilities used by an application's theme/style handler.
 struct ThemeState {
-    /// Ordinary facade may edit resources at the context-free dispatch boundary.
+    /// A retained facade proves a callback cannot claim exclusive runtime access during dispatch.
     ui: microui_redux::Ui,
     /// Validated candidate belongs to the current resource catalog.
     candidate: ComPtr<IAssetBundleAbi>,
@@ -194,10 +196,10 @@ struct ThemeState {
     /// Counts successful handler commits; failures must leave this unchanged.
     installed: u32,
 }
-/// Concrete handler publishes a theme synchronously, with no deferred-work adapter.
+/// Concrete handler deliberately attempts a replacement during an active shared runtime call.
 struct InstallTheme;
 impl microui_redux::EventHandler<ThemeState, microui_redux::events::Activation> for InstallTheme {
-    /// Upload failure propagates through the ordinary session; a later activation can retry.
+    /// The generated COM borrow gate rejects this call before the renderer observes a candidate.
     fn handle(&mut self, state: &mut ThemeState, _: &microui_redux::events::Activation) -> Result<(), NcStatus> {
         state.ui.install_assets(state.candidate.as_com_ref(), state.renderer.as_com_ref())?;
         state.installed += 1;
@@ -205,9 +207,9 @@ impl microui_redux::EventHandler<ThemeState, microui_redux::events::Activation> 
     }
 }
 
-/// Resource edits are legal inside application dispatch, while nested GPU preparation remains protected.
+/// Resource replacement requires an exclusive call after application dispatch has returned.
 #[test]
-fn event_callback_installs_resources_and_recovers_after_upload_failure() {
+fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
     let source = export_bundle(&bundle()).unwrap();
     let runtime = crate::com::create_runtime_from_assets(source.as_com_ref()).unwrap();
     let ui = microui_redux::Ui::from_interface(runtime.clone()).unwrap();
@@ -244,26 +246,34 @@ fn event_callback_installs_resources_and_recovers_after_upload_failure() {
         )
         .unwrap();
     }
-    assert_eq!(ui.update_with_events(SIZE, &session), Err(UI_E_RENDER));
+    assert_eq!(ui.update_with_events(SIZE, &session), Err(NC_E_BUSY));
     assert_eq!(ui.assets().unwrap().as_ptr(), source.as_ptr());
     assert_eq!(session.state().unwrap().installed, 0);
+    assert_eq!(probe.uploads.get(), 0);
+
+    // Once dispatch has returned, the state owns ordinary exclusive access and upload failures
+    // retain both the installed UI value and the renderer's current atlas.
+    {
+        let mut state = session.state_mut().unwrap();
+        let candidate = state.candidate.clone();
+        let renderer = state.renderer.clone();
+        assert_eq!(state.ui.install_assets(candidate.as_com_ref(), renderer.as_com_ref()), Err(UI_E_RENDER));
+    }
+    assert_eq!(ui.assets().unwrap().as_ptr(), source.as_ptr());
+    assert_eq!(probe.uploads.get(), 1);
     probe.fail.set(false);
-    ui.input(
-        UiInput::Key(KeyStroke {
-            key: KeyCode::SPACE,
-            value: 0,
-            pressed: true,
-            repeat: false,
-            modifiers: 0,
-        }),
-        "",
-    )
-    .unwrap();
-    ui.update_with_events(SIZE, &session).unwrap();
+    {
+        let mut state = session.state_mut().unwrap();
+        let candidate = state.candidate.clone();
+        let renderer = state.renderer.clone();
+        state.ui.install_assets(candidate.as_com_ref(), renderer.as_com_ref()).unwrap();
+        state.installed += 1;
+    }
     assert_eq!(probe.uploads.get(), 2);
     assert_eq!(session.state().unwrap().installed, 1);
     assert_eq!(ui.assets().unwrap().as_ptr(), candidate.as_ptr());
-    // The enclosing update completes invalidation/layout; rendering needs no extra app update.
+    // Installation occurred outside update, so one explicit synchronization commits the revision.
+    ui.update_with_events(SIZE, &session).unwrap();
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
 }
 
@@ -272,7 +282,7 @@ fn event_callback_installs_resources_and_recovers_after_upload_failure() {
 fn runtime_install_is_atomic_and_updates_shared_widget_measurement() {
     let source = export_bundle(&bundle()).unwrap();
     let runtime = crate::com::create_runtime_from_assets(source.as_com_ref()).unwrap();
-    let ui = microui_redux::Ui::from_interface(runtime.clone()).unwrap();
+    let mut ui = microui_redux::Ui::from_interface(runtime.clone()).unwrap();
     let button = ui.widgets().button("resources").unwrap();
     let button_interface = button.as_interface().add_ref();
     let probe = Rc::new(Probe {

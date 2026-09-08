@@ -177,8 +177,8 @@ impl UiRuntime for Runtime {
         self.storage.open()?;
         Ok(self.storage.factory.resources.borrow().source().add_ref())
     }
-    /// Prepares all CPU state and the fallible GPU upload before publishing a shared revision.
-    fn install_assets(&self, source: ComRef<'_, IAssetBundleAbi>, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
+    /// Uses exclusive runtime access to prepare CPU state and the GPU upload before publication.
+    fn install_assets(&mut self, source: ComRef<'_, IAssetBundleAbi>, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
         let storage = &self.storage;
         storage.factory.host.check_mutation()?;
         // Dispatch returns the context specifically to permit application edits. The active

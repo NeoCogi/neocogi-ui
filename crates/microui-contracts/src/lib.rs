@@ -488,11 +488,11 @@ pub trait UiRuntime: IInputSink + IWindowManager + IMenus + IFileDialogs {
     /// Retains the currently installed immutable revision, suitable for restoration or another consumer.
     fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus>;
     /// Validates compatible resources and prepares the renderer upload before publishing either UI
-    /// projection. Failure preserves the old bundle. Success requires update before rendering.
-    /// Application event handlers may install at the dispatch boundary; the enclosing update then
-    /// commits layout. Widget update/layout/paint and upload reentry reject with BUSY. The renderer
-    /// is borrowed only for this call.
-    fn install_assets(&self, assets: ComRef<'_, IAssetBundleAbi>, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus>;
+    /// projection. The mutable receiver makes the authority to replace this runtime-wide value
+    /// explicit. Failure preserves the old bundle. Success requires update before rendering.
+    /// Callers install only after update or event dispatch returns; overlapping runtime calls reject
+    /// the exclusive receiver with BUSY. The renderer is borrowed only for this call.
+    fn install_assets(&mut self, assets: ComRef<'_, IAssetBundleAbi>, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus>;
     /// Drains queued input, or one eventless update, and synchronizes setters/resize without an application dispatcher.
     fn update(&self, size: Size) -> Result<(), NcStatus>;
     /// Borrows application dispatch at each safe boundary; handlers may mutate windows/topology before the next input is routed.

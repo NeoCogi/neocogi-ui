@@ -3,7 +3,7 @@
 - Atlas building supports multiple baked fonts and sizes through `microui_plugin_assets::atlas::FontAsset`, and the same config can drive both runtime atlas construction and offline/prebuilt atlas export.
 - A compiled UI bundle resolves conventional `body`, `small`, `title`, `heading` and `mono`
   font roles and the standard semantic icon roles. The assets plugin creates the bundle;
-  `Ui::install_assets` installs it transactionally with the renderer.
+  mutable `Ui` access lets `Ui::install_assets` install it transactionally with the renderer.
 - Text-bearing COM widgets expose typed font selection through the facade. Resolve named
   fonts against the bundle catalog; use semantic roles when the selected theme should
   determine the exact baked resource.

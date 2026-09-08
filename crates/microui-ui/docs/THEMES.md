@@ -8,10 +8,10 @@ construct `ThemeLoader` and pass an explicit original base bundle. Build tools c
 assets through an explicit `AssetSource` implementation. `LoadedTheme` contains a
 display name and validated `AssetData`, with no native UI skin or resource IDs.
 
-Loading prepares an immutable candidate. `Ui::install_assets` validates its catalog
-and resources, asks the renderer to upload its pixels, then publishes the complete
-revision. Loading alone never changes a UI, so applications can prepare several
-choices before selection.
+Loading prepares an immutable candidate. Through a mutable `Ui` reference,
+`Ui::install_assets` validates its catalog and resources, asks the renderer to upload
+its pixels, then publishes the complete revision. Loading alone never changes a UI,
+so applications can prepare several choices before selection.
 
 All PNG paths are relative to the JSON file. Repeated state entries that resolve to the same path
 share one decoded atlas region; their source insets, destination insets, and tints remain

@@ -61,12 +61,13 @@ let native = platform.create_window(
 )?;
 let renderer = native.query::<IRendererAbi>()?;
 let arguments = UiRuntimeAbi::arguments(assets.as_com_ref())?;
-let ui = Ui::from_interface(nc_com::Runtime::global().construct::<UiRuntimeAbi>(arguments)?)?;
+let mut ui = Ui::from_interface(nc_com::Runtime::global().construct::<UiRuntimeAbi>(arguments)?)?;
 ```
 
 ## Installation and ownership
 
-`ui.install_assets(candidate, renderer)` owns one runtime transaction. It validates
+`ui.install_assets(candidate, renderer)` requires mutable access to the `Ui` because it
+replaces that runtime's one shared resource value. The call owns one transaction: it validates
 and imports bounded metadata, asks the renderer to copy and upload the complete image,
 then publishes only local lookup tables and resolved painting state. Only success
 publishes the new revision to `IWidgetHost`, the window manager, text metrics, and
@@ -78,14 +79,13 @@ After a changed revision succeeds, call `update` or `update_with_events` before
 `render`. Old measurement entries, including hidden trees, are invalidated by the
 shared skin revision. Installing the identical bundle does not invalidate unchanged
 UI geometry, though the supplied renderer may need to switch back from another UI's
-atlas. Application event handlers may install a revision synchronously: dispatch returns
-the runtime context, and the enclosing update commits the changed layout before routing
-later input or returning. No extra update is required after that successful transaction.
-Manually dispatched handlers still require an ordinary update before rendering.
-Installation from widget update, paint, layout or another installation returns
-`UI_E_BUSY`. Read-only access to the old installed bundle remains available
-while upload is in progress. No foreign call runs with a live runtime or GPU
-`RefCell` guard.
+atlas. Event handlers may prepare and retain an immutable candidate, but they install it
+only after `update_with_events` returns because that call still holds shared runtime access.
+Installation from event dispatch, widget update, paint, layout or another installation
+returns `NC_E_BUSY`. The renderer may observe the old installed bundle through an
+independent `IWidgetHost`; overlapping calls through the same `UiRuntime` allocation remain
+excluded until upload and publication finish. No foreign call runs with a live resource-cell
+borrow.
 
 `Ui::assets()` and `IWidgetHost::assets()` retain the current immutable revision.
 Independent widget implementations can obtain the latter through their

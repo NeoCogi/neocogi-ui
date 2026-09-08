@@ -389,12 +389,14 @@ The asset plugin's `StyleCompiler` class supports typed palette and metric edito
 `compiler.derive_style(base, metrics, PaletteEdit::Preserve.into())` keeps the base
 theme artwork; `PaletteEdit::Flat(palette)` compiles complete flat appearance tables.
 Both return a new immutable bundle in the current catalog without installing it
-or changing the retained tree. Call `ui.install_assets(candidate, renderer)` to
-publish it through the same validation and GPU preparation as any other revision.
+or changing the retained tree. Call `ui.install_assets(candidate, renderer)` through
+a mutable `Ui` reference to publish it through the same validation and GPU preparation
+as any other revision.
 Invalid metrics or unknown palette tags leave the installed resources unchanged.
 The shared `Color` and `FlatPalette` records are plain contract values; they carry
 no renderer or parser implementation. `Ui` and `WidgetFactory` clones retain their
-existing COM projections, allowing concrete event handlers to own this authority.
+existing COM projections. Event handlers may prepare a candidate through shared access;
+the host installs it through a mutable `Ui` reference after dispatch returns.
 
 Derived styles use the ordinary portable bundle publication/install path, including
 its pixel copy and renderer preparation. This API does not promise a palette-only

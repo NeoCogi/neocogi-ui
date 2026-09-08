@@ -48,7 +48,7 @@ the same transactional asset boundary used for a complete theme replacement:
 ```rust,no_run
 use microui_redux::{FlatPalette, IRendererAbi, StyleCompilerAbi, PaletteEdit, Ui};
 use nc_com::{ComRef, NcStatus};
-fn customize(ui: &Ui, renderer: ComRef<'_, IRendererAbi>, compiler: ComRef<'_, StyleCompilerAbi>) -> Result<(), NcStatus> {
+fn customize(ui: &mut Ui, renderer: ComRef<'_, IRendererAbi>, compiler: ComRef<'_, StyleCompilerAbi>) -> Result<(), NcStatus> {
     let mut metrics = ui.assets()?.metrics()?;
     metrics.padding = 8;
     let current = ui.assets()?;
@@ -85,7 +85,8 @@ allocation-bound values after a bundle switch.
 
 The UI runtime owns the sole active resource revision. Window chrome and every retained
 node use that complete value. Widgets and containers do not store local skin overrides.
-`Ui::install_assets` replaces the revision for the entire UI through one transaction.
+`Ui::install_assets` takes mutable `Ui` access and replaces the revision for the entire UI
+through one transaction.
 
 Each validated skin receives one private, non-reused revision. Retained measurement caches key
 their results by constraints and that complete revision, so a global replacement cannot reuse

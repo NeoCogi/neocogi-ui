@@ -37,6 +37,11 @@ Cancellation releases callback ownership even if another caller retains the leas
 Source closure discards ordinary interaction work; explicit terminal events and
 finished request outcomes follow their documented distinct lifetime rules.
 
+Handlers may prepare immutable asset candidates, but `Ui::install_assets` requires
+exclusive runtime access and therefore runs only after `update_with_events` returns.
+The full demo publishes its latest prepared candidate in the host frame boundary before
+the following synchronization pass.
+
 Programmatic setters remain silent unless their concrete contract says otherwise.
 Applications must synchronize UI changes before rendering, and explicitly arrange
 future updates for timers, animation or external data. Event delivery does not
