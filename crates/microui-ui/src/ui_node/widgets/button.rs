@@ -75,7 +75,8 @@ pub struct ButtonParameters {
     pub content: ButtonContent,
     /// Font used for text content.
     pub font: FontRef,
-    /// Base widget options.
+    /// Base widget options retained only by native algorithm fixtures.
+    #[cfg(test)]
     pub opt: WidgetOption,
     /// Fill behavior for the button background.
     pub fill: WidgetFillOption,
@@ -87,6 +88,7 @@ impl ButtonParameters {
         Self {
             content: ButtonContent::Text { label: label.into(), icon: None },
             font: FontRef::Role(FontRole::Body),
+            #[cfg(test)]
             opt: WidgetOption::FRAME,
             fill: WidgetFillOption::ALL,
         }

@@ -138,7 +138,7 @@ struct Probe {
     /// Reentry must fail while the runtime owns its installation transaction.
     runtime: ComPtr<UiRuntimeAbi>,
     /// Setter reentry must also fail during the upload boundary.
-    button: ComPtr<IButtonAbi>,
+    button: ComPtr<ButtonAbi>,
     /// Last successfully uploaded immutable bundle.
     current: RefCell<ComPtr<IAssetBundleAbi>>,
     /// Forces a recoverable upload failure without changing the current bundle.

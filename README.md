@@ -10,8 +10,9 @@ plugins; browsers register the same interfaces with one static runtime.
 
 This checkout is **0.9.0-alpha.0**, pre-alpha. Its API and binary contracts may change
 without compatibility layers. The imported nc-com implementation is maintained in
-this workspace; ordinary widget inheritance such as `IButton: IWidget` uses one
-object and shared state, including inherited interface calls.
+this workspace. Concrete controls such as `Button` are callable COM class contracts;
+shared protocols such as `IWidget` and `ILeafLayout` remain interfaces on the same
+object and state.
 
 | Windows 3.11 | Mac OS 9 |
 | :--: | :--: |

@@ -108,7 +108,7 @@ pub(super) fn slider(ui: &Ui, value: f32, high: f32) -> Result<Slider, NcStatus>
     Ok(control)
 }
 /// Creates and immediately subscribes a concrete button; only its parent needs to retain it afterward.
-fn button(ui: &Ui, events: &EventSession<State>, text: &str, action: Action) -> Result<Button, NcStatus> {
+fn button(ui: &Ui, events: &EventSession<State>, text: &str, action: Action) -> Result<ButtonWidget, NcStatus> {
     let control = ui.widgets().button(text)?;
     control.set_options(WidgetOptions {
         bits: WidgetOptions::FRAME.bits | WidgetOptions::ALIGN_CENTER.bits,

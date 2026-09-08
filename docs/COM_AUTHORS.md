@@ -208,33 +208,33 @@ A frame finishes explicitly and reports submission/presentation errors. Dropping
 
 Window capabilities expose current manager state through copied snapshots. A child inherits its family root's fixed layer; changing a managed child/dialog layer fails. Hiding a parent excludes its structural family, and showing it restores child-local visibility intent without reopening modal dialogs. Popups have a distinct interface, obey the active owner's modal policy, and retain their definition when hidden. Explicit close destroys the corresponding subtree and closes its widgets even when the application retains handles. Parent capabilities are authenticated by their manager-owned COM identity before a widget's mount-once claim is committed. Unknown option bits, malformed visibility/clip tags, invalid dimensions and invalid fixed layers are rejected before mutation.
 
-## Widget interface inheritance
+## Widget class contracts and shared protocols
 
-Declare specialized contracts as `IButton: IWidget` (or another single widget
-base). The COM class lists `interfaces(IButton, ...)`; nc-com supplies IWidget
-and every ancestor automatically in the same allocation. Compose one concrete
-widget-state field into the class. Interface inheritance shares behavior and
-identity; it does not create a second widget or copy Rust fields.
+Declare each concrete constructible control as a class contract, for example
+`Button: IWidget + ILeafLayout`. Put its typed constructor and control-specific
+editing methods on that class. Keep an interface only when unrelated classes need
+the same independently queryable protocol. The implementation uses
+`#[com_class(contract(Button))]` and stores one concrete widget-state field; it
+does not declare a matching `IButton` or repeat a list of projections.
 
-`button.take_change()` and borrowed inherited calls use the base vtable prefix
-without reference-count traffic. When an API takes `ComRef<IWidgetAbi>`, query
-IWidget once, retain that projection for as long as needed, and pass its borrow.
-The derived header still advertises IButton, so a raw cast is not a valid base
-projection. The static generic facade hides these checked projections from app
-code. Use distinct names for base and specialized methods; local names take
-precedence during Rust method lookup. Definitions across crates should name a
-base through its module path so generated companion types resolve together.
+Query `IWidget` when an API needs the common node protocol and `ILeafLayout` when
+the layout runtime needs leaf measurement. Those projections preserve the class
+identity and refer to the same allocation and state. The static facade hides these
+checked projections from application code. Class definitions across crates should
+name protocol supertraits through their module path when needed so generated
+companion types resolve together.
 
 ## Common state, input and node ownership
 
 `microui_contracts::widget::WidgetState` is a static implementation helper stored
 inside a widget class. It owns the host authority, common options, mount-once
 claim, logical closed flag and sticky geometry flag. It owns no runtime tree,
-children, application callback or additional widget allocation. Specialized
-interfaces inherit IWidget; IWidget itself now includes host/mount/close,
+children, application callback or additional widget allocation. Concrete class
+contracts require IWidget, whose protocol includes host/mount/close,
 properties/set_options, update, take_change and paint. Leaf measurement remains
-a separately cached ILeafLayout capability. No activation-only or separate
-widget-lifetime interface is required.
+the shared ILeafLayout protocol. Button activation and button-specific styling
+live directly on `Button`; no activation-only, style-only, or lifetime interface
+is required for that class.
 
 A semantic setter checks `state.writable()` before borrowing its data, validates
 all replacement inputs, commits atomically, and calls

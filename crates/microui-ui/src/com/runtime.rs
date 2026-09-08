@@ -1,7 +1,7 @@
 //! COM runtime/window ownership over the authoritative retained traversal.
 use super::*;
 use super::{
-    button::Button,
+    button::ButtonObject,
     paint::{Metrics, PaintService},
     render::Backend,
 };
@@ -321,13 +321,12 @@ impl IUiFactory for Runtime {
     }
 
     /// Creates one unmounted button whose host has no reference back to this runtime.
-    fn create_button(&self) -> Result<ComPtr<IButtonAbi>, NcStatus> {
+    fn create_button(&self) -> Result<ComPtr<ButtonAbi>, NcStatus> {
         self.storage.factory.host.check_mutation()?;
-        let parameters = crate::ButtonParameters::new("");
-        Button::create(
+        ButtonObject::create(
             self.storage.factory.host.clone(),
-            parameters.opt,
-            crate::Button::from(parameters),
+            "",
+            WidgetOptions::FRAME,
         )
     }
 }

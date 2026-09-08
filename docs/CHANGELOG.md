@@ -11,8 +11,13 @@ wrappers. The accepted migration and outstanding validation are recorded in
   native bindings, and generated LTO roots. Assemblies deploy one runtime library
   without the former duplicate filename. The Cargo package remains `nc-com-runtime`.
 - Import and maintain nc-com locally: checked recursive interface identities,
-  borrowed clients, `IButton: IWidget` inheritance, generic owned local classes,
-  static runtime binding and explicit dynamic plugin exports.
+  borrowed clients, callable class contracts with typed constructor frames,
+  class-required shared protocols, generic owned local classes, static runtime
+  binding and explicit dynamic plugin exports.
+- Replace the redundant `IButton` and `IButtonStyle` capabilities with the
+  constructible `Button` class contract. Its constructor and concrete editing,
+  activation, font, icon, fill, and image operations now share one class
+  projection; only the reusable `IWidget` and `ILeafLayout` protocols remain.
 - Co-package built-in widgets, containers and window-manager policy in the UI
   plugin; keep each renderer and its OS/device owners together in the platform
   plugin. An optional asset plugin and independently built extension demonstrate

@@ -14,7 +14,7 @@ fn runtime() -> ComPtr<UiRuntimeAbi> {
 }
 
 /// Creates a concrete button without bypassing its production factory.
-fn button(runtime: &ComPtr<UiRuntimeAbi>) -> ComPtr<IButtonAbi> {
+fn button(runtime: &ComPtr<UiRuntimeAbi>) -> ComPtr<ButtonAbi> {
     runtime.query::<IUiFactoryAbi>().unwrap().create_button().unwrap()
 }
 
@@ -173,7 +173,7 @@ struct RetainingWidget {
     /// Gives the custom implementation the same runtime ownership identity and mount-once rules.
     lifetime: ComPtr<IWidgetAbi>,
     /// Actual concrete setter used to test observational mutation rejection.
-    button: ComPtr<IButtonAbi>,
+    button: ComPtr<ButtonAbi>,
     /// Retained runtime deliberately tries to reenter during measurement and painting.
     runtime: ComPtr<UiRuntimeAbi>,
     /// Test state is owned and survives every COM call.
@@ -904,7 +904,7 @@ struct BuiltinPaintProbe {
 /// A foreign-style painter that reenters a read-only editing method during copying.
 struct BuiltinPainter {
     /// The producer's editing projection, independent of its paint helper's storage.
-    button: ComPtr<IButtonAbi>,
+    button: ComPtr<ButtonAbi>,
     /// Test-owned geometry and error observations.
     probe: Rc<BuiltinPaintProbe>,
 }

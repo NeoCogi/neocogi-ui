@@ -7,11 +7,12 @@ are packaged in the UI plugin. Native platform and GPU objects share the selecte
 platform plugin. PNG decoding and optional font/theme construction belong to the
 asset plugin. Several COM classes can share one assembly; a class is not a DLL.
 
-`IButton: IWidget` is real single-base interface inheritance. One COM allocation
-contains the concrete state and all its projections. Inherited calls use the base
-vtable prefix without QueryInterface or AddRef. Acquiring a separately owned base
-capability is explicit. Generic Rust values stay local; a cross-plugin capability
-has one concrete declared interface and checked ABI identity.
+`Button: IWidget + ILeafLayout` is a callable class contract. One COM allocation
+contains its private state, constructor, concrete editing methods, and shared
+protocol projections. Hosts construct the registered class from a typed argument
+frame; they do not first invent or discover an `IButton` companion interface.
+Generic Rust values stay local; every cross-plugin value has a declared ABI type
+and checked identity.
 
 ## Retained objects and frame phases
 

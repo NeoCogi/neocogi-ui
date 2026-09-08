@@ -5,7 +5,7 @@
 //! between input phases, so handlers can use ordinary widget/window methods.
 //!
 //! ```no_run
-//! use microui_redux::{Button, EventHandler, EventSession, Size, Ui};
+//! use microui_redux::{ButtonWidget, EventHandler, EventSession, Size, Ui};
 //! use nc_com::NcStatus;
 //! use microui_redux::events::Activation;
 //!
@@ -16,7 +16,7 @@
 //!         Ok(())
 //!     }
 //! }
-//! fn update(ui: &Ui, button: &Button, size: Size) -> Result<u32, NcStatus> {
+//! fn update(ui: &Ui, button: &ButtonWidget, size: Size) -> Result<u32, NcStatus> {
 //!     let events = EventSession::new(0u32);
 //!     events.subscribe_activation(button, Count)?;
 //!     ui.update_with_events(size, &events)?;
@@ -266,6 +266,44 @@ pub struct Activation {
     /// Copied semantic value owned by this event snapshot.
     pub label: String,
 }
+
+/// Static adapter for concrete widget types that publish labelled activation.
+pub trait ActivationSource {
+    /// Connects one sink through the concrete class or shared interface that owns the source.
+    fn subscribe_activation_sink(
+        &self,
+        sink: ComRef<'_, IActivationSinkAbi>,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
+}
+
+impl ActivationSource for ButtonWidget {
+    /// Buttons expose subscription directly on their callable class contract.
+    fn subscribe_activation_sink(
+        &self,
+        sink: ComRef<'_, IActivationSinkAbi>,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.as_interface().subscribe(sink)
+    }
+}
+
+/// Implements the static adapter for controls retaining the shared optional interface.
+macro_rules! activation_interface_source {
+    ($source:ty) => {
+        impl ActivationSource for $source {
+            /// Queries the shared activation capability on this concrete widget identity.
+            fn subscribe_activation_sink(
+                &self,
+                sink: ComRef<'_, IActivationSinkAbi>,
+            ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+                self.as_interface().add_ref().query::<IActivationEventsAbi>()?.subscribe(sink)
+            }
+        }
+    };
+}
+
+activation_interface_source!(ListItem);
+activation_interface_source!(ListBox);
+
 #[com_class(interfaces(IActivationSink))]
 /// Concrete local sink specialization stores application state and its exact handler type directly.
 struct ActivationSink<State: 'static, Handler: EventHandler<State, Activation> + 'static> {
@@ -281,9 +319,9 @@ impl<State: 'static, Handler: EventHandler<State, Activation> + 'static> IActiva
 impl<State: 'static> EventSession<State> {
     /// Connects the widget's concrete event capability and registers its lease in deterministic order.
     /// Registration during an active session transaction reports BUSY before claiming the producer's port.
-    pub fn subscribe_activation<I: ComInterface, Handler: EventHandler<State, Activation> + 'static>(
+    pub fn subscribe_activation<Source: ActivationSource, Handler: EventHandler<State, Activation> + 'static>(
         &self,
-        widget: &Widget<I>,
+        widget: &Source,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         let mut leases = self.registry.take()?;
@@ -294,7 +332,7 @@ impl<State: 'static> EventSession<State> {
             },
         })
         .query()?;
-        let lease = widget.as_interface().add_ref().query::<IActivationEventsAbi>()?.subscribe(sink.as_com_ref())?;
+        let lease = widget.subscribe_activation_sink(sink.as_com_ref())?;
         leases.push(lease.clone());
         Ok(lease)
     }

@@ -11,7 +11,7 @@ struct ImageProbe {
     /// Final native-resource destruction occurs once after the last owning projection disappears.
     dropped: Cell<bool>,
     /// Weak test slot avoids an image-to-widget ownership cycle during reentry checks.
-    target: std::rc::Weak<RefCell<Option<ComPtr<IImageContentAbi>>>>,
+    target: std::rc::Weak<RefCell<Option<ComPtr<ButtonAbi>>>>,
 }
 #[com_class(interfaces(ITexture))]
 /// A texture deliberately reenters image editing while its immutable dimensions are validated.
@@ -55,7 +55,7 @@ fn image_controls_keep_owned_pixels_and_forward_ordered_cropped_paint_after_erro
     button.set_options(WidgetOptions::NONE).unwrap();
     button.set_fill_states(FillStates::NONE).unwrap();
     let common = button.node_interface().unwrap();
-    let target = Rc::new(RefCell::new(Some(common.query::<IImageContentAbi>().unwrap())));
+    let target = Rc::new(RefCell::new(Some(button.as_interface().add_ref())));
     let image_probe = Rc::new(ImageProbe {
         target: Rc::downgrade(&target),
         ..ImageProbe::default()

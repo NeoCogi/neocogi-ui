@@ -5,7 +5,7 @@ mod tests {
     use nc_com::{ComPtr, IUnknown, NcString, NC_E_INVALID_ARG, com_class};
     use std::cell::{Cell, RefCell};
 
-    #[com_class(interfaces(IWidget, IButton))]
+    #[com_class(contract(Button))]
     /// Concrete stand-in for a plugin button, using the same COM macro and ownership path.
     struct TestButton {
         /// Plugin-local UTF-8 storage; its Rust layout never crosses the boundary.
@@ -14,7 +14,24 @@ mod tests {
         changed: Cell<bool>,
     }
 
-    impl IButton for TestButton {
+    impl Button for TestButton {
+        /// Builds the standalone fixture from the same typed frame as a plugin implementation.
+        fn new(
+            _host: ComRef<'_, IWidgetHostAbi>,
+            label: NcCopyFromBufferOffset<'_, u8>,
+            options: WidgetOptions,
+        ) -> Result<Self, NcStatus> {
+            options.validate()?;
+            if label.offset() != 0 {
+                return Err(NC_E_INVALID_ARG);
+            }
+            let label = std::str::from_utf8(label.as_slice()).map_err(|_| NC_E_INVALID_ARG)?;
+            Ok(Self {
+                label: RefCell::new(label.to_owned()),
+                changed: Cell::new(false),
+            })
+        }
+
         /// Validates the complete replacement before mutating retained text.
         fn set_label(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
             if label.offset() != 0 {
@@ -33,6 +50,59 @@ mod tests {
         fn label(&self) -> Result<ComPtr<nc_com::INcStringAbi>, NcStatus> {
             let stored = self.label.try_borrow().map_err(|_| NC_E_INVALID_ARG)?;
             Ok(NcString::from_utf8_str(&stored))
+        }
+
+        /// This editing-only fixture has no event producer.
+        fn subscribe(&self, _sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+            Err(nc_com::NC_E_NOINTERFACE)
+        }
+
+        /// Font editing is outside this facade fixture's observable state.
+        fn set_font_role(&self, _role: TextFontRole) -> Result<(), NcStatus> {
+            Ok(())
+        }
+
+        /// Named font editing is outside this facade fixture's observable state.
+        fn set_named_font(&self, _name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+            Ok(())
+        }
+
+        /// Icon editing is outside this facade fixture's observable state.
+        fn set_icon_role(&self, _icon: ContentIcon) -> Result<(), NcStatus> {
+            Ok(())
+        }
+
+        /// Named icon editing is outside this facade fixture's observable state.
+        fn set_named_icon(&self, _name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+            Ok(())
+        }
+
+        /// Returns one deterministic paint policy for proxy coverage.
+        fn fill_states(&self) -> Result<FillStates, NcStatus> {
+            Ok(FillStates::ALL)
+        }
+
+        /// Rejects unknown fill flags without retaining a second test field.
+        fn set_fill_states(&self, states: FillStates) -> Result<(), NcStatus> {
+            if states.bits & !FillStates::ALL.bits == 0 { Ok(()) } else { Err(NC_E_INVALID_ARG) }
+        }
+
+        /// Image content is intentionally absent from this minimal fixture.
+        fn set_image(&self, _image: ComRef<'_, ITextureAbi>, _fit_width: bool) -> Result<(), NcStatus> {
+            Err(nc_com::NC_E_NOINTERFACE)
+        }
+
+        /// Clearing already-absent image content is idempotent.
+        fn clear_image(&self) -> Result<(), NcStatus> {
+            Ok(())
+        }
+    }
+
+    impl ILeafLayout for TestButton {
+        /// Uses the supplied shared metrics capability without retaining it.
+        fn measure(&self, _bounds: LayoutLimits, metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
+            let label = self.label.try_borrow().map_err(|_| NC_E_INVALID_ARG)?.clone();
+            metrics.button_size(NcCopyFromBufferOffset::new(0, label.as_bytes()))
         }
     }
 
@@ -92,7 +162,7 @@ mod tests {
             label: RefCell::new(String::new()),
             changed: Cell::new(false),
         });
-        let button = Button::from_interface(unknown.query::<IButtonAbi>()?);
+        let button = ButtonWidget::from_interface(unknown.query::<ButtonAbi>()?);
         button.set_label("Save")?;
         assert_eq!(button.label()?, "Save");
         let node = button.node_interface()?;
@@ -111,10 +181,10 @@ mod tests {
             changed: Cell::new(false),
         });
         assert_eq!(unknown.query::<IChildrenAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
-        let button: ComPtr<IButtonAbi> = unknown.query().unwrap();
+        let button: ComPtr<ButtonAbi> = unknown.query().unwrap();
         assert_eq!(button.set_label(NcCopyFromBufferOffset::new(1, b"after")), Err(NC_E_INVALID_ARG));
         assert_eq!(button.set_label(NcCopyFromBufferOffset::new(0, &[0xff])), Err(NC_E_INVALID_ARG));
-        let proxy = Button::from_interface(button);
+        let proxy = ButtonWidget::from_interface(button);
         assert_eq!(proxy.label().unwrap(), "before");
         assert_eq!(proxy.node_interface().unwrap().take_change().unwrap(), GeometryChange::NO_CHANGE);
         let clone = proxy.clone();

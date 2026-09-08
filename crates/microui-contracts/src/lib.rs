@@ -140,15 +140,49 @@ pub trait IChildren {
     fn child(&self, index: u32) -> Result<ComPtr<IWidgetAbi>, NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.Button:v1")]
-/// Concrete button editing contract; there is no generic property bag.
-// The base slots belong to this same object. An inherited call borrows the
-// button projection; passing a separate IWidget argument requires querying it.
-pub trait IButton: IWidget {
+#[com_class(auto_guid = "microui.Button:v1")]
+/// Constructible button class with only its shared widget and leaf-layout protocols separated.
+pub trait Button: IWidget + ILeafLayout {
+    /// Creates an unmounted button owned by `host` from complete initial state.
+    #[constructor]
+    fn new(
+        host: ComRef<'_, IWidgetHostAbi>,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        options: WidgetOptions,
+    ) -> Result<Self, NcStatus>;
+
     /// Replaces the complete UTF-8 label; the logical input offset must be zero.
     fn set_label(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+
     /// Returns the current label as an independently owned immutable string object.
     fn label(&self) -> Result<ComPtr<nc_com::INcStringAbi>, NcStatus>;
+
+    /// Connects the exclusive activation subscriber and returns its ownership lease.
+    fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
+
+    /// Selects a semantic font role and invalidates measurement only when it differs.
+    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+
+    /// Resolves an exact named font in the current host bundle before committing.
+    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+
+    /// Selects a semantic icon or removes it while retaining the label.
+    fn set_icon_role(&self, icon: ContentIcon) -> Result<(), NcStatus>;
+
+    /// Resolves an exact named icon in the current host bundle before committing.
+    fn set_named_icon(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+
+    /// Returns the interaction states that fill an unframed button's center.
+    fn fill_states(&self) -> Result<FillStates, NcStatus>;
+
+    /// Replaces the validated paint-only center-fill mask.
+    fn set_fill_states(&self, states: FillStates) -> Result<(), NcStatus>;
+
+    /// Installs a positive-sized renderer-owned image, optionally fitted to width.
+    fn set_image(&self, image: ComRef<'_, ITextureAbi>, fit_width: bool) -> Result<(), NcStatus>;
+
+    /// Removes image content while retaining the current label and font.
+    fn clear_image(&self) -> Result<(), NcStatus>;
 }
 
 #[com_interface(auto_guid = "microui.UiFactory:v1")]
@@ -191,7 +225,7 @@ pub trait IUiFactory {
     /// Constructs a scrollbar with a validated orientation and normalized range.
     fn create_scrollbar(&self, range: ScrollRange) -> Result<ComPtr<IScrollbarAbi>, NcStatus>;
     /// Constructs an unmounted button; initialization remains concrete and discoverable.
-    fn create_button(&self) -> Result<ComPtr<IButtonAbi>, NcStatus>;
+    fn create_button(&self) -> Result<ComPtr<ButtonAbi>, NcStatus>;
 }
 
 /// An operation requires an object which has already been logically closed.

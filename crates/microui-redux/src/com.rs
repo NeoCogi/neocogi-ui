@@ -46,10 +46,10 @@ impl<I: ComInterface> Widget<I> {
     }
 }
 
-/// Button proxy whose concrete methods remain statically discoverable.
-pub type Button = Widget<IButtonAbi>;
+/// Static convenience wrapper around the dynamically constructed Button class projection.
+pub type ButtonWidget = Widget<ButtonAbi>;
 
-impl Widget<IButtonAbi> {
+impl Widget<ButtonAbi> {
     /// Replaces the label with a synchronous UTF-8 copy owned by the plugin.
     pub fn set_label(&self, label: &str) -> Result<(), NcStatus> {
         self.interface.set_label(NcCopyFromBufferOffset::new(0, label.as_bytes()))
@@ -64,7 +64,7 @@ impl Widget<IButtonAbi> {
     /// Retain this lease in the application event session; the runtime never owns
     /// an application handler. A second live subscriber is rejected by the source.
     pub fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.interface.query::<IActivationEventsAbi>()?.subscribe(sink)
+        self.interface.subscribe(sink)
     }
 }
 
@@ -299,8 +299,8 @@ impl WidgetFactory {
     }
 
     /// Creates and initializes an unmounted button in one concrete API operation.
-    pub fn button(&self, label: &str) -> Result<Button, NcStatus> {
-        let button = Button::from_interface(self.interface.create_button()?);
+    pub fn button(&self, label: &str) -> Result<ButtonWidget, NcStatus> {
+        let button = ButtonWidget::from_interface(self.interface.create_button()?);
         button.set_label(label)?;
         Ok(button)
     }
@@ -499,7 +499,6 @@ macro_rules! font_proxy {
         }
     };
 }
-font_proxy!(IButtonAbi);
 font_proxy!(ICheckboxAbi);
 font_proxy!(ITextboxAbi);
 font_proxy!(ITextAreaAbi);
@@ -528,16 +527,39 @@ macro_rules! icon_proxy {
         }
     };
 }
-icon_proxy!(IButtonAbi);
 icon_proxy!(IListItemAbi);
-impl Widget<IButtonAbi> {
+impl Widget<ButtonAbi> {
+    /// Selects typography directly through the Button class contract.
+    pub fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
+        self.interface.set_font_role(role)
+    }
+    /// Resolves a named font directly through the Button class contract.
+    pub fn set_named_font(&self, name: &str) -> Result<(), NcStatus> {
+        self.interface.set_named_font(NcCopyFromBufferOffset::new(0, name.as_bytes()))
+    }
+    /// Selects an adjacent semantic icon directly through the Button class contract.
+    pub fn set_icon_role(&self, icon: ContentIcon) -> Result<(), NcStatus> {
+        self.interface.set_icon_role(icon)
+    }
+    /// Resolves a named adjacent icon directly through the Button class contract.
+    pub fn set_named_icon(&self, name: &str) -> Result<(), NcStatus> {
+        self.interface.set_named_icon(NcCopyFromBufferOffset::new(0, name.as_bytes()))
+    }
     /// Reads the current mask controlling center fill on an unframed button.
     pub fn fill_states(&self) -> Result<FillStates, NcStatus> {
-        self.interface.query::<IButtonStyleAbi>()?.fill_states()
+        self.interface.fill_states()
     }
     /// Changes the validated paint-only fill mask.
     pub fn set_fill_states(&self, states: FillStates) -> Result<(), NcStatus> {
-        self.interface.query::<IButtonStyleAbi>()?.set_fill_states(states)
+        self.interface.set_fill_states(states)
+    }
+    /// Installs a renderer-owned image directly through the Button class contract.
+    pub fn set_image(&self, image: ComRef<'_, ITextureAbi>, fit_width: bool) -> Result<(), NcStatus> {
+        self.interface.set_image(image, fit_width)
+    }
+    /// Returns to label-only content without generating an activation event.
+    pub fn clear_image(&self) -> Result<(), NcStatus> {
+        self.interface.clear_image()
     }
 }
 
@@ -601,5 +623,4 @@ macro_rules! image_content {
         }
     };
 }
-image_content!(Button);
 image_content!(ListBox);

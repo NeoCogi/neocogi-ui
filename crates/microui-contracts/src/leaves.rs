@@ -232,15 +232,6 @@ impl FillStates {
     pub const ALL: Self = Self { bits: 7 };
 }
 
-#[com_interface(auto_guid = "microui.ButtonStyle:v1")]
-/// Button-specific center-fill policy; outer FRAME remains a common widget option.
-pub trait IButtonStyle {
-    /// Returns the current center-fill mask.
-    fn fill_states(&self) -> Result<FillStates, NcStatus>;
-    /// Replaces the validated paint-only center-fill mask.
-    fn set_fill_states(&self, states: FillStates) -> Result<(), NcStatus>;
-}
-
 #[com_interface(auto_guid = "microui.MultilineEditor:v1")]
 /// Multiline editing and wrapping, implemented by the real editor and forwarded by its composed root.
 pub trait IMultilineEditor: ITextEditor {

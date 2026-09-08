@@ -237,8 +237,8 @@ fn label(runtime: &Runtime, value: &str) -> Result<TextBlock, NcStatus> {
     ))
 }
 /// Constructs a command button and installs its label through the inherited concrete interface.
-fn button(runtime: &Runtime, value: &str) -> Result<microui_redux::Button, NcStatus> {
-    let button = microui_redux::Button::from_interface(runtime.create_button()?);
+fn button(runtime: &Runtime, value: &str) -> Result<microui_redux::ButtonWidget, NcStatus> {
+    let button = microui_redux::ButtonWidget::from_interface(runtime.create_button()?);
     button.set_label(value)?;
     Ok(button)
 }
@@ -397,7 +397,7 @@ impl Dialog {
     }
 
     /// Connects fixed controls exactly once; dynamic rows use the same typed activation helper when refreshed.
-    fn connect(&self, path: &Textbox, filename: &Textbox, window: &ComPtr<IWindowAbi>, buttons: [(microui_redux::Button, Action); 5]) -> Result<(), NcStatus> {
+    fn connect(&self, path: &Textbox, filename: &Textbox, window: &ComPtr<IWindowAbi>, buttons: [(microui_redux::ButtonWidget, Action); 5]) -> Result<(), NcStatus> {
         self.session.subscribe_text_changed(path, Edited::Path)?;
         self.session.subscribe_text_submitted(path, Navigate)?;
         self.session.subscribe_text_changed(filename, Edited::Filename)?;

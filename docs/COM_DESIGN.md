@@ -166,7 +166,11 @@ The reusable renderer crates still contain the backend implementation; the platf
 
 Distinguish the OS window from microui's logical retained windows. Logical windows, child windows, dialogs and popups remain managed by the UI plugin's window manager.
 
-Classes do not all need registry entries. Register roots that a host must activate—such as a UI runtime/factory, a platform factory, and an asset loader. A runtime-bound `IWidgetFactory` can return concrete button/slider/container COM objects directly. Returned objects still implement normal COM interfaces without giving every ephemeral object a public constructible class descriptor. A third-party plugin can expose its own typed factory or a constructible widget class.
+Register every concrete class that a host or extension must construct, including
+built-in widgets. A runtime-bound UI factory may remain as a dynamically linked
+convenience over those same contracts, but it is not the only construction path.
+Class constructors receive typed argument frames decoded by nc-com; there is no
+untyped property bag, `Any`, or host-side duplicate of plugin constructor state.
 
 **6. The static generic façade**
 
@@ -195,10 +199,10 @@ impl<I: ComInterface> Widget<I> {
     }
 }
 
-/// Concrete public button name backed by the generic proxy implementation.
-pub type Button = Widget<IButtonAbi>;
+/// Static convenience name for the dynamically implemented Button class.
+pub type ButtonWidget = Widget<ButtonAbi>;
 
-impl Widget<IButtonAbi> {
+impl Widget<ButtonAbi> {
     /// Presents a Rust string API while using an explicit ABI buffer for the call.
     pub fn set_label(&self, label: &str) -> Result<(), NcStatus> {
         self.interface.set_label(NcCopyFromBufferOffset::new(
@@ -212,12 +216,33 @@ The corresponding contract is concrete and small:
 
 ```rust
 use nc_com::{
-    ComPtr, INcStringAbi, NcCopyFromBufferOffset, NcStatus, com_interface,
+    ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus,
+    com_class, com_interface,
 };
 
-#[com_interface(auto_guid = "microui.plan.Button:v1")]
-/// Button editing capability, independent of its implementation and event transport.
-pub trait IButton: IWidget {
+#[com_interface(auto_guid = "microui.Widget:v1")]
+/// Shared widget protocol used by the UI runtime.
+pub trait IWidget {
+    // Common lifetime, options, update, and paint operations.
+}
+
+#[com_interface(auto_guid = "microui.LeafLayout:v1")]
+/// Shared leaf-measurement protocol used by the UI runtime.
+pub trait ILeafLayout {
+    // Common measurement operation.
+}
+
+#[com_class(auto_guid = "microui.Button:v1")]
+/// Constructible Button with its concrete API and only shared protocols separated.
+pub trait Button: IWidget + ILeafLayout {
+    /// Creates a complete unmounted Button owned by the supplied UI host.
+    #[constructor]
+    fn new(
+        host: ComRef<'_, IWidgetHostAbi>,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        options: WidgetOptions,
+    ) -> Result<Self, NcStatus>;
+
     /// Replaces the complete UTF-8 label. Offset must be zero; copy before returning.
     fn set_label(&self, label: NcCopyFromBufferOffset<'_, u8>)
         -> Result<(), NcStatus>;
@@ -229,23 +254,32 @@ pub trait IButton: IWidget {
 #[com_interface(auto_guid = "microui.plan.UiFactory:v1")]
 /// Illustrative factory; the complete factory uses typed initialization records.
 pub trait IUiFactory {
-    /// Creates an unmounted button that the caller can configure and attach.
-    fn create_button(&self) -> Result<ComPtr<IButtonAbi>, NcStatus>;
+    /// Creates an unmounted Button through the same concrete class contract.
+    fn create_button(&self) -> Result<ComPtr<ButtonAbi>, NcStatus>;
 }
 ```
 
-Specialized widget interfaces inherit the common contract (`IButton: IWidget`).
-The class lists its specialized interface; nc-com supplies every base projection
-in the same allocation. A concrete plugin class contains its private state directly:
+The host may call the registered class without going through the convenience factory:
 
 ```rust,ignore
-#[com_class(interfaces(IButton, ILeafLayout, IActivationEvents))]
+let host = ui.widgets().host()?;
+let arguments = ButtonAbi::arguments(
+    host.as_com_ref(),
+    NcCopyFromBufferOffset::new(0, b"Save"),
+    WidgetOptions::FRAME,
+)?;
+let button = nc_com::Runtime::global().construct::<ButtonAbi>(arguments)?;
+```
+
+The class contract requires the common protocols; nc-com exposes those projections
+from the same allocation. A concrete plugin class contains its private state directly:
+
+```rust,ignore
+#[com_class(contract(microui_contracts::Button))]
 /// One button allocation; no legacy trait-object wrapper or public downcast is needed.
 pub struct ButtonObject {
-    /// Plugin-local semantic state and pending geometry invalidation.
-    state: RefCell<ButtonState>,
-    /// Typed queued submission state, containing no application callback.
-    submitted: EventSource<ButtonSubmitted>,
+    /// Plugin-local semantic and common widget state.
+    widget: WidgetCore<NativeButton>,
 }
 ```
 
