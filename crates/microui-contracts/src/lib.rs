@@ -197,7 +197,7 @@ pub trait UiFactory {
     /// Creates an empty combo header; its composing owner supplies generic list data and popup content.
     fn create_combo(&self) -> Result<ComPtr<ComboAbi>, NcStatus>;
     /// Creates a fixed scrolling multiline editor; CRLF and CR normalize to LF and the cursor starts at the end.
-    fn create_text_area(&self, text: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping, scrolling: bool) -> Result<ComPtr<ITextAreaAbi>, NcStatus>;
+    fn create_text_area(&self, text: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping, scrolling: bool) -> Result<ComPtr<TextAreaAbi>, NcStatus>;
     /// Creates an empty disclosure with a real text header and editable vertical Linear body.
     fn create_disclosure(&self, label: NcCopyFromBufferOffset<'_, u8>, style: DisclosureStyle, expanded: bool) -> Result<ComPtr<IDisclosureAbi>, NcStatus>;
     /// Creates a framed scroll composite around one unmounted content object; generic options can subsequently change its frame.
@@ -213,9 +213,9 @@ pub trait UiFactory {
     /// Constructs an unmounted boolean control with body-font presentation.
     fn create_checkbox(&self, checked: bool, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<CheckboxAbi>, NcStatus>;
     /// Constructs an unmounted normalized single-line editor.
-    fn create_textbox(&self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ITextboxAbi>, NcStatus>;
+    fn create_textbox(&self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<TextboxAbi>, NcStatus>;
     /// Constructs multiline display text using the explicit wrapping policy.
-    fn create_text_block(&self, text: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping) -> Result<ComPtr<ITextBlockAbi>, NcStatus>;
+    fn create_text_block(&self, text: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping) -> Result<ComPtr<TextBlockAbi>, NcStatus>;
     /// Constructs a slider after validating every arithmetic input.
     fn create_slider(&self, options: SliderOptions) -> Result<ComPtr<ISliderAbi>, NcStatus>;
     /// Constructs standalone numeric entry after validating arithmetic inputs.

@@ -78,7 +78,7 @@ struct MutationState {
     /// Newly constructed window is retained for deterministic teardown after the test.
     next: Option<ComPtr<IWindowAbi>>,
     /// Real replacement editor receives raw input queued after the activating event.
-    editor: Option<microui_redux::Textbox>,
+    editor: Option<microui_redux::TextboxWidget>,
     /// Ordered semantic observations from activation and terminal window delivery.
     observations: Vec<&'static str>,
 }

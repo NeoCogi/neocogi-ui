@@ -3,8 +3,8 @@ use super::*;
 use nc_com::{INcStringAbi, NcString};
 
 callable_leaf_class!(CheckboxObject, crate::Checkbox, microui_contracts::Checkbox);
-leaf_class!(Textbox, crate::Textbox, ITextbox, ITextboxAbi, IFontStyle, ITextEvents);
-leaf_class!(TextBlock, crate::TextBlock, ITextBlock, ITextBlockAbi, IFontStyle);
+callable_leaf_class!(TextboxObject, crate::Textbox, microui_contracts::Textbox);
+callable_leaf_class!(TextBlockObject, crate::TextBlock, microui_contracts::TextBlock);
 leaf_class!(Slider, crate::Slider, ISlider, ISliderAbi, IFontStyle, INumericEvents);
 leaf_class!(Number, crate::Number, INumber, INumberAbi, IFontStyle, INumericEvents);
 leaf_class!(ColorSwatch, crate::ColorSwatch, IColorSwatch, IColorSwatchAbi, IFontStyle);
@@ -79,14 +79,48 @@ impl Checkbox for CheckboxObject {
     }
 }
 
-text_content!(Textbox, text, set_text);
-text_content!(TextBlock, text, set_text);
 text_content!(ColorSwatch, label, set_label);
 text_content!(ListItem, label, set_label);
 text_content!(ListBox, com_label, com_set_label);
 
-impl ITextbox for Textbox {}
-impl ITextEditor for Textbox {
+impl TextboxObject {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(super) fn create(
+        host: ComPtr<IWidgetHostAbi>,
+        text: NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<ComPtr<TextboxAbi>, NcStatus> {
+        let value = <Self as Textbox>::new(host.as_com_ref(), text)?;
+        Ok(Self::from_value(value)
+            .query()
+            .expect("TextboxObject declares the Textbox class contract"))
+    }
+}
+
+impl Textbox for TextboxObject {
+    /// Normalizes the complete input before allocating the established Textbox defaults.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, input: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus> {
+        let parameters = crate::TextboxParameters::new(text(input)?);
+        Ok(Self {
+            widget: super::widget::WidgetCore::new(host.add_ref(), parameters.opt, crate::Textbox::from(parameters))?,
+        })
+    }
+    /// Returns an immutable snapshot without exposing the semantic String allocation.
+    fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+        self.widget.state.readable()?;
+        Ok(NcString::from_utf8_str(self.widget.take()?.text()))
+    }
+    /// Applies single-line normalization before recording an actual geometry change.
+    fn set_text(&self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.widget.state.writable()?;
+        let input = text(input)?;
+        let mut core = self.widget.take()?;
+        let previous = core.text().to_owned();
+        core.set_text(input);
+        if core.text() != previous {
+            self.widget.state.record_change(GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
     /// Reports a byte cursor rather than a glyph or grapheme index.
     fn cursor(&self) -> Result<u64, NcStatus> {
         self.widget.state.readable()?;
@@ -98,9 +132,67 @@ impl ITextEditor for Textbox {
         self.widget.take()?.set_cursor(usize::try_from(cursor).unwrap_or(usize::MAX));
         Ok(())
     }
+    /// Validates a semantic font role before changing the Textbox's measurement input.
+    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
+        self.widget.set_font_role(role)
+    }
+    /// Resolves one exact named font before replacing the Textbox's selection.
+    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.widget.set_named_font(name)
+    }
+    /// Connects the existing changed-text source directly through the class contract.
+    fn subscribe_changed(&self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.widget.subscribe::<crate::TextboxChanged>(sink)
+    }
+    /// Connects the independent submitted-text source directly through the class contract.
+    fn subscribe_submitted(&self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.widget.subscribe::<crate::TextboxSubmitted>(sink)
+    }
 }
 
-impl ITextBlock for TextBlock {
+impl TextBlockObject {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(super) fn create(
+        host: ComPtr<IWidgetHostAbi>,
+        text: NcCopyFromBufferOffset<'_, u8>,
+        wrapping: TextWrapping,
+    ) -> Result<ComPtr<TextBlockAbi>, NcStatus> {
+        let value = <Self as TextBlock>::new(host.as_com_ref(), text, wrapping)?;
+        Ok(Self::from_value(value)
+            .query()
+            .expect("TextBlockObject declares the TextBlock class contract"))
+    }
+}
+
+impl TextBlock for TextBlockObject {
+    /// Validates text and wrapping before allocating the established TextBlock defaults.
+    fn new(
+        host: ComRef<'_, IWidgetHostAbi>,
+        input: NcCopyFromBufferOffset<'_, u8>,
+        wrapping: TextWrapping,
+    ) -> Result<Self, NcStatus> {
+        let parameters = crate::TextBlockParameters::with_wrap(text(input)?, local_wrap(wrapping)?);
+        Ok(Self {
+            widget: super::widget::WidgetCore::new(host.add_ref(), parameters.opt, crate::TextBlock::from(parameters))?,
+        })
+    }
+    /// Returns an immutable snapshot without exposing the semantic String allocation.
+    fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+        self.widget.state.readable()?;
+        Ok(NcString::from_utf8_str(self.widget.take()?.text()))
+    }
+    /// Replaces complete text and records only an actual geometry change.
+    fn set_text(&self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.widget.state.writable()?;
+        let input = text(input)?;
+        let mut core = self.widget.take()?;
+        let previous = core.text().to_owned();
+        core.set_text(input);
+        if core.text() != previous {
+            self.widget.state.record_change(GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
     /// Encodes exactly the wrapping behavior used by existing text measurement.
     fn wrapping(&self) -> Result<TextWrapping, NcStatus> {
         self.widget.state.readable()?;
@@ -119,6 +211,14 @@ impl ITextBlock for TextBlock {
             self.widget.state.record_change(GeometryChange::CHANGED);
         }
         Ok(())
+    }
+    /// Validates a semantic font role before changing the TextBlock's measurement input.
+    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
+        self.widget.set_font_role(role)
+    }
+    /// Resolves one exact named font before replacing the TextBlock's selection.
+    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.widget.set_named_font(name)
     }
 }
 
@@ -262,10 +362,6 @@ impl Scrollbar for ScrollbarObject {
     }
 }
 
-font_style_impl!(Textbox);
-
-font_style_impl!(TextBlock);
-
 font_style_impl!(Slider);
 
 font_style_impl!(Number);
@@ -305,7 +401,5 @@ impl IActivationEvents for ListItem {
         self.widget.subscribe::<crate::ListItemSubmitted>(sink)
     }
 }
-
-text_subscription_impl!(Textbox, crate::TextboxChanged, crate::TextboxSubmitted);
 
 super::widget::image_content_impl!(ListBox);

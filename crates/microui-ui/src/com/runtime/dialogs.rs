@@ -1,6 +1,6 @@
 //! Standard picker composes actual COM controls and owns only explicit request and native-path state.
 use super::*;
-use microui_redux::{EventHandler, EventSession, Linear, ScrollArea, Textbox, TextBlock, ListItem};
+use microui_redux::{EventHandler, EventSession, Linear, ListItem, ScrollArea, TextBlockWidget, TextboxWidget};
 use microui_redux::events::{Activation, FileDialogCompleted, TextChanged, TextSubmitted};
 use nc_com::{INcStringAbi, NcString};
 use std::{
@@ -57,11 +57,11 @@ struct Model {
     /// Exact native row selection, cleared only by a real filename edit or successful navigation.
     selected: Option<PathBuf>,
     /// Persistent path field, reused across every directory and request.
-    path: Textbox,
+    path: TextboxWidget,
     /// Persistent filename field, reused without reconstructing selection from its display label.
-    filename: Textbox,
+    filename: TextboxWidget,
     /// Persistent visible error display; read failures preserve the prior listing and selection.
-    error: TextBlock,
+    error: TextBlockWidget,
     /// Persistent scrolling controllers; refreshing replaces only their application content roots.
     folders: ScrollArea,
     /// Separate file column keeps its own retained scroll request and clamping behavior.
@@ -231,8 +231,8 @@ fn line(runtime: &Runtime, direction: FlowDirection, cross: CrossSize, children:
     Ok(line)
 }
 /// Constructs a text display through the ordinary widget factory.
-fn label(runtime: &Runtime, value: &str) -> Result<TextBlock, NcStatus> {
-    Ok(TextBlock::from_interface(
+fn label(runtime: &Runtime, value: &str) -> Result<TextBlockWidget, NcStatus> {
+    Ok(TextBlockWidget::from_interface(
         runtime.widget_factory().create_text_block(NcCopyFromBufferOffset::new(0, value.as_bytes()), TextWrapping::NONE)?,
     ))
 }
@@ -284,8 +284,8 @@ impl Dialog {
     fn new(runtime: &Runtime, parent: ComRef<'_, IWindowAbi>) -> Result<Rc<Self>, NcStatus> {
         runtime.storage.factory.host.check_mutation()?;
         runtime.storage.parent(parent)?;
-        let path = Textbox::from_interface(runtime.widget_factory().create_textbox(NcCopyFromBufferOffset::new(0, b""))?);
-        let filename = Textbox::from_interface(runtime.widget_factory().create_textbox(NcCopyFromBufferOffset::new(0, b""))?);
+        let path = TextboxWidget::from_interface(runtime.widget_factory().create_textbox(NcCopyFromBufferOffset::new(0, b""))?);
+        let filename = TextboxWidget::from_interface(runtime.widget_factory().create_textbox(NcCopyFromBufferOffset::new(0, b""))?);
         let up = button(runtime, "Up")?;
         let home = button(runtime, "Home")?;
         let go = button(runtime, "Go")?;
@@ -398,7 +398,7 @@ impl Dialog {
     }
 
     /// Connects fixed controls exactly once; dynamic rows use the same typed activation helper when refreshed.
-    fn connect(&self, path: &Textbox, filename: &Textbox, window: &ComPtr<IWindowAbi>, buttons: [(microui_redux::ButtonWidget, Action); 5]) -> Result<(), NcStatus> {
+    fn connect(&self, path: &TextboxWidget, filename: &TextboxWidget, window: &ComPtr<IWindowAbi>, buttons: [(microui_redux::ButtonWidget, Action); 5]) -> Result<(), NcStatus> {
         self.session.subscribe_text_changed(path, Edited::Path)?;
         self.session.subscribe_text_submitted(path, Navigate)?;
         self.session.subscribe_text_changed(filename, Edited::Filename)?;

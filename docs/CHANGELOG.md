@@ -25,6 +25,10 @@ wrappers. The accepted migration and outstanding validation are recorded in
 - Make Checkbox, Scrollbar, and Combo registered class contracts as well. Their
   concrete editing and event methods no longer require matching one-object
   interfaces, while their callback sinks remain reusable COM protocols.
+- Make Textbox, TextBlock, and the fixed TextArea composition registered class
+  contracts. Text, cursor, wrapping, typography, and editor subscriptions now
+  live on those concrete class projections; TextArea retains only shared
+  scrolling and container-layout protocols.
 - Replace `IUiFactory` with a separately registered `UiFactory` class. The
   runtime returns a host-bound instance for convenience, while hosts can construct
   `Button` and other registered classes directly from typed argument frames.

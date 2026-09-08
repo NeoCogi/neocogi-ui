@@ -57,9 +57,9 @@ impl IMultilineEditor for TextEditor {
     }
 }
 
-#[com_object(interfaces(ITextArea, IScrolling, IContainerLayout, IFontStyle, ITextEvents))]
+#[com_object(microui_contracts::TextArea)]
 /// One composed root owns scrolling while inherited text calls edit its fixed actual content child.
-pub(super) struct TextArea {
+pub struct TextAreaObject {
     /// Shared concrete scroll algorithm; no additional wrapper node surrounds the existing scroll tree.
     widget: WidgetCore<crate::ScrollArea>,
     /// Authoritative fixed surface and bars, identical to ordinary ScrollArea construction.
@@ -71,37 +71,49 @@ pub(super) struct TextArea {
     /// Cached event capability of that same fixed editor, never a root-owned duplicate queue.
     events: ComPtr<ITextEventsAbi>,
 }
-fixed_phases!(TextArea);
-scrolling_impl!(TextArea);
+fixed_phases!(TextAreaObject);
+scrolling_impl!(TextAreaObject);
 
-impl TextArea {
-    /// Prepares the fixed scroll structure, attaches one real editor, and consumes all state into the final root.
+impl TextAreaObject {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
     pub(super) fn create(
         host: ComPtr<IWidgetHostAbi>,
-        text: &str,
-        wrap: crate::TextWrap,
+        text: NcCopyFromBufferOffset<'_, u8>,
+        wrapping: TextWrapping,
         scrolling: bool,
-    ) -> Result<ComPtr<ITextAreaAbi>, NcStatus> {
-        let parts = super::scroll::ScrollParts::prepare(host.clone(), scrolling)?;
-        let text = TextEditor::create(host, crate::WidgetOption::NONE, crate::TextArea::com_new(text, wrap, parts.model))?;
+    ) -> Result<ComPtr<TextAreaAbi>, NcStatus> {
+        let value = <Self as TextArea>::new(host.as_com_ref(), text, wrapping, scrolling)?;
+        Ok(Self::from_value(value)
+            .query()
+            .expect("TextAreaObject declares the TextArea class contract"))
+    }
+}
+
+impl TextArea for TextAreaObject {
+    /// Prepares the fixed scroll structure and attaches one real editor before publishing the root.
+    fn new(
+        host: ComRef<'_, IWidgetHostAbi>,
+        input: NcCopyFromBufferOffset<'_, u8>,
+        wrapping: TextWrapping,
+        scrolling: bool,
+    ) -> Result<Self, NcStatus> {
+        let text_value = text(input)?;
+        let wrap = super::leaves::local_wrap(wrapping)?;
+        let parts = super::scroll::ScrollParts::prepare(host.add_ref(), scrolling)?;
+        let text = TextEditor::create(host.add_ref(), crate::WidgetOption::NONE, crate::TextArea::com_new(text_value, wrap, parts.model))?;
         let font = text.query()?;
         let events = text.query()?;
         parts.content.insert(0, text.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
         // The transform surface owns its private editor. This root intentionally
         // retains no content-replacement authority and cannot detach its text leaf.
-        Ok(Self::from_value(Self {
+        Ok(Self {
             widget: parts.widget,
             editor: parts.editor,
             text,
             font,
             events,
         })
-        .query()
-        .expect("text area declares ITextArea"))
     }
-}
-impl ITextArea for TextArea {}
-impl ITextContent for TextArea {
     /// Forwards snapshots after checking the outer object's logical lifetime.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.widget.state.readable()?;
@@ -112,8 +124,6 @@ impl ITextContent for TextArea {
         self.widget.state.writable()?;
         self.text.set_text(text)
     }
-}
-impl ITextEditor for TextArea {
     /// Reads the actual content editor's cursor without retaining a local copy.
     fn cursor(&self) -> Result<u64, NcStatus> {
         self.widget.state.readable()?;
@@ -124,8 +134,6 @@ impl ITextEditor for TextArea {
         self.widget.state.writable()?;
         self.text.set_cursor(cursor)
     }
-}
-impl IMultilineEditor for TextArea {
     /// Returns the actual editor's wrapping policy.
     fn wrapping(&self) -> Result<TextWrapping, NcStatus> {
         self.widget.state.readable()?;
@@ -136,8 +144,6 @@ impl IMultilineEditor for TextArea {
         self.widget.state.writable()?;
         self.text.set_wrapping(wrapping)
     }
-}
-impl IFontStyle for TextArea {
     /// Resolves a semantic font on the actual editor and invalidates its existing layout cache.
     fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
         self.widget.state.writable()?;
@@ -148,9 +154,6 @@ impl IFontStyle for TextArea {
         self.widget.state.writable()?;
         self.font.set_named_font(name)
     }
-}
-
-impl ITextEvents for TextArea {
     /// Forwards changed subscriptions to the actual fixed content editor.
     fn subscribe_changed(&self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.widget.state.writable()?;

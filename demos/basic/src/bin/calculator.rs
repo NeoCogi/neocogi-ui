@@ -332,7 +332,7 @@ struct State {
     /// The fixed calculator panel follows the platform drawable rectangle.
     window: ComPtr<IWindowAbi>,
     /// The result field is edited only after a calculator action changes the display.
-    display: Textbox,
+    display: TextboxWidget,
     /// Arithmetic and formatting are ordinary concrete Rust state, independent of any plugin.
     calculator: Calculator,
 }

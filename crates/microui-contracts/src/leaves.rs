@@ -19,9 +19,29 @@ pub trait ITextEditor: ITextContent {
     fn set_cursor(&self, cursor: u64) -> Result<(), NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.Textbox:v1")]
-/// Single-line editor; construction, replacement and paste remove CR and LF.
-pub trait ITextbox: ITextEditor {}
+#[com_class(auto_guid = "microui.Textbox:v1")]
+/// Constructible single-line editor whose complete concrete API is the class contract.
+pub trait Textbox: crate::IWidget + crate::ILeafLayout {
+    /// Creates normalized unmounted text state owned by the supplied UI host.
+    #[constructor]
+    fn new(host: ComRef<'_, crate::IWidgetHostAbi>, text: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus>;
+    /// Returns an independently owned immutable UTF-8 snapshot.
+    fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
+    /// Replaces complete UTF-8 text after applying the single-line normalization policy.
+    fn set_text(&self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    /// Returns the byte cursor at a Unicode scalar boundary.
+    fn cursor(&self) -> Result<u64, NcStatus>;
+    /// Clamps to the preceding Unicode scalar boundary and current text length.
+    fn set_cursor(&self, cursor: u64) -> Result<(), NcStatus>;
+    /// Selects a semantic font role and invalidates measurement only when it differs.
+    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+    /// Resolves an exact named font in the current host bundle before committing.
+    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    /// Connects the independent changed-text subscriber.
+    fn subscribe_changed(&self, sink: ComRef<'_, crate::ITextChangedSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
+    /// Connects the independent submitted-text subscriber.
+    fn subscribe_submitted(&self, sink: ComRef<'_, crate::ITextSubmittedSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
+}
 
 com_int_enum! {
     /// Concrete multiline wrapping policy shared by display and editing controls.
@@ -33,13 +53,28 @@ com_int_enum! {
     }
 }
 
-#[com_interface(auto_guid = "microui.TextBlock:v1")]
-/// Multiline display text with mutable wrapping and inherited common text editing.
-pub trait ITextBlock: ITextContent {
+#[com_class(auto_guid = "microui.TextBlock:v1")]
+/// Constructible multiline display text with its complete concrete API in one class contract.
+pub trait TextBlock: crate::IWidget + crate::ILeafLayout {
+    /// Creates unmounted display text with an explicit wrapping policy.
+    #[constructor]
+    fn new(
+        host: ComRef<'_, crate::IWidgetHostAbi>,
+        text: NcCopyFromBufferOffset<'_, u8>,
+        wrapping: TextWrapping,
+    ) -> Result<Self, NcStatus>;
+    /// Returns an independently owned immutable UTF-8 snapshot.
+    fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
+    /// Replaces complete UTF-8 text at offset zero.
+    fn set_text(&self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Returns the current wrapping policy.
     fn wrapping(&self) -> Result<TextWrapping, NcStatus>;
     /// Changes wrapping and records a sticky measurement change when it differs.
     fn set_wrapping(&self, wrapping: TextWrapping) -> Result<(), NcStatus>;
+    /// Selects a semantic font role and invalidates measurement only when it differs.
+    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+    /// Resolves an exact named font in the current host bundle before committing.
+    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
 }
 
 #[com_class(auto_guid = "microui.Checkbox:v1")]
@@ -264,10 +299,38 @@ pub trait IMultilineEditor: ITextEditor {
     fn set_wrapping(&self, wrapping: TextWrapping) -> Result<(), NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.TextArea:v1")]
-/// Fixed scrolling editor root. Inherited text methods edit its actual internal editor.
-/// Query IScrolling for offsets; IScrollArea is absent because the editor cannot be replaced.
-pub trait ITextArea: IMultilineEditor {}
+#[com_class(auto_guid = "microui.TextArea:v1")]
+/// Constructible fixed scrolling editor whose class forwards to one actual internal editor.
+pub trait TextArea: crate::IWidget + crate::IContainerLayout + crate::IScrolling {
+    /// Creates a fixed editor composition with normalized text and explicit wrapping/scroll policy.
+    #[constructor]
+    fn new(
+        host: ComRef<'_, crate::IWidgetHostAbi>,
+        text: NcCopyFromBufferOffset<'_, u8>,
+        wrapping: TextWrapping,
+        scrolling: bool,
+    ) -> Result<Self, NcStatus>;
+    /// Returns an independently owned immutable UTF-8 snapshot from the actual editor.
+    fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
+    /// Replaces normalized text on the actual editor and schedules caret reveal.
+    fn set_text(&self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    /// Returns the actual editor's scalar-aligned byte cursor.
+    fn cursor(&self) -> Result<u64, NcStatus>;
+    /// Clamps and installs the actual editor's byte cursor.
+    fn set_cursor(&self, cursor: u64) -> Result<(), NcStatus>;
+    /// Returns the actual editor's wrapping policy.
+    fn wrapping(&self) -> Result<TextWrapping, NcStatus>;
+    /// Changes wrapping and schedules text geometry and caret refresh.
+    fn set_wrapping(&self, wrapping: TextWrapping) -> Result<(), NcStatus>;
+    /// Selects a semantic font role on the actual editor.
+    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+    /// Resolves an exact named font in the current host bundle before committing.
+    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    /// Connects the actual editor's independent changed-text subscriber.
+    fn subscribe_changed(&self, sink: ComRef<'_, crate::ITextChangedSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
+    /// Connects the actual editor's independent submitted-text subscriber.
+    fn subscribe_submitted(&self, sink: ComRef<'_, crate::ITextSubmittedSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
+}
 
 #[com_class(auto_guid = "microui.Combo:v1")]
 /// Constructible combo header; generic list data and popup content remain with its composing owner.

@@ -695,10 +695,11 @@ fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validati
     assert_eq!(textbox.cursor().unwrap(), 5);
     textbox.set_cursor(4).unwrap();
     assert_eq!(textbox.cursor().unwrap(), 2);
-    let editor = textbox.node_interface().unwrap().query::<ITextEditorAbi>().unwrap();
-    let text = editor.query::<ITextContentAbi>().unwrap();
-    assert_eq!(editor.query::<IUnknown>().unwrap().as_ptr(), text.query::<IUnknown>().unwrap().as_ptr());
     let common = textbox.node_interface().unwrap();
+    let concrete = textbox.as_interface().add_ref();
+    assert_eq!(concrete.query::<IUnknown>().unwrap().as_ptr(), common.query::<IUnknown>().unwrap().as_ptr());
+    assert_eq!(common.query::<ITextEditorAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
+    assert_eq!(common.query::<ITextContentAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
     common.take_change().unwrap();
     textbox.set_text("é\n☃").unwrap();
     assert_eq!(textbox.cursor().unwrap(), 5);

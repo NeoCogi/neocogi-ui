@@ -70,12 +70,12 @@ impl Widget<ButtonAbi> {
 
 /// Static convenience wrapper around the dynamically constructed Checkbox class projection.
 pub type CheckboxWidget = Widget<CheckboxAbi>;
-/// Static Textbox proxy; semantic storage belongs to its plugin object.
-pub type Textbox = Widget<ITextboxAbi>;
+/// Static convenience wrapper around the dynamically constructed Textbox class projection.
+pub type TextboxWidget = Widget<TextboxAbi>;
 /// Static proxy for the fixed scrolling editor; inherited text edits reach its actual content leaf.
-pub type TextArea = Widget<ITextAreaAbi>;
+pub type TextAreaWidget = Widget<TextAreaAbi>;
 /// Static TextBlock proxy; semantic storage belongs to its plugin object.
-pub type TextBlock = Widget<ITextBlockAbi>;
+pub type TextBlockWidget = Widget<TextBlockAbi>;
 /// Static Slider proxy; semantic storage belongs to its plugin object.
 pub type Slider = Widget<ISliderAbi>;
 /// Static Number proxy; semantic storage belongs to its plugin object.
@@ -109,10 +109,10 @@ macro_rules! text_proxy {
     };
 }
 text_proxy!(ITextContentAbi);
-text_proxy!(ITextboxAbi);
-text_proxy!(ITextAreaAbi);
+text_proxy!(TextboxAbi);
+text_proxy!(TextAreaAbi);
 text_proxy!(IMultilineEditorAbi);
-text_proxy!(ITextBlockAbi);
+text_proxy!(TextBlockAbi);
 text_proxy!(IColorSwatchAbi);
 text_proxy!(IListItemAbi);
 text_proxy!(IListBoxAbi);
@@ -158,8 +158,8 @@ macro_rules! editor_proxy {
         }
     };
 }
-editor_proxy!(ITextboxAbi);
-editor_proxy!(ITextAreaAbi);
+editor_proxy!(TextboxAbi);
+editor_proxy!(TextAreaAbi);
 editor_proxy!(IMultilineEditorAbi);
 /// Shares explicit wrapping calls without inferring policy from the resulting geometry.
 macro_rules! wrapping_proxy {
@@ -176,10 +176,10 @@ macro_rules! wrapping_proxy {
         }
     };
 }
-wrapping_proxy!(ITextBlockAbi);
-wrapping_proxy!(ITextAreaAbi);
+wrapping_proxy!(TextBlockAbi);
+wrapping_proxy!(TextAreaAbi);
 wrapping_proxy!(IMultilineEditorAbi);
-impl Widget<ITextAreaAbi> {
+impl Widget<TextAreaAbi> {
     /// Queries scrolling on this same root identity; it cannot replace the fixed editor content.
     pub fn scrolling(&self) -> Result<Widget<IScrollingAbi>, NcStatus> {
         Ok(Widget::from_interface(self.interface.query()?))
@@ -245,8 +245,8 @@ impl WidgetFactory {
     }
 
     /// Creates a fixed multiline editor and its real scroll children with one shared offset model.
-    pub fn text_area(&self, text: &str, wrapping: TextWrapping, scrolling: bool) -> Result<TextArea, NcStatus> {
-        Ok(TextArea::from_interface(self.interface.create_text_area(
+    pub fn text_area(&self, text: &str, wrapping: TextWrapping, scrolling: bool) -> Result<TextAreaWidget, NcStatus> {
+        Ok(TextAreaWidget::from_interface(self.interface.create_text_area(
             NcCopyFromBufferOffset::new(0, text.as_bytes()),
             wrapping,
             scrolling,
@@ -259,14 +259,14 @@ impl WidgetFactory {
         ))
     }
     /// Constructs an initialized, unmounted textbox in this runtime.
-    pub fn textbox(&self, text: &str) -> Result<Textbox, NcStatus> {
-        Ok(Textbox::from_interface(
+    pub fn textbox(&self, text: &str) -> Result<TextboxWidget, NcStatus> {
+        Ok(TextboxWidget::from_interface(
             self.interface.create_textbox(NcCopyFromBufferOffset::new(0, text.as_bytes()))?,
         ))
     }
     /// Constructs an initialized, unmounted text block in this runtime.
-    pub fn text_block(&self, text: &str, wrapping: TextWrapping) -> Result<TextBlock, NcStatus> {
-        Ok(TextBlock::from_interface(
+    pub fn text_block(&self, text: &str, wrapping: TextWrapping) -> Result<TextBlockWidget, NcStatus> {
+        Ok(TextBlockWidget::from_interface(
             self.interface.create_text_block(NcCopyFromBufferOffset::new(0, text.as_bytes()), wrapping)?,
         ))
     }
@@ -493,6 +493,18 @@ impl Ui {
 
 /// Static typography conveniences exist only on text-bearing proxy types.
 macro_rules! font_proxy {
+    (direct $interface:ty) => {
+        impl Widget<$interface> {
+            /// Selects typography directly through the concrete class contract.
+            pub fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
+                self.interface.set_font_role(role)
+            }
+            /// Resolves a named font directly through the concrete class contract.
+            pub fn set_named_font(&self, name: &str) -> Result<(), NcStatus> {
+                self.interface.set_named_font(NcCopyFromBufferOffset::new(0, name.as_bytes()))
+            }
+        }
+    };
     ($interface:ty) => {
         impl Widget<$interface> {
             /// Selects typography through this same widget object's optional capability.
@@ -508,10 +520,10 @@ macro_rules! font_proxy {
         }
     };
 }
-font_proxy!(ITextboxAbi);
-font_proxy!(ITextAreaAbi);
+font_proxy!(direct TextboxAbi);
+font_proxy!(direct TextAreaAbi);
 font_proxy!(IMultilineEditorAbi);
-font_proxy!(ITextBlockAbi);
+font_proxy!(direct TextBlockAbi);
 font_proxy!(ISliderAbi);
 font_proxy!(INumberAbi);
 font_proxy!(IColorSwatchAbi);

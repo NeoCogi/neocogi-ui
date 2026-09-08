@@ -629,8 +629,9 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
     assert_eq!(area.text().unwrap(), "a☃\nb\n");
     let root = area.node_interface().unwrap();
     let identity = root.query::<IUnknown>().unwrap();
-    let inherited = root.query::<ITextEditorAbi>().unwrap();
-    assert_eq!(inherited.query::<IUnknown>().unwrap().as_ptr(), identity.as_ptr());
+    let concrete = area.as_interface().add_ref();
+    assert_eq!(concrete.query::<IUnknown>().unwrap().as_ptr(), identity.as_ptr());
+    assert_eq!(root.query::<ITextEditorAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
     assert_eq!(root.query::<IScrollAreaAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
     let scroll = area.scrolling().unwrap();
     assert_eq!(scroll.node_interface().unwrap().query::<IUnknown>().unwrap().as_ptr(), identity.as_ptr());
@@ -639,7 +640,7 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
     let surface = structural.child(0).unwrap().query::<IContainerLayoutAbi>().unwrap();
     let editor = surface.children().unwrap().child(0).unwrap().query::<IMultilineEditorAbi>().unwrap();
     assert_ne!(editor.query::<IUnknown>().unwrap().as_ptr(), identity.as_ptr());
-    assert_eq!(editor.query::<ITextAreaAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
+    assert_eq!(editor.query::<TextAreaAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
     area.set_cursor(3).unwrap();
     assert_eq!(area.cursor().unwrap(), 1); // A byte inside the snowman clamps to its preceding scalar boundary.
     assert_eq!(editor.cursor().unwrap(), 1);

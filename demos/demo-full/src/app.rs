@@ -90,7 +90,7 @@ pub(super) fn append<I: ComInterface>(parent: &Linear, child: &Widget<I>, track:
     parent.insert(parent.children()?.child_count()?, child, LinearEdge::new(track))?.finish()
 }
 /// Static display text remains a real plugin-owned TextBlock with no application callback.
-pub(super) fn label(ui: &Ui, text: &str) -> Result<TextBlock, NcStatus> {
+pub(super) fn label(ui: &Ui, text: &str) -> Result<TextBlockWidget, NcStatus> {
     ui.widgets().text_block(text, TextWrapping::NONE)
 }
 /// Shared framed, centered numeric control used by the palette and background editors.
@@ -146,15 +146,15 @@ pub(super) struct State {
     /// Actual sampler scrolling is retained for navigation and complete-frame image verification.
     sample_scroll: ScrollArea,
     /// Position, dimensions and sampled frame-rate presentations belong to this main window.
-    info: [TextBlock; 3],
+    info: [TextBlockWidget; 3],
     /// Minimized geometry must not be clamped back to the normal minimum size.
     minimized: bool,
     /// Actual log text is the only stored log buffer; appends read it only when an action writes.
-    log: TextBlock,
+    log: TextBlockWidget,
     /// Scroll requests survive measurement changes caused by log appends and style edits.
     log_scroll: ScrollArea,
     /// Enter and Submit edit and clear this actual single-line control.
-    entry: Textbox,
+    entry: TextboxWidget,
     /// User-owned policy for following new output.
     auto_scroll: bool,
     /// Concrete check item displays the same auto-scroll policy.

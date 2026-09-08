@@ -472,6 +472,36 @@ pub struct TextChanged {
     /// Copied semantic value owned by this event snapshot.
     pub cursor: u64,
 }
+
+/// Static facade hook shared by the concrete Textbox and TextArea class wrappers.
+pub trait TextEventSource {
+    /// Connects a changed-text sink through the concrete class contract.
+    fn subscribe_changed_sink(&self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
+    /// Connects a submitted-text sink through the concrete class contract.
+    fn subscribe_submitted_sink(&self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
+}
+
+impl TextEventSource for crate::TextboxWidget {
+    /// Delegates directly to the Textbox class projection without an event-interface query.
+    fn subscribe_changed_sink(&self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.as_interface().subscribe_changed(sink)
+    }
+    /// Delegates directly to the Textbox class projection without an event-interface query.
+    fn subscribe_submitted_sink(&self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.as_interface().subscribe_submitted(sink)
+    }
+}
+
+impl TextEventSource for crate::TextAreaWidget {
+    /// Delegates directly to the TextArea class projection without an event-interface query.
+    fn subscribe_changed_sink(&self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.as_interface().subscribe_changed(sink)
+    }
+    /// Delegates directly to the TextArea class projection without an event-interface query.
+    fn subscribe_submitted_sink(&self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.as_interface().subscribe_submitted(sink)
+    }
+}
 #[com_object(interfaces(ITextChangedSink))]
 /// Concrete local sink specialization stores application state and its exact handler type directly.
 struct TextChangedSink<State: 'static, Handler: EventHandler<State, TextChanged> + 'static> {
@@ -492,9 +522,9 @@ impl<State: 'static, Handler: EventHandler<State, TextChanged> + 'static> ITextC
 impl<State: 'static> EventSession<State> {
     /// Connects the widget's concrete event capability and registers its lease in deterministic order.
     /// Registration during an active session transaction reports BUSY before claiming the producer's port.
-    pub fn subscribe_text_changed<I: ComInterface, Handler: EventHandler<State, TextChanged> + 'static>(
+    pub fn subscribe_text_changed<Source: TextEventSource, Handler: EventHandler<State, TextChanged> + 'static>(
         &self,
-        widget: &Widget<I>,
+        widget: &Source,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         let mut leases = self.registry.take()?;
@@ -505,11 +535,7 @@ impl<State: 'static> EventSession<State> {
             },
         })
         .query()?;
-        let lease = widget
-            .as_interface()
-            .add_ref()
-            .query::<ITextEventsAbi>()?
-            .subscribe_changed(sink.as_com_ref())?;
+        let lease = widget.subscribe_changed_sink(sink.as_com_ref())?;
         leases.push(lease.clone());
         Ok(lease)
     }
@@ -536,9 +562,9 @@ impl<State: 'static, Handler: EventHandler<State, TextSubmitted> + 'static> ITex
 impl<State: 'static> EventSession<State> {
     /// Connects the widget's concrete event capability and registers its lease in deterministic order.
     /// Registration during an active session transaction reports BUSY before claiming the producer's port.
-    pub fn subscribe_text_submitted<I: ComInterface, Handler: EventHandler<State, TextSubmitted> + 'static>(
+    pub fn subscribe_text_submitted<Source: TextEventSource, Handler: EventHandler<State, TextSubmitted> + 'static>(
         &self,
-        widget: &Widget<I>,
+        widget: &Source,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         let mut leases = self.registry.take()?;
@@ -549,11 +575,7 @@ impl<State: 'static> EventSession<State> {
             },
         })
         .query()?;
-        let lease = widget
-            .as_interface()
-            .add_ref()
-            .query::<ITextEventsAbi>()?
-            .subscribe_submitted(sink.as_com_ref())?;
+        let lease = widget.subscribe_submitted_sink(sink.as_com_ref())?;
         leases.push(lease.clone());
         Ok(lease)
     }

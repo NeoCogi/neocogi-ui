@@ -43,13 +43,8 @@ impl UiFactory for UiFactoryObject {
         input: NcCopyFromBufferOffset<'_, u8>,
         wrapping: TextWrapping,
         scrolling: bool,
-    ) -> Result<ComPtr<ITextAreaAbi>, NcStatus> {
-        super::text_area::TextArea::create(
-            self.host.clone(),
-            text(input)?,
-            super::leaves::local_wrap(wrapping)?,
-            scrolling,
-        )
+    ) -> Result<ComPtr<TextAreaAbi>, NcStatus> {
+        super::text_area::TextAreaObject::create(self.host.clone(), input, wrapping, scrolling)
     }
 
     /// Validates text and presentation before constructing either fixed structural child.
@@ -106,10 +101,9 @@ impl UiFactory for UiFactoryObject {
     }
 
     /// Validates complete textbox initialization before allocating its COM identity.
-    fn create_textbox(&self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ITextboxAbi>, NcStatus> {
+    fn create_textbox(&self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<TextboxAbi>, NcStatus> {
         self.host.check_mutation()?;
-        let parameters = crate::TextboxParameters::new(text(input)?);
-        super::leaves::Textbox::create(self.host.clone(), parameters.opt, crate::Textbox::from(parameters))
+        super::leaves::TextboxObject::create(self.host.clone(), input)
     }
 
     /// Validates text and wrapping before allocating the display object's identity.
@@ -117,10 +111,9 @@ impl UiFactory for UiFactoryObject {
         &self,
         input: NcCopyFromBufferOffset<'_, u8>,
         wrapping: TextWrapping,
-    ) -> Result<ComPtr<ITextBlockAbi>, NcStatus> {
+    ) -> Result<ComPtr<TextBlockAbi>, NcStatus> {
         self.host.check_mutation()?;
-        let parameters = crate::TextBlockParameters::with_wrap(text(input)?, super::leaves::local_wrap(wrapping)?);
-        super::leaves::TextBlock::create(self.host.clone(), parameters.opt, crate::TextBlock::from(parameters))
+        super::leaves::TextBlockObject::create(self.host.clone(), input, wrapping)
     }
 
     /// Validates every arithmetic field before allocating a slider identity.
