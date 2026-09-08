@@ -1,24 +1,24 @@
 //! Dynamically linked widget-construction shorthand over concrete COM contracts.
 use super::*;
 
-#[com_object(UiFactory)]
-/// Factory object retaining only the host capability shared by its products.
-pub struct UiFactoryObject {
+#[com_object(microui_contracts::UiFactory)]
+/// Dynamically linked construction shorthand retaining only its products' shared host.
+pub struct UiFactory {
     /// Non-owning runtime authority used for lifetime checks, resources, and child stores.
     host: ComPtr<IWidgetHostAbi>,
 }
 
-impl UiFactoryObject {
+impl UiFactory {
     /// Builds the factory projection used by a newly constructed UI runtime.
     pub(super) fn create(host: ComPtr<IWidgetHostAbi>) -> Result<ComPtr<UiFactoryAbi>, NcStatus> {
-        let value = <Self as UiFactory>::new(host.as_com_ref())?;
+        let value = <Self as microui_contracts::UiFactory>::new(host.as_com_ref())?;
         Ok(Self::from_value(value)
             .query()
-            .expect("UiFactoryObject declares the UiFactory class contract"))
+            .expect("UiFactory declares its callable class contract"))
     }
 }
 
-impl UiFactory for UiFactoryObject {
+impl microui_contracts::UiFactory for UiFactory {
     /// Validates the supplied host before retaining its independent capability.
     fn new(host: ComRef<'_, IWidgetHostAbi>) -> Result<Self, NcStatus> {
         host.check_open()?;

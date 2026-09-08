@@ -35,7 +35,7 @@ pub use crate::ui_node::ScrollArea;
 mod text_area;
 pub use crate::ui_node::widgets::TextArea;
 mod ui_factory;
-pub use ui_factory::UiFactoryObject;
+pub use ui_factory::UiFactory;
 pub use runtime::{Runtime, create_runtime_from_assets};
 #[cfg(test)]
 use runtime::create_runtime;

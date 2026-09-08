@@ -9,7 +9,7 @@ nc_com::plugin! {
     version = "0.9.0-alpha.0",
     classes = [
         microui_ui::com::Runtime,
-        microui_ui::com::UiFactoryObject,
+        microui_ui::com::UiFactory,
         microui_ui::com::Button,
         microui_ui::com::Checkbox,
         microui_ui::com::Scrollbar,
