@@ -170,22 +170,69 @@ pub trait Number: crate::IWidget + crate::ILeafLayout {
     fn subscribe(&self, sink: ComRef<'_, crate::INumericSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.ColorSwatch:v1")]
-/// RGBA swatch with an optional inherited text label.
-pub trait IColorSwatch: ITextContent {
+#[com_class(auto_guid = "microui.ColorSwatch:v1")]
+/// Constructible RGBA preview whose optional label is part of the concrete class API.
+pub trait ColorSwatch: crate::IWidget + crate::ILeafLayout {
+    /// Creates an unmounted color preview from packed RGBA and complete UTF-8 label state.
+    #[constructor]
+    fn new(host: ComRef<'_, crate::IWidgetHostAbi>, rgba: u32, label: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus>;
+    /// Returns an independently owned immutable UTF-8 label snapshot.
+    fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
+    /// Replaces the complete UTF-8 label and invalidates preferred size when changed.
+    fn set_text(&self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Returns RGBA packed with red in the least significant byte.
     fn fill(&self) -> Result<u32, NcStatus>;
     /// Changes paint only and does not publish a user event.
     fn set_fill(&self, rgba: u32) -> Result<(), NcStatus>;
+    /// Selects a semantic font role and invalidates measurement only when it differs.
+    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+    /// Resolves an exact named font in the current host bundle before committing.
+    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.ListItem:v1")]
-/// One labelled row; generic application data remains in the static event adapter.
-pub trait IListItem: ITextContent {}
+#[com_class(auto_guid = "microui.ListItem:v1")]
+/// Constructible labelled row; generic application data remains in the static event adapter.
+pub trait ListItem: crate::IWidget + crate::ILeafLayout {
+    /// Creates one unmounted labelled row without embedding application data in COM.
+    #[constructor]
+    fn new(host: ComRef<'_, crate::IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus>;
+    /// Returns an independently owned immutable UTF-8 label snapshot.
+    fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
+    /// Replaces the complete UTF-8 label and invalidates preferred size when changed.
+    fn set_text(&self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    /// Selects a semantic font role and invalidates measurement only when it differs.
+    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+    /// Resolves an exact named font in the current host bundle before committing.
+    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    /// Selects a semantic icon or removes it while retaining the label.
+    fn set_icon_role(&self, icon: ContentIcon) -> Result<(), NcStatus>;
+    /// Resolves an exact named icon before replacing the existing selection.
+    fn set_named_icon(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    /// Connects the exclusive activation subscriber and returns its ownership lease.
+    fn subscribe(&self, sink: ComRef<'_, crate::IActivationSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
+}
 
-#[com_interface(auto_guid = "microui.ListBox:v1")]
-/// Button-like list entry with inherited text editing.
-pub trait IListBox: ITextContent {}
+#[com_class(auto_guid = "microui.ListBox:v1")]
+/// Constructible button-like list entry with direct label, image, and activation operations.
+pub trait ListBox: crate::IWidget + crate::ILeafLayout {
+    /// Creates one unmounted label-only entry; image state may be installed afterward.
+    #[constructor]
+    fn new(host: ComRef<'_, crate::IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus>;
+    /// Returns an independently owned immutable UTF-8 label snapshot.
+    fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
+    /// Replaces the complete UTF-8 label and invalidates preferred size when changed.
+    fn set_text(&self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    /// Selects a semantic font role and invalidates measurement only when it differs.
+    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+    /// Resolves an exact named font in the current host bundle before committing.
+    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    /// Installs a positive-sized immutable texture and optionally fits it to content width.
+    fn set_image(&self, image: ComRef<'_, crate::ITextureAbi>, fit_width: bool) -> Result<(), NcStatus>;
+    /// Removes image content while retaining the current label and font.
+    fn clear_image(&self) -> Result<(), NcStatus>;
+    /// Connects the exclusive activation subscriber and returns its ownership lease.
+    fn subscribe(&self, sink: ComRef<'_, crate::IActivationSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
+}
 
 com_int_enum! {
     /// Scrollbar orientation, fixed for the lifetime of one control.
@@ -281,15 +328,6 @@ com_int_enum! {
     }
 }
 
-#[com_interface(auto_guid = "microui.IconContent:v1")]
-/// Optional adjacent-icon capability on buttons and list rows.
-pub trait IIconContent {
-    /// Selects a semantic icon or removes it, retaining the existing text label.
-    fn set_icon_role(&self, icon: ContentIcon) -> Result<(), NcStatus>;
-    /// Resolves one exact named icon before replacing the existing visual selection.
-    fn set_named_icon(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
-}
-
 #[com_struct]
 #[derive(Debug, Eq, PartialEq)]
 /// Interaction states in which an unframed button fills its center.
@@ -380,15 +418,4 @@ pub trait Combo: crate::IWidget + crate::ILeafLayout {
     fn subscribe_changed(&self, sink: ComRef<'_, crate::IComboChangedSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
     /// Connects the independent popup-coordination subscriber.
     fn subscribe_popup(&self, sink: ComRef<'_, crate::IComboPopupSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
-}
-
-#[com_interface(auto_guid = "microui.ImageContent:v1")]
-/// Shared image editing for buttons and list-box entries; pixels stay owned by their renderer.
-pub trait IImageContent {
-    /// Installs a positive-sized immutable texture. Width fitting preserves aspect ratio and
-    /// uses the allocated content width; false uses inline placement with dimensions bounded by the allocation.
-    /// Image selection replaces any atlas icon while preserving the label.
-    fn set_image(&self, image: nc_com::ComRef<'_, crate::ITextureAbi>, fit_width: bool) -> Result<(), NcStatus>;
-    /// Removes image content while preserving the current label and font.
-    fn clear_image(&self) -> Result<(), NcStatus>;
 }

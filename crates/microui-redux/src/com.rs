@@ -80,12 +80,12 @@ pub type TextBlockWidget = Widget<TextBlockAbi>;
 pub type SliderWidget = Widget<SliderAbi>;
 /// Static convenience wrapper around the dynamically constructed Number class projection.
 pub type NumberWidget = Widget<NumberAbi>;
-/// Static ColorSwatch proxy; semantic storage belongs to its plugin object.
-pub type ColorSwatch = Widget<IColorSwatchAbi>;
-/// Static ListItem proxy; semantic storage belongs to its plugin object.
-pub type ListItem = Widget<IListItemAbi>;
-/// Static ListBox proxy; semantic storage belongs to its plugin object.
-pub type ListBox = Widget<IListBoxAbi>;
+/// Static convenience wrapper around the dynamically constructed ColorSwatch class projection.
+pub type ColorSwatchWidget = Widget<ColorSwatchAbi>;
+/// Static convenience wrapper around the dynamically constructed ListItem class projection.
+pub type ListItemWidget = Widget<ListItemAbi>;
+/// Static convenience wrapper around the dynamically constructed ListBox class projection.
+pub type ListBoxWidget = Widget<ListBoxAbi>;
 /// Static convenience wrapper around the dynamically constructed Scrollbar class projection.
 pub type ScrollbarWidget = Widget<ScrollbarAbi>;
 
@@ -113,9 +113,9 @@ text_proxy!(TextboxAbi);
 text_proxy!(TextAreaAbi);
 text_proxy!(IMultilineEditorAbi);
 text_proxy!(TextBlockAbi);
-text_proxy!(IColorSwatchAbi);
-text_proxy!(IListItemAbi);
-text_proxy!(IListBoxAbi);
+text_proxy!(ColorSwatchAbi);
+text_proxy!(ListItemAbi);
+text_proxy!(ListBoxAbi);
 
 impl Widget<CheckboxAbi> {
     /// Reads the current checked value.
@@ -206,7 +206,7 @@ macro_rules! numeric_proxy {
 }
 numeric_proxy!(SliderAbi);
 numeric_proxy!(NumberAbi);
-impl Widget<IColorSwatchAbi> {
+impl Widget<ColorSwatchAbi> {
     /// Reads the packed RGBA paint color.
     pub fn fill(&self) -> Result<u32, NcStatus> {
         self.interface.fill()
@@ -279,20 +279,20 @@ impl WidgetFactory {
         Ok(NumberWidget::from_interface(self.interface.create_number(options)?))
     }
     /// Constructs an initialized, unmounted color swatch in this runtime.
-    pub fn color_swatch(&self, rgba: u32, label: &str) -> Result<ColorSwatch, NcStatus> {
-        Ok(ColorSwatch::from_interface(
+    pub fn color_swatch(&self, rgba: u32, label: &str) -> Result<ColorSwatchWidget, NcStatus> {
+        Ok(ColorSwatchWidget::from_interface(
             self.interface.create_color_swatch(rgba, NcCopyFromBufferOffset::new(0, label.as_bytes()))?,
         ))
     }
     /// Constructs an initialized, unmounted list item in this runtime.
-    pub fn list_item(&self, label: &str) -> Result<ListItem, NcStatus> {
-        Ok(ListItem::from_interface(
+    pub fn list_item(&self, label: &str) -> Result<ListItemWidget, NcStatus> {
+        Ok(ListItemWidget::from_interface(
             self.interface.create_list_item(NcCopyFromBufferOffset::new(0, label.as_bytes()))?,
         ))
     }
     /// Constructs an initialized, unmounted list box in this runtime.
-    pub fn list_box(&self, label: &str) -> Result<ListBox, NcStatus> {
-        Ok(ListBox::from_interface(
+    pub fn list_box(&self, label: &str) -> Result<ListBoxWidget, NcStatus> {
+        Ok(ListBoxWidget::from_interface(
             self.interface.create_list_box(NcCopyFromBufferOffset::new(0, label.as_bytes()))?,
         ))
     }
@@ -526,28 +526,20 @@ font_proxy!(IMultilineEditorAbi);
 font_proxy!(direct TextBlockAbi);
 font_proxy!(direct SliderAbi);
 font_proxy!(direct NumberAbi);
-font_proxy!(IColorSwatchAbi);
-font_proxy!(IListBoxAbi);
-font_proxy!(IListItemAbi);
+font_proxy!(direct ColorSwatchAbi);
+font_proxy!(direct ListBoxAbi);
+font_proxy!(direct ListItemAbi);
 
-/// Adjacent-icon conveniences remain restricted to controls that own such content.
-macro_rules! icon_proxy {
-    ($interface:ty) => {
-        impl Widget<$interface> {
-            /// Selects an icon role, or NONE to remove it, without changing the label.
-            pub fn set_icon_role(&self, icon: ContentIcon) -> Result<(), NcStatus> {
-                self.interface.query::<IIconContentAbi>()?.set_icon_role(icon)
-            }
-            /// Resolves a named icon in this widget's own resource bundle.
-            pub fn set_named_icon(&self, name: &str) -> Result<(), NcStatus> {
-                self.interface
-                    .query::<IIconContentAbi>()?
-                    .set_named_icon(NcCopyFromBufferOffset::new(0, name.as_bytes()))
-            }
-        }
-    };
+impl Widget<ListItemAbi> {
+    /// Selects an icon role directly through the concrete ListItem class contract.
+    pub fn set_icon_role(&self, icon: ContentIcon) -> Result<(), NcStatus> {
+        self.interface.set_icon_role(icon)
+    }
+    /// Resolves a named icon directly through the concrete ListItem class contract.
+    pub fn set_named_icon(&self, name: &str) -> Result<(), NcStatus> {
+        self.interface.set_named_icon(NcCopyFromBufferOffset::new(0, name.as_bytes()))
+    }
 }
-icon_proxy!(IListItemAbi);
 impl Widget<ButtonAbi> {
     /// Selects typography directly through the Button class contract.
     pub fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
@@ -635,19 +627,13 @@ impl Widget<ComboAbi> {
     }
 }
 
-/// Shares concrete image-capability calls without introducing an image-only widget wrapper.
-macro_rules! image_content {
-    ($name:ident) => {
-        impl $name {
-            /// Installs this renderer-owned image; dimensions are validated before the edit commits.
-            pub fn set_image(&self, image: ComRef<'_, ITextureAbi>, fit_width: bool) -> Result<(), NcStatus> {
-                self.interface.query::<IImageContentAbi>()?.set_image(image, fit_width)
-            }
-            /// Returns to label-only content without generating an activation event.
-            pub fn clear_image(&self) -> Result<(), NcStatus> {
-                self.interface.query::<IImageContentAbi>()?.clear_image()
-            }
-        }
-    };
+impl ListBoxWidget {
+    /// Installs this renderer-owned image directly through the concrete class contract.
+    pub fn set_image(&self, image: ComRef<'_, ITextureAbi>, fit_width: bool) -> Result<(), NcStatus> {
+        self.interface.set_image(image, fit_width)
+    }
+    /// Returns to label-only content without generating an activation event.
+    pub fn clear_image(&self) -> Result<(), NcStatus> {
+        self.interface.clear_image()
+    }
 }
-image_content!(ListBox);

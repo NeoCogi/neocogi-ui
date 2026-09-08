@@ -172,7 +172,7 @@ pub(super) struct State {
     /// Standalone compact menu opened by the Popup button.
     test_popup: ComPtr<IPopupAbi>,
     /// Color preview reflects the model used to paint the fullscreen background.
-    background: ColorSwatch,
+    background: ColorSwatchWidget,
     /// Native picker remains reusable across complete/cancel requests; browsers have no OS filesystem.
     file_dialog: Option<FileDialog>,
     /// Open menu eligibility follows the real component's active state.

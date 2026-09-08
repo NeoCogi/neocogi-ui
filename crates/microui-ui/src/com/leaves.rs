@@ -7,9 +7,9 @@ callable_leaf_class!(TextboxObject, crate::Textbox, microui_contracts::Textbox);
 callable_leaf_class!(TextBlockObject, crate::TextBlock, microui_contracts::TextBlock);
 callable_leaf_class!(SliderObject, crate::Slider, microui_contracts::Slider);
 callable_leaf_class!(NumberObject, crate::Number, microui_contracts::Number);
-leaf_class!(ColorSwatch, crate::ColorSwatch, IColorSwatch, IColorSwatchAbi, IFontStyle);
-leaf_class!(ListItem, crate::ListItem, IListItem, IListItemAbi, IFontStyle, IIconContent, IActivationEvents);
-leaf_class!(ListBox, crate::ListBox, IListBox, IListBoxAbi, IFontStyle, IActivationEvents, IImageContent);
+callable_leaf_class!(ColorSwatchObject, crate::ColorSwatch, microui_contracts::ColorSwatch);
+callable_leaf_class!(ListItemObject, crate::ListItem, microui_contracts::ListItem);
+callable_leaf_class!(ListBoxObject, crate::ListBox, microui_contracts::ListBox);
 callable_leaf_class!(ScrollbarObject, crate::Scrollbar, microui_contracts::Scrollbar);
 
 impl CheckboxObject {
@@ -79,9 +79,42 @@ impl Checkbox for CheckboxObject {
     }
 }
 
-text_content!(ColorSwatch, label, set_label);
-text_content!(ListItem, label, set_label);
-text_content!(ListBox, com_label, com_set_label);
+/// Expands direct class methods for concrete controls which store one editable label.
+macro_rules! class_text_methods {
+    ($get:ident, $set:ident) => {
+        /// Returns an immutable snapshot without exposing the semantic String allocation.
+        fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+            self.widget.state.readable()?;
+            Ok(NcString::from_utf8_str(self.widget.take()?.$get()))
+        }
+        /// Validates UTF-8, applies the concrete setter policy, and records an actual size change.
+        fn set_text(&self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+            self.widget.state.writable()?;
+            let input = text(input)?;
+            let mut core = self.widget.take()?;
+            let previous = core.$get().to_owned();
+            core.$set(input);
+            if core.$get() != previous {
+                self.widget.state.record_change(GeometryChange::CHANGED);
+            }
+            Ok(())
+        }
+    };
+}
+
+/// Expands direct class methods for semantic font selection on labelled controls.
+macro_rules! class_font_methods {
+    () => {
+        /// Validates a semantic role before changing the control's font selection.
+        fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
+            self.widget.set_font_role(role)
+        }
+        /// Resolves and retains a stable named font identity at the setter boundary.
+        fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+            self.widget.set_named_font(name)
+        }
+    };
+}
 
 impl TextboxObject {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
@@ -352,10 +385,29 @@ impl Number for NumberObject {
     }
 }
 
-impl IListItem for ListItem {}
-impl IListBox for ListBox {}
+impl ColorSwatchObject {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(super) fn create(
+        host: ComPtr<IWidgetHostAbi>,
+        rgba: u32,
+        label: NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<ComPtr<ColorSwatchAbi>, NcStatus> {
+        let value = <Self as ColorSwatch>::new(host.as_com_ref(), rgba, label)?;
+        Ok(Self::from_value(value)
+            .query()
+            .expect("ColorSwatchObject declares the ColorSwatch class contract"))
+    }
+}
 
-impl IColorSwatch for ColorSwatch {
+impl ColorSwatch for ColorSwatchObject {
+    /// Validates the label and copies packed RGBA before allocating the established swatch state.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, rgba: u32, label: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus> {
+        let parameters = crate::ColorSwatchParameters::new(super::render::color(rgba)).label(text(label)?);
+        Ok(Self {
+            widget: super::widget::WidgetCore::new(host.add_ref(), parameters.opt, crate::ColorSwatch::from(parameters))?,
+        })
+    }
+    class_text_methods!(label, set_label);
     /// Packs canonical RGBA without relying on machine endianness.
     fn fill(&self) -> Result<u32, NcStatus> {
         self.widget.state.readable()?;
@@ -367,6 +419,94 @@ impl IColorSwatch for ColorSwatch {
         self.widget.state.writable()?;
         self.widget.take()?.set_fill(super::render::color(rgba));
         Ok(())
+    }
+    class_font_methods!();
+}
+
+impl ListItemObject {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(super) fn create(
+        host: ComPtr<IWidgetHostAbi>,
+        label: NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<ComPtr<ListItemAbi>, NcStatus> {
+        let value = <Self as ListItem>::new(host.as_com_ref(), label)?;
+        Ok(Self::from_value(value)
+            .query()
+            .expect("ListItemObject declares the ListItem class contract"))
+    }
+}
+
+impl ListItem for ListItemObject {
+    /// Validates the label before allocating the established application-data-free row state.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus> {
+        let parameters = crate::ListItemParameters::new(text(label)?);
+        Ok(Self {
+            widget: super::widget::WidgetCore::new(host.add_ref(), parameters.opt, crate::ListItem::from(parameters))?,
+        })
+    }
+    class_text_methods!(label, set_label);
+    class_font_methods!();
+    /// Validates and applies one semantic icon selection directly through the class contract.
+    fn set_icon_role(&self, icon: ContentIcon) -> Result<(), NcStatus> {
+        self.widget.set_icon_role(icon)
+    }
+    /// Resolves one exact named icon before replacing the row's existing selection.
+    fn set_named_icon(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.widget.set_named_icon(name)
+    }
+    /// Connects the row's existing semantic event source directly through the class contract.
+    fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.widget.subscribe::<crate::ListItemSubmitted>(sink)
+    }
+}
+
+impl ListBoxObject {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(super) fn create(
+        host: ComPtr<IWidgetHostAbi>,
+        label: NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<ComPtr<ListBoxAbi>, NcStatus> {
+        let value = <Self as ListBox>::new(host.as_com_ref(), label)?;
+        Ok(Self::from_value(value)
+            .query()
+            .expect("ListBoxObject declares the ListBox class contract"))
+    }
+}
+
+impl ListBox for ListBoxObject {
+    /// Validates the label before allocating the established label-only entry state.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus> {
+        let parameters = crate::ListBoxParameters::new(text(label)?, None);
+        Ok(Self {
+            widget: super::widget::WidgetCore::new(host.add_ref(), parameters.opt, crate::ListBox::from(parameters))?,
+        })
+    }
+    class_text_methods!(com_label, com_set_label);
+    class_font_methods!();
+    /// Validates and installs one immutable renderer-owned image before committing the edit.
+    fn set_image(&self, image: ComRef<'_, ITextureAbi>, fit_width: bool) -> Result<(), NcStatus> {
+        self.widget.state.writable()?;
+        let mut core = self.widget.take()?;
+        let image = microui_redux::Image::from_interface(image.add_ref())?;
+        // Revalidate lifetime authority after the foreign size query while
+        // semantic state remains detached against recursive image editing.
+        self.widget.state.writable()?;
+        if super::widget::ImageState::set_image(&mut *core, Some(image), fit_width) {
+            self.widget.state.record_change(GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
+    /// Removes image content while preserving the label, font, and activation source.
+    fn clear_image(&self) -> Result<(), NcStatus> {
+        self.widget.state.writable()?;
+        if super::widget::ImageState::set_image(&mut *self.widget.take()?, None, false) {
+            self.widget.state.record_change(GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
+    /// Connects the entry's existing semantic event source directly through the class contract.
+    fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.widget.subscribe::<crate::ListBoxSubmitted>(sink)
     }
 }
 
@@ -447,27 +587,3 @@ impl Scrollbar for ScrollbarObject {
         self.widget.subscribe::<crate::ScrollbarChanged>(sink)
     }
 }
-
-font_style_impl!(ColorSwatch);
-
-font_style_impl!(ListBox);
-
-font_style_impl!(ListItem);
-
-icon_content_impl!(ListItem);
-
-impl IActivationEvents for ListBox {
-    /// Connects the one existing native semantic port without creating a parallel event source.
-    fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.widget.subscribe::<crate::ListBoxSubmitted>(sink)
-    }
-}
-
-impl IActivationEvents for ListItem {
-    /// Connects the one existing native semantic port without creating a parallel event source.
-    fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.widget.subscribe::<crate::ListItemSubmitted>(sink)
-    }
-}
-
-super::widget::image_content_impl!(ListBox);

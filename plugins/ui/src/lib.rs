@@ -19,6 +19,9 @@ nc_com::plugin! {
         microui_ui::com::TextAreaObject,
         microui_ui::com::SliderObject,
         microui_ui::com::NumberObject,
+        microui_ui::com::ColorSwatchObject,
+        microui_ui::com::ListItemObject,
+        microui_ui::com::ListBoxObject,
     ],
 }
 

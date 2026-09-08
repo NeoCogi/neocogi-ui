@@ -1,6 +1,6 @@
 //! Standard picker composes actual COM controls and owns only explicit request and native-path state.
 use super::*;
-use microui_redux::{EventHandler, EventSession, Linear, ListItem, ScrollArea, TextBlockWidget, TextboxWidget};
+use microui_redux::{EventHandler, EventSession, Linear, ListItemWidget, ScrollArea, TextBlockWidget, TextboxWidget};
 use microui_redux::events::{Activation, FileDialogCompleted, TextChanged, TextSubmitted};
 use nc_com::{INcStringAbi, NcString};
 use std::{
@@ -212,7 +212,7 @@ struct Column {
     /// Actual COM content root to install into the stable scroll controller.
     root: Linear,
     /// Concrete exact-path actions registered only after the complete directory candidate succeeds.
-    rows: Vec<(ListItem, Action)>,
+    rows: Vec<(ListItemWidget, Action)>,
 }
 /// Complete directory candidate; neither column becomes live if any native read fails.
 struct Listing {
@@ -256,7 +256,7 @@ fn column(runtime: &Runtime, directory: &Path, paths: Vec<PathBuf>, folder: bool
         } else {
             path.file_name().unwrap_or(path.as_os_str()).to_string_lossy()
         };
-        let item = ListItem::from_interface(runtime.widget_factory().create_list_item(NcCopyFromBufferOffset::new(0, display.as_bytes()))?);
+        let item = ListItemWidget::from_interface(runtime.widget_factory().create_list_item(NcCopyFromBufferOffset::new(0, display.as_bytes()))?);
         item.set_icon_role(if folder { ContentIcon::CLOSED_FOLDER } else { ContentIcon::FILE })?;
         children.push((item.node_interface()?, LayoutTrack::Content));
         rows.push((item, if folder { Action::Folder(path) } else { Action::File(path) }));

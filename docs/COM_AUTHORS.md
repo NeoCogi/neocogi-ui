@@ -324,7 +324,8 @@ color, scrollbar offset/range and button center-fill selection affect paint only
 Programmatic setters do not manufacture user-originated events. Label, font,
 icon, wrapping and numeric-label changes retain a sticky geometry marker.
 
-Button and ListBox also expose `IImageContent`. `set_image(texture, fit_width)`
+Button and ListBox expose `set_image(texture, fit_width)` directly on their
+class contracts. The operation
 retains an immutable `ITexture`, validates its positive dimensions once and then
 commits the edit. A failed dimension query leaves the previous content intact;
 recursive image editing during that query reports BUSY. Measurement and paint

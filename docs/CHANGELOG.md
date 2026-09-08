@@ -32,6 +32,9 @@ wrappers. The accepted migration and outstanding validation are recorded in
 - Make Slider and Number registered class contracts. Their value editing,
   typography, and numeric subscriptions now live directly on the concrete class
   projections instead of three overlapping numeric interfaces.
+- Make ColorSwatch, ListItem, and ListBox registered class contracts. Label,
+  typography, icon, image, and activation operations now live directly on those
+  class projections; the single-use icon and image interfaces are removed.
 - Replace `IUiFactory` with a separately registered `UiFactory` class. The
   runtime returns a host-bound instance for convenience, while hosts can construct
   `Button` and other registered classes directly from typed argument frames.

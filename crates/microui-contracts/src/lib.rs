@@ -221,11 +221,11 @@ pub trait UiFactory {
     /// Constructs standalone numeric entry after validating arithmetic inputs.
     fn create_number(&self, options: NumberOptions) -> Result<ComPtr<NumberAbi>, NcStatus>;
     /// Constructs an RGBA swatch with an optional label.
-    fn create_color_swatch(&self, rgba: u32, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IColorSwatchAbi>, NcStatus>;
+    fn create_color_swatch(&self, rgba: u32, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ColorSwatchAbi>, NcStatus>;
     /// Constructs one list row; application data is attached in its static adapter.
-    fn create_list_item(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IListItemAbi>, NcStatus>;
+    fn create_list_item(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ListItemAbi>, NcStatus>;
     /// Constructs a button-like list entry.
-    fn create_list_box(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IListBoxAbi>, NcStatus>;
+    fn create_list_box(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ListBoxAbi>, NcStatus>;
     /// Constructs a scrollbar with a validated orientation and normalized range.
     fn create_scrollbar(&self, range: ScrollRange) -> Result<ComPtr<ScrollbarAbi>, NcStatus>;
     /// Constructs an initialized, unmounted Button through its concrete class contract.

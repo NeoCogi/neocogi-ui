@@ -286,23 +286,25 @@ impl ActivationSource for ButtonWidget {
     }
 }
 
-/// Implements the static adapter for controls retaining the shared optional interface.
-macro_rules! activation_interface_source {
-    ($source:ty) => {
-        impl ActivationSource for $source {
-            /// Queries the shared activation capability on this concrete widget identity.
-            fn subscribe_activation_sink(
-                &self,
-                sink: ComRef<'_, IActivationSinkAbi>,
-            ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-                self.as_interface().add_ref().query::<IActivationEventsAbi>()?.subscribe(sink)
-            }
-        }
-    };
+impl ActivationSource for ListItemWidget {
+    /// List rows expose subscription directly on their callable class contract.
+    fn subscribe_activation_sink(
+        &self,
+        sink: ComRef<'_, IActivationSinkAbi>,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.as_interface().subscribe(sink)
+    }
 }
 
-activation_interface_source!(ListItem);
-activation_interface_source!(ListBox);
+impl ActivationSource for ListBoxWidget {
+    /// List boxes expose subscription directly on their callable class contract.
+    fn subscribe_activation_sink(
+        &self,
+        sink: ComRef<'_, IActivationSinkAbi>,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.as_interface().subscribe(sink)
+    }
+}
 
 #[com_object(interfaces(IActivationSink))]
 /// Concrete local sink specialization stores application state and its exact handler type directly.

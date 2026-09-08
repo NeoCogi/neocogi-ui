@@ -573,22 +573,6 @@ impl<S: IconState> WidgetCore<S> {
     }
 }
 
-/// Shares optional icon selection while preserving the concrete class and semantic data.
-macro_rules! icon_content_impl {
-    ($name:ident) => {
-        impl IIconContent for $name {
-            /// Validates a semantic icon selection before replacing the adjacent visual.
-            fn set_icon_role(&self, icon: ContentIcon) -> Result<(), NcStatus> {
-                self.widget.set_icon_role(icon)
-            }
-            /// Resolves an exact named icon once at the setter boundary.
-            fn set_named_icon(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-                self.widget.set_named_icon(name)
-            }
-        }
-    };
-}
-
 /// Shares only scoped container geometry; fixed composites need not expose mutable generic topology.
 macro_rules! container_layout_impl {
     ($name:ident) => {
@@ -736,31 +720,3 @@ pub(crate) trait ImageState {
     /// Receives only a validated owned image, with no caller buffer or native identifier.
     fn set_image(&mut self, image: Option<microui_redux::Image>, fit_width: bool) -> bool;
 }
-/// Emits the same checked image capability for the two controls that render external images.
-macro_rules! image_content_impl {
-    ($name:ident) => {
-        impl IImageContent for $name {
-            /// Detaches semantic state before reading foreign dimensions; failed reads preserve it.
-            fn set_image(&self, image: ComRef<'_, ITextureAbi>, fit_width: bool) -> Result<(), NcStatus> {
-                self.widget.state.writable()?;
-                let mut core = self.widget.take()?;
-                let image = microui_redux::Image::from_interface(image.add_ref())?;
-                // A hostile dimension provider may reenter lifecycle authority during validation.
-                self.widget.state.writable()?;
-                if super::widget::ImageState::set_image(&mut *core, Some(image), fit_width) {
-                    self.widget.state.record_change(GeometryChange::CHANGED);
-                }
-                Ok(())
-            }
-            /// Clears owned image content and retains the same label/event producer.
-            fn clear_image(&self) -> Result<(), NcStatus> {
-                self.widget.state.writable()?;
-                if super::widget::ImageState::set_image(&mut *self.widget.take()?, None, false) {
-                    self.widget.state.record_change(GeometryChange::CHANGED);
-                }
-                Ok(())
-            }
-        }
-    };
-}
-pub(super) use image_content_impl;

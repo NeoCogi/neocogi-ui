@@ -156,7 +156,7 @@ struct ColorRow {
     /// Real RGBA sliders used for both subscriptions and silent refreshes.
     channels: [SliderWidget; 4],
     /// Real color preview painted by the UI plugin.
-    swatch: ColorSwatch,
+    swatch: ColorSwatchWidget,
 }
 
 /// Complete authoring state for the demo; immutable revisions are published transactionally by Ui.

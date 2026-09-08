@@ -133,24 +133,21 @@ impl UiFactory for UiFactoryObject {
         &self,
         rgba: u32,
         label: NcCopyFromBufferOffset<'_, u8>,
-    ) -> Result<ComPtr<IColorSwatchAbi>, NcStatus> {
+    ) -> Result<ComPtr<ColorSwatchAbi>, NcStatus> {
         self.host.check_mutation()?;
-        let parameters = crate::ColorSwatchParameters::new(super::render::color(rgba)).label(text(label)?);
-        super::leaves::ColorSwatch::create(self.host.clone(), parameters.opt, crate::ColorSwatch::from(parameters))
+        super::leaves::ColorSwatchObject::create(self.host.clone(), rgba, label)
     }
 
     /// Validates the label before allocating a standalone list-row identity.
-    fn create_list_item(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IListItemAbi>, NcStatus> {
+    fn create_list_item(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ListItemAbi>, NcStatus> {
         self.host.check_mutation()?;
-        let parameters = crate::ListItemParameters::new(text(label)?);
-        super::leaves::ListItem::create(self.host.clone(), parameters.opt, crate::ListItem::from(parameters))
+        super::leaves::ListItemObject::create(self.host.clone(), label)
     }
 
     /// Validates the label before allocating a button-like list entry.
-    fn create_list_box(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IListBoxAbi>, NcStatus> {
+    fn create_list_box(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ListBoxAbi>, NcStatus> {
         self.host.check_mutation()?;
-        let parameters = crate::ListBoxParameters::new(text(label)?, None);
-        super::leaves::ListBox::create(self.host.clone(), parameters.opt, crate::ListBox::from(parameters))
+        super::leaves::ListBoxObject::create(self.host.clone(), label)
     }
 
     /// Validates axis and range arithmetic before allocating the scrollbar.
