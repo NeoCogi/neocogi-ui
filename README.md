@@ -76,6 +76,11 @@ fn install(ui: &Ui) -> Result<ComPtr<IWindowAbi>, NcStatus> {
 }
 ```
 
+`UiFactory` is a dynamically implemented class used by the facade as a shorthand.
+A host may instead construct `ButtonAbi` directly from its generated typed
+arguments and the runtime's `IWidgetHost`; no Button-specific interface or
+untyped argument object is involved.
+
 `EventSession<State>` owns application state and concrete `EventHandler<State, Event>`
 implementations. Producers do not retain that state. The host polls copied input,
 calls `ui.update_with_events(size, &events)`, synchronizes the platform's text-input

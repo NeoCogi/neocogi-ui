@@ -185,10 +185,14 @@ pub trait Button: IWidget + ILeafLayout {
     fn clear_image(&self) -> Result<(), NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.UiFactory:v1")]
-/// Runtime-bound widget factory implemented by the UI plugin.
-pub trait IUiFactory {
-    /// Returns this runtime's non-owning authority for inline WidgetState in independent widget classes.
+#[com_class(auto_guid = "microui.UiFactory:v1")]
+/// Dynamically implemented construction shorthand over registered widget contracts.
+pub trait UiFactory {
+    /// Creates a factory bound to one non-owning UI host authority.
+    #[constructor]
+    fn new(host: ComRef<'_, IWidgetHostAbi>) -> Result<Self, NcStatus>;
+
+    /// Returns this factory's non-owning authority for inline WidgetState in independent widget classes.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus>;
     /// Creates an empty combo header; its composing owner supplies generic list data and popup content.
     fn create_combo(&self) -> Result<ComPtr<IComboAbi>, NcStatus>;
@@ -224,8 +228,12 @@ pub trait IUiFactory {
     fn create_list_box(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IListBoxAbi>, NcStatus>;
     /// Constructs a scrollbar with a validated orientation and normalized range.
     fn create_scrollbar(&self, range: ScrollRange) -> Result<ComPtr<IScrollbarAbi>, NcStatus>;
-    /// Constructs an unmounted button; initialization remains concrete and discoverable.
-    fn create_button(&self) -> Result<ComPtr<ButtonAbi>, NcStatus>;
+    /// Constructs an initialized, unmounted Button through its concrete class contract.
+    fn create_button(
+        &self,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        options: WidgetOptions,
+    ) -> Result<ComPtr<ButtonAbi>, NcStatus>;
 }
 
 /// An operation requires an object which has already been logically closed.
@@ -477,10 +485,13 @@ pub trait IWindowManager {
 
 #[com_class(auto_guid = "microui.UiRuntime:v1")]
 /// One constructible retained UI with input, rendering, and resource ownership.
-pub trait UiRuntime: IInputSink + IUiFactory + IWindowManager + IMenus + IFileDialogs {
+pub trait UiRuntime: IInputSink + IWindowManager + IMenus + IFileDialogs {
     /// Imports one immutable asset bundle into a new independent UI.
     #[constructor]
     fn new(assets: ComRef<'_, IAssetBundleAbi>) -> Result<Self, NcStatus>;
+
+    /// Returns the dynamically implemented construction shorthand bound to this UI.
+    fn factory(&self) -> Result<ComPtr<UiFactoryAbi>, NcStatus>;
 
     /// Retains the currently installed immutable revision, suitable for restoration or another consumer.
     fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus>;

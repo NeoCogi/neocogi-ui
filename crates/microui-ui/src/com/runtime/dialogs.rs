@@ -224,7 +224,7 @@ struct Listing {
 
 /// Constructs an ordinary concrete Linear from heterogeneous existing COM widget capabilities.
 fn line(runtime: &Runtime, direction: FlowDirection, cross: CrossSize, children: Vec<(ComPtr<IWidgetAbi>, LayoutTrack)>) -> Result<Linear, NcStatus> {
-    let line = Linear::from_interface(runtime.create_linear(direction, cross.into())?);
+    let line = Linear::from_interface(runtime.widget_factory().create_linear(direction, cross.into())?);
     for (index, (child, track)) in children.into_iter().enumerate() {
         line.as_interface().insert(index as u32, child.as_com_ref(), LinearEdge::new(track))?.finish()?;
     }
@@ -233,14 +233,15 @@ fn line(runtime: &Runtime, direction: FlowDirection, cross: CrossSize, children:
 /// Constructs a text display through the ordinary widget factory.
 fn label(runtime: &Runtime, value: &str) -> Result<TextBlock, NcStatus> {
     Ok(TextBlock::from_interface(
-        runtime.create_text_block(NcCopyFromBufferOffset::new(0, value.as_bytes()), TextWrapping::NONE)?,
+        runtime.widget_factory().create_text_block(NcCopyFromBufferOffset::new(0, value.as_bytes()), TextWrapping::NONE)?,
     ))
 }
-/// Constructs a command button and installs its label through the inherited concrete interface.
+/// Constructs a complete command Button through the dynamically implemented factory shorthand.
 fn button(runtime: &Runtime, value: &str) -> Result<microui_redux::ButtonWidget, NcStatus> {
-    let button = microui_redux::ButtonWidget::from_interface(runtime.create_button()?);
-    button.set_label(value)?;
-    Ok(button)
+    Ok(microui_redux::ButtonWidget::from_interface(runtime.widget_factory().create_button(
+        NcCopyFromBufferOffset::new(0, value.as_bytes()),
+        WidgetOptions::FRAME,
+    )?))
 }
 /// Builds a complete column with exact path actions and fixed ordinary list-row measurements.
 fn column(runtime: &Runtime, directory: &Path, paths: Vec<PathBuf>, folder: bool) -> Result<Column, NcStatus> {
@@ -255,7 +256,7 @@ fn column(runtime: &Runtime, directory: &Path, paths: Vec<PathBuf>, folder: bool
         } else {
             path.file_name().unwrap_or(path.as_os_str()).to_string_lossy()
         };
-        let item = ListItem::from_interface(runtime.create_list_item(NcCopyFromBufferOffset::new(0, display.as_bytes()))?);
+        let item = ListItem::from_interface(runtime.widget_factory().create_list_item(NcCopyFromBufferOffset::new(0, display.as_bytes()))?);
         item.set_icon_role(if folder { ContentIcon::CLOSED_FOLDER } else { ContentIcon::FILE })?;
         children.push((item.node_interface()?, LayoutTrack::Content));
         rows.push((item, if folder { Action::Folder(path) } else { Action::File(path) }));
@@ -283,8 +284,8 @@ impl Dialog {
     fn new(runtime: &Runtime, parent: ComRef<'_, IWindowAbi>) -> Result<Rc<Self>, NcStatus> {
         runtime.storage.factory.host.check_mutation()?;
         runtime.storage.parent(parent)?;
-        let path = Textbox::from_interface(runtime.create_textbox(NcCopyFromBufferOffset::new(0, b""))?);
-        let filename = Textbox::from_interface(runtime.create_textbox(NcCopyFromBufferOffset::new(0, b""))?);
+        let path = Textbox::from_interface(runtime.widget_factory().create_textbox(NcCopyFromBufferOffset::new(0, b""))?);
+        let filename = Textbox::from_interface(runtime.widget_factory().create_textbox(NcCopyFromBufferOffset::new(0, b""))?);
         let up = button(runtime, "Up")?;
         let home = button(runtime, "Home")?;
         let go = button(runtime, "Go")?;
@@ -292,8 +293,8 @@ impl Dialog {
         let cancel = button(runtime, "Cancel")?;
         let folder_content = column(runtime, Path::new(""), Vec::new(), true)?;
         let file_content = column(runtime, Path::new(""), Vec::new(), false)?;
-        let folders = ScrollArea::from_interface(runtime.create_scroll_area(folder_content.root.node_interface()?.as_com_ref(), true)?);
-        let files = ScrollArea::from_interface(runtime.create_scroll_area(file_content.root.node_interface()?.as_com_ref(), true)?);
+        let folders = ScrollArea::from_interface(runtime.widget_factory().create_scroll_area(folder_content.root.node_interface()?.as_com_ref(), true)?);
+        let files = ScrollArea::from_interface(runtime.widget_factory().create_scroll_area(file_content.root.node_interface()?.as_com_ref(), true)?);
         let error = label(runtime, "")?;
         let toolbar = line(
             runtime,

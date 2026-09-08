@@ -224,6 +224,12 @@ checked projections from application code. Class definitions across crates shoul
 name protocol supertraits through their module path when needed so generated
 companion types resolve together.
 
+Use `UiFactory` only as the dynamically linked construction shorthand. Its typed
+constructor binds it to `IWidgetHost`, and `UiRuntime::factory()` returns the
+runtime-bound instance. Do not model it as an `IUiFactory` projection on the
+runtime. A host that needs a concrete control directly builds that class's typed
+arguments and calls `Runtime::construct::<ClassAbi>`.
+
 ## Common state, input and node ownership
 
 `microui_contracts::widget::WidgetState` is a static implementation helper stored

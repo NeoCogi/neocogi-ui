@@ -13,14 +13,10 @@ impl ButtonObject {
     /// Constructs the class directly for the factory shorthand without bypassing contract validation.
     pub(super) fn create(
         host: ComPtr<IWidgetHostAbi>,
-        label: &str,
+        label: NcCopyFromBufferOffset<'_, u8>,
         options: WidgetOptions,
     ) -> Result<ComPtr<ButtonAbi>, NcStatus> {
-        let value = <Self as Button>::new(
-            host.as_com_ref(),
-            NcCopyFromBufferOffset::new(0, label.as_bytes()),
-            options,
-        )?;
+        let value = <Self as Button>::new(host.as_com_ref(), label, options)?;
         Ok(Self::from_value(value)
             .query()
             .expect("ButtonObject declares the Button class contract"))

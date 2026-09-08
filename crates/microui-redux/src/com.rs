@@ -226,8 +226,8 @@ impl Widget<IScrollbarAbi> {
 /// Runtime-bound factory client; cloning retains its interface and copies no widget state.
 #[derive(Clone)]
 pub struct WidgetFactory {
-    /// The plugin's factory on the same identity as its runtime/window manager.
-    interface: ComPtr<IUiFactoryAbi>,
+    /// Dynamically implemented shorthand bound to one runtime's widget host.
+    interface: ComPtr<UiFactoryAbi>,
 }
 
 impl WidgetFactory {
@@ -294,15 +294,16 @@ impl WidgetFactory {
     }
 
     /// Adopts a typed factory obtained from UI runtime activation.
-    pub fn from_interface(interface: ComPtr<IUiFactoryAbi>) -> Self {
+    pub fn from_interface(interface: ComPtr<UiFactoryAbi>) -> Self {
         Self { interface }
     }
 
     /// Creates and initializes an unmounted button in one concrete API operation.
     pub fn button(&self, label: &str) -> Result<ButtonWidget, NcStatus> {
-        let button = ButtonWidget::from_interface(self.interface.create_button()?);
-        button.set_label(label)?;
-        Ok(button)
+        Ok(ButtonWidget::from_interface(self.interface.create_button(
+            NcCopyFromBufferOffset::new(0, label.as_bytes()),
+            WidgetOptions::FRAME,
+        )?))
     }
 }
 
@@ -383,7 +384,7 @@ impl<'a> Painter<'a> {
 pub struct Ui {
     /// Authoritative runtime allocation; all state stays in the implementation plugin.
     runtime: ComPtr<UiRuntimeAbi>,
-    /// Factory shares the runtime's COM identity.
+    /// Factory is a separate dynamically implemented object bound to this runtime's host.
     factory: WidgetFactory,
     /// Window-management projection cached once at construction.
     windows: ComPtr<IWindowManagerAbi>,
@@ -402,7 +403,7 @@ impl Ui {
 
     /// Checks the complete runtime capability set before exposing a usable client.
     pub fn from_interface(runtime: ComPtr<UiRuntimeAbi>) -> Result<Self, NcStatus> {
-        let factory = WidgetFactory::from_interface(runtime.query()?);
+        let factory = WidgetFactory::from_interface(runtime.factory()?);
         let windows = runtime.query()?;
         Ok(Self { runtime, factory, windows })
     }

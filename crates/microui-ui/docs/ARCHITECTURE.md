@@ -14,6 +14,11 @@ frame; they do not first invent or discover an `IButton` companion interface.
 Generic Rust values stay local; every cross-plugin value has a declared ABI type
 and checked identity.
 
+`UiFactory` is a separately registered, dynamically implemented class retaining
+only `IWidgetHost`. `UiRuntime::factory()` returns that shorthand for ordinary
+application ergonomics. It is not an `IUiFactory` projection on the runtime, and
+hosts remain free to construct any registered widget class from its typed frame.
+
 ## Retained objects and frame phases
 
 A UI owns a retained forest. Nodes own actual widget capabilities; callers can

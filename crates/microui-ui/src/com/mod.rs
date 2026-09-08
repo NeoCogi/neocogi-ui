@@ -30,6 +30,8 @@ mod render;
 mod runtime;
 mod scroll;
 mod text_area;
+mod ui_factory;
+pub use ui_factory::UiFactoryObject;
 pub use runtime::{Runtime, create_runtime_from_assets};
 #[cfg(test)]
 use runtime::create_runtime;

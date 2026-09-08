@@ -18,6 +18,9 @@ wrappers. The accepted migration and outstanding validation are recorded in
   constructible `Button` class contract. Its constructor and concrete editing,
   activation, font, icon, fill, and image operations now share one class
   projection; only the reusable `IWidget` and `ILeafLayout` protocols remain.
+- Replace `IUiFactory` with a separately registered `UiFactory` class. The
+  runtime returns a host-bound instance for convenience, while hosts can construct
+  `Button` and other registered classes directly from typed argument frames.
 - Co-package built-in widgets, containers and window-manager policy in the UI
   plugin; keep each renderer and its OS/device owners together in the platform
   plugin. An optional asset plugin and independently built extension demonstrate

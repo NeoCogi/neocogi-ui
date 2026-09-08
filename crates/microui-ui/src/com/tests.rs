@@ -15,7 +15,11 @@ fn runtime() -> ComPtr<UiRuntimeAbi> {
 
 /// Creates a concrete button without bypassing its production factory.
 fn button(runtime: &ComPtr<UiRuntimeAbi>) -> ComPtr<ButtonAbi> {
-    runtime.query::<IUiFactoryAbi>().unwrap().create_button().unwrap()
+    runtime
+        .factory()
+        .unwrap()
+        .create_button(NcCopyFromBufferOffset::new(0, b""), WidgetOptions::FRAME)
+        .unwrap()
 }
 
 /// Mounts the common capability through the production manager's transactional boundary.
@@ -327,14 +331,17 @@ fn external_widget_cannot_reenter_mutate_during_observation_or_reuse_a_paint_sco
 fn window_com_capabilities_preserve_hierarchy_layers_visibility_and_subtree_closure() {
     let runtime = runtime();
     let manager: ComPtr<IWindowManagerAbi> = runtime.query().unwrap();
-    // Runtime, factory and manager are projections of one object, not service-owned peers.
+    // Runtime protocols share one identity; the callable factory is a separately constructible service.
     let identity: ComPtr<IUnknown> = runtime.query().unwrap();
     assert_eq!(identity.as_ptr(), manager.query::<IUnknown>().unwrap().as_ptr());
-    assert_eq!(
-        identity.as_ptr(),
-        runtime.query::<IUiFactoryAbi>().unwrap().query::<IUnknown>().unwrap().as_ptr()
-    );
+    assert_eq!(runtime.query::<UiFactoryAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
+    let factory = runtime.factory().unwrap();
+    assert_ne!(identity.as_ptr(), factory.query::<IUnknown>().unwrap().as_ptr());
     let root_button = button(&runtime);
+    assert_eq!(
+        factory.host().unwrap().query::<IUnknown>().unwrap().as_ptr(),
+        root_button.host().unwrap().query::<IUnknown>().unwrap().as_ptr()
+    );
     let root = mount(&runtime, &root_button.query().unwrap()).unwrap();
     let child_button = button(&runtime);
     let child = manager

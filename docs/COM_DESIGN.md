@@ -251,11 +251,19 @@ pub trait Button: IWidget + ILeafLayout {
     fn label(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.plan.UiFactory:v1")]
-/// Illustrative factory; the complete factory uses typed initialization records.
-pub trait IUiFactory {
-    /// Creates an unmounted Button through the same concrete class contract.
-    fn create_button(&self) -> Result<ComPtr<ButtonAbi>, NcStatus>;
+#[com_class(auto_guid = "microui.UiFactory:v1")]
+/// Dynamically implemented construction shorthand over concrete widget contracts.
+pub trait UiFactory {
+    /// Binds the shorthand to one runtime's non-owning widget authority.
+    #[constructor]
+    fn new(host: ComRef<'_, IWidgetHostAbi>) -> Result<Self, NcStatus>;
+
+    /// Creates a fully initialized Button through the same concrete class contract.
+    fn create_button(
+        &self,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        options: WidgetOptions,
+    ) -> Result<ComPtr<ButtonAbi>, NcStatus>;
 }
 ```
 
@@ -284,6 +292,11 @@ pub struct ButtonObject {
 ```
 
 `ButtonState`, `EventSource<E>` and their Rust fields are implementation helpers inside the plugin. Their layout is never part of the ABI. The façade does not contain a second button state, text-layout cache, event queue or shadow widget tree.
+
+`UiFactory` is also a registered class, implemented in the dynamically loaded UI
+plugin. `UiRuntime::factory()` returns an instance bound to the runtime's
+`IWidgetHost`; it is not a pretend interface projection on the runtime object.
+Hosts may activate either `UiFactoryAbi` or individual widget classes directly.
 
 The original temporary compile-tested sketch is superseded by the checked-in
 [facade regressions](../crates/microui-redux/tests/com_facade.rs). The sketch compiled the separate Widget/Children/Button/event capabilities and tests that a generic proxy edits a COM object, reads its text and observes the same geometry invalidation flag. This validates the contract/façade pattern with current nc-com; it is not a dynamic UI implementation or proof of the proposed nc-com ABI changes.
