@@ -18,6 +18,9 @@ wrappers. The accepted migration and outstanding validation are recorded in
   `#[com_object(Class)]` or `#[com_object(interfaces(...))]` for concrete Rust
   implementations. Class declarations therefore describe the public boundary,
   while object declarations describe private storage and threading.
+- Remove the older implementation-owned `class_id`, name, version, constructor,
+  and interface-list descriptor grammar. A registered object's complete public
+  boundary now has exactly one source: its callable class contract.
 - Replace the redundant `IButton` and `IButtonStyle` capabilities with the
   constructible `Button` class contract. Its constructor and concrete editing,
   activation, font, icon, fill, and image operations now share one class
