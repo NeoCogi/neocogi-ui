@@ -29,7 +29,7 @@ mod render;
 mod runtime;
 mod scroll;
 mod text_area;
-pub use runtime::create_runtime_from_assets;
+pub use runtime::{Runtime, create_runtime_from_assets};
 #[cfg(test)]
 use runtime::create_runtime;
 

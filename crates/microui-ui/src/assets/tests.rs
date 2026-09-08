@@ -136,7 +136,7 @@ impl ITextMetrics for UnusedMetrics {
 /// Observable renderer state contains only owned capabilities and ordinary single-threaded cells.
 struct Probe {
     /// Reentry must fail while the runtime owns its installation transaction.
-    runtime: ComPtr<IUiRuntimeAbi>,
+    runtime: ComPtr<UiRuntimeAbi>,
     /// Setter reentry must also fail during the upload boundary.
     button: ComPtr<IButtonAbi>,
     /// Last successfully uploaded immutable bundle.

@@ -16,16 +16,16 @@ use windows::NativeSurface;
 
 /// Builds a native atlas fixture through the same immutable COM import boundary.
 #[cfg(test)]
-pub(super) fn create_runtime(atlas: AtlasHandle) -> ComPtr<IUiRuntimeAbi> {
+pub(super) fn create_runtime(atlas: AtlasHandle) -> ComPtr<UiRuntimeAbi> {
     let bundle = crate::SkinBundle::from_atlas(atlas);
     let source = crate::assets::export_bundle(&bundle).expect("native test/source bundle is valid");
     create_runtime_from_assets(source.as_com_ref()).expect("exported native bundle imports")
 }
 
 /// Imports application-supplied resources before constructing any live runtime or widget service.
-pub fn create_runtime_from_assets(source: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IUiRuntimeAbi>, NcStatus> {
-    let assets = crate::assets::ImportedAssets::read(source, None)?;
-    Ok(Runtime::from_value(Runtime { storage: create_storage(assets) })
+pub fn create_runtime_from_assets(source: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<UiRuntimeAbi>, NcStatus> {
+    let runtime = <Runtime as UiRuntime>::new(source)?;
+    Ok(Runtime::from_value(runtime)
         .query()
         .expect("runtime interface"))
 }
@@ -65,9 +65,9 @@ fn create_storage(assets: crate::assets::ImportedAssets) -> Rc<RuntimeStorage> {
     })
 }
 
-#[com_class(interfaces(IUiRuntime, IUiFactory, IWindowManager, IMenus, IFileDialogs))]
+#[com_class(contract(UiRuntime), interfaces(IUiFactory, IWindowManager, IMenus, IFileDialogs))]
 /// One identity owns the runtime, its widget factory and window-management policy.
-struct Runtime {
+pub struct Runtime {
     /// Window handles use Weak references so retaining them cannot form a tree cycle.
     storage: Rc<RuntimeStorage>,
 }
@@ -359,8 +359,12 @@ impl IInputSink for Runtime {
     }
 }
 
-
-impl IUiRuntime for Runtime {
+impl UiRuntime for Runtime {
+    /// Imports the one complete asset revision before exposing any runtime capability.
+    fn new(source: ComRef<'_, IAssetBundleAbi>) -> Result<Self, NcStatus> {
+        let assets = crate::assets::ImportedAssets::read(source, None)?;
+        Ok(Self { storage: create_storage(assets) })
+    }
     /// Exposes an owned immutable revision without borrowing mutable tree state.
     fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         self.storage.open()?;

@@ -61,7 +61,7 @@ microui-redux = { path = "../microui-redux/crates/microui-redux" }
 nc-com = { path = "../microui-redux/crates/com/nc-com" }
 ```
 
-Once a provider has created `Ui`, the facade creates and edits the actual objects:
+Once the host has activated `UiRuntimeAbi`, the facade creates and edits the actual objects:
 
 ```rust
 use microui_redux::*;

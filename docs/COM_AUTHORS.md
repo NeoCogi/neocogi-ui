@@ -825,7 +825,7 @@ this migration intentionally provides typed scene/resource capabilities instead.
 
 ## Platform input and native composition
 
-`IUiRuntime: IInputSink` exposes the same ordered input queue through inherited
+`UiRuntime: IInputSink` exposes the same ordered input queue through inherited
 calls or a separately retained input projection. Cache that projection once in
 the host loop. `IPlatformWindow::poll(destination)` borrows it only for the
 synchronous call; the platform never owns an application input destination.

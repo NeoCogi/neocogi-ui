@@ -175,7 +175,7 @@ impl IContainerLayout for TestContainer {
 }
 
 /// Creates a custom container without any access to retained Node or runtime storage.
-fn container(runtime: &ComPtr<IUiRuntimeAbi>, scopes: RetainedScopes) -> (ComPtr<IWidgetAbi>, ComPtr<IChildrenEditorAbi>, Rc<ContainerProbe>) {
+fn container(runtime: &ComPtr<UiRuntimeAbi>, scopes: RetainedScopes) -> (ComPtr<IWidgetAbi>, ComPtr<IChildrenEditorAbi>, Rc<ContainerProbe>) {
     let host = button(runtime).host().unwrap();
     let editor = host.create_children().unwrap();
     let probe = Rc::new(ContainerProbe { scopes, ..ContainerProbe::default() });
@@ -289,7 +289,7 @@ fn final_child_writer_release_during_layout_closes_retained_descendants() {
 }
 
 /// Creates a custom leaf with copied geometry observations and no frame inset to obscure its assigned rectangle.
-fn recorded_leaf(runtime: &ComPtr<IUiRuntimeAbi>) -> (microui_redux::Widget<IWidgetAbi>, Rc<WidgetProbe>) {
+fn recorded_leaf(runtime: &ComPtr<UiRuntimeAbi>) -> (microui_redux::Widget<IWidgetAbi>, Rc<WidgetProbe>) {
     let button = button(runtime);
     button.set_options(WidgetOptions::NONE).unwrap();
     let probe = Rc::new(WidgetProbe::default());

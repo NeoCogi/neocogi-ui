@@ -262,10 +262,10 @@ I would divide the public capabilities as follows:
 
 | Family | Examples | State owner |
 |---|---|---|
-| UI coordination | `IUiRuntime`, `IWindowManager`, `IWidgetFactory` | One UI runtime instance |
+| UI coordination | `UiRuntime`, `IWindowManager`, `UiFactory` | One UI runtime instance |
 | Common widget behavior | `IWidget` | Concrete widget/container object |
 | Geometry | `ILeafLayout`, `IContainerLayout`, `IChildren` | Widget algorithm plus runtime-owned derived node state |
-| Concrete editing | `IButton`, `ISlider`, `ITextbox`, `ILinear`, `IGrid` | Concrete object |
+| Concrete editing | `Button`, `Slider`, `Textbox`, `Linear`, `Grid` class contracts | Concrete object |
 | Events | `IActivationEvents`, `IActivationSink`, `IEventSubscription` and equivalent typed families | Source queue, external subscription owner and application handler |
 | Platform and rendering | `IPlatformWindow`, `IRenderer`, texture/render-item capabilities | Platform/GPU plugin |
 | Resources | `IAssetBundle`, `IAssetLoader`, optional `IThemeLoader` | Immutable bundle or asset operation |

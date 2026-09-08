@@ -9,17 +9,17 @@ const SIZE: Size = Size { width: 640, height: 400 };
 const RECT: Rect = Rect { x: 20, y: 20, width: 400, height: 200 };
 
 /// Creates the production runtime with a small deterministic atlas.
-fn runtime() -> ComPtr<IUiRuntimeAbi> {
+fn runtime() -> ComPtr<UiRuntimeAbi> {
     create_runtime(crate::test_support::test_atlas())
 }
 
 /// Creates a concrete button without bypassing its production factory.
-fn button(runtime: &ComPtr<IUiRuntimeAbi>) -> ComPtr<IButtonAbi> {
+fn button(runtime: &ComPtr<UiRuntimeAbi>) -> ComPtr<IButtonAbi> {
     runtime.query::<IUiFactoryAbi>().unwrap().create_button().unwrap()
 }
 
 /// Mounts the common capability through the production manager's transactional boundary.
-fn mount(runtime: &ComPtr<IUiRuntimeAbi>, root: &ComPtr<IWidgetAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+fn mount(runtime: &ComPtr<UiRuntimeAbi>, root: &ComPtr<IWidgetAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
     runtime
         .query::<IWindowManagerAbi>()?
         .create_window(NcCopyFromBufferOffset::new(0, b"test"), RECT, root.as_com_ref())
@@ -175,7 +175,7 @@ struct RetainingWidget {
     /// Actual concrete setter used to test observational mutation rejection.
     button: ComPtr<IButtonAbi>,
     /// Retained runtime deliberately tries to reenter during measurement and painting.
-    runtime: ComPtr<IUiRuntimeAbi>,
+    runtime: ComPtr<UiRuntimeAbi>,
     /// Test state is owned and survives every COM call.
     probe: Rc<WidgetProbe>,
 }

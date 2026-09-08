@@ -34,7 +34,7 @@ pub use input::{
     KeyCode, KeyStroke, Point, WidgetEvent, WidgetEventAbi, WidgetEventTag, WidgetUpdate, WidgetAction, decode_widget_event, UiInput, UiInputAbi, UiInputTag,
 };
 
-use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, com_interface, com_int_enum, com_struct};
+use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, com_class, com_interface, com_int_enum, com_struct};
 
 com_int_enum! {
     /// Whether preferred measurement or child placement inputs changed.
@@ -441,9 +441,17 @@ pub trait IWindowManager {
     fn create_window(&self, title: NcCopyFromBufferOffset<'_, u8>, rect: Rect, root: ComRef<'_, IWidgetAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.UiRuntime:v1")]
-/// One independent retained UI, also exposing its widget factory/window manager.
-pub trait IUiRuntime: IInputSink {
+#[com_class(
+    class_id(auto_guid = "microui.UiRuntime:v1"),
+    name = "microui.UiRuntime:v1",
+    version = "0.9.0-alpha.0"
+)]
+/// One constructible retained UI with input, rendering, and resource ownership.
+pub trait UiRuntime: IInputSink {
+    /// Imports one immutable asset bundle into a new independent UI.
+    #[constructor]
+    fn new(assets: ComRef<'_, IAssetBundleAbi>) -> Result<Self, NcStatus>;
+
     /// Retains the currently installed immutable revision, suitable for restoration or another consumer.
     fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus>;
     /// Validates compatible resources and prepares the renderer upload before publishing either UI
@@ -466,15 +474,6 @@ pub trait IUiRuntime: IInputSink {
     fn close(&self) -> Result<(), NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.UiProvider:v1")]
-/// UI plugin bootstrap; ordinary widgets are created by each returned runtime.
-pub trait IUiProvider {
-    /// Imports the supplied immutable bundle into a new independent UI; invalid resources create no runtime.
-    fn create_runtime(&self, assets: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IUiRuntimeAbi>, NcStatus>;
-}
-
-/// Stable activation identity independent of Rust module paths.
-pub const UI_PROVIDER_CLASS: nc_com::NcGuid = nc_com::guid_from_qualified_name("microui.UiProvider");
 /// Stable platform activation identity independent of the selected native backend.
 pub const PLATFORM_CLASS: nc_com::NcGuid = nc_com::guid_from_qualified_name("microui.Platform");
 

@@ -79,14 +79,13 @@ impl Host {
     pub fn new(title: &str, size: Size, assets: ComPtr<IAssetBundleAbi>) -> Result<Self, HostError> {
         initialize()?;
         let runtime = nc_com::Runtime::global();
-        runtime.require_interface_type::<IUiProviderAbi>(UI_PROVIDER_CLASS)?;
         runtime.require_interface_type::<IPlatformAbi>(PLATFORM_CLASS)?;
-        // SAFETY: Both validated classes declare no constructor arguments.
-        let provider: ComPtr<IUiProviderAbi> = runtime.construct_class_as(UI_PROVIDER_CLASS, ())?;
+        // SAFETY: The validated platform class declares no constructor arguments.
         let platform: ComPtr<IPlatformAbi> = runtime.construct_class_as(PLATFORM_CLASS, ())?;
         let window = platform.create_window(NcCopyFromBufferOffset::new(0, title.as_bytes()), size, assets.as_com_ref())?;
         let renderer = window.query()?;
-        let ui = Ui::from_interface(provider.create_runtime(assets.as_com_ref())?)?;
+        let arguments = UiRuntimeAbi::arguments(assets.as_com_ref())?;
+        let ui = Ui::from_interface(runtime.construct::<UiRuntimeAbi>(arguments)?)?;
         let input = ui.input_sink()?;
         Ok(Self { ui, renderer, window, input })
     }

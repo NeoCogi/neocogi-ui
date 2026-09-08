@@ -29,7 +29,7 @@ statically. The [asset plugin's decoder](../plugins/assets/src/png.rs) produces
 packed RGBA bytes directly. None of the asset plugin's production feature sets
 links the UI implementation. Font and theme construction remain optional features.
 
-Applications supply one `IAssetBundle` to `IUiProvider::create_runtime` and
+Applications supply one `IAssetBundle` to the `UiRuntime` constructor and
 `IPlatform::create_window`. Neither implementation embeds demo assets. The UI imports
 metadata into its local font/icon tables once and samples only the required white-tile
 rows while validating it. It never copies or retains the complete image. The platform
@@ -60,7 +60,8 @@ let native = platform.create_window(
     assets.as_com_ref(),
 )?;
 let renderer = native.query::<IRendererAbi>()?;
-let ui = Ui::from_interface(provider.create_runtime(assets.as_com_ref())?)?;
+let arguments = UiRuntimeAbi::arguments(assets.as_com_ref())?;
+let ui = Ui::from_interface(nc_com::Runtime::global().construct::<UiRuntimeAbi>(arguments)?)?;
 ```
 
 ## Installation and ownership

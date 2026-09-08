@@ -14,7 +14,7 @@ struct Fixture {
     /// Exact production allocation permits lifetime and private-role assertions without an erased downcast.
     storage: Rc<RuntimeStorage>,
     /// Original canonical runtime projection permits a second static client without constructing a second COM identity.
-    runtime: ComPtr<IUiRuntimeAbi>,
+    runtime: ComPtr<UiRuntimeAbi>,
     /// Actual ordinary owner authenticated by the production file-picker factory.
     owner: ComPtr<IWindowAbi>,
     /// Public component client; request state never lives in this wrapper.
@@ -28,7 +28,7 @@ impl Fixture {
         let bundle = crate::SkinBundle::from_atlas(crate::test_support::test_atlas());
         let source = crate::assets::export_bundle(&bundle).unwrap();
         let storage = create_storage(crate::assets::ImportedAssets::read(source.as_com_ref(), None).unwrap());
-        let runtime: ComPtr<IUiRuntimeAbi> = Runtime::from_value(Runtime { storage: storage.clone() }).query().unwrap();
+        let runtime: ComPtr<UiRuntimeAbi> = Runtime::from_value(Runtime { storage: storage.clone() }).query().unwrap();
         let ui = microui_redux::Ui::from_interface(runtime.clone()).unwrap();
         let body = ui.widgets().button("background").unwrap();
         let owner = ui.window("owner", OWNER_RECT, &body).unwrap();

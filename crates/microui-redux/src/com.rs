@@ -382,7 +382,7 @@ impl<'a> Painter<'a> {
 #[derive(Clone)]
 pub struct Ui {
     /// Authoritative runtime allocation; all state stays in the implementation plugin.
-    runtime: ComPtr<IUiRuntimeAbi>,
+    runtime: ComPtr<UiRuntimeAbi>,
     /// Factory shares the runtime's COM identity.
     factory: WidgetFactory,
     /// Window-management projection cached once at construction.
@@ -401,7 +401,7 @@ impl Ui {
     }
 
     /// Checks the complete runtime capability set before exposing a usable client.
-    pub fn from_interface(runtime: ComPtr<IUiRuntimeAbi>) -> Result<Self, NcStatus> {
+    pub fn from_interface(runtime: ComPtr<UiRuntimeAbi>) -> Result<Self, NcStatus> {
         let factory = WidgetFactory::from_interface(runtime.query()?);
         let windows = runtime.query()?;
         Ok(Self { runtime, factory, windows })
