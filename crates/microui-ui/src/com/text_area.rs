@@ -57,7 +57,7 @@ impl IMultilineEditor for TextEditor {
     }
 }
 
-#[com_class(interfaces(ITextArea, IScrolling, IContainerLayout, IFontStyle, ITextEvents))]
+#[com_object(interfaces(ITextArea, IScrolling, IContainerLayout, IFontStyle, ITextEvents))]
 /// One composed root owns scrolling while inherited text calls edit its fixed actual content child.
 pub(super) struct TextArea {
     /// Shared concrete scroll algorithm; no additional wrapper node surrounds the existing scroll tree.

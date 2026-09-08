@@ -1,6 +1,6 @@
 //! CPU PNG decoding and renderer upload share one bounded RGBA representation.
 use super::*;
-use nc_com::{ComRef, NcCopyFromBufferOffset, com_class};
+use nc_com::{ComRef, NcCopyFromBufferOffset, com_object};
 use std::io::{self, Cursor};
 
 /// Decoded CPU pixels, ready for atlas packing or a texture-factory upload.
@@ -90,7 +90,7 @@ impl RgbaImage {
     }
 }
 
-#[com_class(class_id(PNG_DECODER_CLASS), name = "microui.PngDecoder", version = "0.9.0-alpha.0",
+#[com_object(class_id(PNG_DECODER_CLASS), name = "microui.PngDecoder", version = "0.9.0-alpha.0",
     constructor(args = none, default), interfaces(IPngDecoder, IAssetDiagnostics))]
 #[derive(Default)]
 /// Decodes PNGs independently of the optional font rasterizer and JSON compiler.
@@ -175,7 +175,7 @@ mod tests {
         }
     }
 
-    #[com_class(interfaces(ITexture))]
+    #[com_object(interfaces(ITexture))]
     /// CPU-only result verifies that decoding returns the factory's actual owned capability.
     struct Texture {
         /// Immutable dimensions supplied by the decoder.
@@ -188,7 +188,7 @@ mod tests {
         }
     }
 
-    #[com_class(interfaces(ITextureFactory))]
+    #[com_object(interfaces(ITextureFactory))]
     /// A foreign factory reenters diagnostics and can fail after receiving decoded bytes.
     struct Factory {
         /// Shared observations survive the independently reference-counted factory allocation.

@@ -9,7 +9,7 @@ use microui_redux::{
     Painter,
     events::{Activation, EventSource},
 };
-use nc_com::{com_class, ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
+use nc_com::{com_object, ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
 use std::cell::Cell;
 
 /// Common state is inline; the example adds no second widget allocation or type-erased data.
@@ -129,7 +129,7 @@ macro_rules! widget {
     };
 }
 
-#[com_class(contract(microui_demo_contracts::extension::Counter))]
+#[com_object(microui_demo_contracts::extension::Counter)]
 /// Private implementation of the externally declared, constructible counter class.
 struct CounterObject {
     /// Common options are authoritative here, without a duplicate presentation copy.
@@ -207,7 +207,7 @@ impl ILeafLayout for CounterObject {
     }
 }
 
-#[com_class(interfaces(IInset, IContainerLayout, IWidgetProbe))]
+#[com_object(interfaces(IInset, IContainerLayout, IWidgetProbe))]
 /// Concrete custom container; the host's editor owns its sole child and enforces attachment/lifetime rules.
 struct Inset {
     /// Common lifecycle has no parent backpointer or mirrored geometry.
@@ -341,7 +341,7 @@ fn shrink(mut limit: AxisLimit, inset: i32) -> AxisLimit {
     limit
 }
 
-#[com_class(class_id(EXTENSION_PROVIDER_CLASS), name = "microui.example.ExtensionProvider", version = "0.9.0-alpha.0",
+#[com_object(class_id(EXTENSION_PROVIDER_CLASS), name = "microui.example.ExtensionProvider", version = "0.9.0-alpha.0",
     constructor(args = none), interfaces(IExtensionProvider))]
 /// Stateless shorthand factory creates the interface-based inset container.
 pub struct ExtensionProvider;

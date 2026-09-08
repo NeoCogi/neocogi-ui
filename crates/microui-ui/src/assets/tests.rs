@@ -1,7 +1,7 @@
 //! Boundary tests use real generated COM calls, malformed producer tables and an upload-failing renderer.
 use super::*;
 use microui_redux::assets::AssetData;
-use nc_com::{com_class, NcCopyFromBufferOffset, NcCopyToBufferOffset};
+use nc_com::{com_object, NcCopyFromBufferOffset, NcCopyToBufferOffset};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -123,7 +123,7 @@ fn malformed_portable_metadata_never_reaches_a_live_skin() {
     assert_eq!(data.into_bundle().unwrap_err(), NC_E_INVALID_ARG);
 }
 
-#[com_class(interfaces(ITextMetrics))]
+#[com_object(interfaces(ITextMetrics))]
 /// Built-ins use their own resource revision; this foreign measurement service must remain unused.
 struct UnusedMetrics;
 impl ITextMetrics for UnusedMetrics {
@@ -146,7 +146,7 @@ struct Probe {
     /// Proves malformed candidates fail before reaching GPU preparation.
     uploads: Cell<u32>,
 }
-#[com_class(interfaces(IRenderer))]
+#[com_object(interfaces(IRenderer))]
 /// Concrete test backend models atomic native atlas upload and observes final frame submission.
 struct UploadRenderer(Rc<Probe>);
 impl IRenderer for UploadRenderer {

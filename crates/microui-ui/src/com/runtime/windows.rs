@@ -199,7 +199,7 @@ enum WindowEdit {
     ChildClip(ChildWindowClip),
 }
 
-#[com_class(interfaces(IWindow, IWindowEvents))]
+#[com_object(interfaces(IWindow, IWindowEvents))]
 /// One retained COM window capability; all semantic state remains in the manager's forest.
 struct LogicalWindow {
     /// Weak owner access avoids a manager/window reference cycle.
@@ -319,7 +319,7 @@ impl IWindow for LogicalWindow {
     }
 }
 
-#[com_class(interfaces(IPopup, IPopupEvents))]
+#[com_object(interfaces(IPopup, IPopupEvents))]
 /// Popup projection has its own placement/lifetime methods and cannot impersonate a window.
 pub(super) struct LogicalPopup {
     /// Retaining the popup never retains the runtime through a strong cycle.

@@ -5,7 +5,7 @@
 //! IWidget directly. This helper creates no registered class, native node, erased value or Rust vtable.
 use crate::*;
 use microui_contracts::widget::WidgetState;
-use nc_com::{com_class, ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
+use nc_com::{com_object, ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
 use std::{
     cell::RefCell,
     ops::{Deref, DerefMut},
@@ -34,7 +34,7 @@ pub trait LeafContent: 'static {
     }
 }
 
-#[com_class(interfaces(IWidget, ILeafLayout))]
+#[com_object(interfaces(IWidget, ILeafLayout))]
 /// The generic parameter specializes ordinary Rust calls; only concrete IWidget/ILeafLayout cross COM.
 struct LeafObject<Content: LeafContent> {
     /// One common options, mount, closure and geometry-invalidation state.

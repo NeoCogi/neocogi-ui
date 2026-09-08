@@ -506,7 +506,7 @@ impl Drop for Dialog {
     }
 }
 
-#[com_class(interfaces(IFileDialog, IFileDialogEvents))]
+#[com_object(interfaces(IFileDialog, IFileDialogEvents))]
 /// One public controller identity owns no application callback, generic state pointer or native filesystem borrow.
 struct FileDialog {
     /// Runtime ownership keeps an active picker functional even if its caller releases the editing pointer.

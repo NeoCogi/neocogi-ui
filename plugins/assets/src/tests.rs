@@ -4,7 +4,7 @@ use microui_ui::assets::ImportedAssets;
 use nc_com::INcStringComPtrExt;
 use microui_redux::NativePath;
 
-#[com_class(interfaces(INativePath))]
+#[com_object(interfaces(INativePath))]
 /// A caller-owned path deliberately tries to consume its builder during path decoding.
 struct ReenterPath {
     /// Exact native path delegated after probing the mutation gate.

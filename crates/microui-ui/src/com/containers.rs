@@ -28,7 +28,7 @@ pub(crate) trait ContainerAlgorithm: WidgetAlgorithm + crate::ContainerWidget {
 /// Shares concrete lifecycle, topology and scoped layout plumbing across built-in containers.
 macro_rules! container_class {
     ($name:ident, $core:ty, $interface:ident, $abi:ty) => {
-        #[com_class(interfaces($interface, IContainerLayout))]
+        #[com_object(interfaces($interface, IContainerLayout))]
         /// One concrete container COM allocation, including inherited common widget state.
         pub(super) struct $name {
             /// Concrete semantic state and shared phase execution, with no Rust dynamic widget vtable.

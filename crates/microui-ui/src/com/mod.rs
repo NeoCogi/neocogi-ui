@@ -4,7 +4,7 @@
 //! private and foreign calls receive only copied values or owned scoped services.
 
 use microui_contracts::*;
-use nc_com::{ComPtr, ComRef, IUnknown, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, com_class};
+use nc_com::{ComPtr, ComRef, IUnknown, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -91,7 +91,7 @@ impl HostState {
     }
 }
 
-#[com_class(interfaces(IWidgetHost))]
+#[com_object(interfaces(IWidgetHost))]
 /// Lightweight owned authority shared by every widget in one runtime.
 struct WidgetHost {
     /// Shared phase/lifetime flags; deliberately no reference to the owning runtime.

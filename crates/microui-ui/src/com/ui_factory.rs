@@ -1,7 +1,7 @@
 //! Dynamically linked widget-construction shorthand over concrete COM contracts.
 use super::*;
 
-#[com_class(contract(UiFactory))]
+#[com_object(UiFactory)]
 /// Factory object retaining only the host capability shared by its products.
 pub struct UiFactoryObject {
     /// Non-owning runtime authority used for lifetime checks, resources, and child stores.

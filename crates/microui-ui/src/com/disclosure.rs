@@ -5,7 +5,7 @@ use super::widget::WidgetCore;
 leaf_class!(DisclosureHeader, crate::ui_node::DisclosureHeader, ITextContent, ITextContentAbi);
 text_content!(DisclosureHeader, com_label, com_set_label);
 
-#[com_class(interfaces(IDisclosure, IContainerLayout))]
+#[com_object(interfaces(IDisclosure, IContainerLayout))]
 /// One fixed disclosure identity retains its actual header and editable body capabilities.
 pub(super) struct Disclosure {
     /// Existing indentation, header measurement and hidden-body policy over shared expansion state.

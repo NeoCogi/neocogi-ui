@@ -429,7 +429,7 @@ macro_rules! leaf_layout_impl {
 /// Declares one non-generic COM allocation with a statically known semantic state.
 macro_rules! leaf_class {
     ($name:ident, $core:ty, $interface:ident, $abi:ty $(, $extra:ident)*) => {
-        #[com_class(interfaces($interface, ILeafLayout $(, $extra)*))]
+        #[com_object(interfaces($interface, ILeafLayout $(, $extra)*))]
         /// One concrete built-in object, including its inherited widget state.
         pub(super) struct $name {
             /// Inline semantic state and shared phase execution; no secondary widget owner.

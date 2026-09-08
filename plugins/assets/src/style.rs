@@ -253,7 +253,7 @@ fn flat_chrome_visual(frame_insets: Insets, palette: &FlatPalette, role: ChromeR
     patch
 }
 
-#[nc_com::com_class(class_id(STYLE_COMPILER_CLASS), name = "microui.StyleCompiler", version = "0.9.0-alpha.0",
+#[nc_com::com_object(class_id(STYLE_COMPILER_CLASS), name = "microui.StyleCompiler", version = "0.9.0-alpha.0",
     constructor(args = none, default), interfaces(IStyleCompiler, IAssetDiagnostics))]
 #[derive(Default)]
 /// Compiles resource revisions without borrowing a UI or retaining a renderer.

@@ -214,7 +214,7 @@ Declare each concrete constructible control as a class contract, for example
 `Button: IWidget + ILeafLayout`. Put its typed constructor and control-specific
 editing methods on that class. Keep an interface only when unrelated classes need
 the same independently queryable protocol. The implementation uses
-`#[com_class(contract(Button))]` and stores one concrete widget-state field; it
+`#[com_object(Button)]` and stores one concrete widget-state field; it
 does not declare a matching `IButton` or repeat a list of projections.
 
 Query `IWidget` when an API needs the common node protocol and `ILeafLayout` when

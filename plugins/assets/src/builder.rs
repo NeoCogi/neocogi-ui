@@ -3,10 +3,10 @@ use super::Diagnostic;
 use microui_contracts::*;
 use crate::atlas::{Builder, Config};
 use microui_redux::assets::AssetData;
-use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, INcStringAbi, NC_E_INVALID_ARG, com_class};
+use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, INcStringAbi, NC_E_INVALID_ARG, com_object};
 use std::cell::RefCell;
 
-#[com_class(class_id(ASSET_LOADER_CLASS), name = "microui.AssetLoader", version = "0.9.0-alpha.0",
+#[com_object(class_id(ASSET_LOADER_CLASS), name = "microui.AssetLoader", version = "0.9.0-alpha.0",
     constructor(args = none, default), interfaces(IAssetLoader, IAssetDiagnostics))]
 #[derive(Default)]
 /// Stateless construction root with owned diagnostics; drafts contain the actual mutable builder.
@@ -64,7 +64,7 @@ enum BuildState {
     Finished,
 }
 
-#[com_class(interfaces(IAssetBuilder, IAssetDiagnostics))]
+#[com_object(interfaces(IAssetBuilder, IAssetDiagnostics))]
 /// Concrete builder object with no callbacks, native resource handles or erased payloads.
 struct BuildSession {
     /// State is taken, never borrowed, while caller-provided COM path methods run.
@@ -162,7 +162,7 @@ impl IAssetDiagnostics for BuildSession {
 }
 
 #[cfg(feature = "theme-json")]
-#[com_class(class_id(THEME_LOADER_CLASS), name = "microui.ThemeLoader", version = "0.9.0-alpha.0",
+#[com_object(class_id(THEME_LOADER_CLASS), name = "microui.ThemeLoader", version = "0.9.0-alpha.0",
     constructor(args = none, default), interfaces(IThemeLoader, IAssetDiagnostics))]
 #[derive(Default)]
 /// Optional theme compiler is present only in asset assemblies built with theme-json.

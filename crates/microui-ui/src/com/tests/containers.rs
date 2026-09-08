@@ -28,7 +28,7 @@ struct ContainerProbe {
     mount_edit: RefCell<Option<ComPtr<IChildrenEditorAbi>>>,
 }
 
-#[com_class(interfaces(IWidget, IContainerLayout))]
+#[com_object(interfaces(IWidget, IContainerLayout))]
 /// A custom container owns its common state, private editor and concrete layout policy inline.
 struct TestContainer {
     /// Exactly the same static lifetime helper available to independent component authors.

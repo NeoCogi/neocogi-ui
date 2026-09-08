@@ -2,7 +2,7 @@
 use super::*;
 use crate::{FontRole, WidgetOption, ControlRole};
 
-#[com_class(interfaces(ITextMetrics))]
+#[com_object(interfaces(ITextMetrics))]
 /// Immutable text metrics for one installed resource bundle.
 pub(super) struct Metrics {
     /// Exact immutable revision also shared by the concrete built-in objects.
@@ -89,7 +89,7 @@ struct Recording {
     commands: RefCell<Commands>,
 }
 
-#[com_class(interfaces(IPainter))]
+#[com_object(interfaces(IPainter))]
 /// Retainable COM service owning only recording storage.
 struct Recorder {
     /// Shared storage also retained by the runtime's private driver.

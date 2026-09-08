@@ -42,7 +42,7 @@ struct RenderProbe {
     fail: Cell<bool>,
 }
 
-#[com_class(interfaces(IRenderer))]
+#[com_object(interfaces(IRenderer))]
 /// Typed backend records real final vertices and retains the stream maliciously but safely.
 struct Renderer {
     /// Shared observations owned by the test, with no borrowed stack reference in COM.
@@ -171,7 +171,7 @@ struct WidgetProbe {
     fail_paint: Cell<bool>,
 }
 
-#[com_class(interfaces(IWidget, ILeafLayout))]
+#[com_object(interfaces(IWidget, ILeafLayout))]
 /// Independently implemented leaf delegates lifetime only to a factory-owned fixture object.
 struct RetainingWidget {
     /// Gives the custom implementation the same runtime ownership identity and mount-once rules.
@@ -907,7 +907,7 @@ struct BuiltinPaintProbe {
     fail: Cell<bool>,
 }
 
-#[com_class(interfaces(IPainter))]
+#[com_object(interfaces(IPainter))]
 /// A foreign-style painter that reenters a read-only editing method during copying.
 struct BuiltinPainter {
     /// The producer's editing projection, independent of its paint helper's storage.

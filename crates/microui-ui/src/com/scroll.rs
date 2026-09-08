@@ -2,7 +2,7 @@
 use super::*;
 use super::widget::WidgetCore;
 
-#[com_class(interfaces(IWidget, IContainerLayout))]
+#[com_object(interfaces(IWidget, IContainerLayout))]
 /// Transform-only COM container owning the ordinary application content widget.
 struct ScrollSurface {
     /// The existing transform/layout algorithm reads the same scalar axes as the actual bar objects.
@@ -12,7 +12,7 @@ struct ScrollSurface {
 }
 fixed_phases!(ScrollSurface);
 
-#[com_class(interfaces(IScrollArea, IContainerLayout))]
+#[com_object(interfaces(IScrollArea, IContainerLayout))]
 /// One scroll-area COM identity owns its three structural nodes and shares no parent-widget backpointer.
 pub(super) struct ScrollArea {
     /// Existing convergence, wheel routing, padding and panel paint algorithms remain authoritative.

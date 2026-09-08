@@ -2,7 +2,7 @@
 use super::*;
 use nc_com::{INcStringAbi, NcString};
 
-#[com_class(contract(microui_contracts::Button))]
+#[com_object(microui_contracts::Button)]
 /// Dynamically registered implementation of the public Button class contract.
 pub struct ButtonObject {
     /// Inline semantic state and host-backed phase execution; no companion Button interface exists.

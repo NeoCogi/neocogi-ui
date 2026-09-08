@@ -158,7 +158,7 @@ impl Storage {
     }
 }
 
-#[com_class(interfaces(IRenderStream))]
+#[com_object(interfaces(IRenderStream))]
 /// Retainable bulk-copy capability with no reference to a native borrowed frame.
 struct Stream {
     /// Shared owned frame storage, still safe after the UI runtime is released.

@@ -1,7 +1,7 @@
 //! Concrete immutable asset objects for compiled tables and optional builder output.
 //! Static tables are borrowed for the process lifetime; generated tables are owned outright.
 use crate::*;
-use nc_com::{ComPtr, ComRef, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG, com_class};
+use nc_com::{ComPtr, ComRef, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
 use std::borrow::Cow;
 use microui_contracts::appearance::*;
 
@@ -104,12 +104,12 @@ impl AssetTables {
     }
 }
 
-#[com_class(interfaces(IAssetCatalog))]
+#[com_object(interfaces(IAssetCatalog))]
 /// Immutable namespace shared by revisions without retaining any provider or earlier revision.
 struct Catalog;
 impl IAssetCatalog for Catalog {}
 
-#[com_class(interfaces(IAssetBundle))]
+#[com_object(interfaces(IAssetBundle))]
 /// Single concrete implementation serves both static and dynamically constructed tables.
 struct Bundle {
     /// Canonical namespace ownership remains independent of application and provider lifetimes.

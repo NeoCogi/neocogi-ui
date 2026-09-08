@@ -73,7 +73,7 @@ impl Drop for Access<'_> {
     }
 }
 
-#[com_class(interfaces(ILayoutService))]
+#[com_object(interfaces(ILayoutService))]
 /// Concrete geometry service; retaining it retains resources but no caller stack.
 struct Layout {
     /// Reused scope storage shared with its private driver.

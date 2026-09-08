@@ -44,7 +44,7 @@ pub mod test_support {
 }
 
 use crate::com::*;
-use nc_com::{com_class, ComInterface, ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcStatus, NC_E_INVALID_ARG};
+use nc_com::{com_object, ComInterface, ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcStatus, NC_E_INVALID_ARG};
 use std::{
     cell::{Cell, RefCell, Ref, RefMut},
     rc::Rc,
@@ -203,7 +203,7 @@ impl Drop for Registrations<'_> {
     }
 }
 
-#[com_class(interfaces(IEventDispatcher))]
+#[com_object(interfaces(IEventDispatcher))]
 /// Concrete borrowed runtime capability knows only leases, not application state types or UI implementation storage.
 struct Dispatcher {
     /// The static session and dispatcher share one registration sequence.
@@ -304,7 +304,7 @@ macro_rules! activation_interface_source {
 activation_interface_source!(ListItem);
 activation_interface_source!(ListBox);
 
-#[com_class(interfaces(IActivationSink))]
+#[com_object(interfaces(IActivationSink))]
 /// Concrete local sink specialization stores application state and its exact handler type directly.
 struct ActivationSink<State: 'static, Handler: EventHandler<State, Activation> + 'static> {
     /// One shared local invocation helper; no erased handler or Rust value crosses COM.
@@ -344,7 +344,7 @@ pub struct CheckboxChanged {
     /// Copied semantic value owned by this event snapshot.
     pub checked: bool,
 }
-#[com_class(interfaces(ICheckboxSink))]
+#[com_object(interfaces(ICheckboxSink))]
 /// Concrete local sink specialization stores application state and its exact handler type directly.
 struct CheckboxSink<State: 'static, Handler: EventHandler<State, CheckboxChanged> + 'static> {
     /// One shared local invocation helper; no erased handler or Rust value crosses COM.
@@ -384,7 +384,7 @@ pub struct NumericChanged {
     /// Copied semantic value owned by this event snapshot.
     pub value: f32,
 }
-#[com_class(interfaces(INumericSink))]
+#[com_object(interfaces(INumericSink))]
 /// Concrete local sink specialization stores application state and its exact handler type directly.
 struct NumericSink<State: 'static, Handler: EventHandler<State, NumericChanged> + 'static> {
     /// One shared local invocation helper; no erased handler or Rust value crosses COM.
@@ -427,7 +427,7 @@ pub struct ScrollbarChanged {
     /// Copied semantic value owned by this event snapshot.
     pub offset: i32,
 }
-#[com_class(interfaces(IScrollbarSink))]
+#[com_object(interfaces(IScrollbarSink))]
 /// Concrete local sink specialization stores application state and its exact handler type directly.
 struct ScrollbarSink<State: 'static, Handler: EventHandler<State, ScrollbarChanged> + 'static> {
     /// One shared local invocation helper; no erased handler or Rust value crosses COM.
@@ -472,7 +472,7 @@ pub struct TextChanged {
     /// Copied semantic value owned by this event snapshot.
     pub cursor: u64,
 }
-#[com_class(interfaces(ITextChangedSink))]
+#[com_object(interfaces(ITextChangedSink))]
 /// Concrete local sink specialization stores application state and its exact handler type directly.
 struct TextChangedSink<State: 'static, Handler: EventHandler<State, TextChanged> + 'static> {
     /// One shared local invocation helper; no erased handler or Rust value crosses COM.
@@ -521,7 +521,7 @@ pub struct TextSubmitted {
     /// Copied semantic value owned by this event snapshot.
     pub text: String,
 }
-#[com_class(interfaces(ITextSubmittedSink))]
+#[com_object(interfaces(ITextSubmittedSink))]
 /// Concrete local sink specialization stores application state and its exact handler type directly.
 struct TextSubmittedSink<State: 'static, Handler: EventHandler<State, TextSubmitted> + 'static> {
     /// One shared local invocation helper; no erased handler or Rust value crosses COM.
@@ -559,7 +559,7 @@ impl<State: 'static> EventSession<State> {
     }
 }
 
-#[com_class(interfaces(IWindowSink))]
+#[com_object(interfaces(IWindowSink))]
 /// Concrete application window handler uses the same generic ownership as ordinary widget handlers.
 struct WindowSink<State: 'static, Handler: EventHandler<State, WindowEvent> + 'static> {
     /// Stored application state and handler remain local to this binary.
@@ -583,7 +583,7 @@ impl<State: 'static, Handler: EventHandler<State, WindowEvent> + 'static> IWindo
 /// Captured removal from the active popup branch; it does not imply permanent popup destruction.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PopupDismissed;
-#[com_class(interfaces(IPopupSink))]
+#[com_object(interfaces(IPopupSink))]
 /// Concrete application popup handler stores its actual callback type inline.
 struct PopupSink<State: 'static, Handler: EventHandler<State, PopupDismissed> + 'static> {
     /// Explicit application ownership has no reference from the popup's producer queue.
@@ -642,7 +642,7 @@ pub struct ComboChanged {
     /// Captured display value; generic list data never travels through this string.
     pub label: String,
 }
-#[com_class(interfaces(IComboChangedSink))]
+#[com_object(interfaces(IComboChangedSink))]
 /// Application-local specialization owns its concrete selection handler and shared state.
 struct ComboChangedSink<State: 'static, Handler: EventHandler<State, ComboChanged> + 'static> {
     /// Shared owned invocation discipline used by every event family.
@@ -662,7 +662,7 @@ pub struct ComboSubmitted {
     /// Complete screen-space anchor, independent of subsequent header movement.
     pub anchor: Rect,
 }
-#[com_class(interfaces(IComboPopupSink))]
+#[com_object(interfaces(IComboPopupSink))]
 /// Concrete application coordinator can show/hide its selected popup at the safe runtime boundary.
 struct ComboPopupSink<State: 'static, Handler: EventHandler<State, ComboSubmitted> + 'static> {
     /// One owned handler without a borrowed native state pointer.
@@ -749,7 +749,7 @@ pub enum FileDialogCompleted {
     /// The active request ended without a selected file.
     Cancelled,
 }
-#[com_class(interfaces(IFileDialogSink))]
+#[com_object(interfaces(IFileDialogSink))]
 /// Concrete local completion adapter owns the application's exact state and handler specialization.
 struct FileDialogSink<State: 'static, Handler: EventHandler<State, FileDialogCompleted> + 'static> {
     /// Existing owned invocation helper; native Rust paths are decoded before borrowing application state.

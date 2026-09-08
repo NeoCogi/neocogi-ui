@@ -13,7 +13,7 @@ struct ImageProbe {
     /// Weak test slot avoids an image-to-widget ownership cycle during reentry checks.
     target: std::rc::Weak<RefCell<Option<ComPtr<ButtonAbi>>>>,
 }
-#[com_class(interfaces(ITexture))]
+#[com_object(interfaces(ITexture))]
 /// A texture deliberately reenters image editing while its immutable dimensions are validated.
 struct ImageTexture {
     /// Test-only observations; the COM allocation itself owns no UI state.
@@ -119,7 +119,7 @@ fn image_controls_keep_owned_pixels_and_forward_ordered_cropped_paint_after_erro
     assert_eq!(list.text().unwrap(), "list image");
 }
 
-#[com_class(interfaces(IRenderer))]
+#[com_object(interfaces(IRenderer))]
 /// Consumes actual final image batches without a GPU, after both widget and runtime clipping.
 struct ImageFrameRenderer {
     /// Copied final quads outlive the invocation without retaining renderer resources.

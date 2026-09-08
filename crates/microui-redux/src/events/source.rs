@@ -34,7 +34,7 @@ use std::{
     fmt,
     rc::{Rc, Weak},
 };
-use nc_com::{com_class, ComInterface, ComPtr, ComRef, NcStatus};
+use nc_com::{com_object, ComInterface, ComPtr, ComRef, NcStatus};
 use microui_contracts::*;
 
 /// A concrete semantic snapshot defines its one concrete foreign delivery contract.
@@ -393,7 +393,7 @@ impl fmt::Display for SubscribeError {
 
 impl std::error::Error for SubscribeError {}
 
-#[com_class(interfaces(IEventSubscription))]
+#[com_object(interfaces(IEventSubscription))]
 /// One generic local allocation specializes queue and sink types behind a concrete subscription interface.
 struct Subscription<E: EventPayload> {
     /// Exclusive queue data and cancellation, shared with the existing native producer implementation.
@@ -545,7 +545,7 @@ mod tests {
         /// Value whose callback cancels its own subscription during detached-batch delivery.
         cancel: Cell<Option<i32>>,
     }
-    #[com_class(interfaces(ITestSink))]
+    #[com_object(interfaces(ITestSink))]
     /// Concrete application callback owns its producer capability, an allowed direction of ownership.
     struct Sink {
         /// Producer does not own this sink, so only the deliberate application lease reference can cycle.

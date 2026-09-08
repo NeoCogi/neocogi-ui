@@ -464,7 +464,7 @@ fn real_lifecycle_cascade_obeys_global_budget_and_rejects_recursive_dispatch() {
     window.close().unwrap();
 }
 
-#[com_class(interfaces(IEventDispatcher))]
+#[com_object(interfaces(IEventDispatcher))]
 /// A foreign dispatcher deliberately violates the requested callback bound.
 struct InvalidDispatcher;
 impl IEventDispatcher for InvalidDispatcher {

@@ -132,7 +132,7 @@ impl Drop for ChildTransaction {
     }
 }
 
-#[com_class(interfaces(IChildren))]
+#[com_object(interfaces(IChildren))]
 /// Read-only tree capability; its identity intentionally exposes no editor interface.
 struct ChildView {
     /// One shared authoritative node sequence, kept safe by logical closure checks.
@@ -158,7 +158,7 @@ impl Drop for ChildView {
     }
 }
 
-#[com_class(interfaces(IChildrenEditor))]
+#[com_object(interfaces(IChildrenEditor))]
 /// Private writer; retaining the public view does not grant metadata-bypassing edits.
 struct ChildEditor {
     /// Actual tree owner shared with the separate read-only capability.

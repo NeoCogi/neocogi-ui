@@ -1,6 +1,6 @@
 //! Static native-path conversion preserves platform filename identity across COM.
 use crate::{INativePath, INativePathAbi, PathEncoding};
-use nc_com::{ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcCopyToBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_class};
+use nc_com::{ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcCopyToBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_object};
 use std::path::{Path, PathBuf};
 
 /// Typed static client for an immutable native-path capability.
@@ -70,7 +70,7 @@ pub fn decode(path: ComRef<'_, INativePathAbi>) -> Result<PathBuf, NcStatus> {
     }
 }
 
-#[com_class(interfaces(crate::INativePath))]
+#[com_object(interfaces(crate::INativePath))]
 /// Ordinary concrete value owns its native path inside whichever binary created the snapshot.
 struct PathValue {
     /// Authoritative native identity; display is derived without replacing this value.

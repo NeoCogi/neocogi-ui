@@ -48,7 +48,8 @@ Default planning assumption: preserve the current browser demo through a statica
 The existing project already has most of the necessary foundation:
 
 - `#[com_interface]`: a Rust implementation trait, explicit C-shaped interface header/vtable, safe owning-pointer call helpers, interface GUID and ABI hash.
-- `#[com_class]`: one generated allocation containing the Rust implementation, interface headers, canonical IUnknown support, and an atomic reference count.
+- `#[com_class]`: a callable class contract with one typed constructor and stable registry identity.
+- `#[com_object]`: one generated allocation containing the Rust implementation, interface headers, canonical IUnknown support, and an atomic reference count.
 - `ComPtr<T>`: one owned reference; cloning adds a reference and dropping releases it.
 - `ComRef<'_, T>`: a borrowed interface parameter. A recipient can retain the object by explicitly acquiring an owned reference.
 - `#[com_struct]`, `com_int_enum!`, and `#[com_enum]`: fixed-layout values and tagged payloads suitable for ABI contracts.
@@ -283,7 +284,7 @@ The class contract requires the common protocols; nc-com exposes those projectio
 from the same allocation. A concrete plugin class contains its private state directly:
 
 ```rust,ignore
-#[com_class(contract(microui_contracts::Button))]
+#[com_object(microui_contracts::Button)]
 /// One button allocation; no legacy trait-object wrapper or public downcast is needed.
 pub struct ButtonObject {
     /// Plugin-local semantic and common widget state.

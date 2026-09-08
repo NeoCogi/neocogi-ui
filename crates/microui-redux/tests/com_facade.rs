@@ -2,10 +2,10 @@
 mod tests {
     use microui_redux::com::*;
     use nc_com::{ComRef, NcCopyFromBufferOffset, NcStatus};
-    use nc_com::{ComPtr, IUnknown, NcString, NC_E_INVALID_ARG, com_class};
+    use nc_com::{ComPtr, IUnknown, NcString, NC_E_INVALID_ARG, com_object};
     use std::cell::{Cell, RefCell};
 
-    #[com_class(contract(Button))]
+    #[com_object(Button)]
     /// Concrete stand-in for a plugin button, using the same COM macro and ownership path.
     struct TestButton {
         /// Plugin-local UTF-8 storage; its Rust layout never crosses the boundary.

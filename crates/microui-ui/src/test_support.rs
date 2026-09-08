@@ -547,7 +547,7 @@ impl RendererBackend for RecordingRenderer {
     }
 }
 
-#[nc_com::com_class(interfaces(microui_contracts::ITexture))]
+#[nc_com::com_object(interfaces(microui_contracts::ITexture))]
 /// CPU-only immutable texture supplies dimensions without any native GPU handle.
 struct TestImage {
     /// Positive test dimensions used by the real owning facade image wrapper.

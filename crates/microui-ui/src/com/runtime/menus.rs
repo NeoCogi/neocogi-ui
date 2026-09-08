@@ -12,7 +12,7 @@ pub(super) struct Declaration {
     alive: Cell<bool>,
 }
 
-#[com_class(interfaces(IMenuBuilder))]
+#[com_object(interfaces(IMenuBuilder))]
 /// A root or child construction capability addresses one subtree in the same declaration.
 struct Builder {
     /// Runtime ownership is weak; unused builders cannot prolong the engine or its forest.
@@ -112,7 +112,7 @@ fn item_at<'a>(menu: &'a mut Menu, path: &[usize], slot: usize) -> Result<&'a mu
     }
 }
 
-#[com_class(interfaces(IMenuItem, IActivationEvents, IFontStyle))]
+#[com_object(interfaces(IMenuItem, IActivationEvents, IFontStyle))]
 /// Menu rows expose direct live editing without synthesizing independent widget or container subtrees.
 struct Item {
     /// Live manager resolution never retains the runtime through a row capability.
