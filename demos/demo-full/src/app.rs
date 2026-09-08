@@ -53,7 +53,7 @@
 //! Demo composition keeps concrete application state and actions local to the host binary.
 use super::{
     falloff::FalloffEditor,
-    grid::{GridState, GridWidget},
+    grid::{GridState, GridWidget as GridViewWidget},
     mesh::Suzanne,
     painter_demo::PainterDemo,
     style_editor::StyleEditor,
@@ -78,15 +78,15 @@ fn rect(x: i32, y: i32, width: i32, height: i32) -> Rect {
     Rect { x, y, width, height }
 }
 /// A vertical line owns exactly the children inserted through its COM editor.
-pub(super) fn column(ui: &Ui) -> Result<Linear, NcStatus> {
+pub(super) fn column(ui: &Ui) -> Result<LinearWidget, NcStatus> {
     ui.widgets().linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch)
 }
 /// A row derives height from its actual children, so theme/font changes cannot stale a pixel estimate.
-pub(super) fn row(ui: &Ui) -> Result<Linear, NcStatus> {
+pub(super) fn row(ui: &Ui) -> Result<LinearWidget, NcStatus> {
     ui.widgets().linear(FlowDirection::LEFT_TO_RIGHT, CrossSize::Content)
 }
 /// Appends through the authoritative child count; no second local list or builder closure is retained.
-pub(super) fn append<I: ComInterface>(parent: &Linear, child: &Widget<I>, track: LayoutTrack) -> Result<(), NcStatus> {
+pub(super) fn append<I: ComInterface>(parent: &LinearWidget, child: &Widget<I>, track: LayoutTrack) -> Result<(), NcStatus> {
     parent.insert(parent.children()?.child_count()?, child, LinearEdge::new(track))?.finish()
 }
 /// Static display text remains a real plugin-owned TextBlock with no application callback.
@@ -117,7 +117,7 @@ fn button(ui: &Ui, events: &EventSession<State>, text: &str, action: Action) -> 
     Ok(control)
 }
 /// A disclosure body is its actual editable Linear COM object, with no placeholder replacement tree.
-fn section(ui: &Ui, parent: &Linear, text: &str, style: DisclosureStyle, expanded: bool) -> Result<Linear, NcStatus> {
+fn section(ui: &Ui, parent: &LinearWidget, text: &str, style: DisclosureStyle, expanded: bool) -> Result<LinearWidget, NcStatus> {
     let section = ui.widgets().disclosure(text, style, expanded)?;
     append(parent, &section, LayoutTrack::Content)?;
     section.body()
@@ -466,7 +466,7 @@ fn create() -> Result<(Host, EventSession<State>), HostError> {
     )?;
     let ui = &host.ui;
     let grid = Rc::new(RefCell::new(GridState::default()));
-    let grid_widget = ui.widgets().leaf(GridWidget::new(grid.clone()), WidgetOptions::NONE)?;
+    let grid_widget = ui.widgets().leaf(GridViewWidget::new(grid.clone()), WidgetOptions::NONE)?;
     let desktop = ui.window("X-Y Grid Surface", rect(0, 0, 1200, 800), &grid_widget)?;
     desktop.set_layer(0)?;
     desktop.set_child_clip(ChildClip::CONTENT)?;
@@ -594,7 +594,7 @@ pub(super) fn run() -> Result<(), HostError> {
 }
 
 /// Builds the main scrolling control sampler without duplicating widget state or storing authoring closures.
-fn build_controls(host: &Host, events: &EventSession<State>, content: &Linear) -> Result<(), HostError> {
+fn build_controls(host: &Host, events: &EventSession<State>, content: &LinearWidget) -> Result<(), HostError> {
     let state = events.state()?;
     let ui = &state.ui;
     let info = section(ui, content, "Window Info", DisclosureStyle::HEADER, false)?;

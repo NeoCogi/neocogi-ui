@@ -26,6 +26,7 @@ mod node;
 pub(crate) use node::ComNode;
 mod children;
 pub(crate) mod containers;
+pub use containers::{GridObject, LinearObject};
 mod disclosure;
 mod factory;
 pub(crate) mod layout;

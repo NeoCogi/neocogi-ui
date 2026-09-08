@@ -1,5 +1,5 @@
 //! Host-owned child topology and scoped container layout contracts.
-use nc_com::{ComPtr, ComRef, NcStatus, NcCopyFromBufferOffset, com_interface, com_struct, com_int_enum, com_enum};
+use nc_com::{ComPtr, ComRef, NcStatus, NcCopyFromBufferOffset, com_class, com_interface, com_struct, com_int_enum, com_enum};
 use crate::{Rect, Size, LayoutLimits, WidgetEventAbi};
 
 #[com_struct]
@@ -229,9 +229,18 @@ pub trait IContainer: crate::IWidget {
     fn clear(&self) -> Result<ChildEditResult, NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.Linear:v1")]
-/// One directional Linear object, including inherited widget and container calls.
-pub trait ILinear: IContainer {
+#[com_class(auto_guid = "microui.Linear:v1")]
+/// Constructible directional container whose concrete editing API is one class contract.
+pub trait Linear: crate::IWidget + IContainerLayout {
+    /// Creates an empty unmounted container after validating its complete layout policy.
+    #[constructor]
+    fn new(host: ComRef<'_, crate::IWidgetHostAbi>, direction: FlowDirection, cross: CrossSizeAbi) -> Result<Self, NcStatus>;
+    /// Returns the stable read-only topology view for this container's lifetime.
+    fn children(&self) -> Result<ComPtr<crate::IChildrenAbi>, NcStatus>;
+    /// Removes one complete subtree and matching edge metadata.
+    fn remove(&self, index: u32) -> Result<ChildEditResult, NcStatus>;
+    /// Removes all owned subtrees and matching metadata while retaining reusable capacity.
+    fn clear(&self) -> Result<ChildEditResult, NcStatus>;
     /// Returns its complete axis and leading-edge policy.
     fn direction(&self) -> Result<FlowDirection, NcStatus>;
     /// Replaces the direction without reordering child ownership.
@@ -250,9 +259,22 @@ pub trait ILinear: IContainer {
     fn replace(&self, index: u32, child: ComRef<'_, crate::IWidgetAbi>, edge: LinearEdge) -> Result<ChildEditResult, NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.Grid:v1")]
-/// One Grid object owns ordered children, spans and both track axes.
-pub trait IGrid: IContainer {
+#[com_class(auto_guid = "microui.Grid:v1")]
+/// Constructible Grid whose topology, spans, and both track axes share one class contract.
+pub trait Grid: crate::IWidget + IContainerLayout {
+    /// Creates an empty unmounted Grid after validating both complete track sequences.
+    #[constructor]
+    fn new(
+        host: ComRef<'_, crate::IWidgetHostAbi>,
+        columns: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
+        rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
+    ) -> Result<Self, NcStatus>;
+    /// Returns the stable read-only topology view for this container's lifetime.
+    fn children(&self) -> Result<ComPtr<crate::IChildrenAbi>, NcStatus>;
+    /// Removes one complete subtree and matching span metadata.
+    fn remove(&self, index: u32) -> Result<ChildEditResult, NcStatus>;
+    /// Removes all owned subtrees and matching metadata while retaining reusable capacity.
+    fn clear(&self) -> Result<ChildEditResult, NcStatus>;
     /// Copies a range of column policies; offset indexes tracks and the return value is total count.
     fn columns(&self, output: nc_com::NcCopyToBufferOffset<'_, LayoutTrackAbi>) -> Result<u32, NcStatus>;
     /// Replaces the complete column sequence after validating every track; input offset must be zero.
@@ -329,5 +351,5 @@ pub trait IDisclosure: crate::IWidget {
     /// Returns the real header's text capability, including its inherited widget options.
     fn header(&self) -> Result<ComPtr<crate::ITextContentAbi>, NcStatus>;
     /// Returns the real body container; its child editor keeps topology and edge metadata consistent.
-    fn body(&self) -> Result<ComPtr<ILinearAbi>, NcStatus>;
+    fn body(&self) -> Result<ComPtr<LinearAbi>, NcStatus>;
 }

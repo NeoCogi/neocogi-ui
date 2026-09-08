@@ -203,13 +203,13 @@ pub trait UiFactory {
     /// Creates a framed scroll composite around one unmounted content object; generic options can subsequently change its frame.
     fn create_scroll_area(&self, content: ComRef<'_, IWidgetAbi>, enabled: bool) -> Result<ComPtr<IScrollAreaAbi>, NcStatus>;
     /// Creates an empty directional container after validating its complete initial policy.
-    fn create_linear(&self, direction: FlowDirection, cross: CrossSizeAbi) -> Result<ComPtr<ILinearAbi>, NcStatus>;
+    fn create_linear(&self, direction: FlowDirection, cross: CrossSizeAbi) -> Result<ComPtr<LinearAbi>, NcStatus>;
     /// Creates an empty Grid with validated complete column and row policies; input offsets must be zero.
     fn create_grid(
         &self,
         columns: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
         rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
-    ) -> Result<ComPtr<IGridAbi>, NcStatus>;
+    ) -> Result<ComPtr<GridAbi>, NcStatus>;
     /// Constructs an unmounted boolean control with body-font presentation.
     fn create_checkbox(&self, checked: bool, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<CheckboxAbi>, NcStatus>;
     /// Constructs an unmounted normalized single-line editor.

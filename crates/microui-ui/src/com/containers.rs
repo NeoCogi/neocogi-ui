@@ -25,27 +25,25 @@ pub(crate) trait ContainerAlgorithm: WidgetAlgorithm + crate::ContainerWidget {
     fn edit_edges(&mut self, edit: EdgeEdit<Self::Edge>);
 }
 
-/// Shares concrete lifecycle, topology and scoped layout plumbing across built-in containers.
-macro_rules! container_class {
-    ($name:ident, $core:ty, $interface:ident, $abi:ty) => {
-        #[com_object(interfaces($interface, IContainerLayout))]
+/// Shares concrete storage, lifecycle, and scoped layout plumbing across callable containers.
+macro_rules! container_object {
+    ($name:ident, $core:ty, $contract:path) => {
+        #[com_object($contract)]
         /// One concrete container COM allocation, including inherited common widget state.
-        pub(super) struct $name {
+        pub struct $name {
             /// Concrete semantic state and shared phase execution, with no Rust dynamic widget vtable.
             widget: WidgetCore<$core>,
             /// Private writer owns the one authoritative tree; public callers receive its distinct read-only view.
             editor: ComPtr<IChildrenEditorAbi>,
         }
         impl $name {
-            /// Creates an empty container after validating all concrete configuration.
-            pub(super) fn create(host: ComPtr<IWidgetHostAbi>, core: $core) -> Result<ComPtr<$abi>, NcStatus> {
+            /// Allocates common widget and child storage from already validated concrete policy.
+            fn from_core(host: ComPtr<IWidgetHostAbi>, core: $core) -> Result<Self, NcStatus> {
                 let editor = host.create_children()?;
-                Ok(Self::from_value(Self {
+                Ok(Self {
                     widget: WidgetCore::new(host, crate::WidgetOption::NO_INTERACT, core)?,
                     editor,
                 })
-                .query()
-                .expect("declared container interface"))
             }
             /// Closes logical widget state and all descendant ownership before final COM release.
             fn close_widget(&self) -> Result<(), NcStatus> {
@@ -63,30 +61,34 @@ macro_rules! container_class {
             }
         }
         widget_phase_impl!($name);
-        impl IContainer for $name {
-            /// Exposes read-only topology without allowing callers to bypass the concrete edge metadata.
-            fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
-                self.widget.state.readable()?;
-                self.editor.view()
-            }
-            /// Publishes matching metadata even when the removed child's close reports an error.
-            fn remove(&self, index: u32) -> Result<ChildEditResult, NcStatus> {
-                self.widget.state.writable()?;
-                let mut core = self.widget.take()?;
-                let outcome = self.editor.remove(index)?;
-                core.edit_edges(EdgeEdit::Remove { index: index as usize });
-                Ok(outcome)
-            }
-            /// Clears topology and metadata in the same guarded concrete operation.
-            fn clear(&self) -> Result<ChildEditResult, NcStatus> {
-                self.widget.state.writable()?;
-                let mut core = self.widget.take()?;
-                let outcome = self.editor.clear()?;
-                core.edit_edges(EdgeEdit::Clear);
-                Ok(outcome)
-            }
-        }
         container_layout_impl!($name);
+    };
+}
+
+/// Expands direct class methods for topology edits shared by Linear and Grid.
+macro_rules! container_methods {
+    () => {
+        /// Exposes read-only topology without allowing callers to bypass concrete edge metadata.
+        fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
+            self.widget.state.readable()?;
+            self.editor.view()
+        }
+        /// Publishes matching metadata even when the removed child's close reports an error.
+        fn remove(&self, index: u32) -> Result<ChildEditResult, NcStatus> {
+            self.widget.state.writable()?;
+            let mut core = self.widget.take()?;
+            let outcome = self.editor.remove(index)?;
+            core.edit_edges(EdgeEdit::Remove { index: index as usize });
+            Ok(outcome)
+        }
+        /// Clears topology and metadata in the same guarded concrete operation.
+        fn clear(&self) -> Result<ChildEditResult, NcStatus> {
+            self.widget.state.writable()?;
+            let mut core = self.widget.take()?;
+            let outcome = self.editor.clear()?;
+            core.edit_edges(EdgeEdit::Clear);
+            Ok(outcome)
+        }
     };
 }
 
@@ -131,8 +133,28 @@ macro_rules! container_edges {
     };
 }
 
-container_class!(Linear, crate::Linear, ILinear, ILinearAbi);
-impl ILinear for Linear {
+container_object!(LinearObject, crate::Linear, microui_contracts::Linear);
+impl LinearObject {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(super) fn create(
+        host: ComPtr<IWidgetHostAbi>,
+        direction: FlowDirection,
+        cross: CrossSizeAbi,
+    ) -> Result<ComPtr<LinearAbi>, NcStatus> {
+        let value = <Self as Linear>::new(host.as_com_ref(), direction, cross)?;
+        Ok(Self::from_value(value)
+            .query()
+            .expect("LinearObject declares the Linear class contract"))
+    }
+}
+impl Linear for LinearObject {
+    /// Validates both layout policies before allocating child ownership or widget state.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, direction: FlowDirection, cross: CrossSizeAbi) -> Result<Self, NcStatus> {
+        let direction = local_direction(direction)?;
+        let cross = local_cross(cross)?;
+        Self::from_core(host.add_ref(), crate::Linear::com_new(direction, cross))
+    }
+    container_methods!();
     /// Returns the exact retained axis and leading-edge policy.
     fn direction(&self) -> Result<FlowDirection, NcStatus> {
         self.widget.state.readable()?;
@@ -168,8 +190,32 @@ impl ILinear for Linear {
     container_edges!(LinearEdge, local_linear_edge, linear_edge);
 }
 
-container_class!(Grid, crate::Grid, IGrid, IGridAbi);
-impl IGrid for Grid {
+container_object!(GridObject, crate::Grid, microui_contracts::Grid);
+impl GridObject {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(super) fn create(
+        host: ComPtr<IWidgetHostAbi>,
+        columns: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
+        rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
+    ) -> Result<ComPtr<GridAbi>, NcStatus> {
+        let value = <Self as Grid>::new(host.as_com_ref(), columns, rows)?;
+        Ok(Self::from_value(value)
+            .query()
+            .expect("GridObject declares the Grid class contract"))
+    }
+}
+impl Grid for GridObject {
+    /// Validates both complete track sequences before allocating child ownership or widget state.
+    fn new(
+        host: ComRef<'_, IWidgetHostAbi>,
+        columns: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
+        rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
+    ) -> Result<Self, NcStatus> {
+        let columns = local_tracks(columns)?;
+        let rows = local_tracks(rows)?;
+        Self::from_core(host.add_ref(), crate::Grid::com_new(columns, rows))
+    }
+    container_methods!();
     /// Bulk-copies column policy from the one concrete Grid state.
     fn columns(&self, output: NcCopyToBufferOffset<'_, LayoutTrackAbi>) -> Result<u32, NcStatus> {
         self.widget.state.readable()?;

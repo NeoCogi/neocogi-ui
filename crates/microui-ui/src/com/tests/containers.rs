@@ -318,7 +318,7 @@ fn layout_service_rejects_direct_reentry_without_holding_an_interior_borrow() {
     window.close().unwrap();
 }
 
-/// The production Linear facade preserves exact/flexible tracks, reversal and real inherited identity.
+/// The production Linear class preserves exact/flexible tracks without a redundant container interface.
 #[test]
 fn builtin_linear_reuses_track_resolution_and_validates_edges_before_mounting() {
     let runtime = runtime();
@@ -342,10 +342,10 @@ fn builtin_linear_reuses_track_resolution_and_validates_edges_before_mounting() 
         .finish()
         .unwrap();
     let common = row.node_interface().unwrap();
-    let container = common.query::<IContainerAbi>().unwrap();
-    assert_eq!(common.query::<IUnknown>().unwrap().as_ptr(), container.query::<IUnknown>().unwrap().as_ptr());
+    assert_eq!(common.query::<IContainerAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
+    assert_eq!(common.query::<IUnknown>().unwrap().as_ptr(), row.as_interface().add_ref().query::<IUnknown>().unwrap().as_ptr());
     assert_eq!(
-        container.children().unwrap().query::<IChildrenEditorAbi>().unwrap_err(),
+        row.children().unwrap().query::<IChildrenEditorAbi>().unwrap_err(),
         nc_com::NC_E_NOINTERFACE
     );
     let window = ui.window("Linear", RECT, &row).unwrap();

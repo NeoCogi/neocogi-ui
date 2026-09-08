@@ -302,12 +302,17 @@ Do not return a fabricated successful size to hide a failed resource lookup.
 
 ## Built-in editing and painting
 
-Built-in leaf classes compose one concrete semantic value into their COM
-allocation. Concrete `Textbox`, `TextBlock`, `Slider`, and `Number` operations
+Built-in leaf and container classes compose one concrete semantic value into
+their COM allocation. Concrete `Textbox`, `TextBlock`, `Slider`, and `Number` operations
 live directly on their callable class projections. Shared protocols such as
 `ITextContent` and `ITextEditor` remain only where independently handled internal
 content needs the same behavior. Every call edits the same state used by input,
 measurement, and painting.
+
+Linear and Grid keep their topology edits and parent-owned relationship metadata
+on their concrete class projections. They require `IContainerLayout` only for
+the runtime's shared measurement and placement protocol; `IContainer` remains a
+reusable protocol for independently defined domain containers.
 
 A Textbox removes CR and LF during construction, replacement and committed text
 input. Its cursor is a byte offset at a Unicode scalar boundary, not a glyph,

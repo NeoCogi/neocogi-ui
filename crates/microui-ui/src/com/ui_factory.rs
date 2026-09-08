@@ -71,11 +71,9 @@ impl UiFactory for UiFactoryObject {
         &self,
         direction: FlowDirection,
         cross: CrossSizeAbi,
-    ) -> Result<ComPtr<ILinearAbi>, NcStatus> {
+    ) -> Result<ComPtr<LinearAbi>, NcStatus> {
         self.host.check_mutation()?;
-        let direction = super::containers::local_direction(direction)?;
-        let cross = super::containers::local_cross(cross)?;
-        super::containers::Linear::create(self.host.clone(), crate::Linear::com_new(direction, cross))
+        super::containers::LinearObject::create(self.host.clone(), direction, cross)
     }
 
     /// Validates complete typed track sequences before allocating Grid state.
@@ -83,11 +81,9 @@ impl UiFactory for UiFactoryObject {
         &self,
         columns: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
         rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
-    ) -> Result<ComPtr<IGridAbi>, NcStatus> {
+    ) -> Result<ComPtr<GridAbi>, NcStatus> {
         self.host.check_mutation()?;
-        let columns = super::containers::local_tracks(columns)?;
-        let rows = super::containers::local_tracks(rows)?;
-        super::containers::Grid::create(self.host.clone(), crate::Grid::com_new(columns, rows))
+        super::containers::GridObject::create(self.host.clone(), columns, rows)
     }
 
     /// Validates complete checkbox initialization before allocating its COM identity.

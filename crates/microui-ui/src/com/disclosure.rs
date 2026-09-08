@@ -15,7 +15,7 @@ pub(super) struct Disclosure {
     /// Cached capability for the actual first child, without a duplicate label or common state.
     header: ComPtr<ITextContentAbi>,
     /// Cached capability for the actual second child, without a second child sequence.
-    body: ComPtr<ILinearAbi>,
+    body: ComPtr<LinearAbi>,
 }
 fixed_phases!(Disclosure);
 
@@ -39,9 +39,10 @@ impl Disclosure {
             variant.header_options(),
             crate::ui_node::DisclosureHeader::com_new(model.clone(), label.to_owned(), variant),
         )?;
-        let body = super::containers::Linear::create(
+        let body = super::containers::LinearObject::create(
             host.clone(),
-            crate::Linear::com_new(crate::LinearDirection::TopToBottom, crate::LinearCrossSize::Stretch),
+            FlowDirection::TOP_TO_BOTTOM,
+            CrossSize::Stretch.into(),
         )?;
         let editor = host.create_children()?;
         editor.insert(0, header.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
@@ -80,7 +81,7 @@ impl IDisclosure for Disclosure {
         Ok(self.header.clone())
     }
     /// Returns the actual body whose typed edits preserve child/metadata cardinality.
-    fn body(&self) -> Result<ComPtr<ILinearAbi>, NcStatus> {
+    fn body(&self) -> Result<ComPtr<LinearAbi>, NcStatus> {
         self.widget.state.readable()?;
         Ok(self.body.clone())
     }

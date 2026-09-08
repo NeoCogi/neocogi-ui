@@ -1,6 +1,6 @@
 //! Standard picker composes actual COM controls and owns only explicit request and native-path state.
 use super::*;
-use microui_redux::{EventHandler, EventSession, Linear, ListItemWidget, ScrollArea, TextBlockWidget, TextboxWidget};
+use microui_redux::{EventHandler, EventSession, LinearWidget, ListItemWidget, ScrollArea, TextBlockWidget, TextboxWidget};
 use microui_redux::events::{Activation, FileDialogCompleted, TextChanged, TextSubmitted};
 use nc_com::{INcStringAbi, NcString};
 use std::{
@@ -210,7 +210,7 @@ impl EventHandler<Model, WindowEvent> for Lifecycle {
 /// One completely built column and its concrete row handlers, still unpublished to the modal.
 struct Column {
     /// Actual COM content root to install into the stable scroll controller.
-    root: Linear,
+    root: LinearWidget,
     /// Concrete exact-path actions registered only after the complete directory candidate succeeds.
     rows: Vec<(ListItemWidget, Action)>,
 }
@@ -223,8 +223,8 @@ struct Listing {
 }
 
 /// Constructs an ordinary concrete Linear from heterogeneous existing COM widget capabilities.
-fn line(runtime: &Runtime, direction: FlowDirection, cross: CrossSize, children: Vec<(ComPtr<IWidgetAbi>, LayoutTrack)>) -> Result<Linear, NcStatus> {
-    let line = Linear::from_interface(runtime.widget_factory().create_linear(direction, cross.into())?);
+fn line(runtime: &Runtime, direction: FlowDirection, cross: CrossSize, children: Vec<(ComPtr<IWidgetAbi>, LayoutTrack)>) -> Result<LinearWidget, NcStatus> {
+    let line = LinearWidget::from_interface(runtime.widget_factory().create_linear(direction, cross.into())?);
     for (index, (child, track)) in children.into_iter().enumerate() {
         line.as_interface().insert(index as u32, child.as_com_ref(), LinearEdge::new(track))?.finish()?;
     }

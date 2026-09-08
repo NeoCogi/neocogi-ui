@@ -2,10 +2,10 @@
 use super::*;
 use nc_com::NcCopyToBufferOffset;
 
-/// Static directional Linear proxy; inherited container and widget state remain one COM object.
-pub type Linear = Widget<ILinearAbi>;
-/// Static Grid proxy; ordered child ownership, spans and track policies live in the plugin.
-pub type Grid = Widget<IGridAbi>;
+/// Static convenience wrapper around the dynamically constructed Linear class projection.
+pub type LinearWidget = Widget<LinearAbi>;
+/// Static convenience wrapper around the dynamically constructed Grid class projection.
+pub type GridWidget = Widget<GridAbi>;
 /// Static scroll-composite proxy; its private structural children stay owned by the plugin.
 pub type ScrollArea = Widget<IScrollAreaAbi>;
 
@@ -26,8 +26,8 @@ impl Widget<IDisclosureAbi> {
         Ok(Widget::from_interface(self.interface.header()?))
     }
     /// Returns the actual body for ordinary typed Linear edits.
-    pub fn body(&self) -> Result<Linear, NcStatus> {
-        Ok(Linear::from_interface(self.interface.body()?))
+    pub fn body(&self) -> Result<LinearWidget, NcStatus> {
+        Ok(LinearWidget::from_interface(self.interface.body()?))
     }
 }
 
@@ -108,10 +108,10 @@ macro_rules! container_proxy {
         }
     };
 }
-container_proxy!(ILinearAbi, LinearEdge);
-container_proxy!(IGridAbi, GridExtent);
+container_proxy!(LinearAbi, LinearEdge);
+container_proxy!(GridAbi, GridExtent);
 
-impl Widget<ILinearAbi> {
+impl Widget<LinearAbi> {
     /// Returns the complete axis and leading-edge choice.
     pub fn direction(&self) -> Result<FlowDirection, NcStatus> {
         self.interface.direction()
@@ -137,14 +137,14 @@ enum Axis {
 }
 impl Axis {
     /// Executes the selected concrete copied-policy read.
-    fn copy(&self, grid: &ComPtr<IGridAbi>, output: NcCopyToBufferOffset<'_, LayoutTrackAbi>) -> Result<u32, NcStatus> {
+    fn copy(&self, grid: &ComPtr<GridAbi>, output: NcCopyToBufferOffset<'_, LayoutTrackAbi>) -> Result<u32, NcStatus> {
         match self {
             Self::Columns => grid.columns(output),
             Self::Rows => grid.rows(output),
         }
     }
     /// Allocates an ordinary application snapshot without retaining plugin state.
-    fn read(&self, grid: &ComPtr<IGridAbi>) -> Result<Vec<LayoutTrack>, NcStatus> {
+    fn read(&self, grid: &ComPtr<GridAbi>) -> Result<Vec<LayoutTrack>, NcStatus> {
         let count = self.copy(grid, NcCopyToBufferOffset::new(0, &mut []))?;
         let mut values = vec![LayoutTrack::Content.into(); count as usize];
         if self.copy(grid, NcCopyToBufferOffset::new(0, &mut values))? != count {
@@ -153,7 +153,7 @@ impl Axis {
         values.into_iter().map(LayoutTrack::try_from).collect()
     }
 }
-impl Widget<IGridAbi> {
+impl Widget<GridAbi> {
     /// Copies the current column policies into application-owned typed values.
     pub fn columns(&self) -> Result<Vec<LayoutTrack>, NcStatus> {
         Axis::Columns.read(&self.interface)
@@ -195,14 +195,14 @@ impl WidgetFactory {
         ))
     }
     /// Creates an empty directional container with one complete axis/cross configuration.
-    pub fn linear(&self, direction: FlowDirection, cross: CrossSize) -> Result<Linear, NcStatus> {
-        Ok(Linear::from_interface(self.interface.create_linear(direction, cross.into())?))
+    pub fn linear(&self, direction: FlowDirection, cross: CrossSize) -> Result<LinearWidget, NcStatus> {
+        Ok(LinearWidget::from_interface(self.interface.create_linear(direction, cross.into())?))
     }
     /// Creates an empty Grid with complete validated track policies on both axes.
-    pub fn grid(&self, columns: &[LayoutTrack], rows: &[LayoutTrack]) -> Result<Grid, NcStatus> {
+    pub fn grid(&self, columns: &[LayoutTrack], rows: &[LayoutTrack]) -> Result<GridWidget, NcStatus> {
         let columns = encoded_tracks(columns);
         let rows = encoded_tracks(rows);
-        Ok(Grid::from_interface(self.interface.create_grid(
+        Ok(GridWidget::from_interface(self.interface.create_grid(
             NcCopyFromBufferOffset::new(0, &columns),
             NcCopyFromBufferOffset::new(0, &rows),
         )?))

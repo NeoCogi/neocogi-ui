@@ -22,6 +22,8 @@ nc_com::plugin! {
         microui_ui::com::ColorSwatchObject,
         microui_ui::com::ListItemObject,
         microui_ui::com::ListBoxObject,
+        microui_ui::com::LinearObject,
+        microui_ui::com::GridObject,
     ],
 }
 
