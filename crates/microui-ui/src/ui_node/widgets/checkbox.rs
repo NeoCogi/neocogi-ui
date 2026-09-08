@@ -77,8 +77,11 @@ pub struct CheckboxChanged {
     pub checked: bool,
 }
 
-/// Concrete retained checkbox, including its semantic and interaction state.
+#[nc_com::com_object(microui_contracts::Checkbox)]
+/// Concrete retained checkbox and dynamically constructible COM object.
 pub struct Checkbox {
+    /// Non-semantic COM lifecycle and host-backed phase resources.
+    runtime: crate::com::widget::WidgetRuntime,
     /// Label displayed beside the checkbox square.
     label: String,
     /// Font used for the label.
@@ -99,6 +102,19 @@ impl Checkbox {
     pub fn create(parameters: CheckboxParameters) -> (crate::TypedWidgetHandle<Self>, crate::Node) {
         let widget = Checkbox::from(parameters);
         crate::Node::typed_widget(widget)
+    }
+
+    /// Combines validated semantic parameters with one already bound common runtime.
+    pub(crate) fn from_runtime(runtime: crate::com::widget::WidgetRuntime, parameters: CheckboxParameters) -> Self {
+        Self {
+            runtime,
+            label: parameters.label,
+            font: parameters.font,
+            #[cfg(test)]
+            opt: parameters.opt,
+            checked: parameters.checked,
+            changed_event: crate::EventSource::new(),
+        }
     }
 
     /// Marks the checkbox as checked without recording user interaction.
@@ -213,17 +229,12 @@ impl crate::TypedWidget<CheckboxChanged> for Checkbox {
     }
 }
 
+#[cfg(test)]
 impl From<CheckboxParameters> for Checkbox {
     /// Transfers one-shot parameters into the concrete Checkbox runtime.
     fn from(parameters: CheckboxParameters) -> Self {
-        Checkbox {
-            label: parameters.label,
-            font: parameters.font,
-            #[cfg(test)]
-            opt: parameters.opt,
-            checked: parameters.checked,
-            changed_event: crate::EventSource::new(),
-        }
+        let runtime = crate::com::widget::WidgetRuntime::for_test(parameters.opt);
+        Self::from_runtime(runtime, parameters)
     }
 }
 
@@ -231,6 +242,18 @@ impl crate::com::widget::WidgetAlgorithm for Checkbox {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
         self.changed_event.close_ordinary();
+    }
+}
+
+impl crate::com::widget::HostedWidget for Checkbox {
+    /// Borrows common lifecycle and resource state without a second checkbox representation.
+    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+        &self.runtime
+    }
+
+    /// Exclusively borrows common lifecycle and resource state for a COM mutation or phase.
+    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+        &mut self.runtime
     }
 }
 

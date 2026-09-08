@@ -93,7 +93,7 @@ impl UiFactory for UiFactoryObject {
         label: NcCopyFromBufferOffset<'_, u8>,
     ) -> Result<ComPtr<CheckboxAbi>, NcStatus> {
         self.host.check_mutation()?;
-        super::leaves::CheckboxObject::create(self.host.clone(), checked, label)
+        super::Checkbox::create_com(self.host.clone(), checked, label)
     }
 
     /// Validates complete textbox initialization before allocating its COM identity.
@@ -109,7 +109,7 @@ impl UiFactory for UiFactoryObject {
         wrapping: TextWrapping,
     ) -> Result<ComPtr<TextBlockAbi>, NcStatus> {
         self.host.check_mutation()?;
-        super::leaves::TextBlockObject::create(self.host.clone(), input, wrapping)
+        super::TextBlock::create_com(self.host.clone(), input, wrapping)
     }
 
     /// Validates every arithmetic field before allocating a slider identity.
@@ -131,7 +131,7 @@ impl UiFactory for UiFactoryObject {
         label: NcCopyFromBufferOffset<'_, u8>,
     ) -> Result<ComPtr<ColorSwatchAbi>, NcStatus> {
         self.host.check_mutation()?;
-        super::leaves::ColorSwatchObject::create(self.host.clone(), rgba, label)
+        super::ColorSwatch::create_com(self.host.clone(), rgba, label)
     }
 
     /// Validates the label before allocating a standalone list-row identity.

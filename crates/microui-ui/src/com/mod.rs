@@ -13,14 +13,14 @@ use std::{
 #[macro_use]
 pub(crate) mod widget;
 mod button;
-pub use crate::ui_node::widgets::Button;
+pub use crate::ui_node::widgets::{Button, Checkbox, ColorSwatch, TextBlock};
 mod combo;
 pub use combo::ComboObject;
 pub(crate) mod events;
 mod input;
 mod leaves;
 pub use leaves::{
-    CheckboxObject, ColorSwatchObject, ListBoxObject, ListItemObject, NumberObject, ScrollbarObject, SliderObject, TextBlockObject, TextboxObject,
+    ListBoxObject, ListItemObject, NumberObject, ScrollbarObject, SliderObject, TextboxObject,
 };
 mod node;
 pub(crate) use node::ComNode;

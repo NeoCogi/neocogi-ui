@@ -108,8 +108,11 @@ impl TextBlockParameters {
     }
 }
 
-/// Concrete retained text block, including its semantic state.
+#[nc_com::com_object(microui_contracts::TextBlock)]
+/// Concrete retained text block and dynamically constructible COM object.
 pub struct TextBlock {
+    /// Non-semantic COM lifecycle and host-backed phase resources.
+    runtime: crate::com::widget::WidgetRuntime,
     /// Initialization-only wrapping mode.
     wrap: TextWrap,
     /// Initialization-only font.
@@ -127,6 +130,20 @@ impl TextBlock {
     #[cfg(test)]
     pub fn create(parameters: TextBlockParameters) -> (TypedWidgetHandle<Self>, Node) {
         Node::typed_widget(Self::from(parameters))
+    }
+
+    /// Combines validated semantic parameters with one already bound common runtime.
+    pub(crate) fn from_runtime(runtime: crate::com::widget::WidgetRuntime, parameters: TextBlockParameters) -> Self {
+        Self {
+            runtime,
+            wrap: parameters.wrap,
+            font: parameters.font,
+            #[cfg(test)]
+            opt: parameters.opt,
+            // Public construction data may arrive through a struct literal, so concrete storage
+            // itself remains the single normalization boundary.
+            text: normalize_multiline_text(parameters.text),
+        }
     }
 
     /// Returns the current display text.
@@ -212,22 +229,28 @@ impl Widget for TextBlock {
     }
 }
 
+#[cfg(test)]
 impl From<TextBlockParameters> for TextBlock {
     /// Transfers one-shot parameters into the concrete TextBlock runtime.
     fn from(parameters: TextBlockParameters) -> Self {
-        TextBlock {
-            wrap: parameters.wrap,
-            font: parameters.font,
-            #[cfg(test)]
-            opt: parameters.opt,
-            // `text` is public construction data and may be supplied through a struct literal, so
-            // enforce canonical storage at the concrete widget boundary rather than only in `new`.
-            text: normalize_multiline_text(parameters.text),
-        }
+        let runtime = crate::com::widget::WidgetRuntime::for_test(parameters.opt);
+        Self::from_runtime(runtime, parameters)
     }
 }
 
 impl crate::com::widget::WidgetAlgorithm for TextBlock {}
+
+impl crate::com::widget::HostedWidget for TextBlock {
+    /// Borrows common lifecycle and resource state without a second text-block representation.
+    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+        &self.runtime
+    }
+
+    /// Exclusively borrows common lifecycle and resource state for a COM mutation or phase.
+    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+        &mut self.runtime
+    }
+}
 
 impl TextBlock {
     /// Returns the existing concrete wrapping policy to its COM editing interface.

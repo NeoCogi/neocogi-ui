@@ -70,8 +70,11 @@ impl ColorSwatchParameters {
     }
 }
 
-/// Concrete retained color swatch, including its semantic state.
+#[nc_com::com_object(microui_contracts::ColorSwatch)]
+/// Concrete retained color swatch and dynamically constructible COM object.
 pub struct ColorSwatch {
+    /// Non-semantic COM lifecycle and host-backed phase resources.
+    runtime: crate::com::widget::WidgetRuntime,
     /// Initialization-only font.
     font: FontRef,
     /// Base widget options.
@@ -90,6 +93,18 @@ impl ColorSwatch {
     pub fn create(parameters: ColorSwatchParameters) -> (crate::TypedWidgetHandle<Self>, crate::Node) {
         let widget = ColorSwatch::from(parameters);
         crate::Node::typed_widget(widget)
+    }
+
+    /// Combines validated semantic parameters with one already bound common runtime.
+    pub(crate) fn from_runtime(runtime: crate::com::widget::WidgetRuntime, parameters: ColorSwatchParameters) -> Self {
+        Self {
+            runtime,
+            font: parameters.font,
+            #[cfg(test)]
+            opt: parameters.opt,
+            fill: parameters.fill,
+            label: parameters.label,
+        }
     }
 
     /// Returns the current fill color.
@@ -150,20 +165,28 @@ impl Widget for ColorSwatch {
     }
 }
 
+#[cfg(test)]
 impl From<ColorSwatchParameters> for ColorSwatch {
     /// Transfers one-shot parameters into the concrete ColorSwatch runtime.
     fn from(parameters: ColorSwatchParameters) -> Self {
-        ColorSwatch {
-            font: parameters.font,
-            #[cfg(test)]
-            opt: parameters.opt,
-            fill: parameters.fill,
-            label: parameters.label,
-        }
+        let runtime = crate::com::widget::WidgetRuntime::for_test(parameters.opt);
+        Self::from_runtime(runtime, parameters)
     }
 }
 
 impl crate::com::widget::WidgetAlgorithm for ColorSwatch {}
+
+impl crate::com::widget::HostedWidget for ColorSwatch {
+    /// Borrows common lifecycle and resource state without a second swatch representation.
+    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+        &self.runtime
+    }
+
+    /// Exclusively borrows common lifecycle and resource state for a COM mutation or phase.
+    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+        &mut self.runtime
+    }
+}
 
 impl crate::com::widget::FontState for ColorSwatch {
     /// Borrows the semantic font reference already used by layout and painting.

@@ -1,71 +1,76 @@
 //! Concrete editing implementations over each built-in's one semantic state.
 use super::*;
+use super::widget::{FontState, HostedWidget};
 use nc_com::{INcStringAbi, NcString};
 
-callable_leaf_class!(CheckboxObject, crate::Checkbox, microui_contracts::Checkbox);
 callable_leaf_class!(TextboxObject, crate::Textbox, microui_contracts::Textbox);
-callable_leaf_class!(TextBlockObject, crate::TextBlock, microui_contracts::TextBlock);
 callable_leaf_class!(SliderObject, crate::Slider, microui_contracts::Slider);
 callable_leaf_class!(NumberObject, crate::Number, microui_contracts::Number);
-callable_leaf_class!(ColorSwatchObject, crate::ColorSwatch, microui_contracts::ColorSwatch);
 callable_leaf_class!(ListItemObject, crate::ListItem, microui_contracts::ListItem);
 callable_leaf_class!(ListBoxObject, crate::ListBox, microui_contracts::ListBox);
 callable_leaf_class!(ScrollbarObject, crate::Scrollbar, microui_contracts::Scrollbar);
 
-impl CheckboxObject {
+direct_widget_phase_impl!(crate::Checkbox);
+direct_leaf_layout_impl!(crate::Checkbox);
+direct_widget_phase_impl!(crate::TextBlock);
+direct_leaf_layout_impl!(crate::TextBlock);
+direct_widget_phase_impl!(crate::ColorSwatch);
+direct_leaf_layout_impl!(crate::ColorSwatch);
+
+impl crate::Checkbox {
     /// Constructs the class for the host-bound factory through the same typed contract used by the registry.
-    pub(super) fn create(host: ComPtr<IWidgetHostAbi>, checked: bool, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<CheckboxAbi>, NcStatus> {
-        let value = <Self as Checkbox>::new(host.as_com_ref(), checked, label)?;
-        Ok(Self::from_value(value).query().expect("CheckboxObject declares the Checkbox class contract"))
+    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, checked: bool, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<CheckboxAbi>, NcStatus> {
+        let value = <Self as microui_contracts::Checkbox>::new(host.as_com_ref(), checked, label)?;
+        Ok(Self::from_value(value).query().expect("Checkbox declares its callable class contract"))
     }
 }
 
-impl Checkbox for CheckboxObject {
+impl microui_contracts::Checkbox for crate::Checkbox {
     /// Validates the label and initializes the established Checkbox defaults in one allocation.
     fn new(host: ComRef<'_, IWidgetHostAbi>, checked: bool, label: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus> {
         let parameters = crate::CheckboxParameters::new(text(label)?, checked);
-        Ok(Self {
-            widget: super::widget::WidgetCore::new(host.add_ref(), parameters.opt, crate::Checkbox::from(parameters))?,
-        })
+        let runtime = super::widget::WidgetRuntime::new(host.add_ref(), parameters.opt)?;
+        Ok(Self::from_runtime(runtime, parameters))
     }
     /// Reads the same boolean state used by pointer/Space updates and paint.
     fn checked(&self) -> Result<bool, NcStatus> {
-        self.widget.state.readable()?;
-        Ok(self.widget.core.checked())
+        self.runtime().state.readable()?;
+        Ok(self.checked())
     }
     /// Checked state changes paint only; both states reserve the same glyph space.
     fn set_checked(&mut self, checked: bool) -> Result<(), NcStatus> {
-        self.widget.state.writable()?;
-        self.widget.core.set_checked(checked);
+        self.runtime().state.writable()?;
+        self.set_checked(checked);
         Ok(())
     }
     /// Copies a label into an independently owned immutable COM string.
     fn label(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
-        self.widget.state.readable()?;
-        Ok(NcString::from_utf8_str(self.widget.core.com_label()))
+        self.runtime().state.readable()?;
+        Ok(NcString::from_utf8_str(self.com_label()))
     }
     /// Commits valid UTF-8 atomically and preserves a prior pending change.
     fn set_label(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        self.widget.state.writable()?;
+        self.runtime().state.writable()?;
         let input = text(input)?;
-        let core = &mut self.widget.core;
-        if core.com_label() != input {
-            core.com_set_label(input);
-            self.widget.state.record_change(GeometryChange::CHANGED);
+        if self.com_label() != input {
+            self.com_set_label(input);
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
         }
         Ok(())
     }
     /// Validates a semantic font role before changing the Checkbox's measurement input.
     fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
-        self.widget.set_font_role(role)
+        set_direct_font_role(self, role)
     }
     /// Resolves one exact named font before replacing the Checkbox's selection.
     fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        self.widget.set_named_font(name)
+        set_direct_named_font(self, name)
     }
     /// Connects the Checkbox's existing semantic event source directly through its class contract.
     fn subscribe(&mut self, sink: ComRef<'_, ICheckboxSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.widget.subscribe::<crate::CheckboxChanged>(sink)
+        self.runtime().state.writable()?;
+        let endpoint = <Self as crate::TypedWidget<crate::CheckboxChanged>>::event(self);
+        super::events::subscribe(endpoint, sink)
     }
 }
 
@@ -104,6 +109,27 @@ macro_rules! class_font_methods {
             self.widget.set_named_font(name)
         }
     };
+}
+
+/// Commits one validated semantic font role directly on a concrete widget allocation.
+fn set_direct_font_role<S: HostedWidget + FontState>(widget: &mut S, role: TextFontRole) -> Result<(), NcStatus> {
+    widget.runtime().state.writable()?;
+    let font = crate::FontRef::Role(super::widget::local_font_role(role)?);
+    if widget.font() != &font {
+        widget.set_font(font);
+        widget.runtime_mut().state.record_change(GeometryChange::CHANGED);
+    }
+    Ok(())
+}
+
+/// Resolves one application font name against the widget host before current resource revision.
+fn set_direct_named_font<S: HostedWidget + FontState>(widget: &mut S, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+    let font = widget.runtime_mut().named_font(name)?;
+    if widget.font() != &font {
+        widget.set_font(font);
+        widget.runtime_mut().state.record_change(GeometryChange::CHANGED);
+    }
+    Ok(())
 }
 
 impl TextboxObject {
@@ -168,65 +194,62 @@ impl Textbox for TextboxObject {
     }
 }
 
-impl TextBlockObject {
+impl crate::TextBlock {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(super) fn create(host: ComPtr<IWidgetHostAbi>, text: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping) -> Result<ComPtr<TextBlockAbi>, NcStatus> {
-        let value = <Self as TextBlock>::new(host.as_com_ref(), text, wrapping)?;
-        Ok(Self::from_value(value).query().expect("TextBlockObject declares the TextBlock class contract"))
+    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, text: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping) -> Result<ComPtr<TextBlockAbi>, NcStatus> {
+        let value = <Self as microui_contracts::TextBlock>::new(host.as_com_ref(), text, wrapping)?;
+        Ok(Self::from_value(value).query().expect("TextBlock declares its callable class contract"))
     }
 }
 
-impl TextBlock for TextBlockObject {
+impl microui_contracts::TextBlock for crate::TextBlock {
     /// Validates text and wrapping before allocating the established TextBlock defaults.
     fn new(host: ComRef<'_, IWidgetHostAbi>, input: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping) -> Result<Self, NcStatus> {
         let parameters = crate::TextBlockParameters::with_wrap(text(input)?, local_wrap(wrapping)?);
-        Ok(Self {
-            widget: super::widget::WidgetCore::new(host.add_ref(), parameters.opt, crate::TextBlock::from(parameters))?,
-        })
+        let runtime = super::widget::WidgetRuntime::new(host.add_ref(), parameters.opt)?;
+        Ok(Self::from_runtime(runtime, parameters))
     }
     /// Returns an immutable snapshot without exposing the semantic String allocation.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
-        self.widget.state.readable()?;
-        Ok(NcString::from_utf8_str(self.widget.core.text()))
+        self.runtime().state.readable()?;
+        Ok(NcString::from_utf8_str(self.text()))
     }
     /// Replaces complete text and records only an actual geometry change.
     fn set_text(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        self.widget.state.writable()?;
+        self.runtime().state.writable()?;
         let input = text(input)?;
-        let core = &mut self.widget.core;
-        let previous = core.text().to_owned();
-        core.set_text(input);
-        if core.text() != previous {
-            self.widget.state.record_change(GeometryChange::CHANGED);
+        let previous = self.text().to_owned();
+        self.set_text(input);
+        if self.text() != previous {
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
         }
         Ok(())
     }
     /// Encodes exactly the wrapping behavior used by existing text measurement.
     fn wrapping(&self) -> Result<TextWrapping, NcStatus> {
-        self.widget.state.readable()?;
-        Ok(match self.widget.core.com_wrap() {
+        self.runtime().state.readable()?;
+        Ok(match self.com_wrap() {
             crate::TextWrap::None => TextWrapping::NONE,
             crate::TextWrap::Word => TextWrapping::WORD,
         })
     }
     /// Rejects unknown policies before mutating semantic state or its geometry marker.
     fn set_wrapping(&mut self, wrapping: TextWrapping) -> Result<(), NcStatus> {
-        self.widget.state.writable()?;
+        self.runtime().state.writable()?;
         let wrap = local_wrap(wrapping)?;
-        let core = &mut self.widget.core;
-        if core.com_wrap() != wrap {
-            core.com_set_wrap(wrap);
-            self.widget.state.record_change(GeometryChange::CHANGED);
+        if self.com_wrap() != wrap {
+            self.com_set_wrap(wrap);
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
         }
         Ok(())
     }
     /// Validates a semantic font role before changing the TextBlock's measurement input.
     fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
-        self.widget.set_font_role(role)
+        set_direct_font_role(self, role)
     }
     /// Resolves one exact named font before replacing the TextBlock's selection.
     fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        self.widget.set_named_font(name)
+        set_direct_named_font(self, name)
     }
 }
 
@@ -360,38 +383,58 @@ impl Number for NumberObject {
     }
 }
 
-impl ColorSwatchObject {
+impl crate::ColorSwatch {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(super) fn create(host: ComPtr<IWidgetHostAbi>, rgba: u32, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ColorSwatchAbi>, NcStatus> {
-        let value = <Self as ColorSwatch>::new(host.as_com_ref(), rgba, label)?;
+    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, rgba: u32, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ColorSwatchAbi>, NcStatus> {
+        let value = <Self as microui_contracts::ColorSwatch>::new(host.as_com_ref(), rgba, label)?;
         Ok(Self::from_value(value)
             .query()
-            .expect("ColorSwatchObject declares the ColorSwatch class contract"))
+            .expect("ColorSwatch declares its callable class contract"))
     }
 }
 
-impl ColorSwatch for ColorSwatchObject {
+impl microui_contracts::ColorSwatch for crate::ColorSwatch {
     /// Validates the label and copies packed RGBA before allocating the established swatch state.
     fn new(host: ComRef<'_, IWidgetHostAbi>, rgba: u32, label: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus> {
         let parameters = crate::ColorSwatchParameters::new(super::render::color(rgba)).label(text(label)?);
-        Ok(Self {
-            widget: super::widget::WidgetCore::new(host.add_ref(), parameters.opt, crate::ColorSwatch::from(parameters))?,
-        })
+        let runtime = super::widget::WidgetRuntime::new(host.add_ref(), parameters.opt)?;
+        Ok(Self::from_runtime(runtime, parameters))
     }
-    class_text_methods!(label, set_label);
+    /// Returns an immutable snapshot without exposing the semantic String allocation.
+    fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(NcString::from_utf8_str(self.label()))
+    }
+    /// Validates UTF-8 and records geometry only when the concrete label changes.
+    fn set_text(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        let label = text(input)?;
+        if self.label() != label {
+            self.set_label(label);
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
     /// Packs canonical RGBA without relying on machine endianness.
     fn fill(&self) -> Result<u32, NcStatus> {
-        self.widget.state.readable()?;
-        let c = self.widget.core.fill();
+        self.runtime().state.readable()?;
+        let c = self.fill();
         Ok(u32::from_le_bytes([c.r, c.g, c.b, c.a]))
     }
     /// Color is a paint-only input and emits no user event.
     fn set_fill(&mut self, rgba: u32) -> Result<(), NcStatus> {
-        self.widget.state.writable()?;
-        self.widget.core.set_fill(super::render::color(rgba));
+        self.runtime().state.writable()?;
+        self.set_fill(super::render::color(rgba));
         Ok(())
     }
-    class_font_methods!();
+    /// Validates a semantic role before changing the swatch label's font.
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+        set_direct_font_role(self, role)
+    }
+    /// Resolves one exact named font before changing the swatch label's font.
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        set_direct_named_font(self, name)
+    }
 }
 
 impl ListItemObject {
