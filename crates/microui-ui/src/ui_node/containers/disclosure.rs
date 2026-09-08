@@ -147,7 +147,16 @@ impl DisclosureParameters {
 ///
 /// Expansion gates descendant traversal while retaining every owned runtime and its state. It does
 /// not expose or mutate generic node visibility.
+#[nc_com::com_object(microui_contracts::Disclosure)]
 pub struct Disclosure {
+    /// Non-semantic COM lifecycle and host-backed phase resources.
+    runtime: crate::com::widget::WidgetRuntime,
+    /// Authoritative fixed header/body ownership used by COM traversal.
+    pub(crate) editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+    /// Text capability of the actual header child.
+    pub(crate) header: nc_com::ComPtr<microui_contracts::ITextContentAbi>,
+    /// Typed editing capability of the actual vertical body child.
+    pub(crate) body: nc_com::ComPtr<microui_contracts::LinearAbi>,
     /// Native fixture editing link; absent from production COM composition.
     #[cfg(test)]
     content: Option<TypedWidgetHandle<Linear>>,
@@ -157,6 +166,27 @@ pub struct Disclosure {
 }
 
 impl Disclosure {
+    /// Combines one fixed child composition with the semantic expansion and layout policy.
+    pub(crate) fn from_runtime(
+        runtime: crate::com::widget::WidgetRuntime,
+        editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+        header: nc_com::ComPtr<microui_contracts::ITextContentAbi>,
+        body: nc_com::ComPtr<microui_contracts::LinearAbi>,
+        model: Rc<DisclosureState>,
+        variant: DisclosureVariant,
+    ) -> Self {
+        Self {
+            runtime,
+            editor,
+            header,
+            body,
+            #[cfg(test)]
+            content: None,
+            model,
+            variant,
+        }
+    }
+
     /// Returns whether descendants participate in traversal.
     pub fn is_expanded(&self) -> bool {
         self.model.expanded.get()
@@ -407,11 +437,24 @@ impl Widget for Disclosure {
 fn create_container(parameters: DisclosureParameters) -> (TypedWidgetHandle<Disclosure>, Container) {
     let (content, body) = Linear::create(LinearParameters::vertical(parameters.children));
     let model = DisclosureState::new(parameters.expanded);
-    let widget = Disclosure {
-        content: Some(content),
-        model: model.clone(),
-        variant: parameters.variant,
-    };
+    let runtime = crate::com::widget::WidgetRuntime::for_test(crate::WidgetOption::NO_INTERACT);
+    let host = runtime.state.host().add_ref();
+    let (editor, header_capability, body_capability) = crate::com::disclosure::prepare_children(
+        host,
+        model.clone(),
+        parameters.label.clone(),
+        parameters.variant,
+    )
+    .expect("native disclosure fixture builds the same fixed COM topology");
+    let mut widget = Disclosure::from_runtime(
+        runtime,
+        editor,
+        header_capability,
+        body_capability,
+        model.clone(),
+        parameters.variant,
+    );
+    widget.content = Some(content);
     let runtime = crate::com::widget::WidgetRuntime::for_test(parameters.opt);
     let header = DisclosureHeader {
         runtime,
@@ -437,17 +480,6 @@ impl Disclosure {
     }
 }
 
-impl Disclosure {
-    /// Creates COM semantic state while its concrete class retains the actual typed body capability.
-    pub(crate) fn com_new(model: Rc<DisclosureState>, variant: DisclosureVariant) -> Self {
-        Self {
-            #[cfg(test)]
-            content: None,
-            model,
-            variant,
-        }
-    }
-}
 impl DisclosureHeader {
     /// Combines the shared expansion value and label with one concrete header runtime.
     pub(crate) fn from_runtime(
@@ -476,6 +508,24 @@ impl DisclosureHeader {
     }
 }
 impl crate::com::widget::WidgetAlgorithm for Disclosure {}
+
+impl crate::com::widget::HostedWidget for Disclosure {
+    /// Borrows common phase state stored directly beside Disclosure's semantic fields.
+    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+        &self.runtime
+    }
+
+    /// Exclusively borrows common phase state for mutation or resource refresh.
+    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+        &mut self.runtime
+    }
+
+    /// Closes both real structural children through their authoritative writer.
+    fn close_contents(&mut self) -> Result<(), nc_com::NcStatus> {
+        self.editor.close()?.finish()
+    }
+}
+
 impl crate::com::widget::WidgetAlgorithm for DisclosureHeader {}
 
 impl crate::com::widget::HostedWidget for DisclosureHeader {

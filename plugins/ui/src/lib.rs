@@ -25,7 +25,7 @@ nc_com::plugin! {
         microui_ui::com::Linear,
         microui_ui::com::Grid,
         microui_ui::com::ScrollAreaObject,
-        microui_ui::com::DisclosureObject,
+        microui_ui::com::Disclosure,
     ],
 }
 

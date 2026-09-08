@@ -54,7 +54,7 @@ impl UiFactory for UiFactoryObject {
         style: DisclosureStyle,
         expanded: bool,
     ) -> Result<ComPtr<DisclosureAbi>, NcStatus> {
-        super::disclosure::DisclosureObject::create(self.host.clone(), label, style, expanded)
+        super::Disclosure::create_com(self.host.clone(), label, style, expanded)
     }
 
     /// Composes real bars and a transform container around validated application content.

@@ -1,7 +1,6 @@
 //! Disclosure owns two real COM children; its header shares only explicit expansion data with layout.
 use super::*;
 use super::widget::{HostedWidget, WidgetRuntime};
-use super::widget::WidgetCore;
 
 direct_widget_phase_impl!(crate::ui_node::DisclosureHeader);
 direct_leaf_layout_impl!(crate::ui_node::DisclosureHeader);
@@ -41,36 +40,25 @@ impl ITextContent for crate::ui_node::DisclosureHeader {
     }
 }
 
-#[com_object(microui_contracts::Disclosure)]
-/// One fixed disclosure identity retains its actual header and editable body capabilities.
-pub struct DisclosureObject {
-    /// Existing indentation, header measurement and hidden-body policy over shared expansion state.
-    widget: WidgetCore<crate::Disclosure>,
-    /// Authoritative fixed header/body ownership; public interfaces never grant removal of these roles.
-    editor: ComPtr<IChildrenEditorAbi>,
-    /// Cached capability for the actual first child, without a duplicate label or common state.
-    header: ComPtr<ITextContentAbi>,
-    /// Cached capability for the actual second child, without a second child sequence.
-    body: ComPtr<LinearAbi>,
-}
-fixed_phases!(DisclosureObject);
+direct_widget_phase_impl!(crate::Disclosure);
+direct_container_layout_impl!(crate::Disclosure);
 
-impl DisclosureObject {
+impl crate::Disclosure {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(super) fn create(
+    pub(super) fn create_com(
         host: ComPtr<IWidgetHostAbi>,
         label: NcCopyFromBufferOffset<'_, u8>,
         style: DisclosureStyle,
         expanded: bool,
     ) -> Result<ComPtr<DisclosureAbi>, NcStatus> {
-        let value = <Self as Disclosure>::new(host.as_com_ref(), label, style, expanded)?;
+        let value = <Self as microui_contracts::Disclosure>::new(host.as_com_ref(), label, style, expanded)?;
         Ok(Self::from_value(value)
             .query()
-            .expect("DisclosureObject declares the Disclosure class contract"))
+            .expect("Disclosure declares its callable class contract"))
     }
 }
 
-impl Disclosure for DisclosureObject {
+impl microui_contracts::Disclosure for crate::Disclosure {
     /// Validates presentation and label before constructing the complete fixed composition.
     fn new(host: ComRef<'_, IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>, style: DisclosureStyle, expanded: bool) -> Result<Self, NcStatus> {
         let label = text(label)?;
@@ -81,48 +69,63 @@ impl Disclosure for DisclosureObject {
             _ => return Err(NC_E_INVALID_ARG),
         };
         let model = crate::ui_node::DisclosureState::new(expanded);
-        let header = crate::ui_node::DisclosureHeader::create_com(
-            host.add_ref(),
-            variant.header_options(),
-            model.clone(),
-            label.to_owned(),
-            variant,
-        )?;
-        let body = super::Linear::create_com(host.add_ref(), FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch.into())?;
-        let editor = host.create_children()?;
-        editor.insert(0, header.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
-        editor.insert(1, body.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
-        Ok(Self {
-            widget: WidgetCore::new(host.add_ref(), crate::WidgetOption::NO_INTERACT, crate::Disclosure::com_new(model, variant))?,
+        let runtime = WidgetRuntime::new(host.add_ref(), crate::WidgetOption::NO_INTERACT)?;
+        let (editor, header, body) = prepare_children(host.add_ref(), model.clone(), label.to_owned(), variant)?;
+        Ok(Self::from_runtime(
+            runtime,
             editor,
             header,
             body,
-        })
+            model,
+            variant,
+        ))
     }
     /// Observes the same expansion bit used by header input and container layout.
     fn expanded(&self) -> Result<bool, NcStatus> {
-        self.widget.state.readable()?;
-        Ok(self.widget.core.is_expanded())
+        self.runtime().state.readable()?;
+        Ok(self.is_expanded())
     }
     /// Changes the shared bit through the concrete algorithm; its sticky marker survives skipped updates.
     fn set_expanded(&mut self, expanded: bool) -> Result<(), NcStatus> {
-        self.widget.state.writable()?;
-        let core = &mut self.widget.core;
+        self.runtime().state.writable()?;
         if expanded {
-            core.expand();
+            self.expand();
         } else {
-            core.collapse();
+            self.collapse();
         }
         Ok(())
     }
     /// Returns the actual header whose inherited widget options control its presentation and input.
     fn header(&self) -> Result<ComPtr<ITextContentAbi>, NcStatus> {
-        self.widget.state.readable()?;
+        self.runtime().state.readable()?;
         Ok(self.header.clone())
     }
     /// Returns the actual body whose typed edits preserve child/metadata cardinality.
     fn body(&self) -> Result<ComPtr<LinearAbi>, NcStatus> {
-        self.widget.state.readable()?;
+        self.runtime().state.readable()?;
         Ok(self.body.clone())
     }
+}
+
+/// Builds the two real structural children and their fixed authoritative sequence.
+pub(crate) fn prepare_children(
+    host: ComPtr<IWidgetHostAbi>,
+    model: Rc<crate::ui_node::DisclosureState>,
+    label: String,
+    variant: crate::ui_node::DisclosureVariant,
+) -> Result<(ComPtr<IChildrenEditorAbi>, ComPtr<ITextContentAbi>, ComPtr<LinearAbi>), NcStatus> {
+    // Construct both children before publishing the sequence, so callers never observe a partial
+    // disclosure. The shared scalar model contains no parent or child object backpointer.
+    let header = crate::ui_node::DisclosureHeader::create_com(
+        host.clone(),
+        variant.header_options(),
+        model,
+        label,
+        variant,
+    )?;
+    let body = super::Linear::create_com(host.clone(), FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch.into())?;
+    let editor = host.create_children()?;
+    editor.insert(0, header.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
+    editor.insert(1, body.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
+    Ok((editor, header, body))
 }
