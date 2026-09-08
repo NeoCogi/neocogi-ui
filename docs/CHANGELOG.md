@@ -64,6 +64,11 @@ wrappers. The accepted migration and outstanding validation are recorded in
 - Keep common lifecycle/options/invalidation in WidgetState, authoritative child
   ownership behind scoped layout services, and semantic widget state concrete.
   Native authoring/closure-renderer support remains only in behavior fixtures.
+- Make every registered built-in the concrete Rust widget allocation itself.
+  Remove the temporary `*Object` wrappers and generic `WidgetCore`; the remaining
+  `WidgetRuntime` contains only common lifecycle, resource, and rendering support.
+  Composed controls retain real structural child objects rather than duplicate
+  parent implementations.
 - Share one typed EventSource transport between built-ins and independent widgets;
   EventSession owns app state and concrete handlers outside the producer graph.
 - Preserve menus, native-path file dialogs, immutable resources, full/basic demos,

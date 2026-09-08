@@ -214,7 +214,8 @@ Declare each concrete constructible control as a class contract, for example
 `Button: IWidget + ILeafLayout`. Put its typed constructor and control-specific
 editing methods on that class. Keep an interface only when unrelated classes need
 the same independently queryable protocol. The implementation uses
-`#[com_object(Button)]` and stores one concrete widget-state field; it
+`#[com_object(Button)]` on the concrete Rust widget type and stores its semantic
+fields directly beside the common runtime helper; it
 does not declare a matching `IButton` or repeat a list of projections.
 
 Query `IWidget` when an API needs the common node protocol and `ILeafLayout` when
@@ -232,15 +233,16 @@ arguments and calls `Runtime::construct::<ClassAbi>`.
 
 ## Common state, input and node ownership
 
-`microui_contracts::widget::WidgetState` is a static implementation helper stored
-inside a widget class. It owns the host authority, common options, mount-once
-claim, logical closed flag and sticky geometry flag. It owns no runtime tree,
-children, application callback or additional widget allocation. Concrete class
-contracts require IWidget, whose protocol includes host/mount/close,
-properties/set_options, update, take_change and paint. Leaf measurement remains
-the shared ILeafLayout protocol. Button activation and button-specific styling
-live directly on `Button`; no activation-only, style-only, or lifetime interface
-is required for that class.
+Each concrete widget embeds one private `WidgetRuntime`. That non-generic helper
+contains `microui_contracts::widget::WidgetState` plus host-backed resource and
+rendering machinery; it cannot store a semantic widget implementation. `WidgetState`
+owns the host authority, common options, mount-once claim, logical closed flag, and
+sticky geometry flag. Neither helper owns a runtime tree, application callback, or
+additional widget allocation. Concrete class contracts require `IWidget`, whose
+protocol includes host/mount/close, properties/set_options, update, take_change,
+and paint. Leaf measurement remains the shared `ILeafLayout` protocol. Button
+activation and button-specific styling live directly on `Button`; no
+activation-only, style-only, or lifetime interface is required for that class.
 
 `WidgetState` contains plain fields. Mutating contract methods receive `&mut self`,
 and the generated COM object provides the exclusivity needed to reach them. Do not
@@ -308,9 +310,9 @@ Do not return a fabricated successful size to hide a failed resource lookup.
 
 ## Built-in editing and painting
 
-Built-in leaf and container classes compose one concrete semantic value into
-their COM allocation. Concrete `Textbox`, `TextBlock`, `Slider`, and `Number` operations
-live directly on their callable class projections. Shared protocols such as
+Built-in leaf and container classes are their concrete semantic allocations.
+Concrete `Textbox`, `TextBlock`, `Slider`, and `Number` operations live directly
+on their callable class projections. Shared protocols such as
 `ITextContent` and `ITextEditor` remain only where independently handled internal
 content needs the same behavior. Every call edits the same state used by input,
 measurement, and painting.
@@ -554,6 +556,12 @@ expansion data. TextArea's actual editor requests caret reveal through that same
 scroll model. These models hold no parent widget, runtime, application, or COM
 subscription reference. A child must not need to upgrade a weak parent handle to
 perform an ordinary edit.
+
+Composition does not reinstate the removed wrapper design. The registered outer
+class still owns its own runtime, topology, and outer behavior directly. Each child
+is a separately targetable retained role with its own identity. Do not introduce a
+generic core containing the outer class's algorithm, or duplicate a child's state
+on the parent merely to make forwarding convenient.
 
 The public capabilities preserve each composition's structural roles:
 

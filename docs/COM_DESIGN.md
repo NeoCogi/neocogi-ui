@@ -300,6 +300,14 @@ pub struct Button {
 
 `WidgetRuntime`, `EventSource<E>` and the concrete fields are private implementation details inside the plugin. Their layout is never part of the ABI. There is no `ButtonObject` containing a second native `Button`: the registered class is the same concrete type that implements measurement, input, painting and editing.
 
+This is the invariant for every built-in leaf and container. `WidgetRuntime` contains
+only host authority, lifecycle/options, imported resources, and rendering workspace;
+it cannot contain a semantic widget. Shared Rust traits statically reuse behavior
+without allocating or erasing an implementation. A composed class owns real child
+COM objects only when they represent different retained roles. Thus `TextArea` and
+its `TextEditor` child are a scrolling root and editable content, not two forms of
+one widget; the editor is the sole owner of text, cursor, font, and text events.
+
 `UiFactory` is also a registered class, implemented in the dynamically loaded UI
 plugin. `UiRuntime::factory()` returns an instance bound to the runtime's
 `IWidgetHost`; it is not a pretend interface projection on the runtime object.

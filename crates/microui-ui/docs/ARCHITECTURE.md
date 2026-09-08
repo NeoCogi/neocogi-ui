@@ -14,6 +14,13 @@ frame; they do not first invent or discover an `IButton` companion interface.
 Generic Rust values stay local; every cross-plugin value has a declared ABI type
 and checked identity.
 
+Every built-in follows the same allocation rule. The registered Rust type is the
+type that performs its input, layout, and paint algorithms; there is no parallel
+`ButtonObject`, `WidgetCore<Button>`, native trait object, or `Any` payload.
+`WidgetRuntime` is only embedded common lifecycle/resource machinery and cannot
+hold a semantic widget. Fixed compositions may own genuine child COM objects for
+different structural roles, such as a `TextArea` root and its `TextEditor` child.
+
 `UiFactory` is a separately registered, dynamically implemented class retaining
 only `IWidgetHost`. `UiRuntime::factory()` returns that shorthand for ordinary
 application ergonomics. It is not an `IUiFactory` projection on the runtime, and
@@ -90,8 +97,8 @@ concrete role:
 - a private relational menu popup owns its compact `MenuSurface` and parent trigger-slot index.
 
 The surface layer uses concrete enums for those bodies and roles. It does not store `Any`, erased
-surface payloads, or a manager-side menu controller. Widget implementations remain erased at the
-existing leaf/container boundary inside `Node`; that is independent of surface ownership.
+surface payloads, or a manager-side menu controller. `Node` retains only the shared COM protocol
+projections needed for traversal; it does not store a second native widget implementation.
 
 Every forest node has at most one parent edge. An independent window has none; a structural child
 or dialog points to its ordinary owner; a top-level popup points to a window or dialog; and a

@@ -1,10 +1,11 @@
 # Built-in widgets and containers
 
 Applications use `microui_redux::Ui::widgets()` to construct actual COM objects.
-A thin `Widget<I>` client owns a checked editing interface, with no copied semantic
-state or native widget wrapper. Each concrete editing interface inherits `IWidget`,
-directly or through a more specialized base. The widget's one allocation supplies
-common options, lifecycle, update, measurement, painting and optional event families.
+A thin `Widget<C>` client owns a checked class projection, with no copied semantic
+state or native widget wrapper. Each callable widget class requires `IWidget` and
+the one applicable shared layout protocol. The class's concrete Rust allocation
+supplies common options, lifecycle, update, measurement, painting, editing, and
+optional event families.
 
 ## Construction and ownership
 
@@ -74,6 +75,14 @@ with its layout policy. A topology operation returns `ChildEditResult`: topology
 commit even if closing a removed child fails. Call `finish()` when no additional
 metadata must be reconciled, and do not retry an already committed insertion or
 replacement as if it had rolled back.
+
+The structural children of a composed control are real, distinct COM objects, not
+second representations of the parent. For example, `TextArea` is the scrolling
+root and owns one `TextEditor` content child; the child alone owns the text buffer,
+cursor, font, and text-event sources. `ScrollArea` similarly owns a transform
+surface and two actual scrollbar children. Small scalar models are shared only
+where those distinct roles must coordinate. They contain no widget implementation,
+parent backpointer, or type-erased payload.
 
 ## Geometry and external state
 
