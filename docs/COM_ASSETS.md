@@ -30,7 +30,7 @@ packed RGBA bytes directly. None of the asset plugin's production feature sets
 links the UI implementation. Font and theme construction remain optional features.
 
 Applications supply one `IAssetBundle` to the `UiRuntime` constructor and
-`IPlatform::create_window`. Neither implementation embeds demo assets. The UI imports
+`Platform::create_window`. Neither implementation embeds demo assets. The UI imports
 metadata into its local font/icon tables once and samples only the required white-tile
 rows while validating it. It never copies or retains the complete image. The platform
 reads the bundle header and packed RGBA bytes, then uploads them without importing a

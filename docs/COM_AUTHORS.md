@@ -614,7 +614,7 @@ reference never transfers the parent's topology authority.
 
 ## Combo and compact menus
 
-`ICombo: IWidget` owns the actual header label, selected position and intended
+`Combo: IWidget + ILeafLayout` owns the actual header label, selected position and intended
 popup state. The static `Combo::update_items` resolves generic list data locally
 and silently installs only an index/label snapshot. `Combo::select` represents an
 actual popup selection: it closes the header and publishes `ComboChanged` only
