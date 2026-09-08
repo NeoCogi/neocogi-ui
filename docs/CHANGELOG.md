@@ -45,6 +45,9 @@ wrappers. The accepted migration and outstanding validation are recorded in
   classes; diagnostics remain a reusable interface on both objects.
 - Make the optional AssetLoader and ThemeLoader roots callable classes as well;
   their mutable build sessions and immutable result bundles remain interfaces.
+- Replace the optional extension assembly's one-object provider interface and
+  separate class ID with a callable `ExtensionProvider` class; its custom
+  `IInset` result remains a reusable container capability.
 - Replace the registered platform root's `IPlatform` plus separate class-ID
   declaration with a callable `Platform` class contract. Renderer diagnostics
   remain a shared capability on the same native bootstrap object.

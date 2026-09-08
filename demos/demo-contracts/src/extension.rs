@@ -1,9 +1,6 @@
 //! Example-specific editing capabilities. These are separate from the toolkit's standard widgets.
 use microui_contracts::*;
-use nc_com::{ComPtr, ComRef, NcGuid, NcStatus, com_class, com_interface, com_struct};
-
-/// Optional test/example assembly; ordinary demo deployments do not include it.
-pub const EXTENSION_PROVIDER_CLASS: NcGuid = nc_com::guid_from_qualified_name("microui.example.ExtensionProvider");
+use nc_com::{ComPtr, ComRef, NcStatus, com_class, com_interface, com_struct};
 
 #[com_struct]
 #[derive(Debug, Default, Eq, PartialEq)]
@@ -51,9 +48,12 @@ pub trait IInset: IContainer {
     fn set_padding(&self, padding: i32) -> Result<(), NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.example.ExtensionProvider:v1")]
-/// Stateless factory receives the runtime authority explicitly; it never links the UI implementation.
-pub trait IExtensionProvider {
+#[com_class(auto_guid = "microui.example.ExtensionProvider:v1")]
+/// Constructible stateless factory receiving runtime authority explicitly for each custom widget.
+pub trait ExtensionProvider {
+    /// Creates the stateless provider without linking or capturing a UI implementation.
+    #[constructor]
+    fn new() -> Result<Self, NcStatus>;
     /// Creates an empty custom container; child attachment follows the same rules as built-ins.
     fn inset(&self, host: ComRef<'_, IWidgetHostAbi>) -> Result<ComPtr<IInsetAbi>, NcStatus>;
 }

@@ -341,11 +341,14 @@ fn shrink(mut limit: AxisLimit, inset: i32) -> AxisLimit {
     limit
 }
 
-#[com_object(class_id(EXTENSION_PROVIDER_CLASS), name = "microui.example.ExtensionProvider", version = "0.9.0-alpha.0",
-    constructor(args = none), interfaces(IExtensionProvider))]
+#[com_object(microui_demo_contracts::extension::ExtensionProvider)]
 /// Stateless shorthand factory creates the interface-based inset container.
-pub struct ExtensionProvider;
-impl IExtensionProvider for ExtensionProvider {
+pub struct ExtensionProviderObject;
+impl ExtensionProvider for ExtensionProviderObject {
+    /// Creates a provider with no captured state or UI implementation dependency.
+    fn new() -> Result<Self, NcStatus> {
+        Ok(Self)
+    }
     /// One empty editor is the only topology allocation; no native child list is created in this plugin.
     fn inset(&self, host: ComRef<'_, IWidgetHostAbi>) -> Result<ComPtr<IInsetAbi>, NcStatus> {
         host.check_mutation()?;
@@ -362,7 +365,7 @@ nc_com::plugin! {
     plugin_id(auto_guid = "microui.plugin.extension-example"),
     name = "microui.plugin.extension-example",
     version = "0.9.0-alpha.0",
-    classes = [CounterObject, ExtensionProvider],
+    classes = [CounterObject, ExtensionProviderObject],
 }
 #[cfg(feature = "dynamic-plugin")]
 nc_com::export_plugin!();
