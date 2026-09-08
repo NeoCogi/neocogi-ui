@@ -32,10 +32,9 @@ impl UiFactory for UiFactoryObject {
     }
 
     /// Constructs the complete semantic combo header with this factory's host.
-    fn create_combo(&self) -> Result<ComPtr<IComboAbi>, NcStatus> {
+    fn create_combo(&self) -> Result<ComPtr<ComboAbi>, NcStatus> {
         self.host.check_mutation()?;
-        let parameters = crate::ComboParameters::new();
-        super::combo::Combo::create(self.host.clone(), parameters.opt, crate::Combo::from(parameters))
+        super::combo::ComboObject::create(self.host.clone())
     }
 
     /// Validates complete text and wrapping before constructing the fixed scroll/editor composition.
@@ -101,10 +100,9 @@ impl UiFactory for UiFactoryObject {
         &self,
         checked: bool,
         label: NcCopyFromBufferOffset<'_, u8>,
-    ) -> Result<ComPtr<ICheckboxAbi>, NcStatus> {
+    ) -> Result<ComPtr<CheckboxAbi>, NcStatus> {
         self.host.check_mutation()?;
-        let parameters = crate::CheckboxParameters::new(text(label)?, checked);
-        super::leaves::Checkbox::create(self.host.clone(), parameters.opt, crate::Checkbox::from(parameters))
+        super::leaves::CheckboxObject::create(self.host.clone(), checked, label)
     }
 
     /// Validates complete textbox initialization before allocating its COM identity.
@@ -178,18 +176,9 @@ impl UiFactory for UiFactoryObject {
     }
 
     /// Validates axis and range arithmetic before allocating the scrollbar.
-    fn create_scrollbar(&self, range: ScrollRange) -> Result<ComPtr<IScrollbarAbi>, NcStatus> {
+    fn create_scrollbar(&self, range: ScrollRange) -> Result<ComPtr<ScrollbarAbi>, NcStatus> {
         self.host.check_mutation()?;
-        let axis = match range.axis {
-            ScrollAxis::HORIZONTAL => crate::ScrollbarAxis::Horizontal,
-            ScrollAxis::VERTICAL => crate::ScrollbarAxis::Vertical,
-            _ => return Err(NC_E_INVALID_ARG),
-        };
-        if range.viewport < 0 || range.content < 0 {
-            return Err(NC_E_INVALID_ARG);
-        }
-        let parameters = crate::ScrollbarParameters::new(axis).range(range.viewport, range.content, range.offset);
-        super::leaves::Scrollbar::create(self.host.clone(), parameters.opt, crate::Scrollbar::from(parameters))
+        super::leaves::ScrollbarObject::create(self.host.clone(), range)
     }
 
     /// Constructs a complete Button in one call through its concrete class implementation.

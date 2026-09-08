@@ -427,23 +427,15 @@ macro_rules! leaf_layout_impl {
 }
 
 /// Declares one non-generic COM allocation with a statically known semantic state.
-macro_rules! leaf_class {
-    ($name:ident, $core:ty, $interface:ident, $abi:ty $(, $extra:ident)*) => {
-        #[com_object(interfaces($interface, ILeafLayout $(, $extra)*))]
+macro_rules! leaf_object {
+    ($visibility:vis $name:ident, $core:ty, $($object:tt)+) => {
+        #[com_object($($object)+)]
         /// One concrete built-in object, including its inherited widget state.
-        pub(super) struct $name {
+        $visibility struct $name {
             /// Inline semantic state and shared phase execution; no secondary widget owner.
             widget: super::widget::WidgetCore<$core>,
         }
         impl $name {
-            /// Creates the unmounted final COM allocation after input validation.
-            pub(super) fn create(host: ComPtr<IWidgetHostAbi>, options: crate::WidgetOption, core: $core) -> Result<ComPtr<$abi>, NcStatus> {
-                Ok(Self::from_value(Self {
-                    widget: super::widget::WidgetCore::new(host, options, core)?,
-                })
-                .query()
-                .expect("class declares its editing interface"))
-            }
             /// Applies the complete existing semantic algorithm to copied input.
             fn update_widget(&self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
                 self.widget.update(state, event, text)
@@ -453,6 +445,30 @@ macro_rules! leaf_class {
         }
         widget_phase_impl!($name);
         leaf_layout_impl!($name);
+    };
+}
+
+/// Preserves interface-only leaf allocations until their callable class family is migrated.
+macro_rules! leaf_class {
+    ($name:ident, $core:ty, $interface:ident, $abi:ty $(, $extra:ident)*) => {
+        leaf_object!(pub(super) $name, $core, interfaces($interface, ILeafLayout $(, $extra)*));
+        impl $name {
+            /// Creates the unmounted interface-only allocation after input validation.
+            pub(super) fn create(host: ComPtr<IWidgetHostAbi>, options: crate::WidgetOption, core: $core) -> Result<ComPtr<$abi>, NcStatus> {
+                Ok(Self::from_value(Self {
+                    widget: super::widget::WidgetCore::new(host, options, core)?,
+                })
+                .query()
+                .expect("object declares its concrete editing interface"))
+            }
+        }
+    };
+}
+
+/// Declares public storage for one dynamically registered callable leaf class.
+macro_rules! callable_leaf_class {
+    ($name:ident, $core:ty, $contract:path) => {
+        leaf_object!(pub $name, $core, $contract);
     };
 }
 

@@ -68,8 +68,8 @@ impl Widget<ButtonAbi> {
     }
 }
 
-/// Static Checkbox proxy; semantic storage belongs to its plugin object.
-pub type Checkbox = Widget<ICheckboxAbi>;
+/// Static convenience wrapper around the dynamically constructed Checkbox class projection.
+pub type CheckboxWidget = Widget<CheckboxAbi>;
 /// Static Textbox proxy; semantic storage belongs to its plugin object.
 pub type Textbox = Widget<ITextboxAbi>;
 /// Static proxy for the fixed scrolling editor; inherited text edits reach its actual content leaf.
@@ -86,8 +86,8 @@ pub type ColorSwatch = Widget<IColorSwatchAbi>;
 pub type ListItem = Widget<IListItemAbi>;
 /// Static ListBox proxy; semantic storage belongs to its plugin object.
 pub type ListBox = Widget<IListBoxAbi>;
-/// Static Scrollbar proxy; semantic storage belongs to its plugin object.
-pub type Scrollbar = Widget<IScrollbarAbi>;
+/// Static convenience wrapper around the dynamically constructed Scrollbar class projection.
+pub type ScrollbarWidget = Widget<ScrollbarAbi>;
 
 /// Shares inherited text convenience calls while keeping every proxy concrete.
 macro_rules! text_proxy {
@@ -117,7 +117,7 @@ text_proxy!(IColorSwatchAbi);
 text_proxy!(IListItemAbi);
 text_proxy!(IListBoxAbi);
 
-impl Widget<ICheckboxAbi> {
+impl Widget<CheckboxAbi> {
     /// Reads the current checked value.
     pub fn checked(&self) -> Result<bool, NcStatus> {
         self.interface.checked()
@@ -133,6 +133,14 @@ impl Widget<ICheckboxAbi> {
     /// Replaces label text and records a sticky preferred-size change when needed.
     pub fn set_label(&self, label: &str) -> Result<(), NcStatus> {
         self.interface.set_label(NcCopyFromBufferOffset::new(0, label.as_bytes()))
+    }
+    /// Selects typography directly through the Checkbox class contract.
+    pub fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
+        self.interface.set_font_role(role)
+    }
+    /// Resolves a named font directly through the Checkbox class contract.
+    pub fn set_named_font(&self, name: &str) -> Result<(), NcStatus> {
+        self.interface.set_named_font(NcCopyFromBufferOffset::new(0, name.as_bytes()))
     }
 }
 /// Shares byte-cursor editing conveniences across concrete single-line and multiline capabilities.
@@ -208,7 +216,7 @@ impl Widget<IColorSwatchAbi> {
         self.interface.set_fill(rgba)
     }
 }
-impl Widget<IScrollbarAbi> {
+impl Widget<ScrollbarAbi> {
     /// Reads a coherent range and offset snapshot.
     pub fn range(&self) -> Result<ScrollRange, NcStatus> {
         self.interface.range()
@@ -245,8 +253,8 @@ impl WidgetFactory {
         )?))
     }
     /// Constructs an initialized, unmounted checkbox in this runtime.
-    pub fn checkbox(&self, label: &str, checked: bool) -> Result<Checkbox, NcStatus> {
-        Ok(Checkbox::from_interface(
+    pub fn checkbox(&self, label: &str, checked: bool) -> Result<CheckboxWidget, NcStatus> {
+        Ok(CheckboxWidget::from_interface(
             self.interface.create_checkbox(checked, NcCopyFromBufferOffset::new(0, label.as_bytes()))?,
         ))
     }
@@ -289,8 +297,8 @@ impl WidgetFactory {
         ))
     }
     /// Constructs an initialized, unmounted scrollbar in this runtime.
-    pub fn scrollbar(&self, range: ScrollRange) -> Result<Scrollbar, NcStatus> {
-        Ok(Scrollbar::from_interface(self.interface.create_scrollbar(range)?))
+    pub fn scrollbar(&self, range: ScrollRange) -> Result<ScrollbarWidget, NcStatus> {
+        Ok(ScrollbarWidget::from_interface(self.interface.create_scrollbar(range)?))
     }
 
     /// Adopts a typed factory obtained from UI runtime activation.
@@ -500,7 +508,6 @@ macro_rules! font_proxy {
         }
     };
 }
-font_proxy!(ICheckboxAbi);
 font_proxy!(ITextboxAbi);
 font_proxy!(ITextAreaAbi);
 font_proxy!(IMultilineEditorAbi);
@@ -564,15 +571,15 @@ impl Widget<ButtonAbi> {
     }
 }
 
-/// Typed static proxy for the concrete combo header and its inherited widget state.
-pub type Combo = Widget<IComboAbi>;
+/// Typed static wrapper for the concrete Combo class and its inherited widget state.
+pub type ComboWidget = Widget<ComboAbi>;
 impl WidgetFactory {
     /// Creates an empty header; application-local list data never enters the UI plugin.
-    pub fn combo(&self) -> Result<Combo, NcStatus> {
-        Ok(Combo::from_interface(self.interface.create_combo()?))
+    pub fn combo(&self) -> Result<ComboWidget, NcStatus> {
+        Ok(ComboWidget::from_interface(self.interface.create_combo()?))
     }
 }
-impl Widget<IComboAbi> {
+impl Widget<ComboAbi> {
     /// Reads the selected position without interpreting it as a global identity.
     pub fn selected(&self) -> Result<u64, NcStatus> {
         self.interface.selected()
@@ -606,8 +613,15 @@ impl Widget<IComboAbi> {
             .submit_selection(index as u64, NcCopyFromBufferOffset::new(0, label.unwrap_or("").as_bytes()))?;
         Ok(label.map(str::to_owned))
     }
+    /// Selects typography directly through the Combo class contract.
+    pub fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
+        self.interface.set_font_role(role)
+    }
+    /// Resolves a named font directly through the Combo class contract.
+    pub fn set_named_font(&self, name: &str) -> Result<(), NcStatus> {
+        self.interface.set_named_font(NcCopyFromBufferOffset::new(0, name.as_bytes()))
+    }
 }
-font_proxy!(IComboAbi);
 
 /// Shares concrete image-capability calls without introducing an image-only widget wrapper.
 macro_rules! image_content {

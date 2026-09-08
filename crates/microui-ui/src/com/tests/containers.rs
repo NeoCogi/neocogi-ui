@@ -458,8 +458,8 @@ fn builtin_scroll_area_uses_real_children_and_shared_sticky_invalidation() {
     assert_eq!(root.query::<IContainerAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
     let structural = root.query::<IContainerLayoutAbi>().unwrap().children().unwrap();
     assert_eq!(structural.child_count().unwrap(), 3);
-    let horizontal = structural.child(1).unwrap().query::<IScrollbarAbi>().unwrap();
-    let vertical = structural.child(2).unwrap().query::<IScrollbarAbi>().unwrap();
+    let horizontal = structural.child(1).unwrap().query::<ScrollbarAbi>().unwrap();
+    let vertical = structural.child(2).unwrap().query::<ScrollbarAbi>().unwrap();
     assert_eq!(horizontal.range().unwrap().axis, ScrollAxis::HORIZONTAL);
     assert_eq!(vertical.range().unwrap().axis, ScrollAxis::VERTICAL);
     let content_identity = content.node_interface().unwrap().query::<IUnknown>().unwrap();

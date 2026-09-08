@@ -5,7 +5,7 @@ use microui_redux::{EventHandler, EventSession};
 /// All application list values and coordination capabilities remain local to the caller.
 struct Selection {
     /// Actual inherited combo widget, never a copy of its semantic state.
-    combo: microui_redux::Combo,
+    combo: microui_redux::ComboWidget,
     /// Actual manager-owned popup created independently from its header.
     popup: ComPtr<IPopupAbi>,
     /// Application-only generic list data resolved before any selection crosses COM.

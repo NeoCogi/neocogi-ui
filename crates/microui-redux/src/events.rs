@@ -359,9 +359,9 @@ impl<State: 'static, Handler: EventHandler<State, CheckboxChanged> + 'static> IC
 impl<State: 'static> EventSession<State> {
     /// Connects the widget's concrete event capability and registers its lease in deterministic order.
     /// Registration during an active session transaction reports BUSY before claiming the producer's port.
-    pub fn subscribe_checkbox<I: ComInterface, Handler: EventHandler<State, CheckboxChanged> + 'static>(
+    pub fn subscribe_checkbox<Handler: EventHandler<State, CheckboxChanged> + 'static>(
         &self,
-        widget: &Widget<I>,
+        widget: &crate::CheckboxWidget,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         let mut leases = self.registry.take()?;
@@ -372,7 +372,7 @@ impl<State: 'static> EventSession<State> {
             },
         })
         .query()?;
-        let lease = widget.as_interface().add_ref().query::<ICheckboxEventsAbi>()?.subscribe(sink.as_com_ref())?;
+        let lease = widget.as_interface().subscribe(sink.as_com_ref())?;
         leases.push(lease.clone());
         Ok(lease)
     }
@@ -445,9 +445,9 @@ impl<State: 'static, Handler: EventHandler<State, ScrollbarChanged> + 'static> I
 impl<State: 'static> EventSession<State> {
     /// Connects the widget's concrete event capability and registers its lease in deterministic order.
     /// Registration during an active session transaction reports BUSY before claiming the producer's port.
-    pub fn subscribe_scrollbar<I: ComInterface, Handler: EventHandler<State, ScrollbarChanged> + 'static>(
+    pub fn subscribe_scrollbar<Handler: EventHandler<State, ScrollbarChanged> + 'static>(
         &self,
-        widget: &Widget<I>,
+        widget: &crate::ScrollbarWidget,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         let mut leases = self.registry.take()?;
@@ -458,7 +458,7 @@ impl<State: 'static> EventSession<State> {
             },
         })
         .query()?;
-        let lease = widget.as_interface().add_ref().query::<IScrollbarEventsAbi>()?.subscribe(sink.as_com_ref())?;
+        let lease = widget.as_interface().subscribe(sink.as_com_ref())?;
         leases.push(lease.clone());
         Ok(lease)
     }
@@ -681,7 +681,7 @@ impl<State: 'static> EventSession<State> {
     /// Registers one captured-selection source without claiming the header's independent popup port.
     pub fn subscribe_combo_changed<Handler: EventHandler<State, ComboChanged> + 'static>(
         &self,
-        combo: &crate::Combo,
+        combo: &crate::ComboWidget,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         let mut leases = self.registry.take()?;
@@ -692,18 +692,14 @@ impl<State: 'static> EventSession<State> {
             },
         })
         .query()?;
-        let lease = combo
-            .as_interface()
-            .add_ref()
-            .query::<IComboEventsAbi>()?
-            .subscribe_changed(sink.as_com_ref())?;
+        let lease = combo.as_interface().subscribe_changed(sink.as_com_ref())?;
         leases.push(lease.clone());
         Ok(lease)
     }
     /// Registers the header-to-popup coordinator; ordinary popup dismissal uses its separate family.
     pub fn subscribe_combo_popup<Handler: EventHandler<State, ComboSubmitted> + 'static>(
         &self,
-        combo: &crate::Combo,
+        combo: &crate::ComboWidget,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         let mut leases = self.registry.take()?;
@@ -714,7 +710,7 @@ impl<State: 'static> EventSession<State> {
             },
         })
         .query()?;
-        let lease = combo.as_interface().add_ref().query::<IComboEventsAbi>()?.subscribe_popup(sink.as_com_ref())?;
+        let lease = combo.as_interface().subscribe_popup(sink.as_com_ref())?;
         leases.push(lease.clone());
         Ok(lease)
     }

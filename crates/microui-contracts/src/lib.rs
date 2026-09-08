@@ -195,7 +195,7 @@ pub trait UiFactory {
     /// Returns this factory's non-owning authority for inline WidgetState in independent widget classes.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus>;
     /// Creates an empty combo header; its composing owner supplies generic list data and popup content.
-    fn create_combo(&self) -> Result<ComPtr<IComboAbi>, NcStatus>;
+    fn create_combo(&self) -> Result<ComPtr<ComboAbi>, NcStatus>;
     /// Creates a fixed scrolling multiline editor; CRLF and CR normalize to LF and the cursor starts at the end.
     fn create_text_area(&self, text: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping, scrolling: bool) -> Result<ComPtr<ITextAreaAbi>, NcStatus>;
     /// Creates an empty disclosure with a real text header and editable vertical Linear body.
@@ -211,7 +211,7 @@ pub trait UiFactory {
         rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
     ) -> Result<ComPtr<IGridAbi>, NcStatus>;
     /// Constructs an unmounted boolean control with body-font presentation.
-    fn create_checkbox(&self, checked: bool, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ICheckboxAbi>, NcStatus>;
+    fn create_checkbox(&self, checked: bool, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<CheckboxAbi>, NcStatus>;
     /// Constructs an unmounted normalized single-line editor.
     fn create_textbox(&self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ITextboxAbi>, NcStatus>;
     /// Constructs multiline display text using the explicit wrapping policy.
@@ -227,7 +227,7 @@ pub trait UiFactory {
     /// Constructs a button-like list entry.
     fn create_list_box(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IListBoxAbi>, NcStatus>;
     /// Constructs a scrollbar with a validated orientation and normalized range.
-    fn create_scrollbar(&self, range: ScrollRange) -> Result<ComPtr<IScrollbarAbi>, NcStatus>;
+    fn create_scrollbar(&self, range: ScrollRange) -> Result<ComPtr<ScrollbarAbi>, NcStatus>;
     /// Constructs an initialized, unmounted Button through its concrete class contract.
     fn create_button(
         &self,

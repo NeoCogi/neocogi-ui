@@ -166,7 +166,7 @@ pub(super) struct State {
     /// Comfortable and compact spacing radio items share the style editor path.
     spacing: [MenuItem; 2],
     /// Combo header owns the selected index and label.
-    combo: Combo,
+    combo: ComboWidget,
     /// Actual generic-list popup is coordinated by captured submission/dismissal events.
     combo_popup: ComPtr<IPopupAbi>,
     /// Standalone compact menu opened by the Popup button.

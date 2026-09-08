@@ -2,8 +2,26 @@
 use super::*;
 use nc_com::{INcStringAbi, NcString};
 
-leaf_class!(Combo, crate::Combo, ICombo, IComboAbi, IFontStyle, IComboEvents);
-impl ICombo for Combo {
+callable_leaf_class!(ComboObject, crate::Combo, microui_contracts::Combo);
+
+impl ComboObject {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(super) fn create(host: ComPtr<IWidgetHostAbi>) -> Result<ComPtr<ComboAbi>, NcStatus> {
+        let value = <Self as Combo>::new(host.as_com_ref())?;
+        Ok(Self::from_value(value)
+            .query()
+            .expect("ComboObject declares the Combo class contract"))
+    }
+}
+
+impl Combo for ComboObject {
+    /// Initializes the established empty Combo state after validating host mutation authority.
+    fn new(host: ComRef<'_, IWidgetHostAbi>) -> Result<Self, NcStatus> {
+        let parameters = crate::ComboParameters::new();
+        Ok(Self {
+            widget: super::widget::WidgetCore::new(host.add_ref(), parameters.opt, crate::Combo::from(parameters))?,
+        })
+    }
     /// Reads the same position used by the semantic selection algorithm.
     fn selected(&self) -> Result<u64, NcStatus> {
         self.widget.state.readable()?;
@@ -38,8 +56,24 @@ impl ICombo for Combo {
     fn submit_selection(&self, index: u64, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.selection(index, label, true)
     }
+    /// Validates a semantic font role before changing the Combo's measurement input.
+    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
+        self.widget.set_font_role(role)
+    }
+    /// Resolves one exact named font before replacing the Combo's selection.
+    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.widget.set_named_font(name)
+    }
+    /// Connects the Combo's captured-selection source directly through its class contract.
+    fn subscribe_changed(&self, sink: ComRef<'_, IComboChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.widget.subscribe::<crate::ComboChanged>(sink)
+    }
+    /// Connects popup coordination independently from captured selection delivery.
+    fn subscribe_popup(&self, sink: ComRef<'_, IComboPopupSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.widget.subscribe::<crate::ComboSubmitted>(sink)
+    }
 }
-impl Combo {
+impl ComboObject {
     /// One replacement path validates the complete snapshot and preserves sticky geometry invalidation.
     fn selection(&self, index: u64, label: NcCopyFromBufferOffset<'_, u8>, submit: bool) -> Result<(), NcStatus> {
         self.widget.state.writable()?;
@@ -52,16 +86,6 @@ impl Combo {
             .state
             .record_change(if changed_label { GeometryChange::CHANGED } else { GeometryChange::NO_CHANGE });
         Ok(())
-    }
-}
-impl IComboEvents for Combo {
-    /// Both independent ports use the same application-owned transport as other built-in controls.
-    fn subscribe_changed(&self, sink: ComRef<'_, IComboChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.widget.subscribe::<crate::ComboChanged>(sink)
-    }
-    /// Captured anchors are delivered after runtime traversal releases the context for popup edits.
-    fn subscribe_popup(&self, sink: ComRef<'_, IComboPopupSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.widget.subscribe::<crate::ComboSubmitted>(sink)
     }
 }
 impl super::events::ComEvent for crate::ComboChanged {
@@ -79,5 +103,3 @@ impl super::events::ComEvent for crate::ComboSubmitted {
         sink.submitted(self.open, copied_rect(self.anchor))
     }
 }
-
-font_style_impl!(Combo);

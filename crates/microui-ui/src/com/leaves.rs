@@ -2,7 +2,7 @@
 use super::*;
 use nc_com::{INcStringAbi, NcString};
 
-leaf_class!(Checkbox, crate::Checkbox, ICheckbox, ICheckboxAbi, IFontStyle, ICheckboxEvents);
+callable_leaf_class!(CheckboxObject, crate::Checkbox, microui_contracts::Checkbox);
 leaf_class!(Textbox, crate::Textbox, ITextbox, ITextboxAbi, IFontStyle, ITextEvents);
 leaf_class!(TextBlock, crate::TextBlock, ITextBlock, ITextBlockAbi, IFontStyle);
 leaf_class!(Slider, crate::Slider, ISlider, ISliderAbi, IFontStyle, INumericEvents);
@@ -10,9 +10,34 @@ leaf_class!(Number, crate::Number, INumber, INumberAbi, IFontStyle, INumericEven
 leaf_class!(ColorSwatch, crate::ColorSwatch, IColorSwatch, IColorSwatchAbi, IFontStyle);
 leaf_class!(ListItem, crate::ListItem, IListItem, IListItemAbi, IFontStyle, IIconContent, IActivationEvents);
 leaf_class!(ListBox, crate::ListBox, IListBox, IListBoxAbi, IFontStyle, IActivationEvents, IImageContent);
-leaf_class!(Scrollbar, crate::Scrollbar, IScrollbar, IScrollbarAbi, IScrollbarEvents);
+callable_leaf_class!(ScrollbarObject, crate::Scrollbar, microui_contracts::Scrollbar);
 
-impl ICheckbox for Checkbox {
+impl CheckboxObject {
+    /// Constructs the class for the host-bound factory through the same typed contract used by the registry.
+    pub(super) fn create(
+        host: ComPtr<IWidgetHostAbi>,
+        checked: bool,
+        label: NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<ComPtr<CheckboxAbi>, NcStatus> {
+        let value = <Self as Checkbox>::new(host.as_com_ref(), checked, label)?;
+        Ok(Self::from_value(value)
+            .query()
+            .expect("CheckboxObject declares the Checkbox class contract"))
+    }
+}
+
+impl Checkbox for CheckboxObject {
+    /// Validates the label and initializes the established Checkbox defaults in one allocation.
+    fn new(
+        host: ComRef<'_, IWidgetHostAbi>,
+        checked: bool,
+        label: NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<Self, NcStatus> {
+        let parameters = crate::CheckboxParameters::new(text(label)?, checked);
+        Ok(Self {
+            widget: super::widget::WidgetCore::new(host.add_ref(), parameters.opt, crate::Checkbox::from(parameters))?,
+        })
+    }
     /// Reads the same boolean state used by pointer/Space updates and paint.
     fn checked(&self) -> Result<bool, NcStatus> {
         self.widget.state.readable()?;
@@ -39,6 +64,18 @@ impl ICheckbox for Checkbox {
             self.widget.state.record_change(GeometryChange::CHANGED);
         }
         Ok(())
+    }
+    /// Validates a semantic font role before changing the Checkbox's measurement input.
+    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
+        self.widget.set_font_role(role)
+    }
+    /// Resolves one exact named font before replacing the Checkbox's selection.
+    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.widget.set_named_font(name)
+    }
+    /// Connects the Checkbox's existing semantic event source directly through its class contract.
+    fn subscribe(&self, sink: ComRef<'_, ICheckboxSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.widget.subscribe::<crate::CheckboxChanged>(sink)
     }
 }
 
@@ -147,7 +184,45 @@ impl IColorSwatch for ColorSwatch {
     }
 }
 
-impl IScrollbar for Scrollbar {
+impl ScrollbarObject {
+    /// Builds a private structural scrollbar around an already shared axis model.
+    pub(super) fn from_core(
+        host: ComPtr<IWidgetHostAbi>,
+        options: crate::WidgetOption,
+        core: crate::Scrollbar,
+    ) -> Result<ComPtr<ScrollbarAbi>, NcStatus> {
+        Ok(Self::from_value(Self {
+            widget: super::widget::WidgetCore::new(host, options, core)?,
+        })
+        .query()
+        .expect("ScrollbarObject declares the Scrollbar class contract"))
+    }
+
+    /// Constructs the class for the host-bound factory through the same typed contract used by the registry.
+    pub(super) fn create(host: ComPtr<IWidgetHostAbi>, range: ScrollRange) -> Result<ComPtr<ScrollbarAbi>, NcStatus> {
+        let value = <Self as Scrollbar>::new(host.as_com_ref(), range)?;
+        Ok(Self::from_value(value)
+            .query()
+            .expect("ScrollbarObject declares the Scrollbar class contract"))
+    }
+}
+
+impl Scrollbar for ScrollbarObject {
+    /// Validates orientation and lengths before allocating the established Scrollbar state.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, range: ScrollRange) -> Result<Self, NcStatus> {
+        let axis = match range.axis {
+            ScrollAxis::HORIZONTAL => crate::ScrollbarAxis::Horizontal,
+            ScrollAxis::VERTICAL => crate::ScrollbarAxis::Vertical,
+            _ => return Err(NC_E_INVALID_ARG),
+        };
+        if range.viewport < 0 || range.content < 0 {
+            return Err(NC_E_INVALID_ARG);
+        }
+        let parameters = crate::ScrollbarParameters::new(axis).range(range.viewport, range.content, range.offset);
+        Ok(Self {
+            widget: super::widget::WidgetCore::new(host.add_ref(), parameters.opt, crate::Scrollbar::from(parameters))?,
+        })
+    }
     /// Reads all range fields from one semantic borrow.
     fn range(&self) -> Result<ScrollRange, NcStatus> {
         self.widget.state.readable()?;
@@ -181,9 +256,11 @@ impl IScrollbar for Scrollbar {
         core.set_offset(offset);
         Ok(())
     }
+    /// Connects the Scrollbar's existing semantic event source directly through its class contract.
+    fn subscribe(&self, sink: ComRef<'_, IScrollbarSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.widget.subscribe::<crate::ScrollbarChanged>(sink)
+    }
 }
-
-font_style_impl!(Checkbox);
 
 font_style_impl!(Textbox);
 
@@ -201,13 +278,6 @@ font_style_impl!(ListItem);
 
 icon_content_impl!(ListItem);
 
-impl ICheckboxEvents for Checkbox {
-    /// Connects the one existing native semantic port without creating a parallel event source.
-    fn subscribe(&self, sink: ComRef<'_, ICheckboxSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.widget.subscribe::<crate::CheckboxChanged>(sink)
-    }
-}
-
 impl INumericEvents for Slider {
     /// Connects the one existing native semantic port without creating a parallel event source.
     fn subscribe(&self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
@@ -219,13 +289,6 @@ impl INumericEvents for Number {
     /// Connects the one existing native semantic port without creating a parallel event source.
     fn subscribe(&self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.widget.subscribe::<crate::NumberChanged>(sink)
-    }
-}
-
-impl IScrollbarEvents for Scrollbar {
-    /// Connects the one existing native semantic port without creating a parallel event source.
-    fn subscribe(&self, sink: ComRef<'_, IScrollbarSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.widget.subscribe::<crate::ScrollbarChanged>(sink)
     }
 }
 

@@ -22,6 +22,9 @@ wrappers. The accepted migration and outstanding validation are recorded in
   constructible `Button` class contract. Its constructor and concrete editing,
   activation, font, icon, fill, and image operations now share one class
   projection; only the reusable `IWidget` and `ILeafLayout` protocols remain.
+- Make Checkbox, Scrollbar, and Combo registered class contracts as well. Their
+  concrete editing and event methods no longer require matching one-object
+  interfaces, while their callback sinks remain reusable COM protocols.
 - Replace `IUiFactory` with a separately registered `UiFactory` class. The
   runtime returns a host-bound instance for convenience, while hosts can construct
   `Button` and other registered classes directly from typed argument frames.

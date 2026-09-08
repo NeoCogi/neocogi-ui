@@ -7,7 +7,14 @@ nc_com::plugin! {
     plugin_id(auto_guid = "microui.plugin.ui"),
     name = "microui.plugin.ui",
     version = "0.9.0-alpha.0",
-    classes = [microui_ui::com::Runtime, microui_ui::com::UiFactoryObject, microui_ui::com::ButtonObject],
+    classes = [
+        microui_ui::com::Runtime,
+        microui_ui::com::UiFactoryObject,
+        microui_ui::com::ButtonObject,
+        microui_ui::com::CheckboxObject,
+        microui_ui::com::ScrollbarObject,
+        microui_ui::com::ComboObject,
+    ],
 }
 
 // Only the final native assembly publishes the dynamic entrypoint.

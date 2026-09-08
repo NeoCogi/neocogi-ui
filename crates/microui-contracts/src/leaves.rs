@@ -1,5 +1,5 @@
 //! Concrete built-in editing contracts; implementation state stays in its COM object.
-use nc_com::{ComPtr, INcStringAbi, NcCopyFromBufferOffset, NcStatus, com_interface, com_int_enum, com_struct};
+use nc_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, com_class, com_interface, com_int_enum, com_struct};
 
 #[com_interface(auto_guid = "microui.TextContent:v1")]
 /// Shared whole-text editing inherited by text controls and labelled list entries.
@@ -42,9 +42,17 @@ pub trait ITextBlock: ITextContent {
     fn set_wrapping(&self, wrapping: TextWrapping) -> Result<(), NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.Checkbox:v1")]
-/// Boolean control with a concrete label and silent programmatic checked setter.
-pub trait ICheckbox: crate::IWidget {
+#[com_class(auto_guid = "microui.Checkbox:v1")]
+/// Constructible boolean control with no redundant Checkbox-only interface.
+pub trait Checkbox: crate::IWidget + crate::ILeafLayout {
+    /// Creates complete unmounted state owned by the supplied UI host.
+    #[constructor]
+    fn new(
+        host: ComRef<'_, crate::IWidgetHostAbi>,
+        checked: bool,
+        label: NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<Self, NcStatus>;
+
     /// Returns the current boolean value.
     fn checked(&self) -> Result<bool, NcStatus>;
     /// Replaces the value without publishing user interaction or dirtying geometry.
@@ -53,6 +61,12 @@ pub trait ICheckbox: crate::IWidget {
     fn label(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
     /// Replaces the complete UTF-8 label and invalidates preferred size when changed.
     fn set_label(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    /// Selects a semantic font role and invalidates measurement only when it differs.
+    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+    /// Resolves an exact named font in the current host bundle before committing.
+    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    /// Connects the exclusive checked-state subscriber and returns its ownership lease.
+    fn subscribe(&self, sink: ComRef<'_, crate::ICheckboxSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
 }
 
 #[com_interface(auto_guid = "microui.NumericValue:v1")]
@@ -141,15 +155,24 @@ pub struct ScrollRange {
     pub offset: i32,
 }
 
-#[com_interface(auto_guid = "microui.Scrollbar:v1")]
-/// Concrete scrollbar editing with silent programmatic range/offset changes.
-pub trait IScrollbar: crate::IWidget {
+#[com_class(auto_guid = "microui.Scrollbar:v1")]
+/// Constructible scrollbar with its concrete editing and event surface in one class contract.
+pub trait Scrollbar: crate::IWidget + crate::ILeafLayout {
+    /// Creates complete unmounted scrollbar state owned by the supplied UI host.
+    #[constructor]
+    fn new(
+        host: ComRef<'_, crate::IWidgetHostAbi>,
+        range: ScrollRange,
+    ) -> Result<Self, NcStatus>;
+
     /// Returns a coherent copied range snapshot.
     fn range(&self) -> Result<ScrollRange, NcStatus>;
     /// Replaces nonnegative lengths together and clamps the existing offset.
     fn set_lengths(&self, viewport: i32, content: i32) -> Result<(), NcStatus>;
     /// Clamps a requested offset to the current range without publishing user input.
     fn set_offset(&self, offset: i32) -> Result<(), NcStatus>;
+    /// Connects the exclusive offset subscriber and returns its ownership lease.
+    fn subscribe(&self, sink: ComRef<'_, crate::IScrollbarSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
 }
 
 com_int_enum! {
@@ -246,9 +269,13 @@ pub trait IMultilineEditor: ITextEditor {
 /// Query IScrolling for offsets; IScrollArea is absent because the editor cannot be replaced.
 pub trait ITextArea: IMultilineEditor {}
 
-#[com_interface(auto_guid = "microui.Combo:v1")]
-/// Concrete combo header; generic list data and popup content remain with its composing owner.
-pub trait ICombo: crate::IWidget {
+#[com_class(auto_guid = "microui.Combo:v1")]
+/// Constructible combo header; generic list data and popup content remain with its composing owner.
+pub trait Combo: crate::IWidget + crate::ILeafLayout {
+    /// Creates an empty unmounted header owned by the supplied UI host.
+    #[constructor]
+    fn new(host: ComRef<'_, crate::IWidgetHostAbi>) -> Result<Self, NcStatus>;
+
     /// Returns the selected application-list position, with zero also used by an empty list.
     fn selected(&self) -> Result<u64, NcStatus>;
     /// Returns the captured display label, independently of generic application data.
@@ -261,6 +288,14 @@ pub trait ICombo: crate::IWidget {
     fn set_selection(&self, index: u64, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Commits an actual popup selection, closes the header, and emits changed only when index or label differs.
     fn submit_selection(&self, index: u64, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    /// Selects a semantic font role and invalidates measurement only when it differs.
+    fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus>;
+    /// Resolves an exact named font in the current host bundle before committing.
+    fn set_named_font(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    /// Connects the independent captured-selection subscriber.
+    fn subscribe_changed(&self, sink: ComRef<'_, crate::IComboChangedSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
+    /// Connects the independent popup-coordination subscriber.
+    fn subscribe_popup(&self, sink: ComRef<'_, crate::IComboPopupSinkAbi>) -> Result<ComPtr<crate::IEventSubscriptionAbi>, NcStatus>;
 }
 
 #[com_interface(auto_guid = "microui.ImageContent:v1")]

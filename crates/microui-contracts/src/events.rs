@@ -36,13 +36,6 @@ pub trait ICheckboxSink {
     /// Receives the captured value after retained traversal releases its owned state.
     fn changed(&self, checked: bool) -> Result<(), NcStatus>;
 }
-#[com_interface(auto_guid = "microui.CheckboxEvents:v1")]
-/// Exclusive typed subscription capability for this concrete event shape.
-pub trait ICheckboxEvents {
-    /// Returns an application-owned queue/sink lease; the producer retains neither callback nor application state.
-    fn subscribe(&self, sink: ComRef<'_, ICheckboxSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
-}
-
 #[com_interface(auto_guid = "microui.NumericSink:v1")]
 /// Committed finite user value shared by Slider and Number; programmatic setters do not publish it.
 pub trait INumericSink {
@@ -62,13 +55,6 @@ pub trait IScrollbarSink {
     /// Receives the captured value after retained traversal releases its owned state.
     fn changed(&self, offset: i32) -> Result<(), NcStatus>;
 }
-#[com_interface(auto_guid = "microui.ScrollbarEvents:v1")]
-/// Exclusive typed subscription capability for this concrete event shape.
-pub trait IScrollbarEvents {
-    /// Returns an application-owned queue/sink lease; the producer retains neither callback nor application state.
-    fn subscribe(&self, sink: ComRef<'_, IScrollbarSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
-}
-
 #[com_interface(auto_guid = "microui.TextChangedSink:v1")]
 /// Complete normalized text and scalar-aligned UTF-8 byte cursor at the moment of a user edit.
 pub trait ITextChangedSink {
@@ -164,12 +150,4 @@ pub trait IComboChangedSink {
 pub trait IComboPopupSink {
     /// Receives the desired open state and screen-space anchor captured at header activation.
     fn submitted(&self, open: bool, anchor: crate::Rect) -> Result<(), NcStatus>;
-}
-#[com_interface(auto_guid = "microui.ComboEvents:v1")]
-/// Independent selection and popup-coordination event ports on the actual combo header.
-pub trait IComboEvents {
-    /// Connects one concrete selection consumer without claiming popup coordination.
-    fn subscribe_changed(&self, sink: ComRef<'_, IComboChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
-    /// Connects one concrete popup coordinator without claiming the changed source.
-    fn subscribe_popup(&self, sink: ComRef<'_, IComboPopupSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
 }

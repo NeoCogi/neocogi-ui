@@ -47,8 +47,8 @@ impl ScrollParts {
         let vertical_options = vertical_parameters.opt;
         let vertical = crate::Scrollbar::from(vertical_parameters);
         let model = crate::ui_node::ScrollModel::new(horizontal.axis_state.clone(), vertical.axis_state.clone(), enabled);
-        let horizontal = super::leaves::Scrollbar::create(host.clone(), horizontal_options, horizontal)?;
-        let vertical = super::leaves::Scrollbar::create(host.clone(), vertical_options, vertical)?;
+        let horizontal = super::leaves::ScrollbarObject::from_core(host.clone(), horizontal_options, horizontal)?;
+        let vertical = super::leaves::ScrollbarObject::from_core(host.clone(), vertical_options, vertical)?;
         let content = host.create_children()?;
         let surface: ComPtr<IWidgetAbi> = ScrollSurface::from_value(ScrollSurface {
             widget: WidgetCore::new(
