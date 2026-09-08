@@ -129,9 +129,9 @@ macro_rules! widget {
     };
 }
 
-#[com_class(interfaces(ICounter, ILeafLayout, IActivationEvents, IWidgetProbe))]
-/// One real derived COM widget, including ICounter's inherited IWidget projection.
-struct Counter {
+#[com_class(contract(microui_demo_contracts::extension::Counter))]
+/// Private implementation of the externally declared, constructible counter class.
+struct CounterObject {
     /// Common options are authoritative here, without a duplicate presentation copy.
     common: Common,
     /// The one semantic counter value; labels are short-lived snapshots of it.
@@ -139,7 +139,7 @@ struct Counter {
     /// The shared static producer retains queued snapshots, never the application's callback.
     submitted: EventSource<Activation>,
 }
-impl Counter {
+impl CounterObject {
     /// User activation commits before emission, capturing the matching label for deferred delivery.
     fn update_content(&self, state: WidgetUpdate) -> GeometryChange {
         if state.clicked || state.action == WidgetAction::ACTIVATE {
@@ -161,8 +161,18 @@ impl Counter {
     }
 }
 // Focus=1, Tab=2, Enter=4 and Space=8 are the canonical WidgetProperties keyboard bits.
-widget!(Counter, 1 | 2 | 4 | 8, WidgetFrame::BUTTON);
-impl ICounter for Counter {
+widget!(CounterObject, 1 | 2 | 4 | 8, WidgetFrame::BUTTON);
+impl Counter for CounterObject {
+    /// Authenticates the caller and retains the host as the widget's owner capability.
+    fn new(host: ComRef<'_, IWidgetHostAbi>) -> Result<Self, NcStatus> {
+        host.check_mutation()?;
+        Ok(Self {
+            common: Common::new(host, WidgetOptions::FRAME),
+            count: Cell::new(0),
+            submitted: EventSource::new(),
+        })
+    }
+
     /// Reads the committed scalar directly from the real object.
     fn count(&self) -> Result<u32, NcStatus> {
         self.common.state.readable()?;
@@ -177,14 +187,14 @@ impl ICounter for Counter {
         Ok(())
     }
 }
-impl IActivationEvents for Counter {
+impl IActivationEvents for CounterObject {
     /// Subscription uses the exact same producer/lease implementation as built-in controls.
     fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         let _guard = self.common.write()?;
         self.submitted.subscribe(sink)
     }
 }
-impl ILeafLayout for Counter {
+impl ILeafLayout for CounterObject {
     /// The host's current metrics supply button text geometry; constraints are checked before call-out.
     fn measure(&self, bounds: LayoutLimits, metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
         let _guard = self.common.read()?;
@@ -333,19 +343,9 @@ fn shrink(mut limit: AxisLimit, inset: i32) -> AxisLimit {
 
 #[com_class(class_id(EXTENSION_PROVIDER_CLASS), name = "microui.example.ExtensionProvider", version = "0.9.0-alpha.0",
     constructor(args = none), interfaces(IExtensionProvider))]
-/// Stateless activation root co-packages both custom classes in this one optional assembly.
+/// Stateless shorthand factory creates the interface-based inset container.
 pub struct ExtensionProvider;
 impl IExtensionProvider for ExtensionProvider {
-    /// Authentication precedes publication; the object retains the supplied host explicitly.
-    fn counter(&self, host: ComRef<'_, IWidgetHostAbi>) -> Result<ComPtr<ICounterAbi>, NcStatus> {
-        host.check_mutation()?;
-        Counter::from_value(Counter {
-            common: Common::new(host, WidgetOptions::FRAME),
-            count: Cell::new(0),
-            submitted: EventSource::new(),
-        })
-        .query()
-    }
     /// One empty editor is the only topology allocation; no native child list is created in this plugin.
     fn inset(&self, host: ComRef<'_, IWidgetHostAbi>) -> Result<ComPtr<IInsetAbi>, NcStatus> {
         host.check_mutation()?;
@@ -362,7 +362,7 @@ nc_com::plugin! {
     plugin_id(auto_guid = "microui.plugin.extension-example"),
     name = "microui.plugin.extension-example",
     version = "0.9.0-alpha.0",
-    classes = [ExtensionProvider],
+    classes = [CounterObject, ExtensionProvider],
 }
 #[cfg(feature = "dynamic-plugin")]
 nc_com::export_plugin!();

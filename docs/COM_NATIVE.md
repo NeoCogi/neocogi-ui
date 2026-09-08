@@ -197,8 +197,8 @@ crashed inside `driCreateNewScreen3` when accessible hardware was combined with
 `LIBGL_ALWAYS_SOFTWARE=1`, before renderer construction. The ordinary native display
 passed; CI uses Xvfb with its available software GPU drivers.
 
-The optional independent extension adds a real derived counter and a custom inset
-container, with no dependency on the UI or renderer implementation:
+The optional independent extension adds a registered, constructible counter class
+and a custom inset container, with no dependency on the UI or renderer implementation:
 
 ```sh
 scripts/test-extension.sh glow
@@ -207,7 +207,8 @@ scripts/test-extension.sh wgpu
 ```
 
 The driver separately builds the extension, host, UI and platform, and runs from
-`/tmp`. It verifies common interface identity, shared activation delivery, callback
+`/tmp`. The host activates the counter with a typed `IWidgetHost` constructor frame.
+It verifies common interface identity, shared activation delivery, callback
 measurement, unchanged measurement caches, setter/constraint/resize invalidation,
 exclusive attachment, topology changes and retained-handle closure. Ordinary demo
 packages omit this assembly. See [its source and contracts](../plugins/extension-example).

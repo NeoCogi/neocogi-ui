@@ -12,10 +12,12 @@ target/com-native/debug/glow/files/extension/microui-demo-com --smoke
 Use `vulkan` or `wgpu` for the other native renderers. The same crate also compiles
 for `wasm32-unknown-unknown`; static applications register its descriptor explicitly.
 
-The interfaces live in [demo-contracts](../../demos/demo-contracts/src/extension.rs).
-`ICounter: IWidget` and `IInset: IContainer` provide real interface inheritance.
-One provider co-packages both implementations. Its constructors take `IWidgetHost`
-explicitly, allowing each widget to authenticate attachment to the requesting UI.
+The contracts live in [demo-contracts](../../demos/demo-contracts/src/extension.rs).
+`Counter: IWidget + ILeafLayout + IActivationEvents + IWidgetProbe` is a callable
+class contract, while `IInset: IContainer` demonstrates ordinary interface
+inheritance. The host constructs the registered counter directly with a typed
+`IWidgetHost` argument; the provider remains only as the inset's shorthand factory.
+Both implementations authenticate attachment to the requesting UI.
 
 The [implementation](src/lib.rs) uses `WidgetState` for common options, mount-once
 ownership, logical closure and sticky invalidation. The counter stores its value

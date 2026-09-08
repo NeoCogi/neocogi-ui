@@ -98,9 +98,11 @@ A widget with custom editing interfaces implements those declared COM interfaces
 and composes `WidgetState` directly.
 
 The [independent extension](../../../plugins/extension-example) demonstrates a real
-`ICounter: IWidget`, standard activation events, and an `IInset: IContainer` using
-`IChildrenEditor` and bounded `ILayoutService` calls. Neither widget imports the UI
-implementation, native atlas IDs, tree borrows, GPU contexts or backend callbacks.
+constructible `Counter: IWidget + ILeafLayout`, standard activation events, and an
+`IInset: IContainer` using `IChildrenEditor` and bounded `ILayoutService` calls.
+The host activates `Counter` directly through the COM runtime with a typed
+`IWidgetHost` constructor argument. Neither widget imports the UI implementation,
+native atlas IDs, tree borrows, GPU contexts or backend callbacks.
 Custom drawing uses the painter's solid geometry/image methods or an owned
 `IRenderItem` implemented by the renderer assembly.
 

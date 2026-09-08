@@ -1,6 +1,6 @@
 //! Example-specific editing capabilities. These are separate from the toolkit's standard widgets.
 use microui_contracts::*;
-use nc_com::{ComPtr, ComRef, NcGuid, NcStatus, com_interface, com_struct};
+use nc_com::{ComPtr, ComRef, NcGuid, NcStatus, com_class, com_interface, com_struct};
 
 /// Optional test/example assembly; ordinary demo deployments do not include it.
 pub const EXTENSION_PROVIDER_CLASS: NcGuid = nc_com::guid_from_qualified_name("microui.example.ExtensionProvider");
@@ -28,11 +28,16 @@ pub trait IWidgetProbe {
     fn calls(&self) -> Result<WidgetCalls, NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.example.Counter:v1")]
-/// A concrete custom control inherits all common widget calls on the same COM object.
-pub trait ICounter: IWidget {
+#[com_class(auto_guid = "microui.example.Counter:v1")]
+/// A constructible custom control whose shared widget capabilities remain queryable.
+pub trait Counter: IWidget + ILeafLayout + IActivationEvents + IWidgetProbe {
+    /// Creates an unmounted counter owned by the UI represented by `host`.
+    #[constructor]
+    fn new(host: ComRef<'_, IWidgetHostAbi>) -> Result<Self, NcStatus>;
+
     /// Reads the actual current activation count.
     fn count(&self) -> Result<u32, NcStatus>;
+
     /// Silently replaces the displayed count and invalidates its preferred text size when changed.
     fn set_count(&self, value: u32) -> Result<(), NcStatus>;
 }
@@ -49,8 +54,6 @@ pub trait IInset: IContainer {
 #[com_interface(auto_guid = "microui.example.ExtensionProvider:v1")]
 /// Stateless factory receives the runtime authority explicitly; it never links the UI implementation.
 pub trait IExtensionProvider {
-    /// Creates an unmounted concrete counter with a standard activation-event capability.
-    fn counter(&self, host: ComRef<'_, IWidgetHostAbi>) -> Result<ComPtr<ICounterAbi>, NcStatus>;
     /// Creates an empty custom container; child attachment follows the same rules as built-ins.
     fn inset(&self, host: ComRef<'_, IWidgetHostAbi>) -> Result<ComPtr<IInsetAbi>, NcStatus>;
 }
