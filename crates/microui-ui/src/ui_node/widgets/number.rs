@@ -94,8 +94,11 @@ pub struct NumberChanged {
     pub value: Real,
 }
 
-/// Concrete retained number input, including its semantic and editing state.
+#[nc_com::com_object(microui_contracts::Number)]
+/// Concrete retained number input and dynamically constructible COM object.
 pub struct Number {
+    /// Non-semantic COM lifecycle and host-backed phase resources.
+    runtime: crate::com::widget::WidgetRuntime,
     /// Initialization-only validated drag and arrow-key step.
     step: Real,
     /// Initialization-only bounded display precision.
@@ -119,6 +122,22 @@ impl Number {
     #[cfg(test)]
     pub fn create(parameters: NumberParameters) -> (TypedWidgetHandle<Self>, Node) {
         Node::typed_widget(Self::from(parameters))
+    }
+
+    /// Combines validated semantic parameters with one already bound common runtime.
+    pub(crate) fn from_runtime(runtime: crate::com::widget::WidgetRuntime, parameters: NumberParameters) -> Self {
+        // Fallible parameter constructors guarantee finite value and nonnegative finite step.
+        Self {
+            runtime,
+            step: parameters.step,
+            precision: parameters.precision,
+            font: parameters.font,
+            #[cfg(test)]
+            opt: parameters.opt,
+            value: parameters.value,
+            edit: NumberEditState::default(),
+            changed_event: crate::EventSource::new(),
+        }
     }
 
     /// Returns the current number value.
@@ -248,21 +267,12 @@ impl Widget for Number {
     }
 }
 
+#[cfg(test)]
 impl From<NumberParameters> for Number {
     /// Transfers one-shot parameters into the concrete Number runtime.
     fn from(parameters: NumberParameters) -> Self {
-        // NumberParameters' private numeric fields can only be produced by its fallible validated
-        // constructors, so the runtime starts finite without a second repair policy.
-        Number {
-            step: parameters.step,
-            precision: parameters.precision,
-            font: parameters.font,
-            #[cfg(test)]
-            opt: parameters.opt,
-            value: parameters.value,
-            edit: NumberEditState::default(),
-            changed_event: crate::EventSource::new(),
-        }
+        let runtime = crate::com::widget::WidgetRuntime::for_test(parameters.opt);
+        Self::from_runtime(runtime, parameters)
     }
 }
 
@@ -270,6 +280,18 @@ impl crate::com::widget::WidgetAlgorithm for Number {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
         self.changed_event.close_ordinary();
+    }
+}
+
+impl crate::com::widget::HostedWidget for Number {
+    /// Borrows common lifecycle and resource state without a second number representation.
+    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+        &self.runtime
+    }
+
+    /// Exclusively borrows common lifecycle and resource state for a COM mutation or phase.
+    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+        &mut self.runtime
     }
 }
 

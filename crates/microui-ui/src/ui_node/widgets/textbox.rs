@@ -92,8 +92,11 @@ impl TextboxParameters {
     }
 }
 
-/// Concrete retained textbox, including its semantic and editing state.
+#[nc_com::com_object(microui_contracts::Textbox)]
+/// Concrete retained textbox and dynamically constructible COM object.
 pub struct Textbox {
+    /// Non-semantic COM lifecycle and host-backed phase resources.
+    runtime: crate::com::widget::WidgetRuntime,
     /// Current text buffer.
     buf: String,
     /// Current byte cursor, always positioned at a Unicode scalar-value boundary.
@@ -111,6 +114,23 @@ pub struct Textbox {
 }
 
 impl Textbox {
+    /// Combines validated semantic parameters with one already bound common runtime.
+    pub(crate) fn from_runtime(runtime: crate::com::widget::WidgetRuntime, parameters: TextboxParameters) -> Self {
+        // Normalize at concrete storage so every constructor preserves the one-line invariant.
+        let buf = normalize_single_line_text(parameters.buf);
+        let cursor = buf.len();
+        Self {
+            runtime,
+            buf,
+            cursor,
+            font: parameters.font,
+            #[cfg(test)]
+            opt: parameters.opt,
+            changed_event: crate::EventSource::new(),
+            submitted_event: crate::EventSource::new(),
+        }
+    }
+
     /// Returns the current text buffer.
     pub fn text(&self) -> &str {
         self.buf.as_str()
@@ -412,22 +432,12 @@ impl Widget for Textbox {
     }
 }
 
+#[cfg(test)]
 impl From<TextboxParameters> for Textbox {
     /// Transfers one-shot parameters into the concrete Textbox runtime.
     fn from(parameters: TextboxParameters) -> Self {
-        // Parameters retain their original input until the concrete storage boundary. Normalize
-        // here so even a future alternate constructor cannot mount a multiline textbox buffer.
-        let buf = normalize_single_line_text(parameters.buf);
-        let cursor = buf.len();
-        Textbox {
-            buf,
-            cursor,
-            font: parameters.font,
-            #[cfg(test)]
-            opt: parameters.opt,
-            changed_event: crate::EventSource::new(),
-            submitted_event: crate::EventSource::new(),
-        }
+        let runtime = crate::com::widget::WidgetRuntime::for_test(parameters.opt);
+        Self::from_runtime(runtime, parameters)
     }
 }
 
@@ -436,6 +446,18 @@ impl crate::com::widget::WidgetAlgorithm for Textbox {
     fn close_events(&mut self) {
         self.changed_event.close_ordinary();
         self.submitted_event.close_ordinary();
+    }
+}
+
+impl crate::com::widget::HostedWidget for Textbox {
+    /// Borrows common lifecycle and resource state without a second textbox representation.
+    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+        &self.runtime
+    }
+
+    /// Exclusively borrows common lifecycle and resource state for a COM mutation or phase.
+    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+        &mut self.runtime
     }
 }
 

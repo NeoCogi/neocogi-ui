@@ -126,8 +126,11 @@ pub struct SliderChanged {
     pub value: Real,
 }
 
-/// Concrete retained slider, including its semantic and editing state.
+#[nc_com::com_object(microui_contracts::Slider)]
+/// Concrete retained slider and dynamically constructible COM object.
 pub struct Slider {
+    /// Non-semantic COM lifecycle and host-backed phase resources.
+    runtime: crate::com::widget::WidgetRuntime,
     /// Initialization-only validated non-negative step size.
     step: Real,
     /// Initialization-only bounded display precision.
@@ -155,6 +158,24 @@ impl Slider {
     #[cfg(test)]
     pub fn create(parameters: SliderParameters) -> (TypedWidgetHandle<Self>, Node) {
         Node::typed_widget(Self::from(parameters))
+    }
+
+    /// Combines validated semantic parameters with one already bound common runtime.
+    pub(crate) fn from_runtime(runtime: crate::com::widget::WidgetRuntime, parameters: SliderParameters) -> Self {
+        // Private parameters are finite and ordered; only the initial value needs endpoint clamping.
+        Self {
+            runtime,
+            step: parameters.step,
+            precision: parameters.precision,
+            font: parameters.font,
+            #[cfg(test)]
+            opt: parameters.opt,
+            value: clamp_slider_value(parameters.value, parameters.low, parameters.high),
+            low: parameters.low,
+            high: parameters.high,
+            edit: NumberEditState::default(),
+            changed_event: crate::EventSource::new(),
+        }
     }
 
     /// Returns the current slider value.
@@ -413,23 +434,12 @@ impl Widget for Slider {
     }
 }
 
+#[cfg(test)]
 impl From<SliderParameters> for Slider {
     /// Transfers one-shot parameters into the concrete Slider runtime.
     fn from(parameters: SliderParameters) -> Self {
-        // SliderParameters' private fields arrive finite, ordered, and directionally coherent;
-        // only the initial value may need ordinary endpoint clamping.
-        Slider {
-            step: parameters.step,
-            precision: parameters.precision,
-            font: parameters.font,
-            #[cfg(test)]
-            opt: parameters.opt,
-            value: clamp_slider_value(parameters.value, parameters.low, parameters.high),
-            low: parameters.low,
-            high: parameters.high,
-            edit: NumberEditState::default(),
-            changed_event: crate::EventSource::new(),
-        }
+        let runtime = crate::com::widget::WidgetRuntime::for_test(parameters.opt);
+        Self::from_runtime(runtime, parameters)
     }
 }
 
@@ -437,6 +447,18 @@ impl crate::com::widget::WidgetAlgorithm for Slider {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
         self.changed_event.close_ordinary();
+    }
+}
+
+impl crate::com::widget::HostedWidget for Slider {
+    /// Borrows common lifecycle and resource state without a second slider representation.
+    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+        &self.runtime
+    }
+
+    /// Exclusively borrows common lifecycle and resource state for a COM mutation or phase.
+    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+        &mut self.runtime
     }
 }
 

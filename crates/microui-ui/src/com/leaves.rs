@@ -3,10 +3,6 @@ use super::*;
 use super::widget::{FontState, HostedWidget, IconState, ImageState};
 use nc_com::{INcStringAbi, NcString};
 
-callable_leaf_class!(TextboxObject, crate::Textbox, microui_contracts::Textbox);
-callable_leaf_class!(SliderObject, crate::Slider, microui_contracts::Slider);
-callable_leaf_class!(NumberObject, crate::Number, microui_contracts::Number);
-
 direct_widget_phase_impl!(crate::Checkbox);
 direct_leaf_layout_impl!(crate::Checkbox);
 direct_widget_phase_impl!(crate::TextBlock);
@@ -19,6 +15,12 @@ direct_widget_phase_impl!(crate::ListBox);
 direct_leaf_layout_impl!(crate::ListBox);
 direct_widget_phase_impl!(crate::Scrollbar);
 direct_leaf_layout_impl!(crate::Scrollbar);
+direct_widget_phase_impl!(crate::Textbox);
+direct_leaf_layout_impl!(crate::Textbox);
+direct_widget_phase_impl!(crate::Slider);
+direct_leaf_layout_impl!(crate::Slider);
+direct_widget_phase_impl!(crate::Number);
+direct_leaf_layout_impl!(crate::Number);
 
 impl crate::Checkbox {
     /// Constructs the class for the host-bound factory through the same typed contract used by the registry.
@@ -116,65 +118,67 @@ fn set_direct_named_icon<S: HostedWidget + IconState>(widget: &mut S, name: NcCo
     Ok(())
 }
 
-impl TextboxObject {
+impl crate::Textbox {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(super) fn create(host: ComPtr<IWidgetHostAbi>, text: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<TextboxAbi>, NcStatus> {
-        let value = <Self as Textbox>::new(host.as_com_ref(), text)?;
-        Ok(Self::from_value(value).query().expect("TextboxObject declares the Textbox class contract"))
+    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, text: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<TextboxAbi>, NcStatus> {
+        let value = <Self as microui_contracts::Textbox>::new(host.as_com_ref(), text)?;
+        Ok(Self::from_value(value).query().expect("Textbox declares its callable class contract"))
     }
 }
 
-impl Textbox for TextboxObject {
+impl microui_contracts::Textbox for crate::Textbox {
     /// Normalizes the complete input before allocating the established Textbox defaults.
     fn new(host: ComRef<'_, IWidgetHostAbi>, input: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus> {
         let parameters = crate::TextboxParameters::new(text(input)?);
-        Ok(Self {
-            widget: super::widget::WidgetCore::new(host.add_ref(), parameters.opt, crate::Textbox::from(parameters))?,
-        })
+        let runtime = super::widget::WidgetRuntime::new(host.add_ref(), parameters.opt)?;
+        Ok(Self::from_runtime(runtime, parameters))
     }
     /// Returns an immutable snapshot without exposing the semantic String allocation.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
-        self.widget.state.readable()?;
-        Ok(NcString::from_utf8_str(self.widget.core.text()))
+        self.runtime().state.readable()?;
+        Ok(NcString::from_utf8_str(self.text()))
     }
     /// Applies single-line normalization before recording an actual geometry change.
     fn set_text(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        self.widget.state.writable()?;
+        self.runtime().state.writable()?;
         let input = text(input)?;
-        let core = &mut self.widget.core;
-        let previous = core.text().to_owned();
-        core.set_text(input);
-        if core.text() != previous {
-            self.widget.state.record_change(GeometryChange::CHANGED);
+        let previous = self.text().to_owned();
+        self.set_text(input);
+        if self.text() != previous {
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
         }
         Ok(())
     }
     /// Reports a byte cursor rather than a glyph or grapheme index.
     fn cursor(&self) -> Result<u64, NcStatus> {
-        self.widget.state.readable()?;
-        Ok(self.widget.core.cursor() as u64)
+        self.runtime().state.readable()?;
+        Ok(self.cursor() as u64)
     }
     /// Clamps oversize input before applying the shared Unicode-boundary algorithm.
     fn set_cursor(&mut self, cursor: u64) -> Result<(), NcStatus> {
-        self.widget.state.writable()?;
-        self.widget.core.set_cursor(usize::try_from(cursor).unwrap_or(usize::MAX));
+        self.runtime().state.writable()?;
+        self.set_cursor(usize::try_from(cursor).unwrap_or(usize::MAX));
         Ok(())
     }
     /// Validates a semantic font role before changing the Textbox's measurement input.
     fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
-        self.widget.set_font_role(role)
+        set_direct_font_role(self, role)
     }
     /// Resolves one exact named font before replacing the Textbox's selection.
     fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        self.widget.set_named_font(name)
+        set_direct_named_font(self, name)
     }
     /// Connects the existing changed-text source directly through the class contract.
     fn subscribe_changed(&mut self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.widget.subscribe::<crate::TextboxChanged>(sink)
+        self.runtime().state.writable()?;
+        let endpoint = <Self as crate::TypedWidget<crate::TextboxChanged>>::event(self);
+        super::events::subscribe(endpoint, sink)
     }
     /// Connects the independent submitted-text source directly through the class contract.
     fn subscribe_submitted(&mut self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.widget.subscribe::<crate::TextboxSubmitted>(sink)
+        self.runtime().state.writable()?;
+        let endpoint = <Self as crate::TypedWidget<crate::TextboxSubmitted>>::event(self);
+        super::events::subscribe(endpoint, sink)
     }
 }
 
@@ -246,15 +250,15 @@ pub(super) fn local_wrap(wrap: TextWrapping) -> Result<crate::TextWrap, NcStatus
     }
 }
 
-impl SliderObject {
+impl crate::Slider {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(super) fn create(host: ComPtr<IWidgetHostAbi>, options: SliderOptions) -> Result<ComPtr<SliderAbi>, NcStatus> {
-        let value = <Self as Slider>::new(host.as_com_ref(), options)?;
-        Ok(Self::from_value(value).query().expect("SliderObject declares the Slider class contract"))
+    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, options: SliderOptions) -> Result<ComPtr<SliderAbi>, NcStatus> {
+        let value = <Self as microui_contracts::Slider>::new(host.as_com_ref(), options)?;
+        Ok(Self::from_value(value).query().expect("Slider declares its callable class contract"))
     }
 }
 
-impl Slider for SliderObject {
+impl microui_contracts::Slider for crate::Slider {
     /// Validates the complete arithmetic tuple before allocating the established framed control.
     fn new(host: ComRef<'_, IWidgetHostAbi>, options: SliderOptions) -> Result<Self, NcStatus> {
         let parameters = crate::SliderParameters::with_opt(
@@ -266,57 +270,57 @@ impl Slider for SliderObject {
             crate::WidgetOption::FRAME,
         )
         .map_err(|_| NC_E_INVALID_ARG)?;
-        Ok(Self {
-            widget: super::widget::WidgetCore::new(host.add_ref(), parameters.opt, crate::Slider::from(parameters))?,
-        })
+        let runtime = super::widget::WidgetRuntime::new(host.add_ref(), parameters.opt)?;
+        Ok(Self::from_runtime(runtime, parameters))
     }
     /// Reads the finite value owned by the slider's concrete semantic algorithm.
     fn value(&self) -> Result<f32, NcStatus> {
-        self.widget.state.readable()?;
-        Ok(self.widget.core.value())
+        self.runtime().state.readable()?;
+        Ok(self.value())
     }
     /// Rejects nonfinite input and dirties geometry only when clamping or snapping changes the value.
     fn set_value(&mut self, value: f32) -> Result<(), NcStatus> {
-        self.widget.state.writable()?;
+        self.runtime().state.writable()?;
         if !value.is_finite() {
             return Err(NC_E_INVALID_ARG);
         }
-        let core = &mut self.widget.core;
-        let previous = core.value();
-        core.set_value(value);
-        if core.value() != previous {
-            self.widget.state.record_change(GeometryChange::CHANGED);
+        let previous = self.value();
+        self.set_value(value);
+        if self.value() != previous {
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
         }
         Ok(())
     }
     /// Exposes the same edit mode that controls routed text input.
     fn is_editing(&self) -> Result<bool, NcStatus> {
-        self.widget.state.readable()?;
-        Ok(self.widget.core.is_editing())
+        self.runtime().state.readable()?;
+        Ok(self.is_editing())
     }
     /// Validates a semantic font role before changing the slider's measurement input.
     fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
-        self.widget.set_font_role(role)
+        set_direct_font_role(self, role)
     }
     /// Resolves one exact named font before replacing the slider's selection.
     fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        self.widget.set_named_font(name)
+        set_direct_named_font(self, name)
     }
     /// Connects the slider's existing semantic event source directly through the class contract.
     fn subscribe(&mut self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.widget.subscribe::<crate::SliderChanged>(sink)
+        self.runtime().state.writable()?;
+        let endpoint = <Self as crate::TypedWidget<crate::SliderChanged>>::event(self);
+        super::events::subscribe(endpoint, sink)
     }
 }
 
-impl NumberObject {
+impl crate::Number {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(super) fn create(host: ComPtr<IWidgetHostAbi>, options: NumberOptions) -> Result<ComPtr<NumberAbi>, NcStatus> {
-        let value = <Self as Number>::new(host.as_com_ref(), options)?;
-        Ok(Self::from_value(value).query().expect("NumberObject declares the Number class contract"))
+    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, options: NumberOptions) -> Result<ComPtr<NumberAbi>, NcStatus> {
+        let value = <Self as microui_contracts::Number>::new(host.as_com_ref(), options)?;
+        Ok(Self::from_value(value).query().expect("Number declares its callable class contract"))
     }
 }
 
-impl Number for NumberObject {
+impl microui_contracts::Number for crate::Number {
     /// Validates the complete arithmetic tuple before allocating the numeric editor.
     fn new(host: ComRef<'_, IWidgetHostAbi>, options: NumberOptions) -> Result<Self, NcStatus> {
         let parameters = crate::NumberParameters::new(
@@ -325,45 +329,45 @@ impl Number for NumberObject {
             crate::DecimalPrecision::try_from(usize::from(options.precision)).map_err(|_| NC_E_INVALID_ARG)?,
         )
         .map_err(|_| NC_E_INVALID_ARG)?;
-        Ok(Self {
-            widget: super::widget::WidgetCore::new(host.add_ref(), parameters.opt, crate::Number::from(parameters))?,
-        })
+        let runtime = super::widget::WidgetRuntime::new(host.add_ref(), parameters.opt)?;
+        Ok(Self::from_runtime(runtime, parameters))
     }
     /// Reads the finite value owned by the number editor's concrete semantic algorithm.
     fn value(&self) -> Result<f32, NcStatus> {
-        self.widget.state.readable()?;
-        Ok(self.widget.core.value())
+        self.runtime().state.readable()?;
+        Ok(self.value())
     }
     /// Rejects nonfinite input and dirties geometry only when the committed value changes.
     fn set_value(&mut self, value: f32) -> Result<(), NcStatus> {
-        self.widget.state.writable()?;
+        self.runtime().state.writable()?;
         if !value.is_finite() {
             return Err(NC_E_INVALID_ARG);
         }
-        let core = &mut self.widget.core;
-        let previous = core.value();
-        core.set_value(value);
-        if core.value() != previous {
-            self.widget.state.record_change(GeometryChange::CHANGED);
+        let previous = self.value();
+        self.set_value(value);
+        if self.value() != previous {
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
         }
         Ok(())
     }
     /// Exposes the same edit mode that controls routed text input.
     fn is_editing(&self) -> Result<bool, NcStatus> {
-        self.widget.state.readable()?;
-        Ok(self.widget.core.is_editing())
+        self.runtime().state.readable()?;
+        Ok(self.is_editing())
     }
     /// Validates a semantic font role before changing the number editor's measurement input.
     fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
-        self.widget.set_font_role(role)
+        set_direct_font_role(self, role)
     }
     /// Resolves one exact named font before replacing the number editor's selection.
     fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        self.widget.set_named_font(name)
+        set_direct_named_font(self, name)
     }
     /// Connects the number editor's existing semantic event source directly through the class contract.
     fn subscribe(&mut self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.widget.subscribe::<crate::NumberChanged>(sink)
+        self.runtime().state.writable()?;
+        let endpoint = <Self as crate::TypedWidget<crate::NumberChanged>>::event(self);
+        super::events::subscribe(endpoint, sink)
     }
 }
 

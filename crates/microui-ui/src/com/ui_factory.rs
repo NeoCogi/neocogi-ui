@@ -99,7 +99,7 @@ impl UiFactory for UiFactoryObject {
     /// Validates complete textbox initialization before allocating its COM identity.
     fn create_textbox(&self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<TextboxAbi>, NcStatus> {
         self.host.check_mutation()?;
-        super::leaves::TextboxObject::create(self.host.clone(), input)
+        super::Textbox::create_com(self.host.clone(), input)
     }
 
     /// Validates text and wrapping before allocating the display object's identity.
@@ -115,13 +115,13 @@ impl UiFactory for UiFactoryObject {
     /// Validates every arithmetic field before allocating a slider identity.
     fn create_slider(&self, options: SliderOptions) -> Result<ComPtr<SliderAbi>, NcStatus> {
         self.host.check_mutation()?;
-        super::leaves::SliderObject::create(self.host.clone(), options)
+        super::Slider::create_com(self.host.clone(), options)
     }
 
     /// Validates every arithmetic field before allocating a number identity.
     fn create_number(&self, options: NumberOptions) -> Result<ComPtr<NumberAbi>, NcStatus> {
         self.host.check_mutation()?;
-        super::leaves::NumberObject::create(self.host.clone(), options)
+        super::Number::create_com(self.host.clone(), options)
     }
 
     /// Validates the label before allocating a color swatch with copied RGBA state.
