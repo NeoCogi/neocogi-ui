@@ -316,7 +316,7 @@ I would divide the public capabilities as follows:
 | Concrete editing | `Button`, `Slider`, `Textbox`, `Linear`, `Grid` class contracts | Concrete object |
 | Events | `IActivationEvents`, `IActivationSink`, `IEventSubscription` and equivalent typed families | Source queue, external subscription owner and application handler |
 | Platform and rendering | `IPlatformWindow`, `IRenderer`, texture/render-item capabilities | Platform/GPU plugin |
-| Resources | `IAssetBundle`, `IAssetLoader`, optional `IThemeLoader` | Immutable bundle or asset operation |
+| Resources | `IAssetBundle`, `AssetLoader`, optional `ThemeLoader` | Immutable bundle or asset operation |
 
 One object can implement multiple capabilities. In particular, a UI runtime can expose window management and widget construction on the same COM identity, with one authoritative forest. There is no need for an independently synchronized runtime tree and window-manager tree.
 

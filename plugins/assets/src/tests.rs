@@ -47,7 +47,7 @@ fn data(source: &ComPtr<IAssetBundleAbi>) -> microui_redux::assets::AssetData {
 /// Both producer modes share the exact recipe and immutable object representation.
 #[test]
 fn com_builder_matches_direct_pixels_metrics_and_resolved_visuals() {
-    let loader: ComPtr<IAssetLoaderAbi> = AssetLoader::from_value(AssetLoader::default()).query().unwrap();
+    let loader: ComPtr<AssetLoaderAbi> = AssetLoaderObject::from_value(AssetLoaderObject::default()).query().unwrap();
     let config = crate::test_recipe::atlas_config();
     let white = NativePath::new(&config.white_icon);
     let builder = loader
@@ -104,7 +104,7 @@ fn com_builder_matches_direct_pixels_metrics_and_resolved_visuals() {
 /// Recoverable edits restore the draft; final failure remains closed and diagnostically inspectable.
 #[test]
 fn failed_edit_can_retry_and_failed_finish_is_terminal() {
-    let loader: ComPtr<IAssetLoaderAbi> = AssetLoader::from_value(AssetLoader::default()).query().unwrap();
+    let loader: ComPtr<AssetLoaderAbi> = AssetLoaderObject::from_value(AssetLoaderObject::default()).query().unwrap();
     let config = crate::test_recipe::atlas_config();
     let white = NativePath::new(&config.white_icon);
     assert_eq!(
@@ -147,7 +147,7 @@ fn failed_edit_can_retry_and_failed_finish_is_terminal() {
 fn derived_builder_preserves_catalog_and_can_add_private_resources() {
     let base = test_bundle();
     let imported = ImportedAssets::read(base.as_com_ref(), None).unwrap();
-    let loader: ComPtr<IAssetLoaderAbi> = AssetLoader::from_value(AssetLoader::default()).query().unwrap();
+    let loader: ComPtr<AssetLoaderAbi> = AssetLoaderObject::from_value(AssetLoaderObject::default()).query().unwrap();
     let builder = loader.derive_builder(Size { width: 1024, height: 512 }, base.as_com_ref()).unwrap();
     let config = crate::test_recipe::atlas_config();
     builder
@@ -169,7 +169,7 @@ fn derived_builder_preserves_catalog_and_can_add_private_resources() {
 fn bundled_json_themes_preserve_original_resources_and_surface_diagnostics() {
     let base = test_bundle();
     let imported = ImportedAssets::read(base.as_com_ref(), None).unwrap();
-    let loader: ComPtr<IThemeLoaderAbi> = ThemeLoader::from_value(ThemeLoader::default()).query().unwrap();
+    let loader: ComPtr<ThemeLoaderAbi> = ThemeLoaderObject::from_value(ThemeLoaderObject::default()).query().unwrap();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     for theme in ["windows-3.11", "windows-95", "mac-os-9"] {
         let path = NativePath::new(&root.join("themes").join(theme).join("theme.json"));

@@ -3,7 +3,7 @@
 Enable `theme-json` on `microui-plugin-assets` to compile strict, versioned JSON
 and bake referenced fonts and PNGs into portable resource tables. It is optional;
 the UI implementation has no JSON feature or file-loading API. Native applications
-activate `IThemeLoader` and pass an explicit original base bundle. Build tools call
+construct `ThemeLoader` and pass an explicit original base bundle. Build tools call
 `microui_plugin_assets::theme::load` or `load_bytes`; the latter reads referenced
 assets through an explicit `AssetSource` implementation. `LoadedTheme` contains a
 display name and validated `AssetData`, with no native UI skin or resource IDs.
@@ -331,7 +331,7 @@ GPU work. An unrelated bundle with identical names is rejected with `UI_E_OWNER`
 a missing required resource is rejected with `NC_E_INVALID_ARG`. Failed validation
 or upload preserves the previous UI resources and GPU image.
 
-`IAssetLoader::derive_builder` and `IThemeLoader::load_theme` publish in the base
+`AssetLoader::derive_builder` and `ThemeLoader::load_theme` publish in the base
 bundle's catalog. `StyleCompiler::derive_style` changes metrics or compiles a flat
 palette in that same namespace. Build tools publish `AssetData::into_revision(base)`
 when producing a compatible replacement. These services do not install their output.

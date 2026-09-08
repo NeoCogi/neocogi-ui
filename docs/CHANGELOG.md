@@ -43,6 +43,8 @@ wrappers. The accepted migration and outstanding validation are recorded in
   expansion, header, and body access live on the concrete class projections.
 - Make the always-present PngDecoder and StyleCompiler asset roots callable
   classes; diagnostics remain a reusable interface on both objects.
+- Make the optional AssetLoader and ThemeLoader roots callable classes as well;
+  their mutable build sessions and immutable result bundles remain interfaces.
 - Replace the registered platform root's `IPlatform` plus separate class-ID
   declaration with a callable `Platform` class contract. Renderer diagnostics
   remain a shared capability on the same native bootstrap object.

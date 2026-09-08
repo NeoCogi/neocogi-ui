@@ -390,9 +390,12 @@ pub trait IAssetBuilder {
     fn finish(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.AssetLoader:v1")]
-/// Optional CPU construction root; no font rasterizer or PNG decoder is required in the UI/host.
-pub trait IAssetLoader {
+#[com_class(auto_guid = "microui.AssetLoader:v1")]
+/// Constructible optional CPU asset root; UI and hosts need no linked font or PNG implementation.
+pub trait AssetLoader: IAssetDiagnostics {
+    /// Creates an empty loader with independently owned diagnostic state.
+    #[constructor]
+    fn new() -> Result<Self, NcStatus>;
     /// Starts a fresh atlas using an opaque-white PNG tile; dimensions are validated before reading files.
     fn create_builder(&self, size: Size, white: ComRef<'_, crate::INativePathAbi>) -> Result<ComPtr<IAssetBuilderAbi>, NcStatus>;
     /// Copies an existing bundle into a new packing area while retaining its catalog namespace.
@@ -406,17 +409,15 @@ pub trait IAssetDiagnostics {
     fn diagnostic(&self) -> Result<ComPtr<nc_com::INcStringAbi>, NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.ThemeLoader:v1")]
-/// Optional JSON/font/PNG operation; compiled themes use exactly the ordinary bundle interface.
-pub trait IThemeLoader {
+#[com_class(auto_guid = "microui.ThemeLoader:v1")]
+/// Constructible optional JSON/font/PNG root producing ordinary immutable bundles.
+pub trait ThemeLoader: IAssetDiagnostics {
+    /// Creates an empty theme loader with independently owned diagnostic state.
+    #[constructor]
+    fn new() -> Result<Self, NcStatus>;
     /// Resolves a native theme path against the base's catalog, preserving original resource names.
     fn load_theme(&self, path: ComRef<'_, crate::INativePathAbi>, base: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IAssetBundleAbi>, NcStatus>;
 }
-
-/// Activation identity for the optional theme compiler.
-pub const THEME_LOADER_CLASS: nc_com::NcGuid = nc_com::guid_from_qualified_name("microui.ThemeLoader");
-/// Activation identity for optional font and PNG construction.
-pub const ASSET_LOADER_CLASS: nc_com::NcGuid = nc_com::guid_from_qualified_name("microui.AssetLoader");
 
 #[com_enum(tag = u8)]
 #[derive(Clone, Copy, Debug)]

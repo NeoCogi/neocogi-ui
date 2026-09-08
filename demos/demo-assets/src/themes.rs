@@ -60,7 +60,7 @@ impl Theme {
         }
         #[cfg(not(feature = "embed-assets"))]
         {
-            use microui_redux::{IThemeLoaderAbi, THEME_LOADER_CLASS, NativePath};
+            use microui_redux::{NativePath, ThemeLoaderAbi};
             let path = match self {
                 Self::Windows311 => "themes/windows-3.11/theme.json",
                 Self::Windows95 => "themes/windows-95/theme.json",
@@ -69,7 +69,7 @@ impl Theme {
             };
             let path = super::files::asset_path(path).map_err(|_| nc_com::NC_E_LOAD_FAILED)?;
             // SAFETY: The trusted theme plugin declares a no-argument constructor.
-            let loader: ComPtr<IThemeLoaderAbi> = nc_com::Runtime::global().construct_class_as(THEME_LOADER_CLASS, ())?;
+            let loader: ComPtr<ThemeLoaderAbi> = nc_com::Runtime::global().construct(())?;
             loader.load_theme(NativePath::new(&path).as_interface(), base)
         }
     }

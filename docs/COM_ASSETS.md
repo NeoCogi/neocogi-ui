@@ -173,7 +173,7 @@ The receiving GPU may impose a smaller texture dimension limit than the portable
 
 ## Optional construction and themes
 
-`IAssetLoader::create_builder(size, white_path)` starts a native builder.
+`AssetLoader::create_builder(size, white_path)` starts a native builder.
 Its [implementation](../plugins/assets/src/atlas.rs) packs RGBA pixels and font
 records directly into `AssetData`; it constructs no UI atlas handles or skins.
 `add_icon(name, path)` and `add_font(name, path, pixels)` add distinct names;
@@ -200,7 +200,7 @@ The example's new image belongs to that revision; introduce permanent applicatio
 names in the original base instead when built-in named setters must retain them
 through arbitrary later themes.
 
-`IThemeLoader::load_theme(native_path, base)` performs JSON, font and PNG processing
+`ThemeLoader::load_theme(native_path, base)` performs JSON, font and PNG processing
 entirely in the optional asset plugin. The result is an ordinary immutable bundle:
 
 ```rust,ignore

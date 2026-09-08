@@ -12,9 +12,9 @@ pub use style::StyleCompilerObject;
 #[cfg(feature = "builder")]
 mod builder;
 #[cfg(feature = "builder")]
-pub use builder::AssetLoader;
+pub use builder::AssetLoaderObject;
 #[cfg(feature = "theme-json")]
-pub use builder::ThemeLoader;
+pub use builder::ThemeLoaderObject;
 mod png;
 pub use png::PngDecoderObject;
 
@@ -44,12 +44,12 @@ nc_com::plugin! {
 #[cfg(all(feature = "builder", not(feature = "theme-json")))]
 nc_com::plugin! {
     plugin_id(auto_guid = "microui.plugin.assets"), name = "microui.plugin.assets",
-    version = "0.9.0-alpha.0", classes = [PngDecoderObject, StyleCompilerObject, AssetLoader],
+    version = "0.9.0-alpha.0", classes = [PngDecoderObject, StyleCompilerObject, AssetLoaderObject],
 }
 #[cfg(feature = "theme-json")]
 nc_com::plugin! {
     plugin_id(auto_guid = "microui.plugin.assets"), name = "microui.plugin.assets",
-    version = "0.9.0-alpha.0", classes = [PngDecoderObject, StyleCompilerObject, AssetLoader, ThemeLoader],
+    version = "0.9.0-alpha.0", classes = [PngDecoderObject, StyleCompilerObject, AssetLoaderObject, ThemeLoaderObject],
 }
 #[cfg(feature = "dynamic-plugin")]
 nc_com::export_plugin!();

@@ -6,16 +6,19 @@ use microui_redux::assets::AssetData;
 use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, INcStringAbi, NC_E_INVALID_ARG, com_object};
 use std::cell::RefCell;
 
-#[com_object(class_id(ASSET_LOADER_CLASS), name = "microui.AssetLoader", version = "0.9.0-alpha.0",
-    constructor(args = none, default), interfaces(IAssetLoader, IAssetDiagnostics))]
+#[com_object(microui_contracts::AssetLoader)]
 #[derive(Default)]
 /// Stateless construction root with owned diagnostics; drafts contain the actual mutable builder.
-pub struct AssetLoader {
+pub struct AssetLoaderObject {
     /// Last construction failure, independent of any earlier returned draft.
     diagnostic: Diagnostic,
 }
 
-impl IAssetLoader for AssetLoader {
+impl AssetLoader for AssetLoaderObject {
+    /// Creates an empty construction root whose first failed operation may populate diagnostics.
+    fn new() -> Result<Self, NcStatus> {
+        Ok(Self::default())
+    }
     /// Checks dimensions before decoding the supplied path or reading the white tile.
     fn create_builder(&self, size: Size, white: ComRef<'_, INativePathAbi>) -> Result<ComPtr<IAssetBuilderAbi>, NcStatus> {
         dimensions(size)?;
@@ -39,7 +42,7 @@ impl IAssetLoader for AssetLoader {
         Ok(BuildSession::create(Draft { builder, base: Some(base.add_ref()) }))
     }
 }
-impl IAssetDiagnostics for AssetLoader {
+impl IAssetDiagnostics for AssetLoaderObject {
     /// Returns a snapshot that remains unchanged by later failures.
     fn diagnostic(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         Ok(self.diagnostic.snapshot())
@@ -162,16 +165,19 @@ impl IAssetDiagnostics for BuildSession {
 }
 
 #[cfg(feature = "theme-json")]
-#[com_object(class_id(THEME_LOADER_CLASS), name = "microui.ThemeLoader", version = "0.9.0-alpha.0",
-    constructor(args = none, default), interfaces(IThemeLoader, IAssetDiagnostics))]
+#[com_object(microui_contracts::ThemeLoader)]
 #[derive(Default)]
 /// Optional theme compiler is present only in asset assemblies built with theme-json.
-pub struct ThemeLoader {
+pub struct ThemeLoaderObject {
     /// JSON, filesystem and packing details survive as owned diagnostic snapshots.
     diagnostic: Diagnostic,
 }
 #[cfg(feature = "theme-json")]
-impl IThemeLoader for ThemeLoader {
+impl ThemeLoader for ThemeLoaderObject {
+    /// Creates an empty theme root whose first failed operation may populate diagnostics.
+    fn new() -> Result<Self, NcStatus> {
+        Ok(Self::default())
+    }
     /// Reads a complete theme against immutable base resources and returns ordinary portable tables.
     fn load_theme(&self, path: ComRef<'_, INativePathAbi>, base: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         let path = microui_redux::path::decode(path)?;
@@ -183,7 +189,7 @@ impl IThemeLoader for ThemeLoader {
     }
 }
 #[cfg(feature = "theme-json")]
-impl IAssetDiagnostics for ThemeLoader {
+impl IAssetDiagnostics for ThemeLoaderObject {
     /// Copies the latest failure text without exposing mutable diagnostic storage.
     fn diagnostic(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         Ok(self.diagnostic.snapshot())
