@@ -41,7 +41,7 @@ use crate::{
     color, rect, AtlasHandle, Button, ButtonParameters, ButtonSubmitted, Checkbox, CheckboxParameters, Combo, ComboParameters, ComboSubmitted, Custom, Color,
     CustomParameters, Constraints, Context, DecimalPrecision, Dimensioni, Disclosure, DisclosureParameters, Ui, Grid, GridParameters, Key, KeyEvent,
     KeyboardBehavior, Linear, LinearItem, LinearParameters, Menu, MenuBar, MenuItem, MenuItemMark, MenuItemParameters, MenuItemSubmitted, MouseButton, Node,
-    NinePatch, ScrollArea, ScrollAreaOption, ListItem, ListItemParameters, ScrollAreaParameters, Slider, SliderParameters, Skin, TextArea, TextAreaParameters,
+    NinePatch, ScrollArea, ScrollAreaOption, ListItem, ListItemParameters, ScrollAreaParameters, Slider, SliderParameters, Skin, TextAreaParameters, TextEditor,
     Textbox, TextboxChanged, TextBlock, TextBlockParameters, TextboxParameters, TrackSize, TypedWidgetHandle, UiInputEvent, Vec2i, Widget, WidgetOption,
     WidgetPaintCtx, WidgetUpdateCtx, Modifiers,
 };
@@ -1408,7 +1408,7 @@ fn tab_focused_disclosure_uses_only_its_focused_role_state_visual() {
 fn empty_public_update_consumes_programmatic_text_area_caret_reveal() {
     // Use enough unwrapped lines to guarantee vertical overflow inside the fixed window body.
     let document = (0..20).map(|index| format!("line {index}")).collect::<Vec<_>>().join("\n");
-    let (text_area, content) = TextArea::create(TextAreaParameters::new(document));
+    let (text_area, content) = TextEditor::create(TextAreaParameters::new(document));
     let mut ctx = context();
     let style = ctx.skin().clone().with_metrics(|metrics| {
         metrics.padding = 0;

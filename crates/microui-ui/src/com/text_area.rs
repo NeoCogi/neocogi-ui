@@ -1,59 +1,101 @@
 //! Fixed multiline composition forwards editing to one actual content leaf, sharing scalar scrolling only.
 use super::*;
-use super::widget::WidgetCore;
+use super::widget::{HostedWidget, WidgetCore, set_direct_font_role, set_direct_named_font};
 use nc_com::{INcStringAbi, NcString};
 
-leaf_class!(TextEditor, crate::TextArea, IMultilineEditor, IMultilineEditorAbi, IFontStyle, ITextEvents);
-font_style_impl!(TextEditor);
-text_subscription_impl!(TextEditor, crate::TextAreaChanged, crate::TextAreaSubmitted);
+direct_widget_phase_impl!(crate::TextEditor);
+direct_leaf_layout_impl!(crate::TextEditor);
 
-impl ITextContent for TextEditor {
+impl crate::TextEditor {
+    /// Constructs one private editor child directly on its semantic allocation.
+    fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        text: &str,
+        wrap: crate::TextWrap,
+        model: Rc<crate::ui_node::ScrollModel>,
+    ) -> Result<ComPtr<IMultilineEditorAbi>, NcStatus> {
+        let runtime = super::widget::WidgetRuntime::new(host, crate::WidgetOption::NONE)?;
+        let value = Self::from_runtime(runtime, text, wrap, crate::FontRef::Role(crate::FontRole::Body), Some(model));
+        Ok(Self::from_value(value)
+            .query()
+            .expect("TextEditor declares its editing, font, event, and leaf capabilities"))
+    }
+}
+
+impl ITextContent for crate::TextEditor {
     /// Copies normalized text from the only editor buffer into an immutable snapshot.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
-        self.widget.state.readable()?;
-        Ok(NcString::from_utf8_str(self.widget.core.text()))
+        self.runtime().state.readable()?;
+        Ok(NcString::from_utf8_str(self.text()))
     }
     /// A replacement also requests caret reveal, so even equal normalized text can require new scroll placement.
     fn set_text(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        self.widget.state.writable()?;
-        self.widget.core.set_text(text(input)?);
-        self.widget.state.record_change(GeometryChange::CHANGED);
+        self.runtime().state.writable()?;
+        self.set_text(text(input)?);
+        self.runtime_mut().state.record_change(GeometryChange::CHANGED);
         Ok(())
     }
 }
-impl ITextEditor for TextEditor {
+impl ITextEditor for crate::TextEditor {
     /// Reads the scalar-aligned byte offset from the same buffer used by routed input.
     fn cursor(&self) -> Result<u64, NcStatus> {
-        self.widget.state.readable()?;
-        Ok(self.widget.core.cursor() as u64)
+        self.runtime().state.readable()?;
+        Ok(self.cursor() as u64)
     }
     /// Clamps the byte offset and retains the pending caret reveal until an ordinary update can resolve its geometry.
     fn set_cursor(&mut self, cursor: u64) -> Result<(), NcStatus> {
-        self.widget.state.writable()?;
-        self.widget.core.set_cursor(usize::try_from(cursor).unwrap_or(usize::MAX));
-        self.widget.state.record_change(GeometryChange::CHANGED);
+        self.runtime().state.writable()?;
+        self.set_cursor(usize::try_from(cursor).unwrap_or(usize::MAX));
+        self.runtime_mut().state.record_change(GeometryChange::CHANGED);
         Ok(())
     }
 }
-impl IMultilineEditor for TextEditor {
+impl IMultilineEditor for crate::TextEditor {
     /// Encodes the exact wrapping policy consumed by the existing multiline layout algorithm.
     fn wrapping(&self) -> Result<TextWrapping, NcStatus> {
-        self.widget.state.readable()?;
-        Ok(match self.widget.core.com_wrap() {
+        self.runtime().state.readable()?;
+        Ok(match self.com_wrap() {
             crate::TextWrap::None => TextWrapping::NONE,
             crate::TextWrap::Word => TextWrapping::WORD,
         })
     }
     /// Validates before changing wrapping and invalidating both text geometry and caret navigation.
     fn set_wrapping(&mut self, wrapping: TextWrapping) -> Result<(), NcStatus> {
-        self.widget.state.writable()?;
+        self.runtime().state.writable()?;
         let wrap = super::leaves::local_wrap(wrapping)?;
-        let core = &mut self.widget.core;
-        if core.com_wrap() != wrap {
-            core.com_set_wrap(wrap);
-            self.widget.state.record_change(GeometryChange::CHANGED);
+        if self.com_wrap() != wrap {
+            self.com_set_wrap(wrap);
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
         }
         Ok(())
+    }
+}
+
+impl IFontStyle for crate::TextEditor {
+    /// Validates and commits one semantic font role on the actual editor.
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+        set_direct_font_role(self, role)
+    }
+
+    /// Resolves and commits one named font on the actual editor.
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        set_direct_named_font(self, name)
+    }
+}
+
+impl ITextEvents for crate::TextEditor {
+    /// Connects the editor's existing changed-text event source.
+    fn subscribe_changed(&mut self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.runtime().state.writable()?;
+        let endpoint = <Self as crate::TypedWidget<crate::TextAreaChanged>>::event(self);
+        super::events::subscribe(endpoint, sink)
+    }
+
+    /// Connects the editor's existing submitted-text event source.
+    fn subscribe_submitted(&mut self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.runtime().state.writable()?;
+        let endpoint = <Self as crate::TypedWidget<crate::TextAreaSubmitted>>::event(self);
+        super::events::subscribe(endpoint, sink)
     }
 }
 
@@ -93,11 +135,7 @@ impl TextArea for TextAreaObject {
         let text_value = text(input)?;
         let wrap = super::leaves::local_wrap(wrapping)?;
         let parts = super::scroll::ScrollParts::prepare(host.add_ref(), scrolling)?;
-        let text = TextEditor::create(
-            host.add_ref(),
-            crate::WidgetOption::NONE,
-            crate::TextArea::com_new(text_value, wrap, parts.model),
-        )?;
+        let text = crate::TextEditor::create_com(host.add_ref(), text_value, wrap, parts.model)?;
         let font = text.query()?;
         let events = text.query()?;
         parts.content.insert(0, text.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;

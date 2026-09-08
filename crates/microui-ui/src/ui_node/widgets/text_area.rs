@@ -52,7 +52,7 @@
 //
 //! Multiline editable text content composed inside a retained scroll area.
 //!
-//! [`TextArea`] owns only text, cursor, editing, and caret behavior. [`TextArea::create`] mounts
+//! [`TextEditor`] owns only text, cursor, editing, and caret behavior. [`TextEditor::create`] mounts
 //! that leaf inside [`ScrollArea`], which exclusively owns clipping, translation, wheel input,
 //! scroll offsets, and its two reusable scrollbar children. Editing operates on Unicode scalar
 //! values rather than grapheme clusters. Stored text uses LF line endings: construction,
@@ -69,7 +69,8 @@ use super::text_edit::{
     font_line_metrics, line_index_for_cursor, normalize_multiline_text,
 };
 
-/// One-shot construction input for a composed [`TextArea`].
+/// One-shot construction input for a composed [`TextEditor`].
+#[cfg(test)]
 pub struct TextAreaParameters {
     /// Initial buffer edited by the text area; line endings are normalized when mounted.
     buf: String,
@@ -82,6 +83,7 @@ pub struct TextAreaParameters {
     pub scroll_options: ScrollAreaOption,
 }
 
+#[cfg(test)]
 impl TextAreaParameters {
     /// Creates framed, scrollable text-area parameters without line wrapping.
     pub fn new(buf: impl Into<String>) -> Self {
@@ -99,7 +101,7 @@ impl TextAreaParameters {
     /// Replaces the options applied to the containing scroll area.
     #[cfg(test)]
     pub const fn scroll_options(mut self, scroll_options: ScrollAreaOption) -> Self {
-        // Store the complete outer policy directly; TextArea contributes no hidden scrolling or
+        // Store the complete outer policy directly; TextEditor contributes no hidden scrolling or
         // framing options of its own.
         self.scroll_options = scroll_options;
         self
@@ -114,7 +116,15 @@ impl TextAreaParameters {
 }
 
 /// Concrete editable text leaf retained as the ordinary content of a [`ScrollArea`].
-pub struct TextArea {
+#[nc_com::com_object(interfaces(
+    microui_contracts::IMultilineEditor,
+    microui_contracts::ILeafLayout,
+    microui_contracts::IFontStyle,
+    microui_contracts::ITextEvents
+))]
+pub struct TextEditor {
+    /// Non-semantic COM lifecycle and host-backed phase resources.
+    runtime: crate::com::widget::WidgetRuntime,
     /// Current text buffer.
     buf: String,
     /// Current byte cursor, always positioned at a Unicode scalar-value boundary.
@@ -162,7 +172,7 @@ struct TextAreaInteraction {
     caret_affinity: CaretAffinity,
 }
 
-impl TextArea {
+impl TextEditor {
     /// Creates editable content inside a scroll area and returns the nested text handle plus outer node.
     #[cfg(test)]
     pub fn create(parameters: TextAreaParameters) -> (TypedWidgetHandle<Self>, Node) {
@@ -177,28 +187,17 @@ impl TextArea {
         let model = scroll_handle.try_read(|scroll| scroll.model.clone()).expect("newly composed scroll model");
         editor_handle
             .try_update_without_measurement(|editor| editor.scroll_area = Some(model))
-            .expect("newly composed TextArea content must remain mounted in its ScrollArea");
+            .expect("newly composed TextEditor content must remain mounted in its ScrollArea");
         (editor_handle, root)
     }
 
     /// Creates the unmounted editable leaf before its containing scroll area exists.
+    #[cfg(test)]
     fn new_editor(parameters: TextAreaParameters) -> Self {
         // Initialize semantic and event state together so direct unit tests and composed creation
         // observe the same editing behavior.
-        let buf = normalize_multiline_text(parameters.buf);
-        let cursor = buf.len();
-        Self {
-            buf,
-            cursor,
-            reset_preferred_x: false,
-            reveal_caret: false,
-            wrap: parameters.wrap,
-            font: parameters.font,
-            interaction: TextAreaInteraction::default(),
-            scroll_area: None,
-            changed_event: crate::EventSource::new(),
-            submitted_event: crate::EventSource::new(),
-        }
+        let runtime = crate::com::widget::WidgetRuntime::for_test(WidgetOption::NONE);
+        Self::from_runtime(runtime, parameters.buf, parameters.wrap, parameters.font, None)
     }
 
     /// Returns the current text buffer.
@@ -351,7 +350,7 @@ impl TextArea {
 }
 
 #[cfg(test)]
-impl TypedWidgetHandle<TextArea> {
+impl TypedWidgetHandle<TextEditor> {
     /// Clones the current text while the editable leaf remains mounted.
     pub fn text(&self) -> Option<String> {
         // Clone inside the checked read closure so no borrow escapes typed access.
@@ -367,7 +366,7 @@ impl TypedWidgetHandle<TextArea> {
     /// Clears retained text, cursor, and containing scroll offset.
     pub fn clear(&self) -> Option<()> {
         // Clearing changes intrinsic measurement, so use the ordinary invalidating typed update.
-        self.try_update(TextArea::clear)
+        self.try_update(TextEditor::clear)
     }
 
     /// Moves the retained cursor to the nearest preceding Unicode scalar boundary.
@@ -383,13 +382,13 @@ impl TypedWidgetHandle<TextArea> {
     /// Call `Context::update_ui` before relying on caret reveal or updated scroll state.
     pub fn move_cursor_to_end(&self) -> Option<()> {
         // Cursor movement does not change intrinsic text measurement.
-        self.try_update_without_measurement(TextArea::move_cursor_to_end)
+        self.try_update_without_measurement(TextEditor::move_cursor_to_end)
     }
 
     /// Returns the offset owned by the containing scroll area.
     pub fn scroll(&self) -> Option<Vec2i> {
         // Read through the editable leaf's weak parent capability without duplicating offset state.
-        self.try_read(TextArea::scroll)
+        self.try_read(TextEditor::scroll)
     }
 
     /// Requests a containing scroll-area offset without invalidating text measurement.
@@ -402,7 +401,7 @@ impl TypedWidgetHandle<TextArea> {
     }
 }
 
-impl crate::TypedWidget<TextAreaChanged> for TextArea {
+impl crate::TypedWidget<TextAreaChanged> for TextEditor {
     /// Returns the runtime-owned user-change event endpoint.
     fn event(&self) -> crate::WidgetEventPortHandle<TextAreaChanged> {
         // Create a weak endpoint handle without transferring ownership from the retained leaf.
@@ -410,7 +409,7 @@ impl crate::TypedWidget<TextAreaChanged> for TextArea {
     }
 }
 
-impl crate::TypedWidget<TextAreaSubmitted> for TextArea {
+impl crate::TypedWidget<TextAreaSubmitted> for TextEditor {
     /// Returns the runtime-owned submission event endpoint.
     fn event(&self) -> crate::WidgetEventPortHandle<TextAreaSubmitted> {
         // Create a weak endpoint handle without transferring ownership from the retained leaf.
@@ -436,7 +435,7 @@ struct TextAreaLayout {
 }
 
 /// Builds editable lines for the exact content allocation used by update or paint.
-fn textarea_layout(bounds: Recti, atlas: &AtlasHandle, state: &TextArea, font: FontId) -> TextAreaLayout {
+fn textarea_layout(bounds: Recti, atlas: &AtlasHandle, state: &TextEditor, font: FontId) -> TextAreaLayout {
     // Word wrapping uses the allocated content width selected by ScrollArea convergence. Unwrapped
     // content retains intrinsic line widths and is translated horizontally by the parent viewport.
     let max_width = if state.wrap == TextWrap::Word { bounds.width.max(1) } else { i32::MAX / 4 };
@@ -449,7 +448,7 @@ fn textarea_layout(bounds: Recti, atlas: &AtlasHandle, state: &TextArea, font: F
 }
 
 /// Applies multiline editing and requests parent-owned scrolling when the caret moves.
-fn textarea_update(ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>, state: &mut TextArea, font: FontId) -> TextAreaUpdateOutcome {
+fn textarea_update(ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>, state: &mut TextEditor, font: FontId) -> TextAreaUpdateOutcome {
     // External cursor and text setters schedule reveal without fabricating an input event.
     let mut outcome = TextAreaUpdateOutcome::default();
     let mut ensure_visible = std::mem::take(&mut state.reveal_caret);
@@ -615,7 +614,7 @@ struct TextAreaUpdateOutcome {
 }
 
 /// Paints text and the focused caret while ScrollArea supplies translation and clipping.
-fn textarea_paint(ctx: &mut WidgetPaintCtx<'_>, state: &TextArea, font: FontId) {
+fn textarea_paint(ctx: &mut WidgetPaintCtx<'_>, state: &TextEditor, font: FontId) {
     // Derive the same wrapped lines used by update, then limit recording to lines intersecting the
     // traversal-owned local clip so large documents do not emit invisible text operations.
     let layout = textarea_layout(ctx.local_rect(), ctx.atlas(), state, font);
@@ -662,7 +661,7 @@ fn textarea_paint(ctx: &mut WidgetPaintCtx<'_>, state: &TextArea, font: FontId) 
     });
 }
 
-impl Widget for TextArea {
+impl Widget for TextEditor {
     /// Returns the editable leaf's base options without outer framing or wheel policy.
     #[cfg(test)]
     fn widget_opt(&self) -> &WidgetOption {
@@ -689,7 +688,7 @@ impl Widget for TextArea {
     }
 }
 
-impl LeafWidget for TextArea {
+impl LeafWidget for TextEditor {
     /// Measures intrinsic editable text content for the containing scroll surface.
     fn measure(&self, style: &Skin, atlas: &AtlasHandle, constraints: Constraints) -> Dimensioni {
         // Delegate to the phase-independent measurement helper used by composition and tests.
@@ -697,12 +696,30 @@ impl LeafWidget for TextArea {
     }
 }
 
-impl TextArea {
-    /// Constructs the actual COM editor using the same normalization and interaction initialization as local composition.
-    pub(crate) fn com_new(text: &str, wrap: TextWrap, model: std::rc::Rc<crate::ui_node::ScrollModel>) -> Self {
-        let mut editor = Self::new_editor(TextAreaParameters::new(text).wrap(wrap));
-        editor.scroll_area = Some(model);
-        editor
+impl TextEditor {
+    /// Constructs the actual editor fields beside one already validated host runtime.
+    pub(crate) fn from_runtime(
+        runtime: crate::com::widget::WidgetRuntime,
+        text: impl Into<String>,
+        wrap: TextWrap,
+        font: FontRef,
+        model: Option<std::rc::Rc<crate::ui_node::ScrollModel>>,
+    ) -> Self {
+        let buf = normalize_multiline_text(text);
+        let cursor = buf.len();
+        Self {
+            runtime,
+            buf,
+            cursor,
+            reset_preferred_x: false,
+            reveal_caret: false,
+            wrap,
+            font,
+            interaction: TextAreaInteraction::default(),
+            scroll_area: model,
+            changed_event: crate::EventSource::new(),
+            submitted_event: crate::EventSource::new(),
+        }
     }
     /// Reads the one wrapping choice consumed by both measurement and caret geometry.
     pub(crate) fn com_wrap(&self) -> TextWrap {
@@ -715,14 +732,27 @@ impl TextArea {
         self.reveal_caret = true;
     }
 }
-impl crate::com::widget::WidgetAlgorithm for TextArea {
+impl crate::com::widget::WidgetAlgorithm for TextEditor {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
         self.changed_event.close_ordinary();
         self.submitted_event.close_ordinary();
     }
 }
-impl crate::com::widget::FontState for TextArea {
+
+impl crate::com::widget::HostedWidget for TextEditor {
+    /// Borrows common phase state stored directly beside the editable text fields.
+    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+        &self.runtime
+    }
+
+    /// Exclusively borrows common phase state for mutation or resource refresh.
+    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+        &mut self.runtime
+    }
+}
+
+impl crate::com::widget::FontState for TextEditor {
     /// Borrows the actual font selection used by text measurement and paint.
     fn font(&self) -> &crate::FontRef {
         &self.font
@@ -761,8 +791,8 @@ mod tests {
         events.push(RecordedEvent::Submitted(event.text.clone()));
     }
 
-    /// Creates a dispatcher subscribed to both native TextArea event ports.
-    fn text_dispatcher(text_area: &TextArea) -> crate::event::WidgetEventDispatcher<Vec<RecordedEvent>> {
+    /// Creates a dispatcher subscribed to both native TextEditor event ports.
+    fn text_dispatcher(text_area: &TextEditor) -> crate::event::WidgetEventDispatcher<Vec<RecordedEvent>> {
         // Register both ports against one ordered state log to characterize independent delivery.
         let mut dispatcher = crate::event::WidgetEventDispatcher::new();
         dispatcher
@@ -775,7 +805,7 @@ mod tests {
     }
 
     /// Runs direct focused editor updates at one explicit content allocation.
-    fn update_text_area_in_bounds(text_area: &mut TextArea, bounds: Recti, input: Vec<UiInputEvent>) {
+    fn update_text_area_in_bounds(text_area: &mut TextEditor, bounds: Recti, input: Vec<UiInputEvent>) {
         // Reproduce held key state across the supplied FIFO events while keeping one stable content
         // allocation and focused interaction snapshot. Supplying bounds lets wrapping regressions
         // exercise the same update path without mounting the surrounding scroll area.
@@ -792,7 +822,7 @@ mod tests {
     }
 
     /// Runs direct focused editor updates at the ordinary non-wrapping test allocation.
-    fn update_text_area(text_area: &mut TextArea, input: Vec<UiInputEvent>) {
+    fn update_text_area(text_area: &mut TextEditor, input: Vec<UiInputEvent>) {
         update_text_area_in_bounds(text_area, Recti::new(0, 0, 160, 80), input);
     }
 
@@ -801,7 +831,7 @@ mod tests {
     fn text_area_dispatches_independent_change_and_submission_events() {
         // Directly exercise the inner leaf because scrolling composition is orthogonal to event
         // payload order and the constructor uses this exact semantic initialization path.
-        let mut text_area = TextArea::new_editor(TextAreaParameters::new(""));
+        let mut text_area = TextEditor::new_editor(TextAreaParameters::new(""));
         let mut dispatcher = text_dispatcher(&text_area);
         update_text_area(
             &mut text_area,
@@ -826,7 +856,7 @@ mod tests {
     /// Verifies construction, replacement, and pasted text share canonical LF storage.
     #[test]
     fn every_multiline_text_ingress_normalizes_line_endings() {
-        let mut text_area = TextArea::new_editor(TextAreaParameters::new("a\r\nb\rc\n"));
+        let mut text_area = TextEditor::new_editor(TextAreaParameters::new("a\r\nb\rc\n"));
         assert_eq!(text_area.text(), "a\nb\nc\n");
         assert_eq!(text_area.cursor(), text_area.text().len());
 
@@ -843,7 +873,7 @@ mod tests {
     fn wrapped_vertical_navigation_retains_visual_caret_affinity() {
         // With the test font's eight-pixel advances, this width produces ranges 0..2 and 2..4.
         // Byte 2 is therefore both the first line's end and the continuation line's start.
-        let mut text_area = TextArea::new_editor(TextAreaParameters::new("_ __").wrap(TextWrap::Word));
+        let mut text_area = TextEditor::new_editor(TextAreaParameters::new("_ __").wrap(TextWrap::Word));
         text_area.set_cursor(0);
         let atlas = test_atlas();
         let style = test_skin(&atlas);
@@ -927,7 +957,7 @@ mod tests {
         let bounds = Recti::new(0, 0, 16, 30);
         let parameters = || TextAreaParameters::new("_ __").wrap(TextWrap::Word);
 
-        let mut from_continuation = TextArea::new_editor(parameters());
+        let mut from_continuation = TextEditor::new_editor(parameters());
         from_continuation.set_cursor(3);
         update_text_area_in_bounds(
             &mut from_continuation,
@@ -939,7 +969,7 @@ mod tests {
         assert_eq!(from_continuation.cursor(), 2);
         assert_eq!(from_continuation.interaction.caret_affinity, CaretAffinity::Downstream);
 
-        let mut from_first_line = TextArea::new_editor(parameters());
+        let mut from_first_line = TextEditor::new_editor(parameters());
         from_first_line.set_cursor(1);
         update_text_area_in_bounds(
             &mut from_first_line,
@@ -965,7 +995,7 @@ mod tests {
     #[test]
     fn wrapped_home_selects_the_continuation_start() {
         let bounds = Recti::new(0, 0, 16, 30);
-        let mut text_area = TextArea::new_editor(TextAreaParameters::new("_ __").wrap(TextWrap::Word));
+        let mut text_area = TextEditor::new_editor(TextAreaParameters::new("_ __").wrap(TextWrap::Word));
         text_area.set_cursor(3);
 
         update_text_area_in_bounds(
@@ -983,7 +1013,7 @@ mod tests {
     /// Verifies multiline backspace at byte zero cannot delete the following newline.
     #[test]
     fn backspace_at_start_preserves_leading_newline() {
-        let mut text_area = TextArea::new_editor(TextAreaParameters::new("\ntext"));
+        let mut text_area = TextEditor::new_editor(TextAreaParameters::new("\ntext"));
         text_area.set_cursor(0);
         update_text_area(
             &mut text_area,
@@ -1000,8 +1030,8 @@ mod tests {
     #[test]
     fn text_area_create_returns_nested_editor_handle_and_scroll_area_node() {
         // The outer node owns ScrollArea, its transform surface and two bars, plus exactly one
-        // ordinary TextArea content leaf.
-        let (text_area, root) = TextArea::create(TextAreaParameters::new("content"));
+        // ordinary TextEditor content leaf.
+        let (text_area, root) = TextEditor::create(TextAreaParameters::new("content"));
         assert_eq!(root.debug_node_count(), 5);
         assert!(text_area.is_alive());
         assert_eq!(text_area.text().as_deref(), Some("content"));
@@ -1015,7 +1045,7 @@ mod tests {
     #[test]
     fn programmatic_text_cursor_and_scroll_setters_are_silent() {
         // Subscribe through the nested editor while applying semantic and parent-scroll mutations.
-        let (text_area, _root) = TextArea::create(TextAreaParameters::new("initial"));
+        let (text_area, _root) = TextEditor::create(TextAreaParameters::new("initial"));
         let mut dispatcher = text_area.try_read(text_dispatcher).unwrap();
         text_area.set_text("replacement").unwrap();
         text_area.set_cursor(3).unwrap();
@@ -1026,13 +1056,13 @@ mod tests {
         assert_eq!(text_area.scroll().map(|offset| (offset.x, offset.y)), Some((0, 0)));
     }
 
-    /// Verifies that a real scrollbar capture gesture preserves TextArea keyboard focus.
+    /// Verifies that a real scrollbar capture gesture preserves TextEditor keyboard focus.
     #[test]
     fn scrollbar_press_preserves_text_area_keyboard_focus() {
         // Compose enough narrow lines to activate only the vertical scrollbar in a predictable
         // unframed, zero-padding viewport.
         let document = (0..20).map(|index| format!("line {index}")).collect::<Vec<_>>().join("\n");
-        let (text_area, mut root) = TextArea::create(TextAreaParameters::new(document.clone()).scroll_options(ScrollAreaOption::ENABLE_SCROLL));
+        let (text_area, mut root) = TextEditor::create(TextAreaParameters::new(document.clone()).scroll_options(ScrollAreaOption::ENABLE_SCROLL));
         let atlas = test_atlas();
         let style = test_skin(&atlas).with_metrics(|metrics| {
             metrics.padding = 0;
@@ -1092,7 +1122,7 @@ mod tests {
         runtime.update_tree_root(&mut root, &style, atlas.clone(), scrollbar_up_state);
         runtime.layout_tree_root(&mut root, &style, atlas.clone(), viewport, UNCLIPPED_RECT);
 
-        // Keyboard text must still route to TextArea after the pointer-only scrollbar gesture.
+        // Keyboard text must still route to TextEditor after the pointer-only scrollbar gesture.
         input.text("X");
         let text_event = input.pop_event().unwrap();
         let text_state = input.snapshot();
@@ -1105,10 +1135,10 @@ mod tests {
     /// Verifies ancestor-only wheel bubbling from editable content to its ScrollArea.
     #[test]
     fn wheel_input_bubbles_from_text_content_to_scroll_area() {
-        // Build vertical overflow while leaving TextArea itself free of GRAB_SCROLL so the routed
+        // Build vertical overflow while leaving TextEditor itself free of GRAB_SCROLL so the routed
         // wheel event must follow ancestor-only bubbling to its containing ScrollArea.
         let document = (0..20).map(|index| format!("line {index}")).collect::<Vec<_>>().join("\n");
-        let (text_area, mut root) = TextArea::create(TextAreaParameters::new(document).scroll_options(ScrollAreaOption::ENABLE_SCROLL));
+        let (text_area, mut root) = TextEditor::create(TextAreaParameters::new(document).scroll_options(ScrollAreaOption::ENABLE_SCROLL));
         let atlas = test_atlas();
         let style = test_skin(&atlas).with_metrics(|metrics| {
             metrics.padding = 0;
@@ -1130,7 +1160,7 @@ mod tests {
         runtime.begin_input_event(true, &wheel);
         let (_, result) = runtime
             .route_input_event_to_node_ref(&mut root, &style, &wheel)
-            .expect("wheel input over TextArea must find its composed target path");
+            .expect("wheel input over TextEditor must find its composed target path");
         assert!(result.is_consumed(), "ScrollArea must consume a wheel delta that changes its range");
         runtime.update_tree_root(&mut root, &style, atlas.clone(), wheel_state);
         runtime.layout_tree_root(&mut root, &style, atlas, viewport, UNCLIPPED_RECT);
@@ -1144,7 +1174,7 @@ mod tests {
     fn programmatic_cursor_reveal_scrolls_the_composed_viewport() {
         // A narrow multiline document overflows vertically without requiring a horizontal bar.
         let document = (0..20).map(|index| format!("line {index}"));
-        let (text_area, mut root) = TextArea::create(TextAreaParameters::new(document.collect::<Vec<_>>().join("\n")));
+        let (text_area, mut root) = TextEditor::create(TextAreaParameters::new(document.collect::<Vec<_>>().join("\n")));
         let atlas = test_atlas();
         let style = test_skin(&atlas).with_metrics(|metrics| {
             metrics.padding = 0;

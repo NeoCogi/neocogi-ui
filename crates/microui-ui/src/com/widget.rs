@@ -7,7 +7,7 @@
 use super::*;
 use crate::math::RectExt;
 use microui_contracts::widget::WidgetState;
-use crate::{LeafWidget, WidgetOption, WidgetUpdateCtx, WidgetPaintCtx, Constraints, AvailableSpace};
+use crate::{WidgetOption, WidgetUpdateCtx, WidgetPaintCtx, AvailableSpace};
 use crate::render::{DisplayList, Renderer};
 
 /// Private semantic algorithms reused by each statically known built-in class.
@@ -266,24 +266,6 @@ pub(super) struct WidgetCore<S: WidgetAlgorithm> {
 }
 
 impl<S: WidgetAlgorithm> WidgetCore<S> {
-    /// Closes ordinary sources with the logical widget, before final COM release drops its semantic state.
-    pub(super) fn close(&mut self) -> Result<(), NcStatus> {
-        if self.state.close()? {
-            self.core.close_events();
-        }
-        Ok(())
-    }
-
-    /// Obtains the native typed endpoint under local state access, then releases that access before retaining the foreign sink.
-    pub(super) fn subscribe<E: super::events::ComEvent>(&mut self, sink: ComRef<'_, E::Sink>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>
-    where
-        S: crate::TypedWidget<E>,
-    {
-        self.state.writable()?;
-        let endpoint = self.core.event();
-        super::events::subscribe(endpoint, sink)
-    }
-
     /// Composes an unmounted semantic value into its final COM allocation.
     pub(super) fn new(host: ComPtr<IWidgetHostAbi>, options: WidgetOption, core: S) -> Result<Self, NcStatus> {
         host.check_mutation()?;
@@ -347,23 +329,6 @@ impl<S: WidgetAlgorithm> WidgetCore<S> {
         Ok(match change {
             crate::Change::Changed => GeometryChange::CHANGED,
             crate::Change::NoChange => GeometryChange::NO_CHANGE,
-        })
-    }
-
-    /// Reuses the existing preferred-size algorithm with exact finite/unbounded bounds.
-    pub(super) fn measure(&mut self, bounds: LayoutLimits) -> Result<Size, NcStatus>
-    where
-        S: LeafWidget,
-    {
-        self.state.readable()?;
-        let constraints = Constraints::new(available(bounds.width)?, available(bounds.height)?);
-        let resources = self.resources.current(self.state.host())?;
-        let size = self
-            .core
-            .measure(resources.assets.bundle().skin(), resources.assets.bundle().atlas(), constraints);
-        Ok(Size {
-            width: size.width.max(0),
-            height: size.height.max(0),
         })
     }
 
@@ -495,18 +460,6 @@ macro_rules! widget_phase_impl {
             /// Records complete owned geometry before calling a foreign painter.
             fn paint(&mut self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
                 self.widget.paint(scope, state, painter)
-            }
-        }
-    };
-}
-
-/// Adds only leaf geometry; common widget lifecycle and phases are shared with containers.
-macro_rules! leaf_layout_impl {
-    ($name:ident) => {
-        impl ILeafLayout for $name {
-            /// Measures with the resource revision owned by this runtime-bound class.
-            fn measure(&mut self, bounds: LayoutLimits, _metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
-                self.widget.measure(bounds)
             }
         }
     };
@@ -737,96 +690,12 @@ macro_rules! direct_container_layout_impl {
     };
 }
 
-/// Declares one non-generic COM allocation with a statically known semantic state.
-macro_rules! leaf_object {
-    ($visibility:vis $name:ident, $core:ty, $($object:tt)+) => {
-        #[com_object($($object)+)]
-        /// One concrete built-in object, including its inherited widget state.
-        $visibility struct $name {
-            /// Inline semantic state and shared phase execution; no secondary widget owner.
-            widget: super::widget::WidgetCore<$core>,
-        }
-        impl $name {
-            /// Applies the complete existing semantic algorithm to copied input.
-            fn update_widget(&mut self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
-                self.widget.update(state, event, text)
-            }
-            /// Commits logical closure before final COM destruction.
-            fn close_widget(&mut self) -> Result<(), NcStatus> { self.widget.close() }
-        }
-        widget_phase_impl!($name);
-        leaf_layout_impl!($name);
-    };
-}
-
-/// Preserves interface-only leaf allocations until their callable class family is migrated.
-macro_rules! leaf_class {
-    ($name:ident, $core:ty, $interface:ident, $abi:ty $(, $extra:ident)*) => {
-        leaf_object!(pub(super) $name, $core, interfaces($interface, ILeafLayout $(, $extra)*));
-        impl $name {
-            /// Creates the unmounted interface-only allocation after input validation.
-            pub(super) fn create(host: ComPtr<IWidgetHostAbi>, options: crate::WidgetOption, core: $core) -> Result<ComPtr<$abi>, NcStatus> {
-                Ok(Self::from_value(Self {
-                    widget: super::widget::WidgetCore::new(host, options, core)?,
-                })
-                .query()
-                .expect("object declares its concrete editing interface"))
-            }
-        }
-    };
-}
-
 /// Static typography access implemented only by semantic states which own a font.
 pub(crate) trait FontState: WidgetAlgorithm {
     /// Borrows the actual stable font selection used by measurement and paint.
     fn font(&self) -> &crate::FontRef;
     /// Replaces that same selection after the resource owner validates it.
     fn set_font(&mut self, font: crate::FontRef);
-}
-
-impl<S: FontState> WidgetCore<S> {
-    /// Resolves the finite semantic font vocabulary before committing any change.
-    pub(super) fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
-        self.state.writable()?;
-        let role = local_font_role(role)?;
-        self.commit_font(crate::FontRef::Role(role))
-    }
-    /// Resolves a font once against the exact bundle, never by name per glyph.
-    pub(super) fn set_named_font(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        self.state.writable()?;
-        let name = text(input)?;
-        let resources = self.resources.current(self.state.host())?;
-        let font = resources.assets.original().font_id(name).ok_or(nc_com::NC_E_NOT_FOUND)?;
-        if *self.core.font() != crate::FontRef::Named(font) {
-            self.core.set_font(crate::FontRef::Named(font));
-            self.state.record_change(GeometryChange::CHANGED);
-        }
-        Ok(())
-    }
-    /// Commits an already validated selection and preserves pending setter changes.
-    fn commit_font(&mut self, font: crate::FontRef) -> Result<(), NcStatus> {
-        if *self.core.font() != font {
-            self.core.set_font(font);
-            self.state.record_change(GeometryChange::CHANGED);
-        }
-        Ok(())
-    }
-}
-
-/// Exposes shared typography on the same COM allocation as a concrete text control.
-macro_rules! font_style_impl {
-    ($name:ident) => {
-        impl IFontStyle for $name {
-            /// Validates a semantic role before changing the control's font selection.
-            fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
-                self.widget.set_font_role(role)
-            }
-            /// Resolves and retains a stable named font identity at the setter boundary.
-            fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-                self.widget.set_named_font(name)
-            }
-        }
-    };
 }
 
 /// Static access to the adjacent visual stored by a button or list row.
@@ -916,22 +785,6 @@ macro_rules! scrolling_impl {
                 }
                 self.widget.core.scroll_rect_into_view(local_rect(rect));
                 Ok(())
-            }
-        }
-    };
-}
-
-/// Exposes the two existing independent editor ports on one concrete COM editing object.
-macro_rules! text_subscription_impl {
-    ($name:ident, $changed:ty, $submitted:ty) => {
-        impl ITextEvents for $name {
-            /// Returns the exclusive changed lease without retaining the callback on the producer.
-            fn subscribe_changed(&mut self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-                self.widget.subscribe::<$changed>(sink)
-            }
-            /// Returns the independent submitted lease through the same typed queue transport.
-            fn subscribe_submitted(&mut self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-                self.widget.subscribe::<$submitted>(sink)
             }
         }
     };
