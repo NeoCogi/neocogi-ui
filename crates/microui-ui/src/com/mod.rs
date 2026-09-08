@@ -13,7 +13,7 @@ use std::{
 #[macro_use]
 pub(crate) mod widget;
 mod button;
-pub use button::ButtonObject;
+pub use crate::ui_node::widgets::Button;
 mod combo;
 pub use combo::ComboObject;
 pub(crate) mod events;

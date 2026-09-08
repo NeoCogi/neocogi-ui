@@ -286,13 +286,19 @@ from the same allocation. A concrete plugin class contains its private state dir
 ```rust,ignore
 #[com_object(microui_contracts::Button)]
 /// One button allocation; no legacy trait-object wrapper or public downcast is needed.
-pub struct ButtonObject {
-    /// Plugin-local semantic and common widget state.
-    widget: WidgetCore<NativeButton>,
+pub struct Button {
+    /// Host, lifecycle, options and phase resources; never another widget value.
+    runtime: WidgetRuntime,
+    /// The label read by construction, editing, measurement, painting and activation.
+    label: String,
+    /// The selected font read directly by measurement and painting.
+    font: FontRef,
+    /// The concrete activation source owned by this button.
+    submitted: EventSource<ButtonSubmitted>,
 }
 ```
 
-`ButtonState`, `EventSource<E>` and their Rust fields are implementation helpers inside the plugin. Their layout is never part of the ABI. The façade does not contain a second button state, text-layout cache, event queue or shadow widget tree.
+`WidgetRuntime`, `EventSource<E>` and the concrete fields are private implementation details inside the plugin. Their layout is never part of the ABI. There is no `ButtonObject` containing a second native `Button`: the registered class is the same concrete type that implements measurement, input, painting and editing.
 
 `UiFactory` is also a registered class, implemented in the dynamically loaded UI
 plugin. `UiRuntime::factory()` returns an instance bound to the runtime's

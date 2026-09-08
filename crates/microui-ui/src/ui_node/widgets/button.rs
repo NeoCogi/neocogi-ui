@@ -124,8 +124,14 @@ pub struct ButtonSubmitted {
     pub label: String,
 }
 
-/// Concrete retained button, including its semantic and interaction state.
+#[nc_com::com_object(microui_contracts::Button)]
+/// Concrete retained button and dynamically constructible COM object.
+///
+/// The allocation owns its semantic fields directly. `runtime` contains only common host,
+/// lifecycle, option, resource, and rendering machinery; it cannot contain another Button.
 pub struct Button {
+    /// Non-semantic COM lifecycle and host-backed phase resources.
+    runtime: crate::com::widget::WidgetRuntime,
     /// Initialization-only content.
     content: ButtonContent,
     /// Initialization-only font.
@@ -146,6 +152,19 @@ impl Button {
     pub fn create(parameters: ButtonParameters) -> (crate::TypedWidgetHandle<Self>, crate::Node) {
         let widget = Button::from(parameters);
         crate::Node::typed_widget(widget)
+    }
+
+    /// Combines validated semantic parameters with one already bound common runtime.
+    pub(crate) fn from_runtime(runtime: crate::com::widget::WidgetRuntime, parameters: ButtonParameters) -> Self {
+        Self {
+            runtime,
+            content: parameters.content,
+            font: parameters.font,
+            #[cfg(test)]
+            opt: parameters.opt,
+            fill: parameters.fill,
+            submitted_event: crate::EventSource::new(),
+        }
     }
 
     /// Returns the native event endpoint emitted once for every user submission.
@@ -282,17 +301,12 @@ impl crate::TypedWidget<ButtonSubmitted> for Button {
     }
 }
 
+#[cfg(test)]
 impl From<ButtonParameters> for Button {
     /// Transfers one-shot parameters into the concrete Button runtime.
     fn from(parameters: ButtonParameters) -> Self {
-        Button {
-            content: parameters.content,
-            font: parameters.font,
-            #[cfg(test)]
-            opt: parameters.opt,
-            fill: parameters.fill,
-            submitted_event: crate::EventSource::new(),
-        }
+        let runtime = crate::com::widget::WidgetRuntime::for_test(parameters.opt);
+        Self::from_runtime(runtime, parameters)
     }
 }
 
@@ -300,6 +314,18 @@ impl crate::com::widget::WidgetAlgorithm for Button {
     /// Logical COM closure cancels ordinary submissions while retained widget references remain safe.
     fn close_events(&mut self) {
         self.submitted_event.close_ordinary();
+    }
+}
+
+impl crate::com::widget::HostedWidget for Button {
+    /// Borrows the common runtime without exposing semantic fields through it.
+    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+        &self.runtime
+    }
+
+    /// Exclusively borrows the common runtime while leaving semantic ownership on `Button`.
+    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+        &mut self.runtime
     }
 }
 

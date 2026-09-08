@@ -10,7 +10,7 @@ nc_com::plugin! {
     classes = [
         microui_ui::com::Runtime,
         microui_ui::com::UiFactoryObject,
-        microui_ui::com::ButtonObject,
+        microui_ui::com::Button,
         microui_ui::com::CheckboxObject,
         microui_ui::com::ScrollbarObject,
         microui_ui::com::ComboObject,

@@ -1,7 +1,9 @@
 //! Shared phase execution for concrete built-in COM classes.
 //!
-//! Each class stores its semantic state inline in `WidgetCore<S>`. The private generic
-//! helper has no vtable, type erasure, secondary widget identity or interior mutability.
+//! Concrete widget types own their semantic fields directly. [`WidgetRuntime`] contains only the
+//! common host, lifecycle, option, resource, and rendering machinery required by every class.
+//! [`WidgetCore`] remains temporarily for widgets that have not yet moved their fields onto their
+//! COM allocation; it is deleted after the incremental migration completes.
 use super::*;
 use crate::math::RectExt;
 use microui_contracts::widget::WidgetState;
@@ -42,7 +44,7 @@ impl Resources {
 /// One built-in widget's imported resources and reusable local paint workspace.
 struct WidgetRevision {
     /// Locally decoded immutable bundle selected by the host's current revision.
-    assets: crate::assets::ImportedAssets,
+    assets: Rc<crate::assets::ImportedAssets>,
     /// Reusable local workspace protected by the COM object's exclusive paint receiver.
     scratch: PaintScratch,
 }
@@ -50,7 +52,7 @@ struct WidgetRevision {
 impl WidgetRevision {
     /// Imports a host revision and prepares the local geometry recorder before publication.
     fn read(source: ComRef<'_, IAssetBundleAbi>, previous: Option<&crate::assets::ImportedAssets>) -> Result<Self, NcStatus> {
-        let assets = crate::assets::ImportedAssets::read(source, previous)?;
+        let assets = Rc::new(crate::assets::ImportedAssets::read(source, previous)?);
         let atlas = assets.bundle().atlas().clone();
         let (collector, storage) = super::render::Backend::recording();
         Ok(Self {
@@ -87,6 +89,104 @@ impl WidgetResources {
         }
         Ok(&mut self.current)
     }
+
+    /// Retains the current immutable resource revision after completing any required refresh.
+    fn snapshot(&mut self, host: ComRef<'_, IWidgetHostAbi>) -> Result<Rc<crate::assets::ImportedAssets>, NcStatus> {
+        // Returning an owned revision ends the cache borrow before semantic code receives control.
+        Ok(self.current(host)?.assets.clone())
+    }
+}
+
+/// Common non-semantic state embedded directly in every concrete widget COM allocation.
+///
+/// This helper deliberately has no type parameter and cannot contain a widget implementation. It
+/// owns only cross-cutting COM lifecycle and host-backed rendering resources. Concrete structs such
+/// as `Button` keep their label, font, interaction state, and event sources as ordinary fields.
+pub(crate) struct WidgetRuntime {
+    /// Shared logical lifetime, attachment state, options, and sticky geometry invalidation.
+    pub(crate) state: WidgetState,
+    /// Per-object imported-resource cache and reusable rendering backend.
+    resources: WidgetResources,
+    /// Keeps the real host runtime alive for native-only unit-test fixtures.
+    #[cfg(test)]
+    test_owner: Option<ComPtr<UiRuntimeAbi>>,
+}
+
+impl WidgetRuntime {
+    /// Binds a newly constructed concrete widget to its host without storing semantic state.
+    pub(crate) fn new(host: ComPtr<IWidgetHostAbi>, options: WidgetOption) -> Result<Self, NcStatus> {
+        host.check_mutation()?;
+        let resources = WidgetResources::new(host.as_com_ref())?;
+        Ok(Self {
+            state: WidgetState::new(host, WidgetOptions { bits: options.bits() }),
+            resources,
+            #[cfg(test)]
+            test_owner: None,
+        })
+    }
+
+    /// Creates a fully valid host-bound runtime for the native algorithm test harness.
+    #[cfg(test)]
+    pub(crate) fn for_test(options: WidgetOption) -> Self {
+        // Native tests exercise the same concrete structs without mounting them through COM. A real
+        // runtime supplies their host and assets, while this test-only owner keeps its weak factory
+        // reachable for the complete lifetime of the widget value.
+        let owner = super::runtime::create_runtime(crate::test_support::test_atlas());
+        let factory = owner.factory().expect("test UI runtime exposes its factory");
+        let host = factory.host().expect("test UI factory exposes its widget host");
+        let mut runtime = Self::new(host, options).expect("test widget runtime imports valid assets");
+        runtime.test_owner = Some(owner);
+        runtime
+    }
+
+    /// Returns an owned resource snapshot so no cache borrow crosses semantic widget execution.
+    pub(super) fn resources(&mut self) -> Result<Rc<crate::assets::ImportedAssets>, NcStatus> {
+        self.resources.snapshot(self.state.host())
+    }
+
+    /// Resolves one UTF-8 font name against this widget's exact current resource revision.
+    pub(super) fn named_font(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<crate::FontRef, NcStatus> {
+        self.state.writable()?;
+        let name = text(input)?;
+        let assets = self.resources()?;
+        let font = assets.original().font_id(name).ok_or(nc_com::NC_E_NOT_FOUND)?;
+        Ok(crate::FontRef::Named(font))
+    }
+
+    /// Resolves one UTF-8 icon name against this widget's exact current resource revision.
+    pub(super) fn named_icon(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<crate::IconRef, NcStatus> {
+        self.state.writable()?;
+        let name = text(input)?;
+        let assets = self.resources()?;
+        let icon = assets.original().icon_id(name).ok_or(nc_com::NC_E_NOT_FOUND)?;
+        Ok(crate::IconRef::Named(icon))
+    }
+
+    /// Renders one locally recorded display list and forwards its copied operations to the caller.
+    pub(super) fn render(
+        &mut self,
+        scope: PaintScope,
+        size: crate::Dimensioni,
+        list: &mut DisplayList,
+        painter: ComRef<'_, IPainterAbi>,
+    ) -> Result<(), NcStatus> {
+        let revision = self.resources.current(self.state.host())?;
+        let info = crate::render::FrameInfo::try_new(size, crate::color(0, 0, 0, 0)).map_err(|_| NC_E_INVALID_ARG)?;
+        revision.scratch.renderer.render(info, list).map_err(|_| UI_E_RENDER)?;
+        revision.scratch.storage.paint(scope, painter)
+    }
+}
+
+/// Gives shared COM phase plumbing access to a concrete widget's non-semantic runtime field.
+///
+/// This is a statically dispatched internal Rust trait, not a COM interface or an alternate widget
+/// representation. Each implementation returns the one `WidgetRuntime` physically stored beside
+/// that widget's concrete fields.
+pub(crate) trait HostedWidget: WidgetAlgorithm {
+    /// Borrows common state for observational lifecycle checks.
+    fn runtime(&self) -> &WidgetRuntime;
+    /// Borrows common state exclusively for mutation, resource refresh, or rendering.
+    fn runtime_mut(&mut self) -> &mut WidgetRuntime;
 }
 
 /// Inline common state plus the one concrete semantic state of a COM widget.
@@ -341,6 +441,164 @@ macro_rules! leaf_layout_impl {
             /// Measures with the resource revision owned by this runtime-bound class.
             fn measure(&mut self, bounds: LayoutLimits, _metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
                 self.widget.measure(bounds)
+            }
+        }
+    };
+}
+
+/// Implements the shared COM lifecycle and update/paint phases for one concrete widget type.
+///
+/// The generated methods access only the concrete object's [`WidgetRuntime`] field through
+/// [`HostedWidget`]. Semantic update and paint execute directly on `$name`; there is no contained
+/// algorithm object, erased payload, or secondary widget identity.
+macro_rules! direct_widget_phase_impl {
+    ($name:ty) => {
+        impl IWidget for $name {
+            /// Returns the runtime authority without retaining a tree or parent.
+            fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
+                let runtime = <$name as super::widget::HostedWidget>::runtime(self);
+                Ok(runtime.state.host().add_ref())
+            }
+
+            /// Claims this concrete allocation's only attachment after host validation.
+            fn mount(&mut self) -> Result<(), NcStatus> {
+                <$name as super::widget::HostedWidget>::runtime_mut(self).state.mount()
+            }
+
+            /// Closes the concrete widget's event sources exactly once.
+            fn close(&mut self) -> Result<(), NcStatus> {
+                let closed = <$name as super::widget::HostedWidget>::runtime_mut(self).state.close()?;
+                if closed {
+                    <$name as super::widget::WidgetAlgorithm>::close_events(self);
+                }
+                Ok(())
+            }
+
+            /// Copies routing and frame policy from the concrete widget and its common options.
+            fn properties(&self) -> Result<WidgetProperties, NcStatus> {
+                let runtime = <$name as super::widget::HostedWidget>::runtime(self);
+                let options = runtime.state.options()?;
+                Ok(WidgetProperties {
+                    options: WidgetOptions {
+                        bits: <$name as super::widget::WidgetAlgorithm>::effective_options(
+                            self,
+                            crate::WidgetOption::from_bits_retain(options.bits),
+                        )
+                        .bits(),
+                    },
+                    keyboard: crate::Widget::keyboard_behavior(self).bits(),
+                    frame: super::node::frame_contract(crate::Widget::frame_appearance_role(self)),
+                })
+            }
+
+            /// Replaces the single common option value after complete validation.
+            fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus> {
+                options.validate()?;
+                <$name as super::widget::HostedWidget>::runtime_mut(self).state.set_options(options)
+            }
+
+            /// Runs copied input directly against this concrete widget's semantic fields.
+            fn update(
+                &mut self,
+                state: WidgetUpdate,
+                event: WidgetEventAbi,
+                text: NcCopyFromBufferOffset<'_, u8>,
+            ) -> Result<GeometryChange, NcStatus> {
+                <$name as super::widget::HostedWidget>::runtime(self).state.writable()?;
+                state.validate()?;
+                let input = super::input::local_event(event, text)?;
+                let assets = <$name as super::widget::HostedWidget>::runtime_mut(self).resources()?;
+                let mut ctx = crate::WidgetUpdateCtx::new_with_content_geometry(
+                    local_rect(state.screen),
+                    crate::math::RectExt::translated(
+                        local_rect(state.clip),
+                        crate::Vec2i::new(state.screen.x, state.screen.y),
+                    ),
+                    assets.bundle().skin(),
+                    assets.bundle().atlas(),
+                    state.in_hover_root,
+                    state.hovered,
+                    state.focused,
+                    state.clicked,
+                    state.active,
+                    crate::MouseButton::from_bits(u32::from(state.mouse_buttons)).ok_or(NC_E_INVALID_ARG)?,
+                    crate::Modifiers::from_bits(state.modifiers).ok_or(NC_E_INVALID_ARG)?,
+                );
+                Ok(match crate::Widget::update(self, &mut ctx, input.as_ref()) {
+                    crate::Change::Changed => GeometryChange::CHANGED,
+                    crate::Change::NoChange => GeometryChange::NO_CHANGE,
+                })
+            }
+
+            /// Drains sticky common and explicitly shared semantic geometry changes together.
+            fn take_change(&mut self) -> Result<GeometryChange, NcStatus> {
+                <$name as super::widget::HostedWidget>::runtime(self).state.readable()?;
+                if crate::Widget::take_shared_change(self) {
+                    <$name as super::widget::HostedWidget>::runtime_mut(self)
+                        .state
+                        .record_change(GeometryChange::CHANGED);
+                }
+                <$name as super::widget::HostedWidget>::runtime_mut(self).state.take_change()
+            }
+
+            /// Paints directly from semantic fields, then submits the resulting local display list.
+            fn paint(
+                &mut self,
+                scope: PaintScope,
+                state: WidgetPaint,
+                painter: ComRef<'_, IPainterAbi>,
+            ) -> Result<(), NcStatus> {
+                <$name as super::widget::HostedWidget>::runtime(self).state.readable()?;
+                state.validate()?;
+                let options = <$name as super::widget::HostedWidget>::runtime(self).state.options()?;
+                let assets = <$name as super::widget::HostedWidget>::runtime_mut(self).resources()?;
+                // The display list is phase-local so semantic painting can borrow the complete
+                // concrete object immutably without an interior-mutable scratch field.
+                let mut list = crate::render::DisplayList::new();
+                let mut ctx = crate::WidgetPaintCtx::new_with_content_geometry(
+                    local_rect(state.rect),
+                    &mut list,
+                    local_rect(state.clip),
+                    assets.bundle().skin(),
+                    assets.bundle().atlas(),
+                    state.enabled,
+                    state.hovered,
+                    state.focused,
+                    state.clicked,
+                    state.active,
+                    state.window_active,
+                    crate::WidgetOption::from_bits_retain(options.bits),
+                );
+                crate::Widget::paint(self, &mut ctx);
+                let size = crate::Dimensioni::new(state.rect.width.max(1), state.rect.height.max(1));
+                <$name as super::widget::HostedWidget>::runtime_mut(self).render(scope, size, &mut list, painter)
+            }
+        }
+    };
+}
+
+/// Implements intrinsic COM measurement directly on one concrete leaf widget.
+macro_rules! direct_leaf_layout_impl {
+    ($name:ty) => {
+        impl ILeafLayout for $name {
+            /// Measures the concrete semantic fields against one owned host-resource snapshot.
+            fn measure(&mut self, bounds: LayoutLimits, _metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
+                <$name as super::widget::HostedWidget>::runtime(self).state.readable()?;
+                let constraints = crate::Constraints::new(
+                    super::widget::available(bounds.width)?,
+                    super::widget::available(bounds.height)?,
+                );
+                let assets = <$name as super::widget::HostedWidget>::runtime_mut(self).resources()?;
+                let size = crate::LeafWidget::measure(
+                    self,
+                    assets.bundle().skin(),
+                    assets.bundle().atlas(),
+                    constraints,
+                );
+                Ok(Size {
+                    width: size.width.max(0),
+                    height: size.height.max(0),
+                })
             }
         }
     };
@@ -627,6 +885,23 @@ pub(super) fn local_font_role(role: TextFontRole) -> Result<crate::FontRole, NcS
         TextFontRole::MONO => Ok(crate::FontRole::Mono),
         _ => Err(NC_E_INVALID_ARG),
     }
+}
+
+/// Converts the finite public content-icon vocabulary into concrete semantic state.
+pub(super) fn local_content_icon(icon: ContentIcon) -> Result<Option<crate::IconRef>, NcStatus> {
+    let role = match icon {
+        ContentIcon::NONE => return Ok(None),
+        ContentIcon::CLOSE => crate::IconRole::Close,
+        ContentIcon::EXPAND => crate::IconRole::Expand,
+        ContentIcon::COLLAPSE => crate::IconRole::Collapse,
+        ContentIcon::CHECK => crate::IconRole::Check,
+        ContentIcon::EXPAND_DOWN => crate::IconRole::ExpandDown,
+        ContentIcon::OPEN_FOLDER => crate::IconRole::OpenFolder,
+        ContentIcon::CLOSED_FOLDER => crate::IconRole::ClosedFolder,
+        ContentIcon::FILE => crate::IconRole::File,
+        _ => return Err(NC_E_INVALID_ARG),
+    };
+    Ok(Some(crate::IconRef::Role(role)))
 }
 
 /// Private shared editing hook over each algorithm's authoritative concrete image content.

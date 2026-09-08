@@ -159,6 +159,6 @@ impl UiFactory for UiFactoryObject {
         options: WidgetOptions,
     ) -> Result<ComPtr<ButtonAbi>, NcStatus> {
         self.host.check_mutation()?;
-        super::button::ButtonObject::create(self.host.clone(), label, options)
+        super::Button::create_com(self.host.clone(), label, options)
     }
 }
