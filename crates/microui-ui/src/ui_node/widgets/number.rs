@@ -305,3 +305,78 @@ impl crate::com::widget::FontState for Number {
         self.font = font;
     }
 }
+
+use crate::com::widget::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
+use microui_contracts::{GeometryChange, IEventSubscriptionAbi, INumericSinkAbi, IWidgetHostAbi, NumberAbi, NumberOptions, TextFontRole};
+use nc_com::*;
+
+direct_widget_phase_impl!(Number);
+direct_leaf_layout_impl!(Number);
+
+impl Number {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(crate) fn create_com(host: ComPtr<IWidgetHostAbi>, resources: crate::com::widget::SharedAssets, options: NumberOptions) -> Result<ComPtr<NumberAbi>, NcStatus> {
+        let value = Self::build(host, options, Some(&resources))?;
+        Ok(Self::from_value(value).query().expect("Number declares its callable class contract"))
+    }
+
+    /// Builds one number editor with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        options: NumberOptions,
+        resources: Option<&crate::com::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let parameters = crate::NumberParameters::new(
+            options.value,
+            options.step,
+            crate::DecimalPrecision::try_from(usize::from(options.precision)).map_err(|_| NC_E_INVALID_ARG)?,
+        )
+        .map_err(|_| NC_E_INVALID_ARG)?;
+        let runtime = crate::com::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        Ok(Self::from_runtime(runtime, parameters))
+    }
+}
+
+impl microui_contracts::Number for Number {
+    /// Validates the complete arithmetic tuple before allocating the numeric editor.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, options: NumberOptions) -> Result<Self, NcStatus> {
+        Self::build(host.add_ref(), options, None)
+    }
+    /// Reads the finite value owned by the number editor's concrete semantic algorithm.
+    fn value(&self) -> Result<f32, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(self.value())
+    }
+    /// Rejects nonfinite input and dirties geometry only when the committed value changes.
+    fn set_value(&mut self, value: f32) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        if !value.is_finite() {
+            return Err(NC_E_INVALID_ARG);
+        }
+        let previous = self.value();
+        self.set_value(value);
+        if self.value() != previous {
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
+    /// Exposes the same edit mode that controls routed text input.
+    fn is_editing(&self) -> Result<bool, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(self.is_editing())
+    }
+    /// Validates a semantic font role before changing the number editor's measurement input.
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+        set_direct_font_role(self, role)
+    }
+    /// Resolves one exact named font before replacing the number editor's selection.
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        set_direct_named_font(self, name)
+    }
+    /// Connects the number editor's existing semantic event source directly through the class contract.
+    fn subscribe(&mut self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.runtime().state.writable()?;
+        let endpoint = <Self as crate::TypedWidget<crate::NumberChanged>>::event(self);
+        crate::com::events::subscribe(endpoint, sink)
+    }
+}

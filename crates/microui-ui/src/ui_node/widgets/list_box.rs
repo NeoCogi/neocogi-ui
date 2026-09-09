@@ -250,3 +250,89 @@ impl crate::com::widget::ImageState for ListBox {
         true
     }
 }
+
+use crate::com::widget::{HostedWidget, ImageState, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
+use microui_contracts::{GeometryChange, IActivationSinkAbi, IEventSubscriptionAbi, ITextureAbi, IWidgetHostAbi, ListBoxAbi, TextFontRole};
+use nc_com::*;
+
+direct_widget_phase_impl!(ListBox);
+direct_leaf_layout_impl!(ListBox);
+
+impl ListBox {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(crate) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: crate::com::widget::SharedAssets,
+        label: NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<ComPtr<ListBoxAbi>, NcStatus> {
+        let value = Self::build(host, label, Some(&resources))?;
+        Ok(Self::from_value(value).query().expect("ListBox declares its callable class contract"))
+    }
+
+    /// Builds one list box with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        resources: Option<&crate::com::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let parameters = crate::ListBoxParameters::new(crate::com::text(label)?, None);
+        let runtime = crate::com::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        Ok(Self::from_runtime(runtime, parameters))
+    }
+}
+
+impl microui_contracts::ListBox for ListBox {
+    /// Validates the label before allocating the established label-only entry state.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus> {
+        Self::build(host.add_ref(), label, None)
+    }
+    /// Returns an immutable label snapshot from the concrete list box.
+    fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(NcString::from_utf8_str(self.com_label()))
+    }
+    /// Validates UTF-8 and records geometry only when the concrete label changes.
+    fn set_text(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        let label = crate::com::text(input)?;
+        if self.com_label() != label {
+            self.com_set_label(label);
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
+    /// Validates a semantic role before changing the list-box label's font.
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+        set_direct_font_role(self, role)
+    }
+    /// Resolves one exact named font before changing the list-box label's font.
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        set_direct_named_font(self, name)
+    }
+    /// Validates and installs one immutable renderer-owned image before committing the edit.
+    fn set_image(&mut self, image: ComRef<'_, ITextureAbi>, fit_width: bool) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        let image = microui_redux::Image::from_interface(image.add_ref())?;
+        // Revalidate lifetime authority after the foreign size query before committing the
+        // prepared image; the generated object gate rejects recursive mutable entry.
+        self.runtime().state.writable()?;
+        if ImageState::set_image(self, Some(image), fit_width) {
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
+    /// Removes image content while preserving the label, font, and activation source.
+    fn clear_image(&mut self) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        if ImageState::set_image(self, None, false) {
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
+    /// Connects the entry's existing semantic event source directly through the class contract.
+    fn subscribe(&mut self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.runtime().state.writable()?;
+        let endpoint = <Self as crate::TypedWidget<crate::ListBoxSubmitted>>::event(self);
+        crate::com::events::subscribe(endpoint, sink)
+    }
+}

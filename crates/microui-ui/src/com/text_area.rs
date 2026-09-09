@@ -63,7 +63,7 @@ impl IMultilineEditor for crate::TextEditor {
     /// Validates before changing wrapping and invalidating both text geometry and caret navigation.
     fn set_wrapping(&mut self, wrapping: TextWrapping) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
-        let wrap = super::leaves::local_wrap(wrapping)?;
+        let wrap = super::widget::local_wrap(wrapping)?;
         if self.com_wrap() != wrap {
             self.com_set_wrap(wrap);
             self.runtime_mut().state.record_change(GeometryChange::CHANGED);
@@ -126,7 +126,7 @@ impl crate::TextArea {
         resources: Option<&super::widget::SharedAssets>,
     ) -> Result<Self, NcStatus> {
         let text_value = text(input)?;
-        let wrap = super::leaves::local_wrap(wrapping)?;
+        let wrap = super::widget::local_wrap(wrapping)?;
         let parts = super::scroll::ScrollParts::prepare(host.clone(), scrolling, resources)?;
         let text = crate::TextEditor::create_com(host.clone(), text_value, wrap, parts.model.clone(), resources)?;
         let font = text.query()?;

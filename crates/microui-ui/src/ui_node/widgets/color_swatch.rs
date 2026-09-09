@@ -198,3 +198,79 @@ impl crate::com::widget::FontState for ColorSwatch {
         self.font = font;
     }
 }
+
+use crate::com::widget::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
+use microui_contracts::{Color, ColorSwatchAbi, GeometryChange, IWidgetHostAbi, TextFontRole};
+use nc_com::*;
+
+direct_widget_phase_impl!(ColorSwatch);
+direct_leaf_layout_impl!(ColorSwatch);
+
+impl ColorSwatch {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(crate) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: crate::com::widget::SharedAssets,
+        rgba: u32,
+        label: NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<ComPtr<ColorSwatchAbi>, NcStatus> {
+        let value = Self::build(host, rgba, label, Some(&resources))?;
+        Ok(Self::from_value(value)
+            .query()
+            .expect("ColorSwatch declares its callable class contract"))
+    }
+
+    /// Builds one color swatch with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        rgba: u32,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        resources: Option<&crate::com::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let parameters = crate::ColorSwatchParameters::new(crate::com::color(rgba)).label(crate::com::text(label)?);
+        let runtime = crate::com::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        Ok(Self::from_runtime(runtime, parameters))
+    }
+}
+
+impl microui_contracts::ColorSwatch for ColorSwatch {
+    /// Validates the label and copies packed RGBA before allocating the established swatch state.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, rgba: u32, label: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus> {
+        Self::build(host.add_ref(), rgba, label, None)
+    }
+    /// Returns an immutable snapshot without exposing the semantic String allocation.
+    fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(NcString::from_utf8_str(self.label()))
+    }
+    /// Validates UTF-8 and records geometry only when the concrete label changes.
+    fn set_text(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        let label = crate::com::text(input)?;
+        if self.label() != label {
+            self.set_label(label);
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
+    /// Packs canonical RGBA without relying on machine endianness.
+    fn fill(&self) -> Result<u32, NcStatus> {
+        self.runtime().state.readable()?;
+        let c = self.fill();
+        Ok(u32::from_le_bytes([c.r, c.g, c.b, c.a]))
+    }
+    /// Color is a paint-only input and emits no user event.
+    fn set_fill(&mut self, rgba: u32) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        self.set_fill(crate::com::color(rgba));
+        Ok(())
+    }
+    /// Validates a semantic role before changing the swatch label's font.
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+        set_direct_font_role(self, role)
+    }
+    /// Resolves one exact named font before changing the swatch label's font.
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        set_direct_named_font(self, name)
+    }
+}

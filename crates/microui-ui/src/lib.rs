@@ -183,11 +183,12 @@ pub(crate) use ui_node::{ScrollAreaOption};
 #[cfg(test)]
 pub(crate) use ui_node::{ChildrenHandle, Container, DisclosureParameters, GridParameters, LinearItem, LinearParameters, ScrollAreaParameters, TypedWidgetHandle};
 pub(crate) use widgets::{
-    Button, ButtonParameters, ButtonSubmitted, Checkbox, CheckboxChanged, CheckboxParameters, ColorSwatch, ColorSwatchParameters, Combo, ComboChanged,
-    ComboParameters, ComboSubmitted, DecimalPrecision, ListBox, ListBoxParameters, ListBoxSubmitted, ListItem, ListItemParameters, ListItemSubmitted, Number,
-    NumberChanged, NumberParameters, Slider, SliderChanged, SliderParameters, TextArea, TextAreaChanged, TextAreaSubmitted, TextEditor, Real, TextBlock,
-    TextBlockParameters, Textbox, TextboxChanged, TextboxParameters, TextboxSubmitted,
+    ButtonParameters, ButtonSubmitted, CheckboxChanged, CheckboxParameters, ColorSwatchParameters, Combo, ComboChanged, ComboParameters, ComboSubmitted,
+    DecimalPrecision, ListBoxParameters, ListBoxSubmitted, ListItemParameters, ListItemSubmitted, NumberChanged, NumberParameters, SliderChanged,
+    SliderParameters, TextArea, TextAreaChanged, TextAreaSubmitted, TextEditor, Real, TextBlockParameters, TextboxChanged, TextboxParameters, TextboxSubmitted,
 };
+#[cfg(test)]
+pub(crate) use widgets::{Button, Checkbox, ColorSwatch, ListItem, Number, Slider, TextBlock, Textbox};
 #[cfg(test)]
 pub(crate) use widgets::{TextAreaParameters};
 #[cfg(test)]

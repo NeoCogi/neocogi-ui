@@ -330,3 +330,77 @@ mod tests {
         assert!(display_list.debug_operation_count() >= 1);
     }
 }
+
+use crate::com::widget::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_icon_role, set_direct_named_font, set_direct_named_icon};
+use microui_contracts::{ContentIcon, GeometryChange, IActivationSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi, ListItemAbi, TextFontRole};
+use nc_com::*;
+
+direct_widget_phase_impl!(ListItem);
+direct_leaf_layout_impl!(ListItem);
+
+impl ListItem {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(crate) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: crate::com::widget::SharedAssets,
+        label: NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<ComPtr<ListItemAbi>, NcStatus> {
+        let value = Self::build(host, label, Some(&resources))?;
+        Ok(Self::from_value(value).query().expect("ListItem declares its callable class contract"))
+    }
+
+    /// Builds one list item with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        resources: Option<&crate::com::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let parameters = crate::ListItemParameters::new(crate::com::text(label)?);
+        let runtime = crate::com::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        Ok(Self::from_runtime(runtime, parameters))
+    }
+}
+
+impl microui_contracts::ListItem for ListItem {
+    /// Validates the label before allocating the established application-data-free row state.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus> {
+        Self::build(host.add_ref(), label, None)
+    }
+    /// Returns an immutable label snapshot from the concrete row.
+    fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(NcString::from_utf8_str(self.label()))
+    }
+    /// Validates UTF-8 and records geometry only when the concrete label changes.
+    fn set_text(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        let label = crate::com::text(input)?;
+        if self.label() != label {
+            self.set_label(label);
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
+    /// Validates a semantic role before changing the row label's font.
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+        set_direct_font_role(self, role)
+    }
+    /// Resolves one exact named font before changing the row label's font.
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        set_direct_named_font(self, name)
+    }
+    /// Validates and applies one semantic icon selection directly through the class contract.
+    fn set_icon_role(&mut self, icon: ContentIcon) -> Result<(), NcStatus> {
+        set_direct_icon_role(self, icon)
+    }
+    /// Resolves one exact named icon before replacing the row's existing selection.
+    fn set_named_icon(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        set_direct_named_icon(self, name)
+    }
+    /// Connects the row's existing semantic event source directly through the class contract.
+    fn subscribe(&mut self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.runtime().state.writable()?;
+        let endpoint = <Self as crate::TypedWidget<crate::ListItemSubmitted>>::event(self);
+        crate::com::events::subscribe(endpoint, sink)
+    }
+}

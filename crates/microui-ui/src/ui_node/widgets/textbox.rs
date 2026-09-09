@@ -598,3 +598,87 @@ mod tests {
         assert_eq!(textbox.cursor(), 6);
     }
 }
+
+use crate::com::widget::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
+use microui_contracts::{GeometryChange, IEventSubscriptionAbi, ITextChangedSinkAbi, ITextSubmittedSinkAbi, IWidgetHostAbi, TextFontRole, TextboxAbi};
+use nc_com::*;
+
+direct_widget_phase_impl!(Textbox);
+direct_leaf_layout_impl!(Textbox);
+
+impl Textbox {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(crate) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: crate::com::widget::SharedAssets,
+        text: NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<ComPtr<TextboxAbi>, NcStatus> {
+        let value = Self::build(host, text, Some(&resources))?;
+        Ok(Self::from_value(value).query().expect("Textbox declares its callable class contract"))
+    }
+
+    /// Builds one textbox with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        input: NcCopyFromBufferOffset<'_, u8>,
+        resources: Option<&crate::com::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let parameters = crate::TextboxParameters::new(crate::com::text(input)?);
+        let runtime = crate::com::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        Ok(Self::from_runtime(runtime, parameters))
+    }
+}
+
+impl microui_contracts::Textbox for Textbox {
+    /// Normalizes the complete input before allocating the established Textbox defaults.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, input: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus> {
+        Self::build(host.add_ref(), input, None)
+    }
+    /// Returns an immutable snapshot without exposing the semantic String allocation.
+    fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(NcString::from_utf8_str(self.text()))
+    }
+    /// Applies single-line normalization before recording an actual geometry change.
+    fn set_text(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        let input = crate::com::text(input)?;
+        let previous = self.text().to_owned();
+        self.set_text(input);
+        if self.text() != previous {
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
+    /// Reports a byte cursor rather than a glyph or grapheme index.
+    fn cursor(&self) -> Result<u64, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(self.cursor() as u64)
+    }
+    /// Clamps oversize input before applying the shared Unicode-boundary algorithm.
+    fn set_cursor(&mut self, cursor: u64) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        self.set_cursor(usize::try_from(cursor).unwrap_or(usize::MAX));
+        Ok(())
+    }
+    /// Validates a semantic font role before changing the Textbox's measurement input.
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+        set_direct_font_role(self, role)
+    }
+    /// Resolves one exact named font before replacing the Textbox's selection.
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        set_direct_named_font(self, name)
+    }
+    /// Connects the existing changed-text source directly through the class contract.
+    fn subscribe_changed(&mut self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.runtime().state.writable()?;
+        let endpoint = <Self as crate::TypedWidget<crate::TextboxChanged>>::event(self);
+        crate::com::events::subscribe(endpoint, sink)
+    }
+    /// Connects the independent submitted-text source directly through the class contract.
+    fn subscribe_submitted(&mut self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.runtime().state.writable()?;
+        let endpoint = <Self as crate::TypedWidget<crate::TextboxSubmitted>>::event(self);
+        crate::com::events::subscribe(endpoint, sink)
+    }
+}

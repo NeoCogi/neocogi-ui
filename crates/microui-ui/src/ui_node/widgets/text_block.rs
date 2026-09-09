@@ -294,3 +294,84 @@ mod tests {
         assert_eq!(block.text(), "d\ne\nf\n");
     }
 }
+
+use crate::com::widget::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
+use microui_contracts::{GeometryChange, IWidgetHostAbi, TextBlockAbi, TextFontRole, TextWrapping};
+use nc_com::*;
+
+direct_widget_phase_impl!(TextBlock);
+direct_leaf_layout_impl!(TextBlock);
+
+impl TextBlock {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(crate) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: crate::com::widget::SharedAssets,
+        text: NcCopyFromBufferOffset<'_, u8>,
+        wrapping: TextWrapping,
+    ) -> Result<ComPtr<TextBlockAbi>, NcStatus> {
+        let value = Self::build(host, text, wrapping, Some(&resources))?;
+        Ok(Self::from_value(value).query().expect("TextBlock declares its callable class contract"))
+    }
+
+    /// Builds one text block with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        input: NcCopyFromBufferOffset<'_, u8>,
+        wrapping: TextWrapping,
+        resources: Option<&crate::com::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let parameters = crate::TextBlockParameters::with_wrap(crate::com::text(input)?, crate::com::widget::local_wrap(wrapping)?);
+        let runtime = crate::com::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        Ok(Self::from_runtime(runtime, parameters))
+    }
+}
+
+impl microui_contracts::TextBlock for TextBlock {
+    /// Validates text and wrapping before allocating the established TextBlock defaults.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, input: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping) -> Result<Self, NcStatus> {
+        Self::build(host.add_ref(), input, wrapping, None)
+    }
+    /// Returns an immutable snapshot without exposing the semantic String allocation.
+    fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(NcString::from_utf8_str(self.text()))
+    }
+    /// Replaces complete text and records only an actual geometry change.
+    fn set_text(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        let input = crate::com::text(input)?;
+        let previous = self.text().to_owned();
+        self.set_text(input);
+        if self.text() != previous {
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
+    /// Encodes exactly the wrapping behavior used by existing text measurement.
+    fn wrapping(&self) -> Result<TextWrapping, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(match self.com_wrap() {
+            crate::TextWrap::None => TextWrapping::NONE,
+            crate::TextWrap::Word => TextWrapping::WORD,
+        })
+    }
+    /// Rejects unknown policies before mutating semantic state or its geometry marker.
+    fn set_wrapping(&mut self, wrapping: TextWrapping) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        let wrap = crate::com::widget::local_wrap(wrapping)?;
+        if self.com_wrap() != wrap {
+            self.com_set_wrap(wrap);
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
+    /// Validates a semantic font role before changing the TextBlock's measurement input.
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+        set_direct_font_role(self, role)
+    }
+    /// Resolves one exact named font before replacing the TextBlock's selection.
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        set_direct_named_font(self, name)
+    }
+}

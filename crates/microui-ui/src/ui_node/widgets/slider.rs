@@ -1037,3 +1037,81 @@ mod tests {
         assert!(display_list.debug_operation_count() >= 1);
     }
 }
+
+use crate::com::widget::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
+use microui_contracts::{GeometryChange, IEventSubscriptionAbi, INumericSinkAbi, IWidgetHostAbi, SliderAbi, SliderOptions, TextFontRole};
+use nc_com::*;
+
+direct_widget_phase_impl!(Slider);
+direct_leaf_layout_impl!(Slider);
+
+impl Slider {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(crate) fn create_com(host: ComPtr<IWidgetHostAbi>, resources: crate::com::widget::SharedAssets, options: SliderOptions) -> Result<ComPtr<SliderAbi>, NcStatus> {
+        let value = Self::build(host, options, Some(&resources))?;
+        Ok(Self::from_value(value).query().expect("Slider declares its callable class contract"))
+    }
+
+    /// Builds one slider with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        options: SliderOptions,
+        resources: Option<&crate::com::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let parameters = crate::SliderParameters::with_opt(
+            options.value,
+            options.low,
+            options.high,
+            options.step,
+            crate::DecimalPrecision::try_from(usize::from(options.precision)).map_err(|_| NC_E_INVALID_ARG)?,
+            crate::WidgetOption::FRAME,
+        )
+        .map_err(|_| NC_E_INVALID_ARG)?;
+        let runtime = crate::com::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        Ok(Self::from_runtime(runtime, parameters))
+    }
+}
+
+impl microui_contracts::Slider for Slider {
+    /// Validates the complete arithmetic tuple before allocating the established framed control.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, options: SliderOptions) -> Result<Self, NcStatus> {
+        Self::build(host.add_ref(), options, None)
+    }
+    /// Reads the finite value owned by the slider's concrete semantic algorithm.
+    fn value(&self) -> Result<f32, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(self.value())
+    }
+    /// Rejects nonfinite input and dirties geometry only when clamping or snapping changes the value.
+    fn set_value(&mut self, value: f32) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        if !value.is_finite() {
+            return Err(NC_E_INVALID_ARG);
+        }
+        let previous = self.value();
+        self.set_value(value);
+        if self.value() != previous {
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
+    /// Exposes the same edit mode that controls routed text input.
+    fn is_editing(&self) -> Result<bool, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(self.is_editing())
+    }
+    /// Validates a semantic font role before changing the slider's measurement input.
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+        set_direct_font_role(self, role)
+    }
+    /// Resolves one exact named font before replacing the slider's selection.
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        set_direct_named_font(self, name)
+    }
+    /// Connects the slider's existing semantic event source directly through the class contract.
+    fn subscribe(&mut self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.runtime().state.writable()?;
+        let endpoint = <Self as crate::TypedWidget<crate::SliderChanged>>::event(self);
+        crate::com::events::subscribe(endpoint, sink)
+    }
+}

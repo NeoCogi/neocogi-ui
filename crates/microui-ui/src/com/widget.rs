@@ -212,6 +212,15 @@ pub(crate) fn available(axis: AxisLimit) -> Result<AvailableSpace, NcStatus> {
     })
 }
 
+/// Converts the callable text-wrapping vocabulary into the concrete layout policy.
+pub(crate) fn local_wrap(wrap: TextWrapping) -> Result<crate::TextWrap, NcStatus> {
+    match wrap {
+        TextWrapping::NONE => Ok(crate::TextWrap::None),
+        TextWrapping::WORD => Ok(crate::TextWrap::Word),
+        _ => Err(nc_com::NC_E_INVALID_ARG),
+    }
+}
+
 /// Implements the shared COM lifecycle and update/paint phases for one concrete widget type.
 ///
 /// The generated methods access only the concrete object's [`WidgetRuntime`] field through
@@ -219,20 +228,20 @@ pub(crate) fn available(axis: AxisLimit) -> Result<AvailableSpace, NcStatus> {
 /// algorithm object, erased payload, or secondary widget identity.
 macro_rules! direct_widget_phase_impl {
     ($name:ty) => {
-        impl IWidget for $name {
+        impl microui_contracts::IWidget for $name {
             /// Returns the runtime authority without retaining a tree or parent.
-            fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
+            fn host(&self) -> Result<nc_com::ComPtr<microui_contracts::IWidgetHostAbi>, nc_com::NcStatus> {
                 let runtime = <$name as crate::com::widget::HostedWidget>::runtime(self);
                 Ok(runtime.state.host().add_ref())
             }
 
             /// Claims this concrete allocation's only attachment after host validation.
-            fn mount(&mut self) -> Result<(), NcStatus> {
+            fn mount(&mut self) -> Result<(), nc_com::NcStatus> {
                 <$name as crate::com::widget::HostedWidget>::runtime_mut(self).state.mount()
             }
 
             /// Closes the concrete widget's event sources exactly once.
-            fn close(&mut self) -> Result<(), NcStatus> {
+            fn close(&mut self) -> Result<(), nc_com::NcStatus> {
                 let closed = <$name as crate::com::widget::HostedWidget>::runtime_mut(self).state.close()?;
                 if closed {
                     <$name as crate::com::widget::HostedWidget>::close_contents(self)?;
@@ -241,11 +250,11 @@ macro_rules! direct_widget_phase_impl {
             }
 
             /// Copies routing and frame policy from the concrete widget and its common options.
-            fn properties(&self) -> Result<WidgetProperties, NcStatus> {
+            fn properties(&self) -> Result<microui_contracts::WidgetProperties, nc_com::NcStatus> {
                 let runtime = <$name as crate::com::widget::HostedWidget>::runtime(self);
                 let options = runtime.state.options()?;
-                Ok(WidgetProperties {
-                    options: WidgetOptions {
+                Ok(microui_contracts::WidgetProperties {
+                    options: microui_contracts::WidgetOptions {
                         bits: <$name as crate::com::widget::WidgetAlgorithm>::effective_options(
                             self,
                             crate::WidgetOption::from_bits_retain(options.bits),
@@ -258,7 +267,7 @@ macro_rules! direct_widget_phase_impl {
             }
 
             /// Replaces the single common option value after complete validation.
-            fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus> {
+            fn set_options(&mut self, options: microui_contracts::WidgetOptions) -> Result<(), nc_com::NcStatus> {
                 options.validate()?;
                 <$name as crate::com::widget::HostedWidget>::runtime_mut(self).state.set_options(options)
             }
@@ -266,10 +275,10 @@ macro_rules! direct_widget_phase_impl {
             /// Runs copied input directly against this concrete widget's semantic fields.
             fn update(
                 &mut self,
-                state: WidgetUpdate,
-                event: WidgetEventAbi,
-                text: NcCopyFromBufferOffset<'_, u8>,
-            ) -> Result<GeometryChange, NcStatus> {
+                state: microui_contracts::WidgetUpdate,
+                event: microui_contracts::WidgetEventAbi,
+                text: nc_com::NcCopyFromBufferOffset<'_, u8>,
+            ) -> Result<microui_contracts::GeometryChange, nc_com::NcStatus> {
                 <$name as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
                 state.validate()?;
                 let input = crate::com::local_event(event, text)?;
@@ -292,17 +301,17 @@ macro_rules! direct_widget_phase_impl {
                     crate::Modifiers::from_bits(state.modifiers).ok_or(nc_com::NC_E_INVALID_ARG)?,
                 );
                 Ok(match crate::Widget::update(self, &mut ctx, input.as_ref()) {
-                    crate::Change::Changed => GeometryChange::CHANGED,
-                    crate::Change::NoChange => GeometryChange::NO_CHANGE,
+                    crate::Change::Changed => microui_contracts::GeometryChange::CHANGED,
+                    crate::Change::NoChange => microui_contracts::GeometryChange::NO_CHANGE,
                 })
             }
 
             /// Drains sticky common and explicitly shared semantic geometry changes together.
-            fn take_change(&mut self) -> Result<GeometryChange, NcStatus> {
+            fn take_change(&mut self) -> Result<microui_contracts::GeometryChange, nc_com::NcStatus> {
                 if crate::Widget::take_shared_change(self) {
                     <$name as crate::com::widget::HostedWidget>::runtime_mut(self)
                         .state
-                        .record_change(GeometryChange::CHANGED);
+                        .record_change(microui_contracts::GeometryChange::CHANGED);
                 }
                 <$name as crate::com::widget::HostedWidget>::runtime_mut(self).state.take_change()
             }
@@ -310,10 +319,10 @@ macro_rules! direct_widget_phase_impl {
             /// Paints semantic fields directly into the runtime-owned scoped frame context.
             fn paint(
                 &mut self,
-                scope: PaintScope,
-                state: WidgetPaint,
-                painter: ComRef<'_, IPainterAbi>,
-            ) -> Result<(), NcStatus> {
+                scope: microui_contracts::PaintScope,
+                state: microui_contracts::WidgetPaint,
+                painter: nc_com::ComRef<'_, microui_contracts::IPainterAbi>,
+            ) -> Result<(), nc_com::NcStatus> {
                 state.validate()?;
                 // Reading options performs the one lifecycle check required by
                 // the complete paint invocation. Repeating it before the same
@@ -348,9 +357,13 @@ pub(crate) use direct_widget_phase_impl;
 /// Implements intrinsic COM measurement directly on one concrete leaf widget.
 macro_rules! direct_leaf_layout_impl {
     ($name:ty) => {
-        impl ILeafLayout for $name {
+        impl microui_contracts::ILeafLayout for $name {
             /// Measures the concrete semantic fields against one owned host-resource snapshot.
-            fn measure(&mut self, bounds: LayoutLimits, _metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
+            fn measure(
+                &mut self,
+                bounds: microui_contracts::LayoutLimits,
+                _metrics: nc_com::ComRef<'_, microui_contracts::ITextMetricsAbi>,
+            ) -> Result<microui_contracts::Size, nc_com::NcStatus> {
                 <$name as crate::com::widget::HostedWidget>::runtime(self).state.readable()?;
                 let constraints = crate::Constraints::new(
                     crate::com::widget::available(bounds.width)?,
@@ -364,7 +377,7 @@ macro_rules! direct_leaf_layout_impl {
                     assets.bundle().atlas(),
                     constraints,
                 );
-                Ok(Size {
+                Ok(microui_contracts::Size {
                     width: size.width.max(0),
                     height: size.height.max(0),
                 })

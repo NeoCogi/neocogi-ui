@@ -279,3 +279,82 @@ impl crate::com::widget::FontState for Checkbox {
         self.font = font;
     }
 }
+
+use crate::com::widget::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
+use microui_contracts::{CheckboxAbi, GeometryChange, ICheckboxSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi, TextFontRole};
+use nc_com::*;
+
+direct_widget_phase_impl!(Checkbox);
+direct_leaf_layout_impl!(Checkbox);
+
+impl Checkbox {
+    /// Constructs the class for the host-bound factory through the same typed contract used by the registry.
+    pub(crate) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: crate::com::widget::SharedAssets,
+        checked: bool,
+        label: NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<ComPtr<CheckboxAbi>, NcStatus> {
+        let value = Self::build(host, checked, label, Some(&resources))?;
+        Ok(Self::from_value(value).query().expect("Checkbox declares its callable class contract"))
+    }
+
+    /// Builds one checkbox with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        checked: bool,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        resources: Option<&crate::com::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let parameters = crate::CheckboxParameters::new(crate::com::text(label)?, checked);
+        let runtime = crate::com::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        Ok(Self::from_runtime(runtime, parameters))
+    }
+}
+
+impl microui_contracts::Checkbox for Checkbox {
+    /// Validates the label and initializes the established Checkbox defaults in one allocation.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, checked: bool, label: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus> {
+        Self::build(host.add_ref(), checked, label, None)
+    }
+    /// Reads the same boolean state used by pointer/Space updates and paint.
+    fn checked(&self) -> Result<bool, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(self.checked())
+    }
+    /// Checked state changes paint only; both states reserve the same glyph space.
+    fn set_checked(&mut self, checked: bool) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        self.set_checked(checked);
+        Ok(())
+    }
+    /// Copies a label into an independently owned immutable COM string.
+    fn label(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(NcString::from_utf8_str(self.com_label()))
+    }
+    /// Commits valid UTF-8 atomically and preserves a prior pending change.
+    fn set_label(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        let input = crate::com::text(input)?;
+        if self.com_label() != input {
+            self.com_set_label(input);
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
+    /// Validates a semantic font role before changing the Checkbox's measurement input.
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+        set_direct_font_role(self, role)
+    }
+    /// Resolves one exact named font before replacing the Checkbox's selection.
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        set_direct_named_font(self, name)
+    }
+    /// Connects the Checkbox's existing semantic event source directly through its class contract.
+    fn subscribe(&mut self, sink: ComRef<'_, ICheckboxSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.runtime().state.writable()?;
+        let endpoint = <Self as crate::TypedWidget<crate::CheckboxChanged>>::event(self);
+        crate::com::events::subscribe(endpoint, sink)
+    }
+}

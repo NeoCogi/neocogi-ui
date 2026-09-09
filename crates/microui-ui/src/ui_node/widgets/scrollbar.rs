@@ -617,3 +617,88 @@ mod tests {
         assert!((i64::from(geometry.centered_offset(Vec2i::new(10 + 146 + 4, 20))) - i64::from(offset)).abs() <= 1);
     }
 }
+
+use crate::com::widget::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl};
+use microui_contracts::{IEventSubscriptionAbi, IScrollbarSinkAbi, IWidgetHostAbi, ScrollAxis, ScrollRange, ScrollbarAbi};
+use nc_com::*;
+
+direct_widget_phase_impl!(Scrollbar);
+direct_leaf_layout_impl!(Scrollbar);
+
+impl Scrollbar {
+    /// Converts an already host-bound structural scrollbar into its public COM capability.
+    pub(crate) fn into_com(self) -> ComPtr<ScrollbarAbi> {
+        Self::from_value(self)
+            .query()
+            .expect("Scrollbar declares its callable class contract")
+    }
+
+    /// Constructs the class for the host-bound factory through the same typed contract used by the registry.
+    pub(crate) fn create_com(host: ComPtr<IWidgetHostAbi>, resources: crate::com::widget::SharedAssets, range: ScrollRange) -> Result<ComPtr<ScrollbarAbi>, NcStatus> {
+        let value = Self::build(host, range, Some(&resources))?;
+        Ok(Self::from_value(value).query().expect("Scrollbar declares its callable class contract"))
+    }
+
+    /// Builds one scrollbar with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        range: ScrollRange,
+        resources: Option<&crate::com::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let axis = match range.axis {
+            ScrollAxis::HORIZONTAL => crate::ScrollbarAxis::Horizontal,
+            ScrollAxis::VERTICAL => crate::ScrollbarAxis::Vertical,
+            _ => return Err(NC_E_INVALID_ARG),
+        };
+        if range.viewport < 0 || range.content < 0 {
+            return Err(NC_E_INVALID_ARG);
+        }
+        let parameters = crate::ScrollbarParameters::new(axis).range(range.viewport, range.content, range.offset);
+        let runtime = crate::com::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        Ok(Self::from_runtime(runtime, parameters))
+    }
+}
+
+impl microui_contracts::Scrollbar for Scrollbar {
+    /// Validates orientation and lengths before allocating the established Scrollbar state.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, range: ScrollRange) -> Result<Self, NcStatus> {
+        Self::build(host.add_ref(), range, None)
+    }
+    /// Reads all range fields from one consistent semantic snapshot.
+    fn range(&self) -> Result<ScrollRange, NcStatus> {
+        self.runtime().state.readable()?;
+        let (viewport, content) = self.com_lengths();
+        let axis = match self.axis() {
+            crate::ScrollbarAxis::Horizontal => ScrollAxis::HORIZONTAL,
+            crate::ScrollbarAxis::Vertical => ScrollAxis::VERTICAL,
+        };
+        Ok(ScrollRange {
+            axis,
+            viewport,
+            content,
+            offset: self.offset(),
+        })
+    }
+    /// Validates both lengths before clamping the existing offset in one commit.
+    fn set_lengths(&mut self, viewport: i32, content: i32) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        if viewport < 0 || content < 0 {
+            return Err(NC_E_INVALID_ARG);
+        }
+        self.set_lengths(viewport, content);
+        Ok(())
+    }
+    /// Offset affects thumb paint only; the control's preferred size is fixed by its axis.
+    fn set_offset(&mut self, offset: i32) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        let offset = offset.clamp(0, self.max_offset());
+        self.set_offset(offset);
+        Ok(())
+    }
+    /// Connects the Scrollbar's existing semantic event source directly through its class contract.
+    fn subscribe(&mut self, sink: ComRef<'_, IScrollbarSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.runtime().state.writable()?;
+        let endpoint = <Self as crate::TypedWidget<crate::ScrollbarChanged>>::event(self);
+        crate::com::events::subscribe(endpoint, sink)
+    }
+}
