@@ -513,15 +513,15 @@ impl crate::com::widget::HostedWidget for Grid {
     }
 }
 
-impl crate::com::containers::ContainerAlgorithm for Grid {
+impl super::ContainerAlgorithm for Grid {
     type Edge = GridSpan;
     /// Returns the same span consumed by the existing row-major placement algorithm.
     fn edge(&self, index: usize) -> Option<Self::Edge> {
         self.items.span(index)
     }
     /// Commits validated metadata, rebuilding placements once after the matching topology commit.
-    fn edit_edges(&mut self, edit: crate::com::containers::EdgeEdit<Self::Edge>) {
-        use crate::com::containers::EdgeEdit;
+    fn edit_edges(&mut self, edit: super::EdgeEdit<Self::Edge>) {
+        use super::EdgeEdit;
         match edit {
             EdgeEdit::Insert { index, edge } => self.items.spans.insert(index, edge),
             EdgeEdit::Replace { index, edge } => self.items.spans[index] = edge,
@@ -531,6 +531,123 @@ impl crate::com::containers::ContainerAlgorithm for Grid {
             EdgeEdit::Clear => self.items.spans.clear(),
         }
         self.items.rebuild_placements(self.items.spans.len());
+    }
+}
+
+use crate::com::widget::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
+use microui_contracts::{GridAbi, GridExtent, IWidgetHostAbi, LayoutTrackAbi};
+use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus};
+
+direct_widget_phase_impl!(Grid);
+direct_container_layout_impl!(Grid);
+
+impl Grid {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(crate) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: crate::com::widget::SharedAssets,
+        columns: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
+        rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
+    ) -> Result<ComPtr<GridAbi>, NcStatus> {
+        let value = Self::build(host, columns, rows, Some(&resources))?;
+        Ok(Self::from_value(value).query().expect("Grid declares its callable class contract"))
+    }
+
+    /// Builds one Grid with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        columns: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
+        rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
+        resources: Option<&crate::com::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let columns = local_tracks(columns)?;
+        let rows = local_tracks(rows)?;
+        let editor = host.create_children()?;
+        let runtime = WidgetRuntime::for_resources(host, crate::WidgetOption::NO_INTERACT, resources)?;
+        Ok(Self::from_runtime(runtime, editor, columns, rows))
+    }
+}
+
+impl microui_contracts::Grid for Grid {
+    /// Validates both complete track sequences before allocating child ownership or widget state.
+    fn new(
+        host: ComRef<'_, IWidgetHostAbi>,
+        columns: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
+        rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
+    ) -> Result<Self, NcStatus> {
+        Self::build(host.add_ref(), columns, rows, None)
+    }
+
+    container_methods!();
+
+    /// Copies column policy from the one concrete Grid state.
+    fn columns(&self, output: NcCopyToBufferOffset<'_, LayoutTrackAbi>) -> Result<u32, NcStatus> {
+        self.runtime().state.readable()?;
+        copy_tracks(self.column_tracks(), output)
+    }
+
+    /// Validates all input before rebuilding column-dependent span placement.
+    fn set_columns(&mut self, tracks: NcCopyFromBufferOffset<'_, LayoutTrackAbi>) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        let tracks = local_tracks(tracks)?;
+        if self.column_tracks() != tracks {
+            self.set_column_tracks(tracks);
+            self.runtime_mut().state.record_change(microui_contracts::GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
+
+    /// Copies row policy without exposing Grid's placement scratch.
+    fn rows(&self, output: NcCopyToBufferOffset<'_, LayoutTrackAbi>) -> Result<u32, NcStatus> {
+        self.runtime().state.readable()?;
+        copy_tracks(self.row_tracks(), output)
+    }
+
+    /// Replaces row policy only after validating the complete typed input.
+    fn set_rows(&mut self, tracks: NcCopyFromBufferOffset<'_, LayoutTrackAbi>) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        let tracks = local_tracks(tracks)?;
+        if self.row_tracks() != tracks {
+            self.set_row_tracks(tracks);
+            self.runtime_mut().state.record_change(microui_contracts::GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
+
+    container_edges!(GridExtent, local_grid_edge, grid_edge);
+}
+
+/// Validates a complete track sequence before constructing or mutating Grid state.
+fn local_tracks(tracks: NcCopyFromBufferOffset<'_, LayoutTrackAbi>) -> Result<Vec<TrackSize>, NcStatus> {
+    if tracks.offset() != 0 || tracks.len() > u32::MAX as usize {
+        return Err(nc_com::NC_E_INVALID_ARG);
+    }
+    tracks.as_slice().iter().copied().map(super::local_track).collect()
+}
+
+/// Copies a requested track range and returns the complete retained cardinality.
+fn copy_tracks(tracks: &[TrackSize], mut output: NcCopyToBufferOffset<'_, LayoutTrackAbi>) -> Result<u32, NcStatus> {
+    let offset = usize::try_from(output.offset()).map_err(|_| nc_com::NC_E_INVALID_ARG)?;
+    let source = tracks.get(offset..).ok_or(nc_com::NC_E_INVALID_ARG)?;
+    for (target, track) in output.as_mut_slice().iter_mut().zip(source) {
+        *target = super::layout_track(*track);
+    }
+    u32::try_from(tracks.len()).map_err(|_| nc_com::NC_E_OUT_OF_RANGE)
+}
+
+/// Rejects empty spans before the existing Grid placement algorithm can clamp their edges.
+fn local_grid_edge(edge: GridExtent) -> Result<GridSpan, NcStatus> {
+    if edge.columns == 0 || edge.rows == 0 {
+        return Err(nc_com::NC_E_INVALID_ARG);
+    }
+    Ok(GridSpan::new(edge.columns as usize, edge.rows as usize))
+}
+
+/// Copies one positive retained span into its public contract value.
+fn grid_edge(edge: GridSpan) -> GridExtent {
+    GridExtent {
+        columns: edge.columns() as u32,
+        rows: edge.rows() as u32,
     }
 }
 

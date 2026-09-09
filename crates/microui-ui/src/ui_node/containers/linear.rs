@@ -554,15 +554,15 @@ impl crate::com::widget::HostedWidget for Linear {
     }
 }
 
-impl crate::com::containers::ContainerAlgorithm for Linear {
+impl super::ContainerAlgorithm for Linear {
     type Edge = LinearItemSpec;
     /// Copies the same relationship used by the existing track resolver.
     fn edge(&self, index: usize) -> Option<Self::Edge> {
         self.specs.get(index).copied()
     }
     /// Commits only validated metadata after the host's topology transaction, then discards derived scratch.
-    fn edit_edges(&mut self, edit: crate::com::containers::EdgeEdit<Self::Edge>) {
-        use crate::com::containers::EdgeEdit;
+    fn edit_edges(&mut self, edit: super::EdgeEdit<Self::Edge>) {
+        use super::EdgeEdit;
         match edit {
             EdgeEdit::Insert { index, edge } => self.specs.insert(index, edge),
             EdgeEdit::Replace { index, edge } => self.specs[index] = edge,
@@ -572,6 +572,149 @@ impl crate::com::containers::ContainerAlgorithm for Linear {
             EdgeEdit::Clear => self.specs.clear(),
         }
         self.resolved_main.clear();
+    }
+}
+
+use crate::com::widget::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
+use microui_contracts::{ChildCrossSize, CrossSize, CrossSizeAbi, FlowDirection, IWidgetHostAbi, LinearAbi, LinearEdge};
+use nc_com::{ComPtr, ComRef, NcStatus};
+
+direct_widget_phase_impl!(Linear);
+direct_container_layout_impl!(Linear);
+
+impl Linear {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(crate) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: crate::com::widget::SharedAssets,
+        direction: FlowDirection,
+        cross: CrossSizeAbi,
+    ) -> Result<ComPtr<LinearAbi>, NcStatus> {
+        let value = Self::build(host, direction, cross, Some(&resources))?;
+        Ok(Self::from_value(value).query().expect("Linear declares its callable class contract"))
+    }
+
+    /// Builds one linear container with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        direction: FlowDirection,
+        cross: CrossSizeAbi,
+        resources: Option<&crate::com::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let direction = local_direction(direction)?;
+        let cross = local_cross(cross)?;
+        let editor = host.create_children()?;
+        let runtime = WidgetRuntime::for_resources(host, crate::WidgetOption::NO_INTERACT, resources)?;
+        Ok(Self::from_runtime(runtime, editor, direction, cross))
+    }
+}
+
+impl microui_contracts::Linear for Linear {
+    /// Validates both layout policies before allocating child ownership or widget state.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, direction: FlowDirection, cross: CrossSizeAbi) -> Result<Self, NcStatus> {
+        Self::build(host.add_ref(), direction, cross, None)
+    }
+
+    container_methods!();
+
+    /// Returns the exact retained axis and leading-edge policy.
+    fn direction(&self) -> Result<FlowDirection, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(flow_direction(Linear::direction(self)))
+    }
+
+    /// Changes direction only after validating the complete typed value.
+    fn set_direction(&mut self, direction: FlowDirection) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        let direction = local_direction(direction)?;
+        if Linear::direction(self) != direction {
+            Linear::set_direction(self, direction);
+            self.runtime_mut().state.record_change(microui_contracts::GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
+
+    /// Returns the line's cross size independently of per-child relationships.
+    fn cross_size(&self) -> Result<CrossSizeAbi, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(cross_size(Linear::cross_size(self)))
+    }
+
+    /// Changes cross size only after validating its typed payload.
+    fn set_cross_size(&mut self, cross: CrossSizeAbi) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        let cross = local_cross(cross)?;
+        if Linear::cross_size(self) != cross {
+            Linear::set_cross_size(self, cross);
+            self.runtime_mut().state.record_change(microui_contracts::GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
+
+    container_edges!(LinearEdge, local_linear_edge, linear_edge);
+}
+
+/// Decodes the complete axis and leading-edge choice without a reversal side channel.
+fn local_direction(direction: FlowDirection) -> Result<LinearDirection, NcStatus> {
+    match direction {
+        FlowDirection::LEFT_TO_RIGHT => Ok(LinearDirection::LeftToRight),
+        FlowDirection::RIGHT_TO_LEFT => Ok(LinearDirection::RightToLeft),
+        FlowDirection::TOP_TO_BOTTOM => Ok(LinearDirection::TopToBottom),
+        FlowDirection::BOTTOM_TO_TOP => Ok(LinearDirection::BottomToTop),
+        _ => Err(nc_com::NC_E_INVALID_ARG),
+    }
+}
+
+/// Encodes the exact retained direction without inferring it from geometry.
+fn flow_direction(direction: LinearDirection) -> FlowDirection {
+    match direction {
+        LinearDirection::LeftToRight => FlowDirection::LEFT_TO_RIGHT,
+        LinearDirection::RightToLeft => FlowDirection::RIGHT_TO_LEFT,
+        LinearDirection::TopToBottom => FlowDirection::TOP_TO_BOTTOM,
+        LinearDirection::BottomToTop => FlowDirection::BOTTOM_TO_TOP,
+    }
+}
+
+/// Validates a line cross-axis policy, including exact nonnegative extents.
+fn local_cross(cross: CrossSizeAbi) -> Result<LinearCrossSize, NcStatus> {
+    match CrossSize::try_from(cross).map_err(|_| nc_com::NC_E_INVALID_ARG)? {
+        CrossSize::Content => Ok(LinearCrossSize::Content),
+        CrossSize::Stretch => Ok(LinearCrossSize::Stretch),
+        CrossSize::Fixed { extent } if extent >= 0 => Ok(LinearCrossSize::Fixed(extent)),
+        _ => Err(nc_com::NC_E_INVALID_ARG),
+    }
+}
+
+/// Encodes the retained line cross policy without a duplicate cached representation.
+fn cross_size(cross: LinearCrossSize) -> CrossSizeAbi {
+    match cross {
+        LinearCrossSize::Content => CrossSize::Content,
+        LinearCrossSize::Stretch => CrossSize::Stretch,
+        LinearCrossSize::Fixed(extent) => CrossSize::Fixed { extent },
+    }
+    .into()
+}
+
+/// Validates both axes of one Linear relationship before consuming a child claim.
+fn local_linear_edge(edge: LinearEdge) -> Result<LinearItemSpec, NcStatus> {
+    let main = super::local_track(edge.main)?;
+    let fixed_cross = match ChildCrossSize::try_from(edge.cross).map_err(|_| nc_com::NC_E_INVALID_ARG)? {
+        ChildCrossSize::Stretch => None,
+        ChildCrossSize::Fixed { extent } if extent >= 0 => Some(extent),
+        _ => return Err(nc_com::NC_E_INVALID_ARG),
+    };
+    Ok(LinearItemSpec { main, fixed_cross })
+}
+
+/// Copies one retained Linear relationship into its public contract value.
+fn linear_edge(edge: LinearItemSpec) -> LinearEdge {
+    LinearEdge {
+        main: super::layout_track(edge.main),
+        cross: match edge.fixed_cross {
+            Some(extent) => ChildCrossSize::Fixed { extent },
+            None => ChildCrossSize::Stretch,
+        }
+        .into(),
     }
 }
 

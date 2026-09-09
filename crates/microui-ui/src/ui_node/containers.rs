@@ -34,23 +34,162 @@ use super::container::ContainerLayoutCtx;
 #[cfg(test)]
 use super::{Children, Node};
 
+/// Metadata-only edit applied after the host commits the matching child-topology operation.
+pub(super) enum EdgeEdit<E> {
+    /// Inserts one validated relationship at an already validated position.
+    Insert { index: usize, edge: E },
+    /// Replaces one relationship without changing metadata cardinality.
+    Replace { index: usize, edge: E },
+    /// Removes one relationship after the corresponding subtree has been removed.
+    Remove { index: usize },
+    /// Clears all relationships while retaining reusable storage.
+    Clear,
+}
+
+/// Typed relationship access shared by the two editable built-in container algorithms.
+pub(super) trait ContainerAlgorithm: crate::com::widget::WidgetAlgorithm + crate::ContainerWidget {
+    /// Concrete relationship data retained by this container.
+    type Edge: Copy + PartialEq;
+
+    /// Reads one relationship without exposing the owning metadata collection.
+    fn edge(&self, index: usize) -> Option<Self::Edge>;
+
+    /// Publishes an infallible metadata edit after topology validation succeeds.
+    fn edit_edges(&mut self, edit: EdgeEdit<Self::Edge>);
+}
+
+/// Implements topology methods whose behavior is identical for Linear and Grid.
+macro_rules! container_methods {
+    () => {
+        /// Exposes read-only topology without allowing callers to bypass relationship metadata.
+        fn children(&self) -> Result<nc_com::ComPtr<microui_contracts::IChildrenAbi>, nc_com::NcStatus> {
+            <Self as crate::com::widget::HostedWidget>::runtime(self).state.readable()?;
+            self.editor.view()
+        }
+
+        /// Publishes matching metadata even when removed-child teardown reports an error.
+        fn remove(&mut self, index: u32) -> Result<microui_contracts::ChildEditResult, nc_com::NcStatus> {
+            <Self as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
+            let outcome = self.editor.remove(index)?;
+            <Self as crate::ui_node::containers::ContainerAlgorithm>::edit_edges(
+                self,
+                crate::ui_node::containers::EdgeEdit::Remove { index: index as usize },
+            );
+            Ok(outcome)
+        }
+
+        /// Clears topology and relationship metadata in the same guarded operation.
+        fn clear(&mut self) -> Result<microui_contracts::ChildEditResult, nc_com::NcStatus> {
+            <Self as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
+            let outcome = self.editor.clear()?;
+            <Self as crate::ui_node::containers::ContainerAlgorithm>::edit_edges(self, crate::ui_node::containers::EdgeEdit::Clear);
+            Ok(outcome)
+        }
+    };
+}
+
+/// Implements the identical validated relationship transaction for each concrete edge type.
+macro_rules! container_edges {
+    ($edge:ty, $decode:ident, $encode:ident) => {
+        /// Returns one copied relationship after checking the container's logical lifetime.
+        fn edge(&self, index: u32) -> Result<$edge, nc_com::NcStatus> {
+            <Self as crate::com::widget::HostedWidget>::runtime(self).state.readable()?;
+            Ok($encode(
+                <Self as crate::ui_node::containers::ContainerAlgorithm>::edge(self, index as usize)
+                    .ok_or(nc_com::NC_E_OUT_OF_RANGE)?,
+            ))
+        }
+
+        /// Replaces valid metadata and invalidates layout only when the value changes.
+        fn set_edge(&mut self, index: u32, edge: $edge) -> Result<(), nc_com::NcStatus> {
+            <Self as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
+            let edge = $decode(edge)?;
+            let previous = <Self as crate::ui_node::containers::ContainerAlgorithm>::edge(self, index as usize)
+                .ok_or(nc_com::NC_E_OUT_OF_RANGE)?;
+            if previous != edge {
+                <Self as crate::ui_node::containers::ContainerAlgorithm>::edit_edges(
+                    self,
+                    crate::ui_node::containers::EdgeEdit::Replace { index: index as usize, edge },
+                );
+                <Self as crate::com::widget::HostedWidget>::runtime_mut(self)
+                    .state
+                    .record_change(microui_contracts::GeometryChange::CHANGED);
+            }
+            Ok(())
+        }
+
+        /// Validates the relationship before the child consumes its sole attachment claim.
+        fn insert(
+            &mut self,
+            index: u32,
+            child: nc_com::ComRef<'_, microui_contracts::IWidgetAbi>,
+            edge: $edge,
+        ) -> Result<microui_contracts::ChildEditResult, nc_com::NcStatus> {
+            <Self as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
+            let edge = $decode(edge)?;
+            let outcome = self.editor.insert(index, child)?;
+            <Self as crate::ui_node::containers::ContainerAlgorithm>::edit_edges(
+                self,
+                crate::ui_node::containers::EdgeEdit::Insert { index: index as usize, edge },
+            );
+            Ok(outcome)
+        }
+
+        /// Commits replacement metadata before returning old-child teardown status.
+        fn replace(
+            &mut self,
+            index: u32,
+            child: nc_com::ComRef<'_, microui_contracts::IWidgetAbi>,
+            edge: $edge,
+        ) -> Result<microui_contracts::ChildEditResult, nc_com::NcStatus> {
+            <Self as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
+            let edge = $decode(edge)?;
+            let outcome = self.editor.replace(index, child)?;
+            <Self as crate::ui_node::containers::ContainerAlgorithm>::edit_edges(
+                self,
+                crate::ui_node::containers::EdgeEdit::Replace { index: index as usize, edge },
+            );
+            Ok(outcome)
+        }
+    };
+}
+
+/// Validates one typed track before topology or semantic mutation begins.
+pub(super) fn local_track(track: microui_contracts::LayoutTrackAbi) -> Result<crate::TrackSize, nc_com::NcStatus> {
+    match microui_contracts::LayoutTrack::try_from(track).map_err(|_| nc_com::NC_E_INVALID_ARG)? {
+        microui_contracts::LayoutTrack::Content => Ok(crate::TrackSize::Content),
+        microui_contracts::LayoutTrack::Fixed { extent } if extent >= 0 => Ok(crate::TrackSize::Fixed(extent)),
+        microui_contracts::LayoutTrack::Flex { weight } if weight.is_finite() && weight > 0.0 => Ok(crate::TrackSize::Flex(weight)),
+        _ => Err(nc_com::NC_E_INVALID_ARG),
+    }
+}
+
+/// Copies one retained track policy into its typed ABI representation.
+pub(super) fn layout_track(track: crate::TrackSize) -> microui_contracts::LayoutTrackAbi {
+    match track {
+        crate::TrackSize::Content => microui_contracts::LayoutTrack::Content,
+        crate::TrackSize::Fixed(extent) => microui_contracts::LayoutTrack::Fixed { extent },
+        crate::TrackSize::Flex(weight) => microui_contracts::LayoutTrack::Flex { weight },
+    }
+    .into()
+}
+
 mod disclosure;
 pub(crate) use disclosure::{DisclosureState, DisclosureHeader, DisclosureVariant};
 mod grid;
 mod linear;
-pub(crate) use linear::LinearItemSpec;
 mod scroll_area;
 pub(crate) use scroll_area::{ScrollComposition, ScrollModel, ScrollSurface};
 
 pub use disclosure::{Disclosure};
 #[cfg(test)]
 pub use disclosure::{DisclosureParameters};
-pub use grid::{Grid, GridSpan};
+pub use grid::Grid;
 #[cfg(test)]
 pub use grid::GridParameters;
-pub use linear::{Linear, LinearCrossSize, LinearDirection};
+pub use linear::Linear;
 #[cfg(test)]
-pub use linear::{LinearItem, LinearParameters};
+pub use linear::{LinearCrossSize, LinearItem, LinearParameters};
 pub use scroll_area::ScrollArea;
 #[cfg(test)]
 pub use scroll_area::ScrollAreaOption;
