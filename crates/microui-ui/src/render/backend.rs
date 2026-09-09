@@ -231,6 +231,19 @@ pub trait RendererFrame {
     fn push_quad(&mut self, vertices: [Vertex; 4]);
     /// Appends one atlas-backed triangle.
     fn push_triangle(&mut self, vertices: [Vertex; 3]);
+    /// Appends a contiguous sequence of complete atlas-backed triangles.
+    ///
+    /// Buffered backends should override this method so an already prepared range can be copied
+    /// once. The default preserves simpler indexed or diagnostic backends without forcing them to
+    /// duplicate batching policy.
+    fn push_triangles(&mut self, vertices: &[Vertex]) {
+        // This native-only contract never accepts an incomplete primitive: silently ignoring a
+        // remainder would hide corruption at the final renderer boundary.
+        assert!(vertices.len().is_multiple_of(3), "atlas vertex range must contain complete triangles");
+        for triangle in vertices.as_chunks::<3>().0 {
+            self.push_triangle(*triangle);
+        }
+    }
     /// Closes the current atlas batch at an ordering boundary.
     fn flush(&mut self);
     /// Draws one pre-clipped external-texture quad.

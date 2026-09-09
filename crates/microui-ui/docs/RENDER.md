@@ -54,7 +54,9 @@ the operation clip and viewport. Empty geometry is discarded. Backends receive f
 screen-space UI vertices. `RenderVertex` is the one canonical vertex representation
 used by clipping, the COM stream, platform validation and concrete GPU backends; the
 boundary performs its required bulk copy without packing and unpacking every vertex
-into a duplicate native struct. A render item additionally receives its authoritative
+into a duplicate native struct. Each validated atlas range is then presented to the native
+frame as one slice. Contiguous buffered backends append it once, while indexed backends can
+use the trait's per-triangle fallback. A render item additionally receives its authoritative
 visible region because its own mesh drawing happens at that ordered boundary.
 
 The portable target is a positive drawable up to 8192 by 8192 pixels. Translated logical
