@@ -42,9 +42,9 @@ impl Drop for ImageTexture {
     }
 }
 
-/// Direct external painting checks tint and source clipping before the UI's final frame expansion.
+/// Direct external painting checks semantic image ownership and ordering before final expansion.
 #[test]
-fn image_controls_keep_owned_pixels_and_forward_ordered_cropped_paint_after_errors() {
+fn image_controls_keep_owned_pixels_and_forward_ordered_semantic_paint_after_errors() {
     let atlas = crate::test_support::test_atlas();
     let mut skin = crate::Skin::from_atlas(&atlas);
     let palette = crate::FlatPalette {
@@ -98,12 +98,12 @@ fn image_controls_keep_owned_pixels_and_forward_ordered_cropped_paint_after_erro
     let images = paint_probe.images.borrow();
     assert_eq!(images.len(), 1);
     let (destination, source, tint) = images[0];
-    assert_eq!(destination.width, 16);
-    assert!(source.u0 > 0. && source.u1 < 1. && source.u0 < source.u1);
+    assert_eq!(destination, Rect { x: 5, y: 4, width: 64, height: 32 });
+    assert_eq!(source, TextureRegion::FULL);
     assert_eq!(tint, u32::MAX, "theme black text cannot recolor external RGBA pixels");
     assert_eq!(image_probe.reads.get(), 3, "painting never calls texture size");
     drop(images);
-    // The first clip can omit text entirely. A complete allocation must preserve text before image.
+    // A complete allocation must preserve the semantic text-before-image order.
     paint_probe.order.borrow_mut().clear();
     common
         .paint(PaintScope { clip: rect, ..scope }, WidgetPaint { clip: rect, ..state }, painter.as_com_ref())

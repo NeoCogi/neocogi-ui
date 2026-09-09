@@ -760,19 +760,18 @@ fn textarea_paint(ctx: &mut WidgetPaintCtx<'_>, state: &TextEditor, font: FontId
         None
     };
 
-    let mut painter = ctx.painter();
-    painter.with_clip(layout.bounds, |painter| {
+    ctx.with_clip(layout.bounds, |ctx| {
         // Record only the line interval intersecting the inherited viewport clip.
         for (idx, line) in layout.lines.iter().enumerate().take(last_line).skip(first_line) {
             let text = &state.buf[line.start..line.end];
             if !text.is_empty() {
-                painter.text(font, text, Vec2i::new(0, text_line_y(idx, line_height)), color);
+                ctx.draw_text(font, text, Vec2i::new(0, text_line_y(idx, line_height)), color);
             }
         }
 
         if let Some(caret) = caret {
             // Painter's inherited clip rejects an offscreen caret without editor-owned scroll math.
-            painter.fill_rect(caret, color);
+            ctx.draw_rect(caret, color);
         }
     });
 }

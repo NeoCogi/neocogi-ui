@@ -66,6 +66,42 @@ pub struct PaintScope {
     pub clip: Rect,
 }
 
+com_int_enum! {
+    /// Closed visual state used when the runtime resolves a semantic widget frame.
+    pub enum WidgetVisualState: u8 {
+        /// Disabled surface or control.
+        DISABLED = 0,
+        /// Enabled surface or unfocused control without pointer interaction.
+        NORMAL = 1,
+        /// Enabled unfocused control under the pointer.
+        HOVERED = 2,
+        /// Enabled unfocused control actively pressed under the pointer.
+        PRESSED = 3,
+        /// Focused control without pointer interaction.
+        FOCUSED = 4,
+        /// Focused control under the pointer.
+        FOCUSED_HOVERED = 5,
+        /// Focused control actively pressed under the pointer.
+        FOCUSED_PRESSED = 6,
+    }
+}
+
+#[com_struct]
+#[derive(Debug, Default, PartialEq, Eq)]
+/// Bundle-local font slot selected from the exact asset revision used for this paint call.
+pub struct PaintFont {
+    /// Zero-based font table index; the paint context rejects values outside its installed atlas.
+    pub index: u32,
+}
+
+#[com_struct]
+#[derive(Debug, Default, PartialEq, Eq)]
+/// Bundle-local icon slot selected from the exact asset revision used for this paint call.
+pub struct PaintIcon {
+    /// Zero-based icon table index; the paint context rejects values outside its installed atlas.
+    pub index: u32,
+}
+
 #[com_struct]
 #[derive(Debug, Default, PartialEq, Eq)]
 /// Copied rectangle in the current widget's local coordinate system.
@@ -80,31 +116,52 @@ pub struct Rect {
     pub height: i32,
 }
 
-#[com_interface(auto_guid = "microui.Painter:v1")]
+#[com_interface(auto_guid = "microui.Painter:v2")]
 /// Scoped facade which appends typed operations to the runtime's current frame paint context.
 pub trait IPainter {
     /// Records a nonnegative-width solid line with finite local endpoints. Zero width draws nothing.
-    fn stroke_line(&self, scope: PaintScope, from: PaintPoint, to: PaintPoint, width: f32, rgba: u32) -> Result<(), NcStatus>;
+    fn stroke_line(&mut self, scope: PaintScope, from: PaintPoint, to: PaintPoint, width: f32, rgba: u32) -> Result<(), NcStatus>;
     /// Records finite local polygon points at offset zero; fewer than three points draw nothing.
     /// Concave polygon tessellation and clipping use the same UI implementation as built-in drawing.
-    fn fill_polygon(&self, scope: PaintScope, points: NcCopyFromBufferOffset<'_, PaintPoint>, rgba: u32) -> Result<(), NcStatus>;
+    fn fill_polygon(&mut self, scope: PaintScope, points: NcCopyFromBufferOffset<'_, PaintPoint>, rgba: u32) -> Result<(), NcStatus>;
     /// Records solid triangles in widget-local coordinates. The complete input starts at offset zero,
     /// has a multiple of three vertices and contains only finite positions. Atlas mapping belongs
     /// to the UI implementation and follows the currently installed resource revision.
-    fn colored_triangles(&self, scope: PaintScope, vertices: NcCopyFromBufferOffset<'_, ColoredVertex>) -> Result<(), NcStatus>;
+    fn colored_triangles(&mut self, scope: PaintScope, vertices: NcCopyFromBufferOffset<'_, ColoredVertex>) -> Result<(), NcStatus>;
     /// Records complete atlas triangles in local coordinates; offset is zero,
     /// length is divisible by three, and every position/UV component is finite.
-    fn triangles(&self, scope: PaintScope, vertices: NcCopyFromBufferOffset<'_, RenderVertex>) -> Result<(), NcStatus>;
+    fn triangles(&mut self, scope: PaintScope, vertices: NcCopyFromBufferOffset<'_, RenderVertex>) -> Result<(), NcStatus>;
     /// Retains an immutable renderer-owned RGBA texture and draws its normalized source region in local coordinates.
     /// Negative extents are invalid; zero extents draw nothing. Ownership is validated before GPU execution.
-    fn texture(&self, scope: PaintScope, rect: Rect, source: TextureRegion, rgba: u32, texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus>;
+    fn texture(&mut self, scope: PaintScope, rect: Rect, source: TextureRegion, rgba: u32, texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus>;
     /// Retains a renderer-owned custom item at this exact painter-order position.
     /// The UI translates the rectangle and intersects its clip before submission.
-    fn item(&self, scope: PaintScope, rect: Rect, item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus>;
+    fn item(&mut self, scope: PaintScope, rect: Rect, item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus>;
     /// Records a fill only while this exact invocation remains active.
-    fn fill(&self, scope: PaintScope, rect: Rect, rgba: u32) -> Result<(), NcStatus>;
+    fn fill(&mut self, scope: PaintScope, rect: Rect, rgba: u32) -> Result<(), NcStatus>;
     /// Records UTF-8 text with the current body font and button content style.
-    fn text(&self, scope: PaintScope, rect: Rect, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    fn text(&mut self, scope: PaintScope, rect: Rect, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
+    /// Resolves and records one semantic surface or control frame, returning its usable interior.
+    /// `center_only` removes destination insets without changing the selected artwork.
+    fn frame(
+        &mut self,
+        scope: PaintScope,
+        rect: Rect,
+        role: WidgetFrame,
+        state: WidgetVisualState,
+        center_only: bool,
+    ) -> Result<Rect, NcStatus>;
+    /// Records one atlas icon selected by its slot in the current immutable asset bundle.
+    fn icon(&mut self, scope: PaintScope, icon: PaintIcon, rect: Rect, rgba: u32) -> Result<(), NcStatus>;
+    /// Records one UTF-8 text run at an explicit local baseline-aligned position.
+    fn text_run(
+        &mut self,
+        scope: PaintScope,
+        font: PaintFont,
+        position: Point,
+        rgba: u32,
+        text: NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<(), NcStatus>;
 }
 
 #[com_interface(auto_guid = "microui.Widget:v1")]

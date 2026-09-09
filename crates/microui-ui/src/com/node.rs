@@ -277,8 +277,17 @@ const FRAME_ROLES: &[(WidgetFrame, crate::FrameRole)] = &[
 ];
 
 /// Encodes the exact built-in frame family without collapsing input or item roles.
-pub(super) fn frame_contract(role: crate::FrameRole) -> WidgetFrame {
+pub(crate) fn frame_contract(role: crate::FrameRole) -> WidgetFrame {
     FRAME_ROLES.iter().find(|(_, value)| *value == role).expect("all frame roles are represented").0
+}
+
+/// Decodes a validated semantic frame role for runtime-owned paint resolution.
+pub(crate) fn local_frame(role: WidgetFrame) -> Result<crate::FrameRole, NcStatus> {
+    FRAME_ROLES
+        .iter()
+        .find(|(contract, _)| *contract == role)
+        .map(|(_, local)| *local)
+        .ok_or(NC_E_INVALID_ARG)
 }
 
 impl ComNode {

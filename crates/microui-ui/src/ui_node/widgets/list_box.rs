@@ -149,8 +149,7 @@ impl ListBox {
         if let (Some(image), Some(visual)) = (self.image.as_ref(), placement.visual) {
             // List-box labels remain theme-colored while external image content preserves the
             // exact source RGBA values supplied to the renderer.
-            ctx.painter()
-                .com_texture(visual, crate::color(255, 255, 255, 255), image.as_interface().add_ref());
+            ctx.draw_texture(visual, crate::color(255, 255, 255, 255), image.as_interface().add_ref());
         }
     }
 }

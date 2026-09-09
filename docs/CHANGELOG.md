@@ -92,6 +92,10 @@ wrappers. The accepted migration and outstanding validation are recorded in
   source overrides, and report actual compilation versus cache hits.
 - Remove the native 8 ms frame delay, permit transactional theme installation from
   event callbacks, and flush preceding atlas geometry before image draws.
+- Give `IPainter` exclusive mutable receivers and keep its invocation counter,
+  active scope, and optional frame context as ordinary fields in the concrete
+  recorder. Built-in semantic frame, icon, text, and image operations now append
+  to the runtime's single display list without per-widget lists or renderers.
 - Skip discarded fixed-grid measurements and retain paint/text/custom-geometry
   buffers. Remaining native throughput and deployment-size overhead are recorded
   in COM_PERFORMANCE.md.

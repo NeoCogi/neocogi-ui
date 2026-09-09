@@ -227,8 +227,7 @@ impl Button {
                 if let (Some(image), Some(visual)) = (image.as_ref(), placement.visual) {
                     // External image pixels carry their own color; the adjacent label alone uses
                     // the stateful Button content color selected by the active theme.
-                    ctx.painter()
-                        .com_texture(visual, crate::color(255, 255, 255, 255), image.as_interface().add_ref());
+                    ctx.draw_texture(visual, crate::color(255, 255, 255, 255), image.as_interface().add_ref());
                 }
             }
             ButtonContent::ScaledImage { label, image } => {
@@ -244,8 +243,7 @@ impl Button {
                 if let (Some(image), Some(visual)) = (image.as_ref(), placement.visual) {
                     // Scaling changes only destination geometry; it must not introduce a theme
                     // content-color tint that destroys the source image's RGB channels.
-                    ctx.painter()
-                        .com_texture(visual, crate::color(255, 255, 255, 255), image.as_interface().add_ref());
+                    ctx.draw_texture(visual, crate::color(255, 255, 255, 255), image.as_interface().add_ref());
                 }
             }
         }

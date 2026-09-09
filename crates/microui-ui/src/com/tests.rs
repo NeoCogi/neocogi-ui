@@ -258,10 +258,10 @@ impl IWidget for RetainingWidget {
         self.button.take_change()
     }
     /// Retains authority and probes old tokens while a later scope is active.
-    fn paint(&mut self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
+    fn paint(&mut self, scope: PaintScope, state: WidgetPaint, mut painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
         assert_eq!(self.runtime.update(SIZE), Err(UI_E_BUSY));
         assert_eq!(self.button.set_label(NcCopyFromBufferOffset::new(0, b"forbidden")), Err(UI_E_BUSY));
-        for (old, expired) in self.probe.painters.borrow().iter() {
+        for (old, expired) in self.probe.painters.borrow_mut().iter_mut() {
             assert_eq!(old.fill(*expired, state.rect, 0), Err(UI_E_EXPIRED_SCOPE));
             assert_eq!(old.triangles(*expired, NcCopyFromBufferOffset::new(0, &[])), Err(UI_E_EXPIRED_SCOPE));
             assert_eq!(old.colored_triangles(*expired, NcCopyFromBufferOffset::new(0, &[])), Err(UI_E_EXPIRED_SCOPE));
@@ -353,7 +353,7 @@ fn external_widget_cannot_reenter_mutate_during_observation_or_reuse_a_paint_sco
     assert_eq!(backend.calls.get(), 2);
     window.close().unwrap();
     runtime.close().unwrap();
-    for (painter, scope) in probe.painters.borrow().iter() {
+    for (painter, scope) in probe.painters.borrow_mut().iter_mut() {
         assert_eq!(painter.fill(*scope, RECT, 0), Err(UI_E_EXPIRED_SCOPE));
     }
 }
@@ -928,15 +928,15 @@ fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
 /// Copied paint observations survive the deliberately failing recorder's call.
 #[derive(Default)]
 struct BuiltinPaintProbe {
-    /// Image rectangles, cropped source coordinates and tints copied by the same ordered boundary.
+    /// Semantic image rectangles, source coordinates and tints copied by the ordered boundary.
     images: RefCell<Vec<(Rect, TextureRegion, u32)>>,
-    /// False marks atlas geometry; true marks an image barrier.
+    /// False marks semantic atlas work; true marks an image barrier.
     order: RefCell<Vec<bool>>,
     /// Injects a failure specifically after the preceding text batch succeeded.
     fail_image: Cell<bool>,
-    /// Exact local geometry copied by the bulk boundary.
-    vertices: RefCell<Vec<RenderVertex>>,
-    /// One recoverable recorder failure, used to verify workspace restoration.
+    /// Exact local text origins received before the runtime performs its one expansion pass.
+    text_positions: RefCell<Vec<Point>>,
+    /// One recoverable semantic-paint failure, used to verify later calls remain usable.
     fail: Cell<bool>,
 }
 
@@ -949,51 +949,78 @@ struct BuiltinPainter {
     probe: Rc<BuiltinPaintProbe>,
 }
 impl IPainter for BuiltinPainter {
-    /// Built-ins send already resolved triangle batches to an external painter.
-    fn stroke_line(&self, _: PaintScope, _: PaintPoint, _: PaintPoint, _: f32, _: u32) -> Result<(), NcStatus> {
+    /// Built-ins no longer resolve lines through this primitive.
+    fn stroke_line(&mut self, _: PaintScope, _: PaintPoint, _: PaintPoint, _: f32, _: u32) -> Result<(), NcStatus> {
         panic!("expected atlas triangles")
     }
-    /// Polygon tessellation is already resolved by the built-in algorithm before this copy.
-    fn fill_polygon(&self, _: PaintScope, _: NcCopyFromBufferOffset<'_, PaintPoint>, _: u32) -> Result<(), NcStatus> {
+    /// Built-ins no longer resolve polygons through this primitive.
+    fn fill_polygon(&mut self, _: PaintScope, _: NcCopyFromBufferOffset<'_, PaintPoint>, _: u32) -> Result<(), NcStatus> {
         panic!("expected atlas triangles")
     }
 
-    /// Built-in semantic painting does not route through the independent solid-geometry recorder.
-    fn colored_triangles(&self, _scope: PaintScope, _vertices: NcCopyFromBufferOffset<'_, ColoredVertex>) -> Result<(), NcStatus> {
+    /// Built-in semantic painting does not route through caller-authored colored geometry.
+    fn colored_triangles(&mut self, _scope: PaintScope, _vertices: NcCopyFromBufferOffset<'_, ColoredVertex>) -> Result<(), NcStatus> {
         panic!("expected resolved built-in atlas geometry")
     }
 
     /// Captures the ordered image barrier after verifying that paint holds exclusive object access.
-    fn texture(&self, _scope: PaintScope, _rect: Rect, _source: TextureRegion, _rgba: u32, _texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
+    fn texture(&mut self, _scope: PaintScope, _rect: Rect, _source: TextureRegion, _rgba: u32, _texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
         assert_eq!(self.button.label().err(), Some(NC_E_BUSY));
         self.probe.images.borrow_mut().push((_rect, _source, _rgba));
         self.probe.order.borrow_mut().push(true);
         if self.probe.fail_image.replace(false) { Err(UI_E_RENDER) } else { Ok(()) }
     }
     /// The complete button algorithm cannot emit application GPU work.
-    fn item(&self, _scope: PaintScope, _rect: Rect, _item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
+    fn item(&mut self, _scope: PaintScope, _rect: Rect, _item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
         panic!("unexpected custom item in button paint")
     }
-    /// Confirms bulk recording can call outward while the widget owns ordinary inline state.
-    fn triangles(&self, _scope: PaintScope, vertices: NcCopyFromBufferOffset<'_, RenderVertex>) -> Result<(), NcStatus> {
-        assert_eq!(self.button.label().err(), Some(NC_E_BUSY));
-        *self.probe.vertices.borrow_mut() = vertices.as_slice().to_vec();
-        self.probe.order.borrow_mut().push(false);
-        if self.probe.fail.replace(false) { Err(UI_E_RENDER) } else { Ok(()) }
+    /// Built-ins leave atlas expansion to the runtime instead of sending final triangle batches.
+    fn triangles(&mut self, _scope: PaintScope, _vertices: NcCopyFromBufferOffset<'_, RenderVertex>) -> Result<(), NcStatus> {
+        panic!("unexpected final triangle batch in semantic built-in paint")
     }
     /// Built-in painting uses the bulk path after resolving its complete theme state.
-    fn fill(&self, _scope: PaintScope, _rect: Rect, _rgba: u32) -> Result<(), NcStatus> {
+    fn fill(&mut self, _scope: PaintScope, _rect: Rect, _rgba: u32) -> Result<(), NcStatus> {
         panic!("expected one complete bulk batch")
     }
     /// Text expansion stays with the UI implementation and its immutable atlas.
-    fn text(&self, _scope: PaintScope, _rect: Rect, _text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+    fn text(&mut self, _scope: PaintScope, _rect: Rect, _text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         panic!("expected UI-owned text expansion")
+    }
+    /// Captures the compact semantic frame before the runtime expands its nine-patch.
+    fn frame(
+        &mut self,
+        _scope: PaintScope,
+        rect: Rect,
+        _role: WidgetFrame,
+        _state: WidgetVisualState,
+        _center_only: bool,
+    ) -> Result<Rect, NcStatus> {
+        assert_eq!(self.button.label().err(), Some(NC_E_BUSY));
+        Ok(rect)
+    }
+    /// This fixture paints text-only buttons, so an icon would violate its setup.
+    fn icon(&mut self, _scope: PaintScope, _icon: PaintIcon, _rect: Rect, _rgba: u32) -> Result<(), NcStatus> {
+        panic!("unexpected icon in text-only button paint")
+    }
+    /// Captures aligned text before the single runtime executor performs glyph expansion.
+    fn text_run(
+        &mut self,
+        _scope: PaintScope,
+        _font: PaintFont,
+        position: Point,
+        _rgba: u32,
+        _text: NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<(), NcStatus> {
+        assert_eq!(self.button.label().err(), Some(NC_E_BUSY));
+        self.probe.text_positions.borrow_mut().push(position);
+        self.probe.order.borrow_mut().push(false);
+        if self.probe.fail.replace(false) { Err(UI_E_RENDER) } else { Ok(()) }
     }
 }
 
-/// Button style changes retain the full algorithm and failed copying does not poison reuse.
+/// Button style changes retain the full algorithm and failed semantic recording does not poison reuse.
 #[test]
-fn builtin_bulk_paint_preserves_alignment_icons_with_inline_semantic_state() {
+fn builtin_scoped_paint_preserves_alignment_with_inline_semantic_state() {
     let ui = microui_redux::com::Ui::from_interface(runtime()).unwrap();
     let mut button = ui.widgets().button("AB").unwrap();
     button.set_options(WidgetOptions::NONE).unwrap();
@@ -1031,12 +1058,11 @@ fn builtin_bulk_paint_preserves_alignment_icons_with_inline_semantic_state() {
     probe.fail.set(true);
     assert_eq!(common.paint(scope, paint, painter.as_com_ref()), Err(UI_E_RENDER));
     common.paint(scope, paint, painter.as_com_ref()).unwrap();
-    let left = probe.vertices.borrow().iter().map(|v| v.x).reduce(f32::min).unwrap();
+    let left = probe.text_positions.borrow().last().expect("left-aligned text was recorded").x;
     button.set_options(WidgetOptions::ALIGN_RIGHT).unwrap();
     common.paint(scope, paint, painter.as_com_ref()).unwrap();
-    let right = probe.vertices.borrow().iter().map(|v| v.x).reduce(f32::min).unwrap();
-    assert!(right > left + 40.0, "right alignment must reach the semantic paint algorithm");
-    assert!(probe.vertices.borrow().iter().all(|v| v.x >= 0.0 && v.x <= 100.0 && v.y >= 0.0 && v.y <= 30.0));
+    let right = probe.text_positions.borrow().last().expect("right-aligned text was recorded").x;
+    assert!(right > left + 40, "right alignment must reach the semantic paint algorithm");
     assert_eq!(
         common.paint(
             scope,
@@ -1155,8 +1181,8 @@ impl microui_redux::LeafContent for LocalContent {
         Ok(GeometryChange::NO_CHANGE)
     }
     /// Solid geometry reaches the ordinary display-list arena without an application UV lookup.
-    fn paint(&self, _: WidgetPaint, painter: &microui_redux::Painter<'_>) -> Result<(), NcStatus> {
-        let clipped = painter.clipped(Rect { x: 2, y: 2, width: 3, height: 3 })?;
+    fn paint(&self, _: WidgetPaint, painter: &mut microui_redux::Painter<'_>) -> Result<(), NcStatus> {
+        let mut clipped = painter.clipped(Rect { x: 2, y: 2, width: 3, height: 3 })?;
         clipped.colored_triangles(&[
             ColoredVertex { x: 0.0, y: 0.0, rgba: 0xff030201 },
             ColoredVertex { x: 10.0, y: 0.0, rgba: 0xff030201 },

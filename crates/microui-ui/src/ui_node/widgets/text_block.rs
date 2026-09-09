@@ -192,8 +192,7 @@ impl TextBlock {
         let max_width = if self.wrap == TextWrap::Word { bounds.width.max(1) } else { i32::MAX / 4 };
         let lines = build_display_text_lines(self.text.as_str(), self.wrap, max_width, font, ctx.atlas());
 
-        let mut painter = ctx.painter();
-        painter.with_clip(bounds, |painter| {
+        ctx.with_clip(bounds, |ctx| {
             for (idx, line) in lines.iter().enumerate() {
                 // A large validated line height or long block must clamp at the geometry boundary
                 // instead of overflowing while deriving a later row's origin.
@@ -203,7 +202,7 @@ impl TextBlock {
                 let line_top = baseline_aligned_top(line_rect, line_height, baseline);
                 let slice = &self.text[line.start..line.end];
                 if !slice.is_empty() {
-                    painter.text(font, slice, vec2(line_rect.x, line_top), color);
+                    ctx.draw_text(font, slice, vec2(line_rect.x, line_top), color);
                 }
             }
         });

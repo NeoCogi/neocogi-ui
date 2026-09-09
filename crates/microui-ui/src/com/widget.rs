@@ -1,11 +1,10 @@
 //! Shared phase execution for concrete built-in COM classes.
 //!
 //! Concrete widget types own their semantic fields directly. [`WidgetRuntime`] contains only the
-//! common host, lifecycle, option, resource, and rendering machinery required by every class.
+//! common host, lifecycle, option, and resource machinery required by every class.
 use super::*;
 use microui_contracts::widget::WidgetState;
 use crate::{AvailableSpace, WidgetOption};
-use crate::render::{DisplayList, Renderer};
 
 /// Private semantic algorithms reused by each statically known built-in class.
 pub(crate) trait WidgetAlgorithm: crate::Widget {
@@ -20,27 +19,17 @@ pub(crate) trait WidgetAlgorithm: crate::Widget {
 /// One current imported asset value shared by the runtime services that observe installation.
 pub(super) type SharedAssets = Rc<RefCell<crate::assets::ImportedAssets>>;
 
-/// One built-in widget's imported resources and reusable local paint workspace.
+/// One built-in widget's imported resources.
 struct WidgetRevision {
     /// Locally decoded immutable bundle selected by the host's current revision.
     assets: Rc<crate::assets::ImportedAssets>,
-    /// Reusable local workspace protected by the COM object's exclusive paint receiver.
-    scratch: PaintScratch,
 }
 
 impl WidgetRevision {
-    /// Imports a host revision and prepares the local geometry recorder before publication.
+    /// Imports a host revision before publication.
     fn read(source: ComRef<'_, IAssetBundleAbi>, previous: Option<&crate::assets::ImportedAssets>) -> Result<Self, NcStatus> {
         let assets = Rc::new(crate::assets::ImportedAssets::read(source, previous)?);
-        let atlas = assets.bundle().atlas().clone();
-        let (collector, storage) = super::render::Backend::recording();
-        Ok(Self {
-            assets,
-            scratch: PaintScratch {
-                renderer: Renderer::from_atlas(collector, atlas),
-                storage,
-            },
-        })
+        Ok(Self { assets })
     }
 }
 
@@ -154,19 +143,6 @@ impl WidgetRuntime {
         Ok(crate::IconRef::Named(icon))
     }
 
-    /// Renders one locally recorded display list and forwards its copied operations to the caller.
-    pub(super) fn render(
-        &mut self,
-        scope: PaintScope,
-        size: crate::Dimensioni,
-        list: &mut DisplayList,
-        painter: ComRef<'_, IPainterAbi>,
-    ) -> Result<(), NcStatus> {
-        let revision = self.resources.current(self.state.host())?;
-        let info = crate::render::FrameInfo::try_new(size, crate::color(0, 0, 0, 0)).map_err(|_| NC_E_INVALID_ARG)?;
-        revision.scratch.renderer.render(info, list).map_err(|_| UI_E_RENDER)?;
-        revision.scratch.storage.paint(scope, painter)
-    }
 }
 
 /// Gives shared COM phase plumbing access to a concrete widget's non-semantic runtime field.
@@ -241,14 +217,6 @@ pub(super) fn available(axis: AxisLimit) -> Result<AvailableSpace, NcStatus> {
     } else {
         AvailableSpace::Unbounded
     })
-}
-
-/// Reusable local rendering backend for one independently constructible widget.
-struct PaintScratch {
-    /// The same text/nine-patch/clipping implementation used by retained painting.
-    renderer: Renderer<super::render::Backend>,
-    /// Final local atlas geometry produced by the collector.
-    storage: Rc<super::render::Storage>,
 }
 
 /// Implements the shared COM lifecycle and update/paint phases for one concrete widget type.
@@ -346,7 +314,7 @@ macro_rules! direct_widget_phase_impl {
                 <$name as super::widget::HostedWidget>::runtime_mut(self).state.take_change()
             }
 
-            /// Paints directly from semantic fields, then submits the resulting local display list.
+            /// Paints semantic fields directly into the runtime-owned scoped frame context.
             fn paint(
                 &mut self,
                 scope: PaintScope,
@@ -357,12 +325,8 @@ macro_rules! direct_widget_phase_impl {
                 state.validate()?;
                 let options = <$name as super::widget::HostedWidget>::runtime(self).state.options()?;
                 let assets = <$name as super::widget::HostedWidget>::runtime_mut(self).resources()?;
-                // The display list is phase-local so semantic painting can borrow the complete
-                // concrete object immutably without an interior-mutable scratch field.
-                let mut list = crate::render::DisplayList::new();
-                let mut ctx = crate::WidgetPaintCtx::new_with_content_geometry(
+                let mut ctx = crate::WidgetPaintCtx::new_scoped(
                     local_rect(state.rect),
-                    &mut list,
                     local_rect(state.clip),
                     assets.bundle().skin(),
                     assets.bundle().atlas(),
@@ -373,10 +337,11 @@ macro_rules! direct_widget_phase_impl {
                     state.active,
                     state.window_active,
                     crate::WidgetOption::from_bits_retain(options.bits),
+                    scope,
+                    painter,
                 );
                 crate::Widget::paint(self, &mut ctx);
-                let size = crate::Dimensioni::new(state.rect.width.max(1), state.rect.height.max(1));
-                <$name as super::widget::HostedWidget>::runtime_mut(self).render(scope, size, &mut list, painter)
+                ctx.finish()
             }
         }
     };

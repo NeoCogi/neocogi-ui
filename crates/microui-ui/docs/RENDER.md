@@ -7,6 +7,10 @@ foreign call holds no Rust borrow and every primitive appends to the final opera
 sequence immediately. Neither path lends a widget, tree, backend frame or Rust trait
 object across the ABI.
 
+Painter operations use mutable receivers. The concrete recorder stores its active
+scope and optional frame context as ordinary fields, and nc-com's generated exclusive
+call gate rejects retained or reentrant aliases while one operation mutates them.
+
 ```text
 IWidget.paint -> scoped IPainter -> runtime frame display list
              -> one clipping/expansion pass -> one ordered IRenderer submission

@@ -83,11 +83,11 @@ pub(super) const fn color(r: u8, g: u8, b: u8, a: u8) -> u32 {
     u32::from_le_bytes([r, g, b, a])
 }
 /// Converts a line's endpoints at the drawing boundary; tessellation belongs to the UI.
-pub(super) fn stroke(p: &Painter<'_>, a: Vec2f, b: Vec2f, width: f32, rgba: u32) -> Result<(), NcStatus> {
+pub(super) fn stroke(p: &mut Painter<'_>, a: Vec2f, b: Vec2f, width: f32, rgba: u32) -> Result<(), NcStatus> {
     p.stroke_line(PaintPoint { x: a.x, y: a.y }, PaintPoint { x: b.x, y: b.y }, width, rgba)
 }
 /// Copies a complete simple polygon to the UI's existing fill implementation.
-pub(super) fn fill(p: &Painter<'_>, points: &[Vec2f], rgba: u32) -> Result<(), NcStatus> {
+pub(super) fn fill(p: &mut Painter<'_>, points: &[Vec2f], rgba: u32) -> Result<(), NcStatus> {
     let points: Vec<_> = points.iter().map(|v| PaintPoint { x: v.x, y: v.y }).collect();
     p.fill_polygon(&points, rgba)
 }

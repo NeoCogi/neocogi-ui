@@ -59,7 +59,7 @@ impl LeafContent for Cube {
         })
     }
     /// Observational projection records one solid batch in normal painter order and clipping.
-    fn paint(&self, state: WidgetPaint, painter: &Painter<'_>) -> Result<(), NcStatus> {
+    fn paint(&self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
         painter.colored_triangles(&build_cube_vertices(state.rect, self.angle.get()))
     }
 }

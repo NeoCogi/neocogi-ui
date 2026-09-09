@@ -20,7 +20,7 @@ pub(crate) mod events;
 mod input;
 mod leaves;
 mod node;
-pub(crate) use node::ComNode;
+pub(crate) use node::{ComNode, frame_contract};
 mod children;
 pub(crate) mod containers;
 pub(crate) mod disclosure;

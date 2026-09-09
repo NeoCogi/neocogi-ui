@@ -93,71 +93,6 @@ impl Storage {
     }
 }
 
-/// Detached built-in paint output owns resources while a foreign painter can reenter the widget.
-struct PaintOutput<'a> {
-    /// Reusable destination; neither RefCell stays borrowed during forwarding or resource release.
-    storage: &'a Storage,
-    /// Final local positions and source coordinates from the ordinary geometry executor.
-    vertices: Vec<RenderVertex>,
-    /// Ordered boundaries preserve text/image layering within each built-in.
-    batches: Vec<Batch>,
-}
-impl Drop for PaintOutput<'_> {
-    /// Releases resources outside storage borrows, then restores reusable allocations on every exit.
-    fn drop(&mut self) {
-        self.batches.clear();
-        self.vertices.clear();
-        *self.storage.batches.borrow_mut() = std::mem::take(&mut self.batches);
-        *self.storage.vertices.borrow_mut() = std::mem::take(&mut self.vertices);
-    }
-}
-impl Storage {
-    /// Replays the same ordered recording used for complete frames through one scoped paint service.
-    pub(super) fn paint(&self, scope: PaintScope, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
-        let output = PaintOutput {
-            storage: self,
-            vertices: std::mem::take(&mut *self.vertices.borrow_mut()),
-            batches: std::mem::take(&mut *self.batches.borrow_mut()),
-        };
-        if output.batches.is_empty() {
-            // Even an empty built-in must validate its invocation with the supplied painter.
-            return painter.triangles(scope, NcCopyFromBufferOffset::new(0, &[]));
-        }
-        for batch in &output.batches {
-            match batch {
-                Batch::Atlas { first, count } => {
-                    painter.triangles(
-                        scope,
-                        NcCopyFromBufferOffset::new(0, &output.vertices[*first as usize..(*first + *count) as usize]),
-                    )?;
-                }
-                Batch::Texture { first, texture } => {
-                    // The shared executor produces clockwise axis-aligned quads with integer
-                    // destination edges and uniform tint. Preserve their already-clipped UVs.
-                    let a = output.vertices[*first as usize];
-                    let c = output.vertices[*first as usize + 2];
-                    let rect = Rect {
-                        x: a.x as i32,
-                        y: a.y as i32,
-                        width: (c.x - a.x) as i32,
-                        height: (c.y - a.y) as i32,
-                    };
-                    let source = TextureRegion { u0: a.u, v0: a.v, u1: c.u, v1: c.v };
-                    painter.texture(scope, rect, source, a.rgba, texture.as_com_ref())?;
-                }
-                Batch::Item { rect, clip, item } => {
-                    let scope = PaintScope {
-                        invocation: scope.invocation,
-                        clip: *clip,
-                    };
-                    painter.item(scope, *rect, item.as_com_ref())?;
-                }
-            }
-        }
-        Ok(())
-    }
-}
-
 #[com_object(interfaces(IRenderStream))]
 /// Retainable bulk-copy capability with no reference to a native borrowed frame.
 struct Stream {
@@ -208,20 +143,12 @@ impl IRenderStream for Stream {
     }
 }
 
-/// Final destination of geometry prepared by the single concrete backend type.
-enum Destination {
-    /// A built-in paint invocation returns its owned bulk vertices to a painter.
-    Recording,
-    /// A complete retained frame calls the selected external renderer once.
-    Renderer(super::widget::SharedAssets),
-}
-
-/// One concrete geometry backend for local paint recording and complete COM frame submission.
+/// One concrete geometry backend for complete COM frame submission.
 pub(super) struct Backend {
-    /// Selects local recording or final submission without duplicating the executor type.
-    destination: Destination,
-    /// Runtime submissions observe component failures; detached widget recording needs no private host.
-    host: Option<Rc<HostState>>,
+    /// Runtime submissions observe the first component failure before calling the renderer.
+    host: Rc<HostState>,
+    /// Current installed assets accompany the complete frame submission.
+    resources: super::widget::SharedAssets,
     /// Owned scratch survives across frames and is never lent through a COM object.
     storage: Rc<Storage>,
     /// Stable stream object reused for every synchronous submission.
@@ -231,29 +158,19 @@ pub(super) struct Backend {
 }
 
 impl Backend {
-    /// Creates recording storage without acquiring a GPU frame.
+    /// Creates reusable complete-frame storage and its stable stream capability.
     pub(super) fn new(host: Rc<HostState>, resources: super::widget::SharedAssets) -> Self {
-        Self::create(Some(host), Destination::Renderer(resources))
-    }
-    /// Creates the same executor with explicit recording or resource-owning submission behavior.
-    fn create(host: Option<Rc<HostState>>, destination: Destination) -> Self {
         let storage = Rc::new(Storage::default());
         let stream = Stream::from_value(Stream { storage: storage.clone() })
             .query()
             .expect("Stream declares IRenderStream");
         Self {
-            destination,
             host,
+            resources,
             storage,
             stream,
             target: Rc::default(),
         }
-    }
-    /// Reuses the same backend/executor monomorphization for local widget geometry.
-    pub(super) fn recording() -> (Self, Rc<Storage>) {
-        let backend = Self::create(None, Destination::Recording);
-        let storage = backend.storage.clone();
-        (backend, storage)
     }
 }
 
@@ -265,8 +182,6 @@ pub(super) struct Frame<'a> {
     info: FrameInfo,
     /// Earlier unsupported/failing commands must prevent submission.
     error: Option<FrameError>,
-    /// Successful local recording transfers queued resources to Storage::paint.
-    recorded: bool,
 }
 
 /// Expires frame access even when a renderer fails.
@@ -289,12 +204,7 @@ impl RendererBackend for Backend {
     fn frame(&mut self, info: FrameInfo) -> Result<Self::Frame<'_>, FrameError> {
         self.storage.clear_batches();
         self.storage.vertices.borrow_mut().clear();
-        Ok(Frame {
-            backend: self,
-            info,
-            error: None,
-            recorded: false,
-        })
+        Ok(Frame { backend: self, info, error: None })
     }
     /// Native IDs cannot cross COM; applications create owned images through ITextureFactory.
     fn create_texture(&mut self, _id: TextureId, _pixels: &[u8]) -> Result<(), TextureError> {
@@ -310,12 +220,8 @@ impl RendererFrame for Frame<'_> {
         if let Some(error) = self.error.take() {
             return Err(error);
         }
-        if let Some(error) = self.backend.host.as_ref().and_then(|host| host.error.get()) {
+        if let Some(error) = self.backend.host.error.get() {
             return Err(FrameError::new(error.to_string()));
-        }
-        if matches!(self.backend.destination, Destination::Recording) {
-            self.recorded = true;
-            return Ok(());
         }
         let storage = &self.backend.storage;
         let invocation = storage.next.get().checked_add(1).ok_or_else(|| FrameError::new("frame invocation exhausted"))?;
@@ -327,10 +233,7 @@ impl RendererFrame for Frame<'_> {
         let _scope = ReadScope(storage);
         let size = self.info.dimensions();
         let clear = self.info.clear();
-        let Destination::Renderer(resources) = &self.backend.destination else {
-            unreachable!("recording returned above")
-        };
-        let revision = resources.borrow();
+        let revision = self.backend.resources.borrow();
         renderer
             .render(
                 RenderInfo {
@@ -403,11 +306,8 @@ impl RendererFrame for Frame<'_> {
 }
 
 impl Drop for Frame<'_> {
-    /// Failed/abandoned recordings and completed native submissions release resources here.
-    /// Successful local recordings transfer their ownership to the checked painter forwarding call.
+    /// Failed, abandoned, and completed submissions release retained frame capabilities here.
     fn drop(&mut self) {
-        if !self.recorded {
-            self.backend.storage.clear_batches();
-        }
+        self.backend.storage.clear_batches();
     }
 }

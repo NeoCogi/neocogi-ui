@@ -22,7 +22,7 @@ pub trait LeafContent: 'static {
         Ok(GeometryChange::NO_CHANGE)
     }
     /// Records observational drawing through this invocation's checked painter capability.
-    fn paint(&self, state: WidgetPaint, painter: &Painter<'_>) -> Result<(), NcStatus>;
+    fn paint(&self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus>;
     /// Releases logical component activity once, including closing any locally owned event producers.
     /// The COM allocation and ordinary retained editing data may survive logical closure.
     fn close(&mut self) -> Result<(), NcStatus> {
@@ -91,7 +91,7 @@ impl<Content: LeafContent> IWidget for LeafObject<Content> {
     fn paint(&mut self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
         self.state.readable()?;
         state.validate()?;
-        self.content.paint(state, &Painter::from_call(painter, scope))
+        self.content.paint(state, &mut Painter::from_call(painter, scope))
     }
 }
 impl<Content: LeafContent> ILeafLayout for LeafObject<Content> {

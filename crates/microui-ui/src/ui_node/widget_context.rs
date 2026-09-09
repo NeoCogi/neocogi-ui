@@ -53,6 +53,8 @@
 //! Phase-specific widget execution contexts.
 
 use rs_math3d::{Recti, Vec2i};
+use microui_contracts::{IPainterAbi, PaintFont, PaintIcon, PaintScope, Point, WidgetVisualState};
+use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
 
 use crate::atlas::{AtlasHandle, FontId, IconId};
 use crate::math::RectExt;
@@ -75,6 +77,16 @@ fn local_point(origin: Vec2i, point: Vec2i) -> Vec2i {
 fn localize_clip(content_rect: Recti, screen_clip: Recti) -> Recti {
     // RectExt owns the saturated subtraction policy shared by clipping and hit testing.
     screen_clip.relative_to(Vec2i::new(content_rect.x, content_rect.y))
+}
+
+/// Packs one native color into the renderer contract's fixed little-endian RGBA order.
+fn packed_color(color: Color) -> u32 {
+    u32::from_le_bytes([color.r, color.g, color.b, color.a])
+}
+
+/// Projects one exhaustive native control state into its typed paint-contract counterpart.
+fn visual_state(state: ControlState) -> WidgetVisualState {
+    WidgetVisualState::from_raw(u8::try_from(state.index()).expect("control state count fits u8"))
 }
 
 /// Converts one routed event into coordinates relative to `origin`.
@@ -325,10 +337,27 @@ pub struct WidgetPaintCtx<'a> {
     enabled: bool,
     /// Whether the containing top-level window currently owns activation.
     window_active: bool,
-    /// Display list receiving this widget's paint operations.
-    display_list: &'a mut DisplayList,
+    /// Either the native frame list or the scoped COM facade to that same runtime-owned list.
+    output: PaintOutput<'a>,
+    /// Current local clip; nested helpers save and restore this one context-owned value.
+    draw_clip: Recti,
+    /// First scoped paint failure, returned after the built-in semantic algorithm completes.
+    error: Option<NcStatus>,
     /// Copied caller-authored options from the widget's authoritative common state.
     options: WidgetOption,
+}
+
+/// Concrete destination for one widget paint call; both variants reach the same runtime frame.
+enum PaintOutput<'a> {
+    /// Native traversal has direct exclusive access to the frame display list.
+    Frame(&'a mut DisplayList),
+    /// A built-in COM object appends through the runtime's checked invocation capability.
+    Scoped {
+        /// Invocation identity remains copied and can only be narrowed by `draw_clip`.
+        scope: PaintScope,
+        /// Borrowed interface cannot outlive the widget's synchronous `paint` call.
+        painter: ComRef<'a, IPainterAbi>,
+    },
 }
 
 impl<'a> WidgetPaintCtx<'a> {
@@ -348,13 +377,52 @@ impl<'a> WidgetPaintCtx<'a> {
         window_active: bool,
         options: WidgetOption,
     ) -> Self {
+        let common = WidgetContextData::new(content_rect, screen_clip, style, atlas, hovered, focused, clicked, active);
+        let draw_clip = common.local_clip();
         Self {
-            common: WidgetContextData::new(content_rect, screen_clip, style, atlas, hovered, focused, clicked, active),
+            common,
             enabled,
             window_active,
-            display_list,
+            output: PaintOutput::Frame(display_list),
+            draw_clip,
+            error: None,
             options,
         }
+    }
+
+    /// Creates a built-in context whose semantic operations target the runtime's active COM scope.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new_scoped(
+        content_rect: Recti,
+        screen_clip: Recti,
+        style: &'a Skin,
+        atlas: &'a AtlasHandle,
+        enabled: bool,
+        hovered: bool,
+        focused: bool,
+        clicked: bool,
+        active: bool,
+        window_active: bool,
+        options: WidgetOption,
+        scope: PaintScope,
+        painter: ComRef<'a, IPainterAbi>,
+    ) -> Self {
+        let common = WidgetContextData::new(content_rect, screen_clip, style, atlas, hovered, focused, clicked, active);
+        let draw_clip = common.local_clip();
+        Self {
+            common,
+            enabled,
+            window_active,
+            output: PaintOutput::Scoped { scope, painter },
+            draw_clip,
+            error: None,
+            options,
+        }
+    }
+
+    /// Returns the first scoped recording failure after a built-in semantic paint completes.
+    pub(crate) fn finish(self) -> Result<(), NcStatus> {
+        self.error.map_or(Ok(()), Err)
     }
 
     /// Reads one coherent option snapshot without retaining or borrowing widget state.
@@ -380,13 +448,19 @@ impl<'a> WidgetPaintCtx<'a> {
     /// The empty replacement contains no allocation. [`Self::restore_display_list`] returns the
     /// same owned buffers after the foreign call, so no mutable Rust reference crosses the ABI.
     pub(crate) fn take_display_list(&mut self) -> DisplayList {
-        std::mem::take(self.display_list)
+        match &mut self.output {
+            PaintOutput::Frame(display_list) => std::mem::take(*display_list),
+            PaintOutput::Scoped { .. } => unreachable!("only native traversal owns the frame display list"),
+        }
     }
 
     /// Restores the runtime's frame display list after a synchronous COM paint invocation.
     pub(crate) fn restore_display_list(&mut self, display_list: DisplayList) {
         // Only PaintService can take the list, and it restores it before traversal can continue.
-        *self.display_list = display_list;
+        match &mut self.output {
+            PaintOutput::Frame(target) => **target = display_list,
+            PaintOutput::Scoped { .. } => unreachable!("only native traversal owns the frame display list"),
+        }
     }
 
     /// Returns the traversal-derived content allocation in screen coordinates to the paint driver.
@@ -401,9 +475,9 @@ impl<'a> WidgetPaintCtx<'a> {
 
     /// Returns the traversal-derived effective clip in widget-local coordinates.
     pub fn local_clip(&self) -> Recti {
-        // Translate the inherited screen clip through the widget's committed content origin without
-        // widening it. Scrolled content can therefore cull paint work in stable local coordinates.
-        self.common.local_clip()
+        // The initial value is traversal-derived. A nested paint helper may only replace it with a
+        // positive intersection and restores the parent value before returning.
+        self.draw_clip
     }
 
     /// Returns whether the pointer is currently over this widget.
@@ -447,6 +521,38 @@ impl<'a> WidgetPaintCtx<'a> {
         ControlState::from_interaction(self.enabled, self.hovered(), self.focused(), self.active() && self.hovered())
     }
 
+    /// Executes drawing with a local clip narrowed inside this runtime-owned paint context.
+    pub(crate) fn with_clip(&mut self, rect: Recti, paint: impl FnOnce(&mut Self)) {
+        let previous = self.draw_clip;
+        self.draw_clip = previous
+            .positive_intersection(rect)
+            .unwrap_or_else(|| Recti::new(previous.x.max(rect.x), previous.y.max(rect.y), 0, 0));
+        paint(self);
+        self.draw_clip = previous;
+    }
+
+    /// Preserves the first COM recording error while allowing infallible semantic widget code.
+    fn record(&mut self, result: Result<(), NcStatus>) {
+        if self.error.is_none()
+            && let Err(error) = result
+        {
+            self.error = Some(error);
+        }
+    }
+
+    /// Copies the current invocation with its context-owned effective local clip.
+    fn scoped_paint(&self) -> Option<(PaintScope, ComRef<'a, IPainterAbi>)> {
+        match &self.output {
+            PaintOutput::Frame(_) => None,
+            PaintOutput::Scoped { scope, painter } => Some((PaintScope { invocation: scope.invocation, clip: crate::com::copied_rect(self.draw_clip) }, *painter)),
+        }
+    }
+
+    /// Resolves the effective screen clip for the native display-list path.
+    fn screen_draw_clip(&self) -> Recti {
+        self.draw_clip.translated(Vec2i::new(self.common.content_rect.x, self.common.content_rect.y))
+    }
+
     /// Returns a widget-local painter that records directly into the current frame display list.
     ///
     /// The painter receives the widget origin, local bounds, and traversal-derived effective clip.
@@ -454,8 +560,11 @@ impl<'a> WidgetPaintCtx<'a> {
     /// state.
     pub fn painter(&mut self) -> Painter<'_> {
         let screen_content_bounds = self.common.content_rect;
-        let screen_clip = self.common.screen_clip;
-        Painter::for_widget(&mut *self.display_list, screen_content_bounds, screen_clip)
+        let screen_clip = self.screen_draw_clip();
+        match &mut self.output {
+            PaintOutput::Frame(display_list) => Painter::for_widget(*display_list, screen_content_bounds, screen_clip),
+            PaintOutput::Scoped { .. } => unreachable!("built-in COM painting uses typed WidgetPaintCtx operations"),
+        }
     }
 
     /// Returns this widget's resolved skin.
@@ -470,14 +579,73 @@ impl<'a> WidgetPaintCtx<'a> {
 
     /// Draws a filled rectangle through a widget-local painter.
     pub(crate) fn draw_rect(&mut self, rect: Recti, color: Color) {
-        self.painter().fill_rect(rect, color);
+        if let Some((scope, mut painter)) = self.scoped_paint() {
+            let result = painter.fill(scope, crate::com::copied_rect(rect), packed_color(color));
+            self.record(result);
+        } else {
+            self.painter().fill_rect(rect, color);
+        }
     }
 
     /// Draws an atlas icon through a widget-local painter.
     pub(crate) fn draw_icon(&mut self, id: IconId, rect: Recti, color: Color) {
         // Callers resolve a semantic content color before reaching this primitive, so explicit image
         // tints and role-specific state colors are preserved exactly.
-        self.painter().icon(id, rect, color);
+        if let Some((scope, mut painter)) = self.scoped_paint() {
+            let result = painter.icon(
+                scope,
+                PaintIcon {
+                    index: self.common.atlas.icon_index(id),
+                },
+                crate::com::copied_rect(rect),
+                packed_color(color),
+            );
+            self.record(result);
+        } else {
+            self.painter().icon(id, rect, color);
+        }
+    }
+
+    /// Draws a renderer-owned image without creating a widget-local display list or geometry pass.
+    pub(crate) fn draw_texture(
+        &mut self,
+        rect: Recti,
+        color: Color,
+        texture: ComPtr<microui_contracts::ITextureAbi>,
+    ) {
+        if let Some((scope, mut painter)) = self.scoped_paint() {
+            let result = painter.texture(
+                scope,
+                crate::com::copied_rect(rect),
+                microui_contracts::TextureRegion::FULL,
+                packed_color(color),
+                texture.as_com_ref(),
+            );
+            self.record(result);
+        } else {
+            self.painter().com_texture(rect, color, texture);
+        }
+    }
+
+    /// Draws one exact-font text run through the active native or scoped frame target.
+    pub(crate) fn draw_text(&mut self, font: FontId, text: &str, position: Vec2i, color: Color) {
+        if let Some((scope, mut painter)) = self.scoped_paint() {
+            let result = painter.text_run(
+                scope,
+                PaintFont {
+                    index: self.common.atlas.font_index(font),
+                },
+                Point {
+                    x: position.x,
+                    y: position.y,
+                },
+                packed_color(color),
+                NcCopyFromBufferOffset::new(0, text.as_bytes()),
+            );
+            self.record(result);
+        } else {
+            self.painter().text(font, text, position, color);
+        }
     }
 
     /// Draws one control using this widget's resolved interaction state.
@@ -492,6 +660,23 @@ impl<'a> WidgetPaintCtx<'a> {
     pub(crate) fn draw_control_state(&mut self, role: ControlRole, state: ControlState, rect: Recti) -> Option<Recti> {
         // Composite controls can select a child part's state without converting it into a universal
         // state accepted by unrelated surface, menu, or chrome families.
+        if let Some((scope, mut painter)) = self.scoped_paint() {
+            let result = painter.frame(
+                scope,
+                crate::com::copied_rect(rect),
+                crate::com::frame_contract(crate::FrameRole::Control(role)),
+                visual_state(state),
+                false,
+            );
+            return match result {
+                Ok(content) if content.width > 0 && content.height > 0 => Some(crate::com::local_rect(content)),
+                Ok(_) => None,
+                Err(error) => {
+                    self.record(Err(error));
+                    None
+                }
+            };
+        }
         let patch = self.common.style.control(role, state).patch;
         let mut painter = self.painter();
         crate::ui_node::frame::paint_internal_frame(&mut painter, rect, patch)
@@ -508,17 +693,47 @@ impl<'a> WidgetPaintCtx<'a> {
         // Zero destination insets collapse all eight outer cells. Flat patches retain their center
         // cell and image patches sample only their center source, preserving the old unframed fill
         // contract without introducing a second theme asset vocabulary.
-        let patch = self.common.style.control(role, state).patch.with_insets(crate::SliceInsets::ZERO);
-        let mut painter = self.painter();
-        let _ = crate::ui_node::frame::paint_internal_frame(&mut painter, rect, patch);
+        if let Some((scope, mut painter)) = self.scoped_paint() {
+            let result = painter
+                .frame(
+                    scope,
+                    crate::com::copied_rect(rect),
+                    crate::com::frame_contract(crate::FrameRole::Control(role)),
+                    visual_state(state),
+                    true,
+                )
+                .map(|_| ());
+            self.record(result);
+        } else {
+            let patch = self.common.style.control(role, state).patch.with_insets(crate::SliceInsets::ZERO);
+            let mut painter = self.painter();
+            let _ = crate::ui_node::frame::paint_internal_frame(&mut painter, rect, patch);
+        }
     }
 
     /// Draws only the stretchable center of one structural surface.
     pub(crate) fn draw_surface_center_state(&mut self, role: SurfaceRole, state: SurfaceState, rect: Recti) {
         // Center-only structural fills share the same nine-patch behavior as unframed controls.
-        let patch = self.common.style.surface(role, state).patch.with_insets(crate::SliceInsets::ZERO);
-        let mut painter = self.painter();
-        let _ = crate::ui_node::frame::paint_internal_frame(&mut painter, rect, patch);
+        if let Some((scope, mut painter)) = self.scoped_paint() {
+            let state = match state {
+                SurfaceState::Normal => WidgetVisualState::NORMAL,
+                SurfaceState::Disabled => WidgetVisualState::DISABLED,
+            };
+            let result = painter
+                .frame(
+                    scope,
+                    crate::com::copied_rect(rect),
+                    crate::com::frame_contract(crate::FrameRole::Surface(role)),
+                    state,
+                    true,
+                )
+                .map(|_| ());
+            self.record(result);
+        } else {
+            let patch = self.common.style.surface(role, state).patch.with_insets(crate::SliceInsets::ZERO);
+            let mut painter = self.painter();
+            let _ = crate::ui_node::frame::paint_internal_frame(&mut painter, rect, patch);
+        }
     }
 
     /// Draws one menu part using its menu-specific state.
@@ -559,8 +774,7 @@ impl<'a> WidgetPaintCtx<'a> {
         // Composite callers have already resolved an exact role/state content color. This primitive
         // owns only authoritative text geometry, clipping, and recording.
         let pos = control_text_position_with_font(self.common.style, self.common.atlas, font, text, rect, opt);
-        let mut painter = self.painter();
-        painter.with_clip(rect, |painter| painter.text(font, text, pos, color));
+        self.with_clip(rect, |ctx| ctx.draw_text(font, text, pos, color));
     }
 }
 

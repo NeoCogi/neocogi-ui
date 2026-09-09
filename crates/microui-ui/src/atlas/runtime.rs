@@ -110,6 +110,28 @@ impl AtlasHandle {
         self.0.icon_slots.contains_key(&icon)
     }
 
+    /// Returns the exact bundle-local slot for a font already authenticated by this atlas.
+    pub(crate) fn font_index(&self, font: FontId) -> u32 {
+        let index = *self.0.font_slots.get(&font).expect("font ID does not belong to this atlas");
+        u32::try_from(index).expect("validated asset font count fits u32")
+    }
+
+    /// Returns the exact bundle-local slot for an icon already authenticated by this atlas.
+    pub(crate) fn icon_index(&self, icon: IconId) -> u32 {
+        let index = *self.0.icon_slots.get(&icon).expect("icon ID does not belong to this atlas");
+        u32::try_from(index).expect("validated asset icon count fits u32")
+    }
+
+    /// Resolves one checked bundle-local font slot for scoped semantic painting.
+    pub(crate) fn font_at_index(&self, index: u32) -> Option<FontId> {
+        self.0.fonts.get(index as usize).map(|(_, font)| font.id)
+    }
+
+    /// Resolves one checked bundle-local icon slot for scoped semantic painting.
+    pub(crate) fn icon_at_index(&self, index: u32) -> Option<IconId> {
+        self.0.icons.get(index as usize).map(|(_, icon)| icon.id)
+    }
+
     /// Resolves a font identity through this atlas's immutable local index.
     fn font(&self, font: FontId) -> &Font {
         // The atlas-local index decouples stable identity from ordering changes introduced while a

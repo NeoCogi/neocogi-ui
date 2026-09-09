@@ -372,15 +372,18 @@ copied phase snapshot, and decode event/text input with `decode_widget_event`.
 Painting receives effective clipping, enabled/hover/focus/press state and logical
 window activation as copied values. It has no mutable runtime context.
 
-`IPainter::triangles` records a complete local atlas batch with one copied call.
-The input offset is zero, its length is a multiple of three, and every position
-and UV component is finite. The runtime validates the whole batch before
-publishing any geometry, applies the widget origin and final viewport clipping,
-and preserves painter order. Built-in classes reuse their existing UI geometry
-algorithms before making this call; they release semantic and scratch borrows
-first. A recorder error restores the reusable workspace. This atlas path does
-not represent application GPU scenes or external texture ownership; those use
-the renderer capabilities specified in the renderer migration.
+Every `IPainter` operation has a mutable receiver. A widget therefore uses a
+mutable `Painter` facade while recording, and nc-com rejects conflicting or
+reentrant access through another retained projection. The concrete recorder owns
+ordinary invocation and frame-context fields; it does not use interior-mutable
+slots to simulate mutation through `&self`.
+
+`IPainter::triangles` remains available for custom widgets that already own a
+complete local atlas batch. The input offset is zero, its length is a multiple
+of three, and every position and UV component is finite. Built-in classes do not
+pre-expand their visuals through that path. They issue compact frame, icon, text,
+and image operations, which the runtime appends to its one display list and
+expands during the single final renderer pass.
 
 
 ## Local custom leaves and solid drawing

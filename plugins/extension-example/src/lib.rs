@@ -79,7 +79,7 @@ macro_rules! widget {
                 self.common.state.readable()?;
                 state.validate()?;
                 self.common.calls.paints += 1;
-                self.paint_content(state, &Painter::from_call(painter, scope))
+                self.paint_content(state, &mut Painter::from_call(painter, scope))
             }
         }
         impl IWidgetProbe for $name {
@@ -113,7 +113,7 @@ impl CounterObject {
         }
     }
     /// Standard body text requires no knowledge of native fonts, atlas packing or GPU types.
-    fn paint_content(&self, state: WidgetPaint, painter: &Painter<'_>) -> Result<(), NcStatus> {
+    fn paint_content(&self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
         painter.text(state.rect, &self.count.to_string())
     }
     /// Ordinary interaction work expires even if callers retain the closed control.
@@ -184,7 +184,7 @@ impl Inset {
         GeometryChange::NO_CHANGE
     }
     /// Children paint through ordinary retained traversal, without a second recursive paint path.
-    fn paint_content(&self, _state: WidgetPaint, _painter: &Painter<'_>) -> Result<(), NcStatus> {
+    fn paint_content(&self, _state: WidgetPaint, _painter: &mut Painter<'_>) -> Result<(), NcStatus> {
         Ok(())
     }
     /// Child teardown can fail after topology commits; preserve the ordinary committed result.

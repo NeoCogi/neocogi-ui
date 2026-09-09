@@ -354,44 +354,44 @@ impl<'a> Painter<'a> {
         })
     }
     /// Records a finite solid line; the UI owns tessellation and the currently installed material.
-    pub fn stroke_line(&self, from: PaintPoint, to: PaintPoint, width: f32, rgba: u32) -> Result<(), NcStatus> {
+    pub fn stroke_line(&mut self, from: PaintPoint, to: PaintPoint, width: f32, rgba: u32) -> Result<(), NcStatus> {
         self.interface.stroke_line(self.scope, from, to, width, rgba)
     }
     /// Records finite polygon positions with no application dependence on UI tessellation internals.
-    pub fn fill_polygon(&self, points: &[PaintPoint], rgba: u32) -> Result<(), NcStatus> {
+    pub fn fill_polygon(&mut self, points: &[PaintPoint], rgba: u32) -> Result<(), NcStatus> {
         self.interface.fill_polygon(self.scope, NcCopyFromBufferOffset::new(0, points), rgba)
     }
     /// Draws body text using the UI's current font and semantic content color.
-    pub fn text(&self, rect: Rect, text: &str) -> Result<(), NcStatus> {
+    pub fn text(&mut self, rect: Rect, text: &str) -> Result<(), NcStatus> {
         self.interface.text(self.scope, rect, NcCopyFromBufferOffset::new(0, text.as_bytes()))
     }
 
     /// Records solid triangle geometry without exposing atlas packing to the application.
-    pub fn colored_triangles(&self, vertices: &[ColoredVertex]) -> Result<(), NcStatus> {
+    pub fn colored_triangles(&mut self, vertices: &[ColoredVertex]) -> Result<(), NcStatus> {
         self.interface.colored_triangles(self.scope, NcCopyFromBufferOffset::new(0, vertices))
     }
 
     /// Records a complete validated atlas triangle batch with one COM copy.
-    pub fn triangles(&self, vertices: &[RenderVertex]) -> Result<(), NcStatus> {
+    pub fn triangles(&mut self, vertices: &[RenderVertex]) -> Result<(), NcStatus> {
         self.interface.triangles(self.scope, NcCopyFromBufferOffset::new(0, vertices))
     }
 
     /// Draws an owned immutable texture with an RGBA tint; its creator must be the submitted renderer.
-    pub fn texture(&self, rect: Rect, rgba: u32, texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
+    pub fn texture(&mut self, rect: Rect, rgba: u32, texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
         self.texture_region(rect, TextureRegion::FULL, rgba, texture)
     }
 
     /// Draws an explicit normalized subregion with destination clipping preserving source mapping.
-    pub fn texture_region(&self, rect: Rect, source: TextureRegion, rgba: u32, texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
+    pub fn texture_region(&mut self, rect: Rect, source: TextureRegion, rgba: u32, texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
         self.interface.texture(self.scope, rect, source, rgba, texture)
     }
     /// Inserts renderer-owned application GPU work at this point in painter order.
-    pub fn item(&self, rect: Rect, item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
+    pub fn item(&mut self, rect: Rect, item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
         self.interface.item(self.scope, rect, item)
     }
 
     /// Records a local rectangle within this invocation.
-    pub fn fill(&self, rect: Rect, rgba: u32) -> Result<(), NcStatus> {
+    pub fn fill(&mut self, rect: Rect, rgba: u32) -> Result<(), NcStatus> {
         self.interface.fill(self.scope, rect, rgba)
     }
 }
