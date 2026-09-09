@@ -10,20 +10,6 @@ pub(super) fn color(rgba: u32) -> crate::render::Color {
     crate::render::Color { r, g, b, a }
 }
 
-/// Packs a legacy vertex once at the private implementation boundary.
-fn vertex(value: Vertex) -> RenderVertex {
-    let p = value.position();
-    let t = value.tex_coord();
-    let c = value.color();
-    RenderVertex {
-        x: p.x,
-        y: p.y,
-        u: t.x,
-        v: t.y,
-        rgba: u32::from_le_bytes([c.x, c.y, c.z, c.w]),
-    }
-}
-
 /// Owned frame storage is reused; invocation checks prevent stale readers observing reuse.
 #[derive(Default)]
 pub(super) struct Storage {
@@ -266,7 +252,7 @@ impl RendererFrame for Frame<'_> {
             self.error = Some(FrameError::new("frame geometry exceeds the shared allocation limit"));
             return;
         }
-        storage.vertices.borrow_mut().extend(v.map(vertex));
+        storage.vertices.borrow_mut().extend(v);
         if let Some(Batch::Atlas { count, .. }) = batches.last_mut() {
             *count += 3;
         } else {
@@ -282,7 +268,7 @@ impl RendererFrame for Frame<'_> {
         if first > MAX_RENDER_VERTICES - 4 || storage.batches.borrow().len() >= MAX_RENDER_BATCHES as usize {
             return Err(FrameError::new("frame geometry exceeds the shared allocation limit"));
         }
-        storage.vertices.borrow_mut().extend(vertices.map(vertex));
+        storage.vertices.borrow_mut().extend(vertices);
         storage.batches.borrow_mut().push(Batch::Texture { first, texture: Rc::new(texture) });
         Ok(())
     }

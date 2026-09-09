@@ -51,8 +51,11 @@ those clips from committed geometry, so paint and hit testing share their bounda
 The final executor clips atlas rectangles and adjusts their sampling coordinates,
 clips image quads while preserving UV projection, and clips solid triangles against
 the operation clip and viewport. Empty geometry is discarded. Backends receive final
-screen-space UI vertices. A render item additionally receives its authoritative visible
-region because its own mesh drawing happens at that ordered boundary.
+screen-space UI vertices. `RenderVertex` is the one canonical vertex representation
+used by clipping, the COM stream, platform validation and concrete GPU backends; the
+boundary performs its required bulk copy without packing and unpacking every vertex
+into a duplicate native struct. A render item additionally receives its authoritative
+visible region because its own mesh drawing happens at that ordered boundary.
 
 The portable target is a positive drawable up to 8192 by 8192 pixels. Translated logical
 edges must remain in `-32768..=40960`, allowing four maximum drawable spans off-screen.

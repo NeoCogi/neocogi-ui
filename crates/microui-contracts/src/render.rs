@@ -1,6 +1,7 @@
 //! Ordered bulk frames and owned renderer resources; native GPU APIs stay inside their plugin.
 use crate::{Rect, Size};
 use nc_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, com_enum, com_interface, com_struct};
+use rs_math3d::{Color4b, Vec2f, color4b};
 
 /// Shared allocation ceiling for one complete frame, checked before reserving receiver storage.
 pub const MAX_RENDER_VERTICES: u32 = 16 * 1024 * 1024;
@@ -94,6 +95,61 @@ pub struct RenderVertex {
     pub v: f32,
     /// Color packed as red in the least significant byte, then green, blue, alpha.
     pub rgba: u32,
+}
+
+impl RenderVertex {
+    /// Creates one canonical renderer and COM transport vertex.
+    pub fn new(position: Vec2f, tex_coord: Vec2f, color: Color4b) -> Self {
+        Self {
+            x: position.x,
+            y: position.y,
+            u: tex_coord.x,
+            v: tex_coord.y,
+            rgba: u32::from_le_bytes([color.x, color.y, color.z, color.w]),
+        }
+    }
+
+    /// Returns the screen-space position used by clipping and native backends.
+    pub fn position(&self) -> Vec2f {
+        Vec2f::new(self.x, self.y)
+    }
+
+    /// Returns the normalized atlas or image coordinates.
+    pub fn tex_coord(&self) -> Vec2f {
+        Vec2f::new(self.u, self.v)
+    }
+
+    /// Decodes the canonical packed color into renderer channel storage.
+    pub fn color(&self) -> Color4b {
+        let [r, g, b, a] = self.rgba.to_le_bytes();
+        color4b(r, g, b, a)
+    }
+
+    /// Linearly interpolates every attribute for geometry clipping.
+    pub fn lerp(left: Self, right: Self, amount: f32) -> Self {
+        // Clamp the intersection amount so numerical noise cannot extrapolate
+        // a vertex beyond the caller's validated segment.
+        let amount = amount.clamp(0.0, 1.0);
+        let left_color = left.rgba.to_le_bytes();
+        let right_color = right.rgba.to_le_bytes();
+        Self {
+            x: left.x + (right.x - left.x) * amount,
+            y: left.y + (right.y - left.y) * amount,
+            u: left.u + (right.u - left.u) * amount,
+            v: left.v + (right.v - left.v) * amount,
+            rgba: u32::from_le_bytes([
+                Self::lerp_channel(left_color[0], right_color[0], amount),
+                Self::lerp_channel(left_color[1], right_color[1], amount),
+                Self::lerp_channel(left_color[2], right_color[2], amount),
+                Self::lerp_channel(left_color[3], right_color[3], amount),
+            ]),
+        }
+    }
+
+    /// Interpolates one packed channel and rounds it back into byte storage.
+    fn lerp_channel(left: u8, right: u8, amount: f32) -> u8 {
+        ((left as f32) + (right as f32 - left as f32) * amount).round().clamp(0.0, 255.0) as u8
+    }
 }
 
 #[com_struct]

@@ -446,7 +446,7 @@ pub trait IRenderer {
 
 `IRenderStream` is a bounded, typed view of ordered batches, vertex buffers, resource references and custom render items. Use existing explicit copy-buffer modes for bulk reads into reusable backend-owned storage. Fixed-size render records belong in the contract crate. Do not send serialized arbitrary commands or Rust display-list enums through byte blobs.
 
-Keep high-level text/nine-patch expansion, clipping and tessellation in the UI plugin so each backend consumes the same final geometry and ordering. Preserve the source display-list ordering across UI batches, images and custom draws. Keep buffer allocation reuse and batching; benchmark boundary call and copy counts before selecting chunk sizes.
+Keep high-level text/nine-patch expansion, clipping and tessellation in the UI plugin so each backend consumes the same final geometry and ordering. Preserve the source display-list ordering across UI batches, images and custom draws. Use the ABI-safe `RenderVertex` directly as the renderer backend vertex instead of converting to and from a duplicate native representation on both sides of the stream. Keep buffer allocation reuse and batching; benchmark boundary call and copy counts before selecting chunk sizes.
 
 Prefer a synchronous complete-frame COM method. The backend can keep its existing native `RendererFrame<'_>` and consuming `finish(self)` privately inside that call. The Rust façade can also retain a consuming `Frame<'a>` wrapper for application ergonomics. This avoids exposing a cloneable COM frame merely to model one submission. If an external COM frame becomes necessary, it needs an explicit Open/Finished/Abandoned state and repeat-call rejection; dropping it must abandon, never submit.
 

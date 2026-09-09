@@ -55,69 +55,9 @@
 use super::texture::TextureError;
 use crate::ImageSource;
 use crate::render::{Color, TextureId};
-use rs_math3d::{Color4b, Dimensioni, Rect, Vec2f, color4b};
+pub use microui_contracts::RenderVertex as Vertex;
+use rs_math3d::{Dimensioni, Rect};
 use std::{error::Error, fmt};
-
-#[derive(Default, Copy, Clone)]
-#[repr(C)]
-/// Vertex submitted by the UI to a renderer backend.
-pub struct Vertex {
-    /// Screen-space position in pixels.
-    pos: Vec2f,
-    /// Normalized texture coordinate.
-    tex: Vec2f,
-    /// Vertex color multiplied with the sampled texture.
-    color: Color4b,
-}
-
-impl Vertex {
-    /// Creates a vertex with the provided position, texture coordinate, and color.
-    pub fn new(pos: Vec2f, tex: Vec2f, color: Color4b) -> Self {
-        Self { pos, tex, color }
-    }
-
-    /// Returns the position of the vertex in screen space.
-    pub fn position(&self) -> Vec2f {
-        self.pos
-    }
-
-    /// Returns the texture coordinates associated with the vertex.
-    pub fn tex_coord(&self) -> Vec2f {
-        self.tex
-    }
-
-    /// Returns the vertex color.
-    pub fn color(&self) -> Color4b {
-        self.color
-    }
-
-    /// Linearly interpolates every render attribute between two vertices.
-    ///
-    /// Positions and texture coordinates use vector arithmetic, while packed color channels are
-    /// rounded back to the nearest byte. Clamping the amount prevents callers from extrapolating
-    /// attributes beyond the supplied segment.
-    pub(crate) fn lerp(left: Self, right: Self, amount: f32) -> Self {
-        // amount = clamp(requested_amount, 0, 1).
-        let amount = amount.clamp(0.0, 1.0);
-
-        Self {
-            pos: left.pos + (right.pos - left.pos) * amount,
-            tex: left.tex + (right.tex - left.tex) * amount,
-            color: color4b(
-                Self::lerp_channel(left.color.x, right.color.x, amount),
-                Self::lerp_channel(left.color.y, right.color.y, amount),
-                Self::lerp_channel(left.color.z, right.color.z, amount),
-                Self::lerp_channel(left.color.w, right.color.w, amount),
-            ),
-        }
-    }
-
-    /// Interpolates one packed color channel and rounds it back into byte storage.
-    fn lerp_channel(left: u8, right: u8, amount: f32) -> u8 {
-        // channel = left + (right - left) * amount, clamped to one byte.
-        ((left as f32) + (right as f32 - left as f32) * amount).round().clamp(0.0, 255.0) as u8
-    }
-}
 
 /// Copied geometry for one owned COM render item at an ordered drawing boundary.
 #[derive(Copy, Clone, Debug)]
