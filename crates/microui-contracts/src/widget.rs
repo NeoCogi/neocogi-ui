@@ -61,10 +61,13 @@ impl WidgetState {
 
     /// Allows observations during layout/paint while rejecting logical closure.
     pub fn readable(&self) -> Result<(), NcStatus> {
-        if self.closed {
-            return Err(UI_E_CLOSED);
-        }
+        self.local_open()?;
         self.host.check_open()
+    }
+
+    /// Rejects this allocation's terminal state without consulting its owner.
+    fn local_open(&self) -> Result<(), NcStatus> {
+        if self.closed { Err(UI_E_CLOSED) } else { Ok(()) }
     }
 
     /// Authorizes an ordinary mutation before the implementation borrows state.
@@ -86,9 +89,14 @@ impl WidgetState {
         }
     }
 
-    /// Drains the marker once, including when update was skipped for this widget.
+    /// Drains the marker once while the owning runtime already holds phase authority.
+    ///
+    /// This method is the runtime's mutable collection protocol, not an ordinary
+    /// application observation. Mounted widgets are closed directly during tree
+    /// teardown, so their local terminal flag is authoritative and no repeated
+    /// `IWidgetHost::check_open` round trip is needed during a tree scan.
     pub fn take_change(&mut self) -> Result<GeometryChange, NcStatus> {
-        self.readable()?;
+        self.local_open()?;
         let dirty = self.dirty;
         self.dirty = false;
         Ok(if dirty { GeometryChange::CHANGED } else { GeometryChange::NO_CHANGE })
