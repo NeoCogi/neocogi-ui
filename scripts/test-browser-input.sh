@@ -5,7 +5,7 @@ workspace_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$workspace_root"
 suite="${1:-input}"
 case "$suite" in
-  input) package="microui-plugin-platform"; fixture="plugins/platform/tests/browser-input.html" ;;
+  input) package="neocogi-render-plugin"; fixture="crates/render/plugin/tests/browser-input.html" ;;
   full) package="neocogi-ui-demo-full"; fixture="demos/demo-full/tests/browser-full.html" ;;
   *) echo "usage: $0 [input|full]" >&2; exit 2 ;;
 esac

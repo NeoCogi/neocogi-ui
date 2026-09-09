@@ -8,13 +8,13 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-default = ["wgpu"]
-glow = ["neocogi-ui-demo-host/glow", "microui-plugin-platform/glow"]
+default = ["glow"]
+glow = ["neocogi-ui-demo-host/glow", "neocogi-render-plugin/glow"]
 webgl = ["neocogi-ui-demo-host/webgl", "embed-assets"]
 # Native deployments read adjacent files unless this feature is explicitly requested.
 embed-assets = ["neocogi-ui-demo-assets/embed-assets"]
-vulkan = ["neocogi-ui-demo-host/vulkan", "microui-plugin-platform/vulkan"]
-wgpu = ["neocogi-ui-demo-host/wgpu", "microui-plugin-platform/wgpu"]
+vulkan = ["neocogi-ui-demo-host/vulkan", "neocogi-render-plugin/vulkan"]
+wgpu = ["neocogi-ui-demo-host/wgpu", "neocogi-render-plugin/wgpu"]
 
 [dependencies]
 neocogi-ui.workspace = true
@@ -28,7 +28,7 @@ rs-math3d.workspace = true
 # Build the shared artifacts as dependencies; native startup still loads their C ABI.
 neocogi-com-runtime.workspace = true
 neocogi-ui-runtime = { path = "../../crates/ui/runtime", features = ["dynamic-plugin"] }
-microui-plugin-platform = { path = "../../plugins/platform", default-features = false, features = ["dynamic-plugin"] }
+neocogi-render-plugin = { path = "../../crates/render/plugin", default-features = false, features = ["dynamic-plugin"] }
 microui-plugin-assets = { workspace = true, features = ["dynamic-plugin", "theme-json"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]

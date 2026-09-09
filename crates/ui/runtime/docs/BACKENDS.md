@@ -1,10 +1,17 @@
 # Backend ownership and COM rendering
 
-The platform plugin co-packages the native window, selected renderer, images, meshes,
-and backend-specific application drawing. Its implementation links a concrete Glow,
-Vulkan or WGPU backend. Browser builds statically register the same COM contracts and
-use WebGL. Applications retain `IWindow`, `IRenderer`, `IImage` and `IRenderItem`
-interfaces through the facade; native GPU objects remain inside the platform plugin.
+Each renderer is a plugin: `neocogi.render.glow`, `neocogi.render.vulkan`,
+`neocogi.render.wgpu`, or `neocogi.render.webgl`. A build of `neocogi-render-plugin`
+produces exactly one of those identities and links its concrete renderer. Browser
+builds statically register the WebGL descriptor; native assemblies dynamically load
+one of the other three.
+
+The selected plugin also owns its native window, event pump, images, meshes, and
+backend-specific application drawing. Those are implementation details of a rendering
+device, not separate deployment units. Keeping them together avoids exposing native
+window/graphics handles and avoids another dynamic dispatch boundary during every
+frame. Applications retain `IPlatformWindow`, `IRenderer`, `IImage`, and `IRenderItem`
+interfaces through the facade; native GPU objects never leave the plugin.
 
 `RendererBackend::Frame<'a>` is an implementation-local generic associated type. The
 frame borrows its backend exclusively until `finish(self)` submits it, or Drop abandons
@@ -14,19 +21,19 @@ two simultaneous backend frames.
 
 ## Backend sources
 
-Renderer implementation crates live alongside [the platform plugin](../../../plugins/platform)
-under `plugins/`. The platform plugin links the selected backend and shared helpers
-into its native library; browser builds link them into the wasm module. The renderer
-crates are Rust libraries without separate COM plugin descriptors or shared libraries.
+Renderer sources live together under `crates/render`. The `plugin` package is the
+deployment shell and owns the platform/device integration. The other packages are
+ordinary Rust implementation libraries linked into the selected plugin artifact; they
+are not additional runtime boundaries.
 
 | Source | Responsibility |
 | --- | --- |
-| [plugins/platform](../../../plugins/platform) | Window, input and device ownership; COM renderer integration |
-| [plugins/renderer-glow](../../../plugins/renderer-glow) | Glow rendering shared by native OpenGL and WebGL |
-| [plugins/renderer-vulkan](../../../plugins/renderer-vulkan) | Vulkan rendering and UI shaders |
-| [plugins/renderer-wgpu](../../../plugins/renderer-wgpu) | WGPU rendering |
-| [plugins/renderer-webgl-canvas](../../../plugins/renderer-webgl-canvas) | Browser canvas backend using the Glow renderer |
-| [plugins/renderer-support](../../../plugins/renderer-support) | Shared renderer and platform helpers |
+| [crates/render/plugin](../../../render/plugin) | Plugin descriptor plus window, input, and device ownership |
+| [crates/render/glow](../../../render/glow) | Glow rendering shared by native OpenGL and WebGL |
+| [crates/render/vulkan](../../../render/vulkan) | Vulkan rendering and UI shaders |
+| [crates/render/wgpu](../../../render/wgpu) | WGPU rendering |
+| [crates/render/webgl](../../../render/webgl) | Browser canvas backend using the Glow renderer |
+| [crates/render/support](../../../render/support) | Shared frame preparation and resource validation |
 
 ## Ordered application drawing
 
@@ -37,8 +44,8 @@ The platform then resumes ordinary UI drawing in painter order.
 
 The generic application renderer types in the native backend crates are statically
 linked implementation helpers. Their Rust command values, frame borrows and GPU
-objects never cross the COM ABI. See [the demo renderer](../../../demos/demo-renderer/src)
-for concrete backend implementations and [the application mesh component](../../../demos/demo-full/src/graphics.rs)
+objects never cross the COM ABI. See [the demo renderer](../../../../demos/demo-renderer/src)
+for concrete backend implementations and [the application mesh component](../../../../demos/demo-full/src/graphics.rs)
 for owned COM rendering.
 
 ## Resource lifetime and thread rules
@@ -70,8 +77,8 @@ The browser platform owns canvas, text-input DOM state, IME and event normalizat
 
 ## Validation and packaging
 
-[Native deployment](../../../docs/COM_NATIVE.md) documents separate builds, plugin staging,
-load order, feature choices and smoke commands. [Author obligations](../../../docs/COM_AUTHORS.md)
+[Native deployment](../../../../docs/COM_NATIVE.md) documents separate builds, plugin staging,
+load order, feature choices and smoke commands. [Author obligations](../../../../docs/COM_AUTHORS.md)
 cover phase authority, callback reentrancy, lifecycle and geometry invalidation.
 Run `scripts/test-demo.sh BACKEND` for the full application and
 `scripts/test-extension.sh BACKEND` for a separately built widget/container plugin.

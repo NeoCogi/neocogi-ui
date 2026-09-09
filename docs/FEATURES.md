@@ -13,7 +13,7 @@ facade has no renderer, font-builder or JSON feature. Its defaults are empty:
 | `microui-plugin-assets` | `builder` | Font rasterization and PNG atlas construction into portable tables. |
 | `microui-plugin-assets` | `theme-json` | Strict JSON compilation, including the atlas builder. |
 | `microui-plugin-assets` | `save-to-rust` | Atomic source export from validated portable tables. |
-| `microui-plugin-platform` | `glow` / `vulkan` / `wgpu` | Select exactly one native implementation. |
+| `neocogi-render-plugin` | `glow` / `vulkan` / `wgpu` / `webgl` | Build exactly one renderer plugin identity; WebGL is the browser choice. |
 | Full/basic demos | `embed-assets` | Explicitly embed resource bytes; native defaults read adjacent files. |
 | Full/basic demos | `webgl` | Select browser integration and explicitly enable `embed-assets`. |
 

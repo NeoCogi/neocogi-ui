@@ -50,7 +50,7 @@ The [painter](../demos/demo-full/src/painter_demo.rs),
 [Suzanne viewport](../demos/demo-full/src/mesh.rs) implement `LeafContent` directly.
 There is one COM widget allocation for each. Solid drawing uses the shared UI
 painter; Suzanne edits one renderer-owned `IMeshScene: IRenderItem` object, whose
-backend-specific GPU implementation stays in the platform plugin.
+backend-specific GPU implementation stays in the renderer plugin.
 
 ## Keyboard and text
 

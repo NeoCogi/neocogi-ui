@@ -18,7 +18,7 @@ Keep three plugin groups:
 
 The neocogi-com runtime shared library is infrastructure, not another UI plugin. A normal native installation would therefore contain the executable, the neocogi-com runtime library, the UI plugin, a platform/rendering plugin, and optionally the assets plugin.
 
-Existing backend/helper crates can remain statically linked dependencies inside the platform plugin. A Cargo crate does not need its own plugin descriptor or shared library. In particular, do not make every widget, container, renderer-support helper, painter, or event type a separately loaded plugin.
+Backend/helper crates remain statically linked dependencies inside the selected renderer plugin. A Cargo crate does not need its own plugin descriptor or shared library. In particular, do not make every widget, container, renderer-support helper, painter, or event type a separately loaded plugin.
 
 The native architecture is:
 
@@ -161,11 +161,11 @@ The proposed product crates are:
 | `microui-assets` | Optional plugin implementation | Builder, PNG/font loading and optional theme JSON |
 | Demo crates / xtask | Applications and tools | Application state, packaging, backend selection and validation |
 
-This keeps three logical plugin groups. Normally the platform plugin is compiled with one selected renderer. If simultaneous backend plugins become a requirement, package backend-specific variants with distinct plugin identities using the same interfaces; do not require loading every backend into the ordinary demo.
+This keeps three logical plugin groups. `neocogi-render-plugin` compiles one selected renderer per artifact and assigns Glow, Vulkan, WGPU, and WebGL distinct plugin identities; an ordinary assembly loads only its selected backend.
 
-The platform plugin deliberately combines OS-window and GPU ownership. Today a renderer receives Rust `sdl2::Window`, `Arc<glow::Context>`, or native WGPU/Ash types. Those cannot be passed through the proposed COM boundary as ordinary Rust values. Keep their creation and ownership in one binary. A native window/session object can expose both `IPlatformWindow` and `IRenderer` on the same COM identity. Multiple native windows create multiple such objects.
+Each renderer plugin deliberately combines OS-window and GPU ownership. A renderer receives Rust `sdl2::Window`, `Rc<glow::Context>`, or native WGPU/Ash types. Those cannot cross the COM boundary as ordinary Rust values. Their creation and ownership stay in one binary. A native window/session object exposes both `IPlatformWindow` and `IRenderer` on the same COM identity. Multiple native windows create multiple such objects.
 
-The reusable renderer crates still contain the backend implementation; the platform plugin supplies the actual host/window integration. An embedding application can provide a different platform plugin. Supporting pre-existing external native windows would require an explicit platform-specific native-surface capability and its lifetime contract; it should not be implemented as a public `usize`/void-pointer escape hatch.
+The reusable renderer crates contain the backend implementation; the plugin shell supplies the actual host/window integration. An embedding application can provide a different renderer plugin. Supporting pre-existing external native windows would require an explicit platform-specific native-surface capability and its lifetime contract; it must not be implemented as a public `usize`/void-pointer escape hatch.
 
 Distinguish the OS window from microui's logical retained windows. Logical windows, child windows, dialogs and popups remain managed by the UI plugin's window manager.
 

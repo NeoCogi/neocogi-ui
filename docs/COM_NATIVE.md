@@ -189,7 +189,7 @@ native-path file-picker acceptance, invalidation, resize and explicit teardown.
 Platform resource tests create real windows and remain explicitly opt-in:
 
 ```sh
-cargo test -p microui-plugin-platform --lib --no-default-features --features glow -- --include-ignored
+cargo test -p neocogi-render-plugin --lib --no-default-features --features glow -- --include-ignored
 ```
 
 On a desktop use its ordinary display. A previous Mesa 25.2.8 offscreen EGL setup
@@ -241,7 +241,7 @@ scripts/test-browser-input.sh full
 
 The browser statically registers the same UI, platform and optional PNG descriptors
 with one neocogi-com runtime in the wasm module. DOM listeners, IME, canvas and WebGL2
-ownership stay in the platform assembly. The host owns only application state and
+ownership stay in the selected renderer plugin. The host owns only application state and
 one `requestAnimationFrame` scheduling adapter. Every platform window appends its
 own canvas; page CSS controls its logical dimensions, and input/frame coordinates
 use physical pixels. Do not create an extra placeholder canvas in the page.

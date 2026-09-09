@@ -78,7 +78,7 @@ changes with WidgetState. Apps must deliver worker/shared-model updates through 
 setters or explicit change recording. The runtime cannot observe arbitrary interior
 mutation, and hidden/clipped widgets are not guaranteed an update. Synchronize state
 before it must affect layout. Resize invalidation does not substitute for reporting
-unrelated semantic changes. See the full [author contract](../../../docs/COM_AUTHORS.md).
+unrelated semantic changes. See the full [author contract](../../../../docs/COM_AUTHORS.md).
 
 Key transitions carry logical identity, pressed/released state, modifiers and repeat.
 Composed UTF-8 text is a separate authoritative input channel. WidgetUpdate copies held
@@ -134,4 +134,4 @@ truthfulness of changes and external-state synchronization.
 Native algorithm fixtures test layout arithmetic, retained cache reuse, focus, routing
 and clipping. The independently built extension additionally verifies real COM identity,
 exclusive attachment, changed/no-change caching, resize, child replacement and exactly-once
-closure. Its execution commands are in [COM_NATIVE.md](../../../docs/COM_NATIVE.md).
+closure. Its execution commands are in [COM_NATIVE.md](../../../../docs/COM_NATIVE.md).

@@ -20,7 +20,7 @@ users can select those versions from crates.io.
 
 ## Platforms and renderers
 
-The UI plugin owns retained widget/window-manager behavior. The platform plugin
+The UI plugin owns retained widget/window-manager behavior. The renderer plugin
 owns the OS window, device and native renderer together. Applications retain typed
 COM capabilities and drive the copied input/update/render sequence; Rust SDL/GPU
 owners stay inside the platform implementation.

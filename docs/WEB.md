@@ -1,7 +1,7 @@
 # WebGL canvas demo
 
 The browser demo compiles `neocogi-ui-demo-full` directly for Rust's
-`wasm32-unknown-unknown` target. `microui-plugin-platform` owns DOM input, canvas sizing and WebGL2, while the concrete demo
+`wasm32-unknown-unknown` target. `neocogi-render-plugin` owns DOM input, canvas sizing and WebGL2, while the concrete demo
 host owns `requestAnimationFrame`. UI, platform and PNG descriptors register in one static neocogi-com
 runtime in the same wasm module. SDL remains a native-only dependency.
 The demo's `webgl` feature explicitly selects `embed-assets`; fonts, themes, photo

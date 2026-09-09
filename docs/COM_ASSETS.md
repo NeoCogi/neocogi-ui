@@ -6,7 +6,7 @@
 | `neocogi-ui::assets` | Bounded portable data validation and immutable bundle publication. |
 | `plugins/assets` | PNG decoding, font rasterization, packing, theme/style compilation and source export. |
 | `neocogi-ui-runtime` | Local IDs, text metrics, resolved appearances and retained layout/painting. |
-| `plugins/platform` and renderers | Pixel upload, GPU resources and ordered frame execution. |
+| `crates/render/plugin` and renderers | Pixel upload, GPU resources and ordered frame execution. |
 
 The asset plugin has no production dependency on `neocogi-ui-runtime`. UI construction
 fixtures and a native flat-palette reference remain test-only; they provide an

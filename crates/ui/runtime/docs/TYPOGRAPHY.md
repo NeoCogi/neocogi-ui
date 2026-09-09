@@ -80,7 +80,7 @@ fn add_heading(draft: ComRef<'_, IAssetBuilderAbi>, font: &Path) -> Result<(), N
 ```
 
 Optional semantic roles that are absent resolve to the same bundle's required
-body font. See [asset construction](../../../docs/COM_ASSETS.md) for complete
+body font. See [asset construction](../../../../docs/COM_ASSETS.md) for complete
 recipes and host-side source generation.
 
 After installing the compiled bundle, select a font on an actual COM widget:

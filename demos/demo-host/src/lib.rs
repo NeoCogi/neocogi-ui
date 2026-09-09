@@ -225,7 +225,7 @@ fn register() -> Result<(), HostError> {
     let runtime = neocogi_com::Runtime::global();
     for descriptor in [
         neocogi_ui_runtime::plugin_descriptor(),
-        microui_plugin_platform::plugin_descriptor(),
+        neocogi_render_plugin::plugin_descriptor(),
         #[cfg(feature = "png-assets")]
         microui_plugin_assets::plugin_descriptor(),
     ] {

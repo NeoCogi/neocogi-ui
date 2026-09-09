@@ -9,11 +9,11 @@ repository.workspace = true
 
 [features]
 default = []
-# Native selection belongs to the separately built platform package.
+# Native selection belongs to the separately built renderer plugin.
 glow = []
 vulkan = []
 wgpu = []
-webgl = ["microui-plugin-platform/webgl"]
+webgl = ["neocogi-render-plugin/webgl"]
 # Browser modules link the same optional decoder/style descriptor staged as a native asset plugin.
 png-assets = ["dep:microui-plugin-assets"]
 
@@ -27,7 +27,7 @@ neocogi-com = { workspace = true, features = ["runtime"] }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 neocogi-com = { workspace = true, features = ["static-runtime"] }
 neocogi-ui-runtime = { path = "../../crates/ui/runtime" }
-microui-plugin-platform = { path = "../../plugins/platform", default-features = false }
+neocogi-render-plugin = { path = "../../crates/render/plugin", default-features = false }
 microui-plugin-assets = { path = "../../plugins/assets", optional = true, default-features = false }
 wasm-bindgen.workspace = true
 web-sys = { workspace = true, features = ["Window", "Performance", "Location", "UrlSearchParams", "console"] }

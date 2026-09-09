@@ -96,7 +96,7 @@ Widgets skipped by hidden/clipped-tree update policy cannot report an unseen ext
 change. Authors must synchronize such data through an authorized setter, arrange a
 later truthful update, and schedule any needed frame explicitly. Painting must not
 mutate semantic state or emit coordination events. The full obligations are in
-[COM_AUTHORS.md](../../../docs/COM_AUTHORS.md#update-measurement-and-external-state).
+[COM_AUTHORS.md](../../../../docs/COM_AUTHORS.md#update-measurement-and-external-state).
 
 ## Custom widgets and containers
 
@@ -121,5 +121,5 @@ Committed text travels separately from logical key strokes. After updating, the 
 projects `ui.text_input_area()` to the platform's IME/composition area. Focus loss
 cancels active pointer/key interactions; platform integrations own composition and
 clipboard delivery. These responsibilities, physical scaling and browser limitations
-are documented in [COM_AUTHORS.md](../../../docs/COM_AUTHORS.md) and
-[WEB.md](../../../docs/WEB.md).
+are documented in [COM_AUTHORS.md](../../../../docs/COM_AUTHORS.md) and
+[WEB.md](../../../../docs/WEB.md).

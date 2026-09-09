@@ -57,6 +57,12 @@ but update, layout, paint, and window traversal stay in one optimization unit.
 External leaves and containers implement the same typed contracts; their
 capabilities are discovered once at mount and cached for every hot-path phase.
 
+Rendering follows a deployment-oriented layout under `crates/render`. Glow,
+Vulkan, WGPU, and WebGL builds have distinct plugin identities. Each renderer plugin
+also owns the native window/device integration it needs, so graphics handles stay
+private and a frame does not cross an extra plugin boundary. The backend-specific
+Rust crates and shared helpers remain separate source concerns within that artifact.
+
 For the browser:
 
 ```sh
@@ -108,7 +114,7 @@ External shared state, hidden/skipped updates and observational painting remain
 explicit widget/app responsibilities. Read [COM_AUTHORS.md](docs/COM_AUTHORS.md)
 for the complete requirements and examples. Local custom leaves implement
 `LeafContent`; GPU scenes expose concrete interfaces such as `IMeshScene: IRenderItem`.
-Backend-owned Rust GPU types stay inside their platform plugin.
+Backend-owned Rust GPU types stay inside their renderer plugin.
 
 The [documentation index](docs/README.md) links authoring, assets, deployment and
 implementation references. [Examples](docs/EXAMPLES.md) maps each feature to working

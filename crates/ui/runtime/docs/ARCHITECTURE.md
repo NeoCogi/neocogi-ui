@@ -4,7 +4,7 @@ Applications link `neocogi-ui`, canonical `neocogi-ui-contracts`, and neocogi-co
 The facade contains concrete typed clients and application-local generic adapters.
 The UI implementation, retained window manager, built-in widgets and layout policies
 are packaged in the UI plugin. Native platform and GPU objects share the selected
-platform plugin. PNG decoding and optional font/theme construction belong to the
+renderer plugin. PNG decoding and optional font/theme construction belong to the
 asset plugin. Several COM classes can share one assembly; a class is not a DLL.
 
 `Button: IWidget + ILeafLayout` is a callable class contract. One COM allocation
@@ -109,7 +109,7 @@ truthful CHANGED update results, topology edits, child changes and resize invali
 geometry independently. Paint is observational and rejects a missing or stale
 commit before acquiring a GPU frame. Animation and external-state scheduling remain
 explicit author responsibilities, including widgets skipped by hidden/clipped-tree
-update policy. See [COM_AUTHORS.md](../../../docs/COM_AUTHORS.md).
+update policy. See [COM_AUTHORS.md](../../../../docs/COM_AUTHORS.md).
 
 ## Layout, painting and resource ownership
 
@@ -132,7 +132,7 @@ needed; backend types remain local to their assembly.
 An immutable asset bundle supplies fonts, icons, styles and pixels. Installation
 validates the catalog, prepares CPU resources and uploads the GPU candidate before
 publishing the new revision. Failure preserves the prior working UI/resources.
-[COM_ASSETS.md](../../../docs/COM_ASSETS.md) specifies catalog identity and format limits.
+[COM_ASSETS.md](../../../../docs/COM_ASSETS.md) specifies catalog identity and format limits.
 
 ## Surface forest
 
@@ -302,7 +302,7 @@ changes. The full demo shows this composition through actual window capabilities
 The [extension example](../../../plugins/extension-example) is independently built
 and dynamically loaded. Its counter and inset container exercise inheritance,
 shared event delivery, scoped layout, measurement invalidation and logical closure
-without linking the UI implementation. [COM_NATIVE.md](../../../docs/COM_NATIVE.md)
+without linking the UI implementation. [COM_NATIVE.md](../../../../docs/COM_NATIVE.md)
 documents native and static-browser assembly.
 
 Unit fixtures under `src/test_support` also exercise individual native algorithms.

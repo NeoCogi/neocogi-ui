@@ -48,7 +48,7 @@ future updates for timers, animation or external data. Event delivery does not
 schedule frames or make hidden widgets update automatically.
 
 The full ownership, reentry, cascade-budget, error, terminal-delivery and author
-obligations are in [COM_AUTHORS.md](../../../docs/COM_AUTHORS.md#typed-events-and-application-state).
+obligations are in [COM_AUTHORS.md](../../../../docs/COM_AUTHORS.md#typed-events-and-application-state).
 The [independent extension](../../../plugins/extension-example) demonstrates a real
 derived COM widget using this shared producer. Native algorithm callback fixtures
 live under `src/test_support`; there is no production `Context::subscribe` or

@@ -39,7 +39,7 @@ Paint is observational. Widget setters, topology edits, event production and rec
 updates are prohibited during paint and layout. Scope checks reject calls made with a
 retained expired painter/layout token; the runtime also rejects recursive update/render.
 Private rendering caches may change without affecting authored state or geometry.
-See [author obligations](../../../docs/COM_AUTHORS.md) for error and partial-commit rules.
+See [author obligations](../../../../docs/COM_AUTHORS.md) for error and partial-commit rules.
 
 ## Coordinates and clipping
 
@@ -91,9 +91,9 @@ rectangle and final visible region. There is no production native callback regis
 | `render/display_list.rs` | Owned ordered operations and reusable geometry |
 | `render/renderer.rs` | Atlas expansion, final clipping and execution |
 | `render/backend.rs` | Concrete backend frame contracts |
-| [plugins/platform](../../../plugins/platform) | Window/device ownership and checked COM GPU submission |
-| [plugins/renderer-*](BACKENDS.md#backend-sources) | Concrete GPU backends linked into the platform plugin |
-| [plugins/renderer-support](../../../plugins/renderer-support) | Shared renderer and platform helpers |
+| [crates/render/plugin](../../../render/plugin) | Backend plugin identity, window/device ownership, and checked COM GPU submission |
+| [crates/render/{glow,vulkan,wgpu,webgl}](BACKENDS.md#backend-sources) | Concrete GPU implementations linked into one selected plugin |
+| [crates/render/support](../../../render/support) | Shared frame preparation and resource validation |
 
 A backend acquires one exclusive frame through `RendererBackend::frame`. Its quad and
 triangle methods may batch geometry, `flush` preserves operation order, and consuming
