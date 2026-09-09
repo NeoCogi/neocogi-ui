@@ -47,11 +47,11 @@ fn create_storage(assets: crate::assets::ImportedAssets) -> Rc<RuntimeStorage> {
         host,
         metrics,
         resources: resources.clone(),
-        painter: PaintService::new(resources),
+        painter: PaintService::new(resources.clone()),
         children: RefCell::default(),
     });
     *state.factory.borrow_mut() = Rc::downgrade(&factory);
-    let widget_factory = super::ui_factory::UiFactory::create(factory.host.clone())
+    let widget_factory = super::ui_factory::UiFactory::create(factory.host.clone(), factory.resources.clone())
         .expect("new runtime host creates its factory");
     Rc::new(RuntimeStorage {
         context: RefCell::new(Some(Context::from_bundle(backend, bundle))),

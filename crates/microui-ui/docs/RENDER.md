@@ -24,6 +24,10 @@ Inputs are validated before entering the list and the completed frame is validat
 before GPU work, including buffer bounds, finite values, resource provenance and
 supported batch kinds.
 
+The runtime and its dynamically linked widget factory also share one imported asset
+value with every built-in product. Frame, icon, and font slots therefore resolve
+against that existing value without reconstructing an atlas or skin per widget.
+
 ## Update and frame validity
 
 Deliver input and semantic changes before `Ui::update`. Each queued event receives an

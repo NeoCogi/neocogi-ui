@@ -22,6 +22,134 @@ fn button(runtime: &ComPtr<UiRuntimeAbi>) -> ComPtr<ButtonAbi> {
         .unwrap()
 }
 
+#[com_object(interfaces(IAssetBundle))]
+/// Counts portable bundle calls while delegating the exact data to a valid immutable source.
+struct CountingAssets {
+    /// Valid bundle which remains the sole authority for returned records and catalog identity.
+    source: ComPtr<IAssetBundleAbi>,
+    /// Test-owned count of every method that would repeat portable asset decoding work.
+    calls: Rc<Cell<u32>>,
+}
+
+impl CountingAssets {
+    /// Records one delegated portable operation without changing its result or ownership.
+    fn called(&self) {
+        self.calls.set(self.calls.get() + 1);
+    }
+}
+
+impl IAssetBundle for CountingAssets {
+    /// Delegates catalog identity after recording the lookup.
+    fn catalog(&self) -> Result<ComPtr<IAssetCatalogAbi>, NcStatus> {
+        self.called();
+        self.source.catalog()
+    }
+    /// Delegates bounded table metadata after recording the lookup.
+    fn info(&self) -> Result<AssetInfo, NcStatus> {
+        self.called();
+        self.source.info()
+    }
+    /// Delegates the requested pixel range after recording the copy.
+    fn pixels(&self, output: NcCopyToBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.called();
+        self.source.pixels(output)
+    }
+    /// Delegates the requested font range after recording the copy.
+    fn fonts(&self, output: NcCopyToBufferOffset<'_, AssetFont>) -> Result<(), NcStatus> {
+        self.called();
+        self.source.fonts(output)
+    }
+    /// Delegates the requested glyph range after recording the copy.
+    fn glyphs(&self, output: NcCopyToBufferOffset<'_, AssetGlyph>) -> Result<(), NcStatus> {
+        self.called();
+        self.source.glyphs(output)
+    }
+    /// Delegates the requested icon range after recording the copy.
+    fn icons(&self, output: NcCopyToBufferOffset<'_, AssetIcon>) -> Result<(), NcStatus> {
+        self.called();
+        self.source.icons(output)
+    }
+    /// Delegates the requested UTF-8 name range after recording the copy.
+    fn names(&self, output: NcCopyToBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.called();
+        self.source.names(output)
+    }
+    /// Delegates scalar layout metrics after recording the lookup.
+    fn metrics(&self) -> Result<AssetMetrics, NcStatus> {
+        self.called();
+        self.source.metrics()
+    }
+    /// Delegates window chrome policy after recording the lookup.
+    fn chrome(&self) -> Result<AssetChrome, NcStatus> {
+        self.called();
+        self.source.chrome()
+    }
+    /// Delegates one complete appearance family after recording the copy.
+    fn visuals(&self, family: AppearanceFamily, output: NcCopyToBufferOffset<'_, AssetVisual>) -> Result<(), NcStatus> {
+        self.called();
+        self.source.visuals(family, output)
+    }
+}
+
+/// Factory products, including fixed composites, reuse the runtime's one imported asset value.
+#[test]
+fn factory_construction_and_widget_phases_do_not_reimport_assets() {
+    let source = crate::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
+    let calls = Rc::new(Cell::new(0));
+    let counted: ComPtr<IAssetBundleAbi> = CountingAssets::from_value(CountingAssets {
+        source,
+        calls: calls.clone(),
+    })
+    .query()
+    .unwrap();
+    let runtime = create_runtime_from_assets(counted.as_com_ref()).unwrap();
+    calls.set(0);
+    let factory = runtime.factory().unwrap();
+    let label = NcCopyFromBufferOffset::new(0, b"shared");
+    let button = factory.create_button(label, WidgetOptions::FRAME).unwrap();
+    let _checkbox = factory.create_checkbox(false, label).unwrap();
+    let _textbox = factory.create_textbox(label).unwrap();
+    let _text_block = factory.create_text_block(label, TextWrapping::WORD).unwrap();
+    let _slider = factory
+        .create_slider(SliderOptions {
+            value: 0.0,
+            low: 0.0,
+            high: 1.0,
+            step: 0.1,
+            precision: 1,
+        })
+        .unwrap();
+    let _number = factory.create_number(NumberOptions { value: 0.0, step: 1.0, precision: 0 }).unwrap();
+    let _swatch = factory.create_color_swatch(u32::MAX, label).unwrap();
+    let _list_item = factory.create_list_item(label).unwrap();
+    let _list_box = factory.create_list_box(label).unwrap();
+    let _scrollbar = factory
+        .create_scrollbar(ScrollRange {
+            axis: ScrollAxis::VERTICAL,
+            viewport: 1,
+            content: 2,
+            offset: 0,
+        })
+        .unwrap();
+    let _linear = factory.create_linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch.into()).unwrap();
+    let tracks = [LayoutTrack::Content.into()];
+    let _grid = factory
+        .create_grid(
+            NcCopyFromBufferOffset::new(0, &tracks),
+            NcCopyFromBufferOffset::new(0, &tracks),
+        )
+        .unwrap();
+    let _combo = factory.create_combo().unwrap();
+    let _disclosure = factory.create_disclosure(label, DisclosureStyle::HEADER, false).unwrap();
+    let content = button.query::<IWidgetAbi>().unwrap();
+    let _scroll = factory.create_scroll_area(content.as_com_ref(), true).unwrap();
+    let area = factory.create_text_area(label, TextWrapping::WORD, true).unwrap();
+    let root = area.query::<IWidgetAbi>().unwrap();
+    let _window = mount(&runtime, &root).unwrap();
+    runtime.update(SIZE).unwrap();
+    assert_eq!(calls.get(), 0, "factory construction and update must use the runtime's imported value");
+}
+
 /// Mounts the common capability through the production manager's transactional boundary.
 fn mount(runtime: &ComPtr<UiRuntimeAbi>, root: &ComPtr<IWidgetAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
     runtime

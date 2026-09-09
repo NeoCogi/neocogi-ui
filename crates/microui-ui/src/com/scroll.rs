@@ -21,21 +21,25 @@ pub(crate) struct ScrollParts {
 }
 impl ScrollParts {
     /// Builds every structural role before attaching application content or the internal editor.
-    pub(crate) fn prepare(host: ComPtr<IWidgetHostAbi>, enabled: bool) -> Result<Self, NcStatus> {
+    pub(crate) fn prepare(
+        host: ComPtr<IWidgetHostAbi>,
+        enabled: bool,
+        resources: Option<&super::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
         host.check_mutation()?;
         let horizontal_parameters = crate::ScrollbarParameters::new(crate::ScrollbarAxis::Horizontal);
         let horizontal_options = horizontal_parameters.opt;
-        let horizontal_runtime = super::widget::WidgetRuntime::new(host.clone(), horizontal_options)?;
+        let horizontal_runtime = super::widget::WidgetRuntime::for_resources(host.clone(), horizontal_options, resources)?;
         let horizontal = crate::Scrollbar::from_runtime(horizontal_runtime, horizontal_parameters);
         let vertical_parameters = crate::ScrollbarParameters::new(crate::ScrollbarAxis::Vertical);
         let vertical_options = vertical_parameters.opt;
-        let vertical_runtime = super::widget::WidgetRuntime::new(host.clone(), vertical_options)?;
+        let vertical_runtime = super::widget::WidgetRuntime::for_resources(host.clone(), vertical_options, resources)?;
         let vertical = crate::Scrollbar::from_runtime(vertical_runtime, vertical_parameters);
         let model = crate::ui_node::ScrollModel::new(horizontal.axis_state.clone(), vertical.axis_state.clone(), enabled);
         let horizontal = horizontal.into_com();
         let vertical = vertical.into_com();
         let content = host.create_children()?;
-        let surface_runtime = super::widget::WidgetRuntime::new(host.clone(), crate::WidgetOption::NO_INTERACT)?;
+        let surface_runtime = super::widget::WidgetRuntime::for_resources(host.clone(), crate::WidgetOption::NO_INTERACT, resources)?;
         let surface = crate::ui_node::ScrollSurface::from_runtime(surface_runtime, content.clone(), model.clone());
         let surface: ComPtr<IWidgetAbi> = crate::ui_node::ScrollSurface::from_value(surface)
         .query()
@@ -49,21 +53,36 @@ impl ScrollParts {
 }
 impl crate::ScrollArea {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, content: ComRef<'_, IWidgetAbi>, enabled: bool) -> Result<ComPtr<ScrollAreaAbi>, NcStatus> {
-        let value = <Self as microui_contracts::ScrollArea>::new(host.as_com_ref(), content, enabled)?;
+    pub(super) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: super::widget::SharedAssets,
+        content: ComRef<'_, IWidgetAbi>,
+        enabled: bool,
+    ) -> Result<ComPtr<ScrollAreaAbi>, NcStatus> {
+        let value = Self::build(host, content, enabled, Some(&resources))?;
         Ok(Self::from_value(value)
             .query()
             .expect("ScrollArea declares its callable class contract"))
+    }
+
+    /// Builds the fixed scroll composition with either direct or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        content: ComRef<'_, IWidgetAbi>,
+        enabled: bool,
+        resources: Option<&super::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let parts = ScrollParts::prepare(host.clone(), enabled, resources)?;
+        parts.content.insert(0, content)?.finish()?;
+        let runtime = WidgetRuntime::for_resources(host, crate::WidgetOption::FRAME, resources)?;
+        Ok(Self::from_runtime(runtime, parts.editor, parts.content, parts.model))
     }
 }
 
 impl microui_contracts::ScrollArea for crate::ScrollArea {
     /// Completes internal construction before consuming the application's sole content attachment.
     fn new(host: ComRef<'_, IWidgetHostAbi>, content: ComRef<'_, IWidgetAbi>, enabled: bool) -> Result<Self, NcStatus> {
-        let parts = ScrollParts::prepare(host.add_ref(), enabled)?;
-        parts.content.insert(0, content)?.finish()?;
-        let runtime = WidgetRuntime::new(host.add_ref(), crate::WidgetOption::FRAME)?;
-        Ok(Self::from_runtime(runtime, parts.editor, parts.content, parts.model))
+        Self::build(host.add_ref(), content, enabled, None)
     }
     /// Reads the actual content identity through its fixed one-child editor view.
     fn content(&self) -> Result<ComPtr<IWidgetAbi>, NcStatus> {

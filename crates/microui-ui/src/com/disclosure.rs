@@ -13,8 +13,9 @@ impl crate::ui_node::DisclosureHeader {
         model: Rc<crate::ui_node::DisclosureState>,
         label: String,
         variant: crate::ui_node::DisclosureVariant,
+        resources: Option<&super::widget::SharedAssets>,
     ) -> Result<ComPtr<ITextContentAbi>, NcStatus> {
-        let runtime = WidgetRuntime::new(host, options)?;
+        let runtime = WidgetRuntime::for_resources(host, options, resources)?;
         Ok(Self::from_value(Self::from_runtime(runtime, model, label, variant))
             .query()
             .expect("DisclosureHeader declares its text and leaf capabilities"))
@@ -47,20 +48,25 @@ impl crate::Disclosure {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
     pub(super) fn create_com(
         host: ComPtr<IWidgetHostAbi>,
+        resources: super::widget::SharedAssets,
         label: NcCopyFromBufferOffset<'_, u8>,
         style: DisclosureStyle,
         expanded: bool,
     ) -> Result<ComPtr<DisclosureAbi>, NcStatus> {
-        let value = <Self as microui_contracts::Disclosure>::new(host.as_com_ref(), label, style, expanded)?;
+        let value = Self::build(host, label, style, expanded, Some(&resources))?;
         Ok(Self::from_value(value)
             .query()
             .expect("Disclosure declares its callable class contract"))
     }
-}
 
-impl microui_contracts::Disclosure for crate::Disclosure {
-    /// Validates presentation and label before constructing the complete fixed composition.
-    fn new(host: ComRef<'_, IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>, style: DisclosureStyle, expanded: bool) -> Result<Self, NcStatus> {
+    /// Builds the fixed header/body tree with either direct or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        style: DisclosureStyle,
+        expanded: bool,
+        resources: Option<&super::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
         let label = text(label)?;
         host.check_mutation()?;
         let variant = match style {
@@ -69,16 +75,16 @@ impl microui_contracts::Disclosure for crate::Disclosure {
             _ => return Err(NC_E_INVALID_ARG),
         };
         let model = crate::ui_node::DisclosureState::new(expanded);
-        let runtime = WidgetRuntime::new(host.add_ref(), crate::WidgetOption::NO_INTERACT)?;
-        let children = prepare_children(host.add_ref(), model.clone(), label.to_owned(), variant)?;
-        Ok(Self::from_runtime(
-            runtime,
-            children.editor,
-            children.header,
-            children.body,
-            model,
-            variant,
-        ))
+        let runtime = WidgetRuntime::for_resources(host.clone(), crate::WidgetOption::NO_INTERACT, resources)?;
+        let children = prepare_children(host, model.clone(), label.to_owned(), variant, resources)?;
+        Ok(Self::from_runtime(runtime, children.editor, children.header, children.body, model, variant))
+    }
+}
+
+impl microui_contracts::Disclosure for crate::Disclosure {
+    /// Validates presentation and label before constructing the complete fixed composition.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>, style: DisclosureStyle, expanded: bool) -> Result<Self, NcStatus> {
+        Self::build(host.add_ref(), label, style, expanded, None)
     }
     /// Observes the same expansion bit used by header input and container layout.
     fn expanded(&self) -> Result<bool, NcStatus> {
@@ -123,6 +129,7 @@ pub(crate) fn prepare_children(
     model: Rc<crate::ui_node::DisclosureState>,
     label: String,
     variant: crate::ui_node::DisclosureVariant,
+    resources: Option<&super::widget::SharedAssets>,
 ) -> Result<DisclosureChildren, NcStatus> {
     // Construct both children before publishing the sequence, so callers never observe a partial
     // disclosure. The shared scalar model contains no parent or child object backpointer.
@@ -132,8 +139,23 @@ pub(crate) fn prepare_children(
         model,
         label,
         variant,
+        resources,
     )?;
-    let body = super::Linear::create_com(host.clone(), FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch.into())?;
+    let body = if let Some(resources) = resources {
+        super::Linear::create_com(
+            host.clone(),
+            resources.clone(),
+            FlowDirection::TOP_TO_BOTTOM,
+            CrossSize::Stretch.into(),
+        )?
+    } else {
+        let value = <super::Linear as microui_contracts::Linear>::new(
+            host.as_com_ref(),
+            FlowDirection::TOP_TO_BOTTOM,
+            CrossSize::Stretch.into(),
+        )?;
+        super::Linear::from_value(value).query().expect("Linear declares its callable class contract")
+    };
     let editor = host.create_children()?;
     editor.insert(0, header.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
     editor.insert(1, body.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;

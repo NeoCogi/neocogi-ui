@@ -29,6 +29,8 @@ pub(crate) struct WidgetRuntime {
     pub(crate) state: WidgetState,
     /// The one imported asset value used by this widget's semantic phases.
     resources: SharedAssets,
+    /// Direct class activation polls its foreign host; runtime-factory products observe shared publication.
+    refresh_resources: bool,
     /// Keeps the real host runtime alive for native-only unit-test fixtures.
     #[cfg(test)]
     test_owner: Option<ComPtr<UiRuntimeAbi>>,
@@ -43,9 +45,34 @@ impl WidgetRuntime {
         Ok(Self {
             state: WidgetState::new(host, WidgetOptions { bits: options.bits() }),
             resources,
+            refresh_resources: true,
             #[cfg(test)]
             test_owner: None,
         })
+    }
+
+    /// Binds a factory product directly to the runtime's already imported asset value.
+    pub(crate) fn from_shared(host: ComPtr<IWidgetHostAbi>, options: WidgetOption, resources: SharedAssets) -> Result<Self, NcStatus> {
+        host.check_mutation()?;
+        Ok(Self {
+            state: WidgetState::new(host, WidgetOptions { bits: options.bits() }),
+            resources,
+            refresh_resources: false,
+            #[cfg(test)]
+            test_owner: None,
+        })
+    }
+
+    /// Selects host-owned import or an explicitly shared runtime value for composite construction.
+    pub(crate) fn for_resources(
+        host: ComPtr<IWidgetHostAbi>,
+        options: WidgetOption,
+        resources: Option<&SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        match resources {
+            Some(resources) => Self::from_shared(host, options, resources.clone()),
+            None => Self::new(host, options),
+        }
     }
 
     /// Creates a fully valid host-bound runtime for the native algorithm test harness.
@@ -78,13 +105,15 @@ impl WidgetRuntime {
 
     /// Returns the widget's single shared value after refreshing an independently activated class.
     pub(super) fn resources(&mut self) -> Result<SharedAssets, NcStatus> {
-        let source = self.state.host().assets()?;
-        if self.resources.borrow().source().as_ptr() != source.as_ptr() {
-            let replacement = {
-                let current = self.resources.borrow();
-                crate::assets::ImportedAssets::read(source.as_com_ref(), Some(&current))?
-            };
-            *self.resources.borrow_mut() = replacement;
+        if self.refresh_resources {
+            let source = self.state.host().assets()?;
+            if self.resources.borrow().source().as_ptr() != source.as_ptr() {
+                let replacement = {
+                    let current = self.resources.borrow();
+                    crate::assets::ImportedAssets::read(source.as_com_ref(), Some(&current))?
+                };
+                *self.resources.borrow_mut() = replacement;
+            }
         }
         Ok(self.resources.clone())
     }

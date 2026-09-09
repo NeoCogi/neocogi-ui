@@ -13,8 +13,9 @@ impl crate::TextEditor {
         text: &str,
         wrap: crate::TextWrap,
         model: Rc<crate::ui_node::ScrollModel>,
+        resources: Option<&super::widget::SharedAssets>,
     ) -> Result<ComPtr<IMultilineEditorAbi>, NcStatus> {
-        let runtime = super::widget::WidgetRuntime::new(host, crate::WidgetOption::NONE)?;
+        let runtime = super::widget::WidgetRuntime::for_resources(host, crate::WidgetOption::NONE, resources)?;
         let value = Self::from_runtime(runtime, text, wrap, crate::FontRef::Role(crate::FontRole::Body), Some(model));
         Ok(Self::from_value(value)
             .query()
@@ -107,29 +108,39 @@ impl crate::TextArea {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
     pub(super) fn create_com(
         host: ComPtr<IWidgetHostAbi>,
+        resources: super::widget::SharedAssets,
         text: NcCopyFromBufferOffset<'_, u8>,
         wrapping: TextWrapping,
         scrolling: bool,
     ) -> Result<ComPtr<TextAreaAbi>, NcStatus> {
-        let value = <Self as microui_contracts::TextArea>::new(host.as_com_ref(), text, wrapping, scrolling)?;
+        let value = Self::build(host, text, wrapping, scrolling, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("TextArea declares its callable class contract"))
+    }
+
+    /// Builds the fixed editor tree with either direct or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        input: NcCopyFromBufferOffset<'_, u8>,
+        wrapping: TextWrapping,
+        scrolling: bool,
+        resources: Option<&super::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let text_value = text(input)?;
+        let wrap = super::leaves::local_wrap(wrapping)?;
+        let parts = super::scroll::ScrollParts::prepare(host.clone(), scrolling, resources)?;
+        let text = crate::TextEditor::create_com(host.clone(), text_value, wrap, parts.model.clone(), resources)?;
+        let font = text.query()?;
+        let events = text.query()?;
+        parts.content.insert(0, text.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
+        let runtime = super::widget::WidgetRuntime::for_resources(host, crate::WidgetOption::FRAME, resources)?;
+        Ok(Self::from_runtime(runtime, parts.editor, text, font, events, parts.model))
     }
 }
 
 impl microui_contracts::TextArea for crate::TextArea {
     /// Prepares the fixed scroll structure and attaches one real editor before publishing the root.
     fn new(host: ComRef<'_, IWidgetHostAbi>, input: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping, scrolling: bool) -> Result<Self, NcStatus> {
-        let text_value = text(input)?;
-        let wrap = super::leaves::local_wrap(wrapping)?;
-        let parts = super::scroll::ScrollParts::prepare(host.add_ref(), scrolling)?;
-        let text = crate::TextEditor::create_com(host.add_ref(), text_value, wrap, parts.model.clone())?;
-        let font = text.query()?;
-        let events = text.query()?;
-        parts.content.insert(0, text.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
-        // The transform surface owns its private editor. This root intentionally
-        // retains no content-replacement authority and cannot detach its text leaf.
-        let runtime = super::widget::WidgetRuntime::new(host.add_ref(), crate::WidgetOption::FRAME)?;
-        Ok(Self::from_runtime(runtime, parts.editor, text, font, events, parts.model))
+        Self::build(host.add_ref(), input, wrapping, scrolling, None)
     }
     /// Forwards snapshots after checking the outer object's logical lifetime.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {

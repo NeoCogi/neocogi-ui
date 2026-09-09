@@ -63,6 +63,10 @@ wrappers. The accepted migration and outstanding validation are recorded in
 - Store each independently constructed widget's imported resources directly as
   one `Rc<RefCell<ImportedAssets>>`; remove its redundant revision and resource
   wrappers and borrow that sole value during semantic phases.
+- Give the dynamically linked `UiFactory` the runtime's existing imported asset
+  handle and pass that same handle into every product and fixed internal child.
+  Factory construction and widget phases perform no repeated portable bundle
+  imports; directly activated classes retain their host-refreshing cache.
 - Co-package built-in widgets, containers and window-manager policy in the UI
   plugin; keep each renderer and its OS/device owners together in the platform
   plugin. An optional asset plugin and independently built extension demonstrate

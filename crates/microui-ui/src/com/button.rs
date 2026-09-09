@@ -11,9 +11,28 @@ use nc_com::{INcStringAbi, NcString};
 
 impl crate::Button {
     /// Constructs the class directly for the factory shorthand without bypassing contract validation.
-    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>, options: WidgetOptions) -> Result<ComPtr<ButtonAbi>, NcStatus> {
-        let value = <Self as microui_contracts::Button>::new(host.as_com_ref(), label, options)?;
+    pub(super) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: super::widget::SharedAssets,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        options: WidgetOptions,
+    ) -> Result<ComPtr<ButtonAbi>, NcStatus> {
+        let value = Self::build(host, label, options, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("Button declares its callable class contract"))
+    }
+
+    /// Builds one button with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        options: WidgetOptions,
+        resources: Option<&super::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        options.validate()?;
+        let label = text(label)?;
+        let native_options = crate::WidgetOption::from_bits_retain(options.bits);
+        let runtime = super::widget::WidgetRuntime::for_resources(host, native_options, resources)?;
+        Ok(Self::from_runtime(runtime, crate::ButtonParameters::new(label)))
     }
 }
 
@@ -23,11 +42,7 @@ direct_leaf_layout_impl!(crate::Button);
 impl microui_contracts::Button for crate::Button {
     /// Validates complete construction input and retains only the supplied host capability.
     fn new(host: ComRef<'_, IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>, options: WidgetOptions) -> Result<Self, NcStatus> {
-        options.validate()?;
-        let label = text(label)?;
-        let native_options = crate::WidgetOption::from_bits_retain(options.bits);
-        let runtime = super::widget::WidgetRuntime::new(host.add_ref(), native_options)?;
-        Ok(Self::from_runtime(runtime, crate::ButtonParameters::new(label)))
+        Self::build(host.add_ref(), label, options, None)
     }
 
     /// Validates before committing and only dirties geometry when text actually differs.

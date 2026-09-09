@@ -27,18 +27,33 @@ direct_leaf_layout_impl!(crate::Number);
 
 impl crate::Checkbox {
     /// Constructs the class for the host-bound factory through the same typed contract used by the registry.
-    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, checked: bool, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<CheckboxAbi>, NcStatus> {
-        let value = <Self as microui_contracts::Checkbox>::new(host.as_com_ref(), checked, label)?;
+    pub(super) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: super::widget::SharedAssets,
+        checked: bool,
+        label: NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<ComPtr<CheckboxAbi>, NcStatus> {
+        let value = Self::build(host, checked, label, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("Checkbox declares its callable class contract"))
+    }
+
+    /// Builds one checkbox with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        checked: bool,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        resources: Option<&super::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let parameters = crate::CheckboxParameters::new(text(label)?, checked);
+        let runtime = super::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        Ok(Self::from_runtime(runtime, parameters))
     }
 }
 
 impl microui_contracts::Checkbox for crate::Checkbox {
     /// Validates the label and initializes the established Checkbox defaults in one allocation.
     fn new(host: ComRef<'_, IWidgetHostAbi>, checked: bool, label: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus> {
-        let parameters = crate::CheckboxParameters::new(text(label)?, checked);
-        let runtime = super::widget::WidgetRuntime::new(host.add_ref(), parameters.opt)?;
-        Ok(Self::from_runtime(runtime, parameters))
+        Self::build(host.add_ref(), checked, label, None)
     }
     /// Reads the same boolean state used by pointer/Space updates and paint.
     fn checked(&self) -> Result<bool, NcStatus> {
@@ -84,18 +99,31 @@ impl microui_contracts::Checkbox for crate::Checkbox {
 
 impl crate::Textbox {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, text: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<TextboxAbi>, NcStatus> {
-        let value = <Self as microui_contracts::Textbox>::new(host.as_com_ref(), text)?;
+    pub(super) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: super::widget::SharedAssets,
+        text: NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<ComPtr<TextboxAbi>, NcStatus> {
+        let value = Self::build(host, text, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("Textbox declares its callable class contract"))
+    }
+
+    /// Builds one textbox with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        input: NcCopyFromBufferOffset<'_, u8>,
+        resources: Option<&super::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let parameters = crate::TextboxParameters::new(text(input)?);
+        let runtime = super::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        Ok(Self::from_runtime(runtime, parameters))
     }
 }
 
 impl microui_contracts::Textbox for crate::Textbox {
     /// Normalizes the complete input before allocating the established Textbox defaults.
     fn new(host: ComRef<'_, IWidgetHostAbi>, input: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus> {
-        let parameters = crate::TextboxParameters::new(text(input)?);
-        let runtime = super::widget::WidgetRuntime::new(host.add_ref(), parameters.opt)?;
-        Ok(Self::from_runtime(runtime, parameters))
+        Self::build(host.add_ref(), input, None)
     }
     /// Returns an immutable snapshot without exposing the semantic String allocation.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
@@ -148,18 +176,33 @@ impl microui_contracts::Textbox for crate::Textbox {
 
 impl crate::TextBlock {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, text: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping) -> Result<ComPtr<TextBlockAbi>, NcStatus> {
-        let value = <Self as microui_contracts::TextBlock>::new(host.as_com_ref(), text, wrapping)?;
+    pub(super) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: super::widget::SharedAssets,
+        text: NcCopyFromBufferOffset<'_, u8>,
+        wrapping: TextWrapping,
+    ) -> Result<ComPtr<TextBlockAbi>, NcStatus> {
+        let value = Self::build(host, text, wrapping, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("TextBlock declares its callable class contract"))
+    }
+
+    /// Builds one text block with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        input: NcCopyFromBufferOffset<'_, u8>,
+        wrapping: TextWrapping,
+        resources: Option<&super::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let parameters = crate::TextBlockParameters::with_wrap(text(input)?, local_wrap(wrapping)?);
+        let runtime = super::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        Ok(Self::from_runtime(runtime, parameters))
     }
 }
 
 impl microui_contracts::TextBlock for crate::TextBlock {
     /// Validates text and wrapping before allocating the established TextBlock defaults.
     fn new(host: ComRef<'_, IWidgetHostAbi>, input: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping) -> Result<Self, NcStatus> {
-        let parameters = crate::TextBlockParameters::with_wrap(text(input)?, local_wrap(wrapping)?);
-        let runtime = super::widget::WidgetRuntime::new(host.add_ref(), parameters.opt)?;
-        Ok(Self::from_runtime(runtime, parameters))
+        Self::build(host.add_ref(), input, wrapping, None)
     }
     /// Returns an immutable snapshot without exposing the semantic String allocation.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
@@ -216,15 +259,17 @@ pub(super) fn local_wrap(wrap: TextWrapping) -> Result<crate::TextWrap, NcStatus
 
 impl crate::Slider {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, options: SliderOptions) -> Result<ComPtr<SliderAbi>, NcStatus> {
-        let value = <Self as microui_contracts::Slider>::new(host.as_com_ref(), options)?;
+    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, resources: super::widget::SharedAssets, options: SliderOptions) -> Result<ComPtr<SliderAbi>, NcStatus> {
+        let value = Self::build(host, options, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("Slider declares its callable class contract"))
     }
-}
 
-impl microui_contracts::Slider for crate::Slider {
-    /// Validates the complete arithmetic tuple before allocating the established framed control.
-    fn new(host: ComRef<'_, IWidgetHostAbi>, options: SliderOptions) -> Result<Self, NcStatus> {
+    /// Builds one slider with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        options: SliderOptions,
+        resources: Option<&super::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
         let parameters = crate::SliderParameters::with_opt(
             options.value,
             options.low,
@@ -234,8 +279,15 @@ impl microui_contracts::Slider for crate::Slider {
             crate::WidgetOption::FRAME,
         )
         .map_err(|_| NC_E_INVALID_ARG)?;
-        let runtime = super::widget::WidgetRuntime::new(host.add_ref(), parameters.opt)?;
+        let runtime = super::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
         Ok(Self::from_runtime(runtime, parameters))
+    }
+}
+
+impl microui_contracts::Slider for crate::Slider {
+    /// Validates the complete arithmetic tuple before allocating the established framed control.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, options: SliderOptions) -> Result<Self, NcStatus> {
+        Self::build(host.add_ref(), options, None)
     }
     /// Reads the finite value owned by the slider's concrete semantic algorithm.
     fn value(&self) -> Result<f32, NcStatus> {
@@ -278,23 +330,32 @@ impl microui_contracts::Slider for crate::Slider {
 
 impl crate::Number {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, options: NumberOptions) -> Result<ComPtr<NumberAbi>, NcStatus> {
-        let value = <Self as microui_contracts::Number>::new(host.as_com_ref(), options)?;
+    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, resources: super::widget::SharedAssets, options: NumberOptions) -> Result<ComPtr<NumberAbi>, NcStatus> {
+        let value = Self::build(host, options, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("Number declares its callable class contract"))
     }
-}
 
-impl microui_contracts::Number for crate::Number {
-    /// Validates the complete arithmetic tuple before allocating the numeric editor.
-    fn new(host: ComRef<'_, IWidgetHostAbi>, options: NumberOptions) -> Result<Self, NcStatus> {
+    /// Builds one number editor with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        options: NumberOptions,
+        resources: Option<&super::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
         let parameters = crate::NumberParameters::new(
             options.value,
             options.step,
             crate::DecimalPrecision::try_from(usize::from(options.precision)).map_err(|_| NC_E_INVALID_ARG)?,
         )
         .map_err(|_| NC_E_INVALID_ARG)?;
-        let runtime = super::widget::WidgetRuntime::new(host.add_ref(), parameters.opt)?;
+        let runtime = super::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
         Ok(Self::from_runtime(runtime, parameters))
+    }
+}
+
+impl microui_contracts::Number for crate::Number {
+    /// Validates the complete arithmetic tuple before allocating the numeric editor.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, options: NumberOptions) -> Result<Self, NcStatus> {
+        Self::build(host.add_ref(), options, None)
     }
     /// Reads the finite value owned by the number editor's concrete semantic algorithm.
     fn value(&self) -> Result<f32, NcStatus> {
@@ -337,20 +398,35 @@ impl microui_contracts::Number for crate::Number {
 
 impl crate::ColorSwatch {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, rgba: u32, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ColorSwatchAbi>, NcStatus> {
-        let value = <Self as microui_contracts::ColorSwatch>::new(host.as_com_ref(), rgba, label)?;
+    pub(super) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: super::widget::SharedAssets,
+        rgba: u32,
+        label: NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<ComPtr<ColorSwatchAbi>, NcStatus> {
+        let value = Self::build(host, rgba, label, Some(&resources))?;
         Ok(Self::from_value(value)
             .query()
             .expect("ColorSwatch declares its callable class contract"))
+    }
+
+    /// Builds one color swatch with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        rgba: u32,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        resources: Option<&super::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let parameters = crate::ColorSwatchParameters::new(super::render::color(rgba)).label(text(label)?);
+        let runtime = super::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        Ok(Self::from_runtime(runtime, parameters))
     }
 }
 
 impl microui_contracts::ColorSwatch for crate::ColorSwatch {
     /// Validates the label and copies packed RGBA before allocating the established swatch state.
     fn new(host: ComRef<'_, IWidgetHostAbi>, rgba: u32, label: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus> {
-        let parameters = crate::ColorSwatchParameters::new(super::render::color(rgba)).label(text(label)?);
-        let runtime = super::widget::WidgetRuntime::new(host.add_ref(), parameters.opt)?;
-        Ok(Self::from_runtime(runtime, parameters))
+        Self::build(host.add_ref(), rgba, label, None)
     }
     /// Returns an immutable snapshot without exposing the semantic String allocation.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
@@ -391,18 +467,31 @@ impl microui_contracts::ColorSwatch for crate::ColorSwatch {
 
 impl crate::ListItem {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ListItemAbi>, NcStatus> {
-        let value = <Self as microui_contracts::ListItem>::new(host.as_com_ref(), label)?;
+    pub(super) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: super::widget::SharedAssets,
+        label: NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<ComPtr<ListItemAbi>, NcStatus> {
+        let value = Self::build(host, label, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("ListItem declares its callable class contract"))
+    }
+
+    /// Builds one list item with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        resources: Option<&super::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let parameters = crate::ListItemParameters::new(text(label)?);
+        let runtime = super::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        Ok(Self::from_runtime(runtime, parameters))
     }
 }
 
 impl microui_contracts::ListItem for crate::ListItem {
     /// Validates the label before allocating the established application-data-free row state.
     fn new(host: ComRef<'_, IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus> {
-        let parameters = crate::ListItemParameters::new(text(label)?);
-        let runtime = super::widget::WidgetRuntime::new(host.add_ref(), parameters.opt)?;
-        Ok(Self::from_runtime(runtime, parameters))
+        Self::build(host.add_ref(), label, None)
     }
     /// Returns an immutable label snapshot from the concrete row.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
@@ -445,18 +534,31 @@ impl microui_contracts::ListItem for crate::ListItem {
 
 impl crate::ListBox {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ListBoxAbi>, NcStatus> {
-        let value = <Self as microui_contracts::ListBox>::new(host.as_com_ref(), label)?;
+    pub(super) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: super::widget::SharedAssets,
+        label: NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<ComPtr<ListBoxAbi>, NcStatus> {
+        let value = Self::build(host, label, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("ListBox declares its callable class contract"))
+    }
+
+    /// Builds one list box with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        resources: Option<&super::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let parameters = crate::ListBoxParameters::new(text(label)?, None);
+        let runtime = super::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        Ok(Self::from_runtime(runtime, parameters))
     }
 }
 
 impl microui_contracts::ListBox for crate::ListBox {
     /// Validates the label before allocating the established label-only entry state.
     fn new(host: ComRef<'_, IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus> {
-        let parameters = crate::ListBoxParameters::new(text(label)?, None);
-        let runtime = super::widget::WidgetRuntime::new(host.add_ref(), parameters.opt)?;
-        Ok(Self::from_runtime(runtime, parameters))
+        Self::build(host.add_ref(), label, None)
     }
     /// Returns an immutable label snapshot from the concrete list box.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
@@ -518,15 +620,17 @@ impl crate::Scrollbar {
     }
 
     /// Constructs the class for the host-bound factory through the same typed contract used by the registry.
-    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, range: ScrollRange) -> Result<ComPtr<ScrollbarAbi>, NcStatus> {
-        let value = <Self as microui_contracts::Scrollbar>::new(host.as_com_ref(), range)?;
+    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, resources: super::widget::SharedAssets, range: ScrollRange) -> Result<ComPtr<ScrollbarAbi>, NcStatus> {
+        let value = Self::build(host, range, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("Scrollbar declares its callable class contract"))
     }
-}
 
-impl microui_contracts::Scrollbar for crate::Scrollbar {
-    /// Validates orientation and lengths before allocating the established Scrollbar state.
-    fn new(host: ComRef<'_, IWidgetHostAbi>, range: ScrollRange) -> Result<Self, NcStatus> {
+    /// Builds one scrollbar with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        range: ScrollRange,
+        resources: Option<&super::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
         let axis = match range.axis {
             ScrollAxis::HORIZONTAL => crate::ScrollbarAxis::Horizontal,
             ScrollAxis::VERTICAL => crate::ScrollbarAxis::Vertical,
@@ -536,8 +640,15 @@ impl microui_contracts::Scrollbar for crate::Scrollbar {
             return Err(NC_E_INVALID_ARG);
         }
         let parameters = crate::ScrollbarParameters::new(axis).range(range.viewport, range.content, range.offset);
-        let runtime = super::widget::WidgetRuntime::new(host.add_ref(), parameters.opt)?;
+        let runtime = super::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
         Ok(Self::from_runtime(runtime, parameters))
+    }
+}
+
+impl microui_contracts::Scrollbar for crate::Scrollbar {
+    /// Validates orientation and lengths before allocating the established Scrollbar state.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, range: ScrollRange) -> Result<Self, NcStatus> {
+        Self::build(host.add_ref(), range, None)
     }
     /// Reads all range fields from one consistent semantic snapshot.
     fn range(&self) -> Result<ScrollRange, NcStatus> {

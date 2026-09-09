@@ -96,6 +96,11 @@ independent widgets may share their own concrete cache. Fetch a bundle/table per
 revision, not per glyph. The ordinary
 `ITextMetrics::button_size` and `IPainter::text` conveniences still use body-font
 button styling; custom typography uses the full bundle records and bulk triangles.
+The UI runtime imports these records once. Its dynamically linked `UiFactory`
+passes the same `Rc<RefCell<ImportedAssets>>` to every built-in product and fixed
+internal child, so widget construction, measurement, update, and paint do not
+decode the portable tables again. A class activated directly from a host owns one
+such value and refreshes it when that host publishes a different bundle.
 
 Bundle producers must keep **every** method result immutable for the allocation's
 lifetime. Mutation requires a new bundle object, even when pixels alone change.

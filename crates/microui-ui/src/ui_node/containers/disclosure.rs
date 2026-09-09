@@ -451,6 +451,7 @@ fn create_container(parameters: DisclosureParameters) -> (TypedWidgetHandle<Disc
         model.clone(),
         parameters.label.clone(),
         parameters.variant,
+        None,
     )
     .expect("native disclosure fixture builds the same fixed COM topology");
     let mut widget = Disclosure::from_runtime(

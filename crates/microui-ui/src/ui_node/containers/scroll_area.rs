@@ -699,7 +699,7 @@ impl ScrollArea {
         let (_, surface_container) = Container::from_shared(content, surface);
         let runtime = crate::com::widget::WidgetRuntime::for_test(surface_opt);
         let host = runtime.state.host().add_ref();
-        let parts = crate::com::scroll::ScrollParts::prepare(host, enabled)
+        let parts = crate::com::scroll::ScrollParts::prepare(host, enabled, None)
             .expect("native scroll fixture builds the same fixed COM topology");
         let widget = ScrollArea::from_runtime(runtime, parts.editor, parts.content, model);
         let children = Rc::new(RefCell::new(

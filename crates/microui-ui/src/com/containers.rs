@@ -93,20 +93,34 @@ direct_container_layout_impl!(crate::Linear);
 
 impl crate::Linear {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, direction: FlowDirection, cross: CrossSizeAbi) -> Result<ComPtr<LinearAbi>, NcStatus> {
-        let value = <Self as microui_contracts::Linear>::new(host.as_com_ref(), direction, cross)?;
+    pub(super) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: super::widget::SharedAssets,
+        direction: FlowDirection,
+        cross: CrossSizeAbi,
+    ) -> Result<ComPtr<LinearAbi>, NcStatus> {
+        let value = Self::build(host, direction, cross, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("Linear declares its callable class contract"))
+    }
+
+    /// Builds one linear container with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        direction: FlowDirection,
+        cross: CrossSizeAbi,
+        resources: Option<&super::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let direction = local_direction(direction)?;
+        let cross = local_cross(cross)?;
+        let editor = host.create_children()?;
+        let runtime = WidgetRuntime::for_resources(host, crate::WidgetOption::NO_INTERACT, resources)?;
+        Ok(Self::from_runtime(runtime, editor, direction, cross))
     }
 }
 impl microui_contracts::Linear for crate::Linear {
     /// Validates both layout policies before allocating child ownership or widget state.
     fn new(host: ComRef<'_, IWidgetHostAbi>, direction: FlowDirection, cross: CrossSizeAbi) -> Result<Self, NcStatus> {
-        let direction = local_direction(direction)?;
-        let cross = local_cross(cross)?;
-        let host = host.add_ref();
-        let editor = host.create_children()?;
-        let runtime = WidgetRuntime::new(host, crate::WidgetOption::NO_INTERACT)?;
-        Ok(Self::from_runtime(runtime, editor, direction, cross))
+        Self::build(host.add_ref(), direction, cross, None)
     }
     container_methods!();
     /// Returns the exact retained axis and leading-edge policy.
@@ -149,11 +163,26 @@ impl crate::Grid {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
     pub(super) fn create_com(
         host: ComPtr<IWidgetHostAbi>,
+        resources: super::widget::SharedAssets,
         columns: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
         rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
     ) -> Result<ComPtr<GridAbi>, NcStatus> {
-        let value = <Self as microui_contracts::Grid>::new(host.as_com_ref(), columns, rows)?;
+        let value = Self::build(host, columns, rows, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("Grid declares its callable class contract"))
+    }
+
+    /// Builds one grid with either directly imported or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        columns: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
+        rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
+        resources: Option<&super::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let columns = local_tracks(columns)?;
+        let rows = local_tracks(rows)?;
+        let editor = host.create_children()?;
+        let runtime = WidgetRuntime::for_resources(host, crate::WidgetOption::NO_INTERACT, resources)?;
+        Ok(Self::from_runtime(runtime, editor, columns, rows))
     }
 }
 impl microui_contracts::Grid for crate::Grid {
@@ -163,12 +192,7 @@ impl microui_contracts::Grid for crate::Grid {
         columns: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
         rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
     ) -> Result<Self, NcStatus> {
-        let columns = local_tracks(columns)?;
-        let rows = local_tracks(rows)?;
-        let host = host.add_ref();
-        let editor = host.create_children()?;
-        let runtime = WidgetRuntime::new(host, crate::WidgetOption::NO_INTERACT)?;
-        Ok(Self::from_runtime(runtime, editor, columns, rows))
+        Self::build(host.add_ref(), columns, rows, None)
     }
     container_methods!();
     /// Bulk-copies column policy from the one concrete Grid state.

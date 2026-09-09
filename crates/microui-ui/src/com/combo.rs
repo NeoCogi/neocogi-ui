@@ -8,18 +8,23 @@ direct_leaf_layout_impl!(crate::Combo);
 
 impl crate::Combo {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>) -> Result<ComPtr<ComboAbi>, NcStatus> {
-        let value = <Self as microui_contracts::Combo>::new(host.as_com_ref())?;
+    pub(super) fn create_com(host: ComPtr<IWidgetHostAbi>, resources: super::widget::SharedAssets) -> Result<ComPtr<ComboAbi>, NcStatus> {
+        let value = Self::build(host, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("Combo declares its callable class contract"))
+    }
+
+    /// Builds one combo header with either directly imported or runtime-shared resources.
+    fn build(host: ComPtr<IWidgetHostAbi>, resources: Option<&super::widget::SharedAssets>) -> Result<Self, NcStatus> {
+        let parameters = crate::ComboParameters::new();
+        let runtime = super::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        Ok(Self::from_runtime(runtime, parameters))
     }
 }
 
 impl microui_contracts::Combo for crate::Combo {
     /// Initializes the established empty Combo state after validating host mutation authority.
     fn new(host: ComRef<'_, IWidgetHostAbi>) -> Result<Self, NcStatus> {
-        let parameters = crate::ComboParameters::new();
-        let runtime = super::widget::WidgetRuntime::new(host.add_ref(), parameters.opt)?;
-        Ok(Self::from_runtime(runtime, parameters))
+        Self::build(host.add_ref(), None)
     }
     /// Reads the same position used by the semantic selection algorithm.
     fn selected(&self) -> Result<u64, NcStatus> {
