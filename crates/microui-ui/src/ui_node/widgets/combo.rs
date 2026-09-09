@@ -509,14 +509,14 @@ impl microui_contracts::Combo for Combo {
     fn subscribe_changed(&mut self, sink: ComRef<'_, IComboChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = <Self as crate::TypedWidget<crate::ComboChanged>>::event(self);
-        crate::com::events::subscribe(endpoint, sink)
+        crate::event::subscribe(endpoint, sink)
     }
 
     /// Connects popup coordination independently from captured selection delivery.
     fn subscribe_popup(&mut self, sink: ComRef<'_, IComboPopupSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = <Self as crate::TypedWidget<crate::ComboSubmitted>>::event(self);
-        crate::com::events::subscribe(endpoint, sink)
+        crate::event::subscribe(endpoint, sink)
     }
 }
 
@@ -537,7 +537,7 @@ impl Combo {
     }
 }
 
-impl crate::com::events::ComEvent for ComboChanged {
+impl crate::event::ComEvent for ComboChanged {
     type Sink = IComboChangedSinkAbi;
 
     /// Delivers the captured label rather than rereading possibly newer widget state.
@@ -547,7 +547,7 @@ impl crate::com::events::ComEvent for ComboChanged {
     }
 }
 
-impl crate::com::events::ComEvent for ComboSubmitted {
+impl crate::event::ComEvent for ComboSubmitted {
     type Sink = IComboPopupSinkAbi;
 
     /// Converts the existing routed anchor once at the ABI boundary.

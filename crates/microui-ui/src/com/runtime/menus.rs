@@ -246,7 +246,7 @@ impl IActivationEvents for Item {
     /// Subscription uses the actual native record's source before or after mounting; no callback is retained by the row.
     fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.owner()?.factory.host.check_mutation()?;
-        super::super::events::subscribe(self.handle.submitted(), sink)
+        crate::event::subscribe(self.handle.submitted(), sink)
     }
 }
 

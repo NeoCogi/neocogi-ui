@@ -95,6 +95,15 @@ pub struct ListItemSubmitted {
     pub label: String,
 }
 
+impl crate::event::ComEvent for ListItemSubmitted {
+    type Sink = microui_contracts::IActivationSinkAbi;
+
+    /// Copies the captured row label through the ListItem activation contract.
+    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+        crate::event::deliver_activation(&self.label, sink)
+    }
+}
+
 #[nc_com::com_object(microui_contracts::ListItem)]
 /// Concrete retained list item and dynamically constructible COM object.
 pub struct ListItem {
@@ -401,6 +410,6 @@ impl microui_contracts::ListItem for ListItem {
     fn subscribe(&mut self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = <Self as crate::TypedWidget<crate::ListItemSubmitted>>::event(self);
-        crate::com::events::subscribe(endpoint, sink)
+        crate::event::subscribe(endpoint, sink)
     }
 }

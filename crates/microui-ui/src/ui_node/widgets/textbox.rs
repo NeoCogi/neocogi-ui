@@ -192,6 +192,24 @@ pub struct TextboxSubmitted {
     pub text: String,
 }
 
+impl crate::event::ComEvent for TextboxChanged {
+    type Sink = microui_contracts::ITextChangedSinkAbi;
+
+    /// Delivers normalized text and its matching cursor from the same captured event.
+    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+        crate::event::deliver_text_changed(&self.text, self.cursor, sink)
+    }
+}
+
+impl crate::event::ComEvent for TextboxSubmitted {
+    type Sink = microui_contracts::ITextSubmittedSinkAbi;
+
+    /// Delivers the captured submission without consulting the live Textbox.
+    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+        crate::event::deliver_text_submitted(&self.text, sink)
+    }
+}
+
 impl Textbox {
     /// Constructs a retained node and a weak typed handle to its concrete textbox.
     #[cfg(test)]
@@ -673,12 +691,12 @@ impl microui_contracts::Textbox for Textbox {
     fn subscribe_changed(&mut self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = <Self as crate::TypedWidget<crate::TextboxChanged>>::event(self);
-        crate::com::events::subscribe(endpoint, sink)
+        crate::event::subscribe(endpoint, sink)
     }
     /// Connects the independent submitted-text source directly through the class contract.
     fn subscribe_submitted(&mut self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = <Self as crate::TypedWidget<crate::TextboxSubmitted>>::event(self);
-        crate::com::events::subscribe(endpoint, sink)
+        crate::event::subscribe(endpoint, sink)
     }
 }

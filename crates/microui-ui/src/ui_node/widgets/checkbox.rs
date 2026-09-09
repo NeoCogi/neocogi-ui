@@ -77,6 +77,15 @@ pub struct CheckboxChanged {
     pub checked: bool,
 }
 
+impl crate::event::ComEvent for CheckboxChanged {
+    type Sink = microui_contracts::ICheckboxSinkAbi;
+
+    /// Delivers the captured checked value through the Checkbox event contract.
+    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+        sink.changed(self.checked)
+    }
+}
+
 #[nc_com::com_object(microui_contracts::Checkbox)]
 /// Concrete retained checkbox and dynamically constructible COM object.
 pub struct Checkbox {
@@ -355,6 +364,6 @@ impl microui_contracts::Checkbox for Checkbox {
     fn subscribe(&mut self, sink: ComRef<'_, ICheckboxSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = <Self as crate::TypedWidget<crate::CheckboxChanged>>::event(self);
-        crate::com::events::subscribe(endpoint, sink)
+        crate::event::subscribe(endpoint, sink)
     }
 }

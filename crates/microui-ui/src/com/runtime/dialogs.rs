@@ -576,7 +576,7 @@ impl IFileDialogEvents for FileDialog {
     /// Returns the same completion source for every request without letting producers retain application state.
     fn subscribe(&self, sink: ComRef<'_, IFileDialogSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.dialog.session.state()?.owner()?;
-        super::super::events::subscribe(self.dialog.request.completed.event(), sink)
+        crate::event::subscribe(self.dialog.request.completed.event(), sink)
     }
 }
 impl IFileDialogs for Runtime {

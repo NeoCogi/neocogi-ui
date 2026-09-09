@@ -279,6 +279,24 @@ pub struct TextAreaSubmitted {
     pub text: String,
 }
 
+impl crate::event::ComEvent for TextAreaChanged {
+    type Sink = microui_contracts::ITextChangedSinkAbi;
+
+    /// Delivers normalized text and its matching cursor from the same captured event.
+    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+        crate::event::deliver_text_changed(&self.text, self.cursor, sink)
+    }
+}
+
+impl crate::event::ComEvent for TextAreaSubmitted {
+    type Sink = microui_contracts::ITextSubmittedSinkAbi;
+
+    /// Delivers the captured submission without consulting the live TextArea editor.
+    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+        crate::event::deliver_text_submitted(&self.text, sink)
+    }
+}
+
 /// Runtime-only cursor navigation state retained by the editable leaf.
 #[derive(Default)]
 struct TextAreaInteraction {
@@ -981,14 +999,14 @@ impl ITextEvents for TextEditor {
     fn subscribe_changed(&mut self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = <Self as crate::TypedWidget<crate::TextAreaChanged>>::event(self);
-        crate::com::events::subscribe(endpoint, sink)
+        crate::event::subscribe(endpoint, sink)
     }
 
     /// Connects the editor's existing submitted-text event source.
     fn subscribe_submitted(&mut self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = <Self as crate::TypedWidget<crate::TextAreaSubmitted>>::event(self);
-        crate::com::events::subscribe(endpoint, sink)
+        crate::event::subscribe(endpoint, sink)
     }
 }
 

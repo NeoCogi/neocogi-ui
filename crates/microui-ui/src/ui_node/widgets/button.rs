@@ -130,6 +130,15 @@ pub struct ButtonSubmitted {
     pub label: String,
 }
 
+impl crate::event::ComEvent for ButtonSubmitted {
+    type Sink = microui_contracts::IActivationSinkAbi;
+
+    /// Copies the captured label through the Button activation contract.
+    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+        crate::event::deliver_activation(&self.label, sink)
+    }
+}
+
 #[nc_com::com_object(microui_contracts::Button)]
 /// Concrete retained button and dynamically constructible COM object.
 ///
@@ -461,7 +470,7 @@ impl microui_contracts::Button for Button {
     fn subscribe(&mut self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = <Self as crate::TypedWidget<crate::ButtonSubmitted>>::event(self);
-        crate::com::events::subscribe(endpoint, sink)
+        crate::event::subscribe(endpoint, sink)
     }
 
     /// Validates a semantic role before changing the Button's font selection.

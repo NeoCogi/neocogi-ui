@@ -126,6 +126,15 @@ pub struct SliderChanged {
     pub value: Real,
 }
 
+impl crate::event::ComEvent for SliderChanged {
+    type Sink = microui_contracts::INumericSinkAbi;
+
+    /// Delivers the captured value through the Slider numeric event contract.
+    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+        sink.changed(self.value)
+    }
+}
+
 #[nc_com::com_object(microui_contracts::Slider)]
 /// Concrete retained slider and dynamically constructible COM object.
 pub struct Slider {
@@ -1112,6 +1121,6 @@ impl microui_contracts::Slider for Slider {
     fn subscribe(&mut self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = <Self as crate::TypedWidget<crate::SliderChanged>>::event(self);
-        crate::com::events::subscribe(endpoint, sink)
+        crate::event::subscribe(endpoint, sink)
     }
 }

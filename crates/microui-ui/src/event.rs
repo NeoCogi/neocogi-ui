@@ -30,6 +30,34 @@
 #![doc = include_str!("../docs/EVENTS.md")]
 
 use crate::Widget;
+use microui_contracts::{IActivationSinkAbi, IEventSubscriptionAbi, ITextChangedSinkAbi, ITextSubmittedSinkAbi};
+use nc_com::{ComPtr, ComRef, INcStringAbi, NcStatus, NcString};
+
+/// Static event-to-sink projection implemented beside each concrete semantic event type.
+pub(crate) use microui_redux::events::EventPayload as ComEvent;
+
+/// Connects one producer endpoint to its statically selected foreign sink contract.
+pub(crate) fn subscribe<E: ComEvent>(endpoint: WidgetEventPortHandle<E>, sink: ComRef<'_, E::Sink>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    endpoint.subscribe(sink)
+}
+
+/// Delivers a captured labelled activation without consulting mutable widget state.
+pub(crate) fn deliver_activation(label: &str, sink: ComRef<'_, IActivationSinkAbi>) -> Result<(), NcStatus> {
+    let label: ComPtr<INcStringAbi> = NcString::from_utf8_str(label);
+    sink.submitted(label.as_com_ref())
+}
+
+/// Delivers one immutable text-edit snapshot through the shared changed sink protocol.
+pub(crate) fn deliver_text_changed(text: &str, cursor: usize, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<(), NcStatus> {
+    let text = NcString::from_utf8_str(text);
+    sink.changed(text.as_com_ref(), cursor as u64)
+}
+
+/// Delivers one immutable text submission through the shared submitted sink protocol.
+pub(crate) fn deliver_text_submitted(text: &str, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<(), NcStatus> {
+    let text = NcString::from_utf8_str(text);
+    sink.submitted(text.as_com_ref())
+}
 
 /// A concrete retained widget that owns one typed native event source.
 ///

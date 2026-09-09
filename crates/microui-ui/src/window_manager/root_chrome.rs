@@ -115,6 +115,24 @@ pub enum WindowEvent {
     },
 }
 
+impl crate::event::ComEvent for WindowEvent {
+    type Sink = microui_contracts::IWindowSinkAbi;
+
+    /// Copies the complete captured manager event into its stable boundary representation.
+    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+        let event = match *self {
+            Self::GeometryChanged { rect } => microui_contracts::WindowEvent::GeometryChanged { rect: crate::com::copied_rect(rect) },
+            Self::CloseRequested => microui_contracts::WindowEvent::CloseRequested,
+            Self::Hidden => microui_contracts::WindowEvent::Hidden,
+            Self::Destroyed => microui_contracts::WindowEvent::Destroyed,
+            Self::Minimized { rect } => microui_contracts::WindowEvent::Minimized { rect: crate::com::copied_rect(rect) },
+            Self::Maximized { rect } => microui_contracts::WindowEvent::Maximized { rect: crate::com::copied_rect(rect) },
+            Self::Restored { rect } => microui_contracts::WindowEvent::Restored { rect: crate::com::copied_rect(rect) },
+        };
+        sink.event(event.into())
+    }
+}
+
 
 /// Cloneable non-owning capability for one manager-owned window or dialog.
 ///

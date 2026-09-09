@@ -269,6 +269,15 @@ pub struct ScrollbarChanged {
     pub offset: i32,
 }
 
+impl crate::event::ComEvent for ScrollbarChanged {
+    type Sink = microui_contracts::IScrollbarSinkAbi;
+
+    /// Delivers the captured offset through the Scrollbar event contract.
+    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+        sink.changed(self.offset)
+    }
+}
+
 #[nc_com::com_object(microui_contracts::Scrollbar)]
 /// Standalone one-axis scrollbar and dynamically constructible COM object.
 pub struct Scrollbar {
@@ -699,6 +708,6 @@ impl microui_contracts::Scrollbar for Scrollbar {
     fn subscribe(&mut self, sink: ComRef<'_, IScrollbarSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = <Self as crate::TypedWidget<crate::ScrollbarChanged>>::event(self);
-        crate::com::events::subscribe(endpoint, sink)
+        crate::event::subscribe(endpoint, sink)
     }
 }

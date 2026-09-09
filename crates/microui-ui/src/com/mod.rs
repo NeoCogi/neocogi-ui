@@ -14,7 +14,6 @@ use std::{
 
 pub use crate::ui_node::{Grid, Linear};
 pub use crate::ui_node::widgets::{Button, Checkbox, ColorSwatch, Combo, ListBox, ListItem, Number, Scrollbar, Slider, TextBlock, Textbox};
-pub(crate) mod events;
 pub use crate::ui_node::Disclosure;
 mod runtime;
 pub use crate::ui_node::ScrollArea;
