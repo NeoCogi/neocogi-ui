@@ -59,6 +59,9 @@ frame as one slice. Contiguous buffered backends append it once, while indexed b
 use the trait's per-triangle fallback. A render item additionally receives its authoritative
 visible region because its own mesh drawing happens at that ordered boundary.
 
+The COM recorder appends each generated triangle or six-vertex quad with one bounds check and
+one borrow of each reused output buffer. A quad is not replayed through two recorder calls.
+
 The portable target is a positive drawable up to 8192 by 8192 pixels. Translated logical
 edges must remain in `-32768..=40960`, allowing four maximum drawable spans off-screen.
 Widget/app authors own that coordinate constraint. Positive-size validation does not

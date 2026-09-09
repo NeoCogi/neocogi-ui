@@ -170,6 +170,35 @@ pub(super) struct Frame<'a> {
     error: Option<FrameError>,
 }
 
+impl Frame<'_> {
+    /// Appends one complete local atlas primitive sequence and extends its shared batch.
+    fn push_atlas_vertices(&mut self, vertices: &[Vertex]) {
+        // Only the trait's triangle and quad entry points call this helper, so every accepted slice
+        // is nonempty, forms complete triangles, and fits the bounded count conversion below.
+        debug_assert!(matches!(vertices.len(), 3 | 6));
+        if self.error.is_some() {
+            return;
+        }
+        let count = vertices.len() as u32;
+        let storage = &self.backend.storage;
+        // Hold each distinct local buffer once. No foreign code runs while either guard exists.
+        let mut output = storage.vertices.borrow_mut();
+        let first = output.len() as u32;
+        let mut batches = storage.batches.borrow_mut();
+        let joins_atlas = matches!(batches.last(), Some(Batch::Atlas { .. }));
+        if first > MAX_RENDER_VERTICES - count || (!joins_atlas && batches.len() >= MAX_RENDER_BATCHES as usize) {
+            self.error = Some(FrameError::new("frame geometry exceeds the shared allocation limit"));
+            return;
+        }
+        output.extend_from_slice(vertices);
+        if let Some(Batch::Atlas { count: batch_count, .. }) = batches.last_mut() {
+            *batch_count += count;
+        } else {
+            batches.push(Batch::Atlas { first, count });
+        }
+    }
+}
+
 /// Expires frame access even when a renderer fails.
 struct ReadScope<'a>(&'a Storage);
 impl Drop for ReadScope<'_> {
@@ -234,30 +263,13 @@ impl RendererFrame for Frame<'_> {
             )
             .map_err(|error| FrameError::new(error.to_string()))
     }
-    /// Expands a quad into the same two triangles used by native backends.
+    /// Appends a quad as its two triangles in one checked buffer operation.
     fn push_quad(&mut self, v: [Vertex; 4]) {
-        self.push_triangle([v[0], v[1], v[2]]);
-        self.push_triangle([v[0], v[2], v[3]]);
+        self.push_atlas_vertices(&[v[0], v[1], v[2], v[0], v[2], v[3]]);
     }
     /// Appends to the reusable final vertex buffer.
     fn push_triangle(&mut self, v: [Vertex; 3]) {
-        if self.error.is_some() {
-            return;
-        }
-        let storage = &self.backend.storage;
-        let first = storage.vertices.borrow().len() as u32;
-        let mut batches = storage.batches.borrow_mut();
-        let joins_atlas = matches!(batches.last(), Some(Batch::Atlas { .. }));
-        if first > MAX_RENDER_VERTICES - 3 || (!joins_atlas && batches.len() >= MAX_RENDER_BATCHES as usize) {
-            self.error = Some(FrameError::new("frame geometry exceeds the shared allocation limit"));
-            return;
-        }
-        storage.vertices.borrow_mut().extend(v);
-        if let Some(Batch::Atlas { count, .. }) = batches.last_mut() {
-            *count += 3;
-        } else {
-            batches.push(Batch::Atlas { first, count: 3 });
-        }
+        self.push_atlas_vertices(&v);
     }
     /// Atlas-only triangles preserve their order without introducing an extra draw boundary.
     fn flush(&mut self) {}
