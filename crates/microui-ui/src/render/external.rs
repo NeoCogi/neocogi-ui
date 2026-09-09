@@ -1,8 +1,11 @@
-//! Coarse COM submission adapter over the existing display-list executor.
-use super::*;
+//! Coarse external-renderer submission adapter over the existing display-list executor.
+
+use crate::com::{HostState, copied_rect};
 use crate::{ImageSource, TextureId};
 use crate::render::{AtlasUploadError, FrameError, FrameInfo, RendererBackend, RendererFrame, TextureError, Vertex, RenderItemArgs};
-use nc_com::NcCopyToBufferOffset;
+use microui_contracts::*;
+use nc_com::{ComPtr, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
+use std::{cell::{Cell, RefCell}, rc::Rc};
 
 /// Decodes canonical RGBA packing independently of machine byte order.
 pub(crate) fn color(rgba: u32) -> crate::render::Color {
@@ -140,12 +143,12 @@ pub(crate) struct Backend {
     /// Stable stream object reused for every synchronous submission.
     stream: ComPtr<IRenderStreamAbi>,
     /// Installed only for the duration of the caller's explicit render operation.
-    pub(super) target: Rc<RefCell<Option<Rc<ComPtr<IRendererAbi>>>>>,
+    pub(crate) target: Rc<RefCell<Option<Rc<ComPtr<IRendererAbi>>>>>,
 }
 
 impl Backend {
     /// Creates reusable complete-frame storage and its stable stream capability.
-    pub(super) fn new(host: Rc<HostState>, resources: crate::ui_node::widget_object::SharedAssets) -> Self {
+    pub(crate) fn new(host: Rc<HostState>, resources: crate::ui_node::widget_object::SharedAssets) -> Self {
         let storage = Rc::new(Storage::default());
         let stream = Stream::from_value(Stream { storage: storage.clone() })
             .query()

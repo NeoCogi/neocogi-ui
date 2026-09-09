@@ -32,6 +32,7 @@
 
 mod backend;
 mod color;
+pub(crate) mod external;
 pub(crate) mod display_list;
 pub(crate) mod geometry;
 mod nine_patch;

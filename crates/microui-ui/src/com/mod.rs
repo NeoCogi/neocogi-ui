@@ -16,8 +16,6 @@ pub use crate::ui_node::{Grid, Linear};
 pub use crate::ui_node::widgets::{Button, Checkbox, ColorSwatch, Combo, ListBox, ListItem, Number, Scrollbar, Slider, TextBlock, Textbox};
 pub(crate) mod events;
 pub use crate::ui_node::Disclosure;
-pub(crate) mod render;
-pub(crate) use render::color;
 mod runtime;
 pub use crate::ui_node::ScrollArea;
 pub use crate::ui_node::widgets::TextArea;

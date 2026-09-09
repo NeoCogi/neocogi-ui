@@ -1,7 +1,7 @@
 //! COM runtime/window ownership over the authoritative retained traversal.
 use super::*;
 use crate::ui_node::paint_service::{Metrics, PaintService};
-use super::render::Backend;
+use crate::render::external::Backend;
 use crate::Dimensioni;
 #[cfg(test)]
 use crate::AtlasHandle;
@@ -243,7 +243,8 @@ impl UiRuntime for Runtime {
             return Err(UI_E_UPDATE_REQUIRED);
         }
         let info =
-            crate::render::FrameInfo::try_new(Dimensioni::new(size.width, size.height), super::render::color(0xff302820)).map_err(|_| NC_E_INVALID_ARG)?;
+            crate::render::FrameInfo::try_new(Dimensioni::new(size.width, size.height), crate::render::external::color(0xff302820))
+                .map_err(|_| NC_E_INVALID_ARG)?;
         // The complete submission is observational, including calls into the native renderer.
         let _phase = Observation::begin(&storage.factory.state);
         storage.factory.state.error.set(None);

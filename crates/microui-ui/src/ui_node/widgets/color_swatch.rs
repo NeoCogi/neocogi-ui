@@ -227,7 +227,7 @@ impl ColorSwatch {
         label: NcCopyFromBufferOffset<'_, u8>,
         resources: Option<&crate::ui_node::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
-        let parameters = crate::ColorSwatchParameters::new(crate::com::color(rgba)).label(crate::com::text(label)?);
+        let parameters = crate::ColorSwatchParameters::new(crate::render::external::color(rgba)).label(crate::com::text(label)?);
         let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
         Ok(Self::from_runtime(runtime, parameters))
     }
@@ -262,7 +262,7 @@ impl microui_contracts::ColorSwatch for ColorSwatch {
     /// Color is a paint-only input and emits no user event.
     fn set_fill(&mut self, rgba: u32) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
-        self.set_fill(crate::com::color(rgba));
+        self.set_fill(crate::render::external::color(rgba));
         Ok(())
     }
     /// Validates a semantic role before changing the swatch label's font.

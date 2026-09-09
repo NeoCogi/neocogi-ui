@@ -128,7 +128,7 @@ impl IPainter for Recorder {
             return Err(NC_E_INVALID_ARG);
         }
         self.with_painter(scope, |painter| {
-            painter.stroke_line(crate::Vec2f::new(from.x, from.y), crate::Vec2f::new(to.x, to.y), width, crate::com::render::color(rgba));
+            painter.stroke_line(crate::Vec2f::new(from.x, from.y), crate::Vec2f::new(to.x, to.y), width, crate::render::external::color(rgba));
         })
     }
     /// Copies a whole finite boundary; native geometry code owns all triangulation and clipping.
@@ -137,7 +137,7 @@ impl IPainter for Recorder {
             return Err(NC_E_INVALID_ARG);
         }
         let points = input.as_slice();
-        self.with_painter(scope, |painter| painter.fill_contract_polygon(points, crate::com::render::color(rgba)))
+        self.with_painter(scope, |painter| painter.fill_contract_polygon(points, crate::render::external::color(rgba)))
     }
 
     /// Validates a complete solid batch before appending; invalid or expired calls publish nothing.
@@ -158,7 +158,7 @@ impl IPainter for Recorder {
         self.check(scope)?;
         // AddRef can execute foreign code, so retain the texture before taking the paint context.
         let texture = texture.add_ref();
-        self.with_painter(scope, |painter| painter.com_texture_region(local_rect(rect), source, crate::com::render::color(rgba), texture))
+        self.with_painter(scope, |painter| painter.com_texture_region(local_rect(rect), source, crate::render::external::color(rgba), texture))
     }
     /// Records a capability rather than a callback lending mutable GPU state across COM.
     fn item(&mut self, scope: PaintScope, rect: Rect, item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
@@ -188,7 +188,7 @@ impl IPainter for Recorder {
         if rect.width < 0 || rect.height < 0 {
             return Err(NC_E_INVALID_ARG);
         }
-        self.with_painter(scope, |painter| painter.fill_rect(local_rect(rect), crate::com::render::color(rgba)))
+        self.with_painter(scope, |painter| painter.fill_rect(local_rect(rect), crate::render::external::color(rgba)))
     }
     /// Appends text while its borrowed UTF-8 input remains valid for this synchronous call.
     fn text(&mut self, scope: PaintScope, rect: Rect, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
@@ -246,7 +246,7 @@ impl IPainter for Recorder {
             return Err(NC_E_INVALID_ARG);
         }
         let icon = self.resources.borrow().bundle().atlas().icon_at_index(icon.index).ok_or(NC_E_INVALID_ARG)?;
-        self.with_painter(scope, |painter| painter.icon(icon, local_rect(rect), crate::com::render::color(rgba)))
+        self.with_painter(scope, |painter| painter.icon(icon, local_rect(rect), crate::render::external::color(rgba)))
     }
 
     /// Authenticates and records one exact-font UTF-8 run without an intermediate text command.
@@ -261,7 +261,7 @@ impl IPainter for Recorder {
         let label = text(input)?;
         let font = self.resources.borrow().bundle().atlas().font_at_index(font.index).ok_or(NC_E_INVALID_ARG)?;
         self.with_painter(scope, |painter| {
-            painter.text(font, label, crate::Vec2i::new(position.x, position.y), crate::com::render::color(rgba));
+            painter.text(font, label, crate::Vec2i::new(position.x, position.y), crate::render::external::color(rgba));
         })
     }
 }
