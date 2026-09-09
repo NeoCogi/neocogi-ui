@@ -53,6 +53,6 @@
 //! Full demo binary delegates to the concrete application in its companion library.
 
 /// Native startup blocks until close; browser startup schedules one owned animation loop.
-fn main() -> Result<(), microui_redux_demo_host::HostError> {
-    microui_redux_demo_full::run()
+fn main() -> Result<(), neocogi_ui_demo_host::HostError> {
+    neocogi_ui_demo_full::run()
 }

@@ -6,9 +6,9 @@
 //
 
 //! Compiles flat palette rules into portable resolved appearance tables.
-use microui_contracts::*;
-use microui_contracts::appearance::*;
-use microui_redux::assets::AssetData;
+use neocogi_ui_contracts::*;
+use neocogi_ui_contracts::appearance::*;
+use neocogi_ui::assets::AssetData;
 
 /// Resolves every state once, so UI painting only selects stored values.
 pub(crate) fn apply_flat(data: &mut AssetData, insets: Insets, palette: &FlatPalette) {
@@ -253,7 +253,7 @@ fn flat_chrome_visual(frame_insets: Insets, palette: &FlatPalette, role: ChromeR
     patch
 }
 
-#[neocogi_com::com_object(microui_contracts::StyleCompiler)]
+#[neocogi_com::com_object(neocogi_ui_contracts::StyleCompiler)]
 #[derive(Default)]
 /// Compiles resource revisions without borrowing a UI or retaining a renderer.
 pub struct StyleCompilerObject {

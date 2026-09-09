@@ -1,5 +1,5 @@
 //! Complete theme choices from the asset plugin, or explicitly embedded build-time tables.
-use microui_redux::IAssetBundleAbi;
+use neocogi_ui::IAssetBundleAbi;
 use neocogi_com::{ComPtr, ComRef, NcStatus};
 
 /// Windows 3.11 compiled data also remains usable as an independent source bundle.
@@ -60,7 +60,7 @@ impl Theme {
         }
         #[cfg(not(feature = "embed-assets"))]
         {
-            use microui_redux::{NativePath, ThemeLoaderAbi};
+            use neocogi_ui::{NativePath, ThemeLoaderAbi};
             let path = match self {
                 Self::Windows311 => "themes/windows-3.11/theme.json",
                 Self::Windows95 => "themes/windows-95/theme.json",

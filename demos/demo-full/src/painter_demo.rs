@@ -83,7 +83,7 @@ impl LeafContent for PainterDemo {
             return Ok(GeometryChange::NO_CHANGE);
         }
 
-        self.phase = (microui_redux_demo_host::monotonic_seconds() as f32 * 1.5) % (PI * 2.0);
+        self.phase = (neocogi_ui_demo_host::monotonic_seconds() as f32 * 1.5) % (PI * 2.0);
         if state.hovered {
             let position = match event {
                 WidgetEvent::Move { position, .. }

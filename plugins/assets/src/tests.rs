@@ -1,8 +1,8 @@
 //! The runtime COM builder and generated direct exporter must publish equivalent portable data.
 use super::*;
-use microui_ui::assets::ImportedAssets;
+use neocogi_ui_runtime::assets::ImportedAssets;
 use neocogi_com::INcStringComPtrExt;
-use microui_redux::NativePath;
+use neocogi_ui::NativePath;
 
 #[com_object(interfaces(INativePath))]
 /// A caller-owned path deliberately tries to consume its builder during path decoding.
@@ -40,7 +40,7 @@ impl INativePath for ReenterPath {
 }
 
 /// Copies complete portable values out of an imported revision for deterministic comparisons.
-fn data(source: &ComPtr<IAssetBundleAbi>) -> microui_redux::assets::AssetData {
+fn data(source: &ComPtr<IAssetBundleAbi>) -> neocogi_ui::assets::AssetData {
     AssetData::read(source.as_com_ref()).unwrap()
 }
 

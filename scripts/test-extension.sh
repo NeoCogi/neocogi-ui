@@ -4,7 +4,7 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
 backend=${1:-glow}
-cargo run -p microui-redux-tools --bin com-build -- --demo extension --backend "$backend"
+cargo run -p neocogi-ui-tools --bin com-build -- --demo extension --backend "$backend"
 target=${CARGO_TARGET_DIR:-"$root/target"}
 if [[ "$target" != /* ]]; then target="$root/$target"; fi
 executable="$target/com-native/debug/$backend/files/extension/microui-demo-com"

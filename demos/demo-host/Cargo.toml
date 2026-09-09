@@ -1,5 +1,5 @@
 [package]
-name = "microui-redux-demo-host"
+name = "neocogi-ui-demo-host"
 version = "0.0.0"
 publish = false
 authors.workspace = true
@@ -18,7 +18,7 @@ webgl = ["microui-plugin-platform/webgl"]
 png-assets = ["dep:microui-plugin-assets"]
 
 [dependencies]
-microui-redux.workspace = true
+neocogi-ui.workspace = true
 neocogi-com = { workspace = true, features = ["std", "macros"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -26,7 +26,7 @@ neocogi-com = { workspace = true, features = ["runtime"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 neocogi-com = { workspace = true, features = ["static-runtime"] }
-microui-plugin-ui = { path = "../../plugins/ui" }
+neocogi-ui-runtime = { path = "../../crates/ui/runtime" }
 microui-plugin-platform = { path = "../../plugins/platform", default-features = false }
 microui-plugin-assets = { path = "../../plugins/assets", optional = true, default-features = false }
 wasm-bindgen.workspace = true

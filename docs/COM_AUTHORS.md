@@ -57,9 +57,9 @@ Rust list data also stays in the application; cross-plugin domain data needs a
 concrete domain interface and owner-scoped keys.
 
 ```rust
-use microui_redux::{Button, EventHandler, EventSession};
+use neocogi_ui::{Button, EventHandler, EventSession};
 use neocogi_com::NcStatus;
-use microui_redux::events::Activation;
+use neocogi_ui::events::Activation;
 
 struct Submitted { button: Button }
 impl EventHandler<u32, Activation> for Submitted {
@@ -95,7 +95,7 @@ once when subscribing. The session offers these concrete families:
 | `subscribe_menu_item` | Compact menu row | Submitted label |
 | `subscribe_file_dialog` | Standard file picker | Exact accepted native path or cancellation |
 
-Independent producers share `microui_redux::events::EventSource<E>` with built-ins.
+Independent producers share `neocogi_ui::events::EventSource<E>` with built-ins.
 Standard facade snapshots implement `EventPayload`; custom snapshots implement it
 with their concrete sink interface and delivery method. Commit semantic state, then
 call `emit` with its owned snapshot. Implement the event capability by returning
@@ -234,7 +234,7 @@ arguments and calls `Runtime::construct::<ClassAbi>`.
 ## Common state, input and node ownership
 
 Each concrete widget embeds one private `WidgetRuntime`. That non-generic helper
-contains `microui_contracts::widget::WidgetState` plus host-backed resource and
+contains `neocogi_ui_contracts::widget::WidgetState` plus host-backed resource and
 rendering machinery; it cannot store a semantic widget implementation. `WidgetState`
 owns the host authority, common options, mount-once claim, logical closed flag, and
 sticky geometry flag. Neither helper owns a runtime tree, application callback, or

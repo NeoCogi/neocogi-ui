@@ -1,0 +1,142 @@
+//! Compact menu declarations, live row edits, and manager keyboard policy cross only concrete capabilities.
+use super::*;
+use neocogi_ui::{EventHandler, EventSession};
+use neocogi_ui::events::Activation;
+
+/// Records the immutable submitted label without looking up mutable live menu state.
+struct Record;
+impl EventHandler<Vec<String>, Activation> for Record {
+    /// Both widget and compact-menu activations share this same concrete snapshot shape.
+    fn handle(&mut self, values: &mut Vec<String>, event: &Activation) -> Result<(), NcStatus> {
+        values.push(event.label.clone());
+        Ok(())
+    }
+}
+/// Queues a concrete key including the function-key number carried by FUNCTION.
+fn key(ui: &neocogi_ui::Ui, key: KeyCode, value: u32) {
+    ui.input(
+        UiInput::Key(KeyStroke {
+            key,
+            value,
+            pressed: true,
+            repeat: false,
+            modifiers: 0,
+        }),
+        "",
+    )
+    .unwrap();
+}
+
+/// A declared nested menu transfers once, remains compact, and edits/submits its same native records after builder destruction.
+#[test]
+fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_forest() {
+    let ui = neocogi_ui::Ui::from_interface(runtime()).unwrap();
+    let editor = ui.widgets().textbox("").unwrap();
+    let window = ui.window("menus", RECT, &editor).unwrap();
+    let menus = ui.menus().unwrap();
+    let bar = menus.create("").unwrap();
+    let file = bar.submenu("File").unwrap();
+    let disabled = file.item("Disabled").unwrap();
+    disabled.set_enabled(false).unwrap();
+    file.separator().unwrap();
+    let recent = file.submenu("Recent").unwrap();
+    let item = recent.item("old").unwrap();
+    item.set_label("Before mount").unwrap();
+    item.set_mark(MenuMark::Checked { checked: false }).unwrap();
+    item.set_shortcut_hint("Ctrl+O").unwrap();
+    item.set_font_role(TextFontRole::BODY).unwrap();
+    assert_eq!(item.mark().unwrap(), MenuMark::Checked { checked: false });
+    assert_eq!(item.shortcut_hint().unwrap(), "Ctrl+O");
+    let session = EventSession::new(Vec::new());
+    let lease = session.subscribe_menu_item(&item, Record).unwrap();
+    session.subscribe_menu_item(&disabled, Record).unwrap();
+    menus.attach_bar(window.as_com_ref(), &bar).unwrap();
+    assert_eq!(bar.separator(), Err(UI_E_CLOSED));
+    drop(bar);
+    drop(file);
+    drop(recent);
+    item.set_label("Captured").unwrap();
+    key(&ui, KeyCode::TAB, 0);
+    key(&ui, KeyCode::FUNCTION, 10);
+    key(&ui, KeyCode::ARROW_DOWN, 0);
+    key(&ui, KeyCode::ARROW_RIGHT, 0);
+    key(&ui, KeyCode::ENTER, 0);
+    ui.input(UiInput::Text, "focus restored").unwrap();
+    ui.update(SIZE).unwrap();
+    item.set_label("Later").unwrap();
+    assert_eq!(session.dispatch(), Ok(1));
+    assert_eq!(&*session.state().unwrap(), &["Captured"]);
+    assert_eq!(editor.text().unwrap(), "focus restored");
+    ui.update_with_events(SIZE, &session).unwrap();
+    let (renderer, _) = renderer();
+    ui.render(SIZE, renderer.as_com_ref()).unwrap();
+    item.set_shortcut_hint("A longer accelerator").unwrap();
+    assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+    window.close().unwrap();
+    assert_eq!(item.label(), Err(UI_E_CLOSED));
+    assert_eq!(lease.active(), Ok(false));
+}
+
+/// Wrong owner, invalid bar shape and duplicate bar attachment reject before consuming a candidate declaration.
+#[test]
+fn failed_menu_attachment_preserves_unique_declaration_and_scoped_builder_authority() {
+    let ui = neocogi_ui::Ui::from_interface(runtime()).unwrap();
+    let foreign = neocogi_ui::Ui::from_interface(runtime()).unwrap();
+    let first = ui.widgets().button("first").unwrap();
+    let window = ui.window("first", RECT, &first).unwrap();
+    let second = foreign.widgets().button("second").unwrap();
+    let foreign_window = foreign.window("second", RECT, &second).unwrap();
+    let menus = ui.menus().unwrap();
+    let bar = menus.create("bar").unwrap();
+    let child = bar.submenu("File").unwrap();
+    assert_eq!(menus.attach_bar(foreign_window.as_com_ref(), &bar), Err(UI_E_OWNER));
+    child.item("still appendable").unwrap();
+    assert_eq!(menus.attach_bar(window.as_com_ref(), &child), Err(UI_E_OWNER));
+    menus.attach_bar(window.as_com_ref(), &bar).unwrap();
+    let candidate = menus.create("popup").unwrap();
+    let item = candidate.item("Action").unwrap();
+    assert_eq!(menus.attach_bar(window.as_com_ref(), &candidate), Err(UI_E_POLICY));
+    item.set_label("Still owned").unwrap();
+    let popup = menus.popup(window.as_com_ref(), &candidate).unwrap();
+    assert_eq!(candidate.separator(), Err(UI_E_CLOSED));
+    popup.close().unwrap();
+    assert_eq!(item.label(), Err(UI_E_CLOSED));
+    let malformed = menus.create("not a bar").unwrap();
+    let abandoned = malformed.item("wrong root row").unwrap();
+    let other = ui.widgets().button("other").unwrap();
+    let other_window = ui.window("other", RECT, &other).unwrap();
+    assert_eq!(menus.attach_bar(other_window.as_com_ref(), &malformed), Err(NC_E_INVALID_ARG));
+    assert_eq!(abandoned.label().unwrap(), "wrong root row");
+    let scoped = malformed.submenu("abandoned child").unwrap();
+    drop(malformed);
+    assert_eq!(scoped.separator(), Err(UI_E_CLOSED));
+    assert_eq!(abandoned.label(), Err(UI_E_CLOSED));
+    window.close().unwrap();
+    other_window.close().unwrap();
+    foreign_window.close().unwrap();
+}
+
+/// Standalone menus remain ordinary popup capabilities with the same nested keyboard, dismissal and source lifetime policy.
+#[test]
+fn standalone_menu_popup_submits_then_hides_without_destroying_its_live_rows() {
+    let ui = neocogi_ui::Ui::from_interface(runtime()).unwrap();
+    let body = ui.widgets().button("body").unwrap();
+    let window = ui.window("popup menu", RECT, &body).unwrap();
+    let menus = ui.menus().unwrap();
+    let builder = menus.create("Actions").unwrap();
+    let item = builder.item("Run").unwrap();
+    let popup = menus.popup(window.as_com_ref(), &builder).unwrap();
+    let session = EventSession::new(Vec::new());
+    session.subscribe_menu_item(&item, Record).unwrap();
+    popup.show(Rect { x: 60, y: 60, width: 20, height: 20 }).unwrap();
+    // Standalone menus begin without row selection; Down selects their first actionable row.
+    key(&ui, KeyCode::ARROW_DOWN, 0);
+    key(&ui, KeyCode::ENTER, 0);
+    ui.update_with_events(SIZE, &session).unwrap();
+    assert_eq!(&*session.state().unwrap(), &["Run"]);
+    assert_eq!(popup.visibility(), Ok(Visibility::HIDDEN));
+    assert_eq!(item.label().unwrap(), "Run");
+    popup.close().unwrap();
+    assert_eq!(item.label(), Err(UI_E_CLOSED));
+    window.close().unwrap();
+}

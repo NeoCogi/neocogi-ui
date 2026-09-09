@@ -1,7 +1,7 @@
 //! Optional CPU asset work: compact PNG decoding, optional font/atlas construction and theme JSON.
 //! Native paths, decoder state and construction data never escape this plugin through native handles.
 #![deny(missing_docs)]
-use microui_contracts::*;
+use neocogi_ui_contracts::*;
 use neocogi_com::{ComPtr, INcStringAbi, NcStatus, NcString, NC_E_INVALID_ARG};
 use std::cell::RefCell;
 
@@ -38,17 +38,17 @@ impl Diagnostic {
 
 #[cfg(not(feature = "builder"))]
 neocogi_com::plugin! {
-    plugin_id(auto_guid = "microui.plugin.assets"), name = "microui.plugin.assets",
+    plugin_id(auto_guid = "neocogi.ui.plugin.assets"), name = "neocogi.ui.plugin.assets",
     version = "0.9.0-alpha.0", classes = [PngDecoderObject, StyleCompilerObject],
 }
 #[cfg(all(feature = "builder", not(feature = "theme-json")))]
 neocogi_com::plugin! {
-    plugin_id(auto_guid = "microui.plugin.assets"), name = "microui.plugin.assets",
+    plugin_id(auto_guid = "neocogi.ui.plugin.assets"), name = "neocogi.ui.plugin.assets",
     version = "0.9.0-alpha.0", classes = [PngDecoderObject, StyleCompilerObject, AssetLoaderObject],
 }
 #[cfg(feature = "theme-json")]
 neocogi_com::plugin! {
-    plugin_id(auto_guid = "microui.plugin.assets"), name = "microui.plugin.assets",
+    plugin_id(auto_guid = "neocogi.ui.plugin.assets"), name = "neocogi.ui.plugin.assets",
     version = "0.9.0-alpha.0", classes = [PngDecoderObject, StyleCompilerObject, AssetLoaderObject, ThemeLoaderObject],
 }
 #[cfg(feature = "dynamic-plugin")]

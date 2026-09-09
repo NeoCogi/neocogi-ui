@@ -1,14 +1,14 @@
 # Cargo features
 
-Features belong to the crate that implements them. The `microui-redux` application
+Features belong to the crate that implements them. The `neocogi-ui` application
 facade has no renderer, font-builder or JSON feature. Its defaults are empty:
 
 | Crate | Feature | Effect |
 | --- | --- | --- |
-| `microui-redux` | `runtime` | Link the shared neocogi-com runtime used by native hosts. |
-| `microui-redux` | `static-runtime` | Link one ordinary runtime implementation, including browser deployments. |
-| `microui-redux` | `compiled-assets` | Expand bounded zlib pixels from generated asset tables. |
-| `microui-ui` | none | Imports resolved resources for layout and painting; contains no asset compiler. |
+| `neocogi-ui` | `runtime` | Link the shared neocogi-com runtime used by native hosts. |
+| `neocogi-ui` | `static-runtime` | Link one ordinary runtime implementation, including browser deployments. |
+| `neocogi-ui` | `compiled-assets` | Expand bounded zlib pixels from generated asset tables. |
+| `neocogi-ui-runtime` | none | Imports resolved resources for layout and painting; contains no asset compiler. |
 | `microui-plugin-assets` | none | PNG decoding and live metric/palette compilation, without font or JSON parsing. |
 | `microui-plugin-assets` | `builder` | Font rasterization and PNG atlas construction into portable tables. |
 | `microui-plugin-assets` | `theme-json` | Strict JSON compilation, including the atlas builder. |
@@ -45,7 +45,7 @@ metadata; it also embeds the photo and mesh. Browser `webgl` selects this mode.
 Neither native resource choice links a UI implementation or theme parser into the
 application's normal dependency graph.
 
-`microui-redux-demo-assets/full-demo` adds theme choices, photo and mesh access.
+`neocogi-ui-demo-assets/full-demo` adds theme choices, photo and mesh access.
 The asset compiler is an optional host build dependency enabled by `embed-assets`. Both storage
 modes use the same recipe and retain the original catalog when switching themes.
 
@@ -55,8 +55,8 @@ immutable catalog; `bundle_data()?` provides tables for a compatible revision.
 The exporter is also available as a workspace command:
 
 ```sh
-cargo run -p microui-redux-tools --bin atlas-export -- --output bundle.rs
-cargo test -p microui-redux-demo-assets --features 'full-demo embed-assets'
+cargo run -p neocogi-ui-tools --bin atlas-export -- --output bundle.rs
+cargo test -p neocogi-ui-demo-assets --features 'full-demo embed-assets'
 ```
 
 Asset consumers enforce the shared 64 MiB RGBA limit and exact dimensions/storage.

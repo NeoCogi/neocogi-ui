@@ -6,7 +6,7 @@ cd "$workspace_root"
 suite="${1:-input}"
 case "$suite" in
   input) package="microui-plugin-platform"; fixture="plugins/platform/tests/browser-input.html" ;;
-  full) package="microui-redux-demo-full"; fixture="demos/demo-full/tests/browser-full.html" ;;
+  full) package="neocogi-ui-demo-full"; fixture="demos/demo-full/tests/browser-full.html" ;;
   *) echo "usage: $0 [input|full]" >&2; exit 2 ;;
 esac
 site_dir="${CARGO_TARGET_DIR:-$workspace_root/target}/browser-$suite-tests"

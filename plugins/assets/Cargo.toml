@@ -11,15 +11,15 @@ crate-type = ["rlib", "cdylib"]
 [features]
 default = []
 builder = ["dep:fontdue"]
-theme-json = ["builder", "microui-contracts/theme-json", "dep:serde", "dep:serde_json"]
+theme-json = ["builder", "neocogi-ui-contracts/theme-json", "dep:serde", "dep:serde_json"]
 save-to-rust = ["dep:tempfile", "dep:miniz_oxide"]
 dynamic-plugin = []
 
 [dependencies]
 tempfile = { workspace = true, optional = true }
 miniz_oxide = { workspace = true, optional = true, features = ["with-alloc"] }
-microui-contracts.workspace = true
-microui-redux.workspace = true
+neocogi-ui-contracts.workspace = true
+neocogi-ui.workspace = true
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 png.workspace = true
@@ -27,4 +27,4 @@ fontdue = { workspace = true, optional = true }
 neocogi-com = { workspace = true, features = ["macros", "std"] }
 
 [dev-dependencies]
-microui-ui.workspace = true
+neocogi-ui-runtime.workspace = true

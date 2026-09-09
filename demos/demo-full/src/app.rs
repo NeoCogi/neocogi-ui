@@ -58,9 +58,9 @@ use super::{
     painter_demo::PainterDemo,
     style_editor::StyleEditor,
 };
-use microui_redux::{events::*, *};
-use microui_redux_demo_assets::themes::Theme;
-use microui_redux_demo_host::{AppState, Host, HostError};
+use neocogi_ui::{events::*, *};
+use neocogi_ui_demo_assets::themes::Theme;
+use neocogi_ui_demo_host::{AppState, Host, HostError};
 use neocogi_com::{ComInterface, ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
 use std::{cell::RefCell, rc::Rc};
 
@@ -328,7 +328,7 @@ impl EventHandler<State, Activation> for Action {
                 state.demo.raise()
             }
             Self::ShowTextures => state.sample_scroll.scroll_to_end(),
-            Self::About => state.write_log("microui-redux COM demo: concrete widgets, typed events, shared layout, PNG images and renderer-owned 3D scenes."),
+            Self::About => state.write_log("neocogi-ui COM demo: concrete widgets, typed events, shared layout, PNG images and renderer-owned 3D scenes."),
             Self::Fruit(index) => {
                 state.combo.select(index, &FRUIT)?;
                 state.combo_popup.hide()?;
@@ -429,7 +429,7 @@ impl LeafContent for Triangle {
     }
     /// Time changes color geometry, not measurement; authors explicitly own this NoChange decision.
     fn update(&mut self, _: WidgetUpdate, _: WidgetEvent, _: &str) -> Result<GeometryChange, NcStatus> {
-        self.angle = microui_redux_demo_host::monotonic_seconds() as f32;
+        self.angle = neocogi_ui_demo_host::monotonic_seconds() as f32;
         Ok(GeometryChange::NO_CHANGE)
     }
     /// Rotates three colored points around the committed viewport center.
@@ -457,11 +457,11 @@ fn menu_item(menu: &MenuBuilder, pending: &mut Vec<(MenuItem, Action)>, text: &s
 
 /// Creates the complete demo with the same structural desktop and floating examples on every backend.
 fn create() -> Result<(Host, EventSession<State>), HostError> {
-    microui_redux_demo_host::initialize()?;
+    neocogi_ui_demo_host::initialize()?;
     let host = Host::new(
-        "microui-redux COM Demo",
+        "neocogi-ui COM Demo",
         Size { width: 1200, height: 800 },
-        microui_redux_demo_assets::load_bundle()?,
+        neocogi_ui_demo_assets::load_bundle()?,
     )?;
     let ui = &host.ui;
     let grid = Rc::new(RefCell::new(GridState::default()));
@@ -521,7 +521,7 @@ fn create() -> Result<(Host, EventSession<State>), HostError> {
     menu_item(&grid_menu, &mut pending, "Show Demo Window", Action::ShowDemo)?;
     menu_item(&grid_menu, &mut pending, "About", Action::About)?;
     menus.attach_bar(desktop.as_com_ref(), &bar)?;
-    let mut log = label(ui, "Welcome to microui-redux.")?;
+    let mut log = label(ui, "Welcome to neocogi-ui.")?;
     log.set_font_role(TextFontRole::MONO)?;
     let log_scroll = ui.widgets().scroll_area(&log, true)?;
     let mut entry = ui.widgets().textbox("")?;
@@ -682,7 +682,7 @@ fn build_controls(host: &Host, events: &EventSession<State>, content: &mut Linea
         control.set_image(image.as_com_ref(), false)?;
         append(&mut textures, &control, LayoutTrack::Content)?;
     }
-    let image = host.png_texture(&microui_redux_demo_assets::photo_png()?)?;
+    let image = host.png_texture(&neocogi_ui_demo_assets::photo_png()?)?;
     let mut control = button(ui, events, "External Image", Action::Log)?;
     control.set_image(image.as_com_ref(), true)?;
     append(&mut textures, &control, LayoutTrack::Content)?;

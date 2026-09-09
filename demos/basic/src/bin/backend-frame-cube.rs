@@ -31,8 +31,8 @@
 //!
 //! The application owns only camera/animation data. No backend frame, native handle, callback or
 //! atlas packing detail crosses the widget boundary. The same code runs on every platform backend.
-use microui_redux::*;
-use microui_redux_demo_host::{AppState, Host, HostError};
+use neocogi_ui::*;
+use neocogi_ui_demo_host::{AppState, Host, HostError};
 use neocogi_com::{ComRef, NcStatus};
 use rs_math3d::{EPS_F32, Vec2f, Vec3f, Quatf, lookat, perspective, project3};
 use std::{cell::Cell, rc::Rc};
@@ -138,8 +138,8 @@ impl AppState for State {
 
 /// Creates one concrete COM leaf; standard host ownership handles all input/update/render phases.
 fn main() -> Result<(), HostError> {
-    microui_redux_demo_host::initialize()?;
-    let host = Host::new("COM solid cube", Size { width: 640, height: 480 }, microui_redux_demo_assets::load_bundle()?)?;
+    neocogi_ui_demo_host::initialize()?;
+    let host = Host::new("COM solid cube", Size { width: 640, height: 480 }, neocogi_ui_demo_assets::load_bundle()?)?;
     let angle = Rc::new(Cell::new(0.0));
     let cube = host.ui.widgets().leaf(Cube { angle: angle.clone() }, WidgetOptions::NO_INTERACT)?;
     host.ui.window("Solid painter cube", Rect { x: 40, y: 40, width: 360, height: 360 }, &cube)?;

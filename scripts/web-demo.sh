@@ -3,7 +3,7 @@ set -euo pipefail
 
 workspace_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 target="wasm32-unknown-unknown"
-artifact_name="microui-redux-demo-full"
+artifact_name="neocogi-ui-demo-full"
 target_dir="${CARGO_TARGET_DIR:-$workspace_root/target}"
 if [[ "$target_dir" != /* ]]; then target_dir="$workspace_root/$target_dir"; fi
 profile="${MICROUI_WEB_PROFILE:-release}"
@@ -33,7 +33,7 @@ build() {
   fi
   cargo build \
     --manifest-path "$workspace_root/Cargo.toml" \
-    -p microui-redux-demo-full \
+    -p neocogi-ui-demo-full \
     --bin "$artifact_name" \
     --target "$target" \
     "${profile_args[@]}" \

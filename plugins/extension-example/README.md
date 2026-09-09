@@ -5,7 +5,7 @@ and neocogi-com. It contains a counter and a one-child inset container. It is bu
 loaded separately from the host, UI, and renderer; ordinary demo packages omit it.
 
 ```sh
-cargo run -p microui-redux-tools --bin com-build -- --demo extension --backend glow
+cargo run -p neocogi-ui-tools --bin com-build -- --demo extension --backend glow
 target/com-native/debug/glow/files/extension/microui-demo-com --smoke
 ```
 
@@ -18,6 +18,12 @@ class contract, while `IInset: IContainer` demonstrates ordinary interface
 inheritance. The host constructs the registered counter directly with a typed
 `IWidgetHost` argument; the provider remains only as the inset's shorthand factory.
 Both implementations authenticate attachment to the requesting UI.
+
+Registration is used only to construct the extension class. During attachment the
+UI runtime queries and caches the counter's `ILeafLayout` or the inset's
+`IContainerLayout` beside `IWidget`; subsequent update, layout, and paint phases
+call those cached pointers directly. They perform no class-registry lookup and do
+not distinguish these external classes from built-in nodes.
 
 The [implementation](src/lib.rs) uses `WidgetState` for common options, mount-once
 ownership, logical closure and sticky invalidation. The counter stores its value

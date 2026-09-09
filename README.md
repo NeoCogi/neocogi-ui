@@ -1,8 +1,8 @@
-# microui-redux
+# NeoCogi Platform
 
-[![Crate](https://img.shields.io/crates/v/microui-redux.svg)](https://crates.io/crates/microui-redux)
+[![Crate](https://img.shields.io/crates/v/neocogi-ui.svg)](https://crates.io/crates/neocogi-ui)
 
-`microui-redux` is a retained Rust GUI toolkit inspired by
+NeoCogi Platform is a retained Rust GUI toolkit inspired by
 [rxi/microui](https://github.com/rxi/microui). Applications use a thin, statically
 linked typed facade. Concrete COM objects own widgets, containers, the UI runtime,
 windows and renderer resources. Native deployments load a few independently built
@@ -42,6 +42,21 @@ optional assets, actual GPU tests and executable-relative loading. A native demo
 needs its adjacent runtime and plugin manifest; direct `cargo run` on the demo
 package does not assemble those files.
 
+## Workspace layout
+
+Platform-owned COM infrastructure lives under `crates/com`: `core` defines the
+ABI vocabulary, `macros` generates typed projections, `api` is the safe client
+surface, and `runtime` plus `runtime-sys` own process-wide loading and linkage.
+UI code follows the same role-based layout under `crates/ui`: `contracts` contains
+cross-component types, `api` is the application facade, and `runtime` is the one
+deployable implementation containing retained nodes, built-in widgets and
+containers, surfaces, and the window manager.
+
+The UI runtime is deliberately one plugin. Source modules separate these concerns,
+but update, layout, paint, and window traversal stay in one optimization unit.
+External leaves and containers implement the same typed contracts; their
+capabilities are discovered once at mount and cached for every hot-path phase.
+
 For the browser:
 
 ```sh
@@ -58,14 +73,14 @@ Depend on the local facade while using this pre-alpha checkout:
 
 ```toml
 [dependencies]
-microui-redux = { path = "../microui-redux/crates/microui-redux" }
+neocogi-ui = { path = "../neocogi-platform/crates/ui/api" }
 neocogi-com = { path = "../neocogi-platform/crates/com/api" }
 ```
 
 Once the host has activated `UiRuntimeAbi`, the facade creates and edits the actual objects:
 
 ```rust
-use microui_redux::*;
+use neocogi_ui::*;
 use neocogi_com::{ComPtr, NcStatus};
 
 fn install(ui: &Ui) -> Result<ComPtr<IWindowAbi>, NcStatus> {

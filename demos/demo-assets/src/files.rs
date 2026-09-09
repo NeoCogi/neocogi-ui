@@ -1,6 +1,6 @@
 //! Native clients forward the shared recipe to COM; parsing and packing remain in the asset plugin.
 use super::recipe_data as data;
-use microui_redux::{AssetLoaderAbi, IAssetBundleAbi, NativePath, Size};
+use neocogi_ui::{AssetLoaderAbi, IAssetBundleAbi, NativePath, Size};
 use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcStatus};
 
 /// Resolves a package-relative resource independently of the process working directory.

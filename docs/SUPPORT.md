@@ -1,6 +1,6 @@
 # Support and compatibility
 
-`microui-redux` is pre-alpha and currently intended for experimentation and early integration. This
+`neocogi-ui` is pre-alpha and currently intended for experimentation and early integration. This
 page records what downstream users can rely on without implying guarantees the project does not yet
 make.
 
@@ -49,6 +49,6 @@ modules stay loaded for the process lifetime; hot reload/unload is unsupported.
 
 ## Reporting a problem
 
-Use the [GitHub issue tracker](https://github.com/NeoCogi/microui-redux/issues). Include the crate
+Use the [GitHub issue tracker](https://github.com/NeoCogi/neocogi-ui/issues). Include the crate
 version or commit, enabled Cargo features, Rust version, operating system, rendering backend, and a
 minimal reproduction when possible.

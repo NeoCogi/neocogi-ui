@@ -83,7 +83,7 @@ wrappers. The accepted migration and outstanding validation are recorded in
   live under `ui_node`, external renderer submission under `render`, event sink
   projections beside their semantic event types, and the dynamically linked runtime
   and factory in their top-level modules. The plugin registry imports concrete object
-  types directly from the `microui-ui` crate root.
+  types directly from the `neocogi-ui-runtime` crate root.
 - Share one typed EventSource transport between built-ins and independent widgets;
   EventSession owns app state and concrete handlers outside the producer graph.
 - Preserve menus, native-path file dialogs, immutable resources, full/basic demos,

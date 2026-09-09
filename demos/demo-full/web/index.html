@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>microui-redux WebGL demo</title>
+  <title>neocogi-ui WebGL demo</title>
   <style>
     html, body {
       width: 100%;
@@ -33,7 +33,7 @@
   </style>
 </head>
 <body>
-  <div id="status">Loading microui-redux…</div>
+  <div id="status">Loading neocogi-ui…</div>
   <script type="module">
     const status = document.getElementById("status");
     const showFailure = (message) => {
@@ -47,7 +47,7 @@
     window.addEventListener("error", (event) => showFailure(event.error ?? event.message));
     window.addEventListener("unhandledrejection", (event) => showFailure(event.reason));
     try {
-      const { default: init } = await import("./microui-redux-demo-full.js");
+      const { default: init } = await import("./neocogi-ui-demo-full.js");
       await init();
       requestAnimationFrame(() => {
         document.querySelector("canvas")?.focus();

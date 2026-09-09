@@ -7,7 +7,7 @@ backend="${1:-glow}"
 case "$backend" in glow|vulkan|wgpu) ;; *) echo "usage: $0 [glow|vulkan|wgpu]" >&2; exit 2 ;; esac
 target_dir="${CARGO_TARGET_DIR:-$workspace_root/target}"
 if [[ "$target_dir" != /* ]]; then target_dir="$workspace_root/$target_dir"; fi
-cargo run -p microui-redux-tools --bin com-build -- --backend "$backend" --demo full
+cargo run -p neocogi-ui-tools --bin com-build -- --backend "$backend" --demo full
 export NC_COM_RUNTIME_LINK_DIR="$target_dir/debug"
 case "$(uname -s)" in
   Linux) export RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=-Wl,-rpath,\$ORIGIN" ;;
@@ -15,7 +15,7 @@ case "$(uname -s)" in
 esac
 build_log="$(mktemp)"
 trap 'rm -f "$build_log"' EXIT
-cargo test -p microui-redux-demo-full --lib --no-run --no-default-features --features "$backend" --message-format=json > "$build_log"
+cargo test -p neocogi-ui-demo-full --lib --no-run --no-default-features --features "$backend" --message-format=json > "$build_log"
 artifact="$(python3 - "$build_log" <<'PY'
 import json, sys
 for line in open(sys.argv[1]):

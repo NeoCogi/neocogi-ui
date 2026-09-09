@@ -1,0 +1,23 @@
+[package]
+name = "neocogi-ui"
+version = "0.9.0-alpha.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Typed Rust client API for NeoCogi UI components"
+
+[dependencies]
+neocogi-ui-contracts.workspace = true
+miniz_oxide = { workspace = true, optional = true }
+neocogi-com = { workspace = true, features = ["macros", "std"] }
+
+[features]
+default = []
+# Generated resource tables expand bounded zlib pixels; other clients need no decoder.
+compiled-assets = ["dep:miniz_oxide"]
+# Internal behavior fixtures; ordinary plugin and application builds do not expose queue leases.
+test-support = []
+# Deployment policy belongs to the final application, not implementation plugins.
+runtime = ["neocogi-com/runtime"]
+static-runtime = ["neocogi-com/static-runtime"]

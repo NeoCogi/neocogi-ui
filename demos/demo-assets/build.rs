@@ -34,7 +34,7 @@ use std::{env, error::Error, path::PathBuf};
 #[cfg(feature = "embed-assets")]
 use microui_plugin_assets::{atlas::{self, Builder}, export::write_rust, theme};
 #[cfg(feature = "embed-assets")]
-use microui_redux::assets::AssetData;
+use neocogi_ui::assets::AssetData;
 
 /// Shared source paths are compiled only for explicitly embedded builds.
 #[cfg(feature = "embed-assets")]

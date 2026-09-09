@@ -1,12 +1,12 @@
 //! Optional font/atlas construction and JSON theme assembly.
 use super::Diagnostic;
-use microui_contracts::*;
+use neocogi_ui_contracts::*;
 use crate::atlas::{Builder, Config};
-use microui_redux::assets::AssetData;
+use neocogi_ui::assets::AssetData;
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, INcStringAbi, NC_E_INVALID_ARG, com_object};
 use std::cell::RefCell;
 
-#[com_object(microui_contracts::AssetLoader)]
+#[com_object(neocogi_ui_contracts::AssetLoader)]
 #[derive(Default)]
 /// Stateless construction root with owned diagnostics; drafts contain the actual mutable builder.
 pub struct AssetLoaderObject {
@@ -22,7 +22,7 @@ impl AssetLoader for AssetLoaderObject {
     /// Checks dimensions before decoding the supplied path or reading the white tile.
     fn create_builder(&self, size: Size, white: ComRef<'_, INativePathAbi>) -> Result<ComPtr<IAssetBuilderAbi>, NcStatus> {
         dimensions(size)?;
-        let white_icon = microui_redux::path::decode(white)?;
+        let white_icon = neocogi_ui::path::decode(white)?;
         let builder = Builder::from_config(&Config {
             texture_width: size.width as usize,
             texture_height: size.height as usize,
@@ -124,7 +124,7 @@ impl IAssetBuilder for BuildSession {
     fn add_icon(&self, name: NcCopyFromBufferOffset<'_, u8>, path: ComRef<'_, INativePathAbi>) -> Result<(), NcStatus> {
         let mut edit = self.edit()?;
         let name = text(name)?;
-        let path = microui_redux::path::decode(path)?;
+        let path = neocogi_ui::path::decode(path)?;
         edit.draft()
             .builder
             .add_icon_named(name, &path)
@@ -138,7 +138,7 @@ impl IAssetBuilder for BuildSession {
         if pixels == 0 || pixels > i32::MAX as u32 {
             return Err(NC_E_INVALID_ARG);
         }
-        let path = microui_redux::path::decode(path)?;
+        let path = neocogi_ui::path::decode(path)?;
         edit.draft()
             .builder
             .add_font_named(name, &path, pixels as usize)
@@ -165,7 +165,7 @@ impl IAssetDiagnostics for BuildSession {
 }
 
 #[cfg(feature = "theme-json")]
-#[com_object(microui_contracts::ThemeLoader)]
+#[com_object(neocogi_ui_contracts::ThemeLoader)]
 #[derive(Default)]
 /// Optional theme compiler is present only in asset assemblies built with theme-json.
 pub struct ThemeLoaderObject {
@@ -180,7 +180,7 @@ impl ThemeLoader for ThemeLoaderObject {
     }
     /// Reads a complete theme against immutable base resources and returns ordinary portable tables.
     fn load_theme(&self, path: ComRef<'_, INativePathAbi>, base: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
-        let path = microui_redux::path::decode(path)?;
+        let path = neocogi_ui::path::decode(path)?;
         let data = AssetData::read(base)?;
         let loaded = crate::theme::load(&path, &data).map_err(|error| self.diagnostic.failure(error))?;
         loaded.into_data().into_revision(base).inspect_err(|error| {

@@ -28,8 +28,8 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 //! Calculator with concrete application state and typed COM button handlers.
-use microui_redux::*;
-use microui_redux_demo_host::{AppState, Host, HostError};
+use neocogi_ui::*;
+use neocogi_ui_demo_host::{AppState, Host, HostError};
 use neocogi_com::{ComPtr, NcStatus};
 
 /// Maximum typed display length; calculated results retain the existing decimal formatting policy.
@@ -358,8 +358,8 @@ impl EventHandler<State, events::Activation> for Action {
 
 /// Builds one COM grid of buttons; no separate CalcButton, event port or shadow node list is needed.
 fn main() -> Result<(), HostError> {
-    microui_redux_demo_host::initialize()?;
-    let host = Host::new("Calculator", Size { width: 320, height: 420 }, microui_redux_demo_assets::load_bundle()?)?;
+    neocogi_ui_demo_host::initialize()?;
+    let host = Host::new("Calculator", Size { width: 320, height: 420 }, neocogi_ui_demo_assets::load_bundle()?)?;
     let mut display = host.ui.widgets().textbox("0")?;
     display.set_named_font(DISPLAY_FONT)?;
     display.set_options(WidgetOptions {

@@ -1,6 +1,6 @@
 # WebGL canvas demo
 
-The browser demo compiles `microui-redux-demo-full` directly for Rust's
+The browser demo compiles `neocogi-ui-demo-full` directly for Rust's
 `wasm32-unknown-unknown` target. `microui-plugin-platform` owns DOM input, canvas sizing and WebGL2, while the concrete demo
 host owns `requestAnimationFrame`. UI, platform and PNG descriptors register in one static neocogi-com
 runtime in the same wasm module. SDL remains a native-only dependency.
@@ -104,7 +104,7 @@ configure or deploy Pages. The trusted deployment job requests GitHub Pages enab
 or organization policy prevents automatic enablement, select **GitHub Actions** in
 **Settings > Pages** once. A successful deployment publishes the demo at:
 
-<https://neocogi.github.io/microui-redux/>
+<https://neocogi.github.io/neocogi-ui/>
 
 The workflow deploys only generated files from `target/web-demo`; generated bindings and binaries do
 not need to be committed.

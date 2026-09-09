@@ -52,8 +52,8 @@
 //
 //! Concrete palette/metric controls compile immutable style revisions only after an edit.
 use super::app::{append, column, label, row, slider, rgba, State};
-use microui_redux::{events::NumericChanged, *};
-use microui_redux_demo_assets::themes::Theme;
+use neocogi_ui::{events::NumericChanged, *};
+use neocogi_ui_demo_assets::themes::Theme;
 use neocogi_com::{ComPtr, ComRef, NcStatus};
 
 /// One exhaustive declaration shares color names, field access and editor presentation.

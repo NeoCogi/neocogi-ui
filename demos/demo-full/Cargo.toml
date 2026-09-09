@@ -1,5 +1,5 @@
 [package]
-name = "microui-redux-demo-full"
+name = "neocogi-ui-demo-full"
 version = "0.0.0"
 publish = false
 authors.workspace = true
@@ -9,25 +9,25 @@ repository.workspace = true
 
 [features]
 default = ["wgpu"]
-glow = ["microui-redux-demo-host/glow", "microui-plugin-platform/glow"]
-webgl = ["microui-redux-demo-host/webgl", "embed-assets"]
+glow = ["neocogi-ui-demo-host/glow", "microui-plugin-platform/glow"]
+webgl = ["neocogi-ui-demo-host/webgl", "embed-assets"]
 # Native deployments read adjacent files unless this feature is explicitly requested.
-embed-assets = ["microui-redux-demo-assets/embed-assets"]
-vulkan = ["microui-redux-demo-host/vulkan", "microui-plugin-platform/vulkan"]
-wgpu = ["microui-redux-demo-host/wgpu", "microui-plugin-platform/wgpu"]
+embed-assets = ["neocogi-ui-demo-assets/embed-assets"]
+vulkan = ["neocogi-ui-demo-host/vulkan", "microui-plugin-platform/vulkan"]
+wgpu = ["neocogi-ui-demo-host/wgpu", "microui-plugin-platform/wgpu"]
 
 [dependencies]
-microui-redux.workspace = true
+neocogi-ui.workspace = true
 neocogi-com = { workspace = true, features = ["std", "macros"] }
 microui-demo-contracts.workspace = true
-microui-redux-demo-assets = { workspace = true, features = ["full-demo"] }
-microui-redux-demo-host = { workspace = true, features = ["png-assets"] }
+neocogi-ui-demo-assets = { workspace = true, features = ["full-demo"] }
+neocogi-ui-demo-host = { workspace = true, features = ["png-assets"] }
 rs-math3d.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Build the shared artifacts as dependencies; native startup still loads their C ABI.
 neocogi-com-runtime.workspace = true
-microui-plugin-ui = { path = "../../plugins/ui", features = ["dynamic-plugin"] }
+neocogi-ui-runtime = { path = "../../crates/ui/runtime", features = ["dynamic-plugin"] }
 microui-plugin-platform = { path = "../../plugins/platform", default-features = false, features = ["dynamic-plugin"] }
 microui-plugin-assets = { workspace = true, features = ["dynamic-plugin", "theme-json"] }
 

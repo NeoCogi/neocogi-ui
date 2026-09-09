@@ -98,7 +98,7 @@ Full-demo packaging also places its photograph at `assets/FACEPALM.png`. Inputs
 resolve relative to the owning manifest/configuration file; staged paths resolve
 relative to the application executable. Theme parsing, image decoding, and font
 rasterization run in the asset plugin. Call
-`microui_redux_demo_host::initialize()` before `load_bundle()`.
+`neocogi_ui_demo_host::initialize()` before `load_bundle()`.
 
 ```sh
 cargo neocogi run --assembly full --variant vulkan --variant embedded
@@ -117,8 +117,8 @@ the implementation crates through Rust. An ordinary demo `cargo build` can emit
 those libraries but still needs a runtime linker search path and does not produce
 a runnable assembly. The new command supplies `NC_COM_RUNTIME_LINK_DIR`, builds
 explicit component features, and stages the descriptor-planned manifest.
-`microui-redux` remains the static typed facade without native UI/renderer
-implementation dependencies. See the [backend source map](../crates/microui-ui/docs/BACKENDS.md#backend-sources).
+`neocogi-ui` remains the static typed facade without native UI/renderer
+implementation dependencies. See the [backend source map](../crates/ui/runtime/docs/BACKENDS.md#backend-sources).
 
 Package metadata is our tool's configuration, not a Cargo execution hook. Ordinary
 `cargo build` and `cargo install` do not automatically run the assembly command.
@@ -137,7 +137,7 @@ established `target/com-native/PROFILE/BACKEND/ASSETS/DEMO` paths. Its options r
 
 ```sh
 cargo com-build --demo full --backend glow
-./target/com-native/debug/glow/files/full/microui-redux-demo-full
+./target/com-native/debug/glow/files/full/neocogi-ui-demo-full
 ```
 
 That workspace-local driver requires `cargo +nightly com-build ... --min-size`
@@ -154,7 +154,7 @@ then releases its application session and host:
 
 ```sh
 cd /tmp
-MICROUI_DEMO_FRAMES=8 /absolute/path/to/target/com-native/debug/glow/files/full/microui-redux-demo-full
+MICROUI_DEMO_FRAMES=8 /absolute/path/to/target/com-native/debug/glow/files/full/neocogi-ui-demo-full
 ```
 
 Malformed or zero limits fail at startup. Omission runs until OS close or the
@@ -180,7 +180,7 @@ every backend's pixels; actual-window image checks supplement them. Test executa
 The smaller boundary smoke remains available:
 
 ```sh
-cargo run -p microui-redux-tools --bin com-build -- --demo smoke --backend glow
+cargo run -p neocogi-ui-tools --bin com-build -- --demo smoke --backend glow
 ./target/com-native/debug/glow/files/smoke/microui-demo-com --smoke
 ```
 

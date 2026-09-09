@@ -2,13 +2,13 @@
 
 | Owner | Responsibility |
 | --- | --- |
-| `microui-contracts` | Plain resource records, semantic roles and typed COM interfaces. |
-| `microui-redux::assets` | Bounded portable data validation and immutable bundle publication. |
+| `neocogi-ui-contracts` | Plain resource records, semantic roles and typed COM interfaces. |
+| `neocogi-ui::assets` | Bounded portable data validation and immutable bundle publication. |
 | `plugins/assets` | PNG decoding, font rasterization, packing, theme/style compilation and source export. |
-| `microui-ui` | Local IDs, text metrics, resolved appearances and retained layout/painting. |
+| `neocogi-ui-runtime` | Local IDs, text metrics, resolved appearances and retained layout/painting. |
 | `plugins/platform` and renderers | Pixel upload, GPU resources and ordered frame execution. |
 
-The asset plugin has no production dependency on `microui-ui`. UI construction
+The asset plugin has no production dependency on `neocogi-ui-runtime`. UI construction
 fixtures and a native flat-palette reference remain test-only; they provide an
 independent check of portable compiler output. Runtime UI code only imports
 resolved resources.
@@ -60,7 +60,7 @@ In-memory compilation accepts an explicit `AssetSource` implementation for
 referenced files; filesystem compilation uses the bounded `FileAssets` source.
 
 ```rust,ignore
-let assets = microui_redux_demo_assets::load_bundle()?;
+let assets = neocogi_ui_demo_assets::load_bundle()?;
 let native = platform.create_window(
     NcCopyFromBufferOffset::new(0, b"Application"),
     Size { width: 800, height: 600 },
@@ -253,7 +253,7 @@ pixels into one owned allocation, and owns the resolved visual arrays. No genera
 file exposes `AtlasHandle`, native IDs, UI implementation storage or parser APIs.
 
 ```sh
-cargo run -p microui-redux-tools --bin atlas-export -- --output bundle.rs
+cargo run -p neocogi-ui-tools --bin atlas-export -- --output bundle.rs
 cargo com-build --demo full --backend glow
 cargo com-build --demo full --backend glow --assets embedded
 ```

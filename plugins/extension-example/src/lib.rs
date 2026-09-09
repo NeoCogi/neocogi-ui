@@ -3,9 +3,9 @@
 //! The two concrete objects share only lifecycle plumbing. The counter owns its scalar value and
 //! event producer; the inset owns its padding and the host's sole authoritative child editor.
 #![deny(missing_docs)]
-use microui_contracts::{widget::WidgetState, *};
+use neocogi_ui_contracts::{widget::WidgetState, *};
 use microui_demo_contracts::extension::*;
-use microui_redux::{
+use neocogi_ui::{
     Painter,
     events::{Activation, EventSource},
 };
@@ -320,8 +320,8 @@ impl ExtensionProvider for ExtensionProviderObject {
     }
 }
 neocogi_com::plugin! {
-    plugin_id(auto_guid = "microui.plugin.extension-example"),
-    name = "microui.plugin.extension-example",
+    plugin_id(auto_guid = "neocogi.ui.plugin.extension-example"),
+    name = "neocogi.ui.plugin.extension-example",
     version = "0.9.0-alpha.0",
     classes = [CounterObject, ExtensionProviderObject],
 }

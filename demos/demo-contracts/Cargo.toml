@@ -6,6 +6,6 @@ license.workspace = true
 publish = false
 
 [dependencies]
-microui-contracts.workspace = true
+neocogi-ui-contracts.workspace = true
 neocogi-com = { workspace = true, features = ["macros"] }
 rs-math3d.workspace = true

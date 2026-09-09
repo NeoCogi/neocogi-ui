@@ -13,7 +13,7 @@ default = []
 dynamic-plugin = []
 
 [dependencies]
-microui-contracts.workspace = true
+neocogi-ui-contracts.workspace = true
 microui-demo-contracts.workspace = true
-microui-redux.workspace = true
+neocogi-ui.workspace = true
 neocogi-com = { workspace = true, features = ["macros", "std"] }

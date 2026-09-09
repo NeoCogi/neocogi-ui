@@ -1,12 +1,12 @@
-**COM migration proposal for microui-redux**
+**COM migration proposal for neocogi-ui**
 
 This is the accepted design and implementation plan. Progress is tracked in COM_MIGRATION.md. It incorporates the requested statically linked generic Rust façade over dynamically linked COM implementations, and importing neocogi-com into this workspace so it can be modified here.
 
-The analysis used microui-redux `0.9-alpha.0` at `6b4fd86` and neocogi-com at `fbb66e6`, located at `/home/aifu/projects/neocogi/neocogi-com`. The `neo-cogi` spelling in the original path differs from the actual directory.
+The analysis used neocogi-ui `0.9-alpha.0` at `6b4fd86` and neocogi-com at `fbb66e6`, located at `/home/aifu/projects/neocogi/neocogi-com`. The `neo-cogi` spelling in the original path differs from the actual directory.
 
 **1. Recommended overall design**
 
-Use neocogi-com itself as the COM foundation. Import its source, preserve its crate boundaries, and make focused changes there. Introduce one small UI contract crate and turn the existing public microui-redux crate into the statically linked Rust façade. Move the retained implementation behind that façade into a UI plugin.
+Use neocogi-com itself as the COM foundation. Import its source, preserve its crate boundaries, and make focused changes there. Introduce one small UI contract crate and turn the existing public neocogi-ui crate into the statically linked Rust façade. Move the retained implementation behind that façade into a UI plugin.
 
 Keep three plugin groups:
 
@@ -27,11 +27,11 @@ application and application state
     |
     | statically linked Rust generics, concrete proxy types, local borrows
     v
-microui-redux façade  -------->  neocogi-com façade
+neocogi-ui façade  -------->  neocogi-com façade
     |                              |
     | generated COM calls          | class loading and activation
     v                              v
-microui-contracts             one neocogi-com runtime library
+neocogi-ui-contracts             one neocogi-com runtime library
     |                              |
     +------------------------------+--------------------+
     |                              |                    |
@@ -41,7 +41,7 @@ retained UI engine          native window + GPU     builder / PNG / JSON
 
 COM boundaries are between separately compiled binaries. Generics, Rust helper traits, `Vec`, `String`, and private resource ownership remain useful within each binary. The façade can be generic without making any COM interface generic.
 
-Concrete source ownership follows the same boundary. `microui-contracts` contains declarations only. Inside the UI implementation, a built-in widget or container keeps its generated object declaration, callable-class methods, shared interface projections, semantic state and algorithms in one `ui_node` family module. Shared implementation services live beside the domain that owns them, and the UI plugin imports registered object types directly from the `microui-ui` crate root; there is no separate `microui-ui/src/com` implementation tree or parallel per-widget representation.
+Concrete source ownership follows the same boundary. `neocogi-ui-contracts` contains declarations only. Inside the UI implementation, a built-in widget or container keeps its generated object declaration, callable-class methods, shared interface projections, semantic state and algorithms in one `ui_node` family module. Shared implementation services live beside the domain that owns them, and the UI plugin imports registered object types directly from the `neocogi-ui-runtime` crate root; there is no separate `neocogi-ui-runtime/src/com` implementation tree or parallel per-widget representation.
 
 Default planning assumption: preserve the current browser demo through a statically linked build of the same COM interfaces. This is a separate deployment mode from the statically linked façade used by native dynamic deployments. Browser dynamic plugin loading is outside the initial design.
 
@@ -107,7 +107,7 @@ There are several concrete additions worth making before migrating the retained 
 The recursive-interface issue is verified, not hypothetical. This fails to compile against the current neocogi-com checkout with E0391:
 
 ```rust
-#[com_interface(auto_guid = "microui.plan.RecursiveNode:v1")]
+#[com_interface(auto_guid = "neocogi.ui.plan.RecursiveNode:v1")]
 pub trait IRecursiveNode {
     fn child(&self, index: u32)
         -> Result<ComPtr<IRecursiveNodeAbi>, NcStatus>;
@@ -152,9 +152,9 @@ The proposed product crates are:
 
 | Crate | Kind | Responsibility |
 |---|---|---|
-| `microui-contracts` | Small statically linked contract library | Interfaces, records, enums, IDs and status codes; preferably no_std |
-| `microui-redux` | Statically linked Rust façade | Generic proxies, typed constructors, string/path conversion and scoped convenience APIs |
-| `microui-ui` | UI plugin implementation | Existing retained engine, widgets, containers, menus, window manager and standard dialogs |
+| `neocogi-ui-contracts` | Small statically linked contract library | Interfaces, records, enums, IDs and status codes; preferably no_std |
+| `neocogi-ui` | Statically linked Rust façade | Generic proxies, typed constructors, string/path conversion and scoped convenience APIs |
+| `neocogi-ui-runtime` | UI plugin implementation | Existing retained engine, widgets, containers, menus, window manager and standard dialogs |
 | `microui-platform` | Platform/render plugin assembly | Native host/window + selected backend and app GPU extension composition |
 | Existing renderer crates | Private static implementation libraries | Glow/Vulkan/WGPU/WebGL algorithms and native resource management inside the platform binary |
 | Existing renderer-support | Private static helper library | Shared renderer helpers; no independent plugin |
@@ -223,19 +223,19 @@ use neocogi_com::{
     com_class, com_interface,
 };
 
-#[com_interface(auto_guid = "microui.Widget:v1")]
+#[com_interface(auto_guid = "neocogi.ui.Widget:v1")]
 /// Shared widget protocol used by the UI runtime.
 pub trait IWidget {
     // Common lifetime, options, update, and paint operations.
 }
 
-#[com_interface(auto_guid = "microui.LeafLayout:v1")]
+#[com_interface(auto_guid = "neocogi.ui.LeafLayout:v1")]
 /// Shared leaf-measurement protocol used by the UI runtime.
 pub trait ILeafLayout {
     // Common measurement operation.
 }
 
-#[com_class(auto_guid = "microui.Button:v1")]
+#[com_class(auto_guid = "neocogi.ui.Button:v1")]
 /// Constructible Button with its concrete API and only shared protocols separated.
 pub trait Button: IWidget + ILeafLayout {
     /// Creates a complete unmounted Button owned by the supplied UI host.
@@ -254,7 +254,7 @@ pub trait Button: IWidget + ILeafLayout {
     fn label(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
 }
 
-#[com_class(auto_guid = "microui.UiFactory:v1")]
+#[com_class(auto_guid = "neocogi.ui.UiFactory:v1")]
 /// Dynamically implemented construction shorthand over concrete widget contracts.
 pub trait UiFactory {
     /// Binds the shorthand to one runtime's non-owning widget authority.
@@ -286,7 +286,7 @@ The class contract requires the common protocols; neocogi-com exposes those proj
 from the same allocation. A concrete plugin class contains its private state directly:
 
 ```rust,ignore
-#[com_object(microui_contracts::Button)]
+#[com_object(neocogi_ui_contracts::Button)]
 /// One button allocation; no legacy trait-object wrapper or public downcast is needed.
 pub struct Button {
     /// Host, lifecycle, options and phase resources; never another widget value.
@@ -316,7 +316,7 @@ plugin. `UiRuntime::factory()` returns an instance bound to the runtime's
 Hosts may activate either `UiFactoryAbi` or individual widget classes directly.
 
 The original temporary compile-tested sketch is superseded by the checked-in
-[facade regressions](../crates/microui-redux/tests/com_facade.rs). The sketch compiled the separate Widget/Children/Button/event capabilities and tests that a generic proxy edits a COM object, reads its text and observes the same geometry invalidation flag. This validates the contract/façade pattern with current neocogi-com; it is not a dynamic UI implementation or proof of the proposed neocogi-com ABI changes.
+[facade regressions](../crates/ui/api/tests/com_facade.rs). The sketch compiled the separate Widget/Children/Button/event capabilities and tests that a generic proxy edits a COM object, reads its text and observes the same geometry invalidation flag. This validates the contract/façade pattern with current neocogi-com; it is not a dynamic UI implementation or proof of the proposed neocogi-com ABI changes.
 
 Generics may also remain in a local `ListModel<T>`, renderer implementation or callback adapter. Arbitrary T does not become a wire payload. A generic list model keeps T in the application and sends scoped typed row keys to the UI; its queue/removal policy must retain or reject stale rows consistently. If payload ownership must cross plugins, define a domain interface such as `IFileEntry` with explicit path operations. Do not introduce `IValue`, `get_property(string)`, `Any`, or an IUnknown payload bag as a substitute for typed contracts.
 
@@ -383,7 +383,7 @@ pub struct PaintScope {
     pub invocation: u64,
 }
 
-#[com_interface(auto_guid = "microui.plan.Painter:v1")]
+#[com_interface(auto_guid = "neocogi.ui.plan.Painter:v1")]
 /// Recording service with owned storage and explicit invocation validation.
 pub trait IPainter {
     /// Records a local rectangle while this exact invocation is active.
@@ -405,7 +405,7 @@ Application state stays in the statically linked application. The COM UI runtime
 Expose concrete event capabilities. For example:
 
 ```rust
-#[com_interface(auto_guid = "microui.plan.ActivationSink:v1")]
+#[com_interface(auto_guid = "neocogi.ui.plan.ActivationSink:v1")]
 /// Application-owned handler for one concrete event family.
 pub trait IActivationSink {
     /// Receives a submission snapshot after traversal releases its mutable borrows.
@@ -413,7 +413,7 @@ pub trait IActivationSink {
         -> Result<(), NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.plan.ActivationEvents:v1")]
+#[com_interface(auto_guid = "neocogi.ui.plan.ActivationEvents:v1")]
 /// Typed subscription endpoint implemented by a button.
 pub trait IActivationEvents {
     /// Connects the exclusive subscriber and returns its cancellation/ownership lease.
@@ -437,7 +437,7 @@ File dialogs retain native path semantics. Do not convert PathBuf through a UTF-
 The common dynamic renderer boundary should submit a whole prepared frame rather than make a COM call per vertex, glyph or triangle:
 
 ```rust,ignore
-#[com_interface(auto_guid = "microui.Renderer:v1")]
+#[com_interface(auto_guid = "neocogi.ui.Renderer:v1")]
 /// Backend owning native GPU resources and presentation.
 pub trait IRenderer {
     /// Executes one complete frame and reports submission/presentation failure.
@@ -500,7 +500,7 @@ Use a fresh implementation branch after this plan is accepted. Keep each cohesiv
 | 3 | Add borrowed-interface helper calls | Calls through ComRef perform no ownership transfer; lifetime/compile tests |
 | 4 | Separate descriptor generation and dynamic export | Two plugins statically linked together; independent dynamic loading still works |
 | 5 | Add static runtime binding mode | One shared catalog in static mode; native shared mode unchanged; browser-target compile |
-| 6 | Introduce microui-contracts and the thin generic façade | Compile tests for records, proxy typing, class/IID mismatch and prohibited ABI types |
+| 6 | Introduce neocogi-ui-contracts and the thin generic façade | Compile tests for records, proxy typing, class/IID mismatch and prohibited ABI types |
 | 7 | Establish a real dynamic vertical slice | Platform window, renderer, UI runtime and one button work across separately built binaries |
 | 8 | Move runtime/window-manager ownership to COM objects | Window hierarchy, layering, modal/popup policy, destruction and ownership tests |
 | 9 | Migrate common widget state, input and geometry invalidation | Update/Changed, setter invalidation, resize, hidden-node and stale-cache regressions |
@@ -521,7 +521,7 @@ The migration is substantial production work. Most layout, text editing, paintin
 
 Run existing UI behavior tests against the new façade and add tests where the new boundary creates a new failure mode:
 
-- A separately compiled custom widget plugin, with no dependency on microui-ui implementation internals, measures, updates, paints, emits events and attaches as a child.
+- A separately compiled custom widget plugin, with no dependency on neocogi-ui-runtime implementation internals, measures, updates, paints, emits events and attaches as a child.
 - A separately compiled custom container controls child layout through the bounded capability API.
 - Two independent UI runtime instances share the COM registry but not windows, focus, styles, captures, resources or event queues.
 - Foreign-runtime widgets and renderer resources are rejected.

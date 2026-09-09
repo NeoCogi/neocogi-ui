@@ -1,5 +1,5 @@
 //! Example-specific editing capabilities. These are separate from the toolkit's standard widgets.
-use microui_contracts::*;
+use neocogi_ui_contracts::*;
 use neocogi_com::{ComPtr, ComRef, NcStatus, com_class, com_interface, com_struct};
 
 #[com_struct]
@@ -18,14 +18,14 @@ pub struct WidgetCalls {
     pub closes: u64,
 }
 
-#[com_interface(auto_guid = "microui.example.WidgetProbe:v1")]
+#[com_interface(auto_guid = "neocogi.ui.example.WidgetProbe:v1")]
 /// Example diagnostics remain readable after logical closure for lifetime assertions.
 pub trait IWidgetProbe {
     /// Returns counts from the actual allocation, with no callback or copied semantic model.
     fn calls(&self) -> Result<WidgetCalls, NcStatus>;
 }
 
-#[com_class(auto_guid = "microui.example.Counter:v1")]
+#[com_class(auto_guid = "neocogi.ui.example.Counter:v1")]
 /// A constructible custom control whose shared widget capabilities remain queryable.
 pub trait Counter: IWidget + ILeafLayout + IActivationEvents + IWidgetProbe {
     /// Creates an unmounted counter owned by the UI represented by `host`.
@@ -39,7 +39,7 @@ pub trait Counter: IWidget + ILeafLayout + IActivationEvents + IWidgetProbe {
     fn set_count(&mut self, value: u32) -> Result<(), NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.example.Inset:v1")]
+#[com_interface(auto_guid = "neocogi.ui.example.Inset:v1")]
 /// A one-child container demonstrates a domain-specific layout policy over the shared child editor.
 pub trait IInset: IContainer {
     /// Installs or replaces its one child; removed-child teardown uses the ordinary committed outcome.
@@ -48,7 +48,7 @@ pub trait IInset: IContainer {
     fn set_padding(&mut self, padding: i32) -> Result<(), NcStatus>;
 }
 
-#[com_class(auto_guid = "microui.example.ExtensionProvider:v1")]
+#[com_class(auto_guid = "neocogi.ui.example.ExtensionProvider:v1")]
 /// Constructible stateless factory receiving runtime authority explicitly for each custom widget.
 pub trait ExtensionProvider {
     /// Creates the stateless provider without linking or capturing a UI implementation.

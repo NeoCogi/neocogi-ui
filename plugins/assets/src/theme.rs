@@ -38,10 +38,10 @@ use std::{
 
 use serde::Deserialize;
 
-use microui_contracts::*;
-use microui_contracts::appearance::*;
-use microui_contracts::Insets as SliceInsets;
-use microui_redux::assets::AssetData;
+use neocogi_ui_contracts::*;
+use neocogi_ui_contracts::appearance::*;
+use neocogi_ui_contracts::Insets as SliceInsets;
+use neocogi_ui::assets::AssetData;
 use crate::atlas::Builder;
 use crate::style::{apply_flat, compile_chrome, rgba};
 

@@ -3,7 +3,7 @@
 //! Application state and handlers remain local. UI implementation, DOM/SDL events and GPU objects
 //! are reached only through their checked COM interfaces. Native packages are executable-relative.
 #![deny(missing_docs)]
-use microui_redux::*;
+use neocogi_ui::*;
 use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcStatus};
 use std::fmt;
 
@@ -224,7 +224,7 @@ fn register() -> Result<(), HostError> {
 fn register() -> Result<(), HostError> {
     let runtime = neocogi_com::Runtime::global();
     for descriptor in [
-        microui_plugin_ui::plugin_descriptor(),
+        neocogi_ui_runtime::plugin_descriptor(),
         microui_plugin_platform::plugin_descriptor(),
         #[cfg(feature = "png-assets")]
         microui_plugin_assets::plugin_descriptor(),

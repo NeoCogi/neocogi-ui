@@ -51,8 +51,8 @@
 // IN THE SOFTWARE.
 //
 //! Minimal facade-only application over dynamically or statically assembled COM plugins.
-use microui_redux::*;
-use microui_redux_demo_host::{AppState, Host, HostError};
+use neocogi_ui::*;
+use neocogi_ui_demo_host::{AppState, Host, HostError};
 
 /// This example has no mutable application state; the tree and button belong to the UI plugin.
 struct State;
@@ -60,8 +60,8 @@ impl AppState for State {}
 
 /// Builds the same small tree on native SDL and browser WebGL through the typed facade.
 fn main() -> Result<(), HostError> {
-    microui_redux_demo_host::initialize()?;
-    let host = Host::new("Hello", Size { width: 640, height: 480 }, microui_redux_demo_assets::load_bundle()?)?;
+    neocogi_ui_demo_host::initialize()?;
+    let host = Host::new("Hello", Size { width: 640, height: 480 }, neocogi_ui_demo_assets::load_bundle()?)?;
     let mut hello = host.ui.widgets().button("Hello World!")?;
     hello.set_options(WidgetOptions {
         bits: WidgetOptions::FRAME.bits | WidgetOptions::ALIGN_CENTER.bits,

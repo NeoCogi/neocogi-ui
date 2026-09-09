@@ -149,7 +149,7 @@ mod browser {
         let host = Host::new(
             "Error teardown",
             Size { width: 160, height: 120 },
-            microui_redux_demo_assets::load_bundle().map_err(|error| JsValue::from_str(&error.to_string()))?,
+            neocogi_ui_demo_assets::load_bundle().map_err(|error| JsValue::from_str(&error.to_string()))?,
         )
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
         host.run(EventSession::new(Stop {

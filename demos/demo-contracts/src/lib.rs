@@ -1,7 +1,7 @@
 //! Application-specific mesh contracts shared by the demo host and its co-packaged GPU renderer.
 #![no_std]
 #![deny(missing_docs)]
-use microui_contracts::*;
+use neocogi_ui_contracts::*;
 use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcStatus, com_interface, com_struct};
 use rs_math3d::{Mat4f, Vec2f, Vec3f};
 
@@ -27,7 +27,7 @@ pub struct SceneTransforms {
     pub view_model: Mat4f,
 }
 
-#[com_interface(auto_guid = "microui.demo.MeshScene:v1")]
+#[com_interface(auto_guid = "neocogi.ui.demo.MeshScene:v1")]
 /// Editable mesh scene is itself a render item on one COM allocation.
 pub trait IMeshScene: IRenderItem {
     /// Replaces the complete immutable mesh after validating finite vertices and in-range triangle indices.
@@ -37,7 +37,7 @@ pub trait IMeshScene: IRenderItem {
     fn set_transforms(&self, transforms: SceneTransforms) -> Result<(), NcStatus>;
 }
 
-#[com_interface(auto_guid = "microui.demo.Scenes:v1")]
+#[com_interface(auto_guid = "neocogi.ui.demo.Scenes:v1")]
 /// Demo-specific factory exposed by the native window alongside its ordinary renderer interfaces.
 pub trait IDemoScenes {
     /// Creates an empty scene with identity transforms; its resources retain this window/device.

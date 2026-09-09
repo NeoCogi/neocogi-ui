@@ -1,0 +1,237 @@
+//! Concrete immutable asset objects for compiled tables and optional builder output.
+//! Static tables are borrowed for the process lifetime; generated tables are owned outright.
+use crate::*;
+use neocogi_com::{ComPtr, ComRef, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
+use std::borrow::Cow;
+use neocogi_ui_contracts::appearance::*;
+
+mod validation;
+
+/// Portable metadata and resolved appearances, independent of atlas pixel storage.
+///
+/// UI consumers copy this value to create local resource identities and painting state. Keeping
+/// pixels out of the type prevents a metadata consumer from allocating or retaining the GPU's
+/// complete upload input.
+#[derive(Clone)]
+pub struct AssetTables {
+    /// Positive atlas dimensions whose bundle supplies bounded tightly packed RGBA storage.
+    pub size: Size,
+    /// Font records partition the glyph table in declaration order.
+    pub fonts: Cow<'static, [AssetFont]>,
+    /// Unicode scalar metrics; underscore fallback and duplicates are checked by consumers.
+    pub glyphs: Cow<'static, [AssetGlyph]>,
+    /// Named positive rectangles including the required opaque white icon.
+    pub icons: Cow<'static, [AssetIcon]>,
+    /// UTF-8 names partitioned in font-then-icon order.
+    pub names: Cow<'static, [u8]>,
+    /// Complete resolved scalar geometry.
+    pub metrics: AssetMetrics,
+    /// Complete resolved title and caption policy.
+    pub chrome: AssetChrome,
+    /// SurfaceRole × SurfaceState in shared ALL order.
+    pub surfaces: Cow<'static, [AssetVisual]>,
+    /// ControlRole × ControlState in shared ALL order.
+    pub controls: Cow<'static, [AssetVisual]>,
+    /// MenuRole × MenuState in shared ALL order.
+    pub menus: Cow<'static, [AssetVisual]>,
+    /// ChromeRole × ChromeState in shared ALL order.
+    pub window_chrome: Cow<'static, [AssetVisual]>,
+}
+
+/// Complete portable asset revision used by compilers and immutable bundle publication.
+///
+/// Construction services own both halves. UI consumers read [`AssetTables`] alone, while the
+/// platform copies the packed RGBA bytes directly to its selected GPU backend.
+#[derive(Clone)]
+pub struct AssetData {
+    /// Row-major RGBA bytes; compiled bundles may borrow a static include-bytes array.
+    pub pixels: Cow<'static, [u8]>,
+    /// Resource metadata and resolved appearances paired with these pixels.
+    pub tables: AssetTables,
+}
+
+impl AssetData {
+    /// Publishes this immutable data in a new logical resource namespace.
+    pub fn into_bundle(self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
+        let catalog = Catalog::from_value(Catalog).query().expect("Catalog declares IAssetCatalog");
+        self.publish(catalog)
+    }
+
+    /// Publishes a derived revision. The producer must preserve existing resource meanings;
+    /// UI installation independently checks the catalog identity and original named resources.
+    pub fn into_revision(self, base: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
+        self.publish(base.catalog()?)
+    }
+
+    /// Derives bounded counts and verifies the exact paired pixel length.
+    pub fn info(&self) -> Result<AssetInfo, NcStatus> {
+        let info = self.tables.info()?;
+        if info.rgba_bytes()? != self.pixels.len() {
+            return Err(NC_E_INVALID_ARG);
+        }
+        Ok(info)
+    }
+
+    /// Publishes exact table storage; receiving consumers validate record semantics.
+    fn publish(self, catalog: ComPtr<IAssetCatalogAbi>) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
+        let info = self.info()?;
+        Ok(Bundle::from_value(Bundle { catalog, info, data: self })
+            .query()
+            .expect("Bundle declares IAssetBundle"))
+    }
+}
+
+impl AssetTables {
+    /// Derives bounded counts and verifies fixed appearance-table lengths.
+    pub fn info(&self) -> Result<AssetInfo, NcStatus> {
+        let info = AssetInfo {
+            schema: ASSET_SCHEMA_VERSION,
+            size: self.size,
+            fonts: u32::try_from(self.fonts.len()).map_err(|_| NC_E_INVALID_ARG)?,
+            glyphs: u32::try_from(self.glyphs.len()).map_err(|_| NC_E_INVALID_ARG)?,
+            icons: u32::try_from(self.icons.len()).map_err(|_| NC_E_INVALID_ARG)?,
+            names: u32::try_from(self.names.len()).map_err(|_| NC_E_INVALID_ARG)?,
+        };
+        info.rgba_bytes()?;
+        if self.surfaces.len() != SurfaceRole::COUNT * SurfaceState::COUNT
+            || self.controls.len() != ControlRole::COUNT * ControlState::COUNT
+            || self.menus.len() != MenuRole::COUNT * MenuState::COUNT
+            || self.window_chrome.len() != ChromeRole::COUNT * ChromeState::COUNT
+        {
+            return Err(NC_E_INVALID_ARG);
+        }
+        Ok(info)
+    }
+}
+
+#[com_object(interfaces(IAssetCatalog))]
+/// Immutable namespace shared by revisions without retaining any provider or earlier revision.
+struct Catalog;
+impl IAssetCatalog for Catalog {}
+
+#[com_object(interfaces(IAssetBundle))]
+/// Single concrete implementation serves both static and dynamically constructed tables.
+struct Bundle {
+    /// Canonical namespace ownership remains independent of application and provider lifetimes.
+    catalog: ComPtr<IAssetCatalogAbi>,
+    /// Counts were derived from checked owned/static storage before publication.
+    info: AssetInfo,
+    /// Immutable data is never borrowed directly by foreign code.
+    data: AssetData,
+}
+
+impl IAssetBundle for Bundle {
+    /// Retains the namespace used to authenticate compatible UI replacements.
+    fn catalog(&self) -> Result<ComPtr<IAssetCatalogAbi>, NcStatus> {
+        Ok(self.catalog.clone())
+    }
+    /// Returns exact immutable table bounds.
+    fn info(&self) -> Result<AssetInfo, NcStatus> {
+        Ok(self.info)
+    }
+    /// Copies tightly packed RGBA bytes after validating the entire range.
+    fn pixels(&self, output: NcCopyToBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        copy(&self.data.pixels, output)
+    }
+    /// Copies font metrics without exposing a borrowed Rust slice.
+    fn fonts(&self, output: NcCopyToBufferOffset<'_, AssetFont>) -> Result<(), NcStatus> {
+        copy(&self.data.tables.fonts, output)
+    }
+    /// Copies exact Unicode records in the producer's immutable order.
+    fn glyphs(&self, output: NcCopyToBufferOffset<'_, AssetGlyph>) -> Result<(), NcStatus> {
+        copy(&self.data.tables.glyphs, output)
+    }
+    /// Copies named image rectangles in bundle-local table order.
+    fn icons(&self, output: NcCopyToBufferOffset<'_, AssetIcon>) -> Result<(), NcStatus> {
+        copy(&self.data.tables.icons, output)
+    }
+    /// Copies UTF-8 bytes, with byte offsets and no implicit terminator.
+    fn names(&self, output: NcCopyToBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        copy(&self.data.tables.names, output)
+    }
+    /// Returns complete geometry without parser-specific defaults.
+    fn metrics(&self) -> Result<AssetMetrics, NcStatus> {
+        Ok(self.data.tables.metrics)
+    }
+    /// Returns the complete concrete caption recipe.
+    fn chrome(&self) -> Result<AssetChrome, NcStatus> {
+        Ok(self.data.tables.chrome)
+    }
+    /// Resolves a closed family tag before copying any caller-owned output.
+    fn visuals(&self, family: AppearanceFamily, output: NcCopyToBufferOffset<'_, AssetVisual>) -> Result<(), NcStatus> {
+        let values = match family {
+            AppearanceFamily::SURFACE => &self.data.tables.surfaces,
+            AppearanceFamily::CONTROL => &self.data.tables.controls,
+            AppearanceFamily::MENU => &self.data.tables.menus,
+            AppearanceFamily::CHROME => &self.data.tables.window_chrome,
+            _ => return Err(NC_E_INVALID_ARG),
+        };
+        copy(values, output)
+    }
+}
+
+/// Rejects invalid whole ranges before changing any destination element.
+fn copy<T: Copy>(values: &[T], mut output: NcCopyToBufferOffset<'_, T>) -> Result<(), NcStatus> {
+    let first = usize::try_from(output.offset()).map_err(|_| NC_E_INVALID_ARG)?;
+    let end = first.checked_add(output.len()).ok_or(NC_E_INVALID_ARG)?;
+    output.as_mut_slice().copy_from_slice(values.get(first..end).ok_or(NC_E_INVALID_ARG)?);
+    Ok(())
+}
+
+/// Expands one generated zlib stream into exactly the declared RGBA byte count.
+///
+/// Enabled by `compiled-assets`; no font, image-file or theme parser is involved. The
+/// returned allocation belongs to AssetData and is freed with its immutable bundle.
+/// Malformed, truncated, trailing, checksum-invalid and size-mismatched data fail
+/// before publication. Output cannot grow past the shared 64 MiB asset limit.
+#[cfg(feature = "compiled-assets")]
+pub fn decode_pixels(compressed: &[u8], rgba_bytes: usize) -> Result<Vec<u8>, NcStatus> {
+    use miniz_oxide::inflate::{
+        TINFLStatus,
+        core::{decompress, DecompressorOxide, inflate_flags::*},
+    };
+    if rgba_bytes == 0 || !rgba_bytes.is_multiple_of(4) || rgba_bytes > MAX_ASSET_PIXELS_BYTES {
+        return Err(NC_E_INVALID_ARG);
+    }
+    // Decode directly into the final allocation: no growing buffer, temporary copy or global cache.
+    let mut pixels = vec![0; rgba_bytes];
+    let (status, consumed, written) = decompress(
+        &mut DecompressorOxide::new(),
+        compressed,
+        &mut pixels,
+        0,
+        TINFL_FLAG_PARSE_ZLIB_HEADER | TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF,
+    );
+    if status != TINFLStatus::Done || consumed != compressed.len() || written != rgba_bytes {
+        return Err(NC_E_INVALID_ARG);
+    }
+    Ok(pixels)
+}
+
+#[cfg(all(test, feature = "compiled-assets"))]
+mod compiled_tests {
+    use super::*;
+
+    /// Exact-size expansion rejects corruption and never accepts a partially decoded candidate.
+    #[test]
+    fn compressed_pixels_require_one_complete_exact_sized_stream() {
+        // Python zlib.compress(bytes([255, 255, 255, 255])) gives this independent stream.
+        let compressed = [120, 156, 251, 255, 255, 255, 127, 0, 9, 250, 3, 253];
+        assert_eq!(decode_pixels(&compressed, 4).unwrap(), [255; 4]);
+        for size in [0, 3, 8, MAX_ASSET_PIXELS_BYTES + 4, usize::MAX] {
+            assert_eq!(decode_pixels(&compressed, size), Err(NC_E_INVALID_ARG));
+        }
+        for end in 0..compressed.len() {
+            assert_eq!(decode_pixels(&compressed[..end], 4), Err(NC_E_INVALID_ARG));
+        }
+        // A valid stream that expands beyond the declared buffer must also fail.
+        assert_eq!(decode_pixels(&[120, 156, 251, 255, 31, 2, 0, 35, 228, 7, 249], 4), Err(NC_E_INVALID_ARG));
+        let mut extra = compressed.to_vec();
+        extra.push(0);
+        assert_eq!(decode_pixels(&extra, 4), Err(NC_E_INVALID_ARG));
+        let mut corrupt = compressed;
+        corrupt[11] ^= 1;
+        assert_eq!(decode_pixels(&corrupt, 4), Err(NC_E_INVALID_ARG));
+        assert_eq!(decode_pixels(&[0; 16], 4), Err(NC_E_INVALID_ARG));
+    }
+}
