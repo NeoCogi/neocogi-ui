@@ -366,12 +366,12 @@ impl GridParameters {
 ///
 /// Grid always has an effective track on each axis, but an implicit empty Content track contributes
 /// zero. An empty generic Grid remains zero-sized unless an explicit Fixed track contributes extent.
-#[nc_com::com_object(microui_contracts::Grid)]
+#[neocogi_com::com_object(microui_contracts::Grid)]
 pub struct Grid {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Sole writer for children mounted through this container's COM contract.
-    pub(crate) editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+    pub(crate) editor: neocogi_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
     /// Weak topology access coordinated with Grid-owned edge metadata below.
     #[cfg(test)]
     children: ChildrenHandle,
@@ -389,7 +389,7 @@ impl Grid {
     /// Combines validated tracks with the runtime and authoritative COM child writer.
     pub(crate) fn from_runtime(
         runtime: crate::ui_node::widget_object::WidgetRuntime,
-        editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+        editor: neocogi_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
         column_tracks: Vec<TrackSize>,
         row_tracks: Vec<TrackSize>,
     ) -> Self {
@@ -508,7 +508,7 @@ impl crate::ui_node::widget_object::HostedWidget for Grid {
     }
 
     /// Closes the authoritative COM child sequence when this Grid is retired.
-    fn close_contents(&mut self) -> Result<(), nc_com::NcStatus> {
+    fn close_contents(&mut self) -> Result<(), neocogi_com::NcStatus> {
         self.editor.close()?.finish()
     }
 }
@@ -536,7 +536,7 @@ impl super::ContainerAlgorithm for Grid {
 
 use crate::ui_node::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
 use microui_contracts::{GridAbi, GridExtent, IWidgetHostAbi, LayoutTrackAbi};
-use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus};
+use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus};
 
 direct_widget_phase_impl!(Grid);
 direct_container_layout_impl!(Grid);
@@ -620,25 +620,25 @@ impl microui_contracts::Grid for Grid {
 /// Validates a complete track sequence before constructing or mutating Grid state.
 fn local_tracks(tracks: NcCopyFromBufferOffset<'_, LayoutTrackAbi>) -> Result<Vec<TrackSize>, NcStatus> {
     if tracks.offset() != 0 || tracks.len() > u32::MAX as usize {
-        return Err(nc_com::NC_E_INVALID_ARG);
+        return Err(neocogi_com::NC_E_INVALID_ARG);
     }
     tracks.as_slice().iter().copied().map(super::local_track).collect()
 }
 
 /// Copies a requested track range and returns the complete retained cardinality.
 fn copy_tracks(tracks: &[TrackSize], mut output: NcCopyToBufferOffset<'_, LayoutTrackAbi>) -> Result<u32, NcStatus> {
-    let offset = usize::try_from(output.offset()).map_err(|_| nc_com::NC_E_INVALID_ARG)?;
-    let source = tracks.get(offset..).ok_or(nc_com::NC_E_INVALID_ARG)?;
+    let offset = usize::try_from(output.offset()).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
+    let source = tracks.get(offset..).ok_or(neocogi_com::NC_E_INVALID_ARG)?;
     for (target, track) in output.as_mut_slice().iter_mut().zip(source) {
         *target = super::layout_track(*track);
     }
-    u32::try_from(tracks.len()).map_err(|_| nc_com::NC_E_OUT_OF_RANGE)
+    u32::try_from(tracks.len()).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)
 }
 
 /// Rejects empty spans before the existing Grid placement algorithm can clamp their edges.
 fn local_grid_edge(edge: GridExtent) -> Result<GridSpan, NcStatus> {
     if edge.columns == 0 || edge.rows == 0 {
-        return Err(nc_com::NC_E_INVALID_ARG);
+        return Err(neocogi_com::NC_E_INVALID_ARG);
     }
     Ok(GridSpan::new(edge.columns as usize, edge.rows as usize))
 }

@@ -1,7 +1,7 @@
 //! Runtime authority shared by mounted widget objects and retained node services.
 
 use microui_contracts::*;
-use nc_com::{ComPtr, NcStatus, com_object};
+use neocogi_com::{ComPtr, NcStatus, com_object};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,

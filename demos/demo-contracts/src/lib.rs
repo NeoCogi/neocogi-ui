@@ -2,7 +2,7 @@
 #![no_std]
 #![deny(missing_docs)]
 use microui_contracts::*;
-use nc_com::{ComPtr, NcCopyFromBufferOffset, NcStatus, com_interface, com_struct};
+use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcStatus, com_interface, com_struct};
 use rs_math3d::{Mat4f, Vec2f, Vec3f};
 
 #[com_struct(c_struct)]

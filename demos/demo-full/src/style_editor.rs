@@ -54,7 +54,7 @@
 use super::app::{append, column, label, row, slider, rgba, State};
 use microui_redux::{events::NumericChanged, *};
 use microui_redux_demo_assets::themes::Theme;
-use nc_com::{ComPtr, ComRef, NcStatus};
+use neocogi_com::{ComPtr, ComRef, NcStatus};
 
 /// One exhaustive declaration shares color names, field access and editor presentation.
 macro_rules! color_roles {
@@ -183,7 +183,7 @@ impl StyleEditor {
     pub(super) fn new(ui: &Ui) -> Result<(Self, ScrollAreaWidget), NcStatus> {
         let base = ui.assets()?;
         // Activation belongs to this application; the UI runtime has no asset-provider dependency.
-        let compiler = nc_com::Runtime::global().construct(())?;
+        let compiler = neocogi_com::Runtime::global().construct(())?;
         let mut metrics = base.metrics()?;
         let mut palette = FlatPalette::default();
         let mut content = column(ui)?;

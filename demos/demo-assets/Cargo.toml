@@ -16,7 +16,7 @@ embed-assets = ["microui-redux/compiled-assets", "dep:microui-plugin-assets", "d
 
 [dependencies]
 microui-redux.workspace = true
-nc-com = { workspace = true, features = ["runtime"] }
+neocogi-com = { workspace = true, features = ["runtime"] }
 
 # Cargo builds these APIs for the host even when the demo target is WebAssembly.
 [build-dependencies]

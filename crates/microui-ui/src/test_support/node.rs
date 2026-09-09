@@ -212,7 +212,7 @@ impl NodeData {
         }
     }
     /// Reuses the same framing and caching path around each fixture's content algorithm.
-    pub(crate) fn measure(&mut self, skin: &Skin, atlas: &AtlasHandle, constraints: Constraints) -> Result<Dimensioni, nc_com::NcStatus> {
+    pub(crate) fn measure(&mut self, skin: &Skin, atlas: &AtlasHandle, constraints: Constraints) -> Result<Dimensioni, neocogi_com::NcStatus> {
         match self {
             Self::Com(node) => node.measure(skin, atlas, constraints),
             Self::Widget(node) => Ok(node.widget.borrow().widget.measure(skin, atlas, constraints)),

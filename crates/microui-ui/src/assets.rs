@@ -6,7 +6,7 @@ use crate::{AtlasHandle, FontRole, IconRole, ResourceCatalog, Skin, SkinBundle};
 use crate::atlas::transfer::Tables;
 use microui_contracts::*;
 use microui_redux::assets::AssetTables;
-use nc_com::{ComPtr, ComRef, IUnknown, NcStatus, NC_E_INVALID_ARG};
+use neocogi_com::{ComPtr, ComRef, IUnknown, NcStatus, NC_E_INVALID_ARG};
 
 mod theme;
 
@@ -41,7 +41,7 @@ impl ImportedAssets {
         let pixels = {
             let info = data.info()?;
             let mut pixels = filled(info.rgba_bytes()?, 0)?;
-            source.pixels(nc_com::NcCopyToBufferOffset::new(0, &mut pixels))?;
+            source.pixels(neocogi_com::NcCopyToBufferOffset::new(0, &mut pixels))?;
             pixels
         };
         let tables = Tables {
@@ -160,4 +160,4 @@ fn semantic_resources(atlas: &AtlasHandle) -> Result<(), NcStatus> {
 mod tests;
 
 #[cfg(test)]
-use nc_com::NC_E_OUT_OF_MEMORY;
+use neocogi_com::NC_E_OUT_OF_MEMORY;

@@ -1,7 +1,7 @@
 //! Bulk resource-table validation independent of UI state and asset construction.
 use super::*;
 use std::collections::HashSet;
-use nc_com::NC_E_OUT_OF_MEMORY;
+use neocogi_com::NC_E_OUT_OF_MEMORY;
 
 impl AssetData {
     /// Copies and validates one complete immutable resource revision.

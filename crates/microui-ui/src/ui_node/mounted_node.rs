@@ -2,7 +2,7 @@
 use crate::boundary::{copied_rect, local_rect};
 use super::{HostState, Observation};
 use microui_contracts::*;
-use nc_com::{ComPtr, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
+use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
 use std::{cell::Cell, rc::Rc};
 use super::paint_service::PaintService;
 use crate::{AtlasHandle, Dimensioni, WidgetOption, KeyboardBehavior, WidgetUpdateCtx, WidgetPaintCtx, UiInputEvent, Constraints, Skin};

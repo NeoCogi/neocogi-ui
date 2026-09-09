@@ -4,7 +4,7 @@
 //! common host, lifecycle, option, and resource machinery required by every class.
 use crate::boundary::text;
 use microui_contracts::*;
-use nc_com::{ComPtr, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
+use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
 use std::{cell::RefCell, rc::Rc};
 use microui_contracts::widget::WidgetState;
 use crate::{AvailableSpace, WidgetOption};
@@ -126,7 +126,7 @@ impl WidgetRuntime {
         self.state.writable()?;
         let name = text(input)?;
         let assets = self.resources()?;
-        let font = assets.borrow().original().font_id(name).ok_or(nc_com::NC_E_NOT_FOUND)?;
+        let font = assets.borrow().original().font_id(name).ok_or(neocogi_com::NC_E_NOT_FOUND)?;
         Ok(crate::FontRef::Named(font))
     }
 
@@ -135,7 +135,7 @@ impl WidgetRuntime {
         self.state.writable()?;
         let name = text(input)?;
         let assets = self.resources()?;
-        let icon = assets.borrow().original().icon_id(name).ok_or(nc_com::NC_E_NOT_FOUND)?;
+        let icon = assets.borrow().original().icon_id(name).ok_or(neocogi_com::NC_E_NOT_FOUND)?;
         Ok(crate::IconRef::Named(icon))
     }
 
@@ -220,7 +220,7 @@ pub(crate) fn local_wrap(wrap: TextWrapping) -> Result<crate::TextWrap, NcStatus
     match wrap {
         TextWrapping::NONE => Ok(crate::TextWrap::None),
         TextWrapping::WORD => Ok(crate::TextWrap::Word),
-        _ => Err(nc_com::NC_E_INVALID_ARG),
+        _ => Err(neocogi_com::NC_E_INVALID_ARG),
     }
 }
 
@@ -233,18 +233,18 @@ macro_rules! direct_widget_phase_impl {
     ($name:ty) => {
         impl microui_contracts::IWidget for $name {
             /// Returns the runtime authority without retaining a tree or parent.
-            fn host(&self) -> Result<nc_com::ComPtr<microui_contracts::IWidgetHostAbi>, nc_com::NcStatus> {
+            fn host(&self) -> Result<neocogi_com::ComPtr<microui_contracts::IWidgetHostAbi>, neocogi_com::NcStatus> {
                 let runtime = <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self);
                 Ok(runtime.state.host().add_ref())
             }
 
             /// Claims this concrete allocation's only attachment after host validation.
-            fn mount(&mut self) -> Result<(), nc_com::NcStatus> {
+            fn mount(&mut self) -> Result<(), neocogi_com::NcStatus> {
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self).state.mount()
             }
 
             /// Closes the concrete widget's event sources exactly once.
-            fn close(&mut self) -> Result<(), nc_com::NcStatus> {
+            fn close(&mut self) -> Result<(), neocogi_com::NcStatus> {
                 let closed = <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self).state.close()?;
                 if closed {
                     <$name as crate::ui_node::widget_object::HostedWidget>::close_contents(self)?;
@@ -253,7 +253,7 @@ macro_rules! direct_widget_phase_impl {
             }
 
             /// Copies routing and frame policy from the concrete widget and its common options.
-            fn properties(&self) -> Result<microui_contracts::WidgetProperties, nc_com::NcStatus> {
+            fn properties(&self) -> Result<microui_contracts::WidgetProperties, neocogi_com::NcStatus> {
                 let runtime = <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self);
                 let options = runtime.state.options()?;
                 Ok(microui_contracts::WidgetProperties {
@@ -270,7 +270,7 @@ macro_rules! direct_widget_phase_impl {
             }
 
             /// Replaces the single common option value after complete validation.
-            fn set_options(&mut self, options: microui_contracts::WidgetOptions) -> Result<(), nc_com::NcStatus> {
+            fn set_options(&mut self, options: microui_contracts::WidgetOptions) -> Result<(), neocogi_com::NcStatus> {
                 options.validate()?;
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self).state.set_options(options)
             }
@@ -280,8 +280,8 @@ macro_rules! direct_widget_phase_impl {
                 &mut self,
                 state: microui_contracts::WidgetUpdate,
                 event: microui_contracts::WidgetEventAbi,
-                text: nc_com::NcCopyFromBufferOffset<'_, u8>,
-            ) -> Result<microui_contracts::GeometryChange, nc_com::NcStatus> {
+                text: neocogi_com::NcCopyFromBufferOffset<'_, u8>,
+            ) -> Result<microui_contracts::GeometryChange, neocogi_com::NcStatus> {
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
                 state.validate()?;
                 let input = crate::ui_node::input_contract::local_event(event, text)?;
@@ -300,8 +300,8 @@ macro_rules! direct_widget_phase_impl {
                     state.focused,
                     state.clicked,
                     state.active,
-                    crate::MouseButton::from_bits(u32::from(state.mouse_buttons)).ok_or(nc_com::NC_E_INVALID_ARG)?,
-                    crate::Modifiers::from_bits(state.modifiers).ok_or(nc_com::NC_E_INVALID_ARG)?,
+                    crate::MouseButton::from_bits(u32::from(state.mouse_buttons)).ok_or(neocogi_com::NC_E_INVALID_ARG)?,
+                    crate::Modifiers::from_bits(state.modifiers).ok_or(neocogi_com::NC_E_INVALID_ARG)?,
                 );
                 Ok(match crate::Widget::update(self, &mut ctx, input.as_ref()) {
                     crate::Change::Changed => microui_contracts::GeometryChange::CHANGED,
@@ -310,7 +310,7 @@ macro_rules! direct_widget_phase_impl {
             }
 
             /// Drains sticky common and explicitly shared semantic geometry changes together.
-            fn take_change(&mut self) -> Result<microui_contracts::GeometryChange, nc_com::NcStatus> {
+            fn take_change(&mut self) -> Result<microui_contracts::GeometryChange, neocogi_com::NcStatus> {
                 if crate::Widget::take_shared_change(self) {
                     <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self)
                         .state
@@ -324,8 +324,8 @@ macro_rules! direct_widget_phase_impl {
                 &mut self,
                 scope: microui_contracts::PaintScope,
                 state: microui_contracts::WidgetPaint,
-                painter: nc_com::ComRef<'_, microui_contracts::IPainterAbi>,
-            ) -> Result<(), nc_com::NcStatus> {
+                painter: neocogi_com::ComRef<'_, microui_contracts::IPainterAbi>,
+            ) -> Result<(), neocogi_com::NcStatus> {
                 state.validate()?;
                 // Reading options performs the one lifecycle check required by
                 // the complete paint invocation. Repeating it before the same
@@ -365,8 +365,8 @@ macro_rules! direct_leaf_layout_impl {
             fn measure(
                 &mut self,
                 bounds: microui_contracts::LayoutLimits,
-                _metrics: nc_com::ComRef<'_, microui_contracts::ITextMetricsAbi>,
-            ) -> Result<microui_contracts::Size, nc_com::NcStatus> {
+                _metrics: neocogi_com::ComRef<'_, microui_contracts::ITextMetricsAbi>,
+            ) -> Result<microui_contracts::Size, neocogi_com::NcStatus> {
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
                 let constraints = crate::Constraints::new(
                     crate::ui_node::widget_object::available(bounds.width)?,
@@ -396,7 +396,7 @@ macro_rules! direct_container_layout_impl {
     ($name:ty) => {
         impl microui_contracts::IContainerLayout for $name {
             /// Returns the read-only view paired with this concrete container's private writer.
-            fn children(&self) -> Result<nc_com::ComPtr<microui_contracts::IChildrenAbi>, nc_com::NcStatus> {
+            fn children(&self) -> Result<neocogi_com::ComPtr<microui_contracts::IChildrenAbi>, neocogi_com::NcStatus> {
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
                 self.editor.view()
             }
@@ -406,8 +406,8 @@ macro_rules! direct_container_layout_impl {
                 &mut self,
                 scope: microui_contracts::LayoutScope,
                 bounds: microui_contracts::LayoutLimits,
-                service: nc_com::ComRef<'_, microui_contracts::ILayoutServiceAbi>,
-            ) -> Result<microui_contracts::Size, nc_com::NcStatus> {
+                service: neocogi_com::ComRef<'_, microui_contracts::ILayoutServiceAbi>,
+            ) -> Result<microui_contracts::Size, neocogi_com::NcStatus> {
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
                 let constraints = crate::ui_node::layout_service::constraints(bounds)?;
                 let layout = crate::ui_node::layout_service::ScopedLayout::new(scope, service)?;
@@ -427,11 +427,11 @@ macro_rules! direct_container_layout_impl {
                 &mut self,
                 scope: microui_contracts::LayoutScope,
                 rect: microui_contracts::Rect,
-                service: nc_com::ComRef<'_, microui_contracts::ILayoutServiceAbi>,
-            ) -> Result<microui_contracts::ContainerGeometry, nc_com::NcStatus> {
+                service: neocogi_com::ComRef<'_, microui_contracts::ILayoutServiceAbi>,
+            ) -> Result<microui_contracts::ContainerGeometry, neocogi_com::NcStatus> {
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
                 if rect.width < 0 || rect.height < 0 {
-                    return Err(nc_com::NC_E_INVALID_ARG);
+                    return Err(neocogi_com::NC_E_INVALID_ARG);
                 }
                 let layout = crate::ui_node::layout_service::ScopedLayout::new(scope, service)?;
                 let assets = <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self).resources()?;
@@ -450,8 +450,8 @@ macro_rules! direct_container_layout_impl {
             fn accepts_event(
                 &self,
                 event: microui_contracts::WidgetEventAbi,
-                text: nc_com::NcCopyFromBufferOffset<'_, u8>,
-            ) -> Result<bool, nc_com::NcStatus> {
+                text: neocogi_com::NcCopyFromBufferOffset<'_, u8>,
+            ) -> Result<bool, neocogi_com::NcStatus> {
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
                 let event = crate::ui_node::input_contract::local_event(event, text)?;
                 Ok(event.is_some_and(|event| crate::ContainerWidget::accepts_event(self, &event)))
@@ -482,37 +482,37 @@ macro_rules! direct_scrolling_impl {
     ($name:ty) => {
         impl microui_contracts::IScrolling for $name {
             /// Reads one coherent snapshot from the scalar model shared with both scrollbar children.
-            fn info(&self) -> Result<microui_contracts::ScrollInfo, nc_com::NcStatus> {
+            fn info(&self) -> Result<microui_contracts::ScrollInfo, neocogi_com::NcStatus> {
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
                 Ok(self.model.com_info())
             }
 
             /// Records a sticky nonnegative request for the next concrete placement.
-            fn set_offset(&mut self, offset: microui_contracts::Point) -> Result<(), nc_com::NcStatus> {
+            fn set_offset(&mut self, offset: microui_contracts::Point) -> Result<(), neocogi_com::NcStatus> {
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
                 self.model.set_offset(crate::Vec2i::new(offset.x, offset.y));
                 Ok(())
             }
 
             /// Changes wheel and scrollbar participation through the shared scalar model.
-            fn set_enabled(&mut self, enabled: bool) -> Result<(), nc_com::NcStatus> {
+            fn set_enabled(&mut self, enabled: bool) -> Result<(), neocogi_com::NcStatus> {
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
                 self.model.set_enabled(enabled);
                 Ok(())
             }
 
             /// Preserves an end request until placement installs the freshly measured range.
-            fn scroll_to_end(&mut self) -> Result<(), nc_com::NcStatus> {
+            fn scroll_to_end(&mut self) -> Result<(), neocogi_com::NcStatus> {
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
                 self.model.scroll_to_end();
                 Ok(())
             }
 
             /// Validates one content-local rectangle before changing either requested axis.
-            fn reveal(&mut self, rect: microui_contracts::Rect) -> Result<(), nc_com::NcStatus> {
+            fn reveal(&mut self, rect: microui_contracts::Rect) -> Result<(), neocogi_com::NcStatus> {
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
                 if rect.x < 0 || rect.y < 0 || rect.width < 0 || rect.height < 0 {
-                    return Err(nc_com::NC_E_INVALID_ARG);
+                    return Err(neocogi_com::NC_E_INVALID_ARG);
                 }
                 self.model.reveal(crate::boundary::local_rect(rect));
                 Ok(())

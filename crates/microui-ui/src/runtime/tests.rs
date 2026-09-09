@@ -1,6 +1,6 @@
 //! Runtime boundary regressions use deliberately retaining and reentrant components.
 use super::*;
-use nc_com::{INcStringComPtrExt, NC_E_BUSY, NcCopyToBufferOffset};
+use neocogi_com::{INcStringComPtrExt, NC_E_BUSY, NcCopyToBufferOffset};
 mod containers;
 
 /// Positive drawable size shared by the deterministic headless fixtures.
@@ -494,7 +494,7 @@ fn window_com_capabilities_preserve_hierarchy_layers_visibility_and_subtree_clos
     // Runtime protocols share one identity; the callable factory is a separately constructible service.
     let identity: ComPtr<IUnknown> = runtime.query().unwrap();
     assert_eq!(identity.as_ptr(), manager.query::<IUnknown>().unwrap().as_ptr());
-    assert_eq!(runtime.query::<UiFactoryAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
+    assert_eq!(runtime.query::<UiFactoryAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     let factory = runtime.factory().unwrap();
     assert_ne!(identity.as_ptr(), factory.query::<IUnknown>().unwrap().as_ptr());
     let root_button = button(&runtime);
@@ -607,7 +607,7 @@ fn popup_com_capability_enforces_active_owner_policy_and_permanent_removal() {
             popup_button.query::<IWidgetAbi>().unwrap().as_com_ref(),
         )
         .unwrap();
-    assert_eq!(popup.query::<IWindowAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
+    assert_eq!(popup.query::<IWindowAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     assert_eq!(popup.visibility().unwrap(), Visibility::HIDDEN);
     runtime.update(SIZE).unwrap();
     popup.show(RECT).unwrap();
@@ -774,17 +774,17 @@ fn child_editor_validates_before_claiming_and_closes_retained_views() {
     let foreign = button(&other_runtime);
     let editor = first.host().unwrap().create_children().unwrap();
     let view = editor.view().unwrap();
-    assert_eq!(view.query::<IChildrenEditorAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
+    assert_eq!(view.query::<IChildrenEditorAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     assert_eq!(
         editor.insert(1, first.query::<IWidgetAbi>().unwrap().as_com_ref()),
-        Err(nc_com::NC_E_OUT_OF_RANGE)
+        Err(neocogi_com::NC_E_OUT_OF_RANGE)
     );
     assert_eq!(editor.insert(0, foreign.query::<IWidgetAbi>().unwrap().as_com_ref()), Err(UI_E_OWNER));
     editor.insert(0, first.query::<IWidgetAbi>().unwrap().as_com_ref()).unwrap().finish().unwrap();
     assert_eq!(editor.insert(1, first.query::<IWidgetAbi>().unwrap().as_com_ref()), Err(UI_E_OWNER));
     assert_eq!(
         editor.replace(1, second.query::<IWidgetAbi>().unwrap().as_com_ref()),
-        Err(nc_com::NC_E_OUT_OF_RANGE)
+        Err(neocogi_com::NC_E_OUT_OF_RANGE)
     );
     assert_eq!(view.child_count().unwrap(), 1);
     let held_child = view.child(0).unwrap();
@@ -845,7 +845,7 @@ fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validati
     assert_eq!(checkbox.label().unwrap(), "A longer checkbox");
     checkbox.set_font_role(TextFontRole::BODY).unwrap();
     assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
-    assert_eq!(checkbox.set_named_font("missing"), Err(nc_com::NC_E_NOT_FOUND));
+    assert_eq!(checkbox.set_named_font("missing"), Err(neocogi_com::NC_E_NOT_FOUND));
     assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
     checkbox.set_named_font("body").unwrap();
     assert_eq!(common.take_change().unwrap(), GeometryChange::CHANGED);
@@ -858,8 +858,8 @@ fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validati
     let mut common = textbox.node_interface().unwrap();
     let concrete = textbox.as_interface().add_ref();
     assert_eq!(concrete.query::<IUnknown>().unwrap().as_ptr(), common.query::<IUnknown>().unwrap().as_ptr());
-    assert_eq!(common.query::<ITextEditorAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
-    assert_eq!(common.query::<ITextContentAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
+    assert_eq!(common.query::<ITextEditorAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
+    assert_eq!(common.query::<ITextContentAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     common.take_change().unwrap();
     textbox.set_text("é\n☃").unwrap();
     assert_eq!(textbox.cursor().unwrap(), 5);
@@ -1164,7 +1164,7 @@ fn builtin_scoped_paint_preserves_alignment_with_inline_semantic_state() {
     assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
     button.set_icon_role(ContentIcon::CHECK).unwrap();
     assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
-    assert_eq!(button.set_named_icon("missing"), Err(nc_com::NC_E_NOT_FOUND));
+    assert_eq!(button.set_named_icon("missing"), Err(neocogi_com::NC_E_NOT_FOUND));
     button.set_icon_role(ContentIcon::NONE).unwrap();
     assert_eq!(button.label().unwrap(), "AB");
     let probe = Rc::new(BuiltinPaintProbe::default());
@@ -1215,8 +1215,8 @@ fn platform_input_projection_and_committed_text_area_share_runtime_state() {
     let runtime = runtime();
     let ui = microui_redux::Ui::from_interface(runtime.clone()).unwrap();
     let input = ui.input_sink().unwrap();
-    let identity: ComPtr<nc_com::IUnknown> = input.query().unwrap();
-    assert_eq!(identity.as_ptr(), runtime.query::<nc_com::IUnknown>().unwrap().as_ptr());
+    let identity: ComPtr<neocogi_com::IUnknown> = input.query().unwrap();
+    assert_eq!(identity.as_ptr(), runtime.query::<neocogi_com::IUnknown>().unwrap().as_ptr());
     let editor = ui.widgets().textbox("start").unwrap();
     let window = ui.window("IME", RECT, &editor).unwrap();
     assert_eq!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::None);

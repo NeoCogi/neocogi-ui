@@ -66,8 +66,8 @@ pub(super) struct Suzanne {
 impl Suzanne {
     /// Loads the bundled mesh independently of the process working directory and uploads it once.
     pub(super) fn new(renderer: ComRef<'_, IRendererAbi>) -> Result<Self, NcStatus> {
-        let mesh = Obj::from_byte_stream(&microui_redux_demo_assets::suzanne_obj().map_err(|_| nc_com::NC_E_LOAD_FAILED)?)
-            .map_err(|_| nc_com::NC_E_INVALID_ARG)?
+        let mesh = Obj::from_byte_stream(&microui_redux_demo_assets::suzanne_obj().map_err(|_| neocogi_com::NC_E_LOAD_FAILED)?)
+            .map_err(|_| neocogi_com::NC_E_INVALID_ARG)?
             .to_polymesh();
         let bounds = mesh.calculate_bounding_box();
         let view = View3D::new(

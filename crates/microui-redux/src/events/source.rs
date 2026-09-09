@@ -34,7 +34,7 @@ use std::{
     fmt,
     rc::{Rc, Weak},
 };
-use nc_com::{com_object, ComInterface, ComPtr, ComRef, NcStatus};
+use neocogi_com::{com_object, ComInterface, ComPtr, ComRef, NcStatus};
 use microui_contracts::*;
 
 /// A concrete semantic snapshot defines its one concrete foreign delivery contract.
@@ -225,7 +225,7 @@ impl<E: 'static> Queue<E> {
     }
 
     /// Detaches a bounded FIFO prefix; producer and queue borrows end before any callback.
-    fn drain(&mut self, limit: usize) -> Result<EventBatch<E>, nc_com::NcStatus> {
+    fn drain(&mut self, limit: usize) -> Result<EventBatch<E>, neocogi_com::NcStatus> {
         let (pending, terminal) = match self {
             Self::Disconnected => (0, false),
             Self::Connected { pending } => (pending.len(), false),
@@ -285,7 +285,7 @@ impl<E: 'static> EventLease<E> {
         }
     }
     /// Detaches a bounded batch without lending a producer/queue borrow to its eventual consumer.
-    pub fn drain(&self, limit: usize) -> Result<EventBatch<E>, nc_com::NcStatus> {
+    pub fn drain(&self, limit: usize) -> Result<EventBatch<E>, neocogi_com::NcStatus> {
         if self.cancelled.get() {
             return Ok(EventBatch { events: Vec::new(), terminal: false });
         }
@@ -513,7 +513,7 @@ impl<E: EventPayload> EventSource<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nc_com::{com_interface, NC_E_INVALID_ARG};
+    use neocogi_com::{com_interface, NC_E_INVALID_ARG};
     use microui_contracts::UI_E_EVENT_LIMIT;
 
     #[com_interface(auto_guid = "microui.test.EventLeaseSink:v1")]

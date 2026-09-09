@@ -70,7 +70,7 @@ impl ColorSwatchParameters {
     }
 }
 
-#[nc_com::com_object(microui_contracts::ColorSwatch)]
+#[neocogi_com::com_object(microui_contracts::ColorSwatch)]
 /// Concrete retained color swatch and dynamically constructible COM object.
 pub struct ColorSwatch {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -201,7 +201,7 @@ impl crate::ui_node::widget_object::FontState for ColorSwatch {
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
 use microui_contracts::{Color, ColorSwatchAbi, GeometryChange, IWidgetHostAbi, TextFontRole};
-use nc_com::*;
+use neocogi_com::*;
 
 direct_widget_phase_impl!(ColorSwatch);
 direct_leaf_layout_impl!(ColorSwatch);

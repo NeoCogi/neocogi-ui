@@ -33,7 +33,7 @@ use crate::{Constraints, Dimensioni, Recti, Skin, UiInputEvent, Vec2i, Widget};
 use super::ChildParticipation;
 use crate::ui_node::layout_service::ScopedLayout;
 use microui_contracts::ContainerGeometry;
-use nc_com::NcStatus;
+use neocogi_com::NcStatus;
 #[cfg(not(test))]
 use crate::ui_node::layout_service::ScopedLayout as ChildLayout;
 #[cfg(test)]

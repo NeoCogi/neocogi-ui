@@ -81,12 +81,12 @@ impl crate::event::ComEvent for CheckboxChanged {
     type Sink = microui_contracts::ICheckboxSinkAbi;
 
     /// Delivers the captured checked value through the Checkbox event contract.
-    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
         sink.changed(self.checked)
     }
 }
 
-#[nc_com::com_object(microui_contracts::Checkbox)]
+#[neocogi_com::com_object(microui_contracts::Checkbox)]
 /// Concrete retained checkbox and dynamically constructible COM object.
 pub struct Checkbox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -291,7 +291,7 @@ impl crate::ui_node::widget_object::FontState for Checkbox {
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
 use microui_contracts::{CheckboxAbi, GeometryChange, ICheckboxSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi, TextFontRole};
-use nc_com::*;
+use neocogi_com::*;
 
 direct_widget_phase_impl!(Checkbox);
 direct_leaf_layout_impl!(Checkbox);

@@ -3,7 +3,7 @@
 use crate::boundary::{local_rect, text};
 use crate::ui_node::{HostState, Observation, WidgetHost};
 use microui_contracts::*;
-use nc_com::{ComPtr, ComRef, IUnknown, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
+use neocogi_com::{ComPtr, ComRef, IUnknown, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
 use std::{cell::{Cell, RefCell}, rc::Rc};
 use crate::ui_node::paint_service::{Metrics, PaintService};
 use crate::render::external::Backend;

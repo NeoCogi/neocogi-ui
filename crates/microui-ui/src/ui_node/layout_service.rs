@@ -2,7 +2,7 @@
 use crate::boundary::{copied_rect, local_rect};
 use super::HostState;
 use microui_contracts::*;
-use nc_com::{ComPtr, ComRef, NcStatus, NC_E_INVALID_ARG, com_object};
+use neocogi_com::{ComPtr, ComRef, NcStatus, NC_E_INVALID_ARG, com_object};
 use std::{cell::{Cell, RefCell}, rc::Rc};
 use super::{
     child_store::{ChildStore, ChildTransaction},
@@ -93,7 +93,7 @@ impl ILayoutService for Layout {
     fn measure_child(&self, scope: LayoutScope, index: u32, limits: LayoutLimits) -> Result<Size, NcStatus> {
         let mut access = self.storage.take(scope)?;
         let constraints = constraints(limits)?;
-        let node = access.frame().children.get_mut(index as usize).ok_or(nc_com::NC_E_OUT_OF_RANGE)?;
+        let node = access.frame().children.get_mut(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
         let resources = self.storage.resources.borrow();
         let size = node.measure(resources.bundle().skin(), resources.bundle().atlas(), constraints);
         self.storage.size(size)
@@ -105,7 +105,7 @@ impl ILayoutService for Layout {
             return Err(NC_E_INVALID_ARG);
         }
         let frame = access.placement()?;
-        let node = frame.children.get_mut(index as usize).ok_or(nc_com::NC_E_OUT_OF_RANGE)?;
+        let node = frame.children.get_mut(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
         let resources = self.storage.resources.borrow();
         let size = frame.placement.as_mut().expect("placement was checked").layout_node_ref(
             node,
@@ -118,7 +118,7 @@ impl ILayoutService for Layout {
     /// Exposes only a copied extent, never the child's runtime layout cache.
     fn child_content_size(&self, scope: LayoutScope, index: u32) -> Result<Size, NcStatus> {
         let mut access = self.storage.take(scope)?;
-        let node = access.placement()?.children.get(index as usize).ok_or(nc_com::NC_E_OUT_OF_RANGE)?;
+        let node = access.placement()?.children.get(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
         self.storage.size(node.state.layout.content_size)
     }
     /// Publishes responsive participation only during placement of the direct parent.
@@ -130,14 +130,14 @@ impl ILayoutService for Layout {
             LayoutParticipation::HIDDEN => crate::ChildParticipation::Hidden,
             _ => return Err(NC_E_INVALID_ARG),
         };
-        let node = access.placement()?.children.get_mut(index as usize).ok_or(nc_com::NC_E_OUT_OF_RANGE)?;
+        let node = access.placement()?.children.get_mut(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
         node.state.participation = participation;
         Ok(())
     }
     /// Records a changed shared placement dependency without exposing invalidation internals.
     fn child_placement_changed(&self, scope: LayoutScope, index: u32) -> Result<(), NcStatus> {
         let mut access = self.storage.take(scope)?;
-        let node = access.placement()?.children.get_mut(index as usize).ok_or(nc_com::NC_E_OUT_OF_RANGE)?;
+        let node = access.placement()?.children.get_mut(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
         node.state.invalidate_layout();
         Ok(())
     }
@@ -169,7 +169,7 @@ impl LayoutService {
 
     /// Installs an owned nested scope; the previous token/frame is restored even on errors.
     fn begin(&self, children: &Rc<ChildStore>, placement: Option<LayoutTraversal>) -> Result<Invocation<'_>, NcStatus> {
-        let token = self.storage.next.get().checked_add(1).ok_or(nc_com::NC_E_OUT_OF_RANGE)?;
+        let token = self.storage.next.get().checked_add(1).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
         let frame = Frame { children: children.take()?, placement };
         let previous = self.storage.frame.borrow_mut().replace(frame);
         let previous_token = self.storage.active.replace(token);
@@ -288,7 +288,7 @@ impl<'a> ScopedLayout<'a> {
     }
     /// Prevents usize truncation at the indexed ABI boundary.
     pub(crate) fn index(&self, index: usize) -> Option<u32> {
-        self.capture(u32::try_from(index).map_err(|_| nc_com::NC_E_OUT_OF_RANGE))
+        self.capture(u32::try_from(index).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE))
     }
     /// Measures with the same constraints and node cache as an independent COM container.
     pub(crate) fn measure(&self, index: usize, constraints: Constraints) -> Option<Dimensioni> {

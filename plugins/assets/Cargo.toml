@@ -24,7 +24,7 @@ serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 png.workspace = true
 fontdue = { workspace = true, optional = true }
-nc-com = { workspace = true, features = ["macros", "std"] }
+neocogi-com = { workspace = true, features = ["macros", "std"] }
 
 [dev-dependencies]
 microui-ui.workspace = true

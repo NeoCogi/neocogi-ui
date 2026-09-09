@@ -54,7 +54,7 @@
 
 use rs_math3d::{Recti, Vec2i};
 use microui_contracts::{IPainterAbi, PaintFont, PaintIcon, PaintScope, Point, WidgetVisualState};
-use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
+use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
 
 use crate::atlas::{AtlasHandle, FontId, IconId};
 use crate::math::RectExt;

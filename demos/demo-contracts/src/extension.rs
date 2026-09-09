@@ -1,6 +1,6 @@
 //! Example-specific editing capabilities. These are separate from the toolkit's standard widgets.
 use microui_contracts::*;
-use nc_com::{ComPtr, ComRef, NcStatus, com_class, com_interface, com_struct};
+use neocogi_com::{ComPtr, ComRef, NcStatus, com_class, com_interface, com_struct};
 
 #[com_struct]
 #[derive(Debug, Default, Eq, PartialEq)]

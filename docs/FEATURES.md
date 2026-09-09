@@ -5,7 +5,7 @@ facade has no renderer, font-builder or JSON feature. Its defaults are empty:
 
 | Crate | Feature | Effect |
 | --- | --- | --- |
-| `microui-redux` | `runtime` | Link the shared nc-com runtime used by native hosts. |
+| `microui-redux` | `runtime` | Link the shared neocogi-com runtime used by native hosts. |
 | `microui-redux` | `static-runtime` | Link one ordinary runtime implementation, including browser deployments. |
 | `microui-redux` | `compiled-assets` | Expand bounded zlib pixels from generated asset tables. |
 | `microui-ui` | none | Imports resolved resources for layout and painting; contains no asset compiler. |

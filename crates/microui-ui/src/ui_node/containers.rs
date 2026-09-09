@@ -62,13 +62,13 @@ pub(super) trait ContainerAlgorithm: crate::ui_node::widget_object::WidgetAlgori
 macro_rules! container_methods {
     () => {
         /// Exposes read-only topology without allowing callers to bypass relationship metadata.
-        fn children(&self) -> Result<nc_com::ComPtr<microui_contracts::IChildrenAbi>, nc_com::NcStatus> {
+        fn children(&self) -> Result<neocogi_com::ComPtr<microui_contracts::IChildrenAbi>, neocogi_com::NcStatus> {
             <Self as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
             self.editor.view()
         }
 
         /// Publishes matching metadata even when removed-child teardown reports an error.
-        fn remove(&mut self, index: u32) -> Result<microui_contracts::ChildEditResult, nc_com::NcStatus> {
+        fn remove(&mut self, index: u32) -> Result<microui_contracts::ChildEditResult, neocogi_com::NcStatus> {
             <Self as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
             let outcome = self.editor.remove(index)?;
             <Self as crate::ui_node::containers::ContainerAlgorithm>::edit_edges(
@@ -79,7 +79,7 @@ macro_rules! container_methods {
         }
 
         /// Clears topology and relationship metadata in the same guarded operation.
-        fn clear(&mut self) -> Result<microui_contracts::ChildEditResult, nc_com::NcStatus> {
+        fn clear(&mut self) -> Result<microui_contracts::ChildEditResult, neocogi_com::NcStatus> {
             <Self as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
             let outcome = self.editor.clear()?;
             <Self as crate::ui_node::containers::ContainerAlgorithm>::edit_edges(self, crate::ui_node::containers::EdgeEdit::Clear);
@@ -92,20 +92,20 @@ macro_rules! container_methods {
 macro_rules! container_edges {
     ($edge:ty, $decode:ident, $encode:ident) => {
         /// Returns one copied relationship after checking the container's logical lifetime.
-        fn edge(&self, index: u32) -> Result<$edge, nc_com::NcStatus> {
+        fn edge(&self, index: u32) -> Result<$edge, neocogi_com::NcStatus> {
             <Self as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
             Ok($encode(
                 <Self as crate::ui_node::containers::ContainerAlgorithm>::edge(self, index as usize)
-                    .ok_or(nc_com::NC_E_OUT_OF_RANGE)?,
+                    .ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?,
             ))
         }
 
         /// Replaces valid metadata and invalidates layout only when the value changes.
-        fn set_edge(&mut self, index: u32, edge: $edge) -> Result<(), nc_com::NcStatus> {
+        fn set_edge(&mut self, index: u32, edge: $edge) -> Result<(), neocogi_com::NcStatus> {
             <Self as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
             let edge = $decode(edge)?;
             let previous = <Self as crate::ui_node::containers::ContainerAlgorithm>::edge(self, index as usize)
-                .ok_or(nc_com::NC_E_OUT_OF_RANGE)?;
+                .ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
             if previous != edge {
                 <Self as crate::ui_node::containers::ContainerAlgorithm>::edit_edges(
                     self,
@@ -122,9 +122,9 @@ macro_rules! container_edges {
         fn insert(
             &mut self,
             index: u32,
-            child: nc_com::ComRef<'_, microui_contracts::IWidgetAbi>,
+            child: neocogi_com::ComRef<'_, microui_contracts::IWidgetAbi>,
             edge: $edge,
-        ) -> Result<microui_contracts::ChildEditResult, nc_com::NcStatus> {
+        ) -> Result<microui_contracts::ChildEditResult, neocogi_com::NcStatus> {
             <Self as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
             let edge = $decode(edge)?;
             let outcome = self.editor.insert(index, child)?;
@@ -139,9 +139,9 @@ macro_rules! container_edges {
         fn replace(
             &mut self,
             index: u32,
-            child: nc_com::ComRef<'_, microui_contracts::IWidgetAbi>,
+            child: neocogi_com::ComRef<'_, microui_contracts::IWidgetAbi>,
             edge: $edge,
-        ) -> Result<microui_contracts::ChildEditResult, nc_com::NcStatus> {
+        ) -> Result<microui_contracts::ChildEditResult, neocogi_com::NcStatus> {
             <Self as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
             let edge = $decode(edge)?;
             let outcome = self.editor.replace(index, child)?;
@@ -155,12 +155,12 @@ macro_rules! container_edges {
 }
 
 /// Validates one typed track before topology or semantic mutation begins.
-pub(super) fn local_track(track: microui_contracts::LayoutTrackAbi) -> Result<crate::TrackSize, nc_com::NcStatus> {
-    match microui_contracts::LayoutTrack::try_from(track).map_err(|_| nc_com::NC_E_INVALID_ARG)? {
+pub(super) fn local_track(track: microui_contracts::LayoutTrackAbi) -> Result<crate::TrackSize, neocogi_com::NcStatus> {
+    match microui_contracts::LayoutTrack::try_from(track).map_err(|_| neocogi_com::NC_E_INVALID_ARG)? {
         microui_contracts::LayoutTrack::Content => Ok(crate::TrackSize::Content),
         microui_contracts::LayoutTrack::Fixed { extent } if extent >= 0 => Ok(crate::TrackSize::Fixed(extent)),
         microui_contracts::LayoutTrack::Flex { weight } if weight.is_finite() && weight > 0.0 => Ok(crate::TrackSize::Flex(weight)),
-        _ => Err(nc_com::NC_E_INVALID_ARG),
+        _ => Err(neocogi_com::NC_E_INVALID_ARG),
     }
 }
 

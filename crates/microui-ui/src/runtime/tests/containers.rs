@@ -342,12 +342,12 @@ fn builtin_linear_reuses_track_resolution_and_validates_edges_before_mounting() 
         .finish()
         .unwrap();
     let common = row.node_interface().unwrap();
-    assert_eq!(common.query::<IContainerAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
+    assert_eq!(common.query::<IContainerAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     assert_eq!(
         common.query::<IUnknown>().unwrap().as_ptr(),
         row.as_interface().add_ref().query::<IUnknown>().unwrap().as_ptr()
     );
-    assert_eq!(row.children().unwrap().query::<IChildrenEditorAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
+    assert_eq!(row.children().unwrap().query::<IChildrenEditorAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     let window = ui.window("Linear", RECT, &row).unwrap();
     runtime.update(SIZE).unwrap();
     let (first_rect, second_rect, third_rect) = (a.latest.get().unwrap().screen, b.latest.get().unwrap().screen, c.latest.get().unwrap().screen);
@@ -455,7 +455,7 @@ fn builtin_scroll_area_uses_real_children_and_shared_sticky_invalidation() {
     let mut content = ui.widgets().text_block(&text, TextWrapping::NONE).unwrap();
     let mut scroll = ui.widgets().scroll_area(&content, true).unwrap();
     let root = scroll.node_interface().unwrap();
-    assert_eq!(root.query::<IContainerAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
+    assert_eq!(root.query::<IContainerAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     let structural = root.query::<IContainerLayoutAbi>().unwrap().children().unwrap();
     assert_eq!(structural.child_count().unwrap(), 3);
     let mut horizontal = structural.child(1).unwrap().query::<ScrollbarAbi>().unwrap();
@@ -561,7 +561,7 @@ fn disclosure_com_header_controls_the_actual_body_without_a_parent_backpointer()
     let mut header = disclosure.header().unwrap();
     let mut body = disclosure.body().unwrap();
     let root = disclosure.node_interface().unwrap();
-    assert_eq!(root.query::<IContainerAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
+    assert_eq!(root.query::<IContainerAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     let children = root.query::<IContainerLayoutAbi>().unwrap().children().unwrap();
     assert_eq!(children.child_count().unwrap(), 2);
     assert_eq!(
@@ -631,8 +631,8 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
     let identity = root.query::<IUnknown>().unwrap();
     let concrete = area.as_interface().add_ref();
     assert_eq!(concrete.query::<IUnknown>().unwrap().as_ptr(), identity.as_ptr());
-    assert_eq!(root.query::<ITextEditorAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
-    assert_eq!(root.query::<ScrollAreaAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
+    assert_eq!(root.query::<ITextEditorAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
+    assert_eq!(root.query::<ScrollAreaAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     let mut scroll = area.scrolling().unwrap();
     assert_eq!(scroll.node_interface().unwrap().query::<IUnknown>().unwrap().as_ptr(), identity.as_ptr());
     let structural = root.query::<IContainerLayoutAbi>().unwrap().children().unwrap();
@@ -640,7 +640,7 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
     let surface = structural.child(0).unwrap().query::<IContainerLayoutAbi>().unwrap();
     let editor = surface.children().unwrap().child(0).unwrap().query::<IMultilineEditorAbi>().unwrap();
     assert_ne!(editor.query::<IUnknown>().unwrap().as_ptr(), identity.as_ptr());
-    assert_eq!(editor.query::<TextAreaAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
+    assert_eq!(editor.query::<TextAreaAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     area.set_cursor(3).unwrap();
     assert_eq!(area.cursor().unwrap(), 1); // A byte inside the snowman clamps to its preceding scalar boundary.
     assert_eq!(editor.cursor().unwrap(), 1);

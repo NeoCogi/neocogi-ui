@@ -327,12 +327,12 @@ where
 /// consumes only an exact placement allocation and does not manufacture desired size during
 /// measurement. Content and Fixed overflow remain visible, and every geometry accumulation uses
 /// saturating arithmetic.
-#[nc_com::com_object(microui_contracts::Linear)]
+#[neocogi_com::com_object(microui_contracts::Linear)]
 pub struct Linear {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Sole writer for children mounted through this container's COM contract.
-    pub(crate) editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+    pub(crate) editor: neocogi_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
     /// Weak topology capability supplied by generic container construction.
     #[cfg(test)]
     children: ChildrenHandle,
@@ -350,7 +350,7 @@ impl Linear {
     /// Combines validated layout policy with its runtime and authoritative COM child writer.
     pub(crate) fn from_runtime(
         runtime: crate::ui_node::widget_object::WidgetRuntime,
-        editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+        editor: neocogi_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
         direction: LinearDirection,
         cross_size: LinearCrossSize,
     ) -> Self {
@@ -549,7 +549,7 @@ impl crate::ui_node::widget_object::HostedWidget for Linear {
     }
 
     /// Closes the authoritative COM child sequence when this Linear is retired.
-    fn close_contents(&mut self) -> Result<(), nc_com::NcStatus> {
+    fn close_contents(&mut self) -> Result<(), neocogi_com::NcStatus> {
         self.editor.close()?.finish()
     }
 }
@@ -577,7 +577,7 @@ impl super::ContainerAlgorithm for Linear {
 
 use crate::ui_node::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
 use microui_contracts::{ChildCrossSize, CrossSize, CrossSizeAbi, FlowDirection, IWidgetHostAbi, LinearAbi, LinearEdge};
-use nc_com::{ComPtr, ComRef, NcStatus};
+use neocogi_com::{ComPtr, ComRef, NcStatus};
 
 direct_widget_phase_impl!(Linear);
 direct_container_layout_impl!(Linear);
@@ -661,7 +661,7 @@ fn local_direction(direction: FlowDirection) -> Result<LinearDirection, NcStatus
         FlowDirection::RIGHT_TO_LEFT => Ok(LinearDirection::RightToLeft),
         FlowDirection::TOP_TO_BOTTOM => Ok(LinearDirection::TopToBottom),
         FlowDirection::BOTTOM_TO_TOP => Ok(LinearDirection::BottomToTop),
-        _ => Err(nc_com::NC_E_INVALID_ARG),
+        _ => Err(neocogi_com::NC_E_INVALID_ARG),
     }
 }
 
@@ -677,11 +677,11 @@ fn flow_direction(direction: LinearDirection) -> FlowDirection {
 
 /// Validates a line cross-axis policy, including exact nonnegative extents.
 fn local_cross(cross: CrossSizeAbi) -> Result<LinearCrossSize, NcStatus> {
-    match CrossSize::try_from(cross).map_err(|_| nc_com::NC_E_INVALID_ARG)? {
+    match CrossSize::try_from(cross).map_err(|_| neocogi_com::NC_E_INVALID_ARG)? {
         CrossSize::Content => Ok(LinearCrossSize::Content),
         CrossSize::Stretch => Ok(LinearCrossSize::Stretch),
         CrossSize::Fixed { extent } if extent >= 0 => Ok(LinearCrossSize::Fixed(extent)),
-        _ => Err(nc_com::NC_E_INVALID_ARG),
+        _ => Err(neocogi_com::NC_E_INVALID_ARG),
     }
 }
 
@@ -698,10 +698,10 @@ fn cross_size(cross: LinearCrossSize) -> CrossSizeAbi {
 /// Validates both axes of one Linear relationship before consuming a child claim.
 fn local_linear_edge(edge: LinearEdge) -> Result<LinearItemSpec, NcStatus> {
     let main = super::local_track(edge.main)?;
-    let fixed_cross = match ChildCrossSize::try_from(edge.cross).map_err(|_| nc_com::NC_E_INVALID_ARG)? {
+    let fixed_cross = match ChildCrossSize::try_from(edge.cross).map_err(|_| neocogi_com::NC_E_INVALID_ARG)? {
         ChildCrossSize::Stretch => None,
         ChildCrossSize::Fixed { extent } if extent >= 0 => Some(extent),
-        _ => return Err(nc_com::NC_E_INVALID_ARG),
+        _ => return Err(neocogi_com::NC_E_INVALID_ARG),
     };
     Ok(LinearItemSpec { main, fixed_cross })
 }

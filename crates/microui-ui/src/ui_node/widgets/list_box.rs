@@ -75,12 +75,12 @@ impl crate::event::ComEvent for ListBoxSubmitted {
     type Sink = microui_contracts::IActivationSinkAbi;
 
     /// Copies the captured selection label through the ListBox activation contract.
-    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
         crate::event::deliver_activation(&self.label, sink)
     }
 }
 
-#[nc_com::com_object(microui_contracts::ListBox)]
+#[neocogi_com::com_object(microui_contracts::ListBox)]
 /// Concrete retained list box and dynamically constructible COM object.
 pub struct ListBox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -262,7 +262,7 @@ impl crate::ui_node::widget_object::ImageState for ListBox {
 
 use crate::ui_node::widget_object::{HostedWidget, ImageState, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
 use microui_contracts::{GeometryChange, IActivationSinkAbi, IEventSubscriptionAbi, ITextureAbi, IWidgetHostAbi, ListBoxAbi, TextFontRole};
-use nc_com::*;
+use neocogi_com::*;
 
 direct_widget_phase_impl!(ListBox);
 direct_leaf_layout_impl!(ListBox);

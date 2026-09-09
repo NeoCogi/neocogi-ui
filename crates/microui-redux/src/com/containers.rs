@@ -1,6 +1,6 @@
 //! Concrete container conveniences hold no tree or edge metadata outside the plugin.
 use super::*;
-use nc_com::NcCopyToBufferOffset;
+use neocogi_com::NcCopyToBufferOffset;
 
 /// Static convenience wrapper around the dynamically constructed Linear class projection.
 pub type LinearWidget = Widget<LinearAbi>;

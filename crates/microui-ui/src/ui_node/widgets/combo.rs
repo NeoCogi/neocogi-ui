@@ -72,7 +72,7 @@ impl Default for ComboParameters {
     }
 }
 
-#[nc_com::com_object(microui_contracts::Combo)]
+#[neocogi_com::com_object(microui_contracts::Combo)]
 /// Concrete retained combo and dynamically constructible COM object.
 pub struct Combo {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -427,7 +427,7 @@ use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direc
 use microui_contracts::{
     ComboAbi, GeometryChange, IComboChangedSinkAbi, IComboPopupSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi, TextFontRole,
 };
-use nc_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG};
+use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG};
 
 direct_widget_phase_impl!(Combo);
 direct_leaf_layout_impl!(Combo);

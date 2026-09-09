@@ -3,16 +3,16 @@
 Install the command from this checkout and build a runnable assembly:
 
 ```sh
-cargo install --path tools/cargo-nc-com
-cargo nc-com build --assembly full
-cargo nc-com run --assembly full
+cargo install --path tools/cargo-neocogi
+cargo neocogi build --assembly full
+cargo neocogi run --assembly full
 ```
 
-`cargo nc-com` builds the runtime, selected plugins, and application in order,
+`cargo neocogi` builds the runtime, selected plugins, and application in order,
 then stages the executable, native libraries, plugin manifest, and assets. It
-reads the assembly definitions in `[workspace.metadata.nc-com]` in the root
+reads the assembly definitions in `[workspace.metadata.neocogi]` in the root
 [Cargo.toml](../Cargo.toml). Users of a published tool can instead install with
-`cargo install cargo-nc-com --locked`; publishing the tool and its component
+`cargo install cargo-neocogi --locked`; publishing the tool and its component
 prerequisites is a separate release operation.
 
 `--assembly` selects `full` (the default), `simple`, `calculator`,
@@ -20,9 +20,9 @@ prerequisites is a separate release operation.
 select matching application and platform features explicitly:
 
 ```sh
-cargo nc-com run --assembly full --variant vulkan --release
-cargo nc-com run --assembly calculator --variant wgpu
-cargo nc-com run --assembly smoke --variant extension -- --smoke
+cargo neocogi run --assembly full --variant vulkan --release
+cargo neocogi run --assembly calculator --variant wgpu
+cargo neocogi run --assembly smoke --variant extension -- --smoke
 ```
 
 These commands build selected packages rather than the entire workspace, so a
@@ -31,21 +31,21 @@ ordinary Cargo still selects every renderer root, including their mandatory
 Ash/WGPU dependencies; `--no-default-features` does not deselect those packages.
 
 For contributors, the equivalent command without installation is
-`cargo run -p cargo-nc-com -- build --assembly full`. The installed command needs
-no workspace alias. Run `cargo nc-com plan --assembly full --variant vulkan` to
+`cargo run -p cargo-neocogi -- build --assembly full`. The installed command needs
+no workspace alias. Run `cargo neocogi plan --assembly full --variant vulkan` to
 review the selected typed configuration without compiling or inspecting plugins.
-The [tool reference](../tools/cargo-nc-com/README.md) describes package metadata,
+The [tool reference](../tools/cargo-neocogi/README.md) describes package metadata,
 standalone `--config` files, per-component features, registry version requirements,
 resource paths, and lockfile behavior.
 
 ## Profiles and output
 
 ```sh
-cargo nc-com build --assembly full                       # Debug
-cargo nc-com build --assembly full --release
-cargo nc-com build --assembly full --toolchain nightly --release
+cargo neocogi build --assembly full                       # Debug
+cargo neocogi build --assembly full --release
+cargo neocogi build --assembly full --toolchain nightly --release
 rustup component add rust-src --toolchain nightly
-cargo nc-com build --assembly full --profile min-size
+cargo neocogi build --assembly full --profile min-size
 ```
 
 The `min-size` preset selects nightly automatically and includes its x86_64 Linux
@@ -64,7 +64,7 @@ Cargo's cache; genuinely different graphs can still require different std artifa
 The command prints the completed output directory. Its layout is:
 
 ```text
-TARGET/nc-com/APPLICATION/ASSEMBLY/VARIANTS/dist/COMPILER/TARGET/PROFILE/
+TARGET/neocogi/APPLICATION/ASSEMBLY/VARIANTS/dist/COMPILER/TARGET/PROFILE/
 ```
 
 `TARGET` at the start is Cargo's configured build directory, or `--target-dir`.
@@ -78,7 +78,7 @@ and explicitly isolated plugins before later builds can replace their files.
 Grouped plugins are collected from the application's Cargo invocation. The phase
 summary distinguishes compiled targets from cache hits. Runtime linker aliases handle hashed registry
 artifacts; originals are retained for platform loader identities. A child process
-inspects trusted plugin descriptors and uses nc-com's planner to reject missing
+inspects trusted plugin descriptors and uses neocogi-com's planner to reject missing
 dependencies, duplicate identities, and cycles. It exits before staging directories
 are renamed, releasing Windows library handles. Failed compilation, inspection,
 or resource copying preserves the previous completed assembly.
@@ -101,8 +101,8 @@ rasterization run in the asset plugin. Call
 `microui_redux_demo_host::initialize()` before `load_bundle()`.
 
 ```sh
-cargo nc-com run --assembly full --variant vulkan --variant embedded
-cargo nc-com run --assembly smoke -- --smoke --theme themes/windows-95/theme.json
+cargo neocogi run --assembly full --variant vulkan --variant embedded
+cargo neocogi run --assembly smoke -- --smoke --theme themes/windows-95/theme.json
 ```
 
 Place `--variant embedded` after the renderer variant. It adds the application's
@@ -141,7 +141,7 @@ cargo com-build --demo full --backend glow
 ```
 
 That workspace-local driver requires `cargo +nightly com-build ... --min-size`
-for its older min-size alias. New applications should use `cargo nc-com` and
+for its older min-size alias. New applications should use `cargo neocogi` and
 configuration instead of adding more demo-specific branches to that driver.
 The regression examples below retain the driver's established paths.
 COM_PERFORMANCE.md records whole-deployment measurements;
@@ -240,7 +240,7 @@ scripts/test-browser-input.sh full
 ```
 
 The browser statically registers the same UI, platform and optional PNG descriptors
-with one nc-com runtime in the wasm module. DOM listeners, IME, canvas and WebGL2
+with one neocogi-com runtime in the wasm module. DOM listeners, IME, canvas and WebGL2
 ownership stay in the platform assembly. The host owns only application state and
 one `requestAnimationFrame` scheduling adapter. Every platform window appends its
 own canvas; page CSS controls its logical dimensions, and input/frame coordinates

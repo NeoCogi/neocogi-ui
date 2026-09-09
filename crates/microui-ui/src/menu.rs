@@ -141,7 +141,7 @@ impl crate::event::ComEvent for MenuItemSubmitted {
     type Sink = microui_contracts::IActivationSinkAbi;
 
     /// Copies the captured item label through the menu activation contract.
-    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
         crate::event::deliver_activation(&self.label, sink)
     }
 }

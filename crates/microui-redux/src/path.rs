@@ -1,6 +1,6 @@
 //! Static native-path conversion preserves platform filename identity across COM.
 use crate::{INativePath, INativePathAbi, PathEncoding};
-use nc_com::{ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcCopyToBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_object};
+use neocogi_com::{ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcCopyToBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_object};
 use std::path::{Path, PathBuf};
 
 /// Typed static client for an immutable native-path capability.
@@ -141,7 +141,7 @@ fn copy_range<T: Copy>(source: &[T], mut output: NcCopyToBufferOffset<'_, T>) ->
 /// Rejects impossible foreign lengths before allocation or output initialization can panic.
 fn copy_buffer<T: Default + Clone>(count: usize) -> Result<Vec<T>, NcStatus> {
     let mut buffer = Vec::new();
-    buffer.try_reserve_exact(count).map_err(|_| nc_com::NC_E_OUT_OF_MEMORY)?;
+    buffer.try_reserve_exact(count).map_err(|_| neocogi_com::NC_E_OUT_OF_MEMORY)?;
     buffer.resize(count, T::default());
     Ok(buffer)
 }
@@ -177,7 +177,7 @@ mod tests {
             assert_eq!(interface.windows_units(NcCopyToBufferOffset::new(u64::MAX, &mut units)), Err(NC_E_INVALID_ARG));
             assert_eq!(units, [111, 108, 100, 101]);
         }
-        assert_eq!(copy_buffer::<u16>(usize::MAX), Err(nc_com::NC_E_OUT_OF_MEMORY));
+        assert_eq!(copy_buffer::<u16>(usize::MAX), Err(neocogi_com::NC_E_OUT_OF_MEMORY));
     }
 
     /// Different non-Unicode paths may share display text but must round-trip to distinct filesystem identities.

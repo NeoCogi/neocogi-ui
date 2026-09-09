@@ -1,6 +1,6 @@
 //! Ordered bulk frames and owned renderer resources; native GPU APIs stay inside their plugin.
 use crate::{Rect, Size};
-use nc_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, com_enum, com_interface, com_struct};
+use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, com_enum, com_interface, com_struct};
 use rs_math3d::{Color4b, Vec2f, color4b};
 
 /// Shared allocation ceiling for one complete frame, checked before reserving receiver storage.
@@ -207,8 +207,8 @@ impl TextureRegion {
     /// Complete image, also used by the ordinary Painter::texture convenience.
     pub const FULL: Self = Self { u0: 0., v0: 0., u1: 1., v1: 1. };
     /// Rejects nonfinite, reversed and out-of-image coordinates before retaining a resource.
-    pub fn validate(self) -> Result<(), nc_com::NcStatus> {
+    pub fn validate(self) -> Result<(), neocogi_com::NcStatus> {
         if [self.u0,self.v0,self.u1,self.v1].iter().all(|v| v.is_finite() && (0. ..=1.).contains(v))
-            && self.u0 <= self.u1 && self.v0 <= self.v1 { Ok(()) } else { Err(nc_com::NC_E_INVALID_ARG) }
+            && self.u0 <= self.u1 && self.v0 <= self.v1 { Ok(()) } else { Err(neocogi_com::NC_E_INVALID_ARG) }
     }
 }

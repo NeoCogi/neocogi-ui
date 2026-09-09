@@ -17,7 +17,7 @@ crate-type = ["rlib"]
 # Standard plugin-owned compositions reuse the static typed clients and owned event adapter.
 microui-redux.workspace = true
 microui-contracts.workspace = true
-nc-com = { workspace = true, features = ["macros", "std"] }
+neocogi-com = { workspace = true, features = ["macros", "std"] }
 bitflags.workspace = true
 rs-math3d.workspace = true
 

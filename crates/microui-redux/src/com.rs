@@ -6,7 +6,7 @@
 //! object support.
 
 pub use microui_contracts::*;
-use nc_com::{ComInterface, ComPtr, ComRef, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
+use neocogi_com::{ComInterface, ComPtr, ComRef, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
 mod containers;
 pub use containers::{DisclosureWidget, GridWidget, LinearWidget, ScrollAreaWidget};
 
@@ -335,7 +335,7 @@ impl<'a> Painter<'a> {
     /// restoration is involved. The parent painter remains usable with its original clip.
     pub fn clipped(&self, rect: Rect) -> Result<Self, NcStatus> {
         if rect.width < 0 || rect.height < 0 {
-            return Err(nc_com::NC_E_INVALID_ARG);
+            return Err(neocogi_com::NC_E_INVALID_ARG);
         }
         let parent = self.scope.clip;
         let x = parent.x.max(rect.x);

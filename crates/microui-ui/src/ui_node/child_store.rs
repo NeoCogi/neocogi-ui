@@ -1,7 +1,7 @@
 //! One authoritative owned child collection with separate read/edit COM capabilities.
 use super::HostState;
 use microui_contracts::*;
-use nc_com::{ComPtr, ComRef, IUnknown, NcStatus, com_object};
+use neocogi_com::{ComPtr, ComRef, IUnknown, NcStatus, com_object};
 use std::{cell::{Cell, RefCell}, rc::Rc};
 use super::node_factory::NodeFactory;
 use crate::Children;
@@ -75,7 +75,7 @@ impl ChildStore {
     /// Permanently closes all descendants; active traversals reject before mutation.
     pub(super) fn close(self: &Rc<Self>) -> Result<ChildEditResult, NcStatus> {
         if self.closed.get() {
-            return Ok(ChildEditResult { teardown: nc_com::NC_OK });
+            return Ok(ChildEditResult { teardown: neocogi_com::NC_OK });
         }
         let mut nodes = self.take_storage()?;
         let errors = TeardownErrors::new(&self.factory.state);
@@ -150,7 +150,7 @@ impl IChildren for ChildView {
     /// Returns one actual child projection; checked-out collections report BUSY.
     fn child(&self, index: u32) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
         let nodes = self.store.take()?;
-        let node = nodes.get(index as usize).ok_or(nc_com::NC_E_OUT_OF_RANGE)?;
+        let node = nodes.get(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
         Ok(node.data.com().widget.clone())
     }
 }
@@ -204,14 +204,14 @@ impl IChildrenEditor for ChildEditor {
         self.store.factory.check_edit()?;
         let mut nodes = self.store.take()?;
         if index as usize > nodes.len() || nodes.len() == u32::MAX as usize {
-            return Err(nc_com::NC_E_OUT_OF_RANGE);
+            return Err(neocogi_com::NC_E_OUT_OF_RANGE);
         }
         let node = self.store.factory.mount_node(widget, Some(&self.store))?;
         nodes
             .insert(index as usize, node)
             .unwrap_or_else(|_| unreachable!("validated index cannot change during an owned transaction"));
         self.store.dirty.set(true);
-        Ok(ChildEditResult { teardown: nc_com::NC_OK })
+        Ok(ChildEditResult { teardown: neocogi_com::NC_OK })
     }
     /// Validates the entire replacement before committing removal of the old subtree.
     fn replace(&self, index: u32, widget: ComRef<'_, IWidgetAbi>) -> Result<ChildEditResult, NcStatus> {
@@ -219,7 +219,7 @@ impl IChildrenEditor for ChildEditor {
         self.store.factory.check_edit()?;
         let mut nodes = self.store.take()?;
         if index as usize >= nodes.len() {
-            return Err(nc_com::NC_E_OUT_OF_RANGE);
+            return Err(neocogi_com::NC_E_OUT_OF_RANGE);
         }
         let node = self.store.factory.mount_node(widget, Some(&self.store))?;
         let errors = TeardownErrors::new(&self.store.factory.state);
@@ -234,11 +234,11 @@ impl IChildrenEditor for ChildEditor {
         self.store.factory.check_edit()?;
         let mut nodes = self.store.take()?;
         if index as usize >= nodes.len() {
-            return Err(nc_com::NC_E_OUT_OF_RANGE);
+            return Err(neocogi_com::NC_E_OUT_OF_RANGE);
         }
         let errors = TeardownErrors::new(&self.store.factory.state);
         if !nodes.remove_drop(index as usize) {
-            return Err(nc_com::NC_E_OUT_OF_RANGE);
+            return Err(neocogi_com::NC_E_OUT_OF_RANGE);
         }
         self.store.dirty.set(true);
         Ok(errors.result())
@@ -296,7 +296,7 @@ impl<'a> TeardownErrors<'a> {
     /// Reports this edit's close result after topology has committed.
     fn result(&self) -> ChildEditResult {
         ChildEditResult {
-            teardown: self.state.error.get().unwrap_or(nc_com::NC_OK),
+            teardown: self.state.error.get().unwrap_or(neocogi_com::NC_OK),
         }
     }
 }

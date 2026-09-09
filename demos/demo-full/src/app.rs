@@ -61,7 +61,7 @@ use super::{
 use microui_redux::{events::*, *};
 use microui_redux_demo_assets::themes::Theme;
 use microui_redux_demo_host::{AppState, Host, HostError};
-use nc_com::{ComInterface, ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
+use neocogi_com::{ComInterface, ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
 use std::{cell::RefCell, rc::Rc};
 
 /// Application-owned combo values never cross the ABI as an erased generic collection.

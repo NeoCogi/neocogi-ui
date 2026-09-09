@@ -1,9 +1,9 @@
 //! Conversion from validated portable tables to UI-local lookup storage.
 use super::*;
 use microui_contracts::{AssetFont, AssetGlyph, AssetIcon, AssetRange, Size};
-use nc_com::NcStatus;
+use neocogi_com::NcStatus;
 #[cfg(test)]
-use nc_com::NC_E_INVALID_ARG;
+use neocogi_com::NC_E_INVALID_ARG;
 
 /// Owned wire tables prepared once by an exporter or copied once by an importer.
 #[derive(Default)]

@@ -8,10 +8,10 @@
 | [full](../demos/demo-full/src/app.rs) | Menus, dialogs, editing, images, themes, containers and custom graphics. |
 | [smoke](../demos/com-slice/src/main.rs) | Independent dynamic loading and explicit runtime/renderer boundary checks. |
 
-After installing the [assembly tool](../tools/cargo-nc-com), build and run a complete native package:
+After installing the [assembly tool](../tools/cargo-neocogi), build and run a complete native package:
 
 ```sh
-cargo nc-com run --assembly calculator
+cargo neocogi run --assembly calculator
 ```
 
 Choose `full`, `simple`, `calculator`, `backend-frame-cube` or `smoke` with

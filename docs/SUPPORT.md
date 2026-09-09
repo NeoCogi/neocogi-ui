@@ -10,7 +10,7 @@ The crate uses Rust 2024 edition but does not publish a minimum supported Rust v
 Development and CI target the current stable Rust toolchain. Dependency updates or a pre-1.0 minor
 release may therefore require a newer stable compiler.
 
-The [cargo-nc-com command](../tools/cargo-nc-com/README.md) builds ordinary native
+The [cargo-neocogi command](../tools/cargo-neocogi/README.md) builds ordinary native
 assemblies with stable or explicitly selected nightly Cargo. Its bundled `min-size`
 preset requires nightly plus `rust-src` and currently targets x86_64 Linux GNU.
 Foreign-target assembly is rejected because descriptor validation loads native
@@ -41,7 +41,7 @@ it. There is no compatibility or long-term-support commitment. Pin the checkout 
 your application and every plugin together, and review the [changelog](CHANGELOG.md) before upgrading. The manifest version
 is not a promise that the unreleased checkout matches a published package.
 
-The forked nc-com sources in `crates/com` are part of this checkout. Core ABI 3,
+The forked neocogi-com sources in `crates/com` are part of this checkout. Core ABI 3,
 runtime API table version 1 and hash grammar version 2 are separate discriminators.
 Use the workspace sources for both producer and consumer; a crates.io dependency
 with the same pre-alpha package version is not a substitute for this fork. Native

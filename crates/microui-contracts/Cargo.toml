@@ -12,5 +12,5 @@ theme-json = ["dep:serde"]
 
 [dependencies]
 serde = { workspace = true, optional = true }
-nc-com = { workspace = true, features = ["macros"] }
+neocogi-com = { workspace = true, features = ["macros"] }
 rs-math3d.workspace = true

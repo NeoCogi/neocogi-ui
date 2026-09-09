@@ -4,7 +4,7 @@
 //! and copies geometry between the contract representation and the retained math representation.
 
 use microui_contracts::Rect;
-use nc_com::{NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
+use neocogi_com::{NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
 
 
 /// Validates a whole UTF-8 replacement before touching any live object state.

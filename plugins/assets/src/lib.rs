@@ -2,7 +2,7 @@
 //! Native paths, decoder state and construction data never escape this plugin through native handles.
 #![deny(missing_docs)]
 use microui_contracts::*;
-use nc_com::{ComPtr, INcStringAbi, NcStatus, NcString, NC_E_INVALID_ARG};
+use neocogi_com::{ComPtr, INcStringAbi, NcStatus, NcString, NC_E_INVALID_ARG};
 use std::cell::RefCell;
 
 #[cfg(feature = "builder")]
@@ -37,22 +37,22 @@ impl Diagnostic {
 }
 
 #[cfg(not(feature = "builder"))]
-nc_com::plugin! {
+neocogi_com::plugin! {
     plugin_id(auto_guid = "microui.plugin.assets"), name = "microui.plugin.assets",
     version = "0.9.0-alpha.0", classes = [PngDecoderObject, StyleCompilerObject],
 }
 #[cfg(all(feature = "builder", not(feature = "theme-json")))]
-nc_com::plugin! {
+neocogi_com::plugin! {
     plugin_id(auto_guid = "microui.plugin.assets"), name = "microui.plugin.assets",
     version = "0.9.0-alpha.0", classes = [PngDecoderObject, StyleCompilerObject, AssetLoaderObject],
 }
 #[cfg(feature = "theme-json")]
-nc_com::plugin! {
+neocogi_com::plugin! {
     plugin_id(auto_guid = "microui.plugin.assets"), name = "microui.plugin.assets",
     version = "0.9.0-alpha.0", classes = [PngDecoderObject, StyleCompilerObject, AssetLoaderObject, ThemeLoaderObject],
 }
 #[cfg(feature = "dynamic-plugin")]
-nc_com::export_plugin!();
+neocogi_com::export_plugin!();
 
 /// Optional JSON authoring compiler producing ordinary portable resource tables.
 #[cfg(feature = "theme-json")]

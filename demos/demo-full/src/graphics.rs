@@ -52,7 +52,7 @@
 //
 //! Local math-to-contract conversions used by the concrete graphics widgets.
 pub(super) use microui_redux::*;
-pub(super) use nc_com::{ComPtr, ComRef, NcStatus, NcCopyFromBufferOffset};
+pub(super) use neocogi_com::{ComPtr, ComRef, NcStatus, NcCopyFromBufferOffset};
 pub(super) use rs_math3d::{Vec2f, Vec2i, Vec3f, Vec4f, Mat4f, Quatf, Box3f, Recti, Dimensioni};
 pub(super) use rs_math3d::{FloatVector, Vector, CrossProduct};
 pub(super) use std::f32::consts::PI;

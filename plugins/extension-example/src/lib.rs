@@ -9,7 +9,7 @@ use microui_redux::{
     Painter,
     events::{Activation, EventSource},
 };
-use nc_com::{com_object, ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
+use neocogi_com::{com_object, ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
 
 /// Common state is inline; the example adds no second widget allocation or type-erased data.
 struct Common {
@@ -224,7 +224,7 @@ impl IInset for Inset {
     fn set_padding(&mut self, padding: i32) -> Result<(), NcStatus> {
         self.common.state.writable()?;
         if !(0..=i32::MAX / 2).contains(&padding) {
-            return Err(nc_com::NC_E_INVALID_ARG);
+            return Err(neocogi_com::NC_E_INVALID_ARG);
         }
         if self.padding != padding {
             self.padding = padding;
@@ -266,7 +266,7 @@ impl IContainerLayout for Inset {
     fn place(&mut self, scope: LayoutScope, rect: Rect, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<ContainerGeometry, NcStatus> {
         self.common.state.readable()?;
         if rect.width < 0 || rect.height < 0 {
-            return Err(nc_com::NC_E_INVALID_ARG);
+            return Err(neocogi_com::NC_E_INVALID_ARG);
         }
         self.common.calls.placements += 1;
         let padding = self.padding;
@@ -319,11 +319,11 @@ impl ExtensionProvider for ExtensionProviderObject {
         .query()
     }
 }
-nc_com::plugin! {
+neocogi_com::plugin! {
     plugin_id(auto_guid = "microui.plugin.extension-example"),
     name = "microui.plugin.extension-example",
     version = "0.9.0-alpha.0",
     classes = [CounterObject, ExtensionProviderObject],
 }
 #[cfg(feature = "dynamic-plugin")]
-nc_com::export_plugin!();
+neocogi_com::export_plugin!();

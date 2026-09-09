@@ -1,7 +1,7 @@
 //! Runtime-owned paint state lets COM widgets append directly to the one frame display list.
 use crate::boundary::{copied_rect, local_rect, text};
 use microui_contracts::*;
-use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
+use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
 use crate::{FontRole, WidgetOption, ControlRole};
 use crate::math::RectExt;
 
@@ -90,7 +90,7 @@ impl Recorder {
         if self.active != 0 || self.context.is_some() {
             return Err(UI_E_BUSY);
         }
-        let invocation = self.next.checked_add(1).ok_or(nc_com::NC_E_OUT_OF_RANGE)?;
+        let invocation = self.next.checked_add(1).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
         self.next = invocation;
         self.context = Some(context);
         self.active = invocation;
@@ -280,14 +280,14 @@ impl PaintService {
         Self { painter }
     }
 
-    /// Uses nc-com's object-wide exclusive gate to access the recorder implementation it created.
+    /// Uses neocogi-com's object-wide exclusive gate to access the recorder implementation it created.
     fn with_recorder_mut<T>(&mut self, call: impl FnOnce(&mut Recorder) -> T) -> Result<T, NcStatus> {
-        let header = <IPainterAbi as nc_com::ComInterface>::iunknown(self.painter.as_mut_ptr());
+        let header = <IPainterAbi as neocogi_com::ComInterface>::iunknown(self.painter.as_mut_ptr());
         // SAFETY: `painter` was created exclusively by `Recorder::from_value` in `new` and keeps
         // that allocation alive. Its generated interface header therefore carries the matching
         // Recorder storage pointer. `with_abi_mut` applies the same exclusive call gate used by
         // normal mutable COM dispatch before lending the concrete value to this closure.
-        unsafe { <Recorder as nc_com::ComAbiObject>::with_abi_mut((*header).object, call) }
+        unsafe { <Recorder as neocogi_com::ComAbiObject>::with_abi_mut((*header).object, call) }
     }
 
     /// Moves the frame list into the scoped context, calls a component, then restores the list.

@@ -1,6 +1,6 @@
 //! Thin owning image client caches only the dimensions guaranteed immutable by ITexture.
 use crate::{ITextureAbi, Size};
-use nc_com::{ComPtr, ComRef, NcStatus};
+use neocogi_com::{ComPtr, ComRef, NcStatus};
 
 /// One retained texture plus its checked immutable measurement dimensions.
 #[derive(Clone)]
@@ -15,7 +15,7 @@ impl Image {
     pub fn from_interface(interface: ComPtr<ITextureAbi>) -> Result<Self, NcStatus> {
         let size = interface.size()?;
         if size.width <= 0 || size.height <= 0 {
-            return Err(nc_com::NC_E_INVALID_ARG);
+            return Err(neocogi_com::NC_E_INVALID_ARG);
         }
         Ok(Self { interface, size })
     }

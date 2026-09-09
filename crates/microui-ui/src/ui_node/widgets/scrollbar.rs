@@ -273,12 +273,12 @@ impl crate::event::ComEvent for ScrollbarChanged {
     type Sink = microui_contracts::IScrollbarSinkAbi;
 
     /// Delivers the captured offset through the Scrollbar event contract.
-    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
         sink.changed(self.offset)
     }
 }
 
-#[nc_com::com_object(microui_contracts::Scrollbar)]
+#[neocogi_com::com_object(microui_contracts::Scrollbar)]
 /// Standalone one-axis scrollbar and dynamically constructible COM object.
 pub struct Scrollbar {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -629,7 +629,7 @@ mod tests {
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl};
 use microui_contracts::{IEventSubscriptionAbi, IScrollbarSinkAbi, IWidgetHostAbi, ScrollAxis, ScrollRange, ScrollbarAbi};
-use nc_com::*;
+use neocogi_com::*;
 
 direct_widget_phase_impl!(Scrollbar);
 direct_leaf_layout_impl!(Scrollbar);

@@ -3,7 +3,7 @@
 //! This helper lives inside the widget's COM allocation. Its Rust layout never
 //! crosses an interface boundary and it owns no children, runtime or app sink.
 
-use nc_com::{ComPtr, ComRef, NcStatus, NC_E_INVALID_ARG, com_int_enum, com_struct};
+use neocogi_com::{ComPtr, ComRef, NcStatus, NC_E_INVALID_ARG, com_int_enum, com_struct};
 use crate::{GeometryChange, IWidgetHostAbi, UI_E_CLOSED, UI_E_OWNER};
 
 /// Common logical lifetime and sticky geometry state for one concrete widget.

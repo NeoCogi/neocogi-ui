@@ -98,12 +98,12 @@ impl crate::event::ComEvent for NumberChanged {
     type Sink = microui_contracts::INumericSinkAbi;
 
     /// Delivers the captured value through the Number numeric event contract.
-    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
         sink.changed(self.value)
     }
 }
 
-#[nc_com::com_object(microui_contracts::Number)]
+#[neocogi_com::com_object(microui_contracts::Number)]
 /// Concrete retained number input and dynamically constructible COM object.
 pub struct Number {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -317,7 +317,7 @@ impl crate::ui_node::widget_object::FontState for Number {
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
 use microui_contracts::{GeometryChange, IEventSubscriptionAbi, INumericSinkAbi, IWidgetHostAbi, NumberAbi, NumberOptions, TextFontRole};
-use nc_com::*;
+use neocogi_com::*;
 
 direct_widget_phase_impl!(Number);
 direct_leaf_layout_impl!(Number);

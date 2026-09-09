@@ -5,7 +5,7 @@ use crate::ui_node::HostState;
 use crate::{ImageSource, TextureId};
 use crate::render::{AtlasUploadError, FrameError, FrameInfo, RendererBackend, RendererFrame, TextureError, Vertex, RenderItemArgs};
 use microui_contracts::*;
-use nc_com::{ComPtr, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
+use neocogi_com::{ComPtr, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
 use std::{cell::{Cell, RefCell}, rc::Rc};
 
 /// Decodes canonical RGBA packing independently of machine byte order.
@@ -99,7 +99,7 @@ impl IRenderStream for Stream {
         let source = vertices.get(offset..).ok_or(NC_E_INVALID_ARG)?;
         let count = source.len().min(output.len());
         output.as_mut_slice()[..count].copy_from_slice(&source[..count]);
-        u32::try_from(count).map_err(|_| nc_com::NC_E_OUT_OF_RANGE)
+        u32::try_from(count).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)
     }
     /// Copies ordered metadata without invoking any resource method while storage is borrowed.
     fn batches(&self, invocation: u64, mut output: NcCopyToBufferOffset<'_, RenderBatchAbi>) -> Result<u32, NcStatus> {

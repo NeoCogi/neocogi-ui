@@ -116,7 +116,7 @@ impl TextAreaParameters {
 }
 
 /// Concrete editable text leaf retained as the ordinary content of a [`ScrollArea`].
-#[nc_com::com_object(interfaces(
+#[neocogi_com::com_object(interfaces(
     microui_contracts::IMultilineEditor,
     microui_contracts::ILeafLayout,
     microui_contracts::IFontStyle,
@@ -148,18 +148,18 @@ pub struct TextEditor {
 }
 
 /// Concrete fixed scrolling text-area class with one actual editor child.
-#[nc_com::com_object(microui_contracts::TextArea)]
+#[neocogi_com::com_object(microui_contracts::TextArea)]
 pub struct TextArea {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Exactly three owned structural children: surface and both scrollbar objects.
-    pub(crate) editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+    pub(crate) editor: neocogi_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
     /// Multiline editing capability of the sole content child.
-    pub(crate) text: nc_com::ComPtr<microui_contracts::IMultilineEditorAbi>,
+    pub(crate) text: neocogi_com::ComPtr<microui_contracts::IMultilineEditorAbi>,
     /// Font capability queried from that same content child.
-    pub(crate) font: nc_com::ComPtr<microui_contracts::IFontStyleAbi>,
+    pub(crate) font: neocogi_com::ComPtr<microui_contracts::IFontStyleAbi>,
     /// Event capability queried from that same content child.
-    pub(crate) events: nc_com::ComPtr<microui_contracts::ITextEventsAbi>,
+    pub(crate) events: neocogi_com::ComPtr<microui_contracts::ITextEventsAbi>,
     /// Scalar scrolling state shared with the surface, scrollbars, and editor caret requests.
     pub(crate) model: std::rc::Rc<crate::ui_node::ScrollModel>,
     /// Native fixture policy; deployed options belong to the embedded runtime.
@@ -171,10 +171,10 @@ impl TextArea {
     /// Combines the completed fixed topology and its queried editor capabilities in one class value.
     pub(crate) fn from_runtime(
         runtime: crate::ui_node::widget_object::WidgetRuntime,
-        editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
-        text: nc_com::ComPtr<microui_contracts::IMultilineEditorAbi>,
-        font: nc_com::ComPtr<microui_contracts::IFontStyleAbi>,
-        events: nc_com::ComPtr<microui_contracts::ITextEventsAbi>,
+        editor: neocogi_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+        text: neocogi_com::ComPtr<microui_contracts::IMultilineEditorAbi>,
+        font: neocogi_com::ComPtr<microui_contracts::IFontStyleAbi>,
+        events: neocogi_com::ComPtr<microui_contracts::ITextEventsAbi>,
         model: std::rc::Rc<crate::ui_node::ScrollModel>,
     ) -> Self {
         #[cfg(test)]
@@ -258,7 +258,7 @@ impl crate::ui_node::widget_object::HostedWidget for TextArea {
     }
 
     /// Closes the surface, editor, and both scrollbar children through their fixed writer.
-    fn close_contents(&mut self) -> Result<(), nc_com::NcStatus> {
+    fn close_contents(&mut self) -> Result<(), neocogi_com::NcStatus> {
         self.editor.close()?.finish()
     }
 }
@@ -283,7 +283,7 @@ impl crate::event::ComEvent for TextAreaChanged {
     type Sink = microui_contracts::ITextChangedSinkAbi;
 
     /// Delivers normalized text and its matching cursor from the same captured event.
-    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
         crate::event::deliver_text_changed(&self.text, self.cursor, sink)
     }
 }
@@ -292,7 +292,7 @@ impl crate::event::ComEvent for TextAreaSubmitted {
     type Sink = microui_contracts::ITextSubmittedSinkAbi;
 
     /// Delivers the captured submission without consulting the live TextArea editor.
-    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
         crate::event::deliver_text_submitted(&self.text, sink)
     }
 }
@@ -906,7 +906,7 @@ use microui_contracts::{
     GeometryChange, IEventSubscriptionAbi, IFontStyle, IMultilineEditor, IMultilineEditorAbi, ITextChangedSinkAbi, ITextContent, ITextEditor, ITextEvents,
     ITextSubmittedSinkAbi, IWidgetAbi, IWidgetHostAbi, TextAreaAbi, TextFontRole, TextWrapping,
 };
-use nc_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString};
+use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString};
 
 direct_widget_phase_impl!(TextEditor);
 direct_leaf_layout_impl!(TextEditor);

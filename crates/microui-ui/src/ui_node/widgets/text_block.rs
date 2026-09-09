@@ -108,7 +108,7 @@ impl TextBlockParameters {
     }
 }
 
-#[nc_com::com_object(microui_contracts::TextBlock)]
+#[neocogi_com::com_object(microui_contracts::TextBlock)]
 /// Concrete retained text block and dynamically constructible COM object.
 pub struct TextBlock {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -297,7 +297,7 @@ mod tests {
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
 use microui_contracts::{GeometryChange, IWidgetHostAbi, TextBlockAbi, TextFontRole, TextWrapping};
-use nc_com::*;
+use neocogi_com::*;
 
 direct_widget_phase_impl!(TextBlock);
 direct_leaf_layout_impl!(TextBlock);

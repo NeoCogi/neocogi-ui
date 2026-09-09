@@ -2,7 +2,7 @@
 use crate::{AtlasHandle, Children, Constraints, Dimensioni, Recti, Skin, ChildParticipation};
 use crate::ui_node::layout_service::ScopedLayout;
 use crate::ui_node::LayoutTraversal;
-use nc_com::NcStatus;
+use neocogi_com::NcStatus;
 
 /// The test harness alone can substitute borrowed native children for the COM service.
 pub(crate) enum ChildLayout<'a> {

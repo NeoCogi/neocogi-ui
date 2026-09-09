@@ -16,4 +16,4 @@ dynamic-plugin = []
 microui-contracts.workspace = true
 microui-demo-contracts.workspace = true
 microui-redux.workspace = true
-nc-com = { workspace = true, features = ["macros", "std"] }
+neocogi-com = { workspace = true, features = ["macros", "std"] }

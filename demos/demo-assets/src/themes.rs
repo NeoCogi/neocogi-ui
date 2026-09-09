@@ -1,6 +1,6 @@
 //! Complete theme choices from the asset plugin, or explicitly embedded build-time tables.
 use microui_redux::IAssetBundleAbi;
-use nc_com::{ComPtr, ComRef, NcStatus};
+use neocogi_com::{ComPtr, ComRef, NcStatus};
 
 /// Windows 3.11 compiled data also remains usable as an independent source bundle.
 #[cfg(feature = "embed-assets")]
@@ -67,9 +67,9 @@ impl Theme {
                 Self::MacOs9 => "themes/mac-os-9/theme.json",
                 Self::Default => unreachable!(),
             };
-            let path = super::files::asset_path(path).map_err(|_| nc_com::NC_E_LOAD_FAILED)?;
+            let path = super::files::asset_path(path).map_err(|_| neocogi_com::NC_E_LOAD_FAILED)?;
             // SAFETY: The trusted theme plugin declares a no-argument constructor.
-            let loader: ComPtr<ThemeLoaderAbi> = nc_com::Runtime::global().construct(())?;
+            let loader: ComPtr<ThemeLoaderAbi> = neocogi_com::Runtime::global().construct(())?;
             loader.load_theme(NativePath::new(&path).as_interface(), base)
         }
     }

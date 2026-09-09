@@ -163,7 +163,7 @@ impl crate::event::ComEvent for PopupEvent {
     type Sink = microui_contracts::IPopupSinkAbi;
 
     /// Delivers the captured dismissal without retaining or rereading its popup surface.
-    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
         match self {
             Self::Dismissed => sink.dismissed(),
         }

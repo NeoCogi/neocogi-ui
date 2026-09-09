@@ -1,12 +1,12 @@
 **COM migration proposal for microui-redux**
 
-This is the accepted design and implementation plan. Progress is tracked in COM_MIGRATION.md. It incorporates the requested statically linked generic Rust façade over dynamically linked COM implementations, and importing nc-com into this workspace so it can be modified here.
+This is the accepted design and implementation plan. Progress is tracked in COM_MIGRATION.md. It incorporates the requested statically linked generic Rust façade over dynamically linked COM implementations, and importing neocogi-com into this workspace so it can be modified here.
 
-The analysis used microui-redux `0.9-alpha.0` at `6b4fd86` and nc-com at `fbb66e6`, located at `/home/aifu/projects/neocogi/nc-com`. The `neo-cogi` spelling in the original path differs from the actual directory.
+The analysis used microui-redux `0.9-alpha.0` at `6b4fd86` and neocogi-com at `fbb66e6`, located at `/home/aifu/projects/neocogi/neocogi-com`. The `neo-cogi` spelling in the original path differs from the actual directory.
 
 **1. Recommended overall design**
 
-Use nc-com itself as the COM foundation. Import its source, preserve its crate boundaries, and make focused changes there. Introduce one small UI contract crate and turn the existing public microui-redux crate into the statically linked Rust façade. Move the retained implementation behind that façade into a UI plugin.
+Use neocogi-com itself as the COM foundation. Import its source, preserve its crate boundaries, and make focused changes there. Introduce one small UI contract crate and turn the existing public microui-redux crate into the statically linked Rust façade. Move the retained implementation behind that façade into a UI plugin.
 
 Keep three plugin groups:
 
@@ -16,7 +16,7 @@ Keep three plugin groups:
 | Platform/rendering | Native host/window integration and the selected rendering backend; application GPU extensions compiled into the same binary | Required; normally build one backend |
 | Assets | Atlas building, font rasterization, PNG decoding, optional JSON theme loading | Optional; omitted when supplying compiled assets |
 
-The nc-com runtime shared library is infrastructure, not another UI plugin. A normal native installation would therefore contain the executable, the nc-com runtime library, the UI plugin, a platform/rendering plugin, and optionally the assets plugin.
+The neocogi-com runtime shared library is infrastructure, not another UI plugin. A normal native installation would therefore contain the executable, the neocogi-com runtime library, the UI plugin, a platform/rendering plugin, and optionally the assets plugin.
 
 Existing backend/helper crates can remain statically linked dependencies inside the platform plugin. A Cargo crate does not need its own plugin descriptor or shared library. In particular, do not make every widget, container, renderer-support helper, painter, or event type a separately loaded plugin.
 
@@ -27,11 +27,11 @@ application and application state
     |
     | statically linked Rust generics, concrete proxy types, local borrows
     v
-microui-redux façade  -------->  nc-com façade
+microui-redux façade  -------->  neocogi-com façade
     |                              |
     | generated COM calls          | class loading and activation
     v                              v
-microui-contracts             one nc-com runtime library
+microui-contracts             one neocogi-com runtime library
     |                              |
     +------------------------------+--------------------+
     |                              |                    |
@@ -45,7 +45,7 @@ Concrete source ownership follows the same boundary. `microui-contracts` contain
 
 Default planning assumption: preserve the current browser demo through a statically linked build of the same COM interfaces. This is a separate deployment mode from the statically linked façade used by native dynamic deployments. Browser dynamic plugin loading is outside the initial design.
 
-**2. What nc-com already provides**
+**2. What neocogi-com already provides**
 
 The existing project already has most of the necessary foundation:
 
@@ -62,36 +62,36 @@ The existing project already has most of the necessary foundation:
 Its current rules also matter:
 
 - Interface and callable-class methods explicitly choose `&self` or `&mut self` and return `Result<T, NcStatus>`; generic methods, associated types, arbitrary Rust references and containers do not cross the ABI. Receiver kind is checked ABI metadata, and generated objects reject overlapping mutable calls with `NC_E_BUSY` before creating a Rust reference.
-- The public `Runtime` facade is process-global and expects a separately built nc-com runtime shared library.
+- The public `Runtime` facade is process-global and expects a separately built neocogi-com runtime shared library.
 - Loaded plugins remain mapped until process exit. Live activation failures abort; plugin dependency entries do not discover or recursively load files.
 - Panics are not converted into error statuses. A panic at the C boundary aborts.
 - There is no existing general COM weak-reference API.
 - COM object destruction happens at final Release. It cannot act as a fallible submit/shutdown operation.
 
-Relevant sources: [nc-com usage and ABI rules](../crates/com/README.md#L261), [ownership and threading](../crates/com/README.md#L837), [startup loading](../crates/com/README.md#L700), [runtime linkage](../crates/com/nc-com-runtime-sys/src/lib.rs#L1).
+Relevant sources: [neocogi-com usage and ABI rules](../crates/com/README.md#L261), [ownership and threading](../crates/com/README.md#L837), [startup loading](../crates/com/README.md#L700), [runtime linkage](../crates/com/runtime-sys/src/lib.rs#L1).
 
-**3. Importing nc-com into this workspace**
+**3. Importing neocogi-com into this workspace**
 
 Import the six existing crates, with their names preserved:
 
 ```text
-crates/com/nc-com-core/
-crates/com/nc-com-macros/
-crates/com/nc-com/
-crates/com/nc-com-runtime-sys/
-crates/com/nc-com-runtime/
-tools/nc-com-inspect/
+crates/com/core/
+crates/com/macros/
+crates/com/api/
+crates/com/runtime-sys/
+crates/com/runtime/
+tools/neocogi-inspect/
 ```
 
 These become workspace members with path-based workspace dependencies. This is an owned source import, not a dependency on another developer's home-directory checkout and not an unpinned remote dependency.
 
-Preserve MIT licensing, attribution, source provenance, tests, ABI fixtures, and the canonical COM documentation. Import package metadata explicitly: nc-com currently inherits its own version, license, rust-version and documentation metadata from its workspace, which differ from microui's metadata. Do not accidentally give the imported crates the UI package's composite license or UI version.
+Preserve MIT licensing, attribution, source provenance, tests, ABI fixtures, and the canonical COM documentation. Import package metadata explicitly: neocogi-com currently inherits its own version, license, rust-version and documentation metadata from its workspace, which differ from microui's metadata. Do not accidentally give the imported crates the UI package's composite license or UI version.
 
-Move or adapt nc-com's build/test scripts, workflow-example fixtures and path assumptions. Record the imported revision so future changes can be compared with the original. Do not inherit its root toolchain pin across the UI workspace: select toolchains explicitly for COM compatibility tests and nightly min-size builds.
+Move or adapt neocogi-com's build/test scripts, workflow-example fixtures and path assumptions. Record the imported revision so future changes can be compared with the original. Do not inherit its root toolchain pin across the UI workspace: select toolchains explicitly for COM compatibility tests and nightly min-size builds.
 
-Only the executable/bootstrap path needs the runtime-loading facade. Implementation plugins should normally depend on contracts and nc-com's object/macros support, rather than linking their own nc-com-runtime implementations. Dependencies or services needed by an object should be supplied through typed constructor/factory interfaces. Ordinary method calls should not perform global registry lookups.
+Only the executable/bootstrap path needs the runtime-loading facade. Implementation plugins should normally depend on contracts and neocogi-com's object/macros support, rather than linking their own neocogi-com-runtime implementations. Dependencies or services needed by an object should be supplied through typed constructor/factory interfaces. Ordinary method calls should not perform global registry lookups.
 
-**4. nc-com changes to make here**
+**4. neocogi-com changes to make here**
 
 There are several concrete additions worth making before migrating the retained engine.
 
@@ -104,7 +104,7 @@ There are several concrete additions worth making before migrating the retained 
 | Support generic, unregistered implementation classes where needed | Lets a static façade implement reusable typed event adapters without generic ABI interfaces | After the first event adapter proves the need |
 | Preserve/check error and ownership behavior through new adapters | Pointer validation, final release, invalid status normalization, and panic behavior remain COM responsibilities | Every COM change |
 
-The recursive-interface issue is verified, not hypothetical. This fails to compile against the current nc-com checkout with E0391:
+The recursive-interface issue is verified, not hypothetical. This fails to compile against the current neocogi-com checkout with E0391:
 
 ```rust
 #[com_interface(auto_guid = "microui.plan.RecursiveNode:v1")]
@@ -114,7 +114,7 @@ pub trait IRecursiveNode {
 }
 ```
 
-The generated ABI hash includes hashes of referenced interfaces, and IID currently defaults to a projection of the complete interface identity. A self-reference or mutual reference creates a constant-evaluation cycle. The failure is preserved in `recursive-check.log` beside this plan. Source: [referenced-interface hashing](../crates/com/nc-com-macros/src/interface.rs#L617).
+The generated ABI hash includes hashes of referenced interfaces, and IID currently defaults to a projection of the complete interface identity. A self-reference or mutual reference creates a constant-evaluation cycle. The failure is preserved in `recursive-check.log` beside this plan. Source: [referenced-interface hashing](../crates/com/macros/src/interface.rs#L617).
 
 Since this is now an owned pre-alpha COM layer, I would fix this rather than shape every UI interface around the limitation. My preferred design to investigate is:
 
@@ -134,13 +134,13 @@ For borrowed call helpers, reuse the existing generated call body for a borrowed
 For static plugins, a simple API would be descriptor generation plus an explicit export macro at the final dynamic-library root:
 
 ```rust,ignore
-nc_com::plugin! { /* identity, dependencies, class descriptors */ }
+neocogi_com::plugin! { /* identity, dependencies, class descriptors */ }
 
 #[cfg(feature = "dynamic-plugin")]
-nc_com::export_plugin!(); // proposed addition
+neocogi_com::export_plugin!(); // proposed addition
 ```
 
-Both deployment modes use the same descriptor and class table. Only a dynamic library exports `nc_get_plugin_descriptor`. Source of the present unconditional export: [plugin macro](../crates/com/nc-com-macros/src/plugin.rs#L204).
+Both deployment modes use the same descriptor and class table. Only a dynamic library exports `nc_get_plugin_descriptor`. Source of the present unconditional export: [plugin macro](../crates/com/macros/src/plugin.rs#L204).
 
 The static runtime mode must reuse the existing catalog and API-table implementation. It must not create a second registry design. A native dynamic application links one runtime shared library; a fully static/browser application links one runtime implementation. Do not embed independent process-global registries in each plugin.
 
@@ -172,7 +172,7 @@ Distinguish the OS window from microui's logical retained windows. Logical windo
 Register every concrete class that a host or extension must construct, including
 built-in widgets. A runtime-bound UI factory may remain as a dynamically linked
 convenience over those same contracts, but it is not the only construction path.
-Class constructors receive typed argument frames decoded by nc-com; there is no
+Class constructors receive typed argument frames decoded by neocogi-com; there is no
 untyped property bag, `Any`, or host-side duplicate of plugin constructor state.
 
 **6. The static generic façade**
@@ -180,7 +180,7 @@ untyped property bag, `Any`, or host-side duplicate of plugin constructor state.
 This is the requested generic/static-to-COM/dynamic split:
 
 ```rust
-use nc_com::{
+use neocogi_com::{
     ComInterface, ComPtr, NcCopyFromBufferOffset, NcStatus,
 };
 
@@ -218,7 +218,7 @@ impl Widget<ButtonAbi> {
 The corresponding contract is concrete and small:
 
 ```rust
-use nc_com::{
+use neocogi_com::{
     ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus,
     com_class, com_interface,
 };
@@ -279,10 +279,10 @@ let arguments = ButtonAbi::arguments(
     NcCopyFromBufferOffset::new(0, b"Save"),
     WidgetOptions::FRAME,
 )?;
-let button = nc_com::Runtime::global().construct::<ButtonAbi>(arguments)?;
+let button = neocogi_com::Runtime::global().construct::<ButtonAbi>(arguments)?;
 ```
 
-The class contract requires the common protocols; nc-com exposes those projections
+The class contract requires the common protocols; neocogi-com exposes those projections
 from the same allocation. A concrete plugin class contains its private state directly:
 
 ```rust,ignore
@@ -316,7 +316,7 @@ plugin. `UiRuntime::factory()` returns an instance bound to the runtime's
 Hosts may activate either `UiFactoryAbi` or individual widget classes directly.
 
 The original temporary compile-tested sketch is superseded by the checked-in
-[facade regressions](../crates/microui-redux/tests/com_facade.rs). The sketch compiled the separate Widget/Children/Button/event capabilities and tests that a generic proxy edits a COM object, reads its text and observes the same geometry invalidation flag. This validates the contract/façade pattern with current nc-com; it is not a dynamic UI implementation or proof of the proposed nc-com ABI changes.
+[facade regressions](../crates/microui-redux/tests/com_facade.rs). The sketch compiled the separate Widget/Children/Button/event capabilities and tests that a generic proxy edits a COM object, reads its text and observes the same geometry invalidation flag. This validates the contract/façade pattern with current neocogi-com; it is not a dynamic UI implementation or proof of the proposed neocogi-com ABI changes.
 
 Generics may also remain in a local `ListModel<T>`, renderer implementation or callback adapter. Arbitrary T does not become a wire payload. A generic list model keeps T in the application and sends scoped typed row keys to the UI; its queue/removal policy must retain or reject stale rows consistently. If payload ownership must cross plugins, define a domain interface such as `IFileEntry` with explicit path operations. Do not introduce `IValue`, `get_property(string)`, `Any`, or an IUnknown payload bag as a substitute for typed contracts.
 
@@ -470,13 +470,13 @@ Use shared ABI-safe small values as canonical UI geometry/color/input records wh
 
 `INcString` is UTF-8 text, not a native filesystem path. Buffers specify element type, offset semantics, limits and validity for the call. Renderer/asset loaders must validate dimensions, multiplication overflow, counts, resource ownership, enum tags and UTF-8 before mutating live state.
 
-Recoverable failures use NcStatus with documented UI-specific negative codes; rich diagnostics can use an owned typed diagnostic interface. Preserve backend error details through that diagnostic path. Panics indicate implementation faults and abort under nc-com's existing policy; do not promise exception recovery from arbitrary plugin code.
+Recoverable failures use NcStatus with documented UI-specific negative codes; rich diagnostics can use an owned typed diagnostic interface. Preserve backend error details through that diagnostic path. Panics indicate implementation faults and abort under neocogi-com's existing policy; do not promise exception recovery from arbitrary plugin code.
 
 **12. Native build, packaging and browser support**
 
 Use xtask or an equivalent outer build driver to:
 
-1. Build the matching nc-com runtime library for the chosen target/profile.
+1. Build the matching neocogi-com runtime library for the chosen target/profile.
 2. Build implementation plugins with the desired backend/asset features.
 3. Build the application/static façade with the runtime link directory supplied.
 4. Inspect descriptors and write an explicit dependency-first plugin load list.
@@ -495,7 +495,7 @@ Use a fresh implementation branch after this plan is accepted. Keep each cohesiv
 
 | Order | Commit-sized item | Required evidence |
 |---:|---|---|
-| 1 | Import nc-com crates, documentation, fixtures and workspace metadata | Existing core/macros/runtime tests and imported package builds |
+| 1 | Import neocogi-com crates, documentation, fixtures and workspace metadata | Existing core/macros/runtime tests and imported package builds |
 | 2 | Add recursive-interface support with complete pointer identity validation | Self/mutual-reference success, mismatched argument/return rejection, ownership counts, native C and ABI fixtures |
 | 3 | Add borrowed-interface helper calls | Calls through ComRef perform no ownership transfer; lifetime/compile tests |
 | 4 | Separate descriptor generation and dynamic export | Two plugins statically linked together; independent dynamic loading still works |
@@ -540,8 +540,8 @@ Document the following as explicit component/app-author contracts: UI thread aff
 
 **15. What was verified during planning**
 
-- Read the nc-com macros, object pointers, runtime binding/loader code, contract example, and relevant microui ownership/layout/rendering interfaces.
-- Reproduced the recursive-interface E0391 compiler failure against nc-com at the analyzed revision.
-- Compiled and ran the generic façade/COM button test successfully using current nc-com. This checks a concrete COM object and proxy in one binary; actual separate-binary UI integration remains the vertical-slice milestone.
+- Read the neocogi-com macros, object pointers, runtime binding/loader code, contract example, and relevant microui ownership/layout/rendering interfaces.
+- Reproduced the recursive-interface E0391 compiler failure against neocogi-com at the analyzed revision.
+- Compiled and ran the generic façade/COM button test successfully using current neocogi-com. This checks a concrete COM object and proxy in one binary; actual separate-binary UI integration remains the vertical-slice milestone.
 - Confirmed the unconditional plugin export and shared-runtime-only facade from source.
 - No implementation files or branch state in either repository were changed by this planning work. Probes and this document are under `/tmp/microui-com-plan-r10f3k23`.

@@ -1,6 +1,6 @@
 //! CPU PNG decoding and renderer upload share one bounded RGBA representation.
 use super::*;
-use nc_com::{ComRef, NcCopyFromBufferOffset, com_object};
+use neocogi_com::{ComRef, NcCopyFromBufferOffset, com_object};
 use std::io::{self, Cursor};
 
 /// Decoded CPU pixels, ready for atlas packing or a texture-factory upload.
@@ -126,7 +126,7 @@ impl IAssetDiagnostics for PngDecoderObject {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nc_com::INcStringComPtrExt;
+    use neocogi_com::INcStringComPtrExt;
     use std::{cell::Cell, rc::Rc};
 
     /// Encodes one tiny source image using an independent writer configuration.

@@ -30,7 +30,7 @@
 //! Calculator with concrete application state and typed COM button handlers.
 use microui_redux::*;
 use microui_redux_demo_host::{AppState, Host, HostError};
-use nc_com::{ComPtr, NcStatus};
+use neocogi_com::{ComPtr, NcStatus};
 
 /// Maximum typed display length; calculated results retain the existing decimal formatting policy.
 const DISPLAY_MAX_LEN: usize = 24;

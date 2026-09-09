@@ -119,7 +119,7 @@ impl crate::event::ComEvent for WindowEvent {
     type Sink = microui_contracts::IWindowSinkAbi;
 
     /// Copies the complete captured manager event into its stable boundary representation.
-    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
         let event = match *self {
             Self::GeometryChanged { rect } => microui_contracts::WindowEvent::GeometryChanged { rect: crate::boundary::copied_rect(rect) },
             Self::CloseRequested => microui_contracts::WindowEvent::CloseRequested,

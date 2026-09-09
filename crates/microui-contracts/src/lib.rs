@@ -3,7 +3,7 @@
 //! These are binary boundaries: Rust state, closures, trait objects, references
 //! into implementation storage, and backend-native GPU types stay inside their
 //! owning binary. Generic application conveniences live in the static facade.
-//! Core ABI generation and each interface's IID/hash are checked by nc-com.
+//! Core ABI generation and each interface's IID/hash are checked by neocogi-com.
 
 #![no_std]
 #![deny(missing_docs)]
@@ -34,7 +34,7 @@ pub use input::{
     KeyCode, KeyStroke, Point, WidgetEvent, WidgetEventAbi, WidgetEventTag, WidgetUpdate, WidgetAction, decode_widget_event, UiInput, UiInputAbi, UiInputTag,
 };
 
-use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, com_class, com_interface, com_int_enum, com_struct};
+use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, com_class, com_interface, com_int_enum, com_struct};
 
 com_int_enum! {
     /// Whether preferred measurement or child placement inputs changed.
@@ -208,7 +208,7 @@ pub trait Button: IWidget + ILeafLayout {
     fn set_label(&mut self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
 
     /// Returns the current label as an independently owned immutable string object.
-    fn label(&self) -> Result<ComPtr<nc_com::INcStringAbi>, NcStatus>;
+    fn label(&self) -> Result<ComPtr<neocogi_com::INcStringAbi>, NcStatus>;
 
     /// Connects the exclusive activation subscriber and returns its ownership lease.
     fn subscribe(&mut self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
@@ -336,7 +336,7 @@ impl AxisLimit {
         match self.kind {
             LimitKind::FINITE if self.extent >= 0 => Ok(()),
             LimitKind::UNBOUNDED if self.extent == 0 => Ok(()),
-            _ => Err(nc_com::NC_E_INVALID_ARG),
+            _ => Err(neocogi_com::NC_E_INVALID_ARG),
         }
     }
 }
@@ -448,7 +448,7 @@ impl WindowOptions {
         if self.bits & !Self::KNOWN_BITS == 0 {
             Ok(())
         } else {
-            Err(nc_com::NC_E_INVALID_ARG)
+            Err(neocogi_com::NC_E_INVALID_ARG)
         }
     }
 }
@@ -483,7 +483,7 @@ pub trait IWindow {
     /// Copies current authoritative geometry, visibility and policy without caching app-side state.
     fn snapshot(&self) -> Result<WindowSnapshot, NcStatus>;
     /// Returns an immutable UTF-8 title snapshot.
-    fn title(&self) -> Result<ComPtr<nc_com::INcStringAbi>, NcStatus>;
+    fn title(&self) -> Result<ComPtr<neocogi_com::INcStringAbi>, NcStatus>;
     /// Replaces the complete title silently; UTF-8 input offset must be zero.
     fn set_title(&self, title: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Changes local visibility intent; ancestors and modal policy determine effective visibility.

@@ -107,17 +107,17 @@ impl<'a> Painter<'a> {
     }
 
     /// Records an owned texture without calling foreign code while the display list is borrowed.
-    pub(crate) fn com_texture(&mut self, rect: Recti, color: Color, texture: nc_com::ComPtr<microui_contracts::ITextureAbi>) {
+    pub(crate) fn com_texture(&mut self, rect: Recti, color: Color, texture: neocogi_com::ComPtr<microui_contracts::ITextureAbi>) {
         self.com_texture_region(rect, microui_contracts::TextureRegion::FULL, color, texture);
     }
 
     /// Records explicit source UVs without querying immutable texture dimensions during painting.
-    pub(crate) fn com_texture_region(&mut self, rect: Recti, source: microui_contracts::TextureRegion, color: Color, texture: nc_com::ComPtr<microui_contracts::ITextureAbi>) {
+    pub(crate) fn com_texture_region(&mut self, rect: Recti, source: microui_contracts::TextureRegion, color: Color, texture: neocogi_com::ComPtr<microui_contracts::ITextureAbi>) {
         self.list.push_com_texture(self.clip, self.screen_rect(rect), source, color, texture);
     }
 
     /// Records application GPU work in the same list as every ordinary widget primitive.
-    pub(crate) fn com_item(&mut self, rect: Recti, item: nc_com::ComPtr<microui_contracts::IRenderItemAbi>) {
+    pub(crate) fn com_item(&mut self, rect: Recti, item: neocogi_com::ComPtr<microui_contracts::IRenderItemAbi>) {
         self.list.push_com_item(self.clip, self.screen_rect(rect), item);
     }
 

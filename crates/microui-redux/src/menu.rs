@@ -1,6 +1,6 @@
 //! Static compact menu construction transfers one declaration and retains only actual row capabilities.
 use crate::*;
-use nc_com::{ComPtr, ComRef, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
+use neocogi_com::{ComPtr, ComRef, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
 
 /// Typed runtime menu service; it owns no menu topology or row state in the application.
 pub struct Menus {

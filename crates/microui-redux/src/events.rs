@@ -6,7 +6,7 @@
 //!
 //! ```no_run
 //! use microui_redux::{ButtonWidget, EventHandler, EventSession, Size, Ui};
-//! use nc_com::NcStatus;
+//! use neocogi_com::NcStatus;
 //! use microui_redux::events::Activation;
 //!
 //! struct Count;
@@ -44,7 +44,7 @@ pub mod test_support {
 }
 
 use crate::com::*;
-use nc_com::{com_object, ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcStatus, NC_E_INVALID_ARG};
+use neocogi_com::{com_object, ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcStatus, NC_E_INVALID_ARG};
 use std::{
     cell::{Cell, RefCell, Ref, RefMut},
     rc::Rc,
@@ -849,20 +849,20 @@ macro_rules! event_payload {
     };
 }
 event_payload!(Activation, IActivationSinkAbi, self, sink, {
-    sink.submitted(nc_com::NcString::from_utf8_str(&self.label).as_com_ref())
+    sink.submitted(neocogi_com::NcString::from_utf8_str(&self.label).as_com_ref())
 });
 event_payload!(CheckboxChanged, ICheckboxSinkAbi, self, sink, { sink.changed(self.checked) });
 event_payload!(NumericChanged, INumericSinkAbi, self, sink, { sink.changed(self.value) });
 event_payload!(ScrollbarChanged, IScrollbarSinkAbi, self, sink, { sink.changed(self.offset) });
 event_payload!(TextChanged, ITextChangedSinkAbi, self, sink, {
-    sink.changed(nc_com::NcString::from_utf8_str(&self.text).as_com_ref(), self.cursor)
+    sink.changed(neocogi_com::NcString::from_utf8_str(&self.text).as_com_ref(), self.cursor)
 });
 event_payload!(TextSubmitted, ITextSubmittedSinkAbi, self, sink, {
-    sink.submitted(nc_com::NcString::from_utf8_str(&self.text).as_com_ref())
+    sink.submitted(neocogi_com::NcString::from_utf8_str(&self.text).as_com_ref())
 });
 event_payload!(WindowEvent, IWindowSinkAbi, self, sink, { sink.event((*self).into()) });
 event_payload!(PopupDismissed, IPopupSinkAbi, self, sink, { sink.dismissed() });
 event_payload!(ComboChanged, IComboChangedSinkAbi, self, sink, {
-    sink.changed(self.selected, nc_com::NcString::from_utf8_str(&self.label).as_com_ref())
+    sink.changed(self.selected, neocogi_com::NcString::from_utf8_str(&self.label).as_com_ref())
 });
 event_payload!(ComboSubmitted, IComboPopupSinkAbi, self, sink, { sink.submitted(self.open, self.anchor) });

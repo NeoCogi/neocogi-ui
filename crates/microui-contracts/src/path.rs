@@ -1,5 +1,5 @@
 //! Native filesystem identity remains distinct from potentially lossy UTF-8 display text.
-use nc_com::{ComPtr, INcStringAbi, NcCopyToBufferOffset, NcStatus, com_interface, com_int_enum};
+use neocogi_com::{ComPtr, INcStringAbi, NcCopyToBufferOffset, NcStatus, com_interface, com_int_enum};
 
 com_int_enum! {
     /// Native path representation carried by an immutable path capability.

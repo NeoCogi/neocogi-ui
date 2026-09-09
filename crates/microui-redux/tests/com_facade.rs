@@ -1,8 +1,8 @@
 //! Exercises the static facade against independent concrete COM implementations.
 mod tests {
     use microui_redux::com::*;
-    use nc_com::{ComRef, NcCopyFromBufferOffset, NcStatus};
-    use nc_com::{ComPtr, IUnknown, NcString, NC_E_INVALID_ARG, com_object};
+    use neocogi_com::{ComRef, NcCopyFromBufferOffset, NcStatus};
+    use neocogi_com::{ComPtr, IUnknown, NcString, NC_E_INVALID_ARG, com_object};
 
     #[com_object(Button)]
     /// Concrete stand-in for a plugin button, using the same COM macro and ownership path.
@@ -38,13 +38,13 @@ mod tests {
         }
 
         /// Copies a label snapshot into a standard COM string object.
-        fn label(&self) -> Result<ComPtr<nc_com::INcStringAbi>, NcStatus> {
+        fn label(&self) -> Result<ComPtr<neocogi_com::INcStringAbi>, NcStatus> {
             Ok(NcString::from_utf8_str(&self.label))
         }
 
         /// This editing-only fixture has no event producer.
         fn subscribe(&mut self, _sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-            Err(nc_com::NC_E_NOINTERFACE)
+            Err(neocogi_com::NC_E_NOINTERFACE)
         }
 
         /// Font editing is outside this facade fixture's observable state.
@@ -83,7 +83,7 @@ mod tests {
 
         /// Image content is intentionally absent from this minimal fixture.
         fn set_image(&mut self, _image: ComRef<'_, ITextureAbi>, _fit_width: bool) -> Result<(), NcStatus> {
-            Err(nc_com::NC_E_NOINTERFACE)
+            Err(neocogi_com::NC_E_NOINTERFACE)
         }
 
         /// Clearing already-absent image content is idempotent.
@@ -102,11 +102,11 @@ mod tests {
     impl IWidget for TestButton {
         /// This standalone facade fixture deliberately has no mountable runtime owner.
         fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
-            Err(nc_com::NC_E_NOINTERFACE)
+            Err(neocogi_com::NC_E_NOINTERFACE)
         }
         /// Attachment is outside this editing-only fixture's supported behavior.
         fn mount(&mut self) -> Result<(), NcStatus> {
-            Err(nc_com::NC_E_NOINTERFACE)
+            Err(neocogi_com::NC_E_NOINTERFACE)
         }
         /// Its test-owned state needs no external teardown.
         fn close(&mut self) -> Result<(), NcStatus> {
@@ -168,7 +168,7 @@ mod tests {
             label: String::from("before"),
             changed: false,
         });
-        assert_eq!(unknown.query::<IChildrenAbi>().unwrap_err(), nc_com::NC_E_NOINTERFACE);
+        assert_eq!(unknown.query::<IChildrenAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
         let mut button: ComPtr<ButtonAbi> = unknown.query().unwrap();
         assert_eq!(button.set_label(NcCopyFromBufferOffset::new(1, b"after")), Err(NC_E_INVALID_ARG));
         assert_eq!(button.set_label(NcCopyFromBufferOffset::new(0, &[0xff])), Err(NC_E_INVALID_ARG));

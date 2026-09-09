@@ -1,7 +1,7 @@
 //! Dynamically linked widget-construction shorthand over concrete COM contracts.
 
 use microui_contracts::*;
-use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, com_object};
+use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, com_object};
 use std::{cell::RefCell, rc::Rc};
 
 #[com_object(microui_contracts::UiFactory)]

@@ -2,7 +2,7 @@
 use super::*;
 use microui_redux::{EventHandler, EventSession, LinearWidget, ListItemWidget, ScrollAreaWidget, TextBlockWidget, TextboxWidget};
 use microui_redux::events::{Activation, FileDialogCompleted, TextChanged, TextSubmitted};
-use nc_com::{INcStringAbi, NcString};
+use neocogi_com::{INcStringAbi, NcString};
 use std::{
     path::{Path, PathBuf},
     rc::Weak,

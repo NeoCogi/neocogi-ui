@@ -14,7 +14,7 @@ use crate::Color;
 /// A palette is an authoring value, not retained runtime appearance state. Compiling it eagerly into
 /// complete resolved visual values avoids the former shadow color array that could disagree with
 /// what widgets actually painted.
-#[nc_com::com_struct]
+#[neocogi_com::com_struct]
 #[derive(Debug)]
 #[cfg_attr(feature = "theme-json", derive(serde::Deserialize))]
 #[cfg_attr(feature = "theme-json", serde(default, deny_unknown_fields))]

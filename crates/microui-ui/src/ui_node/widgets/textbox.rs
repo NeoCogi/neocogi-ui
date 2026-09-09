@@ -92,7 +92,7 @@ impl TextboxParameters {
     }
 }
 
-#[nc_com::com_object(microui_contracts::Textbox)]
+#[neocogi_com::com_object(microui_contracts::Textbox)]
 /// Concrete retained textbox and dynamically constructible COM object.
 pub struct Textbox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -196,7 +196,7 @@ impl crate::event::ComEvent for TextboxChanged {
     type Sink = microui_contracts::ITextChangedSinkAbi;
 
     /// Delivers normalized text and its matching cursor from the same captured event.
-    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
         crate::event::deliver_text_changed(&self.text, self.cursor, sink)
     }
 }
@@ -205,7 +205,7 @@ impl crate::event::ComEvent for TextboxSubmitted {
     type Sink = microui_contracts::ITextSubmittedSinkAbi;
 
     /// Delivers the captured submission without consulting the live Textbox.
-    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
         crate::event::deliver_text_submitted(&self.text, sink)
     }
 }
@@ -619,7 +619,7 @@ mod tests {
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
 use microui_contracts::{GeometryChange, IEventSubscriptionAbi, ITextChangedSinkAbi, ITextSubmittedSinkAbi, IWidgetHostAbi, TextFontRole, TextboxAbi};
-use nc_com::*;
+use neocogi_com::*;
 
 direct_widget_phase_impl!(Textbox);
 direct_leaf_layout_impl!(Textbox);

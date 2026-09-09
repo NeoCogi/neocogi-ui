@@ -547,7 +547,7 @@ impl RendererBackend for RecordingRenderer {
     }
 }
 
-#[nc_com::com_object(interfaces(microui_contracts::ITexture))]
+#[neocogi_com::com_object(interfaces(microui_contracts::ITexture))]
 /// CPU-only immutable texture supplies dimensions without any native GPU handle.
 struct TestImage {
     /// Positive test dimensions used by the real owning facade image wrapper.
@@ -555,7 +555,7 @@ struct TestImage {
 }
 impl microui_contracts::ITexture for TestImage {
     /// A real COM projection obeys the production immutable-dimension contract.
-    fn size(&self) -> Result<microui_contracts::Size, nc_com::NcStatus> {
+    fn size(&self) -> Result<microui_contracts::Size, neocogi_com::NcStatus> {
         Ok(self.size)
     }
 }

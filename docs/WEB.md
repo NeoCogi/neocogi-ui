@@ -2,7 +2,7 @@
 
 The browser demo compiles `microui-redux-demo-full` directly for Rust's
 `wasm32-unknown-unknown` target. `microui-plugin-platform` owns DOM input, canvas sizing and WebGL2, while the concrete demo
-host owns `requestAnimationFrame`. UI, platform and PNG descriptors register in one static nc-com
+host owns `requestAnimationFrame`. UI, platform and PNG descriptors register in one static neocogi-com
 runtime in the same wasm module. SDL remains a native-only dependency.
 The demo's `webgl` feature explicitly selects `embed-assets`; fonts, themes, photo
 and mesh are included in the wasm deployment. Native demos default to adjacent files.

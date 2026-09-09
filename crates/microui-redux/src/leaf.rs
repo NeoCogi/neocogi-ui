@@ -5,7 +5,7 @@
 //! IWidget directly. This helper creates no registered class, native node, erased value or Rust vtable.
 use crate::*;
 use microui_contracts::widget::WidgetState;
-use nc_com::{com_object, ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
+use neocogi_com::{com_object, ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
 
 /// Statically dispatched behavior stored inline in one application-owned COM widget.
 pub trait LeafContent: 'static {
@@ -78,7 +78,7 @@ impl<Content: LeafContent> IWidget for LeafObject<Content> {
         })?;
         if change != GeometryChange::CHANGED && change != GeometryChange::NO_CHANGE {
             self.state.record_change(GeometryChange::CHANGED);
-            return Err(nc_com::NC_E_INVALID_ARG);
+            return Err(neocogi_com::NC_E_INVALID_ARG);
         }
         self.state.record_change(change);
         Ok(change)

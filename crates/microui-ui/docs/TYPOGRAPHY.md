@@ -68,7 +68,7 @@ semantic icons before `finish` can publish it:
 
 ```rust,no_run
 use microui_redux::{IAssetBuilderAbi, NativePath};
-use nc_com::{ComRef, NcCopyFromBufferOffset, NcStatus};
+use neocogi_com::{ComRef, NcCopyFromBufferOffset, NcStatus};
 use std::path::Path;
 fn add_heading(draft: ComRef<'_, IAssetBuilderAbi>, font: &Path) -> Result<(), NcStatus> {
     draft.add_font(
@@ -87,7 +87,7 @@ After installing the compiled bundle, select a font on an actual COM widget:
 
 ```rust,no_run
 use microui_redux::{TextBlockWidget, TextFontRole, TextWrapping, Ui};
-use nc_com::NcStatus;
+use neocogi_com::NcStatus;
 fn heading(ui: &Ui) -> Result<TextBlockWidget, NcStatus> {
     let mut title = ui.widgets().text_block("Inspector", TextWrapping::NONE)?;
     title.set_font_role(TextFontRole::HEADING)?;

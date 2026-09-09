@@ -58,7 +58,7 @@ concrete domain interface and owner-scoped keys.
 
 ```rust
 use microui_redux::{Button, EventHandler, EventSession};
-use nc_com::NcStatus;
+use neocogi_com::NcStatus;
 use microui_redux::events::Activation;
 
 struct Submitted { button: Button }
@@ -373,7 +373,7 @@ Painting receives effective clipping, enabled/hover/focus/press state and logica
 window activation as copied values. It has no mutable runtime context.
 
 Every `IPainter` operation has a mutable receiver. A widget therefore uses a
-mutable `Painter` facade while recording, and nc-com rejects conflicting or
+mutable `Painter` facade while recording, and neocogi-com rejects conflicting or
 reentrant access through another retained projection. The concrete recorder owns
 ordinary invocation and frame-context fields; it does not use interior-mutable
 slots to simulate mutation through `&self`.

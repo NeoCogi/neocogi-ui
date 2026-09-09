@@ -47,7 +47,7 @@ the same transactional asset boundary used for a complete theme replacement:
 
 ```rust,no_run
 use microui_redux::{FlatPalette, IRendererAbi, StyleCompilerAbi, PaletteEdit, Ui};
-use nc_com::{ComRef, NcStatus};
+use neocogi_com::{ComRef, NcStatus};
 fn customize(ui: &mut Ui, renderer: ComRef<'_, IRendererAbi>, compiler: ComRef<'_, StyleCompilerAbi>) -> Result<(), NcStatus> {
     let mut metrics = ui.assets()?.metrics()?;
     metrics.padding = 8;

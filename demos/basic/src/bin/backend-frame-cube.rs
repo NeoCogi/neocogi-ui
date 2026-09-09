@@ -33,7 +33,7 @@
 //! atlas packing detail crosses the widget boundary. The same code runs on every platform backend.
 use microui_redux::*;
 use microui_redux_demo_host::{AppState, Host, HostError};
-use nc_com::{ComRef, NcStatus};
+use neocogi_com::{ComRef, NcStatus};
 use rs_math3d::{EPS_F32, Vec2f, Vec3f, Quatf, lookat, perspective, project3};
 use std::{cell::Cell, rc::Rc};
 

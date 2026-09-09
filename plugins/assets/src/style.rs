@@ -253,7 +253,7 @@ fn flat_chrome_visual(frame_insets: Insets, palette: &FlatPalette, role: ChromeR
     patch
 }
 
-#[nc_com::com_object(microui_contracts::StyleCompiler)]
+#[neocogi_com::com_object(microui_contracts::StyleCompiler)]
 #[derive(Default)]
 /// Compiles resource revisions without borrowing a UI or retaining a renderer.
 pub struct StyleCompilerObject {
@@ -263,18 +263,18 @@ pub struct StyleCompilerObject {
 
 impl StyleCompiler for StyleCompilerObject {
     /// Creates an empty compiler whose first failed operation may populate diagnostics.
-    fn new() -> Result<Self, nc_com::NcStatus> {
+    fn new() -> Result<Self, neocogi_com::NcStatus> {
         Ok(Self::default())
     }
     /// Copies the base once, applies the explicit edit, validates and publishes in its catalog.
     fn derive_style(
         &self,
-        base: nc_com::ComRef<'_, IAssetBundleAbi>,
+        base: neocogi_com::ComRef<'_, IAssetBundleAbi>,
         metrics: AssetMetrics,
         palette: PaletteEditAbi,
-    ) -> Result<nc_com::ComPtr<IAssetBundleAbi>, nc_com::NcStatus> {
+    ) -> Result<neocogi_com::ComPtr<IAssetBundleAbi>, neocogi_com::NcStatus> {
         // Validate foreign records and the closed edit tag before using their geometry or artwork.
-        let edit = PaletteEdit::try_from(palette).map_err(|_| nc_com::NC_E_INVALID_ARG)?;
+        let edit = PaletteEdit::try_from(palette).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
         let mut data = AssetData::read(base)?;
         data.tables.metrics = metrics;
         if let PaletteEdit::Flat(palette) = edit {
@@ -294,7 +294,7 @@ impl StyleCompiler for StyleCompilerObject {
 
 impl IAssetDiagnostics for StyleCompilerObject {
     /// Returns an owned failure snapshot without a borrow into the compiler.
-    fn diagnostic(&self) -> Result<nc_com::ComPtr<nc_com::INcStringAbi>, nc_com::NcStatus> {
+    fn diagnostic(&self) -> Result<neocogi_com::ComPtr<neocogi_com::INcStringAbi>, neocogi_com::NcStatus> {
         Ok(self.diagnostic.snapshot())
     }
 }

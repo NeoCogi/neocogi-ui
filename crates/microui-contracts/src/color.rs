@@ -30,7 +30,7 @@
 
 //! Portable RGBA authoring values shared by hosts, UI implementations and optional asset tools.
 
-#[nc_com::com_struct]
+#[neocogi_com::com_struct]
 #[derive(Default, Debug, Eq, PartialEq)]
 /// Simple RGBA color stored with 8-bit components.
 pub struct Color {

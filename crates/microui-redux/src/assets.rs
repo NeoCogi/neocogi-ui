@@ -1,7 +1,7 @@
 //! Concrete immutable asset objects for compiled tables and optional builder output.
 //! Static tables are borrowed for the process lifetime; generated tables are owned outright.
 use crate::*;
-use nc_com::{ComPtr, ComRef, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
+use neocogi_com::{ComPtr, ComRef, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
 use std::borrow::Cow;
 use microui_contracts::appearance::*;
 

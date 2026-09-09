@@ -4,7 +4,7 @@
 //! are reached only through their checked COM interfaces. Native packages are executable-relative.
 #![deny(missing_docs)]
 use microui_redux::*;
-use nc_com::{ComPtr, NcCopyFromBufferOffset, NcStatus};
+use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcStatus};
 use std::fmt;
 
 #[cfg(target_arch = "wasm32")]
@@ -78,7 +78,7 @@ impl Host {
     /// Loads/registers trusted assemblies once and creates one complete demo host from immutable assets.
     pub fn new(title: &str, size: Size, assets: ComPtr<IAssetBundleAbi>) -> Result<Self, HostError> {
         initialize()?;
-        let runtime = nc_com::Runtime::global();
+        let runtime = neocogi_com::Runtime::global();
         runtime.require_interface_type::<PlatformAbi>(PlatformAbi::CLASS_ID)?;
         let platform: ComPtr<PlatformAbi> = runtime.construct(())?;
         let window = platform.create_window(NcCopyFromBufferOffset::new(0, title.as_bytes()), size, assets.as_com_ref())?;
@@ -114,7 +114,7 @@ impl Host {
     /// The caller receives the actual immutable renderer image; decoded pixels live only during upload.
     #[cfg(feature = "png-assets")]
     pub fn png_texture(&self, png: &[u8]) -> Result<ComPtr<ITextureAbi>, HostError> {
-        let runtime = nc_com::Runtime::global();
+        let runtime = neocogi_com::Runtime::global();
         runtime.require_interface_type::<PngDecoderAbi>(PngDecoderAbi::CLASS_ID)?;
         // SAFETY: The checked decoder class has the documented argument-free constructor.
         let decoder: ComPtr<PngDecoderAbi> = runtime.construct(())?;
@@ -123,7 +123,7 @@ impl Host {
             let detail = decoder
                 .query::<IAssetDiagnosticsAbi>()
                 .and_then(|diagnostics| diagnostics.diagnostic())
-                .and_then(|text| nc_com::INcStringComPtrExt::to_string(&text))
+                .and_then(|text| neocogi_com::INcStringComPtrExt::to_string(&text))
                 .unwrap_or_default();
             HostError::Message(format!("PNG upload failed: {status}: {detail}"))
         })
@@ -173,7 +173,7 @@ impl<State: AppState> Driver<State> {
                 .renderer
                 .query::<IRenderDiagnosticsAbi>()
                 .and_then(|diagnostics| diagnostics.diagnostic())
-                .and_then(|text| nc_com::INcStringComPtrExt::to_string(&text))
+                .and_then(|text| neocogi_com::INcStringComPtrExt::to_string(&text))
                 .unwrap_or_default();
             HostError::Message(format!("frame failed: {status}: {detail}"))
         })?;
@@ -204,14 +204,14 @@ fn register() -> Result<(), HostError> {
         .parent()
         .ok_or_else(|| HostError::Message("executable has no parent directory".to_owned()))?;
     let manifest = std::fs::read_to_string(directory.join("plugins.txt"))?;
-    let runtime = nc_com::Runtime::global();
+    let runtime = neocogi_com::Runtime::global();
     for name in manifest.lines() {
         let path = std::path::Path::new(name);
         if path.components().count() != 1 || !matches!(path.components().next(), Some(std::path::Component::Normal(_))) {
             return Err(HostError::Message("plugin manifest entries must be file names".to_owned()));
         }
         // SAFETY: com-build stages these trusted workspace assemblies and their matching runtime.
-        // Required live activation follows nc-com's documented abort policy on invalid binaries.
+        // Required live activation follows neocogi-com's documented abort policy on invalid binaries.
         unsafe {
             runtime.load_plugin_library(directory.join(path));
         }
@@ -222,7 +222,7 @@ fn register() -> Result<(), HostError> {
 /// Browser implementation descriptors live in this wasm module and use its single static runtime.
 #[cfg(target_arch = "wasm32")]
 fn register() -> Result<(), HostError> {
-    let runtime = nc_com::Runtime::global();
+    let runtime = neocogi_com::Runtime::global();
     for descriptor in [
         microui_plugin_ui::plugin_descriptor(),
         microui_plugin_platform::plugin_descriptor(),

@@ -1,7 +1,7 @@
 //! Shared construction authority, independent of any root forest or runtime transaction.
 use super::HostState;
 use microui_contracts::*;
-use nc_com::{ComPtr, ComRef, IUnknown, NcStatus, NC_E_INVALID_ARG};
+use neocogi_com::{ComPtr, ComRef, IUnknown, NcStatus, NC_E_INVALID_ARG};
 use std::{cell::{Cell, RefCell}, rc::Rc};
 use super::{widget_object::SharedAssets, paint_service::PaintService};
 use super::{child_store::ChildStore, mounted_node::{ComNode, NodeLayoutKind}, layout_service::LayoutService};
@@ -43,8 +43,8 @@ impl NodeFactory {
         let leaf = widget.query::<ILeafLayoutAbi>();
         let branch = widget.query::<IContainerLayoutAbi>();
         let layout = match (leaf, branch) {
-            (Ok(leaf), Err(nc_com::NC_E_NOINTERFACE)) => NodeLayoutKind::Leaf(leaf),
-            (Err(nc_com::NC_E_NOINTERFACE), Ok(policy)) => {
+            (Ok(leaf), Err(neocogi_com::NC_E_NOINTERFACE)) => NodeLayoutKind::Leaf(leaf),
+            (Err(neocogi_com::NC_E_NOINTERFACE), Ok(policy)) => {
                 let view = policy.children()?;
                 let identity = view.query::<IUnknown>()?.as_ptr() as usize;
                 let children = self
@@ -58,7 +58,7 @@ impl NodeFactory {
                 NodeLayoutKind::Branch { policy, _view: view, children }
             }
             (Ok(_), Ok(_)) => return Err(NC_E_INVALID_ARG),
-            (Err(error), _) if error != nc_com::NC_E_NOINTERFACE => return Err(error),
+            (Err(error), _) if error != neocogi_com::NC_E_NOINTERFACE => return Err(error),
             (_, Err(error)) | (Err(error), Ok(_)) => return Err(error),
         };
         let properties = widget.properties()?;

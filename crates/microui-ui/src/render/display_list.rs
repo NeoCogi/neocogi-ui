@@ -74,7 +74,7 @@ pub(super) enum DrawKind {
     /// Owned external image used by the COM renderer path.
     ComTexture {
         /// Resource retains its renderer/device until submission and GPU destruction finish.
-        texture: nc_com::ComPtr<microui_contracts::ITextureAbi>,
+        texture: neocogi_com::ComPtr<microui_contracts::ITextureAbi>,
         /// Destination in screen coordinates.
         rect: Recti,
         /// Normalized source region, retained through repeated clipping.
@@ -85,7 +85,7 @@ pub(super) enum DrawKind {
     /// Concrete application scene capability consumed by its co-packaged renderer.
     ComItem {
         /// No native frame or stack borrow is retained by the display list.
-        item: nc_com::ComPtr<microui_contracts::IRenderItemAbi>,
+        item: neocogi_com::ComPtr<microui_contracts::IRenderItemAbi>,
         /// Unclipped destination in screen coordinates.
         rect: Recti,
     },
@@ -187,13 +187,13 @@ impl DisplayList {
         rect: Recti,
         source: microui_contracts::TextureRegion,
         color: Color,
-        texture: nc_com::ComPtr<microui_contracts::ITextureAbi>,
+        texture: neocogi_com::ComPtr<microui_contracts::ITextureAbi>,
     ) {
         self.push(clip, DrawKind::ComTexture { texture, rect, source, color });
     }
 
     /// Retains application GPU work without creating a callback registry entry.
-    pub(super) fn push_com_item(&mut self, clip: Recti, rect: Recti, item: nc_com::ComPtr<microui_contracts::IRenderItemAbi>) {
+    pub(super) fn push_com_item(&mut self, clip: Recti, rect: Recti, item: neocogi_com::ComPtr<microui_contracts::IRenderItemAbi>) {
         self.push(clip, DrawKind::ComItem { item, rect });
     }
 

@@ -1,6 +1,6 @@
 # Architecture
 
-Applications link `microui-redux`, canonical `microui-contracts`, and nc-com support.
+Applications link `microui-redux`, canonical `microui-contracts`, and neocogi-com support.
 The facade contains concrete typed clients and application-local generic adapters.
 The UI implementation, retained window manager, built-in widgets and layout policies
 are packaged in the UI plugin. Native platform and GPU objects share the selected
@@ -63,7 +63,7 @@ There is no production native `Context<State>` or second callback dispatcher.
 
 ```rust,no_run
 use microui_redux::{EventSession, IRendererAbi, Size, Ui};
-use nc_com::{ComRef, NcStatus};
+use neocogi_com::{ComRef, NcStatus};
 fn frame<State: 'static>(ui: &Ui, events: &EventSession<State>, size: Size,
     renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus>
 {

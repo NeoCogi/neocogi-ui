@@ -1,5 +1,5 @@
 //! Compact menu declarations and live item capabilities; rows are values, not synthetic widget trees.
-use nc_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, com_enum, com_interface};
+use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, com_enum, com_interface};
 
 #[com_enum(tag = u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

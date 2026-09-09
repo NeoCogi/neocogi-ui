@@ -68,7 +68,7 @@ let native = platform.create_window(
 )?;
 let renderer = native.query::<IRendererAbi>()?;
 let arguments = UiRuntimeAbi::arguments(assets.as_com_ref())?;
-let mut ui = Ui::from_interface(nc_com::Runtime::global().construct::<UiRuntimeAbi>(arguments)?)?;
+let mut ui = Ui::from_interface(neocogi_com::Runtime::global().construct::<UiRuntimeAbi>(arguments)?)?;
 ```
 
 ## Installation and ownership
@@ -146,7 +146,7 @@ fall back to `body`. Required semantic icons are `close`, `expand`, `collapse`,
 `AssetInfo` supplies dimensions, allocation counts and `ASSET_SCHEMA_VERSION`.
 Reject a different schema before allocation. The semantic schema includes role/state
 table order and mandatory resource interpretation; changing those rules requires a
-schema bump even when the C record layout is unchanged. The ordinary nc-com
+schema bump even when the C record layout is unchanged. The ordinary neocogi-com
 interface hashes separately validate the actual pointer/vtable/record ABI.
 
 | Storage | Bound and interpretation |

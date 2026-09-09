@@ -39,7 +39,7 @@ use crate::ui_node::widget_object::{
     set_direct_font_role, set_direct_icon_role, set_direct_named_font, set_direct_named_icon,
 };
 use microui_contracts::*;
-use nc_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString};
+use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString};
 
 use super::*;
 
@@ -134,12 +134,12 @@ impl crate::event::ComEvent for ButtonSubmitted {
     type Sink = microui_contracts::IActivationSinkAbi;
 
     /// Copies the captured label through the Button activation contract.
-    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
         crate::event::deliver_activation(&self.label, sink)
     }
 }
 
-#[nc_com::com_object(microui_contracts::Button)]
+#[neocogi_com::com_object(microui_contracts::Button)]
 /// Concrete retained button and dynamically constructible COM object.
 ///
 /// The allocation owns its semantic fields directly. `runtime` contains only common host,
@@ -504,7 +504,7 @@ impl microui_contracts::Button for Button {
     /// Rejects unknown flags before committing a paint-only change.
     fn set_fill_states(&mut self, states: FillStates) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
-        let fill = crate::WidgetFillOption::from_bits(u32::from(states.bits)).ok_or(nc_com::NC_E_INVALID_ARG)?;
+        let fill = crate::WidgetFillOption::from_bits(u32::from(states.bits)).ok_or(neocogi_com::NC_E_INVALID_ARG)?;
         self.com_set_fill(fill);
         Ok(())
     }

@@ -99,12 +99,12 @@ impl crate::event::ComEvent for ListItemSubmitted {
     type Sink = microui_contracts::IActivationSinkAbi;
 
     /// Copies the captured row label through the ListItem activation contract.
-    fn deliver(&self, sink: nc_com::ComRef<'_, Self::Sink>) -> Result<(), nc_com::NcStatus> {
+    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
         crate::event::deliver_activation(&self.label, sink)
     }
 }
 
-#[nc_com::com_object(microui_contracts::ListItem)]
+#[neocogi_com::com_object(microui_contracts::ListItem)]
 /// Concrete retained list item and dynamically constructible COM object.
 pub struct ListItem {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -342,7 +342,7 @@ mod tests {
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_icon_role, set_direct_named_font, set_direct_named_icon};
 use microui_contracts::{ContentIcon, GeometryChange, IActivationSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi, ListItemAbi, TextFontRole};
-use nc_com::*;
+use neocogi_com::*;
 
 direct_widget_phase_impl!(ListItem);
 direct_leaf_layout_impl!(ListItem);

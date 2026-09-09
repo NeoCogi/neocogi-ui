@@ -1,5 +1,5 @@
 //! Host-owned child topology and scoped container layout contracts.
-use nc_com::{ComPtr, ComRef, NcStatus, NcCopyFromBufferOffset, com_class, com_interface, com_struct, com_int_enum, com_enum};
+use neocogi_com::{ComPtr, ComRef, NcStatus, NcCopyFromBufferOffset, com_class, com_interface, com_struct, com_int_enum, com_enum};
 use crate::{Rect, Size, LayoutLimits, WidgetEventAbi};
 
 #[com_struct]
@@ -49,7 +49,7 @@ impl ContainerGeometry {
     /// Rejects negative extents before the runtime publishes geometry.
     pub fn validate(self) -> Result<(), NcStatus> {
         if self.content.width < 0 || self.content.height < 0 || self.viewport.width < 0 || self.viewport.height < 0 {
-            Err(nc_com::NC_E_INVALID_ARG)
+            Err(neocogi_com::NC_E_INVALID_ARG)
         } else {
             Ok(())
         }
@@ -276,11 +276,11 @@ pub trait Grid: crate::IWidget + IContainerLayout {
     /// Removes all owned subtrees and matching metadata while retaining reusable capacity.
     fn clear(&mut self) -> Result<ChildEditResult, NcStatus>;
     /// Copies a range of column policies; offset indexes tracks and the return value is total count.
-    fn columns(&self, output: nc_com::NcCopyToBufferOffset<'_, LayoutTrackAbi>) -> Result<u32, NcStatus>;
+    fn columns(&self, output: neocogi_com::NcCopyToBufferOffset<'_, LayoutTrackAbi>) -> Result<u32, NcStatus>;
     /// Replaces the complete column sequence after validating every track; input offset must be zero.
     fn set_columns(&mut self, tracks: NcCopyFromBufferOffset<'_, LayoutTrackAbi>) -> Result<(), NcStatus>;
     /// Copies a range of row policies; offset indexes tracks and the return value is total count.
-    fn rows(&self, output: nc_com::NcCopyToBufferOffset<'_, LayoutTrackAbi>) -> Result<u32, NcStatus>;
+    fn rows(&self, output: neocogi_com::NcCopyToBufferOffset<'_, LayoutTrackAbi>) -> Result<u32, NcStatus>;
     /// Replaces the complete row sequence after validating every track; input offset must be zero.
     fn set_rows(&mut self, tracks: NcCopyFromBufferOffset<'_, LayoutTrackAbi>) -> Result<(), NcStatus>;
     /// Returns one child's positive Grid-owned span.

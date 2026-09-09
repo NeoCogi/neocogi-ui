@@ -1,7 +1,7 @@
 //! The runtime COM builder and generated direct exporter must publish equivalent portable data.
 use super::*;
 use microui_ui::assets::ImportedAssets;
-use nc_com::INcStringComPtrExt;
+use neocogi_com::INcStringComPtrExt;
 use microui_redux::NativePath;
 
 #[com_object(interfaces(INativePath))]
@@ -26,11 +26,11 @@ impl INativePath for ReenterPath {
         self.path.as_interface().unit_count()
     }
     /// Forwards bytes without a lossy conversion through display text.
-    fn unix_bytes(&self, output: nc_com::NcCopyToBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+    fn unix_bytes(&self, output: neocogi_com::NcCopyToBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.path.as_interface().unix_bytes(output)
     }
     /// Keeps the same test valid for native Windows UTF-16 paths.
-    fn windows_units(&self, output: nc_com::NcCopyToBufferOffset<'_, u16>) -> Result<(), NcStatus> {
+    fn windows_units(&self, output: neocogi_com::NcCopyToBufferOffset<'_, u16>) -> Result<(), NcStatus> {
         self.path.as_interface().windows_units(output)
     }
     /// Display remains an independent human-readable snapshot.

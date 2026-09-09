@@ -1,7 +1,7 @@
 # Independent widget and container example
 
 This optional assembly depends only on the facade, UI contracts, example contracts,
-and nc-com. It contains a counter and a one-child inset container. It is built and
+and neocogi-com. It contains a counter and a one-child inset container. It is built and
 loaded separately from the host, UI, and renderer; ordinary demo packages omit it.
 
 ```sh

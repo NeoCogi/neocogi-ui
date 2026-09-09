@@ -1,6 +1,6 @@
 //! Platform input uses the same copied vocabulary as UI injection. OS objects stay in the host.
 use crate::*;
-use nc_com::{com_class, com_enum, com_interface, com_int_enum};
+use neocogi_com::{com_class, com_enum, com_interface, com_int_enum};
 
 #[com_interface(auto_guid = "microui.InputSink:v1")]
 /// Synchronous input destination, implemented by the UI runtime or a concrete application adapter.

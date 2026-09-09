@@ -7,7 +7,7 @@
 //! ```no_run
 //! use microui_redux::{Ui, FileDialog, FileDialogRequest, EventHandler, EventSession, IWindowAbi};
 //! use microui_redux::events::FileDialogCompleted;
-//! use nc_com::{ComRef, NcStatus};
+//! use neocogi_com::{ComRef, NcStatus};
 //! use std::path::{Path, PathBuf};
 //!
 //! struct Selected;
@@ -32,7 +32,7 @@
 //! is lexical: applications decide whether an accepted path must exist or have a
 //! particular file type. Unicode display labels are never path lookup keys.
 use crate::*;
-use nc_com::{ComPtr, ComRef, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
+use neocogi_com::{ComPtr, ComRef, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
 use std::path::{Path, PathBuf};
 
 /// Complete application-owned request; path identity never passes through the title or display label.

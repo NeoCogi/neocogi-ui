@@ -1,5 +1,5 @@
 //! Concrete semantic event consumers and application-owned delivery leases.
-use nc_com::{ComPtr, ComRef, INcStringAbi, NcStatus, com_interface};
+use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcStatus, com_interface};
 
 /// Shared finite callback budget for one runtime dispatch boundary across all sources and cascade sweeps.
 pub const EVENT_DISPATCH_LIMIT: u32 = 1_000_000;
@@ -8,7 +8,7 @@ pub const EVENT_DISPATCH_LIMIT: u32 = 1_000_000;
 /// Concrete labelled activation consumer shared by Button, ListItem and ListBox.
 pub trait IActivationSink {
     /// Receives an immutable submission snapshot after widget traversal releases its borrows.
-    fn submitted(&self, label: ComRef<'_, nc_com::INcStringAbi>) -> Result<(), NcStatus>;
+    fn submitted(&self, label: ComRef<'_, neocogi_com::INcStringAbi>) -> Result<(), NcStatus>;
 }
 
 #[com_interface(auto_guid = "microui.EventSubscription:v1")]
@@ -76,7 +76,7 @@ pub trait IEventDispatcher {
     fn dispatch(&self, limit: u32) -> Result<u32, NcStatus>;
 }
 
-#[nc_com::com_enum(tag = u8)]
+#[neocogi_com::com_enum(tag = u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Captured window lifecycle or user chrome interaction; Destroyed is the one terminal fact.
 pub enum WindowEvent {

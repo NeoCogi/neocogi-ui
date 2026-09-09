@@ -9,7 +9,7 @@ windows and renderer resources. Native deployments load a few independently buil
 plugins; browsers register the same interfaces with one static runtime.
 
 This checkout is **0.9.0-alpha.0**, pre-alpha. Its API and binary contracts may change
-without compatibility layers. The imported nc-com implementation is maintained in
+without compatibility layers. The imported neocogi-com implementation is maintained in
 this workspace. Concrete controls such as `Button` are callable COM class contracts;
 shared protocols such as `IWidget` and `ILeafLayout` remain interfaces on the same
 object and state.
@@ -23,8 +23,8 @@ object and state.
 Install the assembly tool from this checkout, then build and run a complete native package:
 
 ```sh
-cargo install --path tools/cargo-nc-com
-cargo nc-com run --assembly full
+cargo install --path tools/cargo-neocogi
+cargo neocogi run --assembly full
 ```
 
 Use `--variant vulkan` or `--variant wgpu` to select another renderer; the default
@@ -34,8 +34,8 @@ is Glow. Other assemblies are `simple`, `calculator`, `backend-frame-cube`, and
 Native assets are external by default; keep the staged `assets` and `themes`
 directories with the executable. Add `--variant embedded` after the renderer
 variant for an explicit embedded deployment. Assembly definitions live in
-`[workspace.metadata.nc-com]` in [Cargo.toml](Cargo.toml).
-The [tool reference](tools/cargo-nc-com/README.md) documents configuration,
+`[workspace.metadata.neocogi]` in [Cargo.toml](Cargo.toml).
+The [tool reference](tools/cargo-neocogi/README.md) documents configuration,
 versioned crates.io components, standalone TOML, and lockfiles.
 The [package guide](docs/COM_NATIVE.md) covers dependencies, nightly min-size builds,
 optional assets, actual GPU tests and executable-relative loading. A native demo
@@ -59,14 +59,14 @@ Depend on the local facade while using this pre-alpha checkout:
 ```toml
 [dependencies]
 microui-redux = { path = "../microui-redux/crates/microui-redux" }
-nc-com = { path = "../microui-redux/crates/com/nc-com" }
+neocogi-com = { path = "../neocogi-platform/crates/com/api" }
 ```
 
 Once the host has activated `UiRuntimeAbi`, the facade creates and edits the actual objects:
 
 ```rust
 use microui_redux::*;
-use nc_com::{ComPtr, NcStatus};
+use neocogi_com::{ComPtr, NcStatus};
 
 fn install(ui: &Ui) -> Result<ComPtr<IWindowAbi>, NcStatus> {
     let hello = ui.widgets().button("Hello, world!")?;
@@ -102,6 +102,6 @@ cleanup; it distinguishes implementation progress from the accepted design.
 
 ## License
 
-Project-authored code uses the [BSD 3-Clause License](LICENSE). Imported nc-com and
+Project-authored code uses the [BSD 3-Clause License](LICENSE). Imported neocogi-com and
 portions derived from rxi/microui retain their MIT terms. Bundled assets retain the
 licenses recorded in [asset attribution](docs/ASSETS.md).

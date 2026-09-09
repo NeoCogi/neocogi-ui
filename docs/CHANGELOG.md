@@ -9,8 +9,8 @@ wrappers. The accepted migration and outstanding validation are recorded in
 
 - Use `nc_com_shared_runtime` as the runtime library name in direct builds,
   native bindings, and generated LTO roots. Assemblies deploy one runtime library
-  without the former duplicate filename. The Cargo package remains `nc-com-runtime`.
-- Import and maintain nc-com locally: checked recursive interface identities,
+  without the former duplicate filename. The Cargo package remains `neocogi-com-runtime`.
+- Import and maintain neocogi-com locally: checked recursive interface identities,
   borrowed clients, callable class contracts with typed constructor frames,
   class-required shared protocols, generic owned local classes, static runtime
   binding and explicit dynamic plugin exports.
@@ -91,7 +91,7 @@ wrappers. The accepted migration and outstanding validation are recorded in
 - Load native demo assets from adjacent files through the asset plugin by default.
   `embed-assets` explicitly selects build-host compilation and embedded resource
   bytes; browser `webgl` enables it. Generated COM bundles retain bounded pixel expansion.
-- Add the installable `cargo-nc-com` command for configured debug, release, and
+- Add the installable `cargo-neocogi` command for configured debug, release, and
   nightly min-size assemblies. It resolves local/registry component sources through
   Cargo, discovers artifacts from JSON, validates plugin load order, and preserves
   the last assembly on failed updates. Package/workspace metadata and standalone

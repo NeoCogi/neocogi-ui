@@ -2,7 +2,7 @@
 //!
 //! Text stays a separate bounded UTF-8 argument so a complete committed string
 //! crosses once without allocating a COM object for every input event.
-use nc_com::{com_enum, com_int_enum, com_struct, NcStatus, NC_E_INVALID_ARG};
+use neocogi_com::{com_enum, com_int_enum, com_struct, NcStatus, NC_E_INVALID_ARG};
 use crate::Rect;
 
 #[com_struct]
@@ -194,7 +194,7 @@ com_int_enum! {
 
 /// Decodes a tagged event and validates its matching whole-text argument.
 /// The returned text borrow lasts only as long as the caller's original buffer.
-pub fn decode_widget_event<'a>(event: WidgetEventAbi, text: nc_com::NcCopyFromBufferOffset<'a, u8>) -> Result<(WidgetEvent, &'a str), NcStatus> {
+pub fn decode_widget_event<'a>(event: WidgetEventAbi, text: neocogi_com::NcCopyFromBufferOffset<'a, u8>) -> Result<(WidgetEvent, &'a str), NcStatus> {
     let event = WidgetEvent::try_from(event)?;
     if text.offset() != 0 {
         return Err(NC_E_INVALID_ARG);

@@ -1,6 +1,6 @@
 //! Immutable resource transfer: bulk copies during installation, local lookup during frames.
 use crate::{Rect, Size};
-use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, com_class, com_enum, com_interface, com_int_enum, com_struct};
+use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, com_class, com_enum, com_interface, com_int_enum, com_struct};
 
 /// Bulk asset semantic schema, including canonical appearance role/state table order.
 /// Bump when table ordering, mandatory resource names or implicit interpretation changes.
@@ -58,14 +58,14 @@ impl AssetInfo {
             || self.glyphs > MAX_ASSET_GLYPHS
             || self.names > MAX_ASSET_NAMES
         {
-            return Err(nc_com::NC_E_INVALID_ARG);
+            return Err(neocogi_com::NC_E_INVALID_ARG);
         }
         let bytes = (self.size.width as usize)
             .checked_mul(self.size.height as usize)
             .and_then(|pixels| pixels.checked_mul(4))
-            .ok_or(nc_com::NC_E_INVALID_ARG)?;
+            .ok_or(neocogi_com::NC_E_INVALID_ARG)?;
         if bytes > MAX_ASSET_PIXELS_BYTES {
-            return Err(nc_com::NC_E_INVALID_ARG);
+            return Err(neocogi_com::NC_E_INVALID_ARG);
         }
         Ok(bytes)
     }
@@ -382,9 +382,9 @@ pub trait IAssetBundle {
 /// Optional native font/PNG construction session; all mutation uses concrete named operations.
 pub trait IAssetBuilder {
     /// Adds a PNG icon under a distinct UTF-8 name and exact native path; byte offset is zero.
-    fn add_icon(&self, name: nc_com::NcCopyFromBufferOffset<'_, u8>, path: ComRef<'_, crate::INativePathAbi>) -> Result<(), NcStatus>;
+    fn add_icon(&self, name: neocogi_com::NcCopyFromBufferOffset<'_, u8>, path: ComRef<'_, crate::INativePathAbi>) -> Result<(), NcStatus>;
     /// Adds a distinct font name at a positive pixel size; the native builder bakes printable ASCII.
-    fn add_font(&self, name: nc_com::NcCopyFromBufferOffset<'_, u8>, path: ComRef<'_, crate::INativePathAbi>, pixels: u32) -> Result<(), NcStatus>;
+    fn add_font(&self, name: neocogi_com::NcCopyFromBufferOffset<'_, u8>, path: ComRef<'_, crate::INativePathAbi>, pixels: u32) -> Result<(), NcStatus>;
     /// Consumes the session even on validation failure. A successful result has all required
     /// semantic resources and the ordinary immutable bundle form; nested operations return BUSY.
     fn finish(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus>;
@@ -406,7 +406,7 @@ pub trait AssetLoader: IAssetDiagnostics {
 /// Owned diagnostic snapshots supplement recoverable asset-operation statuses.
 pub trait IAssetDiagnostics {
     /// Returns the latest recorded native/decoder/compiler cause, initially empty; argument validation may add no detail.
-    fn diagnostic(&self) -> Result<ComPtr<nc_com::INcStringAbi>, NcStatus>;
+    fn diagnostic(&self) -> Result<ComPtr<neocogi_com::INcStringAbi>, NcStatus>;
 }
 
 #[com_class(auto_guid = "microui.ThemeLoader:v1")]

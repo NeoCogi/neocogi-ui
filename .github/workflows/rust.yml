@@ -21,14 +21,14 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v6
-      - run: cargo test -p cargo-nc-com
-      - run: cargo clippy -p cargo-nc-com --all-targets -- -D warnings
+      - run: cargo test -p cargo-neocogi
+      - run: cargo clippy -p cargo-neocogi --all-targets -- -D warnings
       - name: Install nightly standard-library sources
         if: runner.os == 'Linux'
         run: rustup toolchain install nightly --profile minimal --component rust-src
       - name: Independent nightly min-size consumer and cache reuse
         if: runner.os == 'Linux'
-        run: cargo test -p cargo-nc-com --test native nightly_min_size -- --ignored
+        run: cargo test -p cargo-neocogi --test native nightly_min_size -- --ignored
 
   # The UI consumes resolved resources; optional construction features belong to assets.
   ui:
@@ -53,14 +53,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: rustup toolchain install nightly --profile minimal
-      - run: cargo build -p nc-com-runtime
+      - run: cargo build -p neocogi-com-runtime
       - name: Shared runtime, checked ABI, compile cases and independent producer workflows
         env:
           NC_COM_RUNTIME_LINK_DIR: ${{ github.workspace }}/target/debug
           LD_LIBRARY_PATH: ${{ github.workspace }}/target/debug:${{ github.workspace }}/target/debug/deps
-        run: cargo test -p nc-com-core -p nc-com-macros -p nc-com-runtime -p nc-com-inspect -p nc-com --features nc-com/runtime
+        run: cargo test -p neocogi-com-core -p neocogi-com-macros -p neocogi-com-runtime -p neocogi-inspect -p neocogi-com --features neocogi-com/runtime
       - name: Independent static runtime selection
-        run: cargo test -p nc-com --no-default-features --features 'std macros static-runtime'
+        run: cargo test -p neocogi-com --no-default-features --features 'std macros static-runtime'
 
   native:
     runs-on: ubuntu-latest
@@ -105,7 +105,7 @@ jobs:
           "LIB=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\lib;$env:LIB" >> $env:GITHUB_ENV
           "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin" >> $env:GITHUB_PATH
       - name: Package independently compiled Glow application
-        run: cargo run -p cargo-nc-com -- build --assembly full
+        run: cargo run -p cargo-neocogi -- build --assembly full
       - name: Platform-neutral contracts and facade behavior
         run: cargo test -p microui-contracts -p microui-redux
 

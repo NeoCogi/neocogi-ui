@@ -1,5 +1,5 @@
 //! Concrete built-in editing contracts; implementation state stays in its COM object.
-use nc_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, com_class, com_interface, com_int_enum, com_struct};
+use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, com_class, com_interface, com_int_enum, com_struct};
 
 #[com_interface(auto_guid = "microui.TextContent:v1")]
 /// Shared whole-text editing inherited by text controls and labelled list entries.

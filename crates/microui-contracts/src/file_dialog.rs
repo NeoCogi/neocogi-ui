@@ -1,5 +1,5 @@
 //! Standard native-path file picker with a reusable modal window and one completion source.
-use nc_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, com_interface};
+use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, com_interface};
 
 /// Initial native-picker geometry shared by static request defaults and hidden plugin construction.
 pub const FILE_DIALOG_RECT: crate::Rect = crate::Rect { x: 40, y: 40, width: 600, height: 400 };

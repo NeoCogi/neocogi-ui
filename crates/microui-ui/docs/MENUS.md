@@ -17,7 +17,7 @@ before and after mounting; they never keep a removed menu surface logically open
 ```rust,no_run
 use microui_redux::{EventHandler, EventSession, IWindowAbi, Rect, Ui};
 use microui_redux::events::Activation;
-use nc_com::{ComPtr, NcStatus};
+use neocogi_com::{ComPtr, NcStatus};
 struct Open;
 impl EventHandler<Vec<String>, Activation> for Open {
     fn handle(&mut self, opened: &mut Vec<String>, event: &Activation) -> Result<(), NcStatus> {
@@ -47,7 +47,7 @@ The same builder creates a standalone popup:
 
 ```rust,no_run
 use microui_redux::{IWindowAbi, Rect, Ui};
-use nc_com::{ComRef, NcStatus};
+use neocogi_com::{ComRef, NcStatus};
 fn show(ui: &Ui, owner: ComRef<'_, IWindowAbi>, anchor: Rect) -> Result<(), NcStatus> {
     let menus = ui.menus()?;
     let menu = menus.create("Object actions")?;

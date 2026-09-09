@@ -4,7 +4,7 @@ use crate::{
     PopupHandle, WindowHandle, Window,
     window_manager::{WindowManager, SurfaceMutationError, WindowOption, LayerBinding, ChildWindowClip},
 };
-use nc_com::{INcStringAbi, NcString};
+use neocogi_com::{INcStringAbi, NcString};
 use std::rc::Weak;
 
 /// Preserves the distinction between window and popup identities inside the implementation.

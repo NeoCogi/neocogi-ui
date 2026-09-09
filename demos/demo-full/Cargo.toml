@@ -18,7 +18,7 @@ wgpu = ["microui-redux-demo-host/wgpu", "microui-plugin-platform/wgpu"]
 
 [dependencies]
 microui-redux.workspace = true
-nc-com = { workspace = true, features = ["std", "macros"] }
+neocogi-com = { workspace = true, features = ["std", "macros"] }
 microui-demo-contracts.workspace = true
 microui-redux-demo-assets = { workspace = true, features = ["full-demo"] }
 microui-redux-demo-host = { workspace = true, features = ["png-assets"] }
@@ -26,7 +26,7 @@ rs-math3d.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Build the shared artifacts as dependencies; native startup still loads their C ABI.
-nc-com-runtime.workspace = true
+neocogi-com-runtime.workspace = true
 microui-plugin-ui = { path = "../../plugins/ui", features = ["dynamic-plugin"] }
 microui-plugin-platform = { path = "../../plugins/platform", default-features = false, features = ["dynamic-plugin"] }
 microui-plugin-assets = { workspace = true, features = ["dynamic-plugin", "theme-json"] }

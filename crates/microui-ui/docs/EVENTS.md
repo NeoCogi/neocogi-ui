@@ -8,7 +8,7 @@ commits callback edits before routing the next input event.
 ```rust,no_run
 use microui_redux::{ButtonWidget, EventHandler, EventSession, Size, Ui};
 use microui_redux::events::Activation;
-use nc_com::NcStatus;
+use neocogi_com::NcStatus;
 
 struct Count;
 impl EventHandler<u32, Activation> for Count {

@@ -284,14 +284,14 @@ impl ScrollModel {
 }
 
 /// Concrete three-child scroll composite; its model owns data but no widget or tree backpointer.
-#[nc_com::com_object(microui_contracts::ScrollArea)]
+#[neocogi_com::com_object(microui_contracts::ScrollArea)]
 pub struct ScrollArea {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Exactly three owned structural children: surface and both scrollbar objects.
-    editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+    editor: neocogi_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
     /// Private writer for the surface's single replaceable application child.
-    content: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+    content: neocogi_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
     /// Same scrolling values used by the actual bars, transform surface and optional text editor.
     model: Rc<ScrollModel>,
     /// Native fixture policy; deployed common state owns the authoritative frame options.
@@ -302,8 +302,8 @@ impl ScrollArea {
     /// Combines the fixed structural tree and shared scroll model with one concrete runtime.
     fn from_runtime(
         runtime: crate::ui_node::widget_object::WidgetRuntime,
-        editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
-        content: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+        editor: neocogi_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+        content: neocogi_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
         model: Rc<ScrollModel>,
     ) -> Self {
         #[cfg(test)]
@@ -391,12 +391,12 @@ impl ScrollComposition for ScrollArea {
 }
 
 /// The transform boundary between the viewport and its ordinary content node.
-#[nc_com::com_object(interfaces(microui_contracts::IWidget, microui_contracts::IContainerLayout))]
+#[neocogi_com::com_object(interfaces(microui_contracts::IWidget, microui_contracts::IContainerLayout))]
 struct ScrollSurface {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Sole writer for the one application content child mounted through COM.
-    editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+    editor: neocogi_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
     /// Shares actual axis requests without a reference to the owning parent widget.
     model: Rc<ScrollModel>,
 }
@@ -405,7 +405,7 @@ impl ScrollSurface {
     /// Combines one fixed content writer with the shared scroll scalar model.
     fn from_runtime(
         runtime: crate::ui_node::widget_object::WidgetRuntime,
-        editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+        editor: neocogi_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
         model: Rc<ScrollModel>,
     ) -> Self {
         Self { runtime, editor, model }
@@ -734,7 +734,7 @@ impl crate::ui_node::widget_object::HostedWidget for ScrollArea {
     }
 
     /// Closes the surface and both actual scrollbar children through their fixed writer.
-    fn close_contents(&mut self) -> Result<(), nc_com::NcStatus> {
+    fn close_contents(&mut self) -> Result<(), neocogi_com::NcStatus> {
         self.editor.close()?.finish()
     }
 }
@@ -752,14 +752,14 @@ impl crate::ui_node::widget_object::HostedWidget for ScrollSurface {
     }
 
     /// Closes the sole content child when this structural surface is retired.
-    fn close_contents(&mut self) -> Result<(), nc_com::NcStatus> {
+    fn close_contents(&mut self) -> Result<(), neocogi_com::NcStatus> {
         self.editor.close()?.finish()
     }
 }
 
 use crate::ui_node::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_scrolling_impl, direct_widget_phase_impl};
 use microui_contracts::{ChildEditResult, IChildrenEditorAbi, IWidgetAbi, IWidgetHostAbi, ScrollAreaAbi};
-use nc_com::{ComPtr, ComRef, NcStatus};
+use neocogi_com::{ComPtr, ComRef, NcStatus};
 
 direct_widget_phase_impl!(ScrollSurface);
 direct_container_layout_impl!(ScrollSurface);

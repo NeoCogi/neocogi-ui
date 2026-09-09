@@ -13,7 +13,7 @@ optional event families.
 use microui_redux::{CrossSize, EventHandler, EventSession, FlowDirection, IWindowAbi,
     LayoutTrack, LinearEdge, Rect, Ui};
 use microui_redux::events::CheckboxChanged;
-use nc_com::{ComPtr, NcStatus};
+use neocogi_com::{ComPtr, NcStatus};
 struct Preview;
 impl EventHandler<bool, CheckboxChanged> for Preview {
     fn handle(&mut self, enabled: &mut bool, event: &CheckboxChanged) -> Result<(), NcStatus> {

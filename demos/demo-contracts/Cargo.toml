@@ -7,5 +7,5 @@ publish = false
 
 [dependencies]
 microui-contracts.workspace = true
-nc-com = { workspace = true, features = ["macros"] }
+neocogi-com = { workspace = true, features = ["macros"] }
 rs-math3d.workspace = true

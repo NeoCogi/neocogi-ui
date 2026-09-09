@@ -31,7 +31,7 @@
 
 use crate::Widget;
 use microui_contracts::{IActivationSinkAbi, IEventSubscriptionAbi, ITextChangedSinkAbi, ITextSubmittedSinkAbi};
-use nc_com::{ComPtr, ComRef, INcStringAbi, NcStatus, NcString};
+use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcStatus, NcString};
 
 /// Static event-to-sink projection implemented beside each concrete semantic event type.
 pub(crate) use microui_redux::events::EventPayload as ComEvent;
