@@ -6,7 +6,10 @@ use crate::{ImageSource, TextureId};
 use crate::render::{AtlasUploadError, FrameError, FrameInfo, RendererBackend, RendererFrame, TextureError, Vertex, RenderItemArgs};
 use neocogi_ui_contracts::*;
 use neocogi_com::{ComPtr, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
-use std::{cell::{Cell, RefCell}, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
 /// Decodes canonical RGBA packing independently of machine byte order.
 pub(crate) fn color(rgba: u32) -> crate::render::Color {

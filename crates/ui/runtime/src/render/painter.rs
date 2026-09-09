@@ -112,7 +112,13 @@ impl<'a> Painter<'a> {
     }
 
     /// Records explicit source UVs without querying immutable texture dimensions during painting.
-    pub(crate) fn com_texture_region(&mut self, rect: Recti, source: neocogi_ui_contracts::TextureRegion, color: Color, texture: neocogi_com::ComPtr<neocogi_ui_contracts::ITextureAbi>) {
+    pub(crate) fn com_texture_region(
+        &mut self,
+        rect: Recti,
+        source: neocogi_ui_contracts::TextureRegion,
+        color: Color,
+        texture: neocogi_com::ComPtr<neocogi_ui_contracts::ITextureAbi>,
+    ) {
         self.list.push_com_texture(self.clip, self.screen_rect(rect), source, color, texture);
     }
 
@@ -128,7 +134,10 @@ impl<'a> Painter<'a> {
         for triangle in vertices.as_chunks::<3>().0 {
             let triangle = SolidTriangle::from(triangle.map(|vertex| {
                 let [r, g, b, a] = vertex.rgba.to_le_bytes();
-                SolidVertex { position: Vec2f::new(vertex.x + self.origin.x as f32, vertex.y + self.origin.y as f32), color: color4b(r, g, b, a) }
+                SolidVertex {
+                    position: Vec2f::new(vertex.x + self.origin.x as f32, vertex.y + self.origin.y as f32),
+                    color: color4b(r, g, b, a),
+                }
             }));
             self.list.push_solid_triangles(self.clip, &[triangle]);
         }

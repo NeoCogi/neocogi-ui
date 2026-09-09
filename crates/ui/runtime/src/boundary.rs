@@ -6,7 +6,6 @@
 use neocogi_ui_contracts::Rect;
 use neocogi_com::{NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
 
-
 /// Validates a whole UTF-8 replacement before touching any live object state.
 pub(crate) fn text(input: NcCopyFromBufferOffset<'_, u8>) -> Result<&str, NcStatus> {
     if input.offset() != 0 {

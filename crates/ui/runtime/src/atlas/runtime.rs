@@ -147,8 +147,7 @@ impl AtlasHandle {
     fn font(&self, font: FontId) -> &Font {
         // Stable identity remains independent of ordering when a derived theme
         // replaces or reorders its small font catalog.
-        self
-            .0
+        self.0
             .fonts
             .iter()
             .find_map(|(_, candidate)| (candidate.id == font).then_some(candidate))
@@ -159,8 +158,7 @@ impl AtlasHandle {
     fn icon(&self, icon: IconId) -> &Icon {
         // Resolve the authoritative record rather than trusting a numeric slot
         // embedded in a public resource identity.
-        self
-            .0
+        self.0
             .icons
             .iter()
             .find_map(|(_, candidate)| (candidate.id == icon).then_some(candidate))

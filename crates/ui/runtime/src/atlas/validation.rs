@@ -190,7 +190,6 @@ pub(super) fn checked_atlas_dimensions(width: usize, height: usize) -> Result<Ch
 }
 
 impl AtlasCandidate {
-
     /// Creates a source-backed candidate while preserving all metadata until validation.
     pub(super) fn from_decoded(
         dimensions: CheckedImageDimensions,
@@ -411,14 +410,7 @@ mod tests {
     ) -> AtlasSource<'source> {
         // Keeping this helper borrow-only avoids hiding copies, leaks, or alternate construction
         // paths from tests that are meant to exercise the public TryFrom boundary.
-        AtlasSource {
-            width,
-            height,
-            pixels,
-            icons,
-            fonts,
-
-        }
+        AtlasSource { width, height, pixels, icons, fonts }
     }
 
     /// Extracts the typed failure returned by the public atlas construction boundary.
@@ -525,7 +517,6 @@ mod tests {
             }
         ));
     }
-
 
     /// Verifies raw RGBA input rejects both truncation and ignored trailing bytes.
     #[test]
@@ -822,10 +813,4 @@ mod tests {
         assert!(atlas.clone_font_table().is_empty());
         assert_eq!(atlas.clone_icon_table().len(), icons.len());
     }
-
-
-
-
-
-
 }

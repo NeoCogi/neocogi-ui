@@ -637,23 +637,21 @@ direct_leaf_layout_impl!(Scrollbar);
 impl Scrollbar {
     /// Converts an already host-bound structural scrollbar into its public COM capability.
     pub(crate) fn into_com(self) -> ComPtr<ScrollbarAbi> {
-        Self::from_value(self)
-            .query()
-            .expect("Scrollbar declares its callable class contract")
+        Self::from_value(self).query().expect("Scrollbar declares its callable class contract")
     }
 
     /// Constructs the class for the host-bound factory through the same typed contract used by the registry.
-    pub(crate) fn create_com(host: ComPtr<IWidgetHostAbi>, resources: crate::ui_node::widget_object::SharedAssets, range: ScrollRange) -> Result<ComPtr<ScrollbarAbi>, NcStatus> {
+    pub(crate) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: crate::ui_node::widget_object::SharedAssets,
+        range: ScrollRange,
+    ) -> Result<ComPtr<ScrollbarAbi>, NcStatus> {
         let value = Self::build(host, range, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("Scrollbar declares its callable class contract"))
     }
 
     /// Builds one scrollbar with either directly imported or runtime-shared resources.
-    fn build(
-        host: ComPtr<IWidgetHostAbi>,
-        range: ScrollRange,
-        resources: Option<&crate::ui_node::widget_object::SharedAssets>,
-    ) -> Result<Self, NcStatus> {
+    fn build(host: ComPtr<IWidgetHostAbi>, range: ScrollRange, resources: Option<&crate::ui_node::widget_object::SharedAssets>) -> Result<Self, NcStatus> {
         let axis = match range.axis {
             ScrollAxis::HORIZONTAL => crate::ScrollbarAxis::Horizontal,
             ScrollAxis::VERTICAL => crate::ScrollbarAxis::Vertical,

@@ -255,7 +255,6 @@ fn make_atlas() -> crate::AtlasHandle {
         pixels: &pixels,
         icons: &icons,
         fonts: &fonts,
-
     })
     .expect("renderer performance atlas must satisfy the complete atlas contract")
 }

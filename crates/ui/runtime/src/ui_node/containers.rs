@@ -71,10 +71,7 @@ macro_rules! container_methods {
         fn remove(&mut self, index: u32) -> Result<neocogi_ui_contracts::ChildEditResult, neocogi_com::NcStatus> {
             <Self as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
             let outcome = self.editor.remove(index)?;
-            <Self as crate::ui_node::containers::ContainerAlgorithm>::edit_edges(
-                self,
-                crate::ui_node::containers::EdgeEdit::Remove { index: index as usize },
-            );
+            <Self as crate::ui_node::containers::ContainerAlgorithm>::edit_edges(self, crate::ui_node::containers::EdgeEdit::Remove { index: index as usize });
             Ok(outcome)
         }
 
@@ -95,8 +92,7 @@ macro_rules! container_edges {
         fn edge(&self, index: u32) -> Result<$edge, neocogi_com::NcStatus> {
             <Self as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
             Ok($encode(
-                <Self as crate::ui_node::containers::ContainerAlgorithm>::edge(self, index as usize)
-                    .ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?,
+                <Self as crate::ui_node::containers::ContainerAlgorithm>::edge(self, index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?,
             ))
         }
 
@@ -104,8 +100,7 @@ macro_rules! container_edges {
         fn set_edge(&mut self, index: u32, edge: $edge) -> Result<(), neocogi_com::NcStatus> {
             <Self as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
             let edge = $decode(edge)?;
-            let previous = <Self as crate::ui_node::containers::ContainerAlgorithm>::edge(self, index as usize)
-                .ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
+            let previous = <Self as crate::ui_node::containers::ContainerAlgorithm>::edge(self, index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
             if previous != edge {
                 <Self as crate::ui_node::containers::ContainerAlgorithm>::edit_edges(
                     self,

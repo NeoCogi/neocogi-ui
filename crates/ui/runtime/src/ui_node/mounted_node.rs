@@ -213,8 +213,7 @@ impl ComNode {
 impl ComNode {
     /// Reports already collected invalidation without crossing a component boundary.
     pub(crate) fn is_measurement_dirty(&self) -> bool {
-        self.dirty.get()
-            || matches!(&self.layout, NodeLayoutKind::Branch { children, .. } if children.dirty.get())
+        self.dirty.get() || matches!(&self.layout, NodeLayoutKind::Branch { children, .. } if children.dirty.get())
     }
 
     /// Drains component and child changes once at the mutable traversal boundary.

@@ -18,9 +18,7 @@ impl UiFactory {
     pub(crate) fn create(host: ComPtr<IWidgetHostAbi>, resources: crate::ui_node::widget_object::SharedAssets) -> Result<ComPtr<UiFactoryAbi>, NcStatus> {
         host.check_open()?;
         let value = Self { host, resources };
-        Ok(Self::from_value(value)
-            .query()
-            .expect("UiFactory declares its callable class contract"))
+        Ok(Self::from_value(value).query().expect("UiFactory declares its callable class contract"))
     }
 }
 
@@ -46,40 +44,22 @@ impl neocogi_ui_contracts::UiFactory for UiFactory {
     }
 
     /// Validates complete text and wrapping before constructing the fixed scroll/editor composition.
-    fn create_text_area(
-        &self,
-        input: NcCopyFromBufferOffset<'_, u8>,
-        wrapping: TextWrapping,
-        scrolling: bool,
-    ) -> Result<ComPtr<TextAreaAbi>, NcStatus> {
+    fn create_text_area(&self, input: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping, scrolling: bool) -> Result<ComPtr<TextAreaAbi>, NcStatus> {
         crate::TextArea::create_com(self.host.clone(), self.resources.clone(), input, wrapping, scrolling)
     }
 
     /// Validates text and presentation before constructing either fixed structural child.
-    fn create_disclosure(
-        &self,
-        label: NcCopyFromBufferOffset<'_, u8>,
-        style: DisclosureStyle,
-        expanded: bool,
-    ) -> Result<ComPtr<DisclosureAbi>, NcStatus> {
+    fn create_disclosure(&self, label: NcCopyFromBufferOffset<'_, u8>, style: DisclosureStyle, expanded: bool) -> Result<ComPtr<DisclosureAbi>, NcStatus> {
         crate::Disclosure::create_com(self.host.clone(), self.resources.clone(), label, style, expanded)
     }
 
     /// Composes real bars and a transform container around validated application content.
-    fn create_scroll_area(
-        &self,
-        content: ComRef<'_, IWidgetAbi>,
-        enabled: bool,
-    ) -> Result<ComPtr<ScrollAreaAbi>, NcStatus> {
+    fn create_scroll_area(&self, content: ComRef<'_, IWidgetAbi>, enabled: bool) -> Result<ComPtr<ScrollAreaAbi>, NcStatus> {
         crate::ScrollArea::create_com(self.host.clone(), self.resources.clone(), content, enabled)
     }
 
     /// Validates both policies before creating a container and its host-owned child store.
-    fn create_linear(
-        &self,
-        direction: FlowDirection,
-        cross: CrossSizeAbi,
-    ) -> Result<ComPtr<LinearAbi>, NcStatus> {
+    fn create_linear(&self, direction: FlowDirection, cross: CrossSizeAbi) -> Result<ComPtr<LinearAbi>, NcStatus> {
         self.host.check_mutation()?;
         crate::Linear::create_com(self.host.clone(), self.resources.clone(), direction, cross)
     }
@@ -95,11 +75,7 @@ impl neocogi_ui_contracts::UiFactory for UiFactory {
     }
 
     /// Validates complete checkbox initialization before allocating its COM identity.
-    fn create_checkbox(
-        &self,
-        checked: bool,
-        label: NcCopyFromBufferOffset<'_, u8>,
-    ) -> Result<ComPtr<CheckboxAbi>, NcStatus> {
+    fn create_checkbox(&self, checked: bool, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<CheckboxAbi>, NcStatus> {
         self.host.check_mutation()?;
         crate::Checkbox::create_com(self.host.clone(), self.resources.clone(), checked, label)
     }
@@ -111,11 +87,7 @@ impl neocogi_ui_contracts::UiFactory for UiFactory {
     }
 
     /// Validates text and wrapping before allocating the display object's identity.
-    fn create_text_block(
-        &self,
-        input: NcCopyFromBufferOffset<'_, u8>,
-        wrapping: TextWrapping,
-    ) -> Result<ComPtr<TextBlockAbi>, NcStatus> {
+    fn create_text_block(&self, input: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping) -> Result<ComPtr<TextBlockAbi>, NcStatus> {
         self.host.check_mutation()?;
         crate::TextBlock::create_com(self.host.clone(), self.resources.clone(), input, wrapping)
     }
@@ -133,11 +105,7 @@ impl neocogi_ui_contracts::UiFactory for UiFactory {
     }
 
     /// Validates the label before allocating a color swatch with copied RGBA state.
-    fn create_color_swatch(
-        &self,
-        rgba: u32,
-        label: NcCopyFromBufferOffset<'_, u8>,
-    ) -> Result<ComPtr<ColorSwatchAbi>, NcStatus> {
+    fn create_color_swatch(&self, rgba: u32, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ColorSwatchAbi>, NcStatus> {
         self.host.check_mutation()?;
         crate::ColorSwatch::create_com(self.host.clone(), self.resources.clone(), rgba, label)
     }
@@ -161,11 +129,7 @@ impl neocogi_ui_contracts::UiFactory for UiFactory {
     }
 
     /// Constructs a complete Button in one call through its concrete class implementation.
-    fn create_button(
-        &self,
-        label: NcCopyFromBufferOffset<'_, u8>,
-        options: WidgetOptions,
-    ) -> Result<ComPtr<ButtonAbi>, NcStatus> {
+    fn create_button(&self, label: NcCopyFromBufferOffset<'_, u8>, options: WidgetOptions) -> Result<ComPtr<ButtonAbi>, NcStatus> {
         self.host.check_mutation()?;
         crate::Button::create_com(self.host.clone(), self.resources.clone(), label, options)
     }

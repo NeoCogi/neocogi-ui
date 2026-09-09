@@ -253,7 +253,6 @@ mod tests {
             pixels: &pixels,
             icons: &icons,
             fonts: &fonts,
-
         })
         .expect("the extreme-advance fixture must satisfy the complete atlas contract")
     }

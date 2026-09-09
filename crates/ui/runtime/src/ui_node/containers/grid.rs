@@ -1256,10 +1256,7 @@ mod tests {
 
         let mut children = Children::new();
         let topology = Rc::new(RefCell::new(Children::new()));
-        let mut empty = Grid::com_new(
-            vec![TrackSize::Fixed(10), TrackSize::Content],
-            vec![TrackSize::Fixed(8), TrackSize::Content],
-        );
+        let mut empty = Grid::com_new(vec![TrackSize::Fixed(10), TrackSize::Content], vec![TrackSize::Fixed(8), TrackSize::Content]);
         empty.children = ChildrenHandle::new(&topology);
         let mut ctx = MeasureCtx::new(&style, &atlas, &mut children);
         let measured = grid_size(&mut ctx, &empty, crate::Constraints::unbounded());

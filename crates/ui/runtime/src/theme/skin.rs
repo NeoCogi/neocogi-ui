@@ -53,8 +53,8 @@
 //! Resolved, structured, atlas-bound skin values used across the crate.
 
 use super::{
-    ChromeRole, ChromeState, ControlRole, ControlState, FontRef, FontRole, IconRole, MenuRole, MenuState, SurfaceRole, SurfaceState,
-    Visual, catalog::AppearanceCatalog,
+    ChromeRole, ChromeState, ControlRole, ControlState, FontRef, FontRole, IconRole, MenuRole, MenuState, SurfaceRole, SurfaceState, Visual,
+    catalog::AppearanceCatalog,
 };
 use crate::atlas::{AtlasHandle, FontId};
 use crate::render::NinePatch;
@@ -141,8 +141,12 @@ impl Skin {
     #[cfg(test)]
     pub(crate) fn from_atlas(atlas: &AtlasHandle) -> Self {
         // Test defaults provide an independent oracle for the asset compiler's portable output.
-        Self::from_resolved(atlas, SkinMetrics::default(), WindowChromeSkin::default(),
-            AppearanceCatalog::from_flat_palette(SliceInsets::uniform(1), &FlatPalette::default()))
+        Self::from_resolved(
+            atlas,
+            SkinMetrics::default(),
+            WindowChromeSkin::default(),
+            AppearanceCatalog::from_flat_palette(SliceInsets::uniform(1), &FlatPalette::default()),
+        )
     }
 
     /// Returns the opaque generation associated with this complete skin value.
@@ -252,7 +256,6 @@ impl Skin {
         // Patch and content color cross the mutation boundary together as one complete value.
         self.appearances.set_chrome(role, state, visual);
     }
-
 
     /// Returns the active atlas capability for one semantic font role.
     ///

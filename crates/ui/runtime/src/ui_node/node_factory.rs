@@ -2,9 +2,16 @@
 use super::HostState;
 use neocogi_ui_contracts::*;
 use neocogi_com::{ComPtr, ComRef, IUnknown, NcStatus, NC_E_INVALID_ARG};
-use std::{cell::{Cell, RefCell}, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 use super::{widget_object::SharedAssets, paint_service::PaintService};
-use super::{child_store::ChildStore, mounted_node::{ComNode, NodeLayoutKind}, layout_service::LayoutService};
+use super::{
+    child_store::ChildStore,
+    mounted_node::{ComNode, NodeLayoutKind},
+    layout_service::LayoutService,
+};
 
 /// Runtime-bound services shared by root attachment and owned child collections.
 /// Nothing in this allocation retains a runtime, root tree or application handler.

@@ -424,9 +424,7 @@ impl Combo {
 impl Eq for ComboSubmitted {}
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_contracts::{
-    ComboAbi, GeometryChange, IComboChangedSinkAbi, IComboPopupSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi, TextFontRole,
-};
+use neocogi_ui_contracts::{ComboAbi, GeometryChange, IComboChangedSinkAbi, IComboPopupSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi, TextFontRole};
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG};
 
 direct_widget_phase_impl!(Combo);
@@ -434,10 +432,7 @@ direct_leaf_layout_impl!(Combo);
 
 impl Combo {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(crate) fn create_com(
-        host: ComPtr<IWidgetHostAbi>,
-        resources: crate::ui_node::widget_object::SharedAssets,
-    ) -> Result<ComPtr<ComboAbi>, NcStatus> {
+    pub(crate) fn create_com(host: ComPtr<IWidgetHostAbi>, resources: crate::ui_node::widget_object::SharedAssets) -> Result<ComPtr<ComboAbi>, NcStatus> {
         let value = Self::build(host, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("Combo declares its callable class contract"))
     }
@@ -528,11 +523,9 @@ impl Combo {
         let label = crate::boundary::text(label)?;
         let changed_label = self.label() != label;
         self.com_set_selection(index, label, submit);
-        self.runtime_mut().state.record_change(if changed_label {
-            GeometryChange::CHANGED
-        } else {
-            GeometryChange::NO_CHANGE
-        });
+        self.runtime_mut()
+            .state
+            .record_change(if changed_label { GeometryChange::CHANGED } else { GeometryChange::NO_CHANGE });
         Ok(())
     }
 }

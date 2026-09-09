@@ -35,8 +35,8 @@
 
 use crate::ControlRole;
 use crate::ui_node::widget_object::{
-    HostedWidget, ImageState, direct_leaf_layout_impl, direct_widget_phase_impl,
-    set_direct_font_role, set_direct_icon_role, set_direct_named_font, set_direct_named_icon,
+    HostedWidget, ImageState, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_icon_role, set_direct_named_font,
+    set_direct_named_icon,
 };
 use neocogi_ui_contracts::*;
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString};
@@ -496,9 +496,7 @@ impl neocogi_ui_contracts::Button for Button {
     /// Reports the current fill mask from the sole concrete Button state.
     fn fill_states(&self) -> Result<FillStates, NcStatus> {
         self.runtime().state.readable()?;
-        Ok(FillStates {
-            bits: self.com_fill().bits() as u8,
-        })
+        Ok(FillStates { bits: self.com_fill().bits() as u8 })
     }
 
     /// Rejects unknown flags before committing a paint-only change.

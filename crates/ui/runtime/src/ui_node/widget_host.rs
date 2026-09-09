@@ -59,13 +59,7 @@ impl IWidgetHost for WidgetHost {
     /// Issues a private writer and distinct read-only view for a new empty collection.
     fn create_children(&self) -> Result<ComPtr<IChildrenEditorAbi>, NcStatus> {
         self.check_mutation()?;
-        let factory = self
-            .state
-            .factory
-            .try_borrow()
-            .map_err(|_| UI_E_BUSY)?
-            .upgrade()
-            .ok_or(UI_E_CLOSED)?;
+        let factory = self.state.factory.try_borrow().map_err(|_| UI_E_BUSY)?.upgrade().ok_or(UI_E_CLOSED)?;
         Ok(super::child_store::create(factory))
     }
 

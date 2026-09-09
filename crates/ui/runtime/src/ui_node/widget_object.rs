@@ -67,11 +67,7 @@ impl WidgetRuntime {
     }
 
     /// Selects host-owned import or an explicitly shared runtime value for composite construction.
-    pub(crate) fn for_resources(
-        host: ComPtr<IWidgetHostAbi>,
-        options: WidgetOption,
-        resources: Option<&SharedAssets>,
-    ) -> Result<Self, NcStatus> {
+    pub(crate) fn for_resources(host: ComPtr<IWidgetHostAbi>, options: WidgetOption, resources: Option<&SharedAssets>) -> Result<Self, NcStatus> {
         match resources {
             Some(resources) => Self::from_shared(host, options, resources.clone()),
             None => Self::new(host, options),
@@ -98,11 +94,7 @@ impl WidgetRuntime {
         // Container algorithm tests still use the native tree harness. Supplying a real writer keeps
         // the concrete type structurally identical to its dynamically constructed COM allocation.
         let runtime = Self::for_test(options);
-        let editor = runtime
-            .state
-            .host()
-            .create_children()
-            .expect("test widget host creates a child collection");
+        let editor = runtime.state.host().create_children().expect("test widget host creates a child collection");
         (runtime, editor)
     }
 
@@ -138,7 +130,6 @@ impl WidgetRuntime {
         let icon = assets.borrow().original().icon_id(name).ok_or(neocogi_com::NC_E_NOT_FOUND)?;
         Ok(crate::IconRef::Named(icon))
     }
-
 }
 
 /// Gives shared COM phase plumbing access to a concrete widget's non-semantic runtime field.
@@ -172,10 +163,7 @@ pub(crate) fn set_direct_font_role<S: HostedWidget + FontState>(widget: &mut S, 
 }
 
 /// Resolves and commits one named font against the concrete widget's current host resources.
-pub(crate) fn set_direct_named_font<S: HostedWidget + FontState>(
-    widget: &mut S,
-    name: NcCopyFromBufferOffset<'_, u8>,
-) -> Result<(), NcStatus> {
+pub(crate) fn set_direct_named_font<S: HostedWidget + FontState>(widget: &mut S, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
     let font = widget.runtime_mut().named_font(name)?;
     if widget.font() != &font {
         widget.set_font(font);
@@ -194,10 +182,7 @@ pub(crate) fn set_direct_icon_role<S: HostedWidget + IconState>(widget: &mut S, 
 }
 
 /// Resolves and commits one named icon against the concrete widget's current host resources.
-pub(crate) fn set_direct_named_icon<S: HostedWidget + IconState>(
-    widget: &mut S,
-    name: NcCopyFromBufferOffset<'_, u8>,
-) -> Result<(), NcStatus> {
+pub(crate) fn set_direct_named_icon<S: HostedWidget + IconState>(widget: &mut S, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
     let icon = widget.runtime_mut().named_icon(name)?;
     if widget.set_icon(Some(icon)) {
         widget.runtime_mut().state.record_change(GeometryChange::CHANGED);
@@ -272,7 +257,9 @@ macro_rules! direct_widget_phase_impl {
             /// Replaces the single common option value after complete validation.
             fn set_options(&mut self, options: neocogi_ui_contracts::WidgetOptions) -> Result<(), neocogi_com::NcStatus> {
                 options.validate()?;
-                <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self).state.set_options(options)
+                <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self)
+                    .state
+                    .set_options(options)
             }
 
             /// Runs copied input directly against this concrete widget's semantic fields.
@@ -289,10 +276,7 @@ macro_rules! direct_widget_phase_impl {
                 let assets = assets.borrow();
                 let mut ctx = crate::WidgetUpdateCtx::new_with_content_geometry(
                     crate::boundary::local_rect(state.screen),
-                    crate::math::RectExt::translated(
-                        crate::boundary::local_rect(state.clip),
-                        crate::Vec2i::new(state.screen.x, state.screen.y),
-                    ),
+                    crate::math::RectExt::translated(crate::boundary::local_rect(state.clip), crate::Vec2i::new(state.screen.x, state.screen.y)),
                     assets.bundle().skin(),
                     assets.bundle().atlas(),
                     state.in_hover_root,
@@ -316,7 +300,9 @@ macro_rules! direct_widget_phase_impl {
                         .state
                         .record_change(neocogi_ui_contracts::GeometryChange::CHANGED);
                 }
-                <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self).state.take_change()
+                <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self)
+                    .state
+                    .take_change()
             }
 
             /// Paints semantic fields directly into the runtime-owned scoped frame context.
@@ -374,12 +360,7 @@ macro_rules! direct_leaf_layout_impl {
                 );
                 let assets = <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self).resources()?;
                 let assets = assets.borrow();
-                let size = crate::LeafWidget::measure(
-                    self,
-                    assets.bundle().skin(),
-                    assets.bundle().atlas(),
-                    constraints,
-                );
+                let size = crate::LeafWidget::measure(self, assets.bundle().skin(), assets.bundle().atlas(), constraints);
                 Ok(neocogi_ui_contracts::Size {
                     width: size.width.max(0),
                     height: size.height.max(0),
@@ -436,12 +417,7 @@ macro_rules! direct_container_layout_impl {
                 let layout = crate::ui_node::layout_service::ScopedLayout::new(scope, service)?;
                 let assets = <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self).resources()?;
                 let assets = assets.borrow();
-                let mut ctx = crate::ContainerLayoutCtx::scoped(
-                    assets.bundle().skin(),
-                    assets.bundle().atlas(),
-                    crate::boundary::local_rect(rect),
-                    layout,
-                );
+                let mut ctx = crate::ContainerLayoutCtx::scoped(assets.bundle().skin(), assets.bundle().atlas(), crate::boundary::local_rect(rect), layout);
                 crate::ContainerWidget::place(self, &mut ctx, crate::boundary::local_rect(rect));
                 ctx.result()
             }
@@ -461,7 +437,6 @@ macro_rules! direct_container_layout_impl {
 }
 
 pub(crate) use direct_container_layout_impl;
-
 
 /// Static typography access implemented only by semantic states which own a font.
 pub(crate) trait FontState: WidgetAlgorithm {
@@ -522,7 +497,6 @@ macro_rules! direct_scrolling_impl {
 }
 
 pub(crate) use direct_scrolling_impl;
-
 
 /// Resolves one concrete font-role vocabulary for both widget and compact menu presentation.
 pub(crate) fn local_font_role(role: TextFontRole) -> Result<crate::FontRole, NcStatus> {

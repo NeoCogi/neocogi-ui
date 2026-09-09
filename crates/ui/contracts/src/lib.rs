@@ -143,25 +143,11 @@ pub trait IPainter {
     fn text(&mut self, scope: PaintScope, rect: Rect, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
     /// Resolves and records one semantic surface or control frame, returning its usable interior.
     /// `center_only` removes destination insets without changing the selected artwork.
-    fn frame(
-        &mut self,
-        scope: PaintScope,
-        rect: Rect,
-        role: WidgetFrame,
-        state: WidgetVisualState,
-        center_only: bool,
-    ) -> Result<Rect, NcStatus>;
+    fn frame(&mut self, scope: PaintScope, rect: Rect, role: WidgetFrame, state: WidgetVisualState, center_only: bool) -> Result<Rect, NcStatus>;
     /// Records one atlas icon selected by its slot in the current immutable asset bundle.
     fn icon(&mut self, scope: PaintScope, icon: PaintIcon, rect: Rect, rgba: u32) -> Result<(), NcStatus>;
     /// Records one UTF-8 text run at an explicit local baseline-aligned position.
-    fn text_run(
-        &mut self,
-        scope: PaintScope,
-        font: PaintFont,
-        position: Point,
-        rgba: u32,
-        text: NcCopyFromBufferOffset<'_, u8>,
-    ) -> Result<(), NcStatus>;
+    fn text_run(&mut self, scope: PaintScope, font: PaintFont, position: Point, rgba: u32, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus>;
 }
 
 #[com_interface(auto_guid = "neocogi.ui.Widget:v1")]

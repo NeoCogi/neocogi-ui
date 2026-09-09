@@ -446,22 +446,9 @@ fn create_container(parameters: DisclosureParameters) -> (TypedWidgetHandle<Disc
     let model = DisclosureState::new(parameters.expanded);
     let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(crate::WidgetOption::NO_INTERACT);
     let host = runtime.state.host().add_ref();
-    let children = prepare_children(
-        host,
-        model.clone(),
-        parameters.label.clone(),
-        parameters.variant,
-        None,
-    )
-    .expect("native disclosure fixture builds the same fixed COM topology");
-    let mut widget = Disclosure::from_runtime(
-        runtime,
-        children.editor,
-        children.header,
-        children.body,
-        model.clone(),
-        parameters.variant,
-    );
+    let children = prepare_children(host, model.clone(), parameters.label.clone(), parameters.variant, None)
+        .expect("native disclosure fixture builds the same fixed COM topology");
+    let mut widget = Disclosure::from_runtime(runtime, children.editor, children.header, children.body, model.clone(), parameters.variant);
     widget.content = Some(content);
     let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(parameters.opt);
     let header = DisclosureHeader {
@@ -633,12 +620,7 @@ impl Disclosure {
 
 impl neocogi_ui_contracts::Disclosure for Disclosure {
     /// Validates presentation and label before constructing the complete fixed composition.
-    fn new(
-        host: ComRef<'_, IWidgetHostAbi>,
-        label: NcCopyFromBufferOffset<'_, u8>,
-        style: DisclosureStyle,
-        expanded: bool,
-    ) -> Result<Self, NcStatus> {
+    fn new(host: ComRef<'_, IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>, style: DisclosureStyle, expanded: bool) -> Result<Self, NcStatus> {
         Self::build(host.add_ref(), label, style, expanded, None)
     }
 
@@ -694,18 +676,9 @@ fn prepare_children(
     // disclosure. The shared scalar model contains no parent or child object backpointer.
     let header = DisclosureHeader::create_com(host.clone(), variant.header_options(), model, label, variant, resources)?;
     let body = if let Some(resources) = resources {
-        super::Linear::create_com(
-            host.clone(),
-            resources.clone(),
-            FlowDirection::TOP_TO_BOTTOM,
-            CrossSize::Stretch.into(),
-        )?
+        super::Linear::create_com(host.clone(), resources.clone(), FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch.into())?
     } else {
-        let value = <super::Linear as neocogi_ui_contracts::Linear>::new(
-            host.as_com_ref(),
-            FlowDirection::TOP_TO_BOTTOM,
-            CrossSize::Stretch.into(),
-        )?;
+        let value = <super::Linear as neocogi_ui_contracts::Linear>::new(host.as_com_ref(), FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch.into())?;
         super::Linear::from_value(value).query().expect("Linear declares its callable class contract")
     };
     let editor = host.create_children()?;
@@ -757,7 +730,6 @@ mod tests {
             pixels: &pixels,
             icons: &icons,
             fonts: &fonts,
-
         };
 
         AtlasHandle::try_from(&source).expect("asymmetric disclosure fixture must satisfy the atlas contract")

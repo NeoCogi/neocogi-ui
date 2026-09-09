@@ -177,7 +177,12 @@ impl DisplayList {
                 rs_math3d::color4b(r, g, b, a),
             ));
         }
-        self.push(clip, DrawKind::AtlasTriangles { vertices: first..self.atlas_vertices.len() });
+        self.push(
+            clip,
+            DrawKind::AtlasTriangles {
+                vertices: first..self.atlas_vertices.len(),
+            },
+        );
     }
 
     /// Retains an image in source order; final clipping remains centralized in the executor.
@@ -209,7 +214,15 @@ impl DisplayList {
     pub(super) fn push_text(&mut self, clip: Recti, font: FontId, pos: Vec2i, color: Color, text: &str) {
         let first = self.text.len();
         self.text.push_str(text);
-        self.push(clip, DrawKind::Text { font, pos, color, text: first..self.text.len() });
+        self.push(
+            clip,
+            DrawKind::Text {
+                font,
+                pos,
+                color,
+                text: first..self.text.len(),
+            },
+        );
     }
 
     /// Appends one atlas icon operation.
@@ -250,13 +263,7 @@ impl DisplayList {
     }
 
     /// Converts copied COM polygon points directly into the reusable tessellation workspace.
-    pub(super) fn push_contract_polygon(
-        &mut self,
-        clip: Recti,
-        points: &[neocogi_ui_contracts::PaintPoint],
-        color: Color4b,
-        offset: Vec2f,
-    ) {
+    pub(super) fn push_contract_polygon(&mut self, clip: Recti, points: &[neocogi_ui_contracts::PaintPoint], color: Color4b, offset: Vec2f) {
         let points = points.iter().map(|point| Vec2f::new(point.x, point.y));
         if let Some(range) = self.solid_geometry.append_polygon_points(points, color, offset) {
             self.push_solid_range(clip, range);

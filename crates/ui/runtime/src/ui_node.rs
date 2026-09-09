@@ -57,16 +57,16 @@
 //! layout. A built-in's `com_object` declaration, callable-class implementation, shared widget
 //! projections, semantic state, and native algorithm all live in that same family file; the
 //! shared object projections and retained services live beside the node model that owns them.
-pub(crate) mod widget_object;
-pub(crate) mod widget_host;
 pub(crate) mod child_store;
+pub(crate) mod frame;
+mod input;
 pub(crate) mod input_contract;
 pub(crate) mod layout_service;
 pub(crate) mod mounted_node;
 pub(crate) mod node_factory;
 pub(crate) mod paint_service;
-pub(crate) mod frame;
-mod input;
+pub(crate) mod widget_host;
+pub(crate) mod widget_object;
 pub use input::UiInputEvent;
 pub mod layout;
 pub use layout::{AvailableSpace, Constraints, TrackSize};

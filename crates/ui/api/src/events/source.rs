@@ -495,7 +495,6 @@ impl<E: EventPayload> Drop for SinkAccess<'_, E> {
     }
 }
 
-
 impl<E: EventPayload> EventEndpoint<E> {
     /// Claims the one producer port and returns an application-owned COM lease.
     /// The producer never retains the sink; cancellation releases it immediately.

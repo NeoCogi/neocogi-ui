@@ -128,7 +128,12 @@ impl IPainter for Recorder {
             return Err(NC_E_INVALID_ARG);
         }
         self.with_painter(scope, |painter| {
-            painter.stroke_line(crate::Vec2f::new(from.x, from.y), crate::Vec2f::new(to.x, to.y), width, crate::render::external::color(rgba));
+            painter.stroke_line(
+                crate::Vec2f::new(from.x, from.y),
+                crate::Vec2f::new(to.x, to.y),
+                width,
+                crate::render::external::color(rgba),
+            );
         })
     }
     /// Copies a whole finite boundary; native geometry code owns all triangulation and clipping.
@@ -158,7 +163,9 @@ impl IPainter for Recorder {
         self.check(scope)?;
         // AddRef can execute foreign code, so retain the texture before taking the paint context.
         let texture = texture.add_ref();
-        self.with_painter(scope, |painter| painter.com_texture_region(local_rect(rect), source, crate::render::external::color(rgba), texture))
+        self.with_painter(scope, |painter| {
+            painter.com_texture_region(local_rect(rect), source, crate::render::external::color(rgba), texture)
+        })
     }
     /// Records a capability rather than a callback lending mutable GPU state across COM.
     fn item(&mut self, scope: PaintScope, rect: Rect, item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
@@ -203,7 +210,9 @@ impl IPainter for Recorder {
             let skin = resources.bundle().skin();
             let atlas = resources.bundle().atlas();
             let font = skin.resolve_font_role(atlas, FontRole::Body);
-            let color = skin.control(ControlRole::Button, crate::ControlState::Enabled(crate::PointerState::Normal)).content_color;
+            let color = skin
+                .control(ControlRole::Button, crate::ControlState::Enabled(crate::PointerState::Normal))
+                .content_color;
             let position = crate::ui_node::text_layout::control_text_position_with_font(skin, atlas, font, label, rect, WidgetOption::NONE);
             (font, color, position)
         };
@@ -213,14 +222,7 @@ impl IPainter for Recorder {
     }
 
     /// Resolves one compact semantic patch in the runtime and records it without widget-local geometry.
-    fn frame(
-        &mut self,
-        scope: PaintScope,
-        rect: Rect,
-        role: WidgetFrame,
-        state: WidgetVisualState,
-        center_only: bool,
-    ) -> Result<Rect, NcStatus> {
+    fn frame(&mut self, scope: PaintScope, rect: Rect, role: WidgetFrame, state: WidgetVisualState, center_only: bool) -> Result<Rect, NcStatus> {
         if rect.width < 0 || rect.height < 0 {
             return Err(NC_E_INVALID_ARG);
         }
@@ -250,14 +252,7 @@ impl IPainter for Recorder {
     }
 
     /// Authenticates and records one exact-font UTF-8 run without an intermediate text command.
-    fn text_run(
-        &mut self,
-        scope: PaintScope,
-        font: PaintFont,
-        position: Point,
-        rgba: u32,
-        input: NcCopyFromBufferOffset<'_, u8>,
-    ) -> Result<(), NcStatus> {
+    fn text_run(&mut self, scope: PaintScope, font: PaintFont, position: Point, rgba: u32, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         let label = text(input)?;
         let font = self.resources.borrow().bundle().atlas().font_at_index(font.index).ok_or(NC_E_INVALID_ARG)?;
         self.with_painter(scope, |painter| {
@@ -294,9 +289,9 @@ impl PaintService {
     pub(super) fn paint(&mut self, widget: &ComPtr<IWidgetAbi>, ctx: &mut crate::WidgetPaintCtx<'_>) -> Result<(), NcStatus> {
         let invocation = self.with_recorder_mut(|recorder| {
             recorder.begin(PaintContext {
-            display_list: ctx.take_display_list(),
-            content_rect: ctx.paint_content_rect(),
-            screen_clip: ctx.paint_screen_clip(),
+                display_list: ctx.take_display_list(),
+                content_rect: ctx.paint_content_rect(),
+                screen_clip: ctx.paint_screen_clip(),
             })
         })??;
         let state = WidgetPaint {

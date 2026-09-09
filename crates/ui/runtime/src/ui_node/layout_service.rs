@@ -3,7 +3,10 @@ use crate::boundary::{copied_rect, local_rect};
 use super::HostState;
 use neocogi_ui_contracts::*;
 use neocogi_com::{ComPtr, ComRef, NcStatus, NC_E_INVALID_ARG, com_object};
-use std::{cell::{Cell, RefCell}, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 use super::{
     child_store::{ChildStore, ChildTransaction},
     widget_object::SharedAssets,

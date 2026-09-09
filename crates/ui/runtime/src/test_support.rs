@@ -198,7 +198,6 @@ pub(crate) fn test_atlas_with_font_sizes(fonts: &[(&str, usize)]) -> AtlasHandle
         pixels: &pixels,
         icons: &icons,
         fonts: &fonts,
-
     };
     // Shared fixtures use the public fallible loader so malformed test metadata cannot bypass the
     // same validation boundary required of downstream applications.

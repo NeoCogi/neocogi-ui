@@ -4,7 +4,10 @@ use crate::boundary::{local_rect, text};
 use crate::ui_node::{HostState, Observation, WidgetHost};
 use neocogi_ui_contracts::*;
 use neocogi_com::{ComPtr, ComRef, IUnknown, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
-use std::{cell::{Cell, RefCell}, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 use crate::ui_node::paint_service::{Metrics, PaintService};
 use crate::render::external::Backend;
 use crate::Dimensioni;
@@ -27,9 +30,7 @@ pub(crate) fn create_runtime(atlas: AtlasHandle) -> ComPtr<UiRuntimeAbi> {
 /// Imports application-supplied resources before constructing any live runtime or widget service.
 pub fn create_runtime_from_assets(source: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<UiRuntimeAbi>, NcStatus> {
     let runtime = <Runtime as UiRuntime>::new(source)?;
-    Ok(Runtime::from_value(runtime)
-        .query()
-        .expect("runtime interface"))
+    Ok(Runtime::from_value(runtime).query().expect("runtime interface"))
 }
 
 /// Creates the one authoritative storage allocation used by the runtime and its weak controllers.
@@ -54,8 +55,7 @@ fn create_storage(assets: crate::assets::ImportedAssets) -> Rc<RuntimeStorage> {
         children: RefCell::default(),
     });
     *state.factory.borrow_mut() = Rc::downgrade(&factory);
-    let widget_factory = crate::ui_factory::UiFactory::create(factory.host.clone(), factory.resources.clone())
-        .expect("new runtime host creates its factory");
+    let widget_factory = crate::ui_factory::UiFactory::create(factory.host.clone(), factory.resources.clone()).expect("new runtime host creates its factory");
     Rc::new(RuntimeStorage {
         context: RefCell::new(Some(Context::from_bundle(backend, bundle))),
         mounts: RefCell::new(Vec::new()),
@@ -247,9 +247,8 @@ impl UiRuntime for Runtime {
         if storage.pending.get() || storage.dimensions.get() != size {
             return Err(UI_E_UPDATE_REQUIRED);
         }
-        let info =
-            crate::render::FrameInfo::try_new(Dimensioni::new(size.width, size.height), crate::render::external::color(0xff302820))
-                .map_err(|_| NC_E_INVALID_ARG)?;
+        let info = crate::render::FrameInfo::try_new(Dimensioni::new(size.width, size.height), crate::render::external::color(0xff302820))
+            .map_err(|_| NC_E_INVALID_ARG)?;
         // The complete submission is observational, including calls into the native renderer.
         let _phase = Observation::begin(&storage.factory.state);
         storage.factory.state.error.set(None);

@@ -178,13 +178,7 @@ impl TextArea {
         model: std::rc::Rc<crate::ui_node::ScrollModel>,
     ) -> Self {
         #[cfg(test)]
-        let opt = WidgetOption::from_bits_retain(
-            runtime
-                .state
-                .options()
-                .expect("new test widget runtime exposes its validated options")
-                .bits,
-        );
+        let opt = WidgetOption::from_bits_retain(runtime.state.options().expect("new test widget runtime exposes its validated options").bits);
         Self {
             runtime,
             editor,
@@ -1049,12 +1043,7 @@ impl TextArea {
 
 impl neocogi_ui_contracts::TextArea for TextArea {
     /// Prepares the fixed scroll structure and attaches one real editor before publishing the root.
-    fn new(
-        host: ComRef<'_, IWidgetHostAbi>,
-        input: NcCopyFromBufferOffset<'_, u8>,
-        wrapping: TextWrapping,
-        scrolling: bool,
-    ) -> Result<Self, NcStatus> {
+    fn new(host: ComRef<'_, IWidgetHostAbi>, input: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping, scrolling: bool) -> Result<Self, NcStatus> {
         Self::build(host.add_ref(), input, wrapping, scrolling, None)
     }
 

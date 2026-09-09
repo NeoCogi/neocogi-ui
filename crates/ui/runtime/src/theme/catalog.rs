@@ -47,7 +47,9 @@ impl AppearanceCatalog {
         chrome: [[Visual; ChromeState::COUNT]; ChromeRole::COUNT],
     ) -> Self {
         // The importer has resolved every image slot into its local typed resource identity.
-        Self { values: Rc::new(AppearanceValues { surfaces, controls, menus, chrome }) }
+        Self {
+            values: Rc::new(AppearanceValues { surfaces, controls, menus, chrome }),
+        }
     }
 
     /// Compiles the one concrete flat-palette representation into complete runtime arrays.

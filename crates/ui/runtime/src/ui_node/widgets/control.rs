@@ -194,8 +194,6 @@ pub(super) fn widget_fill_visible(ctx: &WidgetPaintCtx<'_>, fill: WidgetFillOpti
     }
 }
 
-
-
 /// Copies dimensions that were validated and cached before the image became widget content.
 pub(super) fn image_size(image: &neocogi_ui::Image) -> Dimensioni {
     let size = image.size();

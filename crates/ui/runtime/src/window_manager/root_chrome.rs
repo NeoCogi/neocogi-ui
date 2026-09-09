@@ -133,7 +133,6 @@ impl crate::event::ComEvent for WindowEvent {
     }
 }
 
-
 /// Cloneable non-owning capability for one manager-owned window or dialog.
 ///
 /// Stable object identity and event delivery are deliberately separate fields. The private root ID

@@ -340,7 +340,9 @@ mod tests {
     }
 }
 
-use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_icon_role, set_direct_named_font, set_direct_named_icon};
+use crate::ui_node::widget_object::{
+    HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_icon_role, set_direct_named_font, set_direct_named_icon,
+};
 use neocogi_ui_contracts::{ContentIcon, GeometryChange, IActivationSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi, ListItemAbi, TextFontRole};
 use neocogi_com::*;
 

@@ -544,7 +544,13 @@ impl<'a> WidgetPaintCtx<'a> {
     fn scoped_paint(&self) -> Option<(PaintScope, ComRef<'a, IPainterAbi>)> {
         match &self.output {
             PaintOutput::Frame(_) => None,
-            PaintOutput::Scoped { scope, painter } => Some((PaintScope { invocation: scope.invocation, clip: crate::boundary::copied_rect(self.draw_clip) }, *painter)),
+            PaintOutput::Scoped { scope, painter } => Some((
+                PaintScope {
+                    invocation: scope.invocation,
+                    clip: crate::boundary::copied_rect(self.draw_clip),
+                },
+                *painter,
+            )),
         }
     }
 
@@ -594,9 +600,7 @@ impl<'a> WidgetPaintCtx<'a> {
         if let Some((scope, mut painter)) = self.scoped_paint() {
             let result = painter.icon(
                 scope,
-                PaintIcon {
-                    index: self.common.atlas.icon_index(id),
-                },
+                PaintIcon { index: self.common.atlas.icon_index(id) },
                 crate::boundary::copied_rect(rect),
                 packed_color(color),
             );
@@ -607,12 +611,7 @@ impl<'a> WidgetPaintCtx<'a> {
     }
 
     /// Draws a renderer-owned image without creating a widget-local display list or geometry pass.
-    pub(crate) fn draw_texture(
-        &mut self,
-        rect: Recti,
-        color: Color,
-        texture: ComPtr<neocogi_ui_contracts::ITextureAbi>,
-    ) {
+    pub(crate) fn draw_texture(&mut self, rect: Recti, color: Color, texture: ComPtr<neocogi_ui_contracts::ITextureAbi>) {
         if let Some((scope, mut painter)) = self.scoped_paint() {
             let result = painter.texture(
                 scope,
@@ -635,10 +634,7 @@ impl<'a> WidgetPaintCtx<'a> {
                 PaintFont {
                     index: self.common.atlas.font_index(font),
                 },
-                Point {
-                    x: position.x,
-                    y: position.y,
-                },
+                Point { x: position.x, y: position.y },
                 packed_color(color),
                 NcCopyFromBufferOffset::new(0, text.as_bytes()),
             );

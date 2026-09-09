@@ -1056,17 +1056,17 @@ direct_leaf_layout_impl!(Slider);
 
 impl Slider {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(crate) fn create_com(host: ComPtr<IWidgetHostAbi>, resources: crate::ui_node::widget_object::SharedAssets, options: SliderOptions) -> Result<ComPtr<SliderAbi>, NcStatus> {
+    pub(crate) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: crate::ui_node::widget_object::SharedAssets,
+        options: SliderOptions,
+    ) -> Result<ComPtr<SliderAbi>, NcStatus> {
         let value = Self::build(host, options, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("Slider declares its callable class contract"))
     }
 
     /// Builds one slider with either directly imported or runtime-shared resources.
-    fn build(
-        host: ComPtr<IWidgetHostAbi>,
-        options: SliderOptions,
-        resources: Option<&crate::ui_node::widget_object::SharedAssets>,
-    ) -> Result<Self, NcStatus> {
+    fn build(host: ComPtr<IWidgetHostAbi>, options: SliderOptions, resources: Option<&crate::ui_node::widget_object::SharedAssets>) -> Result<Self, NcStatus> {
         let parameters = crate::SliderParameters::with_opt(
             options.value,
             options.low,

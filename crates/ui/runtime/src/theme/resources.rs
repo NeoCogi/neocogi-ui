@@ -100,7 +100,6 @@ impl ResourceCatalog {
         }
         Ok(())
     }
-
 }
 
 #[cfg(test)]
@@ -123,5 +122,4 @@ mod tests {
         assert!(catalog.font_ref("missing-font").is_none());
         assert!(catalog.icon_ref("missing-icon").is_none());
     }
-
 }

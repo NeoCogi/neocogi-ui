@@ -324,17 +324,17 @@ direct_leaf_layout_impl!(Number);
 
 impl Number {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(crate) fn create_com(host: ComPtr<IWidgetHostAbi>, resources: crate::ui_node::widget_object::SharedAssets, options: NumberOptions) -> Result<ComPtr<NumberAbi>, NcStatus> {
+    pub(crate) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: crate::ui_node::widget_object::SharedAssets,
+        options: NumberOptions,
+    ) -> Result<ComPtr<NumberAbi>, NcStatus> {
         let value = Self::build(host, options, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("Number declares its callable class contract"))
     }
 
     /// Builds one number editor with either directly imported or runtime-shared resources.
-    fn build(
-        host: ComPtr<IWidgetHostAbi>,
-        options: NumberOptions,
-        resources: Option<&crate::ui_node::widget_object::SharedAssets>,
-    ) -> Result<Self, NcStatus> {
+    fn build(host: ComPtr<IWidgetHostAbi>, options: NumberOptions, resources: Option<&crate::ui_node::widget_object::SharedAssets>) -> Result<Self, NcStatus> {
         let parameters = crate::NumberParameters::new(
             options.value,
             options.step,

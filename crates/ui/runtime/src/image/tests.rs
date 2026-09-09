@@ -32,15 +32,12 @@
 
 use super::*;
 
-
 /// Returns one checked image extent for tests that exercise the crate-private atlas path.
 fn checked_dimensions(width: usize, height: usize) -> CheckedImageDimensions {
     // Small fixtures are necessarily within every coordinate and allocation bound; failure here
     // means the shared policy changed rather than that a decoder assertion should be updated.
     CheckedImageDimensions::try_new(width, height).expect("test image dimensions must satisfy the shared storage policy")
 }
-
-
 
 /// Verifies the fixed allocation budget accepts its exact RGBA boundary and rejects one extra row.
 #[test]
@@ -64,8 +61,8 @@ fn checked_dimensions_enforce_the_decoded_storage_budget_without_allocating() {
 /// Verifies the public raw loader exposes invalid signed dimensions without an I/O wrapper.
 #[test]
 fn public_raw_loader_returns_typed_dimension_errors() {
-    let error = load_image_bytes(ImageSource { width: -3, height: 7, pixels: &[] })
-        .expect_err("a negative raw-image axis must be rejected before byte validation");
+    let error =
+        load_image_bytes(ImageSource { width: -3, height: 7, pixels: &[] }).expect_err("a negative raw-image axis must be rejected before byte validation");
 
     assert!(matches!(error, ImageError::RawDimensionsOutOfRange { width: -3, height: 7 }));
 }
@@ -97,12 +94,6 @@ fn public_raw_loader_composes_storage_errors() {
     ));
     assert!(std::error::Error::source(&error).is_some());
 }
-
-
-
-
-
-
 
 /// Verifies raw sources report a concrete mismatch instead of requiring error-text inspection.
 #[test]

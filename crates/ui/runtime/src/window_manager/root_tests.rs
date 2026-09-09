@@ -41,9 +41,9 @@ use crate::{
     color, rect, AtlasHandle, Button, ButtonParameters, ButtonSubmitted, Checkbox, CheckboxParameters, Combo, ComboParameters, ComboSubmitted, Custom, Color,
     CustomParameters, Constraints, Context, DecimalPrecision, Dimensioni, Disclosure, DisclosureParameters, Ui, Grid, GridParameters, Key, KeyEvent,
     KeyboardBehavior, Linear, LinearItem, LinearParameters, Menu, MenuBar, MenuItem, MenuItemMark, MenuItemParameters, MenuItemSubmitted, MouseButton, Node,
-    NinePatch, ScrollArea, ScrollAreaOption, ListItem, ListItemParameters, ScrollAreaParameters, Slider, SliderParameters, Skin, TextAreaParameters, TextEditor,
-    Textbox, TextboxChanged, TextBlock, TextBlockParameters, TextboxParameters, TrackSize, TypedWidgetHandle, UiInputEvent, Vec2i, Widget, WidgetOption,
-    WidgetPaintCtx, WidgetUpdateCtx, Modifiers,
+    NinePatch, ScrollArea, ScrollAreaOption, ListItem, ListItemParameters, ScrollAreaParameters, Slider, SliderParameters, Skin, TextAreaParameters,
+    TextEditor, Textbox, TextboxChanged, TextBlock, TextBlockParameters, TextboxParameters, TrackSize, TypedWidgetHandle, UiInputEvent, Vec2i, Widget,
+    WidgetOption, WidgetPaintCtx, WidgetUpdateCtx, Modifiers,
 };
 use crate::render::{FrameInfo, RenderError};
 use std::{
@@ -94,7 +94,6 @@ fn extreme_metric_atlas() -> AtlasHandle {
         pixels: &pixels,
         icons: &icons,
         fonts: &fonts,
-
     };
 
     AtlasHandle::try_from(&source).expect("maximal representable font metrics must form a valid atlas")
@@ -229,7 +228,9 @@ fn increment_event_counter<E>(count: &mut usize, _: &E) {
 
 fn event_counter<E: 'static>(port: crate::WidgetEventPortHandle<E>) -> crate::event::WidgetEventDispatcher<usize> {
     let mut dispatcher = crate::event::WidgetEventDispatcher::new();
-    dispatcher.subscribe(port, |state, _, event| increment_event_counter::<E>(state, event)).unwrap();
+    dispatcher
+        .subscribe(port, |state, _, event| increment_event_counter::<E>(state, event))
+        .unwrap();
     dispatcher
 }
 
@@ -1984,7 +1985,8 @@ fn widget_handle_events_invoke_state_methods_without_polling() {
     let second_submitted = second_widget.submitted();
     let second_id = second.id();
     let (_, content) = Linear::create(LinearParameters::horizontal([LinearItem::fixed(first, 60), LinearItem::fixed(second, 60)]));
-    let mut ctx: crate::test_support::TestContext<NoopRenderer, Model> = crate::test_support::TestContext::new_test_state(NoopRenderer { atlas: test_atlas() }, Dimensioni::new(320, 240));
+    let mut ctx: crate::test_support::TestContext<NoopRenderer, Model> =
+        crate::test_support::TestContext::new_test_state(NoopRenderer { atlas: test_atlas() }, Dimensioni::new(320, 240));
     let root = ctx.ui().create_window(Window::new("signal", rect(0, 0, 140, 100), content));
     ctx.ui()
         .set_window_options(&root, WindowOption::FRAME | WindowOption::NO_TITLE | WindowOption::NO_RESIZE)
@@ -1995,8 +1997,10 @@ fn widget_handle_events_invoke_state_methods_without_polling() {
     let first_rect = ctx.debug_root_node_rect(root.id(), first_id).unwrap();
     let second_rect = ctx.debug_root_node_rect(root.id(), second_id).unwrap();
 
-    ctx.subscribe(first_submitted, move |state, _, event| Model::record(state, &"first", event)).unwrap();
-    ctx.subscribe(second_submitted, move |state, _, event| Model::record(state, &"second", event)).unwrap();
+    ctx.subscribe(first_submitted, move |state, _, event| Model::record(state, &"first", event))
+        .unwrap();
+    ctx.subscribe(second_submitted, move |state, _, event| Model::record(state, &"second", event))
+        .unwrap();
     ctx.mousedown(first_rect.x + 1, first_rect.y + 1, MouseButton::LEFT);
     ctx.mouseup(first_rect.x + 1, first_rect.y + 1, MouseButton::LEFT);
     ctx.mousedown(second_rect.x + 1, second_rect.y + 1, MouseButton::LEFT);
@@ -2041,7 +2045,8 @@ fn context_aware_handler_creates_and_mutates_every_root_kind_before_layout() {
     let (submitted, button) = button_content("create roots");
     let button_id = button.id();
     let dimensions = Dimensioni::new(320, 240);
-    let mut context: crate::test_support::TestContext<NoopRenderer, Model> = crate::test_support::TestContext::new_test_state(NoopRenderer { atlas: test_atlas() }, dimensions);
+    let mut context: crate::test_support::TestContext<NoopRenderer, Model> =
+        crate::test_support::TestContext::new_test_state(NoopRenderer { atlas: test_atlas() }, dimensions);
     let source = context.ui().create_window(Window::new("source", rect(0, 0, 140, 100), button));
     context
         .ui()
@@ -2099,7 +2104,8 @@ fn typed_events_keep_composed_combo_and_popup_state_synchronized() {
     }
 
     let dimensions = Dimensioni::new(320, 240);
-    let mut context: crate::test_support::TestContext<NoopRenderer, Model> = crate::test_support::TestContext::new_test_state(NoopRenderer { atlas: test_atlas() }, dimensions);
+    let mut context: crate::test_support::TestContext<NoopRenderer, Model> =
+        crate::test_support::TestContext::new_test_state(NoopRenderer { atlas: test_atlas() }, dimensions);
     let (combo, combo_node) = Combo::create(ComboParameters::new());
     let combo_id = combo_node.id();
     let (_, menu_item) = MenuItem::create(MenuItemParameters::new("Menu action"));
@@ -2121,7 +2127,9 @@ fn typed_events_keep_composed_combo_and_popup_state_synchronized() {
         submitted_anchor: None,
     };
     context.subscribe(combo.submitted(), Model::combo_submitted).unwrap();
-    context.subscribe(popup.events(), |state, _, event| Model::popup_submitted(state, event)).unwrap();
+    context
+        .subscribe(popup.events(), |state, _, event| Model::popup_submitted(state, event))
+        .unwrap();
     context.update_ui_state(dimensions, &mut model);
     let combo_rect = context.debug_root_node_rect(source.id(), combo_id).unwrap();
 
@@ -2268,7 +2276,8 @@ fn textbox_handle_event_dispatches_a_complete_snapshot_to_state() {
     let (widget, node) = Textbox::create(TextboxParameters::new(""));
     let changed = widget.changed();
     let node_id = node.id();
-    let mut ctx: crate::test_support::TestContext<NoopRenderer, Model> = crate::test_support::TestContext::new_test_state(NoopRenderer { atlas: test_atlas() }, Dimensioni::new(320, 240));
+    let mut ctx: crate::test_support::TestContext<NoopRenderer, Model> =
+        crate::test_support::TestContext::new_test_state(NoopRenderer { atlas: test_atlas() }, Dimensioni::new(320, 240));
     let root = ctx.ui().create_window(Window::new("textbox signal", rect(0, 0, 140, 100), node));
     ctx.ui()
         .set_window_options(&root, WindowOption::FRAME | WindowOption::NO_TITLE | WindowOption::NO_RESIZE)
@@ -2533,7 +2542,9 @@ fn outside_popup_press_hides_and_records_typed_submission() {
     fn record(events: &mut Vec<PopupEvent>, event: &PopupEvent) {
         events.push(*event);
     }
-    widget_event_dispatcher.subscribe(popup.events(), |state, _, event| record(state, event)).unwrap();
+    widget_event_dispatcher
+        .subscribe(popup.events(), |state, _, event| record(state, event))
+        .unwrap();
     let mut submissions = Vec::new();
     ctx.update_and_render_ui();
 
@@ -4338,7 +4349,8 @@ fn menu_items_dispatch_directly_after_close_while_disabled_items_leave_the_menu_
     let (disabled, disabled_item) = MenuItem::create(MenuItemParameters::new("Unavailable").disabled());
     let menu_bar = MenuBar::new([Menu::new("Actions").item(enabled_item).item(disabled_item)]);
     let dimensions = Dimensioni::new(320, 240);
-    let mut ctx: crate::test_support::TestContext<NoopRenderer, Model> = crate::test_support::TestContext::new_test_state(NoopRenderer { atlas: test_atlas() }, dimensions);
+    let mut ctx: crate::test_support::TestContext<NoopRenderer, Model> =
+        crate::test_support::TestContext::new_test_state(NoopRenderer { atlas: test_atlas() }, dimensions);
     let root = ctx
         .ui()
         .create_window(Window::new("menu events", rect(20, 25, 180, 120), empty_content()).menu_bar(menu_bar));

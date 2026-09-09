@@ -135,7 +135,6 @@ mod tests {
             pixels: &pixels,
             icons: &icons,
             fonts: &fonts,
-
         })
         .expect("semantic-icon fixture atlas must satisfy the complete atlas contract");
 

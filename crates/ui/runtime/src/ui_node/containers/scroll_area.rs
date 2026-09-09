@@ -307,13 +307,7 @@ impl ScrollArea {
         model: Rc<ScrollModel>,
     ) -> Self {
         #[cfg(test)]
-        let opt = WidgetOption::from_bits_retain(
-            runtime
-                .state
-                .options()
-                .expect("new test widget runtime exposes its validated options")
-                .bits,
-        );
+        let opt = WidgetOption::from_bits_retain(runtime.state.options().expect("new test widget runtime exposes its validated options").bits);
         Self {
             runtime,
             editor,
@@ -704,8 +698,7 @@ impl ScrollArea {
         let (_, surface_container) = Container::from_shared(content, surface);
         let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(surface_opt);
         let host = runtime.state.host().add_ref();
-        let parts = ScrollParts::prepare(host, enabled, None)
-            .expect("native scroll fixture builds the same fixed COM topology");
+        let parts = ScrollParts::prepare(host, enabled, None).expect("native scroll fixture builds the same fixed COM topology");
         let widget = ScrollArea::from_runtime(runtime, parts.editor, parts.content, model);
         let children = Rc::new(RefCell::new(
             [Node::container(surface_container), horizontal_node, vertical_node].into_iter().collect(),
