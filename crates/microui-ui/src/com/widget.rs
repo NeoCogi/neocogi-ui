@@ -17,7 +17,7 @@ pub(crate) trait WidgetAlgorithm: crate::Widget {
 }
 
 /// One current imported asset value shared by the runtime services that observe installation.
-pub(super) type SharedAssets = Rc<RefCell<crate::assets::ImportedAssets>>;
+pub(crate) type SharedAssets = Rc<RefCell<crate::assets::ImportedAssets>>;
 
 /// Common non-semantic state embedded directly in every concrete widget COM allocation.
 ///
@@ -104,7 +104,7 @@ impl WidgetRuntime {
     }
 
     /// Returns the widget's single shared value after refreshing an independently activated class.
-    pub(super) fn resources(&mut self) -> Result<SharedAssets, NcStatus> {
+    pub(crate) fn resources(&mut self) -> Result<SharedAssets, NcStatus> {
         if self.refresh_resources {
             let source = self.state.host().assets()?;
             if self.resources.borrow().source().as_ptr() != source.as_ptr() {
@@ -119,7 +119,7 @@ impl WidgetRuntime {
     }
 
     /// Resolves one UTF-8 font name against this widget's exact current resource revision.
-    pub(super) fn named_font(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<crate::FontRef, NcStatus> {
+    pub(crate) fn named_font(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<crate::FontRef, NcStatus> {
         self.state.writable()?;
         let name = text(input)?;
         let assets = self.resources()?;
@@ -128,7 +128,7 @@ impl WidgetRuntime {
     }
 
     /// Resolves one UTF-8 icon name against this widget's exact current resource revision.
-    pub(super) fn named_icon(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<crate::IconRef, NcStatus> {
+    pub(crate) fn named_icon(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<crate::IconRef, NcStatus> {
         self.state.writable()?;
         let name = text(input)?;
         let assets = self.resources()?;
@@ -158,7 +158,7 @@ pub(crate) trait HostedWidget: WidgetAlgorithm {
 }
 
 /// Commits one validated semantic font role on a concrete widget allocation.
-pub(super) fn set_direct_font_role<S: HostedWidget + FontState>(widget: &mut S, role: TextFontRole) -> Result<(), NcStatus> {
+pub(crate) fn set_direct_font_role<S: HostedWidget + FontState>(widget: &mut S, role: TextFontRole) -> Result<(), NcStatus> {
     widget.runtime().state.writable()?;
     let font = crate::FontRef::Role(local_font_role(role)?);
     if widget.font() != &font {
@@ -169,7 +169,7 @@ pub(super) fn set_direct_font_role<S: HostedWidget + FontState>(widget: &mut S, 
 }
 
 /// Resolves and commits one named font against the concrete widget's current host resources.
-pub(super) fn set_direct_named_font<S: HostedWidget + FontState>(
+pub(crate) fn set_direct_named_font<S: HostedWidget + FontState>(
     widget: &mut S,
     name: NcCopyFromBufferOffset<'_, u8>,
 ) -> Result<(), NcStatus> {
@@ -182,7 +182,7 @@ pub(super) fn set_direct_named_font<S: HostedWidget + FontState>(
 }
 
 /// Commits one validated semantic icon on a concrete widget allocation.
-pub(super) fn set_direct_icon_role<S: HostedWidget + IconState>(widget: &mut S, icon: ContentIcon) -> Result<(), NcStatus> {
+pub(crate) fn set_direct_icon_role<S: HostedWidget + IconState>(widget: &mut S, icon: ContentIcon) -> Result<(), NcStatus> {
     widget.runtime().state.writable()?;
     if widget.set_icon(local_content_icon(icon)?) {
         widget.runtime_mut().state.record_change(GeometryChange::CHANGED);
@@ -191,7 +191,7 @@ pub(super) fn set_direct_icon_role<S: HostedWidget + IconState>(widget: &mut S, 
 }
 
 /// Resolves and commits one named icon against the concrete widget's current host resources.
-pub(super) fn set_direct_named_icon<S: HostedWidget + IconState>(
+pub(crate) fn set_direct_named_icon<S: HostedWidget + IconState>(
     widget: &mut S,
     name: NcCopyFromBufferOffset<'_, u8>,
 ) -> Result<(), NcStatus> {
@@ -203,7 +203,7 @@ pub(super) fn set_direct_named_icon<S: HostedWidget + IconState>(
 }
 
 /// Converts one checked contract axis without treating finite zero as unbounded.
-pub(super) fn available(axis: AxisLimit) -> Result<AvailableSpace, NcStatus> {
+pub(crate) fn available(axis: AxisLimit) -> Result<AvailableSpace, NcStatus> {
     axis.validate()?;
     Ok(if axis.kind == LimitKind::FINITE {
         AvailableSpace::Bounded(axis.extent)
@@ -222,45 +222,45 @@ macro_rules! direct_widget_phase_impl {
         impl IWidget for $name {
             /// Returns the runtime authority without retaining a tree or parent.
             fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
-                let runtime = <$name as super::widget::HostedWidget>::runtime(self);
+                let runtime = <$name as crate::com::widget::HostedWidget>::runtime(self);
                 Ok(runtime.state.host().add_ref())
             }
 
             /// Claims this concrete allocation's only attachment after host validation.
             fn mount(&mut self) -> Result<(), NcStatus> {
-                <$name as super::widget::HostedWidget>::runtime_mut(self).state.mount()
+                <$name as crate::com::widget::HostedWidget>::runtime_mut(self).state.mount()
             }
 
             /// Closes the concrete widget's event sources exactly once.
             fn close(&mut self) -> Result<(), NcStatus> {
-                let closed = <$name as super::widget::HostedWidget>::runtime_mut(self).state.close()?;
+                let closed = <$name as crate::com::widget::HostedWidget>::runtime_mut(self).state.close()?;
                 if closed {
-                    <$name as super::widget::HostedWidget>::close_contents(self)?;
+                    <$name as crate::com::widget::HostedWidget>::close_contents(self)?;
                 }
                 Ok(())
             }
 
             /// Copies routing and frame policy from the concrete widget and its common options.
             fn properties(&self) -> Result<WidgetProperties, NcStatus> {
-                let runtime = <$name as super::widget::HostedWidget>::runtime(self);
+                let runtime = <$name as crate::com::widget::HostedWidget>::runtime(self);
                 let options = runtime.state.options()?;
                 Ok(WidgetProperties {
                     options: WidgetOptions {
-                        bits: <$name as super::widget::WidgetAlgorithm>::effective_options(
+                        bits: <$name as crate::com::widget::WidgetAlgorithm>::effective_options(
                             self,
                             crate::WidgetOption::from_bits_retain(options.bits),
                         )
                         .bits(),
                     },
                     keyboard: crate::Widget::keyboard_behavior(self).bits(),
-                    frame: super::node::frame_contract(crate::Widget::frame_appearance_role(self)),
+                    frame: crate::com::frame_contract(crate::Widget::frame_appearance_role(self)),
                 })
             }
 
             /// Replaces the single common option value after complete validation.
             fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus> {
                 options.validate()?;
-                <$name as super::widget::HostedWidget>::runtime_mut(self).state.set_options(options)
+                <$name as crate::com::widget::HostedWidget>::runtime_mut(self).state.set_options(options)
             }
 
             /// Runs copied input directly against this concrete widget's semantic fields.
@@ -270,15 +270,15 @@ macro_rules! direct_widget_phase_impl {
                 event: WidgetEventAbi,
                 text: NcCopyFromBufferOffset<'_, u8>,
             ) -> Result<GeometryChange, NcStatus> {
-                <$name as super::widget::HostedWidget>::runtime(self).state.writable()?;
+                <$name as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
                 state.validate()?;
-                let input = super::input::local_event(event, text)?;
-                let assets = <$name as super::widget::HostedWidget>::runtime_mut(self).resources()?;
+                let input = crate::com::local_event(event, text)?;
+                let assets = <$name as crate::com::widget::HostedWidget>::runtime_mut(self).resources()?;
                 let assets = assets.borrow();
                 let mut ctx = crate::WidgetUpdateCtx::new_with_content_geometry(
-                    local_rect(state.screen),
+                    crate::com::local_rect(state.screen),
                     crate::math::RectExt::translated(
-                        local_rect(state.clip),
+                        crate::com::local_rect(state.clip),
                         crate::Vec2i::new(state.screen.x, state.screen.y),
                     ),
                     assets.bundle().skin(),
@@ -288,8 +288,8 @@ macro_rules! direct_widget_phase_impl {
                     state.focused,
                     state.clicked,
                     state.active,
-                    crate::MouseButton::from_bits(u32::from(state.mouse_buttons)).ok_or(NC_E_INVALID_ARG)?,
-                    crate::Modifiers::from_bits(state.modifiers).ok_or(NC_E_INVALID_ARG)?,
+                    crate::MouseButton::from_bits(u32::from(state.mouse_buttons)).ok_or(nc_com::NC_E_INVALID_ARG)?,
+                    crate::Modifiers::from_bits(state.modifiers).ok_or(nc_com::NC_E_INVALID_ARG)?,
                 );
                 Ok(match crate::Widget::update(self, &mut ctx, input.as_ref()) {
                     crate::Change::Changed => GeometryChange::CHANGED,
@@ -300,11 +300,11 @@ macro_rules! direct_widget_phase_impl {
             /// Drains sticky common and explicitly shared semantic geometry changes together.
             fn take_change(&mut self) -> Result<GeometryChange, NcStatus> {
                 if crate::Widget::take_shared_change(self) {
-                    <$name as super::widget::HostedWidget>::runtime_mut(self)
+                    <$name as crate::com::widget::HostedWidget>::runtime_mut(self)
                         .state
                         .record_change(GeometryChange::CHANGED);
                 }
-                <$name as super::widget::HostedWidget>::runtime_mut(self).state.take_change()
+                <$name as crate::com::widget::HostedWidget>::runtime_mut(self).state.take_change()
             }
 
             /// Paints semantic fields directly into the runtime-owned scoped frame context.
@@ -318,12 +318,12 @@ macro_rules! direct_widget_phase_impl {
                 // Reading options performs the one lifecycle check required by
                 // the complete paint invocation. Repeating it before the same
                 // immutable state read would cross the host COM boundary twice.
-                let options = <$name as super::widget::HostedWidget>::runtime(self).state.options()?;
-                let assets = <$name as super::widget::HostedWidget>::runtime_mut(self).resources()?;
+                let options = <$name as crate::com::widget::HostedWidget>::runtime(self).state.options()?;
+                let assets = <$name as crate::com::widget::HostedWidget>::runtime_mut(self).resources()?;
                 let assets = assets.borrow();
                 let mut ctx = crate::WidgetPaintCtx::new_scoped(
-                    local_rect(state.rect),
-                    local_rect(state.clip),
+                    crate::com::local_rect(state.rect),
+                    crate::com::local_rect(state.clip),
                     assets.bundle().skin(),
                     assets.bundle().atlas(),
                     state.enabled,
@@ -343,18 +343,20 @@ macro_rules! direct_widget_phase_impl {
     };
 }
 
+pub(crate) use direct_widget_phase_impl;
+
 /// Implements intrinsic COM measurement directly on one concrete leaf widget.
 macro_rules! direct_leaf_layout_impl {
     ($name:ty) => {
         impl ILeafLayout for $name {
             /// Measures the concrete semantic fields against one owned host-resource snapshot.
             fn measure(&mut self, bounds: LayoutLimits, _metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
-                <$name as super::widget::HostedWidget>::runtime(self).state.readable()?;
+                <$name as crate::com::widget::HostedWidget>::runtime(self).state.readable()?;
                 let constraints = crate::Constraints::new(
-                    super::widget::available(bounds.width)?,
-                    super::widget::available(bounds.height)?,
+                    crate::com::widget::available(bounds.width)?,
+                    crate::com::widget::available(bounds.height)?,
                 );
-                let assets = <$name as super::widget::HostedWidget>::runtime_mut(self).resources()?;
+                let assets = <$name as crate::com::widget::HostedWidget>::runtime_mut(self).resources()?;
                 let assets = assets.borrow();
                 let size = crate::LeafWidget::measure(
                     self,
@@ -371,13 +373,15 @@ macro_rules! direct_leaf_layout_impl {
     };
 }
 
+pub(crate) use direct_leaf_layout_impl;
+
 /// Implements scoped layout directly on a concrete container allocation.
 macro_rules! direct_container_layout_impl {
     ($name:ty) => {
         impl IContainerLayout for $name {
             /// Returns the read-only view paired with this concrete container's private writer.
             fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
-                <$name as super::widget::HostedWidget>::runtime(self).state.readable()?;
+                <$name as crate::com::widget::HostedWidget>::runtime(self).state.readable()?;
                 self.editor.view()
             }
 
@@ -388,10 +392,10 @@ macro_rules! direct_container_layout_impl {
                 bounds: LayoutLimits,
                 service: ComRef<'_, ILayoutServiceAbi>,
             ) -> Result<Size, NcStatus> {
-                <$name as super::widget::HostedWidget>::runtime(self).state.readable()?;
-                let constraints = super::layout::constraints(bounds)?;
-                let layout = super::layout::ScopedLayout::new(scope, service)?;
-                let assets = <$name as super::widget::HostedWidget>::runtime_mut(self).resources()?;
+                <$name as crate::com::widget::HostedWidget>::runtime(self).state.readable()?;
+                let constraints = crate::com::layout::constraints(bounds)?;
+                let layout = crate::com::layout::ScopedLayout::new(scope, service)?;
+                let assets = <$name as crate::com::widget::HostedWidget>::runtime_mut(self).resources()?;
                 let assets = assets.borrow();
                 let mut ctx = crate::MeasureCtx::scoped(assets.bundle().skin(), assets.bundle().atlas(), layout);
                 let size = crate::ContainerWidget::measure(self, &mut ctx, constraints);
@@ -409,12 +413,12 @@ macro_rules! direct_container_layout_impl {
                 rect: Rect,
                 service: ComRef<'_, ILayoutServiceAbi>,
             ) -> Result<ContainerGeometry, NcStatus> {
-                <$name as super::widget::HostedWidget>::runtime(self).state.readable()?;
+                <$name as crate::com::widget::HostedWidget>::runtime(self).state.readable()?;
                 if rect.width < 0 || rect.height < 0 {
                     return Err(NC_E_INVALID_ARG);
                 }
-                let layout = super::layout::ScopedLayout::new(scope, service)?;
-                let assets = <$name as super::widget::HostedWidget>::runtime_mut(self).resources()?;
+                let layout = crate::com::layout::ScopedLayout::new(scope, service)?;
+                let assets = <$name as crate::com::widget::HostedWidget>::runtime_mut(self).resources()?;
                 let assets = assets.borrow();
                 let mut ctx = crate::ContainerLayoutCtx::scoped(
                     assets.bundle().skin(),
@@ -432,13 +436,14 @@ macro_rules! direct_container_layout_impl {
                 event: WidgetEventAbi,
                 text: NcCopyFromBufferOffset<'_, u8>,
             ) -> Result<bool, NcStatus> {
-                <$name as super::widget::HostedWidget>::runtime(self).state.readable()?;
-                let event = super::input::local_event(event, text)?;
+                <$name as crate::com::widget::HostedWidget>::runtime(self).state.readable()?;
+                let event = crate::com::input::local_event(event, text)?;
                 Ok(event.is_some_and(|event| crate::ContainerWidget::accepts_event(self, &event)))
             }
         }
     };
 }
+
 
 /// Static typography access implemented only by semantic states which own a font.
 pub(crate) trait FontState: WidgetAlgorithm {
@@ -460,34 +465,34 @@ macro_rules! direct_scrolling_impl {
         impl IScrolling for $name {
             /// Reads one coherent snapshot from the scalar model shared with both scrollbar children.
             fn info(&self) -> Result<ScrollInfo, NcStatus> {
-                <$name as super::widget::HostedWidget>::runtime(self).state.readable()?;
+                <$name as crate::com::widget::HostedWidget>::runtime(self).state.readable()?;
                 Ok(self.model.com_info())
             }
 
             /// Records a sticky nonnegative request for the next concrete placement.
             fn set_offset(&mut self, offset: Point) -> Result<(), NcStatus> {
-                <$name as super::widget::HostedWidget>::runtime(self).state.writable()?;
+                <$name as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
                 self.model.set_offset(crate::Vec2i::new(offset.x, offset.y));
                 Ok(())
             }
 
             /// Changes wheel and scrollbar participation through the shared scalar model.
             fn set_enabled(&mut self, enabled: bool) -> Result<(), NcStatus> {
-                <$name as super::widget::HostedWidget>::runtime(self).state.writable()?;
+                <$name as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
                 self.model.set_enabled(enabled);
                 Ok(())
             }
 
             /// Preserves an end request until placement installs the freshly measured range.
             fn scroll_to_end(&mut self) -> Result<(), NcStatus> {
-                <$name as super::widget::HostedWidget>::runtime(self).state.writable()?;
+                <$name as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
                 self.model.scroll_to_end();
                 Ok(())
             }
 
             /// Validates one content-local rectangle before changing either requested axis.
             fn reveal(&mut self, rect: Rect) -> Result<(), NcStatus> {
-                <$name as super::widget::HostedWidget>::runtime(self).state.writable()?;
+                <$name as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
                 if rect.x < 0 || rect.y < 0 || rect.width < 0 || rect.height < 0 {
                     return Err(NC_E_INVALID_ARG);
                 }
@@ -497,6 +502,7 @@ macro_rules! direct_scrolling_impl {
         }
     };
 }
+
 
 /// Resolves one concrete font-role vocabulary for both widget and compact menu presentation.
 pub(super) fn local_font_role(role: TextFontRole) -> Result<crate::FontRole, NcStatus> {

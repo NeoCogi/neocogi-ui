@@ -116,6 +116,12 @@ pub mod render;
 #[cfg(test)]
 mod test_support;
 pub mod theme;
+/// COM implementation entrypoints used by the UI plugin assembly.
+///
+/// This module is declared before the concrete node catalog so its shared implementation macros
+/// are available beside the object types that use them. Contract declarations remain in
+/// `microui-contracts`; concrete class methods live with their owning types.
+pub mod com;
 mod ui_node;
 pub(crate) use ui_node::widgets;
 mod window_manager;
@@ -195,9 +201,6 @@ pub(crate) use rs_math3d::{
 pub(crate) use std::{cmp::max, hash::Hash, rc::Rc};
 pub(crate) use render::geometry::UNCLIPPED_RECT;
 pub(crate) use ui_node::UiRuntime;
-
-/// COM implementation entrypoints used by the UI plugin assembly.
-pub mod com;
 
 #[cfg(test)]
 pub(crate) use event::SubscribeError;

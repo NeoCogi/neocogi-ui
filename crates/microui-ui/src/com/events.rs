@@ -65,7 +65,7 @@ text_events!(crate::TextboxChanged, crate::TextboxSubmitted);
 text_events!(crate::TextAreaChanged, crate::TextAreaSubmitted);
 
 /// Connects the producer's static endpoint to its concrete foreign sink.
-pub(super) fn subscribe<E: ComEvent>(endpoint: WidgetEventPortHandle<E>, sink: ComRef<'_, E::Sink>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+pub(crate) fn subscribe<E: ComEvent>(endpoint: WidgetEventPortHandle<E>, sink: ComRef<'_, E::Sink>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
     endpoint.subscribe(sink)
 }
 

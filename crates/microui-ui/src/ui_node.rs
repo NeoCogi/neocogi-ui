@@ -54,7 +54,9 @@
 //! module owns reusable constraints and algorithms rather than pretending those helpers are
 //! concrete containers; runtime recursion is named `layout_traversal` at its narrower ownership
 //! boundary. Tests follow their owning subject without forcing production code into a `mod.rs`
-//! layout.
+//! layout. A built-in's `com_object` declaration, callable-class implementation, shared widget
+//! projections, semantic state, and native algorithm all live in that same family file; the
+//! separate `com` tree owns only cross-object services and shared boundary machinery.
 pub(crate) mod frame;
 mod input;
 pub use input::UiInputEvent;

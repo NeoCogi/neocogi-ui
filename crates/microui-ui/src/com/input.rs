@@ -165,7 +165,7 @@ pub(super) fn enqueue(context: &mut crate::Context<super::render::Backend>, even
 }
 
 /// Decodes copied COM input for the private built-in algorithms, owning only text.
-pub(super) fn local_event(event: WidgetEventAbi, bytes: NcCopyFromBufferOffset<'_, u8>) -> Result<Option<UiInputEvent>, NcStatus> {
+pub(crate) fn local_event(event: WidgetEventAbi, bytes: NcCopyFromBufferOffset<'_, u8>) -> Result<Option<UiInputEvent>, NcStatus> {
     let (event, text) = decode_widget_event(event, bytes)?;
     /// Copies one ABI point into the private math value.
     fn point(value: Point) -> crate::Vec2i {

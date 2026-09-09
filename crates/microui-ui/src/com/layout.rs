@@ -232,7 +232,7 @@ impl Drop for Invocation<'_> {
 }
 
 /// Validates both axes before producing private finite/unbounded constraints.
-pub(super) fn constraints(limits: LayoutLimits) -> Result<Constraints, NcStatus> {
+pub(crate) fn constraints(limits: LayoutLimits) -> Result<Constraints, NcStatus> {
     Ok(Constraints::new(
         super::widget::available(limits.width)?,
         super::widget::available(limits.height)?,

@@ -12,12 +12,12 @@ use std::{
 
 #[macro_use]
 pub(crate) mod widget;
-mod button;
 pub use crate::ui_node::{Grid, Linear};
 pub use crate::ui_node::widgets::{Button, Checkbox, ColorSwatch, Combo, ListBox, ListItem, Number, Scrollbar, Slider, TextBlock, Textbox};
 mod combo;
 pub(crate) mod events;
 mod input;
+pub(crate) use input::local_event;
 mod leaves;
 mod node;
 pub(crate) use node::{ComNode, frame_contract};
@@ -41,7 +41,7 @@ pub use runtime::{Runtime, create_runtime_from_assets};
 use runtime::create_runtime;
 
 /// Validates a whole UTF-8 replacement before touching any live object state.
-fn text(input: NcCopyFromBufferOffset<'_, u8>) -> Result<&str, NcStatus> {
+pub(crate) fn text(input: NcCopyFromBufferOffset<'_, u8>) -> Result<&str, NcStatus> {
     if input.offset() != 0 {
         return Err(NC_E_INVALID_ARG);
     }
