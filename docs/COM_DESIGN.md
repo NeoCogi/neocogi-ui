@@ -41,6 +41,8 @@ retained UI engine          native window + GPU     builder / PNG / JSON
 
 COM boundaries are between separately compiled binaries. Generics, Rust helper traits, `Vec`, `String`, and private resource ownership remain useful within each binary. The façade can be generic without making any COM interface generic.
 
+Concrete source ownership follows the same boundary. `microui-contracts` contains declarations only. Inside the UI implementation, a built-in widget or container keeps its generated object declaration, callable-class methods, shared interface projections, semantic state and algorithms in one `ui_node` family module. The `microui-ui/src/com` tree contains only services shared across objects and its thin public registration catalog; it does not contain parallel per-widget implementations.
+
 Default planning assumption: preserve the current browser demo through a statically linked build of the same COM interfaces. This is a separate deployment mode from the statically linked façade used by native dynamic deployments. Browser dynamic plugin loading is outside the initial design.
 
 **2. What nc-com already provides**

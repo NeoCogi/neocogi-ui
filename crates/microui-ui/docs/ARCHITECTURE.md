@@ -26,6 +26,23 @@ only `IWidgetHost`. `UiRuntime::factory()` returns that shorthand for ordinary
 application ergonomics. It is not an `IUiFactory` projection on the runtime, and
 hosts remain free to construct any registered widget class from its typed frame.
 
+## Source ownership
+
+`microui-contracts` declares cross-binary interfaces and callable class contracts;
+it contains no UI implementation state. In `microui-ui`, each built-in under
+`ui_node/widgets` or `ui_node/containers` owns its `com_object`, constructor,
+callable-class implementation, shared protocol projections, semantic fields, and
+layout/paint algorithm in one family module. A change to `Button`, `Grid`, or
+`ScrollArea` therefore has one implementation source rather than a native type plus
+a second COM-side representation.
+
+`microui-ui/src/com` is the shared boundary layer and plugin export catalog. It owns
+services that necessarily coordinate multiple objects: host lifecycle, retained
+child transactions, event delivery, scoped layout and painting, render transport,
+runtime and surface management, and `UiFactory`. A concrete service object remains
+there only when its object declaration and implementation are already the same
+thing. The directory must not acquire companion per-widget implementation files.
+
 ## Retained objects and frame phases
 
 A UI owns a retained forest. Nodes own actual widget capabilities; callers can

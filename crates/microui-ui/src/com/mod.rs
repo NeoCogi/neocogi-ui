@@ -1,7 +1,9 @@
-//! COM implementation boundary. Rust UI storage never crosses this module's ABI.
+//! Shared COM boundary services and the UI plugin's public object catalog.
 //!
-//! Retained nodes directly own COM widget capabilities. Runtime geometry remains
-//! private and foreign calls receive only copied values or owned scoped services.
+//! Concrete built-in widget and container objects implement their callable contracts beside their
+//! semantic state in `ui_node`. This module retains only cross-object lifecycle, traversal,
+//! children, event, layout, paint, rendering, runtime, window, menu, dialog, and factory services.
+//! Runtime geometry remains private and foreign calls receive only copied values or owned scopes.
 
 use microui_contracts::*;
 use nc_com::{ComPtr, ComRef, IUnknown, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
