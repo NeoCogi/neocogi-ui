@@ -148,8 +148,6 @@ impl Tables {
             .iter()
             .map(|pixel| crate::color4b(pixel[0], pixel[1], pixel[2], pixel[3]))
             .collect();
-        let font_slots = fonts.iter().enumerate().map(|(slot, (_, font))| (font.id, slot)).collect::<HashMap<_, _>>();
-        let icon_slots = icons.iter().enumerate().map(|(slot, (_, icon))| (icon.id, slot)).collect::<HashMap<_, _>>();
         let white_icon = icons
             .iter()
             .find_map(|(name, icon)| (name == "white").then_some(icon.id))
@@ -162,8 +160,6 @@ impl Tables {
             fonts,
             icons,
             white_icon,
-            font_slots,
-            icon_slots,
         })))
     }
 

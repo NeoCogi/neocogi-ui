@@ -39,6 +39,11 @@ revision identity; temporary CPU upload bytes are released after the synchronous
 upload. Frames pass the exact bundle used to expand their geometry, and the renderer
 skips import/upload when that bundle is already current.
 
+The immutable font and icon vectors are also the authoritative local identity tables.
+Runtime lookup compares the retained typed ID directly with those records instead of
+duplicating every ID and slot into randomized hash maps. Glyphs retain their dedicated
+per-font lookup because their portable bound and access pattern are materially larger.
+
 The facade separates `assets::AssetTables` metadata from complete `assets::AssetData`
 pixel-bearing compiler output. `AssetData` produces the same `IAssetBundle` object from
 borrowed static tables or owned builder output. Neither type contains a UI implementation,

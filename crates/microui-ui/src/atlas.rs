@@ -159,13 +159,6 @@ struct Atlas {
     icons: Vec<(String, Icon)>,
     /// Required opaque-white rendering tile resolved once during finalization.
     white_icon: IconId,
-    /// Local font-table positions keyed by stable logical identities.
-    ///
-    /// Derived atlases may reorder fonts while replacing semantic recipes, so the stable ID cannot
-    /// itself be treated as a local vector index.
-    font_slots: HashMap<FontId, usize>,
-    /// Local icon-table positions keyed by stable logical identities.
-    icon_slots: HashMap<IconId, usize>,
 }
 
 /// Owned atlas data that has not yet crossed the single validation boundary.

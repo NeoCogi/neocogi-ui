@@ -322,13 +322,6 @@ impl AtlasHandle {
                 (name, font)
             })
             .collect::<Vec<_>>();
-        // Stable resource identities are private and can enter a candidate only by allocation or
-        // exact copying. Building explicit local indices here keeps metric and paint lookup O(1)
-        // even when a derived atlas reordered resources while replacing semantic fonts.
-        let font_slots = fonts.iter().enumerate().map(|(slot, (_, font))| (font.id, slot)).collect::<HashMap<_, _>>();
-        let icon_slots = icons.iter().enumerate().map(|(slot, (_, icon))| (icon.id, slot)).collect::<HashMap<_, _>>();
-        debug_assert_eq!(font_slots.len(), fonts.len(), "candidate contains duplicate internal font identities");
-        debug_assert_eq!(icon_slots.len(), icons.len(), "candidate contains duplicate internal icon identities");
         let white_icon = icons
             .iter()
             .find_map(|(name, icon)| (name == "white").then_some(icon.id))
@@ -340,8 +333,6 @@ impl AtlasHandle {
             fonts,
             icons,
             white_icon,
-            font_slots,
-            icon_slots,
         };
         // This is the only direct AtlasHandle construction site in production code.
         Ok(Self(Rc::new(atlas)))

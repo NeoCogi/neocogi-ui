@@ -99,26 +99,37 @@ impl AtlasHandle {
 
     /// Reports whether this atlas contains the logical font resource.
     pub(crate) fn contains_font(&self, font: FontId) -> bool {
-        // Membership is exact even when unrelated atlases happen to contain equal table lengths.
-        self.0.font_slots.contains_key(&font)
+        // The authoritative record already carries the stable identity, so a
+        // second hashed index would duplicate immutable atlas state.
+        self.0.fonts.iter().any(|(_, candidate)| candidate.id == font)
     }
 
     /// Reports whether this atlas contains the logical icon resource.
     pub(crate) fn contains_icon(&self, icon: IconId) -> bool {
-        // Theme-private images have distinct resource identities and therefore cannot alias the
-        // same local position in a sibling theme atlas.
-        self.0.icon_slots.contains_key(&icon)
+        // Theme-private images have distinct resource identities and therefore
+        // cannot alias an equal position in a sibling theme atlas.
+        self.0.icons.iter().any(|(_, candidate)| candidate.id == icon)
     }
 
     /// Returns the exact bundle-local slot for a font already authenticated by this atlas.
     pub(crate) fn font_index(&self, font: FontId) -> u32 {
-        let index = *self.0.font_slots.get(&font).expect("font ID does not belong to this atlas");
+        let index = self
+            .0
+            .fonts
+            .iter()
+            .position(|(_, candidate)| candidate.id == font)
+            .expect("font ID does not belong to this atlas");
         u32::try_from(index).expect("validated asset font count fits u32")
     }
 
     /// Returns the exact bundle-local slot for an icon already authenticated by this atlas.
     pub(crate) fn icon_index(&self, icon: IconId) -> u32 {
-        let index = *self.0.icon_slots.get(&icon).expect("icon ID does not belong to this atlas");
+        let index = self
+            .0
+            .icons
+            .iter()
+            .position(|(_, candidate)| candidate.id == icon)
+            .expect("icon ID does not belong to this atlas");
         u32::try_from(index).expect("validated asset icon count fits u32")
     }
 
@@ -134,26 +145,26 @@ impl AtlasHandle {
 
     /// Resolves a font identity through this atlas's immutable local index.
     fn font(&self, font: FontId) -> &Font {
-        // The atlas-local index decouples stable identity from ordering changes introduced while a
-        // theme replaces selected font recipes.
-        let slot = self
+        // Stable identity remains independent of ordering when a derived theme
+        // replaces or reorders its small font catalog.
+        self
             .0
-            .font_slots
-            .get(&font)
-            .unwrap_or_else(|| panic!("font ID does not belong to this atlas: {font:?}"));
-        &self.0.fonts[*slot].1
+            .fonts
+            .iter()
+            .find_map(|(_, candidate)| (candidate.id == font).then_some(candidate))
+            .unwrap_or_else(|| panic!("font ID does not belong to this atlas: {font:?}"))
     }
 
     /// Resolves an icon identity through this atlas's immutable local index.
     fn icon(&self, icon: IconId) -> &Icon {
-        // Resolve through the immutable local index rather than trusting a numeric slot embedded
-        // in the public ID.
-        let slot = self
+        // Resolve the authoritative record rather than trusting a numeric slot
+        // embedded in a public resource identity.
+        self
             .0
-            .icon_slots
-            .get(&icon)
-            .unwrap_or_else(|| panic!("icon ID does not belong to this atlas: {icon:?}"));
-        &self.0.icons[*slot].1
+            .icons
+            .iter()
+            .find_map(|(_, candidate)| (candidate.id == icon).then_some(candidate))
+            .unwrap_or_else(|| panic!("icon ID does not belong to this atlas: {icon:?}"))
     }
 
     /// Returns exact glyph metrics for the specified character, if available.
