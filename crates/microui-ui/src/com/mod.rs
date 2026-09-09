@@ -20,7 +20,6 @@ pub(crate) use input::local_event;
 mod node;
 pub(crate) use node::{ComNode, frame_contract};
 mod children;
-pub(crate) mod disclosure;
 pub use crate::ui_node::Disclosure;
 mod factory;
 pub(crate) mod layout;

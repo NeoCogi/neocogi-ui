@@ -50,7 +50,7 @@ use crate::{LinearParameters};
 
 /// Immutable header presentation shared by disclosure layout and its actual interactive header.
 #[derive(Copy, Clone, Eq, PartialEq)]
-pub(crate) enum DisclosureVariant {
+enum DisclosureVariant {
     /// Framed header row with a non-indented body.
     Header,
     /// Unframed tree row with an indented body.
@@ -59,7 +59,7 @@ pub(crate) enum DisclosureVariant {
 
 impl DisclosureVariant {
     /// Supplies construction defaults without retaining a second option value.
-    pub(crate) fn header_options(self) -> WidgetOption {
+    fn header_options(self) -> WidgetOption {
         match self {
             Self::Header => WidgetOption::FRAME,
             Self::Tree => WidgetOption::NONE,
@@ -68,7 +68,7 @@ impl DisclosureVariant {
 }
 
 /// Explicit expansion data shared by the actual header and its layout parent, without object backpointers.
-pub(crate) struct DisclosureState {
+struct DisclosureState {
     /// Current body participation policy.
     expanded: std::cell::Cell<bool>,
     /// Shared edits persist until the parent collects them, even while its body is hidden.
@@ -76,7 +76,7 @@ pub(crate) struct DisclosureState {
 }
 impl DisclosureState {
     /// Creates one authoritative expansion value for the composed widget.
-    pub(crate) fn new(expanded: bool) -> Rc<Self> {
+    fn new(expanded: bool) -> Rc<Self> {
         Rc::new(Self {
             expanded: std::cell::Cell::new(expanded),
             dirty: std::cell::Cell::new(false),
@@ -152,11 +152,11 @@ pub struct Disclosure {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::com::widget::WidgetRuntime,
     /// Authoritative fixed header/body ownership used by COM traversal.
-    pub(crate) editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+    editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
     /// Text capability of the actual header child.
-    pub(crate) header: nc_com::ComPtr<microui_contracts::ITextContentAbi>,
+    header: nc_com::ComPtr<microui_contracts::ITextContentAbi>,
     /// Typed editing capability of the actual vertical body child.
-    pub(crate) body: nc_com::ComPtr<microui_contracts::LinearAbi>,
+    body: nc_com::ComPtr<microui_contracts::LinearAbi>,
     /// Native fixture editing link; absent from production COM composition.
     #[cfg(test)]
     content: Option<TypedWidgetHandle<Linear>>,
@@ -167,7 +167,7 @@ pub struct Disclosure {
 
 impl Disclosure {
     /// Combines one fixed child composition with the semantic expansion and layout policy.
-    pub(crate) fn from_runtime(
+    fn from_runtime(
         runtime: crate::com::widget::WidgetRuntime,
         editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
         header: nc_com::ComPtr<microui_contracts::ITextContentAbi>,
@@ -251,7 +251,7 @@ impl Disclosure {
 ///
 /// The header owns no descendants and shares only expansion data with its layout parent.
 #[nc_com::com_object(interfaces(microui_contracts::ITextContent, microui_contracts::ILeafLayout))]
-pub(crate) struct DisclosureHeader {
+struct DisclosureHeader {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::com::widget::WidgetRuntime,
     /// Shared scalar state owns no parent widget or tree.
@@ -446,7 +446,7 @@ fn create_container(parameters: DisclosureParameters) -> (TypedWidgetHandle<Disc
     let model = DisclosureState::new(parameters.expanded);
     let runtime = crate::com::widget::WidgetRuntime::for_test(crate::WidgetOption::NO_INTERACT);
     let host = runtime.state.host().add_ref();
-    let children = crate::com::disclosure::prepare_children(
+    let children = prepare_children(
         host,
         model.clone(),
         parameters.label.clone(),
@@ -546,6 +546,172 @@ impl crate::com::widget::HostedWidget for DisclosureHeader {
     fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
         &mut self.runtime
     }
+}
+
+use crate::com::widget::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_leaf_layout_impl, direct_widget_phase_impl};
+use microui_contracts::{
+    CrossSize, DisclosureAbi, DisclosureStyle, FlowDirection, IChildrenEditorAbi, ITextContent, ITextContentAbi, IWidgetAbi, IWidgetHostAbi, LinearAbi,
+};
+use nc_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString};
+
+direct_widget_phase_impl!(DisclosureHeader);
+direct_leaf_layout_impl!(DisclosureHeader);
+
+impl DisclosureHeader {
+    /// Creates the internal header capability directly on its semantic allocation.
+    fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        options: crate::WidgetOption,
+        model: Rc<DisclosureState>,
+        label: String,
+        variant: DisclosureVariant,
+        resources: Option<&crate::com::widget::SharedAssets>,
+    ) -> Result<ComPtr<ITextContentAbi>, NcStatus> {
+        let runtime = WidgetRuntime::for_resources(host, options, resources)?;
+        Ok(Self::from_value(Self::from_runtime(runtime, model, label, variant))
+            .query()
+            .expect("DisclosureHeader declares its text and leaf capabilities"))
+    }
+}
+
+impl ITextContent for DisclosureHeader {
+    /// Copies the label used by this same header's measurement and painting.
+    fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(NcString::from_utf8_str(self.com_label()))
+    }
+
+    /// Replaces the concrete header label and records intrinsic geometry invalidation.
+    fn set_text(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        let label = crate::com::text(input)?;
+        if self.com_label() != label {
+            self.com_set_label(label);
+            self.runtime_mut().state.record_change(microui_contracts::GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
+}
+
+direct_widget_phase_impl!(Disclosure);
+direct_container_layout_impl!(Disclosure);
+
+impl Disclosure {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(crate) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: crate::com::widget::SharedAssets,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        style: DisclosureStyle,
+        expanded: bool,
+    ) -> Result<ComPtr<DisclosureAbi>, NcStatus> {
+        let value = Self::build(host, label, style, expanded, Some(&resources))?;
+        Ok(Self::from_value(value).query().expect("Disclosure declares its callable class contract"))
+    }
+
+    /// Builds the fixed header/body tree with either direct or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        style: DisclosureStyle,
+        expanded: bool,
+        resources: Option<&crate::com::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let label = crate::com::text(label)?;
+        host.check_mutation()?;
+        let variant = match style {
+            DisclosureStyle::HEADER => DisclosureVariant::Header,
+            DisclosureStyle::TREE => DisclosureVariant::Tree,
+            _ => return Err(nc_com::NC_E_INVALID_ARG),
+        };
+        let model = DisclosureState::new(expanded);
+        let runtime = WidgetRuntime::for_resources(host.clone(), crate::WidgetOption::NO_INTERACT, resources)?;
+        let children = prepare_children(host, model.clone(), label.to_owned(), variant, resources)?;
+        Ok(Self::from_runtime(runtime, children.editor, children.header, children.body, model, variant))
+    }
+}
+
+impl microui_contracts::Disclosure for Disclosure {
+    /// Validates presentation and label before constructing the complete fixed composition.
+    fn new(
+        host: ComRef<'_, IWidgetHostAbi>,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        style: DisclosureStyle,
+        expanded: bool,
+    ) -> Result<Self, NcStatus> {
+        Self::build(host.add_ref(), label, style, expanded, None)
+    }
+
+    /// Observes the same expansion bit used by header input and container layout.
+    fn expanded(&self) -> Result<bool, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(self.is_expanded())
+    }
+
+    /// Changes the shared bit through the concrete algorithm's ordinary mutation path.
+    fn set_expanded(&mut self, expanded: bool) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        if expanded {
+            self.expand();
+        } else {
+            self.collapse();
+        }
+        Ok(())
+    }
+
+    /// Returns the actual header whose widget options control presentation and input.
+    fn header(&self) -> Result<ComPtr<ITextContentAbi>, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(self.header.clone())
+    }
+
+    /// Returns the actual Linear body whose typed edits preserve relationship cardinality.
+    fn body(&self) -> Result<ComPtr<LinearAbi>, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(self.body.clone())
+    }
+}
+
+/// Completed fixed disclosure topology consumed by either construction path.
+struct DisclosureChildren {
+    /// Writer owning the header and body in permanent traversal order.
+    editor: ComPtr<IChildrenEditorAbi>,
+    /// Text capability of the actual header returned by the public class.
+    header: ComPtr<ITextContentAbi>,
+    /// Concrete Linear capability of the actual body returned by the public class.
+    body: ComPtr<LinearAbi>,
+}
+
+/// Builds both structural children before publishing their authoritative sequence.
+fn prepare_children(
+    host: ComPtr<IWidgetHostAbi>,
+    model: Rc<DisclosureState>,
+    label: String,
+    variant: DisclosureVariant,
+    resources: Option<&crate::com::widget::SharedAssets>,
+) -> Result<DisclosureChildren, NcStatus> {
+    // Construct both children before publishing the sequence, so callers cannot observe a partial
+    // disclosure. The shared scalar model contains no parent or child object backpointer.
+    let header = DisclosureHeader::create_com(host.clone(), variant.header_options(), model, label, variant, resources)?;
+    let body = if let Some(resources) = resources {
+        super::Linear::create_com(
+            host.clone(),
+            resources.clone(),
+            FlowDirection::TOP_TO_BOTTOM,
+            CrossSize::Stretch.into(),
+        )?
+    } else {
+        let value = <super::Linear as microui_contracts::Linear>::new(
+            host.as_com_ref(),
+            FlowDirection::TOP_TO_BOTTOM,
+            CrossSize::Stretch.into(),
+        )?;
+        super::Linear::from_value(value).query().expect("Linear declares its callable class contract")
+    };
+    let editor = host.create_children()?;
+    editor.insert(0, header.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
+    editor.insert(1, body.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
+    Ok(DisclosureChildren { editor, header, body })
 }
 
 #[cfg(test)]

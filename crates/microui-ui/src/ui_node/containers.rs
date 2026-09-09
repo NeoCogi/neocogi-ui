@@ -175,7 +175,6 @@ pub(super) fn layout_track(track: crate::TrackSize) -> microui_contracts::Layout
 }
 
 mod disclosure;
-pub(crate) use disclosure::{DisclosureState, DisclosureHeader, DisclosureVariant};
 mod grid;
 mod linear;
 mod scroll_area;
