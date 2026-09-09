@@ -36,13 +36,15 @@
 
 #[cfg(test)]
 use crate::test_support::custom_render::{CustomRenderHandle, CustomRenderKey, CustomRenderRegistry, CustomRenderRegistryError};
+use neocogi_render_core::{FrameError, FrameInfo, RenderItemArgs, RendererBackend, RendererFrame, Vertex};
 #[cfg(test)]
-use super::texture::{RendererId, TextureError};
+use neocogi_render_core::{RendererId, TextureError};
 use super::{
-    backend::{RenderItemArgs, FrameError, FrameInfo, RendererBackend, RendererFrame, Vertex},
     display_list::{DisplayList, DrawKind, DrawOp},
     geometry::{ClipRect, SolidTriangle, textured_quad_from_uv},
 };
+#[cfg(test)]
+use crate::ImageSource;
 use crate::{
     atlas::{AtlasHandle, FontId, IconId},
     math::{clamp_i64_to_i32, RectExt},
@@ -328,7 +330,7 @@ impl<B: RendererBackend> Renderer<B> {
     /// Uploads one validated RGBA buffer through the context's sole public image API.
     #[cfg(test)]
     pub(crate) fn try_load_texture_rgba(&mut self, width: i32, height: i32, pixels: &[u8]) -> Result<TextureId, TextureError> {
-        crate::image::validate_rgba_buffer(width, height, pixels.len())?;
+        ImageSource { width, height, pixels }.validate()?;
         // Compute the next slot without committing it, so exhaustion and failed backend uploads
         // leave allocator state unchanged. The zero initial value keeps every usable u32 slot.
         let slot = self.last_texture_slot.checked_add(1).ok_or(TextureError::IdentifierSpaceExhausted)?;

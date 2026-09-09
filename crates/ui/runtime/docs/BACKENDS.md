@@ -29,11 +29,17 @@ are not additional runtime boundaries.
 | Source | Responsibility |
 | --- | --- |
 | [crates/render/plugin](../../../render/plugin) | Plugin descriptor plus window, input, and device ownership |
+| [crates/render/core](../../../render/core) | Backend-neutral frame, texture, color, and validated upload SPI shared with the UI runtime |
 | [crates/render/glow](../../../render/glow) | Glow rendering shared by native OpenGL and WebGL |
 | [crates/render/vulkan](../../../render/vulkan) | Vulkan rendering and UI shaders |
 | [crates/render/wgpu](../../../render/wgpu) | WGPU rendering |
 | [crates/render/webgl](../../../render/webgl) | Browser canvas backend using the Glow renderer |
 | [crates/render/support](../../../render/support) | Shared frame preparation and resource validation |
+
+`core` is a statically linked Rust SPI, not a COM component or deployment plugin. It
+lets the UI runtime and each concrete backend agree on in-process renderer types
+without making a renderer plugin link the UI implementation. This prevents duplicate
+UI plugin entry points and keeps the dynamic boundary at one complete COM frame.
 
 ## Ordered application drawing
 
@@ -44,8 +50,8 @@ The platform then resumes ordinary UI drawing in painter order.
 
 The generic application renderer types in the native backend crates are statically
 linked implementation helpers. Their Rust command values, frame borrows and GPU
-objects never cross the COM ABI. See [the demo renderer](../../../../demos/demo-renderer/src)
-for concrete backend implementations and [the application mesh component](../../../../demos/demo-full/src/graphics.rs)
+objects never cross the COM ABI. See [the demo renderer](../../../../demos/render/src)
+for concrete backend implementations and [the application mesh component](../../../../demos/full/src/graphics.rs)
 for owned COM rendering.
 
 ## Resource lifetime and thread rules

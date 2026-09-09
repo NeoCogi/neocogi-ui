@@ -30,29 +30,26 @@
 
 #![doc = include_str!("../docs/RENDER.md")]
 
-mod backend;
-mod color;
-pub(crate) mod external;
 pub(crate) mod display_list;
+pub(crate) mod external;
 pub(crate) mod geometry;
 mod nine_patch;
 mod painter;
 #[cfg(test)]
 mod performance;
 mod renderer;
-mod texture;
 #[cfg(test)]
-pub(crate) use texture::RendererId;
+pub(crate) use neocogi_render_core::RendererId;
 
-pub use backend::{AtlasUploadError, RenderItemArgs, FrameError, FrameInfo, FrameInfoError, RendererBackend, RendererFrame, Vertex};
+pub use neocogi_render_core::{
+    AtlasUploadError, Color, FrameError, FrameInfo, FrameInfoError, RenderItemArgs, RendererBackend, RendererFrame, TextureError, TextureId, Vertex, color,
+};
 #[cfg(test)]
 pub use crate::test_support::custom_render::{CustomRenderHandle, CustomRenderRegistryError};
 #[cfg(test)]
 pub(crate) use crate::test_support::custom_render::CustomRenderKey;
-pub use color::{Color, color};
 pub(crate) use display_list::DisplayList;
 pub use painter::Painter;
 pub use renderer::RenderError;
 pub(crate) use renderer::Renderer;
 pub use nine_patch::{NinePatch, NinePatchCell, NinePatchCells, NinePatchContent, NinePatchImage, SliceInsets};
-pub use texture::{TextureError, TextureId};

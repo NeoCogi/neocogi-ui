@@ -106,7 +106,7 @@ COM object; the helper shares common lifecycle and bounded paint/input validatio
 A widget with custom editing interfaces implements those declared COM interfaces
 and composes `WidgetState` directly.
 
-The [independent extension](../../../plugins/extension-example) demonstrates a real
+The [independent extension](../../../../examples/ui-extension) demonstrates a real
 constructible `Counter: IWidget + ILeafLayout`, standard activation events, and an
 `IInset: IContainer` using `IChildrenEditor` and bounded `ILayoutService` calls.
 The host activates `Counter` directly through the COM runtime with a typed
@@ -114,6 +114,11 @@ The host activates `Counter` directly through the COM runtime with a typed
 native atlas IDs, tree borrows, GPU contexts or backend callbacks.
 Custom drawing uses the painter's solid geometry/image methods or an owned
 `IRenderItem` implemented by the renderer assembly.
+
+External controls may also implement standard event capabilities such as
+`IActivationEvents` or `ITextEvents`. The application queries that typed capability
+once while wiring its `EventSession`; dispatch then calls the cached event interface
+and never consults the class registry during update, layout, or paint.
 
 ## Native text input and cancellation
 

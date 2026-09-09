@@ -7,6 +7,15 @@ are packaged in the UI plugin. Native platform and GPU objects share the selecte
 renderer plugin. PNG decoding and optional font/theme construction belong to the
 asset plugin. Several COM classes can share one assembly; a class is not a DLL.
 
+A plugin is a deployable implementation and lifetime boundary. A COM object is one
+typed allocation created by such an implementation. Built-in leaves, containers,
+logical windows, menus, popups, and `FileDialog` are distinct COM objects, but they
+share the UI runtime plugin because their behavior depends on its retained forest,
+input routing, and frame phases. Making each one a library would add loading and
+versioning boundaries without adding useful ownership isolation. External widgets and
+containers are the intentional exception: an application may ship their classes in
+its own plugin, and the runtime treats their cached interfaces exactly like built-ins.
+
 `Button: IWidget + ILeafLayout` is a callable class contract. One COM allocation
 contains its private state, constructor, concrete editing methods, and shared
 protocol projections. Hosts construct the registered class from a typed argument
@@ -299,7 +308,7 @@ changes. The full demo shows this composition through actual window capabilities
 
 ## Extension and test boundaries
 
-The [extension example](../../../plugins/extension-example) is independently built
+The [extension example](../../../examples/ui-extension) is independently built
 and dynamically loaded. Its counter and inset container exercise inheritance,
 shared event delivery, scoped layout, measurement invalidation and logical closure
 without linking the UI implementation. [COM_NATIVE.md](../../../../docs/COM_NATIVE.md)

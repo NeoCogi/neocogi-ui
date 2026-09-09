@@ -90,7 +90,7 @@ rectangle and final visible region. There is no production native callback regis
 | `render/painter.rs` | Private built-in geometry recording |
 | `render/display_list.rs` | Owned ordered operations and reusable geometry |
 | `render/renderer.rs` | Atlas expansion, final clipping and execution |
-| `render/backend.rs` | Concrete backend frame contracts |
+| [crates/render/core](../../../render/core) | Backend-neutral frame contracts, texture identity, color, and upload validation |
 | [crates/render/plugin](../../../render/plugin) | Backend plugin identity, window/device ownership, and checked COM GPU submission |
 | [crates/render/{glow,vulkan,wgpu,webgl}](BACKENDS.md#backend-sources) | Concrete GPU implementations linked into one selected plugin |
 | [crates/render/support](../../../render/support) | Shared frame preparation and resource validation |

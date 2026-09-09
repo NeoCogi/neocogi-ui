@@ -4,11 +4,13 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
 backend=${1:-glow}
-cargo run -p neocogi-ui-tools --bin com-build -- --demo extension --backend "$backend"
-target=${CARGO_TARGET_DIR:-"$root/target"}
-if [[ "$target" != /* ]]; then target="$root/$target"; fi
-executable="$target/com-native/debug/$backend/files/extension/microui-demo-com"
-if [[ "${MICROUI_TEST_BUILD_ONLY:-0}" == 1 ]]; then
+case "$backend" in glow|vulkan|wgpu) ;; *) echo "usage: $0 [glow|vulkan|wgpu]" >&2; exit 2 ;; esac
+build_output="$(cargo run -p cargo-neocogi -- build --assembly smoke --variant "$backend" --variant extension)"
+printf '%s\n' "$build_output"
+package_dir="$(printf '%s\n' "$build_output" | sed -n 's/^Staged //p' | tail -n 1)"
+if [[ -z "$package_dir" ]]; then echo "cargo-neocogi did not report an assembly directory" >&2; exit 1; fi
+executable="$package_dir/neocogi-demo-smoke"
+if [[ "${NEOCOGI_TEST_BUILD_ONLY:-0}" == 1 ]]; then
     printf '%s\n' "$executable"
     exit 0
 fi

@@ -1,0 +1,39 @@
+[package]
+name = "neocogi-demo-smoke"
+version = "0.9.0-alpha.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[features]
+default = ["glow"]
+glow = ["neocogi-render-plugin/glow"]
+vulkan = ["neocogi-render-plugin/vulkan"]
+wgpu = ["neocogi-render-plugin/wgpu"]
+extension = ["dep:neocogi-example-ui-extension"]
+# Standalone development benchmark; no counters or recorder enter the normal demo executable.
+benchmark = ["embed-assets"]
+embed-assets = ["neocogi-demo-assets/embed-assets"]
+
+[dependencies]
+neocogi-demo-contracts.workspace = true
+rs-math3d.workspace = true
+neocogi-ui.workspace = true
+neocogi-com = { workspace = true, features = ["runtime", "macros", "std"] }
+
+neocogi-demo-assets.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Build the shared artifacts as dependencies; native startup still loads their C ABI.
+neocogi-com-runtime.workspace = true
+neocogi-ui-runtime = { path = "../../crates/ui/runtime", features = ["dynamic-plugin"] }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "d58ad24f847c767097b39910a551d9a5ff2ce274", default-features = false, features = ["dynamic-plugin"] }
+neocogi-assets = { workspace = true, features = ["dynamic-plugin", "theme-json"] }
+neocogi-example-ui-extension = { path = "../../examples/ui-extension", optional = true, features = ["dynamic-plugin"] }
+
+[[bin]]
+name = "com-bench"
+path = "src/bin/com-bench.rs"
+required-features = ["benchmark"]

@@ -98,7 +98,7 @@ Full-demo packaging also places its photograph at `assets/FACEPALM.png`. Inputs
 resolve relative to the owning manifest/configuration file; staged paths resolve
 relative to the application executable. Theme parsing, image decoding, and font
 rasterization run in the asset plugin. Call
-`neocogi_ui_demo_host::initialize()` before `load_bundle()`.
+`neocogi_demo_host::initialize()` before `load_bundle()`.
 
 ```sh
 cargo neocogi run --assembly full --variant vulkan --variant embedded
@@ -129,21 +129,21 @@ are initially seeded from the application's lockfile. Retain their `sources`
 directories when using `--locked`, since `cargo clean` removes them. Changes to
 the application lock require an unlocked build to refresh the generated locks.
 
-## Existing regression driver
+## Assembly driver
 
-`cargo com-build` remains available for the existing regression scripts and their
-established `target/com-native/PROFILE/BACKEND/ASSETS/DEMO` paths. Its options remain
-`--demo`, `--backend`, `--assets files|embedded`, `--release`, and `--min-size`:
+`cargo neocogi` is the only native assembly path. It reads the workspace assembly
+catalog, builds the executable and selected components, validates plugin descriptors,
+and prints the final staging directory:
 
 ```sh
-cargo com-build --demo full --backend glow
-./target/com-native/debug/glow/files/full/neocogi-ui-demo-full
+cargo neocogi build --assembly full --variant glow
+cargo neocogi run --assembly full --variant glow
 ```
 
-That workspace-local driver requires `cargo +nightly com-build ... --min-size`
-for its older min-size alias. New applications should use `cargo neocogi` and
-configuration instead of adding more demo-specific branches to that driver.
-The regression examples below retain the driver's established paths.
+Use `--release` for the release profile or `--profile min-size` for the bundled
+nightly size profile. The tool owns its layout under `target/neocogi`; callers and
+scripts should use the reported `Staged ...` directory rather than reconstructing
+that internal path.
 COM_PERFORMANCE.md records whole-deployment measurements;
 [COM_MIGRATION.md](COM_MIGRATION.md) records the component migration history.
 
@@ -153,8 +153,7 @@ A finite ordinary demo run renders the requested number of successful frames and
 then releases its application session and host:
 
 ```sh
-cd /tmp
-MICROUI_DEMO_FRAMES=8 /absolute/path/to/target/com-native/debug/glow/files/full/neocogi-ui-demo-full
+NEOCOGI_DEMO_FRAMES=8 cargo neocogi run --assembly full --variant glow
 ```
 
 Malformed or zero limits fail at startup. Omission runs until OS close or the
@@ -175,13 +174,12 @@ submission and retained-handle closure. Win 3.11 is additionally selected throug
 the real nested menu and event callback. These application tests do not read back
 every backend's pixels; actual-window image checks supplement them. Test executables are staged separately under
 `target/com-tests` so they cannot inflate the installed application size. Set
-`MICROUI_TEST_BUILD_ONLY=1` to stage tests for a separate display-enabled invocation.
+`NEOCOGI_TEST_BUILD_ONLY=1` to stage tests for a separate display-enabled invocation.
 
 The smaller boundary smoke remains available:
 
 ```sh
-cargo run -p neocogi-ui-tools --bin com-build -- --demo smoke --backend glow
-./target/com-native/debug/glow/files/smoke/microui-demo-com --smoke
+cargo neocogi run --assembly smoke --variant glow -- --smoke
 ```
 
 It covers typed input/events, inherited and composed controls, compact menus,
@@ -206,12 +204,12 @@ scripts/test-extension.sh vulkan
 scripts/test-extension.sh wgpu
 ```
 
-The driver separately builds the extension, host, UI and platform, and runs from
+The driver separately builds the extension, host, UI and renderer, and runs from
 `/tmp`. The host activates the counter with a typed `IWidgetHost` constructor frame.
 It verifies common interface identity, shared activation delivery, callback
 measurement, unchanged measurement caches, setter/constraint/resize invalidation,
 exclusive attachment, topology changes and retained-handle closure. Ordinary demo
-packages omit this assembly. See [its source and contracts](../plugins/extension-example).
+packages omit this assembly. See [its source and contracts](../examples/ui-extension).
 
 ## Optional construction workflows
 
@@ -219,13 +217,12 @@ The default file package exposes both construction interfaces. The smoke executa
 can derive a larger atlas or load a JSON theme through the same asset plugin:
 
 ```sh
-cargo com-build --assets files
-./target/com-native/debug/glow/files/smoke/microui-demo-com --smoke --rebuild-assets
-./target/com-native/debug/glow/files/smoke/microui-demo-com --smoke --theme themes/windows-95/theme.json
+cargo neocogi run --assembly smoke --variant glow -- --smoke --rebuild-assets
+cargo neocogi run --assembly smoke --variant glow -- --smoke --theme themes/windows-95/theme.json
 ```
 
 Relative theme paths resolve against the executable directory. Use
-`cargo com-build --demo full --assets embedded` for an explicit embedded deployment;
+`cargo neocogi build --assembly full --variant glow --variant embedded` for an explicit embedded deployment;
 its asset plugin exposes PNG decoding and live style edits without runtime atlas
 building or JSON loading. See
 [COM_ASSETS.md](COM_ASSETS.md) for immutable catalogs, bounded transfers, upload
@@ -246,8 +243,8 @@ one `requestAnimationFrame` scheduling adapter. Every platform window appends it
 own canvas; page CSS controls its logical dimensions, and input/frame coordinates
 use physical pixels. Do not create an extra placeholder canvas in the page.
 
-`web-demo.sh` honors `CARGO_TARGET_DIR`, `MICROUI_WASM_BINDGEN` and
-`MICROUI_WEB_PROFILE=debug|release` (release by default). It installs the matching
+`web-demo.sh` honors `CARGO_TARGET_DIR`, `NEOCOGI_WASM_BINDGEN` and
+`NEOCOGI_WEB_PROFILE=debug|release` (release by default). It installs the matching
 binding CLI when needed. A `?frames=8` query runs eight frames and stops, using the
 same finite-run policy as native. Normal stop and asynchronous errors release the
 RAF closure, application session, canvas, input textarea and listeners. GPU
@@ -257,7 +254,7 @@ last release.
 The input suite checks actual DOM composition/paste, pointer chords, wheel scaling,
 static registration, inherited editing, IME placement and WebGL resize. The full
 suite exercises theme/image/action behavior and verifies both normal and failed RAF
-cleanup in Chromium. Set `CHROME_BIN` and `MICROUI_BROWSER_TEST_PORT` where needed.
+cleanup in Chromium. Set `CHROME_BIN` and `NEOCOGI_BROWSER_TEST_PORT` where needed.
 
 A lost WebGL context reports a renderer error. Applications must recreate the
 platform window and its GPU resources; old image/scene capabilities cannot migrate

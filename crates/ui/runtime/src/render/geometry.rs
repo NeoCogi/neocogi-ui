@@ -29,7 +29,7 @@
 //
 //! Stateless vertex construction, tessellation, bounds, translation, and final triangle clipping.
 
-use super::backend::Vertex;
+use neocogi_render_core::Vertex;
 use crate::{math::RectExt, theme::Color};
 
 /// Sentinel clip rectangle used when command recording starts without a root clip.
@@ -198,12 +198,7 @@ impl SolidGeometry {
     ///
     /// COM points can therefore enter the retained tessellation workspace directly instead of
     /// allocating a temporary vector merely to change between equivalent coordinate structs.
-    pub(crate) fn append_polygon_points(
-        &mut self,
-        points: impl ExactSizeIterator<Item = Vec2f>,
-        color: Color4b,
-        offset: Vec2f,
-    ) -> Option<SolidTriangleRange> {
+    pub(crate) fn append_polygon_points(&mut self, points: impl ExactSizeIterator<Item = Vec2f>, color: Color4b, offset: Vec2f) -> Option<SolidTriangleRange> {
         let start = self.triangles.len();
         if points.len() < 3 || !self.prepare_polygon(points) {
             return None;

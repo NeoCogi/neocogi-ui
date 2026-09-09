@@ -148,7 +148,7 @@ fn static_com_editing_and_webgl() {
     assert!(runtime.require_interface_type::<UiRuntimeAbi>(UiRuntimeAbi::CLASS_ID).is_ok());
     assert!(runtime.require_interface_type::<PlatformAbi>(PlatformAbi::CLASS_ID).is_ok());
     let platform: ComPtr<PlatformAbi> = runtime.construct(()).unwrap();
-    let assets = neocogi_ui_demo_assets::load_bundle().unwrap();
+    let assets = neocogi_demo_assets::load_bundle().unwrap();
     let native = platform
         .create_window(
             NcCopyFromBufferOffset::new(0, b"Browser COM regression"),

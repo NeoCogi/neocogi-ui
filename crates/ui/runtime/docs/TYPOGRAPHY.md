@@ -1,6 +1,6 @@
 # Fonts and typography
 
-- Atlas building supports multiple baked fonts and sizes through `microui_plugin_assets::atlas::FontAsset`, and the same config can drive both runtime atlas construction and offline/prebuilt atlas export.
+- Atlas building supports multiple baked fonts and sizes through `neocogi_assets::atlas::FontAsset`, and the same config can drive both runtime atlas construction and offline/prebuilt atlas export.
 - A compiled UI bundle resolves conventional `body`, `small`, `title`, `heading` and `mono`
   font roles and the standard semantic icon roles. The assets plugin creates the bundle;
   mutable `Ui` access lets `Ui::install_assets` install it transactionally with the renderer.
@@ -8,7 +8,7 @@
   fonts against the bundle catalog; use semantic roles when the selected theme should
   determine the exact baked resource.
 - Font sizes are selected by choosing another baked font variant, not by scaling one bitmap font at runtime.
-- `demos/demo-full` uses this directly: `NORMAL.ttf` for control/body text, `BOLD.ttf` for window titles, and `CONSOLE.ttf` for the log window’s input/output text.
+- `demos/full` uses this directly: `NORMAL.ttf` for control/body text, `BOLD.ttf` for window titles, and `CONSOLE.ttf` for the log window’s input/output text.
 
 ## Text encoding and glyph coverage
 
@@ -36,7 +36,7 @@ The asset plugin's atlas builder bakes only printable ASCII (`U+0020` through `U
 underscore. `AssetGlyph` tables can describe arbitrary Unicode scalar values, so applications needing
 broader coverage must provide their own glyph table and must include `_` in every font. Atlas
 construction rejects a font without that explicit fallback. There is not yet a configurable
-glyph-range option in `microui_plugin_assets::atlas::Config`.
+glyph-range option in `neocogi_assets::atlas::Config`.
 
 The text pipeline does not perform grapheme segmentation, script shaping, bidirectional
 reordering, kerning, or fallback-font selection. `TextWrap::Word` wraps only at ASCII space

@@ -217,7 +217,6 @@ fn make_atlas() -> AtlasHandle {
         pixels: &pixels,
         icons: &icons,
         fonts: &fonts,
-
     })
     .expect("renderer fixture atlas must satisfy the complete atlas contract")
 }
@@ -252,7 +251,6 @@ fn make_extreme_metric_atlas() -> AtlasHandle {
         pixels: &pixels,
         icons: &icons,
         fonts: &fonts,
-
     })
     .expect("extreme but representable metrics must remain structurally valid")
 }
@@ -811,7 +809,7 @@ fn texture_upload_validation_and_backend_failure_do_not_consume_ids() {
     assert!(matches!(
         error,
         TextureError::Image {
-            source: crate::ImageError::RawPixelLengthMismatch { expected: 16, actual: 4 },
+            source: neocogi_render_core::ImageValidationError::PixelLength { expected: 16, actual: 4 },
         }
     ));
     assert_eq!(renderer.last_texture_slot, 0);
@@ -1091,8 +1089,8 @@ fn frame_acquisition_failure_discards_the_list_without_finalization() {
         type Frame<'a> = EmptyFrame;
 
         fn replace_atlas(&mut self, _atlas: crate::ImageSource<'_>) -> Result<(), AtlasUploadError> {
-        // This fixture models a successful pixel upload; the UI renderer owns resource metadata.
-                Ok(())
+            // This fixture models a successful pixel upload; the UI renderer owns resource metadata.
+            Ok(())
         }
 
         fn frame(&mut self, _info: FrameInfo) -> Result<Self::Frame<'_>, FrameError> {

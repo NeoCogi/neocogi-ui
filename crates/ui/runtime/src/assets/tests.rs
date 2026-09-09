@@ -333,7 +333,7 @@ fn runtime_install_is_atomic_and_updates_shared_widget_measurement() {
 #[test]
 fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision() {
     let source = export_bundle(&bundle()).unwrap();
-    let compiler: ComPtr<StyleCompilerAbi> = microui_plugin_assets::StyleCompilerObject::from_value(microui_plugin_assets::StyleCompilerObject::default())
+    let compiler: ComPtr<StyleCompilerAbi> = neocogi_assets::StyleCompilerObject::from_value(neocogi_assets::StyleCompilerObject::default())
         .query()
         .unwrap();
     let ui = neocogi_ui::Ui::from_interface(crate::create_runtime_from_assets(source.as_com_ref()).unwrap()).unwrap();

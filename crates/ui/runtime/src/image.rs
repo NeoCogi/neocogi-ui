@@ -31,28 +31,10 @@
 //! Bounded raw RGBA storage used by runtime texture and atlas consumers.
 use crate::{Color4b, color4b};
 use std::fmt;
+pub use neocogi_render_core::ImageSource;
 
 /// Shared upper bound on one raw RGBA image allocation.
 pub const MAX_DECODED_RGBA_BYTES: usize = neocogi_ui_contracts::MAX_ASSET_PIXELS_BYTES;
-
-/// Borrowed packed RGBA pixels with explicit signed dimensions.
-#[derive(Copy, Clone)]
-pub struct ImageSource<'a> {
-    /// Positive width in pixels, checked before allocation or upload.
-    pub width: i32,
-    /// Positive height in pixels, checked before allocation or upload.
-    pub height: i32,
-    /// Exactly width × height × 4 bytes in RGBA8888 channel order.
-    pub pixels: &'a [u8],
-}
-
-impl ImageSource<'_> {
-    /// Checks the complete raw storage contract without copying pixels.
-    pub fn validate(self) -> Result<(), ImageError> {
-        // All renderer entry points apply the same dimensions, byte count and allocation bound.
-        validate_rgba_buffer(self.width, self.height, self.pixels.len())
-    }
-}
 
 /// Concrete failure returned before a raw image is copied or uploaded.
 /// Atlas and texture consumers share these checks so their storage bounds cannot diverge.
@@ -310,25 +292,6 @@ fn resolve_dimensions(expected: Option<CheckedImageDimensions>, actual_width: us
         return Ok(expected);
     }
     CheckedImageDimensions::try_new(actual_width, actual_height).map_err(ImageError::from)
-}
-
-/// Validates raw RGBA dimensions and exact byte length without allocating normalized pixels.
-pub(crate) fn validate_rgba_buffer(width: i32, height: i32, len: usize) -> Result<(), ImageError> {
-    if width <= 0 || height <= 0 {
-        // Preserve both signed inputs because converting them first would lose which invalid value
-        // entered the public raw-image API.
-        return Err(ImageError::RawDimensionsOutOfRange { width, height });
-    }
-    // The shared checked token owns coordinate representation, arithmetic, and allocation-budget
-    // policy for raw images, decoded images, atlases, and external textures alike.
-    let dimensions = CheckedImageDimensions::try_new(width as usize, height as usize).map_err(ImageError::from)?;
-    if len != dimensions.rgba_byte_count {
-        return Err(ImageError::RawPixelLengthMismatch {
-            expected: dimensions.rgba_byte_count,
-            actual: len,
-        });
-    }
-    Ok(())
 }
 
 #[cfg(test)]

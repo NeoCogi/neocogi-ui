@@ -46,7 +46,7 @@ jobs:
         features: ["", "builder", "theme-json", "save-to-rust"]
     steps:
       - uses: actions/checkout@v6
-      - run: cargo test -p microui-plugin-assets --no-default-features --features '${{ matrix.features }}' --lib
+      - run: cargo test -p neocogi-assets --no-default-features --features '${{ matrix.features }}' --lib
 
   com:
     runs-on: ubuntu-latest

@@ -1,5 +1,5 @@
 [package]
-name = "neocogi-ui-basic-demos"
+name = "neocogi-demo-basic"
 version = "0.0.0"
 publish = false
 authors.workspace = true
@@ -9,26 +9,26 @@ repository.workspace = true
 
 [features]
 default = ["glow"]
-glow = ["neocogi-ui-demo-host/glow", "neocogi-render-plugin/glow"]
-webgl = ["neocogi-ui-demo-host/webgl", "embed-assets"]
+glow = ["neocogi-demo-host/glow", "neocogi-render-plugin/glow"]
+webgl = ["neocogi-demo-host/webgl", "embed-assets"]
 # Native deployments read adjacent files unless this feature is explicitly requested.
-embed-assets = ["neocogi-ui-demo-assets/embed-assets"]
-vulkan = ["neocogi-ui-demo-host/vulkan", "neocogi-render-plugin/vulkan"]
-wgpu = ["neocogi-ui-demo-host/wgpu", "neocogi-render-plugin/wgpu"]
+embed-assets = ["neocogi-demo-assets/embed-assets"]
+vulkan = ["neocogi-demo-host/vulkan", "neocogi-render-plugin/vulkan"]
+wgpu = ["neocogi-demo-host/wgpu", "neocogi-render-plugin/wgpu"]
 
 [dependencies]
 neocogi-ui.workspace = true
 neocogi-com = { workspace = true, features = ["std", "macros"] }
-neocogi-ui-demo-assets.workspace = true
-neocogi-ui-demo-host.workspace = true
+neocogi-demo-assets.workspace = true
+neocogi-demo-host.workspace = true
 rs-math3d.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Build the shared artifacts as dependencies; native startup still loads their C ABI.
 neocogi-com-runtime.workspace = true
 neocogi-ui-runtime = { path = "../../crates/ui/runtime", features = ["dynamic-plugin"] }
-neocogi-render-plugin = { path = "../../crates/render/plugin", default-features = false, features = ["dynamic-plugin"] }
-microui-plugin-assets = { workspace = true, features = ["dynamic-plugin", "theme-json"] }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "d58ad24f847c767097b39910a551d9a5ff2ce274", default-features = false, features = ["dynamic-plugin"] }
+neocogi-assets = { workspace = true, features = ["dynamic-plugin", "theme-json"] }
 
 [[bin]]
 name = "backend-frame-cube"

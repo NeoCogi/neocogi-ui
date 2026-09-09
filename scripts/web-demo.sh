@@ -3,15 +3,15 @@ set -euo pipefail
 
 workspace_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 target="wasm32-unknown-unknown"
-artifact_name="neocogi-ui-demo-full"
+artifact_name="neocogi-demo-full"
 target_dir="${CARGO_TARGET_DIR:-$workspace_root/target}"
 if [[ "$target_dir" != /* ]]; then target_dir="$workspace_root/$target_dir"; fi
-profile="${MICROUI_WEB_PROFILE:-release}"
+profile="${NEOCOGI_WEB_PROFILE:-release}"
 artifact_dir="$target_dir/$target/$profile"
 site_dir="$target_dir/web-demo"
 staging_dir="$target_dir/web-demo-staging"
 web_tools_dir="$target_dir/web-tools"
-wasm_bindgen="${MICROUI_WASM_BINDGEN:-$web_tools_dir/bin/wasm-bindgen}"
+wasm_bindgen="${NEOCOGI_WASM_BINDGEN:-$web_tools_dir/bin/wasm-bindgen}"
 wasm_bindgen_version="0.2.127"
 command="${1:-serve}"
 port="${2:-8000}"
@@ -19,7 +19,7 @@ port="${2:-8000}"
 build() {
   cd "$workspace_root"
   if [[ "$profile" != release && "$profile" != debug ]]; then
-    echo "MICROUI_WEB_PROFILE must be release or debug" >&2; exit 2
+    echo "NEOCOGI_WEB_PROFILE must be release or debug" >&2; exit 2
   fi
   if ! rustup target list --installed | rg -q "^$target$"; then rustup target add "$target"; fi
   profile_args=()
@@ -33,7 +33,7 @@ build() {
   fi
   cargo build \
     --manifest-path "$workspace_root/Cargo.toml" \
-    -p neocogi-ui-demo-full \
+    -p neocogi-demo-full \
     --bin "$artifact_name" \
     --target "$target" \
     "${profile_args[@]}" \
@@ -48,7 +48,7 @@ build() {
     --out-dir "$staging_dir" \
     --out-name "$artifact_name" \
     "$artifact_dir/$artifact_name.wasm"
-  install -m 0644 "$workspace_root/demos/demo-full/web/index.html" "$staging_dir/index.html"
+  install -m 0644 "$workspace_root/demos/full/web/index.html" "$staging_dir/index.html"
   touch "$staging_dir/.nojekyll"
   rm -rf "$site_dir"
   mv "$staging_dir" "$site_dir"

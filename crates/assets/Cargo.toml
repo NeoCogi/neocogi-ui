@@ -1,0 +1,33 @@
+[package]
+name = "neocogi-assets"
+version = "0.9.0-alpha.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "NeoCogi asset decoding, compilation, and plugin services"
+publish = false
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[features]
+default = []
+builder = ["dep:fontdue"]
+theme-json = ["builder", "neocogi-ui-contracts/theme-json", "dep:serde", "dep:serde_json"]
+save-to-rust = ["dep:tempfile", "dep:miniz_oxide"]
+dynamic-plugin = []
+
+[dependencies]
+tempfile = { workspace = true, optional = true }
+miniz_oxide = { workspace = true, optional = true, features = ["with-alloc"] }
+neocogi-ui-contracts.workspace = true
+neocogi-ui.workspace = true
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+png.workspace = true
+fontdue = { workspace = true, optional = true }
+neocogi-com = { workspace = true, features = ["macros", "std"] }
+
+[dev-dependencies]
+neocogi-ui-runtime.workspace = true

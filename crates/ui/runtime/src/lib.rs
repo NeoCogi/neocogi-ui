@@ -81,7 +81,7 @@
 //! topology and installed resource revisions. Rendering observes the last complete commit and
 //! rejects stale geometry before acquiring a native frame. Author obligations, deployment and
 //! independent extension examples are documented in the workspace's `docs/COM_AUTHORS.md`,
-//! `docs/COM_NATIVE.md` and `plugins/extension-example`.
+//! `docs/COM_NATIVE.md` and `examples/ui-extension`.
 
 // Compile the Rust examples in standalone guides as part of `cargo test --doc` without publishing
 // duplicate guide modules in the normal API reference.
@@ -105,8 +105,8 @@ mod guide_doctests {
 
 pub mod assets;
 pub mod atlas;
-mod context;
 mod boundary;
+mod context;
 mod event;
 mod identity;
 pub mod image;
@@ -173,9 +173,9 @@ pub use theme::{
 };
 pub(crate) use theme::SkinInstallError;
 pub(crate) use ui_node::{
-    AvailableSpace, Change, ChildParticipation, Children, Constraints, ContainerLayoutCtx, ContainerWidget, KeyboardAction, KeyboardBehavior,
-    LeafWidget, MeasureCtx, Node, ScrollbarAxis, ScrollbarChanged,
-    ScrollbarParameters, TextWrap, TrackSize, UiInputEvent, Widget, WidgetFillOption, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx,
+    AvailableSpace, Change, ChildParticipation, Children, Constraints, ContainerLayoutCtx, ContainerWidget, KeyboardAction, KeyboardBehavior, LeafWidget,
+    MeasureCtx, Node, ScrollbarAxis, ScrollbarChanged, ScrollbarParameters, TextWrap, TrackSize, UiInputEvent, Widget, WidgetFillOption, WidgetOption,
+    WidgetPaintCtx, WidgetUpdateCtx,
 };
 pub use ui_node::{Disclosure, Grid, Linear, ScrollArea};
 pub use ui_node::widgets::{Button, Checkbox, ColorSwatch, Combo, ListBox, ListItem, Number, Scrollbar, Slider, TextArea, TextBlock, Textbox};
@@ -183,8 +183,7 @@ pub use ui_node::widgets::{Button, Checkbox, ColorSwatch, Combo, ListBox, ListIt
 pub(crate) use ui_node::{ScrollAreaOption};
 #[cfg(test)]
 pub(crate) use ui_node::{
-    ChildrenHandle, Container, DisclosureParameters, GridParameters, LinearCrossSize, LinearItem, LinearParameters, ScrollAreaParameters,
-    TypedWidgetHandle,
+    ChildrenHandle, Container, DisclosureParameters, GridParameters, LinearCrossSize, LinearItem, LinearParameters, ScrollAreaParameters, TypedWidgetHandle,
 };
 pub(crate) use widgets::{
     ButtonParameters, ButtonSubmitted, CheckboxChanged, CheckboxParameters, ColorSwatchParameters, ComboChanged, ComboParameters, ComboSubmitted,

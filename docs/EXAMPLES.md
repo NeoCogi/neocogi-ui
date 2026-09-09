@@ -5,8 +5,8 @@
 | [simple](../demos/basic/src/bin/simple.rs) | A small facade-only application with one framed button. |
 | [calculator](../demos/basic/src/bin/calculator.rs) | Concrete typed actions, text updates and weighted layout. |
 | [backend-frame-cube](../demos/basic/src/bin/backend-frame-cube.rs) | A local COM leaf emitting solid triangles through the shared painter. |
-| [full](../demos/demo-full/src/app.rs) | Menus, dialogs, editing, images, themes, containers and custom graphics. |
-| [smoke](../demos/com-slice/src/main.rs) | Independent dynamic loading and explicit runtime/renderer boundary checks. |
+| [full](../demos/full/src/app.rs) | Menus, dialogs, editing, images, themes, containers and custom graphics. |
+| [smoke](../demos/smoke/src/main.rs) | Independent dynamic loading and explicit runtime/renderer boundary checks. |
 
 After installing the [assembly tool](../tools/cargo-neocogi), build and run a complete native package:
 
@@ -44,10 +44,10 @@ Accepted edits publish one immutable revision; animation frames do not repeatedl
 reinstall unchanged styles. The log uses the actual TextBlock as its stored text,
 and Enter/Submit share the concrete submission operation.
 
-The [painter](../demos/demo-full/src/painter_demo.rs),
-[falloff editor](../demos/demo-full/src/falloff.rs),
-[grid](../demos/demo-full/src/grid.rs) and
-[Suzanne viewport](../demos/demo-full/src/mesh.rs) implement `LeafContent` directly.
+The [painter](../demos/full/src/painter_demo.rs),
+[falloff editor](../demos/full/src/falloff.rs),
+[grid](../demos/full/src/grid.rs) and
+[Suzanne viewport](../demos/full/src/mesh.rs) implement `LeafContent` directly.
 There is one COM widget allocation for each. Solid drawing uses the shared UI
 painter; Suzanne edits one renderer-owned `IMeshScene: IRenderItem` object, whose
 backend-specific GPU implementation stays in the renderer plugin.

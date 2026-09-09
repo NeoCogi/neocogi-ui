@@ -6,15 +6,15 @@ cd "$workspace_root"
 suite="${1:-input}"
 case "$suite" in
   input) package="neocogi-render-plugin"; fixture="crates/render/plugin/tests/browser-input.html" ;;
-  full) package="neocogi-ui-demo-full"; fixture="demos/demo-full/tests/browser-full.html" ;;
+  full) package="neocogi-demo-full"; fixture="demos/full/tests/browser-full.html" ;;
   *) echo "usage: $0 [input|full]" >&2; exit 2 ;;
 esac
 site_dir="${CARGO_TARGET_DIR:-$workspace_root/target}/browser-$suite-tests"
 build_log="$(mktemp)"
 server_pid=""
 trap 'if [[ -n "$server_pid" ]]; then kill "$server_pid" 2>/dev/null || true; fi; rm -f "$build_log"' EXIT
-port="${MICROUI_BROWSER_TEST_PORT:-8118}"
-wasm_bindgen="${MICROUI_WASM_BINDGEN:-$workspace_root/target/web-tools/bin/wasm-bindgen}"
+port="${NEOCOGI_BROWSER_TEST_PORT:-8118}"
+wasm_bindgen="${NEOCOGI_WASM_BINDGEN:-$workspace_root/target/web-tools/bin/wasm-bindgen}"
 if [[ ! -x "$wasm_bindgen" ]]; then
   echo "Run ./scripts/web-demo.sh build first to install the matching wasm-bindgen CLI." >&2
   exit 1

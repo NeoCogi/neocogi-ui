@@ -1,0 +1,35 @@
+[package]
+name = "neocogi-demo-full"
+version = "0.0.0"
+publish = false
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["glow"]
+glow = ["neocogi-demo-host/glow", "neocogi-render-plugin/glow"]
+webgl = ["neocogi-demo-host/webgl", "embed-assets"]
+# Native deployments read adjacent files unless this feature is explicitly requested.
+embed-assets = ["neocogi-demo-assets/embed-assets"]
+vulkan = ["neocogi-demo-host/vulkan", "neocogi-render-plugin/vulkan"]
+wgpu = ["neocogi-demo-host/wgpu", "neocogi-render-plugin/wgpu"]
+
+[dependencies]
+neocogi-ui.workspace = true
+neocogi-com = { workspace = true, features = ["std", "macros"] }
+neocogi-demo-contracts.workspace = true
+neocogi-demo-assets = { workspace = true, features = ["full-demo"] }
+neocogi-demo-host = { workspace = true, features = ["png-assets"] }
+rs-math3d.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Build the shared artifacts as dependencies; native startup still loads their C ABI.
+neocogi-com-runtime.workspace = true
+neocogi-ui-runtime = { path = "../../crates/ui/runtime", features = ["dynamic-plugin"] }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "d58ad24f847c767097b39910a551d9a5ff2ce274", default-features = false, features = ["dynamic-plugin"] }
+neocogi-assets = { workspace = true, features = ["dynamic-plugin", "theme-json"] }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen.workspace = true

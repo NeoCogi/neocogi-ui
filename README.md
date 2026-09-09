@@ -62,6 +62,14 @@ Vulkan, WGPU, and WebGL builds have distinct plugin identities. Each renderer pl
 also owns the native window/device integration it needs, so graphics handles stay
 private and a frame does not cross an extra plugin boundary. The backend-specific
 Rust crates and shared helpers remain separate source concerns within that artifact.
+`crates/render/core` is their small, statically linked backend SPI; it is not another
+plugin and does not depend on the UI runtime implementation.
+
+`crates/assets` is the optional decoding and authoring plugin. User-defined UI
+plugins belong outside the platform crates; `examples/ui-extension` demonstrates an
+independently compiled leaf and container. A COM object is not automatically a
+deployment plugin: buttons, containers, windows, menus, and file dialogs remain
+individual typed objects implemented inside the cohesive UI runtime plugin.
 
 For the browser:
 
@@ -69,7 +77,7 @@ For the browser:
 scripts/web-demo.sh serve
 ```
 
-The platform owns its WebGL2 canvas and DOM input/IME bridge. All four demo themes,
+The WebGL renderer plugin owns its canvas and DOM input/IME bridge. All four demo themes,
 images and custom drawing examples remain available. See [WEB.md](docs/WEB.md) for
 input limitations and the native-filesystem picker's browser restriction.
 

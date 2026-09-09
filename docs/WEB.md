@@ -1,6 +1,6 @@
 # WebGL canvas demo
 
-The browser demo compiles `neocogi-ui-demo-full` directly for Rust's
+The browser demo compiles `neocogi-demo-full` directly for Rust's
 `wasm32-unknown-unknown` target. `neocogi-render-plugin` owns DOM input, canvas sizing and WebGL2, while the concrete demo
 host owns `requestAnimationFrame`. UI, platform and PNG descriptors register in one static neocogi-com
 runtime in the same wasm module. SDL remains a native-only dependency.
@@ -48,8 +48,8 @@ Its sole scheduling adapter uses `requestAnimationFrame`. The full demo reserves
 The browser build has no virtual filesystem: the file-dialog entry is disabled, while all bundled
 themes and demonstration assets are embedded and remain available.
 
-`CARGO_TARGET_DIR` changes generated output locations. `MICROUI_WASM_BINDGEN` selects an
-already installed matching CLI, and `MICROUI_WEB_PROFILE=debug` enables a faster development build.
+`CARGO_TARGET_DIR` changes generated output locations. `NEOCOGI_WASM_BINDGEN` selects an
+already installed matching CLI, and `NEOCOGI_WEB_PROFILE=debug` enables a faster development build.
 The `frames` query parameter, such as `?frames=8`, renders a finite number of frames and then
 releases the session and host. Normal stop and asynchronous frame errors both break the RAF
 ownership cycle. A lost WebGL context requires recreating the window and its GPU resources;
@@ -90,7 +90,7 @@ the photograph and typed application actions, and checks both successful and fai
 teardown, including final application-state and canvas/textarea release.
 The script builds the wasm library test export, starts a temporary localhost server, and checks its
 result in headless Chromium. Set `CHROME_BIN` to a compatible executable or
-`MICROUI_BROWSER_TEST_PORT` to change the default port 8118. Generated bindings and result HTML
+`NEOCOGI_BROWSER_TEST_PORT` to change the default port 8118. Generated bindings and result HTML
 remain under `target/browser-input-tests` and `target/browser-full-tests`. The fixture covers DOM composition/paste, keyboard,
 wheel conversion, button chords, cancellation, and teardown. It stubs capture acquisition because
 synthetic pointer events cannot acquire native capture; trusted pointer/OS IME/mobile behavior

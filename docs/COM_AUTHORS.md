@@ -100,7 +100,7 @@ Standard facade snapshots implement `EventPayload`; custom snapshots implement i
 with their concrete sink interface and delivery method. Commit semantic state, then
 call `emit` with its owned snapshot. Implement the event capability by returning
 `source.subscribe(sink)`, and close ordinary sources when the widget logically closes.
-The [extension example](../plugins/extension-example) demonstrates the full object,
+The [extension example](../examples/ui-extension) demonstrates the full object,
 its inherited editing interface, and an application callback across separate binaries.
 Raw queue leases are available only through the facade's internal `test-support`
 feature for algorithm fixtures; ordinary applications use COM subscriptions.
@@ -842,7 +842,7 @@ before preparing actual depth-tested GPU work; it does not substitute CPU UI
 triangles for application rendering.
 
 Use `Painter::texture(rect, rgba, image)` and `Painter::item(rect, scene)` at the
-intended source position. The full example is `demos/com-slice/src/gpu.rs`. Scene edits
+intended source position. The full example is `demos/smoke/src/gpu.rs`. Scene edits
 normally change paint only: render again; a UI update is needed if widget geometry or
 other retained inputs also changed. Perform scene edits before painting. The GPU
 owner can detect its own active preparation/execution, but cannot detect a separate

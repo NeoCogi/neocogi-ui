@@ -4,7 +4,7 @@
 | --- | --- |
 | `neocogi-ui-contracts` | Plain resource records, semantic roles and typed COM interfaces. |
 | `neocogi-ui::assets` | Bounded portable data validation and immutable bundle publication. |
-| `plugins/assets` | PNG decoding, font rasterization, packing, theme/style compilation and source export. |
+| `crates/assets` | PNG decoding, font rasterization, packing, theme/style compilation and source export. |
 | `neocogi-ui-runtime` | Local IDs, text metrics, resolved appearances and retained layout/painting. |
 | `crates/render/plugin` and renderers | Pixel upload, GPU resources and ordered frame execution. |
 
@@ -13,7 +13,7 @@ fixtures and a native flat-palette reference remain test-only; they provide an
 independent check of portable compiler output. Runtime UI code only imports
 resolved resources.
 
-`microui-plugin-assets` without features registers the `PngDecoder` and
+`neocogi-assets` without features registers the `PngDecoder` and
 `StyleCompiler` classes. The decoder's `upload` method accepts one complete, nonempty PNG at offset zero and borrows an
 `ITextureFactory` for the upload. Encoded input and decoded RGBA storage each have
 a 64 MiB ceiling; dimensions are checked before pixel allocation and animated PNG
@@ -25,7 +25,7 @@ diagnostics because the decoder holds no mutable borrow across the upload.
 Enable `builder` to add font/atlas construction, or `theme-json` to add that builder
 and JSON themes. Native applications can ship PNG and style services independently of
 their precompiled atlas. Browser assemblies register the same decoder descriptor
-statically. The [asset plugin's decoder](../plugins/assets/src/png.rs) produces
+statically. The [asset plugin's decoder](../crates/assets/src/png.rs) produces
 packed RGBA bytes directly. None of the asset plugin's production feature sets
 links the UI implementation. Font and theme construction remain optional features.
 
@@ -49,10 +49,10 @@ every glyph they visit.
 The facade separates `assets::AssetTables` metadata from complete `assets::AssetData`
 pixel-bearing compiler output. `AssetData` produces the same `IAssetBundle` object from
 borrowed static tables or owned builder output. Neither type contains a UI implementation,
-font rasterizer, PNG decoder or JSON parser. `plugins/assets` packages the optional native
+font rasterizer, PNG decoder or JSON parser. `crates/assets` packages the optional native
 builder and, with `theme-json`, the theme compiler. Its objects expose ordinary typed
 interfaces and keep all native builder/path/decoder state in that binary.
-The [JSON compiler](../plugins/assets/src/theme.rs) reads a validated `AssetData`,
+The [JSON compiler](../crates/assets/src/theme.rs) reads a validated `AssetData`,
 rebuilds declared resources, and writes complete appearance tables directly.
 Plain geometry and semantic resource names live in contracts. The UI resolves
 those records into its own runtime IDs only when a bundle is installed.
@@ -60,7 +60,7 @@ In-memory compilation accepts an explicit `AssetSource` implementation for
 referenced files; filesystem compilation uses the bounded `FileAssets` source.
 
 ```rust,ignore
-let assets = neocogi_ui_demo_assets::load_bundle()?;
+let assets = neocogi_demo_assets::load_bundle()?;
 let native = platform.create_window(
     NcCopyFromBufferOffset::new(0, b"Application"),
     Size { width: 800, height: 600 },
@@ -186,7 +186,7 @@ The receiving GPU may impose a smaller texture dimension limit than the portable
 ## Optional construction and themes
 
 `AssetLoader::create_builder(size, white_path)` starts a native builder.
-Its [implementation](../plugins/assets/src/atlas.rs) packs RGBA pixels and font
+Its [implementation](../crates/assets/src/atlas.rs) packs RGBA pixels and font
 records directly into `AssetData`; it constructs no UI atlas handles or skins.
 `add_icon(name, path)` and `add_font(name, path, pixels)` add distinct names;
 duplicates are rejected. Native filesystem paths retain exact Unix bytes or Windows
@@ -241,7 +241,7 @@ Compilation remains usable after a UI closes because the service owns no UI stat
 
 ## Compiled resources and packaging
 
-`microui_plugin_assets::export::write_rust(&data, path)` (feature `save-to-rust`)
+`neocogi_assets::export::write_rust(&data, path)` (feature `save-to-rust`)
 atomically writes one self-contained source
 file from validated `AssetData`. The UI crate has no builder, PNG, JSON or source
 export features. Cargo build scripts and command-line tools call the same asset
@@ -253,13 +253,13 @@ pixels into one owned allocation, and owns the resolved visual arrays. No genera
 file exposes `AtlasHandle`, native IDs, UI implementation storage or parser APIs.
 
 ```sh
-cargo run -p neocogi-ui-tools --bin atlas-export -- --output bundle.rs
-cargo com-build --demo full --backend glow
-cargo com-build --demo full --backend glow --assets embedded
+cargo run -p neocogi-asset-tools --bin atlas-export -- --output bundle.rs
+cargo neocogi build --assembly full --variant glow
+cargo neocogi build --assembly full --variant glow --variant embedded
 ```
 
-The stage is `target/com-native/{profile}/{backend}/{asset-mode}/{demo}`. Native
-`files` is the default: it contains the runtime, UI/platform/asset libraries and
+The command prints its managed staging directory under `target/neocogi`. Native
+file assets are the default: the assembly contains the runtime, UI/renderer/asset libraries and
 adjacent assets. The asset plugin builds the atlas from font/icon files and loads
 JSON themes; the host does not embed the photo, mesh or compiled atlases. Register
 the plugin catalog before loading a bundle. Resource paths resolve against the

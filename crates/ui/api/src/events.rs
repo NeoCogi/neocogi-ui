@@ -267,41 +267,36 @@ pub struct Activation {
     pub label: String,
 }
 
-/// Static adapter for concrete widget types that publish labelled activation.
+/// Typed adapter for concrete widgets or an explicitly queried activation capability.
 pub trait ActivationSource {
     /// Connects one sink through the concrete class or shared interface that owns the source.
-    fn subscribe_activation_sink(
-        &self,
-        sink: ComRef<'_, IActivationSinkAbi>,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
+    fn subscribe_activation_sink(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
+}
+
+impl ActivationSource for ComPtr<IActivationEventsAbi> {
+    /// External widgets subscribe through the standard capability queried once during wiring.
+    fn subscribe_activation_sink(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.subscribe(sink)
+    }
 }
 
 impl ActivationSource for ButtonWidget {
     /// Buttons expose subscription directly on their callable class contract.
-    fn subscribe_activation_sink(
-        &self,
-        sink: ComRef<'_, IActivationSinkAbi>,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_activation_sink(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.as_interface().subscribe(sink)
     }
 }
 
 impl ActivationSource for ListItemWidget {
     /// List rows expose subscription directly on their callable class contract.
-    fn subscribe_activation_sink(
-        &self,
-        sink: ComRef<'_, IActivationSinkAbi>,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_activation_sink(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.as_interface().subscribe(sink)
     }
 }
 
 impl ActivationSource for ListBoxWidget {
     /// List boxes expose subscription directly on their callable class contract.
-    fn subscribe_activation_sink(
-        &self,
-        sink: ComRef<'_, IActivationSinkAbi>,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_activation_sink(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.as_interface().subscribe(sink)
     }
 }
@@ -496,12 +491,23 @@ pub struct TextChanged {
     pub cursor: u64,
 }
 
-/// Static facade hook shared by the concrete Textbox and TextArea class wrappers.
+/// Typed facade hook shared by built-ins and explicitly queried text-event capabilities.
 pub trait TextEventSource {
     /// Connects a changed-text sink through the concrete class contract.
     fn subscribe_changed_sink(&self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
     /// Connects a submitted-text sink through the concrete class contract.
     fn subscribe_submitted_sink(&self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
+}
+
+impl TextEventSource for ComPtr<ITextEventsAbi> {
+    /// External editors subscribe through the standard capability queried once during wiring.
+    fn subscribe_changed_sink(&self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.as_com_ref().subscribe_changed(sink)
+    }
+    /// External editors reuse the same capability for their independent submission port.
+    fn subscribe_submitted_sink(&self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.as_com_ref().subscribe_submitted(sink)
+    }
 }
 
 impl TextEventSource for crate::TextboxWidget {
@@ -525,6 +531,7 @@ impl TextEventSource for crate::TextAreaWidget {
         self.as_interface().subscribe_submitted(sink)
     }
 }
+
 #[com_object(interfaces(ITextChangedSink))]
 /// Concrete local sink specialization stores application state and its exact handler type directly.
 struct TextChangedSink<State: 'static, Handler: EventHandler<State, TextChanged> + 'static> {
@@ -836,7 +843,6 @@ impl source::EventPayload for FileDialogCompleted {
         }
     }
 }
-
 
 /// One concrete serializer per standard snapshot; native Rust payloads never cross the ABI.
 macro_rules! event_payload {

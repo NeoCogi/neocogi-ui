@@ -155,17 +155,18 @@ The proposed product crates are:
 | `neocogi-ui-contracts` | Small statically linked contract library | Interfaces, records, enums, IDs and status codes; preferably no_std |
 | `neocogi-ui` | Statically linked Rust façade | Generic proxies, typed constructors, string/path conversion and scoped convenience APIs |
 | `neocogi-ui-runtime` | UI plugin implementation | Existing retained engine, widgets, containers, menus, window manager and standard dialogs |
-| `microui-platform` | Platform/render plugin assembly | Native host/window + selected backend and app GPU extension composition |
-| Existing renderer crates | Private static implementation libraries | Glow/Vulkan/WGPU/WebGL algorithms and native resource management inside the platform binary |
-| Existing renderer-support | Private static helper library | Shared renderer helpers; no independent plugin |
-| `microui-assets` | Optional plugin implementation | Builder, PNG/font loading and optional theme JSON |
-| Demo crates / xtask | Applications and tools | Application state, packaging, backend selection and validation |
+| `neocogi-render-plugin` | Renderer plugin implementation | Native host/window plus exactly one selected backend and app GPU extension composition |
+| `neocogi-render-core` | Private static SPI library | Backend-neutral frame, texture, color, and upload contracts shared without linking the UI runtime |
+| `neocogi-render-{glow,vulkan,wgpu,webgl}` | Private static implementation libraries | Backend algorithms and native resource management inside the selected renderer plugin |
+| `neocogi-render-support` | Private static helper library | Shared renderer helpers; no independent plugin |
+| `neocogi-assets` | Optional plugin implementation | Builder, PNG/font loading and optional theme JSON |
+| Demo and tool crates | Applications and tools | Application state, packaging, backend selection and validation |
 
 This keeps three logical plugin groups. `neocogi-render-plugin` compiles one selected renderer per artifact and assigns Glow, Vulkan, WGPU, and WebGL distinct plugin identities; an ordinary assembly loads only its selected backend.
 
 Each renderer plugin deliberately combines OS-window and GPU ownership. A renderer receives Rust `sdl2::Window`, `Rc<glow::Context>`, or native WGPU/Ash types. Those cannot cross the COM boundary as ordinary Rust values. Their creation and ownership stay in one binary. A native window/session object exposes both `IPlatformWindow` and `IRenderer` on the same COM identity. Multiple native windows create multiple such objects.
 
-The reusable renderer crates contain the backend implementation; the plugin shell supplies the actual host/window integration. An embedding application can provide a different renderer plugin. Supporting pre-existing external native windows would require an explicit platform-specific native-surface capability and its lifetime contract; it must not be implemented as a public `usize`/void-pointer escape hatch.
+The reusable renderer crates contain the backend implementation; the plugin shell supplies the actual host/window integration. `neocogi-render-core` is deliberately not a plugin: it is a small Rust-only SPI linked into the UI runtime and renderer artifacts, and has no dependency on the UI implementation. An embedding application can provide a different renderer plugin. Supporting pre-existing external native windows would require an explicit platform-specific native-surface capability and its lifetime contract; it must not be implemented as a public `usize`/void-pointer escape hatch.
 
 Distinguish the OS window from microui's logical retained windows. Logical windows, child windows, dialogs and popups remain managed by the UI plugin's window manager.
 

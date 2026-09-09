@@ -23,11 +23,12 @@ dynamic-plugin = []
 neocogi-ui.workspace = true
 neocogi-ui-contracts.workspace = true
 neocogi-com = { workspace = true, features = ["macros", "std"] }
+neocogi-render-core.workspace = true
 bitflags.workspace = true
 rs-math3d.workspace = true
 
 [dev-dependencies]
-microui-plugin-assets.workspace = true
+neocogi-assets.workspace = true
 neocogi-ui = { workspace = true, features = ["test-support"] }
 rand.workspace = true
 tempfile.workspace = true

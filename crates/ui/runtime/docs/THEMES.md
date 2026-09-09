@@ -1,10 +1,10 @@
 # JSON themes
 
-Enable `theme-json` on `microui-plugin-assets` to compile strict, versioned JSON
+Enable `theme-json` on `neocogi-assets` to compile strict, versioned JSON
 and bake referenced fonts and PNGs into portable resource tables. It is optional;
 the UI implementation has no JSON feature or file-loading API. Native applications
 construct `ThemeLoader` and pass an explicit original base bundle. Build tools call
-`microui_plugin_assets::theme::load` or `load_bytes`; the latter reads referenced
+`neocogi_assets::theme::load` or `load_bytes`; the latter reads referenced
 assets through an explicit `AssetSource` implementation. `LoadedTheme` contains a
 display name and validated `AssetData`, with no native UI skin or resource IDs.
 
@@ -28,7 +28,7 @@ artwork authored for this project; their directory READMEs identify the GTK, pla
 and gallery references used for visual research and explicitly document that no third-party theme
 files were copied.
 
-`demo-full` loads the Default Skin and every bundled file once at startup. Choose them from
+The full demo loads the Default Skin and every bundled file once at startup. Choose them from
 `View > Theme`; each selection installs a pristine editable copy, so the existing Skin Editor can
 modify it without changing the stored base theme. Native file packages enable the
 asset plugin's `theme-json` feature and stage the theme directories beside the

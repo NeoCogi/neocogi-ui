@@ -1,0 +1,33 @@
+[package]
+name = "neocogi-demo-host"
+version = "0.0.0"
+publish = false
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+# Native selection belongs to the separately built renderer plugin.
+glow = []
+vulkan = []
+wgpu = []
+webgl = ["neocogi-render-plugin/webgl"]
+# Browser modules link the same optional decoder/style descriptor staged as a native asset plugin.
+png-assets = ["dep:neocogi-assets"]
+
+[dependencies]
+neocogi-ui.workspace = true
+neocogi-com = { workspace = true, features = ["std", "macros"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+neocogi-com = { workspace = true, features = ["runtime"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+neocogi-com = { workspace = true, features = ["static-runtime"] }
+neocogi-ui-runtime = { path = "../../crates/ui/runtime" }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "d58ad24f847c767097b39910a551d9a5ff2ce274", default-features = false }
+neocogi-assets = { path = "../../crates/assets", optional = true, default-features = false }
+wasm-bindgen.workspace = true
+web-sys = { workspace = true, features = ["Window", "Performance", "Location", "UrlSearchParams", "console"] }

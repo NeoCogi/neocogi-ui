@@ -23,7 +23,7 @@ users can select those versions from crates.io.
 The UI plugin owns retained widget/window-manager behavior. The renderer plugin
 owns the OS window, device and native renderer together. Applications retain typed
 COM capabilities and drive the copied input/update/render sequence; Rust SDL/GPU
-owners stay inside the platform implementation.
+owners stay inside the renderer implementation.
 
 The workspace includes native SDL/Glow, Vulkan and WGPU assemblies and a static
 browser assembly using WebGL2 and DOM input/IME. Linux CI runs the real packaged
