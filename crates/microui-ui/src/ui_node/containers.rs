@@ -178,7 +178,7 @@ mod disclosure;
 mod grid;
 mod linear;
 mod scroll_area;
-pub(crate) use scroll_area::{ScrollComposition, ScrollModel, ScrollSurface};
+pub(crate) use scroll_area::{ScrollComposition, ScrollModel, ScrollParts};
 
 pub use disclosure::{Disclosure};
 #[cfg(test)]

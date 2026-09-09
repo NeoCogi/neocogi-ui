@@ -72,7 +72,9 @@ pub(crate) use crate::test_support::widget::WidgetStorage;
 #[cfg(test)]
 pub use crate::test_support::{widget::TypedWidgetHandle, container::Container, children::ChildrenHandle};
 pub mod widgets;
-pub use widgets::{Scrollbar, ScrollbarAxis, ScrollbarChanged, ScrollbarParameters};
+pub use widgets::{ScrollbarAxis, ScrollbarChanged, ScrollbarParameters};
+#[cfg(test)]
+pub use widgets::Scrollbar;
 
 mod children;
 pub use children::Children;
@@ -89,7 +91,7 @@ pub(crate) use runtime::RuntimeMetrics;
 mod container;
 pub use container::{ContainerLayoutCtx, ContainerWidget, MeasureCtx};
 mod containers;
-pub(crate) use containers::{ScrollComposition, ScrollModel, ScrollSurface};
+pub(crate) use containers::{ScrollComposition, ScrollModel, ScrollParts};
 pub use containers::{Disclosure, Grid, Linear, ScrollArea};
 #[cfg(test)]
 pub use containers::LinearCrossSize;

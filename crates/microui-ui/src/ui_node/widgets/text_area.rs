@@ -300,7 +300,7 @@ impl TextEditor {
         let (scroll_handle, root) = ScrollArea::create(ScrollAreaParameters::new(scroll_options, editor_node));
 
         // Retain only the parent's explicit scalar model, which owns no widget or child collection.
-        let model = scroll_handle.try_read(|scroll| scroll.model.clone()).expect("newly composed scroll model");
+        let model = scroll_handle.try_read(|scroll| scroll.shared_model()).expect("newly composed scroll model");
         editor_handle
             .try_update_without_measurement(|editor| editor.scroll_area = Some(model))
             .expect("newly composed TextEditor content must remain mounted in its ScrollArea");
@@ -1019,7 +1019,7 @@ impl TextArea {
     ) -> Result<Self, NcStatus> {
         let text_value = crate::com::text(input)?;
         let wrap = crate::com::widget::local_wrap(wrapping)?;
-        let parts = crate::com::scroll::ScrollParts::prepare(host.clone(), scrolling, resources)?;
+        let parts = crate::ui_node::ScrollParts::prepare(host.clone(), scrolling, resources)?;
         let text = TextEditor::create_com(host.clone(), text_value, wrap, parts.model.clone(), resources)?;
         let font = text.query()?;
         let events = text.query()?;

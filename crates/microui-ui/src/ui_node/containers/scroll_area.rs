@@ -36,9 +36,7 @@ use std::cell::RefCell;
 
 use bitflags::bitflags;
 
-use crate::ui_node::widgets::{ScrollbarAxis};
-#[cfg(test)]
-use crate::ui_node::widgets::{Scrollbar, ScrollbarParameters};
+use crate::ui_node::widgets::{Scrollbar, ScrollbarAxis, ScrollbarParameters};
 use crate::{
     ChildParticipation, ContainerWidget, Dimensioni, FrameRole, MeasureCtx, Recti, UiInputEvent, Vec2i, Widget, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx,
 };
@@ -291,18 +289,18 @@ pub struct ScrollArea {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::com::widget::WidgetRuntime,
     /// Exactly three owned structural children: surface and both scrollbar objects.
-    pub(crate) editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+    editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
     /// Private writer for the surface's single replaceable application child.
-    pub(crate) content: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+    content: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
     /// Same scrolling values used by the actual bars, transform surface and optional text editor.
-    pub(crate) model: Rc<ScrollModel>,
+    model: Rc<ScrollModel>,
     /// Native fixture policy; deployed common state owns the authoritative frame options.
     #[cfg(test)]
     opt: WidgetOption,
 }
 impl ScrollArea {
     /// Combines the fixed structural tree and shared scroll model with one concrete runtime.
-    pub(crate) fn from_runtime(
+    fn from_runtime(
         runtime: crate::com::widget::WidgetRuntime,
         editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
         content: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
@@ -325,6 +323,13 @@ impl ScrollArea {
             opt,
         }
     }
+
+    /// Clones the scalar model for a native composed editor without exposing structural children.
+    #[cfg(test)]
+    pub(crate) fn shared_model(&self) -> Rc<ScrollModel> {
+        self.model.clone()
+    }
+
     /// Returns the requested offsets owned by the actual scrollbar state.
     #[cfg(test)]
     pub fn offset(&self) -> Vec2i {
@@ -387,18 +392,18 @@ impl ScrollComposition for ScrollArea {
 
 /// The transform boundary between the viewport and its ordinary content node.
 #[nc_com::com_object(interfaces(microui_contracts::IWidget, microui_contracts::IContainerLayout))]
-pub(crate) struct ScrollSurface {
+struct ScrollSurface {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::com::widget::WidgetRuntime,
     /// Sole writer for the one application content child mounted through COM.
-    pub(crate) editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
+    editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
     /// Shares actual axis requests without a reference to the owning parent widget.
-    pub(crate) model: Rc<ScrollModel>,
+    model: Rc<ScrollModel>,
 }
 
 impl ScrollSurface {
     /// Combines one fixed content writer with the shared scroll scalar model.
-    pub(crate) fn from_runtime(
+    fn from_runtime(
         runtime: crate::com::widget::WidgetRuntime,
         editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
         model: Rc<ScrollModel>,
@@ -699,7 +704,7 @@ impl ScrollArea {
         let (_, surface_container) = Container::from_shared(content, surface);
         let runtime = crate::com::widget::WidgetRuntime::for_test(surface_opt);
         let host = runtime.state.host().add_ref();
-        let parts = crate::com::scroll::ScrollParts::prepare(host, enabled, None)
+        let parts = ScrollParts::prepare(host, enabled, None)
             .expect("native scroll fixture builds the same fixed COM topology");
         let widget = ScrollArea::from_runtime(runtime, parts.editor, parts.content, model);
         let children = Rc::new(RefCell::new(
@@ -749,6 +754,106 @@ impl crate::com::widget::HostedWidget for ScrollSurface {
     /// Closes the sole content child when this structural surface is retired.
     fn close_contents(&mut self) -> Result<(), nc_com::NcStatus> {
         self.editor.close()?.finish()
+    }
+}
+
+use crate::com::widget::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_scrolling_impl, direct_widget_phase_impl};
+use microui_contracts::{ChildEditResult, IChildrenEditorAbi, IWidgetAbi, IWidgetHostAbi, ScrollAreaAbi};
+use nc_com::{ComPtr, ComRef, NcStatus};
+
+direct_widget_phase_impl!(ScrollSurface);
+direct_container_layout_impl!(ScrollSurface);
+direct_widget_phase_impl!(ScrollArea);
+direct_container_layout_impl!(ScrollArea);
+direct_scrolling_impl!(ScrollArea);
+
+/// Prepared fixed scroll topology shared by ScrollArea and TextArea construction.
+///
+/// This value is consumed into one final object; it never becomes a second widget or live owner.
+pub(crate) struct ScrollParts {
+    /// Fixed surface and actual scrollbar topology.
+    pub(crate) editor: ComPtr<IChildrenEditorAbi>,
+    /// Private insertion authority for the surface's single content child.
+    pub(crate) content: ComPtr<IChildrenEditorAbi>,
+    /// Scalar model supplied to editable content before attachment.
+    pub(crate) model: Rc<ScrollModel>,
+}
+
+impl ScrollParts {
+    /// Builds every structural role before attaching application or editor content.
+    pub(crate) fn prepare(
+        host: ComPtr<IWidgetHostAbi>,
+        enabled: bool,
+        resources: Option<&crate::com::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        host.check_mutation()?;
+        let horizontal_parameters = ScrollbarParameters::new(ScrollbarAxis::Horizontal);
+        let horizontal_options = horizontal_parameters.opt;
+        let horizontal_runtime = WidgetRuntime::for_resources(host.clone(), horizontal_options, resources)?;
+        let horizontal = Scrollbar::from_runtime(horizontal_runtime, horizontal_parameters);
+        let vertical_parameters = ScrollbarParameters::new(ScrollbarAxis::Vertical);
+        let vertical_options = vertical_parameters.opt;
+        let vertical_runtime = WidgetRuntime::for_resources(host.clone(), vertical_options, resources)?;
+        let vertical = Scrollbar::from_runtime(vertical_runtime, vertical_parameters);
+        let model = ScrollModel::new(horizontal.axis_state.clone(), vertical.axis_state.clone(), enabled);
+        let horizontal = horizontal.into_com();
+        let vertical = vertical.into_com();
+        let content = host.create_children()?;
+        let surface_runtime = WidgetRuntime::for_resources(host.clone(), crate::WidgetOption::NO_INTERACT, resources)?;
+        let surface = ScrollSurface::from_runtime(surface_runtime, content.clone(), model.clone());
+        let surface: ComPtr<IWidgetAbi> = ScrollSurface::from_value(surface)
+            .query()
+            .expect("ScrollSurface declares its widget and container-layout capabilities");
+        let editor = host.create_children()?;
+        editor.insert(0, surface.as_com_ref())?.finish()?;
+        editor.insert(1, horizontal.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
+        editor.insert(2, vertical.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
+        Ok(Self { editor, content, model })
+    }
+}
+
+impl ScrollArea {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(crate) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: crate::com::widget::SharedAssets,
+        content: ComRef<'_, IWidgetAbi>,
+        enabled: bool,
+    ) -> Result<ComPtr<ScrollAreaAbi>, NcStatus> {
+        let value = Self::build(host, content, enabled, Some(&resources))?;
+        Ok(Self::from_value(value).query().expect("ScrollArea declares its callable class contract"))
+    }
+
+    /// Builds the fixed scroll composition with either direct or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        content: ComRef<'_, IWidgetAbi>,
+        enabled: bool,
+        resources: Option<&crate::com::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let parts = ScrollParts::prepare(host.clone(), enabled, resources)?;
+        parts.content.insert(0, content)?.finish()?;
+        let runtime = WidgetRuntime::for_resources(host, crate::WidgetOption::FRAME, resources)?;
+        Ok(Self::from_runtime(runtime, parts.editor, parts.content, parts.model))
+    }
+}
+
+impl microui_contracts::ScrollArea for ScrollArea {
+    /// Completes internal construction before consuming the content's sole attachment claim.
+    fn new(host: ComRef<'_, IWidgetHostAbi>, content: ComRef<'_, IWidgetAbi>, enabled: bool) -> Result<Self, NcStatus> {
+        Self::build(host.add_ref(), content, enabled, None)
+    }
+
+    /// Reads the actual content identity through the fixed one-child surface writer.
+    fn content(&self) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
+        self.runtime().state.readable()?;
+        self.content.view()?.child(0)
+    }
+
+    /// Replaces only application content while preserving every fixed structural role.
+    fn replace_content(&mut self, content: ComRef<'_, IWidgetAbi>) -> Result<ChildEditResult, NcStatus> {
+        self.runtime().state.writable()?;
+        self.content.replace(0, content)
     }
 }
 

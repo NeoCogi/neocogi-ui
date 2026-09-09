@@ -27,7 +27,6 @@ mod paint;
 mod render;
 pub(crate) use render::color;
 mod runtime;
-pub(crate) mod scroll;
 pub use crate::ui_node::ScrollArea;
 pub use crate::ui_node::widgets::TextArea;
 mod ui_factory;
