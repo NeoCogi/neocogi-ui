@@ -25,12 +25,11 @@ repository = "https://github.com/NeoCogi/neocogi-platform"
 
 [workspace.dependencies]
 neocogi-ui-contracts = { path = "crates/ui/contracts" }
-neocogi-com-core = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "d6f4d4b0ad3e588333a4ade9594e836ce216b9ab", version = "0.1.0", default-features = false }
-neocogi-com-macros = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "d6f4d4b0ad3e588333a4ade9594e836ce216b9ab", version = "0.1.0", default-features = false }
-neocogi-com = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "d6f4d4b0ad3e588333a4ade9594e836ce216b9ab", version = "0.1.0", default-features = false }
-neocogi-com-runtime-sys = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "d6f4d4b0ad3e588333a4ade9594e836ce216b9ab", version = "0.1.0", default-features = false }
-neocogi-com-runtime = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "d6f4d4b0ad3e588333a4ade9594e836ce216b9ab", version = "0.1.0", default-features = false }
-proc-macro-crate = "3"
+neocogi-com-core = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "51975564614b6a6b3c457f24763b3382b38955ba", version = "0.1.0", default-features = false }
+neocogi-com-macros = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "51975564614b6a6b3c457f24763b3382b38955ba", version = "0.1.0", default-features = false }
+neocogi-com = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "51975564614b6a6b3c457f24763b3382b38955ba", version = "0.1.0", default-features = false }
+neocogi-com-runtime-sys = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "51975564614b6a6b3c457f24763b3382b38955ba", version = "0.1.0", default-features = false }
+neocogi-com-runtime = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "51975564614b6a6b3c457f24763b3382b38955ba", version = "0.1.0", default-features = false }
 proc-macro2 = "1"
 quote = "1"
 syn = { version = "2", features = ["full", "extra-traits"] }
@@ -40,13 +39,13 @@ neocogi-ui-runtime = { path = "crates/ui/runtime", version = "0.9.0-alpha.0", de
 neocogi-demo-assets = { path = "demos/assets", default-features = false }
 neocogi-demo-host = { path = "demos/host", default-features = false }
 neocogi-demo-contracts = { path = "demos/contracts" }
-neocogi-demo-renderer = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "d58ad24f847c767097b39910a551d9a5ff2ce274", default-features = false }
-neocogi-render-core = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "d58ad24f847c767097b39910a551d9a5ff2ce274" }
-neocogi-render-support = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "d58ad24f847c767097b39910a551d9a5ff2ce274" }
-neocogi-render-glow = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "d58ad24f847c767097b39910a551d9a5ff2ce274" }
-neocogi-render-webgl = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "d58ad24f847c767097b39910a551d9a5ff2ce274" }
-neocogi-render-vulkan = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "d58ad24f847c767097b39910a551d9a5ff2ce274" }
-neocogi-render-wgpu = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "d58ad24f847c767097b39910a551d9a5ff2ce274" }
+neocogi-demo-renderer = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "f21500edfb2f263188b5f9615ffd18a7493a3242", default-features = false }
+neocogi-render-core = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "f21500edfb2f263188b5f9615ffd18a7493a3242" }
+neocogi-render-support = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "f21500edfb2f263188b5f9615ffd18a7493a3242" }
+neocogi-render-glow = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "f21500edfb2f263188b5f9615ffd18a7493a3242" }
+neocogi-render-webgl = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "f21500edfb2f263188b5f9615ffd18a7493a3242" }
+neocogi-render-vulkan = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "f21500edfb2f263188b5f9615ffd18a7493a3242" }
+neocogi-render-wgpu = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "f21500edfb2f263188b5f9615ffd18a7493a3242" }
 
 ash = { version = "0.38", default-features = false, features = ["linked"] }
 ash-window-handle = { package = "ash-window", version = "0.13" }

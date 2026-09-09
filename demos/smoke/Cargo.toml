@@ -29,7 +29,7 @@ neocogi-demo-assets.workspace = true
 # Build the shared artifacts as dependencies; native startup still loads their C ABI.
 neocogi-com-runtime.workspace = true
 neocogi-ui-runtime = { path = "../../crates/ui/runtime", features = ["dynamic-plugin"] }
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "d58ad24f847c767097b39910a551d9a5ff2ce274", default-features = false, features = ["dynamic-plugin"] }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "f21500edfb2f263188b5f9615ffd18a7493a3242", default-features = false, features = ["dynamic-plugin"] }
 neocogi-assets = { workspace = true, features = ["dynamic-plugin", "theme-json"] }
 neocogi-example-ui-extension = { path = "../../examples/ui-extension", optional = true, features = ["dynamic-plugin"] }
 

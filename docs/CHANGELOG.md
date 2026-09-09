@@ -14,6 +14,9 @@ wrappers. The accepted migration and outstanding validation are recorded in
   borrowed clients, callable class contracts with typed constructor frames,
   class-required shared protocols, generic owned local classes, static runtime
   binding and explicit dynamic plugin exports.
+- Stop inspecting Cargo manifests during COM macro expansion. Generated code uses
+  the canonical `::neocogi_com` path or an explicit facade override, removing
+  `proc-macro-crate` and its TOML parser from application and plugin builds.
 - Reserve `#[com_class]` for callable contract traits and use
   `#[com_object(Class)]` or `#[com_object(interfaces(...))]` for concrete Rust
   implementations. Class declarations therefore describe the public boundary,
