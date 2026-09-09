@@ -391,9 +391,9 @@ pub(crate) use direct_leaf_layout_impl;
 /// Implements scoped layout directly on a concrete container allocation.
 macro_rules! direct_container_layout_impl {
     ($name:ty) => {
-        impl IContainerLayout for $name {
+        impl microui_contracts::IContainerLayout for $name {
             /// Returns the read-only view paired with this concrete container's private writer.
-            fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
+            fn children(&self) -> Result<nc_com::ComPtr<microui_contracts::IChildrenAbi>, nc_com::NcStatus> {
                 <$name as crate::com::widget::HostedWidget>::runtime(self).state.readable()?;
                 self.editor.view()
             }
@@ -401,10 +401,10 @@ macro_rules! direct_container_layout_impl {
             /// Measures the concrete container against the caller's scoped child service.
             fn measure(
                 &mut self,
-                scope: LayoutScope,
-                bounds: LayoutLimits,
-                service: ComRef<'_, ILayoutServiceAbi>,
-            ) -> Result<Size, NcStatus> {
+                scope: microui_contracts::LayoutScope,
+                bounds: microui_contracts::LayoutLimits,
+                service: nc_com::ComRef<'_, microui_contracts::ILayoutServiceAbi>,
+            ) -> Result<microui_contracts::Size, nc_com::NcStatus> {
                 <$name as crate::com::widget::HostedWidget>::runtime(self).state.readable()?;
                 let constraints = crate::com::layout::constraints(bounds)?;
                 let layout = crate::com::layout::ScopedLayout::new(scope, service)?;
@@ -413,7 +413,7 @@ macro_rules! direct_container_layout_impl {
                 let mut ctx = crate::MeasureCtx::scoped(assets.bundle().skin(), assets.bundle().atlas(), layout);
                 let size = crate::ContainerWidget::measure(self, &mut ctx, constraints);
                 ctx.result()?;
-                Ok(Size {
+                Ok(microui_contracts::Size {
                     width: size.width.max(0),
                     height: size.height.max(0),
                 })
@@ -422,13 +422,13 @@ macro_rules! direct_container_layout_impl {
             /// Places the concrete container and returns only its copied child geometry.
             fn place(
                 &mut self,
-                scope: LayoutScope,
-                rect: Rect,
-                service: ComRef<'_, ILayoutServiceAbi>,
-            ) -> Result<ContainerGeometry, NcStatus> {
+                scope: microui_contracts::LayoutScope,
+                rect: microui_contracts::Rect,
+                service: nc_com::ComRef<'_, microui_contracts::ILayoutServiceAbi>,
+            ) -> Result<microui_contracts::ContainerGeometry, nc_com::NcStatus> {
                 <$name as crate::com::widget::HostedWidget>::runtime(self).state.readable()?;
                 if rect.width < 0 || rect.height < 0 {
-                    return Err(NC_E_INVALID_ARG);
+                    return Err(nc_com::NC_E_INVALID_ARG);
                 }
                 let layout = crate::com::layout::ScopedLayout::new(scope, service)?;
                 let assets = <$name as crate::com::widget::HostedWidget>::runtime_mut(self).resources()?;
@@ -436,26 +436,28 @@ macro_rules! direct_container_layout_impl {
                 let mut ctx = crate::ContainerLayoutCtx::scoped(
                     assets.bundle().skin(),
                     assets.bundle().atlas(),
-                    local_rect(rect),
+                    crate::com::local_rect(rect),
                     layout,
                 );
-                crate::ContainerWidget::place(self, &mut ctx, local_rect(rect));
+                crate::ContainerWidget::place(self, &mut ctx, crate::com::local_rect(rect));
                 ctx.result()
             }
 
             /// Applies the concrete container's post-target event filtering policy.
             fn accepts_event(
                 &self,
-                event: WidgetEventAbi,
-                text: NcCopyFromBufferOffset<'_, u8>,
-            ) -> Result<bool, NcStatus> {
+                event: microui_contracts::WidgetEventAbi,
+                text: nc_com::NcCopyFromBufferOffset<'_, u8>,
+            ) -> Result<bool, nc_com::NcStatus> {
                 <$name as crate::com::widget::HostedWidget>::runtime(self).state.readable()?;
-                let event = crate::com::input::local_event(event, text)?;
+                let event = crate::com::local_event(event, text)?;
                 Ok(event.is_some_and(|event| crate::ContainerWidget::accepts_event(self, &event)))
             }
         }
     };
 }
+
+pub(crate) use direct_container_layout_impl;
 
 
 /// Static typography access implemented only by semantic states which own a font.
@@ -475,46 +477,48 @@ pub(crate) trait IconState: WidgetAlgorithm {
 /// Implements shared scrolling calls directly on a concrete fixed-composition class.
 macro_rules! direct_scrolling_impl {
     ($name:ty) => {
-        impl IScrolling for $name {
+        impl microui_contracts::IScrolling for $name {
             /// Reads one coherent snapshot from the scalar model shared with both scrollbar children.
-            fn info(&self) -> Result<ScrollInfo, NcStatus> {
+            fn info(&self) -> Result<microui_contracts::ScrollInfo, nc_com::NcStatus> {
                 <$name as crate::com::widget::HostedWidget>::runtime(self).state.readable()?;
                 Ok(self.model.com_info())
             }
 
             /// Records a sticky nonnegative request for the next concrete placement.
-            fn set_offset(&mut self, offset: Point) -> Result<(), NcStatus> {
+            fn set_offset(&mut self, offset: microui_contracts::Point) -> Result<(), nc_com::NcStatus> {
                 <$name as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
                 self.model.set_offset(crate::Vec2i::new(offset.x, offset.y));
                 Ok(())
             }
 
             /// Changes wheel and scrollbar participation through the shared scalar model.
-            fn set_enabled(&mut self, enabled: bool) -> Result<(), NcStatus> {
+            fn set_enabled(&mut self, enabled: bool) -> Result<(), nc_com::NcStatus> {
                 <$name as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
                 self.model.set_enabled(enabled);
                 Ok(())
             }
 
             /// Preserves an end request until placement installs the freshly measured range.
-            fn scroll_to_end(&mut self) -> Result<(), NcStatus> {
+            fn scroll_to_end(&mut self) -> Result<(), nc_com::NcStatus> {
                 <$name as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
                 self.model.scroll_to_end();
                 Ok(())
             }
 
             /// Validates one content-local rectangle before changing either requested axis.
-            fn reveal(&mut self, rect: Rect) -> Result<(), NcStatus> {
+            fn reveal(&mut self, rect: microui_contracts::Rect) -> Result<(), nc_com::NcStatus> {
                 <$name as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
                 if rect.x < 0 || rect.y < 0 || rect.width < 0 || rect.height < 0 {
-                    return Err(NC_E_INVALID_ARG);
+                    return Err(nc_com::NC_E_INVALID_ARG);
                 }
-                self.model.reveal(local_rect(rect));
+                self.model.reveal(crate::com::local_rect(rect));
                 Ok(())
             }
         }
     };
 }
+
+pub(crate) use direct_scrolling_impl;
 
 
 /// Resolves one concrete font-role vocabulary for both widget and compact menu presentation.

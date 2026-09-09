@@ -98,9 +98,9 @@ pub use number::{Number, NumberChanged, NumberParameters};
 pub use numeric_edit::{DecimalPrecision};
 pub use scrollbar::{Scrollbar, ScrollbarAxis, ScrollbarChanged, ScrollbarParameters};
 pub use slider::{Slider, SliderChanged, SliderParameters};
-pub use text_area::{TextArea, TextAreaChanged, TextAreaSubmitted, TextEditor};
+pub use text_area::{TextArea, TextAreaChanged, TextAreaSubmitted};
 #[cfg(test)]
-pub use text_area::{TextAreaParameters};
+pub use text_area::{TextAreaParameters, TextEditor};
 pub use text_block::{TextBlock, TextBlockParameters};
 pub use textbox::{Textbox, TextboxChanged, TextboxParameters, TextboxSubmitted};
 

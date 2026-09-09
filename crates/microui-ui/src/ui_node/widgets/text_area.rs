@@ -880,6 +880,227 @@ impl crate::com::widget::FontState for TextEditor {
     }
 }
 
+use crate::com::widget::{
+    HostedWidget, direct_container_layout_impl, direct_leaf_layout_impl, direct_scrolling_impl, direct_widget_phase_impl, set_direct_font_role,
+    set_direct_named_font,
+};
+use microui_contracts::{
+    GeometryChange, IEventSubscriptionAbi, IFontStyle, IMultilineEditor, IMultilineEditorAbi, ITextChangedSinkAbi, ITextContent, ITextEditor, ITextEvents,
+    ITextSubmittedSinkAbi, IWidgetAbi, IWidgetHostAbi, TextAreaAbi, TextFontRole, TextWrapping,
+};
+use nc_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString};
+
+direct_widget_phase_impl!(TextEditor);
+direct_leaf_layout_impl!(TextEditor);
+
+impl TextEditor {
+    /// Constructs the private editor child directly on its semantic allocation.
+    fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        text: &str,
+        wrap: crate::TextWrap,
+        model: std::rc::Rc<crate::ui_node::ScrollModel>,
+        resources: Option<&crate::com::widget::SharedAssets>,
+    ) -> Result<ComPtr<IMultilineEditorAbi>, NcStatus> {
+        let runtime = crate::com::widget::WidgetRuntime::for_resources(host, crate::WidgetOption::NONE, resources)?;
+        let value = Self::from_runtime(runtime, text, wrap, crate::FontRef::Role(crate::FontRole::Body), Some(model));
+        Ok(Self::from_value(value)
+            .query()
+            .expect("TextEditor declares its editing, font, event, and leaf capabilities"))
+    }
+}
+
+impl ITextContent for TextEditor {
+    /// Copies normalized text from the only editor buffer into an immutable snapshot.
+    fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(NcString::from_utf8_str(self.text()))
+    }
+
+    /// Replaces text and requests caret reveal through the same concrete editor state.
+    fn set_text(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        self.set_text(crate::com::text(input)?);
+        self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+        Ok(())
+    }
+}
+
+impl ITextEditor for TextEditor {
+    /// Reads the scalar-aligned byte offset from the same buffer used by routed input.
+    fn cursor(&self) -> Result<u64, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(self.cursor() as u64)
+    }
+
+    /// Clamps the byte offset and retains caret reveal until ordinary update resolves its geometry.
+    fn set_cursor(&mut self, cursor: u64) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        self.set_cursor(usize::try_from(cursor).unwrap_or(usize::MAX));
+        self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+        Ok(())
+    }
+}
+
+impl IMultilineEditor for TextEditor {
+    /// Encodes the exact wrapping policy consumed by the multiline layout algorithm.
+    fn wrapping(&self) -> Result<TextWrapping, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(match self.com_wrap() {
+            crate::TextWrap::None => TextWrapping::NONE,
+            crate::TextWrap::Word => TextWrapping::WORD,
+        })
+    }
+
+    /// Validates before changing wrapping and invalidating text and caret geometry.
+    fn set_wrapping(&mut self, wrapping: TextWrapping) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        let wrap = crate::com::widget::local_wrap(wrapping)?;
+        if self.com_wrap() != wrap {
+            self.com_set_wrap(wrap);
+            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+        }
+        Ok(())
+    }
+}
+
+impl IFontStyle for TextEditor {
+    /// Validates and commits one semantic font role on the actual editor.
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+        set_direct_font_role(self, role)
+    }
+
+    /// Resolves and commits one named font on the actual editor.
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        set_direct_named_font(self, name)
+    }
+}
+
+impl ITextEvents for TextEditor {
+    /// Connects the editor's existing changed-text event source.
+    fn subscribe_changed(&mut self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.runtime().state.writable()?;
+        let endpoint = <Self as crate::TypedWidget<crate::TextAreaChanged>>::event(self);
+        crate::com::events::subscribe(endpoint, sink)
+    }
+
+    /// Connects the editor's existing submitted-text event source.
+    fn subscribe_submitted(&mut self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.runtime().state.writable()?;
+        let endpoint = <Self as crate::TypedWidget<crate::TextAreaSubmitted>>::event(self);
+        crate::com::events::subscribe(endpoint, sink)
+    }
+}
+
+direct_widget_phase_impl!(TextArea);
+direct_container_layout_impl!(TextArea);
+direct_scrolling_impl!(TextArea);
+
+impl TextArea {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(crate) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: crate::com::widget::SharedAssets,
+        text: NcCopyFromBufferOffset<'_, u8>,
+        wrapping: TextWrapping,
+        scrolling: bool,
+    ) -> Result<ComPtr<TextAreaAbi>, NcStatus> {
+        let value = Self::build(host, text, wrapping, scrolling, Some(&resources))?;
+        Ok(Self::from_value(value).query().expect("TextArea declares its callable class contract"))
+    }
+
+    /// Builds the fixed editor tree with either direct or runtime-shared resources.
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        input: NcCopyFromBufferOffset<'_, u8>,
+        wrapping: TextWrapping,
+        scrolling: bool,
+        resources: Option<&crate::com::widget::SharedAssets>,
+    ) -> Result<Self, NcStatus> {
+        let text_value = crate::com::text(input)?;
+        let wrap = crate::com::widget::local_wrap(wrapping)?;
+        let parts = crate::com::scroll::ScrollParts::prepare(host.clone(), scrolling, resources)?;
+        let text = TextEditor::create_com(host.clone(), text_value, wrap, parts.model.clone(), resources)?;
+        let font = text.query()?;
+        let events = text.query()?;
+        parts.content.insert(0, text.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
+        let runtime = crate::com::widget::WidgetRuntime::for_resources(host, crate::WidgetOption::FRAME, resources)?;
+        Ok(Self::from_runtime(runtime, parts.editor, text, font, events, parts.model))
+    }
+}
+
+impl microui_contracts::TextArea for TextArea {
+    /// Prepares the fixed scroll structure and attaches one real editor before publishing the root.
+    fn new(
+        host: ComRef<'_, IWidgetHostAbi>,
+        input: NcCopyFromBufferOffset<'_, u8>,
+        wrapping: TextWrapping,
+        scrolling: bool,
+    ) -> Result<Self, NcStatus> {
+        Self::build(host.add_ref(), input, wrapping, scrolling, None)
+    }
+
+    /// Forwards snapshots after checking the outer object's logical lifetime.
+    fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+        self.runtime().state.readable()?;
+        self.text.text()
+    }
+
+    /// Forwards normalized replacement; the actual child invalidates the owning subtree.
+    fn set_text(&mut self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        self.text.set_text(text)
+    }
+
+    /// Reads the actual content editor's cursor without retaining a local copy.
+    fn cursor(&self) -> Result<u64, NcStatus> {
+        self.runtime().state.readable()?;
+        self.text.cursor()
+    }
+
+    /// Requests scalar-aligned cursor positioning and caret reveal on the actual child.
+    fn set_cursor(&mut self, cursor: u64) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        self.text.set_cursor(cursor)
+    }
+
+    /// Returns the actual editor's wrapping policy.
+    fn wrapping(&self) -> Result<TextWrapping, NcStatus> {
+        self.runtime().state.readable()?;
+        self.text.wrapping()
+    }
+
+    /// Changes only the policy used by text measurement and input.
+    fn set_wrapping(&mut self, wrapping: TextWrapping) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        self.text.set_wrapping(wrapping)
+    }
+
+    /// Resolves a semantic font on the actual editor and invalidates its layout cache.
+    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        self.font.set_font_role(role)
+    }
+
+    /// Resolves one stable named font through the actual editor's resource owner.
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        self.font.set_named_font(name)
+    }
+
+    /// Forwards changed subscriptions to the actual fixed content editor.
+    fn subscribe_changed(&mut self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.runtime().state.writable()?;
+        self.events.subscribe_changed(sink)
+    }
+
+    /// Forwards the independent submitted port without adding root queue ownership.
+    fn subscribe_submitted(&mut self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.runtime().state.writable()?;
+        self.events.subscribe_submitted(sink)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

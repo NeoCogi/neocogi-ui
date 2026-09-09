@@ -31,7 +31,6 @@ pub(crate) use render::color;
 mod runtime;
 pub(crate) mod scroll;
 pub use crate::ui_node::ScrollArea;
-mod text_area;
 pub use crate::ui_node::widgets::TextArea;
 mod ui_factory;
 pub use ui_factory::UiFactory;
