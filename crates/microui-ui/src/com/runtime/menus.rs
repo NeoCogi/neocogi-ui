@@ -232,7 +232,7 @@ impl IMenuItem for Item {
 impl IFontStyle for Item {
     /// Uses the same validated font-role mapping as ordinary COM text widgets.
     fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
-        self.edit(Edit::Font(crate::FontRef::Role(super::super::widget::local_font_role(role)?)))
+        self.edit(Edit::Font(crate::FontRef::Role(crate::ui_node::widget_object::local_font_role(role)?)))
     }
     /// Resolves a named font once against the exact owning runtime resource bundle.
     fn set_named_font(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {

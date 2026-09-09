@@ -92,7 +92,7 @@ impl WidgetNode {
 /// Private runtime payload for an owning [`Node`].
 pub(crate) enum NodeData {
     /// Node-owned external widget capabilities; no Rust object or weak handle wraps them.
-    Com(crate::com::ComNode),
+    Com(crate::ui_node::ComNode),
     /// Native leaf used only by algorithm fixtures.
     Widget(WidgetNode),
     /// Direct concrete container owner with one erased geometry implementation.
@@ -173,7 +173,7 @@ impl NodeData {
 
 impl NodeData {
     /// COM child stores contain only COM nodes, including in mixed algorithm tests.
-    pub(crate) fn com(&self) -> &crate::com::ComNode {
+    pub(crate) fn com(&self) -> &crate::ui_node::ComNode {
         match self {
             Self::Com(node) => node,
             _ => unreachable!("COM child stores accept only COM nodes"),

@@ -1,9 +1,7 @@
 //! COM runtime/window ownership over the authoritative retained traversal.
 use super::*;
-use super::{
-    paint::{Metrics, PaintService},
-    render::Backend,
-};
+use crate::ui_node::paint_service::{Metrics, PaintService};
+use super::render::Backend;
 use crate::Dimensioni;
 #[cfg(test)]
 use crate::AtlasHandle;
@@ -15,7 +13,7 @@ use windows::NativeSurface;
 
 /// Builds a native atlas fixture through the same immutable COM import boundary.
 #[cfg(test)]
-pub(super) fn create_runtime(atlas: AtlasHandle) -> ComPtr<UiRuntimeAbi> {
+pub(crate) fn create_runtime(atlas: AtlasHandle) -> ComPtr<UiRuntimeAbi> {
     let bundle = crate::SkinBundle::from_atlas(atlas);
     let source = crate::assets::export_bundle(&bundle).expect("native test/source bundle is valid");
     create_runtime_from_assets(source.as_com_ref()).expect("exported native bundle imports")
@@ -40,8 +38,8 @@ fn create_storage(assets: crate::assets::ImportedAssets) -> Rc<RuntimeStorage> {
         .expect("metrics interface");
     let backend = Backend::new(state.clone(), resources.clone());
     let target = backend.target.clone();
-    let factory = Rc::new(super::factory::NodeFactory {
-        layout: super::layout::LayoutService::new(resources.clone(), state.clone()),
+    let factory = Rc::new(crate::ui_node::node_factory::NodeFactory {
+        layout: crate::ui_node::layout_service::LayoutService::new(resources.clone(), state.clone()),
         attaching: Cell::new(false),
         state: state.clone(),
         host,
@@ -81,7 +79,7 @@ struct RuntimeStorage {
     /// Surface capabilities authenticate parents; the forest alone owns widget nodes.
     mounts: RefCell<Vec<Mount>>,
     /// Shared construction services retain no root forest or owning runtime.
-    factory: Rc<super::factory::NodeFactory>,
+    factory: Rc<crate::ui_node::node_factory::NodeFactory>,
     /// Dynamically implemented shorthand retains only the non-owning host capability.
     widget_factory: ComPtr<UiFactoryAbi>,
     /// Renderer is retained only during explicit synchronous submission.
@@ -155,7 +153,7 @@ impl IInputSink for Runtime {
         let storage = &self.storage;
         storage.open()?;
         let mut context = storage.context()?;
-        super::input::enqueue(&mut context, event, text)?;
+        crate::ui_node::input_contract::enqueue(&mut context, event, text)?;
         storage.pending.set(true);
         Ok(())
     }

@@ -76,7 +76,7 @@ impl Default for ComboParameters {
 /// Concrete retained combo and dynamically constructible COM object.
 pub struct Combo {
     /// Non-semantic COM lifecycle and host-backed phase resources.
-    runtime: crate::com::widget::WidgetRuntime,
+    runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Currently selected item index.
     selected: usize,
     /// Whether the combo popup should be open.
@@ -97,7 +97,7 @@ pub struct Combo {
 
 impl Combo {
     /// Combines validated semantic parameters with one already bound common runtime.
-    pub(crate) fn from_runtime(runtime: crate::com::widget::WidgetRuntime, parameters: ComboParameters) -> Self {
+    pub(crate) fn from_runtime(runtime: crate::ui_node::widget_object::WidgetRuntime, parameters: ComboParameters) -> Self {
         Self {
             runtime,
             selected: 0,
@@ -372,12 +372,12 @@ impl Widget for Combo {
 impl From<ComboParameters> for Combo {
     /// Transfers one-shot parameters into the concrete Combo runtime.
     fn from(parameters: ComboParameters) -> Self {
-        let runtime = crate::com::widget::WidgetRuntime::for_test(parameters.opt);
+        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(parameters.opt);
         Self::from_runtime(runtime, parameters)
     }
 }
 
-impl crate::com::widget::WidgetAlgorithm for Combo {
+impl crate::ui_node::widget_object::WidgetAlgorithm for Combo {
     /// Retained COM pointers cannot extend event delivery after logical widget closure.
     fn close_events(&mut self) {
         self.changed_event.close_ordinary();
@@ -385,18 +385,18 @@ impl crate::com::widget::WidgetAlgorithm for Combo {
     }
 }
 
-impl crate::com::widget::HostedWidget for Combo {
+impl crate::ui_node::widget_object::HostedWidget for Combo {
     /// Borrows common lifecycle and resource state without a second combo representation.
-    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+    fn runtime(&self) -> &crate::ui_node::widget_object::WidgetRuntime {
         &self.runtime
     }
 
     /// Exclusively borrows common lifecycle and resource state for a COM mutation or phase.
-    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+    fn runtime_mut(&mut self) -> &mut crate::ui_node::widget_object::WidgetRuntime {
         &mut self.runtime
     }
 }
-impl crate::com::widget::FontState for Combo {
+impl crate::ui_node::widget_object::FontState for Combo {
     /// Measurement and paint read this same existing font selection.
     fn font(&self) -> &FontRef {
         &self.font
@@ -423,7 +423,7 @@ impl Combo {
 }
 impl Eq for ComboSubmitted {}
 
-use crate::com::widget::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
+use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
 use microui_contracts::{
     ComboAbi, GeometryChange, IComboChangedSinkAbi, IComboPopupSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi, TextFontRole,
 };
@@ -436,16 +436,16 @@ impl Combo {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
     pub(crate) fn create_com(
         host: ComPtr<IWidgetHostAbi>,
-        resources: crate::com::widget::SharedAssets,
+        resources: crate::ui_node::widget_object::SharedAssets,
     ) -> Result<ComPtr<ComboAbi>, NcStatus> {
         let value = Self::build(host, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("Combo declares its callable class contract"))
     }
 
     /// Builds one combo header with either directly imported or runtime-shared resources.
-    fn build(host: ComPtr<IWidgetHostAbi>, resources: Option<&crate::com::widget::SharedAssets>) -> Result<Self, NcStatus> {
+    fn build(host: ComPtr<IWidgetHostAbi>, resources: Option<&crate::ui_node::widget_object::SharedAssets>) -> Result<Self, NcStatus> {
         let parameters = crate::ComboParameters::new();
-        let runtime = crate::com::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
         Ok(Self::from_runtime(runtime, parameters))
     }
 }

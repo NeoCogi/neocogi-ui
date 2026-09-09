@@ -330,7 +330,7 @@ where
 #[nc_com::com_object(microui_contracts::Linear)]
 pub struct Linear {
     /// Non-semantic COM lifecycle and host-backed phase resources.
-    runtime: crate::com::widget::WidgetRuntime,
+    runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Sole writer for children mounted through this container's COM contract.
     pub(crate) editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
     /// Weak topology capability supplied by generic container construction.
@@ -349,7 +349,7 @@ pub struct Linear {
 impl Linear {
     /// Combines validated layout policy with its runtime and authoritative COM child writer.
     pub(crate) fn from_runtime(
-        runtime: crate::com::widget::WidgetRuntime,
+        runtime: crate::ui_node::widget_object::WidgetRuntime,
         editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
         direction: LinearDirection,
         cross_size: LinearCrossSize,
@@ -381,7 +381,7 @@ impl Linear {
         // Build children and relationship metadata together before either can become observable.
         let (children, specs) = collect_items(parameters.items);
         let children = Rc::new(RefCell::new(children));
-        let (runtime, editor) = crate::com::widget::WidgetRuntime::for_test_container(crate::WidgetOption::NO_INTERACT);
+        let (runtime, editor) = crate::ui_node::widget_object::WidgetRuntime::for_test_container(crate::WidgetOption::NO_INTERACT);
         let widget = Self {
             runtime,
             editor,
@@ -535,16 +535,16 @@ impl Linear {
     }
 }
 
-impl crate::com::widget::WidgetAlgorithm for Linear {}
+impl crate::ui_node::widget_object::WidgetAlgorithm for Linear {}
 
-impl crate::com::widget::HostedWidget for Linear {
+impl crate::ui_node::widget_object::HostedWidget for Linear {
     /// Borrows common phase state stored directly beside Linear's layout fields.
-    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+    fn runtime(&self) -> &crate::ui_node::widget_object::WidgetRuntime {
         &self.runtime
     }
 
     /// Exclusively borrows common phase state for mutation or resource refresh.
-    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+    fn runtime_mut(&mut self) -> &mut crate::ui_node::widget_object::WidgetRuntime {
         &mut self.runtime
     }
 
@@ -575,7 +575,7 @@ impl super::ContainerAlgorithm for Linear {
     }
 }
 
-use crate::com::widget::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
+use crate::ui_node::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
 use microui_contracts::{ChildCrossSize, CrossSize, CrossSizeAbi, FlowDirection, IWidgetHostAbi, LinearAbi, LinearEdge};
 use nc_com::{ComPtr, ComRef, NcStatus};
 
@@ -586,7 +586,7 @@ impl Linear {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
     pub(crate) fn create_com(
         host: ComPtr<IWidgetHostAbi>,
-        resources: crate::com::widget::SharedAssets,
+        resources: crate::ui_node::widget_object::SharedAssets,
         direction: FlowDirection,
         cross: CrossSizeAbi,
     ) -> Result<ComPtr<LinearAbi>, NcStatus> {
@@ -599,7 +599,7 @@ impl Linear {
         host: ComPtr<IWidgetHostAbi>,
         direction: FlowDirection,
         cross: CrossSizeAbi,
-        resources: Option<&crate::com::widget::SharedAssets>,
+        resources: Option<&crate::ui_node::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
         let direction = local_direction(direction)?;
         let cross = local_cross(cross)?;

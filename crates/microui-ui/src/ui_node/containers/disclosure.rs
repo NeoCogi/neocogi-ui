@@ -150,7 +150,7 @@ impl DisclosureParameters {
 #[nc_com::com_object(microui_contracts::Disclosure)]
 pub struct Disclosure {
     /// Non-semantic COM lifecycle and host-backed phase resources.
-    runtime: crate::com::widget::WidgetRuntime,
+    runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Authoritative fixed header/body ownership used by COM traversal.
     editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
     /// Text capability of the actual header child.
@@ -168,7 +168,7 @@ pub struct Disclosure {
 impl Disclosure {
     /// Combines one fixed child composition with the semantic expansion and layout policy.
     fn from_runtime(
-        runtime: crate::com::widget::WidgetRuntime,
+        runtime: crate::ui_node::widget_object::WidgetRuntime,
         editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
         header: nc_com::ComPtr<microui_contracts::ITextContentAbi>,
         body: nc_com::ComPtr<microui_contracts::LinearAbi>,
@@ -253,7 +253,7 @@ impl Disclosure {
 #[nc_com::com_object(interfaces(microui_contracts::ITextContent, microui_contracts::ILeafLayout))]
 struct DisclosureHeader {
     /// Non-semantic COM lifecycle and host-backed phase resources.
-    runtime: crate::com::widget::WidgetRuntime,
+    runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Shared scalar state owns no parent widget or tree.
     model: Rc<DisclosureState>,
     /// Owned text shared by measurement and painting.
@@ -444,7 +444,7 @@ impl Widget for Disclosure {
 fn create_container(parameters: DisclosureParameters) -> (TypedWidgetHandle<Disclosure>, Container) {
     let (content, body) = Linear::create(LinearParameters::vertical(parameters.children));
     let model = DisclosureState::new(parameters.expanded);
-    let runtime = crate::com::widget::WidgetRuntime::for_test(crate::WidgetOption::NO_INTERACT);
+    let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(crate::WidgetOption::NO_INTERACT);
     let host = runtime.state.host().add_ref();
     let children = prepare_children(
         host,
@@ -463,7 +463,7 @@ fn create_container(parameters: DisclosureParameters) -> (TypedWidgetHandle<Disc
         parameters.variant,
     );
     widget.content = Some(content);
-    let runtime = crate::com::widget::WidgetRuntime::for_test(parameters.opt);
+    let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(parameters.opt);
     let header = DisclosureHeader {
         runtime,
         model,
@@ -491,7 +491,7 @@ impl Disclosure {
 impl DisclosureHeader {
     /// Combines the shared expansion value and label with one concrete header runtime.
     pub(crate) fn from_runtime(
-        runtime: crate::com::widget::WidgetRuntime,
+        runtime: crate::ui_node::widget_object::WidgetRuntime,
         model: Rc<DisclosureState>,
         label: String,
         variant: DisclosureVariant,
@@ -515,16 +515,16 @@ impl DisclosureHeader {
         self.label.push_str(label);
     }
 }
-impl crate::com::widget::WidgetAlgorithm for Disclosure {}
+impl crate::ui_node::widget_object::WidgetAlgorithm for Disclosure {}
 
-impl crate::com::widget::HostedWidget for Disclosure {
+impl crate::ui_node::widget_object::HostedWidget for Disclosure {
     /// Borrows common phase state stored directly beside Disclosure's semantic fields.
-    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+    fn runtime(&self) -> &crate::ui_node::widget_object::WidgetRuntime {
         &self.runtime
     }
 
     /// Exclusively borrows common phase state for mutation or resource refresh.
-    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+    fn runtime_mut(&mut self) -> &mut crate::ui_node::widget_object::WidgetRuntime {
         &mut self.runtime
     }
 
@@ -534,21 +534,21 @@ impl crate::com::widget::HostedWidget for Disclosure {
     }
 }
 
-impl crate::com::widget::WidgetAlgorithm for DisclosureHeader {}
+impl crate::ui_node::widget_object::WidgetAlgorithm for DisclosureHeader {}
 
-impl crate::com::widget::HostedWidget for DisclosureHeader {
+impl crate::ui_node::widget_object::HostedWidget for DisclosureHeader {
     /// Borrows common phase state stored directly beside the header's semantic fields.
-    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+    fn runtime(&self) -> &crate::ui_node::widget_object::WidgetRuntime {
         &self.runtime
     }
 
     /// Exclusively borrows common phase state for mutation or resource refresh.
-    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+    fn runtime_mut(&mut self) -> &mut crate::ui_node::widget_object::WidgetRuntime {
         &mut self.runtime
     }
 }
 
-use crate::com::widget::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_leaf_layout_impl, direct_widget_phase_impl};
+use crate::ui_node::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_leaf_layout_impl, direct_widget_phase_impl};
 use microui_contracts::{
     CrossSize, DisclosureAbi, DisclosureStyle, FlowDirection, IChildrenEditorAbi, ITextContent, ITextContentAbi, IWidgetAbi, IWidgetHostAbi, LinearAbi,
 };
@@ -565,7 +565,7 @@ impl DisclosureHeader {
         model: Rc<DisclosureState>,
         label: String,
         variant: DisclosureVariant,
-        resources: Option<&crate::com::widget::SharedAssets>,
+        resources: Option<&crate::ui_node::widget_object::SharedAssets>,
     ) -> Result<ComPtr<ITextContentAbi>, NcStatus> {
         let runtime = WidgetRuntime::for_resources(host, options, resources)?;
         Ok(Self::from_value(Self::from_runtime(runtime, model, label, variant))
@@ -600,7 +600,7 @@ impl Disclosure {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
     pub(crate) fn create_com(
         host: ComPtr<IWidgetHostAbi>,
-        resources: crate::com::widget::SharedAssets,
+        resources: crate::ui_node::widget_object::SharedAssets,
         label: NcCopyFromBufferOffset<'_, u8>,
         style: DisclosureStyle,
         expanded: bool,
@@ -615,7 +615,7 @@ impl Disclosure {
         label: NcCopyFromBufferOffset<'_, u8>,
         style: DisclosureStyle,
         expanded: bool,
-        resources: Option<&crate::com::widget::SharedAssets>,
+        resources: Option<&crate::ui_node::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
         let label = crate::com::text(label)?;
         host.check_mutation()?;
@@ -688,7 +688,7 @@ fn prepare_children(
     model: Rc<DisclosureState>,
     label: String,
     variant: DisclosureVariant,
-    resources: Option<&crate::com::widget::SharedAssets>,
+    resources: Option<&crate::ui_node::widget_object::SharedAssets>,
 ) -> Result<DisclosureChildren, NcStatus> {
     // Construct both children before publishing the sequence, so callers cannot observe a partial
     // disclosure. The shared scalar model contains no parent or child object backpointer.

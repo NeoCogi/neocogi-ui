@@ -369,7 +369,7 @@ impl GridParameters {
 #[nc_com::com_object(microui_contracts::Grid)]
 pub struct Grid {
     /// Non-semantic COM lifecycle and host-backed phase resources.
-    runtime: crate::com::widget::WidgetRuntime,
+    runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Sole writer for children mounted through this container's COM contract.
     pub(crate) editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
     /// Weak topology access coordinated with Grid-owned edge metadata below.
@@ -388,7 +388,7 @@ pub struct Grid {
 impl Grid {
     /// Combines validated tracks with the runtime and authoritative COM child writer.
     pub(crate) fn from_runtime(
-        runtime: crate::com::widget::WidgetRuntime,
+        runtime: crate::ui_node::widget_object::WidgetRuntime,
         editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
         column_tracks: Vec<TrackSize>,
         row_tracks: Vec<TrackSize>,
@@ -414,7 +414,7 @@ impl Grid {
     /// Creates an empty host-bound Grid for native algorithm tests.
     #[cfg(test)]
     pub(crate) fn com_new(column_tracks: Vec<TrackSize>, row_tracks: Vec<TrackSize>) -> Self {
-        let (runtime, editor) = crate::com::widget::WidgetRuntime::for_test_container(crate::WidgetOption::NO_INTERACT);
+        let (runtime, editor) = crate::ui_node::widget_object::WidgetRuntime::for_test_container(crate::WidgetOption::NO_INTERACT);
         Self::from_runtime(runtime, editor, column_tracks, row_tracks)
     }
     /// Returns the number of owned Grid children.
@@ -478,7 +478,7 @@ impl Grid {
         let mut items = parameters.items;
         items.set_columns(parameters.column_tracks.len());
         let children = Rc::new(RefCell::new(parameters.children));
-        let (runtime, editor) = crate::com::widget::WidgetRuntime::for_test_container(crate::WidgetOption::NO_INTERACT);
+        let (runtime, editor) = crate::ui_node::widget_object::WidgetRuntime::for_test_container(crate::WidgetOption::NO_INTERACT);
         let widget = Self {
             runtime,
             editor,
@@ -494,16 +494,16 @@ impl Grid {
     }
 }
 
-impl crate::com::widget::WidgetAlgorithm for Grid {}
+impl crate::ui_node::widget_object::WidgetAlgorithm for Grid {}
 
-impl crate::com::widget::HostedWidget for Grid {
+impl crate::ui_node::widget_object::HostedWidget for Grid {
     /// Borrows common phase state stored directly beside Grid's layout fields.
-    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+    fn runtime(&self) -> &crate::ui_node::widget_object::WidgetRuntime {
         &self.runtime
     }
 
     /// Exclusively borrows common phase state for mutation or resource refresh.
-    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+    fn runtime_mut(&mut self) -> &mut crate::ui_node::widget_object::WidgetRuntime {
         &mut self.runtime
     }
 
@@ -534,7 +534,7 @@ impl super::ContainerAlgorithm for Grid {
     }
 }
 
-use crate::com::widget::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
+use crate::ui_node::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
 use microui_contracts::{GridAbi, GridExtent, IWidgetHostAbi, LayoutTrackAbi};
 use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus};
 
@@ -545,7 +545,7 @@ impl Grid {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
     pub(crate) fn create_com(
         host: ComPtr<IWidgetHostAbi>,
-        resources: crate::com::widget::SharedAssets,
+        resources: crate::ui_node::widget_object::SharedAssets,
         columns: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
         rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
     ) -> Result<ComPtr<GridAbi>, NcStatus> {
@@ -558,7 +558,7 @@ impl Grid {
         host: ComPtr<IWidgetHostAbi>,
         columns: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
         rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
-        resources: Option<&crate::com::widget::SharedAssets>,
+        resources: Option<&crate::ui_node::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
         let columns = local_tracks(columns)?;
         let rows = local_tracks(rows)?;

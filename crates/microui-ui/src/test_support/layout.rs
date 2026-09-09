@@ -1,6 +1,6 @@
 //! Native geometry service for algorithm fixtures; COM fixtures use the real ScopedLayout.
 use crate::{AtlasHandle, Children, Constraints, Dimensioni, Recti, Skin, ChildParticipation};
-use crate::com::layout::ScopedLayout;
+use crate::ui_node::layout_service::ScopedLayout;
 use crate::ui_node::LayoutTraversal;
 use nc_com::NcStatus;
 

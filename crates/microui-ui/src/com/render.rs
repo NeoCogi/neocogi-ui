@@ -130,11 +130,11 @@ impl IRenderStream for Stream {
 }
 
 /// One concrete geometry backend for complete COM frame submission.
-pub(super) struct Backend {
+pub(crate) struct Backend {
     /// Runtime submissions observe the first component failure before calling the renderer.
     host: Rc<HostState>,
     /// Current installed assets accompany the complete frame submission.
-    resources: super::widget::SharedAssets,
+    resources: crate::ui_node::widget_object::SharedAssets,
     /// Owned scratch survives across frames and is never lent through a COM object.
     storage: Rc<Storage>,
     /// Stable stream object reused for every synchronous submission.
@@ -145,7 +145,7 @@ pub(super) struct Backend {
 
 impl Backend {
     /// Creates reusable complete-frame storage and its stable stream capability.
-    pub(super) fn new(host: Rc<HostState>, resources: super::widget::SharedAssets) -> Self {
+    pub(super) fn new(host: Rc<HostState>, resources: crate::ui_node::widget_object::SharedAssets) -> Self {
         let storage = Rc::new(Storage::default());
         let stream = Stream::from_value(Stream { storage: storage.clone() })
             .query()
@@ -161,7 +161,7 @@ impl Backend {
 }
 
 /// Private native borrowed frame; it never crosses the shared-library boundary.
-pub(super) struct Frame<'a> {
+pub(crate) struct Frame<'a> {
     /// Exclusive backend access prevents overlapping submissions in safe Rust.
     backend: &'a mut Backend,
     /// Validated drawable size and clear color.

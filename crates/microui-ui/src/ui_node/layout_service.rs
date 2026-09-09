@@ -1,8 +1,11 @@
 //! Owned nested layout scopes; neither COM storage nor retained clients borrow a runtime stack.
-use super::*;
+use crate::com::*;
+use microui_contracts::*;
+use nc_com::{ComPtr, ComRef, NcStatus, NC_E_INVALID_ARG, com_object};
+use std::{cell::{Cell, RefCell}, rc::Rc};
 use super::{
-    children::{ChildStore, ChildTransaction},
-    widget::SharedAssets,
+    child_store::{ChildStore, ChildTransaction},
+    widget_object::SharedAssets,
 };
 use crate::{Constraints, Dimensioni};
 use crate::ui_node::LayoutTraversal;
@@ -141,7 +144,7 @@ impl ILayoutService for Layout {
 
 /// Private driver shares one service allocation across the runtime's complete tree.
 #[derive(Clone)]
-pub(super) struct LayoutService {
+pub(crate) struct LayoutService {
     /// Actual owned authority and frame storage.
     storage: Rc<Storage>,
     /// Borrowed projection passed during calls, without a refcount operation per child query.
@@ -149,7 +152,7 @@ pub(super) struct LayoutService {
 }
 impl LayoutService {
     /// Allocates one service observing the runtime's single replaceable asset value.
-    pub(super) fn new(resources: SharedAssets, host: Rc<HostState>) -> Self {
+    pub(crate) fn new(resources: SharedAssets, host: Rc<HostState>) -> Self {
         let storage = Rc::new(Storage {
             active: Cell::new(0),
             next: Cell::new(0),
@@ -234,8 +237,8 @@ impl Drop for Invocation<'_> {
 /// Validates both axes before producing private finite/unbounded constraints.
 pub(crate) fn constraints(limits: LayoutLimits) -> Result<Constraints, NcStatus> {
     Ok(Constraints::new(
-        super::widget::available(limits.width)?,
-        super::widget::available(limits.height)?,
+        super::widget_object::available(limits.width)?,
+        super::widget_object::available(limits.height)?,
     ))
 }
 
@@ -299,7 +302,7 @@ impl<'a> ScopedLayout<'a> {
     /// Places one child with copied geometry and retains any error for final propagation.
     pub(crate) fn place(&self, index: usize, rect: crate::Recti) -> Option<Dimensioni> {
         let index = self.index(index)?;
-        self.capture(self.service.place_child(self.scope, index, super::copied_rect(rect)))
+        self.capture(self.service.place_child(self.scope, index, copied_rect(rect)))
             .map(|size| Dimensioni::new(size.width, size.height))
     }
     /// Applies subtree participation through the authoritative runtime service.

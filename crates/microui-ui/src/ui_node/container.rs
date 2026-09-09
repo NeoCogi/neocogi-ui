@@ -31,11 +31,11 @@
 use crate::math::RectExt;
 use crate::{Constraints, Dimensioni, Recti, Skin, UiInputEvent, Vec2i, Widget};
 use super::ChildParticipation;
-use crate::com::layout::ScopedLayout;
+use crate::ui_node::layout_service::ScopedLayout;
 use microui_contracts::ContainerGeometry;
 use nc_com::NcStatus;
 #[cfg(not(test))]
-use crate::com::layout::ScopedLayout as ChildLayout;
+use crate::ui_node::layout_service::ScopedLayout as ChildLayout;
 #[cfg(test)]
 use crate::test_support::layout::ChildLayout;
 

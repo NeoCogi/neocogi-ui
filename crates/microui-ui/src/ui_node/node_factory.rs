@@ -1,32 +1,35 @@
 //! Shared construction authority, independent of any root forest or runtime transaction.
-use super::*;
-use super::{widget::SharedAssets, paint::PaintService};
-use super::{children::ChildStore, node::NodeLayoutKind, layout::LayoutService};
+use crate::com::*;
+use microui_contracts::*;
+use nc_com::{ComPtr, ComRef, IUnknown, NcStatus, NC_E_INVALID_ARG};
+use std::{cell::{Cell, RefCell}, rc::Rc};
+use super::{widget_object::SharedAssets, paint_service::PaintService};
+use super::{child_store::ChildStore, mounted_node::{ComNode, NodeLayoutKind}, layout_service::LayoutService};
 
 /// Runtime-bound services shared by root attachment and owned child collections.
 /// Nothing in this allocation retains a runtime, root tree or application handler.
-pub(super) struct NodeFactory {
+pub(crate) struct NodeFactory {
     /// Attachment validation calls foreign interfaces; nested topology edits must wait for it to finish.
-    pub(super) attaching: Cell<bool>,
+    pub(crate) attaching: Cell<bool>,
     /// Weak authentication map for the read-only views issued by this exact host.
-    pub(super) children: RefCell<super::children::ChildRegistry>,
+    pub(crate) children: RefCell<super::child_store::ChildRegistry>,
     /// Common phase, lifetime and first-error authority.
-    pub(super) state: Rc<HostState>,
+    pub(crate) state: Rc<HostState>,
     /// Canonical host identity used to reject objects from another UI instance.
-    pub(super) host: ComPtr<IWidgetHostAbi>,
+    pub(crate) host: ComPtr<IWidgetHostAbi>,
     /// One current imported asset value observed by built-in state and layout services.
-    pub(super) resources: SharedAssets,
+    pub(crate) resources: SharedAssets,
     /// Borrowed measurement service supplied to independent leaf implementations.
-    pub(super) metrics: ComPtr<ITextMetricsAbi>,
+    pub(crate) metrics: ComPtr<ITextMetricsAbi>,
     /// Reusable scope-checked owned painter service.
-    pub(super) painter: PaintService,
+    pub(crate) painter: PaintService,
     /// One owned nested layout service, with no pointer to the root forest.
-    pub(super) layout: LayoutService,
+    pub(crate) layout: LayoutService,
 }
 
 impl NodeFactory {
     /// Validates every fallible capability query before claiming the sole attachment.
-    pub(super) fn mount_node(&self, root: ComRef<'_, IWidgetAbi>, parent: Option<&Rc<ChildStore>>) -> Result<crate::Node, NcStatus> {
+    pub(crate) fn mount_node(&self, root: ComRef<'_, IWidgetAbi>, parent: Option<&Rc<ChildStore>>) -> Result<crate::Node, NcStatus> {
         self.check_edit()?;
         self.attaching.set(true);
         let _attachment = Attachment(&self.attaching);

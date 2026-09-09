@@ -112,7 +112,7 @@ impl TextBlockParameters {
 /// Concrete retained text block and dynamically constructible COM object.
 pub struct TextBlock {
     /// Non-semantic COM lifecycle and host-backed phase resources.
-    runtime: crate::com::widget::WidgetRuntime,
+    runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Initialization-only wrapping mode.
     wrap: TextWrap,
     /// Initialization-only font.
@@ -133,7 +133,7 @@ impl TextBlock {
     }
 
     /// Combines validated semantic parameters with one already bound common runtime.
-    pub(crate) fn from_runtime(runtime: crate::com::widget::WidgetRuntime, parameters: TextBlockParameters) -> Self {
+    pub(crate) fn from_runtime(runtime: crate::ui_node::widget_object::WidgetRuntime, parameters: TextBlockParameters) -> Self {
         Self {
             runtime,
             wrap: parameters.wrap,
@@ -232,21 +232,21 @@ impl Widget for TextBlock {
 impl From<TextBlockParameters> for TextBlock {
     /// Transfers one-shot parameters into the concrete TextBlock runtime.
     fn from(parameters: TextBlockParameters) -> Self {
-        let runtime = crate::com::widget::WidgetRuntime::for_test(parameters.opt);
+        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(parameters.opt);
         Self::from_runtime(runtime, parameters)
     }
 }
 
-impl crate::com::widget::WidgetAlgorithm for TextBlock {}
+impl crate::ui_node::widget_object::WidgetAlgorithm for TextBlock {}
 
-impl crate::com::widget::HostedWidget for TextBlock {
+impl crate::ui_node::widget_object::HostedWidget for TextBlock {
     /// Borrows common lifecycle and resource state without a second text-block representation.
-    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+    fn runtime(&self) -> &crate::ui_node::widget_object::WidgetRuntime {
         &self.runtime
     }
 
     /// Exclusively borrows common lifecycle and resource state for a COM mutation or phase.
-    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+    fn runtime_mut(&mut self) -> &mut crate::ui_node::widget_object::WidgetRuntime {
         &mut self.runtime
     }
 }
@@ -262,7 +262,7 @@ impl TextBlock {
     }
 }
 
-impl crate::com::widget::FontState for TextBlock {
+impl crate::ui_node::widget_object::FontState for TextBlock {
     /// Borrows the semantic font reference already used by layout and painting.
     fn font(&self) -> &crate::FontRef {
         &self.font
@@ -295,7 +295,7 @@ mod tests {
     }
 }
 
-use crate::com::widget::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
+use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
 use microui_contracts::{GeometryChange, IWidgetHostAbi, TextBlockAbi, TextFontRole, TextWrapping};
 use nc_com::*;
 
@@ -306,7 +306,7 @@ impl TextBlock {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
     pub(crate) fn create_com(
         host: ComPtr<IWidgetHostAbi>,
-        resources: crate::com::widget::SharedAssets,
+        resources: crate::ui_node::widget_object::SharedAssets,
         text: NcCopyFromBufferOffset<'_, u8>,
         wrapping: TextWrapping,
     ) -> Result<ComPtr<TextBlockAbi>, NcStatus> {
@@ -319,10 +319,10 @@ impl TextBlock {
         host: ComPtr<IWidgetHostAbi>,
         input: NcCopyFromBufferOffset<'_, u8>,
         wrapping: TextWrapping,
-        resources: Option<&crate::com::widget::SharedAssets>,
+        resources: Option<&crate::ui_node::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
-        let parameters = crate::TextBlockParameters::with_wrap(crate::com::text(input)?, crate::com::widget::local_wrap(wrapping)?);
-        let runtime = crate::com::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        let parameters = crate::TextBlockParameters::with_wrap(crate::com::text(input)?, crate::ui_node::widget_object::local_wrap(wrapping)?);
+        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
         Ok(Self::from_runtime(runtime, parameters))
     }
 }
@@ -359,7 +359,7 @@ impl microui_contracts::TextBlock for TextBlock {
     /// Rejects unknown policies before mutating semantic state or its geometry marker.
     fn set_wrapping(&mut self, wrapping: TextWrapping) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
-        let wrap = crate::com::widget::local_wrap(wrapping)?;
+        let wrap = crate::ui_node::widget_object::local_wrap(wrapping)?;
         if self.com_wrap() != wrap {
             self.com_set_wrap(wrap);
             self.runtime_mut().state.record_change(GeometryChange::CHANGED);

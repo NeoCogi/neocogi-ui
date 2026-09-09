@@ -34,7 +34,7 @@
 //! placement path.
 
 use crate::ControlRole;
-use crate::com::widget::{
+use crate::ui_node::widget_object::{
     HostedWidget, ImageState, direct_leaf_layout_impl, direct_widget_phase_impl,
     set_direct_font_role, set_direct_icon_role, set_direct_named_font, set_direct_named_icon,
 };
@@ -137,7 +137,7 @@ pub struct ButtonSubmitted {
 /// lifecycle, option, resource, and rendering machinery; it cannot contain another Button.
 pub struct Button {
     /// Non-semantic COM lifecycle and host-backed phase resources.
-    runtime: crate::com::widget::WidgetRuntime,
+    runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Initialization-only content.
     content: ButtonContent,
     /// Initialization-only font.
@@ -161,7 +161,7 @@ impl Button {
     }
 
     /// Combines validated semantic parameters with one already bound common runtime.
-    pub(crate) fn from_runtime(runtime: crate::com::widget::WidgetRuntime, parameters: ButtonParameters) -> Self {
+    pub(crate) fn from_runtime(runtime: crate::ui_node::widget_object::WidgetRuntime, parameters: ButtonParameters) -> Self {
         Self {
             runtime,
             content: parameters.content,
@@ -309,26 +309,26 @@ impl crate::TypedWidget<ButtonSubmitted> for Button {
 impl From<ButtonParameters> for Button {
     /// Transfers one-shot parameters into the concrete Button runtime.
     fn from(parameters: ButtonParameters) -> Self {
-        let runtime = crate::com::widget::WidgetRuntime::for_test(parameters.opt);
+        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(parameters.opt);
         Self::from_runtime(runtime, parameters)
     }
 }
 
-impl crate::com::widget::WidgetAlgorithm for Button {
+impl crate::ui_node::widget_object::WidgetAlgorithm for Button {
     /// Logical COM closure cancels ordinary submissions while retained widget references remain safe.
     fn close_events(&mut self) {
         self.submitted_event.close_ordinary();
     }
 }
 
-impl crate::com::widget::HostedWidget for Button {
+impl crate::ui_node::widget_object::HostedWidget for Button {
     /// Borrows the common runtime without exposing semantic fields through it.
-    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+    fn runtime(&self) -> &crate::ui_node::widget_object::WidgetRuntime {
         &self.runtime
     }
 
     /// Exclusively borrows the common runtime while leaving semantic ownership on `Button`.
-    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+    fn runtime_mut(&mut self) -> &mut crate::ui_node::widget_object::WidgetRuntime {
         &mut self.runtime
     }
 }
@@ -348,7 +348,7 @@ impl Button {
     }
 }
 
-impl crate::com::widget::FontState for Button {
+impl crate::ui_node::widget_object::FontState for Button {
     /// Borrows the semantic font reference already used by layout and painting.
     fn font(&self) -> &crate::FontRef {
         &self.font
@@ -359,7 +359,7 @@ impl crate::com::widget::FontState for Button {
     }
 }
 
-impl crate::com::widget::IconState for Button {
+impl crate::ui_node::widget_object::IconState for Button {
     /// Changes visual kind while preserving the sole owned label allocation.
     fn set_icon(&mut self, icon: Option<crate::IconRef>) -> bool {
         if let ButtonContent::Text { icon: previous, .. } = &self.content
@@ -383,7 +383,7 @@ impl Button {
     }
 }
 
-impl crate::com::widget::ImageState for Button {
+impl crate::ui_node::widget_object::ImageState for Button {
     /// Replaces the visual kind while keeping the single label allocation and selected font.
     fn set_image(&mut self, image: Option<microui_redux::Image>, fit_width: bool) -> bool {
         match &self.content {
@@ -408,7 +408,7 @@ impl Button {
     /// Constructs the class directly for the factory shorthand without bypassing contract validation.
     pub(crate) fn create_com(
         host: ComPtr<IWidgetHostAbi>,
-        resources: crate::com::widget::SharedAssets,
+        resources: crate::ui_node::widget_object::SharedAssets,
         label: NcCopyFromBufferOffset<'_, u8>,
         options: WidgetOptions,
     ) -> Result<ComPtr<ButtonAbi>, NcStatus> {
@@ -421,12 +421,12 @@ impl Button {
         host: ComPtr<IWidgetHostAbi>,
         label: NcCopyFromBufferOffset<'_, u8>,
         options: WidgetOptions,
-        resources: Option<&crate::com::widget::SharedAssets>,
+        resources: Option<&crate::ui_node::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
         options.validate()?;
         let label = crate::com::text(label)?;
         let native_options = crate::WidgetOption::from_bits_retain(options.bits);
-        let runtime = crate::com::widget::WidgetRuntime::for_resources(host, native_options, resources)?;
+        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, native_options, resources)?;
         Ok(Self::from_runtime(runtime, crate::ButtonParameters::new(label)))
     }
 }

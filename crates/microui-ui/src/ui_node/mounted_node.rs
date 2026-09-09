@@ -1,11 +1,14 @@
 //! Concrete COM ownership at the retained node boundary.
-use super::*;
-use super::paint::PaintService;
+use crate::com::*;
+use microui_contracts::*;
+use nc_com::{ComPtr, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
+use std::{cell::Cell, rc::Rc};
+use super::paint_service::PaintService;
 use crate::{AtlasHandle, Dimensioni, WidgetOption, KeyboardBehavior, WidgetUpdateCtx, WidgetPaintCtx, UiInputEvent, Constraints, Skin};
 use crate::Change;
 use super::{
-    children::{ChildStore, ChildTransaction},
-    layout::LayoutService,
+    child_store::{ChildStore, ChildTransaction},
+    layout_service::LayoutService,
 };
 
 /// Exactly one cached geometry capability per mounted widget, with one authoritative child store for branches.
@@ -80,8 +83,8 @@ impl ComNode {
 
     /// Delivers every update, including eventless calls and input beyond primary activation.
     pub(crate) fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Change {
-        let state = super::input::snapshot(ctx, input, self.policy().1);
-        let (event, text) = super::input::event(input);
+        let state = super::input_contract::snapshot(ctx, input, self.policy().1);
+        let (event, text) = super::input_contract::event(input);
         let change = match self.widget.update(state, event, NcCopyFromBufferOffset::new(0, text)) {
             Ok(GeometryChange::CHANGED) => Change::Changed,
             Ok(GeometryChange::NO_CHANGE) => Change::NoChange,
@@ -113,7 +116,7 @@ impl ComNode {
     /// Preserves finite/unbounded constraints across the temporary ABI conversion.
     pub(crate) fn measure(&self, _skin: &Skin, _atlas: &AtlasHandle, constraints: Constraints) -> Result<Dimensioni, NcStatus> {
         let _phase = Observation::begin(&self.host);
-        let bounds = super::layout::limits(constraints);
+        let bounds = super::layout_service::limits(constraints);
         let result = match &self.layout {
             NodeLayoutKind::Leaf(layout) => {
                 let mut layout = layout.clone();
@@ -190,7 +193,7 @@ impl ComNode {
             return true;
         };
         let _phase = Observation::begin(&self.host);
-        let (event, bytes) = super::input::event(Some(input));
+        let (event, bytes) = super::input_contract::event(Some(input));
         match policy.accepts_event(event, NcCopyFromBufferOffset::new(0, bytes)) {
             Ok(accepts) => accepts,
             Err(error) => {

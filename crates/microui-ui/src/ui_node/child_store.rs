@@ -1,6 +1,9 @@
 //! One authoritative owned child collection with separate read/edit COM capabilities.
-use super::*;
-use super::factory::NodeFactory;
+use crate::com::*;
+use microui_contracts::*;
+use nc_com::{ComPtr, ComRef, IUnknown, NcStatus, com_object};
+use std::{cell::{Cell, RefCell}, rc::Rc};
+use super::node_factory::NodeFactory;
 use crate::Children;
 use std::{
     ops::{Deref, DerefMut},
@@ -8,7 +11,7 @@ use std::{
 };
 
 /// Shared tree storage; neither the weak registry nor the read-only view duplicates edges.
-pub(super) struct ChildStore {
+pub(crate) struct ChildStore {
     /// Construction authority contains no root tree or owning runtime.
     pub(super) factory: Rc<NodeFactory>,
     /// Traversals take ownership, leaving no RefCell guard across component calls.
@@ -45,7 +48,7 @@ impl ChildStore {
         }
         let nodes = self.take()?;
         for node in nodes.iter() {
-            if let super::node::NodeLayoutKind::Branch { children, .. } = &node.data.com().layout {
+            if let super::mounted_node::NodeLayoutKind::Branch { children, .. } = &node.data.com().layout {
                 children.reject_cycle(parent)?;
             }
         }
@@ -273,7 +276,7 @@ impl Drop for ChildEditor {
 }
 
 /// Weak registry entries authenticate host-created views without retaining another tree.
-pub(super) type ChildRegistry = std::collections::BTreeMap<usize, Weak<ChildStore>>;
+pub(crate) type ChildRegistry = std::collections::BTreeMap<usize, Weak<ChildStore>>;
 
 /// Isolates one committed edit's teardown errors while retaining an enclosing failure.
 struct TeardownErrors<'a> {

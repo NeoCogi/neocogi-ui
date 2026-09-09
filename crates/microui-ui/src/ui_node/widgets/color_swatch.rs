@@ -74,7 +74,7 @@ impl ColorSwatchParameters {
 /// Concrete retained color swatch and dynamically constructible COM object.
 pub struct ColorSwatch {
     /// Non-semantic COM lifecycle and host-backed phase resources.
-    runtime: crate::com::widget::WidgetRuntime,
+    runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Initialization-only font.
     font: FontRef,
     /// Base widget options.
@@ -96,7 +96,7 @@ impl ColorSwatch {
     }
 
     /// Combines validated semantic parameters with one already bound common runtime.
-    pub(crate) fn from_runtime(runtime: crate::com::widget::WidgetRuntime, parameters: ColorSwatchParameters) -> Self {
+    pub(crate) fn from_runtime(runtime: crate::ui_node::widget_object::WidgetRuntime, parameters: ColorSwatchParameters) -> Self {
         Self {
             runtime,
             font: parameters.font,
@@ -169,26 +169,26 @@ impl Widget for ColorSwatch {
 impl From<ColorSwatchParameters> for ColorSwatch {
     /// Transfers one-shot parameters into the concrete ColorSwatch runtime.
     fn from(parameters: ColorSwatchParameters) -> Self {
-        let runtime = crate::com::widget::WidgetRuntime::for_test(parameters.opt);
+        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(parameters.opt);
         Self::from_runtime(runtime, parameters)
     }
 }
 
-impl crate::com::widget::WidgetAlgorithm for ColorSwatch {}
+impl crate::ui_node::widget_object::WidgetAlgorithm for ColorSwatch {}
 
-impl crate::com::widget::HostedWidget for ColorSwatch {
+impl crate::ui_node::widget_object::HostedWidget for ColorSwatch {
     /// Borrows common lifecycle and resource state without a second swatch representation.
-    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+    fn runtime(&self) -> &crate::ui_node::widget_object::WidgetRuntime {
         &self.runtime
     }
 
     /// Exclusively borrows common lifecycle and resource state for a COM mutation or phase.
-    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+    fn runtime_mut(&mut self) -> &mut crate::ui_node::widget_object::WidgetRuntime {
         &mut self.runtime
     }
 }
 
-impl crate::com::widget::FontState for ColorSwatch {
+impl crate::ui_node::widget_object::FontState for ColorSwatch {
     /// Borrows the semantic font reference already used by layout and painting.
     fn font(&self) -> &crate::FontRef {
         &self.font
@@ -199,7 +199,7 @@ impl crate::com::widget::FontState for ColorSwatch {
     }
 }
 
-use crate::com::widget::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
+use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
 use microui_contracts::{Color, ColorSwatchAbi, GeometryChange, IWidgetHostAbi, TextFontRole};
 use nc_com::*;
 
@@ -210,7 +210,7 @@ impl ColorSwatch {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
     pub(crate) fn create_com(
         host: ComPtr<IWidgetHostAbi>,
-        resources: crate::com::widget::SharedAssets,
+        resources: crate::ui_node::widget_object::SharedAssets,
         rgba: u32,
         label: NcCopyFromBufferOffset<'_, u8>,
     ) -> Result<ComPtr<ColorSwatchAbi>, NcStatus> {
@@ -225,10 +225,10 @@ impl ColorSwatch {
         host: ComPtr<IWidgetHostAbi>,
         rgba: u32,
         label: NcCopyFromBufferOffset<'_, u8>,
-        resources: Option<&crate::com::widget::SharedAssets>,
+        resources: Option<&crate::ui_node::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
         let parameters = crate::ColorSwatchParameters::new(crate::com::color(rgba)).label(crate::com::text(label)?);
-        let runtime = crate::com::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
         Ok(Self::from_runtime(runtime, parameters))
     }
 }

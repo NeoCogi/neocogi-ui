@@ -124,7 +124,7 @@ impl TextAreaParameters {
 ))]
 pub struct TextEditor {
     /// Non-semantic COM lifecycle and host-backed phase resources.
-    runtime: crate::com::widget::WidgetRuntime,
+    runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Current text buffer.
     buf: String,
     /// Current byte cursor, always positioned at a Unicode scalar-value boundary.
@@ -151,7 +151,7 @@ pub struct TextEditor {
 #[nc_com::com_object(microui_contracts::TextArea)]
 pub struct TextArea {
     /// Non-semantic COM lifecycle and host-backed phase resources.
-    runtime: crate::com::widget::WidgetRuntime,
+    runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Exactly three owned structural children: surface and both scrollbar objects.
     pub(crate) editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
     /// Multiline editing capability of the sole content child.
@@ -170,7 +170,7 @@ pub struct TextArea {
 impl TextArea {
     /// Combines the completed fixed topology and its queried editor capabilities in one class value.
     pub(crate) fn from_runtime(
-        runtime: crate::com::widget::WidgetRuntime,
+        runtime: crate::ui_node::widget_object::WidgetRuntime,
         editor: nc_com::ComPtr<microui_contracts::IChildrenEditorAbi>,
         text: nc_com::ComPtr<microui_contracts::IMultilineEditorAbi>,
         font: nc_com::ComPtr<microui_contracts::IFontStyleAbi>,
@@ -218,7 +218,7 @@ impl Widget for TextArea {
     /// Adds dynamic wheel routing to the native fixture policy.
     #[cfg(test)]
     fn effective_widget_opt(&self) -> WidgetOption {
-        crate::com::widget::WidgetAlgorithm::effective_options(self, self.opt)
+        crate::ui_node::widget_object::WidgetAlgorithm::effective_options(self, self.opt)
     }
 
     /// Applies wheel input to the scroll model shared with the actual editor and bars.
@@ -239,21 +239,21 @@ impl crate::ui_node::ScrollComposition for TextArea {
     }
 }
 
-impl crate::com::widget::WidgetAlgorithm for TextArea {
+impl crate::ui_node::widget_object::WidgetAlgorithm for TextArea {
     /// Adds or removes wheel routing from the class's current common options.
     fn effective_options(&self, options: WidgetOption) -> WidgetOption {
         crate::ui_node::ScrollComposition::scroll_options(self, options)
     }
 }
 
-impl crate::com::widget::HostedWidget for TextArea {
+impl crate::ui_node::widget_object::HostedWidget for TextArea {
     /// Borrows common phase state stored directly beside the fixed composition capabilities.
-    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+    fn runtime(&self) -> &crate::ui_node::widget_object::WidgetRuntime {
         &self.runtime
     }
 
     /// Exclusively borrows common phase state for mutation or resource refresh.
-    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+    fn runtime_mut(&mut self) -> &mut crate::ui_node::widget_object::WidgetRuntime {
         &mut self.runtime
     }
 
@@ -312,7 +312,7 @@ impl TextEditor {
     fn new_editor(parameters: TextAreaParameters) -> Self {
         // Initialize semantic and event state together so direct unit tests and composed creation
         // observe the same editing behavior.
-        let runtime = crate::com::widget::WidgetRuntime::for_test(WidgetOption::NONE);
+        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(WidgetOption::NONE);
         Self::from_runtime(runtime, parameters.buf, parameters.wrap, parameters.font, None)
     }
 
@@ -814,7 +814,7 @@ impl LeafWidget for TextEditor {
 impl TextEditor {
     /// Constructs the actual editor fields beside one already validated host runtime.
     pub(crate) fn from_runtime(
-        runtime: crate::com::widget::WidgetRuntime,
+        runtime: crate::ui_node::widget_object::WidgetRuntime,
         text: impl Into<String>,
         wrap: TextWrap,
         font: FontRef,
@@ -847,7 +847,7 @@ impl TextEditor {
         self.reveal_caret = true;
     }
 }
-impl crate::com::widget::WidgetAlgorithm for TextEditor {
+impl crate::ui_node::widget_object::WidgetAlgorithm for TextEditor {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
         self.changed_event.close_ordinary();
@@ -855,19 +855,19 @@ impl crate::com::widget::WidgetAlgorithm for TextEditor {
     }
 }
 
-impl crate::com::widget::HostedWidget for TextEditor {
+impl crate::ui_node::widget_object::HostedWidget for TextEditor {
     /// Borrows common phase state stored directly beside the editable text fields.
-    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+    fn runtime(&self) -> &crate::ui_node::widget_object::WidgetRuntime {
         &self.runtime
     }
 
     /// Exclusively borrows common phase state for mutation or resource refresh.
-    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+    fn runtime_mut(&mut self) -> &mut crate::ui_node::widget_object::WidgetRuntime {
         &mut self.runtime
     }
 }
 
-impl crate::com::widget::FontState for TextEditor {
+impl crate::ui_node::widget_object::FontState for TextEditor {
     /// Borrows the actual font selection used by text measurement and paint.
     fn font(&self) -> &crate::FontRef {
         &self.font
@@ -880,7 +880,7 @@ impl crate::com::widget::FontState for TextEditor {
     }
 }
 
-use crate::com::widget::{
+use crate::ui_node::widget_object::{
     HostedWidget, direct_container_layout_impl, direct_leaf_layout_impl, direct_scrolling_impl, direct_widget_phase_impl, set_direct_font_role,
     set_direct_named_font,
 };
@@ -900,9 +900,9 @@ impl TextEditor {
         text: &str,
         wrap: crate::TextWrap,
         model: std::rc::Rc<crate::ui_node::ScrollModel>,
-        resources: Option<&crate::com::widget::SharedAssets>,
+        resources: Option<&crate::ui_node::widget_object::SharedAssets>,
     ) -> Result<ComPtr<IMultilineEditorAbi>, NcStatus> {
-        let runtime = crate::com::widget::WidgetRuntime::for_resources(host, crate::WidgetOption::NONE, resources)?;
+        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, crate::WidgetOption::NONE, resources)?;
         let value = Self::from_runtime(runtime, text, wrap, crate::FontRef::Role(crate::FontRole::Body), Some(model));
         Ok(Self::from_value(value)
             .query()
@@ -955,7 +955,7 @@ impl IMultilineEditor for TextEditor {
     /// Validates before changing wrapping and invalidating text and caret geometry.
     fn set_wrapping(&mut self, wrapping: TextWrapping) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
-        let wrap = crate::com::widget::local_wrap(wrapping)?;
+        let wrap = crate::ui_node::widget_object::local_wrap(wrapping)?;
         if self.com_wrap() != wrap {
             self.com_set_wrap(wrap);
             self.runtime_mut().state.record_change(GeometryChange::CHANGED);
@@ -1000,7 +1000,7 @@ impl TextArea {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
     pub(crate) fn create_com(
         host: ComPtr<IWidgetHostAbi>,
-        resources: crate::com::widget::SharedAssets,
+        resources: crate::ui_node::widget_object::SharedAssets,
         text: NcCopyFromBufferOffset<'_, u8>,
         wrapping: TextWrapping,
         scrolling: bool,
@@ -1015,16 +1015,16 @@ impl TextArea {
         input: NcCopyFromBufferOffset<'_, u8>,
         wrapping: TextWrapping,
         scrolling: bool,
-        resources: Option<&crate::com::widget::SharedAssets>,
+        resources: Option<&crate::ui_node::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
         let text_value = crate::com::text(input)?;
-        let wrap = crate::com::widget::local_wrap(wrapping)?;
+        let wrap = crate::ui_node::widget_object::local_wrap(wrapping)?;
         let parts = crate::ui_node::ScrollParts::prepare(host.clone(), scrolling, resources)?;
         let text = TextEditor::create_com(host.clone(), text_value, wrap, parts.model.clone(), resources)?;
         let font = text.query()?;
         let events = text.query()?;
         parts.content.insert(0, text.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
-        let runtime = crate::com::widget::WidgetRuntime::for_resources(host, crate::WidgetOption::FRAME, resources)?;
+        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, crate::WidgetOption::FRAME, resources)?;
         Ok(Self::from_runtime(runtime, parts.editor, text, font, events, parts.model))
     }
 }

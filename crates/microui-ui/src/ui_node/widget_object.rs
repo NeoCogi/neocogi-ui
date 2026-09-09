@@ -2,7 +2,10 @@
 //!
 //! Concrete widget types own their semantic fields directly. [`WidgetRuntime`] contains only the
 //! common host, lifecycle, option, and resource machinery required by every class.
-use super::*;
+use crate::com::*;
+use microui_contracts::*;
+use nc_com::{ComPtr, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
+use std::{cell::RefCell, rc::Rc};
 use microui_contracts::widget::WidgetState;
 use crate::{AvailableSpace, WidgetOption};
 
@@ -81,7 +84,7 @@ impl WidgetRuntime {
         // Native tests exercise the same concrete structs without mounting them through COM. A real
         // runtime supplies their host and assets, while this test-only owner keeps its weak factory
         // reachable for the complete lifetime of the widget value.
-        let owner = super::runtime::create_runtime(crate::test_support::test_atlas());
+        let owner = crate::com::create_runtime(crate::test_support::test_atlas());
         let factory = owner.factory().expect("test UI runtime exposes its factory");
         let host = factory.host().expect("test UI factory exposes its widget host");
         let mut runtime = Self::new(host, options).expect("test widget runtime imports valid assets");
@@ -231,31 +234,31 @@ macro_rules! direct_widget_phase_impl {
         impl microui_contracts::IWidget for $name {
             /// Returns the runtime authority without retaining a tree or parent.
             fn host(&self) -> Result<nc_com::ComPtr<microui_contracts::IWidgetHostAbi>, nc_com::NcStatus> {
-                let runtime = <$name as crate::com::widget::HostedWidget>::runtime(self);
+                let runtime = <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self);
                 Ok(runtime.state.host().add_ref())
             }
 
             /// Claims this concrete allocation's only attachment after host validation.
             fn mount(&mut self) -> Result<(), nc_com::NcStatus> {
-                <$name as crate::com::widget::HostedWidget>::runtime_mut(self).state.mount()
+                <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self).state.mount()
             }
 
             /// Closes the concrete widget's event sources exactly once.
             fn close(&mut self) -> Result<(), nc_com::NcStatus> {
-                let closed = <$name as crate::com::widget::HostedWidget>::runtime_mut(self).state.close()?;
+                let closed = <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self).state.close()?;
                 if closed {
-                    <$name as crate::com::widget::HostedWidget>::close_contents(self)?;
+                    <$name as crate::ui_node::widget_object::HostedWidget>::close_contents(self)?;
                 }
                 Ok(())
             }
 
             /// Copies routing and frame policy from the concrete widget and its common options.
             fn properties(&self) -> Result<microui_contracts::WidgetProperties, nc_com::NcStatus> {
-                let runtime = <$name as crate::com::widget::HostedWidget>::runtime(self);
+                let runtime = <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self);
                 let options = runtime.state.options()?;
                 Ok(microui_contracts::WidgetProperties {
                     options: microui_contracts::WidgetOptions {
-                        bits: <$name as crate::com::widget::WidgetAlgorithm>::effective_options(
+                        bits: <$name as crate::ui_node::widget_object::WidgetAlgorithm>::effective_options(
                             self,
                             crate::WidgetOption::from_bits_retain(options.bits),
                         )
@@ -269,7 +272,7 @@ macro_rules! direct_widget_phase_impl {
             /// Replaces the single common option value after complete validation.
             fn set_options(&mut self, options: microui_contracts::WidgetOptions) -> Result<(), nc_com::NcStatus> {
                 options.validate()?;
-                <$name as crate::com::widget::HostedWidget>::runtime_mut(self).state.set_options(options)
+                <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self).state.set_options(options)
             }
 
             /// Runs copied input directly against this concrete widget's semantic fields.
@@ -279,10 +282,10 @@ macro_rules! direct_widget_phase_impl {
                 event: microui_contracts::WidgetEventAbi,
                 text: nc_com::NcCopyFromBufferOffset<'_, u8>,
             ) -> Result<microui_contracts::GeometryChange, nc_com::NcStatus> {
-                <$name as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
+                <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
                 state.validate()?;
-                let input = crate::com::local_event(event, text)?;
-                let assets = <$name as crate::com::widget::HostedWidget>::runtime_mut(self).resources()?;
+                let input = crate::ui_node::input_contract::local_event(event, text)?;
+                let assets = <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self).resources()?;
                 let assets = assets.borrow();
                 let mut ctx = crate::WidgetUpdateCtx::new_with_content_geometry(
                     crate::com::local_rect(state.screen),
@@ -309,11 +312,11 @@ macro_rules! direct_widget_phase_impl {
             /// Drains sticky common and explicitly shared semantic geometry changes together.
             fn take_change(&mut self) -> Result<microui_contracts::GeometryChange, nc_com::NcStatus> {
                 if crate::Widget::take_shared_change(self) {
-                    <$name as crate::com::widget::HostedWidget>::runtime_mut(self)
+                    <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self)
                         .state
                         .record_change(microui_contracts::GeometryChange::CHANGED);
                 }
-                <$name as crate::com::widget::HostedWidget>::runtime_mut(self).state.take_change()
+                <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self).state.take_change()
             }
 
             /// Paints semantic fields directly into the runtime-owned scoped frame context.
@@ -327,8 +330,8 @@ macro_rules! direct_widget_phase_impl {
                 // Reading options performs the one lifecycle check required by
                 // the complete paint invocation. Repeating it before the same
                 // immutable state read would cross the host COM boundary twice.
-                let options = <$name as crate::com::widget::HostedWidget>::runtime(self).state.options()?;
-                let assets = <$name as crate::com::widget::HostedWidget>::runtime_mut(self).resources()?;
+                let options = <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.options()?;
+                let assets = <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self).resources()?;
                 let assets = assets.borrow();
                 let mut ctx = crate::WidgetPaintCtx::new_scoped(
                     crate::com::local_rect(state.rect),
@@ -364,12 +367,12 @@ macro_rules! direct_leaf_layout_impl {
                 bounds: microui_contracts::LayoutLimits,
                 _metrics: nc_com::ComRef<'_, microui_contracts::ITextMetricsAbi>,
             ) -> Result<microui_contracts::Size, nc_com::NcStatus> {
-                <$name as crate::com::widget::HostedWidget>::runtime(self).state.readable()?;
+                <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
                 let constraints = crate::Constraints::new(
-                    crate::com::widget::available(bounds.width)?,
-                    crate::com::widget::available(bounds.height)?,
+                    crate::ui_node::widget_object::available(bounds.width)?,
+                    crate::ui_node::widget_object::available(bounds.height)?,
                 );
-                let assets = <$name as crate::com::widget::HostedWidget>::runtime_mut(self).resources()?;
+                let assets = <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self).resources()?;
                 let assets = assets.borrow();
                 let size = crate::LeafWidget::measure(
                     self,
@@ -394,7 +397,7 @@ macro_rules! direct_container_layout_impl {
         impl microui_contracts::IContainerLayout for $name {
             /// Returns the read-only view paired with this concrete container's private writer.
             fn children(&self) -> Result<nc_com::ComPtr<microui_contracts::IChildrenAbi>, nc_com::NcStatus> {
-                <$name as crate::com::widget::HostedWidget>::runtime(self).state.readable()?;
+                <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
                 self.editor.view()
             }
 
@@ -405,10 +408,10 @@ macro_rules! direct_container_layout_impl {
                 bounds: microui_contracts::LayoutLimits,
                 service: nc_com::ComRef<'_, microui_contracts::ILayoutServiceAbi>,
             ) -> Result<microui_contracts::Size, nc_com::NcStatus> {
-                <$name as crate::com::widget::HostedWidget>::runtime(self).state.readable()?;
-                let constraints = crate::com::layout::constraints(bounds)?;
-                let layout = crate::com::layout::ScopedLayout::new(scope, service)?;
-                let assets = <$name as crate::com::widget::HostedWidget>::runtime_mut(self).resources()?;
+                <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
+                let constraints = crate::ui_node::layout_service::constraints(bounds)?;
+                let layout = crate::ui_node::layout_service::ScopedLayout::new(scope, service)?;
+                let assets = <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self).resources()?;
                 let assets = assets.borrow();
                 let mut ctx = crate::MeasureCtx::scoped(assets.bundle().skin(), assets.bundle().atlas(), layout);
                 let size = crate::ContainerWidget::measure(self, &mut ctx, constraints);
@@ -426,12 +429,12 @@ macro_rules! direct_container_layout_impl {
                 rect: microui_contracts::Rect,
                 service: nc_com::ComRef<'_, microui_contracts::ILayoutServiceAbi>,
             ) -> Result<microui_contracts::ContainerGeometry, nc_com::NcStatus> {
-                <$name as crate::com::widget::HostedWidget>::runtime(self).state.readable()?;
+                <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
                 if rect.width < 0 || rect.height < 0 {
                     return Err(nc_com::NC_E_INVALID_ARG);
                 }
-                let layout = crate::com::layout::ScopedLayout::new(scope, service)?;
-                let assets = <$name as crate::com::widget::HostedWidget>::runtime_mut(self).resources()?;
+                let layout = crate::ui_node::layout_service::ScopedLayout::new(scope, service)?;
+                let assets = <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self).resources()?;
                 let assets = assets.borrow();
                 let mut ctx = crate::ContainerLayoutCtx::scoped(
                     assets.bundle().skin(),
@@ -449,8 +452,8 @@ macro_rules! direct_container_layout_impl {
                 event: microui_contracts::WidgetEventAbi,
                 text: nc_com::NcCopyFromBufferOffset<'_, u8>,
             ) -> Result<bool, nc_com::NcStatus> {
-                <$name as crate::com::widget::HostedWidget>::runtime(self).state.readable()?;
-                let event = crate::com::local_event(event, text)?;
+                <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
+                let event = crate::ui_node::input_contract::local_event(event, text)?;
                 Ok(event.is_some_and(|event| crate::ContainerWidget::accepts_event(self, &event)))
             }
         }
@@ -480,34 +483,34 @@ macro_rules! direct_scrolling_impl {
         impl microui_contracts::IScrolling for $name {
             /// Reads one coherent snapshot from the scalar model shared with both scrollbar children.
             fn info(&self) -> Result<microui_contracts::ScrollInfo, nc_com::NcStatus> {
-                <$name as crate::com::widget::HostedWidget>::runtime(self).state.readable()?;
+                <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
                 Ok(self.model.com_info())
             }
 
             /// Records a sticky nonnegative request for the next concrete placement.
             fn set_offset(&mut self, offset: microui_contracts::Point) -> Result<(), nc_com::NcStatus> {
-                <$name as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
+                <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
                 self.model.set_offset(crate::Vec2i::new(offset.x, offset.y));
                 Ok(())
             }
 
             /// Changes wheel and scrollbar participation through the shared scalar model.
             fn set_enabled(&mut self, enabled: bool) -> Result<(), nc_com::NcStatus> {
-                <$name as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
+                <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
                 self.model.set_enabled(enabled);
                 Ok(())
             }
 
             /// Preserves an end request until placement installs the freshly measured range.
             fn scroll_to_end(&mut self) -> Result<(), nc_com::NcStatus> {
-                <$name as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
+                <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
                 self.model.scroll_to_end();
                 Ok(())
             }
 
             /// Validates one content-local rectangle before changing either requested axis.
             fn reveal(&mut self, rect: microui_contracts::Rect) -> Result<(), nc_com::NcStatus> {
-                <$name as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
+                <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
                 if rect.x < 0 || rect.y < 0 || rect.width < 0 || rect.height < 0 {
                     return Err(nc_com::NC_E_INVALID_ARG);
                 }
@@ -522,7 +525,7 @@ pub(crate) use direct_scrolling_impl;
 
 
 /// Resolves one concrete font-role vocabulary for both widget and compact menu presentation.
-pub(super) fn local_font_role(role: TextFontRole) -> Result<crate::FontRole, NcStatus> {
+pub(crate) fn local_font_role(role: TextFontRole) -> Result<crate::FontRole, NcStatus> {
     match role {
         TextFontRole::BODY => Ok(crate::FontRole::Body),
         TextFontRole::SMALL => Ok(crate::FontRole::Small),

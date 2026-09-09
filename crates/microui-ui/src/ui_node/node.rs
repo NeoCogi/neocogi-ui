@@ -29,7 +29,7 @@
 //
 
 #[cfg(not(test))]
-use crate::com::ComNode as NodeData;
+use crate::ui_node::ComNode as NodeData;
 #[cfg(test)]
 use crate::test_support::node::NodeData;
 
@@ -181,7 +181,7 @@ pub struct Node {
 
 impl Node {
     /// Mounts an already authenticated COM leaf without another widget allocation.
-    pub(crate) fn com_widget(widget: crate::com::ComNode) -> Self {
+    pub(crate) fn com_widget(widget: crate::ui_node::ComNode) -> Self {
         // Only the algorithm harness accepts native owners; deployed nodes store this value directly.
         #[cfg(test)]
         let widget = NodeData::Com(widget);

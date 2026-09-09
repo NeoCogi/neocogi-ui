@@ -75,7 +75,7 @@ pub struct ListBoxSubmitted {
 /// Concrete retained list box and dynamically constructible COM object.
 pub struct ListBox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
-    runtime: crate::com::widget::WidgetRuntime,
+    runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Initialization-only label.
     label: String,
     /// Initialization-only image.
@@ -101,7 +101,7 @@ impl ListBox {
     }
 
     /// Combines validated semantic parameters with one already bound common runtime.
-    pub(crate) fn from_runtime(runtime: crate::com::widget::WidgetRuntime, parameters: ListBoxParameters) -> Self {
+    pub(crate) fn from_runtime(runtime: crate::ui_node::widget_object::WidgetRuntime, parameters: ListBoxParameters) -> Self {
         Self {
             runtime,
             label: parameters.label,
@@ -192,26 +192,26 @@ impl crate::TypedWidget<ListBoxSubmitted> for ListBox {
 impl From<ListBoxParameters> for ListBox {
     /// Transfers one-shot parameters into the concrete ListBox runtime.
     fn from(parameters: ListBoxParameters) -> Self {
-        let runtime = crate::com::widget::WidgetRuntime::for_test(parameters.opt);
+        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(parameters.opt);
         Self::from_runtime(runtime, parameters)
     }
 }
 
-impl crate::com::widget::WidgetAlgorithm for ListBox {
+impl crate::ui_node::widget_object::WidgetAlgorithm for ListBox {
     /// Logical COM closure cancels ordinary submissions while retained widget references remain safe.
     fn close_events(&mut self) {
         self.submitted_event.close_ordinary();
     }
 }
 
-impl crate::com::widget::HostedWidget for ListBox {
+impl crate::ui_node::widget_object::HostedWidget for ListBox {
     /// Borrows common lifecycle and resource state without a second list-box representation.
-    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+    fn runtime(&self) -> &crate::ui_node::widget_object::WidgetRuntime {
         &self.runtime
     }
 
     /// Exclusively borrows common lifecycle and resource state for a COM mutation or phase.
-    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+    fn runtime_mut(&mut self) -> &mut crate::ui_node::widget_object::WidgetRuntime {
         &mut self.runtime
     }
 }
@@ -228,7 +228,7 @@ impl ListBox {
     }
 }
 
-impl crate::com::widget::FontState for ListBox {
+impl crate::ui_node::widget_object::FontState for ListBox {
     /// Borrows the semantic font reference already used by layout and painting.
     fn font(&self) -> &crate::FontRef {
         &self.font
@@ -239,7 +239,7 @@ impl crate::com::widget::FontState for ListBox {
     }
 }
 
-impl crate::com::widget::ImageState for ListBox {
+impl crate::ui_node::widget_object::ImageState for ListBox {
     /// List-box image editing uses the same immutable image representation and layout helpers.
     fn set_image(&mut self, image: Option<microui_redux::Image>, fit_width: bool) -> bool {
         if same_image(&self.image, &image) && (image.is_none() || self.fit_width == fit_width) {
@@ -251,7 +251,7 @@ impl crate::com::widget::ImageState for ListBox {
     }
 }
 
-use crate::com::widget::{HostedWidget, ImageState, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
+use crate::ui_node::widget_object::{HostedWidget, ImageState, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
 use microui_contracts::{GeometryChange, IActivationSinkAbi, IEventSubscriptionAbi, ITextureAbi, IWidgetHostAbi, ListBoxAbi, TextFontRole};
 use nc_com::*;
 
@@ -262,7 +262,7 @@ impl ListBox {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
     pub(crate) fn create_com(
         host: ComPtr<IWidgetHostAbi>,
-        resources: crate::com::widget::SharedAssets,
+        resources: crate::ui_node::widget_object::SharedAssets,
         label: NcCopyFromBufferOffset<'_, u8>,
     ) -> Result<ComPtr<ListBoxAbi>, NcStatus> {
         let value = Self::build(host, label, Some(&resources))?;
@@ -273,10 +273,10 @@ impl ListBox {
     fn build(
         host: ComPtr<IWidgetHostAbi>,
         label: NcCopyFromBufferOffset<'_, u8>,
-        resources: Option<&crate::com::widget::SharedAssets>,
+        resources: Option<&crate::ui_node::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
         let parameters = crate::ListBoxParameters::new(crate::com::text(label)?, None);
-        let runtime = crate::com::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
         Ok(Self::from_runtime(runtime, parameters))
     }
 }

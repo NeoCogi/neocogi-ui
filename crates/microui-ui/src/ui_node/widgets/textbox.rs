@@ -96,7 +96,7 @@ impl TextboxParameters {
 /// Concrete retained textbox and dynamically constructible COM object.
 pub struct Textbox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
-    runtime: crate::com::widget::WidgetRuntime,
+    runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Current text buffer.
     buf: String,
     /// Current byte cursor, always positioned at a Unicode scalar-value boundary.
@@ -115,7 +115,7 @@ pub struct Textbox {
 
 impl Textbox {
     /// Combines validated semantic parameters with one already bound common runtime.
-    pub(crate) fn from_runtime(runtime: crate::com::widget::WidgetRuntime, parameters: TextboxParameters) -> Self {
+    pub(crate) fn from_runtime(runtime: crate::ui_node::widget_object::WidgetRuntime, parameters: TextboxParameters) -> Self {
         // Normalize at concrete storage so every constructor preserves the one-line invariant.
         let buf = normalize_single_line_text(parameters.buf);
         let cursor = buf.len();
@@ -435,12 +435,12 @@ impl Widget for Textbox {
 impl From<TextboxParameters> for Textbox {
     /// Transfers one-shot parameters into the concrete Textbox runtime.
     fn from(parameters: TextboxParameters) -> Self {
-        let runtime = crate::com::widget::WidgetRuntime::for_test(parameters.opt);
+        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(parameters.opt);
         Self::from_runtime(runtime, parameters)
     }
 }
 
-impl crate::com::widget::WidgetAlgorithm for Textbox {
+impl crate::ui_node::widget_object::WidgetAlgorithm for Textbox {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
         self.changed_event.close_ordinary();
@@ -448,19 +448,19 @@ impl crate::com::widget::WidgetAlgorithm for Textbox {
     }
 }
 
-impl crate::com::widget::HostedWidget for Textbox {
+impl crate::ui_node::widget_object::HostedWidget for Textbox {
     /// Borrows common lifecycle and resource state without a second textbox representation.
-    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+    fn runtime(&self) -> &crate::ui_node::widget_object::WidgetRuntime {
         &self.runtime
     }
 
     /// Exclusively borrows common lifecycle and resource state for a COM mutation or phase.
-    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+    fn runtime_mut(&mut self) -> &mut crate::ui_node::widget_object::WidgetRuntime {
         &mut self.runtime
     }
 }
 
-impl crate::com::widget::FontState for Textbox {
+impl crate::ui_node::widget_object::FontState for Textbox {
     /// Borrows the semantic font reference already used by layout and painting.
     fn font(&self) -> &crate::FontRef {
         &self.font
@@ -599,7 +599,7 @@ mod tests {
     }
 }
 
-use crate::com::widget::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
+use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
 use microui_contracts::{GeometryChange, IEventSubscriptionAbi, ITextChangedSinkAbi, ITextSubmittedSinkAbi, IWidgetHostAbi, TextFontRole, TextboxAbi};
 use nc_com::*;
 
@@ -610,7 +610,7 @@ impl Textbox {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
     pub(crate) fn create_com(
         host: ComPtr<IWidgetHostAbi>,
-        resources: crate::com::widget::SharedAssets,
+        resources: crate::ui_node::widget_object::SharedAssets,
         text: NcCopyFromBufferOffset<'_, u8>,
     ) -> Result<ComPtr<TextboxAbi>, NcStatus> {
         let value = Self::build(host, text, Some(&resources))?;
@@ -621,10 +621,10 @@ impl Textbox {
     fn build(
         host: ComPtr<IWidgetHostAbi>,
         input: NcCopyFromBufferOffset<'_, u8>,
-        resources: Option<&crate::com::widget::SharedAssets>,
+        resources: Option<&crate::ui_node::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
         let parameters = crate::TextboxParameters::new(crate::com::text(input)?);
-        let runtime = crate::com::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
         Ok(Self::from_runtime(runtime, parameters))
     }
 }

@@ -273,7 +273,7 @@ pub struct ScrollbarChanged {
 /// Standalone one-axis scrollbar and dynamically constructible COM object.
 pub struct Scrollbar {
     /// Non-semantic COM lifecycle and host-backed phase resources.
-    runtime: crate::com::widget::WidgetRuntime,
+    runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Immutable axis used to project pointer and layout coordinates.
     axis: ScrollbarAxis,
     /// One authoritative range/offset allocation, also shared by composed scroll layout when present.
@@ -346,7 +346,7 @@ impl ScrollAxisState {
 
 impl Scrollbar {
     /// Normalizes a complete range and combines it with one already bound common runtime.
-    pub(crate) fn from_runtime(runtime: crate::com::widget::WidgetRuntime, parameters: ScrollbarParameters) -> Self {
+    pub(crate) fn from_runtime(runtime: crate::ui_node::widget_object::WidgetRuntime, parameters: ScrollbarParameters) -> Self {
         // Normalize all range inputs before mounting so the first measure, update, and paint phases
         // observe one coherent range and offset.
         let viewport_len = parameters.viewport_len.max(0);
@@ -368,7 +368,7 @@ impl Scrollbar {
 impl From<ScrollbarParameters> for Scrollbar {
     /// Builds the same concrete scrollbar against a valid native test host.
     fn from(parameters: ScrollbarParameters) -> Self {
-        let runtime = crate::com::widget::WidgetRuntime::for_test(parameters.opt);
+        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(parameters.opt);
         Self::from_runtime(runtime, parameters)
     }
 }
@@ -470,7 +470,7 @@ impl Widget for Scrollbar {
     fn effective_widget_opt(&self) -> WidgetOption {
         // A zero range can still paint a complete thumb when mounted standalone, but accepting a
         // press would create meaningless pointer capture.
-        crate::com::widget::WidgetAlgorithm::effective_options(self, self.opt)
+        crate::ui_node::widget_object::WidgetAlgorithm::effective_options(self, self.opt)
     }
 
     /// Applies track clicks and captured thumb dragging to the current offset.
@@ -530,7 +530,7 @@ impl crate::LeafWidget for Scrollbar {
     }
 }
 
-impl crate::com::widget::WidgetAlgorithm for Scrollbar {
+impl crate::ui_node::widget_object::WidgetAlgorithm for Scrollbar {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
         self.changed_event.close_ordinary();
@@ -546,14 +546,14 @@ impl crate::com::widget::WidgetAlgorithm for Scrollbar {
     }
 }
 
-impl crate::com::widget::HostedWidget for Scrollbar {
+impl crate::ui_node::widget_object::HostedWidget for Scrollbar {
     /// Borrows common lifecycle and resource state without a second scrollbar representation.
-    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+    fn runtime(&self) -> &crate::ui_node::widget_object::WidgetRuntime {
         &self.runtime
     }
 
     /// Exclusively borrows common lifecycle and resource state for a COM mutation or phase.
-    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+    fn runtime_mut(&mut self) -> &mut crate::ui_node::widget_object::WidgetRuntime {
         &mut self.runtime
     }
 }
@@ -618,7 +618,7 @@ mod tests {
     }
 }
 
-use crate::com::widget::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl};
+use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl};
 use microui_contracts::{IEventSubscriptionAbi, IScrollbarSinkAbi, IWidgetHostAbi, ScrollAxis, ScrollRange, ScrollbarAbi};
 use nc_com::*;
 
@@ -634,7 +634,7 @@ impl Scrollbar {
     }
 
     /// Constructs the class for the host-bound factory through the same typed contract used by the registry.
-    pub(crate) fn create_com(host: ComPtr<IWidgetHostAbi>, resources: crate::com::widget::SharedAssets, range: ScrollRange) -> Result<ComPtr<ScrollbarAbi>, NcStatus> {
+    pub(crate) fn create_com(host: ComPtr<IWidgetHostAbi>, resources: crate::ui_node::widget_object::SharedAssets, range: ScrollRange) -> Result<ComPtr<ScrollbarAbi>, NcStatus> {
         let value = Self::build(host, range, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("Scrollbar declares its callable class contract"))
     }
@@ -643,7 +643,7 @@ impl Scrollbar {
     fn build(
         host: ComPtr<IWidgetHostAbi>,
         range: ScrollRange,
-        resources: Option<&crate::com::widget::SharedAssets>,
+        resources: Option<&crate::ui_node::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
         let axis = match range.axis {
             ScrollAxis::HORIZONTAL => crate::ScrollbarAxis::Horizontal,
@@ -654,7 +654,7 @@ impl Scrollbar {
             return Err(NC_E_INVALID_ARG);
         }
         let parameters = crate::ScrollbarParameters::new(axis).range(range.viewport, range.content, range.offset);
-        let runtime = crate::com::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
         Ok(Self::from_runtime(runtime, parameters))
     }
 }

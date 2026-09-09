@@ -7,12 +7,12 @@ pub struct UiFactory {
     /// Non-owning runtime authority used for lifetime checks, resources, and child stores.
     host: ComPtr<IWidgetHostAbi>,
     /// One imported value shared by every widget produced through this factory.
-    resources: super::widget::SharedAssets,
+    resources: crate::ui_node::widget_object::SharedAssets,
 }
 
 impl UiFactory {
     /// Builds the factory projection used by a newly constructed UI runtime.
-    pub(super) fn create(host: ComPtr<IWidgetHostAbi>, resources: super::widget::SharedAssets) -> Result<ComPtr<UiFactoryAbi>, NcStatus> {
+    pub(super) fn create(host: ComPtr<IWidgetHostAbi>, resources: crate::ui_node::widget_object::SharedAssets) -> Result<ComPtr<UiFactoryAbi>, NcStatus> {
         host.check_open()?;
         let value = Self { host, resources };
         Ok(Self::from_value(value)

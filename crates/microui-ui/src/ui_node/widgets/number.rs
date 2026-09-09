@@ -98,7 +98,7 @@ pub struct NumberChanged {
 /// Concrete retained number input and dynamically constructible COM object.
 pub struct Number {
     /// Non-semantic COM lifecycle and host-backed phase resources.
-    runtime: crate::com::widget::WidgetRuntime,
+    runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Initialization-only validated drag and arrow-key step.
     step: Real,
     /// Initialization-only bounded display precision.
@@ -125,7 +125,7 @@ impl Number {
     }
 
     /// Combines validated semantic parameters with one already bound common runtime.
-    pub(crate) fn from_runtime(runtime: crate::com::widget::WidgetRuntime, parameters: NumberParameters) -> Self {
+    pub(crate) fn from_runtime(runtime: crate::ui_node::widget_object::WidgetRuntime, parameters: NumberParameters) -> Self {
         // Fallible parameter constructors guarantee finite value and nonnegative finite step.
         Self {
             runtime,
@@ -271,31 +271,31 @@ impl Widget for Number {
 impl From<NumberParameters> for Number {
     /// Transfers one-shot parameters into the concrete Number runtime.
     fn from(parameters: NumberParameters) -> Self {
-        let runtime = crate::com::widget::WidgetRuntime::for_test(parameters.opt);
+        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(parameters.opt);
         Self::from_runtime(runtime, parameters)
     }
 }
 
-impl crate::com::widget::WidgetAlgorithm for Number {
+impl crate::ui_node::widget_object::WidgetAlgorithm for Number {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
         self.changed_event.close_ordinary();
     }
 }
 
-impl crate::com::widget::HostedWidget for Number {
+impl crate::ui_node::widget_object::HostedWidget for Number {
     /// Borrows common lifecycle and resource state without a second number representation.
-    fn runtime(&self) -> &crate::com::widget::WidgetRuntime {
+    fn runtime(&self) -> &crate::ui_node::widget_object::WidgetRuntime {
         &self.runtime
     }
 
     /// Exclusively borrows common lifecycle and resource state for a COM mutation or phase.
-    fn runtime_mut(&mut self) -> &mut crate::com::widget::WidgetRuntime {
+    fn runtime_mut(&mut self) -> &mut crate::ui_node::widget_object::WidgetRuntime {
         &mut self.runtime
     }
 }
 
-impl crate::com::widget::FontState for Number {
+impl crate::ui_node::widget_object::FontState for Number {
     /// Borrows the semantic font reference already used by layout and painting.
     fn font(&self) -> &crate::FontRef {
         &self.font
@@ -306,7 +306,7 @@ impl crate::com::widget::FontState for Number {
     }
 }
 
-use crate::com::widget::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
+use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
 use microui_contracts::{GeometryChange, IEventSubscriptionAbi, INumericSinkAbi, IWidgetHostAbi, NumberAbi, NumberOptions, TextFontRole};
 use nc_com::*;
 
@@ -315,7 +315,7 @@ direct_leaf_layout_impl!(Number);
 
 impl Number {
     /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(crate) fn create_com(host: ComPtr<IWidgetHostAbi>, resources: crate::com::widget::SharedAssets, options: NumberOptions) -> Result<ComPtr<NumberAbi>, NcStatus> {
+    pub(crate) fn create_com(host: ComPtr<IWidgetHostAbi>, resources: crate::ui_node::widget_object::SharedAssets, options: NumberOptions) -> Result<ComPtr<NumberAbi>, NcStatus> {
         let value = Self::build(host, options, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("Number declares its callable class contract"))
     }
@@ -324,7 +324,7 @@ impl Number {
     fn build(
         host: ComPtr<IWidgetHostAbi>,
         options: NumberOptions,
-        resources: Option<&crate::com::widget::SharedAssets>,
+        resources: Option<&crate::ui_node::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
         let parameters = crate::NumberParameters::new(
             options.value,
@@ -332,7 +332,7 @@ impl Number {
             crate::DecimalPrecision::try_from(usize::from(options.precision)).map_err(|_| NC_E_INVALID_ARG)?,
         )
         .map_err(|_| NC_E_INVALID_ARG)?;
-        let runtime = crate::com::widget::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
         Ok(Self::from_runtime(runtime, parameters))
     }
 }

@@ -47,7 +47,7 @@ pub(super) enum EdgeEdit<E> {
 }
 
 /// Typed relationship access shared by the two editable built-in container algorithms.
-pub(super) trait ContainerAlgorithm: crate::com::widget::WidgetAlgorithm + crate::ContainerWidget {
+pub(super) trait ContainerAlgorithm: crate::ui_node::widget_object::WidgetAlgorithm + crate::ContainerWidget {
     /// Concrete relationship data retained by this container.
     type Edge: Copy + PartialEq;
 
@@ -63,13 +63,13 @@ macro_rules! container_methods {
     () => {
         /// Exposes read-only topology without allowing callers to bypass relationship metadata.
         fn children(&self) -> Result<nc_com::ComPtr<microui_contracts::IChildrenAbi>, nc_com::NcStatus> {
-            <Self as crate::com::widget::HostedWidget>::runtime(self).state.readable()?;
+            <Self as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
             self.editor.view()
         }
 
         /// Publishes matching metadata even when removed-child teardown reports an error.
         fn remove(&mut self, index: u32) -> Result<microui_contracts::ChildEditResult, nc_com::NcStatus> {
-            <Self as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
+            <Self as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
             let outcome = self.editor.remove(index)?;
             <Self as crate::ui_node::containers::ContainerAlgorithm>::edit_edges(
                 self,
@@ -80,7 +80,7 @@ macro_rules! container_methods {
 
         /// Clears topology and relationship metadata in the same guarded operation.
         fn clear(&mut self) -> Result<microui_contracts::ChildEditResult, nc_com::NcStatus> {
-            <Self as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
+            <Self as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
             let outcome = self.editor.clear()?;
             <Self as crate::ui_node::containers::ContainerAlgorithm>::edit_edges(self, crate::ui_node::containers::EdgeEdit::Clear);
             Ok(outcome)
@@ -93,7 +93,7 @@ macro_rules! container_edges {
     ($edge:ty, $decode:ident, $encode:ident) => {
         /// Returns one copied relationship after checking the container's logical lifetime.
         fn edge(&self, index: u32) -> Result<$edge, nc_com::NcStatus> {
-            <Self as crate::com::widget::HostedWidget>::runtime(self).state.readable()?;
+            <Self as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
             Ok($encode(
                 <Self as crate::ui_node::containers::ContainerAlgorithm>::edge(self, index as usize)
                     .ok_or(nc_com::NC_E_OUT_OF_RANGE)?,
@@ -102,7 +102,7 @@ macro_rules! container_edges {
 
         /// Replaces valid metadata and invalidates layout only when the value changes.
         fn set_edge(&mut self, index: u32, edge: $edge) -> Result<(), nc_com::NcStatus> {
-            <Self as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
+            <Self as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
             let edge = $decode(edge)?;
             let previous = <Self as crate::ui_node::containers::ContainerAlgorithm>::edge(self, index as usize)
                 .ok_or(nc_com::NC_E_OUT_OF_RANGE)?;
@@ -111,7 +111,7 @@ macro_rules! container_edges {
                     self,
                     crate::ui_node::containers::EdgeEdit::Replace { index: index as usize, edge },
                 );
-                <Self as crate::com::widget::HostedWidget>::runtime_mut(self)
+                <Self as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self)
                     .state
                     .record_change(microui_contracts::GeometryChange::CHANGED);
             }
@@ -125,7 +125,7 @@ macro_rules! container_edges {
             child: nc_com::ComRef<'_, microui_contracts::IWidgetAbi>,
             edge: $edge,
         ) -> Result<microui_contracts::ChildEditResult, nc_com::NcStatus> {
-            <Self as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
+            <Self as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
             let edge = $decode(edge)?;
             let outcome = self.editor.insert(index, child)?;
             <Self as crate::ui_node::containers::ContainerAlgorithm>::edit_edges(
@@ -142,7 +142,7 @@ macro_rules! container_edges {
             child: nc_com::ComRef<'_, microui_contracts::IWidgetAbi>,
             edge: $edge,
         ) -> Result<microui_contracts::ChildEditResult, nc_com::NcStatus> {
-            <Self as crate::com::widget::HostedWidget>::runtime(self).state.writable()?;
+            <Self as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
             let edge = $decode(edge)?;
             let outcome = self.editor.replace(index, child)?;
             <Self as crate::ui_node::containers::ContainerAlgorithm>::edit_edges(

@@ -1,5 +1,7 @@
 //! Explicit conversion from the retained router to copied COM input contracts.
-use super::*;
+use crate::com::*;
+use microui_contracts::*;
+use nc_com::{NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
 use crate::{KeyboardAction, Key, KeyEvent, UiInputEvent, WidgetUpdateCtx};
 
 /// Copies local point coordinates without exporting the math crate's Rust layout.
@@ -138,9 +140,9 @@ fn host_key(event: KeyStroke) -> Result<KeyEvent, NcStatus> {
 }
 
 /// Validates one host event before changing the queue, then reuses existing normalization.
-pub(super) fn enqueue(context: &mut crate::Context<super::render::Backend>, event: UiInputAbi, bytes: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+pub(crate) fn enqueue(context: &mut crate::Context<crate::com::render::Backend>, event: UiInputAbi, bytes: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
     let event = UiInput::try_from(event)?;
-    let text = super::text(bytes)?;
+    let text = text(bytes)?;
     if !matches!(event, UiInput::Text) && !text.is_empty() {
         return Err(NC_E_INVALID_ARG);
     }
