@@ -202,18 +202,28 @@ impl ComNode {
 }
 
 impl ComNode {
-    /// Collects sticky setter changes without a second owner or weak mutation hook.
+    /// Reports already collected invalidation without crossing a component boundary.
     pub(crate) fn is_measurement_dirty(&self) -> bool {
+        self.dirty.get()
+            || matches!(&self.layout, NodeLayoutKind::Branch { children, .. } if children.dirty.get())
+    }
+
+    /// Drains component and child changes once at the mutable traversal boundary.
+    pub(crate) fn take_measurement_dirty(&mut self) -> bool {
         if let NodeLayoutKind::Branch { children, .. } = &self.layout
             && children.dirty.replace(false)
         {
             self.dirty.set(true);
         }
         let _phase = Observation::begin(&self.host);
-        self.refresh_properties();
-        let mut widget = self.widget.clone();
-        match widget.take_change() {
-            Ok(GeometryChange::CHANGED) => self.dirty.set(true),
+        match self.widget.take_change() {
+            Ok(GeometryChange::CHANGED) => {
+                // A setter may have changed options or frame policy. Query that
+                // copied protocol only after a real component change instead of
+                // once per node on every update and render validation pass.
+                self.refresh_properties();
+                self.dirty.set(true);
+            }
             Ok(GeometryChange::NO_CHANGE) => {}
             Ok(_) => {
                 self.host.fail(NC_E_INVALID_ARG);
@@ -224,12 +234,6 @@ impl ComNode {
                 self.dirty.set(true);
             }
         }
-        self.dirty.get()
-    }
-
-    /// Consumes setter and update changes together at the ancestor propagation boundary.
-    pub(crate) fn take_measurement_dirty(&self) -> bool {
-        self.is_measurement_dirty();
         self.dirty.replace(false)
     }
 
