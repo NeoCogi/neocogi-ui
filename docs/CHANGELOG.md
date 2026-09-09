@@ -60,6 +60,9 @@ wrappers. The accepted migration and outstanding validation are recorded in
 - Store the runtime's current imported assets as one shared value instead of a
   wrapper around nested reference-counted snapshots. Installing a replacement now
   requires a mutable `UiRuntime` receiver, making runtime-wide mutation explicit.
+- Store each independently constructed widget's imported resources directly as
+  one `Rc<RefCell<ImportedAssets>>`; remove its redundant revision and resource
+  wrappers and borrow that sole value during semantic phases.
 - Co-package built-in widgets, containers and window-manager policy in the UI
   plugin; keep each renderer and its OS/device owners together in the platform
   plugin. An optional asset plugin and independently built extension demonstrate

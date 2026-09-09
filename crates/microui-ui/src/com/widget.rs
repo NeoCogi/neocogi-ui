@@ -19,51 +19,6 @@ pub(crate) trait WidgetAlgorithm: crate::Widget {
 /// One current imported asset value shared by the runtime services that observe installation.
 pub(super) type SharedAssets = Rc<RefCell<crate::assets::ImportedAssets>>;
 
-/// One built-in widget's imported resources.
-struct WidgetRevision {
-    /// Locally decoded immutable bundle selected by the host's current revision.
-    assets: Rc<crate::assets::ImportedAssets>,
-}
-
-impl WidgetRevision {
-    /// Imports a host revision before publication.
-    fn read(source: ComRef<'_, IAssetBundleAbi>, previous: Option<&crate::assets::ImportedAssets>) -> Result<Self, NcStatus> {
-        let assets = Rc::new(crate::assets::ImportedAssets::read(source, previous)?);
-        Ok(Self { assets })
-    }
-}
-
-/// Host-backed resource cache owned by one independently constructible widget.
-struct WidgetResources {
-    /// Current imported revision, mutated only through an exclusive widget receiver.
-    current: WidgetRevision,
-}
-
-impl WidgetResources {
-    /// Imports the host's current immutable bundle during widget construction.
-    fn new(host: ComRef<'_, IWidgetHostAbi>) -> Result<Self, NcStatus> {
-        let source = host.assets()?;
-        Ok(Self {
-            current: WidgetRevision::read(source.as_com_ref(), None)?,
-        })
-    }
-
-    /// Refreshes only when the host publishes a distinct immutable bundle object.
-    fn current(&mut self, host: ComRef<'_, IWidgetHostAbi>) -> Result<&mut WidgetRevision, NcStatus> {
-        let source = host.assets()?;
-        if self.current.assets.source().as_ptr() != source.as_ptr() {
-            self.current = WidgetRevision::read(source.as_com_ref(), Some(&self.current.assets))?;
-        }
-        Ok(&mut self.current)
-    }
-
-    /// Retains the current immutable resource revision after completing any required refresh.
-    fn snapshot(&mut self, host: ComRef<'_, IWidgetHostAbi>) -> Result<Rc<crate::assets::ImportedAssets>, NcStatus> {
-        // Returning an owned revision ends the cache borrow before semantic code receives control.
-        Ok(self.current(host)?.assets.clone())
-    }
-}
-
 /// Common non-semantic state embedded directly in every concrete widget COM allocation.
 ///
 /// This helper deliberately has no type parameter and cannot contain a widget implementation. It
@@ -72,8 +27,8 @@ impl WidgetResources {
 pub(crate) struct WidgetRuntime {
     /// Shared logical lifetime, attachment state, options, and sticky geometry invalidation.
     pub(crate) state: WidgetState,
-    /// Per-object imported-resource cache and reusable rendering backend.
-    resources: WidgetResources,
+    /// The one imported asset value used by this widget's semantic phases.
+    resources: SharedAssets,
     /// Keeps the real host runtime alive for native-only unit-test fixtures.
     #[cfg(test)]
     test_owner: Option<ComPtr<UiRuntimeAbi>>,
@@ -83,7 +38,8 @@ impl WidgetRuntime {
     /// Binds a newly constructed concrete widget to its host without storing semantic state.
     pub(crate) fn new(host: ComPtr<IWidgetHostAbi>, options: WidgetOption) -> Result<Self, NcStatus> {
         host.check_mutation()?;
-        let resources = WidgetResources::new(host.as_com_ref())?;
+        let source = host.assets()?;
+        let resources = Rc::new(RefCell::new(crate::assets::ImportedAssets::read(source.as_com_ref(), None)?));
         Ok(Self {
             state: WidgetState::new(host, WidgetOptions { bits: options.bits() }),
             resources,
@@ -120,9 +76,17 @@ impl WidgetRuntime {
         (runtime, editor)
     }
 
-    /// Returns an owned resource snapshot so no cache borrow crosses semantic widget execution.
-    pub(super) fn resources(&mut self) -> Result<Rc<crate::assets::ImportedAssets>, NcStatus> {
-        self.resources.snapshot(self.state.host())
+    /// Returns the widget's single shared value after refreshing an independently activated class.
+    pub(super) fn resources(&mut self) -> Result<SharedAssets, NcStatus> {
+        let source = self.state.host().assets()?;
+        if self.resources.borrow().source().as_ptr() != source.as_ptr() {
+            let replacement = {
+                let current = self.resources.borrow();
+                crate::assets::ImportedAssets::read(source.as_com_ref(), Some(&current))?
+            };
+            *self.resources.borrow_mut() = replacement;
+        }
+        Ok(self.resources.clone())
     }
 
     /// Resolves one UTF-8 font name against this widget's exact current resource revision.
@@ -130,7 +94,7 @@ impl WidgetRuntime {
         self.state.writable()?;
         let name = text(input)?;
         let assets = self.resources()?;
-        let font = assets.original().font_id(name).ok_or(nc_com::NC_E_NOT_FOUND)?;
+        let font = assets.borrow().original().font_id(name).ok_or(nc_com::NC_E_NOT_FOUND)?;
         Ok(crate::FontRef::Named(font))
     }
 
@@ -139,7 +103,7 @@ impl WidgetRuntime {
         self.state.writable()?;
         let name = text(input)?;
         let assets = self.resources()?;
-        let icon = assets.original().icon_id(name).ok_or(nc_com::NC_E_NOT_FOUND)?;
+        let icon = assets.borrow().original().icon_id(name).ok_or(nc_com::NC_E_NOT_FOUND)?;
         Ok(crate::IconRef::Named(icon))
     }
 
@@ -281,6 +245,7 @@ macro_rules! direct_widget_phase_impl {
                 state.validate()?;
                 let input = super::input::local_event(event, text)?;
                 let assets = <$name as super::widget::HostedWidget>::runtime_mut(self).resources()?;
+                let assets = assets.borrow();
                 let mut ctx = crate::WidgetUpdateCtx::new_with_content_geometry(
                     local_rect(state.screen),
                     crate::math::RectExt::translated(
@@ -325,6 +290,7 @@ macro_rules! direct_widget_phase_impl {
                 state.validate()?;
                 let options = <$name as super::widget::HostedWidget>::runtime(self).state.options()?;
                 let assets = <$name as super::widget::HostedWidget>::runtime_mut(self).resources()?;
+                let assets = assets.borrow();
                 let mut ctx = crate::WidgetPaintCtx::new_scoped(
                     local_rect(state.rect),
                     local_rect(state.clip),
@@ -359,6 +325,7 @@ macro_rules! direct_leaf_layout_impl {
                     super::widget::available(bounds.height)?,
                 );
                 let assets = <$name as super::widget::HostedWidget>::runtime_mut(self).resources()?;
+                let assets = assets.borrow();
                 let size = crate::LeafWidget::measure(
                     self,
                     assets.bundle().skin(),
@@ -395,6 +362,7 @@ macro_rules! direct_container_layout_impl {
                 let constraints = super::layout::constraints(bounds)?;
                 let layout = super::layout::ScopedLayout::new(scope, service)?;
                 let assets = <$name as super::widget::HostedWidget>::runtime_mut(self).resources()?;
+                let assets = assets.borrow();
                 let mut ctx = crate::MeasureCtx::scoped(assets.bundle().skin(), assets.bundle().atlas(), layout);
                 let size = crate::ContainerWidget::measure(self, &mut ctx, constraints);
                 ctx.result()?;
@@ -417,6 +385,7 @@ macro_rules! direct_container_layout_impl {
                 }
                 let layout = super::layout::ScopedLayout::new(scope, service)?;
                 let assets = <$name as super::widget::HostedWidget>::runtime_mut(self).resources()?;
+                let assets = assets.borrow();
                 let mut ctx = crate::ContainerLayoutCtx::scoped(
                     assets.bundle().skin(),
                     assets.bundle().atlas(),
