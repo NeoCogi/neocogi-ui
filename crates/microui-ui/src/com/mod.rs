@@ -14,7 +14,6 @@ use std::{
 pub(crate) mod widget;
 pub use crate::ui_node::{Grid, Linear};
 pub use crate::ui_node::widgets::{Button, Checkbox, ColorSwatch, Combo, ListBox, ListItem, Number, Scrollbar, Slider, TextBlock, Textbox};
-mod combo;
 pub(crate) mod events;
 mod input;
 pub(crate) use input::local_event;
