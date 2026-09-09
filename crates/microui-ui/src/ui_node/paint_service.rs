@@ -1,5 +1,5 @@
 //! Runtime-owned paint state lets COM widgets append directly to the one frame display list.
-use crate::com::{copied_rect, local_rect, text};
+use crate::boundary::{copied_rect, local_rect, text};
 use microui_contracts::*;
 use nc_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
 use crate::{FontRole, WidgetOption, ControlRole};

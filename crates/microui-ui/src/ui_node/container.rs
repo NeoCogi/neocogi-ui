@@ -129,7 +129,7 @@ impl<'a> ContainerLayoutCtx<'a> {
             atlas,
             content,
             layout,
-            geometry: ContainerGeometry::new(crate::com::copied_rect(content)),
+            geometry: ContainerGeometry::new(crate::boundary::copied_rect(content)),
         }
     }
     /// Native fixtures use the same copied parent output as actual COM containers.
@@ -185,7 +185,7 @@ impl<'a> ContainerLayoutCtx<'a> {
         let viewport = viewport
             .positive_intersection(self.content)
             .unwrap_or_else(|| Recti::new(self.content.x, self.content.y, 0, 0));
-        self.geometry.viewport = crate::com::copied_rect(viewport);
+        self.geometry.viewport = crate::boundary::copied_rect(viewport);
         self.geometry.offset_x = offset.x;
         self.geometry.offset_y = offset.y;
     }

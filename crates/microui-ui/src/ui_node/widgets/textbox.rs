@@ -641,7 +641,7 @@ impl Textbox {
         input: NcCopyFromBufferOffset<'_, u8>,
         resources: Option<&crate::ui_node::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
-        let parameters = crate::TextboxParameters::new(crate::com::text(input)?);
+        let parameters = crate::TextboxParameters::new(crate::boundary::text(input)?);
         let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
         Ok(Self::from_runtime(runtime, parameters))
     }
@@ -660,7 +660,7 @@ impl microui_contracts::Textbox for Textbox {
     /// Applies single-line normalization before recording an actual geometry change.
     fn set_text(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
-        let input = crate::com::text(input)?;
+        let input = crate::boundary::text(input)?;
         let previous = self.text().to_owned();
         self.set_text(input);
         if self.text() != previous {

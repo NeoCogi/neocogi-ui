@@ -433,7 +433,7 @@ impl Button {
         resources: Option<&crate::ui_node::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
         options.validate()?;
-        let label = crate::com::text(label)?;
+        let label = crate::boundary::text(label)?;
         let native_options = crate::WidgetOption::from_bits_retain(options.bits);
         let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, native_options, resources)?;
         Ok(Self::from_runtime(runtime, crate::ButtonParameters::new(label)))
@@ -452,7 +452,7 @@ impl microui_contracts::Button for Button {
     /// Validates before committing and only dirties geometry when text actually differs.
     fn set_label(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
-        let input = crate::com::text(input)?;
+        let input = crate::boundary::text(input)?;
         if self.com_label() != input {
             self.com_set_label(input);
             self.runtime_mut().state.record_change(GeometryChange::CHANGED);

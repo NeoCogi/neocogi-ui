@@ -284,7 +284,7 @@ impl ListBox {
         label: NcCopyFromBufferOffset<'_, u8>,
         resources: Option<&crate::ui_node::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
-        let parameters = crate::ListBoxParameters::new(crate::com::text(label)?, None);
+        let parameters = crate::ListBoxParameters::new(crate::boundary::text(label)?, None);
         let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
         Ok(Self::from_runtime(runtime, parameters))
     }
@@ -303,7 +303,7 @@ impl microui_contracts::ListBox for ListBox {
     /// Validates UTF-8 and records geometry only when the concrete label changes.
     fn set_text(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
-        let label = crate::com::text(input)?;
+        let label = crate::boundary::text(input)?;
         if self.com_label() != label {
             self.com_set_label(label);
             self.runtime_mut().state.record_change(GeometryChange::CHANGED);

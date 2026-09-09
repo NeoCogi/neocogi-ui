@@ -321,7 +321,7 @@ impl TextBlock {
         wrapping: TextWrapping,
         resources: Option<&crate::ui_node::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
-        let parameters = crate::TextBlockParameters::with_wrap(crate::com::text(input)?, crate::ui_node::widget_object::local_wrap(wrapping)?);
+        let parameters = crate::TextBlockParameters::with_wrap(crate::boundary::text(input)?, crate::ui_node::widget_object::local_wrap(wrapping)?);
         let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
         Ok(Self::from_runtime(runtime, parameters))
     }
@@ -340,7 +340,7 @@ impl microui_contracts::TextBlock for TextBlock {
     /// Replaces complete text and records only an actual geometry change.
     fn set_text(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
-        let input = crate::com::text(input)?;
+        let input = crate::boundary::text(input)?;
         let previous = self.text().to_owned();
         self.set_text(input);
         if self.text() != previous {

@@ -79,6 +79,11 @@ wrappers. The accepted migration and outstanding validation are recorded in
   `WidgetRuntime` contains only common lifecycle, resource, and rendering support.
   Composed controls retain real structural child objects rather than duplicate
   parent implementations.
+- Remove the UI implementation's generic `src/com` tree. Retained-node services now
+  live under `ui_node`, external renderer submission under `render`, event sink
+  projections beside their semantic event types, and the dynamically linked runtime
+  and factory in their top-level modules. The plugin registry imports concrete object
+  types directly from the `microui-ui` crate root.
 - Share one typed EventSource transport between built-ins and independent widgets;
   EventSession owns app state and concrete handlers outside the producer graph.
 - Preserve menus, native-path file dialogs, immutable resources, full/basic demos,

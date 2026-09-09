@@ -544,7 +544,7 @@ impl<'a> WidgetPaintCtx<'a> {
     fn scoped_paint(&self) -> Option<(PaintScope, ComRef<'a, IPainterAbi>)> {
         match &self.output {
             PaintOutput::Frame(_) => None,
-            PaintOutput::Scoped { scope, painter } => Some((PaintScope { invocation: scope.invocation, clip: crate::com::copied_rect(self.draw_clip) }, *painter)),
+            PaintOutput::Scoped { scope, painter } => Some((PaintScope { invocation: scope.invocation, clip: crate::boundary::copied_rect(self.draw_clip) }, *painter)),
         }
     }
 
@@ -580,7 +580,7 @@ impl<'a> WidgetPaintCtx<'a> {
     /// Draws a filled rectangle through a widget-local painter.
     pub(crate) fn draw_rect(&mut self, rect: Recti, color: Color) {
         if let Some((scope, mut painter)) = self.scoped_paint() {
-            let result = painter.fill(scope, crate::com::copied_rect(rect), packed_color(color));
+            let result = painter.fill(scope, crate::boundary::copied_rect(rect), packed_color(color));
             self.record(result);
         } else {
             self.painter().fill_rect(rect, color);
@@ -597,7 +597,7 @@ impl<'a> WidgetPaintCtx<'a> {
                 PaintIcon {
                     index: self.common.atlas.icon_index(id),
                 },
-                crate::com::copied_rect(rect),
+                crate::boundary::copied_rect(rect),
                 packed_color(color),
             );
             self.record(result);
@@ -616,7 +616,7 @@ impl<'a> WidgetPaintCtx<'a> {
         if let Some((scope, mut painter)) = self.scoped_paint() {
             let result = painter.texture(
                 scope,
-                crate::com::copied_rect(rect),
+                crate::boundary::copied_rect(rect),
                 microui_contracts::TextureRegion::FULL,
                 packed_color(color),
                 texture.as_com_ref(),
@@ -663,13 +663,13 @@ impl<'a> WidgetPaintCtx<'a> {
         if let Some((scope, mut painter)) = self.scoped_paint() {
             let result = painter.frame(
                 scope,
-                crate::com::copied_rect(rect),
-                crate::com::frame_contract(crate::FrameRole::Control(role)),
+                crate::boundary::copied_rect(rect),
+                crate::ui_node::frame_contract(crate::FrameRole::Control(role)),
                 visual_state(state),
                 false,
             );
             return match result {
-                Ok(content) if content.width > 0 && content.height > 0 => Some(crate::com::local_rect(content)),
+                Ok(content) if content.width > 0 && content.height > 0 => Some(crate::boundary::local_rect(content)),
                 Ok(_) => None,
                 Err(error) => {
                     self.record(Err(error));
@@ -697,8 +697,8 @@ impl<'a> WidgetPaintCtx<'a> {
             let result = painter
                 .frame(
                     scope,
-                    crate::com::copied_rect(rect),
-                    crate::com::frame_contract(crate::FrameRole::Control(role)),
+                    crate::boundary::copied_rect(rect),
+                    crate::ui_node::frame_contract(crate::FrameRole::Control(role)),
                     visual_state(state),
                     true,
                 )
@@ -722,8 +722,8 @@ impl<'a> WidgetPaintCtx<'a> {
             let result = painter
                 .frame(
                     scope,
-                    crate::com::copied_rect(rect),
-                    crate::com::frame_contract(crate::FrameRole::Surface(role)),
+                    crate::boundary::copied_rect(rect),
+                    crate::ui_node::frame_contract(crate::FrameRole::Surface(role)),
                     state,
                     true,
                 )

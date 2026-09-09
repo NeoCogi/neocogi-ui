@@ -106,6 +106,7 @@ mod guide_doctests {
 pub mod assets;
 pub mod atlas;
 mod context;
+mod boundary;
 mod event;
 mod identity;
 pub mod image;
@@ -117,12 +118,6 @@ mod runtime;
 #[cfg(test)]
 mod test_support;
 pub mod theme;
-/// COM implementation entrypoints used by the UI plugin assembly.
-///
-/// This module is declared before the concrete node catalog so its shared implementation macros
-/// are available beside the object types that use them. Contract declarations remain in
-/// `microui-contracts`; concrete class methods live with their owning types.
-mod com;
 mod ui_node;
 pub(crate) use ui_node::widgets;
 mod ui_factory;
@@ -160,11 +155,13 @@ pub use atlas::{AtlasError, AtlasSource, FontEntry};
 pub(crate) use context::{Context};
 #[cfg(test)]
 pub(crate) use test_support::ui::Ui;
-pub(crate) use window_manager::{PopupEvent, PopupHandle, Window, WindowEvent, WindowHandle, WindowOption};
+pub(crate) use window_manager::{PopupHandle, Window, WindowHandle, WindowOption};
 #[cfg(test)]
 pub(crate) use window_manager::{ChildWindowClip, DEFAULT_LAYER, LayerBinding, MIN_LAYER, SurfaceMutationError};
 pub(crate) use event::{EventSource, TypedWidget, WidgetEventPortHandle};
-pub(crate) use menu::{Menu, MenuBar, MenuItem, MenuItemAccessError, MenuItemHandle, MenuItemMark, MenuItemParameters, MenuItemSubmitted};
+pub(crate) use menu::{Menu, MenuBar, MenuItem, MenuItemAccessError, MenuItemHandle, MenuItemMark, MenuItemParameters};
+#[cfg(test)]
+pub(crate) use menu::MenuItemSubmitted;
 pub use image::{ImageError, ImageSource, ImageStorageError, MAX_DECODED_RGBA_BYTES, load_image_bytes};
 pub use input::{Key, KeyEvent, KeyState, Modifiers, MouseButton};
 pub use math::{expand_rect, rect, vec2};

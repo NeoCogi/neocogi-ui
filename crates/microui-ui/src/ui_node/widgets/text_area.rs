@@ -938,7 +938,7 @@ impl ITextContent for TextEditor {
     /// Replaces text and requests caret reveal through the same concrete editor state.
     fn set_text(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
-        self.set_text(crate::com::text(input)?);
+        self.set_text(crate::boundary::text(input)?);
         self.runtime_mut().state.record_change(GeometryChange::CHANGED);
         Ok(())
     }
@@ -1035,7 +1035,7 @@ impl TextArea {
         scrolling: bool,
         resources: Option<&crate::ui_node::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
-        let text_value = crate::com::text(input)?;
+        let text_value = crate::boundary::text(input)?;
         let wrap = crate::ui_node::widget_object::local_wrap(wrapping)?;
         let parts = crate::ui_node::ScrollParts::prepare(host.clone(), scrolling, resources)?;
         let text = TextEditor::create_com(host.clone(), text_value, wrap, parts.model.clone(), resources)?;

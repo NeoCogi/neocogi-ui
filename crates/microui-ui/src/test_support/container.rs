@@ -95,7 +95,7 @@ impl Container {
             .place(&mut ctx, rect);
         let geometry = ctx.result().expect("native fixture geometry cannot fail");
         current.layout.content_size = Dimensioni::new(geometry.content.width, geometry.content.height);
-        current.layout.children.clip = crate::com::local_rect(geometry.viewport);
+        current.layout.children.clip = crate::boundary::local_rect(geometry.viewport);
         current.layout.children.offset = crate::Vec2i::new(geometry.offset_x, geometry.offset_y);
         current.layout.propagate_child_overflow = geometry.propagate_overflow;
     }

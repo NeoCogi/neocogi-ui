@@ -1,5 +1,5 @@
 //! Explicit conversion from the retained router to copied COM input contracts.
-use crate::com::*;
+use crate::boundary::{copied_rect, text};
 use microui_contracts::*;
 use nc_com::{NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
 use crate::{KeyboardAction, Key, KeyEvent, UiInputEvent, WidgetUpdateCtx};

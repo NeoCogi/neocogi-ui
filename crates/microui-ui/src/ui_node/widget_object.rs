@@ -2,7 +2,7 @@
 //!
 //! Concrete widget types own their semantic fields directly. [`WidgetRuntime`] contains only the
 //! common host, lifecycle, option, and resource machinery required by every class.
-use crate::com::*;
+use crate::boundary::text;
 use microui_contracts::*;
 use nc_com::{ComPtr, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
 use std::{cell::RefCell, rc::Rc};
@@ -265,7 +265,7 @@ macro_rules! direct_widget_phase_impl {
                         .bits(),
                     },
                     keyboard: crate::Widget::keyboard_behavior(self).bits(),
-                    frame: crate::com::frame_contract(crate::Widget::frame_appearance_role(self)),
+                    frame: crate::ui_node::frame_contract(crate::Widget::frame_appearance_role(self)),
                 })
             }
 
@@ -288,9 +288,9 @@ macro_rules! direct_widget_phase_impl {
                 let assets = <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self).resources()?;
                 let assets = assets.borrow();
                 let mut ctx = crate::WidgetUpdateCtx::new_with_content_geometry(
-                    crate::com::local_rect(state.screen),
+                    crate::boundary::local_rect(state.screen),
                     crate::math::RectExt::translated(
-                        crate::com::local_rect(state.clip),
+                        crate::boundary::local_rect(state.clip),
                         crate::Vec2i::new(state.screen.x, state.screen.y),
                     ),
                     assets.bundle().skin(),
@@ -334,8 +334,8 @@ macro_rules! direct_widget_phase_impl {
                 let assets = <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self).resources()?;
                 let assets = assets.borrow();
                 let mut ctx = crate::WidgetPaintCtx::new_scoped(
-                    crate::com::local_rect(state.rect),
-                    crate::com::local_rect(state.clip),
+                    crate::boundary::local_rect(state.rect),
+                    crate::boundary::local_rect(state.clip),
                     assets.bundle().skin(),
                     assets.bundle().atlas(),
                     state.enabled,
@@ -439,10 +439,10 @@ macro_rules! direct_container_layout_impl {
                 let mut ctx = crate::ContainerLayoutCtx::scoped(
                     assets.bundle().skin(),
                     assets.bundle().atlas(),
-                    crate::com::local_rect(rect),
+                    crate::boundary::local_rect(rect),
                     layout,
                 );
-                crate::ContainerWidget::place(self, &mut ctx, crate::com::local_rect(rect));
+                crate::ContainerWidget::place(self, &mut ctx, crate::boundary::local_rect(rect));
                 ctx.result()
             }
 
@@ -514,7 +514,7 @@ macro_rules! direct_scrolling_impl {
                 if rect.x < 0 || rect.y < 0 || rect.width < 0 || rect.height < 0 {
                     return Err(nc_com::NC_E_INVALID_ARG);
                 }
-                self.model.reveal(crate::com::local_rect(rect));
+                self.model.reveal(crate::boundary::local_rect(rect));
                 Ok(())
             }
         }

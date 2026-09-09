@@ -525,7 +525,7 @@ impl Combo {
     fn selection(&mut self, index: u64, label: NcCopyFromBufferOffset<'_, u8>, submit: bool) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
         let index = usize::try_from(index).map_err(|_| NC_E_INVALID_ARG)?;
-        let label = crate::com::text(label)?;
+        let label = crate::boundary::text(label)?;
         let changed_label = self.label() != label;
         self.com_set_selection(index, label, submit);
         self.runtime_mut().state.record_change(if changed_label {
@@ -552,6 +552,6 @@ impl crate::event::ComEvent for ComboSubmitted {
 
     /// Converts the existing routed anchor once at the ABI boundary.
     fn deliver(&self, sink: ComRef<'_, Self::Sink>) -> Result<(), NcStatus> {
-        sink.submitted(self.open, crate::com::copied_rect(self.anchor))
+        sink.submitted(self.open, crate::boundary::copied_rect(self.anchor))
     }
 }

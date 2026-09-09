@@ -584,7 +584,7 @@ impl ITextContent for DisclosureHeader {
     /// Replaces the concrete header label and records intrinsic geometry invalidation.
     fn set_text(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
-        let label = crate::com::text(input)?;
+        let label = crate::boundary::text(input)?;
         if self.com_label() != label {
             self.com_set_label(label);
             self.runtime_mut().state.record_change(microui_contracts::GeometryChange::CHANGED);
@@ -617,7 +617,7 @@ impl Disclosure {
         expanded: bool,
         resources: Option<&crate::ui_node::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
-        let label = crate::com::text(label)?;
+        let label = crate::boundary::text(label)?;
         host.check_mutation()?;
         let variant = match style {
             DisclosureStyle::HEADER => DisclosureVariant::Header,

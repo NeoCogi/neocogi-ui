@@ -173,7 +173,7 @@ impl<'a> Ui<'a> {
 
     /// Hides an active popup and every active descendant while retaining their definitions.
     ///
-    /// Closing any active suffix records one [`crate::PopupEvent::Dismissed`] event per removed
+    /// Closing any active suffix records one [`crate::window_manager::PopupEvent::Dismissed`] event per removed
     /// application popup.
     pub fn hide_popup(&mut self, popup: &PopupHandle) -> Result<(), SurfaceMutationError> {
         // Delegate path truncation to the manager so visibility has one authoritative source.

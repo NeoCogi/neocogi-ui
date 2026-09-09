@@ -73,7 +73,9 @@ pub use root_chrome::{WindowEvent, WindowHandle};
 pub(crate) use root_chrome::DebugRootChromeControls;
 // Popup identity/events and checked surface failures describe forest policy rather than chrome.
 // Re-export both borrowed-mutation and owner-preserving creation errors with the public window API.
-pub use roots::{PopupEvent, PopupHandle, SurfaceMutationError};
+pub use roots::{PopupHandle, SurfaceMutationError};
+#[cfg(test)]
+pub use roots::PopupEvent;
 
 bitflags! {
     #[derive(Copy, Clone)]

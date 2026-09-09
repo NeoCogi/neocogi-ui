@@ -1,9 +1,7 @@
-//! Shared COM boundary services and the UI plugin's public object catalog.
+//! Small value conversions shared by independently owned foreign-facing implementations.
 //!
-//! Concrete built-in widget and container objects implement their callable contracts beside their
-//! semantic state in `ui_node`. This module retains only cross-object lifecycle, traversal,
-//! children, event, layout, paint, rendering, runtime, window, menu, dialog, and factory services.
-//! Runtime geometry remains private and foreign calls receive only copied values or owned scopes.
+//! Contract declarations remain in `microui-contracts`; this module only validates borrowed UTF-8
+//! and copies geometry between the contract representation and the retained math representation.
 
 use microui_contracts::Rect;
 use nc_com::{NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
@@ -31,5 +29,3 @@ pub(crate) fn copied_rect(rect: crate::Recti) -> Rect {
         height: rect.height,
     }
 }
-
-pub(crate) use crate::ui_node::frame_contract;

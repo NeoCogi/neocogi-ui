@@ -36,12 +36,16 @@ layout/paint algorithm in one family module. A change to `Button`, `Grid`, or
 `ScrollArea` therefore has one implementation source rather than a native type plus
 a second COM-side representation.
 
-`microui-ui/src/com` is the shared boundary layer and plugin export catalog. It owns
-services that necessarily coordinate multiple objects: host lifecycle, retained
-child transactions, event delivery, scoped layout and painting, render transport,
-runtime and surface management, and `UiFactory`. A concrete service object remains
-there only when its object declaration and implementation are already the same
-thing. The directory must not acquire companion per-widget implementation files.
+`microui-ui` has no generic `src/com` implementation tree. Shared machinery follows
+its actual owner: node mounting, child transactions, input conversion, widget host
+state, scoped layout, and scoped painting live under `ui_node`; external frame
+submission lives under `render`; event projections live beside their semantic event
+types; and `Runtime` plus `UiFactory` live in their top-level implementation modules.
+The plugin registry imports those concrete object types directly from the crate root.
+
+The small private `boundary` module contains only representation-free UTF-8
+validation and geometry copies reused by multiple domains. It owns no objects,
+runtime state, registration catalog, or alternate implementation representation.
 
 ## Retained objects and frame phases
 

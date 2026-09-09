@@ -1,6 +1,6 @@
 //! Coarse external-renderer submission adapter over the existing display-list executor.
 
-use crate::com::copied_rect;
+use crate::boundary::copied_rect;
 use crate::ui_node::HostState;
 use crate::{ImageSource, TextureId};
 use crate::render::{AtlasUploadError, FrameError, FrameInfo, RendererBackend, RendererFrame, TextureError, Vertex, RenderItemArgs};

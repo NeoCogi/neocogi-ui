@@ -85,7 +85,8 @@ rectangle and final visible region. There is no production native callback regis
 
 | Source | Responsibility |
 | --- | --- |
-| `com/paint.rs` | Scoped COM access to the runtime-owned frame paint context |
+| `ui_node/paint_service.rs` | Scoped foreign access to the runtime-owned frame paint context |
+| `render/external.rs` | Bulk frame transport to an external renderer |
 | `render/painter.rs` | Private built-in geometry recording |
 | `render/display_list.rs` | Owned ordered operations and reusable geometry |
 | `render/renderer.rs` | Atlas expansion, final clipping and execution |

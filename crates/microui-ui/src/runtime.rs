@@ -1,6 +1,6 @@
 //! Dynamically linked runtime ownership over the authoritative retained traversal.
 
-use crate::com::{local_rect, text};
+use crate::boundary::{local_rect, text};
 use crate::ui_node::{HostState, Observation, WidgetHost};
 use microui_contracts::*;
 use nc_com::{ComPtr, ComRef, IUnknown, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};

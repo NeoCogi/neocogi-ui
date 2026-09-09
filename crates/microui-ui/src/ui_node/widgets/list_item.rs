@@ -364,7 +364,7 @@ impl ListItem {
         label: NcCopyFromBufferOffset<'_, u8>,
         resources: Option<&crate::ui_node::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
-        let parameters = crate::ListItemParameters::new(crate::com::text(label)?);
+        let parameters = crate::ListItemParameters::new(crate::boundary::text(label)?);
         let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
         Ok(Self::from_runtime(runtime, parameters))
     }
@@ -383,7 +383,7 @@ impl microui_contracts::ListItem for ListItem {
     /// Validates UTF-8 and records geometry only when the concrete label changes.
     fn set_text(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
-        let label = crate::com::text(input)?;
+        let label = crate::boundary::text(input)?;
         if self.label() != label {
             self.set_label(label);
             self.runtime_mut().state.record_change(GeometryChange::CHANGED);
