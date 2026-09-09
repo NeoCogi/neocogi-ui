@@ -176,7 +176,7 @@ impl AtlasHandle {
     ///
     /// Panics when this atlas does not contain the logical font resource.
     pub fn get_char_entry(&self, font: FontId, c: char) -> Option<CharEntry> {
-        self.font(font).entries.get(&c).cloned()
+        self.font(font).entry(c).cloned()
     }
 
     /// Returns the line height for the specified font.
@@ -261,9 +261,8 @@ impl AtlasHandle {
             }
 
             let src = font
-                .entries
-                .get(&chr)
-                .or_else(|| font.entries.get(&'_'))
+                .entry(chr)
+                .or_else(|| font.entry('_'))
                 .cloned()
                 .expect("validated atlas font must contain the `_` fallback glyph");
 

@@ -312,12 +312,16 @@ impl AtlasHandle {
         let fonts = fonts
             .into_iter()
             .map(|(name, font)| {
+                let mut entries = font.entries;
+                // Duplicate preservation was needed only through validation.
+                // Runtime storage is ordered once for allocation-free lookup.
+                entries.sort_unstable_by_key(|(character, _)| *character);
                 let font = Font {
                     id: font.id,
                     line_size: font.line_size,
                     baseline: font.baseline,
                     font_size: font.font_size,
-                    entries: font.entries.into_iter().collect(),
+                    entries,
                 };
                 (name, font)
             })
@@ -571,7 +575,7 @@ mod tests {
         assert!(matches!(error, AtlasError::DuplicateFontName { name } if name == "body"));
     }
 
-    /// Verifies repeated glyph keys are rejected before HashMap collection could replace one.
+    /// Verifies repeated glyph keys are rejected before runtime sorting can retain them.
     #[test]
     fn duplicate_glyphs_are_rejected_with_their_font_and_character() {
         let pixels = valid_pixels();

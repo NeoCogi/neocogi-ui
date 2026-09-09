@@ -59,9 +59,7 @@ impl Tables {
         for (name, font) in &atlas.0.fonts {
             let name = tables.name(name);
             let first = tables.glyphs.len() as u32;
-            let mut glyphs: Vec<_> = font.entries.iter().collect();
-            glyphs.sort_unstable_by_key(|(scalar, _)| **scalar);
-            tables.glyphs.extend(glyphs.into_iter().map(|(scalar, entry)| AssetGlyph {
+            tables.glyphs.extend(font.entries.iter().map(|(scalar, entry)| AssetGlyph {
                 scalar: *scalar as u32,
                 offset_x: entry.offset.x,
                 offset_y: entry.offset.y,
@@ -106,7 +104,7 @@ impl Tables {
             let name = self.validated_name(font.name);
             let last = font.glyphs.first + font.glyphs.count;
             let glyphs = &self.glyphs[font.glyphs.first as usize..last as usize];
-            let entries = glyphs
+            let mut entries = glyphs
                 .iter()
                 .map(|glyph| {
                     (
@@ -118,7 +116,10 @@ impl Tables {
                         },
                     )
                 })
-                .collect();
+                .collect::<Vec<_>>();
+            // Portable validation rejects duplicate scalars; sorting establishes
+            // the one immutable runtime lookup invariant regardless of source order.
+            entries.sort_unstable_by_key(|(character, _)| *character);
             fonts.push((
                 name.to_owned(),
                 Font {

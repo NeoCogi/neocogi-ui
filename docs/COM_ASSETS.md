@@ -41,8 +41,10 @@ skips import/upload when that bundle is already current.
 
 The immutable font and icon vectors are also the authoritative local identity tables.
 Runtime lookup compares the retained typed ID directly with those records instead of
-duplicating every ID and slot into randomized hash maps. Glyphs retain their dedicated
-per-font lookup because their portable bound and access pattern are materially larger.
+duplicating every ID and slot into randomized hash maps. Each font's glyph vector is sorted once
+after validation and binary-searched by Unicode scalar value. Portable input still preserves and
+rejects duplicate scalars before sorting, while measurement and paint avoid randomized hashing for
+every glyph they visit.
 
 The facade separates `assets::AssetTables` metadata from complete `assets::AssetData`
 pixel-bearing compiler output. `AssetData` produces the same `IAssetBundle` object from

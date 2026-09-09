@@ -34,8 +34,6 @@
 //! local identities and lookup tables created while importing a validated asset revision. Runtime
 //! measurement and drawing substitute the selected font's underscore entry for a missing character.
 
-use std::collections::HashMap;
-
 use super::*;
 use crate::identity::ProcessUniqueId;
 #[cfg(test)]
@@ -62,17 +60,26 @@ struct Font {
     baseline: i32,
     /// Requested font size in pixels.
     font_size: usize,
-    /// Glyph entries available in this font.
+    /// Glyph entries sorted by Unicode scalar value for immutable binary search.
     ///
     /// The built-in builder populates printable ASCII; serialized sources may provide arbitrary
     /// Unicode scalar values.
-    entries: HashMap<char, CharEntry>,
+    entries: Vec<(char, CharEntry)>,
+}
+
+impl Font {
+    /// Finds one glyph without hashing immutable scalar keys on every text pass.
+    fn entry(&self, character: char) -> Option<&CharEntry> {
+        self.entries
+            .binary_search_by_key(&character, |(candidate, _)| *candidate)
+            .ok()
+            .map(|index| &self.entries[index].1)
+    }
 }
 
 /// Unvalidated owned font metadata retained until atlas finalization succeeds.
 ///
-/// A vector deliberately preserves duplicate characters from serialized input. Converting to the
-/// runtime [`HashMap`] before validation would silently replace one duplicate with another.
+/// A vector deliberately preserves duplicate characters from serialized input until validation.
 #[cfg(test)]
 struct FontCandidate {
     /// Stable identity published with this font after the candidate passes validation.
