@@ -1,5 +1,6 @@
 //! Concrete COM ownership at the retained node boundary.
 use crate::com::*;
+use super::{HostState, Observation};
 use microui_contracts::*;
 use nc_com::{ComPtr, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
 use std::{cell::Cell, rc::Rc};

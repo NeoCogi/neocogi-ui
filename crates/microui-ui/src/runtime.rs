@@ -1,5 +1,10 @@
-//! COM runtime/window ownership over the authoritative retained traversal.
-use super::*;
+//! Dynamically linked runtime ownership over the authoritative retained traversal.
+
+use crate::com::{local_rect, text};
+use crate::ui_node::{HostState, Observation, WidgetHost};
+use microui_contracts::*;
+use nc_com::{ComPtr, ComRef, IUnknown, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
+use std::{cell::{Cell, RefCell}, rc::Rc};
 use crate::ui_node::paint_service::{Metrics, PaintService};
 use crate::render::external::Backend;
 use crate::Dimensioni;
@@ -49,7 +54,7 @@ fn create_storage(assets: crate::assets::ImportedAssets) -> Rc<RuntimeStorage> {
         children: RefCell::default(),
     });
     *state.factory.borrow_mut() = Rc::downgrade(&factory);
-    let widget_factory = super::ui_factory::UiFactory::create(factory.host.clone(), factory.resources.clone())
+    let widget_factory = crate::ui_factory::UiFactory::create(factory.host.clone(), factory.resources.clone())
         .expect("new runtime host creates its factory");
     Rc::new(RuntimeStorage {
         context: RefCell::new(Some(Context::from_bundle(backend, bundle))),

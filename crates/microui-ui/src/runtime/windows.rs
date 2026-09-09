@@ -1,4 +1,4 @@
-//! Concrete window/popup COM projections reuse the manager's single authoritative forest.
+//! Concrete external window and popup projections reuse the manager's authoritative forest.
 use super::*;
 use crate::{
     PopupHandle, WindowHandle, Window,

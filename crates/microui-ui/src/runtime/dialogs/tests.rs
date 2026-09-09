@@ -1,4 +1,4 @@
-//! Standard picker acceptance exercises public COM methods, real routed input and exact native filesystem values.
+//! Standard picker acceptance exercises public methods, routed input, and exact native filesystem values.
 use super::*;
 use microui_redux::events::FileDialogCompleted;
 

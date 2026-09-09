@@ -1,5 +1,5 @@
 //! One authoritative owned child collection with separate read/edit COM capabilities.
-use crate::com::*;
+use super::HostState;
 use microui_contracts::*;
 use nc_com::{ComPtr, ComRef, IUnknown, NcStatus, com_object};
 use std::{cell::{Cell, RefCell}, rc::Rc};

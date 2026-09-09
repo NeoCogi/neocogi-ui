@@ -1,4 +1,4 @@
-//! Standard picker composes actual COM controls and owns only explicit request and native-path state.
+//! Standard picker composes actual callable controls and owns only explicit request and native-path state.
 use super::*;
 use microui_redux::{EventHandler, EventSession, LinearWidget, ListItemWidget, ScrollAreaWidget, TextBlockWidget, TextboxWidget};
 use microui_redux::events::{Activation, FileDialogCompleted, TextChanged, TextSubmitted};

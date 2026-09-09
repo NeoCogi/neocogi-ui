@@ -113,6 +113,7 @@ mod input;
 mod math;
 mod menu;
 pub mod render;
+mod runtime;
 #[cfg(test)]
 mod test_support;
 pub mod theme;
@@ -121,9 +122,10 @@ pub mod theme;
 /// This module is declared before the concrete node catalog so its shared implementation macros
 /// are available beside the object types that use them. Contract declarations remain in
 /// `microui-contracts`; concrete class methods live with their owning types.
-pub mod com;
+mod com;
 mod ui_node;
 pub(crate) use ui_node::widgets;
+mod ui_factory;
 mod window_manager;
 
 /// Resource, geometry and backend imports for implementation crates.
@@ -178,12 +180,14 @@ pub(crate) use ui_node::{
     LeafWidget, MeasureCtx, Node, ScrollbarAxis, ScrollbarChanged,
     ScrollbarParameters, TextWrap, TrackSize, UiInputEvent, Widget, WidgetFillOption, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx,
 };
+pub use ui_node::{Disclosure, Grid, Linear, ScrollArea};
+pub use ui_node::widgets::{Button, Checkbox, ColorSwatch, Combo, ListBox, ListItem, Number, Scrollbar, Slider, TextArea, TextBlock, Textbox};
 #[cfg(test)]
 pub(crate) use ui_node::{ScrollAreaOption};
 #[cfg(test)]
 pub(crate) use ui_node::{
-    ChildrenHandle, Container, Disclosure, DisclosureParameters, Grid, GridParameters, Linear, LinearCrossSize, LinearItem, LinearParameters, ScrollArea,
-    ScrollAreaParameters, Scrollbar, TypedWidgetHandle,
+    ChildrenHandle, Container, DisclosureParameters, GridParameters, LinearCrossSize, LinearItem, LinearParameters, ScrollAreaParameters,
+    TypedWidgetHandle,
 };
 pub(crate) use widgets::{
     ButtonParameters, ButtonSubmitted, CheckboxChanged, CheckboxParameters, ColorSwatchParameters, ComboChanged, ComboParameters, ComboSubmitted,
@@ -191,7 +195,7 @@ pub(crate) use widgets::{
     SliderParameters, TextAreaChanged, TextAreaSubmitted, Real, TextBlockParameters, TextboxChanged, TextboxParameters, TextboxSubmitted,
 };
 #[cfg(test)]
-pub(crate) use widgets::{Button, Checkbox, ColorSwatch, Combo, ListItem, Number, Slider, TextBlock, Textbox, TextEditor};
+pub(crate) use widgets::TextEditor;
 #[cfg(test)]
 pub(crate) use widgets::{TextAreaParameters};
 #[cfg(test)]
@@ -205,6 +209,8 @@ pub(crate) use rs_math3d::{
 pub(crate) use std::{cmp::max, hash::Hash, rc::Rc};
 pub(crate) use render::geometry::UNCLIPPED_RECT;
 pub(crate) use ui_node::UiRuntime;
+pub use runtime::{Runtime, create_runtime_from_assets};
+pub use ui_factory::UiFactory;
 
 #[cfg(test)]
 pub(crate) use event::SubscribeError;

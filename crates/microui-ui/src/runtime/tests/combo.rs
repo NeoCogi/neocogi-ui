@@ -1,4 +1,4 @@
-//! The static generic combo adapter coordinates a real COM popup through ordinary typed events.
+//! The static generic combo adapter coordinates a real popup through ordinary typed events.
 use super::*;
 use microui_redux::{EventHandler, EventSession};
 

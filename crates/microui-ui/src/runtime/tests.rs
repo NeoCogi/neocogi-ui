@@ -1,4 +1,4 @@
-//! Boundary regressions use the real runtime and deliberately retaining/reentrant components.
+//! Runtime boundary regressions use deliberately retaining and reentrant components.
 use super::*;
 use nc_com::{INcStringComPtrExt, NC_E_BUSY, NcCopyToBufferOffset};
 mod containers;

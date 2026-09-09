@@ -1,4 +1,4 @@
-//! Image controls preserve immutable ownership, paint ordering and clipped source coordinates.
+//! Image controls preserve immutable ownership, paint ordering, and clipped source coordinates.
 use super::*;
 
 #[derive(Default)]

@@ -84,7 +84,7 @@ impl WidgetRuntime {
         // Native tests exercise the same concrete structs without mounting them through COM. A real
         // runtime supplies their host and assets, while this test-only owner keeps its weak factory
         // reachable for the complete lifetime of the widget value.
-        let owner = crate::com::create_runtime(crate::test_support::test_atlas());
+        let owner = crate::runtime::create_runtime(crate::test_support::test_atlas());
         let factory = owner.factory().expect("test UI runtime exposes its factory");
         let host = factory.host().expect("test UI factory exposes its widget host");
         let mut runtime = Self::new(host, options).expect("test widget runtime imports valid assets");

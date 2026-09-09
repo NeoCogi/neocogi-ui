@@ -1,4 +1,4 @@
-//! End-to-end application sessions use the public facade and ordinary runtime/window capabilities.
+//! End-to-end application sessions use the public facade and runtime/window capabilities.
 use super::*;
 use microui_redux::{EventHandler, EventSession};
 use microui_redux::events::Activation;

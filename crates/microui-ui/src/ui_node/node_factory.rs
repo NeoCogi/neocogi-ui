@@ -1,5 +1,5 @@
 //! Shared construction authority, independent of any root forest or runtime transaction.
-use crate::com::*;
+use super::HostState;
 use microui_contracts::*;
 use nc_com::{ComPtr, ComRef, IUnknown, NcStatus, NC_E_INVALID_ARG};
 use std::{cell::{Cell, RefCell}, rc::Rc};

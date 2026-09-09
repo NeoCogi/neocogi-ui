@@ -56,7 +56,15 @@
 //! boundary. Tests follow their owning subject without forcing production code into a `mod.rs`
 //! layout. A built-in's `com_object` declaration, callable-class implementation, shared widget
 //! projections, semantic state, and native algorithm all live in that same family file; the
-//! separate `com` tree owns only cross-object services and shared boundary machinery.
+//! shared object projections and retained services live beside the node model that owns them.
+pub(crate) mod widget_object;
+pub(crate) mod widget_host;
+pub(crate) mod child_store;
+pub(crate) mod input_contract;
+pub(crate) mod layout_service;
+pub(crate) mod mounted_node;
+pub(crate) mod node_factory;
+pub(crate) mod paint_service;
 pub(crate) mod frame;
 mod input;
 pub use input::UiInputEvent;
@@ -73,8 +81,6 @@ pub(crate) use crate::test_support::widget::WidgetStorage;
 pub use crate::test_support::{widget::TypedWidgetHandle, container::Container, children::ChildrenHandle};
 pub mod widgets;
 pub use widgets::{ScrollbarAxis, ScrollbarChanged, ScrollbarParameters};
-#[cfg(test)]
-pub use widgets::Scrollbar;
 
 mod children;
 pub use children::Children;
@@ -84,6 +90,8 @@ pub(crate) use node_layout::{NodeLayout, RuntimeNodeId, Transform};
 mod node;
 pub use node::Node;
 pub(crate) use node::NodeRuntime;
+pub(crate) use mounted_node::{ComNode, frame_contract};
+pub(crate) use widget_host::{HostState, Observation, WidgetHost};
 mod runtime;
 pub(crate) use runtime::{UiRuntime, LayoutTraversal};
 #[cfg(test)]

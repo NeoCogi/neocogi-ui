@@ -1,4 +1,4 @@
-//! Independent container policy exercises the same COM boundary available to a separate plugin.
+//! Independent container policy exercises the same boundary available to a separate plugin.
 use super::*;
 use microui_contracts::widget::WidgetState;
 

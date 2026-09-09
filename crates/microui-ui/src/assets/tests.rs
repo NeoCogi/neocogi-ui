@@ -211,7 +211,7 @@ impl microui_redux::EventHandler<ThemeState, microui_redux::events::Activation> 
 #[test]
 fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
     let source = export_bundle(&bundle()).unwrap();
-    let runtime = crate::com::create_runtime_from_assets(source.as_com_ref()).unwrap();
+    let runtime = crate::create_runtime_from_assets(source.as_com_ref()).unwrap();
     let ui = microui_redux::Ui::from_interface(runtime.clone()).unwrap();
     let button = ui.widgets().button("switch theme").unwrap();
     let probe = Rc::new(Probe {
@@ -281,7 +281,7 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
 #[test]
 fn runtime_install_is_atomic_and_updates_shared_widget_measurement() {
     let source = export_bundle(&bundle()).unwrap();
-    let runtime = crate::com::create_runtime_from_assets(source.as_com_ref()).unwrap();
+    let runtime = crate::create_runtime_from_assets(source.as_com_ref()).unwrap();
     let mut ui = microui_redux::Ui::from_interface(runtime.clone()).unwrap();
     let button = ui.widgets().button("resources").unwrap();
     let button_interface = button.as_interface().add_ref();
@@ -336,7 +336,7 @@ fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision
     let compiler: ComPtr<StyleCompilerAbi> = microui_plugin_assets::StyleCompilerObject::from_value(microui_plugin_assets::StyleCompilerObject::default())
         .query()
         .unwrap();
-    let ui = microui_redux::Ui::from_interface(crate::com::create_runtime_from_assets(source.as_com_ref()).unwrap()).unwrap();
+    let ui = microui_redux::Ui::from_interface(crate::create_runtime_from_assets(source.as_com_ref()).unwrap()).unwrap();
     let original = ImportedAssets::read(source.as_com_ref(), None).unwrap();
     let mut metrics = source.metrics().unwrap();
     metrics.padding += 4;

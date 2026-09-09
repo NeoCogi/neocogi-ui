@@ -1,5 +1,6 @@
 //! Owned nested layout scopes; neither COM storage nor retained clients borrow a runtime stack.
 use crate::com::*;
+use super::HostState;
 use microui_contracts::*;
 use nc_com::{ComPtr, ComRef, NcStatus, NC_E_INVALID_ARG, com_object};
 use std::{cell::{Cell, RefCell}, rc::Rc};

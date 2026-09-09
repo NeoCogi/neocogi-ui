@@ -1,4 +1,4 @@
-//! COM menu declarations transfer the existing compact rows into the manager's sole surface forest.
+//! External menu declarations transfer compact rows into the manager's sole surface forest.
 use super::*;
 use crate::menu::{Menu, MenuEntry, MenuItemParameters};
 use nc_com::{INcStringAbi, NcString};

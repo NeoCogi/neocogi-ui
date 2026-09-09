@@ -1,4 +1,4 @@
-//! Compact menu declarations, live row edits and manager keyboard policy cross only concrete COM capabilities.
+//! Compact menu declarations, live row edits, and manager keyboard policy cross only concrete capabilities.
 use super::*;
 use microui_redux::{EventHandler, EventSession};
 use microui_redux::events::Activation;
