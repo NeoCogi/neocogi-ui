@@ -299,7 +299,6 @@ macro_rules! direct_widget_phase_impl {
 
             /// Drains sticky common and explicitly shared semantic geometry changes together.
             fn take_change(&mut self) -> Result<GeometryChange, NcStatus> {
-                <$name as super::widget::HostedWidget>::runtime(self).state.readable()?;
                 if crate::Widget::take_shared_change(self) {
                     <$name as super::widget::HostedWidget>::runtime_mut(self)
                         .state
@@ -315,8 +314,10 @@ macro_rules! direct_widget_phase_impl {
                 state: WidgetPaint,
                 painter: ComRef<'_, IPainterAbi>,
             ) -> Result<(), NcStatus> {
-                <$name as super::widget::HostedWidget>::runtime(self).state.readable()?;
                 state.validate()?;
+                // Reading options performs the one lifecycle check required by
+                // the complete paint invocation. Repeating it before the same
+                // immutable state read would cross the host COM boundary twice.
                 let options = <$name as super::widget::HostedWidget>::runtime(self).state.options()?;
                 let assets = <$name as super::widget::HostedWidget>::runtime_mut(self).resources()?;
                 let assets = assets.borrow();
