@@ -148,7 +148,11 @@ impl RenderVertex {
 
     /// Interpolates one packed channel and rounds it back into byte storage.
     fn lerp_channel(left: u8, right: u8, amount: f32) -> u8 {
-        ((left as f32) + (right as f32 - left as f32) * amount).round().clamp(0.0, 255.0) as u8
+        // Inputs and the clamped interpolation amount keep the result non-negative,
+        // so adding one half before integer truncation implements nearest rounding
+        // without relying on the `std`-only floating-point `round` method.
+        let interpolated = (left as f32) + (right as f32 - left as f32) * amount;
+        (interpolated + 0.5).clamp(0.0, 255.0) as u8
     }
 }
 

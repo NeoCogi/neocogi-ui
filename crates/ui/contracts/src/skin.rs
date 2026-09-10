@@ -76,9 +76,8 @@ impl Default for AssetMetrics {
 }
 
 /// Horizontal alignment policy for manager-owned window title text.
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
-#[cfg_attr(feature = "theme-json", derive(serde::Deserialize))]
-#[cfg_attr(feature = "theme-json", serde(rename_all = "snake_case"))]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, neocogi_com::ComDeserialize)]
+#[com_deserialize(rename_all = "snake_case")]
 pub enum WindowTitleAlignment {
     /// Uses the available title span from its leading edge.
     #[default]
@@ -88,9 +87,8 @@ pub enum WindowTitleAlignment {
 }
 
 /// Edge selected for one manager-owned caption button.
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
-#[cfg_attr(feature = "theme-json", derive(serde::Deserialize))]
-#[cfg_attr(feature = "theme-json", serde(rename_all = "snake_case"))]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, neocogi_com::ComDeserialize)]
+#[com_deserialize(rename_all = "snake_case")]
 pub enum CaptionButtonSide {
     /// Allocates the button from the title's leading edge.
     Leading,
@@ -100,9 +98,8 @@ pub enum CaptionButtonSide {
 }
 
 /// Data recipe controlling manager-owned caption button geometry and presentation.
-#[derive(Copy, Clone)]
-#[cfg_attr(feature = "theme-json", derive(serde::Deserialize))]
-#[cfg_attr(feature = "theme-json", serde(default, deny_unknown_fields))]
+#[derive(Copy, Clone, neocogi_com::ComDeserialize)]
+#[com_deserialize(default)]
 pub struct CaptionButtonsSkin {
     /// Edge used by the close button.
     pub close_side: CaptionButtonSide,
@@ -141,9 +138,7 @@ impl Default for CaptionButtonsSkin {
 }
 
 /// Optional flat field painted behind active centered title text.
-#[derive(Copy, Clone)]
-#[cfg_attr(feature = "theme-json", derive(serde::Deserialize))]
-#[cfg_attr(feature = "theme-json", serde(deny_unknown_fields))]
+#[derive(Copy, Clone, neocogi_com::ComDeserialize)]
 pub struct TitleBackdropSkin {
     /// Flat background color interrupting title artwork behind the measured text.
     pub color: Color,
@@ -152,9 +147,8 @@ pub struct TitleBackdropSkin {
 }
 
 /// Manager-owned window chrome policy selected by the resolved skin.
-#[derive(Copy, Clone)]
-#[cfg_attr(feature = "theme-json", derive(serde::Deserialize))]
-#[cfg_attr(feature = "theme-json", serde(default, deny_unknown_fields))]
+#[derive(Copy, Clone, neocogi_com::ComDeserialize)]
+#[com_deserialize(default)]
 pub struct WindowChromeSkin {
     /// Alignment and caption-bank reservation policy for title text.
     pub title_alignment: WindowTitleAlignment,

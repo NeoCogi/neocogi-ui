@@ -16,6 +16,8 @@ pub use builder::AssetLoaderObject;
 #[cfg(feature = "theme-json")]
 pub use builder::ThemeLoaderObject;
 mod png;
+#[cfg(feature = "theme-json")]
+mod serde_com;
 pub use png::PngDecoderObject;
 
 /// Shared owned diagnostics contain no decoder borrow or platform-native error object.

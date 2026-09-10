@@ -115,10 +115,8 @@ pub struct AssetIcon {
     pub rect: Rect,
 }
 
-#[com_struct]
+#[com_struct(deserialize)]
 #[derive(Debug, Default, PartialEq, Eq)]
-#[cfg_attr(feature = "theme-json", derive(serde::Deserialize))]
-#[cfg_attr(feature = "theme-json", serde(deny_unknown_fields))]
 /// Four nonnegative pixel insets used by resolved theme geometry.
 pub struct Insets {
     /// Leading horizontal thickness.
@@ -131,10 +129,8 @@ pub struct Insets {
     pub bottom: i32,
 }
 
-#[com_struct]
+#[com_struct(deserialize, default)]
 #[derive(Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "theme-json", derive(serde::Deserialize))]
-#[cfg_attr(feature = "theme-json", serde(default, deny_unknown_fields))]
 /// Complete scalar layout recipe; installation rejects negative dimensions.
 pub struct AssetMetrics {
     /// Preferred width when a layout supplies none.

@@ -23,9 +23,8 @@ macro_rules! indexed_role {
         }
     ) => {
         $(#[$enum_meta])*
-        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-        #[cfg_attr(feature = "theme-json", derive(serde::Deserialize))]
-        #[cfg_attr(feature = "theme-json", serde(rename_all = "snake_case"))]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, neocogi_com::ComDeserialize)]
+        #[com_deserialize(rename_all = "snake_case")]
         #[repr(u8)]
         pub enum $name {
             $(

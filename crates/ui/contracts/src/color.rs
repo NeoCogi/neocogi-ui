@@ -30,7 +30,7 @@
 
 //! Portable RGBA authoring values shared by hosts, UI implementations and optional asset tools.
 
-#[neocogi_com::com_struct]
+#[neocogi_com::com_struct(deserialize, sequence)]
 #[derive(Default, Debug, Eq, PartialEq)]
 /// Simple RGBA color stored with 8-bit components.
 pub struct Color {
@@ -42,21 +42,6 @@ pub struct Color {
     pub b: u8,
     /// Alpha channel.
     pub a: u8,
-}
-
-#[cfg(feature = "theme-json")]
-impl<'de> serde::Deserialize<'de> for Color {
-    /// Decodes the schema's compact `[red, green, blue, alpha]` byte representation.
-    fn deserialize<Deserializer>(deserializer: Deserializer) -> Result<Self, Deserializer::Error>
-    where
-        Deserializer: serde::Deserializer<'de>,
-    {
-        // Delegate length and byte-range validation to Serde's fixed array implementation. The
-        // conversion then constructs the exact renderer value without an intermediate theme-only
-        // color type or a field-by-field loader mapping.
-        let [r, g, b, a] = <[u8; 4] as serde::Deserialize>::deserialize(deserializer)?;
-        Ok(Self { r, g, b, a })
-    }
 }
 
 /// Convenience constructor for [`Color`].

@@ -223,12 +223,16 @@ struct ThemeDefinition {
 #[serde(default, deny_unknown_fields)]
 struct AppearanceCatalogDocument {
     /// Structural surface appearances keyed by their category-local names.
+    #[serde(deserialize_with = "crate::serde_com::deserialize_map")]
     surface: BTreeMap<SurfaceRole, SurfaceAppearanceDocument>,
     /// Interactive control appearances keyed by their category-local names.
+    #[serde(deserialize_with = "crate::serde_com::deserialize_map")]
     control: BTreeMap<ControlRole, ControlAppearanceDocument>,
     /// Compact menu appearances keyed by their category-local names.
+    #[serde(deserialize_with = "crate::serde_com::deserialize_map")]
     menu: BTreeMap<MenuRole, MenuAppearanceDocument>,
     /// Manager-owned window chrome appearances keyed by their category-local names.
+    #[serde(deserialize_with = "crate::serde_com::deserialize_map")]
     chrome: BTreeMap<ChromeRole, ChromeAppearanceDocument>,
 }
 
@@ -709,12 +713,16 @@ impl FontDocument {
 #[serde(default, deny_unknown_fields)]
 struct ThemeSkinDocument {
     /// Layout values consumed directly by the runtime skin.
+    #[serde(deserialize_with = "crate::serde_com::deserialize")]
     metrics: SkinMetrics,
     /// Shared destination geometry used while compiling flat fallback patches.
+    #[serde(deserialize_with = "crate::serde_com::deserialize")]
     fallback_frame_insets: SliceInsets,
     /// Concrete semantic colors compiled into the complete fallback appearance catalog.
+    #[serde(deserialize_with = "crate::serde_com::deserialize")]
     palette: FlatPalette,
     /// Exact manager-owned title and caption-button policy.
+    #[serde(deserialize_with = "crate::serde_com::deserialize")]
     window_chrome: WindowChromeSkin,
 }
 
@@ -737,6 +745,7 @@ impl Default for ThemeSkinDocument {
 #[serde(default, deny_unknown_fields)]
 struct SurfaceAppearanceDocument {
     /// Destination-space outer row and column sizes shared by both states.
+    #[serde(default, deserialize_with = "crate::serde_com::deserialize")]
     insets: Option<SliceInsets>,
     /// Enabled structural appearance.
     normal: Option<VisualOverrideDocument>,
@@ -783,6 +792,7 @@ impl PointerAppearanceDocument {
 #[serde(default, deny_unknown_fields)]
 struct ControlAppearanceDocument {
     /// Destination-space outer row and column sizes shared by every control state.
+    #[serde(default, deserialize_with = "crate::serde_com::deserialize")]
     insets: Option<SliceInsets>,
     /// Disabled appearance, with no contradictory pointer or focus substate.
     disabled: Option<VisualOverrideDocument>,
@@ -821,6 +831,7 @@ impl ControlAppearanceDocument {
 #[serde(default, deny_unknown_fields)]
 struct MenuAppearanceDocument {
     /// Destination-space outer row and column sizes shared by every menu state.
+    #[serde(default, deserialize_with = "crate::serde_com::deserialize")]
     insets: Option<SliceInsets>,
     /// Enabled menu appearance without transient selection.
     normal: Option<VisualOverrideDocument>,
@@ -872,6 +883,7 @@ impl MenuAppearanceDocument {
 #[serde(default, deny_unknown_fields)]
 struct ChromeAppearanceDocument {
     /// Destination-space outer row and column sizes shared by every chrome state.
+    #[serde(default, deserialize_with = "crate::serde_com::deserialize")]
     insets: Option<SliceInsets>,
     /// Enabled chrome appearance without window activation.
     base: Option<VisualOverrideDocument>,
@@ -904,6 +916,7 @@ impl ChromeAppearanceDocument {
 #[serde(default, deny_unknown_fields)]
 struct VisualOverrideDocument {
     /// Optional text and semantic-glyph color for this exact role and state.
+    #[serde(default, deserialize_with = "crate::serde_com::deserialize")]
     content_color: Option<Color>,
     /// Optional concrete patch source replacing the exact state's flat fallback.
     patch: Option<PatchDocument>,
@@ -931,13 +944,16 @@ enum PatchDocument {
     /// A flat color painted across all nine destination cells.
     Solid {
         /// RGBA color covering the complete patch while role insets retain layout geometry.
+        #[serde(deserialize_with = "crate::serde_com::deserialize")]
         color: Color,
     },
     /// A resource-free three-by-three patch with one border and one center color.
     Framed {
         /// RGBA color painted into every fixed edge and corner cell.
+        #[serde(deserialize_with = "crate::serde_com::deserialize")]
         border: Color,
         /// RGBA color painted into the stretchable center cell.
+        #[serde(deserialize_with = "crate::serde_com::deserialize")]
         center: Color,
     },
     /// One PNG divided into a typed three-by-three image patch.
@@ -945,8 +961,10 @@ enum PatchDocument {
         /// PNG path resolved relative to the containing JSON document.
         path: PathBuf,
         /// Optional source-space slices; omission reuses the role's destination insets.
+        #[serde(default, deserialize_with = "crate::serde_com::deserialize")]
         source_insets: Option<SliceInsets>,
         /// Optional RGBA image modulation; omission preserves the source pixels.
+        #[serde(default, deserialize_with = "crate::serde_com::deserialize")]
         tint: Option<Color>,
     },
 }

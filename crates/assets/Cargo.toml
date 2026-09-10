@@ -14,7 +14,7 @@ crate-type = ["rlib", "cdylib"]
 [features]
 default = []
 builder = ["dep:fontdue"]
-theme-json = ["builder", "neocogi-ui-contracts/theme-json", "dep:serde", "dep:serde_json"]
+theme-json = ["builder", "dep:serde", "dep:serde_json"]
 save-to-rust = ["dep:tempfile", "dep:miniz_oxide"]
 dynamic-plugin = []
 

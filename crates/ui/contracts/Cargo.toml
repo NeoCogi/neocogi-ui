@@ -7,10 +7,6 @@ license.workspace = true
 repository.workspace = true
 description = "Typed COM contracts shared by NeoCogi UI hosts and components"
 
-[features]
-theme-json = ["dep:serde"]
-
 [dependencies]
-serde = { workspace = true, optional = true }
 neocogi-com = { workspace = true, features = ["macros"] }
 rs-math3d.workspace = true
