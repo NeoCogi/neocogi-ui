@@ -9,6 +9,15 @@ repository.workspace = true
 
 [features]
 default = ["glow"]
+# Keeps the application, linked component roots, and runtime on one strict ABI
+# contract mode when an assembly opts into validation.
+abi-validation = [
+    "neocogi-com/abi-validation",
+    "neocogi-com-runtime/abi-validation",
+    "neocogi-ui-runtime/abi-validation",
+    "neocogi-render-plugin/abi-validation",
+    "neocogi-assets/abi-validation",
+]
 glow = ["neocogi-demo-host/glow", "neocogi-render-plugin/glow"]
 webgl = ["neocogi-demo-host/webgl", "embed-assets"]
 # Native deployments read adjacent files unless this feature is explicitly requested.
@@ -28,7 +37,7 @@ rs-math3d.workspace = true
 # Build the shared artifacts as dependencies; native startup still loads their C ABI.
 neocogi-com-runtime.workspace = true
 neocogi-ui-runtime = { path = "../../crates/ui/runtime", features = ["dynamic-plugin"] }
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "94679399c79ec659e50c976af0f989d30a49f25b", default-features = false, features = ["dynamic-plugin"] }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "87b6564446ee158b6cf83bfb5949a204014a8833", default-features = false, features = ["dynamic-plugin"] }
 neocogi-assets = { workspace = true, features = ["dynamic-plugin", "theme-json"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]

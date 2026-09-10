@@ -15,6 +15,8 @@ crate-type = ["rlib"]
 
 [features]
 default = []
+# Generates and checks exact ABI contracts for this component graph.
+abi-validation = ["neocogi-com/abi-validation"]
 builder = ["dep:fontdue"]
 theme-json = ["builder", "dep:serde", "dep:serde_json"]
 save-to-rust = ["dep:tempfile", "dep:miniz_oxide"]

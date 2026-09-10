@@ -17,6 +17,8 @@ crate-type = ["rlib"]
 
 [features]
 default = []
+# Generates and checks exact ABI contracts for this component graph.
+abi-validation = ["neocogi-com/abi-validation"]
 # Only deployable dynamic libraries publish the plugin descriptor entrypoint.
 dynamic-plugin = []
 
