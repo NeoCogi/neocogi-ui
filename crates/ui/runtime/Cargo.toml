@@ -10,8 +10,10 @@ repository.workspace = true
 categories = ["gui", "rendering"]
 
 [lib]
+# cargo-neocogi wraps this implementation rlib in the assembly's deployable
+# cdylib root, avoiding an additional shared-library link for the same code.
 name = "neocogi_ui_runtime"
-crate-type = ["rlib", "cdylib"]
+crate-type = ["rlib"]
 
 [features]
 default = []

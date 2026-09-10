@@ -9,7 +9,9 @@ description = "NeoCogi asset decoding, compilation, and plugin services"
 publish = false
 
 [lib]
-crate-type = ["rlib", "cdylib"]
+# The assembly-generated cdylib root is the only native plugin artifact; this
+# implementation stays reusable as an rlib without triggering a redundant link.
+crate-type = ["rlib"]
 
 [features]
 default = []
