@@ -21,6 +21,7 @@ select matching application and platform features explicitly:
 
 ```sh
 cargo neocogi run --assembly full --variant vulkan --release
+cargo neocogi run --assembly full --variant vulkan --variant monolith --release
 cargo neocogi run --assembly calculator --variant wgpu
 cargo neocogi run --assembly smoke --variant extension -- --smoke
 ```
@@ -73,6 +74,12 @@ compilation platform. `dev` outputs use the `debug` directory name. Keep every
 staged runtime/plugin library and resource with the executable. `run` launches
 the staged binary and forwards arguments after `--`, preserving its exit code.
 
+Add `--variant monolith` after the renderer selection to statically link the COM
+runtime and the UI, renderer, and asset implementations. These assemblies use
+`com-validation = "none"`, register the linked descriptors directly, and stage
+only the executable and configured resources. They therefore have no Neocogi
+shared-library or `plugins.txt` deployment requirement.
+
 The command discovers artifacts from Cargo's JSON output and snapshots the runtime
 and explicitly isolated plugins before later builds can replace their files.
 Grouped plugins are collected from the application's Cargo invocation. The phase
@@ -111,12 +118,12 @@ PNG asset plugin; other embedded demos omit the asset plugin. The smoke assembly
 `extension` variant adds the independent example plugin. Browser `webgl` selects
 embedded resources and retains its separate static registration workflow.
 
-Native demos still declare shared runtime/plugin crates as ordinary dependencies.
-Their native code uses the runtime C ABI and loads plugin files; it does not call
-the implementation crates through Rust. An ordinary demo `cargo build` can emit
-those libraries but still needs a runtime linker search path and does not produce
-a runnable assembly. The new command supplies `NC_COM_RUNTIME_LINK_DIR`, builds
-explicit component features, and stages the descriptor-planned manifest.
+Native demos declare runtime/plugin crates as ordinary dependencies. Dynamic
+startup uses only their C ABI and loads staged plugin files. Monolithic startup
+retains those same implementations by directly registering their descriptors.
+An ordinary dynamic demo `cargo build` still lacks a runtime linker search path
+and staged assembly. The command supplies that path for dynamic builds or selects
+the application-owned static graph for a monolith.
 `neocogi-ui` remains the static typed facade without native UI/renderer
 implementation dependencies. See the [backend source map](../crates/ui/runtime/docs/BACKENDS.md#backend-sources).
 

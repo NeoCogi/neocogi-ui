@@ -43,7 +43,10 @@ COM boundaries are between separately compiled binaries. Generics, Rust helper t
 
 Concrete source ownership follows the same boundary. `neocogi-ui-contracts` contains declarations only. Inside the UI implementation, a built-in widget or container keeps its generated object declaration, callable-class methods, shared interface projections, semantic state and algorithms in one `ui_node` family module. Shared implementation services live beside the domain that owns them, and the UI plugin imports registered object types directly from the `neocogi-ui-runtime` crate root; there is no separate `neocogi-ui-runtime/src/com` implementation tree or parallel per-widget representation.
 
-Default planning assumption: preserve the current browser demo through a statically linked build of the same COM interfaces. This is a separate deployment mode from the statically linked façade used by native dynamic deployments. Browser dynamic plugin loading is outside the initial design.
+The browser and optional native monolith use a statically linked build of the
+same COM interfaces and descriptors. Native dynamic deployment retains separate
+runtime/plugin libraries behind the same facade. Browser dynamic plugin loading
+is outside the initial design.
 
 **2. What neocogi-com already provides**
 

@@ -16,6 +16,8 @@ com-validation-none = ["neocogi-com/com-validation-none", "neocogi-com-runtime/c
 com-validation-sha-256 = ["neocogi-com/com-validation-sha-256", "neocogi-com-runtime/com-validation-sha-256", "neocogi-ui-runtime/com-validation-sha-256", "neocogi-render-plugin/com-validation-sha-256", "neocogi-assets/com-validation-sha-256"]
 com-validation-fnv-1a-128 = ["neocogi-com/com-validation-fnv-1a-128", "neocogi-com-runtime/com-validation-fnv-1a-128", "neocogi-ui-runtime/com-validation-fnv-1a-128", "neocogi-render-plugin/com-validation-fnv-1a-128", "neocogi-assets/com-validation-fnv-1a-128"]
 com-validation-mangling = ["neocogi-com/com-validation-mangling", "neocogi-com-runtime/com-validation-mangling", "neocogi-ui-runtime/com-validation-mangling", "neocogi-render-plugin/com-validation-mangling", "neocogi-assets/com-validation-mangling"]
+# Link the runtime and all three implementation descriptors into one executable.
+monolith = ["neocogi-demo-host/monolith"]
 glow = ["neocogi-demo-host/glow", "neocogi-render-plugin/glow"]
 webgl = ["neocogi-demo-host/webgl", "embed-assets"]
 # Native deployments read adjacent files unless this feature is explicitly requested.
@@ -32,11 +34,11 @@ neocogi-demo-host = { workspace = true, features = ["png-assets"] }
 rs-math3d.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-# Build the shared artifacts as dependencies; native startup still loads their C ABI.
+# Dynamic assembly roots add `dynamic-plugin`; monoliths call descriptors directly.
 neocogi-com-runtime.workspace = true
-neocogi-ui-runtime = { path = "../../crates/ui/runtime", features = ["dynamic-plugin"] }
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "d5ed4e0dbd5ccc6783f062f2af1b8a631eb306fe", default-features = false, features = ["dynamic-plugin"] }
-neocogi-assets = { workspace = true, features = ["dynamic-plugin", "theme-json"] }
+neocogi-ui-runtime = { path = "../../crates/ui/runtime" }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "4052848b4329ffb52d60569fe4678949f7bd7731", default-features = false }
+neocogi-assets = { workspace = true, features = ["theme-json"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen.workspace = true

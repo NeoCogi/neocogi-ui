@@ -1,5 +1,5 @@
 //! Small native host using the static facade/contracts and runtime binding.
-//! Both UI and native GPU implementation are loaded from the packaged executable directory.
+//! Implementations may be loaded from an assembly or linked into one monolith.
 use neocogi_ui::*;
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
 use std::{error::Error, time::Duration};
@@ -54,12 +54,9 @@ impl EventHandler<u32, events::Activation> for Submitted {
     }
 }
 
-/// Loads the staged deployment and either runs interactively or exercises its smoke gate.
-fn main() -> Result<(), Box<dyn Error>> {
-    let options = Options::read()?;
-    let executable = std::env::current_exe()?;
-    let directory = executable.parent().ok_or("executable has no parent")?;
-    let runtime = neocogi_com::Runtime::global();
+/// Loads the dependency-ordered dynamic plugin manifest from the assembly.
+#[cfg(not(feature = "monolith"))]
+fn register_plugins(runtime: &neocogi_com::Runtime, directory: &std::path::Path) -> Result<(), Box<dyn Error>> {
     let manifest = std::fs::read_to_string(directory.join("plugins.txt"))?;
     for name in manifest.lines() {
         // The package manifest contains file names only, keeping all loads in the staged directory.
@@ -71,6 +68,36 @@ fn main() -> Result<(), Box<dyn Error>> {
         let module = unsafe { runtime.load_plugin_library(directory.join(path)) };
         println!("loaded {}", module.qualified_name());
     }
+    Ok(())
+}
+
+/// Registers implementation descriptors retained by the monolithic executable.
+#[cfg(feature = "monolith")]
+fn register_plugins(runtime: &neocogi_com::Runtime, _directory: &std::path::Path) -> Result<(), Box<dyn Error>> {
+    for descriptor in [
+        neocogi_ui_runtime::plugin_descriptor(),
+        neocogi_render_plugin::plugin_descriptor(),
+        neocogi_assets::plugin_descriptor(),
+        #[cfg(feature = "extension")]
+        neocogi_example_ui_extension::plugin_descriptor(),
+    ] {
+        // SAFETY: Every descriptor and its implementation code are retained by
+        // this executable for the process lifetime.
+        let status = unsafe { runtime.register_plugin_descriptor(descriptor) };
+        if status.is_err() {
+            return Err(status.into());
+        }
+    }
+    Ok(())
+}
+
+/// Loads the staged deployment and either runs interactively or exercises its smoke gate.
+fn main() -> Result<(), Box<dyn Error>> {
+    let options = Options::read()?;
+    let executable = std::env::current_exe()?;
+    let directory = executable.parent().ok_or("executable has no parent")?;
+    let runtime = neocogi_com::Runtime::global();
+    register_plugins(runtime, directory)?;
     // Optional class availability is a recoverable startup check, before constructing an OS window.
     if options.rebuild_assets {
         runtime

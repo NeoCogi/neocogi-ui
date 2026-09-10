@@ -17,6 +17,10 @@ wrappers. The accepted migration and outstanding validation are recorded in
 - Stop inspecting Cargo manifests during COM macro expansion. Generated code uses
   the canonical `::neocogi_com` path or an explicit facade override, removing
   `proc-macro-crate` and its TOML parser from application and plugin builds.
+- Add assembly-wide COM validation selection (`none`, SHA-256, FNV-1a-128, or
+  collision-free mangling) and an optional native monolith. The monolith uses
+  unchecked validation, one statically linked runtime, and direct registration
+  of the linked UI, renderer, and asset descriptors.
 - Reserve `#[com_class]` for callable contract traits and use
   `#[com_object(Class)]` or `#[com_object(interfaces(...))]` for concrete Rust
   implementations. Class declarations therefore describe the public boundary,

@@ -196,8 +196,8 @@ pub fn initialize() -> Result<(), HostError> {
         .map_err(|error| HostError::Message(error.clone()))
 }
 
-/// Loads the dependency-ordered manifest adjacent to the executable, independent of current directory.
-#[cfg(not(target_arch = "wasm32"))]
+/// Loads the dependency-ordered dynamic manifest adjacent to the executable.
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "monolith")))]
 fn register() -> Result<(), HostError> {
     let executable = std::env::current_exe()?;
     let directory = executable
@@ -219,14 +219,14 @@ fn register() -> Result<(), HostError> {
     Ok(())
 }
 
-/// Browser implementation descriptors live in this wasm module and use its single static runtime.
-#[cfg(target_arch = "wasm32")]
+/// Registers descriptors linked into a browser module or native monolith.
+#[cfg(any(target_arch = "wasm32", feature = "monolith"))]
 fn register() -> Result<(), HostError> {
     let runtime = neocogi_com::Runtime::global();
     for descriptor in [
         neocogi_ui_runtime::plugin_descriptor(),
         neocogi_render_plugin::plugin_descriptor(),
-        #[cfg(feature = "png-assets")]
+        #[cfg(any(feature = "png-assets", feature = "monolith"))]
         neocogi_assets::plugin_descriptor(),
     ] {
         // SAFETY: The complete graph and implementation code remain static for this module's life.
