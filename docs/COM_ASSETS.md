@@ -155,7 +155,7 @@ fall back to `body`. Required semantic icons are `close`, `expand`, `collapse`,
 Reject a different schema before allocation. The semantic schema includes role/state
 table order and mandatory resource interpretation; changing those rules requires a
 schema bump even when the C record layout is unchanged. The ordinary neocogi-com
-interface hashes separately validate the actual pointer/vtable/record ABI.
+interface signatures separately validate the actual pointer/vtable/record ABI.
 
 | Storage | Bound and interpretation |
 | --- | --- |

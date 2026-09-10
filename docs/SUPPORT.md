@@ -41,8 +41,8 @@ it. There is no compatibility or long-term-support commitment. Pin the checkout 
 your application and every plugin together, and review the [changelog](CHANGELOG.md) before upgrading. The manifest version
 is not a promise that the unreleased checkout matches a published package.
 
-The forked neocogi-com sources in `crates/com` are part of this checkout. Core ABI 3,
-runtime API table version 1 and hash grammar version 2 are separate discriminators.
+The neocogi-com sources in `crates/com` are part of this checkout. Core ABI 6,
+runtime API table version 1 and signature grammar version 1 are separate discriminators.
 Use the workspace sources for both producer and consumer; a crates.io dependency
 with the same pre-alpha package version is not a substitute for this fork. Native
 modules stay loaded for the process lifetime; hot reload/unload is unsupported.

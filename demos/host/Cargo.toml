@@ -27,7 +27,7 @@ neocogi-com = { workspace = true, features = ["runtime"] }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 neocogi-com = { workspace = true, features = ["static-runtime"] }
 neocogi-ui-runtime = { path = "../../crates/ui/runtime" }
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "4ae8fdfa002c7a7fb8729362070962c1ec86aa91", default-features = false }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "d942a9261724d9199e89d2adbe333d146c817d7d", default-features = false }
 neocogi-assets = { path = "../../crates/assets", optional = true, default-features = false }
 wasm-bindgen.workspace = true
 web-sys = { workspace = true, features = ["Window", "Performance", "Location", "UrlSearchParams", "console"] }

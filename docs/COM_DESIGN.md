@@ -49,7 +49,7 @@ Default planning assumption: preserve the current browser demo through a statica
 
 The existing project already has most of the necessary foundation:
 
-- `#[com_interface]`: a Rust implementation trait, explicit C-shaped interface header/vtable, safe owning-pointer call helpers, interface GUID and ABI hash.
+- `#[com_interface]`: a Rust implementation trait, explicit C-shaped interface header/vtable, safe owning-pointer call helpers, interface GUID and ABI signature.
 - `#[com_class]`: a callable class contract with one typed constructor and stable registry identity.
 - `#[com_object]`: one generated allocation containing the Rust implementation, interface headers, canonical IUnknown support, and an atomic reference count.
 - `ComPtr<T>`: one owned reference; cloning adds a reference and dropping releases it.
@@ -115,20 +115,31 @@ pub trait IRecursiveNode {
 }
 ```
 
-The generated ABI hash includes hashes of referenced interfaces, and IID currently defaults to a projection of the complete interface identity. A self-reference or mutual reference creates a constant-evaluation cycle. The failure is preserved in `recursive-check.log` beside this plan. Source: [referenced-interface hashing](../crates/com/macros/src/interface.rs#L617).
+The earlier generated ABI hash recursively included referenced interface hashes,
+which made a self-reference or mutual reference create a constant-evaluation
+cycle. The implemented design now keeps the IID independent and embeds only a
+referenced interface IID plus its ownership/threading passing mode in the local
+canonical ABI signature.
 
-Since this is now an owned pre-alpha COM layer, I would fix this rather than shape every UI interface around the limitation. My preferred design to investigate is:
+Because this is an owned pre-alpha COM layer, the limitation was fixed instead
+of shaping every UI interface around it. The implemented design is:
 
-1. Generate an IID constant independently of the full interface hash.
-2. Hash the local vtable contract. Referenced COM pointers contribute their IID and ownership/threading passing mode, rather than recursively embedding the referenced interface's complete hash.
+1. Generate an IID constant independently of the full interface signature.
+2. Mangle the local vtable contract. Referenced COM pointers contribute their IID and ownership/threading passing mode, rather than recursively embedding the referenced interface's complete signature.
 3. Add interface identity metadata to the common vtable prefix, preferably a pointer to one shared static `NcInterfaceId` record.
 4. Generated thunks validate every incoming COM pointer against the full identity expected by the receiving implementation; generated caller helpers validate owned COM return pointers before exposing a typed `ComPtr`.
 5. On a rejected owned return, release the transferred reference through the common IUnknown prefix. Borrowed arguments are never released merely because validation failed.
-6. Update core ABI generation/version checks, manual built-in string/byte interfaces, descriptor/hash validation, inspection, C fixtures and compatibility tests together.
+6. Update core ABI generation/version checks, manual built-in string/byte interfaces, descriptor/signature validation, inspection, C fixtures and compatibility tests together.
 
-This changes where transitive compatibility is checked; it does not remove that check. Simply dropping nested ABI hashes without checking the actual interface pointers at the call boundary would weaken safety and is not acceptable. The proposed metadata/checking change has not been implemented or benchmarked. It should be its own reviewed COM prerequisite with self-reference, mutual-reference, mismatched-argument, mismatched-return and release-count tests.
+This changes where transitive compatibility is checked; it does not remove that
+check. Generated thunks validate the complete identity of incoming and returned
+COM pointers at the call boundary, and tests cover self-reference, mutual
+reference, mismatched arguments, mismatched returns, and release counts.
 
-A cycle-aware hash over an explicitly declared interface graph is another possible design, but it requires considerably more contract-group/descriptor machinery. The local-hash plus checked-pointer approach is the simpler candidate to prototype first. Coherent capability interfaces should still be separate even after recursive references work.
+A cycle-aware graph identity would require considerably more contract-group and
+descriptor machinery. The implemented local-signature plus checked-pointer
+approach keeps the contract monomorphic and cycle-free. Coherent capability
+interfaces should still be separate even though recursive references work.
 
 For borrowed call helpers, reuse the existing generated call body for a borrowed pointer. Do not create another object model or require AddRef/Release just to perform a synchronous borrowed call.
 
@@ -188,7 +199,7 @@ use neocogi_com::{
 
 /// Statically linked typed proxy; it contains no widget implementation.
 pub struct Widget<I: ComInterface> {
-    /// One owned, hash-checked COM interface reference.
+    /// One owned, signature-checked COM interface reference.
     interface: ComPtr<I>,
 }
 
@@ -530,7 +541,7 @@ Run existing UI behavior tests against the new façade and add tests where the n
 - Destroyed windows/subtrees become logically closed even when an application retains ComPtr handles.
 - Subscription cancellation and terminal delivery do not form strong-reference cycles.
 - Reentrant updates and retained old paint/layout capabilities fail safely; stale scopes never become valid again.
-- Wrong interface hashes, recursive interface references, malformed enum tags, invalid UTF-8 and invalid copy-buffer counts are rejected at their respective boundaries.
+- Wrong interface signatures, malformed signatures, recursive interface references, malformed enum tags, invalid UTF-8 and invalid copy-buffer counts are rejected at their respective boundaries.
 - Every transferred COM reference is released exactly once on success, failure and rejected-return paths.
 - Plugin class/interface names remain stable across ordinary Rust module reorganizations; breaking draft ABI changes are deliberate and update their validation fixtures.
 - Native GPU renderers retain window/context ownership and preserve custom draw ordering, depth, clip/state restoration and explicit completion errors.

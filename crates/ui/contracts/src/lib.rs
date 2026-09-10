@@ -3,7 +3,7 @@
 //! These are binary boundaries: Rust state, closures, trait objects, references
 //! into implementation storage, and backend-native GPU types stay inside their
 //! owning binary. Generic application conveniences live in the static facade.
-//! Core ABI generation and each interface's IID/hash are checked by neocogi-com.
+//! Core ABI generation and each interface's IID/signature are checked by neocogi-com.
 
 #![no_std]
 #![deny(missing_docs)]
