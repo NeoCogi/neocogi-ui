@@ -55,6 +55,7 @@ The existing project already has most of the necessary foundation:
 - `ComPtr<T>`: one owned reference; cloning adds a reference and dropping releases it.
 - `ComRef<'_, T>`: a borrowed interface parameter. A recipient can retain the object by explicitly acquiring an owned reference.
 - `#[com_struct]`, `com_int_enum!`, and `#[com_enum]`: fixed-layout values and tagged payloads suitable for ABI contracts.
+- `ComDeserialize` plus macro-generated record/enum constructors: format-neutral, statically typed source decoding without descriptor-offset writes or class-registry lookup.
 - Explicit copy-buffer argument modes and standard immutable string/byte interfaces.
 - Descriptor validation, class activation, plugin dependency ordering information, and inspection tools.
 - Default thread-local pointers, which are neither Send nor Sync. This fits SDL, UI objects, and GPU context ownership.
