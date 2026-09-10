@@ -5,6 +5,10 @@ facade has no renderer, font-builder or JSON feature. Its defaults are empty:
 
 | Crate | Feature | Effect |
 | --- | --- | --- |
+| COM graph | `com-validation-none` | Preserve structural validation but skip contract comparison. |
+| COM graph | `com-validation-sha-256` | Validate canonical contracts with 256-bit cryptographic digests. |
+| COM graph | `com-validation-fnv-1a-128` | Validate canonical contracts with compact 128-bit FNV fingerprints. |
+| COM graph | `com-validation-mangling` | Validate and store complete collision-free canonical contract bytes. |
 | `neocogi-ui` | `runtime` | Link the shared neocogi-com runtime used by native hosts. |
 | `neocogi-ui` | `static-runtime` | Link one ordinary runtime implementation, including browser deployments. |
 | `neocogi-ui` | `compiled-assets` | Expand bounded zlib pixels from generated asset tables. |
@@ -28,6 +32,10 @@ feature selection and the executable receives its adjacent runtime/manifest:
 cargo neocogi build --assembly full --variant glow
 cargo neocogi build --assembly full --variant glow --profile min-size
 ```
+
+Every assembly declares `com-validation = "none" | "sha-256" |
+"fnv-1a-128" | "mangling"`. The package driver applies the matching feature to
+the executable, runtime, and every plugin after renderer/resource variants.
 
 `glow`, `vulkan`, `wgpu` and `webgl` on demo packages select host behavior. They are
 separate from implementation-library features. A direct demo build does not stage

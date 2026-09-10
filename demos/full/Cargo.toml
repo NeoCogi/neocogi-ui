@@ -9,15 +9,13 @@ repository.workspace = true
 
 [features]
 default = ["glow"]
-# Keeps the application, linked component roots, and runtime on one strict ABI
-# contract mode when an assembly opts into validation.
-abi-validation = [
-    "neocogi-com/abi-validation",
-    "neocogi-com-runtime/abi-validation",
-    "neocogi-ui-runtime/abi-validation",
-    "neocogi-render-plugin/abi-validation",
-    "neocogi-assets/abi-validation",
-]
+# Each option forwards one validation representation through every statically
+# visible part of the application graph. cargo-neocogi applies the same option
+# to separately linked runtime and plugin roots.
+com-validation-none = ["neocogi-com/com-validation-none", "neocogi-com-runtime/com-validation-none", "neocogi-ui-runtime/com-validation-none", "neocogi-render-plugin/com-validation-none", "neocogi-assets/com-validation-none"]
+com-validation-sha-256 = ["neocogi-com/com-validation-sha-256", "neocogi-com-runtime/com-validation-sha-256", "neocogi-ui-runtime/com-validation-sha-256", "neocogi-render-plugin/com-validation-sha-256", "neocogi-assets/com-validation-sha-256"]
+com-validation-fnv-1a-128 = ["neocogi-com/com-validation-fnv-1a-128", "neocogi-com-runtime/com-validation-fnv-1a-128", "neocogi-ui-runtime/com-validation-fnv-1a-128", "neocogi-render-plugin/com-validation-fnv-1a-128", "neocogi-assets/com-validation-fnv-1a-128"]
+com-validation-mangling = ["neocogi-com/com-validation-mangling", "neocogi-com-runtime/com-validation-mangling", "neocogi-ui-runtime/com-validation-mangling", "neocogi-render-plugin/com-validation-mangling", "neocogi-assets/com-validation-mangling"]
 glow = ["neocogi-demo-host/glow", "neocogi-render-plugin/glow"]
 webgl = ["neocogi-demo-host/webgl", "embed-assets"]
 # Native deployments read adjacent files unless this feature is explicitly requested.
@@ -27,7 +25,7 @@ wgpu = ["neocogi-demo-host/wgpu", "neocogi-render-plugin/wgpu"]
 
 [dependencies]
 neocogi-ui.workspace = true
-neocogi-com = { workspace = true, features = ["std", "macros"] }
+neocogi-com = { workspace = true, default-features = false, features = ["std", "macros"] }
 neocogi-demo-contracts.workspace = true
 neocogi-demo-assets = { workspace = true, features = ["full-demo"] }
 neocogi-demo-host = { workspace = true, features = ["png-assets"] }
@@ -37,7 +35,7 @@ rs-math3d.workspace = true
 # Build the shared artifacts as dependencies; native startup still loads their C ABI.
 neocogi-com-runtime.workspace = true
 neocogi-ui-runtime = { path = "../../crates/ui/runtime", features = ["dynamic-plugin"] }
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "87b6564446ee158b6cf83bfb5949a204014a8833", default-features = false, features = ["dynamic-plugin"] }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "d5ed4e0dbd5ccc6783f062f2af1b8a631eb306fe", default-features = false, features = ["dynamic-plugin"] }
 neocogi-assets = { workspace = true, features = ["dynamic-plugin", "theme-json"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]

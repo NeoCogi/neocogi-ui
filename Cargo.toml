@@ -25,11 +25,11 @@ repository = "https://github.com/NeoCogi/neocogi-platform"
 
 [workspace.dependencies]
 neocogi-ui-contracts = { path = "crates/ui/contracts" }
-neocogi-com-core = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "4be819db1b28647f34e035f7257a33ad918f56d9", version = "0.1.0", default-features = false }
-neocogi-com-macros = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "4be819db1b28647f34e035f7257a33ad918f56d9", version = "0.1.0", default-features = false }
-neocogi-com = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "4be819db1b28647f34e035f7257a33ad918f56d9", version = "0.1.0", default-features = false }
-neocogi-com-runtime-sys = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "4be819db1b28647f34e035f7257a33ad918f56d9", version = "0.1.0", default-features = false }
-neocogi-com-runtime = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "4be819db1b28647f34e035f7257a33ad918f56d9", version = "0.1.0", default-features = false }
+neocogi-com-core = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "835bfc5af2f18e82cbd10b4293f405a144ab9be6", version = "0.1.0", default-features = false }
+neocogi-com-macros = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "835bfc5af2f18e82cbd10b4293f405a144ab9be6", version = "0.1.0", default-features = false }
+neocogi-com = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "835bfc5af2f18e82cbd10b4293f405a144ab9be6", version = "0.1.0", default-features = false }
+neocogi-com-runtime-sys = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "835bfc5af2f18e82cbd10b4293f405a144ab9be6", version = "0.1.0", default-features = false }
+neocogi-com-runtime = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "835bfc5af2f18e82cbd10b4293f405a144ab9be6", version = "0.1.0", default-features = false }
 proc-macro2 = "1"
 quote = "1"
 syn = { version = "2", features = ["full", "extra-traits"] }
@@ -39,13 +39,13 @@ neocogi-ui-runtime = { path = "crates/ui/runtime", version = "0.9.0-alpha.0", de
 neocogi-demo-assets = { path = "demos/assets", default-features = false }
 neocogi-demo-host = { path = "demos/host", default-features = false }
 neocogi-demo-contracts = { path = "demos/contracts" }
-neocogi-demo-renderer = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "87b6564446ee158b6cf83bfb5949a204014a8833", default-features = false }
-neocogi-render-core = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "87b6564446ee158b6cf83bfb5949a204014a8833" }
-neocogi-render-support = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "87b6564446ee158b6cf83bfb5949a204014a8833" }
-neocogi-render-glow = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "87b6564446ee158b6cf83bfb5949a204014a8833" }
-neocogi-render-webgl = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "87b6564446ee158b6cf83bfb5949a204014a8833" }
-neocogi-render-vulkan = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "87b6564446ee158b6cf83bfb5949a204014a8833" }
-neocogi-render-wgpu = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "87b6564446ee158b6cf83bfb5949a204014a8833" }
+neocogi-demo-renderer = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "d5ed4e0dbd5ccc6783f062f2af1b8a631eb306fe", default-features = false }
+neocogi-render-core = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "d5ed4e0dbd5ccc6783f062f2af1b8a631eb306fe" }
+neocogi-render-support = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "d5ed4e0dbd5ccc6783f062f2af1b8a631eb306fe" }
+neocogi-render-glow = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "d5ed4e0dbd5ccc6783f062f2af1b8a631eb306fe" }
+neocogi-render-webgl = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "d5ed4e0dbd5ccc6783f062f2af1b8a631eb306fe" }
+neocogi-render-vulkan = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "d5ed4e0dbd5ccc6783f062f2af1b8a631eb306fe" }
+neocogi-render-wgpu = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "d5ed4e0dbd5ccc6783f062f2af1b8a631eb306fe" }
 
 ash = { version = "0.38", default-features = false, features = ["linked"] }
 ash-window-handle = { package = "ash-window", version = "0.13" }
@@ -85,6 +85,7 @@ incremental = false
 default-assembly = "full"
 
 [workspace.metadata.neocogi.assemblies.full]
+com-validation = "none"
 application = { package = "neocogi-demo-full", bin = "neocogi-demo-full", default-features = false, features = ["glow"] }
 runtime = { package = "neocogi-com-runtime", default-features = false }
 plugins = [
@@ -116,6 +117,7 @@ assets = []
 component-features.neocogi-assets = ["dynamic-plugin"]
 
 [workspace.metadata.neocogi.assemblies.simple]
+com-validation = "none"
 application = { package = "neocogi-demo-basic", bin = "simple", default-features = false, features = ["glow"] }
 runtime = { package = "neocogi-com-runtime", default-features = false }
 plugins = [
@@ -146,6 +148,7 @@ assets = []
 omit-plugins = ["neocogi-assets"]
 
 [workspace.metadata.neocogi.assemblies.calculator]
+com-validation = "none"
 application = { package = "neocogi-demo-basic", bin = "calculator", default-features = false, features = ["glow"] }
 runtime = { package = "neocogi-com-runtime", default-features = false }
 plugins = [
@@ -176,6 +179,7 @@ assets = []
 omit-plugins = ["neocogi-assets"]
 
 [workspace.metadata.neocogi.assemblies.backend-frame-cube]
+com-validation = "none"
 application = { package = "neocogi-demo-basic", bin = "backend-frame-cube", default-features = false, features = ["glow"] }
 runtime = { package = "neocogi-com-runtime", default-features = false }
 plugins = [
@@ -206,6 +210,7 @@ assets = []
 omit-plugins = ["neocogi-assets"]
 
 [workspace.metadata.neocogi.assemblies.smoke]
+com-validation = "none"
 application = { package = "neocogi-demo-smoke", bin = "neocogi-demo-smoke", default-features = false, features = ["glow"] }
 runtime = { package = "neocogi-com-runtime", default-features = false }
 plugins = [
