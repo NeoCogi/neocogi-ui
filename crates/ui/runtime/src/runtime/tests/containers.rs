@@ -1,6 +1,6 @@
 //! Independent container policy exercises the same boundary available to a separate plugin.
 use super::*;
-use neocogi_ui_contracts::widget::WidgetState;
+use neocogi_ui::com::widget::WidgetState;
 
 /// Deliberately retained service/token pairs probe expiry after their real nested invocation.
 type RetainedScopes = Rc<RefCell<Vec<(ComPtr<ILayoutServiceAbi>, LayoutScope)>>>;

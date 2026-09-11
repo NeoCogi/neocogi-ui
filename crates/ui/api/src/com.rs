@@ -10,6 +10,9 @@ use neocogi_com::{ComInterface, ComPtr, ComRef, INcStringComPtrExt, NcCopyFromBu
 mod containers;
 pub use containers::{DisclosureWidget, GridWidget, LinearWidget, ScrollAreaWidget};
 
+/// Reusable state composed into concrete Rust widget implementations.
+pub mod widget;
+
 /// Generic static proxy for one concrete widget editing capability.
 pub struct Widget<I: ComInterface> {
     /// One checked, owned reference to the actual plugin object.

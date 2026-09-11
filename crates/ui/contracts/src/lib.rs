@@ -12,10 +12,6 @@ include!(concat!(env!("OUT_DIR"), "/neocogi_ui.rs"));
 /// Semantic appearance roles and state ordering shared by assets and widgets.
 pub mod appearance;
 
-#[path = "widget_support.rs"]
-/// Rust-only widget implementation state built on generated contract values.
-pub mod widget;
-
 /// Named flat-palette authoring values generated from the canonical IDL.
 pub mod palette {
     pub use crate::FlatPalette;

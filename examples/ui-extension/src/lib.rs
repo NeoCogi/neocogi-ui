@@ -3,7 +3,8 @@
 //! The two concrete objects share only lifecycle plumbing. The counter owns its scalar value and
 //! event producer; the inset owns its padding and the host's sole authoritative child editor.
 #![deny(missing_docs)]
-use neocogi_ui_contracts::{widget::WidgetState, *};
+use neocogi_ui::com::widget::WidgetState;
+use neocogi_ui_contracts::*;
 use neocogi_demo_contracts::*;
 use neocogi_ui::{
     Painter,

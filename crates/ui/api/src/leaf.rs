@@ -4,7 +4,7 @@
 //! Classes exposing their own editing interfaces can instead compose WidgetState and implement
 //! IWidget directly. This helper creates no registered class, native node, erased value or Rust vtable.
 use crate::*;
-use neocogi_ui_contracts::widget::WidgetState;
+use crate::com::widget::WidgetState;
 use neocogi_com::{com_object, ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
 
 /// Statically dispatched behavior stored inline in one application-owned COM widget.

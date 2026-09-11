@@ -6,7 +6,7 @@ use crate::boundary::text;
 use neocogi_ui_contracts::*;
 use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
 use std::{cell::RefCell, rc::Rc};
-use neocogi_ui_contracts::widget::WidgetState;
+use neocogi_ui::com::widget::WidgetState;
 use crate::{AvailableSpace, WidgetOption};
 
 /// Private semantic algorithms reused by each statically known built-in class.
