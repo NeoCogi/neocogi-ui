@@ -139,7 +139,7 @@ impl crate::event::ComEvent for ButtonSubmitted {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_contracts::Button)]
+#[neocogi_com::com_object(constructible(neocogi_ui_contracts::Button))]
 /// Concrete retained button and dynamically constructible COM object.
 ///
 /// The allocation owns its semantic fields directly. `runtime` contains only common host,

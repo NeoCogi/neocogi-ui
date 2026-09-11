@@ -135,7 +135,7 @@ impl crate::event::ComEvent for SliderChanged {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_contracts::Slider)]
+#[neocogi_com::com_object(constructible(neocogi_ui_contracts::Slider))]
 /// Concrete retained slider and dynamically constructible COM object.
 pub struct Slider {
     /// Non-semantic COM lifecycle and host-backed phase resources.

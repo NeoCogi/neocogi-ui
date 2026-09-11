@@ -148,7 +148,7 @@ pub struct TextEditor {
 }
 
 /// Concrete fixed scrolling text-area class with one actual editor child.
-#[neocogi_com::com_object(neocogi_ui_contracts::TextArea)]
+#[neocogi_com::com_object(constructible(neocogi_ui_contracts::TextArea))]
 pub struct TextArea {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,

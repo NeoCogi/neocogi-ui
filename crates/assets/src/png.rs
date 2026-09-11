@@ -90,7 +90,7 @@ impl RgbaImage {
     }
 }
 
-#[com_object(neocogi_ui_contracts::PngDecoder)]
+#[com_object(constructible(neocogi_ui_contracts::PngDecoder))]
 #[derive(Default)]
 /// Decodes PNGs independently of the optional font rasterizer and JSON compiler.
 pub struct PngDecoderObject {

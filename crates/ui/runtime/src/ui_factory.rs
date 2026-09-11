@@ -4,7 +4,7 @@ use neocogi_ui_contracts::*;
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, com_object};
 use std::{cell::RefCell, rc::Rc};
 
-#[com_object(neocogi_ui_contracts::UiFactory)]
+#[com_object(constructible(neocogi_ui_contracts::UiFactory))]
 /// Dynamically linked construction shorthand retaining its products' host and one asset value.
 pub struct UiFactory {
     /// Non-owning runtime authority used for lifetime checks, resources, and child stores.

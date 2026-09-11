@@ -80,7 +80,7 @@ impl crate::event::ComEvent for ListBoxSubmitted {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_contracts::ListBox)]
+#[neocogi_com::com_object(constructible(neocogi_ui_contracts::ListBox))]
 /// Concrete retained list box and dynamically constructible COM object.
 pub struct ListBox {
     /// Non-semantic COM lifecycle and host-backed phase resources.

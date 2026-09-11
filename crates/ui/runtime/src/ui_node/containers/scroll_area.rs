@@ -284,7 +284,7 @@ impl ScrollModel {
 }
 
 /// Concrete three-child scroll composite; its model owns data but no widget or tree backpointer.
-#[neocogi_com::com_object(neocogi_ui_contracts::ScrollArea)]
+#[neocogi_com::com_object(constructible(neocogi_ui_contracts::ScrollArea))]
 pub struct ScrollArea {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,

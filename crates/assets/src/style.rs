@@ -253,7 +253,7 @@ fn flat_chrome_visual(frame_insets: Insets, palette: &FlatPalette, role: ChromeR
     patch
 }
 
-#[neocogi_com::com_object(neocogi_ui_contracts::StyleCompiler)]
+#[neocogi_com::com_object(constructible(neocogi_ui_contracts::StyleCompiler))]
 #[derive(Default)]
 /// Compiles resource revisions without borrowing a UI or retaining a renderer.
 pub struct StyleCompilerObject {

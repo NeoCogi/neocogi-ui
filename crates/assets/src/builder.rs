@@ -6,7 +6,7 @@ use neocogi_ui::assets::AssetData;
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, INcStringAbi, NC_E_INVALID_ARG, com_object};
 use std::cell::RefCell;
 
-#[com_object(neocogi_ui_contracts::AssetLoader)]
+#[com_object(constructible(neocogi_ui_contracts::AssetLoader))]
 #[derive(Default)]
 /// Stateless construction root with owned diagnostics; drafts contain the actual mutable builder.
 pub struct AssetLoaderObject {
@@ -164,7 +164,7 @@ impl IAssetDiagnostics for BuildSession {
 }
 
 #[cfg(feature = "theme-json")]
-#[com_object(neocogi_ui_contracts::ThemeLoader)]
+#[com_object(constructible(neocogi_ui_contracts::ThemeLoader))]
 #[derive(Default)]
 /// Optional theme compiler is present only in asset assemblies built with theme-json.
 pub struct ThemeLoaderObject {

@@ -86,7 +86,7 @@ impl crate::event::ComEvent for CheckboxChanged {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_contracts::Checkbox)]
+#[neocogi_com::com_object(constructible(neocogi_ui_contracts::Checkbox))]
 /// Concrete retained checkbox and dynamically constructible COM object.
 pub struct Checkbox {
     /// Non-semantic COM lifecycle and host-backed phase resources.

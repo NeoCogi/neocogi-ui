@@ -91,7 +91,7 @@ macro_rules! widget {
     };
 }
 
-#[com_object(neocogi_demo_contracts::extension::Counter)]
+#[com_object(constructible(neocogi_demo_contracts::extension::Counter))]
 /// Private implementation of the externally declared, constructible counter class.
 struct CounterObject {
     /// Common options are authoritative here, without a duplicate presentation copy.
@@ -299,7 +299,7 @@ fn shrink(mut limit: AxisLimit, inset: i32) -> AxisLimit {
     limit
 }
 
-#[com_object(neocogi_demo_contracts::extension::ExtensionProvider)]
+#[com_object(constructible(neocogi_demo_contracts::extension::ExtensionProvider))]
 /// Stateless shorthand factory creates the interface-based inset container.
 pub struct ExtensionProviderObject;
 impl ExtensionProvider for ExtensionProviderObject {

@@ -103,7 +103,7 @@ impl crate::event::ComEvent for NumberChanged {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_contracts::Number)]
+#[neocogi_com::com_object(constructible(neocogi_ui_contracts::Number))]
 /// Concrete retained number input and dynamically constructible COM object.
 pub struct Number {
     /// Non-semantic COM lifecycle and host-backed phase resources.

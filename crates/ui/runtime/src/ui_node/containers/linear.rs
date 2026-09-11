@@ -327,7 +327,7 @@ where
 /// consumes only an exact placement allocation and does not manufacture desired size during
 /// measurement. Content and Fixed overflow remain visible, and every geometry accumulation uses
 /// saturating arithmetic.
-#[neocogi_com::com_object(neocogi_ui_contracts::Linear)]
+#[neocogi_com::com_object(constructible(neocogi_ui_contracts::Linear))]
 pub struct Linear {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,

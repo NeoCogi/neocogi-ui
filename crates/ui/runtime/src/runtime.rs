@@ -70,7 +70,7 @@ fn create_storage(assets: crate::assets::ImportedAssets) -> Rc<RuntimeStorage> {
     })
 }
 
-#[com_object(UiRuntime)]
+#[com_object(constructible(UiRuntime))]
 /// One identity owns the runtime, its widget factory and window-management policy.
 pub struct Runtime {
     /// Window handles use Weak references so retaining them cannot form a tree cycle.

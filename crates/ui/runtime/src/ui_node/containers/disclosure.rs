@@ -147,7 +147,7 @@ impl DisclosureParameters {
 ///
 /// Expansion gates descendant traversal while retaining every owned runtime and its state. It does
 /// not expose or mutate generic node visibility.
-#[neocogi_com::com_object(neocogi_ui_contracts::Disclosure)]
+#[neocogi_com::com_object(constructible(neocogi_ui_contracts::Disclosure))]
 pub struct Disclosure {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,

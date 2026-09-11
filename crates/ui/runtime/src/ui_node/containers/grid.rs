@@ -366,7 +366,7 @@ impl GridParameters {
 ///
 /// Grid always has an effective track on each axis, but an implicit empty Content track contributes
 /// zero. An empty generic Grid remains zero-sized unless an explicit Fixed track contributes extent.
-#[neocogi_com::com_object(neocogi_ui_contracts::Grid)]
+#[neocogi_com::com_object(constructible(neocogi_ui_contracts::Grid))]
 pub struct Grid {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,

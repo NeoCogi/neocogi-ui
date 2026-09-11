@@ -72,7 +72,7 @@ impl Default for ComboParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_contracts::Combo)]
+#[neocogi_com::com_object(constructible(neocogi_ui_contracts::Combo))]
 /// Concrete retained combo and dynamically constructible COM object.
 pub struct Combo {
     /// Non-semantic COM lifecycle and host-backed phase resources.

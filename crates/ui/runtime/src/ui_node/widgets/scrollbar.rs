@@ -278,7 +278,7 @@ impl crate::event::ComEvent for ScrollbarChanged {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_contracts::Scrollbar)]
+#[neocogi_com::com_object(constructible(neocogi_ui_contracts::Scrollbar))]
 /// Standalone one-axis scrollbar and dynamically constructible COM object.
 pub struct Scrollbar {
     /// Non-semantic COM lifecycle and host-backed phase resources.

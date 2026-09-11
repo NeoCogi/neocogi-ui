@@ -70,7 +70,7 @@ impl ColorSwatchParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_contracts::ColorSwatch)]
+#[neocogi_com::com_object(constructible(neocogi_ui_contracts::ColorSwatch))]
 /// Concrete retained color swatch and dynamically constructible COM object.
 pub struct ColorSwatch {
     /// Non-semantic COM lifecycle and host-backed phase resources.
