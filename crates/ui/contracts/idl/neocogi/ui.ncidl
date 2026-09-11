@@ -1915,6 +1915,7 @@ struct AssetIcon {
 
 #[version(1)]
 /// Four nonnegative pixel insets used by resolved theme geometry.
+#[deserialize]
 struct Insets {
     /// Leading horizontal thickness.
     left: i32,
@@ -1928,6 +1929,7 @@ struct Insets {
 
 #[version(1)]
 /// Complete scalar layout recipe; installation rejects negative dimensions.
+#[deserialize(default)]
 struct AssetMetrics {
     /// Preferred width when a layout supplies none.
     default_cell_width: i32,
@@ -2159,6 +2161,7 @@ factory PngDecoder: IAssetDiagnostics {
 
 #[version(1)]
 /// Simple RGBA color stored with 8-bit components.
+#[deserialize(sequence)]
 struct Color {
     /// Red channel.
     r: u8,
@@ -2176,6 +2179,7 @@ struct Color {
 /// complete resolved visual values avoids the former shadow color array that could disagree with
 /// what widgets actually painted.
 #[version(1)]
+#[deserialize(default)]
 struct FlatPalette {
     /// Ordinary control text and semantic glyph color.
     text: Color,
