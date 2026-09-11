@@ -280,9 +280,10 @@ impl PaintService {
         let header = <IPainterAbi as neocogi_com::ComInterface>::iunknown(self.painter.as_mut_ptr());
         // SAFETY: `painter` was created exclusively by `Recorder::from_value` in `new` and keeps
         // that allocation alive. Its generated interface header therefore carries the matching
-        // Recorder storage pointer. `with_abi_mut` applies the same exclusive call gate used by
-        // normal mutable COM dispatch before lending the concrete value to this closure.
-        unsafe { <Recorder as neocogi_com::ComAbiObject>::with_abi_mut((*header).object, call) }
+        // Recorder storage pointer. `borrow_abi_mut` applies the same exclusive call gate used by
+        // normal mutable COM dispatch and keeps it held for the complete closure invocation.
+        let mut recorder = unsafe { <Recorder as neocogi_com::ComAbiObject>::borrow_abi_mut((*header).object) }?;
+        Ok(call(&mut recorder))
     }
 
     /// Moves the frame list into the scoped context, calls a component, then restores the list.
