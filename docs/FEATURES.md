@@ -32,12 +32,16 @@ feature selection and the executable receives its adjacent runtime/manifest:
 ```sh
 cargo neocogi build --assembly full --variant glow
 cargo neocogi build --assembly full --variant glow --profile min-size
+cargo neocogi build --assembly full --variant vulkan --variant sha-256 --profile min-size
 cargo neocogi build --assembly full --variant vulkan --variant monolith --release
 ```
 
 Every assembly declares `com-validation = "none" | "sha-256" |
 "fnv-1a-128" | "mangling"`. The package driver applies the matching feature to
 the executable, runtime, and every plugin after renderer/resource variants.
+Those four values are also reserved built-in `--variant` names, allowing one
+command to compose renderer, resource, linkage, and validation choices. Repeated
+validation variants are applied in order and the last one wins.
 The `monolith` variant is valid only with `com-validation = "none"`; it stages no
 Neocogi shared libraries or `plugins.txt` because the executable registers its
 linked descriptors directly.
