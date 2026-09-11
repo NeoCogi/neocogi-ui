@@ -42,6 +42,9 @@ the executable, runtime, and every plugin after renderer/resource variants.
 Those four values are also reserved built-in `--variant` names, allowing one
 command to compose renderer, resource, linkage, and validation choices. Repeated
 validation variants are applied in order and the last one wins.
+Each dynamic plugin descriptor records the resulting mode. Assembly staging
+inspects all selected libraries and rejects the plan if their reported modes
+differ, so `plugins.txt` cannot describe a mixed validation graph.
 The `monolith` variant is valid only with `com-validation = "none"`; it stages no
 Neocogi shared libraries or `plugins.txt` because the executable registers its
 linked descriptors directly.
