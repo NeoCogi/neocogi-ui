@@ -38,23 +38,54 @@ impl Diagnostic {
     }
 }
 
-#[cfg(not(feature = "builder"))]
-neocogi_com::plugin! {
-    plugin_id(auto_guid = "neocogi.assets"), name = "neocogi.assets",
-    version = "0.9.0-alpha.0", classes = [PngDecoderObject, StyleCompilerObject],
+/// Stateless process entry that creates the asset services selected by this assembly's features.
+#[neocogi_com::com_factory(neocogi_ui_contracts::AssetsPluginFactory)]
+struct AssetsPluginFactoryObject;
+
+impl AssetsPluginFactory for AssetsPluginFactoryObject {
+    /// Creates one independent decoder with its own diagnostic history.
+    fn png_decoder(&self) -> Result<ComPtr<PngDecoderAbi>, NcStatus> {
+        PngDecoderObject::from_value(PngDecoderObject::default()).query()
+    }
+
+    /// Creates one independent style compiler with its own diagnostic history.
+    fn style_compiler(&self) -> Result<ComPtr<StyleCompilerAbi>, NcStatus> {
+        StyleCompilerObject::from_value(StyleCompilerObject::default()).query()
+    }
+
+    /// Creates the optional atlas builder service when that implementation was compiled in.
+    fn asset_loader(&self) -> Result<ComPtr<AssetLoaderAbi>, NcStatus> {
+        #[cfg(feature = "builder")]
+        {
+            AssetLoaderObject::from_value(AssetLoaderObject::default()).query()
+        }
+        #[cfg(not(feature = "builder"))]
+        {
+            Err(neocogi_com::NC_E_NOT_FOUND)
+        }
+    }
+
+    /// Creates the optional JSON theme service when that implementation was compiled in.
+    fn theme_loader(&self) -> Result<ComPtr<ThemeLoaderAbi>, NcStatus> {
+        #[cfg(feature = "theme-json")]
+        {
+            ThemeLoaderObject::from_value(ThemeLoaderObject::default()).query()
+        }
+        #[cfg(not(feature = "theme-json"))]
+        {
+            Err(neocogi_com::NC_E_NOT_FOUND)
+        }
+    }
 }
-#[cfg(all(feature = "builder", not(feature = "theme-json")))]
-neocogi_com::plugin! {
-    plugin_id(auto_guid = "neocogi.assets"), name = "neocogi.assets",
-    version = "0.9.0-alpha.0", classes = [PngDecoderObject, StyleCompilerObject, AssetLoaderObject],
-}
-#[cfg(feature = "theme-json")]
-neocogi_com::plugin! {
-    plugin_id(auto_guid = "neocogi.assets"), name = "neocogi.assets",
-    version = "0.9.0-alpha.0", classes = [PngDecoderObject, StyleCompilerObject, AssetLoaderObject, ThemeLoaderObject],
+
+neocogi_com::factory_plugin! {
+    name = "neocogi.assets",
+    version = "0.9.0-alpha.0",
+    contracts = [neocogi_ui_contracts::MODULE],
+    factory = AssetsPluginFactoryObject,
 }
 #[cfg(feature = "dynamic-plugin")]
-neocogi_com::export_plugin!();
+neocogi_com::export_factory_plugin!();
 
 /// Optional JSON authoring compiler producing ordinary portable resource tables.
 #[cfg(feature = "theme-json")]

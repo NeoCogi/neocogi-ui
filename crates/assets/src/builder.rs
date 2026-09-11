@@ -3,10 +3,10 @@ use super::Diagnostic;
 use neocogi_ui_contracts::*;
 use crate::atlas::{Builder, Config};
 use neocogi_ui::assets::AssetData;
-use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, INcStringAbi, NC_E_INVALID_ARG, com_object};
+use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, INcStringAbi, NC_E_INVALID_ARG, com_factory, com_object};
 use std::cell::RefCell;
 
-#[com_object(constructible(neocogi_ui_contracts::AssetLoader))]
+#[com_factory(neocogi_ui_contracts::AssetLoader)]
 #[derive(Default)]
 /// Stateless construction root with owned diagnostics; drafts contain the actual mutable builder.
 pub struct AssetLoaderObject {
@@ -15,10 +15,6 @@ pub struct AssetLoaderObject {
 }
 
 impl AssetLoader for AssetLoaderObject {
-    /// Creates an empty construction root whose first failed operation may populate diagnostics.
-    fn new() -> Result<Self, NcStatus> {
-        Ok(Self::default())
-    }
     /// Checks dimensions before decoding the supplied path or reading the white tile.
     fn create_builder(&self, size: Size, white: ComRef<'_, INativePathAbi>) -> Result<ComPtr<IAssetBuilderAbi>, NcStatus> {
         dimensions(size)?;
@@ -164,7 +160,7 @@ impl IAssetDiagnostics for BuildSession {
 }
 
 #[cfg(feature = "theme-json")]
-#[com_object(constructible(neocogi_ui_contracts::ThemeLoader))]
+#[com_factory(neocogi_ui_contracts::ThemeLoader)]
 #[derive(Default)]
 /// Optional theme compiler is present only in asset assemblies built with theme-json.
 pub struct ThemeLoaderObject {
@@ -173,10 +169,6 @@ pub struct ThemeLoaderObject {
 }
 #[cfg(feature = "theme-json")]
 impl ThemeLoader for ThemeLoaderObject {
-    /// Creates an empty theme root whose first failed operation may populate diagnostics.
-    fn new() -> Result<Self, NcStatus> {
-        Ok(Self::default())
-    }
     /// Reads a complete theme against immutable base resources and returns ordinary portable tables.
     fn load_theme(&self, path: ComRef<'_, INativePathAbi>, base: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         let path = neocogi_ui::path::decode(path)?;

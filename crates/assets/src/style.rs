@@ -253,7 +253,7 @@ fn flat_chrome_visual(frame_insets: Insets, palette: &FlatPalette, role: ChromeR
     patch
 }
 
-#[neocogi_com::com_object(constructible(neocogi_ui_contracts::StyleCompiler))]
+#[neocogi_com::com_factory(neocogi_ui_contracts::StyleCompiler)]
 #[derive(Default)]
 /// Compiles resource revisions without borrowing a UI or retaining a renderer.
 pub struct StyleCompilerObject {
@@ -262,10 +262,6 @@ pub struct StyleCompilerObject {
 }
 
 impl StyleCompiler for StyleCompilerObject {
-    /// Creates an empty compiler whose first failed operation may populate diagnostics.
-    fn new() -> Result<Self, neocogi_com::NcStatus> {
-        Ok(Self::default())
-    }
     /// Copies the base once, applies the explicit edit, validates and publishes in its catalog.
     fn derive_style(
         &self,

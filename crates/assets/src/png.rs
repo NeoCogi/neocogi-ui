@@ -1,6 +1,6 @@
 //! CPU PNG decoding and renderer upload share one bounded RGBA representation.
 use super::*;
-use neocogi_com::{ComRef, NcCopyFromBufferOffset, com_object};
+use neocogi_com::{ComRef, NcCopyFromBufferOffset, com_factory};
 use std::io::{self, Cursor};
 
 /// Decoded CPU pixels, ready for atlas packing or a texture-factory upload.
@@ -90,7 +90,7 @@ impl RgbaImage {
     }
 }
 
-#[com_object(constructible(neocogi_ui_contracts::PngDecoder))]
+#[com_factory(neocogi_ui_contracts::PngDecoder)]
 #[derive(Default)]
 /// Decodes PNGs independently of the optional font rasterizer and JSON compiler.
 pub struct PngDecoderObject {
@@ -98,10 +98,6 @@ pub struct PngDecoderObject {
     diagnostic: Diagnostic,
 }
 impl PngDecoder for PngDecoderObject {
-    /// Creates an empty decoder whose first operation may populate its diagnostics.
-    fn new() -> Result<Self, NcStatus> {
-        Ok(Self::default())
-    }
     /// Decodes fully before invoking the renderer, retaining all temporary buffers for the call only.
     fn upload(&self, png: NcCopyFromBufferOffset<'_, u8>, target: ComRef<'_, ITextureFactoryAbi>) -> Result<ComPtr<ITextureAbi>, NcStatus> {
         if png.offset() != 0 {
