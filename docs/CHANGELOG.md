@@ -11,9 +11,9 @@ wrappers. The accepted migration and outstanding validation are recorded in
   native bindings, and generated LTO roots. Assemblies deploy one runtime library
   without the former duplicate filename. The Cargo package remains `neocogi-com-runtime`.
 - Import and maintain neocogi-com locally: checked recursive interface identities,
-  borrowed clients, callable class contracts with typed constructor frames,
-  class-required shared protocols, generic owned local classes, static runtime
-  binding and explicit dynamic plugin exports.
+  borrowed clients, generated IDL class/factory descriptions, required shared
+  protocols, typed factory construction, static runtime binding, and explicit
+  dynamic factory-plugin exports.
 - Stop inspecting Cargo manifests during COM macro expansion. Generated code uses
   the canonical `::neocogi_com` path or an explicit facade override, removing
   `proc-macro-crate` and its TOML parser from application and plugin builds.
@@ -21,56 +21,53 @@ wrappers. The accepted migration and outstanding validation are recorded in
   collision-free mangling) and an optional native monolith. The monolith uses
   unchecked validation, one statically linked runtime, and direct registration
   of the linked UI, renderer, and asset descriptors.
-- Record the selected COM validation mode in core ABI v7 plugin descriptors and
-  schema-v6 inspection artifacts. Dynamic assembly planning now rejects plugins
+- Record the selected COM validation mode in core ABI v7 plugin descriptions and
+  schema-v7 inspection artifacts. Dynamic assembly planning now rejects plugins
   built with different modes before staging `plugins.txt`.
 - Add one-Cargo-crate-per-module Rust-like IDL generation. Dynamic assemblies
   stage fingerprint-qualified contract libraries and factory-only plugins;
-  common loading and inspection detect the activation model and reject
-  conflicting revisions before publication.
-- Reserve `#[com_class]` for callable contract traits and use
-  `#[com_object(Class)]` or `#[com_object(interfaces(...))]` for concrete Rust
-  implementations. Class declarations therefore describe the public boundary,
-  while object declarations describe private storage and threading.
-- Remove the older implementation-owned `class_id`, name, version, constructor,
-  and interface-list descriptor grammar. A registered object's complete public
-  boundary now has exactly one source: its callable class contract.
+  loading and inspection reject conflicting revisions before publication.
+- Use generated IDL `class` descriptions with `#[com_object(Class)]` and IDL
+  `factory` descriptions with `#[com_factory(Factory)]`. Descriptions own public
+  identity/threading/projections; implementations own private state and bodies.
+- Remove runtime class tables, class-ID construction, constructor pointers and
+  erased argument frames. Typed factory methods are the only public construction
+  path.
 - Replace the redundant `IButton` and `IButtonStyle` capabilities with the
-  constructible `Button` class contract. Its constructor and concrete editing,
+  factory-created `Button` IDL class description. Its concrete editing,
   activation, font, icon, fill, and image operations now share one class
   projection; only the reusable `IWidget` and `ILeafLayout` protocols remain.
-- Make Checkbox, Scrollbar, and Combo registered class contracts as well. Their
+- Make Checkbox, Scrollbar, and Combo IDL class descriptions as well. Their
   concrete editing and event methods no longer require matching one-object
   interfaces, while their callback sinks remain reusable COM protocols.
-- Make Textbox, TextBlock, and the fixed TextArea composition registered class
+- Make Textbox, TextBlock, and the fixed TextArea composition IDL class
   contracts. Text, cursor, wrapping, typography, and editor subscriptions now
   live on those concrete class projections; TextArea retains only shared
   scrolling and container-layout protocols.
-- Make Slider and Number registered class contracts. Their value editing,
+- Make Slider and Number IDL class descriptions. Their value editing,
   typography, and numeric subscriptions now live directly on the concrete class
   projections instead of three overlapping numeric interfaces.
-- Make ColorSwatch, ListItem, and ListBox registered class contracts. Label,
+- Make ColorSwatch, ListItem, and ListBox IDL class descriptions. Label,
   typography, icon, image, and activation operations now live directly on those
   class projections; the single-use icon and image interfaces are removed.
-- Make Linear and Grid registered class contracts. Their constructors, topology
+- Make Linear and Grid IDL class descriptions. Their factory methods, topology
   edits, and relationship policies now share the concrete class projection;
   only runtime-facing `IContainerLayout` remains required.
-- Make ScrollArea and Disclosure registered class contracts. Their fixed
+- Make ScrollArea and Disclosure IDL class descriptions. Their fixed
   compositions retain shared scrolling/container protocols while content,
   expansion, header, and body access live on the concrete class projections.
-- Make the always-present PngDecoder and StyleCompiler asset roots callable
-  classes; diagnostics remain a reusable interface on both objects.
-- Make the optional AssetLoader and ThemeLoader roots callable classes as well;
+- Make the always-present PngDecoder and StyleCompiler asset roots IDL classes;
+  diagnostics remain a reusable interface on both objects.
+- Make the optional AssetLoader and ThemeLoader roots IDL classes as well;
   their mutable build sessions and immutable result bundles remain interfaces.
 - Replace the optional extension assembly's one-object provider interface and
-  separate class ID with a callable `ExtensionProvider` class; its custom
+  separate class ID with an `ExtensionProvider` IDL class; its custom
   `IInset` result remains a reusable container capability.
 - Replace the registered platform root's `IPlatform` plus separate class-ID
-  declaration with a callable `Platform` class contract. Renderer diagnostics
+  declaration with a `Platform` IDL class. Renderer diagnostics
   remain a shared capability on the same native bootstrap object.
-- Replace `IUiFactory` with a separately registered `UiFactory` class. The
-  runtime returns a host-bound instance for convenience, while hosts can construct
-  `Button` and other registered classes directly from typed argument frames.
+- Replace `IUiFactory` with an IDL `UiFactory`. The plugin root returns a
+  host-bound instance whose typed methods construct `Button` and other classes.
 - Store the runtime's current imported assets as one shared value instead of a
   wrapper around nested reference-counted snapshots. Installing a replacement now
   requires a mutable `UiRuntime` receiver, making runtime-wide mutation explicit.

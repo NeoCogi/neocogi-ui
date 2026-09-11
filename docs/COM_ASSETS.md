@@ -37,8 +37,8 @@ and bounded owned containers. It never builds `serde_json::Value`, uses `Any`,
 writes through reflected field offsets, or consults the COM class registry.
 Unknown and duplicate fields and role keys are rejected during typed decoding.
 
-Applications supply one `IAssetBundle` to the `UiRuntime` constructor and
-`Platform::create_window`. Neither implementation embeds demo assets. The UI imports
+Applications supply one `IAssetBundle` through the typed `UiRuntime` factory
+method and `Platform::create_window`. Neither implementation embeds demo assets. The UI imports
 metadata into its local font/icon tables once and samples only the required white-tile
 rows while validating it. It never copies or retains the complete image. The platform
 reads the bundle header and packed RGBA bytes, then uploads them without importing a

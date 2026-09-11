@@ -1,563 +1,244 @@
-**COM migration proposal for neocogi-ui**
+# NeoCogi component design
 
-This is the accepted design and implementation plan. Progress is tracked in COM_MIGRATION.md. It incorporates the requested statically linked generic Rust façade over dynamically linked COM implementations, and importing neocogi-com into this workspace so it can be modified here.
+NeoCogi uses generated C-shaped interfaces for Rust components built as
+independent artifacts. Public contracts live in Rust-like IDL modules. Plugins
+implement one typed root factory; the shared runtime validates and connects
+artifacts but does not construct arbitrary classes.
 
-The analysis used neocogi-ui `0.9-alpha.0` at `6b4fd86` and neocogi-com at `fbb66e6`, located at `/home/aifu/projects/neocogi/neocogi-com`. The `neo-cogi` spelling in the original path differs from the actual directory.
-
-**1. Recommended overall design**
-
-Use neocogi-com itself as the COM foundation. Import its source, preserve its crate boundaries, and make focused changes there. Introduce one small UI contract crate and turn the existing public neocogi-ui crate into the statically linked Rust façade. Move the retained implementation behind that façade into a UI plugin.
-
-Keep three plugin groups:
-
-| Plugin group | Contents | Typical deployment |
-|---|---|---|
-| UI | UI runtime, window manager, widgets, containers, menus, standard dialogs, layout, input routing, display-list generation and geometry expansion | Required |
-| Platform/rendering | Native host/window integration and the selected rendering backend; application GPU extensions compiled into the same binary | Required; normally build one backend |
-| Assets | Atlas building, font rasterization, PNG decoding, optional JSON theme loading | Optional; omitted when supplying compiled assets |
-
-The neocogi-com runtime shared library is infrastructure, not another UI plugin. A normal native installation would therefore contain the executable, the neocogi-com runtime library, the UI plugin, a platform/rendering plugin, and optionally the assets plugin.
-
-Backend/helper crates remain statically linked dependencies inside the selected renderer plugin. A Cargo crate does not need its own plugin descriptor or shared library. In particular, do not make every widget, container, renderer-support helper, painter, or event type a separately loaded plugin.
-
-The native architecture is:
+## Architecture
 
 ```text
-application and application state
-    |
-    | statically linked Rust generics, concrete proxy types, local borrows
-    v
-neocogi-ui façade  -------->  neocogi-com façade
-    |                              |
-    | generated COM calls          | class loading and activation
-    v                              v
-neocogi-ui-contracts             one neocogi-com runtime library
-    |                              |
-    +------------------------------+--------------------+
-    |                              |                    |
-UI plugin                  platform/GPU plugin     optional assets plugin
-retained UI engine          native window + GPU     builder / PNG / JSON
+.ncidl source
+  -> generated Rust contract crate
+       -> ABI layouts and typed wrappers compiled into host/plugin
+       -> MODULE reference imports the exact native description getter
+  -> fingerprint-qualified contract library
+       -> one canonical immutable description graph
+
+plugin implementation
+  -> private Rust state + generated COM object storage
+  -> NcFactoryPluginDescription + root activation function
+
+host + plugin + contract libraries
+  -> libnc_com_shared_runtime
+       -> validates identities/fingerprints/signatures
+       -> retains loaded libraries and registry state
+       -> returns the requested typed root factory
 ```
 
-COM boundaries are between separately compiled binaries. Generics, Rust helper traits, `Vec`, `String`, and private resource ownership remain useful within each binary. The façade can be generic without making any COM interface generic.
+The split is deliberate:
 
-Concrete source ownership follows the same boundary. `neocogi-ui-contracts` contains declarations only. Inside the UI implementation, a built-in widget or container keeps its generated object declaration, callable-class methods, shared interface projections, semantic state and algorithms in one `ui_node` family module. Shared implementation services live beside the domain that owns them, and the UI plugin imports registered object types directly from the `neocogi-ui-runtime` crate root; there is no separate `neocogi-ui-runtime/src/com` implementation tree or parallel per-widget representation.
+- The contract crate gives Rust code types it can compile and call.
+- The native contract library is the single runtime source of descriptive
+  truth for one exact module revision.
+- The plugin owns executable implementation and construction policy.
+- The runtime owns cross-artifact validation, registration, inspection, and
+  module lifetime.
 
-The browser and optional native monolith use a statically linked build of the
-same COM interfaces and descriptors. Native dynamic deployment retains separate
-runtime/plugin libraries behind the same facade. Browser dynamic plugin loading
-is outside the initial design.
+No layer uses Rust trait objects or allocator-owned Rust values across the
+binary boundary.
 
-**2. What neocogi-com already provides**
+## IDL descriptions
 
-The existing project already has most of the necessary foundation:
-
-- `#[com_interface]`: a Rust implementation trait, explicit C-shaped interface header/vtable, safe owning-pointer call helpers, interface GUID and ABI signature.
-- `#[com_class]`: a callable class contract with one typed constructor and stable registry identity.
-- `#[com_object]`: one generated allocation containing the Rust implementation, interface headers, canonical IUnknown support, and an atomic reference count.
-- `ComPtr<T>`: one owned reference; cloning adds a reference and dropping releases it.
-- `ComRef<'_, T>`: a borrowed interface parameter. A recipient can retain the object by explicitly acquiring an owned reference.
-- `#[com_struct]`, `com_int_enum!`, and `#[com_enum]`: fixed-layout values and tagged payloads suitable for ABI contracts.
-- `ComDeserialize` plus macro-generated record/enum constructors: format-neutral, statically typed source decoding without descriptor-offset writes or class-registry lookup.
-- Explicit copy-buffer argument modes and standard immutable string/byte interfaces.
-- Descriptor validation, class activation, plugin dependency ordering information, and inspection tools.
-- Default thread-local pointers, which are neither Send nor Sync. This fits SDL, UI objects, and GPU context ownership.
-
-Its current rules also matter:
-
-- Interface and callable-class methods explicitly choose `&self` or `&mut self` and return `Result<T, NcStatus>`; generic methods, associated types, arbitrary Rust references and containers do not cross the ABI. Receiver kind is checked ABI metadata, and generated objects reject overlapping mutable calls with `NC_E_BUSY` before creating a Rust reference.
-- The public `Runtime` facade is process-global and expects a separately built neocogi-com runtime shared library.
-- Loaded plugins remain mapped until process exit. Live activation failures abort; plugin dependency entries do not discover or recursively load files.
-- Panics are not converted into error statuses. A panic at the C boundary aborts.
-- There is no existing general COM weak-reference API.
-- COM object destruction happens at final Release. It cannot act as a fallible submit/shutdown operation.
-
-Relevant sources: [neocogi-com usage and ABI rules](../crates/com/README.md#L261), [ownership and threading](../crates/com/README.md#L837), [startup loading](../crates/com/README.md#L700), [runtime linkage](../crates/com/runtime-sys/src/lib.rs#L1).
-
-**3. Importing neocogi-com into this workspace**
-
-Import the six existing crates, with their names preserved:
-
-```text
-crates/com/core/
-crates/com/macros/
-crates/com/api/
-crates/com/runtime-sys/
-crates/com/runtime/
-tools/neocogi-inspect/
-```
-
-These become workspace members with path-based workspace dependencies. This is an owned source import, not a dependency on another developer's home-directory checkout and not an unpinned remote dependency.
-
-Preserve MIT licensing, attribution, source provenance, tests, ABI fixtures, and the canonical COM documentation. Import package metadata explicitly: neocogi-com currently inherits its own version, license, rust-version and documentation metadata from its workspace, which differ from microui's metadata. Do not accidentally give the imported crates the UI package's composite license or UI version.
-
-Move or adapt neocogi-com's build/test scripts, workflow-example fixtures and path assumptions. Record the imported revision so future changes can be compared with the original. Do not inherit its root toolchain pin across the UI workspace: select toolchains explicitly for COM compatibility tests and nightly min-size builds.
-
-Only the executable/bootstrap path needs the runtime-loading facade. Implementation plugins should normally depend on contracts and neocogi-com's object/macros support, rather than linking their own neocogi-com-runtime implementations. Dependencies or services needed by an object should be supplied through typed constructor/factory interfaces. Ordinary method calls should not perform global registry lookups.
-
-**4. neocogi-com changes to make here**
-
-There are several concrete additions worth making before migrating the retained engine.
-
-| Change | Reason | Priority |
-|---|---|---|
-| Support recursive interface relationships safely | Natural object APIs can reference themselves or one another | Resolve before freezing UI contracts |
-| Generate safe call helpers for `ComRef` as well as `ComPtr` | Current borrowed-object examples must acquire an owned reference to call generated helpers | Early; measure refcount savings |
-| Separate plugin descriptors from exporting the dynamic entrypoint | Current `plugin!` always exports the same unmangled symbol; multiple static plugins need descriptor-only registration | Required for static/browser mode |
-| Add a supported static runtime binding mode | The current facade explicitly links a runtime shared library | Required for static/browser mode |
-| Support generic, unregistered implementation classes where needed | Lets a static façade implement reusable typed event adapters without generic ABI interfaces | After the first event adapter proves the need |
-| Preserve/check error and ownership behavior through new adapters | Pointer validation, final release, invalid status normalization, and panic behavior remain COM responsibilities | Every COM change |
-
-The recursive-interface issue is verified, not hypothetical. This fails to compile against the current neocogi-com checkout with E0391:
+An IDL `class` is a public object description, not an implementation record:
 
 ```rust
-#[com_interface(auto_guid = "neocogi.ui.plan.RecursiveNode:v1")]
-pub trait IRecursiveNode {
-    fn child(&self, index: u32)
-        -> Result<ComPtr<IRecursiveNodeAbi>, NcStatus>;
+#[version(1)]
+trait IWidget {
+    fn enabled(&self) -> Result<bool>;
+    fn set_enabled(&mut self, enabled: bool) -> Result<()>;
+}
+
+#[version(1)]
+class Button: IWidget {
+    fn label(&self) -> Result<String>;
+}
+
+#[version(1)]
+factory UiFactory {
+    fn create_button(&self, label: &str) -> Result<Button>;
 }
 ```
 
-The earlier generated ABI hash recursively included referenced interface hashes,
-which made a self-reference or mutual reference create a constant-evaluation
-cycle. The implemented design now keeps the IID independent and embeds only a
-referenced interface IID plus its ownership/threading passing mode in the local
-canonical ABI signature.
+The generated `Button` description owns its derived identity, version,
+threading capability, callable surface, and required `IWidget` projection. It
+has no constructor. The generated `UiFactory` description defines the typed
+construction call.
 
-Because this is an owned pre-alpha COM layer, the limitation was fixed instead
-of shaping every UI interface around it. The implemented design is:
+Names are exact. If this source is `neocogi/ui.ncidl`, the declarations are
+`neocogi.ui.IWidget`, `neocogi.ui.Button`, and `neocogi.ui.UiFactory`.
+`#[version(1)]` derives identity from that name and version;
+`#[id(1, "UUID")]` pins an identity when migration or external compatibility
+requires it. IDL members are public by definition and do not use `pub`.
 
-1. Generate an IID constant independently of the full interface signature.
-2. Mangle the local vtable contract. Referenced COM pointers contribute their IID and ownership/threading passing mode, rather than recursively embedding the referenced interface's complete signature.
-3. Add interface identity metadata to the common vtable prefix, preferably a pointer to one shared static `NcInterfaceId` record.
-4. Generated thunks validate every incoming COM pointer against the full identity expected by the receiving implementation; generated caller helpers validate owned COM return pointers before exposing a typed `ComPtr`.
-5. On a rejected owned return, release the transferred reference through the common IUnknown prefix. Borrowed arguments are never released merely because validation failed.
-6. Update core ABI generation/version checks, manual built-in string/byte interfaces, descriptor/signature validation, inspection, C fixtures and compatibility tests together.
+## Implementations
 
-This changes where transitive compatibility is checked; it does not remove that
-check. Generated thunks validate the complete identity of incoming and returned
-COM pointers at the call boundary, and tests cover self-reference, mutual
-reference, mismatched arguments, mismatched returns, and release counts.
-
-A cycle-aware graph identity would require considerably more contract-group and
-descriptor machinery. The implemented local-signature plus checked-pointer
-approach keeps the contract monomorphic and cycle-free. Coherent capability
-interfaces should still be separate even though recursive references work.
-
-For borrowed call helpers, reuse the existing generated call body for a borrowed pointer. Do not create another object model or require AddRef/Release just to perform a synchronous borrowed call.
-
-For static plugins, a simple API would be descriptor generation plus an explicit export macro at the final dynamic-library root:
-
-```rust,ignore
-neocogi_com::plugin! { /* identity, dependencies, class descriptors */ }
-
-#[cfg(feature = "dynamic-plugin")]
-neocogi_com::export_plugin!(); // proposed addition
-```
-
-Both deployment modes use the same descriptor and class table. Only a dynamic library exports `nc_get_plugin_descriptor`. Source of the present unconditional export: [plugin macro](../crates/com/macros/src/plugin.rs#L204).
-
-The static runtime mode must reuse the existing catalog and API-table implementation. It must not create a second registry design. A native dynamic application links one runtime shared library; a fully static/browser application links one runtime implementation. Do not embed independent process-global registries in each plugin.
-
-Generic implementation-class support must keep the interfaces monomorphic. A `ActivationSink<State, H>` may be a host-local monomorphization implementing the fixed `IActivationSink` ABI. Initially restrict generic COM classes to objects constructed locally and returned through interfaces; do not silently assign one registered CLSID to unrelated generic instantiations. Objects must own their state; generic lifetimes must not permit borrowed stack state to escape through an unqualified ComPtr.
-
-**5. UI crate and plugin boundaries**
-
-The proposed product crates are:
-
-| Crate | Kind | Responsibility |
-|---|---|---|
-| `neocogi-ui-contracts` | Small statically linked contract library | Interfaces, records, enums, IDs and status codes; preferably no_std |
-| `neocogi-ui` | Statically linked Rust façade | Generic proxies, typed constructors, string/path conversion and scoped convenience APIs |
-| `neocogi-ui-runtime` | UI plugin implementation | Existing retained engine, widgets, containers, menus, window manager and standard dialogs |
-| `neocogi-render-plugin` | Renderer plugin implementation | Native host/window plus exactly one selected backend and app GPU extension composition |
-| `neocogi-render-core` | Private static SPI library | Backend-neutral frame, texture, color, and upload contracts shared without linking the UI runtime |
-| `neocogi-render-{glow,vulkan,wgpu,webgl}` | Private static implementation libraries | Backend algorithms and native resource management inside the selected renderer plugin |
-| `neocogi-render-support` | Private static helper library | Shared renderer helpers; no independent plugin |
-| `neocogi-assets` | Optional plugin implementation | Builder, PNG/font loading and optional theme JSON |
-| Demo and tool crates | Applications and tools | Application state, packaging, backend selection and validation |
-
-This keeps three logical plugin groups. `neocogi-render-plugin` compiles one selected renderer per artifact and assigns Glow, Vulkan, WGPU, and WebGL distinct plugin identities; an ordinary assembly loads only its selected backend.
-
-Each renderer plugin deliberately combines OS-window and GPU ownership. A renderer receives Rust `sdl2::Window`, `Rc<glow::Context>`, or native WGPU/Ash types. Those cannot cross the COM boundary as ordinary Rust values. Their creation and ownership stay in one binary. A native window/session object exposes both `IPlatformWindow` and `IRenderer` on the same COM identity. Multiple native windows create multiple such objects.
-
-The reusable renderer crates contain the backend implementation; the plugin shell supplies the actual host/window integration. `neocogi-render-core` is deliberately not a plugin: it is a small Rust-only SPI linked into the UI runtime and renderer artifacts, and has no dependency on the UI implementation. An embedding application can provide a different renderer plugin. Supporting pre-existing external native windows would require an explicit platform-specific native-surface capability and its lifetime contract; it must not be implemented as a public `usize`/void-pointer escape hatch.
-
-Distinguish the OS window from microui's logical retained windows. Logical windows, child windows, dialogs and popups remain managed by the UI plugin's window manager.
-
-Register every concrete class that a host or extension must construct, including
-built-in widgets. A runtime-bound UI factory may remain as a dynamically linked
-convenience over those same contracts, but it is not the only construction path.
-Class constructors receive typed argument frames decoded by neocogi-com; there is no
-untyped property bag, `Any`, or host-side duplicate of plugin constructor state.
-
-**6. The static generic façade**
-
-This is the requested generic/static-to-COM/dynamic split:
-
-```rust
-use neocogi_com::{
-    ComInterface, ComPtr, NcCopyFromBufferOffset, NcStatus,
-};
-
-/// Statically linked typed proxy; it contains no widget implementation.
-pub struct Widget<I: ComInterface> {
-    /// One owned, signature-checked COM interface reference.
-    interface: ComPtr<I>,
-}
-
-impl<I: ComInterface> Widget<I> {
-    /// Accepts an interface obtained through checked activation or QueryInterface.
-    pub fn from_interface(interface: ComPtr<I>) -> Self {
-        Self { interface }
-    }
-
-    /// Queries the common node behavior when attaching the object to the UI.
-    pub fn node_interface(&self) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
-        self.interface.query()
-    }
-}
-
-/// Static convenience name for the dynamically implemented Button class.
-pub type ButtonWidget = Widget<ButtonAbi>;
-
-impl Widget<ButtonAbi> {
-    /// Presents a Rust string API while using an explicit ABI buffer for the call.
-    pub fn set_label(&mut self, label: &str) -> Result<(), NcStatus> {
-        self.interface.set_label(NcCopyFromBufferOffset::new(
-            0, label.as_bytes(),
-        ))
-    }
-}
-```
-
-The corresponding contract is concrete and small:
-
-```rust
-use neocogi_com::{
-    ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus,
-    com_class, com_interface,
-};
-
-#[com_interface(auto_guid = "neocogi.ui.Widget:v1")]
-/// Shared widget protocol used by the UI runtime.
-pub trait IWidget {
-    // Common lifetime, options, update, and paint operations.
-}
-
-#[com_interface(auto_guid = "neocogi.ui.LeafLayout:v1")]
-/// Shared leaf-measurement protocol used by the UI runtime.
-pub trait ILeafLayout {
-    // Common measurement operation.
-}
-
-#[com_class(auto_guid = "neocogi.ui.Button:v1")]
-/// Constructible Button with its concrete API and only shared protocols separated.
-pub trait Button: IWidget + ILeafLayout {
-    /// Creates a complete unmounted Button owned by the supplied UI host.
-    #[constructor]
-    fn new(
-        host: ComRef<'_, IWidgetHostAbi>,
-        label: NcCopyFromBufferOffset<'_, u8>,
-        options: WidgetOptions,
-    ) -> Result<Self, NcStatus>;
-
-    /// Replaces the complete UTF-8 label. Offset must be zero; copy before returning.
-    fn set_label(&mut self, label: NcCopyFromBufferOffset<'_, u8>)
-        -> Result<(), NcStatus>;
-
-    /// Returns an owned immutable label snapshot.
-    fn label(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
-}
-
-#[com_class(auto_guid = "neocogi.ui.UiFactory:v1")]
-/// Dynamically implemented construction shorthand over concrete widget contracts.
-pub trait UiFactory {
-    /// Binds the shorthand to one runtime's non-owning widget authority.
-    #[constructor]
-    fn new(host: ComRef<'_, IWidgetHostAbi>) -> Result<Self, NcStatus>;
-
-    /// Creates a fully initialized Button through the same concrete class contract.
-    fn create_button(
-        &self,
-        label: NcCopyFromBufferOffset<'_, u8>,
-        options: WidgetOptions,
-    ) -> Result<ComPtr<ButtonAbi>, NcStatus>;
-}
-```
-
-The host may call the registered class without going through the convenience factory:
-
-```rust,ignore
-let host = ui.widgets().host()?;
-let arguments = ButtonAbi::arguments(
-    host.as_com_ref(),
-    NcCopyFromBufferOffset::new(0, b"Save"),
-    WidgetOptions::FRAME,
-)?;
-let button = neocogi_com::Runtime::global().construct::<ButtonAbi>(arguments)?;
-```
-
-The class contract requires the common protocols; neocogi-com exposes those projections
-from the same allocation. A concrete plugin class contains its private state directly:
+Implementation types contain only private state and method bodies:
 
 ```rust,ignore
 #[com_object(neocogi_ui_contracts::Button)]
-/// One button allocation; no legacy trait-object wrapper or public downcast is needed.
-pub struct Button {
-    /// Host, lifecycle, options and phase resources; never another widget value.
-    runtime: WidgetRuntime,
-    /// The label read by construction, editing, measurement, painting and activation.
+struct ButtonObject {
+    enabled: bool,
     label: String,
-    /// The selected font read directly by measurement and painting.
-    font: FontRef,
-    /// The concrete activation source owned by this button.
-    submitted: EventSource<ButtonSubmitted>,
+}
+
+impl IWidget for ButtonObject {
+    fn enabled(&self) -> Result<bool, NcStatus> {
+        Ok(self.enabled)
+    }
+
+    fn set_enabled(&mut self, enabled: bool) -> Result<(), NcStatus> {
+        self.enabled = enabled;
+        Ok(())
+    }
+}
+
+impl Button for ButtonObject {
+    fn label(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+        NcString::from_str(&self.label)
+    }
+}
+
+#[com_factory(neocogi_ui_contracts::UiFactory)]
+struct UiFactoryObject;
+
+impl UiFactory for UiFactoryObject {
+    fn create_button(
+        &self,
+        label: NcUtf8View,
+    ) -> Result<ComPtr<ButtonAbi>, NcStatus> {
+        let label = label.to_owned()?;
+        ButtonObject::from_value(ButtonObject { enabled: true, label }).query()
+    }
 }
 ```
 
-`WidgetRuntime`, `EventSource<E>` and the concrete fields are private implementation details inside the plugin. Their layout is never part of the ABI. There is no `ButtonObject` containing a second native `Button`: the registered class is the same concrete type that implements measurement, input, painting and editing.
+The precise generated Rust lowering may use ABI wrapper types such as borrowed
+UTF-8 views. What matters is that construction remains statically typed from
+the factory method through the concrete implementation. There is no runtime
+argument bag and no `Any` downcast.
 
-This is the invariant for every built-in leaf and container. `WidgetRuntime` contains
-only host authority, lifecycle/options, imported resources, and rendering workspace;
-it cannot contain a semantic widget. Shared Rust traits statically reuse behavior
-without allocating or erasing an implementation. A composed class owns real child
-COM objects only when they represent different retained roles. Thus `TextArea` and
-its `TextEditor` child are a scrolling root and editable content, not two forms of
-one widget; the editor is the sole owner of text, cursor, font, and text events.
+Mutating methods should use `&mut self`. Generated object storage supplies the
+exclusive call gate, so implementation state should remain plain fields unless
+interior mutability represents a real independent synchronization requirement.
 
-`UiFactory` is also a registered class, implemented in the dynamically loaded UI
-plugin. `UiRuntime::factory()` returns an instance bound to the runtime's
-`IWidgetHost`; it is not a pretend interface projection on the runtime object.
-Hosts may activate either `UiFactoryAbi` or individual widget classes directly.
+## Plugin root
 
-The original temporary compile-tested sketch is superseded by the checked-in
-[facade regressions](../crates/ui/api/tests/com_facade.rs). The sketch compiled the separate Widget/Children/Button/event capabilities and tests that a generic proxy edits a COM object, reads its text and observes the same geometry invalidation flag. This validates the contract/façade pattern with current neocogi-com; it is not a dynamic UI implementation or proof of the proposed neocogi-com ABI changes.
-
-Generics may also remain in a local `ListModel<T>`, renderer implementation or callback adapter. Arbitrary T does not become a wire payload. A generic list model keeps T in the application and sends scoped typed row keys to the UI; its queue/removal policy must retain or reject stale rows consistently. If payload ownership must cross plugins, define a domain interface such as `IFileEntry` with explicit path operations. Do not introduce `IValue`, `get_property(string)`, `Any`, or an IUnknown payload bag as a substitute for typed contracts.
-
-**7. Interface families and runtime ownership**
-
-I would divide the public capabilities as follows:
-
-| Family | Examples | State owner |
-|---|---|---|
-| UI coordination | `UiRuntime`, `IWindowManager`, `UiFactory` | One UI runtime instance |
-| Common widget behavior | `IWidget` | Concrete widget/container object |
-| Geometry | `ILeafLayout`, `IContainerLayout`, `IChildren` | Widget algorithm plus runtime-owned derived node state |
-| Concrete editing | `Button`, `Slider`, `Textbox`, `Linear`, `Grid` class contracts | Concrete object |
-| Events | `IActivationEvents`, `IActivationSink`, `IEventSubscription` and equivalent typed families | Source queue, external subscription owner and application handler |
-| Platform and rendering | `IPlatformWindow`, `IRenderer`, texture/render-item capabilities | Platform/GPU plugin |
-| Resources | `IAssetBundle`, `AssetLoader`, optional `ThemeLoader` | Immutable bundle or asset operation |
-
-One object can implement multiple capabilities. In particular, a UI runtime can expose window management and widget construction on the same COM identity, with one authoritative forest. There is no need for an independently synchronized runtime tree and window-manager tree.
-
-Keep one internal node record per mounted object: its COM widget reference, cached geometry interface capabilities, interaction state, committed layout and measurement cache. Cache queried capabilities when mounting instead of running QueryInterface during every update or paint. The former `Rc<RefCell<WidgetStorage<dyn Widget>>>` representation should be replaced, not permanently nested inside another COM object. Reuse existing algorithms as private methods/helper structs during conversion.
-
-COM ownership and UI attachment are distinct. The application can keep a ComPtr after a window or subtree is removed. Specify the states explicitly:
-
-- Constructed/unmounted: configuration is allowed.
-- Mounted: one UI owner and one structural parent; the runtime owns a reference.
-- Removed/closed: no routing, measurement, painting or new ordinary events; editing APIs return a documented closed-object status.
-- Final COM release: frees the remaining allocation and resources.
-
-For the first migration, retain mount-once semantics: removed nodes cannot be reattached. This matches the current tree's simple topology model and avoids introducing reparenting as a side effect of the COM conversion.
-
-The runtime must reject duplicate mounting, cycles and cross-runtime attachment before publishing a topology mutation. Failure leaves the original tree unchanged and leaves the caller's owned reference usable. COM cloning does not authorize a second parent.
-
-Do not assume that `static AtomicU64` in a statically linked helper crate is process-global across multiple shared libraries. IDs must be scoped to an authoritative owner and checked there, or allocated by one central service. Use canonical IUnknown identity when comparing live object identity; interface-header addresses for different interfaces on the same object can differ.
-
-Avoid strong-reference cycles deliberately. Parent ownership is downward; back-links should be local Weak references, scoped IDs or a small state/capability object that does not own the tree. A widget must not retain the complete runtime merely to mark itself dirty. The existing terminal-event semantics must depend on logical closure, not waiting for COM reference count zero.
-
-A general weak-COM extension is not required for the first migration. Existing Rc/Weak helpers may remain within a single plugin; they never cross the ABI. Add general weak COM only if a demonstrated cross-plugin ownership requirement needs it.
-
-**8. Update, measurement, layout and painting**
-
-Preserve the agreed geometry semantics:
-
-- `update` returns Changed or NoChange for measurement/placement inputs.
-- Programmatic setters record sticky geometry invalidation themselves.
-- Resize constraints, skin revision, topology and child changes invalidate independently.
-- NoChange does not mean no events, no paint or no descendant work.
-- Application/widget authors remain responsible for externally mutated state, truthful change reporting, hidden/clipped updates and observational painting.
-
-The COM migration removes the old typed-handle mutation hook, so it cannot silently remain responsible for dirtying setters. Put a small concrete `WidgetState` value inside each implementation. Its options and lifecycle flags are ordinary fields updated through `&mut self`; it is not a `RefCell`, lock, or take-out slot. Setters mark its pending change, and update returns its own geometry result. A runtime dirty-collection pass drains pending setter changes once through mutable node traversal, including nodes whose update was skipped, and propagates them to ancestors before committing layout. Later immutable cache and render checks inspect only the collected node flags; they must not clone a widget capability or invoke its mutating `take_change` method. Refresh copied widget policy only when collection observes a real change. No per-widget heap-allocated invalidator object is needed just for this flag.
-
-Keep measurement constraints distinct from allocated rectangles. Translate the current finite/unbounded constraints, child participation, viewport, scroll transform and content extent to explicit records/tagged ABI values. Linear/grid sizing belongs to parent-child edges, not a generic property bag on every node.
-
-External container implementations need bounded child-measurement and child-placement capabilities. They should be able to measure/place indexed children without borrowing runtime Node storage or editing topology during layout. Keep the existing algorithms and cache policy; move their private data to the new object representation rather than designing a new layout engine.
-
-The difficult lifetime issue is that ComRef does not provide the same exclusive, non-retainable lifetime as `WidgetPaintCtx<'_>` or `ContainerLayoutCtx<'_>`. A callee can acquire an owned reference. A COM adapter must therefore never hide a stack `&mut Painter`, borrowed `Children`, or borrowed frame object behind a reference-counted object.
-
-Use an owned recording/layout service and a non-reused invocation token for ephemeral authority:
-
-```rust
-#[com_struct]
-/// Authority for one paint invocation; the recorder expires it when that call ends.
-pub struct PaintScope {
-    /// Non-reused invocation identity. Zero is never an active scope.
-    pub invocation: u64,
-}
-
-#[com_interface(auto_guid = "neocogi.ui.plan.Painter:v1")]
-/// Recording service with owned storage and explicit invocation validation.
-pub trait IPainter {
-    /// Records a local rectangle while this exact invocation is active.
-    fn fill(&self, scope: PaintScope, rect: Rect, rgba: u32)
-        -> Result<(), NcStatus>;
-}
-```
-
-The service is reusable; do not allocate a COM object per primitive. Private guards expire the scope on every exit. A retained old interface/token pair remains memory-safe and fails after its invocation. Tokens must not become valid again in a later frame. Layout uses the same principle with explicit nesting/parent restoration during recursive child calls.
-
-The static façade can wrap the interface and token in `Painter<'a>` or `LayoutCtx<'a>` so widget authors write ordinary `painter.fill(...)` calls. The token is mechanical ABI plumbing; the façade hides it, while the implementation enforces it for direct COM callers too.
-
-Declare every state-changing operation with `&mut self` and keep the widget's semantic state in ordinary fields. Generated COM objects apply one object-wide call gate: shared calls may overlap, while a conflicting mutable or recursively entered call returns `NC_E_BUSY` before Rust references are formed. A generated thunk holds that permission in an explicit typed lease, invokes the concrete implementation directly, and drops the lease before publishing an owned result. There is no closure-shaped borrow adapter and no class-registry lookup in update, layout, paint, or any other ordinary method dispatch. External widget and container implementations generated in user crates follow the identical vtable-and-lease path. Interior mutability remains appropriate only for genuinely shared infrastructure such as event queues or runtime registries; release those short borrows before invoking another component. Normal setters and topology changes remain allowed at defined input/dispatch boundaries.
-
-**9. Typed events and application state**
-
-Application state stays in the statically linked application. The COM UI runtime does not become `UiRuntime<State>` and does not receive a raw pointer to generic Rust state.
-
-Expose concrete event capabilities. For example:
-
-```rust
-#[com_interface(auto_guid = "neocogi.ui.plan.ActivationSink:v1")]
-/// Application-owned handler for one concrete event family.
-pub trait IActivationSink {
-    /// Receives a submission snapshot after traversal releases its mutable borrows.
-    fn submitted(&self, label: ComRef<'_, INcStringAbi>)
-        -> Result<(), NcStatus>;
-}
-
-#[com_interface(auto_guid = "neocogi.ui.plan.ActivationEvents:v1")]
-/// Typed subscription endpoint implemented by a button.
-pub trait IActivationEvents {
-    /// Connects the exclusive subscriber and returns its cancellation/ownership lease.
-    fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>)
-        -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
-}
-```
-
-Source queues contain event snapshots, not application callback ownership. A subscription owns its typed sink and queue reference. The statically linked event session/driver owns subscriptions. The UI runtime borrows the event dispatcher while processing an input transaction and does not retain it. This permits handlers to retain UI capabilities without the runtime owning a path back to itself through the handler.
-
-Keep deterministic registration-order sweeps, FIFO order per source, the finite cascade limit, exclusive subscription, silent programmatic setters, and the existing distinction between ordinary events and one terminal fact. Dispatch snapshots before invoking handlers, and never invoke application code with a producer or tree borrow held.
-
-A generic static adapter can use an owned `Rc<RefCell<State>>` and a concrete handler trait. If closure convenience is retained for the previously approved callback API, the closure stays in that local adapter. Neither closure layout nor a borrowed `&mut State` crosses the ABI. Adapter code must not manufacture a ComPtr whose implementation borrows stack state that a callee can retain.
-
-Dropping or cancelling a subscription disconnects without calling user code. Source closure discards ordinary pending events and retains the documented terminal fact. The event session can deliver that fact after the producer has logically closed. A bare COM Release should not become a substitute for an explicit UI close operation.
-
-File dialogs retain native path semantics. Do not convert PathBuf through a UTF-8 label. Define an owned path capability with explicit platform encoding (Unix native bytes; Windows UTF-16 code units) and separate display text. The Rust façade presents Path/PathBuf. Keep the existing transactional directory reads, lossy-display selection preservation, hide/destruction cancellation and request completion tests.
-
-**10. Rendering and application GPU work**
-
-The common dynamic renderer boundary should submit a whole prepared frame rather than make a COM call per vertex, glyph or triangle:
+One implementation is selected as the plugin root:
 
 ```rust,ignore
-#[com_interface(auto_guid = "neocogi.ui.Renderer:v1")]
-/// Backend owning native GPU resources and presentation.
-pub trait IRenderer {
-    /// Executes one complete frame and reports submission/presentation failure.
-    fn render(&self, info: FrameInfo, commands: ComRef<'_, IRenderStreamAbi>)
-        -> Result<(), NcStatus>;
+neocogi_com::factory_plugin! {
+    name = "neocogi.ui.runtime",
+    version = "1.0.0",
+    contracts = [neocogi_ui_contracts::MODULE],
+    factory = UiFactoryObject,
 }
+
+neocogi_com::export_factory_plugin!();
 ```
 
-`IRenderStream` is a bounded, typed view of ordered batches, vertex buffers, resource references and custom render items. Use existing explicit copy-buffer modes for bulk reads into reusable backend-owned storage. Fixed-size render records belong in the contract crate. Do not send serialized arbitrary commands or Rust display-list enums through byte blobs.
+The resulting `NcFactoryPluginDescription` stores plugin identity/version,
+validation mode, hard plugin dependencies, exact linked contract references,
+root factory identity/threading, and one no-argument activation pointer. The
+final DSO exports `nc_get_factory_plugin_description` exactly once.
 
-Keep high-level text/nine-patch expansion, clipping and tessellation in the UI plugin so each backend consumes the same final geometry and ordering. Preserve the source display-list ordering across UI batches, images and custom draws. Use the ABI-safe `RenderVertex` directly as the renderer backend vertex instead of converting to and from a duplicate native representation on both sides of the stream. Keep buffer allocation reuse and batching; benchmark boundary call and copy counts before selecting chunk sizes.
+Static assemblies omit the export and pass `factory_plugin_description()`
+directly to `Runtime::register_factory_plugin_description`.
 
-Prefer a synchronous complete-frame COM method. The backend can keep its existing native `RendererFrame<'_>` and consuming `finish(self)` privately inside that call. The Rust façade can also retain a consuming `Frame<'a>` wrapper for application ergonomics. This avoids exposing a cloneable COM frame merely to model one submission. If an external COM frame becomes necessary, it needs an explicit Open/Finished/Abandoned state and repeat-call rejection; dropping it must abandon, never submit.
+## Dynamic contract linking
 
-Textures and render items are owned capabilities. Validate their backend/owner before use, retain resources for as long as queued GPU work requires, and preserve the native window/context lifetime until GPU destruction finishes. Atlas replacement remains transactional: validate logical resource identities and prepare upload before publishing the new bundle.
+Each contract crate's `build.rs` generates both Rust bindings and the native
+contract artifact. A full ABI fingerprint appears in the native library name
+and getter symbol. Generated `MODULE` references bind directly to that exact
+getter.
 
-The most substantial renderer change is application GPU work. The current API lends `&mut wgpu::RenderPass`, `wgpu::CommandEncoder`, `Arc<glow::Context>` and Ash state. A static generic façade does not make these Rust-owned objects ABI-safe between independent binaries. Keep backend-specific application rendering code in the same platform/GPU plugin as the backend. Its concrete Rust command enums and associated types remain private.
+If the host uses UI/U1 and a plugin uses incompatible UI/U2, the operating
+system can map both because their filenames differ. Registration then sees:
 
-Expose application-specific scene interfaces or render-item capabilities outward. For example, the full demo's GPU plugin can expose a typed scene interface for mesh upload/camera updates and return a render item that the UI inserts at the custom-widget position. Its private renderer still performs actual native 3D preparation and rendering. This preserves native GPU functionality rather than replacing it with CPU-generated UI triangles.
+```text
+logical module ID: neocogi.ui
+host fingerprint:  U1
+plugin fingerprint: U2
+result: NC_E_CONTRACT_MISMATCH
+```
 
-An independently loaded GPU extension that must access native internals would need an explicitly designed backend-specific C-shaped capability API. WGPU's Rust RenderPass is not such an API. Do not introduce that large secondary abstraction merely to complete the initial COM migration.
+A stable unversioned `contract.so` would allow loader coalescing to hide the
+conflict. Fingerprint-qualified native identity is what makes the mismatch
+observable and deterministic.
 
-**11. Assets, themes and value types**
+Contract dependencies are also exact native getter dependencies. On ELF they
+appear as `DT_NEEDED`, on Mach-O as `LC_LOAD_DYLIB`, and on PE through the DLL
+import table. The canonical description retains dependency module IDs and
+fingerprints so the runtime verifies the graph rather than trusting filename
+resolution alone.
 
-Keep JSON parsing and font/PNG construction in the optional asset plugin. The size investigation found roughly 167 KiB attributable to bundled JSON theme loading in the current demo; loading this code only when requested is a useful packaging boundary, but dynamic libraries still count toward total installed size.
+## Runtime activation
 
-A runtime asset bundle should be immutable and expose bulk typed metadata plus owned pixel data. Each UI consumer imports and caches font glyph tables, icon metadata and resolved theme roles once per bundle revision through `IWidgetHost`, while the platform alone copies the complete RGBA image for upload. The UI reads only the white-tile rows needed to validate solid rendering and does not retain a second CPU image. Avoid a COM call for every glyph during normal measurement or drawing. The builder and JSON loader produce the same runtime bundle form. Prebuilt tools produce that form without linking fontdue/Serde into the shipped UI plugin.
+Dynamic host code has one bootstrap sequence:
 
-Use shared ABI-safe small values as canonical UI geometry/color/input records wherever practical. Avoid parallel Rect/ComRect/ForeignRect families and repetitive conversion layers. Keep rs-math3d-specific 3D types local to the demo/GPU implementation, or give app-specific scene records an explicit contract representation.
+```rust,ignore
+let runtime = Runtime::global();
+let loaded = unsafe { runtime.load_plugin_library(plugin_path) };
+let factory = runtime.activate_plugin_factory::<UiFactoryAbi>(
+    loaded.plugin_id(),
+)?;
+let button = factory.create_button("OK")?;
+```
 
-`INcString` is UTF-8 text, not a native filesystem path. Buffers specify element type, offset semantics, limits and validity for the call. Renderer/asset loaders must validate dimensions, multiplication overflow, counts, resource ownership, enum tags and UTF-8 before mutating live state.
+Loading maps trusted code, resolves the factory-description symbol, validates
+the complete contract graph and plugin dependencies, and publishes all records
+atomically. Activation checks the requested root factory ID, ABI signature, and
+threading capability before invoking plugin code. Every later product is
+created through a typed factory method.
 
-Recoverable failures use NcStatus with documented UI-specific negative codes; rich diagnostics can use an owned typed diagnostic interface. Preserve backend error details through that diagnostic path. Panics indicate implementation faults and abort under neocogi-com's existing policy; do not promise exception recovery from arbitrary plugin code.
+The runtime never discovers plugin paths recursively. An application or
+`cargo neocogi` supplies a dependency-first plugin list. Required dynamic-load
+failure is fatal and diagnosed; a partial plugin is never returned. Loaded
+libraries remain mapped for process lifetime, so description and function
+pointers cannot dangle.
 
-**12. Native build, packaging and browser support**
+## Inspection and storage
 
-Use xtask or an equivalent outer build driver to:
+The runtime stores only accepted immutable descriptions, relationship indexes,
+and retained module provenance. It does not copy implementation state,
+constructors, or generated Rust bindings. Offline inspection borrows a validated
+factory description during a synchronous callback and copies it into a
+factory-native schema-7 artifact.
 
-1. Build the matching neocogi-com runtime library for the chosen target/profile.
-2. Build implementation plugins with the desired backend/asset features.
-3. Build the application/static façade with the runtime link directory supplied.
-4. Inspect descriptors and write an explicit dependency-first plugin load list.
-5. Stage the executable, runtime library, selected plugins and assets in one install layout.
-6. Run the packaged executable from that layout, including outside the source directory.
+The contract library stores:
 
-Keep this orchestration outside build.rs. Do not restore nested Cargo builds. Native runtime search paths and import libraries must be packaged correctly on Linux/macOS/Windows; library build order alone does not make a runtime shared library discoverable by the OS loader.
+- module name/ID and full ABI fingerprint;
+- canonical IDL source;
+- declaration name/ID/version/kind/threading summaries;
+- exact dependency getters.
 
-Plugins have declarative descriptors; startup constructs explicit root services. Loading dependencies is host policy, not a plugin initializer that recursively loads more modules. Keep required-plugin failure behavior explicit, and use offline inspection for diagnostics before activation. Hot unloading/reloading is not part of this migration.
+It does not store:
 
-For the browser, statically register the required descriptors and use one statically linked runtime implementation. The WebGL/DOM platform implementation uses the same UI interfaces. No dlopen or native shared-library discovery is involved. If that mode cannot be completed early, make it an explicit milestone with a working browser gate, not an unnoticed regression in the native conversion.
+- private Rust fields or object instances;
+- implementation vtables or factory code;
+- runtime registry state;
+- Cargo/workspace paths;
+- class constructors or erased arguments.
 
-**13. Incremental implementation and commits**
+The plugin library stores its implementation code, plugin description, direct
+contract references, and root bootstrap. The host and plugin both compile the
+generated ABI types they use, but the canonical runtime description is owned by
+the linked contract library.
 
-Use a fresh implementation branch after this plan is accepted. Keep each cohesive item in its own descriptive commit, with the promised comments on public/private definitions and the non-obvious parts of bodies.
+## Design boundaries
 
-| Order | Commit-sized item | Required evidence |
-|---:|---|---|
-| 1 | Import neocogi-com crates, documentation, fixtures and workspace metadata | Existing core/macros/runtime tests and imported package builds |
-| 2 | Add recursive-interface support with complete pointer identity validation | Self/mutual-reference success, mismatched argument/return rejection, ownership counts, native C and ABI fixtures |
-| 3 | Add borrowed-interface helper calls | Calls through ComRef perform no ownership transfer; lifetime/compile tests |
-| 4 | Separate descriptor generation and dynamic export | Two plugins statically linked together; independent dynamic loading still works |
-| 5 | Add static runtime binding mode | One shared catalog in static mode; native shared mode unchanged; browser-target compile |
-| 6 | Introduce neocogi-ui-contracts and the thin generic façade | Compile tests for records, proxy typing, class/IID mismatch and prohibited ABI types |
-| 7 | Establish a real dynamic vertical slice | Platform window, renderer, UI runtime and one button work across separately built binaries |
-| 8 | Move runtime/window-manager ownership to COM objects | Window hierarchy, layering, modal/popup policy, destruction and ownership tests |
-| 9 | Migrate common widget state, input and geometry invalidation | Update/Changed, setter invalidation, resize, hidden-node and stale-cache regressions |
-| 10 | Migrate built-in leaves and concrete editing interfaces | Existing widget/input behavior tests through the façade |
-| 11 | Migrate container layout and structural edits | Linear/grid/scroll/disclosure tests, duplicate mount/cycle rejection and transactional edits |
-| 12 | Migrate typed events and application adapters | FIFO/cascade/lifecycle/cancellation/reentrancy tests; add generic local COM adapters only if required |
-| 13 | Migrate menus and file dialogs completely | Existing native-path, request completion, popup and keyboard tests |
-| 14 | Finish all renderer/application-extension integrations | Glow, Vulkan, WGPU and custom 3D demo behavior; ownership and explicit finish/error checks |
-| 15 | Split optional assets/theme loading and update exporters | Runtime/prebuilt equivalence, missing resource rejection, optional JSON size/build checks |
-| 16 | Complete browser/packaging workflows | Static WebGL demo, browser input/IME checks, staged native startup outside the repo |
-| 17 | Remove transitional APIs and representations; finish documentation and budgets | No obsolete core dependency through the façade; final feature/test/size/performance matrix |
+- Add a reusable IDL `trait` only for a capability shared or queried
+  independently across object kinds.
+- Use an IDL `class` for the complete public surface of one produced object.
+- Use an IDL `factory` for construction, service acquisition, or implementation
+  selection.
+- Keep private state and policy in implementation crates.
+- Pass owned variable-size values as COM objects and borrowed bulk data through
+  bounded views.
+- Treat dynamic libraries as trusted native code; descriptor validation is not
+  a sandbox.
+- Prefer coarse, useful ABI operations over chatty per-element calls.
 
-The vertical slice is a design gate. It should exercise real separate-binary loading, mutation, input, measurement, rendering and teardown before converting all widgets. A temporary adapter may keep the branch buildable, but give it a specific removal milestone. Do not preserve two authoritative trees or two implementations of every control as the final architecture.
-
-The migration is substantial production work. Most layout, text editing, painting, clipping and backend algorithms can be reused. The ownership and public integration APIs cannot be replaced by just adding attributes to current structs. Measure the slice before estimating the remaining effort or promising a smaller implementation.
-
-**14. Acceptance tests and documentation obligations**
-
-Run existing UI behavior tests against the new façade and add tests where the new boundary creates a new failure mode:
-
-- A separately compiled custom widget plugin, with no dependency on neocogi-ui-runtime implementation internals, measures, updates, paints, emits events and attaches as a child.
-- A separately compiled custom container controls child layout through the bounded capability API.
-- Two independent UI runtime instances share the COM registry but not windows, focus, styles, captures, resources or event queues.
-- Foreign-runtime widgets and renderer resources are rejected.
-- Destroyed windows/subtrees become logically closed even when an application retains ComPtr handles.
-- Subscription cancellation and terminal delivery do not form strong-reference cycles.
-- Reentrant updates and retained old paint/layout capabilities fail safely; stale scopes never become valid again.
-- Wrong interface signatures, malformed signatures, recursive interface references, malformed enum tags, invalid UTF-8 and invalid copy-buffer counts are rejected at their respective boundaries.
-- Every transferred COM reference is released exactly once on success, failure and rejected-return paths.
-- Plugin class/interface names remain stable across ordinary Rust module reorganizations; breaking draft ABI changes are deliberate and update their validation fixtures.
-- Native GPU renderers retain window/context ownership and preserve custom draw ordering, depth, clip/state restoration and explicit completion errors.
-- Static/browser and native dynamic feature selections both build independently.
-
-Size/performance reporting must include executable size, each shipped shared library, total installed size, loaded memory, startup/activation time, steady-state allocations and AddRef/Release counts. Also measure update/layout/render time for deep and wide trees. A smaller executable alone does not prove a smaller system: class descriptors retain code, dynamic boundaries limit LTO, and helper/std code can be duplicated between libraries.
-
-Document the following as explicit component/app-author contracts: UI thread affinity; recoverable error versus panic behavior; source and callback ownership; logical closure versus final Release; mount-once/one-parent rules; update change reporting; external shared-state synchronization; hidden/clipped update limitations; observational painting; scope expiry; native GPU extension boundaries; native path encoding; required plugin startup order; and no dynamic unload/hot reload.
-
-**15. What was verified during planning**
-
-- Read the neocogi-com macros, object pointers, runtime binding/loader code, contract example, and relevant microui ownership/layout/rendering interfaces.
-- Reproduced the recursive-interface E0391 compiler failure against neocogi-com at the analyzed revision.
-- Compiled and ran the generic façade/COM button test successfully using current neocogi-com. This checks a concrete COM object and proxy in one binary; actual separate-binary UI integration remains the vertical-slice milestone.
-- Confirmed the unconditional plugin export and shared-runtime-only facade from source.
-- No implementation files or branch state in either repository were changed by this planning work. Probes and this document are under `/tmp/microui-com-plan-r10f3k23`.
+This design removes the old duplicated class-description/implementation table
+and makes ownership clear: IDL describes what can be called, factories decide
+what gets created, and the runtime only validates and connects them.

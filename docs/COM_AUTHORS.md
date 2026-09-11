@@ -208,11 +208,11 @@ A frame finishes explicitly and reports submission/presentation errors. Dropping
 
 Window capabilities expose current manager state through copied snapshots. A child inherits its family root's fixed layer; changing a managed child/dialog layer fails. Hiding a parent excludes its structural family, and showing it restores child-local visibility intent without reopening modal dialogs. Popups have a distinct interface, obey the active owner's modal policy, and retain their definition when hidden. Explicit close destroys the corresponding subtree and closes its widgets even when the application retains handles. Parent capabilities are authenticated by their manager-owned COM identity before a widget's mount-once claim is committed. Unknown option bits, malformed visibility/clip tags, invalid dimensions and invalid fixed layers are rejected before mutation.
 
-## Widget class contracts and shared protocols
+## Widget class descriptions and shared protocols
 
-Declare each concrete constructible control as a class contract, for example
-`Button: IWidget + ILeafLayout`. Put its typed constructor and control-specific
-editing methods on that class. Keep an interface only when unrelated classes need
+Declare each concrete produced control as an IDL class, for example
+`Button: IWidget + ILeafLayout`. Put its control-specific editing methods on
+that class and its construction parameters on a factory method. Keep an interface only when unrelated classes need
 the same independently queryable protocol. The implementation uses
 `#[com_object(Button)]` on the concrete Rust widget type and stores its semantic
 fields directly beside the common runtime helper; it
@@ -221,15 +221,16 @@ does not declare a matching `IButton` or repeat a list of projections.
 Query `IWidget` when an API needs the common node protocol and `ILeafLayout` when
 the layout runtime needs leaf measurement. Those projections preserve the class
 identity and refer to the same allocation and state. The static facade hides these
-checked projections from application code. Class definitions across crates should
+checked projections from application code. IDL class definitions across crates should
 name protocol supertraits through their module path when needed so generated
 companion types resolve together.
 
-Use `UiFactory` only as the dynamically linked construction shorthand. Its typed
-constructor binds it to `IWidgetHost`, and `UiRuntime::factory()` returns the
-runtime-bound instance. Do not model it as an `IUiFactory` projection on the
-runtime. A host that needs a concrete control directly builds that class's typed
-arguments and calls `Runtime::construct::<ClassAbi>`.
+Use the generated `UiFactory` as the typed construction surface. The plugin's
+root factory creates the runtime, and `UiRuntime::factory()` returns a
+runtime-bound widget factory. Do not model it as a redundant `IUiFactory`
+projection or ask the shared runtime to construct a control by class ID. Hosts
+call the factory's typed methods, which keep host capabilities and constructor
+arguments explicit in the IDL.
 
 ## Common state, input and node ownership
 
