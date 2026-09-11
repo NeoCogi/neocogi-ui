@@ -1,10 +1,9 @@
 //! Dynamically linked widget-construction shorthand over concrete COM contracts.
 
 use neocogi_ui_contracts::*;
-use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, com_object};
-use std::{cell::RefCell, rc::Rc};
+use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, com_factory};
 
-#[com_object(constructible(neocogi_ui_contracts::UiFactory))]
+#[com_factory(neocogi_ui_contracts::UiFactory)]
 /// Dynamically linked construction shorthand retaining its products' host and one asset value.
 pub struct UiFactory {
     /// Non-owning runtime authority used for lifetime checks, resources, and child stores.
@@ -23,14 +22,6 @@ impl UiFactory {
 }
 
 impl neocogi_ui_contracts::UiFactory for UiFactory {
-    /// Validates the supplied host before retaining its independent capability.
-    fn new(host: ComRef<'_, IWidgetHostAbi>) -> Result<Self, NcStatus> {
-        host.check_open()?;
-        let source = host.assets()?;
-        let resources = Rc::new(RefCell::new(crate::assets::ImportedAssets::read(source.as_com_ref(), None)?));
-        Ok(Self { host: host.add_ref(), resources })
-    }
-
     /// Returns the exact host used by every product without retaining a UI tree.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
         self.host.check_open()?;

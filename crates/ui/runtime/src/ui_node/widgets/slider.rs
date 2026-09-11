@@ -135,7 +135,7 @@ impl crate::event::ComEvent for SliderChanged {
     }
 }
 
-#[neocogi_com::com_object(constructible(neocogi_ui_contracts::Slider))]
+#[neocogi_com::com_object(neocogi_ui_contracts::Slider)]
 /// Concrete retained slider and dynamically constructible COM object.
 pub struct Slider {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -1082,10 +1082,6 @@ impl Slider {
 }
 
 impl neocogi_ui_contracts::Slider for Slider {
-    /// Validates the complete arithmetic tuple before allocating the established framed control.
-    fn new(host: ComRef<'_, IWidgetHostAbi>, options: SliderOptions) -> Result<Self, NcStatus> {
-        Self::build(host.add_ref(), options, None)
-    }
     /// Reads the finite value owned by the slider's concrete semantic algorithm.
     fn value(&self) -> Result<f32, NcStatus> {
         self.runtime().state.readable()?;

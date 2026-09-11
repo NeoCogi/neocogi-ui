@@ -80,7 +80,7 @@ impl crate::event::ComEvent for ListBoxSubmitted {
     }
 }
 
-#[neocogi_com::com_object(constructible(neocogi_ui_contracts::ListBox))]
+#[neocogi_com::com_object(neocogi_ui_contracts::ListBox)]
 /// Concrete retained list box and dynamically constructible COM object.
 pub struct ListBox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -291,10 +291,6 @@ impl ListBox {
 }
 
 impl neocogi_ui_contracts::ListBox for ListBox {
-    /// Validates the label before allocating the established label-only entry state.
-    fn new(host: ComRef<'_, IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus> {
-        Self::build(host.add_ref(), label, None)
-    }
     /// Returns an immutable label snapshot from the concrete list box.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;

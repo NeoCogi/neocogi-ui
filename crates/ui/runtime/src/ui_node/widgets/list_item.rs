@@ -104,7 +104,7 @@ impl crate::event::ComEvent for ListItemSubmitted {
     }
 }
 
-#[neocogi_com::com_object(constructible(neocogi_ui_contracts::ListItem))]
+#[neocogi_com::com_object(neocogi_ui_contracts::ListItem)]
 /// Concrete retained list item and dynamically constructible COM object.
 pub struct ListItem {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -373,10 +373,6 @@ impl ListItem {
 }
 
 impl neocogi_ui_contracts::ListItem for ListItem {
-    /// Validates the label before allocating the established application-data-free row state.
-    fn new(host: ComRef<'_, IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus> {
-        Self::build(host.add_ref(), label, None)
-    }
     /// Returns an immutable label snapshot from the concrete row.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;

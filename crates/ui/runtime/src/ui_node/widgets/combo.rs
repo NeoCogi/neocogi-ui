@@ -72,7 +72,7 @@ impl Default for ComboParameters {
     }
 }
 
-#[neocogi_com::com_object(constructible(neocogi_ui_contracts::Combo))]
+#[neocogi_com::com_object(neocogi_ui_contracts::Combo)]
 /// Concrete retained combo and dynamically constructible COM object.
 pub struct Combo {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -446,11 +446,6 @@ impl Combo {
 }
 
 impl neocogi_ui_contracts::Combo for Combo {
-    /// Initializes the established empty Combo state after validating host mutation authority.
-    fn new(host: ComRef<'_, IWidgetHostAbi>) -> Result<Self, NcStatus> {
-        Self::build(host.add_ref(), None)
-    }
-
     /// Reads the same position used by the semantic selection algorithm.
     fn selected(&self) -> Result<u64, NcStatus> {
         self.runtime().state.readable()?;
@@ -535,8 +530,7 @@ impl crate::event::ComEvent for ComboChanged {
 
     /// Delivers the captured label rather than rereading possibly newer widget state.
     fn deliver(&self, sink: ComRef<'_, Self::Sink>) -> Result<(), NcStatus> {
-        let label = NcString::from_utf8_str(&self.label);
-        sink.changed(self.selected as u64, label.as_com_ref())
+        sink.changed(self.selected as u64, NcCopyFromBufferOffset::new(0, self.label.as_bytes()))
     }
 }
 

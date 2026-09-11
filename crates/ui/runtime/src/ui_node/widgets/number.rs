@@ -103,7 +103,7 @@ impl crate::event::ComEvent for NumberChanged {
     }
 }
 
-#[neocogi_com::com_object(constructible(neocogi_ui_contracts::Number))]
+#[neocogi_com::com_object(neocogi_ui_contracts::Number)]
 /// Concrete retained number input and dynamically constructible COM object.
 pub struct Number {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -347,10 +347,6 @@ impl Number {
 }
 
 impl neocogi_ui_contracts::Number for Number {
-    /// Validates the complete arithmetic tuple before allocating the numeric editor.
-    fn new(host: ComRef<'_, IWidgetHostAbi>, options: NumberOptions) -> Result<Self, NcStatus> {
-        Self::build(host.add_ref(), options, None)
-    }
     /// Reads the finite value owned by the number editor's concrete semantic algorithm.
     fn value(&self) -> Result<f32, NcStatus> {
         self.runtime().state.readable()?;

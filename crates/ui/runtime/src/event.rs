@@ -31,7 +31,7 @@
 
 use crate::Widget;
 use neocogi_ui_contracts::{IActivationSinkAbi, IEventSubscriptionAbi, ITextChangedSinkAbi, ITextSubmittedSinkAbi};
-use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcStatus, NcString};
+use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
 
 /// Static event-to-sink projection implemented beside each concrete semantic event type.
 pub(crate) use neocogi_ui::events::EventPayload as ComEvent;
@@ -43,20 +43,17 @@ pub(crate) fn subscribe<E: ComEvent>(endpoint: WidgetEventPortHandle<E>, sink: C
 
 /// Delivers a captured labelled activation without consulting mutable widget state.
 pub(crate) fn deliver_activation(label: &str, sink: ComRef<'_, IActivationSinkAbi>) -> Result<(), NcStatus> {
-    let label: ComPtr<INcStringAbi> = NcString::from_utf8_str(label);
-    sink.submitted(label.as_com_ref())
+    sink.submitted(NcCopyFromBufferOffset::new(0, label.as_bytes()))
 }
 
 /// Delivers one immutable text-edit snapshot through the shared changed sink protocol.
 pub(crate) fn deliver_text_changed(text: &str, cursor: usize, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<(), NcStatus> {
-    let text = NcString::from_utf8_str(text);
-    sink.changed(text.as_com_ref(), cursor as u64)
+    sink.changed(NcCopyFromBufferOffset::new(0, text.as_bytes()), cursor as u64)
 }
 
 /// Delivers one immutable text submission through the shared submitted sink protocol.
 pub(crate) fn deliver_text_submitted(text: &str, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<(), NcStatus> {
-    let text = NcString::from_utf8_str(text);
-    sink.submitted(text.as_com_ref())
+    sink.submitted(NcCopyFromBufferOffset::new(0, text.as_bytes()))
 }
 
 /// A concrete retained widget that owns one typed native event source.

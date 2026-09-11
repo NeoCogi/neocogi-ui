@@ -108,7 +108,7 @@ impl TextBlockParameters {
     }
 }
 
-#[neocogi_com::com_object(constructible(neocogi_ui_contracts::TextBlock))]
+#[neocogi_com::com_object(neocogi_ui_contracts::TextBlock)]
 /// Concrete retained text block and dynamically constructible COM object.
 pub struct TextBlock {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -328,10 +328,6 @@ impl TextBlock {
 }
 
 impl neocogi_ui_contracts::TextBlock for TextBlock {
-    /// Validates text and wrapping before allocating the established TextBlock defaults.
-    fn new(host: ComRef<'_, IWidgetHostAbi>, input: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping) -> Result<Self, NcStatus> {
-        Self::build(host.add_ref(), input, wrapping, None)
-    }
     /// Returns an immutable snapshot without exposing the semantic String allocation.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;

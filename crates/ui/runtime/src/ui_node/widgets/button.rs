@@ -139,7 +139,7 @@ impl crate::event::ComEvent for ButtonSubmitted {
     }
 }
 
-#[neocogi_com::com_object(constructible(neocogi_ui_contracts::Button))]
+#[neocogi_com::com_object(neocogi_ui_contracts::Button)]
 /// Concrete retained button and dynamically constructible COM object.
 ///
 /// The allocation owns its semantic fields directly. `runtime` contains only common host,
@@ -444,11 +444,6 @@ direct_widget_phase_impl!(Button);
 direct_leaf_layout_impl!(Button);
 
 impl neocogi_ui_contracts::Button for Button {
-    /// Validates complete construction input and retains only the supplied host capability.
-    fn new(host: ComRef<'_, IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>, options: WidgetOptions) -> Result<Self, NcStatus> {
-        Self::build(host.add_ref(), label, options, None)
-    }
-
     /// Validates before committing and only dirties geometry when text actually differs.
     fn set_label(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;

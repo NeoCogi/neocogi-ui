@@ -92,7 +92,7 @@ impl TextboxParameters {
     }
 }
 
-#[neocogi_com::com_object(constructible(neocogi_ui_contracts::Textbox))]
+#[neocogi_com::com_object(neocogi_ui_contracts::Textbox)]
 /// Concrete retained textbox and dynamically constructible COM object.
 pub struct Textbox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -648,10 +648,6 @@ impl Textbox {
 }
 
 impl neocogi_ui_contracts::Textbox for Textbox {
-    /// Normalizes the complete input before allocating the established Textbox defaults.
-    fn new(host: ComRef<'_, IWidgetHostAbi>, input: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus> {
-        Self::build(host.add_ref(), input, None)
-    }
     /// Returns an immutable snapshot without exposing the semantic String allocation.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;

@@ -148,7 +148,7 @@ pub struct TextEditor {
 }
 
 /// Concrete fixed scrolling text-area class with one actual editor child.
-#[neocogi_com::com_object(constructible(neocogi_ui_contracts::TextArea))]
+#[neocogi_com::com_object(neocogi_ui_contracts::TextArea)]
 pub struct TextArea {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,
@@ -1042,11 +1042,6 @@ impl TextArea {
 }
 
 impl neocogi_ui_contracts::TextArea for TextArea {
-    /// Prepares the fixed scroll structure and attaches one real editor before publishing the root.
-    fn new(host: ComRef<'_, IWidgetHostAbi>, input: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping, scrolling: bool) -> Result<Self, NcStatus> {
-        Self::build(host.add_ref(), input, wrapping, scrolling, None)
-    }
-
     /// Forwards snapshots after checking the outer object's logical lifetime.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;

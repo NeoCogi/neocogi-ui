@@ -86,7 +86,7 @@ impl crate::event::ComEvent for CheckboxChanged {
     }
 }
 
-#[neocogi_com::com_object(constructible(neocogi_ui_contracts::Checkbox))]
+#[neocogi_com::com_object(neocogi_ui_contracts::Checkbox)]
 /// Concrete retained checkbox and dynamically constructible COM object.
 pub struct Checkbox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -322,10 +322,6 @@ impl Checkbox {
 }
 
 impl neocogi_ui_contracts::Checkbox for Checkbox {
-    /// Validates the label and initializes the established Checkbox defaults in one allocation.
-    fn new(host: ComRef<'_, IWidgetHostAbi>, checked: bool, label: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus> {
-        Self::build(host.add_ref(), checked, label, None)
-    }
     /// Reads the same boolean state used by pointer/Space updates and paint.
     fn checked(&self) -> Result<bool, NcStatus> {
         self.runtime().state.readable()?;

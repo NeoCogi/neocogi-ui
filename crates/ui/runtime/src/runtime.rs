@@ -29,7 +29,8 @@ pub(crate) fn create_runtime(atlas: AtlasHandle) -> ComPtr<UiRuntimeAbi> {
 
 /// Imports application-supplied resources before constructing any live runtime or widget service.
 pub fn create_runtime_from_assets(source: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<UiRuntimeAbi>, NcStatus> {
-    let runtime = <Runtime as UiRuntime>::new(source)?;
+    let assets = crate::assets::ImportedAssets::read(source, None)?;
+    let runtime = Runtime { storage: create_storage(assets) };
     Ok(Runtime::from_value(runtime).query().expect("runtime interface"))
 }
 
@@ -70,7 +71,7 @@ fn create_storage(assets: crate::assets::ImportedAssets) -> Rc<RuntimeStorage> {
     })
 }
 
-#[com_object(constructible(UiRuntime))]
+#[com_object(UiRuntime)]
 /// One identity owns the runtime, its widget factory and window-management policy.
 pub struct Runtime {
     /// Window handles use Weak references so retaining them cannot form a tree cycle.
@@ -165,11 +166,6 @@ impl IInputSink for Runtime {
 }
 
 impl UiRuntime for Runtime {
-    /// Imports the one complete asset revision before exposing any runtime capability.
-    fn new(source: ComRef<'_, IAssetBundleAbi>) -> Result<Self, NcStatus> {
-        let assets = crate::assets::ImportedAssets::read(source, None)?;
-        Ok(Self { storage: create_storage(assets) })
-    }
     /// Returns the cached factory object bound to this runtime's non-owning host.
     fn factory(&self) -> Result<ComPtr<UiFactoryAbi>, NcStatus> {
         self.storage.open()?;

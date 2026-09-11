@@ -366,7 +366,7 @@ impl GridParameters {
 ///
 /// Grid always has an effective track on each axis, but an implicit empty Content track contributes
 /// zero. An empty generic Grid remains zero-sized unless an explicit Fixed track contributes extent.
-#[neocogi_com::com_object(constructible(neocogi_ui_contracts::Grid))]
+#[neocogi_com::com_object(neocogi_ui_contracts::Grid)]
 pub struct Grid {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,
@@ -536,7 +536,7 @@ impl super::ContainerAlgorithm for Grid {
 
 use crate::ui_node::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
 use neocogi_ui_contracts::{GridAbi, GridExtent, IWidgetHostAbi, LayoutTrackAbi};
-use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus};
+use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus};
 
 direct_widget_phase_impl!(Grid);
 direct_container_layout_impl!(Grid);
@@ -569,15 +569,6 @@ impl Grid {
 }
 
 impl neocogi_ui_contracts::Grid for Grid {
-    /// Validates both complete track sequences before allocating child ownership or widget state.
-    fn new(
-        host: ComRef<'_, IWidgetHostAbi>,
-        columns: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
-        rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
-    ) -> Result<Self, NcStatus> {
-        Self::build(host.add_ref(), columns, rows, None)
-    }
-
     container_methods!();
 
     /// Copies column policy from the one concrete Grid state.

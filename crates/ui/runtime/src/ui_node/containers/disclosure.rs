@@ -147,7 +147,7 @@ impl DisclosureParameters {
 ///
 /// Expansion gates descendant traversal while retaining every owned runtime and its state. It does
 /// not expose or mutate generic node visibility.
-#[neocogi_com::com_object(constructible(neocogi_ui_contracts::Disclosure))]
+#[neocogi_com::com_object(neocogi_ui_contracts::Disclosure)]
 pub struct Disclosure {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,
@@ -539,7 +539,7 @@ use crate::ui_node::widget_object::{HostedWidget, WidgetRuntime, direct_containe
 use neocogi_ui_contracts::{
     CrossSize, DisclosureAbi, DisclosureStyle, FlowDirection, IChildrenEditorAbi, ITextContent, ITextContentAbi, IWidgetAbi, IWidgetHostAbi, LinearAbi,
 };
-use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString};
+use neocogi_com::{ComPtr, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString};
 
 direct_widget_phase_impl!(DisclosureHeader);
 direct_leaf_layout_impl!(DisclosureHeader);
@@ -619,11 +619,6 @@ impl Disclosure {
 }
 
 impl neocogi_ui_contracts::Disclosure for Disclosure {
-    /// Validates presentation and label before constructing the complete fixed composition.
-    fn new(host: ComRef<'_, IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>, style: DisclosureStyle, expanded: bool) -> Result<Self, NcStatus> {
-        Self::build(host.add_ref(), label, style, expanded, None)
-    }
-
     /// Observes the same expansion bit used by header input and container layout.
     fn expanded(&self) -> Result<bool, NcStatus> {
         self.runtime().state.readable()?;
@@ -678,7 +673,7 @@ fn prepare_children(
     let body = if let Some(resources) = resources {
         super::Linear::create_com(host.clone(), resources.clone(), FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch.into())?
     } else {
-        let value = <super::Linear as neocogi_ui_contracts::Linear>::new(host.as_com_ref(), FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch.into())?;
+        let value = super::Linear::build(host.clone(), FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch.into(), None)?;
         super::Linear::from_value(value).query().expect("Linear declares its callable class contract")
     };
     let editor = host.create_children()?;

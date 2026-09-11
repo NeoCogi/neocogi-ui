@@ -211,38 +211,29 @@ pub use ui_factory::UiFactory;
 #[cfg(test)]
 pub(crate) use event::SubscribeError;
 
-// The runtime is the deployable UI component. Keeping its descriptor beside
-// the implementations removes the former wrapper crate without introducing a
-// second ABI boundary between traversal, built-in nodes, surfaces, and window
-// management.
-neocogi_com::plugin! {
-    plugin_id(auto_guid = "neocogi.ui.runtime"),
-    name = "neocogi.ui.runtime",
-    version = "0.9.0-alpha.0",
-    classes = [
-        crate::Runtime,
-        crate::UiFactory,
-        crate::Button,
-        crate::Checkbox,
-        crate::Scrollbar,
-        crate::Combo,
-        crate::Textbox,
-        crate::TextBlock,
-        crate::TextArea,
-        crate::Slider,
-        crate::Number,
-        crate::ColorSwatch,
-        crate::ListItem,
-        crate::ListBox,
-        crate::Linear,
-        crate::Grid,
-        crate::ScrollArea,
-        crate::Disclosure,
-    ],
+/// Stateless process entry that creates independent retained UI runtimes.
+#[neocogi_com::com_factory(neocogi_ui_contracts::UiPluginFactory)]
+struct UiPluginFactoryObject;
+
+impl neocogi_ui_contracts::UiPluginFactory for UiPluginFactoryObject {
+    /// Imports the complete asset revision before publishing any runtime capability.
+    fn create_runtime(
+        &self,
+        assets: neocogi_com::ComRef<'_, neocogi_ui_contracts::IAssetBundleAbi>,
+    ) -> Result<neocogi_com::ComPtr<neocogi_ui_contracts::UiRuntimeAbi>, neocogi_com::NcStatus> {
+        crate::create_runtime_from_assets(assets)
+    }
 }
 
-// Static consumers call `plugin_descriptor` directly. Only a final dynamic
+neocogi_com::factory_plugin! {
+    name = "neocogi.ui.runtime",
+    version = "0.9.0-alpha.0",
+    contracts = [neocogi_ui_contracts::MODULE],
+    factory = UiPluginFactoryObject,
+}
+
+// Static consumers call `factory_plugin_description` directly. Only a final dynamic
 // artifact exposes the stable loader entrypoint, avoiding duplicate exports in
 // applications that link the runtime as an ordinary Rust library.
 #[cfg(feature = "dynamic-plugin")]
-neocogi_com::export_plugin!();
+neocogi_com::export_factory_plugin!();

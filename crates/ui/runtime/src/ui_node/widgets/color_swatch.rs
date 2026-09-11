@@ -70,7 +70,7 @@ impl ColorSwatchParameters {
     }
 }
 
-#[neocogi_com::com_object(constructible(neocogi_ui_contracts::ColorSwatch))]
+#[neocogi_com::com_object(neocogi_ui_contracts::ColorSwatch)]
 /// Concrete retained color swatch and dynamically constructible COM object.
 pub struct ColorSwatch {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -232,10 +232,6 @@ impl ColorSwatch {
 }
 
 impl neocogi_ui_contracts::ColorSwatch for ColorSwatch {
-    /// Validates the label and copies packed RGBA before allocating the established swatch state.
-    fn new(host: ComRef<'_, IWidgetHostAbi>, rgba: u32, label: NcCopyFromBufferOffset<'_, u8>) -> Result<Self, NcStatus> {
-        Self::build(host.add_ref(), rgba, label, None)
-    }
     /// Returns an immutable snapshot without exposing the semantic String allocation.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;

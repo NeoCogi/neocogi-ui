@@ -327,7 +327,7 @@ where
 /// consumes only an exact placement allocation and does not manufacture desired size during
 /// measurement. Content and Fixed overflow remain visible, and every geometry accumulation uses
 /// saturating arithmetic.
-#[neocogi_com::com_object(constructible(neocogi_ui_contracts::Linear))]
+#[neocogi_com::com_object(neocogi_ui_contracts::Linear)]
 pub struct Linear {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,
@@ -577,7 +577,7 @@ impl super::ContainerAlgorithm for Linear {
 
 use crate::ui_node::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
 use neocogi_ui_contracts::{ChildCrossSize, CrossSize, CrossSizeAbi, FlowDirection, IWidgetHostAbi, LinearAbi, LinearEdge};
-use neocogi_com::{ComPtr, ComRef, NcStatus};
+use neocogi_com::{ComPtr, NcStatus};
 
 direct_widget_phase_impl!(Linear);
 direct_container_layout_impl!(Linear);
@@ -595,7 +595,7 @@ impl Linear {
     }
 
     /// Builds one linear container with either directly imported or runtime-shared resources.
-    fn build(
+    pub(super) fn build(
         host: ComPtr<IWidgetHostAbi>,
         direction: FlowDirection,
         cross: CrossSizeAbi,
@@ -610,11 +610,6 @@ impl Linear {
 }
 
 impl neocogi_ui_contracts::Linear for Linear {
-    /// Validates both layout policies before allocating child ownership or widget state.
-    fn new(host: ComRef<'_, IWidgetHostAbi>, direction: FlowDirection, cross: CrossSizeAbi) -> Result<Self, NcStatus> {
-        Self::build(host.add_ref(), direction, cross, None)
-    }
-
     container_methods!();
 
     /// Returns the exact retained axis and leading-edge policy.
