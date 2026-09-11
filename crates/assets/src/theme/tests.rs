@@ -716,8 +716,8 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
     assert_eq!((close_size.width, close_size.height), (13, 14));
     assert_ne!(close_image.icon, pressed_image.icon);
 
-    // Platinum popup selection uses black image-backed rows with white content text, while
-    // the popup itself retains its authored one-pixel black and beveled frame.
+    // Platinum selection uses black rows with white content text, while the popup itself retains
+    // its authored one-pixel black and beveled frame.
     let menu_popup = loaded.bundle().skin().menu(MenuRole::Popup, MenuState::Normal).patch;
     let neocogi_ui_runtime::NinePatchContent::Image { image: menu_popup_image } = menu_popup.content else {
         panic!("Mac OS 9 popup must use baked artwork");
@@ -726,11 +726,28 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
     assert_eq!((menu_popup_size.width, menu_popup_size.height), (7, 7));
     let selected_text = loaded.bundle().skin().menu(MenuRole::Item, MenuState::Hovered).content_color;
     assert_eq!((selected_text.r, selected_text.g, selected_text.b, selected_text.a), (255, 255, 255, 255));
+    for state in [ControlState::Enabled(PointerState::Hovered), ControlState::Enabled(PointerState::Pressed)] {
+        // Enabled list items and tree disclosures inherit the palette's flat black selection
+        // background. Their foreground must remain readable before the control gains focus.
+        let visual = loaded.bundle().skin().control(ControlRole::Item, state);
+        assert!(matches!(
+            visual.patch.content,
+            neocogi_ui_runtime::NinePatchContent::Flat { cells }
+                if matches!(cells.center, neocogi_ui_runtime::NinePatchCell::Color { color }
+                    if (color.r, color.g, color.b, color.a) == (0, 0, 0, 255))
+        ));
+        assert_eq!(
+            (visual.content_color.r, visual.content_color.g, visual.content_color.b, visual.content_color.a),
+            (255, 255, 255, 255)
+        );
+    }
     for state in [
         ControlState::Focused(PointerState::Normal),
         ControlState::Focused(PointerState::Hovered),
         ControlState::Focused(PointerState::Pressed),
     ] {
+        // Focused items use the theme's image-backed selection face and the same contrasting
+        // foreground as the inherited enabled selection states above.
         assert!(matches!(
             loaded.bundle().skin().control(ControlRole::Item, state).patch.content,
             neocogi_ui_runtime::NinePatchContent::Image { .. }

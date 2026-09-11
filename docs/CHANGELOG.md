@@ -101,6 +101,9 @@ wrappers. The accepted migration and outstanding validation are recorded in
 - Split `IPopup` placement into `show()` at the latest consumed pointer and
   `show_at(anchor)` for exact screen-space placement. The full demo's Popup
   button again opens its standalone menu at the triggering pointer position.
+- Render enabled hovered and pressed Mac OS 9 item controls with white content
+  over the Platinum theme's black selection face. Combo/list choices and tree
+  disclosures now retain readable selection contrast before receiving focus.
 - Load native demo assets from adjacent files through the asset plugin by default.
   `embed-assets` explicitly selects build-host compilation and embedded resource
   bytes; browser `webgl` enables it. Generated COM bundles retain bounded pixel expansion.
