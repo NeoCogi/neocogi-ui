@@ -27,6 +27,8 @@ wrappers. The accepted migration and outstanding validation are recorded in
 - Add one-Cargo-crate-per-module Rust-like IDL generation. Dynamic assemblies
   stage fingerprint-qualified contract libraries and factory-only plugins;
   loading and inspection reject conflicting revisions before publication.
+- Compile generated native contract descriptions for the underlying platform ABI
+  when the `min-size` Rust build uses its fingerprint-distinct custom target.
 - Use generated IDL `class` descriptions with `#[com_object(Class)]` and IDL
   `factory` descriptions with `#[com_factory(Factory)]`. Descriptions own public
   identity/threading/projections; implementations own private state and bodies.

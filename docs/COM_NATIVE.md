@@ -52,6 +52,9 @@ cargo neocogi build --assembly full --profile min-size
 The `min-size` preset selects nightly automatically and includes its x86_64 Linux
 GNU target JSON, size-oriented compiler settings, and rebuilt standard library.
 Consumers do not need our `build-min-size` alias or a custom profile definition.
+Contract build scripts retain the custom Rust target as their artifact identity,
+but compile their generated C descriptions for its underlying
+`x86_64-unknown-linux-gnu` ABI so the platform compiler can recognize the target.
 Use `--toolchain nightly-YYYY-MM-DD` to select an installed dated toolchain. Custom
 nightly targets can change with the compiler, so pin and test the toolchain used
 for a release. Ordinary custom profiles remain defined by the application's
