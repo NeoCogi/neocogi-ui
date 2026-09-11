@@ -8,6 +8,13 @@
 #![no_std]
 #![deny(missing_docs)]
 
+/// Compile-checks the generated contract surface while the handwritten helper
+/// implementations are separated from their historical declarations.
+#[allow(dead_code)]
+mod generated_contracts {
+    include!(concat!(env!("OUT_DIR"), "/neocogi_ui.rs"));
+}
+
 pub mod appearance;
 mod assets;
 pub use assets::*;

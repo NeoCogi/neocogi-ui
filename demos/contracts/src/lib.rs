@@ -1,6 +1,13 @@
 //! Application-specific mesh contracts shared by the demo host and its co-packaged GPU renderer.
 #![no_std]
 #![deny(missing_docs)]
+
+/// Compile-checks the generated demo surface before it becomes the crate's
+/// public API in the following migration commit.
+#[allow(dead_code)]
+mod generated_contracts {
+    include!(concat!(env!("OUT_DIR"), "/neocogi_demo.rs"));
+}
 use neocogi_ui_contracts::*;
 use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcStatus, com_interface, com_struct};
 use rs_math3d::{Mat4f, Vec2f, Vec3f};
