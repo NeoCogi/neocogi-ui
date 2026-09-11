@@ -64,7 +64,7 @@ impl CheckboxParameters {
         Self {
             label: label.into(),
             checked,
-            font: FontRef::Role(FontRole::Body),
+            font: FontRef::Role(FontRole::BODY),
             opt: WidgetOption::NONE,
         }
     }
@@ -157,7 +157,7 @@ impl Checkbox {
     /// Measures the checkbox square plus optional label.
     fn preferred_size(&self, style: &Skin, atlas: &AtlasHandle) -> Dimensioni {
         let padding = style.metrics.padding.max(0);
-        let check_icon = atlas.get_icon_size(style.resolve_icon_role(atlas, crate::IconRole::Check));
+        let check_icon = atlas.get_icon_size(style.resolve_icon_role(atlas, crate::IconRole::CHECK));
         let height = content_height(style, atlas, &self.font, check_icon.height);
         let mut width = padding.saturating_mul(2).saturating_add(height.max(0));
         if !self.label.is_empty() {
@@ -172,20 +172,20 @@ impl Checkbox {
     fn paint_widget(&self, checked: bool, ctx: &mut WidgetPaintCtx<'_>) {
         let bounds = ctx.local_rect();
         let box_rect = rect(bounds.x, bounds.y, bounds.height, bounds.height);
-        let box_content = ctx.draw_control(ControlRole::Checkbox, box_rect);
+        let box_content = ctx.draw_control(ControlRole::CHECKBOX, box_rect);
         if checked {
             // The check glyph is the complete persistent-state cue; the surrounding square remains
             // governed only by its ordinary pointer, keyboard, and disabled interaction state.
-            let color = ctx.control_content_color(ControlRole::Checkbox);
+            let color = ctx.control_content_color(ControlRole::CHECKBOX);
             if let Some(box_content) = box_content {
-                let check = ctx.skin().resolve_icon_role(ctx.atlas(), crate::IconRole::Check);
+                let check = ctx.skin().resolve_icon_role(ctx.atlas(), crate::IconRole::CHECK);
                 ctx.draw_icon(check, box_content, color);
             }
         }
         let text_rect = rect(bounds.x + box_rect.width, bounds.y, bounds.width - box_rect.width, bounds.height);
         if !self.label.is_empty() {
             let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
-            ctx.draw_control_text_with_font(font, &self.label, text_rect, ControlRole::Checkbox, ctx.options());
+            ctx.draw_control_text_with_font(font, &self.label, text_rect, ControlRole::CHECKBOX, ctx.options());
         }
     }
 }
@@ -290,7 +290,7 @@ impl crate::ui_node::widget_object::FontState for Checkbox {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_contracts::{CheckboxAbi, GeometryChange, ICheckboxSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi, TextFontRole};
+use neocogi_ui_contracts::{CheckboxAbi, GeometryChange, ICheckboxSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi, FontRole};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Checkbox);
@@ -349,7 +349,7 @@ impl neocogi_ui_contracts::Checkbox for Checkbox {
         Ok(())
     }
     /// Validates a semantic font role before changing the Checkbox's measurement input.
-    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+    fn set_font_role(&mut self, role: FontRole) -> Result<(), NcStatus> {
         set_direct_font_role(self, role)
     }
     /// Resolves one exact named font before replacing the Checkbox's selection.

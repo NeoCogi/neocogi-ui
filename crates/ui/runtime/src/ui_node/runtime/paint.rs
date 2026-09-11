@@ -94,7 +94,7 @@ impl UiRuntime {
             let frame_state = if !enabled {
                 crate::ControlState::Disabled
             } else if node.is_container() {
-                crate::ControlState::Enabled(crate::PointerState::Normal)
+                crate::ControlState::Enabled(crate::PointerState::NORMAL)
             } else {
                 control_state
             };

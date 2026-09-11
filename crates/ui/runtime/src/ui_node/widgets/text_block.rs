@@ -94,7 +94,7 @@ impl TextBlockParameters {
         Self {
             text: text.into(),
             wrap,
-            font: FontRef::Role(FontRole::Body),
+            font: FontRef::Role(FontRole::BODY),
             opt: WidgetOption::NO_INTERACT,
         }
     }
@@ -185,7 +185,7 @@ impl TextBlock {
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
         let color = ctx
             .skin()
-            .surface(SurfaceRole::GenericFrame, SurfaceState::from_enabled(ctx.enabled()))
+            .surface(SurfaceRole::GENERIC_FRAME, SurfaceState::from_enabled(ctx.enabled()))
             .content_color;
         let line_height = ctx.atlas().get_font_height(font) as i32;
         let baseline = ctx.atlas().get_font_baseline(font);
@@ -285,7 +285,7 @@ mod tests {
         let mut block = TextBlock::from(TextBlockParameters {
             text: "a\r\nb\rc\n".to_owned(),
             wrap: TextWrap::None,
-            font: FontRef::Role(FontRole::Body),
+            font: FontRef::Role(FontRole::BODY),
             opt: WidgetOption::NO_INTERACT,
         });
         assert_eq!(block.text(), "a\nb\nc\n");
@@ -296,7 +296,7 @@ mod tests {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_contracts::{GeometryChange, IWidgetHostAbi, TextBlockAbi, TextFontRole, TextWrapping};
+use neocogi_ui_contracts::{GeometryChange, IWidgetHostAbi, TextBlockAbi, FontRole, TextWrapping};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(TextBlock);
@@ -363,7 +363,7 @@ impl neocogi_ui_contracts::TextBlock for TextBlock {
         Ok(())
     }
     /// Validates a semantic font role before changing the TextBlock's measurement input.
-    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+    fn set_font_role(&mut self, role: FontRole) -> Result<(), NcStatus> {
         set_direct_font_role(self, role)
     }
     /// Resolves one exact named font before replacing the TextBlock's selection.

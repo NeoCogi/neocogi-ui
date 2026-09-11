@@ -26,7 +26,6 @@ pub use helpers::*;
 
 /// Semantic names shared by asset recipes and runtime resource resolution.
 mod resource_roles;
-pub use resource_roles::{FontRole, IconRole};
 
 /// Plain layout and window geometry used by theme authoring and resolved skins.
 mod skin;

@@ -115,7 +115,7 @@ pub struct CaptionButtonsSkin {
     pub inner_spacing: i32,
     /// Whether caption controls remain visible and hittable without window activation.
     ///
-    /// Activation selects [`ChromeState::Active`] for frame and title chrome; it does not rewrite
+    /// Activation selects [`ChromeState::ACTIVE`] for frame and title chrome; it does not rewrite
     /// the control state of the caption buttons themselves.
     pub show_without_activation: bool,
 }

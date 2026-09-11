@@ -45,7 +45,7 @@ fn round_trip_preserves_complete_resources_and_image_patches() {
     let mut skin = Skin::from_atlas(&atlas);
     skin.window_chrome = crate::WindowChromeSkin::classic_mac(crate::Color { r: 12, g: 34, b: 56, a: 255 });
     skin.set_control(
-        crate::ControlRole::Button,
+        crate::ControlRole::BUTTON,
         crate::ControlState::Disabled,
         crate::Visual::new(
             crate::NinePatch::image(

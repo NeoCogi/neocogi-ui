@@ -101,7 +101,7 @@ impl MenuItem {
         self.interface.set_shortcut_hint(NcCopyFromBufferOffset::new(0, hint.as_bytes()))
     }
     /// Selects a semantic font through the same concrete optional capability as ordinary text widgets.
-    pub fn set_font_role(&self, role: TextFontRole) -> Result<(), NcStatus> {
+    pub fn set_font_role(&self, role: FontRole) -> Result<(), NcStatus> {
         self.interface.query::<IFontStyleAbi>()?.set_font_role(role)
     }
     /// Resolves a named font against the owning runtime's resource bundle.

@@ -44,7 +44,7 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
     item.set_label("Before mount").unwrap();
     item.set_mark(MenuMark::Checked { checked: false }).unwrap();
     item.set_shortcut_hint("Ctrl+O").unwrap();
-    item.set_font_role(TextFontRole::BODY).unwrap();
+    item.set_font_role(FontRole::BODY).unwrap();
     assert_eq!(item.mark().unwrap(), MenuMark::Checked { checked: false });
     assert_eq!(item.shortcut_hint().unwrap(), "Ctrl+O");
     let session = EventSession::new(Vec::new());

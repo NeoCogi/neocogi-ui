@@ -20,7 +20,7 @@ impl ITextMetrics for Metrics {
         let size = crate::ui_node::widgets::control::inline_content_size(
             resources.bundle().skin(),
             resources.bundle().atlas(),
-            &crate::FontRef::Role(FontRole::Body),
+            &crate::FontRef::Role(FontRole::BODY),
             label,
             None,
         );
@@ -115,8 +115,8 @@ fn local_control_state(state: WidgetVisualState) -> Result<crate::ControlState, 
 /// Decodes the only two states meaningful for structural surfaces.
 fn local_surface_state(state: WidgetVisualState) -> Result<crate::SurfaceState, NcStatus> {
     match state {
-        WidgetVisualState::DISABLED => Ok(crate::SurfaceState::Disabled),
-        WidgetVisualState::NORMAL => Ok(crate::SurfaceState::Normal),
+        WidgetVisualState::DISABLED => Ok(crate::SurfaceState::DISABLED),
+        WidgetVisualState::NORMAL => Ok(crate::SurfaceState::NORMAL),
         _ => Err(NC_E_INVALID_ARG),
     }
 }
@@ -209,9 +209,9 @@ impl IPainter for Recorder {
             let resources = self.resources.borrow();
             let skin = resources.bundle().skin();
             let atlas = resources.bundle().atlas();
-            let font = skin.resolve_font_role(atlas, FontRole::Body);
+            let font = skin.resolve_font_role(atlas, FontRole::BODY);
             let color = skin
-                .control(ControlRole::Button, crate::ControlState::Enabled(crate::PointerState::Normal))
+                .control(ControlRole::BUTTON, crate::ControlState::Enabled(crate::PointerState::NORMAL))
                 .content_color;
             let position = crate::ui_node::text_layout::control_text_position_with_font(skin, atlas, font, label, rect, WidgetOption::NONE);
             (font, color, position)

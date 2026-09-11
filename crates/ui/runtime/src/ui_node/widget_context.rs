@@ -712,8 +712,9 @@ impl<'a> WidgetPaintCtx<'a> {
         // Center-only structural fills share the same nine-patch behavior as unframed controls.
         if let Some((scope, mut painter)) = self.scoped_paint() {
             let state = match state {
-                SurfaceState::Normal => WidgetVisualState::NORMAL,
-                SurfaceState::Disabled => WidgetVisualState::DISABLED,
+                SurfaceState::NORMAL => WidgetVisualState::NORMAL,
+                SurfaceState::DISABLED => WidgetVisualState::DISABLED,
+                _ => unreachable!("widget painting constructs only known surface states"),
             };
             let result = painter
                 .frame(
@@ -823,7 +824,7 @@ mod tests {
                 true,
                 WidgetOption::NONE,
             );
-            assert_eq!(ctx.control_state(), ControlState::Focused(crate::PointerState::Pressed));
+            assert_eq!(ctx.control_state(), ControlState::Focused(crate::PointerState::PRESSED));
         }
         {
             // Capture remains active outside for release routing, but theme art is no longer pressed.
@@ -841,7 +842,7 @@ mod tests {
                 true,
                 WidgetOption::NONE,
             );
-            assert_eq!(ctx.control_state(), ControlState::Focused(crate::PointerState::Normal));
+            assert_eq!(ctx.control_state(), ControlState::Focused(crate::PointerState::NORMAL));
         }
         {
             // Disabled ancestry wins over stale retained interaction snapshots.
@@ -877,7 +878,7 @@ mod tests {
                 false,
                 WidgetOption::NONE,
             );
-            assert_eq!(ctx.control_state(), ControlState::Focused(crate::PointerState::Pressed));
+            assert_eq!(ctx.control_state(), ControlState::Focused(crate::PointerState::PRESSED));
         }
     }
 }

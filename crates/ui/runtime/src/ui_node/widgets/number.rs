@@ -81,7 +81,7 @@ impl NumberParameters {
             value,
             step,
             precision,
-            font: FontRef::Role(FontRole::Body),
+            font: FontRef::Role(FontRole::BODY),
             opt,
         })
     }
@@ -224,10 +224,10 @@ impl Number {
         let base = ctx.local_rect();
         if !ctx.options().intersects(WidgetOption::FRAME) {
             // Unframed numeric editors retain the input role's center without structural borders.
-            ctx.draw_control_center(ControlRole::TextInput, base);
+            ctx.draw_control_center(ControlRole::TEXT_INPUT, base);
         }
         let label = number_label(self.value, self.precision);
-        ctx.draw_control_text_with_font(font, label.as_str(), base, ControlRole::TextInput, ctx.options());
+        ctx.draw_control_text_with_font(font, label.as_str(), base, ControlRole::TEXT_INPUT, ctx.options());
     }
 }
 
@@ -254,7 +254,7 @@ impl Widget for Number {
 
     fn frame_appearance_role(&self) -> FrameRole {
         // Numeric editing shares the single-line text-input background and border contract.
-        FrameRole::Control(ControlRole::TextInput)
+        FrameRole::Control(ControlRole::TEXT_INPUT)
     }
 
     fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
@@ -316,7 +316,7 @@ impl crate::ui_node::widget_object::FontState for Number {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_contracts::{GeometryChange, IEventSubscriptionAbi, INumericSinkAbi, IWidgetHostAbi, NumberAbi, NumberOptions, TextFontRole};
+use neocogi_ui_contracts::{GeometryChange, IEventSubscriptionAbi, INumericSinkAbi, IWidgetHostAbi, NumberAbi, NumberOptions, FontRole};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Number);
@@ -371,7 +371,7 @@ impl neocogi_ui_contracts::Number for Number {
         Ok(self.is_editing())
     }
     /// Validates a semantic font role before changing the number editor's measurement input.
-    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+    fn set_font_role(&mut self, role: FontRole) -> Result<(), NcStatus> {
         set_direct_font_role(self, role)
     }
     /// Resolves one exact named font before replacing the number editor's selection.

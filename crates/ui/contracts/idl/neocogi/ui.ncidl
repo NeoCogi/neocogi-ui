@@ -153,7 +153,7 @@ class Button: IWidget + ILeafLayout {
     fn subscribe(&mut self, sink: &IActivationSink) -> Result<IEventSubscription>;
 
     /// Selects a semantic font role and invalidates measurement only when it differs.
-    fn set_font_role(&mut self, role: TextFontRole) -> Result<()>;
+    fn set_font_role(&mut self, role: FontRole) -> Result<()>;
 
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
@@ -1498,7 +1498,7 @@ class Textbox: IWidget + ILeafLayout {
     /// Clamps to the preceding Unicode scalar boundary and current text length.
     fn set_cursor(&mut self, cursor: u64) -> Result<()>;
     /// Selects a semantic font role and invalidates measurement only when it differs.
-    fn set_font_role(&mut self, role: TextFontRole) -> Result<()>;
+    fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
     /// Connects the independent changed-text subscriber.
@@ -1528,7 +1528,7 @@ class TextBlock: IWidget + ILeafLayout {
     /// Changes wrapping and records a sticky measurement change when it differs.
     fn set_wrapping(&mut self, wrapping: TextWrapping) -> Result<()>;
     /// Selects a semantic font role and invalidates measurement only when it differs.
-    fn set_font_role(&mut self, role: TextFontRole) -> Result<()>;
+    fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
 }
@@ -1546,7 +1546,7 @@ class Checkbox: IWidget + ILeafLayout {
     /// Replaces the complete UTF-8 label and invalidates preferred size when changed.
     fn set_label(&mut self, label: &[u8]) -> Result<()>;
     /// Selects a semantic font role and invalidates measurement only when it differs.
-    fn set_font_role(&mut self, role: TextFontRole) -> Result<()>;
+    fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
     /// Connects the exclusive checked-state subscriber and returns its ownership lease.
@@ -1589,7 +1589,7 @@ class Slider: IWidget + ILeafLayout {
     /// Reports whether the control currently accepts inline text editing.
     fn is_editing(&self) -> Result<bool>;
     /// Selects a semantic font role and invalidates measurement only when it differs.
-    fn set_font_role(&mut self, role: TextFontRole) -> Result<()>;
+    fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
     /// Connects the exclusive finite-value subscriber and returns its ownership lease.
@@ -1606,7 +1606,7 @@ class Number: IWidget + ILeafLayout {
     /// Reports whether the control currently accepts inline text editing.
     fn is_editing(&self) -> Result<bool>;
     /// Selects a semantic font role and invalidates measurement only when it differs.
-    fn set_font_role(&mut self, role: TextFontRole) -> Result<()>;
+    fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
     /// Connects the exclusive finite-value subscriber and returns its ownership lease.
@@ -1625,7 +1625,7 @@ class ColorSwatch: IWidget + ILeafLayout {
     /// Changes paint only and does not publish a user event.
     fn set_fill(&mut self, rgba: u32) -> Result<()>;
     /// Selects a semantic font role and invalidates measurement only when it differs.
-    fn set_font_role(&mut self, role: TextFontRole) -> Result<()>;
+    fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
 }
@@ -1638,7 +1638,7 @@ class ListItem: IWidget + ILeafLayout {
     /// Replaces the complete UTF-8 label and invalidates preferred size when changed.
     fn set_text(&mut self, text: &[u8]) -> Result<()>;
     /// Selects a semantic font role and invalidates measurement only when it differs.
-    fn set_font_role(&mut self, role: TextFontRole) -> Result<()>;
+    fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
     /// Selects a semantic icon or removes it while retaining the label.
@@ -1657,7 +1657,7 @@ class ListBox: IWidget + ILeafLayout {
     /// Replaces the complete UTF-8 label and invalidates preferred size when changed.
     fn set_text(&mut self, text: &[u8]) -> Result<()>;
     /// Selects a semantic font role and invalidates measurement only when it differs.
-    fn set_font_role(&mut self, role: TextFontRole) -> Result<()>;
+    fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
     /// Installs a positive-sized immutable texture and optionally fits it to content width.
@@ -1706,7 +1706,7 @@ class Scrollbar: IWidget + ILeafLayout {
 
 #[version(1)]
 /// Semantic font selection resolved by the current immutable resource revision.
-    enum TextFontRole: u8 {
+    enum FontRole: u8 {
         /// Ordinary control and body text.
         BODY = 0,
         /// Compact supporting text.
@@ -1723,7 +1723,7 @@ class Scrollbar: IWidget + ILeafLayout {
 /// Optional typography capability on concrete text-bearing widget objects.
 trait IFontStyle {
     /// Selects a semantic role and invalidates measurement only when it differs.
-    fn set_font_role(&mut self, role: TextFontRole) -> Result<()>;
+    fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact font in this widget's runtime bundle before committing.
     /// Unknown names fail without replacing the previous selection.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
@@ -1784,7 +1784,7 @@ class TextArea: IWidget + IContainerLayout + IScrolling {
     /// Changes wrapping and schedules text geometry and caret refresh.
     fn set_wrapping(&mut self, wrapping: TextWrapping) -> Result<()>;
     /// Selects a semantic font role on the actual editor.
-    fn set_font_role(&mut self, role: TextFontRole) -> Result<()>;
+    fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
     /// Connects the actual editor's independent changed-text subscriber.
@@ -1810,7 +1810,7 @@ class Combo: IWidget + ILeafLayout {
     /// Commits an actual popup selection, closes the header, and emits changed only when index or label differs.
     fn submit_selection(&mut self, index: u64, label: &[u8]) -> Result<()>;
     /// Selects a semantic font role and invalidates measurement only when it differs.
-    fn set_font_role(&mut self, role: TextFontRole) -> Result<()>;
+    fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
     /// Connects the independent captured-selection subscriber.
@@ -1885,6 +1885,154 @@ struct AssetIcon {
     /// Positive rectangle wholly inside the atlas.
     rect: Rect,
 }
+
+#[version(1)]
+/// Structural surface role whose table entries vary only by availability.
+    enum SurfaceRole: u8 {
+        /// Window or modal-dialog background below application content and chrome.
+        WINDOW = 0,
+        /// Generic frame requested through the common FRAME widget option.
+        GENERIC_FRAME = 1,
+        /// Content panel or scroll-area viewport background.
+        PANEL = 2,
+    }
+
+#[version(1)]
+/// Interactive control part sharing pointer and keyboard-focus behavior.
+    enum ControlRole: u8 {
+        /// Ordinary command button or button-like list box.
+        BUTTON = 0,
+        /// Checkbox square; checked state is painted independently.
+        CHECKBOX = 1,
+        /// Single-line, multiline, or numeric text input background.
+        TEXT_INPUT = 2,
+        /// Generic item or tree row whose state supplies transient selection.
+        ITEM = 3,
+        /// Combo-box header.
+        COMBO = 4,
+        /// Slider background track.
+        SLIDER_TRACK = 5,
+        /// Slider value thumb.
+        SLIDER_THUMB = 6,
+        /// Scrollbar background track.
+        SCROLLBAR_TRACK = 7,
+        /// Scrollbar movable thumb.
+        SCROLLBAR_THUMB = 8,
+        /// Window close caption button.
+        CLOSE_BUTTON = 9,
+        /// Window minimize caption button.
+        MINIMIZE_BUTTON = 10,
+        /// Window maximize caption button.
+        MAXIMIZE_BUTTON = 11,
+        /// Window restore caption button used while maximized.
+        RESTORE_BUTTON = 12,
+        /// Visible bottom-right resize grip.
+        RESIZE_GRIP = 13,
+    }
+
+#[version(1)]
+/// Menu-owned surface or entry role with menu-specific open-selection behavior.
+    enum MenuRole: u8 {
+        /// Menu bar spanning a window.
+        BAR = 0,
+        /// Menu-bar title which can own an open popup.
+        TITLE = 1,
+        /// Popup-menu panel.
+        POPUP = 2,
+        /// Ordinary menu item or submenu row.
+        ITEM = 3,
+    }
+
+#[version(1)]
+/// Manager-owned window chrome role whose presentation follows activation.
+    enum ChromeRole: u8 {
+        /// Ordinary-window outer frame decoration.
+        WINDOW_FRAME = 0,
+        /// Modal-dialog outer frame decoration.
+        DIALOG_FRAME = 1,
+        /// Window title patch and semantic-content color.
+        TITLE = 2,
+    }
+
+#[version(1)]
+/// Pointer interaction nested inside an enabled control state.
+    enum PointerState: u8 {
+        /// Pointer is not hovering or pressing the control.
+        NORMAL = 0,
+        /// Pointer is hovering the control without an active press.
+        HOVERED = 1,
+        /// Pointer capture is pressed while the pointer remains over the control.
+        PRESSED = 2,
+    }
+
+#[version(1)]
+/// State of an interactive control, excluding impossible disabled interaction combinations.
+enum ControlState: u8 {
+    /// Control is unavailable; pointer and keyboard-focus presentation do not apply.
+    Disabled,
+    /// Control is available without keyboard focus and has the enclosed pointer state.
+    Enabled(PointerState),
+    /// Control owns visible keyboard focus and has the enclosed pointer state.
+    Focused(PointerState),
+}
+
+#[version(1)]
+/// Availability state of a noninteractive structural surface.
+    enum SurfaceState: u8 {
+        /// Surface belongs to an enabled retained subtree.
+        NORMAL = 0,
+        /// Surface belongs to a disabled retained subtree.
+        DISABLED = 1,
+    }
+
+#[version(1)]
+/// State of a menu surface or entry after menu-specific precedence is resolved.
+    enum MenuState: u8 {
+        /// Enabled entry or surface without transient selection.
+        NORMAL = 0,
+        /// Pointer is over an enabled entry.
+        HOVERED = 1,
+        /// Pointer capture is pressed over an enabled entry.
+        PRESSED = 2,
+        /// Keyboard navigation selected an enabled entry.
+        FOCUSED = 3,
+        /// Entry owns the popup currently open beneath it.
+        OPEN = 4,
+        /// Entry or surface is unavailable.
+        DISABLED = 5,
+    }
+
+#[version(1)]
+/// State of manager-owned chrome after activation and availability are resolved.
+    enum ChromeState: u8 {
+        /// Enabled chrome for a window that does not own activation.
+        BASE = 0,
+        /// Enabled chrome for the active window.
+        ACTIVE = 1,
+        /// Chrome belonging to a disabled window.
+        DISABLED = 2,
+    }
+
+#[version(1)]
+/// Semantic icon role required in every complete UI asset bundle.
+    enum IconRole: u8 {
+        /// Window and dialog close affordance.
+        CLOSE = 0,
+        /// Collapsed disclosure affordance.
+        EXPAND = 1,
+        /// Expanded disclosure affordance.
+        COLLAPSE = 2,
+        /// Checked checkbox and menu-item mark.
+        CHECK = 3,
+        /// Combo-box dropdown affordance.
+        EXPAND_DOWN = 4,
+        /// Open-folder file-dialog item.
+        OPEN_FOLDER = 5,
+        /// Closed-folder file-dialog item.
+        CLOSED_FOLDER = 6,
+        /// Regular file-dialog item.
+        FILE = 7,
+    }
 
 #[version(1)]
 /// Four nonnegative pixel insets used by resolved theme geometry.
@@ -2020,7 +2168,7 @@ struct AssetVisual {
 }
 
 #[version(1)]
-/// Family whose table is role-major, then state-major, using appearance::* ALL order.
+/// Family whose table is role-major, then state-major, using the declared role/state order.
     enum AppearanceFamily: u8 {
         /// SurfaceRole × SurfaceState values.
         SURFACE = 0,

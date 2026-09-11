@@ -3,7 +3,6 @@
 use crate::*;
 use neocogi_com::{ComPtr, ComRef, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
 use std::borrow::Cow;
-use neocogi_ui_contracts::appearance::*;
 
 mod validation;
 

@@ -232,11 +232,11 @@ impl RootChromeVisualState {
         // Window activation and availability are resolved at the family boundary. This helper
         // supplies only the pointer branch used by interactive caption and resize controls.
         if captured && hovered {
-            PointerState::Pressed
+            PointerState::PRESSED
         } else if hovered {
-            PointerState::Hovered
+            PointerState::HOVERED
         } else {
-            PointerState::Normal
+            PointerState::NORMAL
         }
     }
 }
@@ -289,7 +289,7 @@ impl RootFrameKind {
         // directly define both the visible black outline and the content rectangle behind it.
         match self {
             Self::Window | Self::Dialog => style.metrics.window_border.normalized(),
-            Self::Popup => style.menu(MenuRole::Popup, MenuState::Normal).patch.insets.normalized(),
+            Self::Popup => style.menu(MenuRole::POPUP, MenuState::NORMAL).patch.insets.normalized(),
         }
     }
 }
@@ -436,7 +436,7 @@ pub(super) fn root_chrome_geometry(
                 leading_width.max(trailing_width).saturating_mul(2)
             }
         };
-        let title_font = style.resolve_font_role(atlas, crate::FontRole::Title);
+        let title_font = style.resolve_font_role(atlas, crate::FontRole::TITLE);
         let title_minimum_width = atlas
             .get_text_size(title_font, name)
             .width
@@ -673,7 +673,7 @@ fn root_caption_bank_spacing_rects(title_content: Recti, geometry: RootChromeGeo
 /// Returns a title height large enough for the configured title font and padding.
 fn root_titlebar_height(style: &Skin, atlas: &AtlasHandle) -> i32 {
     // The style value acts as a minimum rather than allowing text to escape a too-short title.
-    let title_font = style.resolve_font_role(atlas, crate::FontRole::Title);
+    let title_font = style.resolve_font_role(atlas, crate::FontRole::TITLE);
     let font_height = atlas.get_font_height(title_font) as i32;
     let vertical_padding = (style.metrics.padding.max(0) / 2).max(1);
     let text_height = font_height.saturating_add(vertical_padding.saturating_mul(2));
@@ -692,16 +692,16 @@ fn root_frame_patch(style: &Skin, frame_kind: RootFrameKind, active: bool, enabl
     match frame_kind {
         RootFrameKind::Window | RootFrameKind::Dialog => {
             let role = match frame_kind {
-                RootFrameKind::Window => ChromeRole::WindowFrame,
-                RootFrameKind::Dialog => ChromeRole::DialogFrame,
+                RootFrameKind::Window => ChromeRole::WINDOW_FRAME,
+                RootFrameKind::Dialog => ChromeRole::DIALOG_FRAME,
                 RootFrameKind::Popup => unreachable!("popup frame was excluded by the outer match"),
             };
-            let visual_insets = style.chrome(role, ChromeState::Base).patch.insets;
+            let visual_insets = style.chrome(role, ChromeState::BASE).patch.insets;
             style.chrome(role, ChromeState::from_window(enabled, active)).patch.with_insets(visual_insets)
         }
         RootFrameKind::Popup => {
-            let state = if enabled { MenuState::Normal } else { MenuState::Disabled };
-            style.menu(MenuRole::Popup, state).patch
+            let state = if enabled { MenuState::NORMAL } else { MenuState::DISABLED };
+            style.menu(MenuRole::POPUP, state).patch
         }
     }
 }
@@ -713,12 +713,12 @@ fn root_background_patch(style: &Skin, frame_kind: RootFrameKind, enabled: bool)
     // structural inset as well as the fill shared with compact popup menus.
     let patch = match frame_kind {
         RootFrameKind::Window | RootFrameKind::Dialog => {
-            let state = if enabled { SurfaceState::Normal } else { SurfaceState::Disabled };
-            style.surface(SurfaceRole::Window, state).patch
+            let state = if enabled { SurfaceState::NORMAL } else { SurfaceState::DISABLED };
+            style.surface(SurfaceRole::WINDOW, state).patch
         }
         RootFrameKind::Popup => {
-            let state = if enabled { MenuState::Normal } else { MenuState::Disabled };
-            style.menu(MenuRole::Popup, state).patch
+            let state = if enabled { MenuState::NORMAL } else { MenuState::DISABLED };
+            style.menu(MenuRole::POPUP, state).patch
         }
     };
 
@@ -771,7 +771,7 @@ pub(super) fn record_root_overlay(
         painter.nine_patch(outer, root_frame_patch(style, frame_kind, chrome_active, enabled).without_center());
     }
     if let Some(title) = geometry.title {
-        let title_visual = style.chrome(ChromeRole::Title, chrome_state);
+        let title_visual = style.chrome(ChromeRole::TITLE, chrome_state);
         let title_content = crate::ui_node::frame::paint_internal_frame(&mut painter, title, title_visual.patch);
         let title_backdrop = if chrome_active { style.window_chrome.active_title_backdrop } else { None };
         if let (Some(backdrop), Some(title_content)) = (title_backdrop, title_content) {
@@ -791,7 +791,7 @@ pub(super) fn record_root_overlay(
                 WindowTitleAlignment::Leading => crate::WidgetOption::NONE,
                 WindowTitleAlignment::Centered => crate::WidgetOption::ALIGN_CENTER,
             };
-            let title_font = style.resolve_font_role(atlas, crate::FontRole::Title);
+            let title_font = style.resolve_font_role(atlas, crate::FontRole::TITLE);
             let position = crate::ui_node::text_layout::control_text_position_with_font(style, atlas, title_font, name, text, options);
             if let Some(backdrop) = title_backdrop
                 && let Some(title_content) = title_content
@@ -835,7 +835,7 @@ pub(super) fn record_root_overlay(
         // A disabled window exposes no resize action, so omit its grip instead of inventing a
         // disabled rectangle when a classic theme deliberately uses transparent normal artwork.
         let state = ControlState::Enabled(visual.part_pointer_state(RootChromePart::Resize(RootResizeAxis::Both)));
-        let _ = crate::ui_node::frame::paint_internal_frame(&mut painter, grip, style.control(ControlRole::ResizeGrip, state).patch);
+        let _ = crate::ui_node::frame::paint_internal_frame(&mut painter, grip, style.control(ControlRole::RESIZE_GRIP, state).patch);
     }
 }
 
@@ -851,17 +851,17 @@ fn paint_caption_button(
     visual: RootChromeVisualState,
 ) {
     let role = match button {
-        RootCaptionButton::Minimize => ControlRole::MinimizeButton,
-        RootCaptionButton::Maximize if visual.maximized => ControlRole::RestoreButton,
-        RootCaptionButton::Maximize => ControlRole::MaximizeButton,
-        RootCaptionButton::Close => ControlRole::CloseButton,
+        RootCaptionButton::Minimize => ControlRole::MINIMIZE_BUTTON,
+        RootCaptionButton::Maximize if visual.maximized => ControlRole::RESTORE_BUTTON,
+        RootCaptionButton::Maximize => ControlRole::MAXIMIZE_BUTTON,
+        RootCaptionButton::Close => ControlRole::CLOSE_BUTTON,
     };
     let state = if !window_enabled {
         ControlState::Disabled
     } else if window_active {
         ControlState::Enabled(visual.part_pointer_state(RootChromePart::Caption(button)))
     } else {
-        ControlState::Enabled(PointerState::Normal)
+        ControlState::Enabled(PointerState::NORMAL)
     };
     // Resolve the face and content color together so the caption consumes one ordinary control
     // visual. There is no independently selected glyph role or chrome-layout drawing flag.
@@ -873,7 +873,7 @@ fn paint_caption_button(
     match button {
         RootCaptionButton::Close => {
             // Close retains the atlas icon already required by every Skin and test atlas.
-            painter.icon(style.resolve_icon_role(atlas, crate::IconRole::Close), content, color);
+            painter.icon(style.resolve_icon_role(atlas, crate::IconRole::CLOSE), content, color);
         }
         RootCaptionButton::Minimize => {
             // A centered lower horizontal stroke supplies a deterministic flat fallback over either
@@ -919,21 +919,21 @@ mod tests {
             interaction: RootInteraction::Caption(RootCaptionButton::Close),
             maximized: false,
         };
-        assert_eq!(close_pressed.part_pointer_state(close), PointerState::Pressed);
+        assert_eq!(close_pressed.part_pointer_state(close), PointerState::PRESSED);
 
         let close_outside = RootChromeVisualState {
             hovered: Some(RootChromePart::Title),
             interaction: RootInteraction::Caption(RootCaptionButton::Close),
             maximized: false,
         };
-        assert_eq!(close_outside.part_pointer_state(close), PointerState::Normal);
+        assert_eq!(close_outside.part_pointer_state(close), PointerState::NORMAL);
 
         let width_pressed = RootChromeVisualState {
             hovered: Some(right),
             interaction: RootInteraction::Resizing(RootResizeAxis::Width),
             maximized: false,
         };
-        assert_eq!(width_pressed.part_pointer_state(right), PointerState::Pressed);
+        assert_eq!(width_pressed.part_pointer_state(right), PointerState::PRESSED);
     }
 
     /// Verifies caption symbols use the control content color instead of a second appearance role.
@@ -941,11 +941,11 @@ mod tests {
     fn transparent_caption_content_color_suppresses_the_manager_owned_symbol() {
         let atlas = crate::test_support::test_atlas();
         let opaque = crate::test_support::test_skin(&atlas);
-        let state = ControlState::Enabled(PointerState::Normal);
+        let state = ControlState::Enabled(PointerState::NORMAL);
         let mut complete_face = opaque.clone();
-        let mut visual = complete_face.control(ControlRole::CloseButton, state);
+        let mut visual = complete_face.control(ControlRole::CLOSE_BUTTON, state);
         visual.content_color.a = 0;
-        complete_face.set_control(ControlRole::CloseButton, state, visual);
+        complete_face.set_control(ControlRole::CLOSE_BUTTON, state, visual);
 
         let record_count = |style: &Skin| {
             // Paint the same face through the production helper. Only the ordinary content color
@@ -1018,8 +1018,8 @@ mod tests {
         style.window_chrome = WindowChromeSkin::classic_mac(backdrop);
         crate::test_support::replace_chrome_patch(
             &mut style,
-            ChromeRole::Title,
-            ChromeState::Active,
+            ChromeRole::TITLE,
+            ChromeState::ACTIVE,
             crate::NinePatch::framed(
                 crate::SliceInsets::new(0, 0, 0, 2),
                 crate::color(3, 5, 7, 255),

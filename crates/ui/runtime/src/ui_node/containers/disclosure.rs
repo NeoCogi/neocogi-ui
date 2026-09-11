@@ -271,13 +271,13 @@ impl DisclosureHeader {
         // Resolve icon and text metrics independently, then build the one-row content preference.
         let padding = style.metrics.padding.max(0);
         let vertical_pad = (padding / 2).max(1);
-        let body_font = style.resolve_font_role(atlas, crate::FontRole::Body);
+        let body_font = style.resolve_font_role(atlas, crate::FontRole::BODY);
         let font_height = atlas.get_font_height(body_font) as i32;
         // Expansion changes only presentation state, not the header's retained allocation. Reserve
         // the component-wise maximum of both possible icons so toggling cannot clip a larger
         // collapse image or require a state-dependent measurement invalidation.
-        let expand_icon = atlas.get_icon_size(style.resolve_icon_role(atlas, crate::IconRole::Expand));
-        let collapse_icon = atlas.get_icon_size(style.resolve_icon_role(atlas, crate::IconRole::Collapse));
+        let expand_icon = atlas.get_icon_size(style.resolve_icon_role(atlas, crate::IconRole::EXPAND));
+        let collapse_icon = atlas.get_icon_size(style.resolve_icon_role(atlas, crate::IconRole::COLLAPSE));
         let icon = Dimensioni::new(expand_icon.width.max(collapse_icon.width), expand_icon.height.max(collapse_icon.height));
         let text_width = if self.label.is_empty() {
             0
@@ -324,35 +324,35 @@ impl Widget for DisclosureHeader {
         // Common traversal already paints and insets a requested frame. An unframed
         // header supplies only the item center for hover/selection feedback.
         if !ctx.options().intersects(WidgetOption::FRAME) {
-            ctx.draw_control_center(ControlRole::Item, row);
+            ctx.draw_control_center(ControlRole::ITEM, row);
         }
 
         // Reserve a square icon cell from row height, then paint text in the remaining rectangle.
         let content_role = if self.variant == DisclosureVariant::Header && ctx.options().intersects(WidgetOption::FRAME) {
-            ControlRole::Button
+            ControlRole::BUTTON
         } else {
-            ControlRole::Item
+            ControlRole::ITEM
         };
         let text_color = ctx.control_content_color(content_role);
         let icon = if expanded {
-            ctx.skin().resolve_icon_role(ctx.atlas(), crate::IconRole::Collapse)
+            ctx.skin().resolve_icon_role(ctx.atlas(), crate::IconRole::COLLAPSE)
         } else {
-            ctx.skin().resolve_icon_role(ctx.atlas(), crate::IconRole::Expand)
+            ctx.skin().resolve_icon_role(ctx.atlas(), crate::IconRole::EXPAND)
         };
         ctx.draw_icon(icon, Recti::new(row.x, row.y, row.height, row.height), text_color);
         // text_offset = row_height - padding.
         let offset = row.height.saturating_sub(ctx.skin().metrics.padding);
         // text_x = row_x + text_offset; text_width = row_width - text_offset.
         let text_rect = Recti::new(row.x.saturating_add(offset), row.y, row.width.saturating_sub(offset), row.height);
-        let body_font = ctx.skin().resolve_font_role(ctx.atlas(), crate::FontRole::Body);
+        let body_font = ctx.skin().resolve_font_role(ctx.atlas(), crate::FontRole::BODY);
         ctx.draw_control_text_with_font(body_font, &self.label, text_rect, content_role, ctx.options());
     }
 
     /// Selects one shared frame for measurement, hit geometry and painting.
     fn frame_appearance_role(&self) -> crate::FrameRole {
         crate::FrameRole::Control(match self.variant {
-            DisclosureVariant::Header => ControlRole::Button,
-            DisclosureVariant::Tree => ControlRole::Item,
+            DisclosureVariant::Header => ControlRole::BUTTON,
+            DisclosureVariant::Tree => ControlRole::ITEM,
         })
     }
 

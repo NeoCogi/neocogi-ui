@@ -297,16 +297,16 @@ fn downstream_skin_visuals_are_concrete_and_exhaustive() {
     // unrepresentable without requiring a universal, sparsely meaningful state table.
     let context = context();
     let mut skin = context.skin().clone();
-    let focused = ControlState::Focused(PointerState::Normal);
-    let pressed = ControlState::Focused(PointerState::Pressed);
-    let original = skin.control(ControlRole::Button, focused);
+    let focused = ControlState::Focused(PointerState::NORMAL);
+    let pressed = ControlState::Focused(PointerState::PRESSED);
+    let original = skin.control(ControlRole::BUTTON, focused);
     let mut changed = original;
     changed.content_color = color(17, 29, 43, 255);
-    skin.set_control(ControlRole::Button, focused, changed);
+    skin.set_control(ControlRole::BUTTON, focused, changed);
 
     assert_eq!(ControlState::ALL.len(), ControlState::COUNT);
-    assert_eq!(skin.control(ControlRole::Button, focused).content_color.r, 17);
-    assert_eq!(skin.control(ControlRole::Button, pressed).content_color.r, original.content_color.r);
+    assert_eq!(skin.control(ControlRole::BUTTON, focused).content_color.r, 17);
+    assert_eq!(skin.control(ControlRole::BUTTON, pressed).content_color.r, original.content_color.r);
 }
 
 /// Verifies exact resource IDs and one atomic bundle remain the typed replacement path.
@@ -336,8 +336,8 @@ fn downstream_resources_bundle_and_chrome_form_one_typed_runtime_value() {
     assert_eq!(context.skin().window_chrome.captions.close_side, CaptionButtonSide::Leading);
     // Semantic role references use IDs resolved once into the replacement skin and therefore share
     // the same direct typed lookup path without retaining resource names.
-    let body_role = FontRef::role(FontRole::Body);
-    let close_role = IconRef::role(IconRole::Close);
+    let body_role = FontRef::role(FontRole::BODY);
+    let close_role = IconRef::role(IconRole::CLOSE);
     assert_eq!(body_role.resolve(context.skin(), &context.atlas()), context.atlas().font_id("body").unwrap());
     assert_eq!(close_role.resolve(context.skin(), &context.atlas()), context.atlas().icon_id("close").unwrap());
 }

@@ -148,15 +148,19 @@ fn flat_surface_visual(frame_insets: SliceInsets, palette: &FlatPalette, role: S
     // Surfaces react only to inherited availability. Window owns the root fill independently of
     // activation, GenericFrame remains hollow, and Panel combines its border with its own fill.
     let patch = match (role, state) {
-        (SurfaceRole::Window, SurfaceState::Normal) => NinePatch::solid(palette.window_background),
-        (SurfaceRole::Window, SurfaceState::Disabled) => NinePatch::solid(palette.disabled_background),
-        (SurfaceRole::GenericFrame, _) => NinePatch::framed(frame_insets, palette.border, None),
-        (SurfaceRole::Panel, SurfaceState::Normal) => NinePatch::framed(frame_insets, palette.border, Some(palette.panel_background)),
-        (SurfaceRole::Panel, SurfaceState::Disabled) => NinePatch::framed(frame_insets, palette.border, Some(palette.disabled_background)),
+        (SurfaceRole::WINDOW, SurfaceState::NORMAL) => NinePatch::solid(palette.window_background),
+        (SurfaceRole::WINDOW, SurfaceState::DISABLED) => NinePatch::solid(palette.disabled_background),
+        (SurfaceRole::GENERIC_FRAME, _) => NinePatch::framed(frame_insets, palette.border, None),
+        (SurfaceRole::PANEL, SurfaceState::NORMAL) => NinePatch::framed(frame_insets, palette.border, Some(palette.panel_background)),
+        (SurfaceRole::PANEL, SurfaceState::DISABLED) => NinePatch::framed(frame_insets, palette.border, Some(palette.disabled_background)),
+        // Test compilation enumerates only the known IDL values through `ALL`.
+        _ => unreachable!("flat test palette received an unknown surface role or state"),
     };
     let content_color = match state {
-        SurfaceState::Normal => palette.text,
-        SurfaceState::Disabled => palette.disabled_foreground,
+        SurfaceState::NORMAL => palette.text,
+        SurfaceState::DISABLED => palette.disabled_foreground,
+        // Test compilation enumerates only the known IDL values through `ALL`.
+        _ => unreachable!("flat test palette received an unknown surface state"),
     };
     Visual::new(patch, content_color)
 }
@@ -169,51 +173,61 @@ fn flat_control_visual(frame_insets: SliceInsets, palette: &FlatPalette, role: C
     let framed = |fill| NinePatch::framed(frame_insets, palette.border, Some(fill));
     let transparent = Color { r: 0, g: 0, b: 0, a: 0 };
     let patch = match role {
-        ControlRole::Button
-        | ControlRole::Combo
-        | ControlRole::SliderThumb
-        | ControlRole::CloseButton
-        | ControlRole::MinimizeButton
-        | ControlRole::MaximizeButton
-        | ControlRole::RestoreButton => match state {
+        ControlRole::BUTTON
+        | ControlRole::COMBO
+        | ControlRole::SLIDER_THUMB
+        | ControlRole::CLOSE_BUTTON
+        | ControlRole::MINIMIZE_BUTTON
+        | ControlRole::MAXIMIZE_BUTTON
+        | ControlRole::RESTORE_BUTTON => match state {
             ControlState::Disabled => framed(palette.disabled_background),
-            ControlState::Enabled(PointerState::Normal) => framed(palette.button),
-            ControlState::Enabled(PointerState::Hovered) => framed(palette.button_hovered),
-            ControlState::Enabled(PointerState::Pressed) => framed(palette.input),
-            ControlState::Focused(PointerState::Normal | PointerState::Hovered) => framed(palette.control_focus),
-            ControlState::Focused(PointerState::Pressed) => framed(palette.input),
+            ControlState::Enabled(PointerState::NORMAL) => framed(palette.button),
+            ControlState::Enabled(PointerState::HOVERED) => framed(palette.button_hovered),
+            ControlState::Enabled(PointerState::PRESSED) => framed(palette.input),
+            ControlState::Focused(PointerState::NORMAL | PointerState::HOVERED) => framed(palette.control_focus),
+            ControlState::Focused(PointerState::PRESSED) => framed(palette.input),
+            // The test compiler is called only with `ControlState::ALL`.
+            _ => unreachable!("flat test palette received an unknown pointer state"),
         },
-        ControlRole::Checkbox | ControlRole::TextInput | ControlRole::SliderTrack | ControlRole::ResizeGrip => match state {
+        ControlRole::CHECKBOX | ControlRole::TEXT_INPUT | ControlRole::SLIDER_TRACK | ControlRole::RESIZE_GRIP => match state {
             ControlState::Disabled => framed(palette.disabled_background),
-            ControlState::Enabled(PointerState::Normal) => framed(palette.input),
-            ControlState::Enabled(PointerState::Hovered | PointerState::Pressed) => framed(palette.input_hovered),
-            ControlState::Focused(PointerState::Normal | PointerState::Hovered) => framed(palette.control_focus),
-            ControlState::Focused(PointerState::Pressed) => framed(palette.input_hovered),
+            ControlState::Enabled(PointerState::NORMAL) => framed(palette.input),
+            ControlState::Enabled(PointerState::HOVERED | PointerState::PRESSED) => framed(palette.input_hovered),
+            ControlState::Focused(PointerState::NORMAL | PointerState::HOVERED) => framed(palette.control_focus),
+            ControlState::Focused(PointerState::PRESSED) => framed(palette.input_hovered),
+            // The test compiler is called only with `ControlState::ALL`.
+            _ => unreachable!("flat test palette received an unknown pointer state"),
         },
-        ControlRole::Item => match state {
-            ControlState::Disabled | ControlState::Enabled(PointerState::Normal) => NinePatch::solid(transparent),
-            ControlState::Enabled(PointerState::Hovered | PointerState::Pressed)
-            | ControlState::Focused(PointerState::Normal | PointerState::Hovered | PointerState::Pressed) => NinePatch::solid(palette.selection_background),
+        ControlRole::ITEM => match state {
+            ControlState::Disabled | ControlState::Enabled(PointerState::NORMAL) => NinePatch::solid(transparent),
+            ControlState::Enabled(PointerState::HOVERED | PointerState::PRESSED)
+            | ControlState::Focused(PointerState::NORMAL | PointerState::HOVERED | PointerState::PRESSED) => NinePatch::solid(palette.selection_background),
+            // The test compiler is called only with `ControlState::ALL`.
+            _ => unreachable!("flat test palette received an unknown pointer state"),
         },
-        ControlRole::ScrollbarTrack => match state {
+        ControlRole::SCROLLBAR_TRACK => match state {
             ControlState::Disabled => NinePatch::solid(palette.disabled_background),
             ControlState::Enabled(_) | ControlState::Focused(_) => NinePatch::solid(palette.scrollbar_track),
         },
-        ControlRole::ScrollbarThumb => match state {
+        ControlRole::SCROLLBAR_THUMB => match state {
             ControlState::Disabled => NinePatch::solid(palette.disabled_background),
             ControlState::Enabled(_) | ControlState::Focused(_) => NinePatch::solid(palette.scrollbar_thumb),
         },
+        // Test compilation enumerates only the known IDL values through `ALL`.
+        _ => unreachable!("flat test palette received an unknown control role"),
     };
     // Content-color selection is separate from patch grouping because item selection and caption
     // symbols have explicit contrast policies that ordinary controls do not share.
     let content_color = match role {
-        ControlRole::Item => match state {
+        ControlRole::ITEM => match state {
             ControlState::Disabled => palette.disabled_foreground,
-            ControlState::Enabled(PointerState::Normal) => palette.text,
-            ControlState::Enabled(PointerState::Hovered | PointerState::Pressed)
-            | ControlState::Focused(PointerState::Normal | PointerState::Hovered | PointerState::Pressed) => palette.selection_foreground,
+            ControlState::Enabled(PointerState::NORMAL) => palette.text,
+            ControlState::Enabled(PointerState::HOVERED | PointerState::PRESSED)
+            | ControlState::Focused(PointerState::NORMAL | PointerState::HOVERED | PointerState::PRESSED) => palette.selection_foreground,
+            // The test compiler is called only with `ControlState::ALL`.
+            _ => unreachable!("flat test palette received an unknown pointer state"),
         },
-        ControlRole::CloseButton | ControlRole::MinimizeButton | ControlRole::MaximizeButton | ControlRole::RestoreButton => match state {
+        ControlRole::CLOSE_BUTTON | ControlRole::MINIMIZE_BUTTON | ControlRole::MAXIMIZE_BUTTON | ControlRole::RESTORE_BUTTON => match state {
             ControlState::Disabled => palette.disabled_title_foreground,
             ControlState::Enabled(_) | ControlState::Focused(_) => palette.title_foreground,
         },
@@ -230,28 +244,30 @@ fn flat_control_visual(frame_insets: SliceInsets, palette: &FlatPalette, role: C
 fn flat_menu_visual(frame_insets: SliceInsets, palette: &FlatPalette, role: MenuRole, state: MenuState) -> Visual {
     // Open is a menu state rather than a duplicate title role. Popup owners and selected submenu
     // entries consequently share the same explicit selection precedence.
-    let selected = matches!(state, MenuState::Hovered | MenuState::Pressed | MenuState::Focused | MenuState::Open);
+    let selected = matches!(state, MenuState::HOVERED | MenuState::PRESSED | MenuState::FOCUSED | MenuState::OPEN);
     let transparent = Color { r: 0, g: 0, b: 0, a: 0 };
     let patch = match role {
-        MenuRole::Bar => match state {
-            MenuState::Disabled => NinePatch::solid(palette.disabled_background),
+        MenuRole::BAR => match state {
+            MenuState::DISABLED => NinePatch::solid(palette.disabled_background),
             _ => NinePatch::solid(palette.menu_background),
         },
-        MenuRole::Title | MenuRole::Item => {
+        MenuRole::TITLE | MenuRole::ITEM => {
             if selected {
                 NinePatch::solid(palette.selection_background)
             } else {
                 NinePatch::solid(transparent)
             }
         }
-        MenuRole::Popup => match state {
-            MenuState::Disabled => NinePatch::framed(frame_insets, palette.border, Some(palette.disabled_background)),
+        MenuRole::POPUP => match state {
+            MenuState::DISABLED => NinePatch::framed(frame_insets, palette.border, Some(palette.disabled_background)),
             _ => NinePatch::framed(frame_insets, palette.border, Some(palette.menu_background)),
         },
+        // Test compilation enumerates only the known IDL values through `ALL`.
+        _ => unreachable!("flat test palette received an unknown menu role"),
     };
     let content_color = match state {
-        MenuState::Disabled => palette.disabled_foreground,
-        _ if selected && matches!(role, MenuRole::Title | MenuRole::Item) => palette.selection_foreground,
+        MenuState::DISABLED => palette.disabled_foreground,
+        _ if selected && matches!(role, MenuRole::TITLE | MenuRole::ITEM) => palette.selection_foreground,
         _ => palette.menu_foreground,
     };
     Visual::new(patch, content_color)
@@ -263,21 +279,29 @@ fn flat_chrome_visual(frame_insets: SliceInsets, palette: &FlatPalette, role: Ch
     // Window activation belongs solely to chrome. Control descendants continue resolving their
     // own enabled, focus, and pointer states independently of the active window.
     let patch = match role {
-        ChromeRole::WindowFrame | ChromeRole::DialogFrame => match state {
-            ChromeState::Base | ChromeState::Disabled => NinePatch::framed(frame_insets, palette.border, None),
-            ChromeState::Active => NinePatch::framed(frame_insets.at_least(1), palette.window_active, None),
+        ChromeRole::WINDOW_FRAME | ChromeRole::DIALOG_FRAME => match state {
+            ChromeState::BASE | ChromeState::DISABLED => NinePatch::framed(frame_insets, palette.border, None),
+            ChromeState::ACTIVE => NinePatch::framed(frame_insets.at_least(1), palette.window_active, None),
+            // Test compilation enumerates only the known IDL values through `ALL`.
+            _ => unreachable!("flat test palette received an unknown chrome state"),
         },
-        ChromeRole::Title => match state {
-            ChromeState::Base => NinePatch::solid(palette.title_background),
-            ChromeState::Active => NinePatch::solid(palette.window_active),
-            ChromeState::Disabled => NinePatch::solid(palette.title_background),
+        ChromeRole::TITLE => match state {
+            ChromeState::BASE => NinePatch::solid(palette.title_background),
+            ChromeState::ACTIVE => NinePatch::solid(palette.window_active),
+            ChromeState::DISABLED => NinePatch::solid(palette.title_background),
+            // Test compilation enumerates only the known IDL values through `ALL`.
+            _ => unreachable!("flat test palette received an unknown chrome state"),
         },
+        // Test compilation enumerates only the known IDL values through `ALL`.
+        _ => unreachable!("flat test palette received an unknown chrome role"),
     };
     let content_color = match (role, state) {
-        (ChromeRole::Title, ChromeState::Disabled) => palette.disabled_title_foreground,
-        (ChromeRole::Title, ChromeState::Base | ChromeState::Active) => palette.title_foreground,
-        (_, ChromeState::Disabled) => palette.disabled_foreground,
-        (_, ChromeState::Base | ChromeState::Active) => palette.text,
+        (ChromeRole::TITLE, ChromeState::DISABLED) => palette.disabled_title_foreground,
+        (ChromeRole::TITLE, ChromeState::BASE | ChromeState::ACTIVE) => palette.title_foreground,
+        (_, ChromeState::DISABLED) => palette.disabled_foreground,
+        (_, ChromeState::BASE | ChromeState::ACTIVE) => palette.text,
+        // Test compilation enumerates only the known IDL values through `ALL`.
+        _ => unreachable!("flat test palette received an unknown chrome role or state"),
     };
     Visual::new(patch, content_color)
 }
@@ -299,11 +323,11 @@ mod tests {
         let replacement = Visual::new(NinePatch::solid(color(7, 8, 9, 255)), color(10, 11, 12, 255));
         let original = AppearanceCatalog::from_flat_palette(SliceInsets::uniform(1), &FlatPalette::default());
         let mut changed = original.clone();
-        let state = ControlState::Focused(PointerState::Pressed);
-        changed.set_control(ControlRole::Button, state, replacement);
+        let state = ControlState::Focused(PointerState::PRESSED);
+        changed.set_control(ControlRole::BUTTON, state, replacement);
 
-        assert_ne!(original.control(ControlRole::Button, state).content_color.r, 10);
-        assert_eq!(changed.control(ControlRole::Button, state).content_color.r, 10);
+        assert_ne!(original.control(ControlRole::BUTTON, state).content_color.r, 10);
+        assert_eq!(changed.control(ControlRole::BUTTON, state).content_color.r, 10);
     }
 
     /// Verifies root backgrounds are concrete surface values rather than chrome side effects.
@@ -318,8 +342,8 @@ mod tests {
 
         // Window and modal-dialog roots intentionally share this semantic surface. Their outer
         // decorations remain independently selectable through the two ChromeRole frame values.
-        for (state, expected) in [(SurfaceState::Normal, (11, 23, 37, 255)), (SurfaceState::Disabled, (47, 61, 79, 255))] {
-            let patch = visuals.surface(SurfaceRole::Window, state).patch;
+        for (state, expected) in [(SurfaceState::NORMAL, (11, 23, 37, 255)), (SurfaceState::DISABLED, (47, 61, 79, 255))] {
+            let patch = visuals.surface(SurfaceRole::WINDOW, state).patch;
             assert!(matches!(
                 patch.content,
                 crate::NinePatchContent::Flat { cells }
@@ -330,7 +354,7 @@ mod tests {
         // Flat chrome fallbacks contain border cells only. The runtime applies the same rule to
         // authored image patches by omitting their center during the decorative overlay pass.
         for state in ChromeState::ALL {
-            let patch = visuals.chrome(ChromeRole::WindowFrame, state).patch;
+            let patch = visuals.chrome(ChromeRole::WINDOW_FRAME, state).patch;
             assert!(matches!(
                 patch.content,
                 crate::NinePatchContent::Flat { cells } if matches!(cells.center, crate::NinePatchCell::Empty)
@@ -351,9 +375,9 @@ mod tests {
         // Compile once through the production fallback constructor so this assertion covers the
         // concrete family/state mapping responsible for focused tree and list rows.
         let visuals = AppearanceCatalog::from_flat_palette(SliceInsets::uniform(1), &palette);
-        let state = ControlState::Focused(PointerState::Normal);
-        let control = visuals.control(ControlRole::Button, state);
-        let item = visuals.control(ControlRole::Item, state);
+        let state = ControlState::Focused(PointerState::NORMAL);
+        let control = visuals.control(ControlRole::BUTTON, state);
+        let item = visuals.control(ControlRole::ITEM, state);
 
         assert!(matches!(
             control.patch.content,

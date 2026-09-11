@@ -700,7 +700,7 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
     assert_eq!(area.cursor().unwrap(), document.len() as u64);
     assert_eq!(scroll.info().unwrap().requested.y, scroll.info().unwrap().maximum.y);
     area.set_wrapping(TextWrapping::WORD).unwrap();
-    area.set_font_role(TextFontRole::MONO).unwrap();
+    area.set_font_role(FontRole::MONO).unwrap();
     runtime.update(SIZE).unwrap();
     assert_eq!(editor.wrapping().unwrap(), TextWrapping::WORD);
     assert_eq!(area.set_wrapping(TextWrapping::from_raw(255)), Err(NC_E_INVALID_ARG));

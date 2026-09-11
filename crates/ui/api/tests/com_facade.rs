@@ -38,7 +38,7 @@ mod tests {
         }
 
         /// Font editing is outside this facade fixture's observable state.
-        fn set_font_role(&mut self, _role: TextFontRole) -> Result<(), NcStatus> {
+        fn set_font_role(&mut self, _role: FontRole) -> Result<(), NcStatus> {
             Ok(())
         }
 

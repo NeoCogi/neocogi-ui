@@ -60,7 +60,7 @@ impl ComboParameters {
     /// Creates combo parameters with default widget options.
     pub const fn new() -> Self {
         Self {
-            font: FontRef::Role(FontRole::Body),
+            font: FontRef::Role(FontRole::BODY),
             opt: WidgetOption::FRAME,
         }
     }
@@ -272,7 +272,7 @@ impl Combo {
         } else {
             text_size(style, atlas, &self.font, self.label.as_str()).width
         };
-        let indicator = atlas.get_icon_size(style.resolve_icon_role(atlas, crate::IconRole::ExpandDown));
+        let indicator = atlas.get_icon_size(style.resolve_icon_role(atlas, crate::IconRole::EXPAND_DOWN));
         let width = padding.saturating_mul(3).saturating_add(text_w.max(0)).saturating_add(indicator.width.max(0));
         let height = content_height(style, atlas, &self.font, indicator.height);
         Dimensioni::new(width, height)
@@ -309,7 +309,7 @@ impl Combo {
     /// Paints the combo header from already-committed retained state.
     fn paint_widget(&self, ctx: &mut WidgetPaintCtx<'_>) {
         let header = ctx.local_rect();
-        let indicator_id = ctx.skin().resolve_icon_role(ctx.atlas(), crate::IconRole::ExpandDown);
+        let indicator_id = ctx.skin().resolve_icon_role(ctx.atlas(), crate::IconRole::EXPAND_DOWN);
         let indicator_size = ctx.atlas().get_icon_size(indicator_id);
         let indicator_x = header.x + header.width - indicator_size.width;
         let indicator_y = header.y + ((header.height - indicator_size.height) / 2).max(0);
@@ -319,10 +319,10 @@ impl Combo {
         let reserved_width = indicator_size.width;
         text_rect.width = (text_rect.width - reserved_width).max(0);
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
-        ctx.draw_control_text_with_font(font, self.label.as_str(), text_rect, ControlRole::Combo, ctx.options());
+        ctx.draw_control_text_with_font(font, self.label.as_str(), text_rect, ControlRole::COMBO, ctx.options());
 
-        let indicator_content = ctx.draw_control(ControlRole::Button, indicator);
-        let icon_color = ctx.control_content_color(ControlRole::Combo);
+        let indicator_content = ctx.draw_control(ControlRole::BUTTON, indicator);
+        let icon_color = ctx.control_content_color(ControlRole::COMBO);
         if let Some(indicator_content) = indicator_content {
             ctx.draw_icon(indicator_id, indicator_content, icon_color);
         }
@@ -349,7 +349,7 @@ impl Widget for Combo {
 
     fn frame_appearance_role(&self) -> FrameRole {
         // Combo headers use a distinct role so themes can separate them from command buttons.
-        FrameRole::Control(ControlRole::Combo)
+        FrameRole::Control(ControlRole::COMBO)
     }
 
     fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
@@ -424,7 +424,7 @@ impl Combo {
 impl Eq for ComboSubmitted {}
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_contracts::{ComboAbi, GeometryChange, IComboChangedSinkAbi, IComboPopupSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi, TextFontRole};
+use neocogi_ui_contracts::{ComboAbi, GeometryChange, IComboChangedSinkAbi, IComboPopupSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi, FontRole};
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG};
 
 direct_widget_phase_impl!(Combo);
@@ -486,7 +486,7 @@ impl neocogi_ui_contracts::Combo for Combo {
     }
 
     /// Validates a semantic font role before changing the Combo's measurement input.
-    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+    fn set_font_role(&mut self, role: FontRole) -> Result<(), NcStatus> {
         set_direct_font_role(self, role)
     }
 

@@ -843,7 +843,7 @@ fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validati
     checkbox.set_label("A longer checkbox").unwrap();
     assert_eq!(common.take_change().unwrap(), GeometryChange::CHANGED);
     assert_eq!(checkbox.label().unwrap(), "A longer checkbox");
-    checkbox.set_font_role(TextFontRole::BODY).unwrap();
+    checkbox.set_font_role(FontRole::BODY).unwrap();
     assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
     assert_eq!(checkbox.set_named_font("missing"), Err(neocogi_com::NC_E_NOT_FOUND));
     assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);

@@ -60,7 +60,7 @@ impl ListItemParameters {
         Self {
             label: label.into(),
             icon: None,
-            font: FontRef::Role(FontRole::Body),
+            font: FontRef::Role(FontRole::BODY),
             opt: WidgetOption::NONE,
         }
     }
@@ -71,7 +71,7 @@ impl ListItemParameters {
         Self {
             label: label.into(),
             icon: None,
-            font: FontRef::Role(FontRole::Body),
+            font: FontRef::Role(FontRole::BODY),
             opt,
         }
     }
@@ -82,7 +82,7 @@ impl ListItemParameters {
         Self {
             label: label.into(),
             icon: Some(icon),
-            font: FontRef::Role(FontRole::Body),
+            font: FontRef::Role(FontRole::BODY),
             opt: WidgetOption::NONE,
         }
     }
@@ -181,7 +181,7 @@ impl ListItem {
         let bounds = ctx.local_rect();
 
         // The default normal role is transparent; image themes may still provide ordinary row art.
-        ctx.draw_control_center(ControlRole::Item, bounds);
+        ctx.draw_control_center(ControlRole::ITEM, bounds);
 
         let mut text_rect = bounds;
         if let Some(icon) = &self.icon {
@@ -200,13 +200,13 @@ impl ListItem {
             let consumed = icon_width.saturating_add(padding.saturating_mul(2));
             text_rect.x = text_rect.x.saturating_add(consumed);
             text_rect.width = text_rect.width.saturating_sub(consumed).max(0);
-            let color = ctx.control_content_color(ControlRole::Item);
+            let color = ctx.control_content_color(ControlRole::ITEM);
             ctx.draw_icon(icon, icon_rect, color);
         }
 
         if !self.label.is_empty() {
             let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
-            ctx.draw_control_text_with_font(font, &self.label, text_rect, ControlRole::Item, ctx.options());
+            ctx.draw_control_text_with_font(font, &self.label, text_rect, ControlRole::ITEM, ctx.options());
         }
     }
 }
@@ -343,7 +343,7 @@ mod tests {
 use crate::ui_node::widget_object::{
     HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_icon_role, set_direct_named_font, set_direct_named_icon,
 };
-use neocogi_ui_contracts::{ContentIcon, GeometryChange, IActivationSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi, ListItemAbi, TextFontRole};
+use neocogi_ui_contracts::{ContentIcon, GeometryChange, IActivationSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi, ListItemAbi, FontRole};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(ListItem);
@@ -389,7 +389,7 @@ impl neocogi_ui_contracts::ListItem for ListItem {
         Ok(())
     }
     /// Validates a semantic role before changing the row label's font.
-    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+    fn set_font_role(&mut self, role: FontRole) -> Result<(), NcStatus> {
         set_direct_font_role(self, role)
     }
     /// Resolves one exact named font before changing the row label's font.

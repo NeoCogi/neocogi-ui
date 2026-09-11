@@ -58,7 +58,7 @@ impl ColorSwatchParameters {
         Self {
             fill,
             label: String::new(),
-            font: FontRef::Role(FontRole::Body),
+            font: FontRef::Role(FontRole::BODY),
             opt: WidgetOption::NO_INTERACT | WidgetOption::ALIGN_CENTER | WidgetOption::FRAME,
         }
     }
@@ -149,7 +149,7 @@ impl ColorSwatch {
         ctx.draw_rect(rect, self.fill);
         if !self.label.is_empty() {
             let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
-            ctx.draw_control_text_with_font(font, self.label.as_str(), rect, ControlRole::Button, ctx.options());
+            ctx.draw_control_text_with_font(font, self.label.as_str(), rect, ControlRole::BUTTON, ctx.options());
         }
     }
 }
@@ -200,7 +200,7 @@ impl crate::ui_node::widget_object::FontState for ColorSwatch {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_contracts::{Color, ColorSwatchAbi, GeometryChange, IWidgetHostAbi, TextFontRole};
+use neocogi_ui_contracts::{Color, ColorSwatchAbi, GeometryChange, IWidgetHostAbi, FontRole};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(ColorSwatch);
@@ -260,7 +260,7 @@ impl neocogi_ui_contracts::ColorSwatch for ColorSwatch {
         Ok(())
     }
     /// Validates a semantic role before changing the swatch label's font.
-    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+    fn set_font_role(&mut self, role: FontRole) -> Result<(), NcStatus> {
         set_direct_font_role(self, role)
     }
     /// Resolves one exact named font before changing the swatch label's font.

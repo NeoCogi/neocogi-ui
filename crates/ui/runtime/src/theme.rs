@@ -39,16 +39,14 @@ mod resources;
 mod skin;
 mod typography;
 
-pub use appearance::Visual;
+pub use appearance::{FrameRole, Visual};
 pub use bundle::SkinBundle;
 pub(crate) use bundle::SkinInstallError;
 pub use crate::render::{Color, color};
 pub use icons::{IconRef, IconRole};
 pub use palette::FlatPalette;
 pub use resources::ResourceCatalog;
-pub use neocogi_ui_contracts::appearance::{
-    ChromeRole, ChromeState, ControlRole, ControlState, FrameRole, MenuRole, MenuState, PointerState, SurfaceRole, SurfaceState,
-};
+pub use neocogi_ui_contracts::appearance::{ChromeRole, ChromeState, ControlRole, ControlState, MenuRole, MenuState, PointerState, SurfaceRole, SurfaceState};
 pub use skin::{CaptionButtonSide, CaptionButtonsSkin, Skin, SkinMetrics, TitleBackdropSkin, WindowChromeSkin, WindowTitleAlignment};
 pub(crate) use skin::SkinRevision;
 pub use typography::{FontRef, FontRole};

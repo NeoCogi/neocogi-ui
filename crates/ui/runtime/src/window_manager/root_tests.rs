@@ -214,7 +214,7 @@ impl crate::LeafWidget for CompleteSkinMeasureProbe {
         // Foreground color is paint-only for built-ins. Observing it here proves the complete skin
         // revision covers every value visible to a custom widget's public measurement contract.
         self.measures.set(self.measures.get() + 1);
-        Dimensioni::new(i32::from(style.menu(MenuRole::Popup, MenuState::Normal).content_color.r).max(1), 10)
+        Dimensioni::new(i32::from(style.menu(MenuRole::POPUP, MenuState::NORMAL).content_color.r).max(1), 10)
     }
 }
 
@@ -887,19 +887,19 @@ fn active_window_and_only_its_remembered_widget_use_role_state_visuals() {
     let mut style = test_skin(&atlas);
     let widget_focus = color(7, 17, 29, 255);
     let window_activation = color(31, 47, 61, 255);
-    let active_frame = NinePatch::framed(style.chrome(ChromeRole::WindowFrame, ChromeState::Base).patch.insets, window_activation, None);
-    replace_chrome_patch(&mut style, ChromeRole::WindowFrame, ChromeState::Active, active_frame);
-    replace_chrome_patch(&mut style, ChromeRole::Title, ChromeState::Active, NinePatch::solid(window_activation));
+    let active_frame = NinePatch::framed(style.chrome(ChromeRole::WINDOW_FRAME, ChromeState::BASE).patch.insets, window_activation, None);
+    replace_chrome_patch(&mut style, ChromeRole::WINDOW_FRAME, ChromeState::ACTIVE, active_frame);
+    replace_chrome_patch(&mut style, ChromeRole::TITLE, ChromeState::ACTIVE, NinePatch::solid(window_activation));
     replace_control_patch(
         &mut style,
-        ControlRole::Button,
-        ControlState::Focused(PointerState::Normal),
+        ControlRole::BUTTON,
+        ControlState::Focused(PointerState::NORMAL),
         NinePatch::solid(widget_focus),
     );
     replace_control_patch(
         &mut style,
-        ControlRole::Button,
-        ControlState::Focused(PointerState::Hovered),
+        ControlRole::BUTTON,
+        ControlState::Focused(PointerState::HOVERED),
         NinePatch::solid(widget_focus),
     );
     let (backend, log) = recording_backend(atlas);
@@ -959,7 +959,7 @@ fn active_window_and_only_its_remembered_widget_use_role_state_visuals() {
 #[test]
 fn modal_dialog_uses_its_own_active_frame_role() {
     // Use unique border colors so the overlay pass proves the selected decorative role. Window
-    // and dialog bodies now share SurfaceRole::Window and cannot conceal an incorrect frame role.
+    // and dialog bodies now share SurfaceRole::WINDOW and cannot conceal an incorrect frame role.
     let atlas = test_atlas();
     let window_frame_color = color(11, 37, 71, 255);
     let dialog_frame_color = color(83, 109, 149, 255);
@@ -967,14 +967,14 @@ fn modal_dialog_uses_its_own_active_frame_role() {
     let frame_insets = crate::SliceInsets::uniform(2);
     replace_chrome_patch(
         &mut style,
-        ChromeRole::WindowFrame,
-        ChromeState::Active,
+        ChromeRole::WINDOW_FRAME,
+        ChromeState::ACTIVE,
         NinePatch::framed(frame_insets, window_frame_color, None),
     );
     replace_chrome_patch(
         &mut style,
-        ChromeRole::DialogFrame,
-        ChromeState::Active,
+        ChromeRole::DIALOG_FRAME,
+        ChromeState::ACTIVE,
         NinePatch::framed(frame_insets, dialog_frame_color, None),
     );
 
@@ -1022,22 +1022,22 @@ fn deactivated_window_keeps_enabled_child_widget_appearance() {
     let enabled_text_color = color(199, 211, 223, 255);
     let disabled_text_color = color(227, 233, 239, 255);
     let mut style = test_skin(&atlas);
-    replace_control_content_colors(&mut style, ControlRole::Button, |state| {
+    replace_control_content_colors(&mut style, ControlRole::BUTTON, |state| {
         if state == ControlState::Disabled {
             disabled_text_color
         } else {
             enabled_text_color
         }
     });
-    replace_chrome_patches(&mut style, ChromeRole::WindowFrame, |state| {
-        let border = if state == ChromeState::Active {
+    replace_chrome_patches(&mut style, ChromeRole::WINDOW_FRAME, |state| {
+        let border = if state == ChromeState::ACTIVE {
             active_window_color
         } else {
             base_window_color
         };
         NinePatch::framed(crate::SliceInsets::uniform(2), border, None)
     });
-    replace_control_patches(&mut style, ControlRole::Button, |state| {
+    replace_control_patches(&mut style, ControlRole::BUTTON, |state| {
         NinePatch::solid(if state == ControlState::Disabled {
             disabled_control_color
         } else {
@@ -1111,37 +1111,37 @@ fn disabled_window_propagates_disabled_presentation_and_rejects_input() {
 
     replace_surface_patch(
         &mut style,
-        SurfaceRole::Window,
-        SurfaceState::Disabled,
+        SurfaceRole::WINDOW,
+        SurfaceState::DISABLED,
         NinePatch::solid(disabled_surface_color),
     );
     replace_chrome_patch(
         &mut style,
-        ChromeRole::WindowFrame,
-        ChromeState::Disabled,
+        ChromeRole::WINDOW_FRAME,
+        ChromeState::DISABLED,
         NinePatch::framed(crate::SliceInsets::uniform(2), disabled_frame_color, None),
     );
     replace_chrome_patch(
         &mut style,
-        ChromeRole::WindowFrame,
-        ChromeState::Active,
+        ChromeRole::WINDOW_FRAME,
+        ChromeState::ACTIVE,
         NinePatch::framed(crate::SliceInsets::uniform(2), forbidden_active_frame_color, None),
     );
     replace_control_patch(
         &mut style,
-        ControlRole::CloseButton,
+        ControlRole::CLOSE_BUTTON,
         ControlState::Disabled,
         NinePatch::solid(disabled_caption_color),
     );
-    replace_menu_patch(&mut style, MenuRole::Bar, MenuState::Disabled, NinePatch::solid(disabled_menu_color));
-    replace_menu_content_color(&mut style, MenuRole::Title, MenuState::Disabled, disabled_menu_text_color);
+    replace_menu_patch(&mut style, MenuRole::BAR, MenuState::DISABLED, NinePatch::solid(disabled_menu_color));
+    replace_menu_content_color(&mut style, MenuRole::TITLE, MenuState::DISABLED, disabled_menu_text_color);
     replace_control_patch(
         &mut style,
-        ControlRole::Checkbox,
+        ControlRole::CHECKBOX,
         ControlState::Disabled,
         NinePatch::solid(disabled_control_color),
     );
-    replace_control_content_color(&mut style, ControlRole::Checkbox, ControlState::Disabled, disabled_control_text_color);
+    replace_control_content_color(&mut style, ControlRole::CHECKBOX, ControlState::Disabled, disabled_control_text_color);
 
     let (checkbox, checkbox_node) = Checkbox::create(CheckboxParameters::new("disabled child", false));
     let checkbox_id = checkbox_node.id();
@@ -1291,8 +1291,8 @@ fn window_and_container_backgrounds_use_noninteractive_state_families() {
     let border = color(17, 19, 23, 255);
     let window_normal = color(31, 37, 41, 255);
     let panel_normal = color(59, 61, 67, 255);
-    replace_surface_patches(&mut style, SurfaceRole::Window, |_| NinePatch::solid(window_normal));
-    replace_surface_patches(&mut style, SurfaceRole::Panel, |_| NinePatch::framed(insets, border, Some(panel_normal)));
+    replace_surface_patches(&mut style, SurfaceRole::WINDOW, |_| NinePatch::solid(window_normal));
+    replace_surface_patches(&mut style, SurfaceRole::PANEL, |_| NinePatch::framed(insets, border, Some(panel_normal)));
 
     let (_, content) = ScrollArea::create(ScrollAreaParameters::new(
         ScrollAreaOption::FRAME | ScrollAreaOption::ENABLE_SCROLL,
@@ -1336,8 +1336,8 @@ fn window_surface_fills_below_decorative_frame_without_painting_its_center() {
     let frame_color = color(61, 79, 101, 255);
     let forbidden_frame_center = color(127, 149, 173, 255);
     let mut style = test_skin(&atlas);
-    replace_surface_patches(&mut style, SurfaceRole::Window, |_| NinePatch::solid(surface_color));
-    replace_chrome_patches(&mut style, ChromeRole::WindowFrame, |_| {
+    replace_surface_patches(&mut style, SurfaceRole::WINDOW, |_| NinePatch::solid(surface_color));
+    replace_chrome_patches(&mut style, ChromeRole::WINDOW_FRAME, |_| {
         // A flat center reproduces the semantic conflict exposed by an image-backed nine-patch:
         // it is valid patch data but must be discarded when the role is used as outer decoration.
         NinePatch::framed(crate::SliceInsets::uniform(3), frame_color, Some(forbidden_frame_center))
@@ -1376,8 +1376,8 @@ fn tab_focused_disclosure_uses_only_its_focused_role_state_visual() {
     let focused_fill = color(67, 83, 101, 255);
     replace_control_patch(
         &mut style,
-        ControlRole::Item,
-        ControlState::Focused(PointerState::Normal),
+        ControlRole::ITEM,
+        ControlState::Focused(PointerState::NORMAL),
         NinePatch::solid(focused_fill),
     );
     let (backend, log) = recording_backend(atlas);
@@ -1456,9 +1456,9 @@ fn global_skin_revision_invalidates_measurements_lazily_in_hidden_surfaces() {
     // complete Skin revision; revealing later must not revive the earlier generation's entry.
     ctx.ui().set_window_visible(&window, false).unwrap();
     let mut replacement = ctx.skin().clone();
-    let mut content_color = replacement.menu(MenuRole::Popup, MenuState::Normal).content_color;
+    let mut content_color = replacement.menu(MenuRole::POPUP, MenuState::NORMAL).content_color;
     content_color.r = content_color.r.wrapping_add(1);
-    replace_menu_content_color(&mut replacement, MenuRole::Popup, MenuState::Normal, content_color);
+    replace_menu_content_color(&mut replacement, MenuRole::POPUP, MenuState::NORMAL, content_color);
     ctx.set_skin(replacement);
     ctx.update_ui(dimensions);
     assert_eq!(measures.get(), warmed, "hidden widget trees must not be traversed during the style commit");
@@ -2216,11 +2216,11 @@ fn combo_popup_choice_hover_resolves_the_item_hovered_focused_appearance() {
     let hovered_color = color(71, 83, 97, 255);
     let focused_color = color(109, 127, 149, 255);
     let hovered_focused_color = color(173, 191, 211, 255);
-    replace_control_patches(&mut style, ControlRole::Item, |state| {
+    replace_control_patches(&mut style, ControlRole::ITEM, |state| {
         NinePatch::solid(match state {
-            ControlState::Enabled(PointerState::Hovered) => hovered_color,
-            ControlState::Focused(PointerState::Normal) => focused_color,
-            ControlState::Focused(PointerState::Hovered) => hovered_focused_color,
+            ControlState::Enabled(PointerState::HOVERED) => hovered_color,
+            ControlState::Focused(PointerState::NORMAL) => focused_color,
+            ControlState::Focused(PointerState::HOVERED) => hovered_focused_color,
             _ => normal_color,
         })
     });
@@ -3488,7 +3488,7 @@ fn right_bottom_and_corner_resize_only_their_declared_axes_with_thick_borders() 
     let atlas = test_atlas();
     let mut style = test_skin(&atlas);
     let insets = crate::SliceInsets::new(3, 4, 5, 6);
-    replace_chrome_patches(&mut style, ChromeRole::WindowFrame, |_| {
+    replace_chrome_patches(&mut style, ChromeRole::WINDOW_FRAME, |_| {
         NinePatch::framed(insets, color(10, 20, 30, 255), Some(color(40, 50, 60, 255)))
     });
     // Structural resize thickness is independent from the frame artwork's fixed corner span.
@@ -3774,7 +3774,7 @@ fn declarative_menu_popups_follow_heading_and_submenu_edges_when_the_window_move
     // Both popup levels use MenuPopup as their sole shell and place compact rows directly inside
     // it. Root padding and WindowFrame must not create a second inset at either menu depth.
     let popup_rows = ctx.debug_active_menu_row_rects();
-    let border = ctx.skin().menu(MenuRole::Popup, MenuState::Normal).patch.insets.left;
+    let border = ctx.skin().menu(MenuRole::POPUP, MenuState::NORMAL).patch.insets.left;
     for (popup, rows) in open_popups.iter().zip(&popup_rows) {
         let first = rows.first().expect("each declared test menu must contain a row");
         let last = rows.last().unwrap();
@@ -4008,10 +4008,10 @@ fn outside_widget_press_clears_closed_menu_heading_hover() {
     let title_focused = color(131, 149, 167, 255);
     let title_open = color(181, 197, 211, 255);
     let mut style = test_skin(&atlas);
-    replace_menu_patch(&mut style, MenuRole::Title, MenuState::Normal, NinePatch::solid(title_normal));
-    replace_menu_patch(&mut style, MenuRole::Title, MenuState::Hovered, NinePatch::solid(title_hovered));
-    replace_menu_patch(&mut style, MenuRole::Title, MenuState::Focused, NinePatch::solid(title_focused));
-    replace_menu_patch(&mut style, MenuRole::Title, MenuState::Open, NinePatch::solid(title_open));
+    replace_menu_patch(&mut style, MenuRole::TITLE, MenuState::NORMAL, NinePatch::solid(title_normal));
+    replace_menu_patch(&mut style, MenuRole::TITLE, MenuState::HOVERED, NinePatch::solid(title_hovered));
+    replace_menu_patch(&mut style, MenuRole::TITLE, MenuState::FOCUSED, NinePatch::solid(title_focused));
+    replace_menu_patch(&mut style, MenuRole::TITLE, MenuState::OPEN, NinePatch::solid(title_open));
 
     let (_, action) = MenuItem::create(MenuItemParameters::new("Action"));
     let (_, button) = Button::create(ButtonParameters::new("Outside target"));
@@ -4165,7 +4165,7 @@ fn standalone_popup_menu_reuses_compact_menu_input_layout_and_events() {
     let rows = ctx.debug_active_menu_row_rects();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].len(), 3);
-    let border = ctx.skin().menu(MenuRole::Popup, MenuState::Normal).patch.insets.left;
+    let border = ctx.skin().menu(MenuRole::POPUP, MenuState::NORMAL).patch.insets.left;
     assert_eq!(rows[0][0].x, outer.x + border);
     assert_eq!(rows[0][2].y + rows[0][2].height + border, outer.y + outer.height);
 
@@ -4734,7 +4734,7 @@ fn application_popup_uses_the_semantic_popup_frame_instead_of_window_border_chro
     let popup_fill = color(211, 213, 217, 255);
     style.metrics.window_border = crate::SliceInsets::uniform(7);
     style.metrics.window_content_insets = crate::SliceInsets::ZERO;
-    replace_menu_patches(&mut style, MenuRole::Popup, |_| NinePatch::framed(popup_insets, popup_border, Some(popup_fill)));
+    replace_menu_patches(&mut style, MenuRole::POPUP, |_| NinePatch::framed(popup_insets, popup_border, Some(popup_fill)));
     let content = desired_size_node(30, 20);
     let content_id = content.id();
     let (backend, log) = recording_backend(atlas);

@@ -49,19 +49,28 @@ where
     T::com_deserialize(SerdeDecoder::new(deserializer, DecodeLimits::THEME))
 }
 
-/// Decodes COM-typed keys while leaving asset-private document values to Serde.
+/// Decodes a closed document-key domain while leaving asset-private values to Serde.
 pub(super) fn deserialize_map<'de, D, K, V>(deserializer: D) -> Result<BTreeMap<K, V>, D::Error>
 where
     D: Deserializer<'de>,
-    K: ComDeserialize + Ord,
+    K: DocumentKey + Ord,
     V: SerdeDeserialize<'de>,
 {
-    // This bridge is intentionally mixed: role keys are public contract values,
-    // while values are private syntax records owned by this asset plugin.
+    // This bridge is intentionally mixed: IDL owns role values and order, this
+    // asset plugin owns their JSON spellings, and values remain private documents.
     deserializer.deserialize_map(MixedMapVisitor {
         limits: DecodeLimits::THEME,
         marker: PhantomData,
     })
+}
+
+/// Asset-document spelling for one closed IDL role used as a map key.
+pub(super) trait DocumentKey: Sized {
+    /// Accepted JSON names in the same order used by `from_index`.
+    const NAMES: &'static [&'static str];
+
+    /// Converts one checked name-table index into its concrete IDL role.
+    fn from_index(index: u32) -> Option<Self>;
 }
 
 /// Serde-backed implementation of the format-neutral COM decoder.
@@ -646,7 +655,7 @@ struct MixedMapVisitor<K, V> {
 
 impl<'de, K, V> Visitor<'de> for MixedMapVisitor<K, V>
 where
-    K: ComDeserialize + Ord,
+    K: DocumentKey + Ord,
     V: SerdeDeserialize<'de>,
 {
     type Value = BTreeMap<K, V>;
@@ -662,7 +671,7 @@ where
         // Values deliberately remain private Serde documents; no duplicate schema type is made.
         let mut values = BTreeMap::new();
         let mut decoded = 0usize;
-        while let Some(key) = input.next_key_seed(ComSeed { limits: self.limits, marker: PhantomData })? {
+        while let Some(key) = input.next_key_seed(DocumentKeySeed::<K> { marker: PhantomData })? {
             if decoded == self.limits.map_entries {
                 return Err(A::Error::custom("map exceeds the configured COM decoding limit"));
             }
@@ -673,6 +682,31 @@ where
             }
         }
         Ok(values)
+    }
+}
+
+/// Serde seed resolving one asset-owned name to a generated IDL role.
+struct DocumentKeySeed<K> {
+    /// Concrete role retained without allocating a lookup table.
+    marker: PhantomData<fn() -> K>,
+}
+
+impl<'de, K> DeserializeSeed<'de> for DocumentKeySeed<K>
+where
+    K: DocumentKey,
+{
+    type Value = K;
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let index = NameSeed {
+            expected: K::NAMES,
+            kind: NameKind::Variant,
+        }
+        .deserialize(deserializer)?;
+        K::from_index(index).ok_or_else(|| D::Error::custom("document key table returned an invalid index"))
     }
 }
 

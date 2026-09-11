@@ -39,7 +39,6 @@ use std::{
 use serde::Deserialize;
 
 use neocogi_ui_contracts::*;
-use neocogi_ui_contracts::appearance::*;
 use neocogi_ui_contracts::Insets as SliceInsets;
 use neocogi_ui::assets::AssetData;
 use crate::atlas::Builder;
@@ -236,6 +235,56 @@ struct AppearanceCatalogDocument {
     chrome: BTreeMap<ChromeRole, ChromeAppearanceDocument>,
 }
 
+/// Defines the JSON spelling owned by this asset format for one IDL role enum.
+macro_rules! document_role {
+    ($name:ident { $($index:literal => $source:literal => $value:expr),+ $(,)? }) => {
+        impl crate::serde_com::DocumentKey for $name {
+            const NAMES: &'static [&'static str] = &[$($source),+];
+
+            /// Converts the decoder's checked name index without accepting raw integers.
+            fn from_index(index: u32) -> Option<Self> {
+                match index {
+                    $($index => Some($value),)+
+                    _ => None,
+                }
+            }
+        }
+    };
+}
+
+document_role!(SurfaceRole {
+    0 => "window" => SurfaceRole::WINDOW,
+    1 => "generic_frame" => SurfaceRole::GENERIC_FRAME,
+    2 => "panel" => SurfaceRole::PANEL,
+});
+document_role!(ControlRole {
+    0 => "button" => ControlRole::BUTTON,
+    1 => "checkbox" => ControlRole::CHECKBOX,
+    2 => "text_input" => ControlRole::TEXT_INPUT,
+    3 => "item" => ControlRole::ITEM,
+    4 => "combo" => ControlRole::COMBO,
+    5 => "slider_track" => ControlRole::SLIDER_TRACK,
+    6 => "slider_thumb" => ControlRole::SLIDER_THUMB,
+    7 => "scrollbar_track" => ControlRole::SCROLLBAR_TRACK,
+    8 => "scrollbar_thumb" => ControlRole::SCROLLBAR_THUMB,
+    9 => "close_button" => ControlRole::CLOSE_BUTTON,
+    10 => "minimize_button" => ControlRole::MINIMIZE_BUTTON,
+    11 => "maximize_button" => ControlRole::MAXIMIZE_BUTTON,
+    12 => "restore_button" => ControlRole::RESTORE_BUTTON,
+    13 => "resize_grip" => ControlRole::RESIZE_GRIP,
+});
+document_role!(MenuRole {
+    0 => "bar" => MenuRole::BAR,
+    1 => "title" => MenuRole::TITLE,
+    2 => "popup" => MenuRole::POPUP,
+    3 => "item" => MenuRole::ITEM,
+});
+document_role!(ChromeRole {
+    0 => "window_frame" => ChromeRole::WINDOW_FRAME,
+    1 => "dialog_frame" => ChromeRole::DIALOG_FRAME,
+    2 => "title" => ChromeRole::TITLE,
+});
+
 impl AppearanceCatalogDocument {
     /// Resolves every authored image path relative to its declaring source document.
     fn resolve_paths(&mut self, directory: &Path) {
@@ -407,7 +456,7 @@ impl ThemeDefinition {
             let destination_insets = destination_insets(
                 &name,
                 document.insets,
-                data.tables.surfaces[role.index() * SurfaceState::COUNT + SurfaceState::Normal.index()].insets,
+                data.tables.surfaces[role.index() * SurfaceState::COUNT + SurfaceState::NORMAL.index()].insets,
             )?;
             for (state, authored) in document.states() {
                 let index = role.index() * SurfaceState::COUNT + state.index();
@@ -417,7 +466,7 @@ impl ThemeDefinition {
         }
         for (role, document) in &self.appearances.control {
             let name = format!("control.{role:?}");
-            let base_state = ControlState::Enabled(PointerState::Normal);
+            let base_state = ControlState::Enabled(PointerState::NORMAL);
             let destination_insets = destination_insets(
                 &name,
                 document.insets,
@@ -434,7 +483,7 @@ impl ThemeDefinition {
             let destination_insets = destination_insets(
                 &name,
                 document.insets,
-                data.tables.menus[role.index() * MenuState::COUNT + MenuState::Normal.index()].insets,
+                data.tables.menus[role.index() * MenuState::COUNT + MenuState::NORMAL.index()].insets,
             )?;
             for (state, authored) in document.states() {
                 let index = role.index() * MenuState::COUNT + state.index();
@@ -447,7 +496,7 @@ impl ThemeDefinition {
             let destination_insets = destination_insets(
                 &name,
                 document.insets,
-                data.tables.window_chrome[role.index() * ChromeState::COUNT + ChromeState::Base.index()].insets,
+                data.tables.window_chrome[role.index() * ChromeState::COUNT + ChromeState::BASE.index()].insets,
             )?;
             for (state, authored) in document.states() {
                 let index = role.index() * ChromeState::COUNT + state.index();
@@ -592,11 +641,11 @@ impl FontCatalogDocument {
         // The explicit table keeps JSON keys, public FontRole values, and atlas names aligned
         // without reflection or string-driven role dispatch.
         [
-            (FontRole::Body, &self.body),
-            (FontRole::Small, &self.small),
-            (FontRole::Title, &self.title),
-            (FontRole::Heading, &self.heading),
-            (FontRole::Mono, &self.mono),
+            (FontRole::BODY, &self.body),
+            (FontRole::SMALL, &self.small),
+            (FontRole::TITLE, &self.title),
+            (FontRole::HEADING, &self.heading),
+            (FontRole::MONO, &self.mono),
         ]
     }
 
@@ -654,14 +703,14 @@ impl IconCatalogDocument {
         // This explicit table is the single bridge from schema fields to runtime roles. Widgets
         // remain unaware of filenames, while the loader remains unaware of widget implementations.
         [
-            (IconRole::Close, &self.close),
-            (IconRole::Expand, &self.expand),
-            (IconRole::Collapse, &self.collapse),
-            (IconRole::Check, &self.check),
-            (IconRole::ExpandDown, &self.expand_down),
-            (IconRole::OpenFolder, &self.open_folder),
-            (IconRole::ClosedFolder, &self.closed_folder),
-            (IconRole::File, &self.file),
+            (IconRole::CLOSE, &self.close),
+            (IconRole::EXPAND, &self.expand),
+            (IconRole::COLLAPSE, &self.collapse),
+            (IconRole::CHECK, &self.check),
+            (IconRole::EXPAND_DOWN, &self.expand_down),
+            (IconRole::OPEN_FOLDER, &self.open_folder),
+            (IconRole::CLOSED_FOLDER, &self.closed_folder),
+            (IconRole::FILE, &self.file),
         ]
     }
 
@@ -763,7 +812,7 @@ impl SurfaceAppearanceDocument {
     /// Returns every surface state paired with its optional authored value.
     fn states(&self) -> [(SurfaceState, Option<&VisualOverrideDocument>); SurfaceState::COUNT] {
         // Declaration order matches the runtime surface catalog.
-        [(SurfaceState::Normal, self.normal.as_ref()), (SurfaceState::Disabled, self.disabled.as_ref())]
+        [(SurfaceState::NORMAL, self.normal.as_ref()), (SurfaceState::DISABLED, self.disabled.as_ref())]
     }
 }
 
@@ -816,12 +865,12 @@ impl ControlAppearanceDocument {
         // This order is the exact flattened storage order internal to the control family only.
         [
             (ControlState::Disabled, self.disabled.as_ref()),
-            (ControlState::Enabled(PointerState::Normal), self.enabled.normal.as_ref()),
-            (ControlState::Enabled(PointerState::Hovered), self.enabled.hovered.as_ref()),
-            (ControlState::Enabled(PointerState::Pressed), self.enabled.pressed.as_ref()),
-            (ControlState::Focused(PointerState::Normal), self.focused.normal.as_ref()),
-            (ControlState::Focused(PointerState::Hovered), self.focused.hovered.as_ref()),
-            (ControlState::Focused(PointerState::Pressed), self.focused.pressed.as_ref()),
+            (ControlState::Enabled(PointerState::NORMAL), self.enabled.normal.as_ref()),
+            (ControlState::Enabled(PointerState::HOVERED), self.enabled.hovered.as_ref()),
+            (ControlState::Enabled(PointerState::PRESSED), self.enabled.pressed.as_ref()),
+            (ControlState::Focused(PointerState::NORMAL), self.focused.normal.as_ref()),
+            (ControlState::Focused(PointerState::HOVERED), self.focused.hovered.as_ref()),
+            (ControlState::Focused(PointerState::PRESSED), self.focused.pressed.as_ref()),
         ]
     }
 }
@@ -868,12 +917,12 @@ impl MenuAppearanceDocument {
     fn states(&self) -> [(MenuState, Option<&VisualOverrideDocument>); MenuState::COUNT] {
         // Declaration order matches the runtime menu catalog.
         [
-            (MenuState::Normal, self.normal.as_ref()),
-            (MenuState::Hovered, self.hovered.as_ref()),
-            (MenuState::Pressed, self.pressed.as_ref()),
-            (MenuState::Focused, self.focused.as_ref()),
-            (MenuState::Open, self.open.as_ref()),
-            (MenuState::Disabled, self.disabled.as_ref()),
+            (MenuState::NORMAL, self.normal.as_ref()),
+            (MenuState::HOVERED, self.hovered.as_ref()),
+            (MenuState::PRESSED, self.pressed.as_ref()),
+            (MenuState::FOCUSED, self.focused.as_ref()),
+            (MenuState::OPEN, self.open.as_ref()),
+            (MenuState::DISABLED, self.disabled.as_ref()),
         ]
     }
 }
@@ -904,9 +953,9 @@ impl ChromeAppearanceDocument {
     fn states(&self) -> [(ChromeState, Option<&VisualOverrideDocument>); ChromeState::COUNT] {
         // Declaration order matches the runtime chrome catalog.
         [
-            (ChromeState::Base, self.base.as_ref()),
-            (ChromeState::Active, self.active.as_ref()),
-            (ChromeState::Disabled, self.disabled.as_ref()),
+            (ChromeState::BASE, self.base.as_ref()),
+            (ChromeState::ACTIVE, self.active.as_ref()),
+            (ChromeState::DISABLED, self.disabled.as_ref()),
         ]
     }
 }

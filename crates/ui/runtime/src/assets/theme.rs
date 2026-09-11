@@ -1,8 +1,6 @@
 //! Bulk resolved appearance transfer; parsing and per-frame lookup stay outside this module.
 use super::*;
 use crate::{Color, SliceInsets, NinePatch, NinePatchCell, NinePatchCells, NinePatchImage, Visual};
-#[cfg(test)]
-use neocogi_ui_contracts::appearance::*;
 
 /// Complete exported geometry and role-major appearance arrays.
 #[cfg(test)]

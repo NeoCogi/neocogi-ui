@@ -135,7 +135,7 @@ impl Widget<CheckboxAbi> {
         self.interface.set_label(NcCopyFromBufferOffset::new(0, label.as_bytes()))
     }
     /// Selects typography directly through the Checkbox class contract.
-    pub fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+    pub fn set_font_role(&mut self, role: FontRole) -> Result<(), NcStatus> {
         self.interface.set_font_role(role)
     }
     /// Resolves a named font directly through the Checkbox class contract.
@@ -506,7 +506,7 @@ macro_rules! font_proxy {
     (direct $interface:ty) => {
         impl Widget<$interface> {
             /// Selects typography directly through the concrete class contract.
-            pub fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+            pub fn set_font_role(&mut self, role: FontRole) -> Result<(), NcStatus> {
                 self.interface.set_font_role(role)
             }
             /// Resolves a named font directly through the concrete class contract.
@@ -518,7 +518,7 @@ macro_rules! font_proxy {
     ($interface:ty) => {
         impl Widget<$interface> {
             /// Selects typography through this same widget object's optional capability.
-            pub fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+            pub fn set_font_role(&mut self, role: FontRole) -> Result<(), NcStatus> {
                 self.interface.query::<IFontStyleAbi>()?.set_font_role(role)
             }
             /// Resolves a named font once in this widget's resource bundle.
@@ -552,7 +552,7 @@ impl Widget<ListItemAbi> {
 }
 impl Widget<ButtonAbi> {
     /// Selects typography directly through the Button class contract.
-    pub fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+    pub fn set_font_role(&mut self, role: FontRole) -> Result<(), NcStatus> {
         self.interface.set_font_role(role)
     }
     /// Resolves a named font directly through the Button class contract.
@@ -628,7 +628,7 @@ impl Widget<ComboAbi> {
         Ok(label.map(str::to_owned))
     }
     /// Selects typography directly through the Combo class contract.
-    pub fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+    pub fn set_font_role(&mut self, role: FontRole) -> Result<(), NcStatus> {
         self.interface.set_font_role(role)
     }
     /// Resolves a named font directly through the Combo class contract.

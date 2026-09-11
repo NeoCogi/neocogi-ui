@@ -517,10 +517,10 @@ fn create() -> Result<(Host, EventSession<State>), HostError> {
     menu_item(&grid_menu, &mut pending, "About", Action::About)?;
     menus.attach_bar(desktop.as_com_ref(), &bar)?;
     let mut log = label(ui, "Welcome to neocogi-ui.")?;
-    log.set_font_role(TextFontRole::MONO)?;
+    log.set_font_role(FontRole::MONO)?;
     let log_scroll = ui.widgets().scroll_area(&log, true)?;
     let mut entry = ui.widgets().textbox("")?;
-    entry.set_font_role(TextFontRole::MONO)?;
+    entry.set_font_role(FontRole::MONO)?;
     let (style, style_root) = StyleEditor::new(ui)?;
     floating(ui, desktop.as_com_ref(), "Flat Palette / Skin Metrics", rect(350, 250, 300, 240), &style_root)?;
     let background = ui.widgets().color_swatch(grid.borrow().background, "#5A5F64")?;
@@ -711,7 +711,7 @@ fn build_examples(host: &Host, events: &EventSession<State>) -> Result<(), HostE
     floating(ui, desktop, "Log Window", rect(350, 40, 300, 200), &log)?;
     let mut typography = column(ui)?;
     let mut heading = label(ui, "NORMAL.ttf at 18px")?;
-    heading.set_font_role(TextFontRole::HEADING)?;
+    heading.set_font_role(FontRole::HEADING)?;
     append(&mut typography, &heading, LayoutTrack::Content)?;
     append(
         &mut typography,

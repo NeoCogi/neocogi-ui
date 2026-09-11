@@ -113,7 +113,7 @@ impl SliderParameters {
             high,
             step,
             precision,
-            font: FontRef::Role(FontRole::Body),
+            font: FontRef::Role(FontRole::BODY),
             opt: opt | WidgetOption::GRAB_SCROLL,
         })
     }
@@ -310,7 +310,7 @@ impl Slider {
         let base = ctx.local_rect();
         if !ctx.options().intersects(WidgetOption::FRAME) {
             // Unframed sliders still retain the semantic track center without adding border space.
-            ctx.draw_control_center(ControlRole::SliderTrack, base);
+            ctx.draw_control_center(ControlRole::SLIDER_TRACK, base);
         }
         // Measurement already treats negative theme thumb sizes as zero. Paint applies the same
         // normalization and uses saturated extent arithmetic so either public style or layout
@@ -327,9 +327,9 @@ impl Slider {
             0
         };
         let thumb = rect(base.x.saturating_add(x), base.y, width, base.height.max(0));
-        let _ = ctx.draw_control(ControlRole::SliderThumb, thumb);
+        let _ = ctx.draw_control(ControlRole::SLIDER_THUMB, thumb);
         let label = number_label(self.value, self.precision);
-        ctx.draw_control_text_with_font(font, label.as_str(), base, ControlRole::SliderTrack, ctx.options());
+        ctx.draw_control_text_with_font(font, label.as_str(), base, ControlRole::SLIDER_TRACK, ctx.options());
     }
 }
 
@@ -421,7 +421,7 @@ impl Widget for Slider {
 
     fn frame_appearance_role(&self) -> FrameRole {
         // Retained traversal paints the complete track before the slider paints its thumb and text.
-        FrameRole::Control(ControlRole::SliderTrack)
+        FrameRole::Control(ControlRole::SLIDER_TRACK)
     }
 
     fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
@@ -846,10 +846,10 @@ mod tests {
         // A borderless ten-pixel thumb records one unambiguous fill rectangle at the computed x.
         style.metrics.thumb_size = 10;
         let frame = style
-            .control(ControlRole::SliderThumb, crate::ControlState::Enabled(crate::PointerState::Normal))
+            .control(ControlRole::SLIDER_THUMB, crate::ControlState::Enabled(crate::PointerState::NORMAL))
             .patch
             .with_insets(crate::SliceInsets::ZERO);
-        crate::test_support::replace_control_patches(&mut style, ControlRole::SliderThumb, |_| frame);
+        crate::test_support::replace_control_patches(&mut style, ControlRole::SLIDER_THUMB, |_| frame);
         let slider = Slider::from(SliderParameters::new(Real::MAX / 2.0, 0.0, Real::MAX).expect("a maximum finite range span must remain usable"));
         let bounds = rect(0, 0, 100, 20);
         let mut display_list = crate::render::DisplayList::new();
@@ -1048,7 +1048,7 @@ mod tests {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_contracts::{GeometryChange, IEventSubscriptionAbi, INumericSinkAbi, IWidgetHostAbi, SliderAbi, SliderOptions, TextFontRole};
+use neocogi_ui_contracts::{GeometryChange, IEventSubscriptionAbi, INumericSinkAbi, IWidgetHostAbi, SliderAbi, SliderOptions, FontRole};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Slider);
@@ -1106,7 +1106,7 @@ impl neocogi_ui_contracts::Slider for Slider {
         Ok(self.is_editing())
     }
     /// Validates a semantic font role before changing the slider's measurement input.
-    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+    fn set_font_role(&mut self, role: FontRole) -> Result<(), NcStatus> {
         set_direct_font_role(self, role)
     }
     /// Resolves one exact named font before replacing the slider's selection.

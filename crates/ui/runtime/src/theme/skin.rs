@@ -119,7 +119,7 @@ impl Skin {
     pub(crate) fn from_resolved(atlas: &AtlasHandle, metrics: SkinMetrics, window_chrome: WindowChromeSkin, appearances: AppearanceCatalog) -> Self {
         // Resolve names once at construction. Every retained value below is a stable resource ID,
         // so layout and paint perform only typed table lookup against the selected atlas.
-        let body = atlas.font_id(FontRole::Body.atlas_name()).expect("atlas does not contain required font `body`");
+        let body = atlas.font_id(FontRole::BODY.atlas_name()).expect("atlas does not contain required font `body`");
         let font_roles = FontRole::ALL.map(|role| atlas.font_id(role.atlas_name()).unwrap_or(body));
         let icon_roles = IconRole::ALL.map(|role| {
             let name = role.atlas_name();
@@ -206,7 +206,7 @@ impl Skin {
     pub(crate) fn frame_insets(&self) -> SliceInsets {
         // NinePatch owns normalization so layout and renderer geometry cannot disagree on negative
         // application-provided style components.
-        self.surface(SurfaceRole::GenericFrame, SurfaceState::Normal).patch.insets.normalized()
+        self.surface(SurfaceRole::GENERIC_FRAME, SurfaceState::NORMAL).patch.insets.normalized()
     }
 
     /// Returns one structural surface visual.
@@ -296,12 +296,12 @@ mod tests {
     /// Verifies semantic and named font references resolve through the active atlas.
     #[test]
     fn font_references_resolve_semantic_and_named_fonts() {
-        let atlas = make_test_atlas(&[(FontRole::Body.atlas_name(), 12), (FontRole::Heading.atlas_name(), 18)]);
-        let heading = atlas.font_id(FontRole::Heading.atlas_name()).unwrap();
+        let atlas = make_test_atlas(&[(FontRole::BODY.atlas_name(), 12), (FontRole::HEADING.atlas_name(), 18)]);
+        let heading = atlas.font_id(FontRole::HEADING.atlas_name()).unwrap();
         let style = Skin::from_atlas(&atlas);
 
-        assert_eq!(FontRef::from(FontRole::Heading), FontRef::role(FontRole::Heading));
-        assert_eq!(FontRef::role(FontRole::Heading).resolve(&style, &atlas), heading);
+        assert_eq!(FontRef::from(FontRole::HEADING), FontRef::role(FontRole::HEADING));
+        assert_eq!(FontRef::role(FontRole::HEADING).resolve(&style, &atlas), heading);
         assert_eq!(FontRef::named(heading).resolve(&style, &atlas), heading);
     }
 
@@ -309,47 +309,47 @@ mod tests {
     #[test]
     fn from_atlas_resolves_named_fonts_and_falls_back_to_body() {
         let atlas = make_test_atlas(&[
-            (FontRole::Small.atlas_name(), 10),
-            (FontRole::Body.atlas_name(), 12),
-            (FontRole::Heading.atlas_name(), 18),
-            (FontRole::Title.atlas_name(), 16),
+            (FontRole::SMALL.atlas_name(), 10),
+            (FontRole::BODY.atlas_name(), 12),
+            (FontRole::HEADING.atlas_name(), 18),
+            (FontRole::TITLE.atlas_name(), 16),
         ]);
 
         let style = Skin::from_atlas(&atlas);
 
-        let body = atlas.font_id(FontRole::Body.atlas_name()).unwrap();
-        assert_eq!(style.resolve_font_role(&atlas, FontRole::Body), body);
+        let body = atlas.font_id(FontRole::BODY.atlas_name()).unwrap();
+        assert_eq!(style.resolve_font_role(&atlas, FontRole::BODY), body);
         assert_eq!(
-            style.resolve_font_role(&atlas, FontRole::Small),
-            atlas.font_id(FontRole::Small.atlas_name()).unwrap()
+            style.resolve_font_role(&atlas, FontRole::SMALL),
+            atlas.font_id(FontRole::SMALL.atlas_name()).unwrap()
         );
         assert_eq!(
-            style.resolve_font_role(&atlas, FontRole::Title),
-            atlas.font_id(FontRole::Title.atlas_name()).unwrap()
+            style.resolve_font_role(&atlas, FontRole::TITLE),
+            atlas.font_id(FontRole::TITLE.atlas_name()).unwrap()
         );
         assert_eq!(
-            style.resolve_font_role(&atlas, FontRole::Heading),
-            atlas.font_id(FontRole::Heading.atlas_name()).unwrap()
+            style.resolve_font_role(&atlas, FontRole::HEADING),
+            atlas.font_id(FontRole::HEADING.atlas_name()).unwrap()
         );
-        assert_eq!(style.resolve_font_role(&atlas, FontRole::Mono), body);
+        assert_eq!(style.resolve_font_role(&atlas, FontRole::MONO), body);
         assert!(style.belongs_to(&atlas));
     }
 
     /// Verifies every image-backed visual capability participates in the ownership predicate.
     #[test]
     fn belongs_to_rejects_a_foreign_appearance_capability() {
-        let local_atlas = make_test_atlas(&[(FontRole::Body.atlas_name(), 12)]);
-        let foreign_atlas = make_test_atlas(&[(FontRole::Body.atlas_name(), 12)]);
+        let local_atlas = make_test_atlas(&[(FontRole::BODY.atlas_name(), 12)]);
+        let foreign_atlas = make_test_atlas(&[(FontRole::BODY.atlas_name(), 12)]);
         let local = Skin::from_atlas(&local_atlas);
 
         // Semantic IDs already belong to the local atlas. Replacing one compiled image with a
         // foreign resource must make the otherwise complete skin fail the same predicate.
         let mut candidate = local;
-        crate::test_support::replace_control_patches(&mut candidate, ControlRole::Button, |_| {
+        crate::test_support::replace_control_patches(&mut candidate, ControlRole::BUTTON, |_| {
             NinePatch::image(
                 SliceInsets::ZERO,
                 crate::NinePatchImage::new(
-                    Skin::from_atlas(&foreign_atlas).resolve_icon_role(&foreign_atlas, IconRole::Close),
+                    Skin::from_atlas(&foreign_atlas).resolve_icon_role(&foreign_atlas, IconRole::CLOSE),
                     SliceInsets::ZERO,
                     Color { r: 255, g: 255, b: 255, a: 255 },
                 ),
@@ -372,9 +372,9 @@ mod tests {
     /// Verifies frame normalization remains independent of atlas-bound asset construction.
     #[test]
     fn frame_insets_normalize_each_component_without_changing_cells() {
-        let atlas = make_test_atlas(&[(FontRole::Body.atlas_name(), 12)]);
+        let atlas = make_test_atlas(&[(FontRole::BODY.atlas_name(), 12)]);
         let mut style = Skin::from_atlas(&atlas);
-        crate::test_support::replace_surface_patches(&mut style, SurfaceRole::GenericFrame, |_| {
+        crate::test_support::replace_surface_patches(&mut style, SurfaceRole::GENERIC_FRAME, |_| {
             NinePatch::framed(SliceInsets::new(-4, 2, -3, 5), Color { r: 10, g: 20, b: 30, a: 255 }, None)
         });
         let insets = style.frame_insets();

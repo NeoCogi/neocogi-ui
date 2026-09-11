@@ -152,7 +152,7 @@ pub(crate) trait HostedWidget: WidgetAlgorithm {
 }
 
 /// Commits one validated semantic font role on a concrete widget allocation.
-pub(crate) fn set_direct_font_role<S: HostedWidget + FontState>(widget: &mut S, role: TextFontRole) -> Result<(), NcStatus> {
+pub(crate) fn set_direct_font_role<S: HostedWidget + FontState>(widget: &mut S, role: FontRole) -> Result<(), NcStatus> {
     widget.runtime().state.writable()?;
     let font = crate::FontRef::Role(local_font_role(role)?);
     if widget.font() != &font {
@@ -499,13 +499,13 @@ macro_rules! direct_scrolling_impl {
 pub(crate) use direct_scrolling_impl;
 
 /// Resolves one concrete font-role vocabulary for both widget and compact menu presentation.
-pub(crate) fn local_font_role(role: TextFontRole) -> Result<crate::FontRole, NcStatus> {
+pub(crate) fn local_font_role(role: FontRole) -> Result<crate::FontRole, NcStatus> {
     match role {
-        TextFontRole::BODY => Ok(crate::FontRole::Body),
-        TextFontRole::SMALL => Ok(crate::FontRole::Small),
-        TextFontRole::TITLE => Ok(crate::FontRole::Title),
-        TextFontRole::HEADING => Ok(crate::FontRole::Heading),
-        TextFontRole::MONO => Ok(crate::FontRole::Mono),
+        FontRole::BODY => Ok(crate::FontRole::BODY),
+        FontRole::SMALL => Ok(crate::FontRole::SMALL),
+        FontRole::TITLE => Ok(crate::FontRole::TITLE),
+        FontRole::HEADING => Ok(crate::FontRole::HEADING),
+        FontRole::MONO => Ok(crate::FontRole::MONO),
         _ => Err(NC_E_INVALID_ARG),
     }
 }
@@ -514,14 +514,14 @@ pub(crate) fn local_font_role(role: TextFontRole) -> Result<crate::FontRole, NcS
 pub(super) fn local_content_icon(icon: ContentIcon) -> Result<Option<crate::IconRef>, NcStatus> {
     let role = match icon {
         ContentIcon::NONE => return Ok(None),
-        ContentIcon::CLOSE => crate::IconRole::Close,
-        ContentIcon::EXPAND => crate::IconRole::Expand,
-        ContentIcon::COLLAPSE => crate::IconRole::Collapse,
-        ContentIcon::CHECK => crate::IconRole::Check,
-        ContentIcon::EXPAND_DOWN => crate::IconRole::ExpandDown,
-        ContentIcon::OPEN_FOLDER => crate::IconRole::OpenFolder,
-        ContentIcon::CLOSED_FOLDER => crate::IconRole::ClosedFolder,
-        ContentIcon::FILE => crate::IconRole::File,
+        ContentIcon::CLOSE => crate::IconRole::CLOSE,
+        ContentIcon::EXPAND => crate::IconRole::EXPAND,
+        ContentIcon::COLLAPSE => crate::IconRole::COLLAPSE,
+        ContentIcon::CHECK => crate::IconRole::CHECK,
+        ContentIcon::EXPAND_DOWN => crate::IconRole::EXPAND_DOWN,
+        ContentIcon::OPEN_FOLDER => crate::IconRole::OPEN_FOLDER,
+        ContentIcon::CLOSED_FOLDER => crate::IconRole::CLOSED_FOLDER,
+        ContentIcon::FILE => crate::IconRole::FILE,
         _ => return Err(NC_E_INVALID_ARG),
     };
     Ok(Some(crate::IconRef::Role(role)))

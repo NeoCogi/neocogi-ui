@@ -58,7 +58,7 @@ impl ListBoxParameters {
         Self {
             label: label.into(),
             image,
-            font: FontRef::Role(FontRole::Body),
+            font: FontRef::Role(FontRole::BODY),
             opt: WidgetOption::NONE,
         }
     }
@@ -143,7 +143,7 @@ impl ListBox {
     fn paint_widget(&self, ctx: &mut WidgetPaintCtx<'_>) {
         let rect = ctx.local_rect();
         if widget_fill_visible(ctx, WidgetFillOption::HOVER | WidgetFillOption::CLICK) {
-            ctx.draw_control_center(ControlRole::Button, rect);
+            ctx.draw_control_center(ControlRole::BUTTON, rect);
         }
         let visual_size = self.image.as_ref().map(image_size);
         let placement = if self.fit_width && visual_size.is_some() {
@@ -153,7 +153,7 @@ impl ListBox {
         };
         if !self.label.is_empty() {
             let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
-            ctx.draw_control_text_with_font(font, &self.label, placement.text, ControlRole::Button, ctx.options());
+            ctx.draw_control_text_with_font(font, &self.label, placement.text, ControlRole::BUTTON, ctx.options());
         }
         if let (Some(image), Some(visual)) = (self.image.as_ref(), placement.visual) {
             // List-box labels remain theme-colored while external image content preserves the
@@ -261,7 +261,7 @@ impl crate::ui_node::widget_object::ImageState for ListBox {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, ImageState, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_contracts::{GeometryChange, IActivationSinkAbi, IEventSubscriptionAbi, ITextureAbi, IWidgetHostAbi, ListBoxAbi, TextFontRole};
+use neocogi_ui_contracts::{GeometryChange, IActivationSinkAbi, IEventSubscriptionAbi, ITextureAbi, IWidgetHostAbi, ListBoxAbi, FontRole};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(ListBox);
@@ -307,7 +307,7 @@ impl neocogi_ui_contracts::ListBox for ListBox {
         Ok(())
     }
     /// Validates a semantic role before changing the list-box label's font.
-    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+    fn set_font_role(&mut self, role: FontRole) -> Result<(), NcStatus> {
         set_direct_font_role(self, role)
     }
     /// Resolves one exact named font before changing the list-box label's font.

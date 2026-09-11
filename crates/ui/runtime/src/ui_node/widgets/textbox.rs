@@ -86,7 +86,7 @@ impl TextboxParameters {
     pub fn new(buf: impl Into<String>) -> Self {
         Self {
             buf: buf.into(),
-            font: FontRef::Role(FontRole::Body),
+            font: FontRef::Role(FontRole::BODY),
             opt: WidgetOption::FRAME,
         }
     }
@@ -395,7 +395,7 @@ pub(crate) fn textbox_paint(ctx: &mut WidgetPaintCtx<'_>, buf: &str, cursor: usi
     let r = ctx.local_rect();
     if !opt.intersects(WidgetOption::FRAME) {
         // Runtime-owned framed editors already painted the complete input patch below this content.
-        ctx.draw_control_center(ControlRole::TextInput, r);
+        ctx.draw_control_center(ControlRole::TEXT_INPUT, r);
     }
 
     let metrics = font_line_metrics(font, ctx.atlas());
@@ -414,14 +414,14 @@ pub(crate) fn textbox_paint(ctx: &mut WidgetPaintCtx<'_>, buf: &str, cursor: usi
 
     if ctx.focused() {
         // Focused editing path clips text/caret to the textbox bounds.
-        let color = ctx.control_content_color(ControlRole::TextInput);
+        let color = ctx.control_content_color(ControlRole::TEXT_INPUT);
         let caret = caret_rect(clamp_i64_to_i32(i64::from(textx) + i64::from(caret_offset)), baseline_y, metrics, r);
         ctx.with_clip(r, |ctx| {
             ctx.draw_text(font, buf, vec2(textx, texty), color);
             ctx.draw_rect(caret, color);
         });
     } else {
-        ctx.draw_control_text_with_font(font, buf, r, ControlRole::TextInput, opt);
+        ctx.draw_control_text_with_font(font, buf, r, ControlRole::TEXT_INPUT, opt);
     }
 }
 
@@ -433,7 +433,7 @@ impl Widget for Textbox {
 
     fn frame_appearance_role(&self) -> FrameRole {
         // Single-line textboxes use the semantic input frame for every interaction state.
-        FrameRole::Control(ControlRole::TextInput)
+        FrameRole::Control(ControlRole::TEXT_INPUT)
     }
 
     fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
@@ -618,7 +618,7 @@ mod tests {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_contracts::{GeometryChange, IEventSubscriptionAbi, ITextChangedSinkAbi, ITextSubmittedSinkAbi, IWidgetHostAbi, TextFontRole, TextboxAbi};
+use neocogi_ui_contracts::{GeometryChange, IEventSubscriptionAbi, ITextChangedSinkAbi, ITextSubmittedSinkAbi, IWidgetHostAbi, FontRole, TextboxAbi};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Textbox);
@@ -676,7 +676,7 @@ impl neocogi_ui_contracts::Textbox for Textbox {
         Ok(())
     }
     /// Validates a semantic font role before changing the Textbox's measurement input.
-    fn set_font_role(&mut self, role: TextFontRole) -> Result<(), NcStatus> {
+    fn set_font_role(&mut self, role: FontRole) -> Result<(), NcStatus> {
         set_direct_font_role(self, role)
     }
     /// Resolves one exact named font before replacing the Textbox's selection.

@@ -9,6 +9,15 @@
 
 use crate::{Color, NinePatch};
 
+/// Runtime-only appearance family selected after validating a contract frame role.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum FrameRole {
+    /// Structural frame whose pointer and focus state is irrelevant.
+    Surface(crate::SurfaceRole),
+    /// Interactive frame resolved from the owning widget's control state.
+    Control(crate::ControlRole),
+}
+
 /// Complete paint description selected for one semantic role and meaningful state.
 ///
 /// The patch and its adjacent text or glyph color intentionally travel together.

@@ -521,8 +521,8 @@ impl Widget for Scrollbar {
         // Hidden composite children never reach this phase, while mounted zero-range bars display a
         // full-length thumb that communicates the absence of overflow.
         let geometry = self.geometry(ctx.local_rect(), ctx.skin().metrics.thumb_size.max(0));
-        let _ = ctx.draw_control(ControlRole::ScrollbarTrack, geometry.track());
-        let _ = ctx.draw_control(ControlRole::ScrollbarThumb, geometry.thumb());
+        let _ = ctx.draw_control(ControlRole::SCROLLBAR_TRACK, geometry.track());
+        let _ = ctx.draw_control(ControlRole::SCROLLBAR_THUMB, geometry.thumb());
     }
 }
 
