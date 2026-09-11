@@ -18,7 +18,7 @@ struct CoordinatePopup;
 impl EventHandler<Selection, neocogi_ui::events::ComboSubmitted> for CoordinatePopup {
     /// Ordinary show/hide operations retain the window manager's existing popup and keyboard policy.
     fn handle(&mut self, state: &mut Selection, event: &neocogi_ui::events::ComboSubmitted) -> Result<(), NcStatus> {
-        if event.open { state.popup.show(event.anchor) } else { state.popup.hide() }
+        if event.open { state.popup.show_at(event.anchor) } else { state.popup.hide() }
     }
 }
 /// One concrete row action owns its local list index rather than converting labels back to data.

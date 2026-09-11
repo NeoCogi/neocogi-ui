@@ -350,9 +350,9 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     ui.update_with_events(SIZE, &session).unwrap();
     assert!(session.state().unwrap().ends_with(&["changed:☃:3".to_owned(), "submitted:☃".to_owned()]));
     let popup_content = ui.widgets().text_block("popup", TextWrapping::NONE).unwrap();
-    let popup = ui.popup(window.as_com_ref(), "popup", &popup_content).unwrap();
+    let mut popup = ui.popup(window.as_com_ref(), "popup", &popup_content).unwrap();
     let lease = session.subscribe_popup(popup.as_com_ref(), record_popup).unwrap();
-    popup.show(Rect { x: 100, y: 100, width: 20, height: 20 }).unwrap();
+    popup.show_at(Rect { x: 100, y: 100, width: 20, height: 20 }).unwrap();
     ui.update_with_events(SIZE, &session).unwrap();
     popup.hide().unwrap();
     ui.update_with_events(SIZE, &session).unwrap();

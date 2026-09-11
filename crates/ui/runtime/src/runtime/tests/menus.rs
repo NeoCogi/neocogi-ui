@@ -97,7 +97,7 @@ fn failed_menu_attachment_preserves_unique_declaration_and_scoped_builder_author
     let item = candidate.item("Action").unwrap();
     assert_eq!(menus.attach_bar(window.as_com_ref(), &candidate), Err(UI_E_POLICY));
     item.set_label("Still owned").unwrap();
-    let popup = menus.popup(window.as_com_ref(), &candidate).unwrap();
+    let mut popup = menus.popup(window.as_com_ref(), &candidate).unwrap();
     assert_eq!(candidate.separator(), Err(UI_E_CLOSED));
     popup.close().unwrap();
     assert_eq!(item.label(), Err(UI_E_CLOSED));
@@ -125,10 +125,10 @@ fn standalone_menu_popup_submits_then_hides_without_destroying_its_live_rows() {
     let menus = ui.menus().unwrap();
     let builder = menus.create("Actions").unwrap();
     let item = builder.item("Run").unwrap();
-    let popup = menus.popup(window.as_com_ref(), &builder).unwrap();
+    let mut popup = menus.popup(window.as_com_ref(), &builder).unwrap();
     let session = EventSession::new(Vec::new());
     session.subscribe_menu_item(&item, Record).unwrap();
-    popup.show(Rect { x: 60, y: 60, width: 20, height: 20 }).unwrap();
+    popup.show_at(Rect { x: 60, y: 60, width: 20, height: 20 }).unwrap();
     // Standalone menus begin without row selection; Down selects their first actionable row.
     key(&ui, KeyCode::ARROW_DOWN, 0);
     key(&ui, KeyCode::ENTER, 0);

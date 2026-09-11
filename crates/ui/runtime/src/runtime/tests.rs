@@ -600,7 +600,7 @@ fn popup_com_capability_enforces_active_owner_policy_and_permanent_removal() {
     let manager: ComPtr<IWindowManagerAbi> = runtime.query().unwrap();
     let root = mount(&runtime, &button(&runtime).query().unwrap()).unwrap();
     let popup_button = button(&runtime);
-    let popup = manager
+    let mut popup = manager
         .create_popup(
             root.as_com_ref(),
             NcCopyFromBufferOffset::new(0, b"popup"),
@@ -610,7 +610,7 @@ fn popup_com_capability_enforces_active_owner_policy_and_permanent_removal() {
     assert_eq!(popup.query::<IWindowAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     assert_eq!(popup.visibility().unwrap(), Visibility::HIDDEN);
     runtime.update(SIZE).unwrap();
-    popup.show(RECT).unwrap();
+    popup.show_at(RECT).unwrap();
     assert_eq!(popup.visibility().unwrap(), Visibility::VISIBLE);
     popup.hide().unwrap();
     assert_eq!(popup.visibility().unwrap(), Visibility::HIDDEN);
@@ -623,9 +623,9 @@ fn popup_com_capability_enforces_active_owner_policy_and_permanent_removal() {
         )
         .unwrap();
     dialog.set_visibility(Visibility::VISIBLE).unwrap();
-    assert_eq!(popup.show(RECT), Err(UI_E_POLICY));
+    assert_eq!(popup.show_at(RECT), Err(UI_E_POLICY));
     dialog.set_visibility(Visibility::HIDDEN).unwrap();
-    popup.show(RECT).unwrap();
+    popup.show_at(RECT).unwrap();
     popup.close().unwrap();
     popup.close().unwrap();
     assert_eq!(popup.visibility(), Err(UI_E_CLOSED));

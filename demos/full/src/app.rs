@@ -253,7 +253,7 @@ enum Action {
     Log,
     /// Append input and clear the textbox.
     Submit,
-    /// Open a standalone compact popup near the main window.
+    /// Open a standalone compact popup at the latest consumed pointer position.
     Popup,
     /// Start a native file-picker request.
     Open,
@@ -286,10 +286,9 @@ impl EventHandler<State, Activation> for Action {
         match *self {
             Self::Log => state.write_log(&format!("Pressed {}", event.label)),
             Self::Submit => state.submit(),
-            Self::Popup => {
-                let area = state.demo.snapshot()?.rect;
-                state.test_popup.show(rect(area.x + 50, area.y + 100, 120, 24))
-            }
+            // The popup capability resolves the pointer captured by the triggering input boundary,
+            // so moving the Demo Window does not require application-authored coordinate offsets.
+            Self::Popup => state.test_popup.show(),
             Self::Open => state.open_file(),
             Self::New => {
                 state.log.clear()?;
@@ -351,7 +350,7 @@ impl EventHandler<State, ComboSubmitted> for Observe {
     /// Popup placement uses the exact routed screen-space header anchor.
     fn handle(&mut self, state: &mut State, event: &ComboSubmitted) -> Result<(), NcStatus> {
         if event.open {
-            state.combo_popup.show(event.anchor)
+            state.combo_popup.show_at(event.anchor)
         } else {
             state.combo_popup.hide()
         }
@@ -474,7 +473,7 @@ fn create() -> Result<(Host, EventSession<State>), HostError> {
     let mut combo = ui.widgets().combo()?;
     combo.update_items(&FRUIT)?;
     let mut combo_content = column(ui)?;
-    let combo_popup = ui.popup(demo.as_com_ref(), "Combo Box Popup", &combo_content)?;
+    let mut combo_popup = ui.popup(demo.as_com_ref(), "Combo Box Popup", &combo_content)?;
     combo_popup.set_options(WindowOptions::FRAME | WindowOptions::AUTO_HEIGHT | WindowOptions::NO_RESIZE | WindowOptions::NO_TITLE)?;
     let menus = ui.menus()?;
     let mut pending = Vec::new();

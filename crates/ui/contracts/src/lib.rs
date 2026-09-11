@@ -565,19 +565,21 @@ pub trait IWidgetHost {
     fn check_mutation(&self) -> Result<(), NcStatus>;
 }
 
-#[com_interface(auto_guid = "neocogi.ui.Popup:v1")]
+#[com_interface(auto_guid = "neocogi.ui.Popup:v2")]
 /// A popup has transient placement and cannot be passed to ordinary window operations.
 pub trait IPopup {
     /// Reports whether this popup belongs to the manager's active visible branch.
     fn visibility(&self) -> Result<Visibility, NcStatus>;
-    /// Atomically sets the screen anchor and activates the popup's input scope.
-    fn show(&self, anchor: Rect) -> Result<(), NcStatus>;
+    /// Activates the popup's input scope at the latest consumed pointer position.
+    fn show(&mut self) -> Result<(), NcStatus>;
+    /// Atomically sets an exact screen anchor and activates the popup's input scope.
+    fn show_at(&mut self, anchor: Rect) -> Result<(), NcStatus>;
     /// Dismisses this active branch while preserving the definition for later reuse.
-    fn hide(&self) -> Result<(), NcStatus>;
+    fn hide(&mut self) -> Result<(), NcStatus>;
     /// Changes popup framing, padding and preferred-size policy.
-    fn set_options(&self, options: WindowOptions) -> Result<(), NcStatus>;
+    fn set_options(&mut self, options: WindowOptions) -> Result<(), NcStatus>;
     /// Permanently removes this popup subtree and closes its retained widgets.
-    fn close(&self) -> Result<(), NcStatus>;
+    fn close(&mut self) -> Result<(), NcStatus>;
 }
 
 /// Plain color values also used by renderer and optional JSON authoring code.

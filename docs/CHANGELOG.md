@@ -98,6 +98,9 @@ wrappers. The accepted migration and outstanding validation are recorded in
   EventSession owns app state and concrete handlers outside the producer graph.
 - Preserve menus, native-path file dialogs, immutable resources, full/basic demos,
   browser input/IME and ordered typed image/mesh/custom drawing.
+- Split `IPopup` placement into `show()` at the latest consumed pointer and
+  `show_at(anchor)` for exact screen-space placement. The full demo's Popup
+  button again opens its standalone menu at the triggering pointer position.
 - Load native demo assets from adjacent files through the asset plugin by default.
   `embed-assets` explicitly selects build-host compilation and embedded resource
   bytes; browser `webgl` enables it. Generated COM bundles retain bounded pixel expansion.

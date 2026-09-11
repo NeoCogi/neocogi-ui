@@ -52,8 +52,8 @@ fn show(ui: &Ui, owner: ComRef<'_, IWindowAbi>, anchor: Rect) -> Result<(), NcSt
     let menus = ui.menus()?;
     let menu = menus.create("Object actions")?;
     let inspect = menu.item("Inspect")?;
-    let popup = menus.popup(owner, &menu)?;
-    popup.show(anchor)?;
+    let mut popup = menus.popup(owner, &menu)?;
+    popup.show_at(anchor)?;
     // Applications retain item/popup capabilities when later editing or hiding is needed.
     Ok(())
 }

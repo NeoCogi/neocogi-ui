@@ -328,7 +328,7 @@ impl IMenus for Runtime {
         let identity = windows::LogicalPopup::from_value(windows::LogicalPopup {
             runtime: Rc::downgrade(&self.storage),
             popup: popup.clone(),
-            closed: Cell::new(false),
+            closed: false,
         });
         self.storage.mounts.borrow_mut().push(Mount {
             surface: NativeSurface::Popup(popup),

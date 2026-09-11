@@ -38,9 +38,7 @@ use std::{
 use super::*;
 use crate::menu::{MenuAction, MenuEntry, MenuSlot, MenuSurface};
 use crate::math::RectExt;
-use crate::{MouseButton, Node, UiInputEvent, Vec2i};
-#[cfg(test)]
-use crate::{rect};
+use crate::{MouseButton, Node, UiInputEvent, Vec2i, rect};
 
 use super::root_chrome::{
     RootCaptionButton, RootChromeGeometry, RootChromePart, RootChromeVisualState, RootFrameKind, RootInteraction, RootResizeAxis, record_root_background,
@@ -1824,9 +1822,12 @@ impl WindowManager {
     }
 
     /// Shows one popup at the current pointer position.
-    #[cfg(test)]
     pub fn show_popup(&mut self, popup: &PopupHandle) -> Result<(), SurfaceMutationError> {
+        // Input applies each queued transition before the matching application dispatch boundary,
+        // making this snapshot the exact click position for pointer-triggered popup requests.
         let mouse = self.input.snapshot().mouse_pos;
+        // A one-pixel anchor preserves the pointer origin while leaving automatic popup sizing to
+        // the retained menu or widget body during the following layout commit.
         self.show_popup_at(popup, rect(mouse.x, mouse.y, 1, 1))
     }
 

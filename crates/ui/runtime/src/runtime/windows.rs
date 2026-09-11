@@ -134,7 +134,7 @@ impl RuntimeStorage {
             NativeSurface::Popup(popup) => LogicalPopup::from_value(LogicalPopup {
                 runtime: Rc::downgrade(self),
                 popup: popup.clone(),
-                closed: Cell::new(false),
+                closed: false,
             }),
         };
         self.mounts.borrow_mut().push(Mount { surface, identity: identity.clone() });
@@ -327,23 +327,31 @@ pub(super) struct LogicalPopup {
     /// Private identity of the manager-owned popup definition.
     pub(super) popup: PopupHandle,
     /// Explicit close is idempotent after removal.
-    pub(super) closed: Cell<bool>,
+    pub(super) closed: bool,
 }
 
 /// Explicit popup mutation payloads use the same concrete dispatch pattern as window edits.
 enum PopupEdit {
-    /// Replace anchor and activate the transient input scope atomically.
-    Show(Rect),
+    /// Read the manager's latest consumed pointer and activate the transient input scope there.
+    Show,
+    /// Replace the anchor with an exact screen rectangle and activate the transient input scope atomically.
+    ShowAt {
+        /// Caller-provided screen-space geometry copied before entering the manager transaction.
+        anchor: Rect,
+    },
     /// Dismiss this active branch while retaining its definition.
     Hide,
     /// Replace popup appearance and automatic sizing.
-    Options(WindowOption),
+    Options {
+        /// Fully validated popup presentation flags translated into the manager's native type.
+        options: WindowOption,
+    },
 }
 
 impl LogicalPopup {
     /// Retains the live owner for one synchronous checked call.
     fn owner(&self) -> Result<Rc<RuntimeStorage>, NcStatus> {
-        if self.closed.get() {
+        if self.closed {
             return Err(UI_E_CLOSED);
         }
         let runtime = self.runtime.upgrade().ok_or(UI_E_CLOSED)?;
@@ -351,14 +359,20 @@ impl LogicalPopup {
         Ok(runtime)
     }
     /// Shares phase/reentry checks while keeping each mutation's data explicit.
-    fn edit(&self, edit: PopupEdit) -> Result<(), NcStatus> {
+    fn edit(&mut self, edit: PopupEdit) -> Result<(), NcStatus> {
         let runtime = self.owner()?;
         runtime.factory.host.check_mutation()?;
         let mut context = runtime.context()?;
         match edit {
-            PopupEdit::Show(rect) => context.window_manager.show_popup_at(&self.popup, local_rect(rect)),
+            // Pointer-relative placement is resolved inside the same manager transaction that
+            // activates the popup, so application code cannot observe an intermediate anchor.
+            PopupEdit::Show => context.window_manager.show_popup(&self.popup),
+            // Explicit placement keeps the caller's copied screen rectangle authoritative.
+            PopupEdit::ShowAt { anchor } => context.window_manager.show_popup_at(&self.popup, local_rect(anchor)),
+            // Hiding truncates the active popup branch without destroying its retained definition.
             PopupEdit::Hide => context.window_manager.hide_popup(&self.popup),
-            PopupEdit::Options(options) => context.window_manager.set_popup_options(&self.popup, options),
+            // Option changes remain popup-specific and cannot accidentally mutate window chrome.
+            PopupEdit::Options { options } => context.window_manager.set_popup_options(&self.popup, options),
         }
         .map_err(status)?;
         runtime.pending.set(true);
@@ -373,40 +387,46 @@ impl IPopup for LogicalPopup {
         let visible = runtime.context()?.window_manager.popup_visible(&self.popup).map_err(status)?;
         Ok(if visible { Visibility::VISIBLE } else { Visibility::HIDDEN })
     }
-    /// Validates allocation before atomically changing anchor and input scope.
-    fn show(&self, anchor: Rect) -> Result<(), NcStatus> {
+    /// Uses the pointer snapshot committed by the input event immediately preceding this callback.
+    fn show(&mut self) -> Result<(), NcStatus> {
+        self.edit(PopupEdit::Show)
+    }
+    /// Validates allocation before atomically changing the exact anchor and input scope.
+    fn show_at(&mut self, anchor: Rect) -> Result<(), NcStatus> {
         if anchor.width < 0 || anchor.height < 0 {
             return Err(NC_E_INVALID_ARG);
         }
-        self.edit(PopupEdit::Show(anchor))
+        self.edit(PopupEdit::ShowAt { anchor })
     }
     /// Dismisses active descendants through existing manager policy.
-    fn hide(&self) -> Result<(), NcStatus> {
+    fn hide(&mut self) -> Result<(), NcStatus> {
         self.edit(PopupEdit::Hide)
     }
     /// Rejects unknown bits and preserves popup-only chrome restrictions.
-    fn set_options(&self, options: WindowOptions) -> Result<(), NcStatus> {
+    fn set_options(&mut self, options: WindowOptions) -> Result<(), NcStatus> {
         options.validate()?;
-        self.edit(PopupEdit::Options(WindowOption::from_bits(options.bits).ok_or(NC_E_INVALID_ARG)?))
+        self.edit(PopupEdit::Options {
+            options: WindowOption::from_bits(options.bits).ok_or(NC_E_INVALID_ARG)?,
+        })
     }
     /// Removes the definition and closes retained widget handles after the native detach.
-    fn close(&self) -> Result<(), NcStatus> {
-        if self.closed.get() {
+    fn close(&mut self) -> Result<(), NcStatus> {
+        if self.closed {
             return Ok(());
         }
         let Some(runtime) = self.runtime.upgrade() else {
-            self.closed.set(true);
+            self.closed = true;
             return Ok(());
         };
         if runtime.factory.state.closed.get() {
-            self.closed.set(true);
+            self.closed = true;
             return Ok(());
         }
         runtime.factory.host.check_mutation()?;
         let mut context = runtime.context()?;
         runtime.factory.state.error.set(None);
         NativeSurface::Popup(self.popup.clone()).close(&mut context.window_manager)?;
-        self.closed.set(true);
+        self.closed = true;
         runtime.pending.set(true);
         runtime.prune_mounts(&context.window_manager);
         runtime.factory.state.error.take().map_or(Ok(()), Err)
@@ -425,5 +445,61 @@ impl IPopupEvents for LogicalPopup {
     fn subscribe(&self, sink: ComRef<'_, IPopupSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.owner()?.factory.host.check_mutation()?;
         crate::event::subscribe(self.popup.events(), sink)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use neocogi_ui::{EventHandler, EventSession, Point, Rect, Size, Ui, UiInput, Visibility, events::Activation};
+    use neocogi_com::NcStatus;
+
+    /// Records one compact-menu activation through the public event adapter.
+    struct RecordActivation;
+
+    impl EventHandler<Vec<String>, Activation> for RecordActivation {
+        /// Copies the captured label so the test can prove pointer routing reached the popup row.
+        fn handle(&mut self, labels: &mut Vec<String>, event: &Activation) -> Result<(), NcStatus> {
+            labels.push(event.label.clone());
+            Ok(())
+        }
+    }
+
+    /// Pointer-relative public popup activation uses the latest input position consumed by the runtime.
+    #[test]
+    fn popup_show_places_a_standalone_menu_at_the_current_pointer() {
+        // Construct the production COM runtime and public clients so the regression crosses the
+        // same popup capability boundary used by the full demo.
+        let runtime = super::super::create_runtime(crate::test_support::test_atlas());
+        let ui = Ui::from_interface(runtime).unwrap();
+        let body = ui.widgets().button("body").unwrap();
+        let owner = ui.window("pointer popup owner", Rect { x: 20, y: 20, width: 400, height: 200 }, &body).unwrap();
+        let menus = ui.menus().unwrap();
+        let builder = menus.create("Pointer actions").unwrap();
+        let item = builder.item("Run at pointer").unwrap();
+        let mut popup = menus.popup(owner.as_com_ref(), &builder).unwrap();
+        let events = EventSession::new(Vec::new());
+        events.subscribe_menu_item(&item, RecordActivation).unwrap();
+        let size = Size { width: 640, height: 400 };
+
+        // Consume a pointer transition before opening. The popup request must use this committed
+        // screen position rather than the popup definition's default rectangle or its owner origin.
+        let pointer = Point { x: 300, y: 250 };
+        ui.input(UiInput::Pointer(pointer), "").unwrap();
+        ui.update_with_events(size, &events).unwrap();
+        popup.show().unwrap();
+        ui.update_with_events(size, &events).unwrap();
+
+        // Press just inside the expected popup frame. Reaching the first row proves the coordinates
+        // crossed IPopup and were used by the manager's subsequent hit testing.
+        let first_row = Point { x: pointer.x + 2, y: pointer.y + 2 };
+        ui.input(UiInput::Down { position: first_row, buttons: 1 }, "").unwrap();
+        ui.update_with_events(size, &events).unwrap();
+        assert_eq!(&*events.state().unwrap(), &["Run at pointer"]);
+        assert_eq!(popup.visibility(), Ok(Visibility::HIDDEN));
+
+        // Explicit closure verifies the newly exercised operation did not alter retained lifetime
+        // ownership for either the popup definition or its window.
+        popup.close().unwrap();
+        owner.close().unwrap();
     }
 }

@@ -676,8 +676,10 @@ A bar's direct entries must be submenus. `attach_bar` installs one intrinsic bar
 on a window; trying to attach another reports `UI_E_POLICY`. Dynamic bar
 replacement is not exposed. For an ordinary standalone popup, build a root with
 items/separators/submenus and call `menus.popup(window, &builder)`, then use the
-returned `IPopup` capability's normal show/hide/close methods. Successful mounting
-consumes declarations; subsequent builder appends report `UI_E_CLOSED`.
+returned `IPopup` capability's `show()` method for current-pointer placement or
+`show_at(anchor)` for an exact screen anchor. Its hide/close methods retain their
+ordinary transient-lifetime behavior. Successful mounting consumes declarations;
+subsequent builder appends report `UI_E_CLOSED`.
 
 Menu item interfaces resolve the same native row before and after that transfer.
 They expose label, enabled state, check/radio role, hint and validated font

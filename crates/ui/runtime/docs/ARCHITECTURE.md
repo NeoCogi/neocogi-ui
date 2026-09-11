@@ -229,9 +229,9 @@ independent family among fixed-layer peers or a child family among its siblings;
 that structural scope or cross a higher fixed layer. Pointer hit testing is the inverse of the
 recursive family paint order, so overlap selects the surface whose pixels are visually in front.
 
-A composed control creates a generic popup once in its stable window owner, then calls
-`show_popup(&popup)` at the current pointer or `show_popup_at(&popup, anchor)` at an exact
-screen-space rectangle. Generic popups keep that screen anchor until explicitly shown elsewhere;
+A composed control creates a generic popup once in its stable window owner, then calls `show()` at
+the latest consumed pointer or `show_at(anchor)` at an exact screen-space rectangle. Generic popups
+keep that screen anchor until explicitly shown elsewhere;
 they do not follow later owner movement. `PopupHandle` parameters keep popup operations separate
 from window operations at compile time.
 
