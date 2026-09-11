@@ -1,6 +1,6 @@
 //! Native acceptance for the independently built extension. This host never links its implementation.
 use super::*;
-use neocogi_demo_contracts::extension::*;
+use neocogi_demo_contracts::*;
 
 /// Concrete application callback retains the real editing capability and the captured event history.
 struct Advance {

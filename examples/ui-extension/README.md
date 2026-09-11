@@ -11,7 +11,7 @@ cargo neocogi run --assembly smoke --variant glow --variant extension -- --smoke
 Use `vulkan` or `wgpu` for the other native renderers. The same crate also compiles
 for `wasm32-unknown-unknown`; static applications register its descriptor explicitly.
 
-The contracts live in [the demo contracts](../../demos/contracts/src/extension.rs).
+The contracts live in [the demo IDL module](../../demos/contracts/idl/neocogi/demo.ncidl).
 `Counter: IWidget + ILeafLayout + IActivationEvents + IWidgetProbe` is a callable
 class contract, while `IInset: IContainer` demonstrates ordinary interface
 inheritance. The host constructs the registered counter directly with a typed

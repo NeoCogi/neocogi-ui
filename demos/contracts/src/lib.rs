@@ -8,9 +8,4 @@
 
 include!(concat!(env!("OUT_DIR"), "/neocogi_demo.rs"));
 
-/// Compatibility namespace for the demo extension's generated declarations.
-pub mod extension {
-    pub use crate::{Counter, CounterAbi, ExtensionProvider, ExtensionProviderAbi, IInset, IInsetAbi, IWidgetProbe, IWidgetProbeAbi, WidgetCalls};
-}
-
 mod helpers;
