@@ -42,37 +42,24 @@ pub(crate) fn apply_flat(data: &mut AssetData, insets: Insets, palette: &FlatPal
     data.tables.window_chrome = chrome.into();
 }
 
-/// Converts authorable caption geometry to the checked transfer record.
+/// Returns the conventional caption geometry in its checked transfer form.
 #[cfg(feature = "builder")]
-pub(crate) fn compile_chrome(chrome: WindowChromeSkin) -> AssetChrome {
-    // The wire record uses bounded integer tags and explicit presence bits, never Rust options.
-    let captions = chrome.captions;
+pub(crate) fn default_chrome() -> AssetChrome {
+    // Keep builder output identical to the default JSON document without
+    // constructing a runtime-only skin representation in this plugin.
     AssetChrome {
-        title_alignment: match chrome.title_alignment {
-            WindowTitleAlignment::Leading => TitleAlignment::LEADING,
-            WindowTitleAlignment::Centered => TitleAlignment::CENTERED,
-        },
-        close_side: compile_side(captions.close_side),
-        minimize_side: compile_side(captions.minimize_side),
-        maximize_side: compile_side(captions.maximize_side),
-        vertical_spacing: captions.vertical_spacing,
-        minimum_extent: captions.minimum_extent,
-        inner_spacing: captions.inner_spacing,
-        show_without_activation: u8::from(captions.show_without_activation),
-        minimized_content_height: chrome.minimized_content_height,
-        has_backdrop: u8::from(chrome.active_title_backdrop.is_some()),
-        backdrop_rgba: chrome.active_title_backdrop.map_or(0, |value| rgba(value.color)),
-        backdrop_padding: chrome.active_title_backdrop.map_or(0, |value| value.horizontal_padding),
-    }
-}
-
-/// Stores the exact declared caption bank in its wire representation.
-#[cfg(feature = "builder")]
-fn compile_side(side: CaptionButtonSide) -> CaptionSide {
-    // Exhaustive matching makes new policies require an explicit transfer decision.
-    match side {
-        CaptionButtonSide::Leading => CaptionSide::LEADING,
-        CaptionButtonSide::Trailing => CaptionSide::TRAILING,
+        title_alignment: TitleAlignment::LEADING,
+        close_side: CaptionSide::TRAILING,
+        minimize_side: CaptionSide::TRAILING,
+        maximize_side: CaptionSide::TRAILING,
+        vertical_spacing: 2,
+        minimum_extent: 0,
+        inner_spacing: 0,
+        show_without_activation: 1,
+        minimized_content_height: 2,
+        has_backdrop: 0,
+        backdrop_rgba: 0,
+        backdrop_padding: 0,
     }
 }
 

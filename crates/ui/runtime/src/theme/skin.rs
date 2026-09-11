@@ -57,7 +57,7 @@ use super::{
     catalog::AppearanceCatalog,
 };
 use crate::atlas::{AtlasHandle, FontId};
-use crate::render::NinePatch;
+use crate::render::{Color, NinePatch};
 #[cfg(test)]
 use crate::SliceInsets;
 #[cfg(test)]
@@ -83,8 +83,142 @@ impl SkinRevision {
     }
 }
 
-/// Plain geometry belongs to the resource contract; this module owns only resolved UI state.
-pub use neocogi_ui_contracts::{CaptionButtonSide, CaptionButtonsSkin, SkinMetrics, TitleBackdropSkin, WindowChromeSkin, WindowTitleAlignment};
+/// Layout metrics use the generated checked transfer record without a second native shape.
+pub use neocogi_ui_contracts::AssetMetrics as SkinMetrics;
+
+/// Horizontal alignment policy for manager-owned window title text.
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
+pub enum WindowTitleAlignment {
+    /// Uses the available title span from its leading edge.
+    #[default]
+    Leading,
+    /// Reserves symmetric caption banks and centers text in the complete title.
+    Centered,
+}
+
+/// Edge selected for one manager-owned caption button.
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
+pub enum CaptionButtonSide {
+    /// Allocates the button from the title's leading edge.
+    Leading,
+    /// Allocates the button from the title's trailing edge.
+    #[default]
+    Trailing,
+}
+
+/// Runtime policy controlling caption-button geometry and presentation.
+#[derive(Copy, Clone)]
+pub struct CaptionButtonsSkin {
+    /// Edge used by the close button.
+    pub close_side: CaptionButtonSide,
+    /// Edge used by the minimize button.
+    pub minimize_side: CaptionButtonSide,
+    /// Edge used by the maximize or restore button.
+    pub maximize_side: CaptionButtonSide,
+    /// Title pixels retained above and below each square caption button.
+    pub vertical_spacing: i32,
+    /// Minimum square caption extent after applying the inset.
+    pub minimum_extent: i32,
+    /// Unstriped title pixels between each non-empty caption bank and title field.
+    pub inner_spacing: i32,
+    /// Whether caption controls remain visible without window activation.
+    pub show_without_activation: bool,
+}
+
+impl Default for CaptionButtonsSkin {
+    /// Returns the conventional trailing-edge caption-button policy.
+    fn default() -> Self {
+        Self {
+            close_side: CaptionButtonSide::Trailing,
+            minimize_side: CaptionButtonSide::Trailing,
+            maximize_side: CaptionButtonSide::Trailing,
+            vertical_spacing: 2,
+            minimum_extent: 0,
+            inner_spacing: 0,
+            show_without_activation: true,
+        }
+    }
+}
+
+/// Optional flat field painted behind active centered title text.
+#[derive(Copy, Clone)]
+pub struct TitleBackdropSkin {
+    /// Flat background color interrupting title artwork behind measured text.
+    pub color: Color,
+    /// Horizontal pixels added on each side of the measured title text.
+    pub horizontal_padding: i32,
+}
+
+/// Manager-owned window chrome policy selected by the resolved runtime skin.
+#[derive(Copy, Clone)]
+pub struct WindowChromeSkin {
+    /// Alignment and caption-bank reservation policy for title text.
+    pub title_alignment: WindowTitleAlignment,
+    /// Independent placement, extent, and visibility policy for caption buttons.
+    pub captions: CaptionButtonsSkin,
+    /// Application-content height retained while a window is minimized.
+    pub minimized_content_height: i32,
+    /// Optional active-title field painted behind measured text.
+    pub active_title_backdrop: Option<TitleBackdropSkin>,
+}
+
+impl WindowChromeSkin {
+    /// Creates a leading-title recipe with every caption button on the trailing edge.
+    pub const fn trailing_buttons() -> Self {
+        Self {
+            title_alignment: WindowTitleAlignment::Leading,
+            captions: CaptionButtonsSkin {
+                close_side: CaptionButtonSide::Trailing,
+                minimize_side: CaptionButtonSide::Trailing,
+                maximize_side: CaptionButtonSide::Trailing,
+                vertical_spacing: 2,
+                minimum_extent: 0,
+                inner_spacing: 0,
+                show_without_activation: true,
+            },
+            minimized_content_height: 2,
+            active_title_backdrop: None,
+        }
+    }
+
+    /// Creates a centered-title recipe with split compact caption banks.
+    pub const fn classic_mac(title_backdrop: Color) -> Self {
+        // The data expresses each behavior directly; manager code contains no
+        // theme-specific mode branch and also supports mixed arrangements.
+        Self {
+            title_alignment: WindowTitleAlignment::Centered,
+            captions: CaptionButtonsSkin {
+                close_side: CaptionButtonSide::Leading,
+                minimize_side: CaptionButtonSide::Trailing,
+                maximize_side: CaptionButtonSide::Trailing,
+                vertical_spacing: 3,
+                minimum_extent: 1,
+                inner_spacing: 4,
+                show_without_activation: false,
+            },
+            minimized_content_height: 2,
+            active_title_backdrop: Some(TitleBackdropSkin {
+                color: title_backdrop,
+                horizontal_padding: 4,
+            }),
+        }
+    }
+
+    /// Updates an existing title backdrop without changing chrome geometry.
+    pub fn set_backdrop_color(&mut self, color: Color) {
+        // Conventional recipes have no backdrop and therefore remain unchanged.
+        if let Some(backdrop) = &mut self.active_title_backdrop {
+            backdrop.color = color;
+        }
+    }
+}
+
+impl Default for WindowChromeSkin {
+    /// Returns the conventional trailing-caption recipe.
+    fn default() -> Self {
+        Self::trailing_buttons()
+    }
+}
 
 /// Complete resolved runtime skin installed with one matching atlas.
 ///

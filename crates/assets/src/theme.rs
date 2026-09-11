@@ -42,7 +42,7 @@ use neocogi_ui_contracts::*;
 use neocogi_ui_contracts::Insets as SliceInsets;
 use neocogi_ui::assets::AssetData;
 use crate::atlas::Builder;
-use crate::style::{apply_flat, compile_chrome, rgba};
+use crate::style::{apply_flat, rgba};
 
 /// Explicit byte source for a theme's referenced fonts and images.
 pub trait AssetSource {
@@ -439,7 +439,7 @@ impl ThemeDefinition {
         let mut data = atlas;
         // Compile directly into the transfer records; no native UI skin or atlas is constructed.
         data.tables.metrics = self.skin.metrics;
-        data.tables.chrome = compile_chrome(self.skin.window_chrome);
+        data.tables.chrome = self.skin.window_chrome.compile();
         let frame_insets = self.skin.fallback_frame_insets;
         validate_non_negative("generic_frame", "skin.fallback_frame_insets", frame_insets)?;
         validate_non_negative(
@@ -754,6 +754,131 @@ impl FontDocument {
     }
 }
 
+/// JSON title-alignment spelling translated directly to the portable record.
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, neocogi_com::ComDeserialize)]
+#[com_deserialize(rename_all = "snake_case")]
+enum WindowTitleAlignmentDocument {
+    /// Uses the title span from its leading edge.
+    #[default]
+    Leading,
+    /// Centers text after reserving symmetric caption banks.
+    Centered,
+}
+
+/// JSON caption-edge spelling translated directly to the portable record.
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, neocogi_com::ComDeserialize)]
+#[com_deserialize(rename_all = "snake_case")]
+enum CaptionButtonSideDocument {
+    /// Allocates the button from the leading edge.
+    Leading,
+    /// Allocates the button from the trailing edge.
+    #[default]
+    Trailing,
+}
+
+/// Asset-document fields controlling caption-button geometry and visibility.
+#[derive(Copy, Clone, neocogi_com::ComDeserialize)]
+#[com_deserialize(default)]
+struct CaptionButtonsDocument {
+    /// Edge used by the close button.
+    close_side: CaptionButtonSideDocument,
+    /// Edge used by the minimize button.
+    minimize_side: CaptionButtonSideDocument,
+    /// Edge used by the maximize or restore button.
+    maximize_side: CaptionButtonSideDocument,
+    /// Title pixels retained above and below each square caption button.
+    vertical_spacing: i32,
+    /// Minimum square caption extent after applying the inset.
+    minimum_extent: i32,
+    /// Unstriped pixels between a caption bank and the title field.
+    inner_spacing: i32,
+    /// Whether caption controls remain visible without window activation.
+    show_without_activation: bool,
+}
+
+impl Default for CaptionButtonsDocument {
+    /// Returns the conventional trailing-edge document defaults.
+    fn default() -> Self {
+        Self {
+            close_side: CaptionButtonSideDocument::Trailing,
+            minimize_side: CaptionButtonSideDocument::Trailing,
+            maximize_side: CaptionButtonSideDocument::Trailing,
+            vertical_spacing: 2,
+            minimum_extent: 0,
+            inner_spacing: 0,
+            show_without_activation: true,
+        }
+    }
+}
+
+/// Optional flat title field in the asset document.
+#[derive(Copy, Clone, neocogi_com::ComDeserialize)]
+struct TitleBackdropDocument {
+    /// Flat background color painted behind measured title text.
+    color: Color,
+    /// Horizontal pixels added on each side of the measured text.
+    horizontal_padding: i32,
+}
+
+/// Asset-owned title and caption syntax compiled to [`AssetChrome`].
+#[derive(Copy, Clone, neocogi_com::ComDeserialize)]
+#[com_deserialize(default)]
+struct WindowChromeDocument {
+    /// Title alignment and caption-bank reservation policy.
+    title_alignment: WindowTitleAlignmentDocument,
+    /// Independent caption placement, extent, and visibility policy.
+    captions: CaptionButtonsDocument,
+    /// Application-content height retained while minimized.
+    minimized_content_height: i32,
+    /// Optional active-title field painted behind measured text.
+    active_title_backdrop: Option<TitleBackdropDocument>,
+}
+
+impl WindowChromeDocument {
+    /// Compiles this JSON document directly into the checked wire record.
+    fn compile(self) -> AssetChrome {
+        // No runtime skin model is constructed or retained by the asset plugin.
+        let captions = self.captions;
+        AssetChrome {
+            title_alignment: match self.title_alignment {
+                WindowTitleAlignmentDocument::Leading => TitleAlignment::LEADING,
+                WindowTitleAlignmentDocument::Centered => TitleAlignment::CENTERED,
+            },
+            close_side: compile_caption_side(captions.close_side),
+            minimize_side: compile_caption_side(captions.minimize_side),
+            maximize_side: compile_caption_side(captions.maximize_side),
+            vertical_spacing: captions.vertical_spacing,
+            minimum_extent: captions.minimum_extent,
+            inner_spacing: captions.inner_spacing,
+            show_without_activation: u8::from(captions.show_without_activation),
+            minimized_content_height: self.minimized_content_height,
+            has_backdrop: u8::from(self.active_title_backdrop.is_some()),
+            backdrop_rgba: self.active_title_backdrop.map_or(0, |value| rgba(value.color)),
+            backdrop_padding: self.active_title_backdrop.map_or(0, |value| value.horizontal_padding),
+        }
+    }
+}
+
+impl Default for WindowChromeDocument {
+    /// Returns the conventional leading-title, trailing-caption recipe.
+    fn default() -> Self {
+        Self {
+            title_alignment: WindowTitleAlignmentDocument::Leading,
+            captions: CaptionButtonsDocument::default(),
+            minimized_content_height: 2,
+            active_title_backdrop: None,
+        }
+    }
+}
+
+/// Converts an asset-document caption edge into its portable tag.
+fn compile_caption_side(side: CaptionButtonSideDocument) -> CaptionSide {
+    match side {
+        CaptionButtonSideDocument::Leading => CaptionSide::LEADING,
+        CaptionButtonSideDocument::Trailing => CaptionSide::TRAILING,
+    }
+}
+
 /// Concrete runtime skin inputs applied before sparse appearance overrides.
 ///
 /// The wrapper exists only to group independent runtime values in JSON. It does not mirror their
@@ -763,7 +888,7 @@ impl FontDocument {
 struct ThemeSkinDocument {
     /// Layout values consumed directly by the runtime skin.
     #[serde(deserialize_with = "crate::serde_com::deserialize")]
-    metrics: SkinMetrics,
+    metrics: AssetMetrics,
     /// Shared destination geometry used while compiling flat fallback patches.
     #[serde(deserialize_with = "crate::serde_com::deserialize")]
     fallback_frame_insets: SliceInsets,
@@ -772,7 +897,7 @@ struct ThemeSkinDocument {
     palette: FlatPalette,
     /// Exact manager-owned title and caption-button policy.
     #[serde(deserialize_with = "crate::serde_com::deserialize")]
-    window_chrome: WindowChromeSkin,
+    window_chrome: WindowChromeDocument,
 }
 
 impl Default for ThemeSkinDocument {
@@ -781,10 +906,10 @@ impl Default for ThemeSkinDocument {
         // Container-level Serde defaults copy from this complete value. Missing JSON fields cannot
         // therefore drift from programmatic defaults or require optional mirror fields.
         Self {
-            metrics: SkinMetrics::default(),
+            metrics: AssetMetrics::default(),
             fallback_frame_insets: SliceInsets::uniform(1),
             palette: FlatPalette::default(),
-            window_chrome: WindowChromeSkin::default(),
+            window_chrome: WindowChromeDocument::default(),
         }
     }
 }

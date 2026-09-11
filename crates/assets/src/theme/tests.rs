@@ -66,7 +66,7 @@ fn test_atlas() -> AssetData {
             glyphs: glyphs.into(),
             icons: icons.into(),
             metrics: AssetMetrics::default(),
-            chrome: crate::style::compile_chrome(WindowChromeSkin::default()),
+            chrome: crate::style::default_chrome(),
             surfaces: vec![].into(),
             controls: vec![].into(),
             menus: vec![].into(),
@@ -570,8 +570,8 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
     assert_eq!(loaded.name(), "Mac OS 9");
     assert_eq!(images, 29, "each shared PNG path must be baked exactly once");
     let chrome = loaded.bundle().skin().window_chrome;
-    assert_eq!(chrome.title_alignment, neocogi_ui_contracts::WindowTitleAlignment::Centered);
-    assert_eq!(chrome.captions.close_side, neocogi_ui_contracts::CaptionButtonSide::Leading);
+    assert_eq!(chrome.title_alignment, neocogi_ui_runtime::WindowTitleAlignment::Centered);
+    assert_eq!(chrome.captions.close_side, neocogi_ui_runtime::CaptionButtonSide::Leading);
     assert_eq!(chrome.captions.vertical_spacing, 3);
     assert_eq!(chrome.captions.inner_spacing, 4);
     assert_eq!(chrome.minimized_content_height, 2);

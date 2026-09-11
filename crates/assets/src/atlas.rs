@@ -412,7 +412,7 @@ impl Builder {
                 icons: icons.into(),
                 names: names.into(),
                 metrics: AssetMetrics::default(),
-                chrome: style::compile_chrome(WindowChromeSkin::default()),
+                chrome: style::default_chrome(),
                 surfaces: Vec::new().into(),
                 controls: Vec::new().into(),
                 menus: Vec::new().into(),

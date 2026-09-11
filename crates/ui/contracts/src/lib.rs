@@ -22,7 +22,3 @@ pub use helpers::*;
 
 /// Semantic names shared by asset recipes and runtime resource resolution.
 mod resource_roles;
-
-/// Plain layout and window geometry used by theme authoring and resolved skins.
-mod skin;
-pub use skin::{CaptionButtonSide, CaptionButtonsSkin, SkinMetrics, TitleBackdropSkin, WindowChromeSkin, WindowTitleAlignment};

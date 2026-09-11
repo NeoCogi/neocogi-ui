@@ -129,6 +129,25 @@ impl Default for AssetIcon {
     }
 }
 
+impl Default for AssetMetrics {
+    /// Returns the standard layout metrics for an authored or installed skin.
+    fn default() -> Self {
+        // The generated type must own this standard-trait implementation under
+        // Rust's coherence rules; no separate handwritten contract type exists.
+        Self {
+            default_cell_width: 68,
+            padding: 5,
+            window_content_insets: Insets::uniform(5),
+            spacing: 4,
+            indent: 24,
+            title_height: 24,
+            window_border: Insets::uniform(1),
+            scrollbar_size: 12,
+            thumb_size: 8,
+        }
+    }
+}
+
 impl Default for Insets {
     /// Returns zero thickness on every edge.
     fn default() -> Self {
