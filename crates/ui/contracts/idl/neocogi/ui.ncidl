@@ -1,7 +1,6 @@
-#[repr(u8)]
 #[version(1)]
 /// Whether preferred measurement or child placement inputs changed.
-    enum GeometryChange {
+    enum GeometryChange: u8 {
         /// Preferred measurement and placement inputs are unchanged.
         NO_CHANGE = 0,
         /// Preferred measurement or placement inputs changed and must be invalidated.
@@ -27,10 +26,9 @@ struct PaintScope {
     clip: Rect,
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Closed visual state used when the runtime resolves a semantic widget frame.
-    enum WidgetVisualState {
+    enum WidgetVisualState: u8 {
         /// Disabled surface or control.
         DISABLED = 0,
         /// Enabled surface or unfocused control without pointer interaction.
@@ -230,10 +228,9 @@ trait ITextMetrics {
     fn button_size(&self, text: &[u8]) -> Result<Size>;
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Whether an axis has a finite measurement maximum.
-    enum LimitKind {
+    enum LimitKind: u8 {
         /// Extent is a nonnegative maximum; zero remains a real bound.
         FINITE = 0,
         /// Preferred size is requested without a finite maximum; extent must be zero.
@@ -265,30 +262,27 @@ trait ILeafLayout {
     fn measure(&mut self, bounds: LayoutLimits, metrics: &ITextMetrics) -> Result<Size>;
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Visibility intent or effective surface visibility, as documented by the operation.
-    enum Visibility {
+    enum Visibility: u8 {
         /// Excluded from rendering and input.
         HIDDEN = 0,
         /// Eligible when structural and modal owner policy also permits it.
         VISIBLE = 1,
     }
 
-#[repr(u8)]
 #[version(1)]
 /// How a parent clips its structural child windows.
-    enum ChildClip {
+    enum ChildClip: u8 {
         /// Inherit the ancestor/viewport clip without narrowing to the parent's body.
         NONE = 0,
         /// Clip complete child surfaces to the parent's application content area.
         CONTENT = 1,
     }
 
-#[repr(u8)]
 #[version(1)]
 /// Structural layer category for a window or dialog.
-    enum LayerKind {
+    enum LayerKind: u8 {
         /// An independent or inherited application layer in 0..=15.
         FIXED = 0,
         /// Dedicated modal band above all application layers; number is zero.
@@ -451,10 +445,9 @@ struct Point {
     y: i32,
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Logical keyboard identity, independent of native scan codes.
-    enum KeyCode {
+    enum KeyCode: u8 {
         /// Printable shortcut key; its scalar is carried in `KeyStroke::value`.
         CHARACTER = 0,
         /// Removes the previous character.
@@ -514,10 +507,9 @@ struct KeyStroke {
     modifiers: u8,
 }
 
-#[repr(u8)]
 #[version(1)]
 /// One routed input transaction; pointer payloads are already content-local.
-enum WidgetEvent {
+enum WidgetEvent: u8 {
     /// Ordinary eventless update, including animation or state synchronization.
     None,
     /// Native focus or capture was lost.
@@ -592,10 +584,9 @@ struct WidgetUpdate {
     modifiers: u8,
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Shared semantic keyboard/pointer action resolved by the runtime's routing rules.
-    enum WidgetAction {
+    enum WidgetAction: u8 {
         /// No semantic action was requested.
         NONE = 0,
         /// Invoke the primary command.
@@ -610,10 +601,9 @@ struct WidgetUpdate {
         COLLAPSE = 5,
     }
 
-#[repr(u8)]
 #[version(1)]
 /// Ordered host input before the runtime computes drag, hover and local coordinates.
-enum UiInput {
+enum UiInput: u8 {
     /// Native focus or capture was lost; clears held state in input order.
     Cancel,
     /// Absolute pointer position in drawable coordinates.
@@ -717,10 +707,9 @@ trait IEventDispatcher {
     fn dispatch(&self, limit: u32) -> Result<u32>;
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Captured window lifecycle or user chrome interaction; Destroyed is the one terminal fact.
-enum WindowEvent {
+enum WindowEvent: u8 {
     /// A user move or resize committed this complete outer rectangle.
     GeometryChanged {
         /// Captured outer geometry, independent of subsequent window edits.
@@ -831,10 +820,9 @@ trait IFileDialogs {
     fn create(&self, parent: &IWindow) -> Result<IFileDialog>;
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Persistent menu marker role remains present even when its selected boolean is false.
-enum MenuMark {
+enum MenuMark: u8 {
     /// No marker role or required marker gutter.
     None,
     /// Checkable item whose boolean determines check-glyph visibility.
@@ -892,10 +880,9 @@ trait IMenus {
     fn create_popup(&self, window: &IWindow, menu: &IMenuBuilder) -> Result<IPopup>;
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Native path representation carried by an immutable path capability.
-    enum PathEncoding {
+    enum PathEncoding: u8 {
         /// Exact Unix filename bytes; invalid UTF-8 is preserved.
         UNIX_BYTES = 0,
         /// Exact Windows UTF-16 code units; unpaired surrogates are preserved.
@@ -925,10 +912,9 @@ trait IInputSink {
     fn input(&self, event: UiInput, text: &[u8]) -> Result<()>;
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Outcome of removing one relevant OS transition from this window's queue.
-    enum PollStatus {
+    enum PollStatus: u8 {
         /// No relevant transition remains; update and render the accumulated input.
         IDLE = 0,
         /// Input was delivered or drawable/window state changed; poll again before rendering.
@@ -937,10 +923,9 @@ trait IInputSink {
         CLOSE = 2,
     }
 
-#[repr(u8)]
 #[version(1)]
 /// Committed native text-input placement, expressed in physical drawable pixels.
-enum TextInputArea {
+enum TextInputArea: u8 {
     /// No editable focus currently requests IME or text composition.
     None,
     /// Nonnegative editor rectangle; hosts convert this to logical OS/CSS coordinates.
@@ -974,10 +959,9 @@ factory Platform: IRenderDiagnostics {
     ) -> Result<IPlatformWindow>;
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Ordered draw record. Vertex ranges must partition the entire vertex buffer without gaps or overlap.
-enum RenderBatch {
+enum RenderBatch: u8 {
     /// Atlas-backed triangles already clipped and tessellated by the UI.
     Atlas {
         /// First vertex, equal to the end of the preceding vertex-bearing batch.
@@ -1118,10 +1102,9 @@ struct WidgetOptions {
     bits: u32,
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Semantic outer-frame role; concrete theme resources stay in the runtime.
-    enum WidgetFrame {
+    enum WidgetFrame: u8 {
         /// Generic appearance in the runtime theme.
         GENERIC = 0,
         /// Button appearance in the runtime theme.
@@ -1199,10 +1182,9 @@ struct LayoutScope {
     invocation: u64,
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Parent-authored participation, independent of a child's semantic options.
-    enum LayoutParticipation {
+    enum LayoutParticipation: u8 {
         /// Update, paint and input are enabled.
         ACTIVE = 0,
         /// Update and paint remain enabled; the entire subtree rejects input.
@@ -1288,10 +1270,9 @@ struct ChildEditResult {
     teardown: Status,
 }
 
-#[repr(u8)]
 #[version(1)]
 /// One parent-owned track; variants carry only the data relevant to their policy.
-enum LayoutTrack {
+enum LayoutTrack: u8 {
     /// Uses the child's intrinsic preferred extent.
     Content,
     /// Uses an exact nonnegative pixel extent.
@@ -1306,10 +1287,9 @@ enum LayoutTrack {
     },
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Shared cross-axis size of a linear container's line.
-enum CrossSize {
+enum CrossSize: u8 {
     /// Fits the largest child's preferred cross extent.
     Content,
     /// Reports preferred content, then stretches to its exact placement allocation.
@@ -1321,10 +1301,9 @@ enum CrossSize {
     },
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Optional exact child cross extent; Stretch uses the owning linear line's cross size.
-enum ChildCrossSize {
+enum ChildCrossSize: u8 {
     /// Uses the line's resolved cross extent.
     Stretch,
     /// Uses an exact nonnegative pixel extent.
@@ -1334,10 +1313,9 @@ enum ChildCrossSize {
     },
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Main axis and leading edge, without independent potentially inconsistent flags.
-    enum FlowDirection {
+    enum FlowDirection: u8 {
         /// Horizontal sequence starting at the left edge.
         LEFT_TO_RIGHT = 0,
         /// Horizontal sequence starting at the right edge.
@@ -1468,10 +1446,9 @@ class ScrollArea: IWidget + IContainerLayout + IScrolling {
     fn replace_content(&mut self, content: &IWidget) -> Result<ChildEditResult>;
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Immutable disclosure presentation; expansion and child ownership use one shared policy.
-    enum DisclosureStyle {
+    enum DisclosureStyle: u8 {
         /// Full framed header above the body.
         HEADER = 0,
         /// Compact tree row with an indented body.
@@ -1530,10 +1507,9 @@ class Textbox: IWidget + ILeafLayout {
     fn subscribe_submitted(&mut self, sink: &ITextSubmittedSink) -> Result<IEventSubscription>;
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Concrete multiline wrapping policy shared by display and editing controls.
-    enum TextWrapping {
+    enum TextWrapping: u8 {
         /// Preserve explicit line breaks without inserting visual breaks.
         NONE = 0,
         /// Break at ASCII spaces, retaining an oversized word as one visual span.
@@ -1692,10 +1668,9 @@ class ListBox: IWidget + ILeafLayout {
     fn subscribe(&mut self, sink: &IActivationSink) -> Result<IEventSubscription>;
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Scrollbar orientation, fixed for the lifetime of one control.
-    enum ScrollAxis {
+    enum ScrollAxis: u8 {
         /// Left-to-right scrolling and horizontal thumb movement.
         HORIZONTAL = 0,
         /// Top-to-bottom scrolling and vertical thumb movement.
@@ -1729,10 +1704,9 @@ class Scrollbar: IWidget + ILeafLayout {
     fn subscribe(&mut self, sink: &IScrollbarSink) -> Result<IEventSubscription>;
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Semantic font selection resolved by the current immutable resource revision.
-    enum TextFontRole {
+    enum TextFontRole: u8 {
         /// Ordinary control and body text.
         BODY = 0,
         /// Compact supporting text.
@@ -1755,10 +1729,9 @@ trait IFontStyle {
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Optional semantic icon selected in the widget's own resource bundle.
-    enum ContentIcon {
+    enum ContentIcon: u8 {
         /// Remove the adjacent icon.
         NONE = 0,
         /// Close affordance.
@@ -1951,20 +1924,18 @@ struct AssetMetrics {
     thumb_size: i32,
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Window title placement within the available caption geometry.
-    enum TitleAlignment {
+    enum TitleAlignment: u8 {
         /// Start at the leading edge.
         LEADING = 0,
         /// Center within the title, reserving symmetric caption banks.
         CENTERED = 1,
     }
 
-#[repr(u8)]
 #[version(1)]
 /// Caption bank containing one window control.
-    enum CaptionSide {
+    enum CaptionSide: u8 {
         /// Place in the leading bank.
         LEADING = 0,
         /// Place in the trailing bank.
@@ -2000,10 +1971,9 @@ struct AssetChrome {
     backdrop_padding: i32,
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Resolved nine-patch artwork; colors use the renderer's packed RGBA convention.
-enum AssetPatch {
+enum AssetPatch: u8 {
     /// Nine independent cells; alpha zero means no visible cell.
     Flat {
         /// Top-left corner color.
@@ -2049,10 +2019,9 @@ struct AssetVisual {
     patch: AssetPatch,
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Family whose table is role-major, then state-major, using appearance::* ALL order.
-    enum AppearanceFamily {
+    enum AppearanceFamily: u8 {
         /// SurfaceRole × SurfaceState values.
         SURFACE = 0,
         /// ControlRole × ControlState values.
@@ -2132,10 +2101,9 @@ factory ThemeLoader: IAssetDiagnostics {
     fn load_theme(&self, path: &INativePath, base: &IAssetBundle) -> Result<IAssetBundle>;
 }
 
-#[repr(u8)]
 #[version(1)]
 /// Explicit choice between preserving authored artwork and replacing it with a flat recipe.
-enum PaletteEdit {
+enum PaletteEdit: u8 {
     /// Keep the current role/state visuals, including image-backed theme artwork.
     Preserve,
     /// Compile this complete named palette through the UI's shared flat-style rules.

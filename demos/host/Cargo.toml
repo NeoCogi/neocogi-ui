@@ -24,7 +24,7 @@ monolith = ["neocogi-com/static-runtime", "dep:neocogi-ui-runtime", "dep:neocogi
 neocogi-ui.workspace = true
 neocogi-com = { workspace = true, features = ["std", "macros"] }
 neocogi-ui-runtime = { path = "../../crates/ui/runtime", optional = true }
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "e83f056399ddd258107aeda00d2af09e25c725df", optional = true, default-features = false }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "311de4ad24e630cc7f12b38da91d3f9b35fd3f6e", optional = true, default-features = false }
 neocogi-assets = { path = "../../crates/assets", optional = true, default-features = false }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
