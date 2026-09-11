@@ -122,7 +122,7 @@ impl IAssetDiagnostics for PngDecoderObject {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neocogi_com::INcStringComPtrExt;
+    use neocogi_com::{INcStringComPtrExt, com_object};
     use std::{cell::Cell, rc::Rc};
 
     /// Encodes one tiny source image using an independent writer configuration.
