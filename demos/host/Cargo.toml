@@ -10,9 +10,9 @@ repository.workspace = true
 [features]
 default = []
 # Native selection belongs to the separately built renderer plugin.
-glow = []
-vulkan = []
-wgpu = []
+glow = ["neocogi-render-plugin?/glow"]
+vulkan = ["neocogi-render-plugin?/vulkan"]
+wgpu = ["neocogi-render-plugin?/wgpu"]
 webgl = ["dep:neocogi-ui-runtime", "dep:neocogi-render-plugin", "neocogi-render-plugin/webgl"]
 # Browser modules link the same optional decoder/style descriptor staged as a native asset plugin.
 png-assets = ["dep:neocogi-assets"]

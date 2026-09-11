@@ -79,12 +79,11 @@ impl Host {
     pub fn new(title: &str, size: Size, assets: ComPtr<IAssetBundleAbi>) -> Result<Self, HostError> {
         initialize()?;
         let runtime = neocogi_com::Runtime::global();
-        runtime.require_interface_type::<PlatformAbi>(PlatformAbi::CLASS_ID)?;
-        let platform: ComPtr<PlatformAbi> = runtime.construct(())?;
+        let platform = runtime.activate_plugin_factory::<PlatformAbi>(neocogi_com::guid_from_qualified_name(renderer_plugin_name()))?;
         let window = platform.create_window(NcCopyFromBufferOffset::new(0, title.as_bytes()), size, assets.as_com_ref())?;
         let renderer = window.query()?;
-        let arguments = UiRuntimeAbi::arguments(assets.as_com_ref())?;
-        let ui = Ui::from_interface(runtime.construct::<UiRuntimeAbi>(arguments)?)?;
+        let ui_factory = runtime.activate_plugin_factory::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
+        let ui = Ui::from_interface(ui_factory.create_runtime(assets.as_com_ref())?)?;
         let input = ui.input_sink()?;
         Ok(Self { ui, renderer, window, input })
     }
@@ -115,9 +114,8 @@ impl Host {
     #[cfg(feature = "png-assets")]
     pub fn png_texture(&self, png: &[u8]) -> Result<ComPtr<ITextureAbi>, HostError> {
         let runtime = neocogi_com::Runtime::global();
-        runtime.require_interface_type::<PngDecoderAbi>(PngDecoderAbi::CLASS_ID)?;
-        // SAFETY: The checked decoder class has the documented argument-free constructor.
-        let decoder: ComPtr<PngDecoderAbi> = runtime.construct(())?;
+        let assets_factory = runtime.activate_plugin_factory::<AssetsPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.assets"))?;
+        let decoder = assets_factory.png_decoder()?;
         let target = self.renderer.query::<ITextureFactoryAbi>()?;
         decoder.upload(NcCopyFromBufferOffset::new(0, png), target.as_com_ref()).map_err(|status| {
             let detail = decoder
@@ -223,19 +221,30 @@ fn register() -> Result<(), HostError> {
 #[cfg(any(target_arch = "wasm32", feature = "monolith"))]
 fn register() -> Result<(), HostError> {
     let runtime = neocogi_com::Runtime::global();
-    for descriptor in [
-        neocogi_ui_runtime::plugin_descriptor(),
-        neocogi_render_plugin::plugin_descriptor(),
+    // SAFETY: The complete generated descriptions, linked contracts, and
+    // implementation code remain static for this module's process lifetime.
+    unsafe {
+        runtime.register_factory_plugin_description(neocogi_ui_runtime::factory_plugin_description())?;
+        runtime.register_factory_plugin_description(neocogi_render_plugin::factory_plugin_description())?;
         #[cfg(any(feature = "png-assets", feature = "monolith"))]
-        neocogi_assets::plugin_descriptor(),
-    ] {
-        // SAFETY: The complete graph and implementation code remain static for this module's life.
-        let status = unsafe { runtime.register_plugin_descriptor(descriptor) };
-        if status.is_err() {
-            return Err(status.into());
-        }
+        runtime.register_factory_plugin_description(neocogi_assets::factory_plugin_description())?;
     }
     Ok(())
+}
+
+/// Returns the qualified identity selected for the separately built renderer assembly.
+fn renderer_plugin_name() -> &'static str {
+    if cfg!(feature = "vulkan") {
+        "neocogi.render.vulkan"
+    } else if cfg!(feature = "wgpu") {
+        "neocogi.render.wgpu"
+    } else if cfg!(feature = "webgl") {
+        "neocogi.render.webgl"
+    } else {
+        // Glow is also the workspace-check fallback when this library is built
+        // directly without an application selecting its renderer feature.
+        "neocogi.render.glow"
+    }
 }
 
 /// Opt-in finite demos exercise ordinary input/update/render and teardown without a separate mock loop.
