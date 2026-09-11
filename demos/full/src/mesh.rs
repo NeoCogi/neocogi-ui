@@ -142,8 +142,8 @@ impl LeafContent for Suzanne {
             _ => {}
         }
         self.scene.set_transforms(SceneTransforms {
-            pvm: self.view.pvm(),
-            view_model: self.view.view_matrix(),
+            pvm: self.view.pvm().into(),
+            view_model: self.view.view_matrix().into(),
         })?;
         Ok(GeometryChange::NO_CHANGE)
     }
@@ -162,9 +162,9 @@ fn mesh_buffers(mesh: &PolyMesh) -> (Vec<MeshVertex>, Vec<u32>) {
         let mut count = 0;
         for v in poly {
             vertices.push(MeshVertex {
-                position: mesh.vertex_position(v.pos),
-                normal: mesh.vertex_normal(v.normal),
-                uv: mesh.vertex_uv(v.tex),
+                position: mesh.vertex_position(v.pos).into(),
+                normal: mesh.vertex_normal(v.normal).into(),
+                uv: mesh.vertex_uv(v.tex).into(),
             });
             count += 1;
         }

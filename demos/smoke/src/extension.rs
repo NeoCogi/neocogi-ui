@@ -15,18 +15,12 @@ impl EventHandler<Vec<String>, events::Activation> for Advance {
     }
 }
 
-/// Activates the extension's registered counter class with one typed host argument.
-fn create_counter(host: &ComPtr<IWidgetHostAbi>) -> Result<ComPtr<CounterAbi>, NcStatus> {
-    let arguments = CounterAbi::arguments(host.as_com_ref())?;
-    neocogi_com::Runtime::global().construct::<CounterAbi>(arguments)
-}
-
 /// Runs real routing, layout, GPU recording and lifecycle through three independently built assemblies.
 pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
-    // The class contract fixes the provider's no-argument constructor frame at compile time.
-    let provider: ComPtr<ExtensionProviderAbi> = neocogi_com::Runtime::global().construct(())?;
+    let provider = neocogi_com::Runtime::global()
+        .activate_plugin_factory::<ExtensionProviderAbi>(neocogi_com::guid_from_qualified_name("neocogi.example.ui-extension"))?;
     let host = ui.widgets().host()?;
-    let mut counter = create_counter(&host)?;
+    let mut counter = provider.counter(host.as_com_ref())?;
     let probe: ComPtr<IWidgetProbeAbi> = counter.query()?;
     let widget: ComPtr<IWidgetAbi> = counter.query()?;
     // Both derived and inherited projections identify the same COM allocation.
@@ -92,7 +86,7 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     assert_eq!(inset.children()?.child_count()?, 0);
     ui.update_with_events(size, &events)?;
     ui.render(size, renderer)?;
-    let replacement = create_counter(&host)?;
+    let replacement = provider.counter(host.as_com_ref())?;
     let replacement_widget: ComPtr<IWidgetAbi> = replacement.query()?;
     let replacement_probe: ComPtr<IWidgetProbeAbi> = replacement.query()?;
     inset.set_child(replacement_widget.as_com_ref())?.finish()?;

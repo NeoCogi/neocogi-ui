@@ -183,7 +183,9 @@ impl StyleEditor {
     pub(super) fn new(ui: &Ui) -> Result<(Self, ScrollAreaWidget), NcStatus> {
         let base = ui.assets()?;
         // Activation belongs to this application; the UI runtime has no asset-provider dependency.
-        let compiler = neocogi_com::Runtime::global().construct(())?;
+        let factory =
+            neocogi_com::Runtime::global().activate_plugin_factory::<AssetsPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.assets"))?;
+        let compiler = factory.style_compiler()?;
         let mut metrics = base.metrics()?;
         let mut palette = FlatPalette::default();
         let mut content = column(ui)?;

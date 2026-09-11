@@ -96,19 +96,19 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let scene = scenes.create_scene()?;
     let vertices = [
         MeshVertex {
-            position: Vec3f::new(-0.8, -0.8, 0.0),
-            normal: Vec3f::new(0.0, 0.0, 1.0),
-            uv: Vec2f::new(0.0, 0.0),
+            position: Vec3f::new(-0.8, -0.8, 0.0).into(),
+            normal: Vec3f::new(0.0, 0.0, 1.0).into(),
+            uv: Vec2f::new(0.0, 0.0).into(),
         },
         MeshVertex {
-            position: Vec3f::new(0.8, -0.8, 0.0),
-            normal: Vec3f::new(0.0, 0.0, 1.0),
-            uv: Vec2f::new(1.0, 0.0),
+            position: Vec3f::new(0.8, -0.8, 0.0).into(),
+            normal: Vec3f::new(0.0, 0.0, 1.0).into(),
+            uv: Vec2f::new(1.0, 0.0).into(),
         },
         MeshVertex {
-            position: Vec3f::new(0.0, 0.8, 0.0),
-            normal: Vec3f::new(0.0, 0.0, 1.0),
-            uv: Vec2f::new(0.5, 1.0),
+            position: Vec3f::new(0.0, 0.8, 0.0).into(),
+            normal: Vec3f::new(0.0, 0.0, 1.0).into(),
+            uv: Vec2f::new(0.5, 1.0).into(),
         },
     ];
     scene.set_mesh(NcCopyFromBufferOffset::new(0, &vertices), NcCopyFromBufferOffset::new(0, &[0, 1, 2]))?;
@@ -117,13 +117,16 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
         Err(NC_E_INVALID_ARG)
     );
     scene.set_transforms(SceneTransforms {
-        pvm: Mat4f::identity(),
-        view_model: Mat4f::identity(),
+        pvm: Mat4f::identity().into(),
+        view_model: Mat4f::identity().into(),
     })?;
     let mut bad = Mat4f::identity();
     bad.col[0].x = f32::NAN;
     assert_eq!(
-        scene.set_transforms(SceneTransforms { pvm: bad, view_model: Mat4f::identity() }),
+        scene.set_transforms(SceneTransforms {
+            pvm: bad.into(),
+            view_model: Mat4f::identity().into(),
+        }),
         Err(NC_E_INVALID_ARG)
     );
     // The base projection is the same scene allocation, with no extra widget or application callback object.

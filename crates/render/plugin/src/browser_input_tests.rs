@@ -138,16 +138,18 @@ pub fn run_browser_input_tests() {
 /// Registers both assembly descriptors in one linked runtime, then exercises real DOM input,
 /// inherited editing, committed IME placement and WebGL submission through their COM interfaces.
 fn static_com_editing_and_webgl() {
-    use neocogi_com::{ComPtr, Runtime, NC_OK};
+    use neocogi_com::{ComPtr, Runtime};
     let runtime = Runtime::global();
     // SAFETY: Both descriptors and all referenced code/data live in this statically linked wasm.
     unsafe {
-        assert_eq!(runtime.register_plugin_descriptor(neocogi_ui_runtime::plugin_descriptor()), NC_OK);
-        assert_eq!(runtime.register_plugin_descriptor(crate::plugin_descriptor()), NC_OK);
+        runtime
+            .register_factory_plugin_description(neocogi_ui_runtime::factory_plugin_description())
+            .unwrap();
+        runtime.register_factory_plugin_description(crate::factory_plugin_description()).unwrap();
     }
-    assert!(runtime.require_interface_type::<UiRuntimeAbi>(UiRuntimeAbi::CLASS_ID).is_ok());
-    assert!(runtime.require_interface_type::<PlatformAbi>(PlatformAbi::CLASS_ID).is_ok());
-    let platform: ComPtr<PlatformAbi> = runtime.construct(()).unwrap();
+    let platform = runtime
+        .activate_plugin_factory::<PlatformAbi>(neocogi_com::guid_from_qualified_name("neocogi.render.webgl"))
+        .unwrap();
     let assets = neocogi_demo_assets::load_bundle().unwrap();
     let native = platform
         .create_window(
@@ -160,8 +162,10 @@ fn static_com_editing_and_webgl() {
     let canvas = document.query_selector("canvas").unwrap().unwrap().dyn_into::<HtmlCanvasElement>().unwrap();
     canvas.style().set_css_text("width:640px;height:400px");
     let renderer: ComPtr<IRendererAbi> = native.query().unwrap();
-    let arguments = UiRuntimeAbi::arguments(assets.as_com_ref()).unwrap();
-    let ui = neocogi_ui::Ui::from_interface(runtime.construct::<UiRuntimeAbi>(arguments).unwrap()).unwrap();
+    let factory = runtime
+        .activate_plugin_factory::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))
+        .unwrap();
+    let ui = neocogi_ui::Ui::from_interface(factory.create_runtime(assets.as_com_ref()).unwrap()).unwrap();
     let editor = ui.widgets().textbox("").unwrap();
     let window = ui
         .window("Editable COM window", Rect { x: 10, y: 10, width: 400, height: 180 }, &editor)

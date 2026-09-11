@@ -1,6 +1,6 @@
 //! Native clients forward the shared recipe to COM; parsing and packing remain in the asset plugin.
 use super::recipe_data as data;
-use neocogi_ui::{AssetLoaderAbi, IAssetBundleAbi, NativePath, Size};
+use neocogi_ui::{AssetsPluginFactoryAbi, IAssetBundleAbi, NativePath, Size};
 use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcStatus};
 
 /// Resolves a package-relative resource independently of the process working directory.
@@ -14,8 +14,8 @@ pub(super) fn asset_path(relative: &str) -> std::io::Result<std::path::PathBuf> 
 /// The provider owns every decoder, font rasterizer and packing operation; no UI implementation is linked here.
 pub fn load_bundle() -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
     let directory = asset_path("").map_err(|_| neocogi_com::NC_E_LOAD_FAILED)?;
-    // SAFETY: The trusted asset plugin declares a no-argument constructor for this class.
-    let loader: ComPtr<AssetLoaderAbi> = neocogi_com::Runtime::global().construct(())?;
+    let factory = neocogi_com::Runtime::global().activate_plugin_factory::<AssetsPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.assets"))?;
+    let loader = factory.asset_loader()?;
     let builder = loader.create_builder(
         Size {
             width: data::SIZE.0 as i32,

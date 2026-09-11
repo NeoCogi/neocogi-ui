@@ -252,8 +252,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let assets = neocogi_demo_assets::load_bundle()?;
     let decoded = start.elapsed();
     let start = Instant::now();
-    let arguments = UiRuntimeAbi::arguments(assets.as_com_ref())?;
-    let ui = Ui::from_interface(runtime.construct::<UiRuntimeAbi>(arguments)?)?;
+    let factory = runtime.activate_plugin_factory::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
+    let ui = Ui::from_interface(factory.create_runtime(assets.as_com_ref())?)?;
     let created = start.elapsed();
     let start = Instant::now();
     let mut workload = Workload::new(ui, &shape)?;

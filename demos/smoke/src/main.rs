@@ -74,19 +74,14 @@ fn register_plugins(runtime: &neocogi_com::Runtime, directory: &std::path::Path)
 /// Registers implementation descriptors retained by the monolithic executable.
 #[cfg(feature = "monolith")]
 fn register_plugins(runtime: &neocogi_com::Runtime, _directory: &std::path::Path) -> Result<(), Box<dyn Error>> {
-    for descriptor in [
-        neocogi_ui_runtime::plugin_descriptor(),
-        neocogi_render_plugin::plugin_descriptor(),
-        neocogi_assets::plugin_descriptor(),
+    // SAFETY: Every description, linked contract, and implementation remains
+    // retained by this executable for the process lifetime.
+    unsafe {
+        runtime.register_factory_plugin_description(neocogi_ui_runtime::factory_plugin_description())?;
+        runtime.register_factory_plugin_description(neocogi_render_plugin::factory_plugin_description())?;
+        runtime.register_factory_plugin_description(neocogi_assets::factory_plugin_description())?;
         #[cfg(feature = "extension")]
-        neocogi_example_ui_extension::plugin_descriptor(),
-    ] {
-        // SAFETY: Every descriptor and its implementation code are retained by
-        // this executable for the process lifetime.
-        let status = unsafe { runtime.register_plugin_descriptor(descriptor) };
-        if status.is_err() {
-            return Err(status.into());
-        }
+        runtime.register_factory_plugin_description(neocogi_example_ui_extension::factory_plugin_description())?;
     }
     Ok(())
 }
@@ -98,18 +93,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let directory = executable.parent().ok_or("executable has no parent")?;
     let runtime = neocogi_com::Runtime::global();
     register_plugins(runtime, directory)?;
-    // Optional class availability is a recoverable startup check, before constructing an OS window.
-    if options.rebuild_assets {
-        runtime
-            .require_interface_type::<AssetLoaderAbi>(AssetLoaderAbi::CLASS_ID)
-            .map_err(|status| format!("--rebuild-assets requires a files package: {status}"))?;
-    }
-    if options.theme.is_some() {
-        runtime
-            .require_interface_type::<ThemeLoaderAbi>(ThemeLoaderAbi::CLASS_ID)
-            .map_err(|status| format!("--theme requires a files package: {status}"))?;
-    }
-    let platform: ComPtr<PlatformAbi> = runtime.construct(())?;
+    let platform = runtime.activate_plugin_factory::<PlatformAbi>(neocogi_com::guid_from_qualified_name(renderer_plugin_name()))?;
     let assets = neocogi_demo_assets::load_bundle()?;
     let native = platform.create_window(
         NcCopyFromBufferOffset::new(0, b"NeoCogi Platform"),
@@ -117,12 +101,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         assets.as_com_ref(),
     )?;
     let renderer: ComPtr<IRendererAbi> = native.query()?;
-    let arguments = UiRuntimeAbi::arguments(assets.as_com_ref())?;
-    let mut ui = Ui::from_interface(runtime.construct::<UiRuntimeAbi>(arguments)?)?;
+    let ui_factory = runtime.activate_plugin_factory::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
+    let mut ui = Ui::from_interface(ui_factory.create_runtime(assets.as_com_ref())?)?;
     if options.rebuild_assets {
         // The optional builder owns packing/font/PNG implementation; the host sees only typed roots.
-        // SAFETY: The packaged asset loader declares a no-argument constructor.
-        let loader: ComPtr<AssetLoaderAbi> = runtime.construct(())?;
+        let assets_factory = runtime.activate_plugin_factory::<AssetsPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.assets"))?;
+        let loader = assets_factory
+            .asset_loader()
+            .map_err(|status| format!("--rebuild-assets requires a files package: {status}"))?;
         let builder = loader.derive_builder(Size { width: 1024, height: 512 }, assets.as_com_ref())?;
         let rebuilt = builder.finish()?;
         ui.install_assets(rebuilt.as_com_ref(), renderer.as_com_ref())?;
@@ -130,8 +116,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     if let Some(path) = &options.theme {
         // Relative paths belong to the staged package, so startup remains independent of cwd.
         let path = if path.is_absolute() { path.clone() } else { directory.join(path) };
-        // SAFETY: The optional theme class declares a no-argument constructor.
-        let loader: ComPtr<ThemeLoaderAbi> = runtime.construct(())?;
+        let assets_factory = runtime.activate_plugin_factory::<AssetsPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.assets"))?;
+        let loader = assets_factory
+            .theme_loader()
+            .map_err(|status| format!("--theme requires a files package: {status}"))?;
         let theme = loader.load_theme(NativePath::new(&path).as_interface(), assets.as_com_ref()).map_err(|error| {
             let detail = loader
                 .query::<IAssetDiagnosticsAbi>()
@@ -142,17 +130,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         })?;
         ui.install_assets(theme.as_com_ref(), renderer.as_com_ref())?;
     }
-    // The host can construct the registered Button class directly. UiFactory remains an
-    // optional dynamically linked shorthand for callers that prefer its convenience methods.
     let host = ui.widgets().host()?;
     if options.smoke {
-        // UiFactory is itself a registered dynamic class, not a runtime interface alias.
-        let factory_arguments = UiFactoryAbi::arguments(host.as_com_ref())?;
-        let factory = runtime.construct::<UiFactoryAbi>(factory_arguments)?;
-        assert_eq!(factory.host()?.as_ptr(), host.as_ptr());
+        assert_eq!(ui.widgets().host()?.as_ptr(), host.as_ptr());
     }
-    let button_arguments = ButtonAbi::arguments(host.as_com_ref(), NcCopyFromBufferOffset::new(0, b"Hello across COM"), WidgetOptions::FRAME)?;
-    let mut button = ButtonWidget::from_interface(runtime.construct::<ButtonAbi>(button_arguments)?);
+    let mut button = ui.widgets().button("Hello across COM")?;
     let window = ui.window("Dynamic UI", Rect { x: 40, y: 40, width: 500, height: 200 }, &button)?;
     let session = EventSession::new(0u32);
     let subscription = session.subscribe_activation(&button, Submitted { button: button.clone() })?;
@@ -213,6 +195,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     subscription.cancel()?;
     ui.close()?;
     Ok(())
+}
+
+/// Returns the qualified identity selected for this smoke executable's renderer assembly.
+fn renderer_plugin_name() -> &'static str {
+    if cfg!(feature = "vulkan") {
+        "neocogi.render.vulkan"
+    } else if cfg!(feature = "wgpu") {
+        "neocogi.render.wgpu"
+    } else {
+        "neocogi.render.glow"
+    }
 }
 
 /// Injects a complete logical press/release pair without pretending it came from an OS event.

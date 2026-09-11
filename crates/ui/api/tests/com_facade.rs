@@ -4,7 +4,7 @@ mod tests {
     use neocogi_com::{ComRef, NcCopyFromBufferOffset, NcStatus};
     use neocogi_com::{ComPtr, IUnknown, NcString, NC_E_INVALID_ARG, com_object};
 
-    #[com_object(constructible(Button))]
+    #[com_object(Button)]
     /// Concrete stand-in for a plugin button, using the same COM macro and ownership path.
     struct TestButton {
         /// Plugin-local UTF-8 storage; its Rust layout never crosses the boundary.
@@ -14,16 +14,6 @@ mod tests {
     }
 
     impl Button for TestButton {
-        /// Builds the standalone fixture from the same typed frame as a plugin implementation.
-        fn new(_host: ComRef<'_, IWidgetHostAbi>, label: NcCopyFromBufferOffset<'_, u8>, options: WidgetOptions) -> Result<Self, NcStatus> {
-            options.validate()?;
-            if label.offset() != 0 {
-                return Err(NC_E_INVALID_ARG);
-            }
-            let label = std::str::from_utf8(label.as_slice()).map_err(|_| NC_E_INVALID_ARG)?;
-            Ok(Self { label: label.to_owned(), changed: false })
-        }
-
         /// Validates the complete replacement before mutating retained text.
         fn set_label(&mut self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
             if label.offset() != 0 {

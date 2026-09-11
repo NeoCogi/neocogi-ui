@@ -60,7 +60,7 @@ impl Theme {
         }
         #[cfg(not(feature = "embed-assets"))]
         {
-            use neocogi_ui::{NativePath, ThemeLoaderAbi};
+            use neocogi_ui::{AssetsPluginFactoryAbi, NativePath};
             let path = match self {
                 Self::Windows311 => "themes/windows-3.11/theme.json",
                 Self::Windows95 => "themes/windows-95/theme.json",
@@ -68,8 +68,9 @@ impl Theme {
                 Self::Default => unreachable!(),
             };
             let path = super::files::asset_path(path).map_err(|_| neocogi_com::NC_E_LOAD_FAILED)?;
-            // SAFETY: The trusted theme plugin declares a no-argument constructor.
-            let loader: ComPtr<ThemeLoaderAbi> = neocogi_com::Runtime::global().construct(())?;
+            let factory =
+                neocogi_com::Runtime::global().activate_plugin_factory::<AssetsPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.assets"))?;
+            let loader = factory.theme_loader()?;
             loader.load_theme(NativePath::new(&path).as_interface(), base)
         }
     }
