@@ -22,8 +22,12 @@ wrappers. The accepted migration and outstanding validation are recorded in
   unchecked validation, one statically linked runtime, and direct registration
   of the linked UI, renderer, and asset descriptors.
 - Record the selected COM validation mode in core ABI v7 plugin descriptors and
-  schema-v5 inspection artifacts. Dynamic assembly planning now rejects plugins
+  schema-v6 inspection artifacts. Dynamic assembly planning now rejects plugins
   built with different modes before staging `plugins.txt`.
+- Add one-Cargo-crate-per-module Rust-like IDL generation. Dynamic assemblies
+  stage fingerprint-qualified contract libraries and factory-only plugins;
+  common loading and inspection detect the activation model and reject
+  conflicting revisions before publication.
 - Reserve `#[com_class]` for callable contract traits and use
   `#[com_object(Class)]` or `#[com_object(interfaces(...))]` for concrete Rust
   implementations. Class declarations therefore describe the public boundary,

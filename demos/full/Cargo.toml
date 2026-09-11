@@ -37,7 +37,7 @@ rs-math3d.workspace = true
 # Dynamic assembly roots add `dynamic-plugin`; monoliths call descriptors directly.
 neocogi-com-runtime.workspace = true
 neocogi-ui-runtime = { path = "../../crates/ui/runtime" }
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "663a29cb3c01d24d6a581142d8b8358c15b59e58", default-features = false }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "81ed4d5494a125b16d95fd0050f5d65e8c9fd6dd", default-features = false }
 neocogi-assets = { workspace = true, features = ["theme-json"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
