@@ -4,12 +4,12 @@
 //! event producer; the inset owns its padding and the host's sole authoritative child editor.
 #![deny(missing_docs)]
 use neocogi_ui_contracts::{widget::WidgetState, *};
-use neocogi_demo_contracts::extension::*;
+use neocogi_demo_contracts::*;
 use neocogi_ui::{
     Painter,
     events::{Activation, EventSource},
 };
-use neocogi_com::{com_object, ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
+use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, com_factory, com_object};
 
 /// Common state is inline; the example adds no second widget allocation or type-erased data.
 struct Common {
@@ -91,8 +91,8 @@ macro_rules! widget {
     };
 }
 
-#[com_object(constructible(neocogi_demo_contracts::extension::Counter))]
-/// Private implementation of the externally declared, constructible counter class.
+#[com_object(neocogi_demo_contracts::Counter)]
+/// Private implementation of the externally declared counter class.
 struct CounterObject {
     /// Common options are authoritative here, without a duplicate presentation copy.
     common: Common,
@@ -102,6 +102,17 @@ struct CounterObject {
     submitted: EventSource<Activation>,
 }
 impl CounterObject {
+    /// Validates runtime authority and publishes one fully initialized counter identity.
+    fn create(host: ComRef<'_, IWidgetHostAbi>) -> Result<ComPtr<CounterAbi>, NcStatus> {
+        host.check_mutation()?;
+        Self::from_value(Self {
+            common: Common::new(host, WidgetOptions::FRAME),
+            count: 0,
+            submitted: EventSource::new(),
+        })
+        .query()
+    }
+
     /// User activation commits before emission, capturing the matching label for deferred delivery.
     fn update_content(&mut self, state: WidgetUpdate) -> GeometryChange {
         if state.clicked || state.action == WidgetAction::ACTIVATE {
@@ -125,16 +136,6 @@ impl CounterObject {
 // Focus=1, Tab=2, Enter=4 and Space=8 are the canonical WidgetProperties keyboard bits.
 widget!(CounterObject, 1 | 2 | 4 | 8, WidgetFrame::BUTTON);
 impl Counter for CounterObject {
-    /// Authenticates the caller and retains the host as the widget's owner capability.
-    fn new(host: ComRef<'_, IWidgetHostAbi>) -> Result<Self, NcStatus> {
-        host.check_mutation()?;
-        Ok(Self {
-            common: Common::new(host, WidgetOptions::FRAME),
-            count: 0,
-            submitted: EventSource::new(),
-        })
-    }
-
     /// Reads the committed scalar directly from the real object.
     fn count(&self) -> Result<u32, NcStatus> {
         self.common.state.readable()?;
@@ -299,14 +300,15 @@ fn shrink(mut limit: AxisLimit, inset: i32) -> AxisLimit {
     limit
 }
 
-#[com_object(constructible(neocogi_demo_contracts::extension::ExtensionProvider))]
+#[com_factory(neocogi_demo_contracts::ExtensionProvider)]
 /// Stateless shorthand factory creates the interface-based inset container.
 pub struct ExtensionProviderObject;
 impl ExtensionProvider for ExtensionProviderObject {
-    /// Creates a provider with no captured state or UI implementation dependency.
-    fn new() -> Result<Self, NcStatus> {
-        Ok(Self)
+    /// Creates a counter only after its supplied host accepts mutation.
+    fn counter(&self, host: ComRef<'_, IWidgetHostAbi>) -> Result<ComPtr<CounterAbi>, NcStatus> {
+        CounterObject::create(host)
     }
+
     /// One empty editor is the only topology allocation; no native child list is created in this plugin.
     fn inset(&self, host: ComRef<'_, IWidgetHostAbi>) -> Result<ComPtr<IInsetAbi>, NcStatus> {
         host.check_mutation()?;
@@ -319,11 +321,11 @@ impl ExtensionProvider for ExtensionProviderObject {
         .query()
     }
 }
-neocogi_com::plugin! {
-    plugin_id(auto_guid = "neocogi.example.ui-extension"),
+neocogi_com::factory_plugin! {
     name = "neocogi.example.ui-extension",
     version = "0.9.0-alpha.0",
-    classes = [CounterObject, ExtensionProviderObject],
+    contracts = [neocogi_ui_contracts::MODULE, neocogi_demo_contracts::MODULE],
+    factory = ExtensionProviderObject,
 }
 #[cfg(feature = "dynamic-plugin")]
-neocogi_com::export_plugin!();
+neocogi_com::export_factory_plugin!();

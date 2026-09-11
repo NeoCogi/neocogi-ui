@@ -117,7 +117,7 @@ trait IWidgetProbe {
 }
 
 #[version(1)]
-/// A constructible custom control whose shared widget capabilities remain queryable.
+/// A custom control created only through ExtensionProvider whose shared widget capabilities remain queryable.
 class Counter: IWidget + ILeafLayout + IActivationEvents + IWidgetProbe {
 
     /// Reads the actual current activation count.
@@ -137,8 +137,10 @@ trait IInset: IContainer {
 }
 
 #[version(1)]
-/// Constructible stateless factory receiving runtime authority explicitly for each custom widget.
+/// Stateless plugin factory receiving runtime authority explicitly for each custom object.
 factory ExtensionProvider {
+    /// Creates a counter whose complete state belongs to the returned COM identity.
+    fn counter(&self, host: &IWidgetHost) -> Result<Counter>;
     /// Creates an empty custom container; child attachment follows the same rules as built-ins.
     fn inset(&self, host: &IWidgetHost) -> Result<IInset>;
 }
