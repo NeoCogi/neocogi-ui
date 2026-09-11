@@ -44,12 +44,23 @@ pub mod test_support {
 }
 
 use crate::com::*;
-use neocogi_com::{com_object, ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcStatus, NC_E_INVALID_ARG};
+use neocogi_com::{ComPtr, ComRef, NC_E_INVALID_ARG, NcCopyFromBufferOffset, NcStatus, com_object};
 use std::{
     cell::{Cell, RefCell, Ref, RefMut},
     rc::Rc,
     ops::{Deref, DerefMut},
 };
+
+/// Copies one complete offset-zero IDL string view into application-owned text.
+fn copied_text(value: NcCopyFromBufferOffset<'_, u8>) -> Result<String, NcStatus> {
+    // Event snapshots cross synchronously as UTF-8 bytes. Rejecting a nonzero
+    // logical offset prevents a producer from presenting a partial string as a
+    // complete semantic value.
+    if value.offset() != 0 {
+        return Err(NC_E_INVALID_ARG);
+    }
+    std::str::from_utf8(value.as_slice()).map(str::to_owned).map_err(|_| NC_E_INVALID_ARG)
+}
 
 /// Application-local behavior stored inline in the concrete COM sink specialization.
 pub trait EventHandler<State, Event> {
@@ -309,8 +320,8 @@ struct ActivationSink<State: 'static, Handler: EventHandler<State, Activation> +
 }
 impl<State: 'static, Handler: EventHandler<State, Activation> + 'static> IActivationSink for ActivationSink<State, Handler> {
     /// Validates and copies the concrete foreign snapshot before invoking application behavior.
-    fn submitted(&self, label: ComRef<'_, INcStringAbi>) -> Result<(), NcStatus> {
-        self.handler.deliver(Activation { label: label.to_string()? })
+    fn submitted(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.handler.deliver(Activation { label: copied_text(label)? })
     }
 }
 impl<State: 'static> EventSession<State> {
@@ -540,8 +551,8 @@ struct TextChangedSink<State: 'static, Handler: EventHandler<State, TextChanged>
 }
 impl<State: 'static, Handler: EventHandler<State, TextChanged> + 'static> ITextChangedSink for TextChangedSink<State, Handler> {
     /// Validates and copies the concrete foreign snapshot before invoking application behavior.
-    fn changed(&self, text: ComRef<'_, INcStringAbi>, cursor: u64) -> Result<(), NcStatus> {
-        let text = text.to_string()?;
+    fn changed(&self, text: NcCopyFromBufferOffset<'_, u8>, cursor: u64) -> Result<(), NcStatus> {
+        let text = copied_text(text)?;
         let position = usize::try_from(cursor).map_err(|_| NC_E_INVALID_ARG)?;
         if !text.is_char_boundary(position) {
             return Err(NC_E_INVALID_ARG);
@@ -585,8 +596,8 @@ struct TextSubmittedSink<State: 'static, Handler: EventHandler<State, TextSubmit
 }
 impl<State: 'static, Handler: EventHandler<State, TextSubmitted> + 'static> ITextSubmittedSink for TextSubmittedSink<State, Handler> {
     /// Validates and copies the concrete foreign snapshot before invoking application behavior.
-    fn submitted(&self, text: ComRef<'_, INcStringAbi>) -> Result<(), NcStatus> {
-        self.handler.deliver(TextSubmitted { text: text.to_string()? })
+    fn submitted(&self, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.handler.deliver(TextSubmitted { text: copied_text(text)? })
     }
 }
 impl<State: 'static> EventSession<State> {
@@ -702,8 +713,8 @@ struct ComboChangedSink<State: 'static, Handler: EventHandler<State, ComboChange
 }
 impl<State: 'static, Handler: EventHandler<State, ComboChanged> + 'static> IComboChangedSink for ComboChangedSink<State, Handler> {
     /// Validates the immutable UTF-8 snapshot before borrowing application state.
-    fn changed(&self, selected: u64, label: ComRef<'_, INcStringAbi>) -> Result<(), NcStatus> {
-        self.handler.deliver(ComboChanged { selected, label: label.to_string()? })
+    fn changed(&self, selected: u64, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.handler.deliver(ComboChanged { selected, label: copied_text(label)? })
     }
 }
 /// Desired popup state and routed screen anchor captured by the combo header.
@@ -855,20 +866,20 @@ macro_rules! event_payload {
     };
 }
 event_payload!(Activation, IActivationSinkAbi, self, sink, {
-    sink.submitted(neocogi_com::NcString::from_utf8_str(&self.label).as_com_ref())
+    sink.submitted(NcCopyFromBufferOffset::new(0, self.label.as_bytes()))
 });
 event_payload!(CheckboxChanged, ICheckboxSinkAbi, self, sink, { sink.changed(self.checked) });
 event_payload!(NumericChanged, INumericSinkAbi, self, sink, { sink.changed(self.value) });
 event_payload!(ScrollbarChanged, IScrollbarSinkAbi, self, sink, { sink.changed(self.offset) });
 event_payload!(TextChanged, ITextChangedSinkAbi, self, sink, {
-    sink.changed(neocogi_com::NcString::from_utf8_str(&self.text).as_com_ref(), self.cursor)
+    sink.changed(NcCopyFromBufferOffset::new(0, self.text.as_bytes()), self.cursor)
 });
 event_payload!(TextSubmitted, ITextSubmittedSinkAbi, self, sink, {
-    sink.submitted(neocogi_com::NcString::from_utf8_str(&self.text).as_com_ref())
+    sink.submitted(NcCopyFromBufferOffset::new(0, self.text.as_bytes()))
 });
 event_payload!(WindowEvent, IWindowSinkAbi, self, sink, { sink.event((*self).into()) });
 event_payload!(PopupDismissed, IPopupSinkAbi, self, sink, { sink.dismissed() });
 event_payload!(ComboChanged, IComboChangedSinkAbi, self, sink, {
-    sink.changed(self.selected, neocogi_com::NcString::from_utf8_str(&self.label).as_com_ref())
+    sink.changed(self.selected, NcCopyFromBufferOffset::new(0, self.label.as_bytes()))
 });
 event_payload!(ComboSubmitted, IComboPopupSinkAbi, self, sink, { sink.submitted(self.open, self.anchor) });
