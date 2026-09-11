@@ -6,7 +6,15 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Typed COM contracts shared by NeoCogi UI hosts and components"
+links = "nc_contract_neocogi_ui"
+
+[package.metadata.neocogi-contract]
+module = "neocogi.ui"
+source = "idl/neocogi/ui.ncidl"
 
 [dependencies]
 neocogi-com = { workspace = true, features = ["macros"] }
 rs-math3d.workspace = true
+
+[build-dependencies]
+neocogi-idl-build.workspace = true

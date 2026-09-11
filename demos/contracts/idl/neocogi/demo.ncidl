@@ -1,0 +1,87 @@
+use neocogi.ui::{IRenderItem, IWidget, ILeafLayout, IActivationEvents, IWidgetHost, IContainer, ChildEditResult};
+
+#[version(1)]
+/// Plain vertex format shared by all native demo shaders.
+struct MeshVertex {
+    /// Object-space position; every component must be finite.
+    position: [f32; 3],
+    /// Object-space normal; every component must be finite.
+    normal: [f32; 3],
+    /// Procedural material coordinates; every component must be finite.
+    uv: [f32; 2],
+}
+
+#[version(1)]
+/// Column-major scene transforms, copied atomically as one camera/model update.
+struct SceneTransforms {
+    /// Projection-view-model transform applied to mesh positions.
+    pvm: [f32; 16],
+    /// View-model transform applied to normals, matching the existing demo's shader convention.
+    view_model: [f32; 16],
+}
+
+#[version(1)]
+/// Editable mesh scene is itself a render item on one COM allocation.
+trait IMeshScene: IRenderItem {
+    /// Replaces the complete immutable mesh after validating finite vertices and in-range triangle indices.
+    /// Offsets must be zero; limits are 4M vertices and 12M indices. Two empty buffers clear the mesh.
+    fn set_mesh(&self, vertices: &[MeshVertex], indices: &[u32]) -> Result<()>;
+    /// Replaces both finite matrices together; scene edits affect subsequent render preparation only.
+    fn set_transforms(&self, transforms: SceneTransforms) -> Result<()>;
+}
+
+#[version(1)]
+/// Demo-specific factory exposed by the native window alongside its ordinary renderer interfaces.
+trait IDemoScenes {
+    /// Creates an empty scene with identity transforms; its resources retain this window/device.
+    fn create_scene(&self) -> Result<IMeshScene>;
+}
+
+#[version(1)]
+/// Observable phase attempts on one example widget, without exposing its native state.
+struct WidgetCalls {
+    /// Preferred-size queries that reached the widget's algorithm.
+    measures: u64,
+    /// Placement queries that reached the container's algorithm.
+    placements: u64,
+    /// Routed or eventless update attempts.
+    updates: u64,
+    /// Paint attempts, including a failed outward painter call.
+    paints: u64,
+    /// Committed logical closures; final COM release is a separate lifetime event.
+    closes: u64,
+}
+
+#[version(1)]
+/// Example diagnostics remain readable after logical closure for lifetime assertions.
+trait IWidgetProbe {
+    /// Returns counts from the actual allocation, with no callback or copied semantic model.
+    fn calls(&self) -> Result<WidgetCalls>;
+}
+
+#[version(1)]
+/// A constructible custom control whose shared widget capabilities remain queryable.
+class Counter: IWidget + ILeafLayout + IActivationEvents + IWidgetProbe {
+
+    /// Reads the actual current activation count.
+    fn count(&self) -> Result<u32>;
+
+    /// Silently replaces the displayed count and invalidates its preferred text size when changed.
+    fn set_count(&mut self, value: u32) -> Result<()>;
+}
+
+#[version(1)]
+/// A one-child container demonstrates a domain-specific layout policy over the shared child editor.
+trait IInset: IContainer {
+    /// Installs or replaces its one child; removed-child teardown uses the ordinary committed outcome.
+    fn set_child(&mut self, child: &IWidget) -> Result<ChildEditResult>;
+    /// Sets a nonnegative inset, bounded to avoid arithmetic overflow in doubled extents.
+    fn set_padding(&mut self, padding: i32) -> Result<()>;
+}
+
+#[version(1)]
+/// Constructible stateless factory receiving runtime authority explicitly for each custom widget.
+factory ExtensionProvider {
+    /// Creates an empty custom container; child attachment follows the same rules as built-ins.
+    fn inset(&self, host: &IWidgetHost) -> Result<IInset>;
+}
