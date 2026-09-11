@@ -190,11 +190,13 @@ override is installed. Each family role/state cell is one concrete `Visual { pat
 patches and content colors cannot drift through parallel catalogs, and no erased or string-keyed
 payload participates at runtime.
 
-The optional `skin.window_chrome` object is the concrete `WindowChromeSkin` recipe. It accepts
+The optional `skin.window_chrome` object is an asset-document recipe compiled directly into the
+IDL-generated `AssetChrome` transfer record. It accepts
 `title_alignment` (`leading` or `centered`), `minimized_content_height`, a `captions` object containing `close_side`,
 `minimize_side`, `maximize_side`, `vertical_spacing`, `minimum_extent`, `inner_spacing`, and
 `show_without_activation`, and an optional `active_title_backdrop` containing `color` and
-`horizontal_padding`. Omitted fields use the same concrete defaults as programmatic skins.
+`horizontal_padding`. Omitted fields produce the same values as the runtime's conventional
+`WindowChromeSkin` default without sharing that runtime-only Rust model with the asset plugin.
 `vertical_spacing` is the exact title-field clearance applied equally above and below every square
 caption button.
 
@@ -308,12 +310,14 @@ control state's `content_color`. Image-backed caption faces that already contain
 set `content_color` alpha to zero. There are no separate caption-glyph roles or window-chrome switch,
 so the same role/state visual fully describes each control without special handling in the loader.
 
-`skin.window_chrome` supplies exact platform geometry without a loader-owned preset enum. A
+`skin.window_chrome` supplies exact platform geometry without a loader-owned preset enum. The
+asset plugin emits only `AssetChrome`; the UI runtime validates that record and constructs its
+local `WindowChromeSkin`. A
 conventional theme may omit it and receive leading text with trailing caption buttons. The bundled
 Mac theme directly selects centered text, a compact leading close box, trailing
 zoom/windowshade controls, and an active-title backdrop. Its caption PNGs are complete faces, so
 these states use a transparent content color and do not show an additional manager-owned symbol. The
-manager consumes only the concrete `WindowChromeSkin` fields and never branches on a theme or
+manager consumes only its concrete `WindowChromeSkin` fields and never branches on a theme or
 platform mode.
 
 Minimize keeps the retained window visible, saves its expanded height, reduces its application body

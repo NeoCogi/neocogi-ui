@@ -29,6 +29,13 @@ wrappers. The accepted migration and outstanding validation are recorded in
   loading and inspection reject conflicting revisions before publication.
 - Compile generated native contract descriptions for the underlying platform ABI
   when the `min-size` Rust build uses its fingerprint-distinct custom target.
+- Move UI appearance roles, appearance states, and semantic font/icon roles into
+  `neocogi/ui.ncidl`, giving their names, representations, and table order one
+  generated source of truth.
+- Remove implementation-only widget state and window-chrome models from the UI
+  contract crate. Widget state belongs to UI implementation support, runtime
+  chrome state belongs to the runtime, and JSON chrome documents belong to the
+  asset loader; only `AssetChrome` crosses their contract boundary.
 - Use generated IDL `class` descriptions with `#[com_object(Class)]` and IDL
   `factory` descriptions with `#[com_factory(Factory)]`. Descriptions own public
   identity/threading/projections; implementations own private state and bodies.
