@@ -720,7 +720,7 @@ mod tests {
 
     /// Payload enum used to verify macro-generated variant construction.
     #[derive(Debug, PartialEq)]
-    #[neocogi_com::com_enum(tag = u8, deserialize)]
+    #[neocogi_com::com_enum(tag = u8, deserialize, assigned_signature = b"00000000000000000000000000000035")]
     enum Message {
         /// Fieldless variant.
         Unit,

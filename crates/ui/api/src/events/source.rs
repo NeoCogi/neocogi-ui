@@ -515,7 +515,7 @@ mod tests {
     use neocogi_com::{com_interface, NC_E_INVALID_ARG};
     use neocogi_ui_contracts::UI_E_EVENT_LIMIT;
 
-    #[com_interface(auto_guid = "neocogi.ui.test.EventLeaseSink:v1")]
+    #[com_interface(auto_guid = "neocogi.ui.test.EventLeaseSink:v1", assigned_signature = b"00000000000000000000000000000036")]
     /// Independent typed consumer used to exercise generic lease transport.
     trait ITestSink {
         /// Consumes one concrete test value and may return a recoverable application error.
