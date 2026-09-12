@@ -8,6 +8,12 @@ cargo neocogi build --assembly full
 cargo neocogi run --assembly full
 ```
 
+Native contract-description artifacts are currently compiled from generated C,
+so the selected target also needs the C compiler/linker expected by Cargo's
+`cc` integration. This is an implementation requirement of the present
+two-artifact build, not a requirement of the COM ABI; the rationale and Rust
+replacement constraints are documented in [IDL contract modules](IDL_MODULES.md#cargo-package-shape).
+
 `cargo neocogi` builds the runtime, selected plugins, and application in order,
 then stages the executable, native libraries, plugin manifest, and assets. It
 reads the assembly definitions in `[workspace.metadata.neocogi]` in the root
