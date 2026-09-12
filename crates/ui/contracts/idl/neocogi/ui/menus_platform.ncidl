@@ -1,0 +1,138 @@
+#[version(1)]
+/// Persistent menu marker role remains present even when its selected boolean is false.
+enum MenuMark: u8 {
+    /// No marker role or required marker gutter.
+    None,
+    /// Checkable item whose boolean determines check-glyph visibility.
+    Checked {
+        /// Current presentation state; submission does not toggle it automatically.
+        checked: bool,
+    },
+    /// Radio item whose boolean determines selection-marker visibility.
+    Radio {
+        /// Current presentation state; application code owns radio-group policy.
+        selected: bool,
+    },
+}
+
+#[version(1)]
+/// Live compact row capability, editable before mounting and while its owning surface exists.
+trait IMenuItem {
+    /// Returns the same label used by measurement, paint and captured submissions.
+    fn label(&self) -> Result<String>;
+    /// Replaces complete UTF-8 display text without publishing user activation.
+    fn set_label(&self, label: &[u8]) -> Result<()>;
+    /// Reports pointer and keyboard eligibility, independently of marker presentation.
+    fn enabled(&self) -> Result<bool>;
+    /// Silently changes interaction eligibility; disabled rows remain visible.
+    fn set_enabled(&self, enabled: bool) -> Result<()>;
+    /// Returns the concrete check/radio role and its current presentation state.
+    fn mark(&self) -> Result<MenuMark>;
+    /// Silently changes the complete marker role; radio grouping remains the caller's responsibility.
+    fn set_mark(&self, mark: MenuMark) -> Result<()>;
+    /// Returns presentation-only accelerator text, with empty text representing absence.
+    fn shortcut_hint(&self) -> Result<String>;
+    /// Changes presentation only; it does not install a keyboard shortcut handler.
+    fn set_shortcut_hint(&self, hint: &[u8]) -> Result<()>;
+}
+
+#[version(1)]
+/// Unique declaration tree consumed once by the owning manager; retained item capabilities remain live afterward.
+trait IMenuBuilder {
+    /// Appends an enabled unmarked row and returns its editing/event capability.
+    fn item(&self, label: &[u8]) -> Result<IMenuItem>;
+    /// Appends one noninteractive separator in exact declaration order.
+    fn separator(&self) -> Result<()>;
+    /// Appends a submenu and returns a builder scoped to that child; only the root is mountable.
+    fn submenu(&self, label: &[u8]) -> Result<IMenuBuilder>;
+}
+
+#[version(1)]
+/// Menu construction and attachment capability on the same runtime identity as the window manager.
+trait IMenus {
+    /// Creates one root declaration; for a bar its direct entries must all be submenus.
+    fn create(&self, label: &[u8]) -> Result<IMenuBuilder>;
+    /// Installs a bar once on a live window; validates owner, declaration shape and prior attachment before transfer.
+    fn attach_bar(&self, window: &IWindow, menu: &IMenuBuilder) -> Result<()>;
+    /// Creates an ordinary hidden popup from one root declaration, including all its nested menus.
+    fn create_popup(&self, window: &IWindow, menu: &IMenuBuilder) -> Result<IPopup>;
+}
+
+#[version(1)]
+/// Native path representation carried by an immutable path capability.
+    enum PathEncoding: u8 {
+        /// Exact Unix filename bytes; invalid UTF-8 is preserved.
+        UnixBytes = 0,
+        /// Exact Windows UTF-16 code units; unpaired surrogates are preserved.
+        WindowsUtf16 = 1,
+    }
+
+#[version(1)]
+/// Immutable native path snapshot with explicit encoding and separate display-only text.
+trait INativePath {
+    /// Reports which typed copy method applies; callers reject incompatible host encodings.
+    fn encoding(&self) -> Result<PathEncoding>;
+    /// Returns bytes or UTF-16 code units according to encoding, without a trailing terminator.
+    fn unit_count(&self) -> Result<u64>;
+    /// Copies the exact requested byte range; wrong encoding or invalid range changes no output.
+    fn unix_bytes(&self, output: &mut [u8]) -> Result<()>;
+    /// Copies the exact requested UTF-16 range; wrong encoding or invalid range changes no output.
+    fn windows_units(&self, output: &mut [u16]) -> Result<()>;
+    /// Returns human-readable UTF-8 which must never be used to reconstruct native selection.
+    fn display(&self) -> Result<String>;
+}
+
+#[version(1)]
+/// Synchronous input destination, implemented by the UI runtime or a concrete application adapter.
+trait IInputSink {
+    /// Copies one ordered event. Text requires complete UTF-8 at offset zero; every other event
+    /// requires an empty text argument. The platform borrows this interface only during polling.
+    fn input(&self, event: UiInput, text: &[u8]) -> Result<()>;
+}
+
+#[version(1)]
+/// Outcome of removing one relevant OS transition from this window's queue.
+    enum PollStatus: u8 {
+        /// No relevant transition remains; update and render the accumulated input.
+        Idle = 0,
+        /// Input was delivered or drawable/window state changed; poll again before rendering.
+        Event = 1,
+        /// Application quit or this native window's close was requested.
+        Close = 2,
+    }
+
+#[version(1)]
+/// Committed native text-input placement, expressed in physical drawable pixels.
+enum TextInputArea: u8 {
+    /// No editable focus currently requests IME or text composition.
+    None,
+    /// Nonnegative editor rectangle; hosts convert this to logical OS/CSS coordinates.
+    Area(Rect),
+}
+
+#[version(1)]
+/// Native window, event pump and renderer share one COM identity and lifetime.
+trait IPlatformWindow {
+    /// Returns current drawable dimensions, including device scaling. Resize is synchronized
+    /// by passing this value to the next UI update before rendering.
+    fn size(&self) -> Result<Size>;
+    /// Removes one relevant transition and borrows the destination for synchronous delivery.
+    /// A failed delivery consumes the attempted event; later events remain queued. Recursive
+    /// polling of this window returns BUSY. The destination is never retained by the platform.
+    fn poll(&self, destination: &IInputSink) -> Result<PollStatus>;
+    /// Enables/disables native text input and positions its composition UI after a UI update.
+    /// Calling repeatedly with the same editable focus must preserve an active composition.
+    fn text_input(&self, area: TextInputArea) -> Result<()>;
+}
+
+#[version(1)]
+/// Constructible platform root whose native-window factory is its concrete class API.
+factory Platform: IRenderDiagnostics {
+    /// Creates an independent window and renderer; title is UTF-8 at offset zero.
+    fn create_window(
+        &self,
+        title: &[u8],
+        size: Size,
+        assets: &IAssetBundle,
+    ) -> Result<IPlatformWindow>;
+}

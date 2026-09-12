@@ -1,0 +1,135 @@
+#[version(1)]
+/// Ordered draw record. Vertex ranges must partition the entire vertex buffer without gaps or overlap.
+enum RenderBatch: u8 {
+    /// Atlas-backed triangles already clipped and tessellated by the UI.
+    Atlas {
+        /// First vertex, equal to the end of the preceding vertex-bearing batch.
+        first: u32,
+        /// Positive vertex count divisible by three.
+        count: u32,
+    },
+    /// Four clipped vertices in top-left, top-right, bottom-right, bottom-left order.
+    Texture {
+        /// First of exactly four vertices; stream.texture(batch_index) supplies the owned resource.
+        first: u32,
+    },
+    /// Backend-specific work; stream.item(batch_index) supplies an owned capability from that renderer.
+    Item {
+        /// Positive, unclipped content rectangle in drawable pixels.
+        rect: Rect,
+        /// Positive intersection of content, widget clip and drawable viewport.
+        clip: Rect,
+    },
+}
+
+#[version(1)]
+/// Immutable RGBA image whose final release destroys its native allocation with its owning device alive.
+trait ITexture {
+    /// Positive immutable pixel dimensions, independent of its destination rectangle.
+    fn size(&self) -> Result<Size>;
+}
+
+#[version(1)]
+/// Opaque owned application GPU work, authenticated by the renderer that created it.
+/// Application-specific derived interfaces edit concrete scene data; this interface exposes no native handles.
+trait IRenderItem {}
+
+#[version(1)]
+/// Optional renderer capability for immutable external images.
+trait ITextureFactory {
+    /// Uploads exactly width*height*4 RGBA bytes at offset zero, publishing only after a successful upload.
+    fn create_texture(&self, size: Size, pixels: &[u8]) -> Result<ITexture>;
+}
+
+#[version(1)]
+/// Owned diagnostic snapshots preserve backend details without exposing backend-dependent errors.
+trait IRenderDiagnostics {
+    /// Returns the most recent failed GPU operation's detail, or empty text before a failure.
+    fn diagnostic(&self) -> Result<String>;
+}
+
+#[version(1)]
+/// Finite floating-point position used by widget-local line and polygon drawing.
+struct PaintPoint {
+    /// Horizontal widget-local coordinate in pixels.
+    x: f32,
+    /// Vertical widget-local coordinate in pixels.
+    y: f32,
+}
+
+#[version(1)]
+/// Local solid vertex; applications never need the atlas's private white-pixel coordinates.
+struct ColoredVertex {
+    /// Horizontal widget-local position in pixels.
+    x: f32,
+    /// Vertical widget-local position in pixels.
+    y: f32,
+    /// Red in the least significant byte, then green, blue and alpha.
+    rgba: u32,
+}
+
+#[version(1)]
+/// Final textured vertex; tessellation and clipping already happened in the UI.
+struct RenderVertex {
+    /// Horizontal position in drawable pixels.
+    x: f32,
+    /// Vertical position in drawable pixels.
+    y: f32,
+    /// Normalized horizontal texture coordinate.
+    u: f32,
+    /// Normalized vertical texture coordinate.
+    v: f32,
+    /// Color packed as red in the least significant byte, then green, blue, alpha.
+    rgba: u32,
+}
+
+#[version(1)]
+/// Metadata for one synchronous renderer submission.
+struct RenderInfo {
+    /// Positive drawable dimensions.
+    size: Size,
+    /// Clear color in the same byte order as RenderVertex::rgba.
+    clear: u32,
+    /// Unique authority to read this frame's stream; expires when render returns.
+    invocation: u64,
+    /// Exact vertex count: atlas batches contain triples and texture batches contain four vertices.
+    vertex_count: u32,
+    /// Exact number of ordered batch records.
+    batch_count: u32,
+}
+
+#[version(1)]
+/// Owned reusable frame storage, readable only during its active submission.
+trait IRenderStream {
+    /// Copies a bounded range into caller-owned storage; offsets count vertices.
+    fn vertices(&self, invocation: u64, output: &mut [RenderVertex]) -> Result<u32>;
+    /// Copies ordered records; offsets count batches, and no output record contains a borrowed pointer.
+    fn batches(&self, invocation: u64, output: &mut [RenderBatch]) -> Result<u32>;
+    /// Retains the texture used by this batch; another batch kind or invalid index is rejected.
+    fn texture(&self, invocation: u64, batch: u32) -> Result<ITexture>;
+    /// Retains the custom item used by this batch; another batch kind or invalid index is rejected.
+    fn item(&self, invocation: u64, batch: u32) -> Result<IRenderItem>;
+}
+
+#[version(1)]
+/// GPU resources and presentation belong to this object's native window.
+trait IRenderer {
+    /// Imports and transactionally uploads a complete immutable atlas. Repeated preparation of
+    /// the identical bundle is a cheap no-op; failure leaves the previous native atlas usable.
+    fn prepare_assets(&self, assets: &IAssetBundle) -> Result<()>;
+    /// Executes one complete frame synchronously; failure must not present it.
+    fn render(&self, info: RenderInfo, assets: &IAssetBundle, stream: &IRenderStream) -> Result<()>;
+}
+
+#[version(1)]
+/// Normalized source rectangle for one immutable texture; all edges lie in the unit square.
+struct TextureRegion {
+    /// Left source edge.
+    u0: f32,
+    /// Top source edge.
+    v0: f32,
+    /// Right source edge, no smaller than u0.
+    u1: f32,
+    /// Bottom source edge, no smaller than v0.
+    v1: f32,
+}

@@ -1,0 +1,383 @@
+#[version(1)]
+/// Integer point or delta in the receiving widget's local coordinates.
+struct Point {
+    /// Horizontal coordinate or displacement.
+    x: i32,
+    /// Vertical coordinate or displacement.
+    y: i32,
+}
+
+#[version(1)]
+/// Logical keyboard identity, independent of native scan codes.
+    enum KeyCode: u8 {
+        /// Printable shortcut key; its scalar is carried in `KeyStroke::value`.
+        Character = 0,
+        /// Removes the previous character.
+        Backspace = 1,
+        /// Removes the next character.
+        Delete = 2,
+        /// Primary activation or line break.
+        Enter = 3,
+        /// Cancellation or popup dismissal.
+        Escape = 4,
+        /// Space-bar activation, separate from committed text.
+        Space = 5,
+        /// Sequential focus traversal.
+        Tab = 6,
+        /// Insert editing command.
+        Insert = 7,
+        /// Beginning of content or line.
+        Home = 8,
+        /// End of content or line.
+        End = 9,
+        /// Previous viewport.
+        PageUp = 10,
+        /// Next viewport.
+        PageDown = 11,
+        /// Upward navigation.
+        ArrowUp = 12,
+        /// Downward navigation.
+        ArrowDown = 13,
+        /// Leftward navigation.
+        ArrowLeft = 14,
+        /// Rightward navigation.
+        ArrowRight = 15,
+        /// Numbered function key; its number is carried in `KeyStroke::value`.
+        Function = 16,
+        /// Alt/Option itself, for distinguishing a tap from a chord.
+        Alt = 17,
+        /// Control modifier itself.
+        Control = 18,
+        /// Shift modifier itself.
+        Shift = 19,
+        /// Command/Windows/Super modifier itself.
+        Super = 20,
+    }
+
+#[version(1)]
+/// Complete logical key transition; text composition uses `WidgetEvent::Text`.
+struct KeyStroke {
+    /// Stable logical key family.
+    key: KeyCode,
+    /// Unicode scalar for CHARACTER, function number for FUNCTION, otherwise zero.
+    value: u32,
+    /// True for a press, false for a release.
+    pressed: bool,
+    /// True only for a platform-generated repeated press.
+    repeat: bool,
+    /// Complete modifier bits: Alt=1, Ctrl=2, Shift=4, Super=8.
+    modifiers: u8,
+}
+
+#[version(1)]
+/// One routed input transaction; pointer payloads are already content-local.
+enum WidgetEvent: u8 {
+    /// Ordinary eventless update, including animation or state synchronization.
+    None,
+    /// Native focus or capture was lost.
+    Cancel,
+    /// Pointer motion without held buttons.
+    Move {
+        /// Current local position.
+        position: Point,
+        /// Change since the previous queued position.
+        delta: Point,
+    },
+    /// Pointer motion under capture or with held buttons.
+    Drag {
+        /// Current local position.
+        position: Point,
+        /// Change since the previous queued position.
+        delta: Point,
+        /// Held buttons: left=1, right=2, middle=4.
+        buttons: u8,
+    },
+    /// Pointer button press.
+    Down {
+        /// Local press position.
+        position: Point,
+        /// Buttons changed by this transition.
+        buttons: u8,
+    },
+    /// Pointer button release.
+    Up {
+        /// Local release position.
+        position: Point,
+        /// Buttons changed by this transition.
+        buttons: u8,
+    },
+    /// Wheel or equivalent scrolling input.
+    Scroll {
+        /// Current local pointer position.
+        position: Point,
+        /// Requested scroll amount.
+        delta: Point,
+    },
+    /// One complete logical keyboard transition.
+    Key(KeyStroke),
+    /// The accompanying bounded UTF-8 argument carries the complete committed text.
+    Text,
+}
+
+#[version(1)]
+/// Router-owned geometry and interaction snapshot for one widget update.
+struct WidgetUpdate {
+    /// Whether pointer hit tests belong to the currently hovered logical root.
+    in_hover_root: bool,
+    /// Content allocation with local origin (0, 0).
+    rect: Rect,
+    /// Effective content-local clip.
+    clip: Rect,
+    /// Content allocation in native drawable coordinates, for input-method placement.
+    screen: Rect,
+    /// Pointer currently hovers this surface.
+    hovered: bool,
+    /// This surface owns logical keyboard focus.
+    focused: bool,
+    /// An eligible primary-button press selected this surface in this transaction.
+    clicked: bool,
+    /// This surface owns pointer capture while the primary button is held.
+    active: bool,
+    /// Shared action derived from the routed event and declared keyboard capabilities.
+    action: WidgetAction,
+    /// Current held mouse buttons using the same bits as pointer event payloads.
+    mouse_buttons: u8,
+    /// Complete current modifier snapshot using KeyStroke's bit assignments.
+    modifiers: u8,
+}
+
+#[version(1)]
+/// Shared semantic keyboard/pointer action resolved by the runtime's routing rules.
+    enum WidgetAction: u8 {
+        /// No semantic action was requested.
+        None = 0,
+        /// Invoke the primary command.
+        Activate = 1,
+        /// Move one step toward the lower value.
+        Decrease = 2,
+        /// Move one step toward the higher value.
+        Increase = 3,
+        /// Reveal a hierarchical branch or popup.
+        Expand = 4,
+        /// Hide a hierarchical branch or popup.
+        Collapse = 5,
+    }
+
+#[version(1)]
+/// Ordered host input before the runtime computes drag, hover and local coordinates.
+enum UiInput: u8 {
+    /// Native focus or capture was lost; clears held state in input order.
+    Cancel,
+    /// Absolute pointer position in drawable coordinates.
+    Pointer(Point),
+    /// Button press at an absolute drawable position.
+    Down {
+        /// Current drawable position.
+        position: Point,
+        /// Buttons changed by this transition.
+        buttons: u8,
+    },
+    /// Button release at an absolute drawable position.
+    Up {
+        /// Current drawable position.
+        position: Point,
+        /// Buttons changed by this transition.
+        buttons: u8,
+    },
+    /// Wheel delta at the last committed pointer position.
+    Scroll(Point),
+    /// Complete key identity, state and modifiers.
+    Key(KeyStroke),
+    /// Complete UTF-8 commit supplied in the accompanying bounded text argument.
+    Text,
+}
+
+#[version(1)]
+/// Concrete labelled activation consumer shared by Button, ListItem and ListBox.
+trait IActivationSink {
+    /// Receives an immutable submission snapshot after widget traversal releases its borrows.
+    fn submitted(&self, label: &str) -> Result<()>;
+}
+
+#[version(1)]
+/// Lease owning one queue and typed consumer; the driver retains this lease.
+trait IEventSubscription {
+    /// Delivers at most limit callbacks from one detached FIFO prefix; zero rejects only when events are pending.
+    /// A callback error consumes that attempted event and preserves unattempted ordinary events ahead of later emissions.
+    fn dispatch(&self, limit: u32) -> Result<u32>;
+    /// Reports a live source or an undelivered terminal fact; cancelled and closed-empty leases are inactive.
+    fn active(&self) -> Result<bool>;
+    /// Disconnects explicitly; final object release also disconnects without invoking user code.
+    fn cancel(&self) -> Result<()>;
+}
+
+#[version(1)]
+/// Shared labelled activation source; the producer never owns the returned lease or its sink.
+trait IActivationEvents {
+    /// Connects the exclusive subscriber and returns its ownership lease.
+    fn subscribe(&self, sink: &IActivationSink) -> Result<IEventSubscription>;
+}
+
+#[version(1)]
+/// Committed user checkbox state; programmatic setters do not publish it.
+trait ICheckboxSink {
+    /// Receives the captured value after retained traversal releases its owned state.
+    fn changed(&self, checked: bool) -> Result<()>;
+}
+
+#[version(1)]
+/// Committed finite user value shared by Slider and Number; programmatic setters do not publish it.
+trait INumericSink {
+    /// Receives the captured value after retained traversal releases its owned state.
+    fn changed(&self, value: f32) -> Result<()>;
+}
+
+#[version(1)]
+/// Committed clamped scrollbar offset from pointer input; programmatic setters do not publish it.
+trait IScrollbarSink {
+    /// Receives the captured value after retained traversal releases its owned state.
+    fn changed(&self, offset: i32) -> Result<()>;
+}
+
+#[version(1)]
+/// Complete normalized text and scalar-aligned UTF-8 byte cursor at the moment of a user edit.
+trait ITextChangedSink {
+    /// Receives an owned immutable text capability borrowed only for this synchronous delivery.
+    fn changed(&self, text: &str, cursor: u64) -> Result<()>;
+}
+
+#[version(1)]
+/// Complete normalized text at submission, independent of later edits.
+trait ITextSubmittedSink {
+    /// Receives the already captured submission value after traversal.
+    fn submitted(&self, text: &str) -> Result<()>;
+}
+
+#[version(1)]
+/// Shared editor event family; changed and submitted are independent exclusive ports.
+trait ITextEvents {
+    /// Connects one changed consumer without claiming the separate submitted port.
+    fn subscribe_changed(&mut self, sink: &ITextChangedSink) -> Result<IEventSubscription>;
+    /// Connects one submitted consumer without claiming the separate changed port.
+    fn subscribe_submitted(&mut self, sink: &ITextSubmittedSink) -> Result<IEventSubscription>;
+}
+
+#[version(1)]
+/// Borrowed application-owned dispatcher; the UI runtime must never retain this capability.
+trait IEventDispatcher {
+    /// Sweeps registered sources in deterministic order until empty or the callback budget is exhausted.
+    fn dispatch(&self, limit: u32) -> Result<u32>;
+}
+
+#[version(1)]
+/// Captured window lifecycle or user chrome interaction; Destroyed is the one terminal fact.
+enum WindowEvent: u8 {
+    /// A user move or resize committed this complete outer rectangle.
+    GeometryChanged {
+        /// Captured outer geometry, independent of subsequent window edits.
+        rect: Rect,
+    },
+    /// The user activated the close affordance; the application decides whether to close.
+    CloseRequested,
+    /// Visibility became false; later callback code may observe a subsequent show.
+    Hidden,
+    /// The window and its descendants were logically destroyed; delivered once after producer closure.
+    Destroyed,
+    /// The user minimized to this complete compact rectangle.
+    Minimized {
+        /// Captured compact outer geometry.
+        rect: Rect,
+    },
+    /// The user maximized into this inherited viewport rectangle.
+    Maximized {
+        /// Captured maximized outer geometry.
+        rect: Rect,
+    },
+    /// The user restored this previously saved rectangle.
+    Restored {
+        /// Captured restored outer geometry.
+        rect: Rect,
+    },
+}
+
+#[version(1)]
+/// Concrete consumer of copied window events, including the terminal Destroyed fact.
+trait IWindowSink {
+    /// Receives the exact committed lifecycle/chrome snapshot after the manager releases traversal ownership.
+    fn event(&self, event: WindowEvent) -> Result<()>;
+}
+
+#[version(1)]
+/// Subscription capability on the actual logical window object; the manager owns its existing native source.
+trait IWindowEvents {
+    /// Connects the current source without making a retained window reference prolong native tree ownership.
+    fn subscribe(&self, sink: &IWindowSink) -> Result<IEventSubscription>;
+}
+
+#[version(1)]
+/// Concrete consumer of ordinary popup dismissal; destruction does not fabricate replay history.
+trait IPopupSink {
+    /// Reports removal from the active popup branch, independently of later activation.
+    fn dismissed(&self) -> Result<()>;
+}
+
+#[version(1)]
+/// Subscription capability on the actual popup object and its existing manager-owned source.
+trait IPopupEvents {
+    /// Returns an exclusive application-owned dismissal lease without retaining application state on the producer.
+    fn subscribe(&self, sink: &IPopupSink) -> Result<IEventSubscription>;
+}
+
+#[version(1)]
+/// Captured user selection committed by a combo's composing popup owner.
+trait IComboChangedSink {
+    /// Receives the matching application-list position and display label from one selection.
+    fn changed(&self, selected: u64, label: &str) -> Result<()>;
+}
+
+#[version(1)]
+/// Header activation requests ordinary popup coordination using copied routed geometry.
+trait IComboPopupSink {
+    /// Receives the desired open state and screen-space anchor captured at header activation.
+    fn submitted(&self, open: bool, anchor: Rect) -> Result<()>;
+}
+
+#[version(1)]
+/// Concrete terminal outcome of one request; there is no impossible Pending event variant.
+trait IFileDialogSink {
+    /// Accepts an exact native path independently of its potentially lossy filename label.
+    fn accepted(&self, path: &INativePath) -> Result<()>;
+    /// Reports explicit cancellation, hiding, close affordance or destruction of an active request.
+    fn cancelled(&self) -> Result<()>;
+}
+
+#[version(1)]
+/// Independent completion source for this reusable picker, using the shared application-owned lease transport.
+trait IFileDialogEvents {
+    /// Connects one concrete completion consumer without retaining the application on the producer.
+    fn subscribe(&self, sink: &IFileDialogSink) -> Result<IEventSubscription>;
+}
+
+#[version(1)]
+/// UI-owned file picker controller and real COM controls; retaining its interface does not keep its runtime open.
+trait IFileDialog {
+    /// Returns the actual stable modal window capability for ordinary lifecycle and geometry operations.
+    fn window(&self) -> Result<IWindow>;
+    /// Reads and validates a complete native directory before changing request state or showing the modal.
+    fn open(&self, title: &[u8], rect: Rect, directory: &INativePath) -> Result<()>;
+    /// Reports whether a request is active; hidden/idle is distinct from permanently closed.
+    fn active(&self) -> Result<bool>;
+    /// Cancels one active request and hides its reusable modal; idle cancellation returns false.
+    fn cancel(&self) -> Result<bool>;
+    /// Permanently destroys the modal and ends its active request, while retained handles remain safe.
+    fn close(&self) -> Result<()>;
+    /// Copies the latest failed directory-read diagnostic without replacing the previous valid listing.
+    fn diagnostic(&self) -> Result<String>;
+}
+
+#[version(1)]
+/// Standard picker construction capability on the same runtime identity as ordinary window management.
+trait IFileDialogs {
+    /// Creates one hidden reusable modal owned by the authenticated ordinary window.
+    fn create(&self, parent: &IWindow) -> Result<IFileDialog>;
+}

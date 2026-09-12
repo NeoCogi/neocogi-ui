@@ -1,0 +1,73 @@
+#[version(1)]
+/// Whether preferred measurement or child placement inputs changed.
+    enum GeometryChange: u8 {
+        /// Preferred measurement and placement inputs are unchanged.
+        NoChange = 0,
+        /// Preferred measurement or placement inputs changed and must be invalidated.
+        Changed = 1,
+    }
+
+#[version(1)]
+/// Canonical copied pixel dimensions for UI contracts.
+struct Size {
+    /// Horizontal extent in pixels.
+    width: i32,
+    /// Vertical extent in pixels.
+    height: i32,
+}
+
+#[version(1)]
+/// Active paint invocation plus a caller-narrowable local clip, checked by the runtime paint context.
+struct PaintScope {
+    /// Non-reused invocation number; zero never identifies an active call.
+    invocation: u64,
+    /// Requested local clip. The service always intersects it with the widget's actual clip;
+    /// modifying this copied field cannot grant drawing authority outside the widget.
+    clip: Rect,
+}
+
+#[version(1)]
+/// Closed visual state used when the runtime resolves a semantic widget frame.
+    enum WidgetVisualState: u8 {
+        /// Disabled surface or control.
+        Disabled = 0,
+        /// Enabled surface or unfocused control without pointer interaction.
+        Normal = 1,
+        /// Enabled unfocused control under the pointer.
+        Hovered = 2,
+        /// Enabled unfocused control actively pressed under the pointer.
+        Pressed = 3,
+        /// Focused control without pointer interaction.
+        Focused = 4,
+        /// Focused control under the pointer.
+        FocusedHovered = 5,
+        /// Focused control actively pressed under the pointer.
+        FocusedPressed = 6,
+    }
+
+#[version(1)]
+/// Bundle-local font slot selected from the exact asset revision used for this paint call.
+struct PaintFont {
+    /// Zero-based font table index; the paint context rejects values outside its installed atlas.
+    index: u32,
+}
+
+#[version(1)]
+/// Bundle-local icon slot selected from the exact asset revision used for this paint call.
+struct PaintIcon {
+    /// Zero-based icon table index; the paint context rejects values outside its installed atlas.
+    index: u32,
+}
+
+#[version(1)]
+/// Copied rectangle in the current widget's local coordinate system.
+struct Rect {
+    /// Horizontal origin.
+    x: i32,
+    /// Vertical origin.
+    y: i32,
+    /// Nonnegative horizontal extent.
+    width: i32,
+    /// Nonnegative vertical extent.
+    height: i32,
+}

@@ -1,0 +1,385 @@
+#[version(2)]
+/// Scoped facade which appends typed operations to the runtime's current frame paint context.
+trait IPainter {
+    /// Records a nonnegative-width solid line with finite local endpoints. Zero width draws nothing.
+    fn stroke_line(&mut self, scope: PaintScope, from: PaintPoint, to: PaintPoint, width: f32, rgba: u32) -> Result<()>;
+    /// Records finite local polygon points at offset zero; fewer than three points draw nothing.
+    /// Concave polygon tessellation and clipping use the same UI implementation as built-in drawing.
+    fn fill_polygon(&mut self, scope: PaintScope, points: &[PaintPoint], rgba: u32) -> Result<()>;
+    /// Records solid triangles in widget-local coordinates. The complete input starts at offset zero,
+    /// has a multiple of three vertices and contains only finite positions. Atlas mapping belongs
+    /// to the UI implementation and follows the currently installed resource revision.
+    fn colored_triangles(&mut self, scope: PaintScope, vertices: &[ColoredVertex]) -> Result<()>;
+    /// Records complete atlas triangles in local coordinates; offset is zero,
+    /// length is divisible by three, and every position/UV component is finite.
+    fn triangles(&mut self, scope: PaintScope, vertices: &[RenderVertex]) -> Result<()>;
+    /// Retains an immutable renderer-owned RGBA texture and draws its normalized source region in local coordinates.
+    /// Negative extents are invalid; zero extents draw nothing. Ownership is validated before GPU execution.
+    fn texture(&mut self, scope: PaintScope, rect: Rect, source: TextureRegion, rgba: u32, texture: &ITexture) -> Result<()>;
+    /// Retains a renderer-owned custom item at this exact painter-order position.
+    /// The UI translates the rectangle and intersects its clip before submission.
+    fn item(&mut self, scope: PaintScope, rect: Rect, item: &IRenderItem) -> Result<()>;
+    /// Records a fill only while this exact invocation remains active.
+    fn fill(&mut self, scope: PaintScope, rect: Rect, rgba: u32) -> Result<()>;
+    /// Records UTF-8 text with the current body font and button content style.
+    fn text(&mut self, scope: PaintScope, rect: Rect, text: &[u8]) -> Result<()>;
+    /// Resolves and records one semantic surface or control frame, returning its usable interior.
+    /// `center_only` removes destination insets without changing the selected artwork.
+    fn frame(&mut self, scope: PaintScope, rect: Rect, role: WidgetFrame, state: WidgetVisualState, center_only: bool) -> Result<Rect>;
+    /// Records one atlas icon selected by its slot in the current immutable asset bundle.
+    fn icon(&mut self, scope: PaintScope, icon: PaintIcon, rect: Rect, rgba: u32) -> Result<()>;
+    /// Records one UTF-8 text run at an explicit local baseline-aligned position.
+    fn text_run(&mut self, scope: PaintScope, font: PaintFont, position: Point, rgba: u32, text: &[u8]) -> Result<()>;
+}
+
+#[version(1)]
+/// Common retained widget capability shared by all concrete widget interfaces.
+trait IWidget {
+    /// Returns the allocating runtime's identity service, which owns no tree.
+    fn host(&self) -> Result<IWidgetHost>;
+    /// Claims the only tree attachment; a second call fails without changing state.
+    fn mount(&mut self) -> Result<()>;
+    /// Logically closes the widget without requiring its final reference release.
+    fn close(&mut self) -> Result<()>;
+
+    /// Returns current frame, focus and pointer-routing policy as one copied record.
+    fn properties(&self) -> Result<WidgetProperties>;
+    /// Changes common options and records sticky geometry invalidation when they differ.
+    fn set_options(&mut self, options: WidgetOptions) -> Result<()>;
+    /// Processes one router-owned snapshot; the text argument is UTF-8 only for Text events.
+    /// Return CHANGED for every modification to measurement or child placement inputs.
+    fn update(&mut self, state: WidgetUpdate, event: WidgetEvent, text: &[u8]) -> Result<GeometryChange>;
+
+    /// Drains sticky geometry invalidation recorded by programmatic setters.
+    fn take_change(&mut self) -> Result<GeometryChange>;
+    /// Records this widget's visual output within a validated paint invocation.
+    fn paint(&mut self, scope: PaintScope, state: WidgetPaint, painter: &IPainter) -> Result<()>;
+}
+
+#[version(1)]
+/// Ordered child access, independent of concrete container layout policy.
+trait IChildren {
+    /// Returns the current number of direct children.
+    fn child_count(&self) -> Result<u32>;
+    /// Returns an owned reference to one direct child; topology ownership is a separate contract.
+    fn child(&self, index: u32) -> Result<IWidget>;
+}
+
+#[version(1)]
+/// Constructible button class with only its shared widget and leaf-layout protocols separated.
+class Button: IWidget + ILeafLayout {
+
+    /// Replaces the complete UTF-8 label; the logical input offset must be zero.
+    fn set_label(&mut self, label: &[u8]) -> Result<()>;
+
+    /// Returns the current label as an independently owned immutable string object.
+    fn label(&self) -> Result<String>;
+
+    /// Connects the exclusive activation subscriber and returns its ownership lease.
+    fn subscribe(&mut self, sink: &IActivationSink) -> Result<IEventSubscription>;
+
+    /// Selects a semantic font role and invalidates measurement only when it differs.
+    fn set_font_role(&mut self, role: FontRole) -> Result<()>;
+
+    /// Resolves an exact named font in the current host bundle before committing.
+    fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
+
+    /// Selects a semantic icon or removes it while retaining the label.
+    fn set_icon_role(&mut self, icon: ContentIcon) -> Result<()>;
+
+    /// Resolves an exact named icon in the current host bundle before committing.
+    fn set_named_icon(&mut self, name: &[u8]) -> Result<()>;
+
+    /// Returns the interaction states that fill an unframed button's center.
+    fn fill_states(&self) -> Result<FillStates>;
+
+    /// Replaces the validated paint-only center-fill mask.
+    fn set_fill_states(&mut self, states: FillStates) -> Result<()>;
+
+    /// Installs a positive-sized renderer-owned image, optionally fitted to width.
+    fn set_image(&mut self, image: &ITexture, fit_width: bool) -> Result<()>;
+
+    /// Removes image content while retaining the current label and font.
+    fn clear_image(&mut self) -> Result<()>;
+}
+
+#[version(1)]
+/// Dynamically implemented construction shorthand over registered widget contracts.
+factory UiFactory {
+
+    /// Returns this factory's non-owning authority for inline WidgetState in independent widget classes.
+    fn host(&self) -> Result<IWidgetHost>;
+    /// Creates an empty combo header; its composing owner supplies generic list data and popup content.
+    fn create_combo(&self) -> Result<Combo>;
+    /// Creates a fixed scrolling multiline editor; CRLF and CR normalize to LF and the cursor starts at the end.
+    fn create_text_area(&self, text: &[u8], wrapping: TextWrapping, scrolling: bool) -> Result<TextArea>;
+    /// Creates an empty disclosure with a real text header and editable vertical Linear body.
+    fn create_disclosure(&self, label: &[u8], style: DisclosureStyle, expanded: bool) -> Result<Disclosure>;
+    /// Creates a framed scroll composite around one unmounted content object; generic options can subsequently change its frame.
+    fn create_scroll_area(&self, content: &IWidget, enabled: bool) -> Result<ScrollArea>;
+    /// Creates an empty directional container after validating its complete initial policy.
+    fn create_linear(&self, direction: FlowDirection, cross: CrossSize) -> Result<Linear>;
+    /// Creates an empty Grid with validated complete column and row policies; input offsets must be zero.
+    fn create_grid(
+        &self,
+        columns: &[LayoutTrack],
+        rows: &[LayoutTrack],
+    ) -> Result<Grid>;
+    /// Constructs an unmounted boolean control with body-font presentation.
+    fn create_checkbox(&self, checked: bool, label: &[u8]) -> Result<Checkbox>;
+    /// Constructs an unmounted normalized single-line editor.
+    fn create_textbox(&self, text: &[u8]) -> Result<Textbox>;
+    /// Constructs multiline display text using the explicit wrapping policy.
+    fn create_text_block(&self, text: &[u8], wrapping: TextWrapping) -> Result<TextBlock>;
+    /// Constructs a slider after validating every arithmetic input.
+    fn create_slider(&self, options: SliderOptions) -> Result<Slider>;
+    /// Constructs standalone numeric entry after validating arithmetic inputs.
+    fn create_number(&self, options: NumberOptions) -> Result<Number>;
+    /// Constructs an RGBA swatch with an optional label.
+    fn create_color_swatch(&self, rgba: u32, label: &[u8]) -> Result<ColorSwatch>;
+    /// Constructs one list row; application data is attached in its static adapter.
+    fn create_list_item(&self, label: &[u8]) -> Result<ListItem>;
+    /// Constructs a button-like list entry.
+    fn create_list_box(&self, label: &[u8]) -> Result<ListBox>;
+    /// Constructs a scrollbar with a validated orientation and normalized range.
+    fn create_scrollbar(&self, range: ScrollRange) -> Result<Scrollbar>;
+    /// Constructs an initialized, unmounted Button through its concrete class contract.
+    fn create_button(&self, label: &[u8], options: WidgetOptions) -> Result<Button>;
+}
+
+#[version(1)]
+/// Immutable resource view shared for a complete layout transaction.
+trait ITextMetrics {
+    /// Measures a UTF-8 button label, including theme padding.
+    fn button_size(&self, text: &[u8]) -> Result<Size>;
+}
+
+#[version(1)]
+/// Whether an axis has a finite measurement maximum.
+    enum LimitKind: u8 {
+        /// Extent is a nonnegative maximum; zero remains a real bound.
+        Finite = 0,
+        /// Preferred size is requested without a finite maximum; extent must be zero.
+        Unbounded = 1,
+    }
+
+#[version(1)]
+/// Copied axis constraint; the tag distinguishes zero from unbounded space.
+struct AxisLimit {
+    /// Explicit finite/unbounded interpretation.
+    kind: LimitKind,
+    /// Nonnegative bound for FINITE, zero for UNBOUNDED.
+    extent: i32,
+}
+
+#[version(1)]
+/// Independent horizontal and vertical measurement constraints.
+struct LayoutLimits {
+    /// Available horizontal space.
+    width: AxisLimit,
+    /// Available vertical space.
+    height: AxisLimit,
+}
+
+#[version(1)]
+/// Preferred-size capability for a leaf; measurement may refresh private resource caches.
+trait ILeafLayout {
+    /// Computes preferred dimensions from explicit finite/unbounded axis constraints.
+    fn measure(&mut self, bounds: LayoutLimits, metrics: &ITextMetrics) -> Result<Size>;
+}
+
+#[version(1)]
+/// Visibility intent or effective surface visibility, as documented by the operation.
+    enum Visibility: u8 {
+        /// Excluded from rendering and input.
+        Hidden = 0,
+        /// Eligible when structural and modal owner policy also permits it.
+        Visible = 1,
+    }
+
+#[version(1)]
+/// How a parent clips its structural child windows.
+    enum ChildClip: u8 {
+        /// Inherit the ancestor/viewport clip without narrowing to the parent's body.
+        None = 0,
+        /// Clip complete child surfaces to the parent's application content area.
+        Content = 1,
+    }
+
+#[version(1)]
+/// Structural layer category for a window or dialog.
+    enum LayerKind: u8 {
+        /// An independent or inherited application layer in 0..=15.
+        Fixed = 0,
+        /// Dedicated modal band above all application layers; number is zero.
+        Modal = 1,
+    }
+
+#[version(1)]
+/// Explicit fixed or manager-controlled modal stacking band.
+struct WindowLayer {
+    /// Interpretation of the numeric field.
+    kind: LayerKind,
+    /// Fixed application layer, or zero when modal.
+    number: u8,
+}
+
+#[version(2)]
+/// Concrete window presentation bits; unknown bits are rejected before mutation.
+bitenum WindowOptions: u16 {
+    /// No optional presentation behavior.
+    NONE = 0,
+    /// Show the minimize caption button.
+    MINIMIZE_BUTTON = 1,
+    /// Show the maximize caption button.
+    MAXIMIZE_BUTTON = 2,
+    /// Keep visible while disabling the complete structural family.
+    DISABLED = 4,
+    /// Remove the ordinary content inset.
+    NO_PADDING = 8,
+    /// Prevent interactive resizing.
+    NO_RESIZE = 16,
+    /// Hide the close caption button.
+    NO_CLOSE = 64,
+    /// Hide the title bar.
+    NO_TITLE = 128,
+    /// Derive width from preferred content measurement.
+    AUTO_WIDTH = 256,
+    /// Derive height from preferred content measurement.
+    AUTO_HEIGHT = 512,
+    /// Derive both dimensions from preferred content measurement.
+    AUTO_SIZE = 768,
+    /// Use the theme-owned outer border and content inset.
+    FRAME = 1024,
+}
+
+#[version(1)]
+/// Immutable copied observation of the manager's authoritative window state.
+struct WindowSnapshot {
+    /// Current outer screen rectangle.
+    rect: Rect,
+    /// Current presentation options.
+    options: WindowOptions,
+    /// Effective visibility including structural ancestors.
+    visibility: Visibility,
+    /// Fixed, inherited or modal stacking policy.
+    layer: WindowLayer,
+    /// Parent-owned clipping applied to this window's structural children.
+    child_clip: ChildClip,
+}
+
+#[version(1)]
+/// Logical UI window retained independently of its runtime's tree membership.
+trait IWindow {
+    /// Copies current authoritative geometry, visibility and policy without caching app-side state.
+    fn snapshot(&self) -> Result<WindowSnapshot>;
+    /// Returns an immutable UTF-8 title snapshot.
+    fn title(&self) -> Result<String>;
+    /// Replaces the complete title silently; UTF-8 input offset must be zero.
+    fn set_title(&self, title: &[u8]) -> Result<()>;
+    /// Changes local visibility intent; ancestors and modal policy determine effective visibility.
+    fn set_visibility(&self, visibility: Visibility) -> Result<()>;
+    /// Changes concrete presentation options and reconciles capture/disabled descendants.
+    fn set_options(&self, options: WindowOptions) -> Result<()>;
+    /// Selects a fixed layer in 0..=15; child/dialog layers are manager-controlled.
+    fn set_layer(&self, layer: u8) -> Result<()>;
+    /// Raises within the permitted structural stacking band.
+    fn raise(&self) -> Result<()>;
+    /// Changes the clipping applied to structural child windows.
+    fn set_child_clip(&self, clip: ChildClip) -> Result<()>;
+    /// Changes allocation and schedules layout; negative extents are rejected.
+    fn set_rect(&self, rect: Rect) -> Result<()>;
+    /// Removes the subtree; retained capabilities subsequently report closure.
+    fn close(&self) -> Result<()>;
+}
+
+#[version(1)]
+/// Window policy and topology are owned by the UI runtime object.
+trait IWindowManager {
+    /// Creates a visible structural child; a modal parent is rejected before claiming the widget.
+    fn create_child(
+        &self,
+        parent: &IWindow,
+        title: &[u8],
+        rect: Rect,
+        root: &IWidget,
+    ) -> Result<IWindow>;
+    /// Creates a hidden modal dialog owned by an ordinary window.
+    fn create_dialog(
+        &self,
+        parent: &IWindow,
+        title: &[u8],
+        rect: Rect,
+        root: &IWidget,
+    ) -> Result<IWindow>;
+    /// Creates a hidden auto-sized popup owned by a live window or dialog.
+    fn create_popup(
+        &self,
+        parent: &IWindow,
+        title: &[u8],
+        root: &IWidget,
+    ) -> Result<IPopup>;
+    /// Mounts one previously unmounted root and creates its logical window.
+    fn create_window(&self, title: &[u8], rect: Rect, root: &IWidget) -> Result<IWindow>;
+}
+
+#[version(1)]
+/// One constructible retained UI with input, rendering, and resource ownership.
+class UiRuntime: IInputSink + IWindowManager + IMenus + IFileDialogs {
+
+    /// Returns the dynamically implemented construction shorthand bound to this UI.
+    fn factory(&self) -> Result<UiFactory>;
+
+    /// Retains the currently installed immutable revision, suitable for restoration or another consumer.
+    fn assets(&self) -> Result<IAssetBundle>;
+    /// Validates compatible resources and prepares the renderer upload before publishing either UI
+    /// projection. The mutable receiver makes the authority to replace this runtime-wide value
+    /// explicit. Failure preserves the old bundle. Success requires update before rendering.
+    /// Callers install only after update or event dispatch returns; overlapping runtime calls reject
+    /// the exclusive receiver with BUSY. The renderer is borrowed only for this call.
+    fn install_assets(&mut self, assets: &IAssetBundle, renderer: &IRenderer) -> Result<()>;
+    /// Drains queued input, or one eventless update, and synchronizes setters/resize without an application dispatcher.
+    fn update(&self, size: Size) -> Result<()>;
+    /// Borrows application dispatch at each safe boundary; handlers may mutate windows/topology before the next input is routed.
+    /// The runtime never retains dispatcher; update/render reentry returns BUSY even while the context is available to handlers.
+    fn update_with_events(&self, size: Size, dispatcher: &IEventDispatcher) -> Result<()>;
+    /// Returns the committed editable focus rectangle in drawable coordinates, or None while
+    /// geometry/input is pending. Hosts synchronize native IME after each successful update.
+    fn text_input_area(&self) -> Result<TextInputArea>;
+    /// Paints only after update has synchronized geometry for this drawable size.
+    fn render(&self, size: Size, renderer: &IRenderer) -> Result<()>;
+    /// Logically closes every mounted subtree; COM allocations may outlive closure.
+    fn close(&self) -> Result<()>;
+}
+
+#[version(1)]
+/// Runtime identity and mutation authority without a reference back to its tree.
+trait IWidgetHost {
+    /// Retains the current immutable resource revision without owning the runtime tree.
+    /// Custom widgets cache bulk metadata by this bundle identity and refresh it during the next
+    /// measure/paint after replacement; never retain UVs or glyph metrics across a different revision.
+    fn assets(&self) -> Result<IAssetBundle>;
+    /// Creates an empty private child editor; containers expose only its read-only view.
+    fn create_children(&self) -> Result<IChildrenEditor>;
+    /// Checks lifetime without forbidding observational reads during layout or painting.
+    fn check_open(&self) -> Result<()>;
+    /// Rejects closed runtimes and mutation during layout or painting.
+    fn check_mutation(&self) -> Result<()>;
+}
+
+#[version(2)]
+/// A popup has transient placement and cannot be passed to ordinary window operations.
+trait IPopup {
+    /// Reports whether this popup belongs to the manager's active visible branch.
+    fn visibility(&self) -> Result<Visibility>;
+    /// Activates the popup's input scope at the latest consumed pointer position.
+    fn show(&mut self) -> Result<()>;
+    /// Atomically sets an exact screen anchor and activates the popup's input scope.
+    fn show_at(&mut self, anchor: Rect) -> Result<()>;
+    /// Dismisses this active branch while preserving the definition for later reuse.
+    fn hide(&mut self) -> Result<()>;
+    /// Changes popup framing, padding and preferred-size policy.
+    fn set_options(&mut self, options: WindowOptions) -> Result<()>;
+    /// Permanently removes this popup subtree and closes its retained widgets.
+    fn close(&mut self) -> Result<()>;
+}
