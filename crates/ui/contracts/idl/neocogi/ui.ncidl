@@ -1706,18 +1706,20 @@ class Scrollbar: IWidget + ILeafLayout {
 
 #[version(1)]
 /// Semantic font selection resolved by the current immutable resource revision.
-    enum FontRole: u8 {
-        /// Ordinary control and body text.
-        BODY = 0,
-        /// Compact supporting text.
-        SMALL = 1,
-        /// Window-title typography.
-        TITLE = 2,
-        /// Larger display typography.
-        HEADING = 3,
-        /// Monospace typography.
-        MONO = 4,
-    }
+#[dense]
+#[names(snake_case)]
+enum FontRole: u8 {
+    /// Ordinary control and body text.
+    BODY = 0,
+    /// Compact supporting text.
+    SMALL = 1,
+    /// Window-title typography.
+    TITLE = 2,
+    /// Larger display typography.
+    HEADING = 3,
+    /// Monospace typography.
+    MONO = 4,
+}
 
 #[version(1)]
 /// Optional typography capability on concrete text-bearing widget objects.
@@ -1888,151 +1890,102 @@ struct AssetIcon {
 
 #[version(1)]
 /// Structural surface role whose table entries vary only by availability.
-    enum SurfaceRole: u8 {
-        /// Window or modal-dialog background below application content and chrome.
-        WINDOW = 0,
-        /// Generic frame requested through the common FRAME widget option.
-        GENERIC_FRAME = 1,
-        /// Content panel or scroll-area viewport background.
-        PANEL = 2,
-    }
-
-#[version(1)]
-/// Interactive control part sharing pointer and keyboard-focus behavior.
-    enum ControlRole: u8 {
-        /// Ordinary command button or button-like list box.
-        BUTTON = 0,
-        /// Checkbox square; checked state is painted independently.
-        CHECKBOX = 1,
-        /// Single-line, multiline, or numeric text input background.
-        TEXT_INPUT = 2,
-        /// Generic item or tree row whose state supplies transient selection.
-        ITEM = 3,
-        /// Combo-box header.
-        COMBO = 4,
-        /// Slider background track.
-        SLIDER_TRACK = 5,
-        /// Slider value thumb.
-        SLIDER_THUMB = 6,
-        /// Scrollbar background track.
-        SCROLLBAR_TRACK = 7,
-        /// Scrollbar movable thumb.
-        SCROLLBAR_THUMB = 8,
-        /// Window close caption button.
-        CLOSE_BUTTON = 9,
-        /// Window minimize caption button.
-        MINIMIZE_BUTTON = 10,
-        /// Window maximize caption button.
-        MAXIMIZE_BUTTON = 11,
-        /// Window restore caption button used while maximized.
-        RESTORE_BUTTON = 12,
-        /// Visible bottom-right resize grip.
-        RESIZE_GRIP = 13,
-    }
-
-#[version(1)]
-/// Menu-owned surface or entry role with menu-specific open-selection behavior.
-    enum MenuRole: u8 {
-        /// Menu bar spanning a window.
-        BAR = 0,
-        /// Menu-bar title which can own an open popup.
-        TITLE = 1,
-        /// Popup-menu panel.
-        POPUP = 2,
-        /// Ordinary menu item or submenu row.
-        ITEM = 3,
-    }
-
-#[version(1)]
-/// Manager-owned window chrome role whose presentation follows activation.
-    enum ChromeRole: u8 {
-        /// Ordinary-window outer frame decoration.
-        WINDOW_FRAME = 0,
-        /// Modal-dialog outer frame decoration.
-        DIALOG_FRAME = 1,
-        /// Window title patch and semantic-content color.
-        TITLE = 2,
-    }
-
-#[version(1)]
-/// Pointer interaction nested inside an enabled control state.
-    enum PointerState: u8 {
-        /// Pointer is not hovering or pressing the control.
-        NORMAL = 0,
-        /// Pointer is hovering the control without an active press.
-        HOVERED = 1,
-        /// Pointer capture is pressed while the pointer remains over the control.
-        PRESSED = 2,
-    }
-
-#[version(1)]
-/// State of an interactive control, excluding impossible disabled interaction combinations.
-enum ControlState: u8 {
-    /// Control is unavailable; pointer and keyboard-focus presentation do not apply.
-    Disabled,
-    /// Control is available without keyboard focus and has the enclosed pointer state.
-    Enabled(PointerState),
-    /// Control owns visible keyboard focus and has the enclosed pointer state.
-    Focused(PointerState),
+#[dense]
+#[names(snake_case)]
+enum SurfaceRole: u8 {
+    /// Window or modal-dialog background below application content and chrome.
+    WINDOW = 0,
+    /// Generic frame requested through the common FRAME widget option.
+    GENERIC_FRAME = 1,
+    /// Content panel or scroll-area viewport background.
+    PANEL = 2,
 }
 
 #[version(1)]
-/// Availability state of a noninteractive structural surface.
-    enum SurfaceState: u8 {
-        /// Surface belongs to an enabled retained subtree.
-        NORMAL = 0,
-        /// Surface belongs to a disabled retained subtree.
-        DISABLED = 1,
-    }
+/// Interactive control part sharing pointer and keyboard-focus behavior.
+#[dense]
+#[names(snake_case)]
+enum ControlRole: u8 {
+    /// Ordinary command button or button-like list box.
+    BUTTON = 0,
+    /// Checkbox square; checked state is painted independently.
+    CHECKBOX = 1,
+    /// Single-line, multiline, or numeric text input background.
+    TEXT_INPUT = 2,
+    /// Generic item or tree row whose state supplies transient selection.
+    ITEM = 3,
+    /// Combo-box header.
+    COMBO = 4,
+    /// Slider background track.
+    SLIDER_TRACK = 5,
+    /// Slider value thumb.
+    SLIDER_THUMB = 6,
+    /// Scrollbar background track.
+    SCROLLBAR_TRACK = 7,
+    /// Scrollbar movable thumb.
+    SCROLLBAR_THUMB = 8,
+    /// Window close caption button.
+    CLOSE_BUTTON = 9,
+    /// Window minimize caption button.
+    MINIMIZE_BUTTON = 10,
+    /// Window maximize caption button.
+    MAXIMIZE_BUTTON = 11,
+    /// Window restore caption button used while maximized.
+    RESTORE_BUTTON = 12,
+    /// Visible bottom-right resize grip.
+    RESIZE_GRIP = 13,
+}
 
 #[version(1)]
-/// State of a menu surface or entry after menu-specific precedence is resolved.
-    enum MenuState: u8 {
-        /// Enabled entry or surface without transient selection.
-        NORMAL = 0,
-        /// Pointer is over an enabled entry.
-        HOVERED = 1,
-        /// Pointer capture is pressed over an enabled entry.
-        PRESSED = 2,
-        /// Keyboard navigation selected an enabled entry.
-        FOCUSED = 3,
-        /// Entry owns the popup currently open beneath it.
-        OPEN = 4,
-        /// Entry or surface is unavailable.
-        DISABLED = 5,
-    }
+/// Menu-owned surface or entry role with menu-specific open-selection behavior.
+#[dense]
+#[names(snake_case)]
+enum MenuRole: u8 {
+    /// Menu bar spanning a window.
+    BAR = 0,
+    /// Menu-bar title which can own an open popup.
+    TITLE = 1,
+    /// Popup-menu panel.
+    POPUP = 2,
+    /// Ordinary menu item or submenu row.
+    ITEM = 3,
+}
 
 #[version(1)]
-/// State of manager-owned chrome after activation and availability are resolved.
-    enum ChromeState: u8 {
-        /// Enabled chrome for a window that does not own activation.
-        BASE = 0,
-        /// Enabled chrome for the active window.
-        ACTIVE = 1,
-        /// Chrome belonging to a disabled window.
-        DISABLED = 2,
-    }
+/// Manager-owned window chrome role whose presentation follows activation.
+#[dense]
+#[names(snake_case)]
+enum ChromeRole: u8 {
+    /// Ordinary-window outer frame decoration.
+    WINDOW_FRAME = 0,
+    /// Modal-dialog outer frame decoration.
+    DIALOG_FRAME = 1,
+    /// Window title patch and semantic-content color.
+    TITLE = 2,
+}
 
 #[version(1)]
 /// Semantic icon role required in every complete UI asset bundle.
-    enum IconRole: u8 {
-        /// Window and dialog close affordance.
-        CLOSE = 0,
-        /// Collapsed disclosure affordance.
-        EXPAND = 1,
-        /// Expanded disclosure affordance.
-        COLLAPSE = 2,
-        /// Checked checkbox and menu-item mark.
-        CHECK = 3,
-        /// Combo-box dropdown affordance.
-        EXPAND_DOWN = 4,
-        /// Open-folder file-dialog item.
-        OPEN_FOLDER = 5,
-        /// Closed-folder file-dialog item.
-        CLOSED_FOLDER = 6,
-        /// Regular file-dialog item.
-        FILE = 7,
-    }
+#[dense]
+#[names(snake_case)]
+enum IconRole: u8 {
+    /// Window and dialog close affordance.
+    CLOSE = 0,
+    /// Collapsed disclosure affordance.
+    EXPAND = 1,
+    /// Expanded disclosure affordance.
+    COLLAPSE = 2,
+    /// Checked checkbox and menu-item mark.
+    CHECK = 3,
+    /// Combo-box dropdown affordance.
+    EXPAND_DOWN = 4,
+    /// Open-folder file-dialog item.
+    OPEN_FOLDER = 5,
+    /// Closed-folder file-dialog item.
+    CLOSED_FOLDER = 6,
+    /// Regular file-dialog item.
+    FILE = 7,
+}
 
 #[version(1)]
 /// Four nonnegative pixel insets used by resolved theme geometry.
@@ -2168,17 +2121,63 @@ struct AssetVisual {
 }
 
 #[version(1)]
-/// Family whose table is role-major, then state-major, using the declared role/state order.
-    enum AppearanceFamily: u8 {
-        /// SurfaceRole × SurfaceState values.
-        SURFACE = 0,
-        /// ControlRole × ControlState values.
-        CONTROL = 1,
-        /// MenuRole × MenuState values.
-        MENU = 2,
-        /// ChromeRole × ChromeState values.
-        CHROME = 3,
-    }
+/// Both availability appearances for one structural surface role.
+struct AssetSurfaceVisuals {
+    /// Surface belonging to an enabled retained subtree.
+    normal: AssetVisual,
+    /// Surface belonging to a disabled retained subtree.
+    disabled: AssetVisual,
+}
+
+#[version(1)]
+/// Pointer appearances nested inside one enabled or focused control branch.
+struct AssetPointerVisuals {
+    /// Pointer is not hovering or pressing the control.
+    normal: AssetVisual,
+    /// Pointer is hovering the control without an active press.
+    hovered: AssetVisual,
+    /// Pointer capture is pressed while the pointer remains over the control.
+    pressed: AssetVisual,
+}
+
+#[version(1)]
+/// Complete non-contradictory appearances for one interactive control role.
+struct AssetControlVisuals {
+    /// Control is unavailable; pointer and focus appearances do not apply.
+    disabled: AssetVisual,
+    /// Pointer appearances while available without visible keyboard focus.
+    enabled: AssetPointerVisuals,
+    /// Pointer appearances while the control owns visible keyboard focus.
+    focused: AssetPointerVisuals,
+}
+
+#[version(1)]
+/// Complete menu-specific appearances for one menu role.
+struct AssetMenuVisuals {
+    /// Enabled appearance without transient selection.
+    normal: AssetVisual,
+    /// Pointer-hover selection appearance.
+    hovered: AssetVisual,
+    /// Visible pointer-press selection appearance.
+    pressed: AssetVisual,
+    /// Keyboard-navigation selection appearance.
+    focused: AssetVisual,
+    /// Appearance of an entry that owns an open popup.
+    open: AssetVisual,
+    /// Appearance of an unavailable menu surface or entry.
+    disabled: AssetVisual,
+}
+
+#[version(1)]
+/// Complete activation and availability appearances for one window chrome role.
+struct AssetChromeVisuals {
+    /// Enabled chrome for a window that does not own activation.
+    base: AssetVisual,
+    /// Enabled chrome for the active window.
+    active: AssetVisual,
+    /// Chrome belonging to a disabled window.
+    disabled: AssetVisual,
+}
 
 #[version(1)]
 /// Logical resource namespace authenticated by canonical COM identity.
@@ -2186,7 +2185,7 @@ struct AssetVisual {
 /// Independently created catalogs remain unrelated even when their names match.
 trait IAssetCatalog {}
 
-#[version(1)]
+#[version(2)]
 /// Immutable, self-contained resource revision. Every copy writes the exact requested range.
 /// Names partition their byte table in font-then-icon order. Fonts require an underscore
 /// fallback; body and the standard semantic icon names are mandatory. Consumers import
@@ -2210,8 +2209,14 @@ trait IAssetBundle {
     fn metrics(&self) -> Result<AssetMetrics>;
     /// Returns complete window chrome policy.
     fn chrome(&self) -> Result<AssetChrome>;
-    /// Copies one complete resolved appearance family in the documented fixed order.
-    fn visuals(&self, family: AppearanceFamily, output: &mut [AssetVisual]) -> Result<()>;
+    /// Copies one complete surface-state record for each SurfaceRole in declaration order.
+    fn surface_visuals(&self, output: &mut [AssetSurfaceVisuals]) -> Result<()>;
+    /// Copies one complete nested control-state record for each ControlRole in declaration order.
+    fn control_visuals(&self, output: &mut [AssetControlVisuals]) -> Result<()>;
+    /// Copies one complete menu-state record for each MenuRole in declaration order.
+    fn menu_visuals(&self, output: &mut [AssetMenuVisuals]) -> Result<()>;
+    /// Copies one complete chrome-state record for each ChromeRole in declaration order.
+    fn chrome_visuals(&self, output: &mut [AssetChromeVisuals]) -> Result<()>;
 }
 
 #[version(1)]

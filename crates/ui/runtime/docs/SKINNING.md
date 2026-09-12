@@ -35,10 +35,12 @@ original catalog independently of the installed revision.
 | `FontRef` / `IconRef` | Stable semantic or named references resolved against the active bundle. |
 | `SkinBundle` | Validated atomic ownership of one skin and its exact atlas. |
 
-Each role and state enum exposes `ALL` and `COUNT`. The private catalog stores four concrete arrays,
-so lookup is total inside each family and code cannot pass menu-open state to a widget or pointer
-state to a window frame. Paint resolves one `Visual`, keeping a state's artwork and content color
-adjacent without erased values or a universal role/state cross-product.
+IDL role enums expose generated `ALL` and `COUNT` metadata because they are the only dense table
+axes. Native state enums expose `ALL` for complete compilation, while the private catalog stores
+their values in named fields—including nested enabled/focused pointer branches for controls.
+Code therefore cannot pass menu-open state to a widget or pointer state to a window frame, and no
+payload state needs a numeric index. Paint resolves one `Visual`, keeping a state's artwork and
+content color adjacent without erased values or a universal role/state cross-product.
 
 ## Programmatic construction
 

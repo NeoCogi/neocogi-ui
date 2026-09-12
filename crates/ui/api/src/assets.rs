@@ -27,14 +27,14 @@ pub struct AssetTables {
     pub metrics: AssetMetrics,
     /// Complete resolved title and caption policy.
     pub chrome: AssetChrome,
-    /// SurfaceRole × SurfaceState in shared ALL order.
-    pub surfaces: Cow<'static, [AssetVisual]>,
-    /// ControlRole × ControlState in shared ALL order.
-    pub controls: Cow<'static, [AssetVisual]>,
-    /// MenuRole × MenuState in shared ALL order.
-    pub menus: Cow<'static, [AssetVisual]>,
-    /// ChromeRole × ChromeState in shared ALL order.
-    pub window_chrome: Cow<'static, [AssetVisual]>,
+    /// One named state record for every surface role in IDL declaration order.
+    pub surfaces: Cow<'static, [AssetSurfaceVisuals]>,
+    /// One named nested state record for every control role in IDL declaration order.
+    pub controls: Cow<'static, [AssetControlVisuals]>,
+    /// One named state record for every menu role in IDL declaration order.
+    pub menus: Cow<'static, [AssetMenuVisuals]>,
+    /// One named state record for every chrome role in IDL declaration order.
+    pub window_chrome: Cow<'static, [AssetChromeVisuals]>,
 }
 
 /// Complete portable asset revision used by compilers and immutable bundle publication.
@@ -81,7 +81,7 @@ impl AssetData {
 }
 
 impl AssetTables {
-    /// Derives bounded counts and verifies fixed appearance-table lengths.
+    /// Derives bounded counts and verifies one structured appearance per declared role.
     pub fn info(&self) -> Result<AssetInfo, NcStatus> {
         let info = AssetInfo {
             schema: ASSET_SCHEMA_VERSION,
@@ -92,10 +92,10 @@ impl AssetTables {
             names: u32::try_from(self.names.len()).map_err(|_| NC_E_INVALID_ARG)?,
         };
         info.rgba_bytes()?;
-        if self.surfaces.len() != SurfaceRole::COUNT * SurfaceState::COUNT
-            || self.controls.len() != ControlRole::COUNT * ControlState::COUNT
-            || self.menus.len() != MenuRole::COUNT * MenuState::COUNT
-            || self.window_chrome.len() != ChromeRole::COUNT * ChromeState::COUNT
+        if self.surfaces.len() != SurfaceRole::COUNT
+            || self.controls.len() != ControlRole::COUNT
+            || self.menus.len() != MenuRole::COUNT
+            || self.window_chrome.len() != ChromeRole::COUNT
         {
             return Err(NC_E_INVALID_ARG);
         }
@@ -156,16 +156,21 @@ impl IAssetBundle for Bundle {
     fn chrome(&self) -> Result<AssetChrome, NcStatus> {
         Ok(self.data.tables.chrome)
     }
-    /// Resolves a closed family tag before copying any caller-owned output.
-    fn visuals(&self, family: AppearanceFamily, output: NcCopyToBufferOffset<'_, AssetVisual>) -> Result<(), NcStatus> {
-        let values = match family {
-            AppearanceFamily::SURFACE => &self.data.tables.surfaces,
-            AppearanceFamily::CONTROL => &self.data.tables.controls,
-            AppearanceFamily::MENU => &self.data.tables.menus,
-            AppearanceFamily::CHROME => &self.data.tables.window_chrome,
-            _ => return Err(NC_E_INVALID_ARG),
-        };
-        copy(values, output)
+    /// Copies complete named surface states without a family tag or flattened state axis.
+    fn surface_visuals(&self, output: NcCopyToBufferOffset<'_, AssetSurfaceVisuals>) -> Result<(), NcStatus> {
+        copy(&self.data.tables.surfaces, output)
+    }
+    /// Copies complete named control states, preserving enabled and focused pointer branches.
+    fn control_visuals(&self, output: NcCopyToBufferOffset<'_, AssetControlVisuals>) -> Result<(), NcStatus> {
+        copy(&self.data.tables.controls, output)
+    }
+    /// Copies complete named menu states without relying on numeric state offsets.
+    fn menu_visuals(&self, output: NcCopyToBufferOffset<'_, AssetMenuVisuals>) -> Result<(), NcStatus> {
+        copy(&self.data.tables.menus, output)
+    }
+    /// Copies complete named chrome states without relying on numeric state offsets.
+    fn chrome_visuals(&self, output: NcCopyToBufferOffset<'_, AssetChromeVisuals>) -> Result<(), NcStatus> {
+        copy(&self.data.tables.window_chrome, output)
     }
 }
 

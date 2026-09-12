@@ -152,10 +152,11 @@ fall back to `body`. Required semantic icons are `close`, `expand`, `collapse`,
 ## Portable data rules
 
 `AssetInfo` supplies dimensions, allocation counts and `ASSET_SCHEMA_VERSION`.
-Reject a different schema before allocation. The semantic schema includes role/state
-table order and mandatory resource interpretation; changing those rules requires a
-schema bump even when the C record layout is unchanged. The ordinary neocogi-com
-interface signatures separately validate the actual pointer/vtable/record ABI.
+Reject a different schema before allocation. The semantic schema includes dense role
+order, named appearance-state fields, and mandatory resource interpretation; changing
+those rules requires a schema bump even when the C record layout is unchanged. The
+ordinary neocogi-com interface signatures separately validate the actual
+pointer/vtable/record ABI.
 
 | Storage | Bound and interpretation |
 | --- | --- |
@@ -164,7 +165,7 @@ interface signatures separately validate the actual pointer/vtable/record ABI.
 | Glyphs | At most 1,048,576 records total; valid Unicode scalars, no duplicates within a font, mandatory `_` fallback |
 | Icons | 1–65,536 distinct names; positive rectangles wholly inside the atlas |
 | Names | At most 4 MiB of nonempty UTF-8 names, without terminators |
-| Visuals | Complete surface/control/menu/chrome families, role-major then state-major using `appearance::*::ALL` |
+| Visuals | One generated named-state record per dense surface/control/menu/chrome role; control pointer states remain nested under enabled and focused branches |
 
 Fonts partition the glyph table in declaration order. Names partition their byte
 table in font-then-icon order. Gaps, overlapping ranges, arithmetic overflow,
@@ -172,7 +173,7 @@ invalid UTF-8/Unicode and duplicate keys are rejected. Glyph rectangles may be e
 but must remain nonnegative and inside the atlas; icons must be positive. Every pixel
 in the white tile must be opaque white. Portable layout and slicing dimensions are
 nonnegative; source slices must fit their image. Boolean bytes accept only zero or
-one; unknown family, caption and patch tags are rejected. Image patches refer to a
+one; unknown caption and patch tags are rejected. Image patches refer to a
 bundle-local icon table position, never an opaque native handle.
 
 All copy offsets and lengths count elements of the declared type; name/pixel offsets

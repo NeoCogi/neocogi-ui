@@ -492,9 +492,9 @@ pub(crate) trait ScrollComposition: Widget {
         } else {
             fallback
         };
-        ctx.draw_surface_center_state(SurfaceRole::PANEL, crate::SurfaceState::NORMAL, surface);
+        ctx.draw_surface_center_state(SurfaceRole::PANEL, crate::SurfaceState::Normal, surface);
         if let Some(corner) = geometry.corner {
-            ctx.draw_surface_center_state(SurfaceRole::PANEL, crate::SurfaceState::NORMAL, corner);
+            ctx.draw_surface_center_state(SurfaceRole::PANEL, crate::SurfaceState::Normal, corner);
         }
     }
 

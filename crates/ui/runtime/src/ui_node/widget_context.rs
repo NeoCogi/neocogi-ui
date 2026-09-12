@@ -86,7 +86,15 @@ fn packed_color(color: Color) -> u32 {
 
 /// Projects one exhaustive native control state into its typed paint-contract counterpart.
 fn visual_state(state: ControlState) -> WidgetVisualState {
-    WidgetVisualState::from_raw(u8::try_from(state.index()).expect("control state count fits u8"))
+    match state {
+        ControlState::Disabled => WidgetVisualState::DISABLED,
+        ControlState::Enabled(crate::PointerState::Normal) => WidgetVisualState::NORMAL,
+        ControlState::Enabled(crate::PointerState::Hovered) => WidgetVisualState::HOVERED,
+        ControlState::Enabled(crate::PointerState::Pressed) => WidgetVisualState::PRESSED,
+        ControlState::Focused(crate::PointerState::Normal) => WidgetVisualState::FOCUSED,
+        ControlState::Focused(crate::PointerState::Hovered) => WidgetVisualState::FOCUSED_HOVERED,
+        ControlState::Focused(crate::PointerState::Pressed) => WidgetVisualState::FOCUSED_PRESSED,
+    }
 }
 
 /// Converts one routed event into coordinates relative to `origin`.
@@ -712,9 +720,8 @@ impl<'a> WidgetPaintCtx<'a> {
         // Center-only structural fills share the same nine-patch behavior as unframed controls.
         if let Some((scope, mut painter)) = self.scoped_paint() {
             let state = match state {
-                SurfaceState::NORMAL => WidgetVisualState::NORMAL,
-                SurfaceState::DISABLED => WidgetVisualState::DISABLED,
-                _ => unreachable!("widget painting constructs only known surface states"),
+                SurfaceState::Normal => WidgetVisualState::NORMAL,
+                SurfaceState::Disabled => WidgetVisualState::DISABLED,
             };
             let result = painter
                 .frame(
@@ -824,7 +831,7 @@ mod tests {
                 true,
                 WidgetOption::NONE,
             );
-            assert_eq!(ctx.control_state(), ControlState::Focused(crate::PointerState::PRESSED));
+            assert_eq!(ctx.control_state(), ControlState::Focused(crate::PointerState::Pressed));
         }
         {
             // Capture remains active outside for release routing, but theme art is no longer pressed.
@@ -842,7 +849,7 @@ mod tests {
                 true,
                 WidgetOption::NONE,
             );
-            assert_eq!(ctx.control_state(), ControlState::Focused(crate::PointerState::NORMAL));
+            assert_eq!(ctx.control_state(), ControlState::Focused(crate::PointerState::Normal));
         }
         {
             // Disabled ancestry wins over stale retained interaction snapshots.
@@ -878,7 +885,7 @@ mod tests {
                 false,
                 WidgetOption::NONE,
             );
-            assert_eq!(ctx.control_state(), ControlState::Focused(crate::PointerState::PRESSED));
+            assert_eq!(ctx.control_state(), ControlState::Focused(crate::PointerState::Pressed));
         }
     }
 }

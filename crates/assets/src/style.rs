@@ -8,38 +8,59 @@
 //! Compiles flat palette rules into portable resolved appearance tables.
 use neocogi_ui_contracts::*;
 use neocogi_ui::assets::AssetData;
+use neocogi_ui::{ChromeState, ControlState, MenuState, PointerState, SurfaceState};
 
 /// Resolves every state once, so UI painting only selects stored values.
 pub(crate) fn apply_flat(data: &mut AssetData, insets: Insets, palette: &FlatPalette) {
-    // These loops enumerate closed role/state domains; no behavior or callback is stored.
-    let mut surfaces = Vec::new();
-    for role in SurfaceRole::ALL {
-        for state in SurfaceState::ALL {
-            surfaces.push(flat_surface_visual(insets, palette, role, state));
-        }
+    // Role order remains the generated dense IDL axis. State structure is expressed by named
+    // record fields, so adding or moving a state cannot silently change an arithmetic offset.
+    data.tables.surfaces = SurfaceRole::ALL
+        .map(|role| AssetSurfaceVisuals {
+            normal: flat_surface_visual(insets, palette, role, SurfaceState::Normal),
+            disabled: flat_surface_visual(insets, palette, role, SurfaceState::Disabled),
+        })
+        .to_vec()
+        .into();
+    data.tables.controls = ControlRole::ALL.map(|role| flat_control_visuals(insets, palette, role)).to_vec().into();
+    data.tables.menus = MenuRole::ALL
+        .map(|role| AssetMenuVisuals {
+            normal: flat_menu_visual(insets, palette, role, MenuState::Normal),
+            hovered: flat_menu_visual(insets, palette, role, MenuState::Hovered),
+            pressed: flat_menu_visual(insets, palette, role, MenuState::Pressed),
+            focused: flat_menu_visual(insets, palette, role, MenuState::Focused),
+            open: flat_menu_visual(insets, palette, role, MenuState::Open),
+            disabled: flat_menu_visual(insets, palette, role, MenuState::Disabled),
+        })
+        .to_vec()
+        .into();
+    data.tables.window_chrome = ChromeRole::ALL
+        .map(|role| AssetChromeVisuals {
+            base: flat_chrome_visual(insets, palette, role, ChromeState::Base),
+            active: flat_chrome_visual(insets, palette, role, ChromeState::Active),
+            disabled: flat_chrome_visual(insets, palette, role, ChromeState::Disabled),
+        })
+        .to_vec()
+        .into();
+}
+
+/// Compiles one control role into its explicit disabled, enabled, and focused branches.
+fn flat_control_visuals(insets: Insets, palette: &FlatPalette, role: ControlRole) -> AssetControlVisuals {
+    AssetControlVisuals {
+        disabled: flat_control_visual(insets, palette, role, ControlState::Disabled),
+        enabled: flat_pointer_visuals(insets, palette, role, ControlState::Enabled),
+        focused: flat_pointer_visuals(insets, palette, role, ControlState::Focused),
     }
-    let mut controls = Vec::new();
-    for role in ControlRole::ALL {
-        for state in ControlState::ALL {
-            controls.push(flat_control_visual(insets, palette, role, state));
-        }
+}
+
+/// Compiles every pointer state beneath one concrete control-state constructor.
+fn flat_pointer_visuals(insets: Insets, palette: &FlatPalette, role: ControlRole, state: fn(PointerState) -> ControlState) -> AssetPointerVisuals {
+    // The function pointer is one of the two concrete enum constructors supplied immediately by
+    // `flat_control_visuals`; it is never stored or exposed as an extensible callback surface.
+    AssetPointerVisuals {
+        normal: flat_control_visual(insets, palette, role, state(PointerState::Normal)),
+        hovered: flat_control_visual(insets, palette, role, state(PointerState::Hovered)),
+        pressed: flat_control_visual(insets, palette, role, state(PointerState::Pressed)),
     }
-    let mut menus = Vec::new();
-    for role in MenuRole::ALL {
-        for state in MenuState::ALL {
-            menus.push(flat_menu_visual(insets, palette, role, state));
-        }
-    }
-    let mut chrome = Vec::new();
-    for role in ChromeRole::ALL {
-        for state in ChromeState::ALL {
-            chrome.push(flat_chrome_visual(insets, palette, role, state));
-        }
-    }
-    data.tables.surfaces = surfaces.into();
-    data.tables.controls = controls.into();
-    data.tables.menus = menus.into();
-    data.tables.window_chrome = chrome.into();
 }
 
 /// Returns the conventional caption geometry in its checked transfer form.
@@ -105,17 +126,16 @@ fn flat_surface_visual(frame_insets: Insets, palette: &FlatPalette, role: Surfac
     // Surfaces react only to inherited availability. Window owns the root fill independently of
     // activation, GenericFrame remains hollow, and Panel combines its border with its own fill.
     let mut patch = match (role, state) {
-        (SurfaceRole::WINDOW, SurfaceState::NORMAL) => solid(palette.window_background),
-        (SurfaceRole::WINDOW, SurfaceState::DISABLED) => solid(palette.disabled_background),
+        (SurfaceRole::WINDOW, SurfaceState::Normal) => solid(palette.window_background),
+        (SurfaceRole::WINDOW, SurfaceState::Disabled) => solid(palette.disabled_background),
         (SurfaceRole::GENERIC_FRAME, _) => framed(frame_insets, palette.border, None),
-        (SurfaceRole::PANEL, SurfaceState::NORMAL) => framed(frame_insets, palette.border, Some(palette.panel_background)),
-        (SurfaceRole::PANEL, SurfaceState::DISABLED) => framed(frame_insets, palette.border, Some(palette.disabled_background)),
+        (SurfaceRole::PANEL, SurfaceState::Normal) => framed(frame_insets, palette.border, Some(palette.panel_background)),
+        (SurfaceRole::PANEL, SurfaceState::Disabled) => framed(frame_insets, palette.border, Some(palette.disabled_background)),
         _ => unreachable!("flat styles iterate only known surface roles and states"),
     };
     let content_color = match state {
-        SurfaceState::NORMAL => palette.text,
-        SurfaceState::DISABLED => palette.disabled_foreground,
-        _ => unreachable!("flat styles iterate only known surface states"),
+        SurfaceState::Normal => palette.text,
+        SurfaceState::Disabled => palette.disabled_foreground,
     };
     patch.content_color = rgba(content_color);
     patch
@@ -135,26 +155,23 @@ fn flat_control_visual(frame_insets: Insets, palette: &FlatPalette, role: Contro
         | ControlRole::MAXIMIZE_BUTTON
         | ControlRole::RESTORE_BUTTON => match state {
             ControlState::Disabled => framed(frame_insets, palette.border, Some(palette.disabled_background)),
-            ControlState::Enabled(PointerState::NORMAL) => framed(frame_insets, palette.border, Some(palette.button)),
-            ControlState::Enabled(PointerState::HOVERED) => framed(frame_insets, palette.border, Some(palette.button_hovered)),
-            ControlState::Enabled(PointerState::PRESSED) => framed(frame_insets, palette.border, Some(palette.input)),
-            ControlState::Focused(PointerState::NORMAL | PointerState::HOVERED) => framed(frame_insets, palette.border, Some(palette.control_focus)),
-            ControlState::Focused(PointerState::PRESSED) => framed(frame_insets, palette.border, Some(palette.input)),
-            _ => unreachable!("flat styles construct only known pointer states"),
+            ControlState::Enabled(PointerState::Normal) => framed(frame_insets, palette.border, Some(palette.button)),
+            ControlState::Enabled(PointerState::Hovered) => framed(frame_insets, palette.border, Some(palette.button_hovered)),
+            ControlState::Enabled(PointerState::Pressed) => framed(frame_insets, palette.border, Some(palette.input)),
+            ControlState::Focused(PointerState::Normal | PointerState::Hovered) => framed(frame_insets, palette.border, Some(palette.control_focus)),
+            ControlState::Focused(PointerState::Pressed) => framed(frame_insets, palette.border, Some(palette.input)),
         },
         ControlRole::CHECKBOX | ControlRole::TEXT_INPUT | ControlRole::SLIDER_TRACK | ControlRole::RESIZE_GRIP => match state {
             ControlState::Disabled => framed(frame_insets, palette.border, Some(palette.disabled_background)),
-            ControlState::Enabled(PointerState::NORMAL) => framed(frame_insets, palette.border, Some(palette.input)),
-            ControlState::Enabled(PointerState::HOVERED | PointerState::PRESSED) => framed(frame_insets, palette.border, Some(palette.input_hovered)),
-            ControlState::Focused(PointerState::NORMAL | PointerState::HOVERED) => framed(frame_insets, palette.border, Some(palette.control_focus)),
-            ControlState::Focused(PointerState::PRESSED) => framed(frame_insets, palette.border, Some(palette.input_hovered)),
-            _ => unreachable!("flat styles construct only known pointer states"),
+            ControlState::Enabled(PointerState::Normal) => framed(frame_insets, palette.border, Some(palette.input)),
+            ControlState::Enabled(PointerState::Hovered | PointerState::Pressed) => framed(frame_insets, palette.border, Some(palette.input_hovered)),
+            ControlState::Focused(PointerState::Normal | PointerState::Hovered) => framed(frame_insets, palette.border, Some(palette.control_focus)),
+            ControlState::Focused(PointerState::Pressed) => framed(frame_insets, palette.border, Some(palette.input_hovered)),
         },
         ControlRole::ITEM => match state {
-            ControlState::Disabled | ControlState::Enabled(PointerState::NORMAL) => solid(transparent),
-            ControlState::Enabled(PointerState::HOVERED | PointerState::PRESSED)
-            | ControlState::Focused(PointerState::NORMAL | PointerState::HOVERED | PointerState::PRESSED) => solid(palette.selection_background),
-            _ => unreachable!("flat styles construct only known pointer states"),
+            ControlState::Disabled | ControlState::Enabled(PointerState::Normal) => solid(transparent),
+            ControlState::Enabled(PointerState::Hovered | PointerState::Pressed)
+            | ControlState::Focused(PointerState::Normal | PointerState::Hovered | PointerState::Pressed) => solid(palette.selection_background),
         },
         ControlRole::SCROLLBAR_TRACK => match state {
             ControlState::Disabled => solid(palette.disabled_background),
@@ -171,10 +188,9 @@ fn flat_control_visual(frame_insets: Insets, palette: &FlatPalette, role: Contro
     let content_color = match role {
         ControlRole::ITEM => match state {
             ControlState::Disabled => palette.disabled_foreground,
-            ControlState::Enabled(PointerState::NORMAL) => palette.text,
-            ControlState::Enabled(PointerState::HOVERED | PointerState::PRESSED)
-            | ControlState::Focused(PointerState::NORMAL | PointerState::HOVERED | PointerState::PRESSED) => palette.selection_foreground,
-            _ => unreachable!("flat styles construct only known pointer states"),
+            ControlState::Enabled(PointerState::Normal) => palette.text,
+            ControlState::Enabled(PointerState::Hovered | PointerState::Pressed)
+            | ControlState::Focused(PointerState::Normal | PointerState::Hovered | PointerState::Pressed) => palette.selection_foreground,
         },
         ControlRole::CLOSE_BUTTON | ControlRole::MINIMIZE_BUTTON | ControlRole::MAXIMIZE_BUTTON | ControlRole::RESTORE_BUTTON => match state {
             ControlState::Disabled => palette.disabled_title_foreground,
@@ -193,11 +209,11 @@ fn flat_control_visual(frame_insets: Insets, palette: &FlatPalette, role: Contro
 fn flat_menu_visual(frame_insets: Insets, palette: &FlatPalette, role: MenuRole, state: MenuState) -> AssetVisual {
     // Open is a menu state rather than a duplicate title role. Popup owners and selected submenu
     // entries consequently share the same explicit selection precedence.
-    let selected = matches!(state, MenuState::HOVERED | MenuState::PRESSED | MenuState::FOCUSED | MenuState::OPEN);
+    let selected = matches!(state, MenuState::Hovered | MenuState::Pressed | MenuState::Focused | MenuState::Open);
     let transparent = Color { r: 0, g: 0, b: 0, a: 0 };
     let mut patch = match role {
         MenuRole::BAR => match state {
-            MenuState::DISABLED => solid(palette.disabled_background),
+            MenuState::Disabled => solid(palette.disabled_background),
             _ => solid(palette.menu_background),
         },
         MenuRole::TITLE | MenuRole::ITEM => {
@@ -208,13 +224,13 @@ fn flat_menu_visual(frame_insets: Insets, palette: &FlatPalette, role: MenuRole,
             }
         }
         MenuRole::POPUP => match state {
-            MenuState::DISABLED => framed(frame_insets, palette.border, Some(palette.disabled_background)),
+            MenuState::Disabled => framed(frame_insets, palette.border, Some(palette.disabled_background)),
             _ => framed(frame_insets, palette.border, Some(palette.menu_background)),
         },
         _ => unreachable!("flat styles iterate only known menu roles"),
     };
     let content_color = match state {
-        MenuState::DISABLED => palette.disabled_foreground,
+        MenuState::Disabled => palette.disabled_foreground,
         _ if selected && matches!(role, MenuRole::TITLE | MenuRole::ITEM) => palette.selection_foreground,
         _ => palette.menu_foreground,
     };
@@ -228,24 +244,21 @@ fn flat_chrome_visual(frame_insets: Insets, palette: &FlatPalette, role: ChromeR
     // own enabled, focus, and pointer states independently of the active window.
     let mut patch = match role {
         ChromeRole::WINDOW_FRAME | ChromeRole::DIALOG_FRAME => match state {
-            ChromeState::BASE | ChromeState::DISABLED => framed(frame_insets, palette.border, None),
-            ChromeState::ACTIVE => framed(frame_insets.at_least(1), palette.window_active, None),
-            _ => unreachable!("flat styles iterate only known chrome states"),
+            ChromeState::Base | ChromeState::Disabled => framed(frame_insets, palette.border, None),
+            ChromeState::Active => framed(frame_insets.at_least(1), palette.window_active, None),
         },
         ChromeRole::TITLE => match state {
-            ChromeState::BASE => solid(palette.title_background),
-            ChromeState::ACTIVE => solid(palette.window_active),
-            ChromeState::DISABLED => solid(palette.title_background),
-            _ => unreachable!("flat styles iterate only known chrome states"),
+            ChromeState::Base => solid(palette.title_background),
+            ChromeState::Active => solid(palette.window_active),
+            ChromeState::Disabled => solid(palette.title_background),
         },
         _ => unreachable!("flat styles iterate only known chrome roles"),
     };
     let content_color = match (role, state) {
-        (ChromeRole::TITLE, ChromeState::DISABLED) => palette.disabled_title_foreground,
-        (ChromeRole::TITLE, ChromeState::BASE | ChromeState::ACTIVE) => palette.title_foreground,
-        (_, ChromeState::DISABLED) => palette.disabled_foreground,
-        (_, ChromeState::BASE | ChromeState::ACTIVE) => palette.text,
-        _ => unreachable!("flat styles iterate only known chrome states"),
+        (ChromeRole::TITLE, ChromeState::Disabled) => palette.disabled_title_foreground,
+        (ChromeRole::TITLE, ChromeState::Base | ChromeState::Active) => palette.title_foreground,
+        (_, ChromeState::Disabled) => palette.disabled_foreground,
+        (_, ChromeState::Base | ChromeState::Active) => palette.text,
     };
     patch.content_color = rgba(content_color);
     patch
@@ -272,7 +285,7 @@ impl StyleCompiler for StyleCompilerObject {
         let mut data = AssetData::read(base)?;
         data.tables.metrics = metrics;
         if let PaletteEdit::Flat(palette) = edit {
-            let insets = data.tables.surfaces[SurfaceRole::GENERIC_FRAME.index() * SurfaceState::COUNT + SurfaceState::NORMAL.index()].insets;
+            let insets = data.tables.surfaces[SurfaceRole::GENERIC_FRAME.raw() as usize].normal.insets;
             apply_flat(&mut data, insets, &palette);
             if data.tables.chrome.has_backdrop == 1 {
                 data.tables.chrome.backdrop_rgba = rgba(palette.title_background);

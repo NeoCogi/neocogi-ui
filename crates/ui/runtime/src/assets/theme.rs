@@ -1,22 +1,25 @@
 //! Bulk resolved appearance transfer; parsing and per-frame lookup stay outside this module.
 use super::*;
 use crate::{Color, SliceInsets, NinePatch, NinePatchCell, NinePatchCells, NinePatchImage, Visual};
+use crate::theme::catalog::{ChromeVisuals, ControlVisuals, MenuVisuals, PointerVisuals, SurfaceVisuals};
+#[cfg(test)]
+use crate::{ChromeState, ControlState, MenuState, PointerState, SurfaceState};
 
-/// Complete exported geometry and role-major appearance arrays.
+/// Complete exported geometry and role-major structured appearance records.
 #[cfg(test)]
 pub(super) struct ExportedTheme {
     /// Scalar layout geometry copied together with artwork.
     pub metrics: AssetMetrics,
     /// Independent manager-owned title and caption recipe.
     pub chrome: AssetChrome,
-    /// Structural surfaces, in canonical role/state order.
-    pub(super) surfaces: Vec<AssetVisual>,
-    /// Interactive control parts, in canonical role/state order.
-    pub(super) controls: Vec<AssetVisual>,
-    /// Menu surfaces and rows, in canonical role/state order.
-    pub(super) menus: Vec<AssetVisual>,
-    /// Window activation visuals, in canonical role/state order.
-    pub(super) window_chrome: Vec<AssetVisual>,
+    /// One complete named-state record per structural surface role.
+    pub(super) surfaces: Vec<AssetSurfaceVisuals>,
+    /// One complete nested named-state record per interactive control role.
+    pub(super) controls: Vec<AssetControlVisuals>,
+    /// One complete named-state record per menu role.
+    pub(super) menus: Vec<AssetMenuVisuals>,
+    /// One complete named-state record per window chrome role.
+    pub(super) window_chrome: Vec<AssetChromeVisuals>,
 }
 
 #[cfg(test)]
@@ -27,7 +30,9 @@ impl ExportedTheme {
         let metrics = skin.metrics;
         let chrome = skin.window_chrome;
         let captions = chrome.captions;
-        let mut result = Self {
+        let atlas = bundle.atlas();
+        let icons = atlas.clone_icon_table();
+        let result = Self {
             metrics: AssetMetrics {
                 default_cell_width: metrics.default_cell_width,
                 padding: metrics.padding,
@@ -56,34 +61,26 @@ impl ExportedTheme {
                 backdrop_rgba: chrome.active_title_backdrop.map_or(0, |value| rgba(value.color)),
                 backdrop_padding: chrome.active_title_backdrop.map_or(0, |value| value.horizontal_padding),
             },
-            surfaces: Vec::new(),
-            controls: Vec::new(),
-            menus: Vec::new(),
-            window_chrome: Vec::new(),
+            surfaces: SurfaceRole::ALL
+                .into_iter()
+                .map(|role| out_surfaces(skin, role, atlas, &icons))
+                .collect::<Result<_, _>>()?,
+            controls: ControlRole::ALL
+                .into_iter()
+                .map(|role| out_controls(skin, role, atlas, &icons))
+                .collect::<Result<_, _>>()?,
+            menus: MenuRole::ALL
+                .into_iter()
+                .map(|role| out_menus(skin, role, atlas, &icons))
+                .collect::<Result<_, _>>()?,
+            window_chrome: ChromeRole::ALL
+                .into_iter()
+                .map(|role| out_chrome(skin, role, atlas, &icons))
+                .collect::<Result<_, _>>()?,
         };
-        let icons = bundle.atlas().clone_icon_table();
-        // The shared role and state declarations define both traversal order and exact table size.
-        macro_rules! family {
-            ($field:ident, $role:ident, $state:ident, $get:ident) => {
-                for role in $role::ALL {
-                    for state in $state::ALL {
-                        result.$field.push(out_visual(skin.$get(role, state), &icons)?);
-                    }
-                }
-            };
-        }
-        family!(surfaces, SurfaceRole, SurfaceState, surface);
-        family!(controls, ControlRole, ControlState, control);
-        family!(menus, MenuRole, MenuState, menu);
-        family!(window_chrome, ChromeRole, ChromeState, chrome);
         // Native programmatic skins can contain negative author input normalized on use. The
         // portable resolved form has stricter geometry, so validate it before publishing too.
         read_geometry(result.metrics, result.chrome)?;
-        for values in [&result.surfaces, &result.controls, &result.menus, &result.window_chrome] {
-            for visual in values {
-                in_visual(*visual, bundle.atlas(), &icons)?;
-            }
-        }
         Ok(result)
     }
 }
@@ -93,31 +90,148 @@ pub(super) fn read(data: &neocogi_ui::assets::AssetTables, atlas: &AtlasHandle) 
     let (metrics, chrome) = read_geometry(data.metrics, data.chrome)?;
     let icons = atlas.clone_icon_table();
     let appearances = crate::theme::catalog::AppearanceCatalog::from_values(
-        read_family(&data.surfaces, atlas, &icons)?,
-        read_family(&data.controls, atlas, &icons)?,
-        read_family(&data.menus, atlas, &icons)?,
-        read_family(&data.window_chrome, atlas, &icons)?,
+        read_surfaces(&data.surfaces, atlas, &icons)?,
+        read_controls(&data.controls, atlas, &icons)?,
+        read_menus(&data.menus, atlas, &icons)?,
+        read_chrome(&data.window_chrome, atlas, &icons)?,
     );
     // Each appearance is already resolved. Skin construction performs only semantic name binding.
     Ok(Skin::from_resolved(atlas, metrics, chrome, appearances))
 }
 
-/// Resolves one bounded role-major table into its concrete native array shape.
-fn read_family<const ROLES: usize, const STATES: usize>(
-    values: &[AssetVisual],
+/// Resolves one bounded surface-role table into native named-state records.
+fn read_surfaces(
+    values: &[AssetSurfaceVisuals],
     atlas: &AtlasHandle,
     icons: &[(String, crate::IconId)],
-) -> Result<[[Visual; STATES]; ROLES], NcStatus> {
-    if values.len() != ROLES * STATES {
+) -> Result<[SurfaceVisuals; SurfaceRole::COUNT], NcStatus> {
+    if values.len() != SurfaceRole::COUNT {
         return Err(NC_E_INVALID_ARG);
     }
-    let empty = Visual::new(NinePatch::solid(Color::default()), Color::default());
-    let mut result = [[empty; STATES]; ROLES];
-    // Initialized scratch never escapes before every source slot passes local image-ID resolution.
-    for (destination, source) in result.iter_mut().flatten().zip(values) {
-        *destination = in_visual(*source, atlas, icons)?;
+    let mut result = [empty_surfaces(); SurfaceRole::COUNT];
+    for (destination, source) in result.iter_mut().zip(values) {
+        *destination = SurfaceVisuals {
+            normal: in_visual(source.normal, atlas, icons)?,
+            disabled: in_visual(source.disabled, atlas, icons)?,
+        };
     }
     Ok(result)
+}
+
+/// Resolves one bounded control-role table without flattening its nested state branches.
+fn read_controls(
+    values: &[AssetControlVisuals],
+    atlas: &AtlasHandle,
+    icons: &[(String, crate::IconId)],
+) -> Result<[ControlVisuals; ControlRole::COUNT], NcStatus> {
+    if values.len() != ControlRole::COUNT {
+        return Err(NC_E_INVALID_ARG);
+    }
+    let mut result = [empty_controls(); ControlRole::COUNT];
+    for (destination, source) in result.iter_mut().zip(values) {
+        *destination = ControlVisuals {
+            disabled: in_visual(source.disabled, atlas, icons)?,
+            enabled: in_pointer(source.enabled, atlas, icons)?,
+            focused: in_pointer(source.focused, atlas, icons)?,
+        };
+    }
+    Ok(result)
+}
+
+/// Resolves one pointer-state transfer record into its native branch.
+fn in_pointer(value: AssetPointerVisuals, atlas: &AtlasHandle, icons: &[(String, crate::IconId)]) -> Result<PointerVisuals, NcStatus> {
+    Ok(PointerVisuals {
+        normal: in_visual(value.normal, atlas, icons)?,
+        hovered: in_visual(value.hovered, atlas, icons)?,
+        pressed: in_visual(value.pressed, atlas, icons)?,
+    })
+}
+
+/// Resolves one bounded menu-role table into native named-state records.
+fn read_menus(values: &[AssetMenuVisuals], atlas: &AtlasHandle, icons: &[(String, crate::IconId)]) -> Result<[MenuVisuals; MenuRole::COUNT], NcStatus> {
+    if values.len() != MenuRole::COUNT {
+        return Err(NC_E_INVALID_ARG);
+    }
+    let mut result = [empty_menus(); MenuRole::COUNT];
+    for (destination, source) in result.iter_mut().zip(values) {
+        *destination = MenuVisuals {
+            normal: in_visual(source.normal, atlas, icons)?,
+            hovered: in_visual(source.hovered, atlas, icons)?,
+            pressed: in_visual(source.pressed, atlas, icons)?,
+            focused: in_visual(source.focused, atlas, icons)?,
+            open: in_visual(source.open, atlas, icons)?,
+            disabled: in_visual(source.disabled, atlas, icons)?,
+        };
+    }
+    Ok(result)
+}
+
+/// Resolves one bounded chrome-role table into native named-state records.
+fn read_chrome(values: &[AssetChromeVisuals], atlas: &AtlasHandle, icons: &[(String, crate::IconId)]) -> Result<[ChromeVisuals; ChromeRole::COUNT], NcStatus> {
+    if values.len() != ChromeRole::COUNT {
+        return Err(NC_E_INVALID_ARG);
+    }
+    let mut result = [empty_chrome(); ChromeRole::COUNT];
+    for (destination, source) in result.iter_mut().zip(values) {
+        *destination = ChromeVisuals {
+            base: in_visual(source.base, atlas, icons)?,
+            active: in_visual(source.active, atlas, icons)?,
+            disabled: in_visual(source.disabled, atlas, icons)?,
+        };
+    }
+    Ok(result)
+}
+
+/// Returns one harmless initialized native visual used only for fallible import scratch.
+fn empty_visual() -> Visual {
+    Visual::new(NinePatch::solid(Color::default()), Color::default())
+}
+
+/// Initializes a complete surface scratch record before fallible conversion.
+fn empty_surfaces() -> SurfaceVisuals {
+    SurfaceVisuals {
+        normal: empty_visual(),
+        disabled: empty_visual(),
+    }
+}
+
+/// Initializes a complete pointer scratch record before fallible conversion.
+fn empty_pointer() -> PointerVisuals {
+    PointerVisuals {
+        normal: empty_visual(),
+        hovered: empty_visual(),
+        pressed: empty_visual(),
+    }
+}
+
+/// Initializes a complete control scratch record before fallible conversion.
+fn empty_controls() -> ControlVisuals {
+    ControlVisuals {
+        disabled: empty_visual(),
+        enabled: empty_pointer(),
+        focused: empty_pointer(),
+    }
+}
+
+/// Initializes a complete menu scratch record before fallible conversion.
+fn empty_menus() -> MenuVisuals {
+    MenuVisuals {
+        normal: empty_visual(),
+        hovered: empty_visual(),
+        pressed: empty_visual(),
+        focused: empty_visual(),
+        open: empty_visual(),
+        disabled: empty_visual(),
+    }
+}
+
+/// Initializes a complete chrome scratch record before fallible conversion.
+fn empty_chrome() -> ChromeVisuals {
+    ChromeVisuals {
+        base: empty_visual(),
+        active: empty_visual(),
+        disabled: empty_visual(),
+    }
 }
 
 /// Validates and converts the one complete metric record for import and live style derivation alike.
@@ -192,9 +306,67 @@ fn read_geometry(metrics: AssetMetrics, chrome: AssetChrome) -> Result<(crate::S
     Ok((metrics, window_chrome))
 }
 
-/// Copies named flat cells or resolves an exact native icon to its bundle-local table position.
+/// Copies both named surface appearances for one role.
 #[cfg(test)]
-fn out_visual(visual: Visual, icons: &[(String, crate::IconId)]) -> Result<AssetVisual, NcStatus> {
+fn out_surfaces(skin: &Skin, role: SurfaceRole, atlas: &AtlasHandle, icons: &[(String, crate::IconId)]) -> Result<AssetSurfaceVisuals, NcStatus> {
+    Ok(AssetSurfaceVisuals {
+        normal: out_visual(skin.surface(role, SurfaceState::Normal), atlas, icons)?,
+        disabled: out_visual(skin.surface(role, SurfaceState::Disabled), atlas, icons)?,
+    })
+}
+
+/// Copies the three pointer appearances beneath one native control-state branch.
+#[cfg(test)]
+fn out_pointer(
+    skin: &Skin,
+    role: ControlRole,
+    state: fn(PointerState) -> ControlState,
+    atlas: &AtlasHandle,
+    icons: &[(String, crate::IconId)],
+) -> Result<AssetPointerVisuals, NcStatus> {
+    Ok(AssetPointerVisuals {
+        normal: out_visual(skin.control(role, state(PointerState::Normal)), atlas, icons)?,
+        hovered: out_visual(skin.control(role, state(PointerState::Hovered)), atlas, icons)?,
+        pressed: out_visual(skin.control(role, state(PointerState::Pressed)), atlas, icons)?,
+    })
+}
+
+/// Copies the explicit disabled, enabled, and focused appearances for one control role.
+#[cfg(test)]
+fn out_controls(skin: &Skin, role: ControlRole, atlas: &AtlasHandle, icons: &[(String, crate::IconId)]) -> Result<AssetControlVisuals, NcStatus> {
+    Ok(AssetControlVisuals {
+        disabled: out_visual(skin.control(role, ControlState::Disabled), atlas, icons)?,
+        enabled: out_pointer(skin, role, ControlState::Enabled, atlas, icons)?,
+        focused: out_pointer(skin, role, ControlState::Focused, atlas, icons)?,
+    })
+}
+
+/// Copies every named menu appearance for one role.
+#[cfg(test)]
+fn out_menus(skin: &Skin, role: MenuRole, atlas: &AtlasHandle, icons: &[(String, crate::IconId)]) -> Result<AssetMenuVisuals, NcStatus> {
+    Ok(AssetMenuVisuals {
+        normal: out_visual(skin.menu(role, MenuState::Normal), atlas, icons)?,
+        hovered: out_visual(skin.menu(role, MenuState::Hovered), atlas, icons)?,
+        pressed: out_visual(skin.menu(role, MenuState::Pressed), atlas, icons)?,
+        focused: out_visual(skin.menu(role, MenuState::Focused), atlas, icons)?,
+        open: out_visual(skin.menu(role, MenuState::Open), atlas, icons)?,
+        disabled: out_visual(skin.menu(role, MenuState::Disabled), atlas, icons)?,
+    })
+}
+
+/// Copies every named chrome appearance for one role.
+#[cfg(test)]
+fn out_chrome(skin: &Skin, role: ChromeRole, atlas: &AtlasHandle, icons: &[(String, crate::IconId)]) -> Result<AssetChromeVisuals, NcStatus> {
+    Ok(AssetChromeVisuals {
+        base: out_visual(skin.chrome(role, ChromeState::Base), atlas, icons)?,
+        active: out_visual(skin.chrome(role, ChromeState::Active), atlas, icons)?,
+        disabled: out_visual(skin.chrome(role, ChromeState::Disabled), atlas, icons)?,
+    })
+}
+
+/// Copies one native visual and validates its complete portable representation.
+#[cfg(test)]
+fn out_visual(visual: Visual, atlas: &AtlasHandle, icons: &[(String, crate::IconId)]) -> Result<AssetVisual, NcStatus> {
     let patch = match visual.patch.content {
         NinePatchContent::Flat { cells } => AssetPatch::Flat {
             top_left: cell(cells.top_left),
@@ -213,12 +385,15 @@ fn out_visual(visual: Visual, icons: &[(String, crate::IconId)]) -> Result<Asset
             tint: rgba(image.tint),
         },
     };
-    Ok(AssetVisual {
+    let value = AssetVisual {
         insets: out_insets(visual.patch.insets),
         center_visible: u8::from(visual.patch.center_visible),
         content_color: rgba(visual.content_color),
         patch: patch.into(),
-    })
+    };
+    // Exported native fixtures cross the same geometry and image checks as foreign bundles.
+    in_visual(value, atlas, icons)?;
+    Ok(value)
 }
 
 /// Validates tagged artwork and source slicing before creating a renderer-visible visual.

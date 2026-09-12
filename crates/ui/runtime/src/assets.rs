@@ -150,7 +150,14 @@ fn filled<T: Clone>(count: usize, value: T) -> Result<Vec<T>, NcStatus> {
 
 /// Proves the required default skin lookups are total before invoking native constructors.
 fn semantic_resources(atlas: &AtlasHandle) -> Result<(), NcStatus> {
-    if atlas.font_id(FontRole::BODY.atlas_name()).is_none() || IconRole::ALL.iter().any(|role| atlas.icon_id(role.atlas_name()).is_none()) {
+    let body = FontRole::BODY.canonical_name().expect("known body font role has an IDL name");
+    if atlas.font_id(body).is_none()
+        || IconRole::ALL.iter().any(|role| {
+            atlas
+                .icon_id(role.canonical_name().expect("IconRole::ALL contains only declared IDL values"))
+                .is_none()
+        })
+    {
         return Err(NC_E_INVALID_ARG);
     }
     Ok(())

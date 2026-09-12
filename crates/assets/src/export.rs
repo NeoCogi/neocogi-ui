@@ -59,23 +59,52 @@ pub fn write_rust(data: &AssetData, destination: &Path) -> io::Result<()> {
         c.backdrop_rgba,
         c.backdrop_padding
     )?;
-    for (name, values) in [
-        ("surfaces", &data.tables.surfaces),
-        ("controls", &data.tables.controls),
-        ("menus", &data.tables.menus),
-        ("window_chrome", &data.tables.window_chrome),
-    ] {
-        writeln!(rust, "            {name}: Cow::Owned(vec![")?;
-        for value in values.iter() {
-            let patch = AssetPatch::try_from(value.patch).map_err(|status| io::Error::other(status.to_string()))?;
-            writeln!(
-                rust,
-                "                AssetVisual {{ insets: {:?}, center_visible: {}, content_color: {}, patch: AssetPatch::{patch:?}.into() }},",
-                value.insets, value.center_visible, value.content_color
-            )?;
-        }
-        writeln!(rust, "            ]),")?;
+    writeln!(rust, "            surfaces: Cow::Owned(vec![")?;
+    for values in data.tables.surfaces.iter() {
+        writeln!(
+            rust,
+            "                AssetSurfaceVisuals {{ normal: {}, disabled: {} }},",
+            visual_source(values.normal)?,
+            visual_source(values.disabled)?
+        )?;
     }
+    writeln!(rust, "            ]),")?;
+    writeln!(rust, "            controls: Cow::Owned(vec![")?;
+    for values in data.tables.controls.iter() {
+        writeln!(
+            rust,
+            "                AssetControlVisuals {{ disabled: {}, enabled: {}, focused: {} }},",
+            visual_source(values.disabled)?,
+            pointer_source(values.enabled)?,
+            pointer_source(values.focused)?
+        )?;
+    }
+    writeln!(rust, "            ]),")?;
+    writeln!(rust, "            menus: Cow::Owned(vec![")?;
+    for values in data.tables.menus.iter() {
+        writeln!(
+            rust,
+            "                AssetMenuVisuals {{ normal: {}, hovered: {}, pressed: {}, focused: {}, open: {}, disabled: {} }},",
+            visual_source(values.normal)?,
+            visual_source(values.hovered)?,
+            visual_source(values.pressed)?,
+            visual_source(values.focused)?,
+            visual_source(values.open)?,
+            visual_source(values.disabled)?
+        )?;
+    }
+    writeln!(rust, "            ]),")?;
+    writeln!(rust, "            window_chrome: Cow::Owned(vec![")?;
+    for values in data.tables.window_chrome.iter() {
+        writeln!(
+            rust,
+            "                AssetChromeVisuals {{ base: {}, active: {}, disabled: {} }},",
+            visual_source(values.base)?,
+            visual_source(values.active)?,
+            visual_source(values.disabled)?
+        )?;
+    }
+    writeln!(rust, "            ]),")?;
     rust.write_all(b"        },\n    })\n}\n")?;
     // Atomic replacement publishes exactly one self-contained source artifact. Failed writes
     // leave both the previous file and every future build's visible input unchanged.
@@ -83,6 +112,25 @@ pub fn write_rust(data: &AssetData, destination: &Path) -> io::Result<()> {
     rust.get_ref().as_file().sync_all()?;
     let temporary = rust.into_inner().map_err(|error| error.into_error())?;
     temporary.persist(destination).map(|_| ()).map_err(|error| error.error)
+}
+
+/// Formats one validated visual as generated Rust source with an explicit tagged patch.
+fn visual_source(value: AssetVisual) -> io::Result<String> {
+    let patch = AssetPatch::try_from(value.patch).map_err(|status| io::Error::other(status.to_string()))?;
+    Ok(format!(
+        "AssetVisual {{ insets: {:?}, center_visible: {}, content_color: {}, patch: AssetPatch::{patch:?}.into() }}",
+        value.insets, value.center_visible, value.content_color
+    ))
+}
+
+/// Formats the three named pointer fields shared by enabled and focused control branches.
+fn pointer_source(values: AssetPointerVisuals) -> io::Result<String> {
+    Ok(format!(
+        "AssetPointerVisuals {{ normal: {}, hovered: {}, pressed: {} }}",
+        visual_source(values.normal)?,
+        visual_source(values.hovered)?,
+        visual_source(values.pressed)?
+    ))
 }
 
 /// Returns a source-level constant name for one previously validated caption edge.

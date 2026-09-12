@@ -9,9 +9,9 @@
 
 use std::rc::Rc;
 
-use super::{ChromeRole, ChromeState, ControlRole, ControlState, MenuRole, MenuState, SurfaceRole, SurfaceState, Visual};
+use super::{ChromeRole, ChromeState, ControlRole, ControlState, MenuRole, MenuState, PointerState, SurfaceRole, SurfaceState, Visual};
 #[cfg(test)]
-use super::{FlatPalette, PointerState};
+use super::FlatPalette;
 #[cfg(test)]
 use crate::{Color, NinePatch, SliceInsets};
 
@@ -28,23 +28,82 @@ pub(crate) struct AppearanceCatalog {
 /// Concrete arrays underlying one appearance catalog.
 #[derive(Clone)]
 struct AppearanceValues {
-    /// Structural surface values indexed by [`SurfaceRole`] and [`SurfaceState`].
-    surfaces: [[Visual; SurfaceState::COUNT]; SurfaceRole::COUNT],
-    /// Interactive control values indexed by [`ControlRole`] and [`ControlState`].
-    controls: [[Visual; ControlState::COUNT]; ControlRole::COUNT],
-    /// Menu values indexed by [`MenuRole`] and [`MenuState`].
-    menus: [[Visual; MenuState::COUNT]; MenuRole::COUNT],
-    /// Window chrome values indexed by [`ChromeRole`] and [`ChromeState`].
-    chrome: [[Visual; ChromeState::COUNT]; ChromeRole::COUNT],
+    /// Structural surface values indexed only by the dense IDL role domain.
+    surfaces: [SurfaceVisuals; SurfaceRole::COUNT],
+    /// Interactive control values indexed only by the dense IDL role domain.
+    controls: [ControlVisuals; ControlRole::COUNT],
+    /// Menu values indexed only by the dense IDL role domain.
+    menus: [MenuVisuals; MenuRole::COUNT],
+    /// Window chrome values indexed only by the dense IDL role domain.
+    chrome: [ChromeVisuals; ChromeRole::COUNT],
+}
+
+/// Native visuals for the two explicit structural-surface branches.
+#[derive(Copy, Clone)]
+pub(crate) struct SurfaceVisuals {
+    /// Enabled structural appearance.
+    pub(crate) normal: Visual,
+    /// Disabled structural appearance.
+    pub(crate) disabled: Visual,
+}
+
+/// Native visuals for one pointer-state branch of an available control.
+#[derive(Copy, Clone)]
+pub(crate) struct PointerVisuals {
+    /// Pointer-neutral appearance.
+    pub(crate) normal: Visual,
+    /// Pointer-hover appearance.
+    pub(crate) hovered: Visual,
+    /// Pointer-press appearance.
+    pub(crate) pressed: Visual,
+}
+
+/// Native visuals preserving disabled, enabled, and focused control structure.
+#[derive(Copy, Clone)]
+pub(crate) struct ControlVisuals {
+    /// Disabled appearance with no nested interaction state.
+    pub(crate) disabled: Visual,
+    /// Pointer appearances without visible keyboard focus.
+    pub(crate) enabled: PointerVisuals,
+    /// Pointer appearances with visible keyboard focus.
+    pub(crate) focused: PointerVisuals,
+}
+
+/// Native visuals for every named menu branch.
+#[derive(Copy, Clone)]
+pub(crate) struct MenuVisuals {
+    /// Enabled appearance without transient selection.
+    pub(crate) normal: Visual,
+    /// Pointer-hover appearance.
+    pub(crate) hovered: Visual,
+    /// Pointer-press appearance.
+    pub(crate) pressed: Visual,
+    /// Keyboard-selection appearance.
+    pub(crate) focused: Visual,
+    /// Open-popup-owner appearance.
+    pub(crate) open: Visual,
+    /// Disabled appearance.
+    pub(crate) disabled: Visual,
+}
+
+/// Native visuals for every named window-chrome branch.
+#[derive(Copy, Clone)]
+pub(crate) struct ChromeVisuals {
+    /// Enabled inactive-window appearance.
+    pub(crate) base: Visual,
+    /// Enabled active-window appearance.
+    pub(crate) active: Visual,
+    /// Disabled-window appearance.
+    pub(crate) disabled: Visual,
 }
 
 impl AppearanceCatalog {
     /// Stores four fully resolved families without interpreting authoring defaults.
     pub(crate) fn from_values(
-        surfaces: [[Visual; SurfaceState::COUNT]; SurfaceRole::COUNT],
-        controls: [[Visual; ControlState::COUNT]; ControlRole::COUNT],
-        menus: [[Visual; MenuState::COUNT]; MenuRole::COUNT],
-        chrome: [[Visual; ChromeState::COUNT]; ChromeRole::COUNT],
+        surfaces: [SurfaceVisuals; SurfaceRole::COUNT],
+        controls: [ControlVisuals; ControlRole::COUNT],
+        menus: [MenuVisuals; MenuRole::COUNT],
+        chrome: [ChromeVisuals; ChromeRole::COUNT],
     ) -> Self {
         // The importer has resolved every image slot into its local typed resource identity.
         Self {
@@ -60,19 +119,37 @@ impl AppearanceCatalog {
         // exhaustively matched family function below.
         let surfaces = std::array::from_fn(|role_index| {
             let role = SurfaceRole::ALL[role_index];
-            std::array::from_fn(|state_index| flat_surface_visual(frame_insets, palette, role, SurfaceState::ALL[state_index]))
+            SurfaceVisuals {
+                normal: flat_surface_visual(frame_insets, palette, role, SurfaceState::Normal),
+                disabled: flat_surface_visual(frame_insets, palette, role, SurfaceState::Disabled),
+            }
         });
         let controls = std::array::from_fn(|role_index| {
             let role = ControlRole::ALL[role_index];
-            std::array::from_fn(|state_index| flat_control_visual(frame_insets, palette, role, ControlState::ALL[state_index]))
+            ControlVisuals {
+                disabled: flat_control_visual(frame_insets, palette, role, ControlState::Disabled),
+                enabled: flat_pointer_visuals(frame_insets, palette, role, ControlState::Enabled),
+                focused: flat_pointer_visuals(frame_insets, palette, role, ControlState::Focused),
+            }
         });
         let menus = std::array::from_fn(|role_index| {
             let role = MenuRole::ALL[role_index];
-            std::array::from_fn(|state_index| flat_menu_visual(frame_insets, palette, role, MenuState::ALL[state_index]))
+            MenuVisuals {
+                normal: flat_menu_visual(frame_insets, palette, role, MenuState::Normal),
+                hovered: flat_menu_visual(frame_insets, palette, role, MenuState::Hovered),
+                pressed: flat_menu_visual(frame_insets, palette, role, MenuState::Pressed),
+                focused: flat_menu_visual(frame_insets, palette, role, MenuState::Focused),
+                open: flat_menu_visual(frame_insets, palette, role, MenuState::Open),
+                disabled: flat_menu_visual(frame_insets, palette, role, MenuState::Disabled),
+            }
         });
         let chrome = std::array::from_fn(|role_index| {
             let role = ChromeRole::ALL[role_index];
-            std::array::from_fn(|state_index| flat_chrome_visual(frame_insets, palette, role, ChromeState::ALL[state_index]))
+            ChromeVisuals {
+                base: flat_chrome_visual(frame_insets, palette, role, ChromeState::Base),
+                active: flat_chrome_visual(frame_insets, palette, role, ChromeState::Active),
+                disabled: flat_chrome_visual(frame_insets, palette, role, ChromeState::Disabled),
+            }
         });
         Self {
             // UI ownership is single-threaded throughout the retained tree, so Rc expresses the
@@ -84,49 +161,49 @@ impl AppearanceCatalog {
     /// Returns one structural surface visual.
     pub(crate) fn surface(&self, role: SurfaceRole, state: SurfaceState) -> Visual {
         // Both indices belong to the surface family, so unrelated states cannot enter this lookup.
-        self.values.surfaces[role.index()][state.index()]
+        self.values.surfaces[role.raw() as usize].get(state)
     }
 
     /// Replaces one structural surface visual.
     pub(crate) fn set_surface(&mut self, role: SurfaceRole, state: SurfaceState, visual: Visual) {
         // Detach shared storage before changing exactly one typed family slot.
-        Rc::make_mut(&mut self.values).surfaces[role.index()][state.index()] = visual;
+        Rc::make_mut(&mut self.values).surfaces[role.raw() as usize].set(state, visual);
     }
 
     /// Returns one interactive control visual.
     pub(crate) fn control(&self, role: ControlRole, state: ControlState) -> Visual {
         // Control lookup accepts the nested enabled/focused pointer state and no other domain.
-        self.values.controls[role.index()][state.index()]
+        self.values.controls[role.raw() as usize].get(state)
     }
 
     /// Replaces one interactive control visual.
     pub(crate) fn set_control(&mut self, role: ControlRole, state: ControlState, visual: Visual) {
         // Detach shared storage before changing exactly one typed family slot.
-        Rc::make_mut(&mut self.values).controls[role.index()][state.index()] = visual;
+        Rc::make_mut(&mut self.values).controls[role.raw() as usize].set(state, visual);
     }
 
     /// Returns one menu visual.
     pub(crate) fn menu(&self, role: MenuRole, state: MenuState) -> Visual {
         // Menu lookup is the only API that can receive the Open state.
-        self.values.menus[role.index()][state.index()]
+        self.values.menus[role.raw() as usize].get(state)
     }
 
     /// Replaces one menu visual.
     pub(crate) fn set_menu(&mut self, role: MenuRole, state: MenuState, visual: Visual) {
         // Detach shared storage before changing exactly one typed family slot.
-        Rc::make_mut(&mut self.values).menus[role.index()][state.index()] = visual;
+        Rc::make_mut(&mut self.values).menus[role.raw() as usize].set(state, visual);
     }
 
     /// Returns one window chrome visual.
     pub(crate) fn chrome(&self, role: ChromeRole, state: ChromeState) -> Visual {
         // Chrome lookup accepts activation state without admitting pointer interaction states.
-        self.values.chrome[role.index()][state.index()]
+        self.values.chrome[role.raw() as usize].get(state)
     }
 
     /// Replaces one window chrome visual.
     pub(crate) fn set_chrome(&mut self, role: ChromeRole, state: ChromeState, visual: Visual) {
         // Detach shared storage before changing exactly one typed family slot.
-        Rc::make_mut(&mut self.values).chrome[role.index()][state.index()] = visual;
+        Rc::make_mut(&mut self.values).chrome[role.raw() as usize].set(state, visual);
     }
 
     /// Iterates over every resolved visual for atlas-ownership validation.
@@ -135,10 +212,150 @@ impl AppearanceCatalog {
         self.values
             .surfaces
             .iter()
-            .flatten()
-            .chain(self.values.controls.iter().flatten())
-            .chain(self.values.menus.iter().flatten())
-            .chain(self.values.chrome.iter().flatten())
+            .flat_map(SurfaceVisuals::iter)
+            .chain(self.values.controls.iter().flat_map(ControlVisuals::iter))
+            .chain(self.values.menus.iter().flat_map(MenuVisuals::iter))
+            .chain(self.values.chrome.iter().flat_map(ChromeVisuals::iter))
+    }
+}
+
+impl SurfaceVisuals {
+    /// Returns the field named by one native surface state.
+    fn get(self, state: SurfaceState) -> Visual {
+        match state {
+            SurfaceState::Normal => self.normal,
+            SurfaceState::Disabled => self.disabled,
+        }
+    }
+
+    /// Replaces the field named by one native surface state.
+    fn set(&mut self, state: SurfaceState, visual: Visual) {
+        *match state {
+            SurfaceState::Normal => &mut self.normal,
+            SurfaceState::Disabled => &mut self.disabled,
+        } = visual;
+    }
+
+    /// Iterates both explicit surface branches.
+    fn iter(&self) -> impl Iterator<Item = &Visual> {
+        [&self.normal, &self.disabled].into_iter()
+    }
+}
+
+impl PointerVisuals {
+    /// Returns the field named by one native pointer state.
+    fn get(self, state: PointerState) -> Visual {
+        match state {
+            PointerState::Normal => self.normal,
+            PointerState::Hovered => self.hovered,
+            PointerState::Pressed => self.pressed,
+        }
+    }
+
+    /// Returns a mutable field named by one native pointer state.
+    fn get_mut(&mut self, state: PointerState) -> &mut Visual {
+        match state {
+            PointerState::Normal => &mut self.normal,
+            PointerState::Hovered => &mut self.hovered,
+            PointerState::Pressed => &mut self.pressed,
+        }
+    }
+
+    /// Iterates all explicit pointer branches.
+    fn iter(&self) -> impl Iterator<Item = &Visual> {
+        [&self.normal, &self.hovered, &self.pressed].into_iter()
+    }
+}
+
+impl ControlVisuals {
+    /// Returns the branch selected by the structured native control state.
+    fn get(self, state: ControlState) -> Visual {
+        match state {
+            ControlState::Disabled => self.disabled,
+            ControlState::Enabled(pointer) => self.enabled.get(pointer),
+            ControlState::Focused(pointer) => self.focused.get(pointer),
+        }
+    }
+
+    /// Replaces the branch selected by the structured native control state.
+    fn set(&mut self, state: ControlState, visual: Visual) {
+        let destination = match state {
+            ControlState::Disabled => &mut self.disabled,
+            ControlState::Enabled(pointer) => self.enabled.get_mut(pointer),
+            ControlState::Focused(pointer) => self.focused.get_mut(pointer),
+        };
+        *destination = visual;
+    }
+
+    /// Iterates the disabled branch followed by both named pointer branches.
+    fn iter(&self) -> impl Iterator<Item = &Visual> {
+        core::iter::once(&self.disabled).chain(self.enabled.iter()).chain(self.focused.iter())
+    }
+}
+
+impl MenuVisuals {
+    /// Returns the field named by one native menu state.
+    fn get(self, state: MenuState) -> Visual {
+        match state {
+            MenuState::Normal => self.normal,
+            MenuState::Hovered => self.hovered,
+            MenuState::Pressed => self.pressed,
+            MenuState::Focused => self.focused,
+            MenuState::Open => self.open,
+            MenuState::Disabled => self.disabled,
+        }
+    }
+
+    /// Replaces the field named by one native menu state.
+    fn set(&mut self, state: MenuState, visual: Visual) {
+        *match state {
+            MenuState::Normal => &mut self.normal,
+            MenuState::Hovered => &mut self.hovered,
+            MenuState::Pressed => &mut self.pressed,
+            MenuState::Focused => &mut self.focused,
+            MenuState::Open => &mut self.open,
+            MenuState::Disabled => &mut self.disabled,
+        } = visual;
+    }
+
+    /// Iterates all explicit menu branches.
+    fn iter(&self) -> impl Iterator<Item = &Visual> {
+        [&self.normal, &self.hovered, &self.pressed, &self.focused, &self.open, &self.disabled].into_iter()
+    }
+}
+
+impl ChromeVisuals {
+    /// Returns the field named by one native chrome state.
+    fn get(self, state: ChromeState) -> Visual {
+        match state {
+            ChromeState::Base => self.base,
+            ChromeState::Active => self.active,
+            ChromeState::Disabled => self.disabled,
+        }
+    }
+
+    /// Replaces the field named by one native chrome state.
+    fn set(&mut self, state: ChromeState, visual: Visual) {
+        *match state {
+            ChromeState::Base => &mut self.base,
+            ChromeState::Active => &mut self.active,
+            ChromeState::Disabled => &mut self.disabled,
+        } = visual;
+    }
+
+    /// Iterates all explicit chrome branches.
+    fn iter(&self) -> impl Iterator<Item = &Visual> {
+        [&self.base, &self.active, &self.disabled].into_iter()
+    }
+}
+
+/// Compiles all pointer states below one control-state constructor for test skins.
+#[cfg(test)]
+fn flat_pointer_visuals(frame_insets: SliceInsets, palette: &FlatPalette, role: ControlRole, state: fn(PointerState) -> ControlState) -> PointerVisuals {
+    PointerVisuals {
+        normal: flat_control_visual(frame_insets, palette, role, state(PointerState::Normal)),
+        hovered: flat_control_visual(frame_insets, palette, role, state(PointerState::Hovered)),
+        pressed: flat_control_visual(frame_insets, palette, role, state(PointerState::Pressed)),
     }
 }
 
@@ -148,19 +365,17 @@ fn flat_surface_visual(frame_insets: SliceInsets, palette: &FlatPalette, role: S
     // Surfaces react only to inherited availability. Window owns the root fill independently of
     // activation, GenericFrame remains hollow, and Panel combines its border with its own fill.
     let patch = match (role, state) {
-        (SurfaceRole::WINDOW, SurfaceState::NORMAL) => NinePatch::solid(palette.window_background),
-        (SurfaceRole::WINDOW, SurfaceState::DISABLED) => NinePatch::solid(palette.disabled_background),
+        (SurfaceRole::WINDOW, SurfaceState::Normal) => NinePatch::solid(palette.window_background),
+        (SurfaceRole::WINDOW, SurfaceState::Disabled) => NinePatch::solid(palette.disabled_background),
         (SurfaceRole::GENERIC_FRAME, _) => NinePatch::framed(frame_insets, palette.border, None),
-        (SurfaceRole::PANEL, SurfaceState::NORMAL) => NinePatch::framed(frame_insets, palette.border, Some(palette.panel_background)),
-        (SurfaceRole::PANEL, SurfaceState::DISABLED) => NinePatch::framed(frame_insets, palette.border, Some(palette.disabled_background)),
+        (SurfaceRole::PANEL, SurfaceState::Normal) => NinePatch::framed(frame_insets, palette.border, Some(palette.panel_background)),
+        (SurfaceRole::PANEL, SurfaceState::Disabled) => NinePatch::framed(frame_insets, palette.border, Some(palette.disabled_background)),
         // Test compilation enumerates only the known IDL values through `ALL`.
         _ => unreachable!("flat test palette received an unknown surface role or state"),
     };
     let content_color = match state {
-        SurfaceState::NORMAL => palette.text,
-        SurfaceState::DISABLED => palette.disabled_foreground,
-        // Test compilation enumerates only the known IDL values through `ALL`.
-        _ => unreachable!("flat test palette received an unknown surface state"),
+        SurfaceState::Normal => palette.text,
+        SurfaceState::Disabled => palette.disabled_foreground,
     };
     Visual::new(patch, content_color)
 }
@@ -181,29 +396,23 @@ fn flat_control_visual(frame_insets: SliceInsets, palette: &FlatPalette, role: C
         | ControlRole::MAXIMIZE_BUTTON
         | ControlRole::RESTORE_BUTTON => match state {
             ControlState::Disabled => framed(palette.disabled_background),
-            ControlState::Enabled(PointerState::NORMAL) => framed(palette.button),
-            ControlState::Enabled(PointerState::HOVERED) => framed(palette.button_hovered),
-            ControlState::Enabled(PointerState::PRESSED) => framed(palette.input),
-            ControlState::Focused(PointerState::NORMAL | PointerState::HOVERED) => framed(palette.control_focus),
-            ControlState::Focused(PointerState::PRESSED) => framed(palette.input),
-            // The test compiler is called only with `ControlState::ALL`.
-            _ => unreachable!("flat test palette received an unknown pointer state"),
+            ControlState::Enabled(PointerState::Normal) => framed(palette.button),
+            ControlState::Enabled(PointerState::Hovered) => framed(palette.button_hovered),
+            ControlState::Enabled(PointerState::Pressed) => framed(palette.input),
+            ControlState::Focused(PointerState::Normal | PointerState::Hovered) => framed(palette.control_focus),
+            ControlState::Focused(PointerState::Pressed) => framed(palette.input),
         },
         ControlRole::CHECKBOX | ControlRole::TEXT_INPUT | ControlRole::SLIDER_TRACK | ControlRole::RESIZE_GRIP => match state {
             ControlState::Disabled => framed(palette.disabled_background),
-            ControlState::Enabled(PointerState::NORMAL) => framed(palette.input),
-            ControlState::Enabled(PointerState::HOVERED | PointerState::PRESSED) => framed(palette.input_hovered),
-            ControlState::Focused(PointerState::NORMAL | PointerState::HOVERED) => framed(palette.control_focus),
-            ControlState::Focused(PointerState::PRESSED) => framed(palette.input_hovered),
-            // The test compiler is called only with `ControlState::ALL`.
-            _ => unreachable!("flat test palette received an unknown pointer state"),
+            ControlState::Enabled(PointerState::Normal) => framed(palette.input),
+            ControlState::Enabled(PointerState::Hovered | PointerState::Pressed) => framed(palette.input_hovered),
+            ControlState::Focused(PointerState::Normal | PointerState::Hovered) => framed(palette.control_focus),
+            ControlState::Focused(PointerState::Pressed) => framed(palette.input_hovered),
         },
         ControlRole::ITEM => match state {
-            ControlState::Disabled | ControlState::Enabled(PointerState::NORMAL) => NinePatch::solid(transparent),
-            ControlState::Enabled(PointerState::HOVERED | PointerState::PRESSED)
-            | ControlState::Focused(PointerState::NORMAL | PointerState::HOVERED | PointerState::PRESSED) => NinePatch::solid(palette.selection_background),
-            // The test compiler is called only with `ControlState::ALL`.
-            _ => unreachable!("flat test palette received an unknown pointer state"),
+            ControlState::Disabled | ControlState::Enabled(PointerState::Normal) => NinePatch::solid(transparent),
+            ControlState::Enabled(PointerState::Hovered | PointerState::Pressed)
+            | ControlState::Focused(PointerState::Normal | PointerState::Hovered | PointerState::Pressed) => NinePatch::solid(palette.selection_background),
         },
         ControlRole::SCROLLBAR_TRACK => match state {
             ControlState::Disabled => NinePatch::solid(palette.disabled_background),
@@ -221,11 +430,9 @@ fn flat_control_visual(frame_insets: SliceInsets, palette: &FlatPalette, role: C
     let content_color = match role {
         ControlRole::ITEM => match state {
             ControlState::Disabled => palette.disabled_foreground,
-            ControlState::Enabled(PointerState::NORMAL) => palette.text,
-            ControlState::Enabled(PointerState::HOVERED | PointerState::PRESSED)
-            | ControlState::Focused(PointerState::NORMAL | PointerState::HOVERED | PointerState::PRESSED) => palette.selection_foreground,
-            // The test compiler is called only with `ControlState::ALL`.
-            _ => unreachable!("flat test palette received an unknown pointer state"),
+            ControlState::Enabled(PointerState::Normal) => palette.text,
+            ControlState::Enabled(PointerState::Hovered | PointerState::Pressed)
+            | ControlState::Focused(PointerState::Normal | PointerState::Hovered | PointerState::Pressed) => palette.selection_foreground,
         },
         ControlRole::CLOSE_BUTTON | ControlRole::MINIMIZE_BUTTON | ControlRole::MAXIMIZE_BUTTON | ControlRole::RESTORE_BUTTON => match state {
             ControlState::Disabled => palette.disabled_title_foreground,
@@ -244,11 +451,11 @@ fn flat_control_visual(frame_insets: SliceInsets, palette: &FlatPalette, role: C
 fn flat_menu_visual(frame_insets: SliceInsets, palette: &FlatPalette, role: MenuRole, state: MenuState) -> Visual {
     // Open is a menu state rather than a duplicate title role. Popup owners and selected submenu
     // entries consequently share the same explicit selection precedence.
-    let selected = matches!(state, MenuState::HOVERED | MenuState::PRESSED | MenuState::FOCUSED | MenuState::OPEN);
+    let selected = matches!(state, MenuState::Hovered | MenuState::Pressed | MenuState::Focused | MenuState::Open);
     let transparent = Color { r: 0, g: 0, b: 0, a: 0 };
     let patch = match role {
         MenuRole::BAR => match state {
-            MenuState::DISABLED => NinePatch::solid(palette.disabled_background),
+            MenuState::Disabled => NinePatch::solid(palette.disabled_background),
             _ => NinePatch::solid(palette.menu_background),
         },
         MenuRole::TITLE | MenuRole::ITEM => {
@@ -259,14 +466,14 @@ fn flat_menu_visual(frame_insets: SliceInsets, palette: &FlatPalette, role: Menu
             }
         }
         MenuRole::POPUP => match state {
-            MenuState::DISABLED => NinePatch::framed(frame_insets, palette.border, Some(palette.disabled_background)),
+            MenuState::Disabled => NinePatch::framed(frame_insets, palette.border, Some(palette.disabled_background)),
             _ => NinePatch::framed(frame_insets, palette.border, Some(palette.menu_background)),
         },
         // Test compilation enumerates only the known IDL values through `ALL`.
         _ => unreachable!("flat test palette received an unknown menu role"),
     };
     let content_color = match state {
-        MenuState::DISABLED => palette.disabled_foreground,
+        MenuState::Disabled => palette.disabled_foreground,
         _ if selected && matches!(role, MenuRole::TITLE | MenuRole::ITEM) => palette.selection_foreground,
         _ => palette.menu_foreground,
     };
@@ -280,28 +487,22 @@ fn flat_chrome_visual(frame_insets: SliceInsets, palette: &FlatPalette, role: Ch
     // own enabled, focus, and pointer states independently of the active window.
     let patch = match role {
         ChromeRole::WINDOW_FRAME | ChromeRole::DIALOG_FRAME => match state {
-            ChromeState::BASE | ChromeState::DISABLED => NinePatch::framed(frame_insets, palette.border, None),
-            ChromeState::ACTIVE => NinePatch::framed(frame_insets.at_least(1), palette.window_active, None),
-            // Test compilation enumerates only the known IDL values through `ALL`.
-            _ => unreachable!("flat test palette received an unknown chrome state"),
+            ChromeState::Base | ChromeState::Disabled => NinePatch::framed(frame_insets, palette.border, None),
+            ChromeState::Active => NinePatch::framed(frame_insets.at_least(1), palette.window_active, None),
         },
         ChromeRole::TITLE => match state {
-            ChromeState::BASE => NinePatch::solid(palette.title_background),
-            ChromeState::ACTIVE => NinePatch::solid(palette.window_active),
-            ChromeState::DISABLED => NinePatch::solid(palette.title_background),
-            // Test compilation enumerates only the known IDL values through `ALL`.
-            _ => unreachable!("flat test palette received an unknown chrome state"),
+            ChromeState::Base => NinePatch::solid(palette.title_background),
+            ChromeState::Active => NinePatch::solid(palette.window_active),
+            ChromeState::Disabled => NinePatch::solid(palette.title_background),
         },
         // Test compilation enumerates only the known IDL values through `ALL`.
         _ => unreachable!("flat test palette received an unknown chrome role"),
     };
     let content_color = match (role, state) {
-        (ChromeRole::TITLE, ChromeState::DISABLED) => palette.disabled_title_foreground,
-        (ChromeRole::TITLE, ChromeState::BASE | ChromeState::ACTIVE) => palette.title_foreground,
-        (_, ChromeState::DISABLED) => palette.disabled_foreground,
-        (_, ChromeState::BASE | ChromeState::ACTIVE) => palette.text,
-        // Test compilation enumerates only the known IDL values through `ALL`.
-        _ => unreachable!("flat test palette received an unknown chrome role or state"),
+        (ChromeRole::TITLE, ChromeState::Disabled) => palette.disabled_title_foreground,
+        (ChromeRole::TITLE, ChromeState::Base | ChromeState::Active) => palette.title_foreground,
+        (_, ChromeState::Disabled) => palette.disabled_foreground,
+        (_, ChromeState::Base | ChromeState::Active) => palette.text,
     };
     Visual::new(patch, content_color)
 }
@@ -323,7 +524,7 @@ mod tests {
         let replacement = Visual::new(NinePatch::solid(color(7, 8, 9, 255)), color(10, 11, 12, 255));
         let original = AppearanceCatalog::from_flat_palette(SliceInsets::uniform(1), &FlatPalette::default());
         let mut changed = original.clone();
-        let state = ControlState::Focused(PointerState::PRESSED);
+        let state = ControlState::Focused(PointerState::Pressed);
         changed.set_control(ControlRole::BUTTON, state, replacement);
 
         assert_ne!(original.control(ControlRole::BUTTON, state).content_color.r, 10);
@@ -342,7 +543,7 @@ mod tests {
 
         // Window and modal-dialog roots intentionally share this semantic surface. Their outer
         // decorations remain independently selectable through the two ChromeRole frame values.
-        for (state, expected) in [(SurfaceState::NORMAL, (11, 23, 37, 255)), (SurfaceState::DISABLED, (47, 61, 79, 255))] {
+        for (state, expected) in [(SurfaceState::Normal, (11, 23, 37, 255)), (SurfaceState::Disabled, (47, 61, 79, 255))] {
             let patch = visuals.surface(SurfaceRole::WINDOW, state).patch;
             assert!(matches!(
                 patch.content,
@@ -375,7 +576,7 @@ mod tests {
         // Compile once through the production fallback constructor so this assertion covers the
         // concrete family/state mapping responsible for focused tree and list rows.
         let visuals = AppearanceCatalog::from_flat_palette(SliceInsets::uniform(1), &palette);
-        let state = ControlState::Focused(PointerState::NORMAL);
+        let state = ControlState::Focused(PointerState::Normal);
         let control = visuals.control(ControlRole::BUTTON, state);
         let item = visuals.control(ControlRole::ITEM, state);
 

@@ -44,6 +44,35 @@ fn data(source: &ComPtr<IAssetBundleAbi>) -> neocogi_ui::assets::AssetData {
     AssetData::read(source.as_com_ref()).unwrap()
 }
 
+/// Iterates every named appearance field for producer-output comparison only.
+fn visuals(tables: &neocogi_ui::assets::AssetTables) -> impl Iterator<Item = &AssetVisual> {
+    let surfaces = tables.surfaces.iter().flat_map(|values| [&values.normal, &values.disabled]);
+    let controls = tables.controls.iter().flat_map(|values| {
+        [
+            &values.disabled,
+            &values.enabled.normal,
+            &values.enabled.hovered,
+            &values.enabled.pressed,
+            &values.focused.normal,
+            &values.focused.hovered,
+            &values.focused.pressed,
+        ]
+    });
+    let menus = tables.menus.iter().flat_map(|values| {
+        [
+            &values.normal,
+            &values.hovered,
+            &values.pressed,
+            &values.focused,
+            &values.open,
+            &values.disabled,
+        ]
+    });
+    let chrome = tables.window_chrome.iter().flat_map(|values| [&values.base, &values.active, &values.disabled]);
+    // Flattening is an assertion view; production storage and transport remain structured.
+    surfaces.chain(controls).chain(menus).chain(chrome)
+}
+
 /// Both producer modes share the exact recipe and immutable object representation.
 #[test]
 fn com_builder_matches_direct_pixels_metrics_and_resolved_visuals() {
@@ -85,19 +114,14 @@ fn com_builder_matches_direct_pixels_metrics_and_resolved_visuals() {
     assert_eq!(runtime.tables.names, direct.tables.names);
     assert_eq!(runtime.tables.metrics, direct.tables.metrics);
     assert_eq!(runtime.tables.chrome, direct.tables.chrome);
-    for (a, b) in [
-        (&runtime.tables.surfaces, &direct.tables.surfaces),
-        (&runtime.tables.controls, &direct.tables.controls),
-        (&runtime.tables.menus, &direct.tables.menus),
-        (&runtime.tables.window_chrome, &direct.tables.window_chrome),
-    ] {
-        assert_eq!(a.len(), b.len());
-        for (a, b) in a.iter().zip(b.iter()) {
-            assert_eq!(a.insets, b.insets);
-            assert_eq!(a.center_visible, b.center_visible);
-            assert_eq!(a.content_color, b.content_color);
-            assert_eq!(AssetPatch::try_from(a.patch).unwrap(), AssetPatch::try_from(b.patch).unwrap());
-        }
+    let runtime_visuals = visuals(&runtime.tables).collect::<Vec<_>>();
+    let direct_visuals = visuals(&direct.tables).collect::<Vec<_>>();
+    assert_eq!(runtime_visuals.len(), direct_visuals.len());
+    for (a, b) in runtime_visuals.into_iter().zip(direct_visuals) {
+        assert_eq!(a.insets, b.insets);
+        assert_eq!(a.center_visible, b.center_visible);
+        assert_eq!(a.content_color, b.content_color);
+        assert_eq!(AssetPatch::try_from(a.patch).unwrap(), AssetPatch::try_from(b.patch).unwrap());
     }
 }
 

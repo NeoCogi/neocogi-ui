@@ -32,7 +32,8 @@ impl TestTheme {
 fn test_atlas() -> AssetData {
     let mut names = String::from("body");
     let mut icons = Vec::new();
-    for name in core::iter::once("white").chain(IconRole::ALL.map(IconRole::atlas_name)) {
+    let icon_names = IconRole::ALL.map(|role| role.canonical_name().expect("IconRole::ALL contains only declared IDL values"));
+    for name in core::iter::once("white").chain(icon_names) {
         let first = names.len() as u32;
         names.push_str(name);
         icons.push(AssetIcon {
@@ -78,7 +79,7 @@ fn test_atlas() -> AssetData {
     data.validate().unwrap();
     data
 }
-use neocogi_ui_contracts::appearance::{ChromeRole, ControlRole, MenuRole};
+use neocogi_ui_contracts::{ChromeRole, ControlRole, MenuRole};
 use std::fs;
 
 /// Installs one repository-bundled theme through the same filesystem and PNG path as Context.
@@ -148,12 +149,12 @@ fn omitted_patch_states_use_theme_flat_colors() {
     let normal = loaded
         .bundle()
         .skin()
-        .control(ControlRole::BUTTON, ControlState::Enabled(PointerState::NORMAL))
+        .control(ControlRole::BUTTON, ControlState::Enabled(PointerState::Normal))
         .patch;
     let hovered = loaded
         .bundle()
         .skin()
-        .control(ControlRole::BUTTON, ControlState::Enabled(PointerState::HOVERED))
+        .control(ControlRole::BUTTON, ControlState::Enabled(PointerState::Hovered))
         .patch;
     let disabled = loaded.bundle().skin().control(ControlRole::BUTTON, ControlState::Disabled).patch;
     assert_eq!(normal.insets.left, 2);
@@ -198,9 +199,9 @@ fn state_content_color_override_does_not_require_a_patch() {
     let loaded = document.install(theme_atlas).expect("content-color-only theme must install");
     let loaded = TestTheme::new(loaded);
 
-    let normal = loaded.bundle().skin().menu(MenuRole::ITEM, MenuState::NORMAL).content_color;
-    let hovered = loaded.bundle().skin().menu(MenuRole::ITEM, MenuState::HOVERED).content_color;
-    let disabled = loaded.bundle().skin().menu(MenuRole::ITEM, MenuState::DISABLED).content_color;
+    let normal = loaded.bundle().skin().menu(MenuRole::ITEM, MenuState::Normal).content_color;
+    let hovered = loaded.bundle().skin().menu(MenuRole::ITEM, MenuState::Hovered).content_color;
+    let disabled = loaded.bundle().skin().menu(MenuRole::ITEM, MenuState::Disabled).content_color;
     assert_eq!((normal.r, normal.g, normal.b, normal.a), (1, 2, 3, 255));
     assert_eq!((hovered.r, hovered.g, hovered.b, hovered.a), (250, 251, 252, 255));
     assert_eq!((disabled.r, disabled.g, disabled.b, disabled.a), (90, 91, 92, 255));
@@ -231,7 +232,7 @@ fn solid_patch_compiles_without_rebuilding_the_atlas() {
     assert!(theme_atlas.images.is_empty());
     let loaded = document.install(theme_atlas).expect("solid patch must install");
     let loaded = TestTheme::new(loaded);
-    let patch = loaded.bundle().skin().surface(SurfaceRole::PANEL, SurfaceState::NORMAL).patch;
+    let patch = loaded.bundle().skin().surface(SurfaceRole::PANEL, SurfaceState::Normal).patch;
 
     assert_eq!((patch.insets.left, patch.insets.top, patch.insets.right, patch.insets.bottom), (2, 3, 4, 5));
     assert!(matches!(
@@ -392,17 +393,17 @@ fn bundled_windows_95_theme_reuses_shared_png_regions() {
         "the theme atlas must contain exactly its five semantic font roles"
     );
     assert_eq!(atlas.get_font_size(atlas.font_id("heading").unwrap()), 18);
-    let insets = loaded.bundle().skin().chrome(ChromeRole::WINDOW_FRAME, ChromeState::BASE).patch.insets;
+    let insets = loaded.bundle().skin().chrome(ChromeRole::WINDOW_FRAME, ChromeState::Base).patch.insets;
     assert_eq!((insets.left, insets.top, insets.right, insets.bottom), (4, 4, 4, 4));
     assert!(matches!(
         loaded.bundle().skin().control(ControlRole::BUTTON, ControlState::Disabled).patch.content,
         neocogi_ui_runtime::NinePatchContent::Image { .. }
     ));
     assert!(matches!(
-        loaded.bundle().skin().chrome(ChromeRole::DIALOG_FRAME, ChromeState::ACTIVE).patch.content,
+        loaded.bundle().skin().chrome(ChromeRole::DIALOG_FRAME, ChromeState::Active).patch.content,
         neocogi_ui_runtime::NinePatchContent::Image { .. }
     ));
-    for state in [ControlState::Focused(PointerState::NORMAL), ControlState::Focused(PointerState::HOVERED)] {
+    for state in [ControlState::Focused(PointerState::Normal), ControlState::Focused(PointerState::Hovered)] {
         let disclosure = loaded.bundle().skin().control(ControlRole::ITEM, state).patch;
         assert!(matches!(
             disclosure.content,
@@ -422,7 +423,7 @@ fn bundled_windows_311_theme_draws_black_framed_white_and_blue_titles() {
     assert_eq!(images, 12, "only referenced role-state artwork is baked into the theme atlas");
     assert_eq!(loaded.bundle().skin().window_chrome.minimized_content_height, 2);
     assert_eq!(loaded.bundle().skin().window_chrome.captions.vertical_spacing, 0);
-    let insets = loaded.bundle().skin().chrome(ChromeRole::WINDOW_FRAME, ChromeState::BASE).patch.insets;
+    let insets = loaded.bundle().skin().chrome(ChromeRole::WINDOW_FRAME, ChromeState::Base).patch.insets;
     assert_eq!((insets.left, insets.top, insets.right, insets.bottom), (23, 23, 23, 23));
     let border = loaded.bundle().skin().metrics.window_border;
     assert_eq!((border.left, border.top, border.right, border.bottom), (4, 4, 4, 4));
@@ -432,7 +433,7 @@ fn bundled_windows_311_theme_draws_black_framed_white_and_blue_titles() {
         (2, 2, 2, 2),
         "the period theme leaves a narrow application margin inside root chrome"
     );
-    let window_surface = loaded.bundle().skin().surface(SurfaceRole::WINDOW, SurfaceState::NORMAL).patch;
+    let window_surface = loaded.bundle().skin().surface(SurfaceRole::WINDOW, SurfaceState::Normal).patch;
     assert!(matches!(
         window_surface.content,
         neocogi_ui_runtime::NinePatchContent::Flat { cells }
@@ -441,10 +442,10 @@ fn bundled_windows_311_theme_draws_black_framed_white_and_blue_titles() {
     // Ordinary windows retain their long L-corner bitmap. Only modal dialogs use the uniform
     // four-pixel blue focus frame visible around period Windows 3.11 dialog boxes.
     assert!(matches!(
-        loaded.bundle().skin().chrome(ChromeRole::WINDOW_FRAME, ChromeState::ACTIVE).patch.content,
+        loaded.bundle().skin().chrome(ChromeRole::WINDOW_FRAME, ChromeState::Active).patch.content,
         neocogi_ui_runtime::NinePatchContent::Image { .. }
     ));
-    let dialog_frame = loaded.bundle().skin().chrome(ChromeRole::DIALOG_FRAME, ChromeState::ACTIVE).patch;
+    let dialog_frame = loaded.bundle().skin().chrome(ChromeRole::DIALOG_FRAME, ChromeState::Active).patch;
     assert_eq!(
         (
             dialog_frame.insets.left,
@@ -460,7 +461,7 @@ fn bundled_windows_311_theme_draws_black_framed_white_and_blue_titles() {
             if matches!(cells.top, neocogi_ui_runtime::NinePatchCell::Color { color } if (color.r, color.g, color.b, color.a) == (0, 0, 170, 255))
                 && matches!(cells.center, neocogi_ui_runtime::NinePatchCell::Empty)
     ));
-    let menu_popup = loaded.bundle().skin().menu(MenuRole::POPUP, MenuState::NORMAL).patch;
+    let menu_popup = loaded.bundle().skin().menu(MenuRole::POPUP, MenuState::Normal).patch;
     assert_eq!(
         (menu_popup.insets.left, menu_popup.insets.top, menu_popup.insets.right, menu_popup.insets.bottom),
         (1, 1, 1, 1)
@@ -475,9 +476,9 @@ fn bundled_windows_311_theme_draws_black_framed_white_and_blue_titles() {
     // The title patch contributes only the missing one-pixel bottom edge, avoiding a doubled
     // line where the two patches meet while leaving themes without framed titles unchanged.
     for (state, expected_center) in [
-        (ChromeState::BASE, (255, 255, 255, 255)),
-        (ChromeState::ACTIVE, (0, 0, 170, 255)),
-        (ChromeState::DISABLED, (255, 255, 255, 255)),
+        (ChromeState::Base, (255, 255, 255, 255)),
+        (ChromeState::Active, (0, 0, 170, 255)),
+        (ChromeState::Disabled, (255, 255, 255, 255)),
     ] {
         let patch = loaded.bundle().skin().chrome(ChromeRole::TITLE, state).patch;
         assert_eq!((patch.insets.left, patch.insets.top, patch.insets.right, patch.insets.bottom), (0, 0, 0, 1));
@@ -490,16 +491,16 @@ fn bundled_windows_311_theme_draws_black_framed_white_and_blue_titles() {
     }
     // Base Windows 3.11 titles are white and require black text, while active blue titles use
     // white text. Pointer interaction is not a representable chrome state.
-    let base = loaded.bundle().skin().chrome(ChromeRole::TITLE, ChromeState::BASE).content_color;
-    let active = loaded.bundle().skin().chrome(ChromeRole::TITLE, ChromeState::ACTIVE).content_color;
+    let base = loaded.bundle().skin().chrome(ChromeRole::TITLE, ChromeState::Base).content_color;
+    let active = loaded.bundle().skin().chrome(ChromeRole::TITLE, ChromeState::Active).content_color;
     assert_eq!((base.r, base.g, base.b, base.a), (0, 0, 0, 255));
     assert_eq!((active.r, active.g, active.b, active.a), (255, 255, 255, 255));
-    let disabled_title = loaded.bundle().skin().chrome(ChromeRole::TITLE, ChromeState::DISABLED).content_color;
+    let disabled_title = loaded.bundle().skin().chrome(ChromeRole::TITLE, ChromeState::Disabled).content_color;
     assert_eq!((disabled_title.r, disabled_title.g, disabled_title.b, disabled_title.a), (125, 125, 125, 255));
     let minimize = loaded
         .bundle()
         .skin()
-        .control(ControlRole::MINIMIZE_BUTTON, ControlState::Enabled(PointerState::NORMAL));
+        .control(ControlRole::MINIMIZE_BUTTON, ControlState::Enabled(PointerState::Normal));
     assert_eq!(
         (
             minimize.content_color.r,
@@ -519,7 +520,7 @@ fn bundled_windows_311_theme_draws_black_framed_white_and_blue_titles() {
         ControlRole::MAXIMIZE_BUTTON,
         ControlRole::RESTORE_BUTTON,
     ] {
-        let normal = loaded.bundle().skin().control(role, ControlState::Enabled(PointerState::NORMAL)).patch;
+        let normal = loaded.bundle().skin().control(role, ControlState::Enabled(PointerState::Normal)).patch;
         let disabled = loaded.bundle().skin().control(role, ControlState::Disabled).patch;
         assert!(matches!(
             (normal.content, disabled.content),
@@ -527,17 +528,17 @@ fn bundled_windows_311_theme_draws_black_framed_white_and_blue_titles() {
                 if normal.icon == disabled.icon
         ));
     }
-    let selected_text = loaded.bundle().skin().menu(MenuRole::ITEM, MenuState::HOVERED).content_color;
+    let selected_text = loaded.bundle().skin().menu(MenuRole::ITEM, MenuState::Hovered).content_color;
     assert_eq!((selected_text.r, selected_text.g, selected_text.b, selected_text.a), (255, 255, 255, 255));
     let slider_normal = loaded
         .bundle()
         .skin()
-        .control(ControlRole::SLIDER_TRACK, ControlState::Enabled(PointerState::NORMAL))
+        .control(ControlRole::SLIDER_TRACK, ControlState::Enabled(PointerState::Normal))
         .patch;
     let slider_focused = loaded
         .bundle()
         .skin()
-        .control(ControlRole::SLIDER_TRACK, ControlState::Focused(PointerState::NORMAL))
+        .control(ControlRole::SLIDER_TRACK, ControlState::Focused(PointerState::Normal))
         .patch;
     assert!(matches!(
         (slider_normal.content, slider_focused.content),
@@ -545,11 +546,11 @@ fn bundled_windows_311_theme_draws_black_framed_white_and_blue_titles() {
             if normal.icon == focused.icon
     ));
     for state in [
-        ControlState::Enabled(PointerState::HOVERED),
-        ControlState::Enabled(PointerState::PRESSED),
-        ControlState::Focused(PointerState::NORMAL),
-        ControlState::Focused(PointerState::HOVERED),
-        ControlState::Focused(PointerState::PRESSED),
+        ControlState::Enabled(PointerState::Hovered),
+        ControlState::Enabled(PointerState::Pressed),
+        ControlState::Focused(PointerState::Normal),
+        ControlState::Focused(PointerState::Hovered),
+        ControlState::Focused(PointerState::Pressed),
     ] {
         // Combo popup choices and tree rows share the semantic Item visual. Its complete
         // interaction ladder carries both blue selection art and contrasting text.
@@ -607,7 +608,7 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
         (0, 0, 0, 0),
         "Platinum windows expose their complete application body below root chrome"
     );
-    let insets = loaded.bundle().skin().chrome(ChromeRole::WINDOW_FRAME, ChromeState::BASE).patch.insets;
+    let insets = loaded.bundle().skin().chrome(ChromeRole::WINDOW_FRAME, ChromeState::Base).patch.insets;
     assert_eq!((insets.left, insets.top, insets.right, insets.bottom), (6, 22, 6, 6));
     let border = loaded.bundle().skin().metrics.window_border;
     assert_eq!(
@@ -615,7 +616,7 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
         (6, 2, 6, 6),
         "the title begins below the two-pixel top edge while the remaining edges retain the six-layer frame"
     );
-    let active_title = loaded.bundle().skin().chrome(ChromeRole::TITLE, ChromeState::ACTIVE).patch;
+    let active_title = loaded.bundle().skin().chrome(ChromeRole::TITLE, ChromeState::Active).patch;
     let neocogi_ui_runtime::NinePatchContent::Image { image: active_title_image } = active_title.content else {
         panic!("Mac OS 9 active title must use baked artwork");
     };
@@ -640,7 +641,7 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
         ),
         (0, 0, 0, 2)
     );
-    let active_frame = loaded.bundle().skin().chrome(ChromeRole::WINDOW_FRAME, ChromeState::ACTIVE).patch;
+    let active_frame = loaded.bundle().skin().chrome(ChromeRole::WINDOW_FRAME, ChromeState::Active).patch;
     let neocogi_ui_runtime::NinePatchContent::Image { image: active_frame_image } = active_frame.content else {
         panic!("Mac OS 9 active frame must use baked title-and-body artwork");
     };
@@ -649,7 +650,7 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
     // Push buttons and checkboxes deliberately own different source geometry. Verifying their
     // baked sizes prevents later theme edits from collapsing both controls back onto the same
     // generic frame merely because both expose the same typed interaction states.
-    let button = loaded.bundle().skin().control(ControlRole::BUTTON, ControlState::Enabled(PointerState::NORMAL));
+    let button = loaded.bundle().skin().control(ControlRole::BUTTON, ControlState::Enabled(PointerState::Normal));
     let neocogi_ui_runtime::NinePatchContent::Image { image: button_image } = button.patch.content else {
         panic!("Mac OS 9 buttons must use baked artwork");
     };
@@ -658,15 +659,15 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
     let checkbox = loaded
         .bundle()
         .skin()
-        .control(ControlRole::CHECKBOX, ControlState::Enabled(PointerState::NORMAL));
+        .control(ControlRole::CHECKBOX, ControlState::Enabled(PointerState::Normal));
     let pressed_checkbox = loaded
         .bundle()
         .skin()
-        .control(ControlRole::CHECKBOX, ControlState::Enabled(PointerState::PRESSED));
+        .control(ControlRole::CHECKBOX, ControlState::Enabled(PointerState::Pressed));
     let focused_checkbox = loaded
         .bundle()
         .skin()
-        .control(ControlRole::CHECKBOX, ControlState::Focused(PointerState::NORMAL));
+        .control(ControlRole::CHECKBOX, ControlState::Focused(PointerState::Normal));
     let disabled_checkbox = loaded.bundle().skin().control(ControlRole::CHECKBOX, ControlState::Disabled);
     let [checkbox_image, pressed_checkbox_image, focused_checkbox_image, disabled_checkbox_image] =
         [checkbox, pressed_checkbox, focused_checkbox, disabled_checkbox].map(|visual| {
@@ -681,14 +682,14 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
     assert_ne!(checkbox_image.icon, focused_checkbox_image.icon);
     assert_ne!(checkbox_image.icon, disabled_checkbox_image.icon);
     assert!(matches!(
-        loaded.bundle().skin().chrome(ChromeRole::DIALOG_FRAME, ChromeState::ACTIVE).patch.content,
+        loaded.bundle().skin().chrome(ChromeRole::DIALOG_FRAME, ChromeState::Active).patch.content,
         neocogi_ui_runtime::NinePatchContent::Image { .. }
     ));
 
     // Base and active chrome retain their independently authored frame bitmaps without a
     // pointer-state path that could select one from the other.
-    let normal_frame = loaded.bundle().skin().chrome(ChromeRole::WINDOW_FRAME, ChromeState::BASE).patch;
-    let active_frame = loaded.bundle().skin().chrome(ChromeRole::WINDOW_FRAME, ChromeState::ACTIVE).patch;
+    let normal_frame = loaded.bundle().skin().chrome(ChromeRole::WINDOW_FRAME, ChromeState::Base).patch;
+    let active_frame = loaded.bundle().skin().chrome(ChromeRole::WINDOW_FRAME, ChromeState::Active).patch;
     assert!(matches!(
         (normal_frame.content, active_frame.content),
         (neocogi_ui_runtime::NinePatchContent::Image { image: normal }, neocogi_ui_runtime::NinePatchContent::Image { image: active })
@@ -700,11 +701,11 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
     let close_visual = loaded
         .bundle()
         .skin()
-        .control(ControlRole::CLOSE_BUTTON, ControlState::Enabled(PointerState::NORMAL));
+        .control(ControlRole::CLOSE_BUTTON, ControlState::Enabled(PointerState::Normal));
     let close_pressed_visual = loaded
         .bundle()
         .skin()
-        .control(ControlRole::CLOSE_BUTTON, ControlState::Enabled(PointerState::PRESSED));
+        .control(ControlRole::CLOSE_BUTTON, ControlState::Enabled(PointerState::Pressed));
     assert_eq!(close_visual.content_color.a, 0);
     assert_eq!(close_pressed_visual.content_color.a, 0);
     let (neocogi_ui_runtime::NinePatchContent::Image { image: close_image }, neocogi_ui_runtime::NinePatchContent::Image { image: pressed_image }) =
@@ -718,15 +719,15 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
 
     // Platinum selection uses black rows with white content text, while the popup itself retains
     // its authored one-pixel black and beveled frame.
-    let menu_popup = loaded.bundle().skin().menu(MenuRole::POPUP, MenuState::NORMAL).patch;
+    let menu_popup = loaded.bundle().skin().menu(MenuRole::POPUP, MenuState::Normal).patch;
     let neocogi_ui_runtime::NinePatchContent::Image { image: menu_popup_image } = menu_popup.content else {
         panic!("Mac OS 9 popup must use baked artwork");
     };
     let menu_popup_size = loaded.bundle().atlas().get_icon_size(menu_popup_image.icon);
     assert_eq!((menu_popup_size.width, menu_popup_size.height), (7, 7));
-    let selected_text = loaded.bundle().skin().menu(MenuRole::ITEM, MenuState::HOVERED).content_color;
+    let selected_text = loaded.bundle().skin().menu(MenuRole::ITEM, MenuState::Hovered).content_color;
     assert_eq!((selected_text.r, selected_text.g, selected_text.b, selected_text.a), (255, 255, 255, 255));
-    for state in [ControlState::Enabled(PointerState::HOVERED), ControlState::Enabled(PointerState::PRESSED)] {
+    for state in [ControlState::Enabled(PointerState::Hovered), ControlState::Enabled(PointerState::Pressed)] {
         // Enabled list items and tree disclosures inherit the palette's flat black selection
         // background. Their foreground must remain readable before the control gains focus.
         let visual = loaded.bundle().skin().control(ControlRole::ITEM, state);
@@ -742,9 +743,9 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
         );
     }
     for state in [
-        ControlState::Focused(PointerState::NORMAL),
-        ControlState::Focused(PointerState::HOVERED),
-        ControlState::Focused(PointerState::PRESSED),
+        ControlState::Focused(PointerState::Normal),
+        ControlState::Focused(PointerState::Hovered),
+        ControlState::Focused(PointerState::Pressed),
     ] {
         // Focused items use the theme's image-backed selection face and the same contrasting
         // foreground as the inherited enabled selection states above.

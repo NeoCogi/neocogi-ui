@@ -57,19 +57,19 @@ impl AssetTables {
             names: filled(info.names as usize, 0)?.into(),
             metrics: source.metrics()?,
             chrome: source.chrome()?,
-            surfaces: filled(SurfaceRole::COUNT * SurfaceState::COUNT, transparent())?.into(),
-            controls: filled(ControlRole::COUNT * ControlState::COUNT, transparent())?.into(),
-            menus: filled(MenuRole::COUNT * MenuState::COUNT, transparent())?.into(),
-            window_chrome: filled(ChromeRole::COUNT * ChromeState::COUNT, transparent())?.into(),
+            surfaces: filled(SurfaceRole::COUNT, transparent_surfaces())?.into(),
+            controls: filled(ControlRole::COUNT, transparent_controls())?.into(),
+            menus: filled(MenuRole::COUNT, transparent_menus())?.into(),
+            window_chrome: filled(ChromeRole::COUNT, transparent_chrome())?.into(),
         };
         source.fonts(NcCopyToBufferOffset::new(0, tables.fonts.to_mut()))?;
         source.glyphs(NcCopyToBufferOffset::new(0, tables.glyphs.to_mut()))?;
         source.icons(NcCopyToBufferOffset::new(0, tables.icons.to_mut()))?;
         source.names(NcCopyToBufferOffset::new(0, tables.names.to_mut()))?;
-        source.visuals(AppearanceFamily::SURFACE, NcCopyToBufferOffset::new(0, tables.surfaces.to_mut()))?;
-        source.visuals(AppearanceFamily::CONTROL, NcCopyToBufferOffset::new(0, tables.controls.to_mut()))?;
-        source.visuals(AppearanceFamily::MENU, NcCopyToBufferOffset::new(0, tables.menus.to_mut()))?;
-        source.visuals(AppearanceFamily::CHROME, NcCopyToBufferOffset::new(0, tables.window_chrome.to_mut()))?;
+        source.surface_visuals(NcCopyToBufferOffset::new(0, tables.surfaces.to_mut()))?;
+        source.control_visuals(NcCopyToBufferOffset::new(0, tables.controls.to_mut()))?;
+        source.menu_visuals(NcCopyToBufferOffset::new(0, tables.menus.to_mut()))?;
+        source.chrome_visuals(NcCopyToBufferOffset::new(0, tables.window_chrome.to_mut()))?;
         Ok(tables)
     }
 
@@ -121,7 +121,8 @@ impl AssetTables {
             }
             self.validate_rect(icon.rect, false)?;
         }
-        for name in core::iter::once("white").chain(IconRole::ALL.map(IconRole::atlas_name)) {
+        let required_icon_names = IconRole::ALL.map(|role| role.canonical_name().expect("IconRole::ALL contains only declared IDL values"));
+        for name in core::iter::once("white").chain(required_icon_names) {
             if !icon_names.contains(name) {
                 return Err(NC_E_INVALID_ARG);
             }
@@ -149,13 +150,30 @@ impl AssetTables {
         {
             return Err(NC_E_INVALID_ARG);
         }
-        for visual in self
-            .surfaces
-            .iter()
-            .chain(self.controls.iter())
-            .chain(self.menus.iter())
-            .chain(self.window_chrome.iter())
-        {
+        let surfaces = self.surfaces.iter().flat_map(|values| [&values.normal, &values.disabled]);
+        let controls = self.controls.iter().flat_map(|values| {
+            [
+                &values.disabled,
+                &values.enabled.normal,
+                &values.enabled.hovered,
+                &values.enabled.pressed,
+                &values.focused.normal,
+                &values.focused.hovered,
+                &values.focused.pressed,
+            ]
+        });
+        let menus = self.menus.iter().flat_map(|values| {
+            [
+                &values.normal,
+                &values.hovered,
+                &values.pressed,
+                &values.focused,
+                &values.open,
+                &values.disabled,
+            ]
+        });
+        let chrome = self.window_chrome.iter().flat_map(|values| [&values.base, &values.active, &values.disabled]);
+        for visual in surfaces.chain(controls).chain(menus).chain(chrome) {
             validate_insets(visual.insets)?;
             if visual.center_visible > 1 {
                 return Err(NC_E_INVALID_ARG);
@@ -301,5 +319,52 @@ fn transparent() -> AssetVisual {
             bottom_right: 0,
         }
         .into(),
+    }
+}
+
+/// Initializes both explicit surface branches with a valid transparent visual.
+fn transparent_surfaces() -> AssetSurfaceVisuals {
+    AssetSurfaceVisuals {
+        normal: transparent(),
+        disabled: transparent(),
+    }
+}
+
+/// Initializes the three pointer branches used by enabled and focused controls.
+fn transparent_pointer() -> AssetPointerVisuals {
+    AssetPointerVisuals {
+        normal: transparent(),
+        hovered: transparent(),
+        pressed: transparent(),
+    }
+}
+
+/// Initializes the complete nested control state record without flattening it.
+fn transparent_controls() -> AssetControlVisuals {
+    AssetControlVisuals {
+        disabled: transparent(),
+        enabled: transparent_pointer(),
+        focused: transparent_pointer(),
+    }
+}
+
+/// Initializes every named menu branch with a valid transparent visual.
+fn transparent_menus() -> AssetMenuVisuals {
+    AssetMenuVisuals {
+        normal: transparent(),
+        hovered: transparent(),
+        pressed: transparent(),
+        focused: transparent(),
+        open: transparent(),
+        disabled: transparent(),
+    }
+}
+
+/// Initializes every named chrome branch with a valid transparent visual.
+fn transparent_chrome() -> AssetChromeVisuals {
+    AssetChromeVisuals {
+        base: transparent(),
+        active: transparent(),
+        disabled: transparent(),
     }
 }

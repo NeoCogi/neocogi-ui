@@ -22,20 +22,44 @@ fn equivalent(a: &AssetData, b: &AssetData) {
     assert_eq!(a.tables.names, b.tables.names);
     assert_eq!(a.tables.metrics, b.tables.metrics);
     assert_eq!(a.tables.chrome, b.tables.chrome);
-    for (a, b) in [
-        (&a.tables.surfaces, &b.tables.surfaces),
-        (&a.tables.controls, &b.tables.controls),
-        (&a.tables.menus, &b.tables.menus),
-        (&a.tables.window_chrome, &b.tables.window_chrome),
-    ] {
-        assert_eq!(a.len(), b.len());
-        for (a, b) in a.iter().zip(b.iter()) {
-            assert_eq!(a.insets, b.insets);
-            assert_eq!(a.center_visible, b.center_visible);
-            assert_eq!(a.content_color, b.content_color);
-            assert_eq!(AssetPatch::try_from(a.patch).unwrap(), AssetPatch::try_from(b.patch).unwrap());
-        }
+    let a_visuals = visuals(&a.tables).collect::<Vec<_>>();
+    let b_visuals = visuals(&b.tables).collect::<Vec<_>>();
+    assert_eq!(a_visuals.len(), b_visuals.len());
+    for (a, b) in a_visuals.into_iter().zip(b_visuals) {
+        assert_eq!(a.insets, b.insets);
+        assert_eq!(a.center_visible, b.center_visible);
+        assert_eq!(a.content_color, b.content_color);
+        assert_eq!(AssetPatch::try_from(a.patch).unwrap(), AssetPatch::try_from(b.patch).unwrap());
     }
+}
+
+/// Iterates every named appearance field without reconstructing a flattened storage format.
+fn visuals(tables: &neocogi_ui::assets::AssetTables) -> impl Iterator<Item = &AssetVisual> {
+    let surfaces = tables.surfaces.iter().flat_map(|values| [&values.normal, &values.disabled]);
+    let controls = tables.controls.iter().flat_map(|values| {
+        [
+            &values.disabled,
+            &values.enabled.normal,
+            &values.enabled.hovered,
+            &values.enabled.pressed,
+            &values.focused.normal,
+            &values.focused.hovered,
+            &values.focused.pressed,
+        ]
+    });
+    let menus = tables.menus.iter().flat_map(|values| {
+        [
+            &values.normal,
+            &values.hovered,
+            &values.pressed,
+            &values.focused,
+            &values.open,
+            &values.disabled,
+        ]
+    });
+    let chrome = tables.window_chrome.iter().flat_map(|values| [&values.base, &values.active, &values.disabled]);
+    // Chaining is local test observation; the owned representation remains structured throughout.
+    surfaces.chain(controls).chain(menus).chain(chrome)
 }
 
 /// Bulk transport preserves every pixel, glyph metric, semantic visual and scalar recipe.
@@ -103,16 +127,16 @@ fn malformed_portable_metadata_never_reaches_a_live_skin() {
             5 => data.pixels.to_mut().fill(0),                         // Required white tile is no longer opaque white.
             6 => data.tables.metrics.padding = -1,
             7 => data.tables.chrome.has_backdrop = 2,
-            8 => data.tables.controls.to_mut()[0].patch = AssetPatchAbi::from_unknown_tag(AssetPatchTag::from_raw(255)).unwrap(),
+            8 => data.tables.controls.to_mut()[0].disabled.patch = AssetPatchAbi::from_unknown_tag(AssetPatchTag::from_raw(255)).unwrap(),
             9 => {
-                data.tables.controls.to_mut()[0].patch = AssetPatch::Image {
+                data.tables.controls.to_mut()[0].disabled.patch = AssetPatch::Image {
                     icon: u32::MAX,
                     source: Insets::default(),
                     tint: 0,
                 }
                 .into()
             }
-            10 => data.tables.controls.to_mut()[0].center_visible = 2,
+            10 => data.tables.controls.to_mut()[0].disabled.center_visible = 2,
             _ => unreachable!(),
         }
         let source = data.into_bundle().unwrap();

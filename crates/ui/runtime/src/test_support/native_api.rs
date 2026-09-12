@@ -297,14 +297,14 @@ fn downstream_skin_visuals_are_concrete_and_exhaustive() {
     // unrepresentable without requiring a universal, sparsely meaningful state table.
     let context = context();
     let mut skin = context.skin().clone();
-    let focused = ControlState::Focused(PointerState::NORMAL);
-    let pressed = ControlState::Focused(PointerState::PRESSED);
+    let focused = ControlState::Focused(PointerState::Normal);
+    let pressed = ControlState::Focused(PointerState::Pressed);
     let original = skin.control(ControlRole::BUTTON, focused);
     let mut changed = original;
     changed.content_color = color(17, 29, 43, 255);
     skin.set_control(ControlRole::BUTTON, focused, changed);
 
-    assert_eq!(ControlState::ALL.len(), ControlState::COUNT);
+    assert_eq!(ControlState::ALL.len(), 7);
     assert_eq!(skin.control(ControlRole::BUTTON, focused).content_color.r, 17);
     assert_eq!(skin.control(ControlRole::BUTTON, pressed).content_color.r, original.content_color.r);
 }

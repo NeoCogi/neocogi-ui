@@ -109,14 +109,23 @@ impl Recorder {
 
 /// Decodes one exhaustive contract state for a control appearance lookup.
 fn local_control_state(state: WidgetVisualState) -> Result<crate::ControlState, NcStatus> {
-    crate::ControlState::ALL.get(usize::from(state.raw())).copied().ok_or(NC_E_INVALID_ARG)
+    match state {
+        WidgetVisualState::DISABLED => Ok(crate::ControlState::Disabled),
+        WidgetVisualState::NORMAL => Ok(crate::ControlState::Enabled(crate::PointerState::Normal)),
+        WidgetVisualState::HOVERED => Ok(crate::ControlState::Enabled(crate::PointerState::Hovered)),
+        WidgetVisualState::PRESSED => Ok(crate::ControlState::Enabled(crate::PointerState::Pressed)),
+        WidgetVisualState::FOCUSED => Ok(crate::ControlState::Focused(crate::PointerState::Normal)),
+        WidgetVisualState::FOCUSED_HOVERED => Ok(crate::ControlState::Focused(crate::PointerState::Hovered)),
+        WidgetVisualState::FOCUSED_PRESSED => Ok(crate::ControlState::Focused(crate::PointerState::Pressed)),
+        _ => Err(NC_E_INVALID_ARG),
+    }
 }
 
 /// Decodes the only two states meaningful for structural surfaces.
 fn local_surface_state(state: WidgetVisualState) -> Result<crate::SurfaceState, NcStatus> {
     match state {
-        WidgetVisualState::DISABLED => Ok(crate::SurfaceState::DISABLED),
-        WidgetVisualState::NORMAL => Ok(crate::SurfaceState::NORMAL),
+        WidgetVisualState::DISABLED => Ok(crate::SurfaceState::Disabled),
+        WidgetVisualState::NORMAL => Ok(crate::SurfaceState::Normal),
         _ => Err(NC_E_INVALID_ARG),
     }
 }
@@ -211,7 +220,7 @@ impl IPainter for Recorder {
             let atlas = resources.bundle().atlas();
             let font = skin.resolve_font_role(atlas, FontRole::BODY);
             let color = skin
-                .control(ControlRole::BUTTON, crate::ControlState::Enabled(crate::PointerState::NORMAL))
+                .control(ControlRole::BUTTON, crate::ControlState::Enabled(crate::PointerState::Normal))
                 .content_color;
             let position = crate::ui_node::text_layout::control_text_position_with_font(skin, atlas, font, label, rect, WidgetOption::NONE);
             (font, color, position)

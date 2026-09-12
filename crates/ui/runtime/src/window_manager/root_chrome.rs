@@ -232,11 +232,11 @@ impl RootChromeVisualState {
         // Window activation and availability are resolved at the family boundary. This helper
         // supplies only the pointer branch used by interactive caption and resize controls.
         if captured && hovered {
-            PointerState::PRESSED
+            PointerState::Pressed
         } else if hovered {
-            PointerState::HOVERED
+            PointerState::Hovered
         } else {
-            PointerState::NORMAL
+            PointerState::Normal
         }
     }
 }
@@ -289,7 +289,7 @@ impl RootFrameKind {
         // directly define both the visible black outline and the content rectangle behind it.
         match self {
             Self::Window | Self::Dialog => style.metrics.window_border.normalized(),
-            Self::Popup => style.menu(MenuRole::POPUP, MenuState::NORMAL).patch.insets.normalized(),
+            Self::Popup => style.menu(MenuRole::POPUP, MenuState::Normal).patch.insets.normalized(),
         }
     }
 }
@@ -696,11 +696,11 @@ fn root_frame_patch(style: &Skin, frame_kind: RootFrameKind, active: bool, enabl
                 RootFrameKind::Dialog => ChromeRole::DIALOG_FRAME,
                 RootFrameKind::Popup => unreachable!("popup frame was excluded by the outer match"),
             };
-            let visual_insets = style.chrome(role, ChromeState::BASE).patch.insets;
+            let visual_insets = style.chrome(role, ChromeState::Base).patch.insets;
             style.chrome(role, ChromeState::from_window(enabled, active)).patch.with_insets(visual_insets)
         }
         RootFrameKind::Popup => {
-            let state = if enabled { MenuState::NORMAL } else { MenuState::DISABLED };
+            let state = if enabled { MenuState::Normal } else { MenuState::Disabled };
             style.menu(MenuRole::POPUP, state).patch
         }
     }
@@ -713,11 +713,11 @@ fn root_background_patch(style: &Skin, frame_kind: RootFrameKind, enabled: bool)
     // structural inset as well as the fill shared with compact popup menus.
     let patch = match frame_kind {
         RootFrameKind::Window | RootFrameKind::Dialog => {
-            let state = if enabled { SurfaceState::NORMAL } else { SurfaceState::DISABLED };
+            let state = if enabled { SurfaceState::Normal } else { SurfaceState::Disabled };
             style.surface(SurfaceRole::WINDOW, state).patch
         }
         RootFrameKind::Popup => {
-            let state = if enabled { MenuState::NORMAL } else { MenuState::DISABLED };
+            let state = if enabled { MenuState::Normal } else { MenuState::Disabled };
             style.menu(MenuRole::POPUP, state).patch
         }
     };
@@ -861,7 +861,7 @@ fn paint_caption_button(
     } else if window_active {
         ControlState::Enabled(visual.part_pointer_state(RootChromePart::Caption(button)))
     } else {
-        ControlState::Enabled(PointerState::NORMAL)
+        ControlState::Enabled(PointerState::Normal)
     };
     // Resolve the face and content color together so the caption consumes one ordinary control
     // visual. There is no independently selected glyph role or chrome-layout drawing flag.
@@ -919,21 +919,21 @@ mod tests {
             interaction: RootInteraction::Caption(RootCaptionButton::Close),
             maximized: false,
         };
-        assert_eq!(close_pressed.part_pointer_state(close), PointerState::PRESSED);
+        assert_eq!(close_pressed.part_pointer_state(close), PointerState::Pressed);
 
         let close_outside = RootChromeVisualState {
             hovered: Some(RootChromePart::Title),
             interaction: RootInteraction::Caption(RootCaptionButton::Close),
             maximized: false,
         };
-        assert_eq!(close_outside.part_pointer_state(close), PointerState::NORMAL);
+        assert_eq!(close_outside.part_pointer_state(close), PointerState::Normal);
 
         let width_pressed = RootChromeVisualState {
             hovered: Some(right),
             interaction: RootInteraction::Resizing(RootResizeAxis::Width),
             maximized: false,
         };
-        assert_eq!(width_pressed.part_pointer_state(right), PointerState::PRESSED);
+        assert_eq!(width_pressed.part_pointer_state(right), PointerState::Pressed);
     }
 
     /// Verifies caption symbols use the control content color instead of a second appearance role.
@@ -941,7 +941,7 @@ mod tests {
     fn transparent_caption_content_color_suppresses_the_manager_owned_symbol() {
         let atlas = crate::test_support::test_atlas();
         let opaque = crate::test_support::test_skin(&atlas);
-        let state = ControlState::Enabled(PointerState::NORMAL);
+        let state = ControlState::Enabled(PointerState::Normal);
         let mut complete_face = opaque.clone();
         let mut visual = complete_face.control(ControlRole::CLOSE_BUTTON, state);
         visual.content_color.a = 0;
@@ -1019,7 +1019,7 @@ mod tests {
         crate::test_support::replace_chrome_patch(
             &mut style,
             ChromeRole::TITLE,
-            ChromeState::ACTIVE,
+            ChromeState::Active,
             crate::NinePatch::framed(
                 crate::SliceInsets::new(0, 0, 0, 2),
                 crate::color(3, 5, 7, 255),

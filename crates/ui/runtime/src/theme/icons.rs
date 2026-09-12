@@ -140,7 +140,8 @@ mod tests {
 
         let skin = Skin::from_atlas(&atlas);
         for role in IconRole::ALL {
-            assert_eq!(skin.resolve_icon_role(&atlas, role), atlas.icon_id(role.atlas_name()).unwrap());
+            let name = role.canonical_name().expect("IconRole::ALL contains only declared IDL values");
+            assert_eq!(skin.resolve_icon_role(&atlas, role), atlas.icon_id(name).unwrap());
         }
 
         let close = atlas.icon_id("close").unwrap();

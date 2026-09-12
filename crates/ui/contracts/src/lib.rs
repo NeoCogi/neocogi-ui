@@ -9,16 +9,5 @@
 
 include!(concat!(env!("OUT_DIR"), "/neocogi_ui.rs"));
 
-/// Semantic appearance roles and state ordering shared by assets and widgets.
-pub mod appearance;
-
-/// Named flat-palette authoring values generated from the canonical IDL.
-pub mod palette {
-    pub use crate::FlatPalette;
-}
-
 mod helpers;
 pub use helpers::*;
-
-/// Semantic names shared by asset recipes and runtime resource resolution.
-mod resource_roles;

@@ -84,10 +84,25 @@ impl IAssetBundle for CountingAssets {
         self.called();
         self.source.chrome()
     }
-    /// Delegates one complete appearance family after recording the copy.
-    fn visuals(&self, family: AppearanceFamily, output: NcCopyToBufferOffset<'_, AssetVisual>) -> Result<(), NcStatus> {
+    /// Delegates complete surface-state records after recording the copy.
+    fn surface_visuals(&self, output: NcCopyToBufferOffset<'_, AssetSurfaceVisuals>) -> Result<(), NcStatus> {
         self.called();
-        self.source.visuals(family, output)
+        self.source.surface_visuals(output)
+    }
+    /// Delegates complete control-state records after recording the copy.
+    fn control_visuals(&self, output: NcCopyToBufferOffset<'_, AssetControlVisuals>) -> Result<(), NcStatus> {
+        self.called();
+        self.source.control_visuals(output)
+    }
+    /// Delegates complete menu-state records after recording the copy.
+    fn menu_visuals(&self, output: NcCopyToBufferOffset<'_, AssetMenuVisuals>) -> Result<(), NcStatus> {
+        self.called();
+        self.source.menu_visuals(output)
+    }
+    /// Delegates complete chrome-state records after recording the copy.
+    fn chrome_visuals(&self, output: NcCopyToBufferOffset<'_, AssetChromeVisuals>) -> Result<(), NcStatus> {
+        self.called();
+        self.source.chrome_visuals(output)
     }
 }
 

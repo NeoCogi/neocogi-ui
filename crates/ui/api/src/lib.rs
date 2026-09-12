@@ -29,6 +29,10 @@ pub use file_dialog::{FileDialog, FileDialogRequest};
 /// Immutable prebuilt and builder-produced resource objects using the same bulk contracts.
 pub mod assets;
 
+/// Native appearance states shared by asset compilers and retained UI code.
+pub mod appearance;
+pub use appearance::{ChromeState, ControlState, MenuState, PointerState, SurfaceState};
+
 /// Static application leaf behavior stored inline in one concrete COM object.
 pub mod leaf;
 pub use leaf::LeafContent;

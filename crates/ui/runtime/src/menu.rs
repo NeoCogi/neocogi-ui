@@ -712,7 +712,7 @@ impl MenuSurface {
         // paint passes while allowing every row state to select its own PNG.
         let style = ctx.skin().clone();
         let panel_role = if self.popup { MenuRole::POPUP } else { MenuRole::BAR };
-        let panel_state = if enabled { MenuState::NORMAL } else { MenuState::DISABLED };
+        let panel_state = if enabled { MenuState::Normal } else { MenuState::Disabled };
         let _ = ctx.draw_menu_state(panel_role, panel_state, ctx.local_rect());
         for (slot, entry) in self.rows.iter().enumerate() {
             let row = self.geometry.slots[slot];
@@ -882,7 +882,7 @@ fn layout_popup(rows: &[MenuSlot], style: &Skin, atlas: &AtlasHandle, mut slots:
     // second WindowFrame. Measure raw glyph maxima because control text supplies its own padding.
     slots.clear();
     slots.reserve(rows.len());
-    let panel_insets = style.menu(MenuRole::POPUP, MenuState::NORMAL).patch.insets.normalized();
+    let panel_insets = style.menu(MenuRole::POPUP, MenuState::Normal).patch.insets.normalized();
     let padding = style.metrics.padding.max(1);
     let mut label_width = 0_i32;
     let mut trailing_width = 0_i32;
@@ -1031,7 +1031,7 @@ fn paint_separator(ctx: &mut WidgetPaintCtx<'_>, row: Recti) {
         row.width.saturating_sub(padding.saturating_mul(2)).max(0),
         1,
     );
-    let mut color = ctx.menu_content_color(MenuRole::POPUP, MenuState::NORMAL);
+    let mut color = ctx.menu_content_color(MenuRole::POPUP, MenuState::Normal);
     color.a = ((u16::from(color.a) * 45) / 100).max(1) as u8;
     ctx.draw_rect(rule, color);
 }

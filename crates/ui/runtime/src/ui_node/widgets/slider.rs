@@ -846,7 +846,7 @@ mod tests {
         // A borderless ten-pixel thumb records one unambiguous fill rectangle at the computed x.
         style.metrics.thumb_size = 10;
         let frame = style
-            .control(ControlRole::SLIDER_THUMB, crate::ControlState::Enabled(crate::PointerState::NORMAL))
+            .control(ControlRole::SLIDER_THUMB, crate::ControlState::Enabled(crate::PointerState::Normal))
             .patch
             .with_insets(crate::SliceInsets::ZERO);
         crate::test_support::replace_control_patches(&mut style, ControlRole::SLIDER_THUMB, |_| frame);

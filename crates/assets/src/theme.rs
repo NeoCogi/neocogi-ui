@@ -41,6 +41,7 @@ use serde::Deserialize;
 use neocogi_ui_contracts::*;
 use neocogi_ui_contracts::Insets as SliceInsets;
 use neocogi_ui::assets::AssetData;
+use neocogi_ui::{ChromeState, ControlState, MenuState, PointerState, SurfaceState};
 use crate::atlas::Builder;
 use crate::style::{apply_flat, rgba};
 
@@ -237,53 +238,23 @@ struct AppearanceCatalogDocument {
 
 /// Defines the JSON spelling owned by this asset format for one IDL role enum.
 macro_rules! document_role {
-    ($name:ident { $($index:literal => $source:literal => $value:expr),+ $(,)? }) => {
+    ($name:ty) => {
         impl crate::serde_com::DocumentKey for $name {
-            const NAMES: &'static [&'static str] = &[$($source),+];
+            const NAMES: &'static [&'static str] = &<$name>::NAMES;
 
             /// Converts the decoder's checked name index without accepting raw integers.
             fn from_index(index: u32) -> Option<Self> {
-                match index {
-                    $($index => Some($value),)+
-                    _ => None,
-                }
+                // The IDL generator has proved that `ALL` is contiguous and aligned with `NAMES`.
+                usize::try_from(index).ok().and_then(|index| <$name>::ALL.get(index).copied())
             }
         }
     };
 }
 
-document_role!(SurfaceRole {
-    0 => "window" => SurfaceRole::WINDOW,
-    1 => "generic_frame" => SurfaceRole::GENERIC_FRAME,
-    2 => "panel" => SurfaceRole::PANEL,
-});
-document_role!(ControlRole {
-    0 => "button" => ControlRole::BUTTON,
-    1 => "checkbox" => ControlRole::CHECKBOX,
-    2 => "text_input" => ControlRole::TEXT_INPUT,
-    3 => "item" => ControlRole::ITEM,
-    4 => "combo" => ControlRole::COMBO,
-    5 => "slider_track" => ControlRole::SLIDER_TRACK,
-    6 => "slider_thumb" => ControlRole::SLIDER_THUMB,
-    7 => "scrollbar_track" => ControlRole::SCROLLBAR_TRACK,
-    8 => "scrollbar_thumb" => ControlRole::SCROLLBAR_THUMB,
-    9 => "close_button" => ControlRole::CLOSE_BUTTON,
-    10 => "minimize_button" => ControlRole::MINIMIZE_BUTTON,
-    11 => "maximize_button" => ControlRole::MAXIMIZE_BUTTON,
-    12 => "restore_button" => ControlRole::RESTORE_BUTTON,
-    13 => "resize_grip" => ControlRole::RESIZE_GRIP,
-});
-document_role!(MenuRole {
-    0 => "bar" => MenuRole::BAR,
-    1 => "title" => MenuRole::TITLE,
-    2 => "popup" => MenuRole::POPUP,
-    3 => "item" => MenuRole::ITEM,
-});
-document_role!(ChromeRole {
-    0 => "window_frame" => ChromeRole::WINDOW_FRAME,
-    1 => "dialog_frame" => ChromeRole::DIALOG_FRAME,
-    2 => "title" => ChromeRole::TITLE,
-});
+document_role!(SurfaceRole);
+document_role!(ControlRole);
+document_role!(MenuRole);
+document_role!(ChromeRole);
 
 impl AppearanceCatalogDocument {
     /// Resolves every authored image path relative to its declaring source document.
@@ -394,8 +365,8 @@ impl ThemeDefinition {
         // Replacement is expressed entirely in the atlas's two resource namespaces. The builder
         // copies application-owned resources and replaces only the declared semantic names.
         // UI-local identities are assigned by the consumer when this revision is installed.
-        let semantic_font_names = FontRole::ALL.map(FontRole::atlas_name);
-        let semantic_icon_names = IconRole::ALL.map(IconRole::atlas_name);
+        let semantic_font_names = FontRole::ALL.map(font_role_name);
+        let semantic_icon_names = IconRole::ALL.map(icon_role_name);
         let excluded_fonts = self.fonts.as_ref().map(|_| semantic_font_names.as_slice()).unwrap_or(&[]);
         let excluded_icons = self.icons.as_ref().map(|_| semantic_icon_names.as_slice()).unwrap_or(&[]);
         let mut builder = Builder::from_data(base, width, height, excluded_fonts, excluded_icons).map_err(|source| ThemeLoadError::AtlasBuild { source })?;
@@ -404,7 +375,7 @@ impl ThemeDefinition {
             for (role, font) in fonts.entries() {
                 let bytes = source.read(font.path.as_path()).map_err(|source| ThemeLoadError::AtlasBuild { source })?;
                 builder
-                    .add_font_bytes_named(role.atlas_name(), font.path.as_path(), font.size, bytes.as_slice())
+                    .add_font_bytes_named(font_role_name(role), font.path.as_path(), font.size, bytes.as_slice())
                     .map_err(|source| ThemeLoadError::AtlasBuild { source })?;
             }
         }
@@ -413,7 +384,7 @@ impl ThemeDefinition {
             for (role, icon) in icons.entries() {
                 let bytes = source.read(icon.path.as_path()).map_err(|source| ThemeLoadError::AtlasBuild { source })?;
                 builder
-                    .add_icon_bytes_named(role.atlas_name(), icon.path.as_path(), bytes.as_slice())
+                    .add_icon_bytes_named(icon_role_name(role), icon.path.as_path(), bytes.as_slice())
                     .map_err(|source| ThemeLoadError::AtlasBuild { source })?;
             }
         }
@@ -453,62 +424,42 @@ impl ThemeDefinition {
             // Shared role/state enums determine the wire-table order. Every authored override
             // replaces one concrete record without an intermediate runtime object.
             let name = format!("surface.{role:?}");
-            let destination_insets = destination_insets(
-                &name,
-                document.insets,
-                data.tables.surfaces[role.index() * SurfaceState::COUNT + SurfaceState::NORMAL.index()].insets,
-            )?;
+            let destination_insets = destination_insets(&name, document.insets, data.tables.surfaces[role.raw() as usize].normal.insets)?;
             for (state, authored) in document.states() {
-                let index = role.index() * SurfaceState::COUNT + state.index();
-                let visual = compile_visual(&data.tables.icons, &images, &name, destination_insets, authored, data.tables.surfaces[index])?;
-                data.tables.surfaces.to_mut()[index] = visual;
+                let role_index = role.raw() as usize;
+                let fallback = surface_visual(&data.tables.surfaces[role_index], state);
+                let visual = compile_visual(&data.tables.icons, &images, &name, destination_insets, authored, fallback)?;
+                *surface_visual_mut(&mut data.tables.surfaces.to_mut()[role_index], state) = visual;
             }
         }
         for (role, document) in &self.appearances.control {
             let name = format!("control.{role:?}");
-            let base_state = ControlState::Enabled(PointerState::NORMAL);
-            let destination_insets = destination_insets(
-                &name,
-                document.insets,
-                data.tables.controls[role.index() * ControlState::COUNT + base_state.index()].insets,
-            )?;
+            let destination_insets = destination_insets(&name, document.insets, data.tables.controls[role.raw() as usize].enabled.normal.insets)?;
             for (state, authored) in document.states() {
-                let index = role.index() * ControlState::COUNT + state.index();
-                let visual = compile_visual(&data.tables.icons, &images, &name, destination_insets, authored, data.tables.controls[index])?;
-                data.tables.controls.to_mut()[index] = visual;
+                let role_index = role.raw() as usize;
+                let fallback = control_visual(&data.tables.controls[role_index], state);
+                let visual = compile_visual(&data.tables.icons, &images, &name, destination_insets, authored, fallback)?;
+                *control_visual_mut(&mut data.tables.controls.to_mut()[role_index], state) = visual;
             }
         }
         for (role, document) in &self.appearances.menu {
             let name = format!("menu.{role:?}");
-            let destination_insets = destination_insets(
-                &name,
-                document.insets,
-                data.tables.menus[role.index() * MenuState::COUNT + MenuState::NORMAL.index()].insets,
-            )?;
+            let destination_insets = destination_insets(&name, document.insets, data.tables.menus[role.raw() as usize].normal.insets)?;
             for (state, authored) in document.states() {
-                let index = role.index() * MenuState::COUNT + state.index();
-                let visual = compile_visual(&data.tables.icons, &images, &name, destination_insets, authored, data.tables.menus[index])?;
-                data.tables.menus.to_mut()[index] = visual;
+                let role_index = role.raw() as usize;
+                let fallback = menu_visual(&data.tables.menus[role_index], state);
+                let visual = compile_visual(&data.tables.icons, &images, &name, destination_insets, authored, fallback)?;
+                *menu_visual_mut(&mut data.tables.menus.to_mut()[role_index], state) = visual;
             }
         }
         for (role, document) in &self.appearances.chrome {
             let name = format!("chrome.{role:?}");
-            let destination_insets = destination_insets(
-                &name,
-                document.insets,
-                data.tables.window_chrome[role.index() * ChromeState::COUNT + ChromeState::BASE.index()].insets,
-            )?;
+            let destination_insets = destination_insets(&name, document.insets, data.tables.window_chrome[role.raw() as usize].base.insets)?;
             for (state, authored) in document.states() {
-                let index = role.index() * ChromeState::COUNT + state.index();
-                let visual = compile_visual(
-                    &data.tables.icons,
-                    &images,
-                    &name,
-                    destination_insets,
-                    authored,
-                    data.tables.window_chrome[index],
-                )?;
-                data.tables.window_chrome.to_mut()[index] = visual;
+                let role_index = role.raw() as usize;
+                let fallback = chrome_visual(&data.tables.window_chrome[role_index], state);
+                let visual = compile_visual(&data.tables.icons, &images, &name, destination_insets, authored, fallback)?;
+                *chrome_visual_mut(&mut data.tables.window_chrome.to_mut()[role_index], state) = visual;
             }
         }
 
@@ -567,6 +518,100 @@ pub fn load_bytes(path: &Path, bytes: &[u8], base: &AssetData, source: &mut impl
     let definition = ThemeDefinition::read_bytes(path, bytes)?;
     let atlas = definition.build_atlas_with(base, source)?;
     definition.install(atlas)
+}
+
+/// Returns the generated canonical resource name for one known semantic font role.
+fn font_role_name(role: FontRole) -> &'static str {
+    role.canonical_name().expect("FontRole::ALL contains only declared IDL values")
+}
+
+/// Returns the generated canonical resource name for one known semantic icon role.
+fn icon_role_name(role: IconRole) -> &'static str {
+    role.canonical_name().expect("IconRole::ALL contains only declared IDL values")
+}
+
+/// Selects one named surface branch without deriving a numeric state index.
+fn surface_visual(values: &AssetSurfaceVisuals, state: SurfaceState) -> AssetVisual {
+    match state {
+        SurfaceState::Normal => values.normal,
+        SurfaceState::Disabled => values.disabled,
+    }
+}
+
+/// Selects one mutable named surface branch without deriving a numeric state index.
+fn surface_visual_mut(values: &mut AssetSurfaceVisuals, state: SurfaceState) -> &mut AssetVisual {
+    match state {
+        SurfaceState::Normal => &mut values.normal,
+        SurfaceState::Disabled => &mut values.disabled,
+    }
+}
+
+/// Selects one named nested control branch without flattening [`ControlState`].
+fn control_visual(values: &AssetControlVisuals, state: ControlState) -> AssetVisual {
+    match state {
+        ControlState::Disabled => values.disabled,
+        ControlState::Enabled(PointerState::Normal) => values.enabled.normal,
+        ControlState::Enabled(PointerState::Hovered) => values.enabled.hovered,
+        ControlState::Enabled(PointerState::Pressed) => values.enabled.pressed,
+        ControlState::Focused(PointerState::Normal) => values.focused.normal,
+        ControlState::Focused(PointerState::Hovered) => values.focused.hovered,
+        ControlState::Focused(PointerState::Pressed) => values.focused.pressed,
+    }
+}
+
+/// Selects one mutable nested control branch without flattening [`ControlState`].
+fn control_visual_mut(values: &mut AssetControlVisuals, state: ControlState) -> &mut AssetVisual {
+    match state {
+        ControlState::Disabled => &mut values.disabled,
+        ControlState::Enabled(PointerState::Normal) => &mut values.enabled.normal,
+        ControlState::Enabled(PointerState::Hovered) => &mut values.enabled.hovered,
+        ControlState::Enabled(PointerState::Pressed) => &mut values.enabled.pressed,
+        ControlState::Focused(PointerState::Normal) => &mut values.focused.normal,
+        ControlState::Focused(PointerState::Hovered) => &mut values.focused.hovered,
+        ControlState::Focused(PointerState::Pressed) => &mut values.focused.pressed,
+    }
+}
+
+/// Selects one named menu branch without deriving a numeric state index.
+fn menu_visual(values: &AssetMenuVisuals, state: MenuState) -> AssetVisual {
+    match state {
+        MenuState::Normal => values.normal,
+        MenuState::Hovered => values.hovered,
+        MenuState::Pressed => values.pressed,
+        MenuState::Focused => values.focused,
+        MenuState::Open => values.open,
+        MenuState::Disabled => values.disabled,
+    }
+}
+
+/// Selects one mutable named menu branch without deriving a numeric state index.
+fn menu_visual_mut(values: &mut AssetMenuVisuals, state: MenuState) -> &mut AssetVisual {
+    match state {
+        MenuState::Normal => &mut values.normal,
+        MenuState::Hovered => &mut values.hovered,
+        MenuState::Pressed => &mut values.pressed,
+        MenuState::Focused => &mut values.focused,
+        MenuState::Open => &mut values.open,
+        MenuState::Disabled => &mut values.disabled,
+    }
+}
+
+/// Selects one named chrome branch without deriving a numeric state index.
+fn chrome_visual(values: &AssetChromeVisuals, state: ChromeState) -> AssetVisual {
+    match state {
+        ChromeState::Base => values.base,
+        ChromeState::Active => values.active,
+        ChromeState::Disabled => values.disabled,
+    }
+}
+
+/// Selects one mutable named chrome branch without deriving a numeric state index.
+fn chrome_visual_mut(values: &mut AssetChromeVisuals, state: ChromeState) -> &mut AssetVisual {
+    match state {
+        ChromeState::Base => &mut values.base,
+        ChromeState::Active => &mut values.active,
+        ChromeState::Disabled => &mut values.disabled,
+    }
 }
 
 /// Selects and validates the destination geometry shared by every state of one role.
@@ -935,9 +980,9 @@ impl SurfaceAppearanceDocument {
     }
 
     /// Returns every surface state paired with its optional authored value.
-    fn states(&self) -> [(SurfaceState, Option<&VisualOverrideDocument>); SurfaceState::COUNT] {
+    fn states(&self) -> [(SurfaceState, Option<&VisualOverrideDocument>); 2] {
         // Declaration order matches the runtime surface catalog.
-        [(SurfaceState::NORMAL, self.normal.as_ref()), (SurfaceState::DISABLED, self.disabled.as_ref())]
+        [(SurfaceState::Normal, self.normal.as_ref()), (SurfaceState::Disabled, self.disabled.as_ref())]
     }
 }
 
@@ -986,16 +1031,16 @@ impl ControlAppearanceDocument {
     }
 
     /// Returns every concrete nested control state and its optional authored value.
-    fn states(&self) -> [(ControlState, Option<&VisualOverrideDocument>); ControlState::COUNT] {
+    fn states(&self) -> [(ControlState, Option<&VisualOverrideDocument>); 7] {
         // This order is the exact flattened storage order internal to the control family only.
         [
             (ControlState::Disabled, self.disabled.as_ref()),
-            (ControlState::Enabled(PointerState::NORMAL), self.enabled.normal.as_ref()),
-            (ControlState::Enabled(PointerState::HOVERED), self.enabled.hovered.as_ref()),
-            (ControlState::Enabled(PointerState::PRESSED), self.enabled.pressed.as_ref()),
-            (ControlState::Focused(PointerState::NORMAL), self.focused.normal.as_ref()),
-            (ControlState::Focused(PointerState::HOVERED), self.focused.hovered.as_ref()),
-            (ControlState::Focused(PointerState::PRESSED), self.focused.pressed.as_ref()),
+            (ControlState::Enabled(PointerState::Normal), self.enabled.normal.as_ref()),
+            (ControlState::Enabled(PointerState::Hovered), self.enabled.hovered.as_ref()),
+            (ControlState::Enabled(PointerState::Pressed), self.enabled.pressed.as_ref()),
+            (ControlState::Focused(PointerState::Normal), self.focused.normal.as_ref()),
+            (ControlState::Focused(PointerState::Hovered), self.focused.hovered.as_ref()),
+            (ControlState::Focused(PointerState::Pressed), self.focused.pressed.as_ref()),
         ]
     }
 }
@@ -1039,15 +1084,15 @@ impl MenuAppearanceDocument {
     }
 
     /// Returns every menu state paired with its optional authored value.
-    fn states(&self) -> [(MenuState, Option<&VisualOverrideDocument>); MenuState::COUNT] {
+    fn states(&self) -> [(MenuState, Option<&VisualOverrideDocument>); 6] {
         // Declaration order matches the runtime menu catalog.
         [
-            (MenuState::NORMAL, self.normal.as_ref()),
-            (MenuState::HOVERED, self.hovered.as_ref()),
-            (MenuState::PRESSED, self.pressed.as_ref()),
-            (MenuState::FOCUSED, self.focused.as_ref()),
-            (MenuState::OPEN, self.open.as_ref()),
-            (MenuState::DISABLED, self.disabled.as_ref()),
+            (MenuState::Normal, self.normal.as_ref()),
+            (MenuState::Hovered, self.hovered.as_ref()),
+            (MenuState::Pressed, self.pressed.as_ref()),
+            (MenuState::Focused, self.focused.as_ref()),
+            (MenuState::Open, self.open.as_ref()),
+            (MenuState::Disabled, self.disabled.as_ref()),
         ]
     }
 }
@@ -1075,12 +1120,12 @@ impl ChromeAppearanceDocument {
     }
 
     /// Returns every chrome state paired with its optional authored value.
-    fn states(&self) -> [(ChromeState, Option<&VisualOverrideDocument>); ChromeState::COUNT] {
+    fn states(&self) -> [(ChromeState, Option<&VisualOverrideDocument>); 3] {
         // Declaration order matches the runtime chrome catalog.
         [
-            (ChromeState::BASE, self.base.as_ref()),
-            (ChromeState::ACTIVE, self.active.as_ref()),
-            (ChromeState::DISABLED, self.disabled.as_ref()),
+            (ChromeState::Base, self.base.as_ref()),
+            (ChromeState::Active, self.active.as_ref()),
+            (ChromeState::Disabled, self.disabled.as_ref()),
         ]
     }
 }

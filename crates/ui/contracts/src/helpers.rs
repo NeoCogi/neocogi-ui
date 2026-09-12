@@ -270,9 +270,9 @@ impl core::ops::BitOr for WindowOptions {
     }
 }
 
-/// Bulk asset semantic schema, including canonical appearance role/state table order.
-/// Bump when table ordering, mandatory resource names or implicit interpretation changes.
-pub const ASSET_SCHEMA_VERSION: u32 = 1;
+/// Bulk asset semantic schema, including role order and structured appearance interpretation.
+/// Bump when role ordering, named appearance fields, or mandatory resource meaning changes.
+pub const ASSET_SCHEMA_VERSION: u32 = 2;
 
 /// Maximum uncompressed RGBA storage accepted by all asset consumers.
 pub const MAX_ASSET_PIXELS_BYTES: usize = 64 * 1024 * 1024;

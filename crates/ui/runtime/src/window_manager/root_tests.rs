@@ -214,7 +214,7 @@ impl crate::LeafWidget for CompleteSkinMeasureProbe {
         // Foreground color is paint-only for built-ins. Observing it here proves the complete skin
         // revision covers every value visible to a custom widget's public measurement contract.
         self.measures.set(self.measures.get() + 1);
-        Dimensioni::new(i32::from(style.menu(MenuRole::POPUP, MenuState::NORMAL).content_color.r).max(1), 10)
+        Dimensioni::new(i32::from(style.menu(MenuRole::POPUP, MenuState::Normal).content_color.r).max(1), 10)
     }
 }
 
@@ -887,19 +887,19 @@ fn active_window_and_only_its_remembered_widget_use_role_state_visuals() {
     let mut style = test_skin(&atlas);
     let widget_focus = color(7, 17, 29, 255);
     let window_activation = color(31, 47, 61, 255);
-    let active_frame = NinePatch::framed(style.chrome(ChromeRole::WINDOW_FRAME, ChromeState::BASE).patch.insets, window_activation, None);
-    replace_chrome_patch(&mut style, ChromeRole::WINDOW_FRAME, ChromeState::ACTIVE, active_frame);
-    replace_chrome_patch(&mut style, ChromeRole::TITLE, ChromeState::ACTIVE, NinePatch::solid(window_activation));
+    let active_frame = NinePatch::framed(style.chrome(ChromeRole::WINDOW_FRAME, ChromeState::Base).patch.insets, window_activation, None);
+    replace_chrome_patch(&mut style, ChromeRole::WINDOW_FRAME, ChromeState::Active, active_frame);
+    replace_chrome_patch(&mut style, ChromeRole::TITLE, ChromeState::Active, NinePatch::solid(window_activation));
     replace_control_patch(
         &mut style,
         ControlRole::BUTTON,
-        ControlState::Focused(PointerState::NORMAL),
+        ControlState::Focused(PointerState::Normal),
         NinePatch::solid(widget_focus),
     );
     replace_control_patch(
         &mut style,
         ControlRole::BUTTON,
-        ControlState::Focused(PointerState::HOVERED),
+        ControlState::Focused(PointerState::Hovered),
         NinePatch::solid(widget_focus),
     );
     let (backend, log) = recording_backend(atlas);
@@ -968,13 +968,13 @@ fn modal_dialog_uses_its_own_active_frame_role() {
     replace_chrome_patch(
         &mut style,
         ChromeRole::WINDOW_FRAME,
-        ChromeState::ACTIVE,
+        ChromeState::Active,
         NinePatch::framed(frame_insets, window_frame_color, None),
     );
     replace_chrome_patch(
         &mut style,
         ChromeRole::DIALOG_FRAME,
-        ChromeState::ACTIVE,
+        ChromeState::Active,
         NinePatch::framed(frame_insets, dialog_frame_color, None),
     );
 
@@ -1030,7 +1030,7 @@ fn deactivated_window_keeps_enabled_child_widget_appearance() {
         }
     });
     replace_chrome_patches(&mut style, ChromeRole::WINDOW_FRAME, |state| {
-        let border = if state == ChromeState::ACTIVE {
+        let border = if state == ChromeState::Active {
             active_window_color
         } else {
             base_window_color
@@ -1112,19 +1112,19 @@ fn disabled_window_propagates_disabled_presentation_and_rejects_input() {
     replace_surface_patch(
         &mut style,
         SurfaceRole::WINDOW,
-        SurfaceState::DISABLED,
+        SurfaceState::Disabled,
         NinePatch::solid(disabled_surface_color),
     );
     replace_chrome_patch(
         &mut style,
         ChromeRole::WINDOW_FRAME,
-        ChromeState::DISABLED,
+        ChromeState::Disabled,
         NinePatch::framed(crate::SliceInsets::uniform(2), disabled_frame_color, None),
     );
     replace_chrome_patch(
         &mut style,
         ChromeRole::WINDOW_FRAME,
-        ChromeState::ACTIVE,
+        ChromeState::Active,
         NinePatch::framed(crate::SliceInsets::uniform(2), forbidden_active_frame_color, None),
     );
     replace_control_patch(
@@ -1133,8 +1133,8 @@ fn disabled_window_propagates_disabled_presentation_and_rejects_input() {
         ControlState::Disabled,
         NinePatch::solid(disabled_caption_color),
     );
-    replace_menu_patch(&mut style, MenuRole::BAR, MenuState::DISABLED, NinePatch::solid(disabled_menu_color));
-    replace_menu_content_color(&mut style, MenuRole::TITLE, MenuState::DISABLED, disabled_menu_text_color);
+    replace_menu_patch(&mut style, MenuRole::BAR, MenuState::Disabled, NinePatch::solid(disabled_menu_color));
+    replace_menu_content_color(&mut style, MenuRole::TITLE, MenuState::Disabled, disabled_menu_text_color);
     replace_control_patch(
         &mut style,
         ControlRole::CHECKBOX,
@@ -1377,7 +1377,7 @@ fn tab_focused_disclosure_uses_only_its_focused_role_state_visual() {
     replace_control_patch(
         &mut style,
         ControlRole::ITEM,
-        ControlState::Focused(PointerState::NORMAL),
+        ControlState::Focused(PointerState::Normal),
         NinePatch::solid(focused_fill),
     );
     let (backend, log) = recording_backend(atlas);
@@ -1456,9 +1456,9 @@ fn global_skin_revision_invalidates_measurements_lazily_in_hidden_surfaces() {
     // complete Skin revision; revealing later must not revive the earlier generation's entry.
     ctx.ui().set_window_visible(&window, false).unwrap();
     let mut replacement = ctx.skin().clone();
-    let mut content_color = replacement.menu(MenuRole::POPUP, MenuState::NORMAL).content_color;
+    let mut content_color = replacement.menu(MenuRole::POPUP, MenuState::Normal).content_color;
     content_color.r = content_color.r.wrapping_add(1);
-    replace_menu_content_color(&mut replacement, MenuRole::POPUP, MenuState::NORMAL, content_color);
+    replace_menu_content_color(&mut replacement, MenuRole::POPUP, MenuState::Normal, content_color);
     ctx.set_skin(replacement);
     ctx.update_ui(dimensions);
     assert_eq!(measures.get(), warmed, "hidden widget trees must not be traversed during the style commit");
@@ -2218,9 +2218,9 @@ fn combo_popup_choice_hover_resolves_the_item_hovered_focused_appearance() {
     let hovered_focused_color = color(173, 191, 211, 255);
     replace_control_patches(&mut style, ControlRole::ITEM, |state| {
         NinePatch::solid(match state {
-            ControlState::Enabled(PointerState::HOVERED) => hovered_color,
-            ControlState::Focused(PointerState::NORMAL) => focused_color,
-            ControlState::Focused(PointerState::HOVERED) => hovered_focused_color,
+            ControlState::Enabled(PointerState::Hovered) => hovered_color,
+            ControlState::Focused(PointerState::Normal) => focused_color,
+            ControlState::Focused(PointerState::Hovered) => hovered_focused_color,
             _ => normal_color,
         })
     });
@@ -3774,7 +3774,7 @@ fn declarative_menu_popups_follow_heading_and_submenu_edges_when_the_window_move
     // Both popup levels use MenuPopup as their sole shell and place compact rows directly inside
     // it. Root padding and WindowFrame must not create a second inset at either menu depth.
     let popup_rows = ctx.debug_active_menu_row_rects();
-    let border = ctx.skin().menu(MenuRole::POPUP, MenuState::NORMAL).patch.insets.left;
+    let border = ctx.skin().menu(MenuRole::POPUP, MenuState::Normal).patch.insets.left;
     for (popup, rows) in open_popups.iter().zip(&popup_rows) {
         let first = rows.first().expect("each declared test menu must contain a row");
         let last = rows.last().unwrap();
@@ -4008,10 +4008,10 @@ fn outside_widget_press_clears_closed_menu_heading_hover() {
     let title_focused = color(131, 149, 167, 255);
     let title_open = color(181, 197, 211, 255);
     let mut style = test_skin(&atlas);
-    replace_menu_patch(&mut style, MenuRole::TITLE, MenuState::NORMAL, NinePatch::solid(title_normal));
-    replace_menu_patch(&mut style, MenuRole::TITLE, MenuState::HOVERED, NinePatch::solid(title_hovered));
-    replace_menu_patch(&mut style, MenuRole::TITLE, MenuState::FOCUSED, NinePatch::solid(title_focused));
-    replace_menu_patch(&mut style, MenuRole::TITLE, MenuState::OPEN, NinePatch::solid(title_open));
+    replace_menu_patch(&mut style, MenuRole::TITLE, MenuState::Normal, NinePatch::solid(title_normal));
+    replace_menu_patch(&mut style, MenuRole::TITLE, MenuState::Hovered, NinePatch::solid(title_hovered));
+    replace_menu_patch(&mut style, MenuRole::TITLE, MenuState::Focused, NinePatch::solid(title_focused));
+    replace_menu_patch(&mut style, MenuRole::TITLE, MenuState::Open, NinePatch::solid(title_open));
 
     let (_, action) = MenuItem::create(MenuItemParameters::new("Action"));
     let (_, button) = Button::create(ButtonParameters::new("Outside target"));
@@ -4165,7 +4165,7 @@ fn standalone_popup_menu_reuses_compact_menu_input_layout_and_events() {
     let rows = ctx.debug_active_menu_row_rects();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].len(), 3);
-    let border = ctx.skin().menu(MenuRole::POPUP, MenuState::NORMAL).patch.insets.left;
+    let border = ctx.skin().menu(MenuRole::POPUP, MenuState::Normal).patch.insets.left;
     assert_eq!(rows[0][0].x, outer.x + border);
     assert_eq!(rows[0][2].y + rows[0][2].height + border, outer.y + outer.height);
 

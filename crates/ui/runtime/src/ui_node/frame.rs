@@ -70,8 +70,8 @@ pub(crate) fn frame_visual(style: &Skin, role: FrameRole, control_state: Control
 /// Resolves the stable state used for frame geometry during measurement and placement.
 pub(crate) fn normal_frame_visual(style: &Skin, role: FrameRole) -> Visual {
     match role {
-        FrameRole::Surface(role) => style.surface(role, SurfaceState::NORMAL),
-        FrameRole::Control(role) => style.control(role, ControlState::Enabled(crate::PointerState::NORMAL)),
+        FrameRole::Surface(role) => style.surface(role, SurfaceState::Normal),
+        FrameRole::Control(role) => style.control(role, ControlState::Enabled(crate::PointerState::Normal)),
     }
 }
 
