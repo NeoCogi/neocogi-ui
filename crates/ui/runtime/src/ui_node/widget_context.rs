@@ -576,7 +576,7 @@ impl<'a> WidgetPaintCtx<'a> {
         let screen_content_bounds = self.common.content_rect;
         let screen_clip = self.screen_draw_clip();
         match &mut self.output {
-            PaintOutput::Frame(display_list) => Painter::for_widget(*display_list, screen_content_bounds, screen_clip),
+            PaintOutput::Frame(display_list) => Painter::for_widget(display_list, screen_content_bounds, screen_clip),
             PaintOutput::Scoped { .. } => unreachable!("built-in COM painting uses typed WidgetPaintCtx operations"),
         }
     }
