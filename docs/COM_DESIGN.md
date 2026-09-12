@@ -13,7 +13,7 @@ artifacts but does not construct arbitrary classes.
        -> ABI layouts and typed wrappers compiled into host/plugin
        -> MODULE reference imports the exact native description getter
   -> fingerprint-qualified contract library
-       -> one canonical immutable description graph
+       -> one compact immutable identity graph
 
 plugin implementation
   -> private Rust state + generated COM object storage
@@ -30,7 +30,8 @@ The split is deliberate:
 
 - The contract crate gives Rust code types it can compile and call.
 - The native contract library is the single runtime source of descriptive
-  truth for one exact module revision.
+  identity and dependency metadata for one exact module revision. It does not
+  expose the original IDL source.
 - The plugin owns executable implementation and construction policy.
 - The runtime owns cross-artifact validation, registration, inspection, and
   module lifetime.
@@ -210,18 +211,18 @@ pointers cannot dangle.
 The runtime stores only accepted immutable descriptions, relationship indexes,
 and retained module provenance. It does not copy implementation state,
 constructors, or generated Rust bindings. Offline inspection borrows a validated
-factory description during a synchronous callback and copies it into a
-factory-native schema-7 artifact.
+factory description during a synchronous callback and copies its structured
+metadata into a factory-native schema-8 artifact.
 
 The contract library stores:
 
 - module name/ID and full ABI fingerprint;
-- canonical IDL source;
 - declaration name/ID/version/kind/threading summaries;
 - exact dependency getters.
 
 It does not store:
 
+- original `.ncidl` source;
 - private Rust fields or object instances;
 - implementation vtables or factory code;
 - runtime registry state;

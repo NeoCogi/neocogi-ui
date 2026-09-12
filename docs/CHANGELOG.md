@@ -22,11 +22,14 @@ wrappers. The accepted migration and outstanding validation are recorded in
   unchecked validation, one statically linked runtime, and direct registration
   of the linked UI, renderer, and asset descriptors.
 - Record the selected COM validation mode in core ABI v7 plugin descriptions and
-  schema-v7 inspection artifacts. Dynamic assembly planning now rejects plugins
+  schema-v8 inspection artifacts. Dynamic assembly planning now rejects plugins
   built with different modes before staging `plugins.txt`.
 - Add one-Cargo-crate-per-module Rust-like IDL generation. Dynamic assemblies
   stage fingerprint-qualified contract libraries and factory-only plugins;
   loading and inspection reject conflicting revisions before publication.
+- Keep native contract descriptions metadata-only. Contract libraries and
+  schema-v8 inspection output retain identities, fingerprints, declarations,
+  and dependencies without embedding or exposing the original `.ncidl` source.
 - Split optional asset authoring into the `neocogi.ui_assets` contract module.
   Its generated factories reuse `Size`, `AssetMetrics`, `FlatPalette`, native
   paths, bundles, and texture interfaces from `neocogi.ui`, producing a real
