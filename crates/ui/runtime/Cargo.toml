@@ -17,11 +17,6 @@ crate-type = ["rlib"]
 
 [features]
 default = []
-# The assembly selects one validation representation for the complete graph.
-com-validation-none = ["neocogi-com/com-validation-none"]
-com-validation-sha-256 = ["neocogi-com/com-validation-sha-256"]
-com-validation-fnv-1a-128 = ["neocogi-com/com-validation-fnv-1a-128"]
-com-validation-mangling = ["neocogi-com/com-validation-mangling"]
 # Only deployable dynamic libraries publish the plugin descriptor entrypoint.
 dynamic-plugin = []
 

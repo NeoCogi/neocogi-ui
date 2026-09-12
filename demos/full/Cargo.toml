@@ -9,13 +9,6 @@ repository.workspace = true
 
 [features]
 default = ["glow"]
-# Each option forwards one validation representation through every statically
-# visible part of the application graph. cargo-neocogi applies the same option
-# to separately linked runtime and plugin roots.
-com-validation-none = ["neocogi-com/com-validation-none", "neocogi-com-runtime/com-validation-none", "neocogi-ui-runtime/com-validation-none", "neocogi-render-plugin/com-validation-none", "neocogi-assets/com-validation-none"]
-com-validation-sha-256 = ["neocogi-com/com-validation-sha-256", "neocogi-com-runtime/com-validation-sha-256", "neocogi-ui-runtime/com-validation-sha-256", "neocogi-render-plugin/com-validation-sha-256", "neocogi-assets/com-validation-sha-256"]
-com-validation-fnv-1a-128 = ["neocogi-com/com-validation-fnv-1a-128", "neocogi-com-runtime/com-validation-fnv-1a-128", "neocogi-ui-runtime/com-validation-fnv-1a-128", "neocogi-render-plugin/com-validation-fnv-1a-128", "neocogi-assets/com-validation-fnv-1a-128"]
-com-validation-mangling = ["neocogi-com/com-validation-mangling", "neocogi-com-runtime/com-validation-mangling", "neocogi-ui-runtime/com-validation-mangling", "neocogi-render-plugin/com-validation-mangling", "neocogi-assets/com-validation-mangling"]
 # Link the runtime and all three implementation descriptors into one executable.
 monolith = ["neocogi-demo-host/monolith"]
 glow = ["neocogi-demo-host/glow", "neocogi-render-plugin/glow"]
@@ -37,7 +30,7 @@ rs-math3d.workspace = true
 # Dynamic assembly roots add `dynamic-plugin`; monoliths call descriptors directly.
 neocogi-com-runtime.workspace = true
 neocogi-ui-runtime = { path = "../../crates/ui/runtime" }
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "bfe71b5c123c99c100ad50149f945251c1a4d9ee", default-features = false }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "ac978f3d1b93e9711d06abdc36ae41e04f8aaba5", default-features = false }
 neocogi-assets = { workspace = true, features = ["theme-json"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
