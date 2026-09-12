@@ -94,7 +94,7 @@ impl TextBlockParameters {
         Self {
             text: text.into(),
             wrap,
-            font: FontRef::Role(FontRole::BODY),
+            font: FontRef::Role(FontRole::Body),
             opt: WidgetOption::NO_INTERACT,
         }
     }
@@ -185,7 +185,7 @@ impl TextBlock {
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
         let color = ctx
             .skin()
-            .surface(SurfaceRole::GENERIC_FRAME, SurfaceState::from_enabled(ctx.enabled()))
+            .surface(SurfaceRole::GenericFrame, SurfaceState::from_enabled(ctx.enabled()))
             .content_color;
         let line_height = ctx.atlas().get_font_height(font) as i32;
         let baseline = ctx.atlas().get_font_baseline(font);
@@ -285,7 +285,7 @@ mod tests {
         let mut block = TextBlock::from(TextBlockParameters {
             text: "a\r\nb\rc\n".to_owned(),
             wrap: TextWrap::None,
-            font: FontRef::Role(FontRole::BODY),
+            font: FontRef::Role(FontRole::Body),
             opt: WidgetOption::NO_INTERACT,
         });
         assert_eq!(block.text(), "a\nb\nc\n");
@@ -340,7 +340,7 @@ impl neocogi_ui_contracts::TextBlock for TextBlock {
         let previous = self.text().to_owned();
         self.set_text(input);
         if self.text() != previous {
-            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+            self.runtime_mut().state.record_change(GeometryChange::Changed);
         }
         Ok(())
     }
@@ -348,8 +348,8 @@ impl neocogi_ui_contracts::TextBlock for TextBlock {
     fn wrapping(&self) -> Result<TextWrapping, NcStatus> {
         self.runtime().state.readable()?;
         Ok(match self.com_wrap() {
-            crate::TextWrap::None => TextWrapping::NONE,
-            crate::TextWrap::Word => TextWrapping::WORD,
+            crate::TextWrap::None => TextWrapping::None,
+            crate::TextWrap::Word => TextWrapping::Word,
         })
     }
     /// Rejects unknown policies before mutating semantic state or its geometry marker.
@@ -358,7 +358,7 @@ impl neocogi_ui_contracts::TextBlock for TextBlock {
         let wrap = crate::ui_node::widget_object::local_wrap(wrapping)?;
         if self.com_wrap() != wrap {
             self.com_set_wrap(wrap);
-            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+            self.runtime_mut().state.record_change(GeometryChange::Changed);
         }
         Ok(())
     }

@@ -97,7 +97,7 @@ impl Model {
     fn finish(&mut self, outcome: FileDialogCompleted) -> Result<(), NcStatus> {
         if self.request.active.get() {
             if self.window.snapshot().is_ok() {
-                self.window.set_visibility(Visibility::HIDDEN)?;
+                self.window.set_visibility(Visibility::Hidden)?;
             }
             self.request.finish(outcome);
         }
@@ -191,7 +191,7 @@ impl EventHandler<Model, WindowEvent> for Lifecycle {
     fn handle(&mut self, model: &mut Model, event: &WindowEvent) -> Result<(), NcStatus> {
         match event {
             WindowEvent::Hidden | WindowEvent::CloseRequested
-                if model.request.active.get() && model.window.snapshot().is_ok_and(|snapshot| snapshot.visibility == Visibility::HIDDEN) =>
+                if model.request.active.get() && model.window.snapshot().is_ok_and(|snapshot| snapshot.visibility == Visibility::Hidden) =>
             {
                 model.finish(FileDialogCompleted::Cancelled)?;
             }
@@ -235,7 +235,7 @@ fn label(runtime: &Runtime, value: &str) -> Result<TextBlockWidget, NcStatus> {
     Ok(TextBlockWidget::from_interface(
         runtime
             .widget_factory()
-            .create_text_block(NcCopyFromBufferOffset::new(0, value.as_bytes()), TextWrapping::NONE)?,
+            .create_text_block(NcCopyFromBufferOffset::new(0, value.as_bytes()), TextWrapping::None)?,
     ))
 }
 /// Constructs a complete command Button through the dynamically implemented factory shorthand.
@@ -260,7 +260,7 @@ fn column(runtime: &Runtime, directory: &Path, paths: Vec<PathBuf>, folder: bool
             path.file_name().unwrap_or(path.as_os_str()).to_string_lossy()
         };
         let mut item = ListItemWidget::from_interface(runtime.widget_factory().create_list_item(NcCopyFromBufferOffset::new(0, display.as_bytes()))?);
-        item.set_icon_role(if folder { ContentIcon::CLOSED_FOLDER } else { ContentIcon::FILE })?;
+        item.set_icon_role(if folder { ContentIcon::ClosedFolder } else { ContentIcon::File })?;
         children.push((item.node_interface()?, LayoutTrack::Content));
         rows.push((item, if folder { Action::Folder(path) } else { Action::File(path) }));
     }
@@ -268,7 +268,7 @@ fn column(runtime: &Runtime, directory: &Path, paths: Vec<PathBuf>, folder: bool
         children.push((label(runtime, "(empty)")?.node_interface()?, LayoutTrack::Content));
     }
     Ok(Column {
-        root: line(runtime, FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch, children)?,
+        root: line(runtime, FlowDirection::TopToBottom, CrossSize::Stretch, children)?,
         rows,
     })
 }
@@ -309,7 +309,7 @@ impl Dialog {
         let error = label(runtime, "")?;
         let toolbar = line(
             runtime,
-            FlowDirection::LEFT_TO_RIGHT,
+            FlowDirection::LeftToRight,
             CrossSize::Content,
             vec![
                 (up.node_interface()?, LayoutTrack::Fixed { extent: 56 }),
@@ -320,7 +320,7 @@ impl Dialog {
         )?;
         let browser = line(
             runtime,
-            FlowDirection::LEFT_TO_RIGHT,
+            FlowDirection::LeftToRight,
             CrossSize::Stretch,
             vec![
                 (folders.node_interface()?, LayoutTrack::Flex { weight: 1.0 }),
@@ -329,7 +329,7 @@ impl Dialog {
         )?;
         let filename_line = line(
             runtime,
-            FlowDirection::LEFT_TO_RIGHT,
+            FlowDirection::LeftToRight,
             CrossSize::Content,
             vec![
                 (label(runtime, "File name:")?.node_interface()?, LayoutTrack::Fixed { extent: 86 }),
@@ -338,7 +338,7 @@ impl Dialog {
         )?;
         let actions = line(
             runtime,
-            FlowDirection::LEFT_TO_RIGHT,
+            FlowDirection::LeftToRight,
             CrossSize::Content,
             vec![
                 (label(runtime, "")?.node_interface()?, LayoutTrack::Flex { weight: 1.0 }),
@@ -348,7 +348,7 @@ impl Dialog {
         )?;
         let shell = line(
             runtime,
-            FlowDirection::TOP_TO_BOTTOM,
+            FlowDirection::TopToBottom,
             CrossSize::Stretch,
             vec![
                 (toolbar.node_interface()?, LayoutTrack::Content),
@@ -479,7 +479,7 @@ impl Dialog {
         })?;
         let listing = self.candidate(&mut model, &directory)?;
         // Modal eligibility is checked before replacing existing request data.
-        model.window.set_visibility(Visibility::VISIBLE)?;
+        model.window.set_visibility(Visibility::Visible)?;
         self.install(&mut model, directory, listing, true)?;
         model.window.set_title(NcCopyFromBufferOffset::new(0, title.as_bytes()))?;
         model.window.set_rect(rect)?;

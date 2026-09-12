@@ -271,13 +271,13 @@ impl DisclosureHeader {
         // Resolve icon and text metrics independently, then build the one-row content preference.
         let padding = style.metrics.padding.max(0);
         let vertical_pad = (padding / 2).max(1);
-        let body_font = style.resolve_font_role(atlas, crate::FontRole::BODY);
+        let body_font = style.resolve_font_role(atlas, crate::FontRole::Body);
         let font_height = atlas.get_font_height(body_font) as i32;
         // Expansion changes only presentation state, not the header's retained allocation. Reserve
         // the component-wise maximum of both possible icons so toggling cannot clip a larger
         // collapse image or require a state-dependent measurement invalidation.
-        let expand_icon = atlas.get_icon_size(style.resolve_icon_role(atlas, crate::IconRole::EXPAND));
-        let collapse_icon = atlas.get_icon_size(style.resolve_icon_role(atlas, crate::IconRole::COLLAPSE));
+        let expand_icon = atlas.get_icon_size(style.resolve_icon_role(atlas, crate::IconRole::Expand));
+        let collapse_icon = atlas.get_icon_size(style.resolve_icon_role(atlas, crate::IconRole::Collapse));
         let icon = Dimensioni::new(expand_icon.width.max(collapse_icon.width), expand_icon.height.max(collapse_icon.height));
         let text_width = if self.label.is_empty() {
             0
@@ -324,35 +324,35 @@ impl Widget for DisclosureHeader {
         // Common traversal already paints and insets a requested frame. An unframed
         // header supplies only the item center for hover/selection feedback.
         if !ctx.options().intersects(WidgetOption::FRAME) {
-            ctx.draw_control_center(ControlRole::ITEM, row);
+            ctx.draw_control_center(ControlRole::Item, row);
         }
 
         // Reserve a square icon cell from row height, then paint text in the remaining rectangle.
         let content_role = if self.variant == DisclosureVariant::Header && ctx.options().intersects(WidgetOption::FRAME) {
-            ControlRole::BUTTON
+            ControlRole::Button
         } else {
-            ControlRole::ITEM
+            ControlRole::Item
         };
         let text_color = ctx.control_content_color(content_role);
         let icon = if expanded {
-            ctx.skin().resolve_icon_role(ctx.atlas(), crate::IconRole::COLLAPSE)
+            ctx.skin().resolve_icon_role(ctx.atlas(), crate::IconRole::Collapse)
         } else {
-            ctx.skin().resolve_icon_role(ctx.atlas(), crate::IconRole::EXPAND)
+            ctx.skin().resolve_icon_role(ctx.atlas(), crate::IconRole::Expand)
         };
         ctx.draw_icon(icon, Recti::new(row.x, row.y, row.height, row.height), text_color);
         // text_offset = row_height - padding.
         let offset = row.height.saturating_sub(ctx.skin().metrics.padding);
         // text_x = row_x + text_offset; text_width = row_width - text_offset.
         let text_rect = Recti::new(row.x.saturating_add(offset), row.y, row.width.saturating_sub(offset), row.height);
-        let body_font = ctx.skin().resolve_font_role(ctx.atlas(), crate::FontRole::BODY);
+        let body_font = ctx.skin().resolve_font_role(ctx.atlas(), crate::FontRole::Body);
         ctx.draw_control_text_with_font(body_font, &self.label, text_rect, content_role, ctx.options());
     }
 
     /// Selects one shared frame for measurement, hit geometry and painting.
     fn frame_appearance_role(&self) -> crate::FrameRole {
         crate::FrameRole::Control(match self.variant {
-            DisclosureVariant::Header => ControlRole::BUTTON,
-            DisclosureVariant::Tree => ControlRole::ITEM,
+            DisclosureVariant::Header => ControlRole::Button,
+            DisclosureVariant::Tree => ControlRole::Item,
         })
     }
 
@@ -574,7 +574,7 @@ impl ITextContent for DisclosureHeader {
         let label = crate::boundary::text(input)?;
         if self.com_label() != label {
             self.com_set_label(label);
-            self.runtime_mut().state.record_change(neocogi_ui_contracts::GeometryChange::CHANGED);
+            self.runtime_mut().state.record_change(neocogi_ui_contracts::GeometryChange::Changed);
         }
         Ok(())
     }
@@ -607,8 +607,8 @@ impl Disclosure {
         let label = crate::boundary::text(label)?;
         host.check_mutation()?;
         let variant = match style {
-            DisclosureStyle::HEADER => DisclosureVariant::Header,
-            DisclosureStyle::TREE => DisclosureVariant::Tree,
+            DisclosureStyle::Header => DisclosureVariant::Header,
+            DisclosureStyle::Tree => DisclosureVariant::Tree,
             _ => return Err(neocogi_com::NC_E_INVALID_ARG),
         };
         let model = DisclosureState::new(expanded);
@@ -671,9 +671,9 @@ fn prepare_children(
     // disclosure. The shared scalar model contains no parent or child object backpointer.
     let header = DisclosureHeader::create_com(host.clone(), variant.header_options(), model, label, variant, resources)?;
     let body = if let Some(resources) = resources {
-        super::Linear::create_com(host.clone(), resources.clone(), FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch.into())?
+        super::Linear::create_com(host.clone(), resources.clone(), FlowDirection::TopToBottom, CrossSize::Stretch.into())?
     } else {
-        let value = super::Linear::build(host.clone(), FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch.into(), None)?;
+        let value = super::Linear::build(host.clone(), FlowDirection::TopToBottom, CrossSize::Stretch.into(), None)?;
         super::Linear::from_value(value).query().expect("Linear declares its callable class contract")
     };
     let editor = host.create_children()?;

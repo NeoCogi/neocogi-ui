@@ -472,7 +472,7 @@ pub(crate) trait ScrollComposition: Widget {
 
     /// Returns the common panel appearance used by every fixed scrolling composition.
     fn scroll_frame_role(&self) -> FrameRole {
-        FrameRole::Surface(SurfaceRole::PANEL)
+        FrameRole::Surface(SurfaceRole::Panel)
     }
 
     /// Applies wheel input to the shared model and reports whether placement must run again.
@@ -494,9 +494,9 @@ pub(crate) trait ScrollComposition: Widget {
         } else {
             fallback
         };
-        ctx.draw_surface_center_state(SurfaceRole::PANEL, crate::SurfaceState::Normal, surface);
+        ctx.draw_surface_center_state(SurfaceRole::Panel, crate::SurfaceState::Normal, surface);
         if let Some(corner) = geometry.corner {
-            ctx.draw_surface_center_state(SurfaceRole::PANEL, crate::SurfaceState::Normal, corner);
+            ctx.draw_surface_center_state(SurfaceRole::Panel, crate::SurfaceState::Normal, corner);
         }
     }
 
@@ -1172,7 +1172,7 @@ mod tests {
         assert_eq!(scroll.try_read(|state| state.model.geometry.get().horizontal.is_none()), Some(true));
         let text_rect = runtime.node_rect(std::slice::from_ref(&root), text_id).unwrap();
         assert_eq!(text_rect.width, 56);
-        assert!(text_rect.height > atlas.get_font_height(style.resolve_font_role(&atlas, crate::FontRole::BODY)) as i32);
+        assert!(text_rect.height > atlas.get_font_height(style.resolve_font_role(&atlas, crate::FontRole::Body)) as i32);
     }
 
     #[test]
@@ -1237,7 +1237,7 @@ mod tests {
             metrics.scrollbar_size = 10;
         });
         let frame_insets = crate::SliceInsets::uniform(3);
-        crate::test_support::replace_surface_patches(&mut style, SurfaceRole::PANEL, |_| {
+        crate::test_support::replace_surface_patches(&mut style, SurfaceRole::Panel, |_| {
             crate::NinePatch::framed(frame_insets, crate::color(1, 2, 3, 255), Some(crate::color(4, 5, 6, 255)))
         });
         let outer = Recti::new(10, 20, 100, 80);

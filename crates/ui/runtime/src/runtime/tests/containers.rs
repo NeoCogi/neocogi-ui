@@ -84,7 +84,7 @@ impl IWidget for TestContainer {
         Ok(WidgetProperties {
             options: self.state.options()?,
             keyboard: 0,
-            frame: WidgetFrame::PANEL,
+            frame: WidgetFrame::Panel,
         })
     }
     /// Common option changes share the same sticky invalidation as built-in widgets.
@@ -94,7 +94,7 @@ impl IWidget for TestContainer {
     /// This fixture's layout inputs change through setters only.
     fn update(&mut self, _state: WidgetUpdate, _event: WidgetEventAbi, _text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
         self.state.writable()?;
-        Ok(GeometryChange::NO_CHANGE)
+        Ok(GeometryChange::NoChange)
     }
     /// Returns sticky setter changes without exporting its concrete state.
     fn take_change(&mut self) -> Result<GeometryChange, NcStatus> {
@@ -116,7 +116,7 @@ impl IContainerLayout for TestContainer {
         self.observe(scope, layout);
         self.probe.measures.set(self.probe.measures.get() + 1);
         assert_eq!(self.editor()?.clear(), Err(UI_E_BUSY));
-        assert_eq!(layout.set_participation(scope, 0, LayoutParticipation::ACTIVE), Err(UI_E_BUSY));
+        assert_eq!(layout.set_participation(scope, 0, LayoutParticipation::Active), Err(UI_E_BUSY));
         assert_eq!(layout.child_content_size(scope, 0), Err(UI_E_BUSY));
         if self.probe.fail_measure.get() {
             return Err(NC_E_INVALID_ARG);
@@ -141,9 +141,9 @@ impl IContainerLayout for TestContainer {
         let count = layout.child_count(scope)?;
         for index in 0..count {
             let participation = if self.probe.hidden.get() {
-                LayoutParticipation::HIDDEN
+                LayoutParticipation::Hidden
             } else {
-                LayoutParticipation::ACTIVE
+                LayoutParticipation::Active
             };
             layout.set_participation(scope, index, participation)?;
             layout.place_child(
@@ -323,7 +323,7 @@ fn layout_service_rejects_direct_reentry_without_holding_an_interior_borrow() {
 fn builtin_linear_reuses_track_resolution_and_validates_edges_before_mounting() {
     let runtime = runtime();
     let ui = neocogi_ui::Ui::from_interface(runtime.clone()).unwrap();
-    let mut row = ui.widgets().linear(FlowDirection::LEFT_TO_RIGHT, CrossSize::Stretch).unwrap();
+    let mut row = ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Stretch).unwrap();
     let (first, a) = recorded_leaf(&runtime);
     let (second, b) = recorded_leaf(&runtime);
     let (third, c) = recorded_leaf(&runtime);
@@ -358,7 +358,7 @@ fn builtin_linear_reuses_track_resolution_and_validates_edges_before_mounting() 
     assert!(second_rect.width > 0);
     assert!((third_rect.width - second_rect.width * 2).abs() <= 2);
     assert_eq!((first_rect.y, first_rect.height), (third_rect.y, third_rect.height));
-    row.set_direction(FlowDirection::RIGHT_TO_LEFT).unwrap();
+    row.set_direction(FlowDirection::RightToLeft).unwrap();
     runtime.update(SIZE).unwrap();
     assert!(a.latest.get().unwrap().screen.x > b.latest.get().unwrap().screen.x);
     assert!(b.latest.get().unwrap().screen.x > c.latest.get().unwrap().screen.x);
@@ -423,7 +423,7 @@ fn builtin_grid_reuses_span_placement_and_bulk_track_validation() {
 fn builtin_container_commits_replacement_metadata_before_reporting_failed_teardown() {
     let runtime = runtime();
     let ui = neocogi_ui::Ui::from_interface(runtime.clone()).unwrap();
-    let mut row = ui.widgets().linear(FlowDirection::LEFT_TO_RIGHT, CrossSize::Stretch).unwrap();
+    let mut row = ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Stretch).unwrap();
     let (first, previous) = recorded_leaf(&runtime);
     previous.fail_close.set(true);
     row.insert(0, &first, LinearEdge::new(LayoutTrack::Fixed { extent: 40 }))
@@ -452,7 +452,7 @@ fn builtin_scroll_area_uses_real_children_and_shared_sticky_invalidation() {
     let runtime = runtime();
     let ui = neocogi_ui::Ui::from_interface(runtime.clone()).unwrap();
     let text = format!("{}\n{}", "wide".repeat(80), "another line\n".repeat(50));
-    let mut content = ui.widgets().text_block(&text, TextWrapping::NONE).unwrap();
+    let mut content = ui.widgets().text_block(&text, TextWrapping::None).unwrap();
     let mut scroll = ui.widgets().scroll_area(&content, true).unwrap();
     let root = scroll.node_interface().unwrap();
     assert_eq!(root.query::<IContainerAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
@@ -460,8 +460,8 @@ fn builtin_scroll_area_uses_real_children_and_shared_sticky_invalidation() {
     assert_eq!(structural.child_count().unwrap(), 3);
     let mut horizontal = structural.child(1).unwrap().query::<ScrollbarAbi>().unwrap();
     let vertical = structural.child(2).unwrap().query::<ScrollbarAbi>().unwrap();
-    assert_eq!(horizontal.range().unwrap().axis, ScrollAxis::HORIZONTAL);
-    assert_eq!(vertical.range().unwrap().axis, ScrollAxis::VERTICAL);
+    assert_eq!(horizontal.range().unwrap().axis, ScrollAxis::Horizontal);
+    assert_eq!(vertical.range().unwrap().axis, ScrollAxis::Vertical);
     let content_identity = content.node_interface().unwrap().query::<IUnknown>().unwrap();
     assert_eq!(
         scroll.content().unwrap().node_interface().unwrap().query::<IUnknown>().unwrap().as_ptr(),
@@ -497,7 +497,7 @@ fn builtin_scroll_area_uses_real_children_and_shared_sticky_invalidation() {
     assert_eq!(disabled.maximum, Point::default());
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     scroll.set_enabled(true).unwrap();
-    let replacement = ui.widgets().text_block("short replacement", TextWrapping::NONE).unwrap();
+    let replacement = ui.widgets().text_block("short replacement", TextWrapping::None).unwrap();
     scroll.replace_content(&replacement).unwrap().finish().unwrap();
     assert_eq!(content.text(), Err(UI_E_CLOSED));
     runtime.update(SIZE).unwrap();
@@ -514,10 +514,10 @@ fn builtin_scroll_area_uses_real_children_and_shared_sticky_invalidation() {
 fn nested_com_scroll_areas_preserve_boundary_bubbling() {
     let runtime = runtime();
     let ui = neocogi_ui::Ui::from_interface(runtime.clone()).unwrap();
-    let text = ui.widgets().text_block(&"nested content\n".repeat(60), TextWrapping::NONE).unwrap();
+    let text = ui.widgets().text_block(&"nested content\n".repeat(60), TextWrapping::None).unwrap();
     let mut inner = ui.widgets().scroll_area(&text, true).unwrap();
-    let tail = ui.widgets().text_block(&"outer content\n".repeat(60), TextWrapping::NONE).unwrap();
-    let mut column = ui.widgets().linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch).unwrap();
+    let tail = ui.widgets().text_block(&"outer content\n".repeat(60), TextWrapping::None).unwrap();
+    let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     column
         .insert(0, &inner, LinearEdge::new(LayoutTrack::Fixed { extent: 110 }))
         .unwrap()
@@ -557,7 +557,7 @@ fn nested_com_scroll_areas_preserve_boundary_bubbling() {
 fn disclosure_com_header_controls_the_actual_body_without_a_parent_backpointer() {
     let runtime = runtime();
     let ui = neocogi_ui::Ui::from_interface(runtime.clone()).unwrap();
-    let mut disclosure = ui.widgets().disclosure("Tree", DisclosureStyle::TREE, false).unwrap();
+    let mut disclosure = ui.widgets().disclosure("Tree", DisclosureStyle::Tree, false).unwrap();
     let mut header = disclosure.header().unwrap();
     let mut body = disclosure.body().unwrap();
     let root = disclosure.node_interface().unwrap();
@@ -584,7 +584,7 @@ fn disclosure_com_header_controls_the_actual_body_without_a_parent_backpointer()
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     // A single Tab reaches the real header. Right expands a tree even though
     // the header's preferred size and its ordinary update result do not change.
-    for key in [KeyCode::TAB, KeyCode::ARROW_RIGHT] {
+    for key in [KeyCode::Tab, KeyCode::ArrowRight] {
         runtime
             .input(
                 UiInput::Key(KeyStroke {
@@ -625,7 +625,7 @@ fn disclosure_com_header_controls_the_actual_body_without_a_parent_backpointer()
 fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_identity() {
     let runtime = runtime();
     let ui = neocogi_ui::Ui::from_interface(runtime.clone()).unwrap();
-    let mut area = ui.widgets().text_area("a☃\r\nb\r", TextWrapping::NONE, true).unwrap();
+    let mut area = ui.widgets().text_area("a☃\r\nb\r", TextWrapping::None, true).unwrap();
     assert_eq!(area.text().unwrap(), "a☃\nb\n");
     let root = area.node_interface().unwrap();
     let identity = root.query::<IUnknown>().unwrap();
@@ -652,7 +652,7 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
     runtime
         .input(
             UiInput::Key(KeyStroke {
-                key: KeyCode::TAB,
+                key: KeyCode::Tab,
                 value: 0,
                 pressed: true,
                 repeat: false,
@@ -669,7 +669,7 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
     runtime
         .input(
             UiInput::Key(KeyStroke {
-                key: KeyCode::ENTER,
+                key: KeyCode::Enter,
                 value: 0,
                 pressed: true,
                 repeat: false,
@@ -699,10 +699,10 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
     runtime.update(SIZE).unwrap();
     assert_eq!(area.cursor().unwrap(), document.len() as u64);
     assert_eq!(scroll.info().unwrap().requested.y, scroll.info().unwrap().maximum.y);
-    area.set_wrapping(TextWrapping::WORD).unwrap();
-    area.set_font_role(FontRole::MONO).unwrap();
+    area.set_wrapping(TextWrapping::Word).unwrap();
+    area.set_font_role(FontRole::Mono).unwrap();
     runtime.update(SIZE).unwrap();
-    assert_eq!(editor.wrapping().unwrap(), TextWrapping::WORD);
+    assert_eq!(editor.wrapping().unwrap(), TextWrapping::Word);
     assert_eq!(area.set_wrapping(TextWrapping::from_raw(255)), Err(NC_E_INVALID_ARG));
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     scroll.set_enabled(false).unwrap();
@@ -718,8 +718,8 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
 #[test]
 fn disclosure_headers_use_the_common_frame_policy_for_both_variants() {
     for (style, frame, defaults) in [
-        (DisclosureStyle::HEADER, WidgetFrame::BUTTON, WidgetOptions::FRAME),
-        (DisclosureStyle::TREE, WidgetFrame::ITEM, WidgetOptions::NONE),
+        (DisclosureStyle::Header, WidgetFrame::Button, WidgetOptions::FRAME),
+        (DisclosureStyle::Tree, WidgetFrame::Item, WidgetOptions::NONE),
     ] {
         let runtime = runtime();
         let ui = neocogi_ui::Ui::from_interface(runtime.clone()).unwrap();
@@ -740,7 +740,7 @@ fn disclosure_headers_use_the_common_frame_policy_for_both_variants() {
         runtime.update(SIZE).unwrap();
         runtime.render(SIZE, renderer.as_com_ref()).unwrap();
         header.set_options(WidgetOptions::FRAME).unwrap();
-        assert_eq!(header.take_change().unwrap(), GeometryChange::NO_CHANGE);
+        assert_eq!(header.take_change().unwrap(), GeometryChange::NoChange);
         window.close().unwrap();
     }
 }

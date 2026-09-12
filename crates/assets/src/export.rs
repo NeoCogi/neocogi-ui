@@ -42,10 +42,10 @@ pub fn write_rust(data: &AssetData, destination: &Path) -> io::Result<()> {
     writeln!(
         rust,
         "            chrome: AssetChrome {{ title_alignment: TitleAlignment::{}, close_side: CaptionSide::{}, minimize_side: CaptionSide::{}, maximize_side: CaptionSide::{}, vertical_spacing: {}, minimum_extent: {}, inner_spacing: {}, show_without_activation: {}, minimized_content_height: {}, has_backdrop: {}, backdrop_rgba: {}, backdrop_padding: {} }},",
-        if c.title_alignment == TitleAlignment::LEADING {
-            "LEADING"
+        if c.title_alignment == TitleAlignment::Leading {
+            "Leading"
         } else {
-            "CENTERED"
+            "Centered"
         },
         side(c.close_side),
         side(c.minimize_side),
@@ -135,5 +135,5 @@ fn pointer_source(values: AssetPointerVisuals) -> io::Result<String> {
 
 /// Returns a source-level constant name for one previously validated caption edge.
 fn side(value: CaptionSide) -> &'static str {
-    if value == CaptionSide::LEADING { "LEADING" } else { "TRAILING" }
+    if value == CaptionSide::Leading { "Leading" } else { "Trailing" }
 }

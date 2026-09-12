@@ -80,7 +80,7 @@ impl LeafContent for PainterDemo {
         let local_width = bounds.width.max(0) as f32;
         let local_height = bounds.height.max(0) as f32;
         if local_width <= 0.0 || local_height <= 0.0 {
-            return Ok(GeometryChange::NO_CHANGE);
+            return Ok(GeometryChange::NoChange);
         }
 
         self.phase = (neocogi_demo_host::monotonic_seconds() as f32 * 1.5) % (PI * 2.0);
@@ -101,7 +101,7 @@ impl LeafContent for PainterDemo {
         }
 
         // Geometry is unchanged here; mutations through other handles invalidate their owners.
-        Ok(GeometryChange::NO_CHANGE)
+        Ok(GeometryChange::NoChange)
     }
 
     /// Records ordered lines and concave fills through the shared painter and narrowed clips.

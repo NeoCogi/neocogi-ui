@@ -33,7 +33,7 @@ impl IWidget for SceneView {
         Ok(WidgetProperties {
             options: self.state.options()?,
             keyboard: 0,
-            frame: WidgetFrame::GENERIC,
+            frame: WidgetFrame::Generic,
         })
     }
     /// Common presentation changes invalidate measurement consistently with every other widget.
@@ -44,7 +44,7 @@ impl IWidget for SceneView {
     fn update(&mut self, _state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
         self.state.writable()?;
         decode_widget_event(event, text)?;
-        Ok(GeometryChange::NO_CHANGE)
+        Ok(GeometryChange::NoChange)
     }
     /// Independent setter invalidation is sticky even when ordinary update was skipped.
     fn take_change(&mut self) -> Result<GeometryChange, NcStatus> {
@@ -67,12 +67,12 @@ impl ILeafLayout for SceneView {
         bounds.width.validate()?;
         bounds.height.validate()?;
         Ok(Size {
-            width: if bounds.width.kind == LimitKind::FINITE {
+            width: if bounds.width.kind == LimitKind::Finite {
                 320.min(bounds.width.extent)
             } else {
                 320
             },
-            height: if bounds.height.kind == LimitKind::FINITE {
+            height: if bounds.height.kind == LimitKind::Finite {
                 200.min(bounds.height.extent)
             } else {
                 200

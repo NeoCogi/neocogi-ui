@@ -71,7 +71,7 @@ fn combo_coordinates_real_popup_and_keeps_generic_list_data_in_the_static_caller
     combo.set_selection(0, "silent").unwrap();
     ui.update_with_events(SIZE, &session).unwrap();
     assert!(session.state().unwrap().changes.is_empty());
-    for key in [KeyCode::TAB, KeyCode::ENTER, KeyCode::SPACE] {
+    for key in [KeyCode::Tab, KeyCode::Enter, KeyCode::Space] {
         ui.input(
             UiInput::Key(KeyStroke {
                 key,
@@ -88,7 +88,7 @@ fn combo_coordinates_real_popup_and_keeps_generic_list_data_in_the_static_caller
     assert_eq!(combo.selected(), Ok(1));
     assert_eq!(combo.label().unwrap(), "second");
     assert_eq!(combo.is_open(), Ok(false));
-    assert_eq!(popup.visibility(), Ok(Visibility::HIDDEN));
+    assert_eq!(popup.visibility(), Ok(Visibility::Hidden));
     assert_eq!(
         session.state().unwrap().changes,
         [neocogi_ui::events::ComboChanged { selected: 1, label: "second".to_owned() }]

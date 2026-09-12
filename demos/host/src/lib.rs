@@ -149,9 +149,9 @@ impl<State: AppState> Driver<State> {
         let host = &self.host;
         loop {
             match host.window.poll(host.input.as_com_ref())? {
-                PollStatus::EVENT => continue,
-                PollStatus::IDLE => break,
-                PollStatus::CLOSE => return Ok(false),
+                PollStatus::Event => continue,
+                PollStatus::Idle => break,
+                PollStatus::Close => return Ok(false),
                 _ => return Err(HostError::Message("unknown platform polling result".to_owned())),
             }
         }

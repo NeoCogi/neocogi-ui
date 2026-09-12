@@ -583,7 +583,7 @@ impl neocogi_ui_contracts::Grid for Grid {
         let tracks = local_tracks(tracks)?;
         if self.column_tracks() != tracks {
             self.set_column_tracks(tracks);
-            self.runtime_mut().state.record_change(neocogi_ui_contracts::GeometryChange::CHANGED);
+            self.runtime_mut().state.record_change(neocogi_ui_contracts::GeometryChange::Changed);
         }
         Ok(())
     }
@@ -600,7 +600,7 @@ impl neocogi_ui_contracts::Grid for Grid {
         let tracks = local_tracks(tracks)?;
         if self.row_tracks() != tracks {
             self.set_row_tracks(tracks);
-            self.runtime_mut().state.record_change(neocogi_ui_contracts::GeometryChange::CHANGED);
+            self.runtime_mut().state.record_change(neocogi_ui_contracts::GeometryChange::Changed);
         }
         Ok(())
     }

@@ -110,7 +110,7 @@ impl LeafContent for GridWidget {
     /// Synchronizes aspect before routing a local drag or wheel zoom.
     fn update(&mut self, state: WidgetUpdate, event: WidgetEvent, _: &str) -> Result<GeometryChange, NcStatus> {
         if state.rect.width <= 0 || state.rect.height <= 0 {
-            return Ok(GeometryChange::NO_CHANGE);
+            return Ok(GeometryChange::NoChange);
         }
         let mut grid = self.data.borrow_mut();
         grid.view.set_dimension(Dimensioni::new(state.rect.width, state.rect.height));
@@ -126,7 +126,7 @@ impl LeafContent for GridWidget {
             }
             _ => {}
         }
-        Ok(GeometryChange::NO_CHANGE)
+        Ok(GeometryChange::NoChange)
     }
     /// Reuses owned geometry without holding model or cache borrows across painter calls.
     fn paint(&self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {

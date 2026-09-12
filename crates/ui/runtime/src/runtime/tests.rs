@@ -124,7 +124,7 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
     let button = factory.create_button(label, WidgetOptions::FRAME).unwrap();
     let _checkbox = factory.create_checkbox(false, label).unwrap();
     let _textbox = factory.create_textbox(label).unwrap();
-    let _text_block = factory.create_text_block(label, TextWrapping::WORD).unwrap();
+    let _text_block = factory.create_text_block(label, TextWrapping::Word).unwrap();
     let _slider = factory
         .create_slider(SliderOptions {
             value: 0.0,
@@ -140,13 +140,13 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
     let _list_box = factory.create_list_box(label).unwrap();
     let _scrollbar = factory
         .create_scrollbar(ScrollRange {
-            axis: ScrollAxis::VERTICAL,
+            axis: ScrollAxis::Vertical,
             viewport: 1,
             content: 2,
             offset: 0,
         })
         .unwrap();
-    let _linear = factory.create_linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch.into()).unwrap();
+    let _linear = factory.create_linear(FlowDirection::TopToBottom, CrossSize::Stretch.into()).unwrap();
     let tracks = [LayoutTrack::Content.into()];
     let _grid = factory
         .create_grid(
@@ -155,10 +155,10 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
         )
         .unwrap();
     let _combo = factory.create_combo().unwrap();
-    let _disclosure = factory.create_disclosure(label, DisclosureStyle::HEADER, false).unwrap();
+    let _disclosure = factory.create_disclosure(label, DisclosureStyle::Header, false).unwrap();
     let content = button.query::<IWidgetAbi>().unwrap();
     let _scroll = factory.create_scroll_area(content.as_com_ref(), true).unwrap();
-    let area = factory.create_text_area(label, TextWrapping::WORD, true).unwrap();
+    let area = factory.create_text_area(label, TextWrapping::Word, true).unwrap();
     let root = area.query::<IWidgetAbi>().unwrap();
     let _window = mount(&runtime, &root).unwrap();
     runtime.update(SIZE).unwrap();
@@ -390,9 +390,9 @@ impl IWidget for RetainingWidget {
         }
         let width = self.probe.requested_width.replace(0);
         if width > 0 && self.probe.width.replace(width) != width {
-            Ok(GeometryChange::CHANGED)
+            Ok(GeometryChange::Changed)
         } else {
-            Ok(GeometryChange::NO_CHANGE)
+            Ok(GeometryChange::NoChange)
         }
     }
 
@@ -539,17 +539,17 @@ fn window_com_capabilities_preserve_hierarchy_layers_visibility_and_subtree_clos
     root.set_layer(2).unwrap();
     assert_eq!(child.snapshot().unwrap().layer.number, 2);
     assert_eq!(child.set_layer(4), Err(UI_E_POLICY));
-    assert_eq!(dialog.snapshot().unwrap().layer.kind, LayerKind::MODAL);
-    assert_eq!(dialog.snapshot().unwrap().visibility, Visibility::HIDDEN);
-    dialog.set_visibility(Visibility::VISIBLE).unwrap();
-    root.set_visibility(Visibility::HIDDEN).unwrap();
-    assert_eq!(child.snapshot().unwrap().visibility, Visibility::HIDDEN);
-    root.set_visibility(Visibility::VISIBLE).unwrap();
-    assert_eq!(child.snapshot().unwrap().visibility, Visibility::VISIBLE);
+    assert_eq!(dialog.snapshot().unwrap().layer.kind, LayerKind::Modal);
+    assert_eq!(dialog.snapshot().unwrap().visibility, Visibility::Hidden);
+    dialog.set_visibility(Visibility::Visible).unwrap();
+    root.set_visibility(Visibility::Hidden).unwrap();
+    assert_eq!(child.snapshot().unwrap().visibility, Visibility::Hidden);
+    root.set_visibility(Visibility::Visible).unwrap();
+    assert_eq!(child.snapshot().unwrap().visibility, Visibility::Visible);
     // Hiding an owner closes modal visibility intent; showing it must not resurrect a dialog.
-    assert_eq!(dialog.snapshot().unwrap().visibility, Visibility::HIDDEN);
-    root.set_child_clip(ChildClip::CONTENT).unwrap();
-    assert_eq!(root.snapshot().unwrap().child_clip, ChildClip::CONTENT);
+    assert_eq!(dialog.snapshot().unwrap().visibility, Visibility::Hidden);
+    root.set_child_clip(ChildClip::Content).unwrap();
+    assert_eq!(root.snapshot().unwrap().child_clip, ChildClip::Content);
     let before = root.snapshot().unwrap().options.raw();
     assert_eq!(root.set_options(WindowOptions::from_raw(32)), Err(NC_E_INVALID_ARG));
     assert_eq!(root.snapshot().unwrap().options.raw(), before);
@@ -563,7 +563,7 @@ fn window_com_capabilities_preserve_hierarchy_layers_visibility_and_subtree_clos
         assert_eq!(button.set_label(NcCopyFromBufferOffset::new(0, b"closed")), Err(UI_E_CLOSED));
     }
     assert_eq!(child.snapshot().unwrap_err(), UI_E_CLOSED);
-    assert_eq!(dialog.set_visibility(Visibility::VISIBLE), Err(UI_E_CLOSED));
+    assert_eq!(dialog.set_visibility(Visibility::Visible), Err(UI_E_CLOSED));
     // Parent destruction has already removed these definitions; close remains idempotent.
     child.close().unwrap();
     dialog.close().unwrap();
@@ -603,7 +603,7 @@ fn child_creation_rejects_foreign_and_modal_parents_before_mounting() {
     let valid = manager
         .create_child(root.as_com_ref(), NcCopyFromBufferOffset::new(0, b"valid"), RECT, node.as_com_ref())
         .unwrap();
-    assert_eq!(valid.snapshot().unwrap().visibility, Visibility::VISIBLE);
+    assert_eq!(valid.snapshot().unwrap().visibility, Visibility::Visible);
     first.close().unwrap();
     second.close().unwrap();
 }
@@ -623,12 +623,12 @@ fn popup_com_capability_enforces_active_owner_policy_and_permanent_removal() {
         )
         .unwrap();
     assert_eq!(popup.query::<IWindowAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
-    assert_eq!(popup.visibility().unwrap(), Visibility::HIDDEN);
+    assert_eq!(popup.visibility().unwrap(), Visibility::Hidden);
     runtime.update(SIZE).unwrap();
     popup.show_at(RECT).unwrap();
-    assert_eq!(popup.visibility().unwrap(), Visibility::VISIBLE);
+    assert_eq!(popup.visibility().unwrap(), Visibility::Visible);
     popup.hide().unwrap();
-    assert_eq!(popup.visibility().unwrap(), Visibility::HIDDEN);
+    assert_eq!(popup.visibility().unwrap(), Visibility::Hidden);
     let dialog = manager
         .create_dialog(
             root.as_com_ref(),
@@ -637,9 +637,9 @@ fn popup_com_capability_enforces_active_owner_policy_and_permanent_removal() {
             button(&runtime).query::<IWidgetAbi>().unwrap().as_com_ref(),
         )
         .unwrap();
-    dialog.set_visibility(Visibility::VISIBLE).unwrap();
+    dialog.set_visibility(Visibility::Visible).unwrap();
     assert_eq!(popup.show_at(RECT), Err(UI_E_POLICY));
-    dialog.set_visibility(Visibility::HIDDEN).unwrap();
+    dialog.set_visibility(Visibility::Hidden).unwrap();
     popup.show_at(RECT).unwrap();
     popup.close().unwrap();
     popup.close().unwrap();
@@ -673,7 +673,7 @@ fn com_nodes_update_without_activation_and_collect_hidden_widget_changes() {
     assert_eq!(probe.width.get(), 240);
 
     let tab = UiInput::Key(KeyStroke {
-        key: KeyCode::TAB,
+        key: KeyCode::Tab,
         value: 0,
         pressed: true,
         repeat: false,
@@ -694,14 +694,14 @@ fn com_nodes_update_without_activation_and_collect_hidden_widget_changes() {
     let before = button.properties().unwrap().options;
     assert_eq!(button.set_options(WidgetOptions::from_raw(8)), Err(NC_E_INVALID_ARG));
     assert_eq!(button.properties().unwrap().options, before);
-    window.set_visibility(Visibility::HIDDEN).unwrap();
+    window.set_visibility(Visibility::Hidden).unwrap();
     runtime.update(SIZE).unwrap();
     let updates = probe.updates.get();
     let measured = probe.measures.get();
     button.set_options(WidgetOptions::NONE).unwrap();
     runtime.update(SIZE).unwrap();
     assert_eq!(probe.updates.get(), updates, "hidden widgets skip update but retain setter invalidation");
-    window.set_visibility(Visibility::VISIBLE).unwrap();
+    window.set_visibility(Visibility::Visible).unwrap();
     runtime.update(SIZE).unwrap();
     assert!(probe.measures.get() > measured);
     window.close().unwrap();
@@ -725,7 +725,7 @@ fn input_validation_and_explicit_teardown_preserve_their_error_boundaries() {
     let window = mount(&runtime, &object.query().unwrap()).unwrap();
     runtime.update(SIZE).unwrap();
     let bad_key = UiInput::Key(KeyStroke {
-        key: KeyCode::CHARACTER,
+        key: KeyCode::Character,
         value: 0xd800,
         pressed: true,
         repeat: false,
@@ -854,16 +854,16 @@ fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validati
     common.take_change().unwrap();
     checkbox.set_checked(true).unwrap();
     assert!(checkbox.checked().unwrap());
-    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NoChange);
     checkbox.set_label("A longer checkbox").unwrap();
-    assert_eq!(common.take_change().unwrap(), GeometryChange::CHANGED);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::Changed);
     assert_eq!(checkbox.label().unwrap(), "A longer checkbox");
-    checkbox.set_font_role(FontRole::BODY).unwrap();
-    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
+    checkbox.set_font_role(FontRole::Body).unwrap();
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NoChange);
     assert_eq!(checkbox.set_named_font("missing"), Err(neocogi_com::NC_E_NOT_FOUND));
-    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NoChange);
     checkbox.set_named_font("body").unwrap();
-    assert_eq!(common.take_change().unwrap(), GeometryChange::CHANGED);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::Changed);
 
     let mut textbox = ui.widgets().textbox("é\r\n☃").unwrap();
     assert_eq!(textbox.text().unwrap(), "é☃");
@@ -878,22 +878,22 @@ fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validati
     common.take_change().unwrap();
     textbox.set_text("é\n☃").unwrap();
     assert_eq!(textbox.cursor().unwrap(), 5);
-    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NoChange);
     assert_eq!(textbox.as_interface().set_text(NcCopyFromBufferOffset::new(0, &[0xff])), Err(NC_E_INVALID_ARG));
     assert_eq!(textbox.text().unwrap(), "é☃");
     textbox.clear().unwrap();
     assert_eq!(textbox.cursor().unwrap(), 0);
-    assert_eq!(common.take_change().unwrap(), GeometryChange::CHANGED);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::Changed);
 
-    let mut block = ui.widgets().text_block("one\r\ntwo", TextWrapping::NONE).unwrap();
+    let mut block = ui.widgets().text_block("one\r\ntwo", TextWrapping::None).unwrap();
     assert_eq!(block.text().unwrap(), "one\ntwo");
     let mut common = block.node_interface().unwrap();
     common.take_change().unwrap();
-    block.set_wrapping(TextWrapping::WORD).unwrap();
-    assert_eq!(block.wrapping().unwrap(), TextWrapping::WORD);
-    assert_eq!(common.take_change().unwrap(), GeometryChange::CHANGED);
+    block.set_wrapping(TextWrapping::Word).unwrap();
+    assert_eq!(block.wrapping().unwrap(), TextWrapping::Word);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::Changed);
     assert_eq!(block.set_wrapping(TextWrapping::from_raw(99)), Err(NC_E_INVALID_ARG));
-    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NoChange);
     runtime.close().unwrap();
     assert_eq!(textbox.text(), Err(UI_E_CLOSED));
     assert_eq!(checkbox.set_checked(false), Err(UI_E_CLOSED));
@@ -918,10 +918,10 @@ fn builtin_numeric_and_scrollbar_facades_reject_invalid_inputs_without_losing_st
     common.take_change().unwrap();
     assert_eq!(slider.set_value(f32::NAN), Err(NC_E_INVALID_ARG));
     assert_eq!(slider.value().unwrap(), 5.0);
-    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NoChange);
     slider.set_value(200.0).unwrap();
     assert_eq!(slider.value().unwrap(), 10.0);
-    assert_eq!(common.take_change().unwrap(), GeometryChange::CHANGED);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::Changed);
     assert!(
         ui.widgets()
             .slider(SliderOptions {
@@ -942,7 +942,7 @@ fn builtin_numeric_and_scrollbar_facades_reject_invalid_inputs_without_losing_st
     let mut scrollbar = ui
         .widgets()
         .scrollbar(ScrollRange {
-            axis: ScrollAxis::VERTICAL,
+            axis: ScrollAxis::Vertical,
             viewport: 50,
             content: 100,
             offset: 80,
@@ -959,7 +959,7 @@ fn builtin_numeric_and_scrollbar_facades_reject_invalid_inputs_without_losing_st
     assert_eq!(scrollbar.range().unwrap().offset, 10);
     scrollbar.set_offset(-1).unwrap();
     assert_eq!(scrollbar.range().unwrap().offset, 0);
-    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NoChange);
     scrollbar.set_lengths(100, 100).unwrap();
     assert!(common.properties().unwrap().options.contains(WidgetOptions::NO_INTERACT));
     let mut swatch = ui.widgets().color_swatch(0xff102030, "RGBA").unwrap();
@@ -967,7 +967,7 @@ fn builtin_numeric_and_scrollbar_facades_reject_invalid_inputs_without_losing_st
     common.take_change().unwrap();
     swatch.set_fill(0xffaabbcc).unwrap();
     assert_eq!(swatch.fill().unwrap(), 0xffaabbcc);
-    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NoChange);
 }
 
 /// Real routing and complete painting exercise all migrated classes through the facade.
@@ -979,7 +979,7 @@ fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
     let window = ui.window("editor", RECT, &textbox).unwrap();
     ui.input(
         UiInput::Key(KeyStroke {
-            key: KeyCode::TAB,
+            key: KeyCode::Tab,
             value: 0,
             pressed: true,
             repeat: false,
@@ -1001,7 +1001,7 @@ fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
     ui.input(UiInput::Cancel, "").unwrap();
     ui.input(
         UiInput::Key(KeyStroke {
-            key: KeyCode::TAB,
+            key: KeyCode::Tab,
             value: 0,
             pressed: true,
             repeat: false,
@@ -1012,7 +1012,7 @@ fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
     .unwrap();
     ui.input(
         UiInput::Key(KeyStroke {
-            key: KeyCode::SPACE,
+            key: KeyCode::Space,
             value: 0,
             pressed: true,
             repeat: false,
@@ -1028,7 +1028,7 @@ fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
 
     let roots = [
         ui.widgets().button("button").unwrap().node_interface().unwrap(),
-        ui.widgets().text_block("display\ntext", TextWrapping::WORD).unwrap().node_interface().unwrap(),
+        ui.widgets().text_block("display\ntext", TextWrapping::Word).unwrap().node_interface().unwrap(),
         ui.widgets()
             .slider(SliderOptions {
                 value: 2.0,
@@ -1050,7 +1050,7 @@ fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
         ui.widgets().list_box("list box").unwrap().node_interface().unwrap(),
         ui.widgets()
             .scrollbar(ScrollRange {
-                axis: ScrollAxis::VERTICAL,
+                axis: ScrollAxis::Vertical,
                 viewport: 40,
                 content: 120,
                 offset: 30,
@@ -1172,15 +1172,15 @@ fn builtin_scoped_paint_preserves_alignment_with_inline_semantic_state() {
     common.take_change().unwrap();
     assert_eq!(button.set_fill_states(FillStates::from_raw(8)), Err(NC_E_INVALID_ARG));
     assert_eq!(button.fill_states().unwrap(), FillStates::NONE);
-    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
-    button.set_icon_role(ContentIcon::CHECK).unwrap();
-    assert_eq!(common.take_change().unwrap(), GeometryChange::CHANGED);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NoChange);
+    button.set_icon_role(ContentIcon::Check).unwrap();
+    assert_eq!(common.take_change().unwrap(), GeometryChange::Changed);
     button.clear_image().unwrap();
-    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
-    button.set_icon_role(ContentIcon::CHECK).unwrap();
-    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NoChange);
+    button.set_icon_role(ContentIcon::Check).unwrap();
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NoChange);
     assert_eq!(button.set_named_icon("missing"), Err(neocogi_com::NC_E_NOT_FOUND));
-    button.set_icon_role(ContentIcon::NONE).unwrap();
+    button.set_icon_role(ContentIcon::None).unwrap();
     assert_eq!(button.label().unwrap(), "AB");
     let probe = Rc::new(BuiltinPaintProbe::default());
     let painter: ComPtr<IPainterAbi> = BuiltinPainter::from_value(BuiltinPainter {
@@ -1238,7 +1238,7 @@ fn platform_input_projection_and_committed_text_area_share_runtime_state() {
     input
         .input(
             UiInput::Key(KeyStroke {
-                key: KeyCode::TAB,
+                key: KeyCode::Tab,
                 value: 0,
                 pressed: true,
                 repeat: false,
@@ -1321,7 +1321,7 @@ impl neocogi_ui::LeafContent for LocalContent {
             self.probe.width.set(120);
             return Err(NC_E_INVALID_ARG);
         }
-        Ok(GeometryChange::NO_CHANGE)
+        Ok(GeometryChange::NoChange)
     }
     /// Solid geometry reaches the ordinary display-list arena without an application UV lookup.
     fn paint(&self, _: WidgetPaint, painter: &mut neocogi_ui::Painter<'_>) -> Result<(), NcStatus> {

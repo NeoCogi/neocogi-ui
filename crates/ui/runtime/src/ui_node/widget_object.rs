@@ -157,7 +157,7 @@ pub(crate) fn set_direct_font_role<S: HostedWidget + FontState>(widget: &mut S, 
     let font = crate::FontRef::Role(local_font_role(role)?);
     if widget.font() != &font {
         widget.set_font(font);
-        widget.runtime_mut().state.record_change(GeometryChange::CHANGED);
+        widget.runtime_mut().state.record_change(GeometryChange::Changed);
     }
     Ok(())
 }
@@ -167,7 +167,7 @@ pub(crate) fn set_direct_named_font<S: HostedWidget + FontState>(widget: &mut S,
     let font = widget.runtime_mut().named_font(name)?;
     if widget.font() != &font {
         widget.set_font(font);
-        widget.runtime_mut().state.record_change(GeometryChange::CHANGED);
+        widget.runtime_mut().state.record_change(GeometryChange::Changed);
     }
     Ok(())
 }
@@ -176,7 +176,7 @@ pub(crate) fn set_direct_named_font<S: HostedWidget + FontState>(widget: &mut S,
 pub(crate) fn set_direct_icon_role<S: HostedWidget + IconState>(widget: &mut S, icon: ContentIcon) -> Result<(), NcStatus> {
     widget.runtime().state.writable()?;
     if widget.set_icon(local_content_icon(icon)?) {
-        widget.runtime_mut().state.record_change(GeometryChange::CHANGED);
+        widget.runtime_mut().state.record_change(GeometryChange::Changed);
     }
     Ok(())
 }
@@ -185,7 +185,7 @@ pub(crate) fn set_direct_icon_role<S: HostedWidget + IconState>(widget: &mut S, 
 pub(crate) fn set_direct_named_icon<S: HostedWidget + IconState>(widget: &mut S, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
     let icon = widget.runtime_mut().named_icon(name)?;
     if widget.set_icon(Some(icon)) {
-        widget.runtime_mut().state.record_change(GeometryChange::CHANGED);
+        widget.runtime_mut().state.record_change(GeometryChange::Changed);
     }
     Ok(())
 }
@@ -193,7 +193,7 @@ pub(crate) fn set_direct_named_icon<S: HostedWidget + IconState>(widget: &mut S,
 /// Converts one checked contract axis without treating finite zero as unbounded.
 pub(crate) fn available(axis: AxisLimit) -> Result<AvailableSpace, NcStatus> {
     axis.validate()?;
-    Ok(if axis.kind == LimitKind::FINITE {
+    Ok(if axis.kind == LimitKind::Finite {
         AvailableSpace::Bounded(axis.extent)
     } else {
         AvailableSpace::Unbounded
@@ -203,8 +203,8 @@ pub(crate) fn available(axis: AxisLimit) -> Result<AvailableSpace, NcStatus> {
 /// Converts the callable text-wrapping vocabulary into the concrete layout policy.
 pub(crate) fn local_wrap(wrap: TextWrapping) -> Result<crate::TextWrap, NcStatus> {
     match wrap {
-        TextWrapping::NONE => Ok(crate::TextWrap::None),
-        TextWrapping::WORD => Ok(crate::TextWrap::Word),
+        TextWrapping::None => Ok(crate::TextWrap::None),
+        TextWrapping::Word => Ok(crate::TextWrap::Word),
         _ => Err(neocogi_com::NC_E_INVALID_ARG),
     }
 }
@@ -288,8 +288,8 @@ macro_rules! direct_widget_phase_impl {
                     crate::Modifiers::from_bits(state.modifiers).ok_or(neocogi_com::NC_E_INVALID_ARG)?,
                 );
                 Ok(match crate::Widget::update(self, &mut ctx, input.as_ref()) {
-                    crate::Change::Changed => neocogi_ui_contracts::GeometryChange::CHANGED,
-                    crate::Change::NoChange => neocogi_ui_contracts::GeometryChange::NO_CHANGE,
+                    crate::Change::Changed => neocogi_ui_contracts::GeometryChange::Changed,
+                    crate::Change::NoChange => neocogi_ui_contracts::GeometryChange::NoChange,
                 })
             }
 
@@ -298,7 +298,7 @@ macro_rules! direct_widget_phase_impl {
                 if crate::Widget::take_shared_change(self) {
                     <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self)
                         .state
-                        .record_change(neocogi_ui_contracts::GeometryChange::CHANGED);
+                        .record_change(neocogi_ui_contracts::GeometryChange::Changed);
                 }
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self)
                     .state
@@ -501,11 +501,11 @@ pub(crate) use direct_scrolling_impl;
 /// Resolves one concrete font-role vocabulary for both widget and compact menu presentation.
 pub(crate) fn local_font_role(role: FontRole) -> Result<crate::FontRole, NcStatus> {
     match role {
-        FontRole::BODY => Ok(crate::FontRole::BODY),
-        FontRole::SMALL => Ok(crate::FontRole::SMALL),
-        FontRole::TITLE => Ok(crate::FontRole::TITLE),
-        FontRole::HEADING => Ok(crate::FontRole::HEADING),
-        FontRole::MONO => Ok(crate::FontRole::MONO),
+        FontRole::Body => Ok(crate::FontRole::Body),
+        FontRole::Small => Ok(crate::FontRole::Small),
+        FontRole::Title => Ok(crate::FontRole::Title),
+        FontRole::Heading => Ok(crate::FontRole::Heading),
+        FontRole::Mono => Ok(crate::FontRole::Mono),
         _ => Err(NC_E_INVALID_ARG),
     }
 }
@@ -513,15 +513,15 @@ pub(crate) fn local_font_role(role: FontRole) -> Result<crate::FontRole, NcStatu
 /// Converts the finite public content-icon vocabulary into concrete semantic state.
 pub(super) fn local_content_icon(icon: ContentIcon) -> Result<Option<crate::IconRef>, NcStatus> {
     let role = match icon {
-        ContentIcon::NONE => return Ok(None),
-        ContentIcon::CLOSE => crate::IconRole::CLOSE,
-        ContentIcon::EXPAND => crate::IconRole::EXPAND,
-        ContentIcon::COLLAPSE => crate::IconRole::COLLAPSE,
-        ContentIcon::CHECK => crate::IconRole::CHECK,
-        ContentIcon::EXPAND_DOWN => crate::IconRole::EXPAND_DOWN,
-        ContentIcon::OPEN_FOLDER => crate::IconRole::OPEN_FOLDER,
-        ContentIcon::CLOSED_FOLDER => crate::IconRole::CLOSED_FOLDER,
-        ContentIcon::FILE => crate::IconRole::FILE,
+        ContentIcon::None => return Ok(None),
+        ContentIcon::Close => crate::IconRole::Close,
+        ContentIcon::Expand => crate::IconRole::Expand,
+        ContentIcon::Collapse => crate::IconRole::Collapse,
+        ContentIcon::Check => crate::IconRole::Check,
+        ContentIcon::ExpandDown => crate::IconRole::ExpandDown,
+        ContentIcon::OpenFolder => crate::IconRole::OpenFolder,
+        ContentIcon::ClosedFolder => crate::IconRole::ClosedFolder,
+        ContentIcon::File => crate::IconRole::File,
         _ => return Err(NC_E_INVALID_ARG),
     };
     Ok(Some(crate::IconRef::Role(role)))

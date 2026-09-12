@@ -66,12 +66,12 @@ fn image_controls_keep_owned_pixels_and_forward_ordered_semantic_paint_after_err
     let texture: ComPtr<ITextureAbi> = ImageTexture::from_value(ImageTexture { probe: image_probe.clone() }).query().unwrap();
     button.set_image(texture.as_com_ref(), false).unwrap();
     assert_eq!(image_probe.reads.get(), 1);
-    assert_eq!(common.take_change().unwrap(), GeometryChange::CHANGED);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::Changed);
     button.set_image(texture.as_com_ref(), false).unwrap();
-    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NoChange);
     image_probe.invalid.set(true);
     assert_eq!(button.set_image(texture.as_com_ref(), true), Err(NC_E_INVALID_ARG));
-    assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::NoChange);
     image_probe.invalid.set(false);
     let paint_probe = Rc::new(BuiltinPaintProbe::default());
     let painter: ComPtr<IPainterAbi> = BuiltinPainter::from_value(BuiltinPainter {
@@ -161,10 +161,10 @@ fn image_buttons_survive_both_builtin_and_runtime_clipping_in_a_complete_frame()
     let image: ComPtr<ITextureAbi> = ImageTexture::from_value(ImageTexture { probe: image_probe.clone() }).query().unwrap();
     button.set_image(image.as_com_ref(), false).unwrap();
     drop(image);
-    let background = ui.widgets().text_block("", TextWrapping::NONE).unwrap();
+    let background = ui.widgets().text_block("", TextWrapping::None).unwrap();
     let parent = ui.window("clip owner", Rect { x: 20, y: 20, width: 32, height: 40 }, &background).unwrap();
     parent.set_options(WindowOptions::NO_TITLE | WindowOptions::NO_PADDING).unwrap();
-    parent.set_child_clip(ChildClip::CONTENT).unwrap();
+    parent.set_child_clip(ChildClip::Content).unwrap();
     let window = ui
         .child_window(parent.as_com_ref(), "image", Rect { x: 20, y: 20, width: 100, height: 40 }, &button)
         .unwrap();

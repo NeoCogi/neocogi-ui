@@ -134,7 +134,7 @@ impl Workload {
             buttons.push(button);
             if shape == "deep" {
                 for _ in 0..64 {
-                    let mut parent = factory.linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch)?;
+                    let mut parent = factory.linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
                     let child = Widget::from_interface(root);
                     parent.insert(0, &child, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))?.finish()?;
                     root = parent.node_interface()?;

@@ -367,7 +367,7 @@ fn main() -> Result<(), HostError> {
         &[LayoutTrack::Flex { weight: 1.0 }; 4],
         &[LayoutTrack::Flex { weight: KEYPAD_ROW_HEIGHT_WEIGHT }; 5],
     )?;
-    let mut tree = host.ui.widgets().linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch)?;
+    let mut tree = host.ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     tree.insert(0, &display, LinearEdge::new(LayoutTrack::Flex { weight: DISPLAY_HEIGHT_FRACTION }))?
         .finish()?;
     tree.insert(1, &grid, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 - DISPLAY_HEIGHT_FRACTION }))?

@@ -132,10 +132,10 @@ impl AssetTables {
         }
         validate_metrics(self.metrics)?;
         let chrome = self.chrome;
-        if !matches!(chrome.title_alignment, TitleAlignment::LEADING | TitleAlignment::CENTERED)
+        if !matches!(chrome.title_alignment, TitleAlignment::Leading | TitleAlignment::Centered)
             || [chrome.close_side, chrome.minimize_side, chrome.maximize_side]
                 .iter()
-                .any(|side| !matches!(*side, CaptionSide::LEADING | CaptionSide::TRAILING))
+                .any(|side| !matches!(*side, CaptionSide::Leading | CaptionSide::Trailing))
             || chrome.show_without_activation > 1
             || chrome.has_backdrop > 1
             || [

@@ -87,13 +87,13 @@ fn packed_color(color: Color) -> u32 {
 /// Projects one exhaustive native control state into its typed paint-contract counterpart.
 fn visual_state(state: ControlState) -> WidgetVisualState {
     match state {
-        ControlState::Disabled => WidgetVisualState::DISABLED,
-        ControlState::Enabled(crate::PointerState::Normal) => WidgetVisualState::NORMAL,
-        ControlState::Enabled(crate::PointerState::Hovered) => WidgetVisualState::HOVERED,
-        ControlState::Enabled(crate::PointerState::Pressed) => WidgetVisualState::PRESSED,
-        ControlState::Focused(crate::PointerState::Normal) => WidgetVisualState::FOCUSED,
-        ControlState::Focused(crate::PointerState::Hovered) => WidgetVisualState::FOCUSED_HOVERED,
-        ControlState::Focused(crate::PointerState::Pressed) => WidgetVisualState::FOCUSED_PRESSED,
+        ControlState::Disabled => WidgetVisualState::Disabled,
+        ControlState::Enabled(crate::PointerState::Normal) => WidgetVisualState::Normal,
+        ControlState::Enabled(crate::PointerState::Hovered) => WidgetVisualState::Hovered,
+        ControlState::Enabled(crate::PointerState::Pressed) => WidgetVisualState::Pressed,
+        ControlState::Focused(crate::PointerState::Normal) => WidgetVisualState::Focused,
+        ControlState::Focused(crate::PointerState::Hovered) => WidgetVisualState::FocusedHovered,
+        ControlState::Focused(crate::PointerState::Pressed) => WidgetVisualState::FocusedPressed,
     }
 }
 
@@ -720,8 +720,8 @@ impl<'a> WidgetPaintCtx<'a> {
         // Center-only structural fills share the same nine-patch behavior as unframed controls.
         if let Some((scope, mut painter)) = self.scoped_paint() {
             let state = match state {
-                SurfaceState::Normal => WidgetVisualState::NORMAL,
-                SurfaceState::Disabled => WidgetVisualState::DISABLED,
+                SurfaceState::Normal => WidgetVisualState::Normal,
+                SurfaceState::Disabled => WidgetVisualState::Disabled,
             };
             let result = painter
                 .frame(

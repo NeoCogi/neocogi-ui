@@ -200,8 +200,8 @@ impl AxisLimit {
     /// Rejects malformed tags, negative bounds, and meaningless unbounded extents.
     pub fn validate(self) -> Result<(), NcStatus> {
         match self.kind {
-            LimitKind::FINITE if self.extent >= 0 => Ok(()),
-            LimitKind::UNBOUNDED if self.extent == 0 => Ok(()),
+            LimitKind::Finite if self.extent >= 0 => Ok(()),
+            LimitKind::Unbounded if self.extent == 0 => Ok(()),
             _ => Err(neocogi_com::NC_E_INVALID_ARG),
         }
     }
@@ -419,9 +419,9 @@ impl KeyStroke {
             return Err(NC_E_INVALID_ARG);
         }
         let valid = match self.key {
-            KeyCode::CHARACTER => char::from_u32(self.value).is_some(),
-            KeyCode::FUNCTION => (1..=24).contains(&self.value),
-            key if key.raw() <= KeyCode::SUPER.raw() => self.value == 0,
+            KeyCode::Character => char::from_u32(self.value).is_some(),
+            KeyCode::Function => (1..=24).contains(&self.value),
+            key if key.raw() <= KeyCode::Super.raw() => self.value == 0,
             _ => false,
         };
         if valid { Ok(()) } else { Err(NC_E_INVALID_ARG) }
@@ -462,7 +462,7 @@ impl WidgetUpdate {
             || self.clip.height < 0
             || self.mouse_buttons & !7 != 0
             || self.modifiers & !15 != 0
-            || self.action.raw() > WidgetAction::COLLAPSE.raw()
+            || self.action.raw() > WidgetAction::Collapse.raw()
         {
             return Err(NC_E_INVALID_ARG);
         }

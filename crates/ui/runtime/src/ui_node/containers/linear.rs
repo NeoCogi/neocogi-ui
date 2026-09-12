@@ -624,7 +624,7 @@ impl neocogi_ui_contracts::Linear for Linear {
         let direction = local_direction(direction)?;
         if Linear::direction(self) != direction {
             Linear::set_direction(self, direction);
-            self.runtime_mut().state.record_change(neocogi_ui_contracts::GeometryChange::CHANGED);
+            self.runtime_mut().state.record_change(neocogi_ui_contracts::GeometryChange::Changed);
         }
         Ok(())
     }
@@ -641,7 +641,7 @@ impl neocogi_ui_contracts::Linear for Linear {
         let cross = local_cross(cross)?;
         if Linear::cross_size(self) != cross {
             Linear::set_cross_size(self, cross);
-            self.runtime_mut().state.record_change(neocogi_ui_contracts::GeometryChange::CHANGED);
+            self.runtime_mut().state.record_change(neocogi_ui_contracts::GeometryChange::Changed);
         }
         Ok(())
     }
@@ -652,10 +652,10 @@ impl neocogi_ui_contracts::Linear for Linear {
 /// Decodes the complete axis and leading-edge choice without a reversal side channel.
 fn local_direction(direction: FlowDirection) -> Result<LinearDirection, NcStatus> {
     match direction {
-        FlowDirection::LEFT_TO_RIGHT => Ok(LinearDirection::LeftToRight),
-        FlowDirection::RIGHT_TO_LEFT => Ok(LinearDirection::RightToLeft),
-        FlowDirection::TOP_TO_BOTTOM => Ok(LinearDirection::TopToBottom),
-        FlowDirection::BOTTOM_TO_TOP => Ok(LinearDirection::BottomToTop),
+        FlowDirection::LeftToRight => Ok(LinearDirection::LeftToRight),
+        FlowDirection::RightToLeft => Ok(LinearDirection::RightToLeft),
+        FlowDirection::TopToBottom => Ok(LinearDirection::TopToBottom),
+        FlowDirection::BottomToTop => Ok(LinearDirection::BottomToTop),
         _ => Err(neocogi_com::NC_E_INVALID_ARG),
     }
 }
@@ -663,10 +663,10 @@ fn local_direction(direction: FlowDirection) -> Result<LinearDirection, NcStatus
 /// Encodes the exact retained direction without inferring it from geometry.
 fn flow_direction(direction: LinearDirection) -> FlowDirection {
     match direction {
-        LinearDirection::LeftToRight => FlowDirection::LEFT_TO_RIGHT,
-        LinearDirection::RightToLeft => FlowDirection::RIGHT_TO_LEFT,
-        LinearDirection::TopToBottom => FlowDirection::TOP_TO_BOTTOM,
-        LinearDirection::BottomToTop => FlowDirection::BOTTOM_TO_TOP,
+        LinearDirection::LeftToRight => FlowDirection::LeftToRight,
+        LinearDirection::RightToLeft => FlowDirection::RightToLeft,
+        LinearDirection::TopToBottom => FlowDirection::TopToBottom,
+        LinearDirection::BottomToTop => FlowDirection::BottomToTop,
     }
 }
 
@@ -995,7 +995,7 @@ fn minimum_content_cross(direction: LinearDirection, style: &Skin, atlas: &Atlas
         return 0;
     }
     let padding = style.metrics.padding.max(0);
-    (atlas.get_font_height(style.resolve_font_role(atlas, crate::FontRole::BODY)) as i32)
+    (atlas.get_font_height(style.resolve_font_role(atlas, crate::FontRole::Body)) as i32)
         .saturating_add(padding.saturating_mul(2))
         .max(padding.saturating_mul(2))
 }

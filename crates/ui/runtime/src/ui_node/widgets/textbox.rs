@@ -86,7 +86,7 @@ impl TextboxParameters {
     pub fn new(buf: impl Into<String>) -> Self {
         Self {
             buf: buf.into(),
-            font: FontRef::Role(FontRole::BODY),
+            font: FontRef::Role(FontRole::Body),
             opt: WidgetOption::FRAME,
         }
     }
@@ -395,7 +395,7 @@ pub(crate) fn textbox_paint(ctx: &mut WidgetPaintCtx<'_>, buf: &str, cursor: usi
     let r = ctx.local_rect();
     if !opt.intersects(WidgetOption::FRAME) {
         // Runtime-owned framed editors already painted the complete input patch below this content.
-        ctx.draw_control_center(ControlRole::TEXT_INPUT, r);
+        ctx.draw_control_center(ControlRole::TextInput, r);
     }
 
     let metrics = font_line_metrics(font, ctx.atlas());
@@ -414,14 +414,14 @@ pub(crate) fn textbox_paint(ctx: &mut WidgetPaintCtx<'_>, buf: &str, cursor: usi
 
     if ctx.focused() {
         // Focused editing path clips text/caret to the textbox bounds.
-        let color = ctx.control_content_color(ControlRole::TEXT_INPUT);
+        let color = ctx.control_content_color(ControlRole::TextInput);
         let caret = caret_rect(clamp_i64_to_i32(i64::from(textx) + i64::from(caret_offset)), baseline_y, metrics, r);
         ctx.with_clip(r, |ctx| {
             ctx.draw_text(font, buf, vec2(textx, texty), color);
             ctx.draw_rect(caret, color);
         });
     } else {
-        ctx.draw_control_text_with_font(font, buf, r, ControlRole::TEXT_INPUT, opt);
+        ctx.draw_control_text_with_font(font, buf, r, ControlRole::TextInput, opt);
     }
 }
 
@@ -433,7 +433,7 @@ impl Widget for Textbox {
 
     fn frame_appearance_role(&self) -> FrameRole {
         // Single-line textboxes use the semantic input frame for every interaction state.
-        FrameRole::Control(ControlRole::TEXT_INPUT)
+        FrameRole::Control(ControlRole::TextInput)
     }
 
     fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
@@ -660,7 +660,7 @@ impl neocogi_ui_contracts::Textbox for Textbox {
         let previous = self.text().to_owned();
         self.set_text(input);
         if self.text() != previous {
-            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+            self.runtime_mut().state.record_change(GeometryChange::Changed);
         }
         Ok(())
     }

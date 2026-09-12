@@ -54,7 +54,7 @@ impl Default for FontRef {
     /// Selects ordinary body typography for a newly constructed widget.
     fn default() -> Self {
         // Body is the only required semantic font and is therefore the unsurprising default.
-        Self::Role(FontRole::BODY)
+        Self::Role(FontRole::Body)
     }
 }
 

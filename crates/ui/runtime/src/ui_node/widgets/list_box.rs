@@ -58,7 +58,7 @@ impl ListBoxParameters {
         Self {
             label: label.into(),
             image,
-            font: FontRef::Role(FontRole::BODY),
+            font: FontRef::Role(FontRole::Body),
             opt: WidgetOption::NONE,
         }
     }
@@ -143,7 +143,7 @@ impl ListBox {
     fn paint_widget(&self, ctx: &mut WidgetPaintCtx<'_>) {
         let rect = ctx.local_rect();
         if widget_fill_visible(ctx, WidgetFillOption::HOVER | WidgetFillOption::CLICK) {
-            ctx.draw_control_center(ControlRole::BUTTON, rect);
+            ctx.draw_control_center(ControlRole::Button, rect);
         }
         let visual_size = self.image.as_ref().map(image_size);
         let placement = if self.fit_width && visual_size.is_some() {
@@ -153,7 +153,7 @@ impl ListBox {
         };
         if !self.label.is_empty() {
             let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
-            ctx.draw_control_text_with_font(font, &self.label, placement.text, ControlRole::BUTTON, ctx.options());
+            ctx.draw_control_text_with_font(font, &self.label, placement.text, ControlRole::Button, ctx.options());
         }
         if let (Some(image), Some(visual)) = (self.image.as_ref(), placement.visual) {
             // List-box labels remain theme-colored while external image content preserves the
@@ -302,7 +302,7 @@ impl neocogi_ui_contracts::ListBox for ListBox {
         let label = crate::boundary::text(input)?;
         if self.com_label() != label {
             self.com_set_label(label);
-            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+            self.runtime_mut().state.record_change(GeometryChange::Changed);
         }
         Ok(())
     }
@@ -322,7 +322,7 @@ impl neocogi_ui_contracts::ListBox for ListBox {
         // prepared image; the generated object gate rejects recursive mutable entry.
         self.runtime().state.writable()?;
         if ImageState::set_image(self, Some(image), fit_width) {
-            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+            self.runtime_mut().state.record_change(GeometryChange::Changed);
         }
         Ok(())
     }
@@ -330,7 +330,7 @@ impl neocogi_ui_contracts::ListBox for ListBox {
     fn clear_image(&mut self) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
         if ImageState::set_image(self, None, false) {
-            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+            self.runtime_mut().state.record_change(GeometryChange::Changed);
         }
         Ok(())
     }

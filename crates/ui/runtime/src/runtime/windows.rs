@@ -267,8 +267,8 @@ impl IWindow for LogicalWindow {
     /// Preserves the difference between local intent and structurally effective visibility.
     fn set_visibility(&self, visibility: Visibility) -> Result<(), NcStatus> {
         let visible = match visibility {
-            Visibility::VISIBLE => true,
-            Visibility::HIDDEN => false,
+            Visibility::Visible => true,
+            Visibility::Hidden => false,
             _ => return Err(NC_E_INVALID_ARG),
         };
         self.edit(WindowEdit::Visibility(visible))
@@ -289,8 +289,8 @@ impl IWindow for LogicalWindow {
     /// Changes parent-owned child clipping without altering child-local state.
     fn set_child_clip(&self, clip: ChildClip) -> Result<(), NcStatus> {
         let clip = match clip {
-            ChildClip::NONE => ChildWindowClip::None,
-            ChildClip::CONTENT => ChildWindowClip::Content,
+            ChildClip::None => ChildWindowClip::None,
+            ChildClip::Content => ChildWindowClip::Content,
             _ => return Err(NC_E_INVALID_ARG),
         };
         self.edit(WindowEdit::ChildClip(clip))
@@ -385,7 +385,7 @@ impl IPopup for LogicalPopup {
     fn visibility(&self) -> Result<Visibility, NcStatus> {
         let runtime = self.owner()?;
         let visible = runtime.context()?.window_manager.popup_visible(&self.popup).map_err(status)?;
-        Ok(if visible { Visibility::VISIBLE } else { Visibility::HIDDEN })
+        Ok(if visible { Visibility::Visible } else { Visibility::Hidden })
     }
     /// Uses the pointer snapshot committed by the input event immediately preceding this callback.
     fn show(&mut self) -> Result<(), NcStatus> {
@@ -495,7 +495,7 @@ mod tests {
         ui.input(UiInput::Down { position: first_row, buttons: 1 }, "").unwrap();
         ui.update_with_events(size, &events).unwrap();
         assert_eq!(&*events.state().unwrap(), &["Run at pointer"]);
-        assert_eq!(popup.visibility(), Ok(Visibility::HIDDEN));
+        assert_eq!(popup.visibility(), Ok(Visibility::Hidden));
 
         // Explicit closure verifies the newly exercised operation did not alter retained lifetime
         // ownership for either the popup definition or its window.

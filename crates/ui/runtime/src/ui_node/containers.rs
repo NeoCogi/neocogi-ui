@@ -108,7 +108,7 @@ macro_rules! container_edges {
                 );
                 <Self as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self)
                     .state
-                    .record_change(neocogi_ui_contracts::GeometryChange::CHANGED);
+                    .record_change(neocogi_ui_contracts::GeometryChange::Changed);
             }
             Ok(())
         }

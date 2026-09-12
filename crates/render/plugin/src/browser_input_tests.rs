@@ -68,7 +68,7 @@ pub fn run_browser_input_tests() {
     assert!(matches!(host.drain().as_slice(), [PendingInput { event: UiInput::Text, text }] if text == "é\n pasted"));
     exercise(host.text.unchecked_ref(), "key");
     assert!(
-        matches!(host.drain().as_slice(), [PendingInput { event: UiInput::Key(event), .. }] if event.key == KeyCode::CHARACTER && event.value == u32::from('F'))
+        matches!(host.drain().as_slice(), [PendingInput { event: UiInput::Key(event), .. }] if event.key == KeyCode::Character && event.value == u32::from('F'))
     );
     exercise(canvas.unchecked_ref(), "wheel");
     assert!(matches!(
@@ -172,16 +172,16 @@ fn static_com_editing_and_webgl() {
         .unwrap();
     let input = ui.input_sink().unwrap();
     exercise(canvas.unchecked_ref(), "tab");
-    while native.poll(input.as_com_ref()).unwrap() == PollStatus::EVENT {}
+    while native.poll(input.as_com_ref()).unwrap() == PollStatus::Event {}
     let size = native.size().unwrap();
     ui.update(size).unwrap();
     native.text_input(ui.text_input_area().unwrap()).unwrap();
     let text = document.query_selector("textarea").unwrap().unwrap().dyn_into::<HtmlTextAreaElement>().unwrap();
     assert_eq!(document.active_element(), Some(text.clone().into()));
     exercise(text.unchecked_ref(), "compose-start");
-    assert_eq!(native.poll(input.as_com_ref()).unwrap(), PollStatus::IDLE);
+    assert_eq!(native.poll(input.as_com_ref()).unwrap(), PollStatus::Idle);
     exercise(text.unchecked_ref(), "compose-end");
-    while native.poll(input.as_com_ref()).unwrap() == PollStatus::EVENT {}
+    while native.poll(input.as_com_ref()).unwrap() == PollStatus::Event {}
     assert_eq!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::None);
     ui.update(size).unwrap();
     assert_eq!(editor.text().unwrap(), "日本");

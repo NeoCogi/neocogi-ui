@@ -93,8 +93,8 @@ impl ComNode {
         let state = super::input_contract::snapshot(ctx, input, self.policy().1);
         let (event, text) = super::input_contract::event(input);
         let change = match self.widget.update(state, event, NcCopyFromBufferOffset::new(0, text)) {
-            Ok(GeometryChange::CHANGED) => Change::Changed,
-            Ok(GeometryChange::NO_CHANGE) => Change::NoChange,
+            Ok(GeometryChange::Changed) => Change::Changed,
+            Ok(GeometryChange::NoChange) => Change::NoChange,
             Ok(_) => {
                 self.host.fail(NC_E_INVALID_ARG);
                 Change::Changed
@@ -230,14 +230,14 @@ impl ComNode {
             self.widget.take_change()
         };
         match change {
-            Ok(GeometryChange::CHANGED) => {
+            Ok(GeometryChange::Changed) => {
                 // A setter may have changed options or frame policy. Query that
                 // copied protocol only after a real component change instead of
                 // once per node on every update and render validation pass.
                 self.refresh_properties();
                 self.dirty.set(true);
             }
-            Ok(GeometryChange::NO_CHANGE) => {}
+            Ok(GeometryChange::NoChange) => {}
             Ok(_) => {
                 self.host.fail(NC_E_INVALID_ARG);
                 self.dirty.set(true);
@@ -274,23 +274,23 @@ impl Drop for ComNode {
 
 /// One mapping serves both COM policy decoding and concrete built-in reporting.
 const FRAME_ROLES: &[(WidgetFrame, crate::FrameRole)] = &[
-    (WidgetFrame::GENERIC, crate::FrameRole::Surface(crate::SurfaceRole::GENERIC_FRAME)),
-    (WidgetFrame::BUTTON, crate::FrameRole::Control(crate::ControlRole::BUTTON)),
-    (WidgetFrame::CHECKBOX, crate::FrameRole::Control(crate::ControlRole::CHECKBOX)),
-    (WidgetFrame::TEXT_INPUT, crate::FrameRole::Control(crate::ControlRole::TEXT_INPUT)),
-    (WidgetFrame::ITEM, crate::FrameRole::Control(crate::ControlRole::ITEM)),
-    (WidgetFrame::COMBO, crate::FrameRole::Control(crate::ControlRole::COMBO)),
-    (WidgetFrame::SLIDER_TRACK, crate::FrameRole::Control(crate::ControlRole::SLIDER_TRACK)),
-    (WidgetFrame::SLIDER_THUMB, crate::FrameRole::Control(crate::ControlRole::SLIDER_THUMB)),
-    (WidgetFrame::SCROLLBAR_TRACK, crate::FrameRole::Control(crate::ControlRole::SCROLLBAR_TRACK)),
-    (WidgetFrame::SCROLLBAR_THUMB, crate::FrameRole::Control(crate::ControlRole::SCROLLBAR_THUMB)),
-    (WidgetFrame::CLOSE_BUTTON, crate::FrameRole::Control(crate::ControlRole::CLOSE_BUTTON)),
-    (WidgetFrame::MINIMIZE_BUTTON, crate::FrameRole::Control(crate::ControlRole::MINIMIZE_BUTTON)),
-    (WidgetFrame::MAXIMIZE_BUTTON, crate::FrameRole::Control(crate::ControlRole::MAXIMIZE_BUTTON)),
-    (WidgetFrame::RESTORE_BUTTON, crate::FrameRole::Control(crate::ControlRole::RESTORE_BUTTON)),
-    (WidgetFrame::RESIZE_GRIP, crate::FrameRole::Control(crate::ControlRole::RESIZE_GRIP)),
-    (WidgetFrame::WINDOW, crate::FrameRole::Surface(crate::SurfaceRole::WINDOW)),
-    (WidgetFrame::PANEL, crate::FrameRole::Surface(crate::SurfaceRole::PANEL)),
+    (WidgetFrame::Generic, crate::FrameRole::Surface(crate::SurfaceRole::GenericFrame)),
+    (WidgetFrame::Button, crate::FrameRole::Control(crate::ControlRole::Button)),
+    (WidgetFrame::Checkbox, crate::FrameRole::Control(crate::ControlRole::Checkbox)),
+    (WidgetFrame::TextInput, crate::FrameRole::Control(crate::ControlRole::TextInput)),
+    (WidgetFrame::Item, crate::FrameRole::Control(crate::ControlRole::Item)),
+    (WidgetFrame::Combo, crate::FrameRole::Control(crate::ControlRole::Combo)),
+    (WidgetFrame::SliderTrack, crate::FrameRole::Control(crate::ControlRole::SliderTrack)),
+    (WidgetFrame::SliderThumb, crate::FrameRole::Control(crate::ControlRole::SliderThumb)),
+    (WidgetFrame::ScrollbarTrack, crate::FrameRole::Control(crate::ControlRole::ScrollbarTrack)),
+    (WidgetFrame::ScrollbarThumb, crate::FrameRole::Control(crate::ControlRole::ScrollbarThumb)),
+    (WidgetFrame::CloseButton, crate::FrameRole::Control(crate::ControlRole::CloseButton)),
+    (WidgetFrame::MinimizeButton, crate::FrameRole::Control(crate::ControlRole::MinimizeButton)),
+    (WidgetFrame::MaximizeButton, crate::FrameRole::Control(crate::ControlRole::MaximizeButton)),
+    (WidgetFrame::RestoreButton, crate::FrameRole::Control(crate::ControlRole::RestoreButton)),
+    (WidgetFrame::ResizeGrip, crate::FrameRole::Control(crate::ControlRole::ResizeGrip)),
+    (WidgetFrame::Window, crate::FrameRole::Surface(crate::SurfaceRole::Window)),
+    (WidgetFrame::Panel, crate::FrameRole::Surface(crate::SurfaceRole::Panel)),
 ];
 
 /// Encodes the exact built-in frame family without collapsing input or item roles.

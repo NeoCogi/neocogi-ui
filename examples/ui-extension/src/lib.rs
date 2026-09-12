@@ -116,12 +116,12 @@ impl CounterObject {
 
     /// User activation commits before emission, capturing the matching label for deferred delivery.
     fn update_content(&mut self, state: WidgetUpdate) -> GeometryChange {
-        if state.clicked || state.action == WidgetAction::ACTIVATE {
+        if state.clicked || state.action == WidgetAction::Activate {
             self.count = self.count.saturating_add(1);
             self.submitted.emit(Activation { label: self.count.to_string() });
-            GeometryChange::CHANGED
+            GeometryChange::Changed
         } else {
-            GeometryChange::NO_CHANGE
+            GeometryChange::NoChange
         }
     }
     /// Standard body text requires no knowledge of native fonts, atlas packing or GPU types.
@@ -135,7 +135,7 @@ impl CounterObject {
     }
 }
 // Focus=1, Tab=2, Enter=4 and Space=8 are the canonical WidgetProperties keyboard bits.
-widget!(CounterObject, 1 | 2 | 4 | 8, WidgetFrame::BUTTON);
+widget!(CounterObject, 1 | 2 | 4 | 8, WidgetFrame::Button);
 impl Counter for CounterObject {
     /// Reads the committed scalar directly from the real object.
     fn count(&self) -> Result<u32, NcStatus> {
@@ -147,7 +147,7 @@ impl Counter for CounterObject {
         self.common.state.writable()?;
         if self.count != value {
             self.count = value;
-            self.common.state.record_change(GeometryChange::CHANGED);
+            self.common.state.record_change(GeometryChange::Changed);
         }
         Ok(())
     }
@@ -183,7 +183,7 @@ struct Inset {
 impl Inset {
     /// This layout-only container has no input-dependent semantic state.
     fn update_content(&mut self, _state: WidgetUpdate) -> GeometryChange {
-        GeometryChange::NO_CHANGE
+        GeometryChange::NoChange
     }
     /// Children paint through ordinary retained traversal, without a second recursive paint path.
     fn paint_content(&self, _state: WidgetPaint, _painter: &mut Painter<'_>) -> Result<(), NcStatus> {
@@ -194,7 +194,7 @@ impl Inset {
         self.editor.close()?.finish()
     }
 }
-widget!(Inset, 0, WidgetFrame::PANEL);
+widget!(Inset, 0, WidgetFrame::Panel);
 impl IContainer for Inset {
     /// Exposes actual topology without granting the writer needed to bypass the one-child policy.
     fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
@@ -230,7 +230,7 @@ impl IInset for Inset {
         }
         if self.padding != padding {
             self.padding = padding;
-            self.common.state.record_change(GeometryChange::CHANGED);
+            self.common.state.record_change(GeometryChange::Changed);
         }
         Ok(())
     }
@@ -295,7 +295,7 @@ impl IContainerLayout for Inset {
 }
 /// Remove decoration from finite constraints while preserving an explicitly unbounded axis.
 fn shrink(mut limit: AxisLimit, inset: i32) -> AxisLimit {
-    if limit.kind == LimitKind::FINITE {
+    if limit.kind == LimitKind::Finite {
         limit.extent = limit.extent.saturating_sub(inset).max(0);
     }
     limit

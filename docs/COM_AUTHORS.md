@@ -253,7 +253,7 @@ receiver contract and make state flow harder to follow.
 
 A semantic setter checks `state.writable()` before borrowing its data, validates
 all replacement inputs, commits atomically, and calls
-`state.record_change(GeometryChange::CHANGED)` when measurement/placement inputs
+`state.record_change(GeometryChange::Changed)` when measurement/placement inputs
 actually differ. Common option setters use `state.set_options`. Return the
 update's own geometry result; NO_CHANGE must never erase a prior setter marker.
 The runtime collects markers across the authoritative forest, including hidden
@@ -265,7 +265,7 @@ The app queues raw input and then updates explicitly:
 
 ```rust,ignore
 ui.input(UiInput::Key(KeyStroke {
-    key: KeyCode::TAB, value: 0, pressed: true, repeat: false, modifiers: 0,
+    key: KeyCode::Tab, value: 0, pressed: true, repeat: false, modifiers: 0,
 }), "")?;
 ui.input(UiInput::Text, "complete Unicode commit ☃")?;
 ui.update(drawable_size)?;
@@ -589,9 +589,9 @@ For example, a static client can edit actual child capabilities without mirrorin
 plugin state:
 
 ```rust
-let section = ui.widgets().disclosure("Details", DisclosureStyle::TREE, false)?;
+let section = ui.widgets().disclosure("Details", DisclosureStyle::Tree, false)?;
 let body = section.body()?;
-let editor = ui.widgets().text_area("first line\nsecond line", TextWrapping::WORD, true)?;
+let editor = ui.widgets().text_area("first line\nsecond line", TextWrapping::Word, true)?;
 body.insert(0, &editor, LinearEdge::new(LayoutTrack::Content))?.finish()?;
 section.header()?.set_text("Editable details")?;
 section.set_expanded(true)?;
@@ -851,7 +851,7 @@ other retained inputs also changed. Perform scene edits before painting. The GPU
 owner can detect its own active preparation/execution, but cannot detect a separate
 UI plugin's earlier paint phase. Widget/application authors must uphold observational
 paint and synchronize externally shared scene/model changes; no automatic dependency
-tracking is implied by `GeometryChange::NO_CHANGE`.
+tracking is implied by `GeometryChange::NoChange`.
 
 Backend-specific application renderers are compiled into the selected GPU plugin.
 Their concrete command enums, GL context, Vulkan command buffers, WGPU encoders and
@@ -869,7 +869,7 @@ synchronous call; the platform never owns an application input destination.
 An application interceptor can implement `IInputSink` as a concrete COM class,
 retain the runtime input projection and forward accepted events explicitly.
 
-Drain `PollStatus::EVENT` until `IDLE`; `CLOSE` requests host shutdown. A failed
+Drain `PollStatus::Event` until `IDLE`; `CLOSE` requests host shutdown. A failed
 input delivery consumes the attempted event and preserves later queued events.
 Do not replay the failed event automatically: a destination may have committed
 part of its work before returning an error. Recursive polling of the same window

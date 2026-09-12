@@ -43,7 +43,7 @@ pub fn decode(path: ComRef<'_, INativePathAbi>) -> Result<PathBuf, NcStatus> {
     #[cfg(windows)]
     {
         use std::os::windows::ffi::OsStringExt;
-        if encoding != PathEncoding::WINDOWS_UTF16 {
+        if encoding != PathEncoding::WindowsUtf16 {
             return Err(NC_E_INVALID_ARG);
         }
         let mut units = copy_buffer::<u16>(count)?;
@@ -52,7 +52,7 @@ pub fn decode(path: ComRef<'_, INativePathAbi>) -> Result<PathBuf, NcStatus> {
     }
     #[cfg(not(windows))]
     {
-        if encoding != PathEncoding::UNIX_BYTES {
+        if encoding != PathEncoding::UnixBytes {
             return Err(NC_E_INVALID_ARG);
         }
         let mut bytes = copy_buffer::<u8>(count)?;
@@ -79,11 +79,7 @@ struct PathValue {
 impl INativePath for PathValue {
     /// Fixed native encoding for this producer target.
     fn encoding(&self) -> Result<PathEncoding, NcStatus> {
-        Ok(if cfg!(windows) {
-            PathEncoding::WINDOWS_UTF16
-        } else {
-            PathEncoding::UNIX_BYTES
-        })
+        Ok(if cfg!(windows) { PathEncoding::WindowsUtf16 } else { PathEncoding::UnixBytes })
     }
     /// Counts native units independently of lossy display length.
     fn unit_count(&self) -> Result<u64, NcStatus> {

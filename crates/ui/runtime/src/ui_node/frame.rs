@@ -182,7 +182,7 @@ mod tests {
     /// Replaces the generic frame role used by the frame geometry under test.
     fn with_frame(mut style: Skin, patch: NinePatch) -> Skin {
         // Tests mutate the same concrete catalog entry that production generic framing resolves.
-        replace_surface_patches(&mut style, SurfaceRole::GENERIC_FRAME, |_| patch);
+        replace_surface_patches(&mut style, SurfaceRole::GenericFrame, |_| patch);
         style
     }
 
@@ -190,7 +190,7 @@ mod tests {
     fn frame_geometry_derives_inside_content() {
         let atlas = test_atlas();
         let style = with_frame(test_skin(&atlas), NinePatch::framed(SliceInsets::uniform(2), color(1, 2, 3, 255), None));
-        let geometry = frame_geometry(Recti::new(10, 20, 30, 40), Some(FrameRole::Surface(SurfaceRole::GENERIC_FRAME)), &style);
+        let geometry = frame_geometry(Recti::new(10, 20, 30, 40), Some(FrameRole::Surface(SurfaceRole::GenericFrame)), &style);
         assert_eq!(rect_tuple(geometry.outer), (10, 20, 30, 40));
         assert_eq!(geometry.content.map(rect_tuple), Some((12, 22, 26, 36)));
     }
@@ -200,7 +200,7 @@ mod tests {
         let atlas = test_atlas();
         let style = with_frame(test_skin(&atlas), NinePatch::framed(SliceInsets::ZERO, color(1, 2, 3, 255), None));
         let outer = Recti::new(10, 20, 30, 40);
-        let geometry = frame_geometry(outer, Some(FrameRole::Surface(SurfaceRole::GENERIC_FRAME)), &style);
+        let geometry = frame_geometry(outer, Some(FrameRole::Surface(SurfaceRole::GenericFrame)), &style);
         assert_eq!(geometry.content.map(rect_tuple), Some(rect_tuple(outer)));
     }
 
@@ -209,7 +209,7 @@ mod tests {
         let atlas = test_atlas();
         let style = with_frame(test_skin(&atlas), NinePatch::framed(SliceInsets::uniform(1), color(0, 0, 0, 0), None));
         assert_eq!(
-            frame_geometry(Recti::new(4, 5, 8, 7), Some(FrameRole::Surface(SurfaceRole::GENERIC_FRAME)), &style)
+            frame_geometry(Recti::new(4, 5, 8, 7), Some(FrameRole::Surface(SurfaceRole::GenericFrame)), &style)
                 .content
                 .map(rect_tuple),
             Some((5, 6, 6, 5))
@@ -221,7 +221,7 @@ mod tests {
         let atlas = test_atlas();
         let style = test_skin(&atlas);
         assert!(
-            frame_geometry(Recti::new(7, 8, 2, 10), Some(FrameRole::Surface(SurfaceRole::GENERIC_FRAME)), &style)
+            frame_geometry(Recti::new(7, 8, 2, 10), Some(FrameRole::Surface(SurfaceRole::GenericFrame)), &style)
                 .content
                 .is_none()
         );

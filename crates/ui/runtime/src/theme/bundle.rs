@@ -75,7 +75,7 @@ impl SkinBundle {
     pub fn new(atlas: AtlasHandle, mut skin: Skin) -> Self {
         // Validate the already-resolved semantic IDs. This keeps a successfully constructed bundle
         // total for every built-in measure and paint operation without repeating name lookup.
-        let _ = skin.resolve_font_role(&atlas, crate::FontRole::BODY);
+        let _ = skin.resolve_font_role(&atlas, crate::FontRole::Body);
         for role in IconRole::ALL {
             let _ = skin.resolve_icon_role(&atlas, role);
         }
@@ -127,8 +127,8 @@ mod tests {
         let local_atlas = crate::test_support::test_atlas();
         let foreign_atlas = crate::test_support::test_atlas();
         let mut skin = Skin::from_atlas(&local_atlas);
-        let foreign_icon = Skin::from_atlas(&foreign_atlas).resolve_icon_role(&foreign_atlas, IconRole::CLOSE);
-        crate::test_support::replace_control_patches(&mut skin, ControlRole::BUTTON, |_| {
+        let foreign_icon = Skin::from_atlas(&foreign_atlas).resolve_icon_role(&foreign_atlas, IconRole::Close);
+        crate::test_support::replace_control_patches(&mut skin, ControlRole::Button, |_| {
             NinePatch::image(
                 SliceInsets::ZERO,
                 NinePatchImage::new(foreign_icon, SliceInsets::ZERO, Color { r: 255, g: 255, b: 255, a: 255 }),

@@ -143,9 +143,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     ui.render(size, renderer.as_com_ref())?;
     if options.smoke {
         // Keyboard routing must cross the real UI plugin, enqueue, then reach the host sink.
-        key(&ui, KeyCode::TAB)?;
+        key(&ui, KeyCode::Tab)?;
         ui.update_with_events(size, &session)?;
-        key(&ui, KeyCode::ENTER)?;
+        key(&ui, KeyCode::Enter)?;
         ui.update_with_events(size, &session)?;
         assert_eq!(*session.state()?, 1);
         button.set_label("A longer label changes preferred measurement across the plugin boundary")?;
@@ -178,9 +178,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     'frames: loop {
         loop {
             match native.poll(input.as_com_ref())? {
-                PollStatus::EVENT => continue,
-                PollStatus::IDLE => break,
-                PollStatus::CLOSE => break 'frames,
+                PollStatus::Event => continue,
+                PollStatus::Idle => break,
+                PollStatus::Close => break 'frames,
                 _ => return Err("unknown platform polling result".into()),
             }
         }
@@ -227,15 +227,15 @@ fn key(ui: &Ui, key: KeyCode) -> Result<(), NcStatus> {
 
 /// Exercises every migrated container through independently compiled factory and layout interfaces.
 fn smoke_containers(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
-    let mut section = ui.widgets().disclosure("Composed editor", DisclosureStyle::TREE, true)?;
-    let mut text = ui.widgets().text_area(&"Editable native content\n".repeat(60), TextWrapping::WORD, true)?;
+    let mut section = ui.widgets().disclosure("Composed editor", DisclosureStyle::Tree, true)?;
+    let mut text = ui.widgets().text_area(&"Editable native content\n".repeat(60), TextWrapping::Word, true)?;
     section
         .body()?
         .insert(0, &text, LinearEdge::new(LayoutTrack::Fixed { extent: 100 }))?
         .finish()?;
     let mut grid = ui.widgets().grid(&[LayoutTrack::Flex { weight: 1.0 }], &[])?;
     grid.insert(0, &section, GridExtent { columns: 1, rows: 1 })?.finish()?;
-    let tail = ui.widgets().text_block(&"Outer scrolling content\n".repeat(60), TextWrapping::NONE)?;
+    let tail = ui.widgets().text_block(&"Outer scrolling content\n".repeat(60), TextWrapping::None)?;
     grid.insert(1, &tail, GridExtent { columns: 1, rows: 1 })?.finish()?;
     let mut scroll = ui.widgets().scroll_area(&grid, true)?;
     let window = ui.window("Dynamic containers", Rect { x: 20, y: 20, width: 560, height: 320 }, &scroll)?;
@@ -324,7 +324,7 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     events.subscribe_menu_item(&item, MenuSubmission)?;
     ui.update_with_events(size, &events)?;
     ui.render(size, renderer)?;
-    for (key, value) in [(KeyCode::FUNCTION, 10), (KeyCode::ARROW_DOWN, 0), (KeyCode::ENTER, 0)] {
+    for (key, value) in [(KeyCode::Function, 10), (KeyCode::ArrowDown, 0), (KeyCode::Enter, 0)] {
         smoke_key(ui, key, value)?;
     }
     ui.update_with_events(size, &events)?;
@@ -337,13 +337,13 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     ui.update_with_events(size, &events)?;
     ui.render(size, renderer)?;
     for _ in 0..6 {
-        smoke_key(ui, KeyCode::TAB, 0)?;
+        smoke_key(ui, KeyCode::Tab, 0)?;
     }
     ui.input(UiInput::Text, " native file ")?;
     for _ in 0..2 {
-        smoke_key(ui, KeyCode::TAB, 0)?;
+        smoke_key(ui, KeyCode::Tab, 0)?;
     }
-    smoke_key(ui, KeyCode::SPACE, 0)?;
+    smoke_key(ui, KeyCode::Space, 0)?;
     ui.update_with_events(size, &events)?;
     assert_eq!(*events.state()?, 2);
     assert_eq!(picker.active(), Ok(false));

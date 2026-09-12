@@ -44,7 +44,7 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
     item.set_label("Before mount").unwrap();
     item.set_mark(MenuMark::Checked { checked: false }).unwrap();
     item.set_shortcut_hint("Ctrl+O").unwrap();
-    item.set_font_role(FontRole::BODY).unwrap();
+    item.set_font_role(FontRole::Body).unwrap();
     assert_eq!(item.mark().unwrap(), MenuMark::Checked { checked: false });
     assert_eq!(item.shortcut_hint().unwrap(), "Ctrl+O");
     let session = EventSession::new(Vec::new());
@@ -56,11 +56,11 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
     drop(file);
     drop(recent);
     item.set_label("Captured").unwrap();
-    key(&ui, KeyCode::TAB, 0);
-    key(&ui, KeyCode::FUNCTION, 10);
-    key(&ui, KeyCode::ARROW_DOWN, 0);
-    key(&ui, KeyCode::ARROW_RIGHT, 0);
-    key(&ui, KeyCode::ENTER, 0);
+    key(&ui, KeyCode::Tab, 0);
+    key(&ui, KeyCode::Function, 10);
+    key(&ui, KeyCode::ArrowDown, 0);
+    key(&ui, KeyCode::ArrowRight, 0);
+    key(&ui, KeyCode::Enter, 0);
     ui.input(UiInput::Text, "focus restored").unwrap();
     ui.update(SIZE).unwrap();
     item.set_label("Later").unwrap();
@@ -130,11 +130,11 @@ fn standalone_menu_popup_submits_then_hides_without_destroying_its_live_rows() {
     session.subscribe_menu_item(&item, Record).unwrap();
     popup.show_at(Rect { x: 60, y: 60, width: 20, height: 20 }).unwrap();
     // Standalone menus begin without row selection; Down selects their first actionable row.
-    key(&ui, KeyCode::ARROW_DOWN, 0);
-    key(&ui, KeyCode::ENTER, 0);
+    key(&ui, KeyCode::ArrowDown, 0);
+    key(&ui, KeyCode::Enter, 0);
     ui.update_with_events(SIZE, &session).unwrap();
     assert_eq!(&*session.state().unwrap(), &["Run"]);
-    assert_eq!(popup.visibility(), Ok(Visibility::HIDDEN));
+    assert_eq!(popup.visibility(), Ok(Visibility::Hidden));
     assert_eq!(item.label().unwrap(), "Run");
     popup.close().unwrap();
     assert_eq!(item.label(), Err(UI_E_CLOSED));

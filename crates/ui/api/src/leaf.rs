@@ -12,14 +12,14 @@ pub trait LeafContent: 'static {
     /// Keyboard participation bits use the same copied contract as IWidget::properties.
     const KEYBOARD: u16 = 0;
     /// Theme frame role shared with ordinary controls; options choose whether to draw it.
-    const FRAME: WidgetFrame = WidgetFrame::GENERIC;
+    const FRAME: WidgetFrame = WidgetFrame::Generic;
     /// Computes preferred content dimensions under validated finite/unbounded constraints.
     fn measure(&self, bounds: LayoutLimits, metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus>;
     /// Processes a validated copied event or an ordinary eventless update. Report CHANGED whenever
     /// external/local state changes measurement inputs; skipped hidden updates retain the documented
     /// author obligation to synchronize through a setter or a later truthful update result.
     fn update(&mut self, _state: WidgetUpdate, _event: WidgetEvent, _text: &str) -> Result<GeometryChange, NcStatus> {
-        Ok(GeometryChange::NO_CHANGE)
+        Ok(GeometryChange::NoChange)
     }
     /// Records observational drawing through this invocation's checked painter capability.
     fn paint(&self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus>;
@@ -74,10 +74,10 @@ impl<Content: LeafContent> IWidget for LeafObject<Content> {
         let change = self.content.update(state, event, text).inspect_err(|_| {
             // A failed behavior update may have committed part of its local state. Retain a
             // conservative geometry marker so recovery cannot reuse an earlier measurement.
-            self.state.record_change(GeometryChange::CHANGED);
+            self.state.record_change(GeometryChange::Changed);
         })?;
-        if change != GeometryChange::CHANGED && change != GeometryChange::NO_CHANGE {
-            self.state.record_change(GeometryChange::CHANGED);
+        if change != GeometryChange::Changed && change != GeometryChange::NoChange {
+            self.state.record_change(GeometryChange::Changed);
             return Err(neocogi_com::NC_E_INVALID_ARG);
         }
         self.state.record_change(change);

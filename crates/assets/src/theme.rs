@@ -686,11 +686,11 @@ impl FontCatalogDocument {
         // The explicit table keeps JSON keys, public FontRole values, and atlas names aligned
         // without reflection or string-driven role dispatch.
         [
-            (FontRole::BODY, &self.body),
-            (FontRole::SMALL, &self.small),
-            (FontRole::TITLE, &self.title),
-            (FontRole::HEADING, &self.heading),
-            (FontRole::MONO, &self.mono),
+            (FontRole::Body, &self.body),
+            (FontRole::Small, &self.small),
+            (FontRole::Title, &self.title),
+            (FontRole::Heading, &self.heading),
+            (FontRole::Mono, &self.mono),
         ]
     }
 
@@ -748,14 +748,14 @@ impl IconCatalogDocument {
         // This explicit table is the single bridge from schema fields to runtime roles. Widgets
         // remain unaware of filenames, while the loader remains unaware of widget implementations.
         [
-            (IconRole::CLOSE, &self.close),
-            (IconRole::EXPAND, &self.expand),
-            (IconRole::COLLAPSE, &self.collapse),
-            (IconRole::CHECK, &self.check),
-            (IconRole::EXPAND_DOWN, &self.expand_down),
-            (IconRole::OPEN_FOLDER, &self.open_folder),
-            (IconRole::CLOSED_FOLDER, &self.closed_folder),
-            (IconRole::FILE, &self.file),
+            (IconRole::Close, &self.close),
+            (IconRole::Expand, &self.expand),
+            (IconRole::Collapse, &self.collapse),
+            (IconRole::Check, &self.check),
+            (IconRole::ExpandDown, &self.expand_down),
+            (IconRole::OpenFolder, &self.open_folder),
+            (IconRole::ClosedFolder, &self.closed_folder),
+            (IconRole::File, &self.file),
         ]
     }
 
@@ -886,8 +886,8 @@ impl WindowChromeDocument {
         let captions = self.captions;
         AssetChrome {
             title_alignment: match self.title_alignment {
-                WindowTitleAlignmentDocument::Leading => TitleAlignment::LEADING,
-                WindowTitleAlignmentDocument::Centered => TitleAlignment::CENTERED,
+                WindowTitleAlignmentDocument::Leading => TitleAlignment::Leading,
+                WindowTitleAlignmentDocument::Centered => TitleAlignment::Centered,
             },
             close_side: compile_caption_side(captions.close_side),
             minimize_side: compile_caption_side(captions.minimize_side),
@@ -919,8 +919,8 @@ impl Default for WindowChromeDocument {
 /// Converts an asset-document caption edge into its portable tag.
 fn compile_caption_side(side: CaptionButtonSideDocument) -> CaptionSide {
     match side {
-        CaptionButtonSideDocument::Leading => CaptionSide::LEADING,
-        CaptionButtonSideDocument::Trailing => CaptionSide::TRAILING,
+        CaptionButtonSideDocument::Leading => CaptionSide::Leading,
+        CaptionButtonSideDocument::Trailing => CaptionSide::Trailing,
     }
 }
 

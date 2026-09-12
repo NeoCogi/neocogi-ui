@@ -69,7 +69,7 @@ fn round_trip_preserves_complete_resources_and_image_patches() {
     let mut skin = Skin::from_atlas(&atlas);
     skin.window_chrome = crate::WindowChromeSkin::classic_mac(crate::Color { r: 12, g: 34, b: 56, a: 255 });
     skin.set_control(
-        crate::ControlRole::BUTTON,
+        crate::ControlRole::Button,
         crate::ControlState::Disabled,
         crate::Visual::new(
             crate::NinePatch::image(
@@ -257,7 +257,7 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
         installed: 0,
     });
     session.subscribe_activation(&button, InstallTheme).unwrap();
-    for key in [KeyCode::TAB, KeyCode::SPACE] {
+    for key in [KeyCode::Tab, KeyCode::Space] {
         ui.input(
             UiInput::Key(KeyStroke {
                 key,
@@ -321,8 +321,8 @@ fn runtime_install_is_atomic_and_updates_shared_widget_measurement() {
     let mut leaf: ComPtr<ILeafLayoutAbi> = button_interface.query().unwrap();
     let metrics: ComPtr<ITextMetricsAbi> = UnusedMetrics::from_value(UnusedMetrics).query().unwrap();
     let limits = LayoutLimits {
-        width: AxisLimit { kind: LimitKind::UNBOUNDED, extent: 0 },
-        height: AxisLimit { kind: LimitKind::UNBOUNDED, extent: 0 },
+        width: AxisLimit { kind: LimitKind::Unbounded, extent: 0 },
+        height: AxisLimit { kind: LimitKind::Unbounded, extent: 0 },
     };
     let before = leaf.measure(limits, metrics.as_com_ref()).unwrap();
     ui.update(SIZE).unwrap();

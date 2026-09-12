@@ -104,7 +104,7 @@ mod tests {
             Ok(WidgetProperties {
                 options: WidgetOptions::NONE,
                 keyboard: 0,
-                frame: WidgetFrame::GENERIC,
+                frame: WidgetFrame::Generic,
             })
         }
         /// This fixed fixture permits only its supported inert option policy.
@@ -114,14 +114,14 @@ mod tests {
         /// Input validation remains typed even in a facade-only fake component.
         fn update(&mut self, _state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
             decode_widget_event(event, text)?;
-            Ok(GeometryChange::NO_CHANGE)
+            Ok(GeometryChange::NoChange)
         }
 
         /// Clears one accumulated programmatic geometry change.
         fn take_change(&mut self) -> Result<GeometryChange, NcStatus> {
             let changed = self.changed;
             self.changed = false;
-            Ok(if changed { GeometryChange::CHANGED } else { GeometryChange::NO_CHANGE })
+            Ok(if changed { GeometryChange::Changed } else { GeometryChange::NoChange })
         }
 
         /// Delegates one illustrative fill to the scope-checked recorder.
@@ -140,10 +140,10 @@ mod tests {
         button.set_label("Save")?;
         assert_eq!(button.label()?, "Save");
         let mut node = button.node_interface()?;
-        assert_eq!(node.take_change()?, GeometryChange::CHANGED);
-        assert_eq!(node.take_change()?, GeometryChange::NO_CHANGE);
+        assert_eq!(node.take_change()?, GeometryChange::Changed);
+        assert_eq!(node.take_change()?, GeometryChange::NoChange);
         button.set_label("Save")?;
-        assert_eq!(node.take_change()?, GeometryChange::NO_CHANGE);
+        assert_eq!(node.take_change()?, GeometryChange::NoChange);
         Ok(())
     }
 
@@ -161,7 +161,7 @@ mod tests {
         let proxy = ButtonWidget::from_interface(button);
         assert_eq!(proxy.label().unwrap(), "before");
         let mut node = proxy.node_interface().unwrap();
-        assert_eq!(node.take_change().unwrap(), GeometryChange::NO_CHANGE);
+        assert_eq!(node.take_change().unwrap(), GeometryChange::NoChange);
         let mut clone = proxy.clone();
         clone.set_label("shared").unwrap();
         assert_eq!(proxy.label().unwrap(), "shared");

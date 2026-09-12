@@ -81,7 +81,7 @@ impl NumberParameters {
             value,
             step,
             precision,
-            font: FontRef::Role(FontRole::BODY),
+            font: FontRef::Role(FontRole::Body),
             opt,
         })
     }
@@ -224,10 +224,10 @@ impl Number {
         let base = ctx.local_rect();
         if !ctx.options().intersects(WidgetOption::FRAME) {
             // Unframed numeric editors retain the input role's center without structural borders.
-            ctx.draw_control_center(ControlRole::TEXT_INPUT, base);
+            ctx.draw_control_center(ControlRole::TextInput, base);
         }
         let label = number_label(self.value, self.precision);
-        ctx.draw_control_text_with_font(font, label.as_str(), base, ControlRole::TEXT_INPUT, ctx.options());
+        ctx.draw_control_text_with_font(font, label.as_str(), base, ControlRole::TextInput, ctx.options());
     }
 }
 
@@ -254,7 +254,7 @@ impl Widget for Number {
 
     fn frame_appearance_role(&self) -> FrameRole {
         // Numeric editing shares the single-line text-input background and border contract.
-        FrameRole::Control(ControlRole::TEXT_INPUT)
+        FrameRole::Control(ControlRole::TextInput)
     }
 
     fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
@@ -361,7 +361,7 @@ impl neocogi_ui_contracts::Number for Number {
         let previous = self.value();
         self.set_value(value);
         if self.value() != previous {
-            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+            self.runtime_mut().state.record_change(GeometryChange::Changed);
         }
         Ok(())
     }

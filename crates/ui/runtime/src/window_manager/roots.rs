@@ -3848,8 +3848,8 @@ impl WindowManager {
         let root = node.root().expect("validated window has root policy");
         let rect = node.surface.rect;
         let layer = match self.window_layer(window)? {
-            super::LayerBinding::Fixed(number) => WindowLayer { kind: LayerKind::FIXED, number },
-            super::LayerBinding::Modal => WindowLayer { kind: LayerKind::MODAL, number: 0 },
+            super::LayerBinding::Fixed(number) => WindowLayer { kind: LayerKind::Fixed, number },
+            super::LayerBinding::Modal => WindowLayer { kind: LayerKind::Modal, number: 0 },
         };
         Ok(WindowSnapshot {
             rect: Rect {
@@ -3860,10 +3860,10 @@ impl WindowManager {
             },
             options: WindowOptions::from_raw(node.surface.options.bits() as u16),
             layer,
-            visibility: if self.root_is_visible(id) { Visibility::VISIBLE } else { Visibility::HIDDEN },
+            visibility: if self.root_is_visible(id) { Visibility::Visible } else { Visibility::Hidden },
             child_clip: match root.child_window_clip {
-                super::ChildWindowClip::None => ChildClip::NONE,
-                super::ChildWindowClip::Content => ChildClip::CONTENT,
+                super::ChildWindowClip::None => ChildClip::None,
+                super::ChildWindowClip::Content => ChildClip::Content,
             },
         })
     }

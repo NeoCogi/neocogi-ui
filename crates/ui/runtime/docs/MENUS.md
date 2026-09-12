@@ -79,7 +79,7 @@ An intrinsic bar is also the overlay boundary for structural child windows. With
 family the manager records the parent's background and application body, then its child families,
 then the parent bar and chrome. Pointer selection walks that relationship in reverse, so a root bar
 both renders and handles input above children that geometrically overlap it. If the parent window
-uses `ChildClip::CONTENT`, each complete child surface is additionally clipped below the bar
+uses `ChildClip::Content`, each complete child surface is additionally clipped below the bar
 to the parent's application body. The active menu-popup branch still occupies the transient tier of
 the owning window's inherited fixed or modal band.
 

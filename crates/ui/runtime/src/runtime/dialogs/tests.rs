@@ -61,7 +61,7 @@ impl Fixture {
     /// Traverses actual keyboard-eligible COM controls using ordinary Tab input.
     fn tabs(&self, count: usize) {
         for _ in 0..count {
-            self.key(KeyCode::TAB, 0);
+            self.key(KeyCode::Tab, 0);
         }
     }
     /// Opens a native directory through the statically linked request/path adapter.
@@ -99,7 +99,7 @@ fn failed_open_and_overlapping_requests_preserve_previous_state_and_expose_nativ
     let missing = directory.path().join("missing");
     assert_eq!(fixture.handle.open(&neocogi_ui::FileDialogRequest::new(&missing)), Err(UI_E_IO));
     assert!(!fixture.handle.active().unwrap());
-    assert_eq!(fixture.handle.window().unwrap().snapshot().unwrap().visibility, Visibility::HIDDEN);
+    assert_eq!(fixture.handle.window().unwrap().snapshot().unwrap().visibility, Visibility::Hidden);
     assert_eq!(fixture.file_root().as_ptr(), original.as_ptr());
     assert!(fixture.handle.diagnostic().unwrap().contains("missing"));
     fixture.open(directory.path());
@@ -136,7 +136,7 @@ fn empty_acceptance_and_independent_picker_requests_use_actual_controls() {
     fixture.open(directory.path());
     // Up, Home, Path, Go, Parent, Filename, Cancel, Open: activate Open with an empty filename.
     fixture.tabs(8);
-    fixture.key(KeyCode::SPACE, 0);
+    fixture.key(KeyCode::Space, 0);
     fixture.ui.update_with_events(SIZE, &events).unwrap();
     assert_eq!(fixture.handle.active(), Ok(true));
     assert!(events.state().unwrap().is_empty());
@@ -166,14 +166,14 @@ fn typed_filename_acceptance_uses_real_controls_and_completes_before_update_retu
     fixture.tabs(6);
     fixture.ui.input(UiInput::Text, " file name ").unwrap();
     fixture.tabs(2);
-    fixture.key(KeyCode::SPACE, 0);
+    fixture.key(KeyCode::Space, 0);
     fixture.ui.update_with_events(SIZE, &events).unwrap();
     assert_eq!(
         &*events.state().unwrap(),
         &[FileDialogCompleted::Accepted(directory.path().join(" file name "))]
     );
     assert_eq!(fixture.handle.active(), Ok(false));
-    assert_eq!(fixture.handle.window().unwrap().snapshot().unwrap().visibility, Visibility::HIDDEN);
+    assert_eq!(fixture.handle.window().unwrap().snapshot().unwrap().visibility, Visibility::Hidden);
     assert_eq!(fixture.controller.session.state().unwrap().filename.text().unwrap(), " file name ");
     assert_eq!(fixture.handle.cancel(), Ok(false));
     fixture.handle.close().unwrap();
@@ -195,12 +195,12 @@ fn selected_non_utf8_file_preserves_exact_native_identity_across_display_collisi
     fixture.open(directory.path());
     // Four toolbar stops, parent folder, then the first exact native file row.
     fixture.tabs(6);
-    fixture.key(KeyCode::SPACE, 0);
+    fixture.key(KeyCode::Space, 0);
     fixture.ui.update_with_events(SIZE, &events).unwrap();
     assert_eq!(fixture.controller.session.state().unwrap().selected.as_ref(), Some(&first));
     // Second file, filename, Cancel, Open.
     fixture.tabs(4);
-    fixture.key(KeyCode::SPACE, 0);
+    fixture.key(KeyCode::Space, 0);
     fixture.ui.update_with_events(SIZE, &events).unwrap();
     assert_eq!(&*events.state().unwrap(), &[FileDialogCompleted::Accepted(first)]);
     fixture.handle.close().unwrap();
@@ -217,13 +217,13 @@ fn unreadable_navigation_preserves_selection_directory_and_dynamic_widget_identi
     std::fs::write(&file, "data").unwrap();
     fixture.open(directory.path());
     fixture.tabs(7); // Four toolbar stops, parent folder, child folder, file.
-    fixture.key(KeyCode::SPACE, 0);
+    fixture.key(KeyCode::Space, 0);
     fixture.ui.update(SIZE).unwrap();
     assert_eq!(fixture.controller.session.state().unwrap().selected.as_ref(), Some(&file));
     let root = fixture.file_root();
     std::fs::remove_dir(&folder).unwrap();
-    fixture.key(KeyCode::TAB, 4); // Shift+Tab returns to the now-unreadable retained folder row.
-    fixture.key(KeyCode::SPACE, 0);
+    fixture.key(KeyCode::Tab, 4); // Shift+Tab returns to the now-unreadable retained folder row.
+    fixture.key(KeyCode::Space, 0);
     fixture.ui.update(SIZE).unwrap();
     assert_eq!(fixture.file_root().as_ptr(), root.as_ptr());
     let model = fixture.controller.session.state().unwrap();
@@ -246,11 +246,11 @@ fn lifecycle_cancellation_is_once_per_request_and_stale_hide_does_not_cancel_reo
     fixture.ui.update_with_events(SIZE, &events).unwrap();
     assert_eq!(&*events.state().unwrap(), &[FileDialogCompleted::Cancelled]);
     assert_eq!(fixture.handle.active(), Ok(true));
-    fixture.owner.set_visibility(Visibility::HIDDEN).unwrap();
+    fixture.owner.set_visibility(Visibility::Hidden).unwrap();
     fixture.ui.update_with_events(SIZE, &events).unwrap();
     assert_eq!(events.state().unwrap().len(), 2);
     assert_eq!(fixture.handle.active(), Ok(false));
-    fixture.owner.set_visibility(Visibility::VISIBLE).unwrap();
+    fixture.owner.set_visibility(Visibility::Visible).unwrap();
     fixture.open(directory.path());
     fixture.owner.close().unwrap();
     fixture.ui.update_with_events(SIZE, &events).unwrap();
@@ -297,7 +297,7 @@ fn successful_navigation_reuses_fixed_controls_and_replaces_the_complete_dynamic
     fixture.ui.update(SIZE).unwrap();
     assert!(scroll.info().unwrap().requested.y > 0);
     fixture.tabs(6); // Four toolbar stops, parent folder, then the child directory.
-    fixture.key(KeyCode::SPACE, 0);
+    fixture.key(KeyCode::Space, 0);
     fixture.ui.update(SIZE).unwrap();
     assert_ne!(fixture.file_root().as_ptr(), old_root.as_ptr());
     assert_eq!(fixture.controller.session.state().unwrap().directory, child);
@@ -340,11 +340,11 @@ fn application_callback_opens_picker_and_later_input_reaches_its_new_modal_scope
         )
         .unwrap();
     fixture.tabs(1);
-    fixture.key(KeyCode::SPACE, 0);
+    fixture.key(KeyCode::Space, 0);
     fixture.tabs(6);
     fixture.ui.input(UiInput::Text, "after callback").unwrap();
     fixture.tabs(2);
-    fixture.key(KeyCode::SPACE, 0);
+    fixture.key(KeyCode::Space, 0);
     fixture.ui.update_with_events(SIZE, &events).unwrap();
     assert_eq!(
         &*events.state().unwrap(),

@@ -370,7 +370,7 @@ impl LeafContent for FalloffEditor {
         let bounds = local_rect(state.rect);
         let graph = Self::graph_rect(bounds);
         if graph.width <= 0 || graph.height <= 0 {
-            return Ok(GeometryChange::NO_CHANGE);
+            return Ok(GeometryChange::NoChange);
         }
 
         if !state.focused && !state.active {
@@ -385,7 +385,7 @@ impl LeafContent for FalloffEditor {
             _ => None,
         };
         let Some((mouse_pos, mouse_delta)) = pointer else {
-            return Ok(GeometryChange::NO_CHANGE);
+            return Ok(GeometryChange::NoChange);
         };
         let mouse_local = Vec2f::new(mouse_pos.x as f32, mouse_pos.y as f32);
         self.hovered = if state.hovered { self.pick_target(graph, mouse_local) } else { None };
@@ -409,7 +409,7 @@ impl LeafContent for FalloffEditor {
         }
 
         // Geometry is unchanged here; mutations through other handles invalidate their owners.
-        Ok(GeometryChange::NO_CHANGE)
+        Ok(GeometryChange::NoChange)
     }
 
     /// Records the graph, curve and explicit control markers under a narrowed graph clip.

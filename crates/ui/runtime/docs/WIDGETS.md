@@ -24,7 +24,7 @@ impl EventHandler<bool, CheckboxChanged> for Preview {
 fn install(ui: &Ui, events: &EventSession<bool>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
     let checkbox = ui.widgets().checkbox("Enable preview", false)?;
     events.subscribe_checkbox(&checkbox, Preview)?;
-    let mut column = ui.widgets().linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch)?;
+    let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     column.insert(0, &checkbox, LinearEdge::new(LayoutTrack::Content))?.finish()?;
     ui.window("Settings", Rect { x: 40, y: 40, width: 260, height: 120 }, &column)
 }

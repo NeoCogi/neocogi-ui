@@ -54,8 +54,8 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     assert_eq!(inset.set_padding(-1), Err(neocogi_com::NC_E_INVALID_ARG));
     ui.render(size, renderer)?; // Rejected edits cannot invalidate a committed frame.
 
-    key(ui, KeyCode::TAB)?;
-    key(ui, KeyCode::SPACE)?;
+    key(ui, KeyCode::Tab)?;
+    key(ui, KeyCode::Space)?;
     ui.update_with_events(size, &events)?;
     assert_eq!(&*events.state()?, &["1".to_owned()]);
     assert_eq!(counter.count()?, 100);

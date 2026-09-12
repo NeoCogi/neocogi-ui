@@ -89,8 +89,8 @@ After installing the compiled bundle, select a font on an actual COM widget:
 use neocogi_ui::{FontRole, TextBlockWidget, TextWrapping, Ui};
 use neocogi_com::NcStatus;
 fn heading(ui: &Ui) -> Result<TextBlockWidget, NcStatus> {
-    let mut title = ui.widgets().text_block("Inspector", TextWrapping::NONE)?;
-    title.set_font_role(FontRole::HEADING)?;
+    let mut title = ui.widgets().text_block("Inspector", TextWrapping::None)?;
+    title.set_font_role(FontRole::Heading)?;
     Ok(title)
 }
 ```

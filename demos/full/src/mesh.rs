@@ -102,7 +102,7 @@ impl LeafContent for Suzanne {
     fn update(&mut self, state: WidgetUpdate, event: WidgetEvent, text: &str) -> Result<GeometryChange, NcStatus> {
         let rect = state.rect;
         if rect.width <= 0 || rect.height <= 0 {
-            return Ok(GeometryChange::NO_CHANGE);
+            return Ok(GeometryChange::NoChange);
         }
         self.view.set_dimension(Dimensioni::new(rect.width, rect.height));
         match event {
@@ -115,10 +115,10 @@ impl LeafContent for Suzanne {
             }
             WidgetEvent::Key(key) if key.pressed => {
                 let delta = match key.key {
-                    KeyCode::ARROW_LEFT => Vec2i::new(-20, 0),
-                    KeyCode::ARROW_RIGHT => Vec2i::new(20, 0),
-                    KeyCode::ARROW_UP => Vec2i::new(0, -20),
-                    KeyCode::ARROW_DOWN => Vec2i::new(0, 20),
+                    KeyCode::ArrowLeft => Vec2i::new(-20, 0),
+                    KeyCode::ArrowRight => Vec2i::new(20, 0),
+                    KeyCode::ArrowUp => Vec2i::new(0, -20),
+                    KeyCode::ArrowDown => Vec2i::new(0, 20),
                     _ => Vec2i::default(),
                 };
                 if delta.x != 0 || delta.y != 0 {
@@ -145,7 +145,7 @@ impl LeafContent for Suzanne {
             pvm: self.view.pvm().into(),
             view_model: self.view.view_matrix().into(),
         })?;
-        Ok(GeometryChange::NO_CHANGE)
+        Ok(GeometryChange::NoChange)
     }
     /// Rendering observes the scene without a native callback, native handle or borrowed GPU frame.
     fn paint(&self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {

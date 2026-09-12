@@ -34,21 +34,21 @@ fn static_session_preserves_registration_order_snapshot_values_and_bounded_progr
     let ui = neocogi_ui::Ui::from_interface(runtime.clone()).unwrap();
     let mut a = ui.widgets().button("a").unwrap();
     let mut b = ui.widgets().button("b").unwrap();
-    let mut column = ui.widgets().linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch).unwrap();
+    let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     column.insert(0, &a, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     column.insert(1, &b, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let window = ui.window("order", RECT, &column).unwrap();
     let session = EventSession::new(Vec::<String>::new());
     session.subscribe_activation(&b, RecordActivation).unwrap();
     session.subscribe_activation(&a, RecordActivation).unwrap();
-    key(&ui, KeyCode::TAB);
-    key(&ui, KeyCode::SPACE);
+    key(&ui, KeyCode::Tab);
+    key(&ui, KeyCode::Space);
     ui.update(SIZE).unwrap();
     a.set_label("a2").unwrap();
-    key(&ui, KeyCode::SPACE);
+    key(&ui, KeyCode::Space);
     ui.update(SIZE).unwrap();
-    key(&ui, KeyCode::TAB);
-    key(&ui, KeyCode::SPACE);
+    key(&ui, KeyCode::Tab);
+    key(&ui, KeyCode::Space);
     ui.update(SIZE).unwrap();
     a.set_label("later a").unwrap();
     b.set_label("later b").unwrap();
@@ -127,7 +127,7 @@ fn eventful_runtime_releases_context_for_handlers_and_routes_later_input_to_thei
     });
     let activation = session.subscribe_activation(&button, ReplaceWindow).unwrap();
     let lifecycle = session.subscribe_window(previous.as_com_ref(), RecordWindow).unwrap();
-    for input in [KeyCode::TAB, KeyCode::SPACE, KeyCode::TAB] {
+    for input in [KeyCode::Tab, KeyCode::Space, KeyCode::Tab] {
         key(&ui, input);
     }
     ui.input(UiInput::Text, "arrived after replacement").unwrap();
@@ -213,8 +213,8 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
     checkbox.set_checked(true).unwrap();
     ui.update_with_events(SIZE, &session).unwrap();
     assert!(session.state().unwrap().is_empty());
-    key(&ui, KeyCode::TAB);
-    key(&ui, KeyCode::SPACE);
+    key(&ui, KeyCode::Tab);
+    key(&ui, KeyCode::Space);
     ui.update_with_events(SIZE, &session).unwrap();
     assert_eq!(&*session.state().unwrap(), &["checked:false"]);
     window.close().unwrap();
@@ -234,8 +234,8 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
     slider.set_value(5.0).unwrap();
     ui.update_with_events(SIZE, &session).unwrap();
     assert_eq!(session.state().unwrap().len(), 1);
-    key(&ui, KeyCode::TAB);
-    key(&ui, KeyCode::ARROW_RIGHT);
+    key(&ui, KeyCode::Tab);
+    key(&ui, KeyCode::ArrowRight);
     ui.update_with_events(SIZE, &session).unwrap();
     assert_eq!(session.state().unwrap().last().unwrap(), "numeric:6");
     window.close().unwrap();
@@ -243,22 +243,22 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
     let number = ui.widgets().number(NumberOptions { value: 3.0, step: 1.0, precision: 0 }).unwrap();
     let window = ui.window("number", RECT, &number).unwrap();
     session.subscribe_numeric(&number, record_numeric).unwrap();
-    key(&ui, KeyCode::TAB);
+    key(&ui, KeyCode::Tab);
     // Numeric text controls use Up/Down; horizontal sliders use Left/Right.
-    key(&ui, KeyCode::ARROW_UP);
+    key(&ui, KeyCode::ArrowUp);
     ui.update_with_events(SIZE, &session).unwrap();
     assert_eq!(session.state().unwrap().last().unwrap(), "numeric:4");
     window.close().unwrap();
 
     let item = ui.widgets().list_item("item").unwrap();
     let list_box = ui.widgets().list_box("box").unwrap();
-    let mut column = ui.widgets().linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch).unwrap();
+    let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     column.insert(0, &item, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     column.insert(1, &list_box, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let window = ui.window("lists", RECT, &column).unwrap();
     session.subscribe_activation(&item, RecordActivation).unwrap();
     session.subscribe_activation(&list_box, RecordActivation).unwrap();
-    for input in [KeyCode::TAB, KeyCode::SPACE, KeyCode::TAB, KeyCode::SPACE] {
+    for input in [KeyCode::Tab, KeyCode::Space, KeyCode::Tab, KeyCode::Space] {
         key(&ui, input);
     }
     ui.update_with_events(SIZE, &session).unwrap();
@@ -268,7 +268,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
     let mut bar = ui
         .widgets()
         .scrollbar(ScrollRange {
-            axis: ScrollAxis::HORIZONTAL,
+            axis: ScrollAxis::Horizontal,
             viewport: 20,
             content: 100,
             offset: 0,
@@ -323,22 +323,22 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     textbox.set_text("a").unwrap();
     ui.update_with_events(SIZE, &session).unwrap();
     assert!(session.state().unwrap().is_empty());
-    key(&ui, KeyCode::TAB);
+    key(&ui, KeyCode::Tab);
     ui.input(UiInput::Text, "é").unwrap();
-    key(&ui, KeyCode::ENTER);
+    key(&ui, KeyCode::Enter);
     ui.update_with_events(SIZE, &session).unwrap();
     assert_eq!(&*session.state().unwrap(), &["changed:aé:3", "submitted:aé"]);
     window.close().unwrap();
 
-    let area = ui.widgets().text_area("", TextWrapping::WORD, true).unwrap();
+    let area = ui.widgets().text_area("", TextWrapping::Word, true).unwrap();
     let window = ui.window("textarea", RECT, &area).unwrap();
     session.subscribe_text_changed(&area, record_text_change).unwrap();
     session.subscribe_text_submitted(&area, record_text_submission).unwrap();
-    key(&ui, KeyCode::TAB);
+    key(&ui, KeyCode::Tab);
     ui.input(UiInput::Text, "☃").unwrap();
     ui.input(
         UiInput::Key(KeyStroke {
-            key: KeyCode::ENTER,
+            key: KeyCode::Enter,
             value: 0,
             pressed: true,
             repeat: false,
@@ -349,7 +349,7 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     .unwrap();
     ui.update_with_events(SIZE, &session).unwrap();
     assert!(session.state().unwrap().ends_with(&["changed:☃:3".to_owned(), "submitted:☃".to_owned()]));
-    let popup_content = ui.widgets().text_block("popup", TextWrapping::NONE).unwrap();
+    let popup_content = ui.widgets().text_block("popup", TextWrapping::None).unwrap();
     let mut popup = ui.popup(window.as_com_ref(), "popup", &popup_content).unwrap();
     let lease = session.subscribe_popup(popup.as_com_ref(), record_popup).unwrap();
     popup.show_at(Rect { x: 100, y: 100, width: 20, height: 20 }).unwrap();
@@ -385,13 +385,13 @@ fn failed_callback_recovers_on_next_update_and_preserves_remaining_native_input(
     let ui = neocogi_ui::Ui::from_interface(runtime()).unwrap();
     let button = ui.widgets().button("fail once").unwrap();
     let editor = ui.widgets().textbox("").unwrap();
-    let mut column = ui.widgets().linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch).unwrap();
+    let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     column.insert(0, &button, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     column.insert(1, &editor, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let window = ui.window("recovery", RECT, &column).unwrap();
     let session = EventSession::new(0);
     session.subscribe_activation(&button, FailOnce { fail: true }).unwrap();
-    for input in [KeyCode::TAB, KeyCode::SPACE, KeyCode::TAB] {
+    for input in [KeyCode::Tab, KeyCode::Space, KeyCode::Tab] {
         key(&ui, input);
     }
     ui.input(UiInput::Text, "still queued").unwrap();
@@ -403,8 +403,8 @@ fn failed_callback_recovers_on_next_update_and_preserves_remaining_native_input(
     ui.update_with_events(SIZE, &session).unwrap();
     assert_eq!(*session.state().unwrap(), 1);
     assert_eq!(editor.text().unwrap(), "still queued");
-    key(&ui, KeyCode::TAB);
-    key(&ui, KeyCode::SPACE);
+    key(&ui, KeyCode::Tab);
+    key(&ui, KeyCode::Space);
     ui.update_with_events(SIZE, &session).unwrap();
     assert_eq!(*session.state().unwrap(), 2);
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
@@ -433,8 +433,8 @@ impl EventHandler<Option<CascadeState>, WindowEvent> for Cascade {
             state.observed += 1;
             if state.remaining != 0 {
                 state.remaining -= 1;
-                state.window.set_visibility(Visibility::VISIBLE)?;
-                state.window.set_visibility(Visibility::HIDDEN)?;
+                state.window.set_visibility(Visibility::Visible)?;
+                state.window.set_visibility(Visibility::Hidden)?;
             }
         }
         Ok(())
@@ -455,7 +455,7 @@ fn real_lifecycle_cascade_obeys_global_budget_and_rejects_recursive_dispatch() {
         observed: 0,
     });
     session.subscribe_window(window.as_com_ref(), Cascade).unwrap();
-    window.set_visibility(Visibility::HIDDEN).unwrap();
+    window.set_visibility(Visibility::Hidden).unwrap();
     assert_eq!(session.dispatch_bounded(2), Err(UI_E_EVENT_LIMIT));
     assert_eq!(session.state().unwrap().as_ref().unwrap().observed, 2);
     assert_eq!(session.dispatch_bounded(1), Ok(1));

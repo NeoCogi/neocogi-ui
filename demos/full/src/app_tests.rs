@@ -19,20 +19,20 @@ fn select_win311_from_menu(host: &Host, events: &EventSession<State>) -> Result<
     }
     // Focus the main window, open View -> Theme and activate its second radio item.
     for key in [
-        KeyCode::FUNCTION,
-        KeyCode::ARROW_RIGHT,
-        KeyCode::ARROW_DOWN,
-        KeyCode::ARROW_DOWN,
-        KeyCode::ARROW_DOWN,
-        KeyCode::ARROW_DOWN,
-        KeyCode::ARROW_RIGHT,
-        KeyCode::ARROW_DOWN,
-        KeyCode::ENTER,
+        KeyCode::Function,
+        KeyCode::ArrowRight,
+        KeyCode::ArrowDown,
+        KeyCode::ArrowDown,
+        KeyCode::ArrowDown,
+        KeyCode::ArrowDown,
+        KeyCode::ArrowRight,
+        KeyCode::ArrowDown,
+        KeyCode::Enter,
     ] {
         host.ui.input(
             UiInput::Key(KeyStroke {
                 key,
-                value: if key == KeyCode::FUNCTION { 10 } else { 0 },
+                value: if key == KeyCode::Function { 10 } else { 0 },
                 pressed: true,
                 repeat: false,
                 modifiers: 0,
@@ -80,9 +80,9 @@ fn exercise() -> Result<(Host, EventSession<State>), HostError> {
         state.submit()?;
         assert!(state.entry.text()?.is_empty());
         assert!(state.log.text()?.ends_with("Unicode: 日本語"));
-        state.demo.set_visibility(Visibility::HIDDEN)?;
+        state.demo.set_visibility(Visibility::Hidden)?;
         Action::ShowDemo.handle(&mut state, &Activation { label: String::new() })?;
-        assert_eq!(state.demo.snapshot()?.visibility, Visibility::VISIBLE);
+        assert_eq!(state.demo.snapshot()?.visibility, Visibility::Visible);
     }
     host.ui.update_with_events(size, &events)?;
     host.ui.render(size, host.renderer.as_com_ref())?;

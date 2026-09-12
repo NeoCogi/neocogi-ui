@@ -59,7 +59,7 @@ impl CustomParameters {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
-            font: FontRef::Role(FontRole::BODY),
+            font: FontRef::Role(FontRole::Body),
             opt: WidgetOption::NONE,
             keyboard: KeyboardBehavior::NONE,
         }

@@ -46,12 +46,12 @@ impl LeafContent for Cube {
     /// The preferred square honors bounded zero and independent finite constraints.
     fn measure(&self, bounds: LayoutLimits, _metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
         Ok(Size {
-            width: if bounds.width.kind == LimitKind::FINITE {
+            width: if bounds.width.kind == LimitKind::Finite {
                 300.min(bounds.width.extent)
             } else {
                 300
             },
-            height: if bounds.height.kind == LimitKind::FINITE {
+            height: if bounds.height.kind == LimitKind::Finite {
                 300.min(bounds.height.extent)
             } else {
                 300

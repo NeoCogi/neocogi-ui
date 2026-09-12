@@ -49,7 +49,7 @@ impl WidgetState {
         options.validate()?;
         if self.options != options {
             self.options = options;
-            self.record_change(GeometryChange::CHANGED);
+            self.record_change(GeometryChange::Changed);
         }
         Ok(())
     }
@@ -84,7 +84,7 @@ impl WidgetState {
     /// visual-only changes need no measurement invalidation. External state must
     /// be synchronized through an authorized setter or a truthful update result.
     pub fn record_change(&mut self, change: GeometryChange) {
-        if change == GeometryChange::CHANGED {
+        if change == GeometryChange::Changed {
             self.dirty = true;
         }
     }
@@ -98,7 +98,7 @@ impl WidgetState {
         self.local_open()?;
         let dirty = self.dirty;
         self.dirty = false;
-        Ok(if dirty { GeometryChange::CHANGED } else { GeometryChange::NO_CHANGE })
+        Ok(if dirty { GeometryChange::Changed } else { GeometryChange::NoChange })
     }
 
     /// Commits attachment after owner, capability, and topology checks pass.

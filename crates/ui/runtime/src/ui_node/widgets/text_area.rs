@@ -92,7 +92,7 @@ impl TextAreaParameters {
         Self {
             buf: buf.into(),
             wrap: TextWrap::None,
-            font: FontRef::Role(FontRole::BODY),
+            font: FontRef::Role(FontRole::Body),
             #[cfg(test)]
             scroll_options: ScrollAreaOption::FRAME | ScrollAreaOption::ENABLE_SCROLL,
         }
@@ -756,8 +756,8 @@ fn textarea_paint(ctx: &mut WidgetPaintCtx<'_>, state: &TextEditor, font: FontId
 
     // Fill the translated content surface with the editable base color; Painter clips the large
     // semantic rectangle to the effective ScrollArea viewport.
-    ctx.draw_control_center(ControlRole::TEXT_INPUT, layout.bounds);
-    let color = ctx.control_content_color(ControlRole::TEXT_INPUT);
+    ctx.draw_control_center(ControlRole::TextInput, layout.bounds);
+    let color = ctx.control_content_color(ControlRole::TextInput);
     let cursor_pos = clamp_cursor_boundary(&state.buf, state.cursor);
     let cursor_line = line_index_for_cursor(&layout.lines, cursor_pos, state.interaction.caret_affinity);
     let caret_x = cursor_x_in_line(&layout.lines[cursor_line], state.buf.as_str(), cursor_pos, font, ctx.atlas());
@@ -917,7 +917,7 @@ impl TextEditor {
         resources: Option<&crate::ui_node::widget_object::SharedAssets>,
     ) -> Result<ComPtr<IMultilineEditorAbi>, NcStatus> {
         let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, crate::WidgetOption::NONE, resources)?;
-        let value = Self::from_runtime(runtime, text, wrap, crate::FontRef::Role(crate::FontRole::BODY), Some(model));
+        let value = Self::from_runtime(runtime, text, wrap, crate::FontRef::Role(crate::FontRole::Body), Some(model));
         Ok(Self::from_value(value)
             .query()
             .expect("TextEditor declares its editing, font, event, and leaf capabilities"))
@@ -935,7 +935,7 @@ impl ITextContent for TextEditor {
     fn set_text(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
         self.set_text(crate::boundary::text(input)?);
-        self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+        self.runtime_mut().state.record_change(GeometryChange::Changed);
         Ok(())
     }
 }
@@ -951,7 +951,7 @@ impl ITextEditor for TextEditor {
     fn set_cursor(&mut self, cursor: u64) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
         self.set_cursor(usize::try_from(cursor).unwrap_or(usize::MAX));
-        self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+        self.runtime_mut().state.record_change(GeometryChange::Changed);
         Ok(())
     }
 }
@@ -961,8 +961,8 @@ impl IMultilineEditor for TextEditor {
     fn wrapping(&self) -> Result<TextWrapping, NcStatus> {
         self.runtime().state.readable()?;
         Ok(match self.com_wrap() {
-            crate::TextWrap::None => TextWrapping::NONE,
-            crate::TextWrap::Word => TextWrapping::WORD,
+            crate::TextWrap::None => TextWrapping::None,
+            crate::TextWrap::Word => TextWrapping::Word,
         })
     }
 
@@ -972,7 +972,7 @@ impl IMultilineEditor for TextEditor {
         let wrap = crate::ui_node::widget_object::local_wrap(wrapping)?;
         if self.com_wrap() != wrap {
             self.com_set_wrap(wrap);
-            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+            self.runtime_mut().state.record_change(GeometryChange::Changed);
         }
         Ok(())
     }

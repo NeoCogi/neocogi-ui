@@ -58,7 +58,7 @@ impl ColorSwatchParameters {
         Self {
             fill,
             label: String::new(),
-            font: FontRef::Role(FontRole::BODY),
+            font: FontRef::Role(FontRole::Body),
             opt: WidgetOption::NO_INTERACT | WidgetOption::ALIGN_CENTER | WidgetOption::FRAME,
         }
     }
@@ -149,7 +149,7 @@ impl ColorSwatch {
         ctx.draw_rect(rect, self.fill);
         if !self.label.is_empty() {
             let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
-            ctx.draw_control_text_with_font(font, self.label.as_str(), rect, ControlRole::BUTTON, ctx.options());
+            ctx.draw_control_text_with_font(font, self.label.as_str(), rect, ControlRole::Button, ctx.options());
         }
     }
 }
@@ -243,7 +243,7 @@ impl neocogi_ui_contracts::ColorSwatch for ColorSwatch {
         let label = crate::boundary::text(input)?;
         if self.label() != label {
             self.set_label(label);
-            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+            self.runtime_mut().state.record_change(GeometryChange::Changed);
         }
         Ok(())
     }

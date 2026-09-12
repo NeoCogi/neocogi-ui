@@ -79,11 +79,11 @@ fn rect(x: i32, y: i32, width: i32, height: i32) -> Rect {
 }
 /// A vertical line owns exactly the children inserted through its COM editor.
 pub(super) fn column(ui: &Ui) -> Result<LinearWidget, NcStatus> {
-    ui.widgets().linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch)
+    ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)
 }
 /// A row derives height from its actual children, so theme/font changes cannot stale a pixel estimate.
 pub(super) fn row(ui: &Ui) -> Result<LinearWidget, NcStatus> {
-    ui.widgets().linear(FlowDirection::LEFT_TO_RIGHT, CrossSize::Content)
+    ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Content)
 }
 /// Appends through the authoritative child count; no second local list or builder closure is retained.
 pub(super) fn append<I: ComInterface>(parent: &mut LinearWidget, child: &Widget<I>, track: LayoutTrack) -> Result<(), NcStatus> {
@@ -91,7 +91,7 @@ pub(super) fn append<I: ComInterface>(parent: &mut LinearWidget, child: &Widget<
 }
 /// Static display text remains a real plugin-owned TextBlock with no application callback.
 pub(super) fn label(ui: &Ui, text: &str) -> Result<TextBlockWidget, NcStatus> {
-    ui.widgets().text_block(text, TextWrapping::NONE)
+    ui.widgets().text_block(text, TextWrapping::None)
 }
 /// Shared framed, centered numeric control used by the palette and background editors.
 pub(super) fn slider(ui: &Ui, value: f32, high: f32) -> Result<SliderWidget, NcStatus> {
@@ -319,7 +319,7 @@ impl EventHandler<State, Activation> for Action {
                 state.minor_item.set_mark(MenuMark::Checked { checked })
             }
             Self::ShowDemo => {
-                state.demo.set_visibility(Visibility::VISIBLE)?;
+                state.demo.set_visibility(Visibility::Visible)?;
                 state.demo.raise()
             }
             Self::ShowTextures => state.sample_scroll.scroll_to_end(),
@@ -425,7 +425,7 @@ impl LeafContent for Triangle {
     /// Time changes color geometry, not measurement; authors explicitly own this NoChange decision.
     fn update(&mut self, _: WidgetUpdate, _: WidgetEvent, _: &str) -> Result<GeometryChange, NcStatus> {
         self.angle = neocogi_demo_host::monotonic_seconds() as f32;
-        Ok(GeometryChange::NO_CHANGE)
+        Ok(GeometryChange::NoChange)
     }
     /// Rotates three colored points around the committed viewport center.
     fn paint(&self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
@@ -459,7 +459,7 @@ fn create() -> Result<(Host, EventSession<State>), HostError> {
     let grid_widget = ui.widgets().leaf(GridViewWidget::new(grid.clone()), WidgetOptions::NONE)?;
     let desktop = ui.window("X-Y Grid Surface", rect(0, 0, 1200, 800), &grid_widget)?;
     desktop.set_layer(0)?;
-    desktop.set_child_clip(ChildClip::CONTENT)?;
+    desktop.set_child_clip(ChildClip::Content)?;
     desktop.set_options(WindowOptions::NO_TITLE | WindowOptions::NO_CLOSE | WindowOptions::NO_RESIZE | WindowOptions::NO_PADDING)?;
     let mut main_body = column(ui)?;
     let main_scroll = ui.widgets().scroll_area(&main_body, true)?;
@@ -513,10 +513,10 @@ fn create() -> Result<(Host, EventSession<State>), HostError> {
     menu_item(&grid_menu, &mut pending, "About", Action::About)?;
     menus.attach_bar(desktop.as_com_ref(), &bar)?;
     let mut log = label(ui, "Welcome to neocogi-ui.")?;
-    log.set_font_role(FontRole::MONO)?;
+    log.set_font_role(FontRole::Mono)?;
     let log_scroll = ui.widgets().scroll_area(&log, true)?;
     let mut entry = ui.widgets().textbox("")?;
-    entry.set_font_role(FontRole::MONO)?;
+    entry.set_font_role(FontRole::Mono)?;
     let (style, style_root) = StyleEditor::new(ui)?;
     floating(ui, desktop.as_com_ref(), "Flat Palette / Skin Metrics", rect(350, 250, 300, 240), &style_root)?;
     let background = ui.widgets().color_swatch(grid.borrow().background, "#5A5F64")?;
@@ -586,14 +586,14 @@ pub(super) fn run() -> Result<(), HostError> {
 fn build_controls(host: &Host, events: &EventSession<State>, content: &mut LinearWidget) -> Result<(), HostError> {
     let state = events.state()?;
     let ui = &state.ui;
-    let mut info = section(ui, content, "Window Info", DisclosureStyle::HEADER, false)?;
+    let mut info = section(ui, content, "Window Info", DisclosureStyle::Header, false)?;
     for (name, value) in ["Position", "Size", "FPS"].into_iter().zip(&state.info) {
         let mut line = row(ui)?;
         append(&mut line, &label(ui, name)?, LayoutTrack::Fixed { extent: 54 })?;
         append(&mut line, value, FLEX)?;
         append(&mut info, &line, LayoutTrack::Content)?;
     }
-    let mut tests = section(ui, content, "Test Buttons", DisclosureStyle::HEADER, true)?;
+    let mut tests = section(ui, content, "Test Buttons", DisclosureStyle::Header, true)?;
     for (name, a, b, action) in [
         ("Buttons", "Button 1", "Button 2", Action::Log),
         ("More", "Button 3", "Popup", Action::Popup),
@@ -609,20 +609,20 @@ fn build_controls(host: &Host, events: &EventSession<State>, content: &mut Linea
         append(&mut line, &right, FLEX)?;
         append(&mut tests, &line, LayoutTrack::Content)?;
     }
-    let mut combo = section(ui, content, "Combo Box", DisclosureStyle::HEADER, true)?;
+    let mut combo = section(ui, content, "Combo Box", DisclosureStyle::Header, true)?;
     append(&mut combo, &state.combo, LayoutTrack::Content)?;
-    let mut trees = section(ui, content, "Tree and Text", DisclosureStyle::HEADER, true)?;
+    let mut trees = section(ui, content, "Tree and Text", DisclosureStyle::Header, true)?;
     let mut line = row(ui)?;
     let mut left = column(ui)?;
-    let mut test = section(ui, &mut left, "Test 1", DisclosureStyle::TREE, false)?;
-    let mut nested = section(ui, &mut test, "Test 1a", DisclosureStyle::TREE, false)?;
+    let mut test = section(ui, &mut left, "Test 1", DisclosureStyle::Tree, false)?;
+    let mut nested = section(ui, &mut test, "Test 1a", DisclosureStyle::Tree, false)?;
     append(&mut nested, &label(ui, "Hello")?, LayoutTrack::Content)?;
     append(&mut nested, &label(ui, "World")?, LayoutTrack::Content)?;
-    let mut nested = section(ui, &mut test, "Test 1b", DisclosureStyle::TREE, false)?;
+    let mut nested = section(ui, &mut test, "Test 1b", DisclosureStyle::Tree, false)?;
     for text in ["Button 1", "Button 2"] {
         append(&mut nested, &button(ui, events, text, Action::Log)?, LayoutTrack::Content)?;
     }
-    let mut test = section(ui, &mut left, "Test 2", DisclosureStyle::TREE, false)?;
+    let mut test = section(ui, &mut left, "Test 2", DisclosureStyle::Tree, false)?;
     for pair in [["Button 3", "Button 4"], ["Button 5", "Button 6"]] {
         let mut line = row(ui)?;
         for text in pair {
@@ -630,21 +630,21 @@ fn build_controls(host: &Host, events: &EventSession<State>, content: &mut Linea
         }
         append(&mut test, &line, LayoutTrack::Content)?;
     }
-    let mut test = section(ui, &mut left, "Test 3", DisclosureStyle::TREE, false)?;
+    let mut test = section(ui, &mut left, "Test 3", DisclosureStyle::Tree, false)?;
     for text in ["Checkbox 1", "Checkbox 2", "Checkbox 3"] {
         append(&mut test, &ui.widgets().checkbox(text, false)?, LayoutTrack::Content)?;
     }
     append(&mut line, &left, LayoutTrack::Fixed { extent: 140 })?;
-    append(&mut line, &ui.widgets().text_block("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Maecenas lacinia, sem eu lacinia molestie, mi risus faucibus ipsum, eu varius magna felis a nulla.", TextWrapping::WORD)?, FLEX)?;
+    append(&mut line, &ui.widgets().text_block("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Maecenas lacinia, sem eu lacinia molestie, mi risus faucibus ipsum, eu varius magna felis a nulla.", TextWrapping::Word)?, FLEX)?;
     append(&mut trees, &line, LayoutTrack::Content)?;
-    let mut text = section(ui, content, "TextArea", DisclosureStyle::HEADER, true)?;
+    let mut text = section(ui, content, "TextArea", DisclosureStyle::Header, true)?;
     let editor = ui.widgets().text_area(
         "This is a multi-line TextArea.\nYou can type, scroll, and resize the window.\n\nTry adding more lines to see the scrollbars.",
-        TextWrapping::WORD,
+        TextWrapping::Word,
         true,
     )?;
     append(&mut text, &editor, LayoutTrack::Fixed { extent: 120 })?;
-    let mut background = section(ui, content, "Background Color", DisclosureStyle::HEADER, true)?;
+    let mut background = section(ui, content, "Background Color", DisclosureStyle::Header, true)?;
     let mut line = row(ui)?;
     let mut controls = column(ui)?;
     for (name, shift) in [("Red", 0), ("Green", 8), ("Blue", 16)] {
@@ -658,7 +658,7 @@ fn build_controls(host: &Host, events: &EventSession<State>, content: &mut Linea
     append(&mut line, &controls, FLEX)?;
     append(&mut line, &state.background, LayoutTrack::Fixed { extent: 77 })?;
     append(&mut background, &line, LayoutTrack::Content)?;
-    let mut textures = section(ui, content, "Textures", DisclosureStyle::HEADER, true)?;
+    let mut textures = section(ui, content, "Textures", DisclosureStyle::Header, true)?;
     let factory = host.renderer.query::<ITextureFactoryAbi>()?;
     for (name, size, color) in [
         ("Texture 1 - Red", Size { width: 64, height: 64 }, [255, 0, 0, 255]),
@@ -705,13 +705,13 @@ fn build_examples(host: &Host, events: &EventSession<State>) -> Result<(), HostE
     floating(ui, desktop, "Log Window", rect(350, 40, 300, 200), &log)?;
     let mut typography = column(ui)?;
     let mut heading = label(ui, "NORMAL.ttf at 18px")?;
-    heading.set_font_role(FontRole::HEADING)?;
+    heading.set_font_role(FontRole::Heading)?;
     append(&mut typography, &heading, LayoutTrack::Content)?;
     append(
         &mut typography,
         &ui.widgets().text_block(
             "NORMAL.ttf at 12px remains the control font. Window titles use BOLD.ttf, and the log window uses CONSOLE.ttf for input and output.",
-            TextWrapping::WORD,
+            TextWrapping::Word,
         )?,
         LayoutTrack::Content,
     )?;
@@ -746,7 +746,7 @@ fn build_examples(host: &Host, events: &EventSession<State>) -> Result<(), HostE
         &ui.widgets().leaf(Suzanne::new(host.renderer.as_com_ref())?, WidgetOptions::NONE)?,
     )?;
     let mut stacks = row(ui)?;
-    for (name, direction) in [("Top to bottom", FlowDirection::TOP_TO_BOTTOM), ("Bottom to top", FlowDirection::BOTTOM_TO_TOP)] {
+    for (name, direction) in [("Top to bottom", FlowDirection::TopToBottom), ("Bottom to top", FlowDirection::BottomToTop)] {
         let mut column = column(ui)?;
         append(&mut column, &label(ui, name)?, LayoutTrack::Content)?;
         let mut stack = ui.widgets().linear(direction, CrossSize::Stretch)?;

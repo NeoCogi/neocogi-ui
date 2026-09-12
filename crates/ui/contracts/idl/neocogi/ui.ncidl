@@ -2,9 +2,9 @@
 /// Whether preferred measurement or child placement inputs changed.
     enum GeometryChange: u8 {
         /// Preferred measurement and placement inputs are unchanged.
-        NO_CHANGE = 0,
+        NoChange = 0,
         /// Preferred measurement or placement inputs changed and must be invalidated.
-        CHANGED = 1,
+        Changed = 1,
     }
 
 #[version(1)]
@@ -30,19 +30,19 @@ struct PaintScope {
 /// Closed visual state used when the runtime resolves a semantic widget frame.
     enum WidgetVisualState: u8 {
         /// Disabled surface or control.
-        DISABLED = 0,
+        Disabled = 0,
         /// Enabled surface or unfocused control without pointer interaction.
-        NORMAL = 1,
+        Normal = 1,
         /// Enabled unfocused control under the pointer.
-        HOVERED = 2,
+        Hovered = 2,
         /// Enabled unfocused control actively pressed under the pointer.
-        PRESSED = 3,
+        Pressed = 3,
         /// Focused control without pointer interaction.
-        FOCUSED = 4,
+        Focused = 4,
         /// Focused control under the pointer.
-        FOCUSED_HOVERED = 5,
+        FocusedHovered = 5,
         /// Focused control actively pressed under the pointer.
-        FOCUSED_PRESSED = 6,
+        FocusedPressed = 6,
     }
 
 #[version(1)]
@@ -232,9 +232,9 @@ trait ITextMetrics {
 /// Whether an axis has a finite measurement maximum.
     enum LimitKind: u8 {
         /// Extent is a nonnegative maximum; zero remains a real bound.
-        FINITE = 0,
+        Finite = 0,
         /// Preferred size is requested without a finite maximum; extent must be zero.
-        UNBOUNDED = 1,
+        Unbounded = 1,
     }
 
 #[version(1)]
@@ -266,27 +266,27 @@ trait ILeafLayout {
 /// Visibility intent or effective surface visibility, as documented by the operation.
     enum Visibility: u8 {
         /// Excluded from rendering and input.
-        HIDDEN = 0,
+        Hidden = 0,
         /// Eligible when structural and modal owner policy also permits it.
-        VISIBLE = 1,
+        Visible = 1,
     }
 
 #[version(1)]
 /// How a parent clips its structural child windows.
     enum ChildClip: u8 {
         /// Inherit the ancestor/viewport clip without narrowing to the parent's body.
-        NONE = 0,
+        None = 0,
         /// Clip complete child surfaces to the parent's application content area.
-        CONTENT = 1,
+        Content = 1,
     }
 
 #[version(1)]
 /// Structural layer category for a window or dialog.
     enum LayerKind: u8 {
         /// An independent or inherited application layer in 0..=15.
-        FIXED = 0,
+        Fixed = 0,
         /// Dedicated modal band above all application layers; number is zero.
-        MODAL = 1,
+        Modal = 1,
     }
 
 #[version(1)]
@@ -471,47 +471,47 @@ struct Point {
 /// Logical keyboard identity, independent of native scan codes.
     enum KeyCode: u8 {
         /// Printable shortcut key; its scalar is carried in `KeyStroke::value`.
-        CHARACTER = 0,
+        Character = 0,
         /// Removes the previous character.
-        BACKSPACE = 1,
+        Backspace = 1,
         /// Removes the next character.
-        DELETE = 2,
+        Delete = 2,
         /// Primary activation or line break.
-        ENTER = 3,
+        Enter = 3,
         /// Cancellation or popup dismissal.
-        ESCAPE = 4,
+        Escape = 4,
         /// Space-bar activation, separate from committed text.
-        SPACE = 5,
+        Space = 5,
         /// Sequential focus traversal.
-        TAB = 6,
+        Tab = 6,
         /// Insert editing command.
-        INSERT = 7,
+        Insert = 7,
         /// Beginning of content or line.
-        HOME = 8,
+        Home = 8,
         /// End of content or line.
-        END = 9,
+        End = 9,
         /// Previous viewport.
-        PAGE_UP = 10,
+        PageUp = 10,
         /// Next viewport.
-        PAGE_DOWN = 11,
+        PageDown = 11,
         /// Upward navigation.
-        ARROW_UP = 12,
+        ArrowUp = 12,
         /// Downward navigation.
-        ARROW_DOWN = 13,
+        ArrowDown = 13,
         /// Leftward navigation.
-        ARROW_LEFT = 14,
+        ArrowLeft = 14,
         /// Rightward navigation.
-        ARROW_RIGHT = 15,
+        ArrowRight = 15,
         /// Numbered function key; its number is carried in `KeyStroke::value`.
-        FUNCTION = 16,
+        Function = 16,
         /// Alt/Option itself, for distinguishing a tap from a chord.
-        ALT = 17,
+        Alt = 17,
         /// Control modifier itself.
-        CONTROL = 18,
+        Control = 18,
         /// Shift modifier itself.
-        SHIFT = 19,
+        Shift = 19,
         /// Command/Windows/Super modifier itself.
-        SUPER = 20,
+        Super = 20,
     }
 
 #[version(1)]
@@ -610,17 +610,17 @@ struct WidgetUpdate {
 /// Shared semantic keyboard/pointer action resolved by the runtime's routing rules.
     enum WidgetAction: u8 {
         /// No semantic action was requested.
-        NONE = 0,
+        None = 0,
         /// Invoke the primary command.
-        ACTIVATE = 1,
+        Activate = 1,
         /// Move one step toward the lower value.
-        DECREASE = 2,
+        Decrease = 2,
         /// Move one step toward the higher value.
-        INCREASE = 3,
+        Increase = 3,
         /// Reveal a hierarchical branch or popup.
-        EXPAND = 4,
+        Expand = 4,
         /// Hide a hierarchical branch or popup.
-        COLLAPSE = 5,
+        Collapse = 5,
     }
 
 #[version(1)]
@@ -906,9 +906,9 @@ trait IMenus {
 /// Native path representation carried by an immutable path capability.
     enum PathEncoding: u8 {
         /// Exact Unix filename bytes; invalid UTF-8 is preserved.
-        UNIX_BYTES = 0,
+        UnixBytes = 0,
         /// Exact Windows UTF-16 code units; unpaired surrogates are preserved.
-        WINDOWS_UTF16 = 1,
+        WindowsUtf16 = 1,
     }
 
 #[version(1)]
@@ -938,11 +938,11 @@ trait IInputSink {
 /// Outcome of removing one relevant OS transition from this window's queue.
     enum PollStatus: u8 {
         /// No relevant transition remains; update and render the accumulated input.
-        IDLE = 0,
+        Idle = 0,
         /// Input was delivered or drawable/window state changed; poll again before rendering.
-        EVENT = 1,
+        Event = 1,
         /// Application quit or this native window's close was requested.
-        CLOSE = 2,
+        Close = 2,
     }
 
 #[version(1)]
@@ -1138,39 +1138,39 @@ bitenum WidgetOptions: u16 {
 /// Semantic outer-frame role; concrete theme resources stay in the runtime.
     enum WidgetFrame: u8 {
         /// Generic appearance in the runtime theme.
-        GENERIC = 0,
+        Generic = 0,
         /// Button appearance in the runtime theme.
-        BUTTON = 1,
+        Button = 1,
         /// Checkbox appearance in the runtime theme.
-        CHECKBOX = 2,
+        Checkbox = 2,
         /// Text input appearance in the runtime theme.
-        TEXT_INPUT = 3,
+        TextInput = 3,
         /// Item appearance in the runtime theme.
-        ITEM = 4,
+        Item = 4,
         /// Combo appearance in the runtime theme.
-        COMBO = 5,
+        Combo = 5,
         /// Slider track appearance in the runtime theme.
-        SLIDER_TRACK = 6,
+        SliderTrack = 6,
         /// Slider thumb appearance in the runtime theme.
-        SLIDER_THUMB = 7,
+        SliderThumb = 7,
         /// Scrollbar track appearance in the runtime theme.
-        SCROLLBAR_TRACK = 8,
+        ScrollbarTrack = 8,
         /// Scrollbar thumb appearance in the runtime theme.
-        SCROLLBAR_THUMB = 9,
+        ScrollbarThumb = 9,
         /// Close button appearance in the runtime theme.
-        CLOSE_BUTTON = 10,
+        CloseButton = 10,
         /// Minimize button appearance in the runtime theme.
-        MINIMIZE_BUTTON = 11,
+        MinimizeButton = 11,
         /// Maximize button appearance in the runtime theme.
-        MAXIMIZE_BUTTON = 12,
+        MaximizeButton = 12,
         /// Restore button appearance in the runtime theme.
-        RESTORE_BUTTON = 13,
+        RestoreButton = 13,
         /// Resize grip appearance in the runtime theme.
-        RESIZE_GRIP = 14,
+        ResizeGrip = 14,
         /// Window appearance in the runtime theme.
-        WINDOW = 15,
+        Window = 15,
         /// Panel appearance in the runtime theme.
-        PANEL = 16,
+        Panel = 16,
     }
 
 #[version(1)]
@@ -1218,11 +1218,11 @@ struct LayoutScope {
 /// Parent-authored participation, independent of a child's semantic options.
     enum LayoutParticipation: u8 {
         /// Update, paint and input are enabled.
-        ACTIVE = 0,
+        Active = 0,
         /// Update and paint remain enabled; the entire subtree rejects input.
-        DISABLED = 1,
+        Disabled = 1,
         /// Ownership remains; ordinary update, paint and input skip this subtree.
-        HIDDEN = 2,
+        Hidden = 2,
     }
 
 #[version(1)]
@@ -1349,13 +1349,13 @@ enum ChildCrossSize: u8 {
 /// Main axis and leading edge, without independent potentially inconsistent flags.
     enum FlowDirection: u8 {
         /// Horizontal sequence starting at the left edge.
-        LEFT_TO_RIGHT = 0,
+        LeftToRight = 0,
         /// Horizontal sequence starting at the right edge.
-        RIGHT_TO_LEFT = 1,
+        RightToLeft = 1,
         /// Vertical sequence starting at the top edge.
-        TOP_TO_BOTTOM = 2,
+        TopToBottom = 2,
         /// Vertical sequence starting at the bottom edge.
-        BOTTOM_TO_TOP = 3,
+        BottomToTop = 3,
     }
 
 #[version(1)]
@@ -1482,9 +1482,9 @@ class ScrollArea: IWidget + IContainerLayout + IScrolling {
 /// Immutable disclosure presentation; expansion and child ownership use one shared policy.
     enum DisclosureStyle: u8 {
         /// Full framed header above the body.
-        HEADER = 0,
+        Header = 0,
         /// Compact tree row with an indented body.
-        TREE = 1,
+        Tree = 1,
     }
 
 #[version(1)]
@@ -1543,9 +1543,9 @@ class Textbox: IWidget + ILeafLayout {
 /// Concrete multiline wrapping policy shared by display and editing controls.
     enum TextWrapping: u8 {
         /// Preserve explicit line breaks without inserting visual breaks.
-        NONE = 0,
+        None = 0,
         /// Break at ASCII spaces, retaining an oversized word as one visual span.
-        WORD = 1,
+        Word = 1,
     }
 
 #[version(1)]
@@ -1704,9 +1704,9 @@ class ListBox: IWidget + ILeafLayout {
 /// Scrollbar orientation, fixed for the lifetime of one control.
     enum ScrollAxis: u8 {
         /// Left-to-right scrolling and horizontal thumb movement.
-        HORIZONTAL = 0,
+        Horizontal = 0,
         /// Top-to-bottom scrolling and vertical thumb movement.
-        VERTICAL = 1,
+        Vertical = 1,
     }
 
 #[version(1)]
@@ -1742,15 +1742,15 @@ class Scrollbar: IWidget + ILeafLayout {
 #[names(snake_case)]
 enum FontRole: u8 {
     /// Ordinary control and body text.
-    BODY = 0,
+    Body = 0,
     /// Compact supporting text.
-    SMALL = 1,
+    Small = 1,
     /// Window-title typography.
-    TITLE = 2,
+    Title = 2,
     /// Larger display typography.
-    HEADING = 3,
+    Heading = 3,
     /// Monospace typography.
-    MONO = 4,
+    Mono = 4,
 }
 
 #[version(1)]
@@ -1767,23 +1767,23 @@ trait IFontStyle {
 /// Optional semantic icon selected in the widget's own resource bundle.
     enum ContentIcon: u8 {
         /// Remove the adjacent icon.
-        NONE = 0,
+        None = 0,
         /// Close affordance.
-        CLOSE = 1,
+        Close = 1,
         /// Collapsed disclosure affordance.
-        EXPAND = 2,
+        Expand = 2,
         /// Expanded disclosure affordance.
-        COLLAPSE = 3,
+        Collapse = 3,
         /// Checked value marker.
-        CHECK = 4,
+        Check = 4,
         /// Dropdown affordance.
-        EXPAND_DOWN = 5,
+        ExpandDown = 5,
         /// Open folder.
-        OPEN_FOLDER = 6,
+        OpenFolder = 6,
         /// Closed folder.
-        CLOSED_FOLDER = 7,
+        ClosedFolder = 7,
         /// Regular file.
-        FILE = 8,
+        File = 8,
     }
 
 #[version(2)]
@@ -1934,11 +1934,11 @@ struct AssetIcon {
 #[names(snake_case)]
 enum SurfaceRole: u8 {
     /// Window or modal-dialog background below application content and chrome.
-    WINDOW = 0,
+    Window = 0,
     /// Generic frame requested through the common FRAME widget option.
-    GENERIC_FRAME = 1,
+    GenericFrame = 1,
     /// Content panel or scroll-area viewport background.
-    PANEL = 2,
+    Panel = 2,
 }
 
 #[version(1)]
@@ -1947,33 +1947,33 @@ enum SurfaceRole: u8 {
 #[names(snake_case)]
 enum ControlRole: u8 {
     /// Ordinary command button or button-like list box.
-    BUTTON = 0,
+    Button = 0,
     /// Checkbox square; checked state is painted independently.
-    CHECKBOX = 1,
+    Checkbox = 1,
     /// Single-line, multiline, or numeric text input background.
-    TEXT_INPUT = 2,
+    TextInput = 2,
     /// Generic item or tree row whose state supplies transient selection.
-    ITEM = 3,
+    Item = 3,
     /// Combo-box header.
-    COMBO = 4,
+    Combo = 4,
     /// Slider background track.
-    SLIDER_TRACK = 5,
+    SliderTrack = 5,
     /// Slider value thumb.
-    SLIDER_THUMB = 6,
+    SliderThumb = 6,
     /// Scrollbar background track.
-    SCROLLBAR_TRACK = 7,
+    ScrollbarTrack = 7,
     /// Scrollbar movable thumb.
-    SCROLLBAR_THUMB = 8,
+    ScrollbarThumb = 8,
     /// Window close caption button.
-    CLOSE_BUTTON = 9,
+    CloseButton = 9,
     /// Window minimize caption button.
-    MINIMIZE_BUTTON = 10,
+    MinimizeButton = 10,
     /// Window maximize caption button.
-    MAXIMIZE_BUTTON = 11,
+    MaximizeButton = 11,
     /// Window restore caption button used while maximized.
-    RESTORE_BUTTON = 12,
+    RestoreButton = 12,
     /// Visible bottom-right resize grip.
-    RESIZE_GRIP = 13,
+    ResizeGrip = 13,
 }
 
 #[version(1)]
@@ -1982,13 +1982,13 @@ enum ControlRole: u8 {
 #[names(snake_case)]
 enum MenuRole: u8 {
     /// Menu bar spanning a window.
-    BAR = 0,
+    Bar = 0,
     /// Menu-bar title which can own an open popup.
-    TITLE = 1,
+    Title = 1,
     /// Popup-menu panel.
-    POPUP = 2,
+    Popup = 2,
     /// Ordinary menu item or submenu row.
-    ITEM = 3,
+    Item = 3,
 }
 
 #[version(1)]
@@ -1997,11 +1997,11 @@ enum MenuRole: u8 {
 #[names(snake_case)]
 enum ChromeRole: u8 {
     /// Ordinary-window outer frame decoration.
-    WINDOW_FRAME = 0,
+    WindowFrame = 0,
     /// Modal-dialog outer frame decoration.
-    DIALOG_FRAME = 1,
+    DialogFrame = 1,
     /// Window title patch and semantic-content color.
-    TITLE = 2,
+    Title = 2,
 }
 
 #[version(1)]
@@ -2010,21 +2010,21 @@ enum ChromeRole: u8 {
 #[names(snake_case)]
 enum IconRole: u8 {
     /// Window and dialog close affordance.
-    CLOSE = 0,
+    Close = 0,
     /// Collapsed disclosure affordance.
-    EXPAND = 1,
+    Expand = 1,
     /// Expanded disclosure affordance.
-    COLLAPSE = 2,
+    Collapse = 2,
     /// Checked checkbox and menu-item mark.
-    CHECK = 3,
+    Check = 3,
     /// Combo-box dropdown affordance.
-    EXPAND_DOWN = 4,
+    ExpandDown = 4,
     /// Open-folder file-dialog item.
-    OPEN_FOLDER = 5,
+    OpenFolder = 5,
     /// Closed-folder file-dialog item.
-    CLOSED_FOLDER = 6,
+    ClosedFolder = 6,
     /// Regular file-dialog item.
-    FILE = 7,
+    File = 7,
 }
 
 #[version(1)]
@@ -2069,18 +2069,18 @@ struct AssetMetrics {
 /// Window title placement within the available caption geometry.
     enum TitleAlignment: u8 {
         /// Start at the leading edge.
-        LEADING = 0,
+        Leading = 0,
         /// Center within the title, reserving symmetric caption banks.
-        CENTERED = 1,
+        Centered = 1,
     }
 
 #[version(1)]
 /// Caption bank containing one window control.
     enum CaptionSide: u8 {
         /// Place in the leading bank.
-        LEADING = 0,
+        Leading = 0,
         /// Place in the trailing bank.
-        TRAILING = 1,
+        Trailing = 1,
     }
 
 #[version(1)]

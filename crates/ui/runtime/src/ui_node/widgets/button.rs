@@ -93,7 +93,7 @@ impl ButtonParameters {
     pub fn new(label: impl Into<String>) -> Self {
         Self {
             content: ButtonContent::Text { label: label.into(), icon: None },
-            font: FontRef::Role(FontRole::BODY),
+            font: FontRef::Role(FontRole::Body),
             #[cfg(test)]
             opt: WidgetOption::FRAME,
             fill: WidgetFillOption::ALL,
@@ -105,7 +105,7 @@ impl ButtonParameters {
     pub fn with_opt(label: impl Into<String>, opt: WidgetOption) -> Self {
         Self {
             content: ButtonContent::Text { label: label.into(), icon: None },
-            font: FontRef::Role(FontRole::BODY),
+            font: FontRef::Role(FontRole::Body),
             opt,
             fill: WidgetFillOption::ALL,
         }
@@ -116,7 +116,7 @@ impl ButtonParameters {
     pub fn with_image(label: impl Into<String>, image: Option<neocogi_ui::Image>, opt: WidgetOption, fill: WidgetFillOption) -> Self {
         Self {
             content: ButtonContent::Image { label: label.into(), image },
-            font: FontRef::Role(FontRole::BODY),
+            font: FontRef::Role(FontRole::Body),
             opt,
             fill,
         }
@@ -216,7 +216,7 @@ impl Button {
         if !ctx.options().intersects(WidgetOption::FRAME) && widget_fill_visible(ctx, self.fill) {
             // Framed buttons are painted once by retained traversal across their complete outer
             // allocation. An unframed button asks for only the role's stretchable center payload.
-            ctx.draw_control_center(ControlRole::BUTTON, rect);
+            ctx.draw_control_center(ControlRole::Button, rect);
         }
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
         match &self.content {
@@ -226,10 +226,10 @@ impl Button {
                 let visual_size = icon_id.map(|icon| ctx.atlas().get_icon_size(icon));
                 let placement = place_inline_content(rect, ctx.skin(), label, visual_size);
                 if !label.is_empty() {
-                    ctx.draw_control_text_with_font(font, label, placement.text, ControlRole::BUTTON, ctx.options());
+                    ctx.draw_control_text_with_font(font, label, placement.text, ControlRole::Button, ctx.options());
                 }
                 if let (Some(icon), Some(visual)) = (icon_id, placement.visual) {
-                    let color = ctx.control_content_color(ControlRole::BUTTON);
+                    let color = ctx.control_content_color(ControlRole::Button);
                     ctx.draw_icon(icon, visual, color);
                 }
             }
@@ -237,7 +237,7 @@ impl Button {
                 let visual_size = image.as_ref().map(image_size);
                 let placement = place_inline_content(rect, ctx.skin(), label, visual_size);
                 if !label.is_empty() {
-                    ctx.draw_control_text_with_font(font, label, placement.text, ControlRole::BUTTON, ctx.options());
+                    ctx.draw_control_text_with_font(font, label, placement.text, ControlRole::Button, ctx.options());
                 }
                 if let (Some(image), Some(visual)) = (image.as_ref(), placement.visual) {
                     // External image pixels carry their own color; the adjacent label alone uses
@@ -253,7 +253,7 @@ impl Button {
                     place_inline_content(rect, ctx.skin(), label, visual_size)
                 };
                 if !label.is_empty() {
-                    ctx.draw_control_text_with_font(font, label, placement.text, ControlRole::BUTTON, ctx.options());
+                    ctx.draw_control_text_with_font(font, label, placement.text, ControlRole::Button, ctx.options());
                 }
                 if let (Some(image), Some(visual)) = (image.as_ref(), placement.visual) {
                     // Scaling changes only destination geometry; it must not introduce a theme
@@ -281,7 +281,7 @@ impl Widget for Button {
 
     fn frame_appearance_role(&self) -> FrameRole {
         // Buttons use one stateful role for their complete runtime-owned outer frame.
-        FrameRole::Control(ControlRole::BUTTON)
+        FrameRole::Control(ControlRole::Button)
     }
 
     fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
@@ -450,7 +450,7 @@ impl neocogi_ui_contracts::Button for Button {
         let input = crate::boundary::text(input)?;
         if self.com_label() != input {
             self.com_set_label(input);
-            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+            self.runtime_mut().state.record_change(GeometryChange::Changed);
         }
         Ok(())
     }
@@ -510,7 +510,7 @@ impl neocogi_ui_contracts::Button for Button {
         // call is active; revalidate host authority before committing the prepared image.
         self.runtime().state.writable()?;
         if ImageState::set_image(self, Some(image), fit_width) {
-            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+            self.runtime_mut().state.record_change(GeometryChange::Changed);
         }
         Ok(())
     }
@@ -519,7 +519,7 @@ impl neocogi_ui_contracts::Button for Button {
     fn clear_image(&mut self) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
         if ImageState::set_image(self, None, false) {
-            self.runtime_mut().state.record_change(GeometryChange::CHANGED);
+            self.runtime_mut().state.record_change(GeometryChange::Changed);
         }
         Ok(())
     }

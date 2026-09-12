@@ -46,8 +46,8 @@ impl ExportedTheme {
             },
             chrome: AssetChrome {
                 title_alignment: match chrome.title_alignment {
-                    crate::WindowTitleAlignment::Leading => TitleAlignment::LEADING,
-                    crate::WindowTitleAlignment::Centered => TitleAlignment::CENTERED,
+                    crate::WindowTitleAlignment::Leading => TitleAlignment::Leading,
+                    crate::WindowTitleAlignment::Centered => TitleAlignment::Centered,
                 },
                 close_side: out_side(captions.close_side),
                 minimize_side: out_side(captions.minimize_side),
@@ -280,8 +280,8 @@ fn read_geometry(metrics: AssetMetrics, chrome: AssetChrome) -> Result<(crate::S
     }
     let window_chrome = crate::WindowChromeSkin {
         title_alignment: match chrome.title_alignment {
-            TitleAlignment::LEADING => crate::WindowTitleAlignment::Leading,
-            TitleAlignment::CENTERED => crate::WindowTitleAlignment::Centered,
+            TitleAlignment::Leading => crate::WindowTitleAlignment::Leading,
+            TitleAlignment::Centered => crate::WindowTitleAlignment::Centered,
             _ => return Err(NC_E_INVALID_ARG),
         },
         captions: crate::CaptionButtonsSkin {
@@ -463,16 +463,16 @@ fn in_insets(value: Insets) -> Result<SliceInsets, NcStatus> {
 #[cfg(test)]
 fn out_side(value: crate::CaptionButtonSide) -> CaptionSide {
     match value {
-        crate::CaptionButtonSide::Leading => CaptionSide::LEADING,
-        crate::CaptionButtonSide::Trailing => CaptionSide::TRAILING,
+        crate::CaptionButtonSide::Leading => CaptionSide::Leading,
+        crate::CaptionButtonSide::Trailing => CaptionSide::Trailing,
     }
 }
 
 /// Rejects unknown caption edge tags instead of treating them as a default.
 fn in_side(value: CaptionSide) -> Result<crate::CaptionButtonSide, NcStatus> {
     match value {
-        CaptionSide::LEADING => Ok(crate::CaptionButtonSide::Leading),
-        CaptionSide::TRAILING => Ok(crate::CaptionButtonSide::Trailing),
+        CaptionSide::Leading => Ok(crate::CaptionButtonSide::Leading),
+        CaptionSide::Trailing => Ok(crate::CaptionButtonSide::Trailing),
         _ => Err(NC_E_INVALID_ARG),
     }
 }

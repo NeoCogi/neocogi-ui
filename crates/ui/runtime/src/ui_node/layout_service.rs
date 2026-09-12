@@ -128,9 +128,9 @@ impl ILayoutService for Layout {
     fn set_participation(&self, scope: LayoutScope, index: u32, participation: LayoutParticipation) -> Result<(), NcStatus> {
         let mut access = self.storage.take(scope)?;
         let participation = match participation {
-            LayoutParticipation::ACTIVE => crate::ChildParticipation::Active,
-            LayoutParticipation::DISABLED => crate::ChildParticipation::Disabled,
-            LayoutParticipation::HIDDEN => crate::ChildParticipation::Hidden,
+            LayoutParticipation::Active => crate::ChildParticipation::Active,
+            LayoutParticipation::Disabled => crate::ChildParticipation::Disabled,
+            LayoutParticipation::Hidden => crate::ChildParticipation::Hidden,
             _ => return Err(NC_E_INVALID_ARG),
         };
         let node = access.placement()?.children.get_mut(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
@@ -315,9 +315,9 @@ impl<'a> ScopedLayout<'a> {
             return false;
         };
         let participation = match participation {
-            crate::ChildParticipation::Active => LayoutParticipation::ACTIVE,
-            crate::ChildParticipation::Disabled => LayoutParticipation::DISABLED,
-            crate::ChildParticipation::Hidden => LayoutParticipation::HIDDEN,
+            crate::ChildParticipation::Active => LayoutParticipation::Active,
+            crate::ChildParticipation::Disabled => LayoutParticipation::Disabled,
+            crate::ChildParticipation::Hidden => LayoutParticipation::Hidden,
         };
         self.capture(self.service.set_participation(self.scope, index, participation)).is_some()
     }
@@ -340,7 +340,7 @@ impl<'a> ScopedLayout<'a> {
 /// Converts one private constraint without losing an explicitly bounded zero.
 fn axis_limit(space: crate::AvailableSpace) -> AxisLimit {
     match space.bound() {
-        Some(extent) => AxisLimit { kind: LimitKind::FINITE, extent },
-        None => AxisLimit { kind: LimitKind::UNBOUNDED, extent: 0 },
+        Some(extent) => AxisLimit { kind: LimitKind::Finite, extent },
+        None => AxisLimit { kind: LimitKind::Unbounded, extent: 0 },
     }
 }
