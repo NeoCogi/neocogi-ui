@@ -46,7 +46,7 @@ impl WidgetRuntime {
         let source = host.assets()?;
         let resources = Rc::new(RefCell::new(crate::assets::ImportedAssets::read(source.as_com_ref(), None)?));
         Ok(Self {
-            state: WidgetState::new(host, WidgetOptions { bits: options.bits() }),
+            state: WidgetState::new(host, WidgetOptions::from_raw(options.bits() as u16)),
             resources,
             refresh_resources: true,
             #[cfg(test)]
@@ -58,7 +58,7 @@ impl WidgetRuntime {
     pub(crate) fn from_shared(host: ComPtr<IWidgetHostAbi>, options: WidgetOption, resources: SharedAssets) -> Result<Self, NcStatus> {
         host.check_mutation()?;
         Ok(Self {
-            state: WidgetState::new(host, WidgetOptions { bits: options.bits() }),
+            state: WidgetState::new(host, WidgetOptions::from_raw(options.bits() as u16)),
             resources,
             refresh_resources: false,
             #[cfg(test)]
@@ -242,13 +242,13 @@ macro_rules! direct_widget_phase_impl {
                 let runtime = <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self);
                 let options = runtime.state.options()?;
                 Ok(neocogi_ui_contracts::WidgetProperties {
-                    options: neocogi_ui_contracts::WidgetOptions {
-                        bits: <$name as crate::ui_node::widget_object::WidgetAlgorithm>::effective_options(
+                    options: neocogi_ui_contracts::WidgetOptions::from_raw(
+                        <$name as crate::ui_node::widget_object::WidgetAlgorithm>::effective_options(
                             self,
-                            crate::WidgetOption::from_bits_retain(options.bits),
+                            crate::WidgetOption::from_bits_retain(u32::from(options.raw())),
                         )
-                        .bits(),
-                    },
+                        .bits() as u16,
+                    ),
                     keyboard: crate::Widget::keyboard_behavior(self).bits(),
                     frame: crate::ui_node::frame_contract(crate::Widget::frame_appearance_role(self)),
                 })
@@ -330,7 +330,7 @@ macro_rules! direct_widget_phase_impl {
                     state.clicked,
                     state.active,
                     state.window_active,
-                    crate::WidgetOption::from_bits_retain(options.bits),
+                    crate::WidgetOption::from_bits_retain(u32::from(options.raw())),
                     scope,
                     painter,
                 );

@@ -57,7 +57,7 @@ impl ComNode {
             .expect("node policy is validated")
             .1;
         (
-            WidgetOption::from_bits_retain(properties.options.bits),
+            WidgetOption::from_bits_retain(u32::from(properties.options.raw())),
             KeyboardBehavior::from_bits_retain(properties.keyboard),
             frame,
         )

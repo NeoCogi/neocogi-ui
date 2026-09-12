@@ -3858,7 +3858,7 @@ impl WindowManager {
                 width: rect.width,
                 height: rect.height,
             },
-            options: WindowOptions { bits: node.surface.options.bits() },
+            options: WindowOptions::from_raw(node.surface.options.bits() as u16),
             layer,
             visibility: if self.root_is_visible(id) { Visibility::VISIBLE } else { Visibility::HIDDEN },
             child_clip: match root.child_window_clip {

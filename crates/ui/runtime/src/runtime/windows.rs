@@ -276,7 +276,7 @@ impl IWindow for LogicalWindow {
     /// Rejects unknown bits before the manager reconciles enabled descendants and captures.
     fn set_options(&self, options: WindowOptions) -> Result<(), NcStatus> {
         options.validate()?;
-        self.edit(WindowEdit::Options(WindowOption::from_bits(options.bits).ok_or(NC_E_INVALID_ARG)?))
+        self.edit(WindowEdit::Options(WindowOption::from_bits(u32::from(options.raw())).ok_or(NC_E_INVALID_ARG)?))
     }
     /// Delegates fixed-layer range and managed-layer policy to the authoritative manager.
     fn set_layer(&self, layer: u8) -> Result<(), NcStatus> {
@@ -406,7 +406,7 @@ impl IPopup for LogicalPopup {
     fn set_options(&mut self, options: WindowOptions) -> Result<(), NcStatus> {
         options.validate()?;
         self.edit(PopupEdit::Options {
-            options: WindowOption::from_bits(options.bits).ok_or(NC_E_INVALID_ARG)?,
+            options: WindowOption::from_bits(u32::from(options.raw())).ok_or(NC_E_INVALID_ARG)?,
         })
     }
     /// Removes the definition and closes retained widget handles after the native detach.

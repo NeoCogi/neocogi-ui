@@ -307,7 +307,9 @@ impl ScrollArea {
         model: Rc<ScrollModel>,
     ) -> Self {
         #[cfg(test)]
-        let opt = WidgetOption::from_bits_retain(runtime.state.options().expect("new test widget runtime exposes its validated options").bits);
+        let opt = WidgetOption::from_bits_retain(u32::from(
+            runtime.state.options().expect("new test widget runtime exposes its validated options").raw(),
+        ));
         Self {
             runtime,
             editor,

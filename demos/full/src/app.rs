@@ -102,17 +102,13 @@ pub(super) fn slider(ui: &Ui, value: f32, high: f32) -> Result<SliderWidget, NcS
         step: 1.,
         precision: 0,
     })?;
-    control.set_options(WidgetOptions {
-        bits: WidgetOptions::FRAME.bits | WidgetOptions::ALIGN_CENTER.bits,
-    })?;
+    control.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
     Ok(control)
 }
 /// Creates and immediately subscribes a concrete button; only its parent needs to retain it afterward.
 fn button(ui: &Ui, events: &EventSession<State>, text: &str, action: Action) -> Result<ButtonWidget, NcStatus> {
     let mut control = ui.widgets().button(text)?;
-    control.set_options(WidgetOptions {
-        bits: WidgetOptions::FRAME.bits | WidgetOptions::ALIGN_CENTER.bits,
-    })?;
+    control.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
     events.subscribe_activation(&control, action)?;
     Ok(control)
 }
@@ -608,9 +604,7 @@ fn build_controls(host: &Host, events: &EventSession<State>, content: &mut Linea
         append(&mut line, &button(ui, events, a, Action::Log)?, FLEX)?;
         let mut right = button(ui, events, b, action)?;
         if matches!(action, Action::Open) && state.file_dialog.is_none() {
-            right.set_options(WidgetOptions {
-                bits: WidgetOptions::FRAME.bits | WidgetOptions::NO_INTERACT.bits,
-            })?;
+            right.set_options(WidgetOptions::FRAME | WidgetOptions::NO_INTERACT)?;
         }
         append(&mut line, &right, FLEX)?;
         append(&mut tests, &line, LayoutTrack::Content)?;

@@ -48,13 +48,6 @@ impl Default for Point {
     }
 }
 
-impl Default for WidgetOptions {
-    /// Returns an empty option bit set.
-    fn default() -> Self {
-        Self::NONE
-    }
-}
-
 impl Default for WidgetPaint {
     /// Returns empty inactive paint state.
     fn default() -> Self {
@@ -215,58 +208,9 @@ impl AxisLimit {
 }
 
 impl WindowOptions {
-    /// No optional presentation behavior.
-    pub const NONE: Self = Self { bits: 0 };
-    /// Show the minimize caption button.
-    pub const MINIMIZE_BUTTON: Self = Self { bits: 1 };
-    /// Show the maximize caption button.
-    pub const MAXIMIZE_BUTTON: Self = Self { bits: 2 };
-    /// Keep visible while disabling the complete structural family.
-    pub const DISABLED: Self = Self { bits: 4 };
-    /// Remove the ordinary content inset.
-    pub const NO_PADDING: Self = Self { bits: 8 };
-    /// Prevent interactive resizing.
-    pub const NO_RESIZE: Self = Self { bits: 16 };
-    /// Hide the close caption button.
-    pub const NO_CLOSE: Self = Self { bits: 64 };
-    /// Hide the title bar.
-    pub const NO_TITLE: Self = Self { bits: 128 };
-    /// Derive width from preferred content measurement.
-    pub const AUTO_WIDTH: Self = Self { bits: 256 };
-    /// Derive height from preferred content measurement.
-    pub const AUTO_HEIGHT: Self = Self { bits: 512 };
-    /// Derive both dimensions from preferred content measurement.
-    pub const AUTO_SIZE: Self = Self { bits: 768 };
-    /// Use the theme-owned outer border and content inset.
-    pub const FRAME: Self = Self { bits: 1024 };
-
-    /// Every declared presentation bit; aliases such as AUTO_SIZE introduce no new bits.
-    const KNOWN_BITS: u32 = Self::MINIMIZE_BUTTON.bits
-        | Self::MAXIMIZE_BUTTON.bits
-        | Self::DISABLED.bits
-        | Self::NO_PADDING.bits
-        | Self::NO_RESIZE.bits
-        | Self::NO_CLOSE.bits
-        | Self::NO_TITLE.bits
-        | Self::AUTO_WIDTH.bits
-        | Self::AUTO_HEIGHT.bits
-        | Self::FRAME.bits;
-
     /// Validates the complete bit set at the component boundary.
     pub fn validate(self) -> Result<(), NcStatus> {
-        if self.bits & !Self::KNOWN_BITS == 0 {
-            Ok(())
-        } else {
-            Err(neocogi_com::NC_E_INVALID_ARG)
-        }
-    }
-}
-
-impl core::ops::BitOr for WindowOptions {
-    type Output = Self;
-    /// Combines concrete options without exposing a typeless property collection.
-    fn bitor(self, rhs: Self) -> Self {
-        Self { bits: self.bits | rhs.bits }
+        if self.is_valid() { Ok(()) } else { Err(neocogi_com::NC_E_INVALID_ARG) }
     }
 }
 
@@ -604,19 +548,6 @@ impl TextureRegion {
     }
 }
 
-impl FillStates {
-    /// No center fill.
-    pub const NONE: Self = Self { bits: 0 };
-    /// Idle or disabled center fill.
-    pub const NORMAL: Self = Self { bits: 1 };
-    /// Hovered center fill.
-    pub const HOVER: Self = Self { bits: 2 };
-    /// Focused or pressed center fill.
-    pub const FOCUS: Self = Self { bits: 4 };
-    /// Center fill in every interaction state.
-    pub const ALL: Self = Self { bits: 7 };
-}
-
 /// Shared finite callback budget for one runtime dispatch boundary across all sources and cascade sweeps.
 pub const EVENT_DISPATCH_LIMIT: u32 = 1_000_000;
 
@@ -624,34 +555,9 @@ pub const EVENT_DISPATCH_LIMIT: u32 = 1_000_000;
 pub const FILE_DIALOG_RECT: crate::Rect = crate::Rect { x: 40, y: 40, width: 600, height: 400 };
 
 impl WidgetOptions {
-    /// No optional frame or routing override.
-    pub const NONE: Self = Self { bits: 0 };
-    /// Centers content within its allocation.
-    pub const ALIGN_CENTER: Self = Self { bits: 1 };
-    /// Aligns content with the right edge.
-    pub const ALIGN_RIGHT: Self = Self { bits: 2 };
-    /// Makes only this surface inert; enabled descendants may still receive input.
-    pub const NO_INTERACT: Self = Self { bits: 4 };
-    /// Consumes hovered wheel input.
-    pub const GRAB_SCROLL: Self = Self { bits: 32 };
-    /// Requests the theme-owned outer frame for the widget's semantic role.
-    pub const FRAME: Self = Self { bits: 512 };
-
     /// Rejects undefined flags before callers commit a replacement.
     pub fn validate(self) -> Result<(), NcStatus> {
-        if self.bits & !(1 | 2 | 4 | 32 | 512) == 0 {
-            Ok(())
-        } else {
-            Err(NC_E_INVALID_ARG)
-        }
-    }
-}
-
-impl core::ops::BitOr for WidgetOptions {
-    type Output = Self;
-    /// Combines independent flags without hiding a stored closure or policy object.
-    fn bitor(self, other: Self) -> Self {
-        Self { bits: self.bits | other.bits }
+        if self.is_valid() { Ok(()) } else { Err(NC_E_INVALID_ARG) }
     }
 }
 

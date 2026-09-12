@@ -298,11 +298,33 @@ struct WindowLayer {
     number: u8,
 }
 
-#[version(1)]
+#[version(2)]
 /// Concrete window presentation bits; unknown bits are rejected before mutation.
-struct WindowOptions {
-    /// Union of the documented constants on this type.
-    bits: u32,
+bitenum WindowOptions: u16 {
+    /// No optional presentation behavior.
+    NONE = 0,
+    /// Show the minimize caption button.
+    MINIMIZE_BUTTON = 1,
+    /// Show the maximize caption button.
+    MAXIMIZE_BUTTON = 2,
+    /// Keep visible while disabling the complete structural family.
+    DISABLED = 4,
+    /// Remove the ordinary content inset.
+    NO_PADDING = 8,
+    /// Prevent interactive resizing.
+    NO_RESIZE = 16,
+    /// Hide the close caption button.
+    NO_CLOSE = 64,
+    /// Hide the title bar.
+    NO_TITLE = 128,
+    /// Derive width from preferred content measurement.
+    AUTO_WIDTH = 256,
+    /// Derive height from preferred content measurement.
+    AUTO_HEIGHT = 512,
+    /// Derive both dimensions from preferred content measurement.
+    AUTO_SIZE = 768,
+    /// Use the theme-owned outer border and content inset.
+    FRAME = 1024,
 }
 
 #[version(1)]
@@ -1095,11 +1117,21 @@ struct TextureRegion {
     v1: f32,
 }
 
-#[version(1)]
+#[version(2)]
 /// Common widget option bits; parent-child sizing rules belong to container edges.
-struct WidgetOptions {
-    /// Union of the documented option constants; unknown bits are rejected.
-    bits: u32,
+bitenum WidgetOptions: u16 {
+    /// No optional frame or routing override.
+    NONE = 0,
+    /// Centers content within its allocation.
+    ALIGN_CENTER = 1,
+    /// Aligns content with the right edge.
+    ALIGN_RIGHT = 2,
+    /// Makes only this surface inert; enabled descendants may still receive input.
+    NO_INTERACT = 4,
+    /// Consumes hovered wheel input.
+    GRAB_SCROLL = 32,
+    /// Requests the theme-owned outer frame for the widget's semantic role.
+    FRAME = 512,
 }
 
 #[version(1)]
@@ -1754,11 +1786,19 @@ trait IFontStyle {
         FILE = 8,
     }
 
-#[version(1)]
+#[version(2)]
 /// Interaction states in which an unframed button fills its center.
-struct FillStates {
-    /// Union of NORMAL, HOVER and FOCUS; unknown bits are rejected.
-    bits: u8,
+bitenum FillStates: u8 {
+    /// No center fill.
+    NONE = 0,
+    /// Idle or disabled center fill.
+    NORMAL = 1,
+    /// Hovered center fill.
+    HOVER = 2,
+    /// Focused or pressed center fill.
+    FOCUS = 4,
+    /// Center fill in every interaction state.
+    ALL = 7,
 }
 
 #[version(1)]

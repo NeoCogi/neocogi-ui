@@ -362,9 +362,7 @@ fn main() -> Result<(), HostError> {
     let host = Host::new("Calculator", Size { width: 320, height: 420 }, neocogi_demo_assets::load_bundle()?)?;
     let mut display = host.ui.widgets().textbox("0")?;
     display.set_named_font(DISPLAY_FONT)?;
-    display.set_options(WidgetOptions {
-        bits: WidgetOptions::FRAME.bits | WidgetOptions::ALIGN_RIGHT.bits | WidgetOptions::NO_INTERACT.bits,
-    })?;
+    display.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_RIGHT | WidgetOptions::NO_INTERACT)?;
     let mut grid = host.ui.widgets().grid(
         &[LayoutTrack::Flex { weight: 1.0 }; 4],
         &[LayoutTrack::Flex { weight: KEYPAD_ROW_HEIGHT_WEIGHT }; 5],
@@ -375,9 +373,7 @@ fn main() -> Result<(), HostError> {
     tree.insert(1, &grid, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 - DISPLAY_HEIGHT_FRACTION }))?
         .finish()?;
     let window = host.ui.window("Calculator", Rect { x: 0, y: 0, width: 320, height: 420 }, &tree)?;
-    window.set_options(WindowOptions {
-        bits: WindowOptions::FRAME.bits | WindowOptions::NO_RESIZE.bits | WindowOptions::NO_TITLE.bits,
-    })?;
+    window.set_options(WindowOptions::FRAME | WindowOptions::NO_RESIZE | WindowOptions::NO_TITLE)?;
     let events = EventSession::new(State {
         window,
         display,
@@ -409,9 +405,7 @@ fn main() -> Result<(), HostError> {
     .enumerate()
     {
         let mut button = host.ui.widgets().button(label)?;
-        button.set_options(WidgetOptions {
-            bits: WidgetOptions::FRAME.bits | WidgetOptions::ALIGN_CENTER.bits,
-        })?;
+        button.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
         grid.insert(index as u32, &button, GridExtent { columns: 1, rows: 1 })?.finish()?;
         events.subscribe_activation(&button, action)?;
     }

@@ -434,7 +434,7 @@ impl Button {
     ) -> Result<Self, NcStatus> {
         options.validate()?;
         let label = crate::boundary::text(label)?;
-        let native_options = crate::WidgetOption::from_bits_retain(options.bits);
+        let native_options = crate::WidgetOption::from_bits_retain(u32::from(options.raw()));
         let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, native_options, resources)?;
         Ok(Self::from_runtime(runtime, crate::ButtonParameters::new(label)))
     }
@@ -491,13 +491,13 @@ impl neocogi_ui_contracts::Button for Button {
     /// Reports the current fill mask from the sole concrete Button state.
     fn fill_states(&self) -> Result<FillStates, NcStatus> {
         self.runtime().state.readable()?;
-        Ok(FillStates { bits: self.com_fill().bits() as u8 })
+        Ok(FillStates::from_raw(self.com_fill().bits() as u8))
     }
 
     /// Rejects unknown flags before committing a paint-only change.
     fn set_fill_states(&mut self, states: FillStates) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
-        let fill = crate::WidgetFillOption::from_bits(u32::from(states.bits)).ok_or(neocogi_com::NC_E_INVALID_ARG)?;
+        let fill = crate::WidgetFillOption::from_bits(u32::from(states.raw())).ok_or(neocogi_com::NC_E_INVALID_ARG)?;
         self.com_set_fill(fill);
         Ok(())
     }

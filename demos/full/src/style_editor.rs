@@ -295,14 +295,14 @@ impl StyleEditor {
             let color = row.role.value(&mut self.palette);
             for (channel, control) in Channel::ALL.into_iter().zip(&mut row.channels) {
                 control.set_value(*channel.value(color) as f32)?;
-                let options = WidgetOptions::FRAME.bits
-                    | WidgetOptions::ALIGN_CENTER.bits
+                let options = WidgetOptions::FRAME
+                    | WidgetOptions::ALIGN_CENTER
                     | if self.selected == Theme::Default {
-                        0
+                        WidgetOptions::NONE
                     } else {
-                        WidgetOptions::NO_INTERACT.bits
+                        WidgetOptions::NO_INTERACT
                     };
-                control.set_options(WidgetOptions { bits: options })?;
+                control.set_options(options)?;
             }
             row.swatch.set_fill(rgba(*color))?;
         }

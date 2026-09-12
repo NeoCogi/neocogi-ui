@@ -550,9 +550,9 @@ fn window_com_capabilities_preserve_hierarchy_layers_visibility_and_subtree_clos
     assert_eq!(dialog.snapshot().unwrap().visibility, Visibility::HIDDEN);
     root.set_child_clip(ChildClip::CONTENT).unwrap();
     assert_eq!(root.snapshot().unwrap().child_clip, ChildClip::CONTENT);
-    let before = root.snapshot().unwrap().options.bits;
-    assert_eq!(root.set_options(WindowOptions { bits: 32 }), Err(NC_E_INVALID_ARG));
-    assert_eq!(root.snapshot().unwrap().options.bits, before);
+    let before = root.snapshot().unwrap().options.raw();
+    assert_eq!(root.set_options(WindowOptions::from_raw(32)), Err(NC_E_INVALID_ARG));
+    assert_eq!(root.snapshot().unwrap().options.raw(), before);
     assert_eq!(root.set_layer(16), Err(NC_E_INVALID_ARG));
     assert_eq!(root.snapshot().unwrap().layer.number, 2);
     root.set_title(NcCopyFromBufferOffset::new(0, b"new title")).unwrap();
@@ -692,7 +692,7 @@ fn com_nodes_update_without_activation_and_collect_hidden_widget_changes() {
     assert_eq!(probe.measures.get(), measured, "NoChange text processing must preserve measurement");
 
     let before = button.properties().unwrap().options;
-    assert_eq!(button.set_options(WidgetOptions { bits: 8 }), Err(NC_E_INVALID_ARG));
+    assert_eq!(button.set_options(WidgetOptions::from_raw(8)), Err(NC_E_INVALID_ARG));
     assert_eq!(button.properties().unwrap().options, before);
     window.set_visibility(Visibility::HIDDEN).unwrap();
     runtime.update(SIZE).unwrap();
@@ -961,7 +961,7 @@ fn builtin_numeric_and_scrollbar_facades_reject_invalid_inputs_without_losing_st
     assert_eq!(scrollbar.range().unwrap().offset, 0);
     assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
     scrollbar.set_lengths(100, 100).unwrap();
-    assert_ne!(common.properties().unwrap().options.bits & WidgetOptions::NO_INTERACT.bits, 0);
+    assert!(common.properties().unwrap().options.contains(WidgetOptions::NO_INTERACT));
     let mut swatch = ui.widgets().color_swatch(0xff102030, "RGBA").unwrap();
     let mut common = swatch.node_interface().unwrap();
     common.take_change().unwrap();
@@ -1170,7 +1170,7 @@ fn builtin_scoped_paint_preserves_alignment_with_inline_semantic_state() {
     button.set_fill_states(FillStates::NONE).unwrap();
     let mut common = button.node_interface().unwrap();
     common.take_change().unwrap();
-    assert_eq!(button.set_fill_states(FillStates { bits: 8 }), Err(NC_E_INVALID_ARG));
+    assert_eq!(button.set_fill_states(FillStates::from_raw(8)), Err(NC_E_INVALID_ARG));
     assert_eq!(button.fill_states().unwrap(), FillStates::NONE);
     assert_eq!(common.take_change().unwrap(), GeometryChange::NO_CHANGE);
     button.set_icon_role(ContentIcon::CHECK).unwrap();

@@ -64,11 +64,7 @@ mod tests {
 
         /// Rejects unknown fill flags without retaining a second test field.
         fn set_fill_states(&mut self, states: FillStates) -> Result<(), NcStatus> {
-            if states.bits & !FillStates::ALL.bits == 0 {
-                Ok(())
-            } else {
-                Err(NC_E_INVALID_ARG)
-            }
+            if states.is_valid() { Ok(()) } else { Err(NC_E_INVALID_ARG) }
         }
 
         /// Image content is intentionally absent from this minimal fixture.
