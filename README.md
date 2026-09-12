@@ -47,6 +47,10 @@ package does not assemble those files.
 Platform-owned COM infrastructure lives under `crates/com`: `core` defines the
 ABI vocabulary, `macros` generates typed projections, `api` is the safe client
 surface, and `runtime` plus `runtime-sys` own process-wide loading and linkage.
+Build-time IDL tooling lives under `tools/idl`: `core` owns parsing, resolution,
+and fingerprints, while `build` is the reusable contract-crate `build.rs`
+integration. It remains separate from `tools/cargo-neocogi` so ordinary Cargo
+builds can regenerate contracts without invoking the assembly CLI.
 UI code follows the same role-based layout under `crates/ui`: `contracts` contains
 cross-component types, `api` is the application facade, and `runtime` is the one
 deployable implementation containing retained nodes, built-in widgets and
