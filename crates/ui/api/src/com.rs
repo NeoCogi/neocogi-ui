@@ -6,6 +6,10 @@
 //! object support.
 
 pub use neocogi_ui_contracts::*;
+pub use neocogi_ui_assets_contracts::{
+    AssetLoader, AssetLoaderAbi, AssetsPluginFactory, AssetsPluginFactoryAbi, IAssetBuilder, IAssetBuilderAbi, IAssetDiagnostics, IAssetDiagnosticsAbi,
+    PaletteEdit, PaletteEditAbi, PaletteEditTag, PngDecoder, PngDecoderAbi, StyleCompiler, StyleCompilerAbi, ThemeLoader, ThemeLoaderAbi,
+};
 use neocogi_com::{ComInterface, ComPtr, ComRef, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
 mod containers;
 pub use containers::{DisclosureWidget, GridWidget, LinearWidget, ScrollAreaWidget};

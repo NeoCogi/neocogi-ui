@@ -1,0 +1,20 @@
+[package]
+name = "neocogi-ui-assets-contracts"
+version = "0.9.0-alpha.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Typed COM contracts for optional NeoCogi UI asset authoring services"
+links = "nc_contract_neocogi_ui_assets"
+
+[package.metadata.neocogi-contract]
+module = "neocogi.ui_assets"
+source = "idl/neocogi/ui_assets.ncidl"
+
+[dependencies]
+neocogi-com = { workspace = true, features = ["macros"] }
+neocogi-ui-contracts.workspace = true
+
+[build-dependencies]
+neocogi-idl-build.workspace = true

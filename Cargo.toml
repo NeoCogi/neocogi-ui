@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/ui/assets-contracts",
     "crates/ui/contracts",
     "examples/ui-extension",
     "crates/assets",
@@ -24,6 +25,7 @@ readme = "README.md"
 repository = "https://github.com/NeoCogi/neocogi-platform"
 
 [workspace.dependencies]
+neocogi-ui-assets-contracts = { path = "crates/ui/assets-contracts" }
 neocogi-ui-contracts = { path = "crates/ui/contracts" }
 neocogi-com-core = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "e8ff92a6279919f3c8fd4952a38ee62160b0247e", version = "0.1.0", default-features = false }
 neocogi-com-macros = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "e8ff92a6279919f3c8fd4952a38ee62160b0247e", version = "0.1.0", default-features = false }

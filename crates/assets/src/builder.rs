@@ -1,12 +1,13 @@
 //! Optional font/atlas construction and JSON theme assembly.
 use super::Diagnostic;
+use neocogi_ui_assets_contracts::*;
 use neocogi_ui_contracts::*;
 use crate::atlas::{Builder, Config};
 use neocogi_ui::assets::AssetData;
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, INcStringAbi, NC_E_INVALID_ARG, com_factory, com_object};
 use std::cell::RefCell;
 
-#[com_factory(neocogi_ui_contracts::AssetLoader)]
+#[com_factory(neocogi_ui_assets_contracts::AssetLoader)]
 #[derive(Default)]
 /// Stateless construction root with owned diagnostics; drafts contain the actual mutable builder.
 pub struct AssetLoaderObject {
@@ -160,7 +161,7 @@ impl IAssetDiagnostics for BuildSession {
 }
 
 #[cfg(feature = "theme-json")]
-#[com_factory(neocogi_ui_contracts::ThemeLoader)]
+#[com_factory(neocogi_ui_assets_contracts::ThemeLoader)]
 #[derive(Default)]
 /// Optional theme compiler is present only in asset assemblies built with theme-json.
 pub struct ThemeLoaderObject {

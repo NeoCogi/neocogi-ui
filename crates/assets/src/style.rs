@@ -6,6 +6,7 @@
 //
 
 //! Compiles flat palette rules into portable resolved appearance tables.
+use neocogi_ui_assets_contracts::*;
 use neocogi_ui_contracts::*;
 use neocogi_ui::assets::AssetData;
 use neocogi_ui::{ChromeState, ControlState, MenuState, PointerState, SurfaceState};
@@ -264,7 +265,7 @@ fn flat_chrome_visual(frame_insets: Insets, palette: &FlatPalette, role: ChromeR
     patch
 }
 
-#[neocogi_com::com_factory(neocogi_ui_contracts::StyleCompiler)]
+#[neocogi_com::com_factory(neocogi_ui_assets_contracts::StyleCompiler)]
 #[derive(Default)]
 /// Compiles resource revisions without borrowing a UI or retaining a renderer.
 pub struct StyleCompilerObject {

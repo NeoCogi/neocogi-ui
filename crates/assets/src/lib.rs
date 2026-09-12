@@ -1,6 +1,7 @@
 //! Optional CPU asset work: compact PNG decoding, optional font/atlas construction and theme JSON.
 //! Native paths, decoder state and construction data never escape this plugin through native handles.
 #![deny(missing_docs)]
+use neocogi_ui_assets_contracts::*;
 use neocogi_ui_contracts::*;
 use neocogi_com::{ComPtr, INcStringAbi, NcStatus, NcString, NC_E_INVALID_ARG};
 use std::cell::RefCell;
@@ -39,7 +40,7 @@ impl Diagnostic {
 }
 
 /// Stateless process entry that creates the asset services selected by this assembly's features.
-#[neocogi_com::com_factory(neocogi_ui_contracts::AssetsPluginFactory)]
+#[neocogi_com::com_factory(neocogi_ui_assets_contracts::AssetsPluginFactory)]
 struct AssetsPluginFactoryObject;
 
 impl AssetsPluginFactory for AssetsPluginFactoryObject {
@@ -81,7 +82,7 @@ impl AssetsPluginFactory for AssetsPluginFactoryObject {
 neocogi_com::factory_plugin! {
     name = "neocogi.assets",
     version = "0.9.0-alpha.0",
-    contracts = [neocogi_ui_contracts::MODULE],
+    contracts = [neocogi_ui_assets_contracts::MODULE],
     factory = AssetsPluginFactoryObject,
 }
 #[cfg(feature = "dynamic-plugin")]

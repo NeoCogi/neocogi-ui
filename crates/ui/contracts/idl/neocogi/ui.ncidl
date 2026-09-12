@@ -2260,67 +2260,6 @@ trait IAssetBundle {
 }
 
 #[version(1)]
-/// Optional native font/PNG construction session; all mutation uses concrete named operations.
-trait IAssetBuilder {
-    /// Adds a PNG icon under a distinct UTF-8 name and exact native path; byte offset is zero.
-    fn add_icon(&self, name: &[u8], path: &INativePath) -> Result<()>;
-    /// Adds a distinct font name at a positive pixel size; the native builder bakes printable ASCII.
-    fn add_font(&self, name: &[u8], path: &INativePath, pixels: u32) -> Result<()>;
-    /// Consumes the session even on validation failure. A successful result has all required
-    /// semantic resources and the ordinary immutable bundle form; nested operations return BUSY.
-    fn finish(&self) -> Result<IAssetBundle>;
-}
-
-#[version(1)]
-/// Constructible optional CPU asset root; UI and hosts need no linked font or PNG implementation.
-factory AssetLoader: IAssetDiagnostics {
-    /// Starts a fresh atlas using an opaque-white PNG tile; dimensions are validated before reading files.
-    fn create_builder(&self, size: Size, white: &INativePath) -> Result<IAssetBuilder>;
-    /// Copies an existing bundle into a new packing area while retaining its catalog namespace.
-    fn derive_builder(&self, size: Size, base: &IAssetBundle) -> Result<IAssetBuilder>;
-}
-
-#[version(1)]
-/// Owned diagnostic snapshots supplement recoverable asset-operation statuses.
-trait IAssetDiagnostics {
-    /// Returns the latest recorded native/decoder/compiler cause, initially empty; argument validation may add no detail.
-    fn diagnostic(&self) -> Result<String>;
-}
-
-#[version(1)]
-/// Constructible optional JSON/font/PNG root producing ordinary immutable bundles.
-factory ThemeLoader: IAssetDiagnostics {
-    /// Resolves a native theme path against the base's catalog, preserving original resource names.
-    fn load_theme(&self, path: &INativePath, base: &IAssetBundle) -> Result<IAssetBundle>;
-}
-
-#[version(1)]
-/// Explicit choice between preserving authored artwork and replacing it with a flat recipe.
-enum PaletteEdit: u8 {
-    /// Keep the current role/state visuals, including image-backed theme artwork.
-    Preserve,
-    /// Compile this complete named palette through the UI's shared flat-style rules.
-    Flat(FlatPalette),
-}
-
-#[version(1)]
-/// Constructible asset authoring root independent of UI trees and renderer resources.
-factory StyleCompiler: IAssetDiagnostics {
-    /// Derives a complete immutable revision in the base catalog without installing it.
-    /// Preserve retains artwork; Flat recompiles every appearance from one concrete palette.
-    fn derive_style(&self, base: &IAssetBundle, metrics: AssetMetrics, palette: PaletteEdit) -> Result<IAssetBundle>;
-}
-
-#[version(1)]
-/// Constructible CPU decoder uploading through the target renderer's owned-image factory.
-factory PngDecoder: IAssetDiagnostics {
-    /// Decodes one static PNG and uploads exact normalized RGBA through a borrowed factory.
-    /// The complete input starts at offset zero; encoded and decoded data are bounded to 64 MiB.
-    /// Decoder failures never call the factory. Upload failures preserve their original status.
-    fn upload(&self, png: &[u8], target: &ITextureFactory) -> Result<ITexture>;
-}
-
-#[version(1)]
 /// Simple RGBA color stored with 8-bit components.
 #[deserialize(sequence)]
 struct Color {
@@ -2391,17 +2330,4 @@ struct FlatPalette {
 factory UiPluginFactory {
     /// Creates one independent retained UI from an immutable asset bundle.
     fn create_runtime(&self, assets: &IAssetBundle) -> Result<UiRuntime>;
-}
-
-/// Process entry factory for optional asset construction services.
-#[version(1)]
-factory AssetsPluginFactory {
-    /// Creates the PNG upload service.
-    fn png_decoder(&self) -> Result<PngDecoder>;
-    /// Creates the style derivation service.
-    fn style_compiler(&self) -> Result<StyleCompiler>;
-    /// Creates the optional atlas builder service.
-    fn asset_loader(&self) -> Result<AssetLoader>;
-    /// Creates the optional JSON theme loader service.
-    fn theme_loader(&self) -> Result<ThemeLoader>;
 }
