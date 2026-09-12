@@ -9,8 +9,8 @@ description = "Typed COM contracts for optional NeoCogi UI asset authoring servi
 links = "nc_contract_neocogi_ui_assets"
 
 [package.metadata.neocogi-contract]
-module = "neocogi.ui_assets"
-source = "idl/neocogi/ui_assets.ncidl"
+module = "neocogi.ui.assets"
+source = "idl/neocogi/ui/assets"
 
 [dependencies]
 neocogi-com = { workspace = true, features = ["macros"] }

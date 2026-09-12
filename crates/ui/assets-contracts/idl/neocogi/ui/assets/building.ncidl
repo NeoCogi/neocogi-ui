@@ -1,0 +1,20 @@
+#[version(1)]
+/// Optional native font/PNG construction session; all mutation uses concrete named operations.
+trait IAssetBuilder {
+    /// Adds a PNG icon under a distinct UTF-8 name and exact native path; byte offset is zero.
+    fn add_icon(&self, name: &[u8], path: &INativePath) -> Result<()>;
+    /// Adds a distinct font name at a positive pixel size; the native builder bakes printable ASCII.
+    fn add_font(&self, name: &[u8], path: &INativePath, pixels: u32) -> Result<()>;
+    /// Consumes the session even on validation failure. A successful result has all required
+    /// semantic resources and the ordinary immutable bundle form; nested operations return BUSY.
+    fn finish(&self) -> Result<IAssetBundle>;
+}
+
+#[version(1)]
+/// Constructible optional CPU asset root; UI and hosts need no linked font or PNG implementation.
+factory AssetLoader: IAssetDiagnostics {
+    /// Starts a fresh atlas using an opaque-white PNG tile; dimensions are validated before reading files.
+    fn create_builder(&self, size: Size, white: &INativePath) -> Result<IAssetBuilder>;
+    /// Copies an existing bundle into a new packing area while retaining its catalog namespace.
+    fn derive_builder(&self, size: Size, base: &IAssetBundle) -> Result<IAssetBuilder>;
+}

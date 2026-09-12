@@ -38,15 +38,15 @@ wrappers. The accepted migration and outstanding validation are recorded in
 - Keep native contract descriptions metadata-only. Contract libraries and
   schema-v8 inspection output retain identities, fingerprints, declarations,
   and dependencies without embedding or exposing the original `.ncidl` source.
-- Split optional asset authoring into the `neocogi.ui_assets` contract module.
+- Split optional asset authoring into the `neocogi.ui.assets` contract module.
   Its generated factories reuse `Size`, `AssetMetrics`, `FlatPalette`, native
   paths, bundles, and texture interfaces from `neocogi.ui.core`, producing a real
   fingerprinted native dependency instead of duplicate cross-module types.
 - Compile generated native contract descriptions for the underlying platform ABI
   when the `min-size` Rust build uses its fingerprint-distinct custom target.
 - Move UI appearance roles, appearance states, and semantic font/icon roles into
-  `neocogi/ui/core/resources.ncidl`, giving their names, representations, and table order one
-  generated source of truth.
+  `neocogi/ui/core/resources.ncidl`, giving their names, representations, and
+  table order one generated source of truth.
 - Remove implementation-only widget state and window-chrome models from the UI
   contract crate. Widget state belongs to UI implementation support, runtime
   chrome state belongs to the runtime, and JSON chrome documents belong to the

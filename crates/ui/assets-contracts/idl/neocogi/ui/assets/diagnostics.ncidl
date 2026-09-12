@@ -1,0 +1,6 @@
+#[version(1)]
+/// Owned diagnostic snapshots supplement recoverable asset-operation statuses.
+trait IAssetDiagnostics {
+    /// Returns the latest recorded native/decoder/compiler cause, initially empty; argument validation may add no detail.
+    fn diagnostic(&self) -> Result<String>;
+}

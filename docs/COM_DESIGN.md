@@ -175,12 +175,12 @@ fingerprints so the runtime verifies the graph rather than trusting filename
 resolution alone.
 
 NeoCogi's optional asset-authoring contract is one concrete example. Its
-`neocogi/ui_assets.ncidl` source imports portable values and interfaces from
-`neocogi/ui/core/`; generated signatures refer to those original UI types, and
-`contract_neocogi_ui_assets` links to the exact fingerprinted
-`contract_neocogi_ui_core` description. The assets plugin needs to name only the
-asset-authoring module directly because registration follows that dependency
-edge to the UI module.
+`neocogi/ui/assets/` source declares `extern neocogi.ui.core` and imports
+portable values and interfaces from `neocogi/ui/core/`; generated signatures
+refer to those original UI types, and `nc_contract_neocogi_ui_assets` links to
+the exact fingerprinted `nc_contract_neocogi_ui_core` description. The assets
+plugin needs to name only the `neocogi.ui.assets` module directly because
+registration follows that dependency edge to `neocogi.ui.core`.
 
 ## Runtime activation
 

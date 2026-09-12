@@ -1,0 +1,2 @@
+extern neocogi.ui.core;
+use neocogi.ui.core::{AssetMetrics, FlatPalette, IAssetBundle, INativePath, ITexture, ITextureFactory, Size};
