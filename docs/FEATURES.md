@@ -18,6 +18,12 @@ facade has no renderer, font-builder or JSON feature. Its defaults are empty:
 | Full/basic demos | `embed-assets` | Explicitly embed resource bytes; native defaults read adjacent files. |
 | Full/basic demos | `webgl` | Select browser integration and explicitly enable `embed-assets`. |
 
+Shared native builds intentionally allow Cargo to unify the dynamic `runtime`
+feature. The facade contains no registry state: every dependent calls the same
+loaded `libnc_com_shared_runtime`. In contrast, `static-runtime` must not be
+enabled independently in plugin DSOs because each image would then contain a
+separate registry implementation.
+
 The UI implementation has no optional asset features. `test-support` on the facade
 exposes native event-queue fixtures only for implementation tests; applications and
 plugins use the ordinary typed `EventSource` and `EventSession` API.

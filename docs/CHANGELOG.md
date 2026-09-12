@@ -10,6 +10,10 @@ wrappers. The accepted migration and outstanding validation are recorded in
 - Use `nc_com_shared_runtime` as the runtime library name in direct builds,
   native bindings, and generated LTO roots. Assemblies deploy one runtime library
   without the former duplicate filename. The Cargo package remains `neocogi-com-runtime`.
+- Document dynamic runtime feature unification as the mechanism that routes
+  every facade to that shared object's single registry, while retaining
+  `static-runtime` only for one monolithic image. Reconnect linked-runtime build
+  checks to the current factory registration and dynamic plugin tests.
 - Import and maintain neocogi-com locally: checked recursive interface identities,
   borrowed clients, generated IDL class/factory descriptions, required shared
   protocols, typed factory construction, static runtime binding, and explicit

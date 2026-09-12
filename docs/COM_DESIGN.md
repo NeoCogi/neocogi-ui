@@ -200,6 +200,12 @@ atomically. Activation checks the requested root factory ID, ABI signature, and
 threading capability before invoking plugin code. Every later product is
 created through a typed factory method.
 
+The dynamic `runtime` feature is intentionally unified across the assembly.
+Its Rust facade and `runtime-sys` dependency contain only calls and table
+declarations; registry ownership remains exclusively in the one
+`libnc_com_shared_runtime` selected by the platform loader. This must not be
+confused with `static-runtime`, which belongs only in a single monolithic image.
+
 The runtime never discovers plugin paths recursively. An application or
 `cargo neocogi` supplies a dependency-first plugin list. Required dynamic-load
 failure is fatal and diagnosed; a partial plugin is never returned. Loaded
