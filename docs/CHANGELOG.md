@@ -21,6 +21,10 @@ wrappers. The accepted migration and outstanding validation are recorded in
   monolith. The monolith uses one statically linked runtime and directly
   registers the linked UI, renderer, and asset descriptors with the same exact
   validation as a dynamic assembly.
+- Compute module fingerprints once in the IDL build tool, derive distinct
+  declaration signatures, and embed their final 32 bytes in generated Rust.
+  Remove compiler-side signature serialization and const SHA-256 so rustc only
+  compiles typed metadata and compares precomputed identities.
 - Add one-Cargo-crate-per-module Rust-like IDL generation. Dynamic assemblies
   stage fingerprint-qualified contract libraries and factory-only plugins;
   loading and inspection reject conflicting revisions before publication.

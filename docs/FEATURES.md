@@ -32,11 +32,13 @@ cargo neocogi build --assembly full --variant vulkan --profile min-size
 cargo neocogi build --assembly full --variant vulkan --variant monolith --release
 ```
 
-Generated ABI signatures always use SHA-256. This is part of the contract ABI,
-not an assembly feature or variant. Dynamic plugins and monolithically linked
-descriptions therefore receive the same exact signature checks. The `monolith`
-variant stages no Neocogi shared libraries or `plugins.txt` because the
-executable registers its linked descriptors directly.
+Generated ABI signatures are build-tool-computed SHA-256 values derived from
+the exact module fingerprint and declaration ID. This is part of the contract
+ABI, not an assembly feature or variant, and rustc performs no contract
+hashing. Dynamic plugins and monolithically linked descriptions therefore
+receive the same exact signature checks. The `monolith` variant stages no
+Neocogi shared libraries or `plugins.txt` because the executable registers its
+linked descriptors directly.
 
 `glow`, `vulkan`, `wgpu` and `webgl` on demo packages select host behavior. They are
 separate from implementation-library features. A direct demo build does not stage
