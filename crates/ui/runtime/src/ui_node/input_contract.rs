@@ -1,6 +1,6 @@
 //! Explicit conversion from the retained router to copied COM input contracts.
 use crate::boundary::{copied_rect, text};
-use neocogi_ui_contracts::*;
+use neocogi_ui_core_contracts::*;
 use neocogi_com::{NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
 use crate::{KeyboardAction, Key, KeyEvent, UiInputEvent, WidgetUpdateCtx};
 

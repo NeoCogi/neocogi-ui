@@ -38,8 +38,8 @@ use std::{
 
 use serde::Deserialize;
 
-use neocogi_ui_contracts::*;
-use neocogi_ui_contracts::Insets as SliceInsets;
+use neocogi_ui_core_contracts::*;
+use neocogi_ui_core_contracts::Insets as SliceInsets;
 use neocogi_ui::assets::AssetData;
 use neocogi_ui::{ChromeState, ControlState, MenuState, PointerState, SurfaceState};
 use crate::atlas::Builder;

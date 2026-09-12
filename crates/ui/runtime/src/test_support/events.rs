@@ -4,7 +4,7 @@ use neocogi_ui::events::test_support::{EventLease, SubscribeError};
 #[cfg(test)]
 use std::rc::Rc;
 /// Keep runaway test callbacks bounded by the same published runtime budget.
-const MAX_EVENT_DISPATCHES: usize = neocogi_ui_contracts::EVENT_DISPATCH_LIMIT as usize;
+const MAX_EVENT_DISPATCHES: usize = neocogi_ui_core_contracts::EVENT_DISPATCH_LIMIT as usize;
 
 /// Object-safe boundary allowing one dispatcher to store heterogeneous event subscriptions.
 ///

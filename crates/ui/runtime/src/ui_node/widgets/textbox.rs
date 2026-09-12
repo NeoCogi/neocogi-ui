@@ -92,7 +92,7 @@ impl TextboxParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_contracts::Textbox)]
+#[neocogi_com::com_object(neocogi_ui_core_contracts::Textbox)]
 /// Concrete retained textbox and dynamically constructible COM object.
 pub struct Textbox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -193,7 +193,7 @@ pub struct TextboxSubmitted {
 }
 
 impl crate::event::ComEvent for TextboxChanged {
-    type Sink = neocogi_ui_contracts::ITextChangedSinkAbi;
+    type Sink = neocogi_ui_core_contracts::ITextChangedSinkAbi;
 
     /// Delivers normalized text and its matching cursor from the same captured event.
     fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
@@ -202,7 +202,7 @@ impl crate::event::ComEvent for TextboxChanged {
 }
 
 impl crate::event::ComEvent for TextboxSubmitted {
-    type Sink = neocogi_ui_contracts::ITextSubmittedSinkAbi;
+    type Sink = neocogi_ui_core_contracts::ITextSubmittedSinkAbi;
 
     /// Delivers the captured submission without consulting the live Textbox.
     fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
@@ -618,7 +618,7 @@ mod tests {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_contracts::{GeometryChange, IEventSubscriptionAbi, ITextChangedSinkAbi, ITextSubmittedSinkAbi, IWidgetHostAbi, FontRole, TextboxAbi};
+use neocogi_ui_core_contracts::{GeometryChange, IEventSubscriptionAbi, ITextChangedSinkAbi, ITextSubmittedSinkAbi, IWidgetHostAbi, FontRole, TextboxAbi};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Textbox);
@@ -647,7 +647,7 @@ impl Textbox {
     }
 }
 
-impl neocogi_ui_contracts::Textbox for Textbox {
+impl neocogi_ui_core_contracts::Textbox for Textbox {
     /// Returns an immutable snapshot without exposing the semantic String allocation.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;

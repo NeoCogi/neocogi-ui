@@ -79,7 +79,7 @@ fn test_atlas() -> AssetData {
     data.validate().unwrap();
     data
 }
-use neocogi_ui_contracts::{ChromeRole, ControlRole, MenuRole};
+use neocogi_ui_core_contracts::{ChromeRole, ControlRole, MenuRole};
 use std::fs;
 
 /// Installs one repository-bundled theme through the same filesystem and PNG path as Context.

@@ -4,7 +4,7 @@ use crate::boundary::copied_rect;
 use crate::ui_node::HostState;
 use crate::{ImageSource, TextureId};
 use crate::render::{AtlasUploadError, FrameError, FrameInfo, RendererBackend, RendererFrame, TextureError, Vertex, RenderItemArgs};
-use neocogi_ui_contracts::*;
+use neocogi_ui_core_contracts::*;
 use neocogi_com::{ComPtr, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
 use std::{
     cell::{Cell, RefCell},

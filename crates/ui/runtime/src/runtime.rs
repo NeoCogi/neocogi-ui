@@ -2,7 +2,7 @@
 
 use crate::boundary::{local_rect, text};
 use crate::ui_node::{HostState, Observation, WidgetHost};
-use neocogi_ui_contracts::*;
+use neocogi_ui_core_contracts::*;
 use neocogi_com::{ComPtr, ComRef, IUnknown, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
 use std::{
     cell::{Cell, RefCell},

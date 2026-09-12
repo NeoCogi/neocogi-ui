@@ -1,4 +1,4 @@
-//! Rust conveniences layered over the generated `neocogi.ui` ABI declarations.
+//! Rust conveniences layered over the generated `neocogi.ui.core` ABI declarations.
 //!
 //! None of these helpers contribute to module identity or native contract metadata.
 

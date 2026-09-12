@@ -1,6 +1,6 @@
 //! Runtime authority shared by mounted widget objects and retained node services.
 
-use neocogi_ui_contracts::*;
+use neocogi_ui_core_contracts::*;
 use neocogi_com::{ComPtr, NcStatus, com_object};
 use std::{
     cell::{Cell, RefCell},

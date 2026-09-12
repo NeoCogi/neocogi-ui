@@ -147,16 +147,16 @@ impl DisclosureParameters {
 ///
 /// Expansion gates descendant traversal while retaining every owned runtime and its state. It does
 /// not expose or mutate generic node visibility.
-#[neocogi_com::com_object(neocogi_ui_contracts::Disclosure)]
+#[neocogi_com::com_object(neocogi_ui_core_contracts::Disclosure)]
 pub struct Disclosure {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Authoritative fixed header/body ownership used by COM traversal.
-    editor: neocogi_com::ComPtr<neocogi_ui_contracts::IChildrenEditorAbi>,
+    editor: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
     /// Text capability of the actual header child.
-    header: neocogi_com::ComPtr<neocogi_ui_contracts::ITextContentAbi>,
+    header: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextContentAbi>,
     /// Typed editing capability of the actual vertical body child.
-    body: neocogi_com::ComPtr<neocogi_ui_contracts::LinearAbi>,
+    body: neocogi_com::ComPtr<neocogi_ui_core_contracts::LinearAbi>,
     /// Native fixture editing link; absent from production COM composition.
     #[cfg(test)]
     content: Option<TypedWidgetHandle<Linear>>,
@@ -169,9 +169,9 @@ impl Disclosure {
     /// Combines one fixed child composition with the semantic expansion and layout policy.
     fn from_runtime(
         runtime: crate::ui_node::widget_object::WidgetRuntime,
-        editor: neocogi_com::ComPtr<neocogi_ui_contracts::IChildrenEditorAbi>,
-        header: neocogi_com::ComPtr<neocogi_ui_contracts::ITextContentAbi>,
-        body: neocogi_com::ComPtr<neocogi_ui_contracts::LinearAbi>,
+        editor: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
+        header: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextContentAbi>,
+        body: neocogi_com::ComPtr<neocogi_ui_core_contracts::LinearAbi>,
         model: Rc<DisclosureState>,
         variant: DisclosureVariant,
     ) -> Self {
@@ -250,7 +250,7 @@ impl Disclosure {
 /// Dispatcher-addressable disclosure header.
 ///
 /// The header owns no descendants and shares only expansion data with its layout parent.
-#[neocogi_com::com_object(interfaces(neocogi_ui_contracts::ITextContent, neocogi_ui_contracts::ILeafLayout))]
+#[neocogi_com::com_object(interfaces(neocogi_ui_core_contracts::ITextContent, neocogi_ui_core_contracts::ILeafLayout))]
 struct DisclosureHeader {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,
@@ -536,7 +536,7 @@ impl crate::ui_node::widget_object::HostedWidget for DisclosureHeader {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_leaf_layout_impl, direct_widget_phase_impl};
-use neocogi_ui_contracts::{
+use neocogi_ui_core_contracts::{
     CrossSize, DisclosureAbi, DisclosureStyle, FlowDirection, IChildrenEditorAbi, ITextContent, ITextContentAbi, IWidgetAbi, IWidgetHostAbi, LinearAbi,
 };
 use neocogi_com::{ComPtr, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString};
@@ -574,7 +574,7 @@ impl ITextContent for DisclosureHeader {
         let label = crate::boundary::text(input)?;
         if self.com_label() != label {
             self.com_set_label(label);
-            self.runtime_mut().state.record_change(neocogi_ui_contracts::GeometryChange::Changed);
+            self.runtime_mut().state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
         }
         Ok(())
     }
@@ -618,7 +618,7 @@ impl Disclosure {
     }
 }
 
-impl neocogi_ui_contracts::Disclosure for Disclosure {
+impl neocogi_ui_core_contracts::Disclosure for Disclosure {
     /// Observes the same expansion bit used by header input and container layout.
     fn expanded(&self) -> Result<bool, NcStatus> {
         self.runtime().state.readable()?;

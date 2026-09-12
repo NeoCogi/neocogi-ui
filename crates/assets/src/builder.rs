@@ -1,7 +1,7 @@
 //! Optional font/atlas construction and JSON theme assembly.
 use super::Diagnostic;
 use neocogi_ui_assets_contracts::*;
-use neocogi_ui_contracts::*;
+use neocogi_ui_core_contracts::*;
 use crate::atlas::{Builder, Config};
 use neocogi_ui::assets::AssetData;
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, INcStringAbi, NC_E_INVALID_ARG, com_factory, com_object};

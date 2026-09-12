@@ -2,7 +2,7 @@
 
 | Owner | Responsibility |
 | --- | --- |
-| `neocogi-ui-contracts` | Plain resource records, semantic roles and typed COM interfaces. |
+| `neocogi-ui-core-contracts` | Plain resource records, semantic roles and typed COM interfaces. |
 | `neocogi-ui::assets` | Bounded portable data validation and immutable bundle publication. |
 | `crates/assets` | PNG decoding, font rasterization, packing, theme/style compilation and source export. |
 | `neocogi-ui-runtime` | Local IDs, text metrics, resolved appearances and retained layout/painting. |

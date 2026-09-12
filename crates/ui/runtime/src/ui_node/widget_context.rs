@@ -53,7 +53,7 @@
 //! Phase-specific widget execution contexts.
 
 use rs_math3d::{Recti, Vec2i};
-use neocogi_ui_contracts::{IPainterAbi, PaintFont, PaintIcon, PaintScope, Point, WidgetVisualState};
+use neocogi_ui_core_contracts::{IPainterAbi, PaintFont, PaintIcon, PaintScope, Point, WidgetVisualState};
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
 
 use crate::atlas::{AtlasHandle, FontId, IconId};
@@ -619,12 +619,12 @@ impl<'a> WidgetPaintCtx<'a> {
     }
 
     /// Draws a renderer-owned image without creating a widget-local display list or geometry pass.
-    pub(crate) fn draw_texture(&mut self, rect: Recti, color: Color, texture: ComPtr<neocogi_ui_contracts::ITextureAbi>) {
+    pub(crate) fn draw_texture(&mut self, rect: Recti, color: Color, texture: ComPtr<neocogi_ui_core_contracts::ITextureAbi>) {
         if let Some((scope, mut painter)) = self.scoped_paint() {
             let result = painter.texture(
                 scope,
                 crate::boundary::copied_rect(rect),
-                neocogi_ui_contracts::TextureRegion::FULL,
+                neocogi_ui_core_contracts::TextureRegion::FULL,
                 packed_color(color),
                 texture.as_com_ref(),
             );

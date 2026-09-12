@@ -107,29 +107,29 @@ impl<'a> Painter<'a> {
     }
 
     /// Records an owned texture without calling foreign code while the display list is borrowed.
-    pub(crate) fn com_texture(&mut self, rect: Recti, color: Color, texture: neocogi_com::ComPtr<neocogi_ui_contracts::ITextureAbi>) {
-        self.com_texture_region(rect, neocogi_ui_contracts::TextureRegion::FULL, color, texture);
+    pub(crate) fn com_texture(&mut self, rect: Recti, color: Color, texture: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextureAbi>) {
+        self.com_texture_region(rect, neocogi_ui_core_contracts::TextureRegion::FULL, color, texture);
     }
 
     /// Records explicit source UVs without querying immutable texture dimensions during painting.
     pub(crate) fn com_texture_region(
         &mut self,
         rect: Recti,
-        source: neocogi_ui_contracts::TextureRegion,
+        source: neocogi_ui_core_contracts::TextureRegion,
         color: Color,
-        texture: neocogi_com::ComPtr<neocogi_ui_contracts::ITextureAbi>,
+        texture: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextureAbi>,
     ) {
         self.list.push_com_texture(self.clip, self.screen_rect(rect), source, color, texture);
     }
 
     /// Records application GPU work in the same list as every ordinary widget primitive.
-    pub(crate) fn com_item(&mut self, rect: Recti, item: neocogi_com::ComPtr<neocogi_ui_contracts::IRenderItemAbi>) {
+    pub(crate) fn com_item(&mut self, rect: Recti, item: neocogi_com::ComPtr<neocogi_ui_core_contracts::IRenderItemAbi>) {
         self.list.push_com_item(self.clip, self.screen_rect(rect), item);
     }
 
     /// Appends solid COM geometry directly to the reusable arena; the executor supplies the current
     /// atlas material later, so theme replacement cannot invalidate application-side UV caches.
-    pub(crate) fn colored_triangles(&mut self, vertices: &[neocogi_ui_contracts::ColoredVertex]) {
+    pub(crate) fn colored_triangles(&mut self, vertices: &[neocogi_ui_core_contracts::ColoredVertex]) {
         use super::geometry::{SolidTriangle, SolidVertex};
         for triangle in vertices.as_chunks::<3>().0 {
             let triangle = SolidTriangle::from(triangle.map(|vertex| {
@@ -144,7 +144,7 @@ impl<'a> Painter<'a> {
     }
 
     /// Copies validated COM atlas geometry and applies this painter's local origin.
-    pub(crate) fn atlas_triangles(&mut self, vertices: &[neocogi_ui_contracts::RenderVertex]) {
+    pub(crate) fn atlas_triangles(&mut self, vertices: &[neocogi_ui_core_contracts::RenderVertex]) {
         self.list.push_atlas_triangles(self.clip, self.origin, vertices);
     }
 
@@ -239,7 +239,7 @@ impl<'a> Painter<'a> {
     }
 
     /// Tessellates copied COM polygon points directly into this painter's retained frame storage.
-    pub(crate) fn fill_contract_polygon(&mut self, points: &[neocogi_ui_contracts::PaintPoint], color: Color) {
+    pub(crate) fn fill_contract_polygon(&mut self, points: &[neocogi_ui_core_contracts::PaintPoint], color: Color) {
         if points.len() < 3 || color.a == 0 || !self.clip.has_positive_area() {
             return;
         }

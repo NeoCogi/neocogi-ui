@@ -38,7 +38,7 @@ use crate::ui_node::widget_object::{
     HostedWidget, ImageState, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_icon_role, set_direct_named_font,
     set_direct_named_icon,
 };
-use neocogi_ui_contracts::*;
+use neocogi_ui_core_contracts::*;
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString};
 
 use super::*;
@@ -131,7 +131,7 @@ pub struct ButtonSubmitted {
 }
 
 impl crate::event::ComEvent for ButtonSubmitted {
-    type Sink = neocogi_ui_contracts::IActivationSinkAbi;
+    type Sink = neocogi_ui_core_contracts::IActivationSinkAbi;
 
     /// Copies the captured label through the Button activation contract.
     fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
@@ -139,7 +139,7 @@ impl crate::event::ComEvent for ButtonSubmitted {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_contracts::Button)]
+#[neocogi_com::com_object(neocogi_ui_core_contracts::Button)]
 /// Concrete retained button and dynamically constructible COM object.
 ///
 /// The allocation owns its semantic fields directly. `runtime` contains only common host,
@@ -443,7 +443,7 @@ impl Button {
 direct_widget_phase_impl!(Button);
 direct_leaf_layout_impl!(Button);
 
-impl neocogi_ui_contracts::Button for Button {
+impl neocogi_ui_core_contracts::Button for Button {
     /// Validates before committing and only dirties geometry when text actually differs.
     fn set_label(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;

@@ -1,6 +1,6 @@
 //! Shared construction authority, independent of any root forest or runtime transaction.
 use super::HostState;
-use neocogi_ui_contracts::*;
+use neocogi_ui_core_contracts::*;
 use neocogi_com::{ComPtr, ComRef, IUnknown, NcStatus, NC_E_INVALID_ARG};
 use std::{
     cell::{Cell, RefCell},

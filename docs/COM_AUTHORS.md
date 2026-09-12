@@ -235,7 +235,7 @@ arguments explicit in the IDL.
 ## Common state, input and node ownership
 
 Each concrete widget embeds one private `WidgetRuntime`. That non-generic helper
-contains `neocogi_ui_contracts::widget::WidgetState` plus host-backed resource and
+contains `neocogi_ui_core_contracts::widget::WidgetState` plus host-backed resource and
 rendering machinery; it cannot store a semantic widget implementation. `WidgetState`
 owns the host authority, common options, mount-once claim, logical closed flag, and
 sticky geometry flag. Neither helper owns a runtime tree, application callback, or

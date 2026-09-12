@@ -78,7 +78,7 @@ pub struct CheckboxChanged {
 }
 
 impl crate::event::ComEvent for CheckboxChanged {
-    type Sink = neocogi_ui_contracts::ICheckboxSinkAbi;
+    type Sink = neocogi_ui_core_contracts::ICheckboxSinkAbi;
 
     /// Delivers the captured checked value through the Checkbox event contract.
     fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
@@ -86,7 +86,7 @@ impl crate::event::ComEvent for CheckboxChanged {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_contracts::Checkbox)]
+#[neocogi_com::com_object(neocogi_ui_core_contracts::Checkbox)]
 /// Concrete retained checkbox and dynamically constructible COM object.
 pub struct Checkbox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -290,7 +290,7 @@ impl crate::ui_node::widget_object::FontState for Checkbox {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_contracts::{CheckboxAbi, GeometryChange, ICheckboxSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi, FontRole};
+use neocogi_ui_core_contracts::{CheckboxAbi, GeometryChange, ICheckboxSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi, FontRole};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Checkbox);
@@ -321,7 +321,7 @@ impl Checkbox {
     }
 }
 
-impl neocogi_ui_contracts::Checkbox for Checkbox {
+impl neocogi_ui_core_contracts::Checkbox for Checkbox {
     /// Reads the same boolean state used by pointer/Space updates and paint.
     fn checked(&self) -> Result<bool, NcStatus> {
         self.runtime().state.readable()?;

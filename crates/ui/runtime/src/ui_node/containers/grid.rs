@@ -366,12 +366,12 @@ impl GridParameters {
 ///
 /// Grid always has an effective track on each axis, but an implicit empty Content track contributes
 /// zero. An empty generic Grid remains zero-sized unless an explicit Fixed track contributes extent.
-#[neocogi_com::com_object(neocogi_ui_contracts::Grid)]
+#[neocogi_com::com_object(neocogi_ui_core_contracts::Grid)]
 pub struct Grid {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Sole writer for children mounted through this container's COM contract.
-    pub(crate) editor: neocogi_com::ComPtr<neocogi_ui_contracts::IChildrenEditorAbi>,
+    pub(crate) editor: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
     /// Weak topology access coordinated with Grid-owned edge metadata below.
     #[cfg(test)]
     children: ChildrenHandle,
@@ -389,7 +389,7 @@ impl Grid {
     /// Combines validated tracks with the runtime and authoritative COM child writer.
     pub(crate) fn from_runtime(
         runtime: crate::ui_node::widget_object::WidgetRuntime,
-        editor: neocogi_com::ComPtr<neocogi_ui_contracts::IChildrenEditorAbi>,
+        editor: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
         column_tracks: Vec<TrackSize>,
         row_tracks: Vec<TrackSize>,
     ) -> Self {
@@ -535,7 +535,7 @@ impl super::ContainerAlgorithm for Grid {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
-use neocogi_ui_contracts::{GridAbi, GridExtent, IWidgetHostAbi, LayoutTrackAbi};
+use neocogi_ui_core_contracts::{GridAbi, GridExtent, IWidgetHostAbi, LayoutTrackAbi};
 use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus};
 
 direct_widget_phase_impl!(Grid);
@@ -568,7 +568,7 @@ impl Grid {
     }
 }
 
-impl neocogi_ui_contracts::Grid for Grid {
+impl neocogi_ui_core_contracts::Grid for Grid {
     container_methods!();
 
     /// Copies column policy from the one concrete Grid state.
@@ -583,7 +583,7 @@ impl neocogi_ui_contracts::Grid for Grid {
         let tracks = local_tracks(tracks)?;
         if self.column_tracks() != tracks {
             self.set_column_tracks(tracks);
-            self.runtime_mut().state.record_change(neocogi_ui_contracts::GeometryChange::Changed);
+            self.runtime_mut().state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
         }
         Ok(())
     }
@@ -600,7 +600,7 @@ impl neocogi_ui_contracts::Grid for Grid {
         let tracks = local_tracks(tracks)?;
         if self.row_tracks() != tracks {
             self.set_row_tracks(tracks);
-            self.runtime_mut().state.record_change(neocogi_ui_contracts::GeometryChange::Changed);
+            self.runtime_mut().state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
         }
         Ok(())
     }

@@ -138,7 +138,7 @@ pub struct MenuItemSubmitted {
 }
 
 impl crate::event::ComEvent for MenuItemSubmitted {
-    type Sink = neocogi_ui_contracts::IActivationSinkAbi;
+    type Sink = neocogi_ui_core_contracts::IActivationSinkAbi;
 
     /// Copies the captured item label through the menu activation contract.
     fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {

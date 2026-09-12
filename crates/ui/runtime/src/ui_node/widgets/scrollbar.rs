@@ -270,7 +270,7 @@ pub struct ScrollbarChanged {
 }
 
 impl crate::event::ComEvent for ScrollbarChanged {
-    type Sink = neocogi_ui_contracts::IScrollbarSinkAbi;
+    type Sink = neocogi_ui_core_contracts::IScrollbarSinkAbi;
 
     /// Delivers the captured offset through the Scrollbar event contract.
     fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
@@ -278,7 +278,7 @@ impl crate::event::ComEvent for ScrollbarChanged {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_contracts::Scrollbar)]
+#[neocogi_com::com_object(neocogi_ui_core_contracts::Scrollbar)]
 /// Standalone one-axis scrollbar and dynamically constructible COM object.
 pub struct Scrollbar {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -628,7 +628,7 @@ mod tests {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl};
-use neocogi_ui_contracts::{IEventSubscriptionAbi, IScrollbarSinkAbi, IWidgetHostAbi, ScrollAxis, ScrollRange, ScrollbarAbi};
+use neocogi_ui_core_contracts::{IEventSubscriptionAbi, IScrollbarSinkAbi, IWidgetHostAbi, ScrollAxis, ScrollRange, ScrollbarAbi};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Scrollbar);
@@ -666,7 +666,7 @@ impl Scrollbar {
     }
 }
 
-impl neocogi_ui_contracts::Scrollbar for Scrollbar {
+impl neocogi_ui_core_contracts::Scrollbar for Scrollbar {
     /// Reads all range fields from one consistent semantic snapshot.
     fn range(&self) -> Result<ScrollRange, NcStatus> {
         self.runtime().state.readable()?;

@@ -1,9 +1,9 @@
 //! Small value conversions shared by independently owned foreign-facing implementations.
 //!
-//! Contract declarations remain in `neocogi-ui-contracts`; this module only validates borrowed UTF-8
+//! Contract declarations remain in `neocogi-ui-core-contracts`; this module only validates borrowed UTF-8
 //! and copies geometry between the contract representation and the retained math representation.
 
-use neocogi_ui_contracts::Rect;
+use neocogi_ui_core_contracts::Rect;
 use neocogi_com::{NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
 
 /// Validates a whole UTF-8 replacement before touching any live object state.

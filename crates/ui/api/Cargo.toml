@@ -9,7 +9,7 @@ description = "Typed Rust client API for NeoCogi UI components"
 
 [dependencies]
 neocogi-ui-assets-contracts.workspace = true
-neocogi-ui-contracts.workspace = true
+neocogi-ui-core-contracts.workspace = true
 miniz_oxide = { workspace = true, optional = true }
 neocogi-com = { workspace = true, features = ["macros", "std"] }
 

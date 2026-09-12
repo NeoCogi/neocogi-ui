@@ -35,7 +35,7 @@ use crate::atlas::{AtlasHandle, FontId};
 use super::Skin;
 
 /// Shared semantic role; concrete atlas capabilities remain local to the UI.
-pub use neocogi_ui_contracts::FontRole;
+pub use neocogi_ui_core_contracts::FontRole;
 
 /// Stable reference to a font used by retained UI state.
 ///

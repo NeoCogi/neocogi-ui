@@ -62,13 +62,13 @@ pub(super) trait ContainerAlgorithm: crate::ui_node::widget_object::WidgetAlgori
 macro_rules! container_methods {
     () => {
         /// Exposes read-only topology without allowing callers to bypass relationship metadata.
-        fn children(&self) -> Result<neocogi_com::ComPtr<neocogi_ui_contracts::IChildrenAbi>, neocogi_com::NcStatus> {
+        fn children(&self) -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenAbi>, neocogi_com::NcStatus> {
             <Self as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
             self.editor.view()
         }
 
         /// Publishes matching metadata even when removed-child teardown reports an error.
-        fn remove(&mut self, index: u32) -> Result<neocogi_ui_contracts::ChildEditResult, neocogi_com::NcStatus> {
+        fn remove(&mut self, index: u32) -> Result<neocogi_ui_core_contracts::ChildEditResult, neocogi_com::NcStatus> {
             <Self as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
             let outcome = self.editor.remove(index)?;
             <Self as crate::ui_node::containers::ContainerAlgorithm>::edit_edges(self, crate::ui_node::containers::EdgeEdit::Remove { index: index as usize });
@@ -76,7 +76,7 @@ macro_rules! container_methods {
         }
 
         /// Clears topology and relationship metadata in the same guarded operation.
-        fn clear(&mut self) -> Result<neocogi_ui_contracts::ChildEditResult, neocogi_com::NcStatus> {
+        fn clear(&mut self) -> Result<neocogi_ui_core_contracts::ChildEditResult, neocogi_com::NcStatus> {
             <Self as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
             let outcome = self.editor.clear()?;
             <Self as crate::ui_node::containers::ContainerAlgorithm>::edit_edges(self, crate::ui_node::containers::EdgeEdit::Clear);
@@ -108,7 +108,7 @@ macro_rules! container_edges {
                 );
                 <Self as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self)
                     .state
-                    .record_change(neocogi_ui_contracts::GeometryChange::Changed);
+                    .record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
             }
             Ok(())
         }
@@ -117,9 +117,9 @@ macro_rules! container_edges {
         fn insert(
             &mut self,
             index: u32,
-            child: neocogi_com::ComRef<'_, neocogi_ui_contracts::IWidgetAbi>,
+            child: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>,
             edge: $edge,
-        ) -> Result<neocogi_ui_contracts::ChildEditResult, neocogi_com::NcStatus> {
+        ) -> Result<neocogi_ui_core_contracts::ChildEditResult, neocogi_com::NcStatus> {
             <Self as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
             let edge = $decode(edge)?;
             let outcome = self.editor.insert(index, child)?;
@@ -134,9 +134,9 @@ macro_rules! container_edges {
         fn replace(
             &mut self,
             index: u32,
-            child: neocogi_com::ComRef<'_, neocogi_ui_contracts::IWidgetAbi>,
+            child: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>,
             edge: $edge,
-        ) -> Result<neocogi_ui_contracts::ChildEditResult, neocogi_com::NcStatus> {
+        ) -> Result<neocogi_ui_core_contracts::ChildEditResult, neocogi_com::NcStatus> {
             <Self as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
             let edge = $decode(edge)?;
             let outcome = self.editor.replace(index, child)?;
@@ -150,21 +150,21 @@ macro_rules! container_edges {
 }
 
 /// Validates one typed track before topology or semantic mutation begins.
-pub(super) fn local_track(track: neocogi_ui_contracts::LayoutTrackAbi) -> Result<crate::TrackSize, neocogi_com::NcStatus> {
-    match neocogi_ui_contracts::LayoutTrack::try_from(track).map_err(|_| neocogi_com::NC_E_INVALID_ARG)? {
-        neocogi_ui_contracts::LayoutTrack::Content => Ok(crate::TrackSize::Content),
-        neocogi_ui_contracts::LayoutTrack::Fixed { extent } if extent >= 0 => Ok(crate::TrackSize::Fixed(extent)),
-        neocogi_ui_contracts::LayoutTrack::Flex { weight } if weight.is_finite() && weight > 0.0 => Ok(crate::TrackSize::Flex(weight)),
+pub(super) fn local_track(track: neocogi_ui_core_contracts::LayoutTrackAbi) -> Result<crate::TrackSize, neocogi_com::NcStatus> {
+    match neocogi_ui_core_contracts::LayoutTrack::try_from(track).map_err(|_| neocogi_com::NC_E_INVALID_ARG)? {
+        neocogi_ui_core_contracts::LayoutTrack::Content => Ok(crate::TrackSize::Content),
+        neocogi_ui_core_contracts::LayoutTrack::Fixed { extent } if extent >= 0 => Ok(crate::TrackSize::Fixed(extent)),
+        neocogi_ui_core_contracts::LayoutTrack::Flex { weight } if weight.is_finite() && weight > 0.0 => Ok(crate::TrackSize::Flex(weight)),
         _ => Err(neocogi_com::NC_E_INVALID_ARG),
     }
 }
 
 /// Copies one retained track policy into its typed ABI representation.
-pub(super) fn layout_track(track: crate::TrackSize) -> neocogi_ui_contracts::LayoutTrackAbi {
+pub(super) fn layout_track(track: crate::TrackSize) -> neocogi_ui_core_contracts::LayoutTrackAbi {
     match track {
-        crate::TrackSize::Content => neocogi_ui_contracts::LayoutTrack::Content,
-        crate::TrackSize::Fixed(extent) => neocogi_ui_contracts::LayoutTrack::Fixed { extent },
-        crate::TrackSize::Flex(weight) => neocogi_ui_contracts::LayoutTrack::Flex { weight },
+        crate::TrackSize::Content => neocogi_ui_core_contracts::LayoutTrack::Content,
+        crate::TrackSize::Fixed(extent) => neocogi_ui_core_contracts::LayoutTrack::Fixed { extent },
+        crate::TrackSize::Flex(weight) => neocogi_ui_core_contracts::LayoutTrack::Flex { weight },
     }
     .into()
 }

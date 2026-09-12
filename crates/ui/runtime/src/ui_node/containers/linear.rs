@@ -327,12 +327,12 @@ where
 /// consumes only an exact placement allocation and does not manufacture desired size during
 /// measurement. Content and Fixed overflow remain visible, and every geometry accumulation uses
 /// saturating arithmetic.
-#[neocogi_com::com_object(neocogi_ui_contracts::Linear)]
+#[neocogi_com::com_object(neocogi_ui_core_contracts::Linear)]
 pub struct Linear {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Sole writer for children mounted through this container's COM contract.
-    pub(crate) editor: neocogi_com::ComPtr<neocogi_ui_contracts::IChildrenEditorAbi>,
+    pub(crate) editor: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
     /// Weak topology capability supplied by generic container construction.
     #[cfg(test)]
     children: ChildrenHandle,
@@ -350,7 +350,7 @@ impl Linear {
     /// Combines validated layout policy with its runtime and authoritative COM child writer.
     pub(crate) fn from_runtime(
         runtime: crate::ui_node::widget_object::WidgetRuntime,
-        editor: neocogi_com::ComPtr<neocogi_ui_contracts::IChildrenEditorAbi>,
+        editor: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
         direction: LinearDirection,
         cross_size: LinearCrossSize,
     ) -> Self {
@@ -576,7 +576,7 @@ impl super::ContainerAlgorithm for Linear {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
-use neocogi_ui_contracts::{ChildCrossSize, CrossSize, CrossSizeAbi, FlowDirection, IWidgetHostAbi, LinearAbi, LinearEdge};
+use neocogi_ui_core_contracts::{ChildCrossSize, CrossSize, CrossSizeAbi, FlowDirection, IWidgetHostAbi, LinearAbi, LinearEdge};
 use neocogi_com::{ComPtr, NcStatus};
 
 direct_widget_phase_impl!(Linear);
@@ -609,7 +609,7 @@ impl Linear {
     }
 }
 
-impl neocogi_ui_contracts::Linear for Linear {
+impl neocogi_ui_core_contracts::Linear for Linear {
     container_methods!();
 
     /// Returns the exact retained axis and leading-edge policy.
@@ -624,7 +624,7 @@ impl neocogi_ui_contracts::Linear for Linear {
         let direction = local_direction(direction)?;
         if Linear::direction(self) != direction {
             Linear::set_direction(self, direction);
-            self.runtime_mut().state.record_change(neocogi_ui_contracts::GeometryChange::Changed);
+            self.runtime_mut().state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
         }
         Ok(())
     }
@@ -641,7 +641,7 @@ impl neocogi_ui_contracts::Linear for Linear {
         let cross = local_cross(cross)?;
         if Linear::cross_size(self) != cross {
             Linear::set_cross_size(self, cross);
-            self.runtime_mut().state.record_change(neocogi_ui_contracts::GeometryChange::Changed);
+            self.runtime_mut().state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
         }
         Ok(())
     }

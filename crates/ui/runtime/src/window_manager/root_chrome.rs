@@ -116,18 +116,18 @@ pub enum WindowEvent {
 }
 
 impl crate::event::ComEvent for WindowEvent {
-    type Sink = neocogi_ui_contracts::IWindowSinkAbi;
+    type Sink = neocogi_ui_core_contracts::IWindowSinkAbi;
 
     /// Copies the complete captured manager event into its stable boundary representation.
     fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
         let event = match *self {
-            Self::GeometryChanged { rect } => neocogi_ui_contracts::WindowEvent::GeometryChanged { rect: crate::boundary::copied_rect(rect) },
-            Self::CloseRequested => neocogi_ui_contracts::WindowEvent::CloseRequested,
-            Self::Hidden => neocogi_ui_contracts::WindowEvent::Hidden,
-            Self::Destroyed => neocogi_ui_contracts::WindowEvent::Destroyed,
-            Self::Minimized { rect } => neocogi_ui_contracts::WindowEvent::Minimized { rect: crate::boundary::copied_rect(rect) },
-            Self::Maximized { rect } => neocogi_ui_contracts::WindowEvent::Maximized { rect: crate::boundary::copied_rect(rect) },
-            Self::Restored { rect } => neocogi_ui_contracts::WindowEvent::Restored { rect: crate::boundary::copied_rect(rect) },
+            Self::GeometryChanged { rect } => neocogi_ui_core_contracts::WindowEvent::GeometryChanged { rect: crate::boundary::copied_rect(rect) },
+            Self::CloseRequested => neocogi_ui_core_contracts::WindowEvent::CloseRequested,
+            Self::Hidden => neocogi_ui_core_contracts::WindowEvent::Hidden,
+            Self::Destroyed => neocogi_ui_core_contracts::WindowEvent::Destroyed,
+            Self::Minimized { rect } => neocogi_ui_core_contracts::WindowEvent::Minimized { rect: crate::boundary::copied_rect(rect) },
+            Self::Maximized { rect } => neocogi_ui_core_contracts::WindowEvent::Maximized { rect: crate::boundary::copied_rect(rect) },
+            Self::Restored { rect } => neocogi_ui_core_contracts::WindowEvent::Restored { rect: crate::boundary::copied_rect(rect) },
         };
         sink.event(event.into())
     }

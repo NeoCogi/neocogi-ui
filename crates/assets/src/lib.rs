@@ -2,7 +2,7 @@
 //! Native paths, decoder state and construction data never escape this plugin through native handles.
 #![deny(missing_docs)]
 use neocogi_ui_assets_contracts::*;
-use neocogi_ui_contracts::*;
+use neocogi_ui_core_contracts::*;
 use neocogi_com::{ComPtr, INcStringAbi, NcStatus, NcString, NC_E_INVALID_ARG};
 use std::cell::RefCell;
 

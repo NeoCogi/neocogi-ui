@@ -4,7 +4,7 @@
 //! Each importing binary creates local resource IDs in an authenticated catalog namespace.
 use crate::{AtlasHandle, FontRole, IconRole, ResourceCatalog, Skin, SkinBundle};
 use crate::atlas::transfer::Tables;
-use neocogi_ui_contracts::*;
+use neocogi_ui_core_contracts::*;
 use neocogi_ui::assets::AssetTables;
 use neocogi_com::{ComPtr, ComRef, IUnknown, NcStatus, NC_E_INVALID_ARG};
 

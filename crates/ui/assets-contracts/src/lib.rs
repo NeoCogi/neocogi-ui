@@ -1,6 +1,6 @@
 //! Generated COM contracts for optional UI asset-authoring services.
 //!
-//! The generated bindings re-export every explicitly imported `neocogi.ui`
+//! The generated bindings re-export every explicitly imported `neocogi.ui.core`
 //! declaration with its original identity. This crate declares only the
 //! construction services implemented by the optional assets plugin.
 

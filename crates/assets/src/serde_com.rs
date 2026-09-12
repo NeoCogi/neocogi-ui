@@ -784,7 +784,7 @@ mod tests {
     /// Generated record constructors enforce shape while supporting explicit defaults.
     #[test]
     fn record_generation_rejects_shape_errors_and_retains_defaults() {
-        use neocogi_ui_contracts::{AssetMetrics, Insets};
+        use neocogi_ui_core_contracts::{AssetMetrics, Insets};
 
         let metrics = parse::<AssetMetrics>(r#"{"padding": 11}"#);
         assert_eq!(metrics.padding, 11);

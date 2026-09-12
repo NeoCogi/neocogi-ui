@@ -195,14 +195,14 @@ impl ScrollModel {
         Vec2i::new(self.horizontal.offset(), self.vertical.offset())
     }
     /// Copies a coherent ABI snapshot from the actual axis requests and committed viewport.
-    pub(crate) fn com_info(&self) -> neocogi_ui_contracts::ScrollInfo {
+    pub(crate) fn com_info(&self) -> neocogi_ui_core_contracts::ScrollInfo {
         let requested = self.offset();
         let maximum = self.maximum();
         let viewport = self.geometry.get().viewport;
-        neocogi_ui_contracts::ScrollInfo {
-            requested: neocogi_ui_contracts::Point { x: requested.x, y: requested.y },
-            maximum: neocogi_ui_contracts::Point { x: maximum.x, y: maximum.y },
-            viewport: neocogi_ui_contracts::Size {
+        neocogi_ui_core_contracts::ScrollInfo {
+            requested: neocogi_ui_core_contracts::Point { x: requested.x, y: requested.y },
+            maximum: neocogi_ui_core_contracts::Point { x: maximum.x, y: maximum.y },
+            viewport: neocogi_ui_core_contracts::Size {
                 width: viewport.width,
                 height: viewport.height,
             },
@@ -284,14 +284,14 @@ impl ScrollModel {
 }
 
 /// Concrete three-child scroll composite; its model owns data but no widget or tree backpointer.
-#[neocogi_com::com_object(neocogi_ui_contracts::ScrollArea)]
+#[neocogi_com::com_object(neocogi_ui_core_contracts::ScrollArea)]
 pub struct ScrollArea {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Exactly three owned structural children: surface and both scrollbar objects.
-    editor: neocogi_com::ComPtr<neocogi_ui_contracts::IChildrenEditorAbi>,
+    editor: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
     /// Private writer for the surface's single replaceable application child.
-    content: neocogi_com::ComPtr<neocogi_ui_contracts::IChildrenEditorAbi>,
+    content: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
     /// Same scrolling values used by the actual bars, transform surface and optional text editor.
     model: Rc<ScrollModel>,
     /// Native fixture policy; deployed common state owns the authoritative frame options.
@@ -302,8 +302,8 @@ impl ScrollArea {
     /// Combines the fixed structural tree and shared scroll model with one concrete runtime.
     fn from_runtime(
         runtime: crate::ui_node::widget_object::WidgetRuntime,
-        editor: neocogi_com::ComPtr<neocogi_ui_contracts::IChildrenEditorAbi>,
-        content: neocogi_com::ComPtr<neocogi_ui_contracts::IChildrenEditorAbi>,
+        editor: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
+        content: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
         model: Rc<ScrollModel>,
     ) -> Self {
         #[cfg(test)]
@@ -387,12 +387,12 @@ impl ScrollComposition for ScrollArea {
 }
 
 /// The transform boundary between the viewport and its ordinary content node.
-#[neocogi_com::com_object(interfaces(neocogi_ui_contracts::IWidget, neocogi_ui_contracts::IContainerLayout))]
+#[neocogi_com::com_object(interfaces(neocogi_ui_core_contracts::IWidget, neocogi_ui_core_contracts::IContainerLayout))]
 struct ScrollSurface {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Sole writer for the one application content child mounted through COM.
-    editor: neocogi_com::ComPtr<neocogi_ui_contracts::IChildrenEditorAbi>,
+    editor: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
     /// Shares actual axis requests without a reference to the owning parent widget.
     model: Rc<ScrollModel>,
 }
@@ -401,7 +401,7 @@ impl ScrollSurface {
     /// Combines one fixed content writer with the shared scroll scalar model.
     fn from_runtime(
         runtime: crate::ui_node::widget_object::WidgetRuntime,
-        editor: neocogi_com::ComPtr<neocogi_ui_contracts::IChildrenEditorAbi>,
+        editor: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
         model: Rc<ScrollModel>,
     ) -> Self {
         Self { runtime, editor, model }
@@ -753,7 +753,7 @@ impl crate::ui_node::widget_object::HostedWidget for ScrollSurface {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_scrolling_impl, direct_widget_phase_impl};
-use neocogi_ui_contracts::{ChildEditResult, IChildrenEditorAbi, IWidgetAbi, IWidgetHostAbi, ScrollAreaAbi};
+use neocogi_ui_core_contracts::{ChildEditResult, IChildrenEditorAbi, IWidgetAbi, IWidgetHostAbi, ScrollAreaAbi};
 use neocogi_com::{ComPtr, ComRef, NcStatus};
 
 direct_widget_phase_impl!(ScrollSurface);
@@ -833,7 +833,7 @@ impl ScrollArea {
     }
 }
 
-impl neocogi_ui_contracts::ScrollArea for ScrollArea {
+impl neocogi_ui_core_contracts::ScrollArea for ScrollArea {
     /// Reads the actual content identity through the fixed one-child surface writer.
     fn content(&self) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
         self.runtime().state.readable()?;

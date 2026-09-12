@@ -127,7 +127,7 @@ pub struct SliderChanged {
 }
 
 impl crate::event::ComEvent for SliderChanged {
-    type Sink = neocogi_ui_contracts::INumericSinkAbi;
+    type Sink = neocogi_ui_core_contracts::INumericSinkAbi;
 
     /// Delivers the captured value through the Slider numeric event contract.
     fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
@@ -135,7 +135,7 @@ impl crate::event::ComEvent for SliderChanged {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_contracts::Slider)]
+#[neocogi_com::com_object(neocogi_ui_core_contracts::Slider)]
 /// Concrete retained slider and dynamically constructible COM object.
 pub struct Slider {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -1048,7 +1048,7 @@ mod tests {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_contracts::{GeometryChange, IEventSubscriptionAbi, INumericSinkAbi, IWidgetHostAbi, SliderAbi, SliderOptions, FontRole};
+use neocogi_ui_core_contracts::{GeometryChange, IEventSubscriptionAbi, INumericSinkAbi, IWidgetHostAbi, SliderAbi, SliderOptions, FontRole};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Slider);
@@ -1081,7 +1081,7 @@ impl Slider {
     }
 }
 
-impl neocogi_ui_contracts::Slider for Slider {
+impl neocogi_ui_core_contracts::Slider for Slider {
     /// Reads the finite value owned by the slider's concrete semantic algorithm.
     fn value(&self) -> Result<f32, NcStatus> {
         self.runtime().state.readable()?;

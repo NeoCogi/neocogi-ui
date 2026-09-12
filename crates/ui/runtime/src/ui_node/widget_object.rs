@@ -3,7 +3,7 @@
 //! Concrete widget types own their semantic fields directly. [`WidgetRuntime`] contains only the
 //! common host, lifecycle, option, and resource machinery required by every class.
 use crate::boundary::text;
-use neocogi_ui_contracts::*;
+use neocogi_ui_core_contracts::*;
 use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
 use std::{cell::RefCell, rc::Rc};
 use neocogi_ui::com::widget::WidgetState;
@@ -216,9 +216,9 @@ pub(crate) fn local_wrap(wrap: TextWrapping) -> Result<crate::TextWrap, NcStatus
 /// algorithm object, erased payload, or secondary widget identity.
 macro_rules! direct_widget_phase_impl {
     ($name:ty) => {
-        impl neocogi_ui_contracts::IWidget for $name {
+        impl neocogi_ui_core_contracts::IWidget for $name {
             /// Returns the runtime authority without retaining a tree or parent.
-            fn host(&self) -> Result<neocogi_com::ComPtr<neocogi_ui_contracts::IWidgetHostAbi>, neocogi_com::NcStatus> {
+            fn host(&self) -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::IWidgetHostAbi>, neocogi_com::NcStatus> {
                 let runtime = <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self);
                 Ok(runtime.state.host().add_ref())
             }
@@ -238,11 +238,11 @@ macro_rules! direct_widget_phase_impl {
             }
 
             /// Copies routing and frame policy from the concrete widget and its common options.
-            fn properties(&self) -> Result<neocogi_ui_contracts::WidgetProperties, neocogi_com::NcStatus> {
+            fn properties(&self) -> Result<neocogi_ui_core_contracts::WidgetProperties, neocogi_com::NcStatus> {
                 let runtime = <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self);
                 let options = runtime.state.options()?;
-                Ok(neocogi_ui_contracts::WidgetProperties {
-                    options: neocogi_ui_contracts::WidgetOptions::from_raw(
+                Ok(neocogi_ui_core_contracts::WidgetProperties {
+                    options: neocogi_ui_core_contracts::WidgetOptions::from_raw(
                         <$name as crate::ui_node::widget_object::WidgetAlgorithm>::effective_options(
                             self,
                             crate::WidgetOption::from_bits_retain(u32::from(options.raw())),
@@ -255,7 +255,7 @@ macro_rules! direct_widget_phase_impl {
             }
 
             /// Replaces the single common option value after complete validation.
-            fn set_options(&mut self, options: neocogi_ui_contracts::WidgetOptions) -> Result<(), neocogi_com::NcStatus> {
+            fn set_options(&mut self, options: neocogi_ui_core_contracts::WidgetOptions) -> Result<(), neocogi_com::NcStatus> {
                 options.validate()?;
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self)
                     .state
@@ -265,10 +265,10 @@ macro_rules! direct_widget_phase_impl {
             /// Runs copied input directly against this concrete widget's semantic fields.
             fn update(
                 &mut self,
-                state: neocogi_ui_contracts::WidgetUpdate,
-                event: neocogi_ui_contracts::WidgetEventAbi,
+                state: neocogi_ui_core_contracts::WidgetUpdate,
+                event: neocogi_ui_core_contracts::WidgetEventAbi,
                 text: neocogi_com::NcCopyFromBufferOffset<'_, u8>,
-            ) -> Result<neocogi_ui_contracts::GeometryChange, neocogi_com::NcStatus> {
+            ) -> Result<neocogi_ui_core_contracts::GeometryChange, neocogi_com::NcStatus> {
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
                 state.validate()?;
                 let input = crate::ui_node::input_contract::local_event(event, text)?;
@@ -288,17 +288,17 @@ macro_rules! direct_widget_phase_impl {
                     crate::Modifiers::from_bits(state.modifiers).ok_or(neocogi_com::NC_E_INVALID_ARG)?,
                 );
                 Ok(match crate::Widget::update(self, &mut ctx, input.as_ref()) {
-                    crate::Change::Changed => neocogi_ui_contracts::GeometryChange::Changed,
-                    crate::Change::NoChange => neocogi_ui_contracts::GeometryChange::NoChange,
+                    crate::Change::Changed => neocogi_ui_core_contracts::GeometryChange::Changed,
+                    crate::Change::NoChange => neocogi_ui_core_contracts::GeometryChange::NoChange,
                 })
             }
 
             /// Drains sticky common and explicitly shared semantic geometry changes together.
-            fn take_change(&mut self) -> Result<neocogi_ui_contracts::GeometryChange, neocogi_com::NcStatus> {
+            fn take_change(&mut self) -> Result<neocogi_ui_core_contracts::GeometryChange, neocogi_com::NcStatus> {
                 if crate::Widget::take_shared_change(self) {
                     <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self)
                         .state
-                        .record_change(neocogi_ui_contracts::GeometryChange::Changed);
+                        .record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
                 }
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self)
                     .state
@@ -308,9 +308,9 @@ macro_rules! direct_widget_phase_impl {
             /// Paints semantic fields directly into the runtime-owned scoped frame context.
             fn paint(
                 &mut self,
-                scope: neocogi_ui_contracts::PaintScope,
-                state: neocogi_ui_contracts::WidgetPaint,
-                painter: neocogi_com::ComRef<'_, neocogi_ui_contracts::IPainterAbi>,
+                scope: neocogi_ui_core_contracts::PaintScope,
+                state: neocogi_ui_core_contracts::WidgetPaint,
+                painter: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IPainterAbi>,
             ) -> Result<(), neocogi_com::NcStatus> {
                 state.validate()?;
                 // Reading options performs the one lifecycle check required by
@@ -346,13 +346,13 @@ pub(crate) use direct_widget_phase_impl;
 /// Implements intrinsic COM measurement directly on one concrete leaf widget.
 macro_rules! direct_leaf_layout_impl {
     ($name:ty) => {
-        impl neocogi_ui_contracts::ILeafLayout for $name {
+        impl neocogi_ui_core_contracts::ILeafLayout for $name {
             /// Measures the concrete semantic fields against one owned host-resource snapshot.
             fn measure(
                 &mut self,
-                bounds: neocogi_ui_contracts::LayoutLimits,
-                _metrics: neocogi_com::ComRef<'_, neocogi_ui_contracts::ITextMetricsAbi>,
-            ) -> Result<neocogi_ui_contracts::Size, neocogi_com::NcStatus> {
+                bounds: neocogi_ui_core_contracts::LayoutLimits,
+                _metrics: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::ITextMetricsAbi>,
+            ) -> Result<neocogi_ui_core_contracts::Size, neocogi_com::NcStatus> {
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
                 let constraints = crate::Constraints::new(
                     crate::ui_node::widget_object::available(bounds.width)?,
@@ -361,7 +361,7 @@ macro_rules! direct_leaf_layout_impl {
                 let assets = <$name as crate::ui_node::widget_object::HostedWidget>::runtime_mut(self).resources()?;
                 let assets = assets.borrow();
                 let size = crate::LeafWidget::measure(self, assets.bundle().skin(), assets.bundle().atlas(), constraints);
-                Ok(neocogi_ui_contracts::Size {
+                Ok(neocogi_ui_core_contracts::Size {
                     width: size.width.max(0),
                     height: size.height.max(0),
                 })
@@ -375,9 +375,9 @@ pub(crate) use direct_leaf_layout_impl;
 /// Implements scoped layout directly on a concrete container allocation.
 macro_rules! direct_container_layout_impl {
     ($name:ty) => {
-        impl neocogi_ui_contracts::IContainerLayout for $name {
+        impl neocogi_ui_core_contracts::IContainerLayout for $name {
             /// Returns the read-only view paired with this concrete container's private writer.
-            fn children(&self) -> Result<neocogi_com::ComPtr<neocogi_ui_contracts::IChildrenAbi>, neocogi_com::NcStatus> {
+            fn children(&self) -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenAbi>, neocogi_com::NcStatus> {
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
                 self.editor.view()
             }
@@ -385,10 +385,10 @@ macro_rules! direct_container_layout_impl {
             /// Measures the concrete container against the caller's scoped child service.
             fn measure(
                 &mut self,
-                scope: neocogi_ui_contracts::LayoutScope,
-                bounds: neocogi_ui_contracts::LayoutLimits,
-                service: neocogi_com::ComRef<'_, neocogi_ui_contracts::ILayoutServiceAbi>,
-            ) -> Result<neocogi_ui_contracts::Size, neocogi_com::NcStatus> {
+                scope: neocogi_ui_core_contracts::LayoutScope,
+                bounds: neocogi_ui_core_contracts::LayoutLimits,
+                service: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::ILayoutServiceAbi>,
+            ) -> Result<neocogi_ui_core_contracts::Size, neocogi_com::NcStatus> {
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
                 let constraints = crate::ui_node::layout_service::constraints(bounds)?;
                 let layout = crate::ui_node::layout_service::ScopedLayout::new(scope, service)?;
@@ -397,7 +397,7 @@ macro_rules! direct_container_layout_impl {
                 let mut ctx = crate::MeasureCtx::scoped(assets.bundle().skin(), assets.bundle().atlas(), layout);
                 let size = crate::ContainerWidget::measure(self, &mut ctx, constraints);
                 ctx.result()?;
-                Ok(neocogi_ui_contracts::Size {
+                Ok(neocogi_ui_core_contracts::Size {
                     width: size.width.max(0),
                     height: size.height.max(0),
                 })
@@ -406,10 +406,10 @@ macro_rules! direct_container_layout_impl {
             /// Places the concrete container and returns only its copied child geometry.
             fn place(
                 &mut self,
-                scope: neocogi_ui_contracts::LayoutScope,
-                rect: neocogi_ui_contracts::Rect,
-                service: neocogi_com::ComRef<'_, neocogi_ui_contracts::ILayoutServiceAbi>,
-            ) -> Result<neocogi_ui_contracts::ContainerGeometry, neocogi_com::NcStatus> {
+                scope: neocogi_ui_core_contracts::LayoutScope,
+                rect: neocogi_ui_core_contracts::Rect,
+                service: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::ILayoutServiceAbi>,
+            ) -> Result<neocogi_ui_core_contracts::ContainerGeometry, neocogi_com::NcStatus> {
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
                 if rect.width < 0 || rect.height < 0 {
                     return Err(neocogi_com::NC_E_INVALID_ARG);
@@ -425,7 +425,7 @@ macro_rules! direct_container_layout_impl {
             /// Applies the concrete container's post-target event filtering policy.
             fn accepts_event(
                 &self,
-                event: neocogi_ui_contracts::WidgetEventAbi,
+                event: neocogi_ui_core_contracts::WidgetEventAbi,
                 text: neocogi_com::NcCopyFromBufferOffset<'_, u8>,
             ) -> Result<bool, neocogi_com::NcStatus> {
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
@@ -455,15 +455,15 @@ pub(crate) trait IconState: WidgetAlgorithm {
 /// Implements shared scrolling calls directly on a concrete fixed-composition class.
 macro_rules! direct_scrolling_impl {
     ($name:ty) => {
-        impl neocogi_ui_contracts::IScrolling for $name {
+        impl neocogi_ui_core_contracts::IScrolling for $name {
             /// Reads one coherent snapshot from the scalar model shared with both scrollbar children.
-            fn info(&self) -> Result<neocogi_ui_contracts::ScrollInfo, neocogi_com::NcStatus> {
+            fn info(&self) -> Result<neocogi_ui_core_contracts::ScrollInfo, neocogi_com::NcStatus> {
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.readable()?;
                 Ok(self.model.com_info())
             }
 
             /// Records a sticky nonnegative request for the next concrete placement.
-            fn set_offset(&mut self, offset: neocogi_ui_contracts::Point) -> Result<(), neocogi_com::NcStatus> {
+            fn set_offset(&mut self, offset: neocogi_ui_core_contracts::Point) -> Result<(), neocogi_com::NcStatus> {
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
                 self.model.set_offset(crate::Vec2i::new(offset.x, offset.y));
                 Ok(())
@@ -484,7 +484,7 @@ macro_rules! direct_scrolling_impl {
             }
 
             /// Validates one content-local rectangle before changing either requested axis.
-            fn reveal(&mut self, rect: neocogi_ui_contracts::Rect) -> Result<(), neocogi_com::NcStatus> {
+            fn reveal(&mut self, rect: neocogi_ui_core_contracts::Rect) -> Result<(), neocogi_com::NcStatus> {
                 <$name as crate::ui_node::widget_object::HostedWidget>::runtime(self).state.writable()?;
                 if rect.x < 0 || rect.y < 0 || rect.width < 0 || rect.height < 0 {
                     return Err(neocogi_com::NC_E_INVALID_ARG);

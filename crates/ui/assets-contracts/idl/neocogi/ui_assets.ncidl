@@ -1,5 +1,5 @@
-extern neocogi.ui;
-use neocogi.ui::{AssetMetrics, FlatPalette, IAssetBundle, INativePath, ITexture, ITextureFactory, Size};
+extern neocogi.ui.core;
+use neocogi.ui.core::{AssetMetrics, FlatPalette, IAssetBundle, INativePath, ITexture, ITextureFactory, Size};
 
 #[version(1)]
 /// Optional native font/PNG construction session; all mutation uses concrete named operations.

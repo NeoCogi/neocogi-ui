@@ -1,6 +1,6 @@
 //! Build-time exporter for the ordinary immutable COM bundle implementation.
 //! Generated runtime code depends only on neocogi-ui and neocogi-com, with no UI/parser dependency.
-use neocogi_ui_contracts::*;
+use neocogi_ui_core_contracts::*;
 use neocogi_ui::assets::AssetData;
 use std::{
     io::{self, Write as _},

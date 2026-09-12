@@ -1,6 +1,6 @@
 //! Conversion from validated portable tables to UI-local lookup storage.
 use super::*;
-use neocogi_ui_contracts::{AssetFont, AssetGlyph, AssetIcon, AssetRange, Size};
+use neocogi_ui_core_contracts::{AssetFont, AssetGlyph, AssetIcon, AssetRange, Size};
 use neocogi_com::NcStatus;
 #[cfg(test)]
 use neocogi_com::NC_E_INVALID_ARG;
@@ -20,8 +20,8 @@ pub(crate) struct Tables {
 
 /// Copies one local rectangle into the shared pixel record.
 #[cfg(test)]
-fn rect(value: Recti) -> neocogi_ui_contracts::Rect {
-    neocogi_ui_contracts::Rect {
+fn rect(value: Recti) -> neocogi_ui_core_contracts::Rect {
+    neocogi_ui_core_contracts::Rect {
         x: value.x,
         y: value.y,
         width: value.width,
@@ -48,10 +48,10 @@ impl Tables {
             .chain(atlas.0.icons.iter().map(|(name, _)| name.len()))
             .try_fold(0usize, |sum, len| sum.checked_add(len))
             .ok_or(NC_E_INVALID_ARG)?;
-        if atlas.0.fonts.len() > neocogi_ui_contracts::MAX_ASSET_FONTS as usize
-            || atlas.0.icons.len() > neocogi_ui_contracts::MAX_ASSET_ICONS as usize
-            || glyphs > neocogi_ui_contracts::MAX_ASSET_GLYPHS as usize
-            || names > neocogi_ui_contracts::MAX_ASSET_NAMES as usize
+        if atlas.0.fonts.len() > neocogi_ui_core_contracts::MAX_ASSET_FONTS as usize
+            || atlas.0.icons.len() > neocogi_ui_core_contracts::MAX_ASSET_ICONS as usize
+            || glyphs > neocogi_ui_core_contracts::MAX_ASSET_GLYPHS as usize
+            || names > neocogi_ui_core_contracts::MAX_ASSET_NAMES as usize
         {
             return Err(NC_E_INVALID_ARG);
         }

@@ -158,7 +158,7 @@ pub enum PopupEvent {
 }
 
 impl crate::event::ComEvent for PopupEvent {
-    type Sink = neocogi_ui_contracts::IPopupSinkAbi;
+    type Sink = neocogi_ui_core_contracts::IPopupSinkAbi;
 
     /// Delivers the captured dismissal without retaining or rereading its popup surface.
     fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
@@ -3841,8 +3841,8 @@ impl WindowManager {
     }
 
     /// Copies current window policy into the canonical COM snapshot without a second state store.
-    pub(crate) fn window_snapshot(&self, window: &WindowHandle) -> Result<neocogi_ui_contracts::WindowSnapshot, SurfaceMutationError> {
-        use neocogi_ui_contracts::{ChildClip, LayerKind, Rect, Visibility, WindowLayer, WindowOptions, WindowSnapshot};
+    pub(crate) fn window_snapshot(&self, window: &WindowHandle) -> Result<neocogi_ui_core_contracts::WindowSnapshot, SurfaceMutationError> {
+        use neocogi_ui_core_contracts::{ChildClip, LayerKind, Rect, Visibility, WindowLayer, WindowOptions, WindowSnapshot};
         let id = self.window_id(window)?;
         let node = self.root_node(id)?;
         let root = node.root().expect("validated window has root policy");

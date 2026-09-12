@@ -1,6 +1,6 @@
 # Architecture
 
-Applications link `neocogi-ui`, canonical `neocogi-ui-contracts`, and neocogi-com support.
+Applications link `neocogi-ui`, canonical `neocogi-ui-core-contracts`, and neocogi-com support.
 The facade contains concrete typed clients and application-local generic adapters.
 The UI implementation, retained window manager, built-in widgets and layout policies
 are packaged in the UI plugin. Native platform and GPU objects share the selected
@@ -37,7 +37,7 @@ hosts remain free to construct any registered widget class from its typed frame.
 
 ## Source ownership
 
-`neocogi-ui-contracts` declares cross-binary interfaces and callable class contracts;
+`neocogi-ui-core-contracts` declares cross-binary interfaces and callable class contracts;
 it contains no UI implementation state. In `neocogi-ui-runtime`, each built-in under
 `ui_node/widgets` or `ui_node/containers` owns its `com_object`, constructor,
 callable-class implementation, shared protocol projections, semantic fields, and

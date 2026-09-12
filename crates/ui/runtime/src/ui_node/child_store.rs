@@ -1,6 +1,6 @@
 //! One authoritative owned child collection with separate read/edit COM capabilities.
 use super::HostState;
-use neocogi_ui_contracts::*;
+use neocogi_ui_core_contracts::*;
 use neocogi_com::{ComPtr, ComRef, IUnknown, NcStatus, com_object};
 use std::{
     cell::{Cell, RefCell},

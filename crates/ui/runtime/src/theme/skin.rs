@@ -94,7 +94,7 @@ impl SkinRevision {
 }
 
 /// Layout metrics use the generated checked transfer record without a second native shape.
-pub use neocogi_ui_contracts::AssetMetrics as SkinMetrics;
+pub use neocogi_ui_core_contracts::AssetMetrics as SkinMetrics;
 
 /// Horizontal alignment policy for manager-owned window title text.
 #[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]

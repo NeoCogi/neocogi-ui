@@ -14,7 +14,7 @@ source = "idl/neocogi/ui_assets.ncidl"
 
 [dependencies]
 neocogi-com = { workspace = true, features = ["macros"] }
-neocogi-ui-contracts.workspace = true
+neocogi-ui-core-contracts.workspace = true
 
 [build-dependencies]
 neocogi-idl-build.workspace = true

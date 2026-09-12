@@ -52,7 +52,7 @@ pointers. Final COM release frees the allocation separately.
 
 Events own the value captured at the interaction. Ordinary programmatic setters
 remain silent. The [events guide](EVENTS.md) describes delivery; exact interfaces and
-capabilities are documented in `neocogi-ui-contracts` and the facade's API reference.
+capabilities are documented in `neocogi-ui-core-contracts` and the facade's API reference.
 
 Combo lists can keep generic Rust values in the application; selection indices and
 labels cross the concrete COM contract. Domain data crossing plugins requires its

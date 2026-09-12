@@ -1,5 +1,5 @@
-extern neocogi.ui;
-use neocogi.ui::{IRenderItem, IWidget, ILeafLayout, IActivationEvents, IWidgetHost, IContainer, ChildEditResult};
+extern neocogi.ui.core;
+use neocogi.ui.core::{IRenderItem, IWidget, ILeafLayout, IActivationEvents, IWidgetHost, IContainer, ChildEditResult};
 
 /// Copied two-component floating-point vector with no external Rust layout dependency.
 #[version(1)]

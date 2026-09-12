@@ -1,6 +1,6 @@
 //! Runtime-owned paint state lets COM widgets append directly to the one frame display list.
 use crate::boundary::{copied_rect, local_rect, text};
-use neocogi_ui_contracts::*;
+use neocogi_ui_core_contracts::*;
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
 use crate::{FontRole, WidgetOption, ControlRole};
 use crate::math::RectExt;

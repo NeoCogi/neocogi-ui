@@ -72,7 +72,7 @@ impl Default for ComboParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_contracts::Combo)]
+#[neocogi_com::com_object(neocogi_ui_core_contracts::Combo)]
 /// Concrete retained combo and dynamically constructible COM object.
 pub struct Combo {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -424,7 +424,7 @@ impl Combo {
 impl Eq for ComboSubmitted {}
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_contracts::{ComboAbi, GeometryChange, IComboChangedSinkAbi, IComboPopupSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi, FontRole};
+use neocogi_ui_core_contracts::{ComboAbi, GeometryChange, IComboChangedSinkAbi, IComboPopupSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi, FontRole};
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG};
 
 direct_widget_phase_impl!(Combo);
@@ -445,7 +445,7 @@ impl Combo {
     }
 }
 
-impl neocogi_ui_contracts::Combo for Combo {
+impl neocogi_ui_core_contracts::Combo for Combo {
     /// Reads the same position used by the semantic selection algorithm.
     fn selected(&self) -> Result<u64, NcStatus> {
         self.runtime().state.readable()?;

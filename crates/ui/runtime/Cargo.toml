@@ -23,7 +23,7 @@ dynamic-plugin = []
 [dependencies]
 # Standard plugin-owned compositions reuse the static typed clients and owned event adapter.
 neocogi-ui.workspace = true
-neocogi-ui-contracts.workspace = true
+neocogi-ui-core-contracts.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
 neocogi-render-core.workspace = true
 bitflags.workspace = true

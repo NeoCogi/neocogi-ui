@@ -35,7 +35,7 @@ use std::{
     rc::{Rc, Weak},
 };
 use neocogi_com::{com_object, ComInterface, ComPtr, ComRef, NcStatus};
-use neocogi_ui_contracts::*;
+use neocogi_ui_core_contracts::*;
 
 /// A concrete semantic snapshot defines its one concrete foreign delivery contract.
 pub trait EventPayload: 'static {
@@ -233,7 +233,7 @@ impl<E: 'static> Queue<E> {
             Self::Closed { terminal } => (usize::from(terminal.is_some()), true),
         };
         if limit == 0 && pending != 0 {
-            return Err(neocogi_ui_contracts::UI_E_EVENT_LIMIT);
+            return Err(neocogi_ui_core_contracts::UI_E_EVENT_LIMIT);
         }
         let events = match self {
             Self::Disconnected => Vec::new(),
@@ -513,7 +513,7 @@ impl<E: EventPayload> EventSource<E> {
 mod tests {
     use super::*;
     use neocogi_com::{com_interface, NC_E_INVALID_ARG};
-    use neocogi_ui_contracts::UI_E_EVENT_LIMIT;
+    use neocogi_ui_core_contracts::UI_E_EVENT_LIMIT;
 
     #[com_interface(auto_guid = "neocogi.ui.test.EventLeaseSink:v1", assigned_signature = b"00000000000000000000000000000036")]
     /// Independent typed consumer used to exercise generic lease transport.
@@ -645,7 +645,7 @@ mod lease_tests {
         assert!(source.connected());
         source.emit(1);
         source.emit(2);
-        assert_eq!(lease.drain(0).err(), Some(neocogi_ui_contracts::UI_E_EVENT_LIMIT));
+        assert_eq!(lease.drain(0).err(), Some(neocogi_ui_core_contracts::UI_E_EVENT_LIMIT));
         let first = lease.drain(1).unwrap();
         assert_eq!(first.events, [1]);
         source.emit(3);

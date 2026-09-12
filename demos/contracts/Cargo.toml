@@ -11,7 +11,7 @@ module = "neocogi.demo"
 source = "idl/neocogi/demo.ncidl"
 
 [dependencies]
-neocogi-ui-contracts.workspace = true
+neocogi-ui-core-contracts.workspace = true
 neocogi-com = { workspace = true, features = ["macros"] }
 rs-math3d.workspace = true
 

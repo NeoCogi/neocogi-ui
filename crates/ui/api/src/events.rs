@@ -78,7 +78,7 @@ where
 }
 
 /// Default finite callback budget for one deterministic dispatch boundary.
-pub use neocogi_ui_contracts::EVENT_DISPATCH_LIMIT;
+pub use neocogi_ui_core_contracts::EVENT_DISPATCH_LIMIT;
 
 /// Static session owns application state and subscriptions; producers never retain this session.
 pub struct EventSession<State: 'static> {

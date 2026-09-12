@@ -1,7 +1,7 @@
 //! Concrete COM ownership at the retained node boundary.
 use crate::boundary::{copied_rect, local_rect};
 use super::{HostState, Observation};
-use neocogi_ui_contracts::*;
+use neocogi_ui_core_contracts::*;
 use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
 use std::{cell::Cell, rc::Rc};
 use super::paint_service::PaintService;

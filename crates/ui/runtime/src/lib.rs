@@ -212,15 +212,15 @@ pub use ui_factory::UiFactory;
 pub(crate) use event::SubscribeError;
 
 /// Stateless process entry that creates independent retained UI runtimes.
-#[neocogi_com::com_factory(neocogi_ui_contracts::UiPluginFactory)]
+#[neocogi_com::com_factory(neocogi_ui_core_contracts::UiPluginFactory)]
 struct UiPluginFactoryObject;
 
-impl neocogi_ui_contracts::UiPluginFactory for UiPluginFactoryObject {
+impl neocogi_ui_core_contracts::UiPluginFactory for UiPluginFactoryObject {
     /// Imports the complete asset revision before publishing any runtime capability.
     fn create_runtime(
         &self,
-        assets: neocogi_com::ComRef<'_, neocogi_ui_contracts::IAssetBundleAbi>,
-    ) -> Result<neocogi_com::ComPtr<neocogi_ui_contracts::UiRuntimeAbi>, neocogi_com::NcStatus> {
+        assets: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IAssetBundleAbi>,
+    ) -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::UiRuntimeAbi>, neocogi_com::NcStatus> {
         crate::create_runtime_from_assets(assets)
     }
 }
@@ -228,7 +228,7 @@ impl neocogi_ui_contracts::UiPluginFactory for UiPluginFactoryObject {
 neocogi_com::factory_plugin! {
     name = "neocogi.ui.runtime",
     version = "0.9.0-alpha.0",
-    contracts = [neocogi_ui_contracts::MODULE],
+    contracts = [neocogi_ui_core_contracts::MODULE],
     factory = UiPluginFactoryObject,
 }
 

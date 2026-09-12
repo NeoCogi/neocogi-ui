@@ -32,7 +32,7 @@
 //!
 //! Construction owns CPU pixels and file input. Runtime font identities and UI skins
 //! are deliberately absent: consumers create their local lookup state from the result.
-use neocogi_ui_contracts::*;
+use neocogi_ui_core_contracts::*;
 use neocogi_ui::assets::{AssetData, AssetTables};
 use fontdue::{Font as RasterFont, FontSettings, Metrics};
 use std::{

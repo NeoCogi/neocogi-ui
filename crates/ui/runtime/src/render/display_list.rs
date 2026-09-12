@@ -74,18 +74,18 @@ pub(super) enum DrawKind {
     /// Owned external image used by the COM renderer path.
     ComTexture {
         /// Resource retains its renderer/device until submission and GPU destruction finish.
-        texture: neocogi_com::ComPtr<neocogi_ui_contracts::ITextureAbi>,
+        texture: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextureAbi>,
         /// Destination in screen coordinates.
         rect: Recti,
         /// Normalized source region, retained through repeated clipping.
-        source: neocogi_ui_contracts::TextureRegion,
+        source: neocogi_ui_core_contracts::TextureRegion,
         /// Multiplicative tint.
         color: Color,
     },
     /// Concrete application scene capability consumed by its co-packaged renderer.
     ComItem {
         /// No native frame or stack borrow is retained by the display list.
-        item: neocogi_com::ComPtr<neocogi_ui_contracts::IRenderItemAbi>,
+        item: neocogi_com::ComPtr<neocogi_ui_core_contracts::IRenderItemAbi>,
         /// Unclipped destination in screen coordinates.
         rect: Recti,
     },
@@ -166,7 +166,7 @@ impl DisplayList {
     }
 
     /// Retains a complete atlas batch in painter order for final viewport clipping.
-    pub(super) fn push_atlas_triangles(&mut self, clip: Recti, origin: Vec2i, vertices: &[neocogi_ui_contracts::RenderVertex]) {
+    pub(super) fn push_atlas_triangles(&mut self, clip: Recti, origin: Vec2i, vertices: &[neocogi_ui_core_contracts::RenderVertex]) {
         let first = self.atlas_vertices.len();
         // Translate directly into retained storage, with no intermediate per-operation vector.
         for vertex in vertices {
@@ -190,15 +190,15 @@ impl DisplayList {
         &mut self,
         clip: Recti,
         rect: Recti,
-        source: neocogi_ui_contracts::TextureRegion,
+        source: neocogi_ui_core_contracts::TextureRegion,
         color: Color,
-        texture: neocogi_com::ComPtr<neocogi_ui_contracts::ITextureAbi>,
+        texture: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextureAbi>,
     ) {
         self.push(clip, DrawKind::ComTexture { texture, rect, source, color });
     }
 
     /// Retains application GPU work without creating a callback registry entry.
-    pub(super) fn push_com_item(&mut self, clip: Recti, rect: Recti, item: neocogi_com::ComPtr<neocogi_ui_contracts::IRenderItemAbi>) {
+    pub(super) fn push_com_item(&mut self, clip: Recti, rect: Recti, item: neocogi_com::ComPtr<neocogi_ui_core_contracts::IRenderItemAbi>) {
         self.push(clip, DrawKind::ComItem { item, rect });
     }
 
@@ -263,7 +263,7 @@ impl DisplayList {
     }
 
     /// Converts copied COM polygon points directly into the reusable tessellation workspace.
-    pub(super) fn push_contract_polygon(&mut self, clip: Recti, points: &[neocogi_ui_contracts::PaintPoint], color: Color4b, offset: Vec2f) {
+    pub(super) fn push_contract_polygon(&mut self, clip: Recti, points: &[neocogi_ui_core_contracts::PaintPoint], color: Color4b, offset: Vec2f) {
         let points = points.iter().map(|point| Vec2f::new(point.x, point.y));
         if let Some(range) = self.solid_geometry.append_polygon_points(points, color, offset) {
             self.push_solid_range(clip, range);

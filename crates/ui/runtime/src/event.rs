@@ -30,7 +30,7 @@
 #![doc = include_str!("../docs/EVENTS.md")]
 
 use crate::Widget;
-use neocogi_ui_contracts::{IActivationSinkAbi, IEventSubscriptionAbi, ITextChangedSinkAbi, ITextSubmittedSinkAbi};
+use neocogi_ui_core_contracts::{IActivationSinkAbi, IEventSubscriptionAbi, ITextChangedSinkAbi, ITextSubmittedSinkAbi};
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
 
 /// Static event-to-sink projection implemented beside each concrete semantic event type.

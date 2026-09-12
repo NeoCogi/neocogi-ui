@@ -66,8 +66,9 @@ threading capability, callable surface, and required `IWidget` projection. It
 has no constructor. The generated `UiFactory` description defines the typed
 construction call.
 
-Names are exact. If this source is `neocogi/ui.ncidl`, the declarations are
-`neocogi.ui.IWidget`, `neocogi.ui.Button`, and `neocogi.ui.UiFactory`.
+Names are exact. If this source is `neocogi/ui/core.ncidl`, the declarations are
+`neocogi.ui.core.IWidget`, `neocogi.ui.core.Button`, and
+`neocogi.ui.core.UiFactory`.
 `#[version(1)]` derives identity from that name and version;
 `#[id(1, "UUID")]` pins an identity when migration or external compatibility
 requires it. IDL members are public by definition and do not use `pub`.
@@ -77,7 +78,7 @@ requires it. IDL members are public by definition and do not use `pub`.
 Implementation types contain only private state and method bodies:
 
 ```rust,ignore
-#[com_object(neocogi_ui_contracts::Button)]
+#[com_object(neocogi_ui_core_contracts::Button)]
 struct ButtonObject {
     enabled: bool,
     label: String,
@@ -100,7 +101,7 @@ impl Button for ButtonObject {
     }
 }
 
-#[com_factory(neocogi_ui_contracts::UiFactory)]
+#[com_factory(neocogi_ui_core_contracts::UiFactory)]
 struct UiFactoryObject;
 
 impl UiFactory for UiFactoryObject {
@@ -131,7 +132,7 @@ One implementation is selected as the plugin root:
 neocogi_com::factory_plugin! {
     name = "neocogi.ui.runtime",
     version = "1.0.0",
-    contracts = [neocogi_ui_contracts::MODULE],
+    contracts = [neocogi_ui_core_contracts::MODULE],
     factory = UiFactoryObject,
 }
 
@@ -157,7 +158,7 @@ If the host uses UI/U1 and a plugin uses incompatible UI/U2, the operating
 system can map both because their filenames differ. Registration then sees:
 
 ```text
-logical module ID: neocogi.ui
+logical module ID: neocogi.ui.core
 host fingerprint:  U1
 plugin fingerprint: U2
 result: NC_E_CONTRACT_MISMATCH
@@ -175,9 +176,9 @@ resolution alone.
 
 NeoCogi's optional asset-authoring contract is one concrete example. Its
 `neocogi/ui_assets.ncidl` source imports portable values and interfaces from
-`neocogi/ui.ncidl`; generated signatures refer to those original UI types, and
+`neocogi/ui/core/`; generated signatures refer to those original UI types, and
 `contract_neocogi_ui_assets` links to the exact fingerprinted
-`contract_neocogi_ui` description. The assets plugin needs to name only the
+`contract_neocogi_ui_core` description. The assets plugin needs to name only the
 asset-authoring module directly because registration follows that dependency
 edge to the UI module.
 

@@ -72,7 +72,7 @@ pub struct ListBoxSubmitted {
 }
 
 impl crate::event::ComEvent for ListBoxSubmitted {
-    type Sink = neocogi_ui_contracts::IActivationSinkAbi;
+    type Sink = neocogi_ui_core_contracts::IActivationSinkAbi;
 
     /// Copies the captured selection label through the ListBox activation contract.
     fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
@@ -80,7 +80,7 @@ impl crate::event::ComEvent for ListBoxSubmitted {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_contracts::ListBox)]
+#[neocogi_com::com_object(neocogi_ui_core_contracts::ListBox)]
 /// Concrete retained list box and dynamically constructible COM object.
 pub struct ListBox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -261,7 +261,7 @@ impl crate::ui_node::widget_object::ImageState for ListBox {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, ImageState, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_contracts::{GeometryChange, IActivationSinkAbi, IEventSubscriptionAbi, ITextureAbi, IWidgetHostAbi, ListBoxAbi, FontRole};
+use neocogi_ui_core_contracts::{GeometryChange, IActivationSinkAbi, IEventSubscriptionAbi, ITextureAbi, IWidgetHostAbi, ListBoxAbi, FontRole};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(ListBox);
@@ -290,7 +290,7 @@ impl ListBox {
     }
 }
 
-impl neocogi_ui_contracts::ListBox for ListBox {
+impl neocogi_ui_core_contracts::ListBox for ListBox {
     /// Returns an immutable label snapshot from the concrete list box.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;
