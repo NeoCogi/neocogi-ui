@@ -84,10 +84,10 @@ staged runtime/plugin library and resource with the executable. `run` launches
 the staged binary and forwards arguments after `--`, preserving its exit code.
 
 Add `--variant monolith` after the renderer selection to statically link the COM
-runtime and the UI, renderer, and asset implementations. These assemblies use
-`com-validation = "none"`, register the linked descriptors directly, and stage
-only the executable and configured resources. They therefore have no Neocogi
-shared-library or `plugins.txt` deployment requirement.
+runtime and the UI, renderer, and asset implementations. These assemblies
+register the linked descriptors directly with the same SHA-256 ABI validation
+and stage only the executable and configured resources. They therefore have no
+Neocogi shared-library or `plugins.txt` deployment requirement.
 
 The command discovers artifacts from Cargo's JSON output and snapshots the runtime
 and explicitly isolated plugins before later builds can replace their files.

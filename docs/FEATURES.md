@@ -5,10 +5,6 @@ facade has no renderer, font-builder or JSON feature. Its defaults are empty:
 
 | Crate | Feature | Effect |
 | --- | --- | --- |
-| COM graph | `com-validation-none` | Preserve structural validation but skip contract comparison. |
-| COM graph | `com-validation-sha-256` | Validate canonical contracts with 256-bit cryptographic digests. |
-| COM graph | `com-validation-fnv-1a-128` | Validate canonical contracts with compact 128-bit FNV fingerprints. |
-| COM graph | `com-validation-mangling` | Validate and store complete collision-free canonical contract bytes. |
 | Native demos | `monolith` | Link the runtime plus UI, renderer, and asset implementations into the executable. |
 | `neocogi-ui` | `runtime` | Link the shared neocogi-com runtime used by native hosts. |
 | `neocogi-ui` | `static-runtime` | Link one ordinary runtime implementation, including browser deployments. |
@@ -32,22 +28,15 @@ feature selection and the executable receives its adjacent runtime/manifest:
 ```sh
 cargo neocogi build --assembly full --variant glow
 cargo neocogi build --assembly full --variant glow --profile min-size
-cargo neocogi build --assembly full --variant vulkan --variant sha-256 --profile min-size
+cargo neocogi build --assembly full --variant vulkan --profile min-size
 cargo neocogi build --assembly full --variant vulkan --variant monolith --release
 ```
 
-Every assembly declares `com-validation = "none" | "sha-256" |
-"fnv-1a-128" | "mangling"`. The package driver applies the matching feature to
-the executable, runtime, and every plugin after renderer/resource variants.
-Those four values are also reserved built-in `--variant` names, allowing one
-command to compose renderer, resource, linkage, and validation choices. Repeated
-validation variants are applied in order and the last one wins.
-Each dynamic plugin descriptor records the resulting mode. Assembly staging
-inspects all selected libraries and rejects the plan if their reported modes
-differ, so `plugins.txt` cannot describe a mixed validation graph.
-The `monolith` variant is valid only with `com-validation = "none"`; it stages no
-Neocogi shared libraries or `plugins.txt` because the executable registers its
-linked descriptors directly.
+Generated ABI signatures always use SHA-256. This is part of the contract ABI,
+not an assembly feature or variant. Dynamic plugins and monolithically linked
+descriptions therefore receive the same exact signature checks. The `monolith`
+variant stages no Neocogi shared libraries or `plugins.txt` because the
+executable registers its linked descriptors directly.
 
 `glow`, `vulkan`, `wgpu` and `webgl` on demo packages select host behavior. They are
 separate from implementation-library features. A direct demo build does not stage

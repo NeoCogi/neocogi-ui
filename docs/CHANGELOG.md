@@ -17,13 +17,10 @@ wrappers. The accepted migration and outstanding validation are recorded in
 - Stop inspecting Cargo manifests during COM macro expansion. Generated code uses
   the canonical `::neocogi_com` path or an explicit facade override, removing
   `proc-macro-crate` and its TOML parser from application and plugin builds.
-- Add assembly-wide COM validation selection (`none`, SHA-256, FNV-1a-128, or
-  collision-free mangling) and an optional native monolith. The monolith uses
-  unchecked validation, one statically linked runtime, and direct registration
-  of the linked UI, renderer, and asset descriptors.
-- Record the selected COM validation mode in core ABI v7 plugin descriptions and
-  schema-v8 inspection artifacts. Dynamic assembly planning now rejects plugins
-  built with different modes before staging `plugins.txt`.
+- Make SHA-256 ABI signatures unconditional and add an optional native
+  monolith. The monolith uses one statically linked runtime and directly
+  registers the linked UI, renderer, and asset descriptors with the same exact
+  validation as a dynamic assembly.
 - Add one-Cargo-crate-per-module Rust-like IDL generation. Dynamic assemblies
   stage fingerprint-qualified contract libraries and factory-only plugins;
   loading and inspection reject conflicting revisions before publication.

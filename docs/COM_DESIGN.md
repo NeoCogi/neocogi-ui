@@ -138,9 +138,9 @@ neocogi_com::factory_plugin! {
 neocogi_com::export_factory_plugin!();
 ```
 
-The resulting `NcFactoryPluginDescription` stores plugin identity/version,
-validation mode, hard plugin dependencies, exact linked contract references,
-root factory identity/threading, and one no-argument activation pointer. The
+The resulting `NcFactoryPluginDescription` stores plugin identity/version, hard
+plugin dependencies, exact linked contract references, root factory
+identity/threading, and one no-argument activation pointer. The
 final DSO exports `nc_get_factory_plugin_description` exactly once.
 
 Static assemblies omit the export and pass `factory_plugin_description()`
