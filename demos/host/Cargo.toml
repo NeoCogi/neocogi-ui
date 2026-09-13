@@ -14,8 +14,8 @@ glow = ["neocogi-render-plugin?/glow"]
 vulkan = ["neocogi-render-plugin?/vulkan"]
 wgpu = ["neocogi-render-plugin?/wgpu"]
 webgl = ["dep:neocogi-ui-runtime", "dep:neocogi-render-plugin", "dep:neocogi-gfx", "neocogi-render-plugin/webgl"]
-# Browser modules link the same optional decoder descriptor staged as a native GFX plugin.
-png-assets = ["neocogi-ui/gfx"]
+# Expose PNG upload through the GFX plugin selected by the owning application.
+png-assets = []
 # Native monoliths retain only the implementations selected by their assembly.
 monolith = ["neocogi-com/static-runtime", "dep:neocogi-ui-runtime", "dep:neocogi-render-plugin"]
 monolith-gfx = ["monolith", "dep:neocogi-gfx"]
@@ -25,7 +25,7 @@ monolith-skin = ["monolith", "dep:neocogi-skin"]
 neocogi-ui.workspace = true
 neocogi-com = { workspace = true, features = ["std", "macros"] }
 neocogi-ui-runtime = { path = "../../crates/ui/runtime", optional = true }
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "eb66761922125bd761378de19829d610415a05c4", optional = true, default-features = false }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "ff3940174fc57fe6c50648b5e171c3c340e28ef0", optional = true, default-features = false }
 neocogi-gfx = { workspace = true, optional = true, default-features = false }
 neocogi-skin = { workspace = true, optional = true, default-features = false, features = ["theme-json"] }
 

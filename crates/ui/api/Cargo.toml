@@ -19,10 +19,7 @@ neocogi-com = { workspace = true, features = ["macros", "std"] }
 [features]
 default = []
 # Optional authoring clients keep unrelated plugin contracts out of UI/runtime binaries.
-gfx = []
 skin = ["dep:neocogi-skin-contracts"]
-# Generated resource tables expand bounded zlib pixels; other clients need no decoder.
-compiled-assets = ["neocogi-gfx-support/compiled-assets"]
 # Internal behavior fixtures; ordinary plugin and application builds do not expose queue leases.
 test-support = []
 # Deployment policy belongs to the final application, not implementation plugins.

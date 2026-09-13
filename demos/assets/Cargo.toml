@@ -16,7 +16,7 @@ full-demo = ["neocogi-ui/skin"]
 embed-assets = ["neocogi-gfx-support/compiled-assets", "dep:neocogi-gfx-impl", "dep:neocogi-skin-impl", "dep:neocogi-gfx-contracts", "dep:neocogi-gfx-support"]
 
 [dependencies]
-neocogi-ui = { workspace = true, features = ["gfx"] }
+neocogi-ui.workspace = true
 neocogi-com = { workspace = true, features = ["runtime"] }
 neocogi-gfx-contracts = { workspace = true, optional = true }
 neocogi-gfx-support = { workspace = true, optional = true }
