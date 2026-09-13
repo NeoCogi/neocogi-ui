@@ -35,6 +35,9 @@ wrappers. The accepted migration and outstanding validation are recorded in
 - Add one-Cargo-crate-per-module Rust-like IDL generation. Dynamic assemblies
   stage fingerprint-qualified contract libraries and factory-only plugins;
   loading and inspection reject conflicting revisions before publication.
+- Generate standalone descriptions as self-contained `no_std` Rust instead of
+  C. Hosts and plugins retain only typed bindings and exact getter imports, so
+  each fingerprinted description library is mapped once per process.
 - Keep native contract descriptions metadata-only. Contract libraries and
   schema-v8 inspection output retain identities, fingerprints, declarations,
   and dependencies without embedding or exposing the original `.ncidl` source.
@@ -42,8 +45,8 @@ wrappers. The accepted migration and outstanding validation are recorded in
   Its generated factories reuse `Size`, `AssetMetrics`, `FlatPalette`, native
   paths, bundles, and texture interfaces from `neocogi.ui.core`, producing a real
   fingerprinted native dependency instead of duplicate cross-module types.
-- Compile generated native contract descriptions for the underlying platform ABI
-  when the `min-size` Rust build uses its fingerprint-distinct custom target.
+- Compile generated Rust contract descriptions for the underlying platform ABI
+  when the `min-size` build uses its fingerprint-distinct custom target.
 - Move UI appearance roles, appearance states, and semantic font/icon roles into
   `neocogi/ui/core/resources.ncidl`, giving their names, representations, and
   table order one generated source of truth.

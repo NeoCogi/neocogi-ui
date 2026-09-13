@@ -8,11 +8,11 @@ cargo neocogi build --assembly full
 cargo neocogi run --assembly full
 ```
 
-Native contract-description artifacts are currently compiled from generated C,
-so the selected target also needs the C compiler/linker expected by Cargo's
-`cc` integration. This is an implementation requirement of the present
-two-artifact build, not a requirement of the COM ABI; the rationale and Rust
-replacement constraints are documented in [IDL contract modules](IDL_MODULES.md#cargo-package-shape).
+Contract build scripts use the Cargo-selected `rustc` to compile a small,
+self-contained `no_std` description library beside the generated bindings. No
+nested Cargo build or C compiler is involved. Static builds additionally need
+the target archiver used for ordinary native libraries. The ownership model is
+documented in [IDL contract modules](IDL_MODULES.md#cargo-package-shape).
 
 `cargo neocogi` builds the runtime, selected plugins, and application in order,
 then stages the executable, native libraries, plugin manifest, and assets. It
@@ -59,8 +59,8 @@ The `min-size` preset selects nightly automatically and includes its x86_64 Linu
 GNU target JSON, size-oriented compiler settings, and rebuilt standard library.
 Consumers do not need our `build-min-size` alias or a custom profile definition.
 Contract build scripts retain the custom Rust target as their artifact identity,
-but compile their generated C descriptions for its underlying
-`x86_64-unknown-linux-gnu` ABI so the platform compiler can recognize the target.
+but compile their self-contained Rust descriptions for its compatible built-in
+`x86_64-unknown-linux-gnu` ABI so `rustc` can reuse the installed `core` library.
 Use `--toolchain nightly-YYYY-MM-DD` to select an installed dated toolchain. Custom
 nightly targets can change with the compiler, so pin and test the toolchain used
 for a release. Ordinary custom profiles remain defined by the application's
