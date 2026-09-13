@@ -1,0 +1,53 @@
+use neocogi.renderer::{IRenderItem, IRenderer, ITexture, Rect, RenderVertex, Size, TextureRegion};
+
+#[version(1)]
+/// One solid-color vertex in final drawable coordinates before rectangular clipping.
+struct SolidVertex {
+    /// Finite horizontal position in drawable pixels.
+    x: f32,
+    /// Finite vertical position in drawable pixels.
+    y: f32,
+    /// Color packed as red in the least significant byte, then green, blue, and alpha.
+    rgba: u32,
+}
+
+#[version(1)]
+/// Finite drawable position used as the origin of one UTF-8 text run.
+struct DrawPoint {
+    /// Horizontal drawable coordinate in pixels.
+    x: i32,
+    /// Vertical drawable coordinate in pixels.
+    y: i32,
+}
+
+#[version(1)]
+/// Renderer-neutral display-list executor owned by the GFX plugin.
+///
+/// UI code supplies semantic operations in painter order. The compositor owns
+/// atlas lookup, glyph expansion, rectangular clipping, final vertex batching,
+/// and the single synchronous renderer submission. No backend-native handle or
+/// Rust implementation type crosses this boundary.
+factory GfxCompositor: IGfxDiagnostics {
+    /// Imports a complete compatible resource revision before the UI publishes matching style state.
+    fn install_assets(&mut self, assets: &IAssetBundle) -> Result<()>;
+    /// Clears retained command output and starts one frame with positive drawable dimensions.
+    fn begin(&mut self, size: Size, clear: u32) -> Result<()>;
+    /// Appends complete solid triangles with one authoritative drawable clip.
+    fn solid_triangles(&mut self, clip: Rect, vertices: &[SolidVertex]) -> Result<()>;
+    /// Appends complete atlas triangles whose UV coordinates are already normalized.
+    fn atlas_triangles(&mut self, clip: Rect, vertices: &[RenderVertex]) -> Result<()>;
+    /// Draws one atlas pixel rectangle into a drawable destination with clipping and tinting.
+    fn atlas_rect(&mut self, clip: Rect, destination: Rect, source: Rect, rgba: u32) -> Result<()>;
+    /// Expands one UTF-8 run through a bundle-local font slot and appends its visible glyphs.
+    fn text(&mut self, clip: Rect, font: u32, origin: DrawPoint, rgba: u32, text: &[u8]) -> Result<()>;
+    /// Centers one bundle-local icon slot inside a destination and appends its visible quad.
+    fn icon(&mut self, clip: Rect, icon: u32, destination: Rect, rgba: u32) -> Result<()>;
+    /// Retains and appends one renderer-owned texture with normalized source coordinates.
+    fn texture(&mut self, clip: Rect, destination: Rect, source: TextureRegion, rgba: u32, texture: &ITexture) -> Result<()>;
+    /// Retains backend-specific work at this exact painter-order position.
+    fn item(&mut self, clip: Rect, content: Rect, item: &IRenderItem) -> Result<()>;
+    /// Submits the complete frame once and clears retained resource capabilities on every result.
+    fn submit(&mut self, renderer: &IRenderer) -> Result<()>;
+    /// Abandons an incomplete frame while retaining reusable allocations.
+    fn cancel(&mut self) -> Result<()>;
+}

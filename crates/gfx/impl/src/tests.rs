@@ -1,10 +1,61 @@
 //! The runtime COM builder and generated direct exporter must publish equivalent portable data.
 use super::*;
-use crate::AssetPublisherObject;
-use neocogi_com::{ComPtr, INcStringAbi, INcStringComPtrExt, NcStatus, com_object};
+use crate::{AssetPublisherObject, GfxCompositorObject};
+use neocogi_com::{ComPtr, INcStringAbi, INcStringComPtrExt, NC_E_INVALID_ARG, NcCopyToBufferOffset, NcStatus, com_object};
 use neocogi_ui::{NativePath, PathEncoding};
 use neocogi_ui_runtime::assets::ImportedAssets;
 use neocogi_platform_contracts::*;
+use neocogi_renderer_contracts::{
+    IRenderStreamAbi, IRenderer, IRendererAbi, IRendererInterfacesFor, IRgbaImageAbi, RenderBatch, RenderBatchAbi, RenderInfo, RenderVertex,
+};
+
+/// Renderer observations shared with the concrete COM mock after object publication.
+#[derive(Default)]
+struct RenderCapture {
+    /// Number of complete synchronous submissions.
+    calls: std::cell::Cell<u32>,
+    /// Final bulk vertices copied while the stream token was active.
+    vertices: std::cell::RefCell<Vec<RenderVertex>>,
+    /// Final ordered batch records copied while the stream token was active.
+    batches: std::cell::RefCell<Vec<RenderBatchAbi>>,
+    /// Retained stream and expired invocation used to verify post-call revocation.
+    retained: std::cell::RefCell<Option<(u64, ComPtr<IRenderStreamAbi>)>>,
+}
+
+#[com_object(interfaces(IRenderer))]
+/// Test renderer that reads the complete bulk stream and deliberately retains it past submission.
+struct CaptureRenderer {
+    /// Local observation state contains no renderer-native object or frame borrow.
+    capture: std::rc::Rc<RenderCapture>,
+}
+
+impl IRenderer for CaptureRenderer {
+    /// Atlas preparation is outside the focused compositor stream test.
+    fn prepare_atlas(&self, _atlas: neocogi_com::ComRef<'_, IRgbaImageAbi>) -> Result<(), NcStatus> {
+        Ok(())
+    }
+
+    /// Copies every declared record while the invocation is active, then retains the stream.
+    fn render(
+        &self,
+        info: RenderInfo,
+        _atlas: neocogi_com::ComRef<'_, IRgbaImageAbi>,
+        stream: neocogi_com::ComRef<'_, IRenderStreamAbi>,
+    ) -> Result<(), NcStatus> {
+        let mut vertices = vec![RenderVertex::default(); info.vertex_count as usize];
+        let mut batches = vec![RenderBatch::Atlas { first: 0, count: 3 }.into(); info.batch_count as usize];
+        assert_eq!(
+            stream.vertices(info.invocation, NcCopyToBufferOffset::new(0, &mut vertices))?,
+            info.vertex_count
+        );
+        assert_eq!(stream.batches(info.invocation, NcCopyToBufferOffset::new(0, &mut batches))?, info.batch_count);
+        *self.capture.vertices.borrow_mut() = vertices;
+        *self.capture.batches.borrow_mut() = batches;
+        *self.capture.retained.borrow_mut() = Some((info.invocation, stream.add_ref()));
+        self.capture.calls.set(self.capture.calls.get() + 1);
+        Ok(())
+    }
+}
 
 #[com_object(interfaces(INativePath))]
 /// A caller-owned path deliberately tries to consume its builder during path decoding.
@@ -249,6 +300,78 @@ fn appearance_revision_is_a_validated_resource_preserving_transaction() {
             .unwrap_err(),
         NC_E_INVALID_ARG
     );
+}
+
+/// Coarse operations expand inside GFX, use one renderer call, and expire the retained stream.
+#[test]
+fn compositor_owns_final_geometry_batching_and_stream_scope() {
+    let bundle = test_bundle();
+    let tables = data(&bundle).tables;
+    let body = tables
+        .fonts
+        .iter()
+        .position(|font| tables.name(font.name) == Ok("body"))
+        .expect("test bundle contains body") as u32;
+    let close = tables
+        .icons
+        .iter()
+        .position(|icon| tables.name(icon.name) == Ok("close"))
+        .expect("test bundle contains close") as u32;
+    let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
+    compositor.begin(Size { width: 80, height: 60 }, 0xff000000).unwrap();
+    compositor
+        .solid_triangles(
+            Rect { x: 0, y: 0, width: 80, height: 60 },
+            NcCopyFromBufferOffset::new(
+                0,
+                &[
+                    SolidVertex { x: -5.0, y: 2.0, rgba: 0xff0000ff },
+                    SolidVertex { x: 12.0, y: 2.0, rgba: 0xff00ff00 },
+                    SolidVertex { x: 2.0, y: 14.0, rgba: 0xffff0000 },
+                ],
+            ),
+        )
+        .unwrap();
+    compositor
+        .text(
+            Rect { x: 0, y: 0, width: 80, height: 60 },
+            body,
+            DrawPoint { x: 4, y: 6 },
+            0xffffffff,
+            NcCopyFromBufferOffset::new(0, b"A _"),
+        )
+        .unwrap();
+    compositor
+        .icon(
+            Rect { x: 0, y: 0, width: 80, height: 60 },
+            close,
+            Rect { x: 30, y: 10, width: 24, height: 24 },
+            0xffffffff,
+        )
+        .unwrap();
+
+    let capture = std::rc::Rc::new(RenderCapture::default());
+    let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { capture: capture.clone() }).query().unwrap();
+    compositor.submit(renderer.as_com_ref()).unwrap();
+
+    assert_eq!(capture.calls.get(), 1);
+    assert!(!capture.vertices.borrow().is_empty());
+    assert_eq!(capture.vertices.borrow().len() % 3, 0);
+    assert_eq!(capture.batches.borrow().len(), 1, "adjacent primary-atlas output must merge");
+    let (invocation, stream) = capture.retained.borrow().as_ref().cloned().unwrap();
+    let mut vertex = [RenderVertex::default()];
+    assert_eq!(
+        stream.vertices(invocation, NcCopyToBufferOffset::new(0, &mut vertex)),
+        Err(NC_E_INVALID_ARG),
+        "the renderer cannot reuse a stream after its synchronous call"
+    );
+
+    // Equal table positions from a separately constructed bundle do not establish revision
+    // compatibility. The failed replacement leaves the compositor ready for a later frame.
+    let unrelated = test_bundle();
+    assert_eq!(compositor.install_assets(unrelated.as_com_ref()), Err(NC_E_INVALID_ARG));
+    compositor.begin(Size { width: 1, height: 1 }, 0).unwrap();
+    compositor.cancel().unwrap();
 }
 
 /// Constructs one standalone catalog without importing application deployment machinery.

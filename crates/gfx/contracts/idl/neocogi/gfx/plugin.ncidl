@@ -1,4 +1,4 @@
-#[version(2)]
+#[version(3)]
 /// Process entry for the cohesive CPU decoding and resource-baking plugin.
 factory GfxPluginFactory {
     /// Creates one PNG upload service with independent diagnostic history.
@@ -7,4 +7,6 @@ factory GfxPluginFactory {
     fn asset_loader(&self) -> Result<AssetLoader>;
     /// Creates the resource-preserving revision publisher available in every GFX deployment.
     fn asset_publisher(&self) -> Result<AssetPublisher>;
+    /// Imports one immutable resource revision into an independent renderer-neutral compositor.
+    fn create_compositor(&self, assets: &IAssetBundle) -> Result<GfxCompositor>;
 }

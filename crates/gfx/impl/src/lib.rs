@@ -14,6 +14,8 @@ pub mod atlas;
 mod builder;
 #[cfg(feature = "builder")]
 pub use builder::AssetLoaderObject;
+mod compositor;
+pub use compositor::GfxCompositorObject;
 #[cfg(feature = "publisher")]
 mod publisher;
 #[cfg(feature = "publisher")]

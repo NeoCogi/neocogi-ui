@@ -8,7 +8,7 @@
 
 #[cfg(feature = "builder")]
 use neocogi_gfx_impl::AssetLoaderObject;
-use neocogi_gfx_impl::{AssetPublisherObject, PngDecoderObject};
+use neocogi_gfx_impl::{AssetPublisherObject, GfxCompositorObject, PngDecoderObject};
 use neocogi_com::{ComPtr, NcStatus};
 use neocogi_gfx_contracts::*;
 
@@ -37,6 +37,11 @@ impl GfxPluginFactory for GfxPluginFactoryObject {
     /// Creates the narrow revision publisher available with or without native atlas construction.
     fn asset_publisher(&self) -> Result<ComPtr<AssetPublisherAbi>, NcStatus> {
         AssetPublisherObject::from_value(AssetPublisherObject::default()).query()
+    }
+
+    /// Imports one validated resource revision into an independently mutable compositor.
+    fn create_compositor(&self, assets: neocogi_com::ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<GfxCompositorAbi>, NcStatus> {
+        GfxCompositorObject::create(assets)
     }
 }
 

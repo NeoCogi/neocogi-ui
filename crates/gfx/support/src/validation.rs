@@ -230,7 +230,11 @@ impl AssetTables {
     }
 
     /// Returns the required white-tile rectangle after metadata validation has proved it exists.
-    fn white_rect(&self) -> Rect {
+    ///
+    /// Compositors use the center of this authenticated source for solid-color geometry. Exposing
+    /// the copied rectangle keeps that policy next to bundle validation without exposing pixel
+    /// storage or requiring a second name index in each consumer.
+    pub fn white_rect(&self) -> Rect {
         self.icons
             .iter()
             .find(|icon| self.name(icon.name) == Ok("white"))
