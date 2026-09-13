@@ -12,6 +12,7 @@ include!(concat!(env!("OUT_DIR"), "/neocogi_ui_core.rs"));
 // Preserve the facade's established Rust import surface while declaration
 // ownership and native metadata live exclusively in `neocogi.renderer`.
 pub use neocogi_renderer_contracts::*;
+pub use neocogi_platform_contracts::*;
 
 mod helpers;
 pub use helpers::*;

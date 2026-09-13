@@ -50,6 +50,13 @@ wrappers. The accepted migration and outstanding validation are recorded in
   `IRgbaImage` capability to renderer implementations, and the UI caches that
   projection so frame submission neither leaks skin metadata nor repeats interface
   discovery.
+- Split normalized input, native-window polling, and IME placement into
+  `neocogi.platform`. Platform construction now consumes `IRgbaImage`, allowing
+  platform/renderer plugins to omit the UI core contract and its complete widget,
+  skin, and asset descriptor surface.
+- Split the demo mesh protocol into `neocogi.demo.render`; the renderer plugin's
+  normal dependency graph no longer reimports UI core through the unrelated
+  widget-extension demonstration.
 - Compile generated Rust contract descriptions for the underlying platform ABI
   when the `min-size` build uses its fingerprint-distinct custom target.
 - Move UI appearance roles, appearance states, and semantic font/icon roles into

@@ -95,10 +95,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     register_plugins(runtime, directory)?;
     let platform = runtime.activate_plugin_factory::<PlatformAbi>(neocogi_com::guid_from_qualified_name(renderer_plugin_name()))?;
     let assets = neocogi_demo_assets::load_bundle()?;
+    let atlas = assets.query::<IRgbaImageAbi>()?;
     let native = platform.create_window(
         NcCopyFromBufferOffset::new(0, b"NeoCogi Platform"),
         Size { width: 640, height: 400 },
-        assets.as_com_ref(),
+        atlas.as_com_ref(),
     )?;
     let renderer: ComPtr<IRendererAbi> = native.query()?;
     let ui_factory = runtime.activate_plugin_factory::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;

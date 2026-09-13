@@ -1,75 +1,4 @@
 #[version(1)]
-/// Integer point or delta in the receiving widget's local coordinates.
-struct Point {
-    /// Horizontal coordinate or displacement.
-    x: i32,
-    /// Vertical coordinate or displacement.
-    y: i32,
-}
-
-#[version(1)]
-/// Logical keyboard identity, independent of native scan codes.
-    enum KeyCode: u8 {
-        /// Printable shortcut key; its scalar is carried in `KeyStroke::value`.
-        Character = 0,
-        /// Removes the previous character.
-        Backspace = 1,
-        /// Removes the next character.
-        Delete = 2,
-        /// Primary activation or line break.
-        Enter = 3,
-        /// Cancellation or popup dismissal.
-        Escape = 4,
-        /// Space-bar activation, separate from committed text.
-        Space = 5,
-        /// Sequential focus traversal.
-        Tab = 6,
-        /// Insert editing command.
-        Insert = 7,
-        /// Beginning of content or line.
-        Home = 8,
-        /// End of content or line.
-        End = 9,
-        /// Previous viewport.
-        PageUp = 10,
-        /// Next viewport.
-        PageDown = 11,
-        /// Upward navigation.
-        ArrowUp = 12,
-        /// Downward navigation.
-        ArrowDown = 13,
-        /// Leftward navigation.
-        ArrowLeft = 14,
-        /// Rightward navigation.
-        ArrowRight = 15,
-        /// Numbered function key; its number is carried in `KeyStroke::value`.
-        Function = 16,
-        /// Alt/Option itself, for distinguishing a tap from a chord.
-        Alt = 17,
-        /// Control modifier itself.
-        Control = 18,
-        /// Shift modifier itself.
-        Shift = 19,
-        /// Command/Windows/Super modifier itself.
-        Super = 20,
-    }
-
-#[version(1)]
-/// Complete logical key transition; text composition uses `WidgetEvent::Text`.
-struct KeyStroke {
-    /// Stable logical key family.
-    key: KeyCode,
-    /// Unicode scalar for CHARACTER, function number for FUNCTION, otherwise zero.
-    value: u32,
-    /// True for a press, false for a release.
-    pressed: bool,
-    /// True only for a platform-generated repeated press.
-    repeat: bool,
-    /// Complete modifier bits: Alt=1, Ctrl=2, Shift=4, Super=8.
-    modifiers: u8,
-}
-
-#[version(1)]
 /// One routed input transaction; pointer payloads are already content-local.
 enum WidgetEvent: u8 {
     /// Ordinary eventless update, including animation or state synchronization.
@@ -162,35 +91,6 @@ struct WidgetUpdate {
         /// Hide a hierarchical branch or popup.
         Collapse = 5,
     }
-
-#[version(1)]
-/// Ordered host input before the runtime computes drag, hover and local coordinates.
-enum UiInput: u8 {
-    /// Native focus or capture was lost; clears held state in input order.
-    Cancel,
-    /// Absolute pointer position in drawable coordinates.
-    Pointer(Point),
-    /// Button press at an absolute drawable position.
-    Down {
-        /// Current drawable position.
-        position: Point,
-        /// Buttons changed by this transition.
-        buttons: u8,
-    },
-    /// Button release at an absolute drawable position.
-    Up {
-        /// Current drawable position.
-        position: Point,
-        /// Buttons changed by this transition.
-        buttons: u8,
-    },
-    /// Wheel delta at the last committed pointer position.
-    Scroll(Point),
-    /// Complete key identity, state and modifiers.
-    Key(KeyStroke),
-    /// Complete UTF-8 commit supplied in the accompanying bounded text argument.
-    Text,
-}
 
 #[version(1)]
 /// Concrete labelled activation consumer shared by Button, ListItem and ListBox.

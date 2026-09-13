@@ -1,2 +1,4 @@
 extern neocogi.renderer;
-use neocogi.renderer::{Color, IRenderDiagnostics, IRenderItem, IRenderStream, IRgbaImage, IRenderer, ITexture, ITextureFactory, Rect, RenderBatch, RenderInfo, RenderVertex, Size, TextureRegion};
+extern neocogi.platform;
+use neocogi.renderer::{Color, IRenderItem, IRgbaImage, IRenderer, ITexture, Rect, RenderVertex, Size, TextureRegion};
+use neocogi.platform::{IInputSink, KeyCode, KeyStroke, Point, TextInputArea, UiInput};

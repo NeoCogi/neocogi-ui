@@ -19,13 +19,6 @@ impl Default for PaintIcon {
     }
 }
 
-impl Default for Point {
-    /// Returns the coordinate-system origin.
-    fn default() -> Self {
-        Self { x: 0, y: 0 }
-    }
-}
-
 impl Default for WidgetPaint {
     /// Returns empty inactive paint state.
     fn default() -> Self {
@@ -375,22 +368,6 @@ impl LinearEdge {
     pub fn with_fixed_cross(mut self, extent: i32) -> Self {
         self.cross = ChildCrossSize::Fixed { extent }.into();
         self
-    }
-}
-
-impl KeyStroke {
-    /// Rejects unknown keys, invalid Unicode, and inconsistent modifier/repeat data.
-    pub fn validate(self) -> Result<(), NcStatus> {
-        if self.modifiers & !15 != 0 || (self.repeat && !self.pressed) {
-            return Err(NC_E_INVALID_ARG);
-        }
-        let valid = match self.key {
-            KeyCode::Character => char::from_u32(self.value).is_some(),
-            KeyCode::Function => (1..=24).contains(&self.value),
-            key if key.raw() <= KeyCode::Super.raw() => self.value == 0,
-            _ => false,
-        };
-        if valid { Ok(()) } else { Err(NC_E_INVALID_ARG) }
     }
 }
 

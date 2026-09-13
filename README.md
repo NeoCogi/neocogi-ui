@@ -61,6 +61,13 @@ but update, layout, paint, and window traversal stay in one optimization unit.
 External leaves and containers implement the same typed contracts; their
 capabilities are discovered once at mount and cached for every hot-path phase.
 
+Platform-normalized input, polling, native text-input placement, and window
+construction live in `crates/platform/contracts`. The `neocogi.platform` ABI
+depends only on `neocogi.renderer`; it accepts a narrow `IRgbaImage` and contains
+no widget, skin, font, icon, or asset-catalog declaration. The current backend
+plugin still co-locates platform and renderer implementations so no raw native
+window or graphics handle crosses a dynamic boundary.
+
 Rendering follows a deployment-oriented layout under `crates/render`. Glow,
 Vulkan, WGPU, and WebGL builds have distinct plugin identities. Each renderer plugin
 also owns the native window/device integration it needs, so graphics handles stay

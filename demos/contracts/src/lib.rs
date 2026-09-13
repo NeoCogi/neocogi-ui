@@ -1,7 +1,7 @@
-//! Generated application-specific contracts shared by demo hosts and renderers.
+//! Generated application-specific contracts for the independent widget extension.
 //!
-//! External math types are converted by ordinary Rust helper implementations;
-//! the ABI itself contains only IDL-owned copied vector and matrix layouts.
+//! Mesh rendering belongs to the separate `neocogi.demo.render` module so a
+//! renderer plugin never imports the UI widget contract graph.
 
 #![no_std]
 #![deny(missing_docs)]

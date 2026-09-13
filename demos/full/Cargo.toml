@@ -22,6 +22,7 @@ wgpu = ["neocogi-demo-host/wgpu", "neocogi-render-plugin/wgpu"]
 neocogi-ui.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["std", "macros"] }
 neocogi-demo-contracts.workspace = true
+neocogi-demo-render-contracts.workspace = true
 neocogi-demo-assets = { workspace = true, features = ["full-demo"] }
 neocogi-demo-host = { workspace = true, features = ["png-assets"] }
 rs-math3d.workspace = true
@@ -30,7 +31,7 @@ rs-math3d.workspace = true
 # Dynamic assembly roots add `dynamic-plugin`; monoliths call descriptors directly.
 neocogi-com-runtime.workspace = true
 neocogi-ui-runtime = { path = "../../crates/ui/runtime" }
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "88446aee3a87ca1cc4d512eb4613ff57ca53634e", default-features = false }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "f2310738fee6709116bbc0753c1982aed9a86c9e", default-features = false }
 neocogi-assets = { workspace = true, features = ["theme-json"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]

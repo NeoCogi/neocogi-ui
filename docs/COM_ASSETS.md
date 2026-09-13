@@ -38,13 +38,13 @@ and bounded owned containers. It never builds `serde_json::Value`, uses `Any`,
 writes through reflected field offsets, or consults the COM class registry.
 Unknown and duplicate fields and role keys are rejected during typed decoding.
 
-Applications supply one `IAssetBundle` through the typed `UiRuntime` factory
-method and `Platform::create_window`. Neither implementation embeds demo assets. An
-asset bundle derives from the narrow renderer-owned `IRgbaImage` capability, so one
+Applications supply one `IAssetBundle` through the typed `UiRuntime` factory and
+pass its `IRgbaImage` projection to `Platform::create_window`. Neither implementation
+embeds demo assets. An asset bundle derives from that narrow renderer-owned capability, so one
 object can publish both views without duplicating its pixel storage. The UI imports
 metadata into its local font/icon tables once and samples only the required white-tile
 rows while validating it. It never copies or retains the complete image. The platform
-queries `IRgbaImage`, reads only its dimensions and packed RGBA bytes, then uploads
+receives `IRgbaImage`, reads only its dimensions and packed RGBA bytes, then uploads
 them without importing a native atlas or skin. GPU backends retain textures and the
 renderer retains only the image projection; temporary CPU upload bytes are released
 after the synchronous upload. Frames pass that cached projection, and the renderer
@@ -72,10 +72,11 @@ referenced files; filesystem compilation uses the bounded `FileAssets` source.
 
 ```rust,ignore
 let assets = neocogi_demo_assets::load_bundle()?;
+let atlas = assets.query::<IRgbaImageAbi>()?;
 let native = platform.create_window(
     NcCopyFromBufferOffset::new(0, b"Application"),
     Size { width: 800, height: 600 },
-    assets.as_com_ref(),
+    atlas.as_com_ref(),
 )?;
 let renderer = native.query::<IRendererAbi>()?;
 let arguments = UiRuntimeAbi::arguments(assets.as_com_ref())?;
