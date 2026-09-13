@@ -1,9 +1,10 @@
 # Cargo features
 
-Features belong to the crate that implements them. The `neocogi-ui` application
-facade keeps its defaults empty. Its required GFX contract exposes the frame compositor
-and resource bundle; applications opt into `skin` only when they need theme-authoring
-contracts. The retained `gfx` feature is an empty source-compatibility marker:
+Features belong to the crate that implements the selected capability. The
+`neocogi-ui` application facade keeps its defaults empty. Its required GFX
+contract and portable bundle values are part of the ordinary API because every
+retained UI imports resources and submits composed frames. Applications opt into
+`skin` only when they need theme-authoring contracts.
 
 | Crate | Feature | Effect |
 | --- | --- | --- |
@@ -11,8 +12,6 @@ contracts. The retained `gfx` feature is an empty source-compatibility marker:
 | `neocogi-ui` | `runtime` | Link the shared neocogi-com runtime used by native hosts. |
 | `neocogi-ui` | `static-runtime` | Link one ordinary runtime implementation, including browser deployments. |
 | `neocogi-gfx-support` | `compiled-assets` | Expand bounded zlib pixels from generated asset tables. |
-| `neocogi-ui` | `compiled-assets` | Compatibility forwarding to GFX support for existing applications. |
-| `neocogi-ui` | `gfx` | Empty compatibility marker; required GFX bundle/compositor contracts are always exported. |
 | `neocogi-ui` | `skin` | Re-export the optional Skin plugin's typed authoring contracts. |
 | `neocogi-ui-runtime` | none | Imports resolved resources for layout and painting; contains neither an asset compiler nor final graphics executor. |
 | `neocogi-gfx` | none | PNG decoding, resource publication, and renderer-neutral frame composition. |
@@ -22,6 +21,7 @@ contracts. The retained `gfx` feature is an empty source-compatibility marker:
 | `neocogi-gfx-impl` | `save-to-rust` | Build-tool-only atomic source export from validated portable tables. |
 | `neocogi-skin-impl` | `builder` | Offline JSON-theme generation through the GFX implementation; never selected by the Skin plugin. |
 | `neocogi-render-plugin` | `glow` / `vulkan` / `wgpu` / `webgl` | Build exactly one renderer plugin identity; WebGL is the browser choice. |
+| `neocogi-demo-host` | `png-assets` | Expose the host PNG-upload client for applications that select the GFX plugin. |
 | Full/basic demos | `embed-assets` | Explicitly embed resource bytes; native defaults read adjacent files. |
 | Full/basic demos | `webgl` | Select browser integration and explicitly enable `embed-assets`. |
 
@@ -75,8 +75,8 @@ The asset compiler is an optional host build dependency enabled by `embed-assets
 modes use the same recipe and retain the original catalog when switching themes.
 
 For another application, call `neocogi_gfx_impl::export::write_rust` from a build tool and
-enable GFX support `compiled-assets` in the consumer (the UI facade forwards its
-compatibility feature). `load_bundle()` returns a fresh
+enable `neocogi-gfx-support/compiled-assets` directly in the consumer.
+`load_bundle()` returns a fresh
 immutable catalog; `bundle_data()?` provides tables for a compatible revision.
 The exporter is also available as a workspace command:
 

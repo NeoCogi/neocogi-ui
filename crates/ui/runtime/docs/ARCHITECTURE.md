@@ -312,7 +312,7 @@ changes. The full demo shows this composition through actual window capabilities
 
 ## Extension and test boundaries
 
-The [extension example](../../../examples/ui-extension) is independently built
+The [extension example](../../../../examples/ui-extension) is independently built
 and dynamically loaded. Its counter and inset container exercise inheritance,
 shared event delivery, scoped layout, measurement invalidation and logical closure
 without linking the UI implementation. [COM_NATIVE.md](../../../../docs/COM_NATIVE.md)

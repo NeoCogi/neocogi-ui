@@ -23,9 +23,9 @@ A failed load leaves the active renderer and its external textures untouched.
 
 ## Bundled example themes
 
-The repository includes [`themes/windows-3.11/theme.json`](../../../themes/windows-3.11/theme.json),
-[`themes/windows-95/theme.json`](../../../themes/windows-95/theme.json), and
-[`themes/mac-os-9/theme.json`](../../../themes/mac-os-9/theme.json). All use original BSD-licensed pixel
+The repository includes [`themes/windows-3.11/theme.json`](../../../../themes/windows-3.11/theme.json),
+[`themes/windows-95/theme.json`](../../../../themes/windows-95/theme.json), and
+[`themes/mac-os-9/theme.json`](../../../../themes/mac-os-9/theme.json). All use original BSD-licensed pixel
 artwork authored for this project; their directory READMEs identify the GTK, platform-guideline,
 and gallery references used for visual research and explicitly document that no third-party theme
 files were copied.
