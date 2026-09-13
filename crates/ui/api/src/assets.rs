@@ -128,10 +128,6 @@ impl IAssetBundle for Bundle {
     fn info(&self) -> Result<AssetInfo, NcStatus> {
         Ok(self.info)
     }
-    /// Copies tightly packed RGBA bytes after validating the entire range.
-    fn pixels(&self, output: NcCopyToBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        copy(&self.data.pixels, output)
-    }
     /// Copies font metrics without exposing a borrowed Rust slice.
     fn fonts(&self, output: NcCopyToBufferOffset<'_, AssetFont>) -> Result<(), NcStatus> {
         copy(&self.data.tables.fonts, output)
@@ -171,6 +167,18 @@ impl IAssetBundle for Bundle {
     /// Copies complete named chrome states without relying on numeric state offsets.
     fn chrome_visuals(&self, output: NcCopyToBufferOffset<'_, AssetChromeVisuals>) -> Result<(), NcStatus> {
         copy(&self.data.tables.window_chrome, output)
+    }
+}
+
+impl IRgbaImage for Bundle {
+    /// Returns the dimensions paired with the immutable tightly packed pixel storage.
+    fn size(&self) -> Result<Size, NcStatus> {
+        Ok(self.info.size)
+    }
+
+    /// Copies tightly packed RGBA bytes after validating the complete requested range.
+    fn pixels(&self, output: NcCopyToBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        copy(&self.data.pixels, output)
     }
 }
 

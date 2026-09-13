@@ -14,7 +14,7 @@ source = "idl/neocogi/ui/core"
 
 [dependencies]
 neocogi-com = { workspace = true, features = ["macros"] }
-rs-math3d.workspace = true
+neocogi-renderer-contracts.workspace = true
 
 [build-dependencies]
 neocogi-idl-build.workspace = true

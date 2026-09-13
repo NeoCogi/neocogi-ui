@@ -362,18 +362,16 @@ struct AssetChromeVisuals {
 /// Independently created catalogs remain unrelated even when their names match.
 trait IAssetCatalog {}
 
-#[version(2)]
+#[version(3)]
 /// Immutable, self-contained resource revision. Every copy writes the exact requested range.
 /// Names partition their byte table in font-then-icon order. Fonts require an underscore
 /// fallback; body and the standard semantic icon names are mandatory. Consumers import
 /// once, validating all records and pixels before publication. No per-glyph COM calls occur.
-trait IAssetBundle {
+trait IAssetBundle: IRgbaImage {
     /// Retains the logical namespace shared by compatible derived revisions.
     fn catalog(&self) -> Result<IAssetCatalog>;
     /// Returns bounded allocation counts and dimensions.
     fn info(&self) -> Result<AssetInfo>;
-    /// Copies tightly packed RGBA bytes in row-major order.
-    fn pixels(&self, output: &mut [u8]) -> Result<()>;
     /// Copies contiguous font records.
     fn fonts(&self, output: &mut [AssetFont]) -> Result<()>;
     /// Copies contiguous glyph records.
@@ -394,20 +392,6 @@ trait IAssetBundle {
     fn menu_visuals(&self, output: &mut [AssetMenuVisuals]) -> Result<()>;
     /// Copies one complete chrome-state record for each ChromeRole in declaration order.
     fn chrome_visuals(&self, output: &mut [AssetChromeVisuals]) -> Result<()>;
-}
-
-#[version(1)]
-/// Simple RGBA color stored with 8-bit components.
-#[deserialize(sequence)]
-struct Color {
-    /// Red channel.
-    r: u8,
-    /// Green channel.
-    g: u8,
-    /// Blue channel.
-    b: u8,
-    /// Alpha channel.
-    a: u8,
 }
 
 /// Named flat colors used as inputs to visual-catalog construction.

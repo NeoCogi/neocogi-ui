@@ -290,7 +290,7 @@ impl<B: RendererBackend> Renderer<B> {
 
     /// Replaces UI lookup metadata after the platform has uploaded the matching asset revision.
     ///
-    /// The COM runtime calls the external renderer's `prepare_assets` transaction before reaching
+    /// The COM runtime calls the external renderer's `prepare_atlas` transaction before reaching
     /// this infallible local commit. The UI therefore derives only dimensions and white-tile UVs;
     /// it neither stores the complete RGBA image nor repeats the platform upload.
     pub(crate) fn replace_atlas(&mut self, atlas: AtlasHandle) {

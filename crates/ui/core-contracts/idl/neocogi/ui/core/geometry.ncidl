@@ -8,15 +8,6 @@
     }
 
 #[version(1)]
-/// Canonical copied pixel dimensions for UI contracts.
-struct Size {
-    /// Horizontal extent in pixels.
-    width: i32,
-    /// Vertical extent in pixels.
-    height: i32,
-}
-
-#[version(1)]
 /// Active paint invocation plus a caller-narrowable local clip, checked by the runtime paint context.
 struct PaintScope {
     /// Non-reused invocation number; zero never identifies an active call.
@@ -57,17 +48,4 @@ struct PaintFont {
 struct PaintIcon {
     /// Zero-based icon table index; the paint context rejects values outside its installed atlas.
     index: u32,
-}
-
-#[version(1)]
-/// Copied rectangle in the current widget's local coordinate system.
-struct Rect {
-    /// Horizontal origin.
-    x: i32,
-    /// Vertical origin.
-    y: i32,
-    /// Nonnegative horizontal extent.
-    width: i32,
-    /// Nonnegative vertical extent.
-    height: i32,
 }

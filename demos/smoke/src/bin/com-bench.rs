@@ -51,12 +51,12 @@ struct Recorder {
     buffers: RefCell<Option<Buffers>>,
 }
 impl IRenderer for Recorder {
-    /// CPU transport requires no device upload; the UI has already validated its resource catalog.
-    fn prepare_assets(&self, _assets: ComRef<'_, IAssetBundleAbi>) -> Result<(), NcStatus> {
+    /// CPU transport requires no device upload; the UI has already validated its atlas image.
+    fn prepare_atlas(&self, _atlas: ComRef<'_, IRgbaImageAbi>) -> Result<(), NcStatus> {
         Ok(())
     }
     /// Always restores capacity after an outward call, including failed stream reads.
-    fn render(&self, info: RenderInfo, _assets: ComRef<'_, IAssetBundleAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
+    fn render(&self, info: RenderInfo, _atlas: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         let mut buffers = self.buffers.borrow_mut().take().ok_or(UI_E_BUSY)?;
         let result = buffers.copy(info, stream);
         *self.buffers.borrow_mut() = Some(buffers);

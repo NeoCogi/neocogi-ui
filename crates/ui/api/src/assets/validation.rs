@@ -11,7 +11,7 @@ impl AssetData {
         let info = source.info()?;
         let tables = AssetTables::read_from(source, info)?;
         let mut pixels = filled(info.rgba_bytes()?, 0)?;
-        source.pixels(NcCopyToBufferOffset::new(0, &mut pixels))?;
+        source.add_ref().query::<IRgbaImageAbi>()?.pixels(NcCopyToBufferOffset::new(0, &mut pixels))?;
         let data = Self { pixels: pixels.into(), tables };
         data.validate()?;
         Ok(data)
@@ -250,12 +250,13 @@ impl AssetTables {
 
     /// Reads only the white tile rows required to authenticate solid-color rendering.
     fn validate_white_source(&self, source: ComRef<'_, IAssetBundleAbi>) -> Result<(), NcStatus> {
+        let image = source.add_ref().query::<IRgbaImageAbi>()?;
         let rect = self.white_rect();
         let row_bytes = rect.width as usize * 4;
         let mut row = filled(row_bytes, 0)?;
         for y in rect.y..rect.y + rect.height {
             let first = (y as usize * self.size.width as usize + rect.x as usize) * 4;
-            source.pixels(NcCopyToBufferOffset::new(first as u64, &mut row))?;
+            image.pixels(NcCopyToBufferOffset::new(first as u64, &mut row))?;
             if row.iter().any(|channel| *channel != 255) {
                 return Err(NC_E_INVALID_ARG);
             }

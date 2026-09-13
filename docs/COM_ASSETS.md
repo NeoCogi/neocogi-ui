@@ -2,7 +2,8 @@
 
 | Owner | Responsibility |
 | --- | --- |
-| `neocogi-ui-core-contracts` | Plain resource records, semantic roles and typed COM interfaces. |
+| `neocogi-renderer-contracts` | Renderer-neutral geometry, images, textures and bulk frame interfaces. |
+| `neocogi-ui-core-contracts` | UI resource records, semantic roles, skin values and widget interfaces. |
 | `neocogi-ui::assets` | Bounded portable data validation and immutable bundle publication. |
 | `crates/assets` | PNG decoding, font rasterization, packing, theme/style compilation and source export. |
 | `neocogi-ui-runtime` | Local IDs, text metrics, resolved appearances and retained layout/painting. |
@@ -38,14 +39,16 @@ writes through reflected field offsets, or consults the COM class registry.
 Unknown and duplicate fields and role keys are rejected during typed decoding.
 
 Applications supply one `IAssetBundle` through the typed `UiRuntime` factory
-method and `Platform::create_window`. Neither implementation embeds demo assets. The UI imports
+method and `Platform::create_window`. Neither implementation embeds demo assets. An
+asset bundle derives from the narrow renderer-owned `IRgbaImage` capability, so one
+object can publish both views without duplicating its pixel storage. The UI imports
 metadata into its local font/icon tables once and samples only the required white-tile
 rows while validating it. It never copies or retains the complete image. The platform
-reads the bundle header and packed RGBA bytes, then uploads them without importing a
-native atlas or skin. GPU backends retain textures and the platform retains the source
-revision identity; temporary CPU upload bytes are released after the synchronous
-upload. Frames pass the exact bundle used to expand their geometry, and the renderer
-skips import/upload when that bundle is already current.
+queries `IRgbaImage`, reads only its dimensions and packed RGBA bytes, then uploads
+them without importing a native atlas or skin. GPU backends retain textures and the
+renderer retains only the image projection; temporary CPU upload bytes are released
+after the synchronous upload. Frames pass that cached projection, and the renderer
+skips import/upload when the same image is already current.
 
 The immutable font and icon vectors are also the authoritative local identity tables.
 Runtime lookup compares the retained typed ID directly with those records instead of
@@ -83,12 +86,14 @@ let mut ui = Ui::from_interface(neocogi_com::Runtime::global().construct::<UiRun
 
 `ui.install_assets(candidate, renderer)` requires mutable access to the `Ui` because it
 replaces that runtime's one shared resource value. The call owns one transaction: it validates
-and imports bounded metadata, asks the renderer to copy and upload the complete image,
+and imports bounded metadata, caches the bundle's typed `IRgbaImage` projection, asks
+the renderer to copy and upload that complete image,
 then publishes only local lookup tables and resolved painting state. Only success
 publishes the new revision to `IWidgetHost`, the window manager, text metrics, and
 scoped layout services together. Failed validation or upload leaves the previous UI
 resources and GPU atlas usable. The renderer is borrowed for the call; the UI retains
 neither a platform/window nor a second CPU image merely to remember its resources.
+The cached projection also avoids a `QueryInterface` call on every submitted frame.
 
 After a changed revision succeeds, call `update` or `update_with_events` before
 `render`. Old measurement entries, including hidden trees, are invalidated by the

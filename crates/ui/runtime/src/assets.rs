@@ -14,6 +14,8 @@ mod theme;
 pub struct ImportedAssets {
     /// Retained source allows renderers and other consumers to import this exact revision.
     source: ComPtr<IAssetBundleAbi>,
+    /// Narrow renderer projection avoids querying or exposing UI metadata during every frame.
+    image: ComPtr<IRgbaImageAbi>,
     /// Canonical namespace identity is checked before preserving any local resource ID.
     identity: ComPtr<IUnknown>,
     /// Original local resources; private theme artwork never enters the application catalog.
@@ -28,6 +30,7 @@ impl ImportedAssets {
     pub fn read(source: ComRef<'_, IAssetBundleAbi>, previous: Option<&Self>) -> Result<Self, NcStatus> {
         let catalog = source.catalog()?;
         let identity = catalog.query::<IUnknown>()?;
+        let image = source.add_ref().query::<IRgbaImageAbi>()?;
         if previous.is_some_and(|previous| previous.identity.as_ptr() != identity.as_ptr()) {
             return Err(UI_E_OWNER);
         }
@@ -41,7 +44,10 @@ impl ImportedAssets {
         let pixels = {
             let info = data.info()?;
             let mut pixels = filled(info.rgba_bytes()?, 0)?;
-            source.pixels(neocogi_com::NcCopyToBufferOffset::new(0, &mut pixels))?;
+            source
+                .add_ref()
+                .query::<IRgbaImageAbi>()?
+                .pixels(neocogi_com::NcCopyToBufferOffset::new(0, &mut pixels))?;
             pixels
         };
         let tables = Tables {
@@ -63,6 +69,7 @@ impl ImportedAssets {
         ResourceCatalog::new(original.clone()).validate_bundle(&bundle).map_err(|_| NC_E_INVALID_ARG)?;
         Ok(Self {
             source: source.add_ref(),
+            image,
             identity,
             original,
             bundle,
@@ -77,6 +84,11 @@ impl ImportedAssets {
     /// Borrows the retained immutable source for another binary's bulk import.
     pub fn source(&self) -> ComRef<'_, IAssetBundleAbi> {
         self.source.as_com_ref()
+    }
+
+    /// Borrows only the packed RGBA capability consumed by graphics and renderer plugins.
+    pub fn image(&self) -> ComRef<'_, IRgbaImageAbi> {
+        self.image.as_com_ref()
     }
 
     /// Borrows the original catalog atlas; named application references must resolve here.

@@ -49,11 +49,6 @@ impl IAssetBundle for CountingAssets {
         self.called();
         self.source.info()
     }
-    /// Delegates the requested pixel range after recording the copy.
-    fn pixels(&self, output: NcCopyToBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        self.called();
-        self.source.pixels(output)
-    }
     /// Delegates the requested font range after recording the copy.
     fn fonts(&self, output: NcCopyToBufferOffset<'_, AssetFont>) -> Result<(), NcStatus> {
         self.called();
@@ -103,6 +98,20 @@ impl IAssetBundle for CountingAssets {
     fn chrome_visuals(&self, output: NcCopyToBufferOffset<'_, AssetChromeVisuals>) -> Result<(), NcStatus> {
         self.called();
         self.source.chrome_visuals(output)
+    }
+}
+
+impl IRgbaImage for CountingAssets {
+    /// Delegates image dimensions through the narrow renderer-owned projection.
+    fn size(&self) -> Result<Size, NcStatus> {
+        self.called();
+        self.source.query::<IRgbaImageAbi>()?.size()
+    }
+
+    /// Delegates pixel copying through the narrow renderer-owned projection.
+    fn pixels(&self, output: NcCopyToBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.called();
+        self.source.query::<IRgbaImageAbi>()?.pixels(output)
     }
 }
 
@@ -193,12 +202,12 @@ struct Renderer {
 }
 
 impl IRenderer for Renderer {
-    /// This CPU recorder accepts validated bundles without a GPU upload.
-    fn prepare_assets(&self, _assets: ComRef<'_, IAssetBundleAbi>) -> Result<(), NcStatus> {
+    /// This CPU recorder accepts validated images without a GPU upload.
+    fn prepare_atlas(&self, _atlas: ComRef<'_, IRgbaImageAbi>) -> Result<(), NcStatus> {
         Ok(())
     }
     /// Copies bulk geometry during its valid scope and retains authority for later rejection tests.
-    fn render(&self, info: RenderInfo, _assets: ComRef<'_, IAssetBundleAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
+    fn render(&self, info: RenderInfo, _atlas: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         let mut vertices = vec![RenderVertex::default(); info.vertex_count as usize];
         assert_eq!(
             stream.vertices(info.invocation, NcCopyToBufferOffset::new(0, &mut vertices))?,

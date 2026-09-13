@@ -195,9 +195,10 @@ impl UiRuntime for Runtime {
         let Some(next) = next else {
             // The UI revision is already current. Only the explicitly supplied renderer may
             // need to switch back from another UI's atlas; do not invalidate unchanged geometry.
-            return renderer.prepare_assets(source);
+            let resources = storage.factory.resources.borrow();
+            return renderer.prepare_atlas(resources.image());
         };
-        renderer.prepare_assets(source)?;
+        renderer.prepare_atlas(next.image())?;
         // ImportedAssets has already proved every original identity survives. The COM backend's
         // atlas replacement is a local assignment; this commit performs no further foreign calls.
         context.set_skin_bundle(next.bundle()).map_err(|_| NC_E_INVALID_ARG)?;

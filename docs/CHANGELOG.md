@@ -45,6 +45,11 @@ wrappers. The accepted migration and outstanding validation are recorded in
   Its generated factories reuse `Size`, `AssetMetrics`, `FlatPalette`, native
   paths, bundles, and texture interfaces from `neocogi.ui.core`, producing a real
   fingerprinted native dependency instead of duplicate cross-module types.
+- Split renderer-neutral geometry, image, texture, diagnostics, and bulk frame
+  declarations into `neocogi.renderer`. Asset bundles expose only the derived
+  `IRgbaImage` capability to renderer implementations, and the UI caches that
+  projection so frame submission neither leaks skin metadata nor repeats interface
+  discovery.
 - Compile generated Rust contract descriptions for the underlying platform ABI
   when the `min-size` build uses its fingerprint-distinct custom target.
 - Move UI appearance roles, appearance states, and semantic font/icon roles into

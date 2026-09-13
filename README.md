@@ -51,8 +51,8 @@ Build-time IDL tooling lives under `tools/idl`: `core` owns parsing, resolution,
 and fingerprints, while `build` is the reusable contract-crate `build.rs`
 integration. It remains separate from `tools/cargo-neocogi` so ordinary Cargo
 builds can regenerate contracts without invoking the assembly CLI.
-UI code follows the same role-based layout under `crates/ui`: `contracts` contains
-cross-component types, `api` is the application facade, and `runtime` is the one
+UI code follows the same role-based layout under `crates/ui`: `core-contracts` contains
+UI-specific cross-component types, `api` is the application facade, and `runtime` is the one
 deployable implementation containing retained nodes, built-in widgets and
 containers, surfaces, and the window manager.
 
@@ -66,6 +66,10 @@ Vulkan, WGPU, and WebGL builds have distinct plugin identities. Each renderer pl
 also owns the native window/device integration it needs, so graphics handles stay
 private and a frame does not cross an extra plugin boundary. The backend-specific
 Rust crates and shared helpers remain separate source concerns within that artifact.
+`crates/render/contracts` owns the independent `neocogi.renderer` ABI: geometry,
+raw RGBA images, GPU texture capabilities, and one bounded bulk frame stream. It
+contains no UI asset or skin declarations; `IAssetBundle` merely exposes an
+`IRgbaImage` projection to the renderer.
 `crates/render/core` is their small, statically linked backend SPI; it is not another
 plugin and does not depend on the UI runtime implementation.
 

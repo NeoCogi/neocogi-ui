@@ -140,7 +140,7 @@ impl IRenderStream for Stream {
 pub(crate) struct Backend {
     /// Runtime submissions observe the first component failure before calling the renderer.
     host: Rc<HostState>,
-    /// Current installed assets accompany the complete frame submission.
+    /// Current installed assets provide only their narrow image projection at submission.
     resources: crate::ui_node::widget_object::SharedAssets,
     /// Owned scratch survives across frames and is never lent through a COM object.
     storage: Rc<Storage>,
@@ -265,7 +265,7 @@ impl RendererFrame for Frame<'_> {
                     vertex_count,
                     batch_count,
                 },
-                revision.source(),
+                revision.image(),
                 self.backend.stream.as_com_ref(),
             )
             .map_err(|error| FrameError::new(error.to_string()))

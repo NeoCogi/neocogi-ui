@@ -5,6 +5,11 @@
 //! lives in the UI plugin; this facade depends only on the contracts and COM
 //! object support.
 
+pub use neocogi_renderer_contracts::{
+    Color, IRenderDiagnostics, IRenderDiagnosticsAbi, IRenderItem, IRenderItemAbi, IRenderStream, IRenderStreamAbi, IRenderer, IRendererAbi, IRgbaImage,
+    IRgbaImageAbi, ITexture, ITextureAbi, ITextureFactory, ITextureFactoryAbi, MAX_IMAGE_BYTES, MAX_RENDER_BATCHES, MAX_RENDER_VERTICES, Rect, RenderBatch,
+    RenderBatchAbi, RenderBatchTag, RenderInfo, RenderVertex, Size, TextureRegion, color, rgba_bytes,
+};
 pub use neocogi_ui_core_contracts::*;
 pub use neocogi_ui_assets_contracts::{
     AssetLoader, AssetLoaderAbi, AssetsPluginFactory, AssetsPluginFactoryAbi, IAssetBuilder, IAssetBuilderAbi, IAssetDiagnostics, IAssetDiagnosticsAbi,

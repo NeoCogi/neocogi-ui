@@ -10,8 +10,15 @@ The selected plugin also owns its native window, event pump, images, meshes, and
 backend-specific application drawing. Those are implementation details of a rendering
 device, not separate deployment units. Keeping them together avoids exposing native
 window/graphics handles and avoids another dynamic dispatch boundary during every
-frame. Applications retain `IPlatformWindow`, `IRenderer`, `IImage`, and `IRenderItem`
+frame. Applications retain `IPlatformWindow`, `IRenderer`, `ITexture`, and `IRenderItem`
 interfaces through the facade; native GPU objects never leave the plugin.
+
+Renderer-neutral ABI declarations live in the independent `neocogi.renderer`
+contract module under `crates/render/contracts`. The module owns `Size`, `Rect`,
+`Color`, `IRgbaImage`, texture/resource capabilities, and the bulk renderer stream.
+It has no widget, font, icon, skin, chrome, palette, or platform-window declarations.
+`neocogi.ui.core` imports the small set of renderer types needed by its public UI
+methods instead of owning duplicate declarations.
 
 `RendererBackend::Frame<'a>` is an implementation-local generic associated type. The
 frame borrows its backend exclusively until `finish(self)` submits it, or Drop abandons
@@ -93,6 +100,7 @@ GPU atlas input is a borrowed `ImageSource` containing positive dimensions and
 packed RGBA bytes. Backends validate it, upload a complete candidate texture and
 publish that texture only on success. They retain no native atlas, font/icon IDs
 or skin. `RendererBackend::replace_atlas` uses this raw input; the UI's geometry
-executor owns its resolved resource tables independently. The COM platform reads
-only `IAssetBundle::info` and `pixels` for uploads and caches the source identity
-to skip unchanged revisions.
+executor owns its resolved resource tables independently. The COM platform queries
+`IRgbaImage` once from its initial bundle. Subsequent renderer preparation and frame
+submission accept only that projection, whose `size` and `pixels` methods cannot
+leak UI metadata into a renderer implementation.

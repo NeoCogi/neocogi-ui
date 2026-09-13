@@ -89,7 +89,13 @@ fn round_trip_preserves_complete_resources_and_image_patches() {
     // Whole-range copy validation must preserve output even when only its final byte is invalid.
     let mut output = [77; 2];
     let count = source.info().unwrap().rgba_bytes().unwrap();
-    assert_eq!(source.pixels(NcCopyToBufferOffset::new(count as u64 - 1, &mut output)), Err(NC_E_INVALID_ARG));
+    assert_eq!(
+        source
+            .query::<IRgbaImageAbi>()
+            .unwrap()
+            .pixels(NcCopyToBufferOffset::new(count as u64 - 1, &mut output)),
+        Err(NC_E_INVALID_ARG)
+    );
     assert_eq!(output, [77; 2]);
 }
 
@@ -164,8 +170,8 @@ struct Probe {
     runtime: ComPtr<UiRuntimeAbi>,
     /// Setter reentry must also fail during the upload boundary.
     button: ComPtr<ButtonAbi>,
-    /// Last successfully uploaded immutable bundle.
-    current: RefCell<ComPtr<IAssetBundleAbi>>,
+    /// Last successfully uploaded renderer-owned image projection.
+    current: RefCell<ComPtr<IRgbaImageAbi>>,
     /// Forces a recoverable upload failure without changing the current bundle.
     fail: Cell<bool>,
     /// Proves malformed candidates fail before reaching GPU preparation.
@@ -176,17 +182,19 @@ struct Probe {
 struct UploadRenderer(Rc<Probe>);
 impl IRenderer for UploadRenderer {
     /// Confirms mutation/reentry gates, then commits only a successful fake GPU upload.
-    fn prepare_assets(&self, source: ComRef<'_, IAssetBundleAbi>) -> Result<(), NcStatus> {
+    fn prepare_atlas(&self, source: ComRef<'_, IRgbaImageAbi>) -> Result<(), NcStatus> {
         self.0.uploads.set(self.0.uploads.get() + 1);
         // The independently allocated host still exposes the old, fully installed UI revision.
-        assert_eq!(self.0.button.host()?.assets()?.as_ptr(), self.0.current.borrow().as_ptr());
+        let installed = self.0.button.host()?.assets()?.query::<IRgbaImageAbi>()?;
+        assert_eq!(installed.as_ptr(), self.0.current.borrow().as_ptr());
         // The mutable runtime call excludes every overlapping call on that same COM allocation.
         assert_eq!(self.0.runtime.update(SIZE), Err(NC_E_BUSY));
         let mut button = self.0.button.clone();
         assert_eq!(button.set_label(NcCopyFromBufferOffset::new(0, b"reentrant")), Err(UI_E_BUSY));
         let recursive: ComPtr<IRendererAbi> = Self::from_value(Self(self.0.clone())).query()?;
         let mut runtime = self.0.runtime.clone();
-        assert_eq!(runtime.install_assets(source, recursive.as_com_ref()), Err(NC_E_BUSY));
+        let installed = self.0.button.host()?.assets()?;
+        assert_eq!(runtime.install_assets(installed.as_com_ref(), recursive.as_com_ref()), Err(NC_E_BUSY));
         if self.0.fail.get() {
             return Err(UI_E_RENDER);
         }
@@ -196,7 +204,7 @@ impl IRenderer for UploadRenderer {
         Ok(())
     }
     /// Final geometry must use the exact bundle prepared by the successful upload.
-    fn render(&self, info: RenderInfo, source: ComRef<'_, IAssetBundleAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
+    fn render(&self, info: RenderInfo, source: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         assert_eq!(source.as_ptr(), self.0.current.borrow().as_ptr());
         let mut vertices = vec![RenderVertex::default(); info.vertex_count as usize];
         assert_eq!(
@@ -242,7 +250,7 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
     let probe = Rc::new(Probe {
         runtime,
         button: button.as_interface().add_ref(),
-        current: RefCell::new(source.clone()),
+        current: RefCell::new(source.query::<IRgbaImageAbi>().unwrap()),
         fail: Cell::new(true),
         uploads: Cell::new(0),
     });
@@ -313,7 +321,7 @@ fn runtime_install_is_atomic_and_updates_shared_widget_measurement() {
     let probe = Rc::new(Probe {
         runtime: runtime.clone(),
         button: button_interface.clone(),
-        current: RefCell::new(source.clone()),
+        current: RefCell::new(source.query::<IRgbaImageAbi>().unwrap()),
         fail: Cell::new(false),
         uploads: Cell::new(0),
     });

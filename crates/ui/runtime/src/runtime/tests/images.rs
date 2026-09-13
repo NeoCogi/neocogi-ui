@@ -129,12 +129,12 @@ struct ImageFrameRenderer {
     quads: Rc<RefCell<Vec<[RenderVertex; 4]>>>,
 }
 impl IRenderer for ImageFrameRenderer {
-    /// The CPU observer has no upload phase; the runtime already validated the immutable bundle.
-    fn prepare_assets(&self, _: ComRef<'_, IAssetBundleAbi>) -> Result<(), NcStatus> {
+    /// The CPU observer has no upload phase; the runtime already validated the immutable image.
+    fn prepare_atlas(&self, _: ComRef<'_, IRgbaImageAbi>) -> Result<(), NcStatus> {
         Ok(())
     }
     /// Resolves each texture only during the active stream, then immediately releases the projection.
-    fn render(&self, info: RenderInfo, _: ComRef<'_, IAssetBundleAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
+    fn render(&self, info: RenderInfo, _: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         let mut batches = vec![RenderBatch::Atlas { first: 0, count: 0 }.into(); info.batch_count as usize];
         assert_eq!(stream.batches(info.invocation, NcCopyToBufferOffset::new(0, &mut batches))?, info.batch_count);
         let mut quads = Vec::new();

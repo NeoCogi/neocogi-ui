@@ -13,7 +13,7 @@ call gate rejects retained or reentrant aliases while one operation mutates them
 
 ```text
 IWidget.paint -> scoped IPainter -> runtime frame display list
-             -> one clipping/expansion pass -> one ordered IRenderer submission
+             -> one clipping/expansion pass -> one bulk neocogi.renderer submission
 ```
 
 The display list owns text, solid geometry and retained image/render-item interfaces.
@@ -26,7 +26,10 @@ supported batch kinds.
 
 The runtime and its dynamically linked widget factory also share one imported asset
 value with every built-in product. Frame, icon, and font slots therefore resolve
-against that existing value without reconstructing an atlas or skin per widget.
+against that existing value without reconstructing an atlas or skin per widget. The
+import stores a separate `IRgbaImage` projection beside the UI bundle. Only that narrow
+projection crosses into `IRenderer::prepare_atlas` and `IRenderer::render`; no renderer
+can inspect the bundle's theme, font, icon, chrome, or catalog tables.
 
 ## Update and frame validity
 
@@ -51,7 +54,8 @@ those clips from committed geometry, so paint and hit testing share their bounda
 The final executor clips atlas rectangles and adjusts their sampling coordinates,
 clips image quads while preserving UV projection, and clips solid triangles against
 the operation clip and viewport. Empty geometry is discarded. Backends receive final
-screen-space UI vertices. `RenderVertex` is the one canonical vertex representation
+screen-space UI vertices. `RenderVertex` from the standalone `neocogi.renderer`
+contract module is the one canonical vertex representation
 used by clipping, the COM stream, platform validation and concrete GPU backends; the
 boundary performs its required bulk copy without packing and unpacking every vertex
 into a duplicate native struct. Each validated atlas range is then presented to the native
