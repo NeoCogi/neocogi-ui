@@ -38,8 +38,6 @@ pub(crate) use layout_traversal::LayoutTraversal;
 mod paint;
 mod update;
 
-#[cfg(test)]
-pub(crate) use input_router::RouteResult;
 use input_router::InputRouter;
 
 use crate::input::InputSnapshot;
@@ -47,20 +45,6 @@ use crate::math::RectExt;
 // Re-exported into the private paint implementation and runtime tests through `super::*`.
 use crate::render::DisplayList;
 use crate::{Constraints, Dimensioni, MouseButton, Recti, Skin, UNCLIPPED_RECT, Vec2i};
-#[cfg(test)]
-use std::cell::Cell;
-
-/// Test-only counters for one retained root's most recent update/paint cycle.
-#[cfg(test)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(crate) struct RuntimeMetrics {
-    pub(crate) tree_layouts: u64,
-    pub(crate) measures: u64,
-    pub(crate) layouts: u64,
-    pub(crate) updates: u64,
-    pub(crate) paints: u64,
-    pub(crate) routed_input_routes: u64,
-}
 
 /// Coordinates retained measurement, layout, update, and paint for one root tree.
 ///
@@ -76,25 +60,15 @@ pub(crate) struct UiRuntime {
     root_transform: Transform,
     /// Independent state machine for raw-input targeting and transient interaction ownership.
     input_router: InputRouter,
-    /// Structural phase counters used by retained runtime regression baselines.
-    #[cfg(test)]
-    metrics: std::rc::Rc<Cell<RuntimeMetrics>>,
 }
 
 impl Default for UiRuntime {
     fn default() -> Self {
-        #[cfg(test)]
-        let metrics = std::rc::Rc::new(Cell::new(RuntimeMetrics::default()));
         Self {
-            geometry: LayoutTraversal {
-                #[cfg(test)]
-                metrics: metrics.clone(),
-            },
+            geometry: LayoutTraversal {},
             root_content_size: Dimensioni::default(),
             root_transform: Transform::root(UNCLIPPED_RECT),
             input_router: InputRouter::default(),
-            #[cfg(test)]
-            metrics,
         }
     }
 }
@@ -135,8 +109,6 @@ impl UiRuntime {
         // InputRouter independently clears event-local delivery while preserving focus/capture;
         // UiRuntime resets only traversal metrics owned by the remaining runtime phases.
         self.input_router.begin_update();
-        #[cfg(test)]
-        self.metrics.set(RuntimeMetrics::default());
     }
 
     /// Starts input routing for one normalized raw event in this retained tree.
@@ -168,8 +140,6 @@ impl UiRuntime {
 
     /// Lays out one persistent root node at its authoritative screen-space rectangle.
     pub(crate) fn layout_tree_root(&mut self, root: &mut Node, style: &Skin, atlas: crate::AtlasHandle, outer: Recti, viewport: Recti) {
-        #[cfg(test)]
-        self.bump_metric(|metrics| metrics.tree_layouts += 1);
         root.synchronize_measurement_invalidation();
         // Root layout establishes the transform reused by subsequent routing, update, and paint.
         self.root_transform = Transform::root(viewport);
@@ -189,37 +159,14 @@ impl UiRuntime {
         self.input_router.sanitize_transient_targets(std::slice::from_mut(root), self.root_transform);
     }
 
-    /// Returns the aggregate root content size from the most recent layout.
-    #[cfg(test)]
-    pub(crate) fn debug_root_content_size(&self) -> Dimensioni {
-        self.root_content_size
-    }
-
-    /// Returns structural phase counters since the most recent explicit update began.
-    #[cfg(test)]
-    pub(crate) fn debug_metrics(&self) -> RuntimeMetrics {
-        // Preserve the aggregate diagnostic while each subsystem owns and resets its own counter.
-        let mut metrics = self.metrics.get();
-        metrics.routed_input_routes = self.input_router.debug_routed_input_routes();
-        metrics
-    }
-
-    /// Applies one mutation to the retained traversal counters without exposing interior mutability.
-    #[cfg(test)]
-    fn bump_metric(&self, update: impl FnOnce(&mut RuntimeMetrics)) {
-        let mut metrics = self.metrics.get();
-        update(&mut metrics);
-        self.metrics.set(metrics);
-    }
-
     /// Returns whether this runtime accepts pointer hit routing for the current event.
     pub(crate) fn accepts_pointer_input(&self) -> bool {
         self.input_router.accepts_pointer_input()
     }
 
-    /// Returns whether this retained tree currently owns pointer capture.
-    pub(crate) fn has_pointer_capture(&self) -> bool {
-        self.input_router.has_capture()
+    /// Reports a live capture or a revoked capture whose remaining gesture must be consumed.
+    pub(crate) fn owns_pointer_gesture(&self) -> bool {
+        self.input_router.owns_pointer_gesture()
     }
 
     /// Routes drag/release continuation to the current capture owner, when one remains valid.
@@ -258,72 +205,6 @@ impl UiRuntime {
         event: &UiInputEvent,
     ) -> Option<(RuntimeNodeId, input_router::RouteResult)> {
         self.input_router.route_input_event_to_node_ref(node, self.root_transform, style, event)
-    }
-
-    /// Records a synthetic routed event for invalidation tests.
-    #[cfg(test)]
-    pub(crate) fn push_routed_event(&mut self, node: RuntimeNodeId, event: UiInputEvent) {
-        self.input_router.push_routed_event(node, event);
-    }
-
-    /// Attempts to consume a synthetic routed event from one identity in tests.
-    #[cfg(test)]
-    pub(crate) fn take_routed_event(&mut self, node: RuntimeNodeId) -> Option<UiInputEvent> {
-        self.input_router.take_routed_event(node)
-    }
-
-    /// Returns the router's focused identity for integration tests.
-    #[cfg(test)]
-    pub(crate) fn debug_focus_target(&self) -> Option<RuntimeNodeId> {
-        self.input_router.focus_target()
-    }
-
-    /// Returns the router's hovered identity for integration tests.
-    #[cfg(test)]
-    pub(crate) fn debug_hover_target(&self) -> Option<RuntimeNodeId> {
-        self.input_router.debug_hover_target()
-    }
-
-    /// Returns the router's capture identity for integration tests.
-    #[cfg(test)]
-    pub(crate) fn debug_capture_target(&self) -> Option<RuntimeNodeId> {
-        self.input_router.debug_capture_target()
-    }
-
-    /// Installs explicit router targets for topology-invalidation tests.
-    #[cfg(test)]
-    pub(crate) fn debug_set_transient_targets(&mut self, focus: Option<RuntimeNodeId>, hover: Option<RuntimeNodeId>, capture: Option<RuntimeNodeId>) {
-        self.input_router.debug_set_transient_targets(focus, hover, capture);
-    }
-
-    /// Installs one capture owner for gesture-transition tests.
-    #[cfg(test)]
-    pub(crate) fn debug_set_capture_target(&mut self, capture: Option<RuntimeNodeId>) {
-        self.input_router.debug_set_capture_target(capture);
-    }
-
-    /// Reports whether routing is suppressing a revoked gesture's remaining events in tests.
-    #[cfg(test)]
-    pub(crate) fn debug_discards_invalidated_capture_events(&self) -> bool {
-        self.input_router.debug_discards_invalidated_capture_events()
-    }
-
-    /// Returns the current screen rectangle for a retained node after committed transforms.
-    #[cfg(test)]
-    pub(crate) fn node_rect(&self, roots: &[Node], id: RuntimeNodeId) -> Option<Recti> {
-        // Search each retained root with the transform committed by the latest layout pass.
-        roots.iter().find_map(|root| Self::node_rect_from(root, id, self.root_transform))
-    }
-
-    /// Recursively resolves one node while accumulating its parent transform.
-    #[cfg(test)]
-    fn node_rect_from(current: &Node, target: RuntimeNodeId, parent: Transform) -> Option<Recti> {
-        // Resolve the first identity match; runtime node IDs are process-unique.
-        if current.id() == target {
-            return Some(parent.resolve(current.state.layout.allocation));
-        }
-        let child_parent = parent.push(current.state.layout);
-        current.with_children(|children| children.iter().find_map(|child| Self::node_rect_from(child, target, child_parent)))
     }
 }
 
@@ -406,6 +287,3 @@ fn node_interaction_config(node: &Node) -> (WidgetOption, KeyboardBehavior) {
     }
     (opt, keyboard)
 }
-
-#[cfg(test)]
-mod tests;

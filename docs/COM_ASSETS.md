@@ -17,7 +17,9 @@ The GFX plugin has no production dependency on either the UI facade or runtime;
 the skin plugin has no production dependency on `neocogi-ui-runtime`. UI construction
 fixtures and a native flat-palette reference remain test-only; they provide an
 independent check of portable compiler output. Runtime UI code only imports
-resolved resources.
+resolved resources. UI unit tests use this same metadata import and white-tile
+validation path. Full pixel copies needed to construct expected fixture revisions
+live in explicit test setup and do not alter runtime import.
 
 `neocogi-gfx` registers `PngDecoder`; its optional `builder` feature also
 registers `AssetLoader`. `PngDecoder::upload` accepts one complete, nonempty PNG at offset zero and borrows an

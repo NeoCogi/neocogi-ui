@@ -64,56 +64,37 @@ use crate::{ControlRole};
 use crate::ui_node::text_layout::{TextLine, build_text_lines, text_block_size};
 use crate::*;
 
-use super::text_edit::{
-    CaretAffinity, FontLineMetrics, ReturnBehavior, affinity_for_line, apply_text_input, caret_rect, clamp_cursor_boundary, cursor_from_x, cursor_x_in_line,
-    font_line_metrics, line_index_for_cursor, normalize_multiline_text,
-};
-
-/// One-shot construction input for a composed [`TextEditor`].
+/// Focused editor-test input excludes the removed native scrolling composition.
 #[cfg(test)]
-pub struct TextAreaParameters {
-    /// Initial buffer edited by the text area; line endings are normalized when mounted.
+struct TextAreaParameters {
+    /// Initial text is normalized by the production editor constructor.
     buf: String,
-    /// Wrapping mode used for measurement, editing, and paint.
-    pub wrap: TextWrap,
-    /// Font used for measurement, editing, and paint.
-    pub font: FontRef,
-    /// Presentation and scrolling options applied to the containing [`ScrollArea`].
-    #[cfg(test)]
-    pub scroll_options: ScrollAreaOption,
+    /// Wrapping controls the production text layout used during measurement and editing.
+    wrap: TextWrap,
+    /// Semantic font is resolved by the real host resources.
+    font: FontRef,
 }
-
 #[cfg(test)]
 impl TextAreaParameters {
-    /// Creates framed, scrollable text-area parameters without line wrapping.
-    pub fn new(buf: impl Into<String>) -> Self {
-        // Text editing is always implemented by the inner leaf. The default outer options provide
-        // the familiar framed viewport while keeping all scrolling policy in ScrollArea.
+    /// Supplies the same defaults as public multiline editor construction.
+    fn new(text: impl Into<String>) -> Self {
         Self {
-            buf: buf.into(),
+            buf: text.into(),
             wrap: TextWrap::None,
             font: FontRef::Role(FontRole::Body),
-            #[cfg(test)]
-            scroll_options: ScrollAreaOption::FRAME | ScrollAreaOption::ENABLE_SCROLL,
         }
     }
-
-    /// Replaces the options applied to the containing scroll area.
-    #[cfg(test)]
-    pub const fn scroll_options(mut self, scroll_options: ScrollAreaOption) -> Self {
-        // Store the complete outer policy directly; TextEditor contributes no hidden scrolling or
-        // framing options of its own.
-        self.scroll_options = scroll_options;
-        self
-    }
-
-    /// Replaces the wrapping mode used by the editable text content.
-    pub const fn wrap(mut self, wrap: TextWrap) -> Self {
-        // Wrapping is retained by the inner leaf because it determines intrinsic content geometry.
+    /// Selects the specific line-wrapping policy under test.
+    fn wrap(mut self, wrap: TextWrap) -> Self {
         self.wrap = wrap;
         self
     }
 }
+
+use super::text_edit::{
+    CaretAffinity, FontLineMetrics, ReturnBehavior, affinity_for_line, apply_text_input, caret_rect, clamp_cursor_boundary, cursor_from_x, cursor_x_in_line,
+    font_line_metrics, line_index_for_cursor, normalize_multiline_text,
+};
 
 /// Concrete editable text leaf retained as the ordinary content of a [`ScrollArea`].
 #[neocogi_com::com_object(interfaces(
@@ -162,9 +143,6 @@ pub struct TextArea {
     pub(crate) events: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextEventsAbi>,
     /// Scalar scrolling state shared with the surface, scrollbars, and editor caret requests.
     pub(crate) model: std::rc::Rc<crate::ui_node::ScrollModel>,
-    /// Native fixture policy; deployed options belong to the embedded runtime.
-    #[cfg(test)]
-    opt: WidgetOption,
 }
 
 impl TextArea {
@@ -177,10 +155,6 @@ impl TextArea {
         events: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextEventsAbi>,
         model: std::rc::Rc<crate::ui_node::ScrollModel>,
     ) -> Self {
-        #[cfg(test)]
-        let opt = WidgetOption::from_bits_retain(u32::from(
-            runtime.state.options().expect("new test widget runtime exposes its validated options").raw(),
-        ));
         Self {
             runtime,
             editor,
@@ -188,8 +162,6 @@ impl TextArea {
             font,
             events,
             model,
-            #[cfg(test)]
-            opt,
         }
     }
 }
@@ -200,21 +172,9 @@ impl Widget for TextArea {
         crate::ui_node::ScrollComposition::take_scroll_change(self)
     }
 
-    /// Supplies the native fixture's frame policy.
-    #[cfg(test)]
-    fn widget_opt(&self) -> &WidgetOption {
-        &self.opt
-    }
-
     /// Uses the same panel appearance as an ordinary ScrollArea.
     fn frame_appearance_role(&self) -> FrameRole {
         crate::ui_node::ScrollComposition::scroll_frame_role(self)
-    }
-
-    /// Adds dynamic wheel routing to the native fixture policy.
-    #[cfg(test)]
-    fn effective_widget_opt(&self) -> WidgetOption {
-        crate::ui_node::widget_object::WidgetAlgorithm::effective_options(self, self.opt)
     }
 
     /// Applies wheel input to the scroll model shared with the actual editor and bars.
@@ -303,31 +263,14 @@ struct TextAreaInteraction {
 }
 
 impl TextEditor {
-    /// Creates editable content inside a scroll area and returns the nested text handle plus outer node.
-    #[cfg(test)]
-    pub fn create(parameters: TextAreaParameters) -> (TypedWidgetHandle<Self>, Node) {
-        // Split the one-shot input before mounting because presentation belongs to the outer
-        // ScrollArea while text, wrapping, and font belong to the retained editable leaf.
-        let scroll_options = parameters.scroll_options;
-        let editor = Self::new_editor(parameters);
-        let (editor_handle, editor_node) = Node::typed_widget(editor);
-        let (scroll_handle, root) = ScrollArea::create(ScrollAreaParameters::new(scroll_options, editor_node));
-
-        // Retain only the parent's explicit scalar model, which owns no widget or child collection.
-        let model = scroll_handle.try_read(|scroll| scroll.shared_model()).expect("newly composed scroll model");
-        editor_handle
-            .try_update_without_measurement(|editor| editor.scroll_area = Some(model))
-            .expect("newly composed TextEditor content must remain mounted in its ScrollArea");
-        (editor_handle, root)
-    }
-
     /// Creates the unmounted editable leaf before its containing scroll area exists.
     #[cfg(test)]
-    fn new_editor(parameters: TextAreaParameters) -> Self {
+    fn new_editor(parameters: TextAreaParameters) -> crate::test_support::algorithm::Algorithm<Self> {
         // Initialize semantic and event state together so direct unit tests and composed creation
         // observe the same editing behavior.
-        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(WidgetOption::NONE);
-        Self::from_runtime(runtime, parameters.buf, parameters.wrap, parameters.font, None)
+        crate::test_support::algorithm::Algorithm::new(WidgetOption::NONE, |runtime| {
+            Self::from_runtime(runtime, parameters.buf, parameters.wrap, parameters.font, None)
+        })
     }
 
     /// Returns the current text buffer.
@@ -348,19 +291,6 @@ impl TextEditor {
         self.reveal_caret = true;
     }
 
-    /// Clears text, cursor, navigation preference, and the containing scroll offset.
-    #[cfg(test)]
-    pub fn clear(&mut self) {
-        // Reset semantic state before synchronizing presentation so the next measure sees the empty
-        // document while the explicit shared scroll model receives the matching reset.
-        self.buf.clear();
-        self.cursor = 0;
-        self.interaction.caret_affinity = CaretAffinity::Upstream;
-        self.reset_preferred_x = true;
-        self.reveal_caret = false;
-        self.set_scroll(Vec2i::default());
-    }
-
     /// Returns the current byte cursor at a Unicode scalar-value boundary.
     pub const fn cursor(&self) -> usize {
         // Every mutation path clamps or derives the cursor from valid source boundaries.
@@ -376,34 +306,6 @@ impl TextEditor {
         self.interaction.caret_affinity = CaretAffinity::Upstream;
         self.reset_preferred_x = true;
         self.reveal_caret = true;
-    }
-
-    /// Moves the cursor to the end of the current text and schedules caret reveal.
-    #[cfg(test)]
-    pub fn move_cursor_to_end(&mut self) {
-        // String length is always a valid terminal UTF-8 boundary.
-        self.cursor = self.buf.len();
-        self.interaction.caret_affinity = CaretAffinity::Upstream;
-        self.reset_preferred_x = true;
-        self.reveal_caret = true;
-    }
-
-    /// Returns the offset owned by the containing scroll area.
-    #[cfg(test)]
-    pub fn scroll(&self) -> Vec2i {
-        // An unmounted editor exists only during construction or direct unit tests and therefore has
-        // no viewport translation to report.
-        self.scroll_area.as_ref().map(|scroll| scroll.offset()).unwrap_or_default()
-    }
-
-    /// Requests a non-negative offset through the containing scroll area.
-    #[cfg(test)]
-    pub fn set_scroll(&self, scroll: Vec2i) {
-        // Keep ScrollArea and its two scrollbar children as the only owners of scroll state. Direct
-        // editor unit tests have no parent capability and intentionally treat this as a no-op.
-        if let Some(scroll_area) = &self.scroll_area {
-            scroll_area.set_offset(scroll);
-        }
     }
 
     /// Returns the native event endpoint emitted after every user-originated text change.
@@ -476,58 +378,6 @@ impl TextEditor {
         // the editor records no offset arithmetic or scrollbar operations.
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
         textarea_paint(ctx, self, font);
-    }
-}
-
-#[cfg(test)]
-impl TypedWidgetHandle<TextEditor> {
-    /// Clones the current text while the editable leaf remains mounted.
-    pub fn text(&self) -> Option<String> {
-        // Clone inside the checked read closure so no borrow escapes typed access.
-        self.try_read(|widget| widget.text().to_owned())
-    }
-
-    /// Replaces retained text with canonical LF endings, moves its cursor to the end, and reveals it.
-    pub fn set_text(&self, text: impl Into<String>) -> Option<()> {
-        // Preserve ownership of the replacement string when access cannot begin.
-        self.try_update_with(text.into(), |widget, text| widget.set_text(text)).ok()
-    }
-
-    /// Clears retained text, cursor, and containing scroll offset.
-    pub fn clear(&self) -> Option<()> {
-        // Clearing changes intrinsic measurement, so use the ordinary invalidating typed update.
-        self.try_update(TextEditor::clear)
-    }
-
-    /// Moves the retained cursor to the nearest preceding Unicode scalar boundary.
-    ///
-    /// Call `Context::update_ui` before relying on caret reveal or updated scroll state.
-    pub fn set_cursor(&self, cursor: usize) -> Option<()> {
-        // Cursor movement does not change intrinsic text measurement.
-        self.try_update_without_measurement(|widget| widget.set_cursor(cursor))
-    }
-
-    /// Moves the retained cursor to the end of its text.
-    ///
-    /// Call `Context::update_ui` before relying on caret reveal or updated scroll state.
-    pub fn move_cursor_to_end(&self) -> Option<()> {
-        // Cursor movement does not change intrinsic text measurement.
-        self.try_update_without_measurement(TextEditor::move_cursor_to_end)
-    }
-
-    /// Returns the offset owned by the containing scroll area.
-    pub fn scroll(&self) -> Option<Vec2i> {
-        // Read through the editable leaf's weak parent capability without duplicating offset state.
-        self.try_read(TextEditor::scroll)
-    }
-
-    /// Requests a containing scroll-area offset without invalidating text measurement.
-    ///
-    /// Call `Context::update_ui` before relying on the resulting viewport state.
-    pub fn set_scroll(&self, scroll: Vec2i) -> Option<()> {
-        // The nested call mutates only ScrollArea's interactive state; the text leaf remains the
-        // checked access anchor exposed to applications.
-        self.try_update_without_measurement(|widget| widget.set_scroll(scroll))
     }
 }
 
@@ -791,13 +641,6 @@ fn textarea_paint(ctx: &mut WidgetPaintCtx<'_>, state: &TextEditor, font: FontId
 }
 
 impl Widget for TextEditor {
-    /// Returns the editable leaf's base options without outer framing or wheel policy.
-    #[cfg(test)]
-    fn widget_opt(&self) -> &WidgetOption {
-        // ScrollArea owns frame and GRAB_SCROLL. Keyboard focus is declared separately below.
-        &WidgetOption::NONE
-    }
-
     /// Applies one routed event to retained text and cursor state.
     fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         // Keep the trait boundary thin so unit tests and retained traversal share one implementation.
@@ -1108,10 +951,8 @@ impl neocogi_ui_core_contracts::TextArea for TextArea {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::input::Input;
+
     use crate::test_support::{test_atlas, test_skin};
-    use crate::ui_node::UiRuntime;
-    use crate::UNCLIPPED_RECT;
 
     #[derive(Debug, Eq, PartialEq)]
     enum RecordedEvent {
@@ -1132,16 +973,22 @@ mod tests {
     }
 
     /// Creates a dispatcher subscribed to both native TextEditor event ports.
-    fn text_dispatcher(text_area: &TextEditor) -> crate::event::WidgetEventDispatcher<Vec<RecordedEvent>> {
-        // Register both ports against one ordered state log to characterize independent delivery.
-        let mut dispatcher = crate::event::WidgetEventDispatcher::new();
-        dispatcher
-            .subscribe(text_area.changed(), |state, _, event| record_changed(state, event))
-            .unwrap();
-        dispatcher
-            .subscribe(text_area.submitted(), |state, _, event| record_submitted(state, event))
-            .unwrap();
-        dispatcher
+    /// Reads complete production queue snapshots; runtime dispatch is tested through EventSession.
+    fn text_dispatcher(text_area: &TextEditor) -> impl FnMut(&mut Vec<RecordedEvent>) -> bool + use<> {
+        let changed = neocogi_ui::events::test_support::EventLease::connect(text_area.changed()).unwrap();
+        let submitted = neocogi_ui::events::test_support::EventLease::connect(text_area.submitted()).unwrap();
+        move |values| {
+            let changed = changed.drain(1024).unwrap();
+            let submitted = submitted.drain(1024).unwrap();
+            let delivered = !changed.events.is_empty() || !submitted.events.is_empty();
+            for event in changed.events {
+                record_changed(values, &event);
+            }
+            for event in submitted.events {
+                record_submitted(values, &event);
+            }
+            delivered
+        }
     }
 
     /// Runs direct focused editor updates at one explicit content allocation.
@@ -1186,7 +1033,7 @@ mod tests {
             ],
         );
         let mut events = Vec::new();
-        assert!(dispatcher.dispatch(&mut events));
+        assert!(dispatcher(&mut events));
         assert_eq!(
             events,
             [RecordedEvent::Changed("line".to_owned(), 4), RecordedEvent::Submitted("line".to_owned())]
@@ -1364,175 +1211,5 @@ mod tests {
 
         assert_eq!(text_area.text(), "\ntext");
         assert_eq!(text_area.cursor(), 0);
-    }
-
-    /// Verifies the five-node composition and nested typed-handle lifetime.
-    #[test]
-    fn text_area_create_returns_nested_editor_handle_and_scroll_area_node() {
-        // The outer node owns ScrollArea, its transform surface and two bars, plus exactly one
-        // ordinary TextEditor content leaf.
-        let (text_area, root) = TextEditor::create(TextAreaParameters::new("content"));
-        assert_eq!(root.debug_node_count(), 5);
-        assert!(text_area.is_alive());
-        assert_eq!(text_area.text().as_deref(), Some("content"));
-
-        // Dropping the outer owner expires the nested semantic handle and its weak parent link.
-        drop(root);
-        assert!(!text_area.is_alive());
-    }
-
-    /// Verifies that programmatic semantic and scroll mutations do not emit user events.
-    #[test]
-    fn programmatic_text_cursor_and_scroll_setters_are_silent() {
-        // Subscribe through the nested editor while applying semantic and parent-scroll mutations.
-        let (text_area, _root) = TextEditor::create(TextAreaParameters::new("initial"));
-        let mut dispatcher = text_area.try_read(text_dispatcher).unwrap();
-        text_area.set_text("replacement").unwrap();
-        text_area.set_cursor(3).unwrap();
-        text_area.move_cursor_to_end().unwrap();
-        text_area.set_scroll(Vec2i::new(5, 7)).unwrap();
-        text_area.clear().unwrap();
-        assert!(!dispatcher.dispatch(&mut Vec::new()));
-        assert_eq!(text_area.scroll().map(|offset| (offset.x, offset.y)), Some((0, 0)));
-    }
-
-    /// Verifies that a real scrollbar capture gesture preserves TextEditor keyboard focus.
-    #[test]
-    fn scrollbar_press_preserves_text_area_keyboard_focus() {
-        // Compose enough narrow lines to activate only the vertical scrollbar in a predictable
-        // unframed, zero-padding viewport.
-        let document = (0..20).map(|index| format!("line {index}")).collect::<Vec<_>>().join("\n");
-        let (text_area, mut root) = TextEditor::create(TextAreaParameters::new(document.clone()).scroll_options(ScrollAreaOption::ENABLE_SCROLL));
-        let atlas = test_atlas();
-        let style = test_skin(&atlas).with_metrics(|metrics| {
-            metrics.padding = 0;
-            metrics.scrollbar_size = 10;
-        });
-        let viewport = Recti::new(0, 0, 100, 60);
-        let mut runtime = UiRuntime::new();
-        let mut input = Input::default();
-        runtime.begin_update();
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), viewport, UNCLIPPED_RECT);
-
-        // Focus the text content near its first line and complete that captured press gesture.
-        input.mousedown(1, 1, MouseButton::LEFT);
-        let editor_down = input.pop_event().unwrap();
-        let editor_down_state = input.snapshot();
-        runtime.begin_input_event(true, &editor_down);
-        let (editor_owner, editor_result) = runtime
-            .route_input_event_to_node_ref(&mut root, &style, &editor_down)
-            .expect("the editable content must receive its pointer press");
-        runtime.update_pointer_capture(editor_owner, editor_result, &editor_down, editor_down_state.mouse_buttons);
-        runtime.update_tree_root(&mut root, &style, atlas.clone(), editor_down_state);
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), viewport, UNCLIPPED_RECT);
-
-        input.mouseup(1, 1, MouseButton::LEFT);
-        let editor_up = input.pop_event().unwrap();
-        let editor_up_state = input.snapshot();
-        runtime.begin_input_event(true, &editor_up);
-        assert_eq!(
-            runtime.route_captured_pointer_input_event(std::slice::from_mut(&mut root), &style, editor_up_state.mouse_buttons, &editor_up,),
-            Some(true)
-        );
-        runtime.update_tree_root(&mut root, &style, atlas.clone(), editor_up_state);
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), viewport, UNCLIPPED_RECT);
-
-        // Press and release the vertical scrollbar at x=95. It must own this pointer capture without
-        // replacing the editor's hold-focus identity.
-        input.mousedown(95, 1, MouseButton::LEFT);
-        let scrollbar_down = input.pop_event().unwrap();
-        let scrollbar_down_state = input.snapshot();
-        runtime.begin_input_event(true, &scrollbar_down);
-        let (scrollbar_owner, scrollbar_result) = runtime
-            .route_input_event_to_node_ref(&mut root, &style, &scrollbar_down)
-            .expect("the visible vertical scrollbar must receive its pointer press");
-        assert_ne!(scrollbar_owner, editor_owner);
-        runtime.update_pointer_capture(scrollbar_owner, scrollbar_result, &scrollbar_down, scrollbar_down_state.mouse_buttons);
-        runtime.update_tree_root(&mut root, &style, atlas.clone(), scrollbar_down_state);
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), viewport, UNCLIPPED_RECT);
-
-        input.mouseup(95, 1, MouseButton::LEFT);
-        let scrollbar_up = input.pop_event().unwrap();
-        let scrollbar_up_state = input.snapshot();
-        runtime.begin_input_event(true, &scrollbar_up);
-        assert_eq!(
-            runtime.route_captured_pointer_input_event(std::slice::from_mut(&mut root), &style, scrollbar_up_state.mouse_buttons, &scrollbar_up,),
-            Some(true)
-        );
-        runtime.update_tree_root(&mut root, &style, atlas.clone(), scrollbar_up_state);
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), viewport, UNCLIPPED_RECT);
-
-        // Keyboard text must still route to TextEditor after the pointer-only scrollbar gesture.
-        input.text("X");
-        let text_event = input.pop_event().unwrap();
-        let text_state = input.snapshot();
-        runtime.begin_input_event(true, &text_event);
-        assert!(runtime.route_focus_input_event(std::slice::from_mut(&mut root), &style, &text_event));
-        runtime.update_tree_root(&mut root, &style, atlas, text_state);
-        assert_eq!(text_area.text().map(|text| text.len()), Some(document.len() + 1));
-    }
-
-    /// Verifies ancestor-only wheel bubbling from editable content to its ScrollArea.
-    #[test]
-    fn wheel_input_bubbles_from_text_content_to_scroll_area() {
-        // Build vertical overflow while leaving TextEditor itself free of GRAB_SCROLL so the routed
-        // wheel event must follow ancestor-only bubbling to its containing ScrollArea.
-        let document = (0..20).map(|index| format!("line {index}")).collect::<Vec<_>>().join("\n");
-        let (text_area, mut root) = TextEditor::create(TextAreaParameters::new(document).scroll_options(ScrollAreaOption::ENABLE_SCROLL));
-        let atlas = test_atlas();
-        let style = test_skin(&atlas).with_metrics(|metrics| {
-            metrics.padding = 0;
-            metrics.scrollbar_size = 10;
-        });
-        let viewport = Recti::new(0, 0, 100, 60);
-        let mut runtime = UiRuntime::new();
-        runtime.begin_update();
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), viewport, UNCLIPPED_RECT);
-
-        // Seed a pointer position over editable content, then route one wheel transition through the
-        // ordinary deepest-target and ancestor-bubbling path.
-        let mut input = Input::default();
-        input.mousemove(1, 1);
-        let _ = input.pop_event().expect("pointer seed must be queued");
-        input.scroll(0, 12);
-        let wheel = input.pop_event().expect("wheel input must be queued");
-        let wheel_state = input.snapshot();
-        runtime.begin_input_event(true, &wheel);
-        let (_, result) = runtime
-            .route_input_event_to_node_ref(&mut root, &style, &wheel)
-            .expect("wheel input over TextEditor must find its composed target path");
-        assert!(result.is_consumed(), "ScrollArea must consume a wheel delta that changes its range");
-        runtime.update_tree_root(&mut root, &style, atlas.clone(), wheel_state);
-        runtime.layout_tree_root(&mut root, &style, atlas, viewport, UNCLIPPED_RECT);
-
-        // The nested semantic handle observes the offset owned and changed by ScrollArea.
-        assert_eq!(text_area.scroll().map(|offset| (offset.x, offset.y)), Some((0, 12)));
-    }
-
-    /// Verifies that a typed cursor mutation requests parent-owned caret reveal.
-    #[test]
-    fn programmatic_cursor_reveal_scrolls_the_composed_viewport() {
-        // A narrow multiline document overflows vertically without requiring a horizontal bar.
-        let document = (0..20).map(|index| format!("line {index}"));
-        let (text_area, mut root) = TextEditor::create(TextAreaParameters::new(document.collect::<Vec<_>>().join("\n")));
-        let atlas = test_atlas();
-        let style = test_skin(&atlas).with_metrics(|metrics| {
-            metrics.padding = 0;
-            metrics.scrollbar_size = 10;
-        });
-        let viewport = Recti::new(0, 0, 100, 60);
-        let mut runtime = UiRuntime::new();
-
-        // Commit initial ranges, schedule an end-cursor reveal, then let the ordinary child update
-        // request and subsequent layout clamp the parent-owned vertical offset.
-        runtime.begin_update();
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), viewport, UNCLIPPED_RECT);
-        text_area.move_cursor_to_end().unwrap();
-        runtime.update_tree_root(&mut root, &style, atlas.clone(), Input::default().snapshot());
-        runtime.layout_tree_root(&mut root, &style, atlas, viewport, UNCLIPPED_RECT);
-
-        let scroll = text_area.scroll().unwrap();
-        assert_eq!(scroll.x, 0);
-        assert!(scroll.y > 0, "revealing the final caret must move the parent-owned vertical offset");
     }
 }

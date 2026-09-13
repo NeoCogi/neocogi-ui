@@ -1,5 +1,6 @@
 //! Boundary tests use real generated COM calls, malformed producer tables and an upload-failing renderer.
 use super::*;
+use crate::test_support::assets::{export_bundle, export_bundle_data, export_imported_data};
 use neocogi_gfx_contracts::AssetPublisherAbi;
 use neocogi_ui::assets::AssetData;
 use neocogi_skin_contracts::{PaletteEdit, PaletteEditAbi, PaletteEditTag, StyleCompilerAbi};
@@ -84,7 +85,10 @@ fn round_trip_preserves_complete_resources_and_image_patches() {
     let original = SkinBundle::new(atlas, skin);
     let source = export_bundle(&original).unwrap();
     let imported = ImportedAssets::read(source.as_com_ref(), None).unwrap();
-    equivalent(&export_bundle_data(&original).unwrap(), &export_bundle_data(imported.bundle()).unwrap());
+    equivalent(
+        &export_bundle_data(&original).unwrap(),
+        &export_imported_data(&imported, imported.bundle()).unwrap(),
+    );
     assert_ne!(original.atlas().font_id("body"), imported.bundle().atlas().font_id("body"));
 
     // Whole-range copy validation must preserve output even when only its final byte is invalid.
@@ -385,9 +389,9 @@ fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision
         "deriving a candidate cannot publish or schedule a UI edit"
     );
     let imported = ImportedAssets::read(candidate.as_com_ref(), Some(&original)).unwrap();
-    let mut expected = export_bundle_data(original.bundle()).unwrap();
+    let mut expected = export_imported_data(&original, original.bundle()).unwrap();
     expected.tables.metrics = metrics;
-    equivalent(&export_bundle_data(imported.bundle()).unwrap(), &expected);
+    equivalent(&export_imported_data(&imported, imported.bundle()).unwrap(), &expected);
     let palette = crate::FlatPalette {
         text: crate::color(11, 22, 33, 44),
         button: crate::color(51, 62, 73, 84),
@@ -399,7 +403,10 @@ fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision
     skin.metrics.padding = metrics.padding;
     skin.apply_flat_palette(palette);
     let native = SkinBundle::new(original.bundle().atlas().clone(), skin);
-    equivalent(&export_bundle_data(imported.bundle()).unwrap(), &export_bundle_data(&native).unwrap());
+    equivalent(
+        &export_imported_data(&imported, imported.bundle()).unwrap(),
+        &export_imported_data(&original, &native).unwrap(),
+    );
     let invalid = AssetMetrics { padding: -1, ..metrics };
     assert_eq!(
         compiler.derive_style(source.as_com_ref(), invalid, PaletteEdit::Preserve.into()).unwrap_err(),

@@ -53,8 +53,7 @@
 //! Backend-independent retained root-window coordination.
 //!
 //! [`WindowManager`] owns retained roots, ordered input, modal policy, layout state, and display-list
-//! recording. The generic [`crate::Context`] façade owns it alongside the renderer and application
-//! widget-event dispatcher. WindowManager chooses the eligible root, then the [`UiRuntime`]-owned
+//! recording. The production retained context owns it beside the GFX compositor. WindowManager chooses the eligible root, then the [`UiRuntime`]-owned
 //! input router chooses a node; neither invokes application widget-event subscribers.
 use bitflags::bitflags;
 
@@ -65,17 +64,11 @@ use crate::{Dimensioni, Node, Recti, Skin, SkinBundle, UiRuntime};
 use roots::{SurfaceForest, SurfaceKey};
 mod root_chrome;
 mod roots;
-#[cfg(test)]
-pub(crate) use roots::SurfaceCreationError;
 
 pub use root_chrome::{WindowEvent, WindowHandle};
-#[cfg(test)]
-pub(crate) use root_chrome::DebugRootChromeControls;
 // Popup identity/events and checked surface failures describe forest policy rather than chrome.
 // Re-export both borrowed-mutation and owner-preserving creation errors with the public window API.
 pub use roots::{PopupHandle, SurfaceMutationError};
-#[cfg(test)]
-pub use roots::PopupEvent;
 
 bitflags! {
     #[derive(Copy, Clone)]
@@ -145,28 +138,6 @@ impl Window {
             menu_bar: None,
             child_window_clip: ChildWindowClip::None,
         }
-    }
-
-    /// Installs the menu bar that will remain an intrinsic part of this window.
-    #[cfg(test)]
-    pub fn menu_bar(mut self, menu_bar: MenuBar) -> Self {
-        // A builder replacement keeps exactly one bar and consumes every menu node only once.
-        self.menu_bar = Some(menu_bar);
-        self
-    }
-
-    /// Selects how this window clips structural child windows.
-    ///
-    /// [`ChildWindowClip::Content`] is useful for a fullscreen application root whose retained
-    /// content belongs behind floating child windows while its intrinsic menu and chrome remain in
-    /// front. The setting has no effect until at least one child is registered through
-    /// [`crate::Ui::create_child_window`].
-    #[cfg(test)]
-    pub const fn child_window_clip(mut self, clip: ChildWindowClip) -> Self {
-        // Store policy on the construction value so the first committed child layout observes the
-        // same immutable parent configuration as registration and paint ordering.
-        self.child_window_clip = clip;
-        self
     }
 
     /// Transfers all construction values to the private manager implementation.
@@ -379,20 +350,7 @@ impl WindowManager {
 
     /// Borrows the reusable display list after retained paint has recorded it.
     pub(crate) fn display_list_mut(&mut self) -> &mut DisplayList {
-        // The Context frame executor drains this same manager-owned allocation.
+        // The production compositor replay drains this same manager-owned allocation.
         &mut self.display_list
     }
-
-    /// Clears recorded drawing when a logical frame is cancelled or backend setup fails.
-    #[cfg(test)]
-    pub(crate) fn cancel_frame(&mut self) {
-        // Clearing preserves allocations while preventing stale operations from leaking forward.
-        self.display_list.clear();
-    }
 }
-
-#[cfg(test)]
-mod retained_runtime_baseline;
-
-#[cfg(test)]
-mod root_tests;

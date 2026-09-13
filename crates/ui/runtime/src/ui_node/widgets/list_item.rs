@@ -65,17 +65,6 @@ impl ListItemParameters {
         }
     }
 
-    /// Creates list-item parameters with explicit widget options.
-    #[cfg(test)]
-    pub fn with_opt(label: impl Into<String>, opt: WidgetOption) -> Self {
-        Self {
-            label: label.into(),
-            icon: None,
-            font: FontRef::Role(FontRole::Body),
-            opt,
-        }
-    }
-
     /// Creates list-item parameters with an icon and default widget options.
     #[cfg(test)]
     pub fn with_icon(label: impl Into<String>, icon: IconRef) -> Self {
@@ -114,9 +103,6 @@ pub struct ListItem {
     /// Initialization-only font.
     font: FontRef,
     /// Base widget options.
-    /// Native algorithm fixture policy; production options live only in WidgetState.
-    #[cfg(test)]
-    opt: WidgetOption,
     /// Mutable label displayed for the item.
     label: String,
     /// Runtime-owned source for user submissions.
@@ -124,20 +110,12 @@ pub struct ListItem {
 }
 
 impl ListItem {
-    /// Constructs a retained node and a weak typed handle to its concrete list item.
-    #[cfg(test)]
-    pub fn create(parameters: ListItemParameters) -> (TypedWidgetHandle<Self>, Node) {
-        Node::typed_widget(Self::from(parameters))
-    }
-
     /// Combines validated semantic parameters with one already bound common runtime.
     pub(crate) fn from_runtime(runtime: crate::ui_node::widget_object::WidgetRuntime, parameters: ListItemParameters) -> Self {
         Self {
             runtime,
             icon: parameters.icon,
             font: parameters.font,
-            #[cfg(test)]
-            opt: parameters.opt,
             label: parameters.label,
             submitted_event: crate::EventSource::new(),
         }
@@ -211,20 +189,7 @@ impl ListItem {
     }
 }
 
-#[cfg(test)]
-impl TypedWidgetHandle<ListItem> {
-    /// Returns the list item's native submission endpoint.
-    pub fn submitted(&self) -> WidgetEventPortHandle<ListItemSubmitted> {
-        self.widget_event()
-    }
-}
-
 impl Widget for ListItem {
-    #[cfg(test)]
-    fn widget_opt(&self) -> &WidgetOption {
-        &self.opt
-    }
-
     fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         if ctx.action(input, self.keyboard_behavior()) != Some(KeyboardAction::Activate) {
             return crate::Change::NoChange;
@@ -253,11 +218,10 @@ impl crate::TypedWidget<ListItemSubmitted> for ListItem {
 }
 
 #[cfg(test)]
-impl From<ListItemParameters> for ListItem {
+impl From<ListItemParameters> for crate::test_support::algorithm::Algorithm<ListItem> {
     /// Transfers construction data into one concrete row and its typed event source.
     fn from(parameters: ListItemParameters) -> Self {
-        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(parameters.opt);
-        Self::from_runtime(runtime, parameters)
+        Self::new(parameters.opt, |runtime| ListItem::from_runtime(runtime, parameters))
     }
 }
 
@@ -315,7 +279,7 @@ mod tests {
         let mut style = test_skin(&atlas);
         style.metrics.padding = i32::MAX;
         let check = atlas.icon_id("check").expect("test atlas must contain the exact check resource");
-        let item = ListItem::from(ListItemParameters::with_icon("item", IconRef::named(check)));
+        let item = crate::test_support::algorithm::Algorithm::<ListItem>::from(ListItemParameters::with_icon("item", IconRef::named(check)));
         let bounds = rect(0, 0, 20, 20);
         let mut display_list = DisplayList::new();
         let mut ctx = WidgetPaintCtx::new_with_content_geometry(
@@ -330,7 +294,7 @@ mod tests {
             false,
             false,
             true,
-            *item.widget_opt(),
+            WidgetOption::from_bits_retain(item.runtime.state.options().unwrap().raw() as u32),
         );
 
         item.paint(&mut ctx);

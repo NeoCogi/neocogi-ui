@@ -445,12 +445,6 @@ impl<'a> WidgetPaintCtx<'a> {
         self.common.local_rect()
     }
 
-    /// Returns the widget's derived content allocation in screen coordinates.
-    #[cfg(test)]
-    pub fn screen_content_rect(&self) -> Recti {
-        self.common.content_rect
-    }
-
     /// Moves the runtime's single frame display list into a synchronous COM paint invocation.
     ///
     /// The empty replacement contains no allocation. [`Self::restore_display_list`] returns the

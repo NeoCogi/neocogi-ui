@@ -86,9 +86,6 @@ pub struct Combo {
     /// Initialization-only font.
     font: FontRef,
     /// Base widget options.
-    /// Native algorithm fixture policy; production options live only in WidgetState.
-    #[cfg(test)]
-    opt: WidgetOption,
     /// Runtime-owned source for selection changes.
     changed_event: crate::EventSource<ComboChanged>,
     /// Runtime-owned source for header submissions.
@@ -104,8 +101,6 @@ impl Combo {
             open: false,
             label: String::new(),
             font: parameters.font,
-            #[cfg(test)]
-            opt: parameters.opt,
             changed_event: crate::EventSource::new(),
             submitted_event: crate::EventSource::new(),
         }
@@ -136,94 +131,11 @@ impl Combo {
         self.open = false;
     }
 
-    /// Updates the cached label and clamps the selected index to the provided items.
-    #[cfg(test)]
-    pub fn update_items<S: AsRef<str>>(&mut self, items: &[S]) {
-        let previous_selected = self.selected;
-        if items.is_empty() {
-            self.selected = 0;
-            self.label.clear();
-            if self.selected != previous_selected {
-                self.emit_changed();
-            }
-            return;
-        }
-
-        if self.selected >= items.len() {
-            // Clamp stale selections after the backing item list changes.
-            self.selected = items.len() - 1;
-        }
-
-        self.label.clear();
-        if let Some(label) = items.get(self.selected) {
-            self.label.push_str(label.as_ref());
-        }
-        if self.selected != previous_selected {
-            self.emit_changed();
-        }
-    }
-
-    /// Applies a submitted popup item selection and closes the popup.
-    #[cfg(test)]
-    pub fn select<S: AsRef<str>>(&mut self, index: usize, items: &[S]) -> Option<String> {
-        let previous_selected = self.selected;
-        let previous_label = self.label.clone();
-        if items.is_empty() {
-            self.selected = 0;
-            self.label.clear();
-            self.close_popup();
-            self.emit_change_if_needed(previous_selected, &previous_label);
-            return None;
-        }
-
-        self.selected = index.min(items.len() - 1);
-        self.label.clear();
-        self.label.push_str(items[self.selected].as_ref());
-        let selected_label = self.label.clone();
-        self.close_popup();
-        self.emit_change_if_needed(previous_selected, &previous_label);
-        Some(selected_label)
-    }
-
-    #[cfg(test)]
-    fn emit_change_if_needed(&mut self, previous_selected: usize, previous_label: &str) {
-        if self.selected == previous_selected && self.label == previous_label {
-            return;
-        }
-        self.changed_event.emit(ComboChanged {
-            selected: self.selected,
-            label: self.label.clone(),
-        });
-    }
-
     fn emit_changed(&mut self) {
         self.changed_event.emit(ComboChanged {
             selected: self.selected,
             label: self.label.clone(),
         });
-    }
-}
-
-#[cfg(test)]
-impl TypedWidgetHandle<Combo> {
-    /// Returns whether the retained combo popup is open.
-    pub fn is_open(&self) -> Option<bool> {
-        self.try_read(Combo::is_open)
-    }
-
-    /// Closes the retained combo popup.
-    pub fn close_popup(&self) -> Option<()> {
-        self.try_update(Combo::close_popup)
-    }
-
-    /// Returns the combo's native selection-change endpoint.
-    pub fn changed(&self) -> WidgetEventPortHandle<ComboChanged> {
-        self.widget_event()
-    }
-
-    /// Returns the combo's native header-submission endpoint.
-    pub fn submitted(&self) -> WidgetEventPortHandle<ComboSubmitted> {
-        self.widget_event()
     }
 }
 
@@ -252,18 +164,6 @@ impl PartialEq for ComboSubmitted {
 }
 
 impl Combo {
-    /// Constructs a retained node and a weak typed handle to its concrete combo.
-    #[cfg(test)]
-    pub fn create(parameters: ComboParameters) -> (TypedWidgetHandle<Self>, Node) {
-        Node::typed_widget(Self::from(parameters))
-    }
-
-    /// Returns the native event endpoint emitted whenever the user submits the combo header.
-    #[cfg(test)]
-    pub fn submitted(&self) -> crate::WidgetEventPortHandle<ComboSubmitted> {
-        <Self as crate::TypedWidget<ComboSubmitted>>::event(self)
-    }
-
     /// Measures the combo header label plus dropdown indicator.
     fn preferred_size_widget(&self, style: &Skin, atlas: &AtlasHandle, _constraints: Constraints) -> Dimensioni {
         let padding = style.metrics.padding.max(0);
@@ -342,11 +242,6 @@ impl crate::TypedWidget<ComboSubmitted> for Combo {
 }
 
 impl Widget for Combo {
-    #[cfg(test)]
-    fn widget_opt(&self) -> &WidgetOption {
-        &self.opt
-    }
-
     fn frame_appearance_role(&self) -> FrameRole {
         // Combo headers use a distinct role so themes can separate them from command buttons.
         FrameRole::Control(ControlRole::Combo)
@@ -365,15 +260,6 @@ impl Widget for Combo {
 
     fn keyboard_behavior(&self) -> KeyboardBehavior {
         KeyboardBehavior::TAB_STOP | KeyboardBehavior::ACTIVATE_ENTER | KeyboardBehavior::ACTIVATE_SPACE | KeyboardBehavior::POPUP
-    }
-}
-
-#[cfg(test)]
-impl From<ComboParameters> for Combo {
-    /// Transfers one-shot parameters into the concrete Combo runtime.
-    fn from(parameters: ComboParameters) -> Self {
-        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(parameters.opt);
-        Self::from_runtime(runtime, parameters)
     }
 }
 

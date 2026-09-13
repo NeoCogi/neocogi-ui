@@ -44,7 +44,7 @@
 //! Each production node owns one actual IWidget plus its cached leaf or container
 //! layout capability. A branch retains one authoritative COM ChildStore. Scoped
 //! layout services take owned child transactions; no widget retains borrowed tree state.
-//! Native Rust owners exist only in the algorithm test harness.
+//! Headless tests mount these same COM capabilities through the public factory.
 //!
 //! # Source layout
 //!
@@ -75,10 +75,6 @@ pub use text_layout::TextWrap;
 mod widget;
 mod widget_context;
 pub use widget::{Change, KeyboardAction, KeyboardBehavior, LeafWidget, Widget, WidgetFillOption, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx};
-#[cfg(test)]
-pub(crate) use crate::test_support::widget::WidgetStorage;
-#[cfg(test)]
-pub use crate::test_support::{widget::TypedWidgetHandle, container::Container, children::ChildrenHandle};
 pub mod widgets;
 pub use widgets::{ScrollbarAxis, ScrollbarChanged, ScrollbarParameters};
 
@@ -94,16 +90,8 @@ pub(crate) use mounted_node::{ComNode, frame_contract};
 pub(crate) use widget_host::{HostState, Observation, WidgetHost};
 mod runtime;
 pub(crate) use runtime::{UiRuntime, LayoutTraversal};
-#[cfg(test)]
-pub(crate) use runtime::RuntimeMetrics;
 mod container;
 pub use container::{ContainerLayoutCtx, ContainerWidget, MeasureCtx};
 mod containers;
 pub(crate) use containers::{ScrollComposition, ScrollModel, ScrollParts};
 pub use containers::{Disclosure, Grid, Linear, ScrollArea};
-#[cfg(test)]
-pub use containers::LinearCrossSize;
-#[cfg(test)]
-pub use containers::{DisclosureParameters, GridParameters, LinearItem, LinearParameters, ScrollAreaParameters};
-#[cfg(test)]
-pub use containers::ScrollAreaOption;

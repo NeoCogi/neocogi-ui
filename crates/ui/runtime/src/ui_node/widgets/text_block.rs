@@ -83,12 +83,6 @@ impl crate::LeafWidget for TextBlock {
 }
 
 impl TextBlockParameters {
-    /// Creates text-block parameters without wrapping.
-    #[cfg(test)]
-    pub fn new(text: impl Into<String>) -> Self {
-        Self::with_wrap(text, TextWrap::None)
-    }
-
     /// Creates text-block parameters with an explicit wrapping mode.
     pub fn with_wrap(text: impl Into<String>, wrap: TextWrap) -> Self {
         Self {
@@ -97,14 +91,6 @@ impl TextBlockParameters {
             font: FontRef::Role(FontRole::Body),
             opt: WidgetOption::NO_INTERACT,
         }
-    }
-
-    /// Replaces the font used for text measurement and paint.
-    #[cfg(test)]
-    pub fn font(mut self, font: FontRef) -> Self {
-        // Text layout resolves this stable value against whichever skin bundle is active later.
-        self.font = font;
-        self
     }
 }
 
@@ -118,28 +104,17 @@ pub struct TextBlock {
     /// Initialization-only font.
     font: FontRef,
     /// Base widget options.
-    /// Native algorithm fixture policy; production options live only in WidgetState.
-    #[cfg(test)]
-    opt: WidgetOption,
     /// Mutable display text.
     text: String,
 }
 
 impl TextBlock {
-    /// Constructs a retained node and a weak typed handle to its concrete text block.
-    #[cfg(test)]
-    pub fn create(parameters: TextBlockParameters) -> (TypedWidgetHandle<Self>, Node) {
-        Node::typed_widget(Self::from(parameters))
-    }
-
     /// Combines validated semantic parameters with one already bound common runtime.
     pub(crate) fn from_runtime(runtime: crate::ui_node::widget_object::WidgetRuntime, parameters: TextBlockParameters) -> Self {
         Self {
             runtime,
             wrap: parameters.wrap,
             font: parameters.font,
-            #[cfg(test)]
-            opt: parameters.opt,
             // Public construction data may arrive through a struct literal, so concrete storage
             // itself remains the single normalization boundary.
             text: normalize_multiline_text(parameters.text),
@@ -209,31 +184,17 @@ impl TextBlock {
     }
 }
 
-#[cfg(test)]
-impl TypedWidgetHandle<TextBlock> {
-    /// Replaces retained display text after normalizing line endings to LF.
-    pub fn set_text(&self, text: impl Into<String>) -> Option<()> {
-        self.try_update_with(text.into(), |widget, text| widget.set_text(text)).ok()
-    }
-}
-
 impl Widget for TextBlock {
-    #[cfg(test)]
-    fn widget_opt(&self) -> &WidgetOption {
-        &self.opt
-    }
-
     fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
         self.paint_widget(ctx);
     }
 }
 
 #[cfg(test)]
-impl From<TextBlockParameters> for TextBlock {
+impl From<TextBlockParameters> for crate::test_support::algorithm::Algorithm<TextBlock> {
     /// Transfers one-shot parameters into the concrete TextBlock runtime.
     fn from(parameters: TextBlockParameters) -> Self {
-        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(parameters.opt);
-        Self::from_runtime(runtime, parameters)
+        Self::new(parameters.opt, |runtime| TextBlock::from_runtime(runtime, parameters))
     }
 }
 
@@ -282,7 +243,7 @@ mod tests {
     /// Verifies both public parameter forms and later replacements canonicalize line endings.
     #[test]
     fn text_block_stores_only_lf_line_endings() {
-        let mut block = TextBlock::from(TextBlockParameters {
+        let mut block = crate::test_support::algorithm::Algorithm::<TextBlock>::from(TextBlockParameters {
             text: "a\r\nb\rc\n".to_owned(),
             wrap: TextWrap::None,
             font: FontRef::Role(FontRole::Body),

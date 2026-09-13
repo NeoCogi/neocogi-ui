@@ -35,18 +35,8 @@ use std::rc::Rc;
 use crate::{
     AtlasHandle, ChildParticipation, ContainerWidget, Dimensioni, MeasureCtx, Recti, Skin, UiInputEvent, Widget, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx,
 };
-#[cfg(test)]
-use crate::{Container, TypedWidgetHandle};
 
 use super::{ContainerLayoutCtx};
-#[cfg(test)]
-use super::{Node};
-#[cfg(test)]
-use super::{LinearItem};
-#[cfg(test)]
-use crate::{Linear};
-#[cfg(test)]
-use crate::{LinearParameters};
 
 /// Immutable header presentation shared by disclosure layout and its actual interactive header.
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -90,59 +80,6 @@ impl DisclosureState {
     }
 }
 
-/// One-shot construction input for a stateful disclosure container.
-///
-/// Label, header/tree presentation, and base options are initialization-only. Initial expansion
-/// and children move into [`Disclosure`] for mounted mutation.
-#[cfg(test)]
-pub struct DisclosureParameters {
-    label: String,
-    expanded: bool,
-    children: Vec<LinearItem>,
-    variant: DisclosureVariant,
-    opt: WidgetOption,
-}
-
-#[cfg(test)]
-impl DisclosureParameters {
-    /// Creates the framed header presentation and its top-to-bottom body items.
-    ///
-    /// Plain [`Node`] values use content height. Pass [`LinearItem`] when an item has an explicit
-    /// fixed or flexible relationship to the private vertical Linear.
-    pub fn header<T>(label: impl Into<String>, expanded: bool, children: impl IntoIterator<Item = T>) -> Self
-    where
-        T: Into<LinearItem>,
-    {
-        Self {
-            label: label.into(),
-            expanded,
-            children: children.into_iter().map(Into::into).collect(),
-            variant: DisclosureVariant::Header,
-            opt: WidgetOption::FRAME,
-        }
-    }
-
-    /// Creates the unframed, indented tree presentation and its body items.
-    pub fn tree<T>(label: impl Into<String>, expanded: bool, children: impl IntoIterator<Item = T>) -> Self
-    where
-        T: Into<LinearItem>,
-    {
-        Self {
-            label: label.into(),
-            expanded,
-            children: children.into_iter().map(Into::into).collect(),
-            variant: DisclosureVariant::Tree,
-            opt: WidgetOption::NONE,
-        }
-    }
-
-    /// Overrides the presentation's default widget options.
-    pub fn with_options(mut self, opt: WidgetOption) -> Self {
-        self.opt = opt;
-        self
-    }
-}
-
 /// Application-facing state for a disclosure container.
 ///
 /// Expansion gates descendant traversal while retaining every owned runtime and its state. It does
@@ -157,9 +94,6 @@ pub struct Disclosure {
     header: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextContentAbi>,
     /// Typed editing capability of the actual vertical body child.
     body: neocogi_com::ComPtr<neocogi_ui_core_contracts::LinearAbi>,
-    /// Native fixture editing link; absent from production COM composition.
-    #[cfg(test)]
-    content: Option<TypedWidgetHandle<Linear>>,
     /// Same expansion scalar read by the actual header object and parent layout.
     model: Rc<DisclosureState>,
     variant: DisclosureVariant,
@@ -180,8 +114,6 @@ impl Disclosure {
             editor,
             header,
             body,
-            #[cfg(test)]
-            content: None,
             model,
             variant,
         }
@@ -192,12 +124,6 @@ impl Disclosure {
         self.model.expanded.get()
     }
 
-    /// Returns whether descendants are currently gated.
-    #[cfg(test)]
-    pub fn is_collapsed(&self) -> bool {
-        !self.model.expanded.get()
-    }
-
     /// Makes descendants participate in traversal.
     pub fn expand(&mut self) {
         self.model.set(true);
@@ -206,31 +132,6 @@ impl Disclosure {
     /// Gates descendants while retaining their ownership and state.
     pub fn collapse(&mut self) {
         self.model.set(false);
-    }
-
-    /// Reverses the current descendant gate.
-    #[cfg(test)]
-    pub fn toggle(&mut self) {
-        self.model.set(!self.model.expanded.get());
-    }
-
-    /// Returns the number of owned child nodes.
-    #[cfg(test)]
-    pub fn len(&self) -> Option<usize> {
-        self.content.as_ref()?.try_read(Linear::len).flatten()
-    }
-
-    /// Returns whether the owned body has no child nodes while its storage is accessible.
-    #[cfg(test)]
-    pub fn is_empty(&self) -> Option<bool> {
-        // Delegate to the actual body so absence and active-borrow behavior remain identical to len.
-        self.content.as_ref()?.try_read(Linear::is_empty).flatten()
-    }
-
-    /// Drops every child owner.
-    #[cfg(test)]
-    pub fn clear(&mut self) -> Option<()> {
-        self.content.as_ref()?.try_update(Linear::clear).flatten()
     }
 
     // Structural child order is also retained keyboard traversal order. Keeping the visible
@@ -260,9 +161,6 @@ struct DisclosureHeader {
     label: String,
     /// Chooses indentation and the common frame appearance.
     variant: DisclosureVariant,
-    /// Native fixture policy; deployed options belong to WidgetState.
-    #[cfg(test)]
-    opt: WidgetOption,
 }
 
 impl DisclosureHeader {
@@ -292,12 +190,6 @@ impl DisclosureHeader {
 }
 
 impl Widget for DisclosureHeader {
-    #[cfg(test)]
-    fn widget_opt(&self) -> &WidgetOption {
-        // Static options describe only the header child, never the complete disclosure allocation.
-        &self.opt
-    }
-
     fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         // Pointer/Enter/Space toggle while directional keys expose the conventional tree behavior.
         match ctx.action(input, self.keyboard_behavior()) {
@@ -431,49 +323,11 @@ impl Widget for Disclosure {
     fn take_shared_change(&self) -> bool {
         self.model.dirty.replace(false)
     }
-    #[cfg(test)]
-    fn widget_opt(&self) -> &WidgetOption {
-        &WidgetOption::NO_INTERACT
-    }
 
     fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }
 
-/// Builds the fixed body/header structure before wrapping it in the public owning node.
-#[cfg(test)]
-fn create_container(parameters: DisclosureParameters) -> (TypedWidgetHandle<Disclosure>, Container) {
-    let (content, body) = Linear::create(LinearParameters::vertical(parameters.children));
-    let model = DisclosureState::new(parameters.expanded);
-    let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(crate::WidgetOption::NO_INTERACT);
-    let host = runtime.state.host().add_ref();
-    let children = prepare_children(host, model.clone(), parameters.label.clone(), parameters.variant, None)
-        .expect("native disclosure fixture builds the same fixed COM topology");
-    let mut widget = Disclosure::from_runtime(runtime, children.editor, children.header, children.body, model.clone(), parameters.variant);
-    widget.content = Some(content);
-    let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(parameters.opt);
-    let header = DisclosureHeader {
-        runtime,
-        model,
-        label: parameters.label,
-        variant: parameters.variant,
-        opt: parameters.opt,
-    };
-    // Visual and keyboard order are the same authoritative fixed header/body order.
-    Container::new(widget, [Node::widget_internal(header), body])
-}
-
-impl Disclosure {
-    /// Creates a child-owning disclosure and returns its weak typed widget handle plus completed node.
-    ///
-    /// Construction is complete before the node is returned: callers never observe or manipulate
-    /// the two structural children separately.
-    #[cfg(test)]
-    pub fn create(parameters: DisclosureParameters) -> (TypedWidgetHandle<Disclosure>, Node) {
-        // Add the common Node runtime state around the concrete Container ownership boundary.
-        let (state, container) = create_container(parameters);
-        (state, Node::container(container))
-    }
-}
+impl Disclosure {}
 
 impl DisclosureHeader {
     /// Combines the shared expansion value and label with one concrete header runtime.
@@ -483,14 +337,7 @@ impl DisclosureHeader {
         label: String,
         variant: DisclosureVariant,
     ) -> Self {
-        Self {
-            runtime,
-            model,
-            label,
-            variant,
-            #[cfg(test)]
-            opt: variant.header_options(),
-        }
+        Self { runtime, model, label, variant }
     }
     /// Reads the label used by both preferred-size measurement and complete header painting.
     pub(crate) fn com_label(&self) -> &str {
@@ -683,82 +530,4 @@ fn prepare_children(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Constructs one valid theme atlas whose expanded-state icon is larger than the collapsed one.
-    fn asymmetric_disclosure_atlas() -> AtlasHandle {
-        // Every texel is opaque white so overlapping semantic rectangles remain valid; only the
-        // declared dimensions matter to this measurement regression.
-        let pixels = vec![0xFF; 10 * 5 * 4];
-        let icons = [
-            ("white", Recti::new(0, 0, 1, 1)),
-            ("close", Recti::new(0, 0, 1, 1)),
-            ("expand", Recti::new(0, 0, 1, 1)),
-            ("collapse", Recti::new(0, 0, 10, 5)),
-            ("check", Recti::new(0, 0, 1, 1)),
-            ("expand_down", Recti::new(0, 0, 1, 1)),
-            ("open_folder", Recti::new(0, 0, 1, 1)),
-            ("closed_folder", Recti::new(0, 0, 1, 1)),
-            ("file", Recti::new(0, 0, 1, 1)),
-        ];
-        let glyphs = [(
-            '_',
-            crate::CharEntry {
-                offset: crate::Vec2i::new(0, 0),
-                advance: crate::Vec2i::new(1, 0),
-                rect: Recti::new(0, 0, 1, 1),
-            },
-        )];
-        let fonts = [(
-            "body",
-            crate::FontEntry {
-                line_size: 1,
-                baseline: 1,
-                font_size: 1,
-                entries: &glyphs,
-            },
-        )];
-        let source = crate::AtlasSource {
-            width: 10,
-            height: 5,
-            pixels: &pixels,
-            icons: &icons,
-            fonts: &fonts,
-        };
-
-        AtlasHandle::try_from(&source).expect("asymmetric disclosure fixture must satisfy the atlas contract")
-    }
-
-    #[test]
-    #[cfg(test)]
-    fn header_and_tree_preserve_state_and_fixed_structural_children() {
-        let (header_state, header) = create_container(DisclosureParameters::header("Header", false, std::iter::empty::<LinearItem>()));
-        assert_eq!(header_state.try_read(Disclosure::is_collapsed), Some(true));
-        header_state.try_update(Disclosure::toggle).unwrap();
-        assert_eq!(header_state.try_read(Disclosure::is_expanded), Some(true));
-        assert_eq!(Node::container(header).debug_node_count(), 3);
-
-        let custom_opt = WidgetOption::ALIGN_RIGHT | WidgetOption::NO_INTERACT;
-        let (tree_state, tree) = create_container(DisclosureParameters::tree("Tree", true, std::iter::empty::<LinearItem>()).with_options(custom_opt));
-        assert_eq!(tree_state.try_read(Disclosure::is_expanded), Some(true));
-        assert_eq!(Node::container(tree).debug_node_count(), 3);
-    }
-
-    /// Verifies either expansion state fits the one state-independent header allocation.
-    #[test]
-    #[cfg(test)]
-    fn header_measurement_reserves_the_larger_expand_or_collapse_icon() {
-        let atlas = asymmetric_disclosure_atlas();
-        let style = Skin::from_atlas(&atlas).with_metrics(|metrics| metrics.padding = 0);
-        let (_, container) = create_container(DisclosureParameters::tree("", false, std::iter::empty::<LinearItem>()));
-        let mut root = Node::container(container);
-        let mut runtime = crate::ui_node::UiRuntime::new();
-
-        let preferred = runtime.measure_tree_root(&mut root, &style, &atlas, crate::Constraints::unbounded());
-
-        // The 10x5 collapse icon plus one vertical pixel on each side determines 10x7. Measuring
-        // only the 1x1 expand icon would incorrectly return 3x3 and clip after expansion.
-        assert_eq!((preferred.width, preferred.height), (10, 7));
-    }
-}
+mod tests {}

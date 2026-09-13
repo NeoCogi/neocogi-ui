@@ -434,3 +434,6 @@ impl RuntimeStorage {
         self.phase_result()
     }
 }
+
+#[cfg(test)]
+mod tests;

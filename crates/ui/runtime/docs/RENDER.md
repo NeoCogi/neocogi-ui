@@ -87,7 +87,7 @@ Backend-specific rendering uses an owned `IRenderItem`, such as the full demo's 
 scene. The platform invokes it after flushing preceding UI geometry and before later
 commands. Native contexts, command encoders and render passes stay within that plugin.
 `RenderItemArgs` is copied implementation geometry, with frame dimensions, full content
-rectangle and final visible region. There is no production native callback registry.
+rectangle and final visible region. Render items are owned COM capabilities; no native callback registry participates in UI execution.
 
 ## Implementation boundaries
 
@@ -98,7 +98,6 @@ rectangle and final visible region. There is no production native callback regis
 | `render/painter.rs` | Private built-in geometry recording |
 | `render/display_list.rs` | Owned ordered operations and reusable geometry |
 | `render/compositor.rs` | Thin production replay into the GFX compositor |
-| `render/renderer.rs` | Generic native executor retained only for implementation tests |
 | [crates/render/core](../../../render/core) | Backend-neutral frame contracts, texture identity, color, and upload validation |
 | [crates/render/plugin](../../../render/plugin) | Backend plugin identity, window/device ownership, and checked COM GPU submission |
 | [crates/render/{glow,vulkan,wgpu,webgl}](BACKENDS.md#backend-sources) | Concrete GPU implementations linked into one selected plugin |
@@ -109,7 +108,12 @@ triangle methods may batch geometry, `flush` preserves operation order, and cons
 `finish` reports submission/presentation failures. Drop abandons pending work. GPU state
 and resource obligations are detailed in [BACKENDS.md](BACKENDS.md).
 
-Native renderer ordering/allocation fixtures live under test support. They preserve
-algorithm regression coverage but do not measure deployed COM overhead. Deployment
-measurements must include the executable, every shipped plugin and runtime, required
-assets, loaded memory, startup, allocation/reference activity and actual tree shape.
+Headless tests inspect the actual compositor stream through `IRenderer`. They
+cover command order, resource expiry, texture UVs, clipped triangle attributes,
+text placement and nine-patch geometry. Pure painter/tessellation tests observe
+production buffers directly. No second UI executor or clipping implementation is
+compiled for tests. [TESTING.md](TESTING.md) describes these boundaries.
+
+The warmed painter allocation assertion covers command recording only. Deployment
+measurements must include COM overhead, the executable, shipped plugins, assets,
+loaded memory, startup and actual tree shape.

@@ -94,21 +94,11 @@ pub struct ListBox {
     /// Initialization-only font.
     font: FontRef,
     /// Base widget options.
-    /// Native algorithm fixture policy; production options live only in WidgetState.
-    #[cfg(test)]
-    opt: WidgetOption,
     /// Runtime-owned source for user submissions.
     submitted_event: crate::EventSource<ListBoxSubmitted>,
 }
 
 impl ListBox {
-    /// Constructs a retained node and a weak typed handle to its concrete list box.
-    #[cfg(test)]
-    pub fn create(parameters: ListBoxParameters) -> (crate::TypedWidgetHandle<Self>, crate::Node) {
-        let widget = ListBox::from(parameters);
-        crate::Node::typed_widget(widget)
-    }
-
     /// Combines validated semantic parameters with one already bound common runtime.
     pub(crate) fn from_runtime(runtime: crate::ui_node::widget_object::WidgetRuntime, parameters: ListBoxParameters) -> Self {
         Self {
@@ -117,16 +107,8 @@ impl ListBox {
             image: parameters.image,
             fit_width: false,
             font: parameters.font,
-            #[cfg(test)]
-            opt: parameters.opt,
             submitted_event: crate::EventSource::new(),
         }
-    }
-
-    /// Returns the native event endpoint emitted once for every user submission.
-    #[cfg(test)]
-    pub fn submitted(&self) -> crate::WidgetEventPortHandle<ListBoxSubmitted> {
-        <Self as crate::TypedWidget<ListBoxSubmitted>>::event(self)
     }
 
     /// Measures list-box inline label and optional image.
@@ -164,11 +146,6 @@ impl ListBox {
 }
 
 impl Widget for ListBox {
-    #[cfg(test)]
-    fn widget_opt(&self) -> &WidgetOption {
-        &self.opt
-    }
-
     fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         if ctx.action(input, self.keyboard_behavior()) != Some(KeyboardAction::Activate) {
             return crate::Change::NoChange;
@@ -194,15 +171,6 @@ impl Widget for ListBox {
 impl crate::TypedWidget<ListBoxSubmitted> for ListBox {
     fn event(&self) -> crate::WidgetEventPortHandle<ListBoxSubmitted> {
         self.submitted_event.event()
-    }
-}
-
-#[cfg(test)]
-impl From<ListBoxParameters> for ListBox {
-    /// Transfers one-shot parameters into the concrete ListBox runtime.
-    fn from(parameters: ListBoxParameters) -> Self {
-        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(parameters.opt);
-        Self::from_runtime(runtime, parameters)
     }
 }
 

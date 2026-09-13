@@ -321,18 +321,6 @@ impl Skin {
         self.window_chrome.set_backdrop_color(palette.title_background);
     }
 
-    /// Applies a concrete metrics edit and returns the resulting skin.
-    ///
-    /// The closure keeps grouped metrics construction concise in programmatic skins and tests
-    /// without restoring a flat duplicate field surface on `Skin`.
-    #[cfg(test)]
-    pub(crate) fn with_metrics(mut self, configure: impl FnOnce(&mut SkinMetrics)) -> Self {
-        // Metrics are plain concrete values, so configuration is immediate and cannot be retained
-        // as an erased callback or deferred mutation.
-        configure(&mut self.metrics);
-        self
-    }
-
     /// Reports whether `atlas` contains every semantic and image resource used by this skin.
     pub(crate) fn belongs_to(&self, atlas: &AtlasHandle) -> bool {
         // Semantic resource tables and image-backed appearances all carry stable IDs. Checking the

@@ -81,9 +81,6 @@ pub struct ButtonParameters {
     pub content: ButtonContent,
     /// Font used for text content.
     pub font: FontRef,
-    /// Base widget options retained only by native algorithm fixtures.
-    #[cfg(test)]
-    pub opt: WidgetOption,
     /// Fill behavior for the button background.
     pub fill: WidgetFillOption,
 }
@@ -94,31 +91,7 @@ impl ButtonParameters {
         Self {
             content: ButtonContent::Text { label: label.into(), icon: None },
             font: FontRef::Role(FontRole::Body),
-            #[cfg(test)]
-            opt: WidgetOption::FRAME,
             fill: WidgetFillOption::ALL,
-        }
-    }
-
-    /// Creates text-button parameters with explicit widget options.
-    #[cfg(test)]
-    pub fn with_opt(label: impl Into<String>, opt: WidgetOption) -> Self {
-        Self {
-            content: ButtonContent::Text { label: label.into(), icon: None },
-            font: FontRef::Role(FontRole::Body),
-            opt,
-            fill: WidgetFillOption::ALL,
-        }
-    }
-
-    /// Creates image-button parameters with explicit options and fill behavior.
-    #[cfg(test)]
-    pub fn with_image(label: impl Into<String>, image: Option<neocogi_ui::Image>, opt: WidgetOption, fill: WidgetFillOption) -> Self {
-        Self {
-            content: ButtonContent::Image { label: label.into(), image },
-            font: FontRef::Role(FontRole::Body),
-            opt,
-            fill,
         }
     }
 }
@@ -152,9 +125,6 @@ pub struct Button {
     /// Initialization-only font.
     font: FontRef,
     /// Base widget options.
-    /// Native algorithm fixture policy; production options live only in WidgetState.
-    #[cfg(test)]
-    opt: WidgetOption,
     /// Initialization-only fill behavior.
     fill: WidgetFillOption,
     /// Runtime-owned source for user submissions.
@@ -162,30 +132,15 @@ pub struct Button {
 }
 
 impl Button {
-    /// Constructs a retained node and a weak typed handle to its concrete button.
-    #[cfg(test)]
-    pub fn create(parameters: ButtonParameters) -> (crate::TypedWidgetHandle<Self>, crate::Node) {
-        let widget = Button::from(parameters);
-        crate::Node::typed_widget(widget)
-    }
-
     /// Combines validated semantic parameters with one already bound common runtime.
     pub(crate) fn from_runtime(runtime: crate::ui_node::widget_object::WidgetRuntime, parameters: ButtonParameters) -> Self {
         Self {
             runtime,
             content: parameters.content,
             font: parameters.font,
-            #[cfg(test)]
-            opt: parameters.opt,
             fill: parameters.fill,
             submitted_event: crate::EventSource::new(),
         }
-    }
-
-    /// Returns the native event endpoint emitted once for every user submission.
-    #[cfg(test)]
-    pub fn submitted(&self) -> crate::WidgetEventPortHandle<ButtonSubmitted> {
-        <Self as crate::TypedWidget<ButtonSubmitted>>::event(self)
     }
 
     /// Measures the label and optional visual content.
@@ -265,20 +220,7 @@ impl Button {
     }
 }
 
-#[cfg(test)]
-impl crate::TypedWidgetHandle<Button> {
-    /// Returns the button's native submission endpoint.
-    pub fn submitted(&self) -> crate::WidgetEventPortHandle<ButtonSubmitted> {
-        self.widget_event()
-    }
-}
-
 impl Widget for Button {
-    #[cfg(test)]
-    fn widget_opt(&self) -> &WidgetOption {
-        &self.opt
-    }
-
     fn frame_appearance_role(&self) -> FrameRole {
         // Buttons use one stateful role for their complete runtime-owned outer frame.
         FrameRole::Control(ControlRole::Button)
@@ -311,15 +253,6 @@ impl Widget for Button {
 impl crate::TypedWidget<ButtonSubmitted> for Button {
     fn event(&self) -> crate::WidgetEventPortHandle<ButtonSubmitted> {
         self.submitted_event.event()
-    }
-}
-
-#[cfg(test)]
-impl From<ButtonParameters> for Button {
-    /// Transfers one-shot parameters into the concrete Button runtime.
-    fn from(parameters: ButtonParameters) -> Self {
-        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(parameters.opt);
-        Self::from_runtime(runtime, parameters)
     }
 }
 

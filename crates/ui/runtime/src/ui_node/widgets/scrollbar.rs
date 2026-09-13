@@ -58,10 +58,6 @@ use crate::{ControlRole};
 
 use crate::math::{clamp_i64_to_i32, RectExt};
 use crate::{Dimensioni, MouseButton, Recti, UiInputEvent, Vec2i, Widget, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx};
-#[cfg(test)]
-use crate::{Node};
-#[cfg(test)]
-use crate::{TypedWidgetHandle};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 /// Axis selector used by shared scrollbar geometry helpers.
@@ -288,9 +284,6 @@ pub struct Scrollbar {
     /// One authoritative range/offset allocation, also shared by composed scroll layout when present.
     pub(crate) axis_state: std::rc::Rc<ScrollAxisState>,
     /// Caller-authored options; dynamic range policy is resolved from the same shared state.
-    /// Native algorithm fixture policy; production options live only in WidgetState.
-    #[cfg(test)]
-    opt: WidgetOption,
     /// Typed source for user-originated movement; programmatic requests remain silent.
     changed_event: crate::EventSource<ScrollbarChanged>,
 }
@@ -366,29 +359,20 @@ impl Scrollbar {
             runtime,
             axis: parameters.axis,
             axis_state,
-            #[cfg(test)]
-            opt: parameters.opt,
             changed_event: crate::EventSource::new(),
         }
     }
 }
 
 #[cfg(test)]
-impl From<ScrollbarParameters> for Scrollbar {
+impl From<ScrollbarParameters> for crate::test_support::algorithm::Algorithm<Scrollbar> {
     /// Builds the same concrete scrollbar against a valid native test host.
     fn from(parameters: ScrollbarParameters) -> Self {
-        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(parameters.opt);
-        Self::from_runtime(runtime, parameters)
+        Self::new(parameters.opt, |runtime| Scrollbar::from_runtime(runtime, parameters))
     }
 }
 
 impl Scrollbar {
-    /// Creates a standalone scrollbar node and a weak typed handle to its retained state.
-    #[cfg(test)]
-    pub fn create(parameters: ScrollbarParameters) -> (TypedWidgetHandle<Self>, Node) {
-        Node::typed_widget(Self::from(parameters))
-    }
-
     /// Returns the axis configured when this scrollbar was constructed.
     pub const fn axis(&self) -> ScrollbarAxis {
         // Axis is immutable semantic configuration, so returning it never depends on layout state.
@@ -434,30 +418,6 @@ impl Scrollbar {
     }
 }
 
-#[cfg(test)]
-impl TypedWidgetHandle<Scrollbar> {
-    /// Returns the current offset while the scrollbar remains mounted.
-    pub fn offset(&self) -> Option<i32> {
-        // Read through the weak typed capability without extending the node's ownership lifetime.
-        self.try_read(Scrollbar::offset)
-    }
-
-    /// Replaces the current viewport and content lengths.
-    ///
-    /// This measurement-preserving setter does not invalidate the current commit; call
-    /// `Context::update_ui` before relying on the resulting thumb geometry.
-    pub fn set_lengths(&self, viewport_len: i32, content_len: i32) -> Option<()> {
-        // Range changes affect thumb geometry but not the scrollbar's intrinsic thickness.
-        self.try_update_without_measurement(|scrollbar| scrollbar.set_lengths(viewport_len, content_len))
-    }
-
-    /// Returns the scrollbar's native offset-change endpoint.
-    pub fn changed(&self) -> crate::WidgetEventPortHandle<ScrollbarChanged> {
-        // Resolve the event endpoint through the generic typed-widget helper.
-        self.widget_event()
-    }
-}
-
 impl crate::TypedWidget<ScrollbarChanged> for Scrollbar {
     /// Returns the runtime-owned event endpoint for user-originated offset changes.
     fn event(&self) -> crate::WidgetEventPortHandle<ScrollbarChanged> {
@@ -467,21 +427,6 @@ impl crate::TypedWidget<ScrollbarChanged> for Scrollbar {
 }
 
 impl Widget for Scrollbar {
-    /// Returns the base options used by generic retained input routing.
-    #[cfg(test)]
-    fn widget_opt(&self) -> &WidgetOption {
-        // The stored options already include focus preservation established during construction.
-        &self.opt
-    }
-
-    /// Disables pointer interaction while the scrollbar has no movable content range.
-    #[cfg(test)]
-    fn effective_widget_opt(&self) -> WidgetOption {
-        // A zero range can still paint a complete thumb when mounted standalone, but accepting a
-        // press would create meaningless pointer capture.
-        crate::ui_node::widget_object::WidgetAlgorithm::effective_options(self, self.opt)
-    }
-
     /// Applies track clicks and captured thumb dragging to the current offset.
     fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         // Resolve one geometry snapshot from this widget's local allocation so hit testing and drag

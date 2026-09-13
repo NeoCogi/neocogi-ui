@@ -34,9 +34,6 @@ pub(crate) struct WidgetRuntime {
     resources: SharedAssets,
     /// Direct class activation polls its foreign host; runtime-factory products observe shared publication.
     refresh_resources: bool,
-    /// Keeps the real host runtime alive for native-only unit-test fixtures.
-    #[cfg(test)]
-    test_owner: Option<ComPtr<UiRuntimeAbi>>,
 }
 
 impl WidgetRuntime {
@@ -49,8 +46,6 @@ impl WidgetRuntime {
             state: WidgetState::new(host, WidgetOptions::from_raw(options.bits() as u16)),
             resources,
             refresh_resources: true,
-            #[cfg(test)]
-            test_owner: None,
         })
     }
 
@@ -61,8 +56,6 @@ impl WidgetRuntime {
             state: WidgetState::new(host, WidgetOptions::from_raw(options.bits() as u16)),
             resources,
             refresh_resources: false,
-            #[cfg(test)]
-            test_owner: None,
         })
     }
 
@@ -72,30 +65,6 @@ impl WidgetRuntime {
             Some(resources) => Self::from_shared(host, options, resources.clone()),
             None => Self::new(host, options),
         }
-    }
-
-    /// Creates a fully valid host-bound runtime for the native algorithm test harness.
-    #[cfg(test)]
-    pub(crate) fn for_test(options: WidgetOption) -> Self {
-        // Native tests exercise the same concrete structs without mounting them through COM. A real
-        // runtime supplies their host and assets, while this test-only owner keeps its weak factory
-        // reachable for the complete lifetime of the widget value.
-        let owner = crate::test_support::create_runtime(crate::test_support::test_atlas());
-        let factory = owner.factory().expect("test UI runtime exposes its factory");
-        let host = factory.host().expect("test UI factory exposes its widget host");
-        let mut runtime = Self::new(host, options).expect("test widget runtime imports valid assets");
-        runtime.test_owner = Some(owner);
-        runtime
-    }
-
-    /// Creates test-only common state together with a valid host-owned child writer.
-    #[cfg(test)]
-    pub(crate) fn for_test_container(options: WidgetOption) -> (Self, ComPtr<IChildrenEditorAbi>) {
-        // Container algorithm tests still use the native tree harness. Supplying a real writer keeps
-        // the concrete type structurally identical to its dynamically constructed COM allocation.
-        let runtime = Self::for_test(options);
-        let editor = runtime.state.host().create_children().expect("test widget host creates a child collection");
-        (runtime, editor)
     }
 
     /// Returns the widget's single shared value after refreshing an independently activated class.

@@ -35,8 +35,6 @@ use crate::{
     math::RectExt,
     render::{Color, SliceInsets, NinePatch},
 };
-#[cfg(test)]
-use crate::render::TextureId;
 use rs_math3d::{Recti, Vec2f, Vec2i, color4b};
 
 /// Records backend-neutral drawing operations in local coordinates.
@@ -199,12 +197,6 @@ impl<'a> Painter<'a> {
         self.record_rect(rect, color, |list, clip, screen_rect| list.push_icon(clip, id, screen_rect, color));
     }
 
-    /// Records one backend-owned external texture in a local rectangle.
-    #[cfg(test)]
-    pub fn image(&mut self, id: TextureId, rect: Recti, color: Color) {
-        self.record_rect(rect, color, |list, clip, screen_rect| list.push_image(clip, id, screen_rect, color));
-    }
-
     /// Tessellates and records one thick local line without clipping its generated triangles.
     pub fn stroke_line(&mut self, from: Vec2f, to: Vec2f, width: f32, color: Color) {
         if color.a == 0 || !self.clip.has_positive_area() {
@@ -297,7 +289,7 @@ impl<'a> Painter<'a> {
 mod tests {
     use super::*;
     use crate::test_support::test_atlas;
-    use crate::{NinePatchCell, TextureId, color};
+    use crate::{NinePatchCell, color};
     use super::super::display_list::DrawKind;
 
     fn rect_tuple(rect: Recti) -> (i32, i32, i32, i32) {
@@ -429,7 +421,7 @@ mod tests {
     }
 
     #[test]
-    fn semantic_primitives_translate_and_reject_fully_hidden_bounds() {
+    fn semantic_primitives_translate_and_retain_clipping_for_the_compositor() {
         // Resolve semantic resources from one concrete atlas even though this focused test stops
         // after recording. Real atlas-scoped capabilities ensure Painter is exercised through the
         // same typed API used by renderer-bound application code.
@@ -441,10 +433,16 @@ mod tests {
             let mut painter = Painter::for_widget(&mut list, Recti::new(10, 20, 100, 100), Recti::new(10, 20, 20, 20));
             painter.text(font, "label", Vec2i::new(1, 2), color(255, 255, 255, 255));
             painter.icon(icon, Recti::new(2, 3, 4, 5), color(255, 255, 255, 255));
-            painter.image(TextureId::new_test(1, 10, 10), Recti::new(100, 100, 10, 10), color(255, 255, 255, 255));
+            painter.com_texture(
+                Recti::new(100, 100, 10, 10),
+                color(255, 255, 255, 255),
+                crate::test_support::test_image(10, 10).as_interface().add_ref(),
+            );
         }
 
-        assert_eq!(list.ops.len(), 2);
+        // COM textures retain their authoritative clip; GFX decides whether they contribute.
+        assert_eq!(list.ops.len(), 3);
+        assert!(matches!(list.ops[2].kind, DrawKind::ComTexture { .. }));
         let DrawKind::Text { pos, .. } = &list.ops[0].kind else {
             panic!("expected text");
         };

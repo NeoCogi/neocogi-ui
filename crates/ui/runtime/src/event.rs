@@ -70,22 +70,3 @@ pub trait TypedWidget<E: 'static>: Widget {
 }
 
 pub use neocogi_ui::events::{EventSource, EventEndpoint as WidgetEventPortHandle};
-#[cfg(test)]
-pub use neocogi_ui::events::test_support::SubscribeError;
-#[cfg(test)]
-pub(crate) use crate::test_support::events::WidgetEventDispatcher;
-#[cfg(test)]
-impl<W: Widget + 'static> crate::TypedWidgetHandle<W> {
-    /// Projects a concrete widget-owned event port through this weak typed widget handle.
-    ///
-    /// Access is intentionally brief: [`TypedWidget::event`] clones only the weak port capability,
-    /// and the concrete widget borrow is released before the caller can subscribe. If the widget
-    /// cell is currently unavailable or already dead, the result behaves as an expired event
-    /// handle.
-    pub fn widget_event<E: 'static>(&self) -> WidgetEventPortHandle<E>
-    where
-        W: TypedWidget<E>,
-    {
-        self.try_read(TypedWidget::event).unwrap_or_else(WidgetEventPortHandle::expired)
-    }
-}

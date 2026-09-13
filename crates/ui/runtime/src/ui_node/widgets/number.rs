@@ -115,9 +115,6 @@ pub struct Number {
     /// Initialization-only font.
     font: FontRef,
     /// Base widget options.
-    /// Native algorithm fixture policy; production options live only in WidgetState.
-    #[cfg(test)]
-    opt: WidgetOption,
     /// Current number value.
     value: Real,
     /// Text editing state for shift-click numeric entry.
@@ -127,12 +124,6 @@ pub struct Number {
 }
 
 impl Number {
-    /// Constructs a retained node and a weak typed handle to its concrete number input.
-    #[cfg(test)]
-    pub fn create(parameters: NumberParameters) -> (TypedWidgetHandle<Self>, Node) {
-        Node::typed_widget(Self::from(parameters))
-    }
-
     /// Combines validated semantic parameters with one already bound common runtime.
     pub(crate) fn from_runtime(runtime: crate::ui_node::widget_object::WidgetRuntime, parameters: NumberParameters) -> Self {
         // Fallible parameter constructors guarantee finite value and nonnegative finite step.
@@ -141,8 +132,6 @@ impl Number {
             step: parameters.step,
             precision: parameters.precision,
             font: parameters.font,
-            #[cfg(test)]
-            opt: parameters.opt,
             value: parameters.value,
             edit: NumberEditState::default(),
             changed_event: crate::EventSource::new(),
@@ -247,11 +236,6 @@ fn add_number_delta(value: Real, delta: f64) -> Real {
 }
 
 impl Widget for Number {
-    #[cfg(test)]
-    fn widget_opt(&self) -> &WidgetOption {
-        &self.opt
-    }
-
     fn frame_appearance_role(&self) -> FrameRole {
         // Numeric editing shares the single-line text-input background and border contract.
         FrameRole::Control(ControlRole::TextInput)
@@ -277,11 +261,10 @@ impl Widget for Number {
 }
 
 #[cfg(test)]
-impl From<NumberParameters> for Number {
+impl From<NumberParameters> for crate::test_support::algorithm::Algorithm<Number> {
     /// Transfers one-shot parameters into the concrete Number runtime.
     fn from(parameters: NumberParameters) -> Self {
-        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(parameters.opt);
-        Self::from_runtime(runtime, parameters)
+        Self::new(parameters.opt, |runtime| Number::from_runtime(runtime, parameters))
     }
 }
 

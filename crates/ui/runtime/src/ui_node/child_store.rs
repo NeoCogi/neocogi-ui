@@ -51,7 +51,7 @@ impl ChildStore {
         }
         let nodes = self.take()?;
         for node in nodes.iter() {
-            if let super::mounted_node::NodeLayoutKind::Branch { children, .. } = &node.data.com().layout {
+            if let super::mounted_node::NodeLayoutKind::Branch { children, .. } = &node.data.layout {
                 children.reject_cycle(parent)?;
             }
         }
@@ -154,7 +154,7 @@ impl IChildren for ChildView {
     fn child(&self, index: u32) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
         let nodes = self.store.take()?;
         let node = nodes.get(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
-        Ok(node.data.com().widget.clone())
+        Ok(node.data.widget.clone())
     }
 }
 impl Drop for ChildView {

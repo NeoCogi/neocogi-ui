@@ -104,9 +104,6 @@ pub struct Textbox {
     /// Initialization-only font.
     font: FontRef,
     /// Base widget options.
-    /// Native algorithm fixture policy; production options live only in WidgetState.
-    #[cfg(test)]
-    opt: WidgetOption,
     /// Runtime-owned source for user-originated text changes.
     changed_event: crate::EventSource<TextboxChanged>,
     /// Runtime-owned source for user submissions.
@@ -124,8 +121,6 @@ impl Textbox {
             buf,
             cursor,
             font: parameters.font,
-            #[cfg(test)]
-            opt: parameters.opt,
             changed_event: crate::EventSource::new(),
             submitted_event: crate::EventSource::new(),
         }
@@ -168,14 +163,6 @@ impl Textbox {
     }
 }
 
-#[cfg(test)]
-impl TypedWidgetHandle<Textbox> {
-    /// Returns the textbox's native value-change endpoint.
-    pub fn changed(&self) -> WidgetEventPortHandle<TextboxChanged> {
-        self.widget_event()
-    }
-}
-
 /// Snapshot emitted after a user-originated textbox value change.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TextboxChanged {
@@ -211,12 +198,6 @@ impl crate::event::ComEvent for TextboxSubmitted {
 }
 
 impl Textbox {
-    /// Constructs a retained node and a weak typed handle to its concrete textbox.
-    #[cfg(test)]
-    pub fn create(parameters: TextboxParameters) -> (TypedWidgetHandle<Self>, Node) {
-        Node::typed_widget(Self::from(parameters))
-    }
-
     /// Returns the native event endpoint emitted after every user-originated text change.
     #[cfg(test)]
     pub fn changed(&self) -> crate::WidgetEventPortHandle<TextboxChanged> {
@@ -426,11 +407,6 @@ pub(crate) fn textbox_paint(ctx: &mut WidgetPaintCtx<'_>, buf: &str, cursor: usi
 }
 
 impl Widget for Textbox {
-    #[cfg(test)]
-    fn widget_opt(&self) -> &WidgetOption {
-        &self.opt
-    }
-
     fn frame_appearance_role(&self) -> FrameRole {
         // Single-line textboxes use the semantic input frame for every interaction state.
         FrameRole::Control(ControlRole::TextInput)
@@ -450,11 +426,10 @@ impl Widget for Textbox {
 }
 
 #[cfg(test)]
-impl From<TextboxParameters> for Textbox {
+impl From<TextboxParameters> for crate::test_support::algorithm::Algorithm<Textbox> {
     /// Transfers one-shot parameters into the concrete Textbox runtime.
     fn from(parameters: TextboxParameters) -> Self {
-        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(parameters.opt);
-        Self::from_runtime(runtime, parameters)
+        Self::new(parameters.opt, |runtime| Textbox::from_runtime(runtime, parameters))
     }
 }
 
@@ -508,13 +483,22 @@ mod tests {
         events.push(RecordedEvent::Submitted(event.text.clone()));
     }
 
-    fn text_dispatcher(textbox: &Textbox) -> crate::event::WidgetEventDispatcher<Vec<RecordedEvent>> {
-        let mut dispatcher = crate::event::WidgetEventDispatcher::new();
-        dispatcher.subscribe(textbox.changed(), |state, _, event| record_changed(state, event)).unwrap();
-        dispatcher
-            .subscribe(textbox.submitted(), |state, _, event| record_submitted(state, event))
-            .unwrap();
-        dispatcher
+    /// Reads complete production queue snapshots; runtime dispatch is tested through EventSession.
+    fn text_dispatcher(textbox: &Textbox) -> impl FnMut(&mut Vec<RecordedEvent>) -> bool + use<> {
+        let changed = neocogi_ui::events::test_support::EventLease::connect(textbox.changed()).unwrap();
+        let submitted = neocogi_ui::events::test_support::EventLease::connect(textbox.submitted()).unwrap();
+        move |values| {
+            let changed = changed.drain(1024).unwrap();
+            let submitted = submitted.drain(1024).unwrap();
+            let delivered = !changed.events.is_empty() || !submitted.events.is_empty();
+            for event in changed.events {
+                record_changed(values, &event);
+            }
+            for event in submitted.events {
+                record_submitted(values, &event);
+            }
+            delivered
+        }
     }
 
     fn update_textbox(textbox: &mut Textbox, focused: bool, input: Vec<UiInputEvent>) {
@@ -534,7 +518,7 @@ mod tests {
 
     #[test]
     fn text_events_preserve_complete_snapshots_and_per_port_fifo() {
-        let mut textbox = Textbox::from(TextboxParameters::new(""));
+        let mut textbox = crate::test_support::algorithm::Algorithm::<Textbox>::from(TextboxParameters::new(""));
         let mut dispatcher = text_dispatcher(&textbox);
 
         update_textbox(
@@ -552,7 +536,7 @@ mod tests {
 
         assert_eq!(textbox.text(), "abcde");
         let mut events = Vec::new();
-        assert!(dispatcher.dispatch(&mut events));
+        assert!(dispatcher(&mut events));
         assert_eq!(
             events,
             [
@@ -566,19 +550,19 @@ mod tests {
 
     #[test]
     fn programmatic_text_and_cursor_setters_are_silent() {
-        let mut textbox = Textbox::from(TextboxParameters::new("initial"));
+        let mut textbox = crate::test_support::algorithm::Algorithm::<Textbox>::from(TextboxParameters::new("initial"));
         let mut dispatcher = text_dispatcher(&textbox);
         textbox.set_text("replacement");
         textbox.set_cursor(3);
         textbox.move_cursor_to_end();
         textbox.clear();
-        assert!(!dispatcher.dispatch(&mut Vec::new()));
+        assert!(!dispatcher(&mut Vec::new()));
     }
 
     /// Verifies the public Home and End keys select the two single-line cursor boundaries.
     #[test]
     fn home_and_end_keys_select_single_line_boundaries() {
-        let mut textbox = Textbox::from(TextboxParameters::new("abcd"));
+        let mut textbox = crate::test_support::algorithm::Algorithm::<Textbox>::from(TextboxParameters::new("abcd"));
         textbox.set_cursor(2);
 
         update_textbox(
@@ -603,7 +587,7 @@ mod tests {
     /// Verifies construction, programmatic replacement, and pasted input all remain single-line.
     #[test]
     fn every_text_ingress_removes_line_endings() {
-        let mut textbox = Textbox::from(TextboxParameters::new("a\r\nb\rc\n"));
+        let mut textbox = crate::test_support::algorithm::Algorithm::<Textbox>::from(TextboxParameters::new("a\r\nb\rc\n"));
         assert_eq!(textbox.text(), "abc");
         assert_eq!(textbox.cursor(), 3);
 

@@ -104,21 +104,6 @@ impl MenuItemParameters {
         self.enabled(false)
     }
 
-    /// Replaces the initial marker state.
-    #[cfg(test)]
-    pub const fn mark(mut self, mark: MenuItemMark) -> Self {
-        // The role is retained when its boolean is false so alignment remains stable.
-        self.mark = mark;
-        self
-    }
-
-    /// Configures an initially checked or unchecked item.
-    #[cfg(test)]
-    pub const fn checked(self, checked: bool) -> Self {
-        // Preserve the checkable role independently from its selected value.
-        self.mark(MenuItemMark::Checked(checked))
-    }
-
     /// Adds presentation-only accelerator text such as `Ctrl+O`.
     ///
     /// This does not register a keyboard shortcut or submit the item from keyboard input.
@@ -346,30 +331,6 @@ impl Menu {
     pub fn new(label: impl Into<String>) -> Self {
         // Entries remain declaration data until a window or standalone popup consumes the menu.
         Self { label: label.into(), entries: Vec::new() }
-    }
-
-    /// Appends one uniquely owned actionable item.
-    #[cfg(test)]
-    pub fn item(mut self, item: MenuItem) -> Self {
-        // Moving the item prevents accidental reuse and removes public handle/node pairs.
-        self.entries.push(MenuEntry::Item(item));
-        self
-    }
-
-    /// Appends one explicit non-interactive separator row.
-    #[cfg(test)]
-    pub fn separator(mut self) -> Self {
-        // Preserve exact declaration order; registration performs no implicit grouping.
-        self.entries.push(MenuEntry::Separator);
-        self
-    }
-
-    /// Appends one recursively composed submenu.
-    #[cfg(test)]
-    pub fn submenu(mut self, submenu: Menu) -> Self {
-        // The child remains uniquely owned and is flattened only during window registration.
-        self.entries.push(MenuEntry::Submenu(submenu));
-        self
     }
 
     /// Separates the parent-facing label from the rows consumed by one popup surface.
@@ -769,27 +730,6 @@ impl MenuSurface {
                 bounds.height,
             )
         })
-    }
-
-    /// Copies every committed slot rectangle into screen space for focused manager tests.
-    #[cfg(test)]
-    pub(crate) fn slot_rects(&self) -> Vec<Recti> {
-        self.geometry.slots.iter().enumerate().filter_map(|(slot, _)| self.slot_rect(slot)).collect()
-    }
-
-    /// Returns the label of one branch slot for test-only diagnostic synthesis.
-    #[cfg(test)]
-    pub(crate) fn branch_label(&self, slot: usize) -> Option<&str> {
-        match self.rows.get(slot)? {
-            MenuSlot::Branch { label } => Some(label),
-            MenuSlot::Item(_) | MenuSlot::Separator => None,
-        }
-    }
-
-    /// Returns the committed full surface allocation for root-layout tests.
-    #[cfg(test)]
-    pub(crate) fn surface_rect(&self) -> Recti {
-        self.rect
     }
 
     /// Replaces the paint-only child highlight derived from active forest edges.

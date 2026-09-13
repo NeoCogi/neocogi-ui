@@ -297,7 +297,7 @@ shared semantic action. It contains no painter or pointer into the runtime.
 Properties are refreshed after update even when geometry is unchanged, so
 mode-dependent focus/text-input policy is visible to the next routed event.
 
-The runtime takes ownership of its Context for each transaction and restores it
+The runtime takes ownership of its retained context for each transaction and restores it
 on every return path. No runtime RefCell guard spans a foreign call. Reentrant
 runtime operations receive BUSY while the slot is occupied; ordinary peer
 widget setters remain available during update. Measurement, painting and

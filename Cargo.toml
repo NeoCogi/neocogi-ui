@@ -32,8 +32,8 @@ repository = "https://github.com/NeoCogi/neocogi-platform"
 
 [workspace.dependencies]
 neocogi-ui-core-contracts = { path = "crates/ui/core-contracts" }
-neocogi-renderer-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "dfe542fd1faa47cdb26e84514b771462d6c7a1d3" }
-neocogi-platform-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "dfe542fd1faa47cdb26e84514b771462d6c7a1d3" }
+neocogi-renderer-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "eb66761922125bd761378de19829d610415a05c4" }
+neocogi-platform-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "eb66761922125bd761378de19829d610415a05c4" }
 neocogi-gfx-contracts = { path = "crates/gfx/contracts" }
 neocogi-gfx-support = { path = "crates/gfx/support" }
 neocogi-gfx-impl = { path = "crates/gfx/impl", version = "0.9.0-alpha.0", default-features = false }
@@ -58,14 +58,14 @@ neocogi-ui-runtime = { path = "crates/ui/runtime", version = "0.9.0-alpha.0", de
 neocogi-demo-assets = { path = "demos/assets", default-features = false }
 neocogi-demo-host = { path = "demos/host", default-features = false }
 neocogi-demo-contracts = { path = "demos/contracts" }
-neocogi-demo-render-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "dfe542fd1faa47cdb26e84514b771462d6c7a1d3" }
-neocogi-demo-renderer = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "dfe542fd1faa47cdb26e84514b771462d6c7a1d3", default-features = false }
-neocogi-render-core = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "dfe542fd1faa47cdb26e84514b771462d6c7a1d3" }
-neocogi-render-support = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "dfe542fd1faa47cdb26e84514b771462d6c7a1d3" }
-neocogi-render-glow = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "dfe542fd1faa47cdb26e84514b771462d6c7a1d3" }
-neocogi-render-webgl = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "dfe542fd1faa47cdb26e84514b771462d6c7a1d3" }
-neocogi-render-vulkan = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "dfe542fd1faa47cdb26e84514b771462d6c7a1d3" }
-neocogi-render-wgpu = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "dfe542fd1faa47cdb26e84514b771462d6c7a1d3" }
+neocogi-demo-render-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "eb66761922125bd761378de19829d610415a05c4" }
+neocogi-demo-renderer = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "eb66761922125bd761378de19829d610415a05c4", default-features = false }
+neocogi-render-core = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "eb66761922125bd761378de19829d610415a05c4" }
+neocogi-render-support = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "eb66761922125bd761378de19829d610415a05c4" }
+neocogi-render-glow = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "eb66761922125bd761378de19829d610415a05c4" }
+neocogi-render-webgl = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "eb66761922125bd761378de19829d610415a05c4" }
+neocogi-render-vulkan = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "eb66761922125bd761378de19829d610415a05c4" }
+neocogi-render-wgpu = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "eb66761922125bd761378de19829d610415a05c4" }
 
 ash = { version = "0.38", default-features = false, features = ["linked"] }
 ash-window-handle = { package = "ash-window", version = "0.13" }

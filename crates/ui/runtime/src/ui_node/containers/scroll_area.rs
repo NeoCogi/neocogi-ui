@@ -31,8 +31,6 @@
 use crate::{SurfaceRole};
 
 use std::rc::Rc;
-#[cfg(test)]
-use std::cell::RefCell;
 
 use bitflags::bitflags;
 
@@ -40,12 +38,8 @@ use crate::ui_node::widgets::{Scrollbar, ScrollbarAxis, ScrollbarParameters};
 use crate::{
     ChildParticipation, ContainerWidget, Dimensioni, FrameRole, MeasureCtx, Recti, UiInputEvent, Vec2i, Widget, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx,
 };
-#[cfg(test)]
-use crate::{Container, TypedWidgetHandle};
 
 use super::{ContainerLayoutCtx};
-#[cfg(test)]
-use super::{Node};
 
 /// Returns the child allocation for one scrollbar adjacent to the resolved content body.
 fn scrollbar_track(axis: ScrollbarAxis, body: Recti, scrollbar_size: i32) -> Recti {
@@ -76,27 +70,6 @@ bitflags! {
         const ENABLE_SCROLL = 32;
         /// No special options.
         const NONE = 0;
-    }
-}
-
-/// One-shot construction input for a retained scroll area.
-#[cfg(test)]
-pub struct ScrollAreaParameters {
-    /// The ordinary content node viewed through the scroll surface.
-    content: Node,
-    /// Immutable presentation options for the completed composite.
-    opt: ScrollAreaOption,
-}
-
-#[cfg(test)]
-impl ScrollAreaParameters {
-    /// Creates a scroll area that owns one ordinary content node.
-    ///
-    /// The content fills at least the complete viewport, while either desired extent may remain
-    /// larger and create overflow. Use explicit tracks inside the content container to express fixed
-    /// or flexible descendants; ScrollArea adds no additional child sizing policy.
-    pub fn new(opt: ScrollAreaOption, content: Node) -> Self {
-        Self { content, opt }
     }
 }
 
@@ -294,9 +267,6 @@ pub struct ScrollArea {
     content: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
     /// Same scrolling values used by the actual bars, transform surface and optional text editor.
     model: Rc<ScrollModel>,
-    /// Native fixture policy; deployed common state owns the authoritative frame options.
-    #[cfg(test)]
-    opt: WidgetOption,
 }
 impl ScrollArea {
     /// Combines the fixed structural tree and shared scroll model with one concrete runtime.
@@ -306,31 +276,9 @@ impl ScrollArea {
         content: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
         model: Rc<ScrollModel>,
     ) -> Self {
-        #[cfg(test)]
-        let opt = WidgetOption::from_bits_retain(u32::from(
-            runtime.state.options().expect("new test widget runtime exposes its validated options").raw(),
-        ));
-        Self {
-            runtime,
-            editor,
-            content,
-            model,
-            #[cfg(test)]
-            opt,
-        }
+        Self { runtime, editor, content, model }
     }
 
-    /// Clones the scalar model for a native composed editor without exposing structural children.
-    #[cfg(test)]
-    pub(crate) fn shared_model(&self) -> Rc<ScrollModel> {
-        self.model.clone()
-    }
-
-    /// Returns the requested offsets owned by the actual scrollbar state.
-    #[cfg(test)]
-    pub fn offset(&self) -> Vec2i {
-        self.model.offset()
-    }
     /// Requests nonnegative offsets; placement clamps against freshly measured content.
     pub fn set_offset(&mut self, offset: Vec2i) {
         self.model.set_offset(offset);
@@ -354,19 +302,9 @@ impl Widget for ScrollArea {
     fn take_shared_change(&self) -> bool {
         self.take_scroll_change()
     }
-    #[cfg(test)]
-    fn widget_opt(&self) -> &WidgetOption {
-        // These are presentation defaults; effective options below add dynamic scroll eligibility.
-        &self.opt
-    }
 
     fn frame_appearance_role(&self) -> FrameRole {
         self.scroll_frame_role()
-    }
-
-    #[cfg(test)]
-    fn effective_widget_opt(&self) -> WidgetOption {
-        crate::ui_node::widget_object::WidgetAlgorithm::effective_options(self, self.opt)
     }
 
     /// Reports scrolling because child placement reads the scrollbar-owned offsets.
@@ -441,14 +379,6 @@ impl ContainerWidget for ScrollSurface {
 }
 
 impl Widget for ScrollSurface {
-    /// Marks the transform-only surface as transparent to direct pointer targeting.
-    #[cfg(test)]
-    fn widget_opt(&self) -> &WidgetOption {
-        // Eligible content descendants remain targetable even though this structural surface has no
-        // independent interaction behavior.
-        &WidgetOption::NO_INTERACT
-    }
-
     /// Emits no paint operations because clipping and translation are traversal geometry.
     fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {}
 }
@@ -673,42 +603,7 @@ impl<T: ScrollComposition> ContainerWidget for T {
     }
 }
 
-impl ScrollArea {
-    /// Creates the composite and returns its weak typed widget handle plus completed node.
-    ///
-    /// The completed parent always owns exactly three structural children: a scrolling content
-    /// container and two real scrollbar widgets. The concrete `ScrollArea` is the parent
-    /// `ContainerWidget`; the generic `Container` remains the structural owner.
-    #[cfg(test)]
-    pub fn create(parameters: ScrollAreaParameters) -> (TypedWidgetHandle<ScrollArea>, Node) {
-        // Separate immutable presentation flags from dynamic enablement stored in the widget.
-        let enabled = parameters.opt.intersects(ScrollAreaOption::ENABLE_SCROLL);
-        let surface_opt = if parameters.opt.intersects(ScrollAreaOption::FRAME) {
-            WidgetOption::FRAME
-        } else {
-            WidgetOption::NONE
-        };
-        // Compose actual scalar state before publishing any weak legacy handles or COM objects.
-        let horizontal = Scrollbar::from(ScrollbarParameters::new(ScrollbarAxis::Horizontal));
-        let vertical = Scrollbar::from(ScrollbarParameters::new(ScrollbarAxis::Vertical));
-        let model = ScrollModel::new(horizontal.axis_state.clone(), vertical.axis_state.clone(), enabled);
-        let (_, horizontal_node) = Node::typed_widget(horizontal);
-        let (_, vertical_node) = Node::typed_widget(vertical);
-        let content = Rc::new(RefCell::new([parameters.content].into_iter().collect()));
-        let (surface_runtime, surface_editor) = crate::ui_node::widget_object::WidgetRuntime::for_test_container(WidgetOption::NO_INTERACT);
-        let surface = ScrollSurface::from_runtime(surface_runtime, surface_editor, model.clone());
-        let (_, surface_container) = Container::from_shared(content, surface);
-        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(surface_opt);
-        let host = runtime.state.host().add_ref();
-        let parts = ScrollParts::prepare(host, enabled, None).expect("native scroll fixture builds the same fixed COM topology");
-        let widget = ScrollArea::from_runtime(runtime, parts.editor, parts.content, model);
-        let children = Rc::new(RefCell::new(
-            [Node::container(surface_container), horizontal_node, vertical_node].into_iter().collect(),
-        ));
-        let (handle, container) = Container::from_shared(children, widget);
-        (handle, Node::container(container))
-    }
-}
+impl ScrollArea {}
 
 impl crate::ui_node::widget_object::WidgetAlgorithm for ScrollArea {
     /// Dynamic wheel eligibility follows the same shared policy used by placement.
@@ -844,429 +739,5 @@ impl neocogi_ui_core_contracts::ScrollArea for ScrollArea {
     fn replace_content(&mut self, content: ComRef<'_, IWidgetAbi>) -> Result<ChildEditResult, NcStatus> {
         self.runtime().state.writable()?;
         self.content.replace(0, content)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::cell::Cell;
-    use crate::input::Input;
-    use crate::test_support::{AllocationMeasurement, test_atlas};
-    use crate::ui_node::UiRuntime;
-    use crate::{Custom, CustomParameters, Linear, MouseButton, Skin, TextBlock, TextBlockParameters, TextWrap, UNCLIPPED_RECT};
-    #[cfg(test)]
-    use crate::{LinearItem, LinearParameters};
-
-    /// Test leaf whose desired size is content behavior rather than a generic node policy.
-    struct FixedContent(Dimensioni);
-
-    impl Widget for FixedContent {
-        fn widget_opt(&self) -> &WidgetOption {
-            &WidgetOption::NONE
-        }
-
-        fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {}
-    }
-
-    impl crate::LeafWidget for FixedContent {
-        fn measure(&self, _style: &crate::Skin, _atlas: &crate::AtlasHandle, _constraints: crate::Constraints) -> Dimensioni {
-            self.0
-        }
-    }
-
-    #[cfg(test)]
-    fn fixed_content(size: Dimensioni) -> Node {
-        Node::widget(FixedContent(size))
-    }
-
-    /// Container probe that distinguishes measurement candidates from real placement.
-    struct CountingContent {
-        desired: Dimensioni,
-        placements: Rc<Cell<usize>>,
-    }
-
-    impl ContainerWidget for CountingContent {
-        fn measure(&self, _ctx: &mut MeasureCtx<'_>, _constraints: crate::Constraints) -> Dimensioni {
-            self.desired
-        }
-
-        fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) {
-            self.placements.set(self.placements.get() + 1);
-            ctx.set_content_size(Dimensioni::new(rect.width, rect.height));
-        }
-    }
-
-    impl Widget for CountingContent {
-        fn widget_opt(&self) -> &WidgetOption {
-            &WidgetOption::NONE
-        }
-
-        fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {}
-    }
-
-    /// Lays out one fixed content node and returns the parent layout's committed summary.
-    ///
-    /// `style` must contain resource IDs resolved from `atlas`; accepting the handle explicitly
-    /// keeps this helper from creating a second, incompatible ownership domain behind the test's
-    /// back.
-    fn laid_out_geometry(child_size: Dimensioni, surface: Recti, style: Skin, atlas: &crate::AtlasHandle, requested_offset: Vec2i) -> ScrollAreaGeometry {
-        let child = fixed_content(child_size);
-        let (scroll, mut root) = ScrollArea::create(ScrollAreaParameters::new(ScrollAreaOption::ENABLE_SCROLL, child));
-        scroll.try_update(|state| state.set_offset(requested_offset)).unwrap();
-
-        let mut runtime = UiRuntime::new();
-        runtime.begin_update();
-        // The runtime takes an owned handle for the pass, so clone the caller's exact atlas
-        // capability rather than reconstructing identical-but-foreign atlas contents.
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), surface, UNCLIPPED_RECT);
-        scroll.try_read(|state| state.model.geometry.get()).unwrap()
-    }
-
-    #[test]
-    #[cfg(test)]
-    fn scroll_area_keeps_one_arbitrary_content_node_behind_its_surface() {
-        let child = Custom::create(CustomParameters::new("child"));
-        let (child_state, child) = Node::typed_widget(child);
-        let (scroll, node) = ScrollArea::create(ScrollAreaParameters::new(ScrollAreaOption::FRAME | ScrollAreaOption::ENABLE_SCROLL, child));
-
-        assert_eq!(
-            node.debug_node_count(),
-            5,
-            "parent, scroll surface, two bars, and arbitrary content are retained nodes"
-        );
-        scroll.try_update(|state| state.set_offset(Vec2i::new(-4, 12))).unwrap();
-        assert_eq!(scroll.try_read(|state| (state.offset().x, state.offset().y)), Some((0, 12)));
-        scroll.try_update(|state| state.set_scrolling_enabled(false)).unwrap();
-        assert_eq!(scroll.try_read(|state| (state.offset().x, state.offset().y)), Some((0, 0)));
-
-        drop(node);
-        assert!(!child_state.is_alive());
-        assert!(!scroll.is_alive());
-    }
-
-    /// Verifies that intrinsic content smaller than the viewport still owns its blank interaction area.
-    #[test]
-    fn short_content_fills_the_complete_scroll_viewport() {
-        // Retain the child identity so the committed screen allocation can verify both filled axes.
-        let child = fixed_content(Dimensioni::new(20, 20));
-        let child_id = child.id();
-        let (scroll, mut root) = ScrollArea::create(ScrollAreaParameters::new(ScrollAreaOption::ENABLE_SCROLL, child));
-        let atlas = test_atlas();
-        let style = crate::test_support::test_skin(&atlas).with_metrics(|metrics| {
-            metrics.padding = 0;
-            metrics.scrollbar_size = 10;
-        });
-        let viewport = Recti::new(0, 0, 100, 80);
-        let mut runtime = UiRuntime::new();
-
-        // A child smaller than the viewport produces no overflow but receives the complete
-        // interactive content allocation rather than a top-aligned intrinsic-height strip.
-        runtime.begin_update();
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), viewport, UNCLIPPED_RECT);
-        let child_rect = runtime.node_rect(std::slice::from_ref(&root), child_id).unwrap();
-        assert_eq!((child_rect.width, child_rect.height), (100, 80));
-        assert_eq!(
-            scroll.try_read(|state| (state.model.geometry.get().viewport.width, state.model.geometry.get().viewport.height)),
-            Some((100, 80))
-        );
-        assert_eq!(scroll.try_read(|state| (state.model.maximum().x, state.model.maximum().y)), Some((0, 0)));
-    }
-
-    /// Verifies nearest-edge reveal behavior on both axes of an overflowing viewport.
-    #[test]
-    fn scroll_rect_into_view_reveals_nearest_content_edges() {
-        // Overflow on both axes reserves two ten-pixel bars and leaves a 90-by-90 content viewport.
-        let child = fixed_content(Dimensioni::new(200, 300));
-        let (scroll, mut root) = ScrollArea::create(ScrollAreaParameters::new(ScrollAreaOption::ENABLE_SCROLL, child));
-        let atlas = test_atlas();
-        let style = crate::test_support::test_skin(&atlas).with_metrics(|metrics| {
-            metrics.padding = 0;
-            metrics.scrollbar_size = 10;
-        });
-        let viewport = Recti::new(0, 0, 100, 100);
-        let mut runtime = UiRuntime::new();
-        runtime.begin_update();
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), viewport, UNCLIPPED_RECT);
-
-        // Align the trailing edges of a lower-right target, then commit the requested offsets
-        // through ordinary placement and range clamping.
-        scroll.try_update(|state| state.scroll_rect_into_view(Recti::new(150, 250, 1, 10))).unwrap();
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), viewport, UNCLIPPED_RECT);
-        assert_eq!(scroll.try_read(|state| (state.offset().x, state.offset().y)), Some((61, 170)));
-
-        // A target before the visible origin aligns its leading edges instead of overscrolling to
-        // zero or retaining the previous lower-right position.
-        scroll.try_update(|state| state.scroll_rect_into_view(Recti::new(10, 20, 5, 5))).unwrap();
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), viewport, UNCLIPPED_RECT);
-        assert_eq!(scroll.try_read(|state| (state.offset().x, state.offset().y)), Some((10, 20)));
-    }
-
-    #[test]
-    #[cfg(test)]
-    fn ordinary_column_content_reuses_retained_measurements_while_scrolling() {
-        let mut first_id = None;
-        let rows = (0..1_000).map(|index| {
-            let node = Node::widget(Custom::create(CustomParameters::new(format!("row-{index}"))));
-            first_id.get_or_insert(node.id());
-            LinearItem::fixed(node, 20)
-        });
-        let (_, content) = Linear::create(LinearParameters::vertical(rows));
-        let (scroll, mut root) = ScrollArea::create(ScrollAreaParameters::new(ScrollAreaOption::ENABLE_SCROLL, content));
-        assert_eq!(root.debug_node_count(), 1_005, "all retained row nodes remain owned by their column");
-
-        let atlas = test_atlas();
-        let style = crate::test_support::test_skin(&atlas).with_metrics(|metrics| {
-            metrics.padding = 0;
-            metrics.spacing = 2;
-            metrics.scrollbar_size = 10;
-        });
-        let viewport = Recti::new(0, 0, 200, 120);
-        let mut runtime = UiRuntime::new();
-        runtime.begin_update();
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), viewport, UNCLIPPED_RECT);
-        let first_id = first_id.unwrap();
-        let before = runtime.node_rect(std::slice::from_ref(&root), first_id).unwrap();
-
-        runtime.begin_update();
-        let allocation = AllocationMeasurement::begin();
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), viewport, UNCLIPPED_RECT);
-        let allocations = allocation.finish();
-        let metrics = runtime.debug_metrics();
-        assert_eq!(allocations.events, 0);
-        assert_eq!(metrics.measures, 1);
-        assert_eq!(metrics.layouts, 0);
-
-        scroll.try_update(|state| state.set_offset(Vec2i::new(0, 10_000))).unwrap();
-        runtime.begin_update();
-        runtime.layout_tree_root(&mut root, &style, atlas, viewport, UNCLIPPED_RECT);
-        let after = runtime.node_rect(std::slice::from_ref(&root), first_id).unwrap();
-        assert!(after.y < before.y);
-        assert_eq!(root.debug_node_count(), 1_005);
-    }
-
-    #[test]
-    fn disabling_scrolling_revokes_scrollbar_capture_through_participation() {
-        let child = fixed_content(Dimensioni::new(200, 200));
-        let (scroll, mut root) = ScrollArea::create(ScrollAreaParameters::new(ScrollAreaOption::ENABLE_SCROLL, child));
-        let atlas = test_atlas();
-        let style = crate::test_support::test_skin(&atlas).with_metrics(|metrics| {
-            metrics.padding = 0;
-            metrics.scrollbar_size = 10;
-        });
-        let outer = Recti::new(0, 0, 100, 100);
-        let mut runtime = UiRuntime::new();
-
-        runtime.begin_update();
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), outer, UNCLIPPED_RECT);
-        let track = scroll
-            .try_read(|state| state.model.geometry.get().vertical)
-            .flatten()
-            .expect("overflowing content must activate the vertical scrollbar");
-
-        let mut input = Input::default();
-        input.mousedown(track.x + track.width / 2, track.y + 1, MouseButton::LEFT);
-        let event = input.pop_event().expect("test input must contain the pointer press");
-        let snapshot = input.snapshot();
-        runtime.begin_input_event(true, &event);
-        let (owner, result) = runtime
-            .route_input_event_to_node_ref(&mut root, &style, &event)
-            .expect("the scrollbar must receive its pointer press");
-        runtime.update_pointer_capture(owner, result, &event, snapshot.mouse_buttons);
-        runtime.update_tree_root(&mut root, &style, atlas.clone(), snapshot);
-        assert_eq!(runtime.debug_capture_target(), Some(owner));
-
-        scroll.try_update(|state| state.set_scrolling_enabled(false)).unwrap();
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), outer, UNCLIPPED_RECT);
-        assert_eq!(runtime.debug_capture_target(), None);
-    }
-
-    /// Verifies Skin padding and perpendicular scrollbar overflow converge together.
-    #[test]
-    fn padding_and_mutually_induced_bars_converge_from_logical_content_extent() {
-        // Ten pixels of padding on both sides leaves an eighty-pixel viewport for the child.
-        let surface = Recti::new(0, 0, 100, 100);
-        let atlas = test_atlas();
-        let style = crate::test_support::test_skin(&atlas);
-        let fits = laid_out_geometry(
-            Dimensioni::new(80, 80),
-            surface,
-            style.clone().with_metrics(|metrics| {
-                metrics.padding = 10;
-                metrics.scrollbar_size = 10;
-            }),
-            &atlas,
-            Vec2i::default(),
-        );
-        assert_eq!((fits.surface.width, fits.surface.height), (100, 100));
-        assert_eq!((fits.viewport.width, fits.viewport.height), (80, 80));
-        assert!(fits.vertical.is_none() && fits.horizontal.is_none());
-
-        // Vertical overflow removes horizontal space and therefore induces the perpendicular bar;
-        // the four-state convergence still commits the union of both required affordances.
-        let induced = laid_out_geometry(
-            Dimensioni::new(95, 101),
-            surface,
-            style.with_metrics(|metrics| {
-                metrics.padding = 0;
-                metrics.scrollbar_size = 10;
-            }),
-            &atlas,
-            Vec2i::default(),
-        );
-        assert_eq!(induced.vertical.map(|track| track.x), Some(90));
-        assert_eq!(induced.horizontal.map(|track| track.y), Some(90));
-        assert!(induced.vertical.is_some() && induced.horizontal.is_some() && induced.corner.is_some());
-    }
-
-    #[test]
-    #[cfg(test)]
-    fn scrollbar_candidates_measure_then_place_content_once() {
-        let placements = Rc::new(Cell::new(0));
-        let (_, content) = Container::new(
-            CountingContent {
-                desired: Dimensioni::new(95, 101),
-                placements: placements.clone(),
-            },
-            std::iter::empty::<Node>(),
-        );
-        let (_, mut root) = ScrollArea::create(ScrollAreaParameters::new(ScrollAreaOption::ENABLE_SCROLL, Node::container(content)));
-        let atlas = test_atlas();
-        let style = crate::test_support::test_skin(&atlas).with_metrics(|metrics| {
-            metrics.padding = 0;
-            metrics.scrollbar_size = 10;
-        });
-
-        let mut runtime = UiRuntime::new();
-        runtime.begin_update();
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), Recti::new(0, 0, 100, 100), UNCLIPPED_RECT);
-
-        assert_eq!(placements.get(), 1, "candidate scrollbar states must never speculatively place content");
-    }
-
-    #[test]
-    fn wrapped_flex_content_does_not_manufacture_horizontal_overflow() {
-        let (_, label) = TextBlock::create(TextBlockParameters::new("label"));
-        let (_, text) = TextBlock::create(TextBlockParameters::with_wrap(
-            "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Maecenas lacinia, sem eu lacinia molestie, mi risus faucibus ipsum.",
-            TextWrap::Word,
-        ));
-        let text_id = text.id();
-        let (_, text_column) = Linear::create(LinearParameters::vertical([text]));
-        let (_, row) = Linear::create(LinearParameters::horizontal([
-            crate::LinearItem::fixed(label, 40),
-            crate::LinearItem::flex(text_column, 1.0),
-        ]));
-        let (scroll, mut root) = ScrollArea::create(ScrollAreaParameters::new(ScrollAreaOption::ENABLE_SCROLL, row));
-        let atlas = test_atlas();
-        let style = crate::test_support::test_skin(&atlas).with_metrics(|metrics| {
-            metrics.padding = 0;
-            metrics.spacing = 4;
-            metrics.scrollbar_size = 10;
-        });
-
-        let mut runtime = UiRuntime::new();
-        runtime.begin_update();
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), Recti::new(0, 0, 100, 300), UNCLIPPED_RECT);
-
-        assert_eq!(scroll.try_read(|state| state.model.geometry.get().horizontal.is_none()), Some(true));
-        let text_rect = runtime.node_rect(std::slice::from_ref(&root), text_id).unwrap();
-        assert_eq!(text_rect.width, 56);
-        assert!(text_rect.height > atlas.get_font_height(style.resolve_font_role(&atlas, crate::FontRole::Body)) as i32);
-    }
-
-    #[test]
-    fn placement_clamps_requested_offsets_after_content_or_viewport_changes() {
-        let atlas = test_atlas();
-        let style = crate::test_support::test_skin(&atlas);
-        let geometry = laid_out_geometry(
-            Dimensioni::new(120, 130),
-            Recti::new(0, 0, 100, 100),
-            style.with_metrics(|metrics| {
-                metrics.padding = 0;
-                metrics.scrollbar_size = 10;
-            }),
-            &atlas,
-            Vec2i::new(500, 500),
-        );
-        assert_eq!((geometry.offset.x, geometry.offset.y), (30, 40));
-    }
-
-    #[test]
-    fn scroll_to_end_uses_the_next_vertical_range_and_preserves_horizontal_offset() {
-        let wide_line = "0123456789".repeat(12);
-        let (text, child) = TextBlock::create(TextBlockParameters::new(&wide_line));
-        let (scroll, mut root) = ScrollArea::create(ScrollAreaParameters::new(ScrollAreaOption::ENABLE_SCROLL, child));
-        let atlas = test_atlas();
-        let style = crate::test_support::test_skin(&atlas).with_metrics(|metrics| {
-            metrics.padding = 0;
-            metrics.scrollbar_size = 10;
-        });
-        let surface = Recti::new(0, 0, 100, 80);
-        let mut runtime = UiRuntime::new();
-
-        runtime.begin_update();
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), surface, UNCLIPPED_RECT);
-        text.set_text(std::iter::repeat_n(wide_line, 20).collect::<Vec<_>>().join("\n")).unwrap();
-        scroll
-            .try_update(|state| {
-                state.set_offset(Vec2i::new(7, 0));
-                state.scroll_to_end();
-            })
-            .unwrap();
-
-        runtime.begin_update();
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), surface, UNCLIPPED_RECT);
-        let geometry = scroll.try_read(|state| state.model.geometry.get()).unwrap();
-        assert_eq!(geometry.offset.x, 7);
-        let maximum = scroll.try_read(|state| state.model.maximum()).unwrap();
-        assert!(maximum.y > 0);
-        assert_eq!(geometry.offset.y, maximum.y);
-    }
-
-    /// Verifies that the optional frame and scroll transform each contribute exactly one offset.
-    #[test]
-    fn frame_origin_and_scroll_translation_are_applied_exactly_once() {
-        let child = fixed_content(Dimensioni::new(160, 200));
-        let child_id = child.id();
-        let (scroll, mut root) = ScrollArea::create(ScrollAreaParameters::new(ScrollAreaOption::FRAME | ScrollAreaOption::ENABLE_SCROLL, child));
-        let mut runtime = UiRuntime::new();
-        let atlas = test_atlas();
-        let mut style = crate::test_support::test_skin(&atlas).with_metrics(|metrics| {
-            metrics.padding = 5;
-            metrics.scrollbar_size = 10;
-        });
-        let frame_insets = crate::SliceInsets::uniform(3);
-        crate::test_support::replace_surface_patches(&mut style, SurfaceRole::Panel, |_| {
-            crate::NinePatch::framed(frame_insets, crate::color(1, 2, 3, 255), Some(crate::color(4, 5, 6, 255)))
-        });
-        let outer = Recti::new(10, 20, 100, 80);
-
-        runtime.begin_update();
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), outer, UNCLIPPED_RECT);
-        let allocation_before = root.with_node(child_id, |node| node.state.layout.allocation).unwrap();
-        let screen_before = runtime.node_rect(std::slice::from_ref(&root), child_id).unwrap();
-        assert_eq!((allocation_before.x, allocation_before.y), (0, 0));
-        assert_eq!(
-            (screen_before.x, screen_before.y),
-            (
-                outer.x + frame_insets.left + style.metrics.padding,
-                outer.y + frame_insets.top + style.metrics.padding
-            )
-        );
-
-        scroll.try_update(|state| state.set_offset(Vec2i::new(0, 12))).unwrap();
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), outer, UNCLIPPED_RECT);
-        let allocation_after = root.with_node(child_id, |node| node.state.layout.allocation).unwrap();
-        let screen_after = runtime.node_rect(std::slice::from_ref(&root), child_id).unwrap();
-        assert_eq!(
-            (allocation_after.x, allocation_after.y, allocation_after.width, allocation_after.height),
-            (allocation_before.x, allocation_before.y, allocation_before.width, allocation_before.height),
-            "scrolling changes transform, not content placement"
-        );
-        assert_eq!((screen_after.x, screen_after.y), (screen_before.x, screen_before.y - 12));
-
-        runtime.layout_tree_root(&mut root, &style, atlas.clone(), Recti::new(10, 20, 240, 260), UNCLIPPED_RECT);
-        assert_eq!(scroll.try_read(|state| (state.offset().x, state.offset().y)), Some((0, 0)));
     }
 }

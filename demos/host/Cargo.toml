@@ -25,7 +25,7 @@ monolith-skin = ["monolith", "dep:neocogi-skin"]
 neocogi-ui.workspace = true
 neocogi-com = { workspace = true, features = ["std", "macros"] }
 neocogi-ui-runtime = { path = "../../crates/ui/runtime", optional = true }
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "dfe542fd1faa47cdb26e84514b771462d6c7a1d3", optional = true, default-features = false }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "eb66761922125bd761378de19829d610415a05c4", optional = true, default-features = false }
 neocogi-gfx = { workspace = true, optional = true, default-features = false }
 neocogi-skin = { workspace = true, optional = true, default-features = false, features = ["theme-json"] }
 

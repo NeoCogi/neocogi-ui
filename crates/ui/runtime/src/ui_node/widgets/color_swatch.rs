@@ -78,9 +78,6 @@ pub struct ColorSwatch {
     /// Initialization-only font.
     font: FontRef,
     /// Base widget options.
-    /// Native algorithm fixture policy; production options live only in WidgetState.
-    #[cfg(test)]
-    opt: WidgetOption,
     /// Mutable fill color.
     fill: Color,
     /// Mutable label.
@@ -88,20 +85,11 @@ pub struct ColorSwatch {
 }
 
 impl ColorSwatch {
-    /// Constructs a retained node and a weak typed handle to its concrete color swatch.
-    #[cfg(test)]
-    pub fn create(parameters: ColorSwatchParameters) -> (crate::TypedWidgetHandle<Self>, crate::Node) {
-        let widget = ColorSwatch::from(parameters);
-        crate::Node::typed_widget(widget)
-    }
-
     /// Combines validated semantic parameters with one already bound common runtime.
     pub(crate) fn from_runtime(runtime: crate::ui_node::widget_object::WidgetRuntime, parameters: ColorSwatchParameters) -> Self {
         Self {
             runtime,
             font: parameters.font,
-            #[cfg(test)]
-            opt: parameters.opt,
             fill: parameters.fill,
             label: parameters.label,
         }
@@ -155,22 +143,8 @@ impl ColorSwatch {
 }
 
 impl Widget for ColorSwatch {
-    #[cfg(test)]
-    fn widget_opt(&self) -> &WidgetOption {
-        &self.opt
-    }
-
     fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
         self.paint_widget(ctx);
-    }
-}
-
-#[cfg(test)]
-impl From<ColorSwatchParameters> for ColorSwatch {
-    /// Transfers one-shot parameters into the concrete ColorSwatch runtime.
-    fn from(parameters: ColorSwatchParameters) -> Self {
-        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(parameters.opt);
-        Self::from_runtime(runtime, parameters)
     }
 }
 

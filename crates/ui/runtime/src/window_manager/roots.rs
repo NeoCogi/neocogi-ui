@@ -109,20 +109,6 @@ impl<T> SurfaceCreationError<T> {
         // preserve a value after registration has partially transferred it into the forest.
         Self { reason, _input: input }
     }
-
-    /// Returns the concrete capability or ownership-policy failure.
-    #[cfg(test)]
-    pub const fn reason(&self) -> SurfaceMutationError {
-        // The reason is Copy, so callers may retain it before reclaiming the unique input.
-        self.reason
-    }
-
-    /// Recovers the exact typed declaration passed to the failed creation call.
-    #[cfg(test)]
-    pub fn into_input(self) -> T {
-        // Consume the error so unique ownership has one explicit destination.
-        self._input
-    }
 }
 
 impl<T> fmt::Debug for SurfaceCreationError<T> {
@@ -417,10 +403,10 @@ impl SurfaceBody {
         }
     }
 
-    /// Returns whether this body owns pointer capture.
-    fn has_capture(&self) -> bool {
+    /// Reports an active capture or a removed target's still-unconsumed gesture tail.
+    fn owns_pointer_gesture(&self) -> bool {
         match self {
-            Self::Widgets { runtime, .. } => runtime.has_pointer_capture(),
+            Self::Widgets { runtime, .. } => runtime.owns_pointer_gesture(),
             Self::Menu(menu) => menu.has_capture(),
         }
     }
@@ -536,43 +522,6 @@ impl SurfaceBody {
         match self {
             Self::Widgets { root, runtime } => runtime.paint_tree_root(root, display_list, style, atlas.clone(), focus_visible, window_active, enabled),
             Self::Menu(menu) => menu.paint(display_list, style, atlas, window_active, enabled),
-        }
-    }
-
-    /// Resolves one retained widget rectangle for relational popup anchors and tests.
-    #[cfg(test)]
-    fn node_rect(&self, node: crate::ui_node::RuntimeNodeId) -> Option<Recti> {
-        let Self::Widgets { root, runtime } = self else {
-            return None;
-        };
-        // Runtime identities are process-unique, so the first recursive match is authoritative.
-        runtime.node_rect(std::slice::from_ref(root), node)
-    }
-
-    /// Returns committed widget content size for retained layout tests.
-    #[cfg(test)]
-    fn content_size(&self) -> Option<Dimensioni> {
-        match self {
-            Self::Widgets { runtime, .. } => Some(runtime.debug_root_content_size()),
-            Self::Menu(_) => None,
-        }
-    }
-
-    /// Returns widget traversal counters for phase-order tests.
-    #[cfg(test)]
-    fn metrics(&self) -> Option<crate::ui_node::RuntimeMetrics> {
-        match self {
-            Self::Widgets { runtime, .. } => Some(runtime.debug_metrics()),
-            Self::Menu(_) => None,
-        }
-    }
-
-    /// Counts application-authored nodes without manager chrome.
-    #[cfg(test)]
-    fn node_count(&self) -> Option<usize> {
-        match self {
-            Self::Widgets { root, .. } => Some(root.debug_node_count()),
-            Self::Menu(_) => None,
         }
     }
 }
@@ -726,11 +675,11 @@ impl SurfaceNode {
         }
     }
 
-    /// Returns whether manager chrome or application content owns pointer capture.
-    fn has_capture(&self) -> bool {
+    /// Reports whether chrome, menus or application content still own the pointer gesture.
+    fn owns_pointer_gesture(&self) -> bool {
         self.root().is_some_and(|root| root.interaction != RootInteraction::None)
             || self.root().and_then(|root| root.menu_bar.as_ref()).is_some_and(MenuSurface::has_capture)
-            || self.surface.body.has_capture()
+            || self.surface.body.owns_pointer_gesture()
     }
 
     /// Clears every transient input identity retained by this surface.
@@ -957,12 +906,6 @@ pub(super) struct SurfaceForest {
     nodes: Vec<SurfaceNode>,
     /// Derived key lookup, adjacency, and inherited policy. This never owns a surface.
     index: HashMap<SurfaceKey, SurfaceIndex>,
-    /// Test-only work counter: geometry phases must not repeat inherited-policy derivation.
-    #[cfg(test)]
-    policy_visits: usize,
-    /// Test-only lookup count used to bound complete paint/hit-test traversal work.
-    #[cfg(test)]
-    lookups: std::cell::Cell<usize>,
     /// Deepest popup in the sole active branch, or no visible popup branch.
     active_popup: Option<PopupId>,
     /// Materialized parent-first base traversal, reused without per-frame allocation.
@@ -981,10 +924,6 @@ impl SurfaceForest {
         Self {
             nodes: Vec::new(),
             index: HashMap::new(),
-            #[cfg(test)]
-            policy_visits: 0,
-            #[cfg(test)]
-            lookups: std::cell::Cell::new(0),
             active_popup: None,
             visible_order: Vec::new(),
             popup_path_scratch: Vec::new(),
@@ -993,8 +932,6 @@ impl SurfaceForest {
 
     /// Resolves a stable surface key to its current storage index.
     fn node_index(&self, key: SurfaceKey) -> Option<usize> {
-        #[cfg(test)]
-        self.lookups.set(self.lookups.get() + 1);
         self.index.get(&key).map(|entry| entry.position)
     }
 
@@ -1033,10 +970,6 @@ impl SurfaceForest {
 
     /// Resolves one node from its parent's policy, then visits each direct child exactly once.
     fn derive_policy_tree(&mut self, key: SurfaceKey, parent: Option<SurfacePolicy>) {
-        #[cfg(test)]
-        {
-            self.policy_visits += 1;
-        }
         let node = self.node(key).expect("indexed surface must remain retained");
         let policy = match (key, node.root()) {
             (SurfaceKey::Root(owner), Some(state)) => SurfacePolicy {
@@ -1649,21 +1582,6 @@ impl WindowManager {
         Ok(())
     }
 
-    /// Replaces a window outer size without changing its screen origin.
-    #[cfg(test)]
-    pub fn set_window_size(&mut self, window: &WindowHandle, size: Dimensioni) -> Result<(), SurfaceMutationError> {
-        let root = self.window_id(window)?;
-        let node = self.root_node_mut(root)?;
-        // Programmatic sizing has the same managed-mode policy as replacing the complete rect.
-        let state = node.root_mut().expect("window identity must resolve root policy");
-        state.restore_rect = None;
-        state.unminimized_height = None;
-        node.surface.rect.width = size.width;
-        node.surface.rect.height = size.height;
-        self.invalidate_ui_commit();
-        Ok(())
-    }
-
     /// Replaces window presentation and interaction options and reconciles capture immediately.
     pub fn set_window_options(&mut self, window: &WindowHandle, options: WindowOption) -> Result<(), SurfaceMutationError> {
         let root = self.window_id(window)?;
@@ -2019,13 +1937,6 @@ impl WindowManager {
             .ok_or(SurfaceMutationError::UnknownPopup)
     }
 
-    /// Resolves a typed popup capability directly to its authenticated concrete forest node.
-    #[cfg(test)]
-    fn popup_node(&self, popup: &PopupHandle) -> Result<&SurfaceNode, SurfaceMutationError> {
-        let id = self.popup_id(popup)?;
-        Ok(self.surfaces.popup_node(id).expect("authenticated popup must remain retained"))
-    }
-
     /// Collects one root and every structurally owned child window or modal dialog below it.
     fn owned_root_ids(&self, root: RootId) -> Vec<RootId> {
         let mut ids = vec![root];
@@ -2083,7 +1994,7 @@ impl WindowManager {
             let popup = self.surfaces.popup_node_mut(current).expect("active popup must remain retained");
             // Once the popup leaves the active ancestry only the manager can consume the remainder
             // of an application capture gesture, so remember capture before clearing the runtime.
-            revoked_capture |= popup.surface.body.has_capture();
+            revoked_capture |= popup.surface.body.owns_pointer_gesture();
             popup.dismiss_popup();
             retained_leaf = parent;
             let Some(parent) = parent else { break };
@@ -2842,34 +2753,6 @@ impl WindowManager {
         }
     }
 
-    /// Performs one update per queued event or one eventless update when the queue is empty.
-    #[cfg(test)]
-    pub(crate) fn update(&mut self, dimensions: Dimensioni) {
-        // Polling contexts have no application dispatcher, so the safe boundary performs no work.
-        self.update_with(dimensions, &mut (), |_, _| false);
-    }
-
-    /// Performs retained updates while exposing each safe subscriber-dispatch boundary.
-    #[cfg(test)]
-    pub(crate) fn update_with<DispatchState>(
-        &mut self,
-        dimensions: Dimensioni,
-        dispatch_state: &mut DispatchState,
-        mut after_update: impl FnMut(&mut Self, &mut DispatchState) -> bool,
-    ) {
-        self.begin_update_cycle(dimensions);
-        if after_update(self, dispatch_state) {
-            self.layout_update_cycle(dimensions);
-        }
-        let mut first = true;
-        while self.update_cycle_step(first) {
-            first = false;
-            after_update(self, dispatch_state);
-            self.layout_update_cycle(dimensions);
-        }
-        self.finish_update_cycle(dimensions);
-    }
-
     /// Begins one cycle and lays out every visible tree before either callbacks or input routing.
     pub(crate) fn begin_update_cycle(&mut self, dimensions: Dimensioni) {
         self.ui_commit = None;
@@ -3539,7 +3422,7 @@ impl WindowManager {
     fn captured_input_surface(&self) -> Option<SurfaceKey> {
         let modal = self.surfaces.active_modal_root();
         self.surfaces.visible_order.iter().rev().copied().find(|key| {
-            self.surface_is_eligible(*key, modal) && self.surface_accepts_input(*key) && self.surfaces.node(*key).is_some_and(SurfaceNode::has_capture)
+            self.surface_is_eligible(*key, modal) && self.surface_accepts_input(*key) && self.surfaces.node(*key).is_some_and(SurfaceNode::owns_pointer_gesture)
         })
     }
 
@@ -3577,253 +3460,6 @@ impl WindowManager {
             .union(WindowOption::AUTO_SIZE)
             .union(WindowOption::NO_RESIZE)
             .union(WindowOption::NO_TITLE)
-    }
-
-    /// Returns visible surface names in base-surface paint order for tests.
-    ///
-    /// A structural parent's overlay is deliberately recorded after descendant base surfaces and
-    /// therefore has no separate name entry in this diagnostic projection.
-    #[cfg(test)]
-    pub(crate) fn debug_rendered_root_names(&self) -> Vec<String> {
-        self.surfaces
-            .visible_order
-            .iter()
-            .filter_map(|key| self.surfaces.surface(*key).map(|surface| surface.name.clone()))
-            .collect()
-    }
-
-    /// Returns one window name for tests.
-    #[cfg(test)]
-    pub(crate) fn debug_root_name(&self, root: RootId) -> Option<String> {
-        self.surfaces.root_node(root).map(|node| node.surface.name.clone())
-    }
-
-    /// Returns one window rectangle for tests.
-    #[cfg(test)]
-    pub(crate) fn debug_root_rect(&self, root: RootId) -> Option<Recti> {
-        self.surfaces.root_node(root).map(|node| node.surface.rect)
-    }
-
-    /// Returns the effective committed surface clip for one window hierarchy test.
-    #[cfg(test)]
-    pub(crate) fn debug_root_clip(&self, root: RootId) -> Option<Recti> {
-        // Copy the geometry snapshot rather than exposing the mutable Surface that owns retained
-        // runtime and chrome state.
-        self.surfaces.root_node(root).map(|node| node.surface.clip)
-    }
-
-    /// Returns one window visibility value for tests.
-    #[cfg(test)]
-    pub(crate) fn debug_root_visible(&self, root: RootId) -> Option<bool> {
-        self.surfaces.root_node(root)?.root().map(|state| state.visible)
-    }
-
-    /// Returns whether window chrome owns a gesture for tests.
-    #[cfg(test)]
-    pub(crate) fn debug_root_active(&self, root: RootId) -> Option<bool> {
-        self.surfaces.root_node(root)?.root().map(|state| state.interaction != RootInteraction::None)
-    }
-
-    /// Returns whether window title movement is active for tests.
-    #[cfg(test)]
-    pub(crate) fn debug_root_moving(&self, root: RootId) -> Option<bool> {
-        self.surfaces.root_node(root)?.root().map(|state| state.interaction == RootInteraction::Moving)
-    }
-
-    /// Returns whether window resizing is active for tests.
-    #[cfg(test)]
-    pub(crate) fn debug_root_resizing(&self, root: RootId) -> Option<bool> {
-        self.surfaces
-            .root_node(root)?
-            .root()
-            .map(|state| matches!(state.interaction, RootInteraction::Resizing(_)))
-    }
-
-    /// Returns the root that owns the active concrete surface for tests.
-    #[cfg(test)]
-    pub(crate) fn debug_active_root(&self) -> Option<RootId> {
-        self.active_surface.and_then(|surface| self.surfaces.owning_root(surface))
-    }
-
-    /// Returns the active modal dialog for tests.
-    #[cfg(test)]
-    pub(crate) fn debug_modal_root(&self) -> Option<RootId> {
-        self.surfaces.active_modal_root()
-    }
-
-    /// Returns a window body rectangle for chrome geometry tests.
-    #[cfg(test)]
-    pub(crate) fn debug_root_body(&self, root: RootId) -> Option<Recti> {
-        let node = self.surfaces.root_node(root)?;
-        // Committed geometry excludes the root-owned menu bar and therefore names app content.
-        Some(node.surface.geometry.body)
-    }
-
-    /// Returns the framed client rectangle before title, menu, or body-padding allocation.
-    #[cfg(test)]
-    pub(crate) fn debug_root_client(&self, root: RootId) -> Option<Recti> {
-        // Tests use this immutable snapshot to distinguish full-width chrome from the independently
-        // inset application body without reproducing private frame arithmetic.
-        Some(self.surfaces.root_node(root)?.surface.geometry.client)
-    }
-
-    /// Returns window runtime metrics for tests.
-    #[cfg(test)]
-    pub(crate) fn debug_root_runtime_metrics(&self, root: RootId) -> Option<crate::ui_node::RuntimeMetrics> {
-        self.surfaces.root_node(root)?.surface.body.metrics()
-    }
-
-    /// Returns combined window pointer capture for tests.
-    #[cfg(test)]
-    pub(crate) fn debug_root_has_pointer_capture(&self, root: RootId) -> Option<bool> {
-        self.surfaces.root_node(root).map(SurfaceNode::has_capture)
-    }
-
-    /// Counts application nodes in one window for tests.
-    #[cfg(test)]
-    pub(crate) fn debug_root_node_count(&self, root: RootId) -> Option<usize> {
-        self.surfaces.root_node(root)?.surface.body.node_count()
-    }
-
-    /// Returns one application node rectangle inside a window.
-    #[cfg(test)]
-    pub(crate) fn debug_root_node_rect(&self, root: RootId, node: crate::ui_node::RuntimeNodeId) -> Option<Recti> {
-        self.surfaces.root_node(root)?.surface.body.node_rect(node)
-    }
-
-    /// Returns title, close, and resize geometry for one window.
-    #[cfg(test)]
-    pub(crate) fn debug_root_chrome(&self, root: RootId) -> Option<(Option<Recti>, Option<Recti>, Option<Recti>)> {
-        let node = self.surfaces.root_node(root)?;
-        // The committed snapshot already includes the measured menu contribution and matches the
-        // exact geometry consumed by layout, hit testing, and paint in the current UI commit.
-        let mut geometry = node.surface.geometry;
-        if node.root().is_some_and(|state| state.restore_rect.is_some()) {
-            geometry = geometry.without_resize();
-        }
-        Some((geometry.title, geometry.close, geometry.resize_corner))
-    }
-
-    /// Returns optional minimize, maximize, right-edge, bottom-edge, and corner geometry for tests.
-    #[cfg(test)]
-    pub(crate) fn debug_root_chrome_controls(&self, root: RootId) -> Option<super::DebugRootChromeControls> {
-        let node = self.surfaces.root_node(root)?;
-        // Return the same committed geometry as ordinary interaction instead of reconstructing a
-        // shell without access to the root-owned menu's measured size.
-        let mut geometry = node.surface.geometry;
-        if node.root().is_some_and(|state| state.restore_rect.is_some()) {
-            // Match committed maximized geometry rather than returning raw policy candidates.
-            geometry = geometry.without_resize();
-        }
-        Some(super::DebugRootChromeControls {
-            minimize: geometry.minimize,
-            maximize: geometry.maximize,
-            resize_right: geometry.resize_right,
-            resize_bottom: geometry.resize_bottom,
-            resize_corner: geometry.resize_corner,
-        })
-    }
-
-    /// Returns a popup rectangle through its typed handle for tests.
-    #[cfg(test)]
-    pub(crate) fn debug_popup_rect(&self, popup: &PopupHandle) -> Option<Recti> {
-        Some(self.popup_node(popup).ok()?.surface.rect)
-    }
-
-    /// Returns whether a popup belongs to the sole active path for tests.
-    #[cfg(test)]
-    pub(crate) fn debug_popup_visible(&self, popup: &PopupHandle) -> Option<bool> {
-        // Membership validation accepts the handle's private forest key without exposing it.
-        Some(self.surfaces.popup_is_active(self.popup_id(popup).ok()?))
-    }
-
-    /// Returns popup content size through its typed handle for tests.
-    #[cfg(test)]
-    pub(crate) fn debug_popup_content_size(&self, popup: &PopupHandle) -> Option<Dimensioni> {
-        self.popup_node(popup).ok()?.surface.body.content_size()
-    }
-
-    /// Returns one retained node rectangle inside a popup for tests.
-    #[cfg(test)]
-    pub(crate) fn debug_popup_node_rect(&self, popup: &PopupHandle, node: crate::ui_node::RuntimeNodeId) -> Option<Recti> {
-        self.popup_node(popup).ok()?.surface.body.node_rect(node)
-    }
-
-    /// Returns the active popup names in parent-to-child order for path tests.
-    #[cfg(test)]
-    pub(crate) fn debug_active_popup_names(&self) -> Vec<String> {
-        self.surfaces
-            .visible_order
-            .iter()
-            .copied()
-            .filter(|key| matches!(key, SurfaceKey::Popup(_)))
-            .filter_map(|key| {
-                let SurfaceKey::Popup(popup) = key else { return None };
-                let node = self.surfaces.popup_node(popup)?;
-                match node.popup()? {
-                    PopupState::Application { .. } => Some(node.surface.name.clone()),
-                    PopupState::Menu { trigger_slot } => {
-                        let parent = node.parent?;
-                        let label = self.menu_surface(parent)?.branch_label(*trigger_slot)?;
-                        let owner = self.surfaces.owning_root(key)?;
-                        let root_name = &self.surfaces.root_node(owner)?.surface.name;
-                        Some(format!("{root_name} {label} Menu"))
-                    }
-                }
-            })
-            .collect()
-    }
-
-    /// Returns active popup rectangles in parent-to-child order for relational-anchor tests.
-    #[cfg(test)]
-    pub(crate) fn debug_active_popup_rects(&self) -> Vec<Recti> {
-        // Copy geometry out so tests cannot mutate or retain references into window-owned popups.
-        self.surfaces
-            .visible_order
-            .iter()
-            .copied()
-            .filter(|key| matches!(key, SurfaceKey::Popup(_)))
-            .filter_map(|key| self.surfaces.surface(key).map(|surface| surface.rect))
-            .collect()
-    }
-
-    /// Returns each relational menu trigger rectangle in declaration order for tests.
-    #[cfg(test)]
-    pub(crate) fn debug_menu_anchor_rects(&self, root: RootId) -> Option<Vec<Option<Recti>>> {
-        self.surfaces.root_node(root)?.root()?.menu_bar.as_ref()?;
-        Some(
-            self.surfaces
-                .nodes
-                .iter()
-                .filter(|node| self.surfaces.owning_root(node.key) == Some(root))
-                .filter_map(|node| {
-                    let PopupState::Menu { trigger_slot } = node.popup()? else { return None };
-                    Some(node.parent.and_then(|parent| self.menu_surface(parent)?.slot_rect(*trigger_slot)))
-                })
-                .collect(),
-        )
-    }
-
-    /// Returns the full committed root-owned menu-bar allocation for layout tests.
-    #[cfg(test)]
-    pub(crate) fn debug_menu_bar_rect(&self, root: RootId) -> Option<Recti> {
-        self.surfaces.root_node(root)?.root()?.menu_bar.as_ref().map(MenuSurface::surface_rect)
-    }
-
-    /// Returns active compact menu row rectangles in parent-to-child popup order for tests.
-    #[cfg(test)]
-    pub(crate) fn debug_active_menu_row_rects(&self) -> Vec<Vec<Recti>> {
-        // Active forest order is already parent-first; copy geometry directly from menu bodies.
-        self.surfaces
-            .visible_order
-            .iter()
-            .copied()
-            .filter_map(|key| {
-                let SurfaceKey::Popup(popup_id) = key else { return None };
-                let popup = self.surfaces.popup_node(popup_id)?;
-                Some(popup.surface.body.menu()?.slot_rects())
-            })
-            .collect()
     }
 }
 
@@ -3908,67 +3544,3 @@ impl WindowManager {
 }
 
 impl std::error::Error for SurfaceMutationError {}
-
-#[cfg(test)]
-mod index_tests {
-    use super::*;
-
-    /// Builds a minimal unique retained body without depending on application models.
-    fn window(name: &str) -> Window {
-        let (_, body) = crate::Linear::create(crate::LinearParameters::vertical([] as [Node; 0]));
-        Window::new(name, rect(0, 0, 100, 100), body)
-    }
-
-    /// Counts structural work for both a wide family and a deep ancestry, without timing thresholds.
-    #[test]
-    fn indexed_traversal_reuses_policy_and_visits_linear_work() {
-        for size in [32, 128] {
-            let atlas = crate::test_support::test_atlas();
-            let skin = crate::test_support::test_skin(&atlas);
-            let mut manager = WindowManager::new(SkinBundle::new(atlas, skin));
-            let parent = manager.create_window(window("parent"));
-            let mut deepest = parent.clone();
-            for _ in 0..size {
-                manager.create_child_window(&parent, window("wide")).unwrap();
-                deepest = manager.create_child_window(&deepest, window("deep")).unwrap();
-            }
-            let count = manager.surfaces.nodes.len();
-            assert_eq!(manager.surfaces.index.values().map(|entry| entry.children.len()).sum::<usize>(), count - 1);
-
-            // Reordering places the oldest parent after its descendants in the authoritative Vec.
-            manager.bring_window_to_front(&parent).unwrap();
-            manager.surfaces.policy_visits = 0;
-            manager.set_window_layer(&parent, 3).unwrap();
-            assert_eq!(manager.surfaces.policy_visits, count, "derive every node exactly once");
-            assert_eq!(manager.window_layer(&deepest), Ok(LayerBinding::Fixed(3)));
-            for (position, node) in manager.surfaces.nodes.iter().enumerate() {
-                assert_eq!(manager.surfaces.node_index(node.key), Some(position));
-            }
-
-            let dimensions = Dimensioni::new(400, 400);
-            manager.update(dimensions);
-            manager.surfaces.policy_visits = 0;
-            manager.surfaces.lookups.set(0);
-            manager.update(dimensions);
-            manager.paint(dimensions);
-            assert_eq!(manager.input_surface_at(Vec2i::new(1000, 1000)), None);
-            assert_eq!(manager.surfaces.policy_visits, 0, "geometry-only phases reuse committed policy");
-            assert!(
-                manager.surfaces.lookups.get() < 80 * count,
-                "complete traversal must stay linear in surface count"
-            );
-
-            // Policy changes become observable before another layout or paint call.
-            manager.set_window_options(&parent, WindowOption::DISABLED).unwrap();
-            assert!(!manager.surfaces.root_is_effectively_enabled(deepest.id()));
-            manager.set_window_visible(&parent, false).unwrap();
-            assert!(!manager.surfaces.root_is_effectively_visible(deepest.id()));
-            manager.set_window_visible(&parent, true).unwrap();
-            assert!(manager.surfaces.root_is_effectively_visible(deepest.id()));
-            manager.destroy_window(&parent).unwrap();
-            assert!(manager.surfaces.index.is_empty());
-            assert!(manager.surfaces.visible_order.is_empty());
-            assert!(manager.surfaces.nodes.is_empty());
-        }
-    }
-}

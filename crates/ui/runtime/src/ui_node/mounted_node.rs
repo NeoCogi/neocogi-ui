@@ -308,12 +308,6 @@ pub(crate) fn local_frame(role: WidgetFrame) -> Result<crate::FrameRole, NcStatu
 }
 
 impl ComNode {
-    /// Returns the authenticated owner used by COM child collection operations.
-    #[cfg(not(test))]
-    pub(crate) fn com(&self) -> &Self {
-        self
-    }
-
     /// Visits branch storage under its transaction; leaves have an empty sequence.
     pub(crate) fn with_children<R>(&self, f: impl FnOnce(&crate::Children) -> R) -> R {
         match self.children() {

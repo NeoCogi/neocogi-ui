@@ -35,26 +35,12 @@ pub(crate) mod display_list;
 pub(crate) mod geometry;
 mod nine_patch;
 mod painter;
-#[cfg(test)]
-mod performance;
-#[cfg(test)]
-mod renderer;
-#[cfg(test)]
-pub(crate) use neocogi_render_core::RendererId;
 
 pub use neocogi_render_core::{
     AtlasUploadError, Color, FrameError, FrameInfo, FrameInfoError, RenderItemArgs, RendererBackend, RendererFrame, TextureError, TextureId, Vertex, color,
 };
-#[cfg(test)]
-pub use crate::test_support::custom_render::{CustomRenderHandle, CustomRenderRegistryError};
-#[cfg(test)]
-pub(crate) use crate::test_support::custom_render::CustomRenderKey;
 pub(crate) use display_list::DisplayList;
 pub use painter::Painter;
-#[cfg(test)]
-pub use renderer::RenderError;
-#[cfg(test)]
-pub(crate) use renderer::Renderer;
 pub use nine_patch::{NinePatch, NinePatchCell, NinePatchCells, NinePatchContent, NinePatchImage, SliceInsets};
 
 /// Decodes canonical contract RGBA packing independently of machine byte order.

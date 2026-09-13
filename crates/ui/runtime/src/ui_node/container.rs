@@ -34,17 +34,10 @@ use super::ChildParticipation;
 use crate::ui_node::layout_service::ScopedLayout;
 use neocogi_ui_core_contracts::ContainerGeometry;
 use neocogi_com::NcStatus;
-#[cfg(not(test))]
-use crate::ui_node::layout_service::ScopedLayout as ChildLayout;
-#[cfg(test)]
-use crate::test_support::layout::ChildLayout;
 
 /// Private statically dispatched algorithms for built-in COM containers.
 /// Child ownership and traversal remain behind the same scoped service used by external plugins.
 pub trait ContainerWidget: Widget {
-    /// Supplies the native fixture's weak topology link; deployed widgets use IChildrenEditor.
-    #[cfg(test)]
-    fn bind_children(&mut self, _children: crate::ChildrenHandle) {}
     /// Computes preferred content from indexed child measurements.
     fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: Constraints) -> Dimensioni;
     /// Authors child placements and one complete copied parent geometry result.
@@ -62,23 +55,12 @@ pub struct MeasureCtx<'a> {
     /// Atlas paired with that skin; no resource identity crosses an unchecked boundary.
     atlas: &'a crate::AtlasHandle,
     /// Expiring child geometry authority, never a borrowed production node collection.
-    layout: ChildLayout<'a>,
+    layout: ScopedLayout<'a>,
 }
 impl<'a> MeasureCtx<'a> {
     /// Binds the validated service for exactly this synchronous COM call.
     pub(crate) fn scoped(skin: &'a Skin, atlas: &'a crate::AtlasHandle, layout: ScopedLayout<'a>) -> Self {
-        #[cfg(test)]
-        let layout = ChildLayout::Com(layout);
         Self { skin, atlas, layout }
-    }
-    /// Supports native algorithm fixtures without changing the deployed representation.
-    #[cfg(test)]
-    pub(crate) fn new(skin: &'a Skin, atlas: &'a crate::AtlasHandle, children: &'a mut crate::Children) -> Self {
-        Self {
-            skin,
-            atlas,
-            layout: ChildLayout::native(skin, atlas, children, None),
-        }
     }
     /// Returns the first failed child operation before the caller publishes a preference.
     pub(crate) fn result(&self) -> Result<(), NcStatus> {
@@ -111,19 +93,13 @@ pub struct ContainerLayoutCtx<'a> {
     /// Assigned content rectangle limits the descendant viewport.
     content: Recti,
     /// No retained runtime node is borrowed by a production algorithm.
-    layout: ChildLayout<'a>,
+    layout: ScopedLayout<'a>,
     /// Published atomically only when all child operations succeeded.
     geometry: ContainerGeometry,
 }
 impl<'a> ContainerLayoutCtx<'a> {
     /// Initializes complete output for one validated scoped layout call.
     pub(crate) fn scoped(skin: &'a Skin, atlas: &'a crate::AtlasHandle, content: Recti, layout: ScopedLayout<'a>) -> Self {
-        #[cfg(test)]
-        let layout = ChildLayout::Com(layout);
-        Self::with_layout(skin, atlas, content, layout)
-    }
-    /// Shares output initialization between the real service and native algorithm fixtures.
-    fn with_layout(skin: &'a Skin, atlas: &'a crate::AtlasHandle, content: Recti, layout: ChildLayout<'a>) -> Self {
         Self {
             skin,
             atlas,
@@ -131,17 +107,6 @@ impl<'a> ContainerLayoutCtx<'a> {
             layout,
             geometry: ContainerGeometry::new(crate::boundary::copied_rect(content)),
         }
-    }
-    /// Native fixtures use the same copied parent output as actual COM containers.
-    #[cfg(test)]
-    pub(crate) fn new(
-        runtime: &'a mut crate::ui_node::LayoutTraversal,
-        skin: &'a Skin,
-        atlas: &'a crate::AtlasHandle,
-        content: Recti,
-        children: &'a mut crate::Children,
-    ) -> Self {
-        Self::with_layout(skin, atlas, content, ChildLayout::native(skin, atlas, children, Some(runtime)))
     }
     /// Rejects partial output after any failed child service operation.
     pub(crate) fn result(&self) -> Result<ContainerGeometry, NcStatus> {
@@ -192,48 +157,5 @@ impl<'a> ContainerLayoutCtx<'a> {
     /// Selects whether visible descendant overflow enlarges the parent's logical extent.
     pub fn set_child_overflow_propagation(&mut self, propagate: bool) {
         self.geometry.propagate_overflow = propagate;
-    }
-}
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::{cell::RefCell, rc::Rc};
-    use crate::{Container, Children, WidgetOption};
-
-    /// Minimal layout implementation proving that concrete ownership needs geometry only.
-    struct GeometryOnly;
-
-    impl Widget for GeometryOnly {
-        fn widget_opt(&self) -> &WidgetOption {
-            &WidgetOption::NO_INTERACT
-        }
-
-        fn paint(&self, _ctx: &mut crate::WidgetPaintCtx<'_>) {}
-    }
-
-    impl ContainerWidget for GeometryOnly {
-        fn measure(&self, ctx: &mut MeasureCtx<'_>, _constraints: Constraints) -> Dimensioni {
-            Dimensioni::new(ctx.child_count() as i32, 1)
-        }
-
-        fn place(&mut self, _ctx: &mut ContainerLayoutCtx<'_>, _rect: Recti) {}
-    }
-
-    /// Creates one real unique node for ownership checks.
-    fn text_node(label: &str) -> super::super::Node {
-        crate::TextBlock::create(crate::TextBlockParameters::new(label)).1
-    }
-
-    #[test]
-    fn concrete_container_owns_one_collection_beside_its_widget() {
-        let children = Rc::new(RefCell::new([text_node("first")].into_iter().collect()));
-        let handle = crate::ChildrenHandle::new(&children);
-        let (_, owner) = Container::from_shared(children, GeometryOnly);
-
-        assert_eq!(owner.with_children(Children::len), 1);
-        owner.with_children_mut(|children| children.push(text_node("second")));
-        assert_eq!(handle.len(), Some(2));
-        drop(owner);
-        assert_eq!(handle.len(), None);
     }
 }

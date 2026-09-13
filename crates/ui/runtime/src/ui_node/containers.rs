@@ -31,8 +31,6 @@
 //! Built-in retained containers.
 
 use super::container::ContainerLayoutCtx;
-#[cfg(test)]
-use super::{Children, Node};
 
 /// Metadata-only edit applied after the host commits the matching child-topology operation.
 pub(super) enum EdgeEdit<E> {
@@ -176,16 +174,6 @@ mod scroll_area;
 pub(crate) use scroll_area::{ScrollComposition, ScrollModel, ScrollParts};
 
 pub use disclosure::{Disclosure};
-#[cfg(test)]
-pub use disclosure::{DisclosureParameters};
 pub use grid::Grid;
-#[cfg(test)]
-pub use grid::GridParameters;
 pub use linear::Linear;
-#[cfg(test)]
-pub use linear::{LinearCrossSize, LinearItem, LinearParameters};
 pub use scroll_area::ScrollArea;
-#[cfg(test)]
-pub use scroll_area::ScrollAreaOption;
-#[cfg(test)]
-pub use scroll_area::{ScrollAreaParameters};

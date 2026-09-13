@@ -30,21 +30,10 @@
 
 //! One concrete retained widget for horizontal and vertical linear layout.
 
-#[cfg(test)]
-use std::{cell::RefCell, rc::Rc};
-
-#[cfg(test)]
-use crate::ChildrenHandle;
-#[cfg(test)]
-use crate::WidgetOption;
 use crate::{
     AtlasHandle, AvailableSpace, Constraints, ContainerLayoutCtx, ContainerWidget, Dimensioni, MeasureCtx, Recti, Skin, TrackSize, UiInputEvent, Widget,
     WidgetPaintCtx, WidgetUpdateCtx,
 };
-#[cfg(test)]
-use crate::{Children, Node};
-#[cfg(test)]
-use crate::{Container, TypedWidgetHandle};
 
 use crate::ui_node::layout::TrackResolver;
 
@@ -103,141 +92,7 @@ pub enum LinearCrossSize {
     Fixed(i32),
 }
 
-impl LinearCrossSize {
-    /// Creates an exact cross extent, normalizing negative public input to zero.
-    #[cfg(test)]
-    pub const fn fixed(extent: i32) -> Self {
-        // Normalize at the named construction boundary while still defending against callers that
-        // directly construct `Fixed` with a negative value in the private resolver.
-        Self::Fixed(if extent < 0 { 0 } else { extent })
-    }
-}
-
-/// One-shot construction input for a [`Linear`] container.
-///
-/// Horizontal construction defaults to content cross sizing, matching an ordinary control row.
-/// Vertical construction defaults to stretch, so children receive the exact width assigned by the
-/// parent while the container still reports its widest desired child during measurement.
-#[cfg(test)]
-pub struct LinearParameters {
-    items: Vec<LinearItem>,
-    direction: LinearDirection,
-    cross_size: LinearCrossSize,
-}
-
-#[cfg(test)]
-impl LinearParameters {
-    /// Creates a left-to-right sequence with content-derived line height.
-    pub fn horizontal<T>(items: impl IntoIterator<Item = T>) -> Self
-    where
-        T: Into<LinearItem>,
-    {
-        // Consume each unique unmounted node exactly once into construction input; ownership is not
-        // transferred to retained `Children` until `Linear::create` succeeds.
-        Self {
-            items: items.into_iter().map(Into::into).collect(),
-            direction: LinearDirection::LeftToRight,
-            cross_size: LinearCrossSize::Content,
-        }
-    }
-
-    /// Creates a top-to-bottom sequence that stretches children across its assigned width.
-    pub fn vertical<T>(items: impl IntoIterator<Item = T>) -> Self
-    where
-        T: Into<LinearItem>,
-    {
-        // Vertical defaults stretch across the assigned width using the same cross-size vocabulary
-        // available to every direction.
-        Self {
-            items: items.into_iter().map(Into::into).collect(),
-            direction: LinearDirection::TopToBottom,
-            cross_size: LinearCrossSize::Stretch,
-        }
-    }
-
-    /// Replaces the shared cross-axis sizing behavior.
-    pub const fn with_cross_size(mut self, cross_size: LinearCrossSize) -> Self {
-        // This is one-shot input, so changing the policy cannot invalidate retained measurement yet.
-        self.cross_size = cross_size;
-        self
-    }
-
-    /// Stretches the shared line across its exact allocated cross extent.
-    pub const fn stretch_cross(self) -> Self {
-        // Delegate to the general setter so constructor vocabulary and stored policy cannot diverge.
-        self.with_cross_size(LinearCrossSize::Stretch)
-    }
-
-    /// Uses an exact non-negative shared cross extent.
-    pub const fn fixed_cross(self, extent: i32) -> Self {
-        // Normalize through the public value constructor before storing the policy.
-        self.with_cross_size(LinearCrossSize::fixed(extent))
-    }
-}
-
-/// An unmounted node paired with its main-axis relationship to a [`Linear`] container.
-///
-/// The item is construction and mutation input, not another runtime node. Horizontal directions
-/// interpret `main` as width; vertical directions interpret it as height. The optional fixed cross
-/// extent is likewise interpreted by the owning container, so no direction-specific policy is
-/// stored on [`Node`].
-#[cfg(test)]
-pub struct LinearItem {
-    node: Node,
-    main: TrackSize,
-    fixed_cross: Option<i32>,
-}
-
-#[cfg(test)]
-impl LinearItem {
-    /// Creates an item with an explicit main-axis track that stretches across the container's line.
-    pub fn new(node: Node, main: TrackSize) -> Self {
-        Self { node, main, fixed_cross: None }
-    }
-
-    /// Creates a content-sized item.
-    pub fn content(node: Node) -> Self {
-        Self::new(node, TrackSize::Content)
-    }
-
-    /// Creates an item with an exact non-negative main-axis extent.
-    pub fn fixed(node: Node, extent: i32) -> Self {
-        Self::new(node, TrackSize::Fixed(extent))
-    }
-
-    /// Creates an item that receives a weighted share of bounded remaining main-axis space.
-    pub fn flex(node: Node, weight: f32) -> Self {
-        Self::new(node, TrackSize::Flex(weight))
-    }
-
-    /// Uses an exact non-negative cross-axis extent instead of stretching across the line.
-    pub fn with_fixed_cross(mut self, extent: i32) -> Self {
-        self.fixed_cross = Some(extent.max(0));
-        self
-    }
-
-    /// Recovers the still-unmounted node and discards its linear-container relationship.
-    pub fn into_node(self) -> Node {
-        self.node
-    }
-
-    fn into_parts(self) -> (Node, LinearItemSpec) {
-        (
-            self.node,
-            LinearItemSpec {
-                main: self.main,
-                fixed_cross: self.fixed_cross,
-            },
-        )
-    }
-}
-
-#[cfg(test)]
-impl From<Node> for LinearItem {
-    fn from(node: Node) -> Self {
-        Self::content(node)
-    }
-}
+impl LinearCrossSize {}
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub(crate) struct LinearItemSpec {
@@ -245,29 +100,6 @@ pub(crate) struct LinearItemSpec {
     pub(crate) main: TrackSize,
     /// Optional exact cross extent, otherwise the line's resolved cross size.
     pub(crate) fixed_cross: Option<i32>,
-}
-
-/// Collects construction or replacement input into the runtime's split ownership representation.
-///
-/// The concrete container remains the sole strong owner of `Children`; linear state retains only
-/// the index-matched relationship metadata that Linear interprets. Building both outputs in
-/// one function keeps their order and length identical before either becomes observable.
-#[cfg(test)]
-fn collect_items<T>(items: impl IntoIterator<Item = T>) -> (Children, Vec<LinearItemSpec>)
-where
-    T: Into<LinearItem>,
-{
-    let mut children = Children::new();
-    let mut specs = Vec::new();
-    for item in items {
-        // Split each unique unmounted owner exactly once, preserving iterator order in both
-        // adjacent collections.
-        let (node, spec) = item.into().into_parts();
-        children.push(node);
-        specs.push(spec);
-    }
-    debug_assert_eq!(children.len(), specs.len());
-    (children, specs)
 }
 
 /// Complete retained widget for one-dimensional child measurement and placement.
@@ -333,9 +165,6 @@ pub struct Linear {
     runtime: crate::ui_node::widget_object::WidgetRuntime,
     /// Sole writer for children mounted through this container's COM contract.
     pub(crate) editor: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
-    /// Weak topology capability supplied by generic container construction.
-    #[cfg(test)]
-    children: ChildrenHandle,
     /// One relationship specification per owned child, in the same order.
     specs: Vec<LinearItemSpec>,
     /// Main axis and placement order.
@@ -357,136 +186,11 @@ impl Linear {
         Self {
             runtime,
             editor,
-            #[cfg(test)]
-            children: ChildrenHandle::default(),
             specs: Vec::new(),
             direction,
             cross_size,
             resolved_main: Vec::new(),
         }
-    }
-    /// Mounts ordered input and returns both a weak typed widget handle and its owning node.
-    #[cfg(test)]
-    pub fn create(parameters: LinearParameters) -> (TypedWidgetHandle<Self>, Node) {
-        // Split the one-shot parameters only at the ownership boundary: the generic Container keeps
-        // the strong child collection while Linear keeps its weak topology mutation capability.
-        let (children, widget) = Self::mount(parameters);
-        let (handle, container) = Container::from_shared(children, widget);
-        (handle, Node::container(container))
-    }
-
-    /// Mounts ordered items behind the generic container ownership boundary.
-    #[cfg(test)]
-    fn mount(parameters: LinearParameters) -> (Rc<RefCell<Children>>, Self) {
-        // Build children and relationship metadata together before either can become observable.
-        let (children, specs) = collect_items(parameters.items);
-        let children = Rc::new(RefCell::new(children));
-        let (runtime, editor) = crate::ui_node::widget_object::WidgetRuntime::for_test_container(crate::WidgetOption::NO_INTERACT);
-        let widget = Self {
-            runtime,
-            editor,
-            #[cfg(test)]
-            children: ChildrenHandle::default(),
-            specs,
-            direction: parameters.direction,
-            cross_size: parameters.cross_size,
-            resolved_main: Vec::new(),
-        };
-        widget.debug_assert_synchronized(children.borrow().len());
-        (children, widget)
-    }
-
-    /// Returns the mounted child count while the concrete collection is available.
-    #[cfg(test)]
-    pub fn len(&self) -> Option<usize> {
-        // The weak capability makes node lifetime and active traversal borrows visible as absence.
-        self.children.len()
-    }
-
-    /// Returns whether this Linear has no children while its native storage is accessible.
-    #[cfg(test)]
-    pub fn is_empty(&self) -> Option<bool> {
-        // Reuse the child handle's checked read so traversal conflicts remain observable as None.
-        self.children.is_empty()
-    }
-
-    /// Appends one node and its relationship metadata as one observable topology mutation.
-    #[allow(clippy::result_large_err)] // Failure preserves the unique node and its edge metadata.
-    #[cfg(test)]
-    pub fn push(&mut self, item: impl Into<LinearItem>) -> Result<(), LinearItem> {
-        let specs = &mut self.specs;
-        let resolved_main = &mut self.resolved_main;
-        // Acquire the authoritative collection before consuming the unique input, then update both
-        // parallel collections inside one checked borrow.
-        self.children.try_update_with(item.into(), |children, item| {
-            debug_assert_eq!(children.len(), specs.len());
-            let (node, spec) = item.into_parts();
-            children.push(node);
-            specs.push(spec);
-            // No resolved extent may survive a topology change, but retaining capacity keeps the
-            // next committed placement allocation-free when the previous capacity is sufficient.
-            resolved_main.clear();
-            debug_assert_eq!(children.len(), specs.len());
-        })
-    }
-
-    /// Drops one indexed child owner and its relationship metadata if that index exists.
-    #[cfg(test)]
-    pub fn remove_drop(&mut self, index: usize) -> Option<bool> {
-        let specs = &mut self.specs;
-        let resolved_main = &mut self.resolved_main;
-        // Keep the child and metadata removals inside the same topology borrow so traversal can
-        // never observe one collection after only half of the mutation.
-        self.children
-            .try_update_with((), |children, ()| {
-                debug_assert_eq!(children.len(), specs.len());
-                if index >= children.len() {
-                    return false;
-                }
-                let removed = children.remove_drop(index);
-                debug_assert!(removed, "linear state validated the child index before removal");
-                specs.remove(index);
-                resolved_main.clear();
-                debug_assert_eq!(children.len(), specs.len());
-                true
-            })
-            .ok()
-    }
-
-    /// Drops all child owners and metadata while retaining reusable vector allocations.
-    #[cfg(test)]
-    pub fn clear(&mut self) -> Option<()> {
-        let specs = &mut self.specs;
-        let resolved_main = &mut self.resolved_main;
-        // Clear vectors rather than replacing them so a subsequent warm layout can reuse capacity.
-        self.children
-            .try_update_with((), |children, ()| {
-                children.clear();
-                specs.clear();
-                resolved_main.clear();
-                debug_assert_eq!(children.len(), specs.len());
-            })
-            .ok()
-    }
-
-    /// Returns one child's main-axis relationship when its metadata index exists.
-    #[cfg(test)]
-    pub fn track(&self, index: usize) -> Option<TrackSize> {
-        // Specifications are immutable during traversal, so an ordinary indexed read is sufficient.
-        self.specs.get(index).map(|spec| spec.main)
-    }
-
-    /// Replaces one main-axis track and discards any resolved placement derived from the old track.
-    #[cfg(test)]
-    pub fn set_track(&mut self, index: usize, track: TrackSize) -> bool {
-        let Some(spec) = self.specs.get_mut(index) else {
-            return false;
-        };
-        // Retained exact extents are placement scratch derived from the old track and cannot survive
-        // a semantic mutation, although their vector capacity remains reusable.
-        spec.main = track;
-        self.resolved_main.clear();
-        true
     }
 
     /// Returns the complete main-axis direction.
@@ -948,12 +652,6 @@ fn measure_layout_child(
 }
 
 impl ContainerWidget for Linear {
-    /// Uses the same construction hook available to downstream mutable containers.
-    #[cfg(test)]
-    fn bind_children(&mut self, children: ChildrenHandle) {
-        self.children = children;
-    }
-
     fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: Constraints) -> Dimensioni {
         // Route the public widget contract through the scalar immutable pass; placement scratch is
         // intentionally unavailable through this shared reference.
@@ -968,12 +666,6 @@ impl ContainerWidget for Linear {
 }
 
 impl Widget for Linear {
-    #[cfg(test)]
-    fn widget_opt(&self) -> &WidgetOption {
-        // Linear is a geometry-only branch surface; interaction belongs to retained descendants.
-        &WidgetOption::NO_INTERACT
-    }
-
     fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) -> crate::Change {
         // Linear owns no event-driven semantic state, so runtime update traversal only visits its
         // descendants after this intentionally empty surface callback.
@@ -1035,67 +727,6 @@ mod cross_size_tests {
         assert_eq!(resolve_placed_cross(LinearCrossSize::Stretch, 80, 20), 80);
         assert_eq!(resolve_measured_cross(LinearCrossSize::Fixed(12), 20), 12);
         assert_eq!(resolve_placed_cross(LinearCrossSize::Fixed(12), 80, 20), 12);
-        assert_eq!(LinearCrossSize::fixed(-7), LinearCrossSize::Fixed(0));
-    }
-}
-
-#[cfg(test)]
-mod linear_widget_tests {
-    use super::*;
-    use crate::test_support::test_atlas;
-    use crate::{Custom, CustomParameters};
-
-    /// Measures one ordinary content-track widget through its public container contract.
-    #[cfg(test)]
-    fn measure_content_linear(width: AvailableSpace) -> Dimensioni {
-        let child = Node::widget(Custom::create(CustomParameters::new("content")));
-        let (children, linear) = Linear::mount(LinearParameters::horizontal([child]));
-        let atlas = test_atlas();
-        let style = crate::test_support::test_skin(&atlas);
-        let mut children = children.borrow_mut();
-        let mut ctx = MeasureCtx::new(&style, &atlas, &mut children);
-
-        // Height remains unbounded so this probe isolates the main-axis bounded measurement rule.
-        linear.measure(&mut ctx, Constraints::new(width, AvailableSpace::Unbounded))
-    }
-
-    #[test]
-    #[cfg(test)]
-    fn topology_mutations_keep_nodes_and_tracks_synchronized() {
-        let first = Custom::create(CustomParameters::new("first"));
-        let (first_state, first) = Node::typed_widget(first);
-        let (linear, node) = Linear::create(LinearParameters::horizontal([LinearItem::fixed(first, 20)]));
-
-        linear
-            .try_update(|state| {
-                // Exercise topology, edge metadata, and cross policy through the one concrete typed
-                // handle so synchronization no longer depends on an orientation-specific façade.
-                assert!(
-                    state
-                        .push(LinearItem::flex(Node::widget(Custom::create(CustomParameters::new("second"))), 2.0))
-                        .is_ok()
-                );
-                assert!(state.set_track(0, TrackSize::Flex(1.0)));
-                state.set_cross_size(LinearCrossSize::fixed(24));
-            })
-            .unwrap();
-
-        assert_eq!(linear.try_read(|state| state.track(0)), Some(Some(TrackSize::Flex(1.0))));
-        assert_eq!(linear.try_read(Linear::cross_size), Some(LinearCrossSize::Fixed(24)));
-        assert_eq!(linear.try_read(Linear::len), Some(Some(2)));
-        assert_eq!(linear.try_update(|state| state.remove_drop(0)), Some(Some(true)));
-        assert!(!first_state.is_alive());
-        drop(node);
-        assert!(!linear.is_alive());
-    }
-
-    #[test]
-    fn bounded_content_linear_reports_only_its_desired_width() {
-        let desired = measure_content_linear(AvailableSpace::Unbounded);
-        let bounded = measure_content_linear(AvailableSpace::bounded(desired.width.saturating_add(100)));
-
-        // An offered main-axis bound is measurement information, not an allocation to claim.
-        assert_eq!(bounded.width, desired.width);
-        assert_eq!(bounded.height, desired.height);
+        assert_eq!(resolve_measured_cross(LinearCrossSize::Fixed(-7), 20), 0);
     }
 }

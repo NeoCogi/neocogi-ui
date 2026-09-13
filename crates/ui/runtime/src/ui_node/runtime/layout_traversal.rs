@@ -36,33 +36,17 @@ use crate::math::RectExt;
 /// Geometry recursion contains no input router, runtime owner or borrowed tree.
 /// Production instances carry no state; test instances share only phase counters.
 #[derive(Clone)]
-pub(crate) struct LayoutTraversal {
-    /// Counts remain attached to their original root during scoped recursive calls.
-    #[cfg(test)]
-    pub(super) metrics: std::rc::Rc<std::cell::Cell<RuntimeMetrics>>,
-}
+pub(crate) struct LayoutTraversal {}
 
 impl LayoutTraversal {
     /// Measures one already-borrowed node through the authoritative private node path.
     pub(crate) fn measure_node(&self, node: &mut Node, style: &Skin, atlas: &crate::AtlasHandle, constraints: Constraints) -> Dimensioni {
-        #[cfg(test)]
-        {
-            let mut metrics = self.metrics.get();
-            metrics.measures += 1;
-            self.metrics.set(metrics);
-        }
         // Node::measure is the only place that adds frame geometry; containers receive the same
         // content-only measurement contract whether reached here or through Children.
         node.measure(style, atlas, constraints)
     }
 
     fn measure_node_for_layout(&self, node: &mut Node, style: &Skin, atlas: &crate::AtlasHandle, constraints: Constraints) -> (Dimensioni, bool) {
-        #[cfg(test)]
-        {
-            let mut metrics = self.metrics.get();
-            metrics.measures += 1;
-            self.metrics.set(metrics);
-        }
         node.measure_with_cache_status(style, atlas, constraints)
     }
 
@@ -91,12 +75,6 @@ impl LayoutTraversal {
         let same_allocation = previous.x == outer.x && previous.y == outer.y && previous.width == outer.width && previous.height == outer.height;
         if measurement_cached && same_allocation && !node.state.layout_is_dirty() {
             return Dimensioni::new(outer.width, outer.height);
-        }
-        #[cfg(test)]
-        {
-            let mut metrics = self.metrics.get();
-            metrics.layouts += 1;
-            self.metrics.set(metrics);
         }
         // Store every rectangle in node-local coordinates except the outer allocation, which stays
         // parent-local. Transform traversal later composes those two coordinate spaces once.

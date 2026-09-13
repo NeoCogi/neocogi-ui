@@ -70,8 +70,7 @@
     clippy::too_many_arguments,
     clippy::wildcard_imports
 )]
-//! Retained implementation used by the UI plugin, with native executor fixtures compiled only
-//! for implementation tests.
+//! Retained UI implementation shared by deployed plugins and headless boundary tests.
 //!
 //! Applications use `neocogi-ui`, whose concrete COM clients link no UI implementation.
 //! Each retained COM node owns the widget capabilities used for routing, layout and painting.
@@ -107,8 +106,6 @@ mod guide_doctests {
 pub mod assets;
 pub mod atlas;
 mod boundary;
-#[cfg(test)]
-mod context;
 mod event;
 mod identity;
 pub mod image;
@@ -138,8 +135,6 @@ pub mod prelude {
         AtlasUploadError, FrameError, FrameInfo, FrameInfoError, NinePatch, NinePatchCell, NinePatchCells, NinePatchContent, NinePatchImage, RendererBackend,
         RendererFrame, SliceInsets, TextureError, TextureId,
     };
-    #[cfg(test)]
-    pub use crate::test_support::custom_render::{CustomRenderHandle};
     pub use crate::math::{expand_rect, rect, vec2};
     pub use crate::theme::{
         CaptionButtonSide, CaptionButtonsSkin, ChromeRole, ChromeState, Color, ControlRole, ControlState, FlatPalette, FontRef, FontRole, FrameRole, IconRef,
@@ -155,17 +150,9 @@ pub mod prelude {
 pub use atlas::{AtlasHandle, CharEntry, FontId, IconId};
 #[cfg(test)]
 pub use atlas::{AtlasError, AtlasSource, FontEntry};
-#[cfg(test)]
-pub(crate) use context::Context;
-#[cfg(test)]
-pub(crate) use test_support::ui::Ui;
 pub(crate) use window_manager::{PopupHandle, Window, WindowHandle, WindowOption};
-#[cfg(test)]
-pub(crate) use window_manager::{ChildWindowClip, DEFAULT_LAYER, LayerBinding, MIN_LAYER, SurfaceMutationError};
 pub(crate) use event::{EventSource, TypedWidget, WidgetEventPortHandle};
 pub(crate) use menu::{Menu, MenuBar, MenuItem, MenuItemAccessError, MenuItemHandle, MenuItemMark, MenuItemParameters};
-#[cfg(test)]
-pub(crate) use menu::MenuItemSubmitted;
 pub use image::{ImageError, ImageSource, ImageStorageError, MAX_DECODED_RGBA_BYTES, load_image_bytes};
 pub use input::{Key, KeyEvent, KeyState, Modifiers, MouseButton};
 pub use math::{expand_rect, rect, vec2};
@@ -183,23 +170,11 @@ pub(crate) use ui_node::{
 };
 pub use ui_node::{Disclosure, Grid, Linear, ScrollArea};
 pub use ui_node::widgets::{Button, Checkbox, ColorSwatch, Combo, ListBox, ListItem, Number, Scrollbar, Slider, TextArea, TextBlock, Textbox};
-#[cfg(test)]
-pub(crate) use ui_node::{ScrollAreaOption};
-#[cfg(test)]
-pub(crate) use ui_node::{
-    ChildrenHandle, Container, DisclosureParameters, GridParameters, LinearCrossSize, LinearItem, LinearParameters, ScrollAreaParameters, TypedWidgetHandle,
-};
 pub(crate) use widgets::{
     ButtonParameters, ButtonSubmitted, CheckboxChanged, CheckboxParameters, ColorSwatchParameters, ComboChanged, ComboParameters, ComboSubmitted,
     DecimalPrecision, ListBoxParameters, ListBoxSubmitted, ListItemParameters, ListItemSubmitted, NumberChanged, NumberParameters, SliderChanged,
     SliderParameters, TextAreaChanged, TextAreaSubmitted, Real, TextBlockParameters, TextboxChanged, TextboxParameters, TextboxSubmitted,
 };
-#[cfg(test)]
-pub(crate) use widgets::TextEditor;
-#[cfg(test)]
-pub(crate) use widgets::{TextAreaParameters};
-#[cfg(test)]
-pub(crate) use widgets::{Custom, CustomParameters};
 
 #[allow(unused_imports)]
 pub(crate) use rs_math3d::{
@@ -211,9 +186,6 @@ pub(crate) use render::geometry::UNCLIPPED_RECT;
 pub(crate) use ui_node::UiRuntime;
 pub use runtime::{Runtime, create_runtime_from_assets};
 pub use ui_factory::UiFactory;
-
-#[cfg(test)]
-pub(crate) use event::SubscribeError;
 
 /// Stateless process entry that creates independent retained UI runtimes.
 #[neocogi_com::com_factory(neocogi_ui_core_contracts::UiPluginFactory)]

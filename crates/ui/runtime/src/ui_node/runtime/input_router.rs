@@ -62,9 +62,6 @@ pub(super) struct InputRouter {
     routed_event: Option<(RuntimeNodeId, UiInputEvent)>,
     /// Allocation-reusing retained-order workspace for sequential keyboard traversal.
     tab_stops: Vec<RuntimeNodeId>,
-    /// Number of already-selected node surfaces examined by routing in the current test cycle.
-    #[cfg(test)]
-    routed_input_routes: u64,
 }
 
 impl Default for InputRouter {
@@ -80,8 +77,6 @@ impl Default for InputRouter {
             clicked: None,
             routed_event: None,
             tab_stops: Vec::new(),
-            #[cfg(test)]
-            routed_input_routes: 0,
         }
     }
 }
@@ -114,10 +109,6 @@ impl InputRouter {
         self.routed_event = None;
         self.clicked = None;
         self.pointer_event_active = false;
-        #[cfg(test)]
-        {
-            self.routed_input_routes = 0;
-        }
     }
 
     /// Establishes routing policy and event-local flags for one normalized raw input event.
@@ -144,7 +135,10 @@ impl InputRouter {
         self.hover = None;
         self.routed_event = None;
         self.clicked = None;
-        self.invalidate_pointer_capture();
+        // The surface manager owns any discarded tail after cancellation or visibility changes.
+        // A fully reset tree must not regain gesture ownership when that surface becomes visible.
+        self.capture = None;
+        self.discard_invalidated_capture_events = false;
     }
 
     /// Clears pointer-derived targets while retaining this tree's keyboard focus identity.
@@ -154,12 +148,17 @@ impl InputRouter {
         self.hover = None;
         self.routed_event = None;
         self.clicked = None;
-        self.invalidate_pointer_capture();
+        // Explicit cross-surface preemption finishes this tree's old gesture. Only topology
+        // invalidation inside a still-active tree retains a tail for this router to consume.
+        self.capture = None;
+        self.discard_invalidated_capture_events = false;
     }
 
-    /// Returns whether this tree currently owns pointer capture.
-    pub(super) const fn has_capture(&self) -> bool {
-        self.capture.is_some()
+    /// Keeps the owning surface selected until a removed target's gesture tail is consumed.
+    pub(super) const fn owns_pointer_gesture(&self) -> bool {
+        // Layout may remove the captured node before the next drag/release. The manager must
+        // still call this router so it can swallow that continuation instead of retargeting it.
+        self.capture.is_some() || self.discard_invalidated_capture_events
     }
 
     /// Returns whether the cross-root policy admits pointer routing for the current event.
@@ -223,47 +222,9 @@ impl InputRouter {
         (hovered, focused, clicked, active)
     }
 
-    /// Returns the current test-only count of selected node surfaces visited by routing.
-    #[cfg(test)]
-    pub(super) const fn debug_routed_input_routes(&self) -> u64 {
-        self.routed_input_routes
-    }
-
     /// Returns the authoritative focused identity for host input queries and routing tests.
     pub(super) const fn focus_target(&self) -> Option<RuntimeNodeId> {
         self.focus
-    }
-
-    /// Returns the hovered identity for retained routing tests.
-    #[cfg(test)]
-    pub(super) const fn debug_hover_target(&self) -> Option<RuntimeNodeId> {
-        self.hover
-    }
-
-    /// Returns the pointer-capture identity for retained routing tests.
-    #[cfg(test)]
-    pub(super) const fn debug_capture_target(&self) -> Option<RuntimeNodeId> {
-        self.capture
-    }
-
-    /// Installs explicit transient identities for tests that exercise invalidation boundaries.
-    #[cfg(test)]
-    pub(super) fn debug_set_transient_targets(&mut self, focus: Option<RuntimeNodeId>, hover: Option<RuntimeNodeId>, capture: Option<RuntimeNodeId>) {
-        self.focus = focus;
-        self.hover = hover;
-        self.capture = capture;
-    }
-
-    /// Replaces only pointer capture for tests that begin from an active gesture.
-    #[cfg(test)]
-    pub(super) fn debug_set_capture_target(&mut self, capture: Option<RuntimeNodeId>) {
-        self.capture = capture;
-    }
-
-    /// Reports whether a revoked gesture is still swallowing its drag/release tail in tests.
-    #[cfg(test)]
-    pub(super) const fn debug_discards_invalidated_capture_events(&self) -> bool {
-        self.discard_invalidated_capture_events
     }
 
     /// Returns whether generic widget options admit one event kind.
@@ -618,10 +579,6 @@ impl InputRouter {
 
     /// Routes an event to exactly one borrowed node without traversing descendants.
     fn route_input_event_to_node_only_ref(&mut self, node: &mut Node, parent_transform: Transform, style: &Skin, event: &UiInputEvent) -> RouteResult {
-        #[cfg(test)]
-        {
-            self.routed_input_routes += 1;
-        }
         // Resolve the same frame/content geometry used by update and paint before localizing the
         // selected event for the concrete widget or container handler.
         let frame_role = node_frame_role(node);

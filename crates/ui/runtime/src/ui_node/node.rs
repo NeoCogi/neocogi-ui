@@ -28,10 +28,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 
-#[cfg(not(test))]
-use crate::ui_node::ComNode as NodeData;
-#[cfg(test)]
-use crate::test_support::node::NodeData;
+use crate::ui_node::ComNode;
 
 use crate::math::RectExt;
 use crate::{AtlasHandle, Constraints, Dimensioni, Recti, SliceInsets, Skin};
@@ -105,11 +102,7 @@ impl MeasurementCache {
     }
 }
 
-#[cfg(test)]
-use super::node_layout::advance_runtime_node_id;
 use super::Transform;
-#[cfg(test)]
-use crate::Vec2i;
 
 /// Common derived and transient runtime state shared by widgets and containers.
 ///
@@ -176,20 +169,12 @@ pub struct Node {
     /// Common state for layout, identity, and interaction.
     pub(crate) state: NodeRuntime,
     /// Node-specific payload.
-    pub(crate) data: NodeData,
+    pub(crate) data: ComNode,
 }
 
 impl Node {
     /// Mounts an already authenticated COM leaf without another widget allocation.
     pub(crate) fn com_widget(widget: crate::ui_node::ComNode) -> Self {
-        // Only the algorithm harness accepts native owners; deployed nodes store this value directly.
-        #[cfg(test)]
-        let widget = NodeData::Com(widget);
-        Self::from_data(widget)
-    }
-
-    /// Allocates the unique runtime identity and empty geometry at final ownership transfer.
-    pub(crate) fn from_data(kind: NodeData) -> Self {
         // Identity is allocated once at the final owning boundary and survives every subsequent move
         // of the non-Clone Node through unmounted construction and retained insertion.
         Self {
@@ -204,7 +189,7 @@ impl Node {
                 measurement: MeasurementCache::new(),
                 placed: false,
             },
-            data: kind,
+            data: widget,
         }
     }
 
@@ -312,44 +297,13 @@ impl Node {
     pub(crate) fn is_container(&self) -> bool {
         self.data.is_container()
     }
-
-    /// Counts this node and every retained descendant.
-    #[cfg(test)]
-    pub(crate) fn debug_node_count(&self) -> usize {
-        self.with_children(|children| 1 + children.iter().map(Self::debug_node_count).sum::<usize>())
-    }
-
-    /// Runs a test-only immutable visitor against one matching retained node.
-    #[cfg(test)]
-    pub(crate) fn with_node<R>(&self, id: RuntimeNodeId, f: impl FnOnce(&Node) -> R) -> Option<R> {
-        // Keep the one-shot visitor in an Option so recursive descent can move it exactly once when
-        // the requested identity is reached without returning a borrow from opaque child storage.
-        let mut f = Some(f);
-        self.with_node_inner(id, &mut f)
-    }
-
-    #[cfg(test)]
-    fn with_node_inner<R, F>(&self, id: RuntimeNodeId, f: &mut Option<F>) -> Option<R>
-    where
-        F: FnOnce(&Node) -> R,
-    {
-        if self.id() == id {
-            // Runtime IDs are unique, so taking the callback here proves it cannot run twice.
-            return Some(f.take().expect("node visitor invoked twice")(self));
-        }
-        // The child borrow remains scoped to this search and cannot escape through the callback.
-        self.with_children(|children| children.iter().find_map(|child| child.with_node_inner(id, f)))
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::test_atlas;
-
-    fn text_node(label: &str) -> (crate::TypedWidgetHandle<crate::TextBlock>, Node) {
-        crate::TextBlock::create(crate::TextBlockParameters::new(label))
-    }
+    use crate::ui_node::node_layout::advance_runtime_node_id;
+    use crate::Vec2i;
 
     #[test]
     fn pushing_a_node_uses_node_local_child_geometry() {
@@ -367,88 +321,8 @@ mod tests {
     }
 
     #[test]
-    fn owning_nodes_allocate_once_and_preserve_identity_while_moved_or_rejected() {
-        let (_, first) = text_node("first");
-        let first_id = first.state.id.0.get();
-        let (_, second) = text_node("second");
-        let second_id = second.state.id.0.get();
-        assert!(second_id > first_id, "the process-wide allocator must increase monotonically");
-
-        let mut children = Children::new();
-        let rejected = children.insert(1, first).expect_err("out-of-range insertion must reject the exact owner");
-        assert_eq!(rejected.state.id.0.get(), first_id);
-        assert!(children.is_empty());
-
-        children.push(rejected);
-        assert_eq!(children.nodes[0].state.id.0.get(), first_id);
-    }
-
-    #[test]
-    fn measurement_reports_content_independently_of_exact_parent_allocation() {
-        let (_, mut node) = text_node("same content");
-        let atlas = test_atlas();
-        // Resolve the measurement style from the exact handle passed to both measurement and
-        // layout so same-slot resources from another atlas can never satisfy this regression.
-        let style = crate::test_support::test_skin(&atlas);
-
-        let preferred = node.measure(&style, &atlas, Constraints::unbounded());
-        let mut runtime = crate::ui_node::UiRuntime::new();
-        runtime.begin_update();
-        runtime.layout_tree_root(&mut node, &style, atlas.clone(), Recti::new(0, 0, 300, 200), crate::UNCLIPPED_RECT);
-        let measured_again = node.measure(&style, &atlas, Constraints::unbounded());
-
-        assert_eq!((measured_again.width, measured_again.height), (preferred.width, preferred.height));
-        let allocation = node.state.layout.allocation;
-        assert_eq!((allocation.x, allocation.y, allocation.width, allocation.height), (0, 0, 300, 200));
-    }
-
-    #[test]
     fn runtime_identity_exhaustion_is_detected_without_mutating_the_global_allocator() {
         assert_eq!(advance_runtime_node_id(1), Some(2));
         assert_eq!(advance_runtime_node_id(u64::MAX), None);
-    }
-
-    #[test]
-    fn children_topology_operations_drop_only_the_replaced_owners() {
-        let (first_state, first) = text_node("first");
-        let (second_state, second) = text_node("second");
-        let (third_state, third) = text_node("third");
-        let mut children: Children = [first, second].into_iter().collect();
-
-        assert_eq!(children.len(), 2);
-        assert!(children.remove_drop(0));
-        assert!(!first_state.is_alive());
-        assert!(second_state.is_alive());
-
-        children.replace([third]);
-        assert!(!second_state.is_alive());
-        assert!(third_state.is_alive());
-
-        children.clear();
-        assert!(!third_state.is_alive());
-        assert!(!children.remove_drop(0));
-    }
-
-    #[test]
-    #[allow(clippy::result_large_err)] // The test verifies that failed mutation returns the exact owner.
-    fn ownership_moving_widget_access_returns_the_same_unmounted_node_on_failure() {
-        let (column_state, column_node) = crate::Linear::create(crate::LinearParameters::vertical(std::iter::empty::<Node>()));
-        let (_, candidate) = text_node("candidate");
-        let candidate_id = candidate.state.id.0.get();
-
-        let rejected = column_state
-            .try_read(|_| match column_state.try_update_with(candidate, |column, node| column.push(node)) {
-                Err(candidate) => candidate,
-                Ok(_) => panic!("the active read must prevent mutation"),
-            })
-            .expect("column read must be available");
-        assert_eq!(rejected.state.id.0.get(), candidate_id);
-
-        drop(column_node);
-        let rejected = match column_state.try_update_with(rejected, |column, node| column.push(node)) {
-            Err(rejected) => rejected,
-            Ok(_) => panic!("expired state must return the input owner"),
-        };
-        assert_eq!(rejected.state.id.0.get(), candidate_id);
     }
 }

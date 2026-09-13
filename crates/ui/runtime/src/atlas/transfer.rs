@@ -98,7 +98,7 @@ impl Tables {
     /// Original catalog names preserve exact local IDs; revision-private artwork receives fresh
     /// IDs. Portable validation remains singular: this conversion cannot be called before the
     /// facade has checked name partitions, scalar values, metrics, rectangles and the white tile.
-    pub(crate) fn import(&self, size: Size, #[cfg(test)] pixels: Vec<u8>, catalog: Option<&AtlasHandle>) -> Result<AtlasHandle, NcStatus> {
+    pub(crate) fn import(&self, size: Size, catalog: Option<&AtlasHandle>) -> Result<AtlasHandle, NcStatus> {
         let mut fonts = Vec::with_capacity(self.fonts.len());
         for font in &self.fonts {
             let name = self.validated_name(font.name);
@@ -142,13 +142,6 @@ impl Tables {
                 },
             ));
         }
-        #[cfg(test)]
-        let pixels = pixels
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .map(|pixel| crate::color4b(pixel[0], pixel[1], pixel[2], pixel[3]))
-            .collect();
         let white_icon = icons
             .iter()
             .find_map(|(name, icon)| (name == "white").then_some(icon.id))
@@ -156,8 +149,9 @@ impl Tables {
         Ok(AtlasHandle(Rc::new(Atlas {
             width: size.width as usize,
             height: size.height as usize,
+            // Only hand-authored atlas input fixtures retain pixels for their test exporter.
             #[cfg(test)]
-            pixels,
+            pixels: Vec::new(),
             fonts,
             icons,
             white_icon,

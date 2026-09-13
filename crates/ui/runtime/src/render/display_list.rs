@@ -31,15 +31,11 @@
 //!
 //! Painter records through this internal operation interface and Renderer consumes it exactly once.
 
-#[cfg(test)]
-use crate::test_support::custom_render::CustomRenderKey;
 use super::{
     geometry::{SolidGeometry, SolidTriangle, SolidTriangleRange},
 };
 use crate::atlas::{FontId, IconId};
 use crate::render::{Color, NinePatch};
-#[cfg(test)]
-use crate::render::TextureId;
 use rs_math3d::{Color4b, Recti, Vec2f, Vec2i};
 
 /// An owned sequence of rendering operations and their solid geometry.
@@ -118,32 +114,19 @@ pub(super) enum DrawKind {
         /// Icon tint.
         color: Color,
     },
-    /// Draws one backend-owned external texture.
-    #[cfg(test)]
-    Image {
-        /// External texture identifier.
-        id: TextureId,
-        /// Destination rectangle in screen space.
-        rect: Recti,
-        /// Image tint.
-        color: Color,
-    },
     /// Draws one contiguous range of solid triangles.
     SolidTriangles {
         /// Validated range inside [`DisplayList::solid_geometry`].
         triangles: SolidTriangleRange,
     },
-    /// Invokes backend-specific drawing at this point in the operation stream.
-    #[cfg(test)]
-    Custom {
-        /// Renderer-owned callback key.
-        renderer: CustomRenderKey,
-        /// Unclipped custom-render content rectangle.
-        content_area: Recti,
-    },
 }
 
 impl DisplayList {
+    /// Reports whether a rejected or completed frame retains any operations.
+    #[cfg(test)]
+    pub(crate) fn is_empty(&self) -> bool {
+        self.ops.is_empty() && self.solid_geometry.is_empty() && self.atlas_vertices.is_empty() && self.text.is_empty()
+    }
     /// Creates an empty display list.
     pub(crate) const fn new() -> Self {
         Self {
@@ -160,12 +143,6 @@ impl DisplayList {
         self.solid_geometry.clear();
         self.atlas_vertices.clear();
         self.text.clear();
-    }
-
-    /// Returns `true` when the list contains no operations or solid geometry.
-    #[cfg(test)]
-    pub(crate) fn is_empty(&self) -> bool {
-        self.ops.is_empty() && self.solid_geometry.is_empty() && self.atlas_vertices.is_empty() && self.text.is_empty()
     }
 
     /// Retains a complete atlas batch in painter order for final viewport clipping.
@@ -231,18 +208,6 @@ impl DisplayList {
     /// Appends one atlas icon operation.
     pub(super) fn push_icon(&mut self, clip: Recti, id: IconId, rect: Recti, color: Color) {
         self.push(clip, DrawKind::Icon { id, rect, color });
-    }
-
-    /// Appends one image operation.
-    #[cfg(test)]
-    pub(super) fn push_image(&mut self, clip: Recti, id: TextureId, rect: Recti, color: Color) {
-        self.push(clip, DrawKind::Image { id, rect, color });
-    }
-
-    /// Appends one backend-specific custom drawing barrier.
-    #[cfg(test)]
-    pub(crate) fn push_custom(&mut self, clip: Recti, renderer: CustomRenderKey, content_area: Recti) {
-        self.push(clip, DrawKind::Custom { renderer, content_area });
     }
 
     /// Appends strongly typed solid triangles and records their valid contiguous range.
@@ -331,30 +296,6 @@ impl DisplayList {
     pub(crate) fn debug_operation_count(&self) -> usize {
         self.ops.len()
     }
-
-    /// Returns the operation allocation capacity retained by this list.
-    #[cfg(test)]
-    pub(crate) fn debug_operation_capacity(&self) -> usize {
-        self.ops.capacity()
-    }
-
-    /// Returns the number of strongly typed solid triangles retained by this list.
-    #[cfg(test)]
-    pub(crate) fn debug_triangle_count(&self) -> usize {
-        self.solid_geometry.triangles().len()
-    }
-
-    /// Returns the solid-triangle allocation capacity retained by this list.
-    #[cfg(test)]
-    pub(crate) fn debug_triangle_capacity(&self) -> usize {
-        self.solid_geometry.triangle_capacity()
-    }
-
-    /// Returns the polygon workspace allocation capacity retained by this list.
-    #[cfg(test)]
-    pub(crate) fn debug_polygon_capacity(&self) -> usize {
-        self.solid_geometry.polygon_capacity()
-    }
 }
 
 /// Compares rectangle components without requiring an equality implementation from `rs-math3d`.
@@ -366,7 +307,7 @@ fn same_rect(left: Recti, right: Recti) -> bool {
 mod tests {
     use super::*;
     use crate::test_support::test_atlas;
-    use crate::{color, color4b, TextureId};
+    use crate::{color, color4b};
 
     fn triangle_at(offset: f32) -> SolidTriangle {
         SolidTriangle::new(
@@ -398,7 +339,13 @@ mod tests {
         list.push_nine_patch(clips[0], Recti::new(0, 0, 2, 2), NinePatch::solid(color(1, 2, 3, 4)));
         list.push_text(clips[1], font, Vec2i::new(4, 5), color(5, 6, 7, 8), "text");
         list.push_icon(clips[2], icon, Recti::new(6, 7, 8, 9), color(9, 10, 11, 12));
-        list.push_image(clips[3], TextureId::new_test(1, 12, 13), Recti::new(10, 11, 12, 13), color(13, 14, 15, 16));
+        list.push_com_texture(
+            clips[3],
+            Recti::new(10, 11, 12, 13),
+            neocogi_ui_core_contracts::TextureRegion { u0: 0., v0: 0., u1: 1., v1: 1. },
+            color(13, 14, 15, 16),
+            crate::test_support::test_image(12, 13).as_interface().add_ref(),
+        );
 
         assert_eq!(list.ops.len(), clips.len());
         for (operation, expected) in list.ops.iter().zip(clips) {
@@ -407,7 +354,7 @@ mod tests {
         assert!(matches!(list.ops[0].kind, DrawKind::NinePatch { .. }));
         assert!(matches!(list.ops[1].kind, DrawKind::Text { .. }));
         assert!(matches!(list.ops[2].kind, DrawKind::Icon { .. }));
-        assert!(matches!(list.ops[3].kind, DrawKind::Image { .. }));
+        assert!(matches!(list.ops[3].kind, DrawKind::ComTexture { .. }));
     }
 
     #[test]

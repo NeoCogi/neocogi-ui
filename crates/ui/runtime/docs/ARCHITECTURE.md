@@ -102,7 +102,7 @@ The runtime synchronizes pending geometry, then handles each queued input event 
 order. It routes the event, updates eligible widgets, releases traversal state,
 dispatches concrete application handlers, and commits their geometry changes before
 routing the next event. An empty input queue still performs an eventless update.
-There is no production native `Context<State>` or second callback dispatcher.
+Runtime tests and deployed plugins share one retained context and one event-session boundary.
 
 ```rust,no_run
 use neocogi_ui::{EventSession, IRendererAbi, Size, Ui};
@@ -151,7 +151,7 @@ before publishing the new revision. Failure preserves the prior working UI/resou
 
 ### Concrete surface forest and parent edges
 
-`Context` owns one private `SurfaceForest`. Its single `Vec<SurfaceNode>` retains independent and
+`WindowManager` owns one private `SurfaceForest`. Its single `Vec<SurfaceNode>` retains independent and
 child windows, dialogs, application popups, and menu popups. The key index and child adjacency
 described below are derived access data and never own additional surfaces. Each node combines common screen-space geometry with a
 concrete role:
@@ -318,19 +318,31 @@ shared event delivery, scoped layout, measurement invalidation and logical closu
 without linking the UI implementation. [COM_NATIVE.md](../../../../docs/COM_NATIVE.md)
 documents native and static-browser assembly.
 
-Unit fixtures under `src/test_support` also exercise individual native algorithms.
-Their borrowed-state callback driver uses the facade's test-only queue access;
-it is absent from normal application/plugin builds. Production event ownership and
-cross-assembly behavior are tested through COM sessions and staged deployments.
+All runtime tests construct the production runtime and GFX compositor. A small
+headless `IRenderer` reads final streams without performing layout, clipping,
+tessellation, event routing, or resource expansion. Nodes always own `ComNode`;
+containers always receive the expiring `ScopedLayout` service.
 
-## Runtime boundary tests
+Focused semantic tests use `test_support::algorithm::Algorithm<W>` to keep a real
+host alive beside the ordinary concrete widget. It does not mount a replacement
+tree or coordinate frames. Pure arithmetic tests remain beside their production
+functions. Event-source observations may drain a concrete queue directly; event
+ordering, failure, reentry and lifecycle tests use the public `EventSession`.
 
-Runtime boundary tests construct a real GFX compositor and invoke the same
-`create_runtime_from_assets(assets, compositor)` entrypoint as a deployed consumer.
-The retained context, resource installation, paint phase, and GFX submission path
-are identical in unit and ordinary builds. A headless `IRenderer` records or checks
-the resulting bounded render stream; it does not replace composition.
+See [TESTING.md](TESTING.md) for fixture ownership, coverage and validation commands.
 
-Painting and submission are separate internal operations. The runtime checks the
-first foreign-widget failure after painting and discards partial commands before
-calling GFX. This ordering is covered by the retained-widget failure regression.
+## Checked frame submission
+
+`create_runtime_from_assets(assets, compositor)` is the single construction path.
+The retained context records painting before the runtime checks the first foreign
+widget error. Rejected painting clears owned commands and returns that error
+before GFX or the renderer can observe a partial frame. Successful painting enters
+the same GFX replay, clipping, batching and stream-expiry path in every build.
+
+A node removed during pointer capture still leaves a gesture to finish. The router
+keeps its surface selected until it consumes the remaining drag/release, preventing
+that tail from reaching a newly inserted child at the same location.
+
+Explicit cancellation, visibility resets and cross-surface preemption finish the
+old tree's gesture ownership. Showing that surface again cannot intercept a new
+gesture in another layer.

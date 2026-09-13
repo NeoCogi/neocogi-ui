@@ -28,7 +28,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 
-//! Parent-first paint traversal and custom-render dispatch.
+//! Parent-first production paint traversal through scoped COM painter capabilities.
 
 use super::*;
 
@@ -74,8 +74,6 @@ impl UiRuntime {
         window_active: bool,
         ancestors_enabled: bool,
     ) {
-        #[cfg(test)]
-        self.bump_metric(|metrics| metrics.paints += 1);
         // Resolve the same outer/content geometry used for input and update before recording paint.
         let frame_role = node_frame_role(node);
         let screen_rect = parent_transform.resolve(node.state.layout.allocation);
@@ -125,12 +123,6 @@ impl UiRuntime {
                 node.data.policy().0,
             );
             node.data.paint(&mut widget_ctx);
-        }
-
-        #[cfg(test)]
-        if let Some(renderer) = node.data.custom_render() {
-            // Custom backend work is an ordered barrier immediately after ordinary widget paint.
-            display_list.push_custom(screen_content_clip, renderer, screen_content_rect);
         }
 
         let traverse_children = node.is_container();

@@ -40,7 +40,7 @@ use super::*;
 /// One-shot construction input for a [`Checkbox`].
 ///
 /// The label, font, and widget options configure the retained runtime. The checked value seeds
-/// The checked value remains application-mutable through [`TypedWidgetHandle<Checkbox>`].
+/// Applications change the checked value through the typed COM checkbox capability.
 pub struct CheckboxParameters {
     /// Label displayed beside the checkbox square.
     pub label: String,
@@ -96,9 +96,6 @@ pub struct Checkbox {
     /// Font used for the label.
     font: FontRef,
     /// Base widget options.
-    /// Native algorithm fixture policy; production options live only in WidgetState.
-    #[cfg(test)]
-    opt: WidgetOption,
     /// Current checked value.
     checked: bool,
     /// Runtime-owned source for user-originated value changes.
@@ -106,36 +103,15 @@ pub struct Checkbox {
 }
 
 impl Checkbox {
-    /// Constructs a retained node and a weak typed handle to its concrete checkbox.
-    #[cfg(test)]
-    pub fn create(parameters: CheckboxParameters) -> (crate::TypedWidgetHandle<Self>, crate::Node) {
-        let widget = Checkbox::from(parameters);
-        crate::Node::typed_widget(widget)
-    }
-
     /// Combines validated semantic parameters with one already bound common runtime.
     pub(crate) fn from_runtime(runtime: crate::ui_node::widget_object::WidgetRuntime, parameters: CheckboxParameters) -> Self {
         Self {
             runtime,
             label: parameters.label,
             font: parameters.font,
-            #[cfg(test)]
-            opt: parameters.opt,
             checked: parameters.checked,
             changed_event: crate::EventSource::new(),
         }
-    }
-
-    /// Marks the checkbox as checked without recording user interaction.
-    #[cfg(test)]
-    pub fn check(&mut self) {
-        self.checked = true;
-    }
-
-    /// Marks the checkbox as unchecked without recording user interaction.
-    #[cfg(test)]
-    pub fn uncheck(&mut self) {
-        self.checked = false;
     }
 
     /// Replaces the checked value without recording user interaction.
@@ -146,12 +122,6 @@ impl Checkbox {
     /// Returns the current checked value.
     pub const fn checked(&self) -> bool {
         self.checked
-    }
-
-    /// Returns the native event endpoint emitted after every user-originated value change.
-    #[cfg(test)]
-    pub fn changed(&self) -> crate::WidgetEventPortHandle<CheckboxChanged> {
-        <Self as crate::TypedWidget<CheckboxChanged>>::event(self)
     }
 
     /// Measures the checkbox square plus optional label.
@@ -190,25 +160,7 @@ impl Checkbox {
     }
 }
 
-#[cfg(test)]
-impl crate::TypedWidgetHandle<Checkbox> {
-    /// Returns the current checked value while the widget is retained.
-    pub fn checked(&self) -> Option<bool> {
-        self.try_read(Checkbox::checked)
-    }
-
-    /// Returns the checkbox's native value-change endpoint.
-    pub fn changed(&self) -> crate::WidgetEventPortHandle<CheckboxChanged> {
-        self.widget_event()
-    }
-}
-
 impl Widget for Checkbox {
-    #[cfg(test)]
-    fn widget_opt(&self) -> &WidgetOption {
-        &self.opt
-    }
-
     fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         if ctx.action(input, self.keyboard_behavior()) != Some(KeyboardAction::Activate) {
             return crate::Change::NoChange;
@@ -235,15 +187,6 @@ impl Widget for Checkbox {
 impl crate::TypedWidget<CheckboxChanged> for Checkbox {
     fn event(&self) -> crate::WidgetEventPortHandle<CheckboxChanged> {
         self.changed_event.event()
-    }
-}
-
-#[cfg(test)]
-impl From<CheckboxParameters> for Checkbox {
-    /// Transfers one-shot parameters into the concrete Checkbox runtime.
-    fn from(parameters: CheckboxParameters) -> Self {
-        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_test(parameters.opt);
-        Self::from_runtime(runtime, parameters)
     }
 }
 

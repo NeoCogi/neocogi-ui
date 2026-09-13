@@ -35,8 +35,6 @@ use super::*;
 impl UiRuntime {
     /// Updates one already-borrowed node and descendants.
     pub(super) fn update_node_ref(&mut self, node: &mut Node, parent_transform: Transform, style: &Skin, atlas: crate::AtlasHandle, input: InputSnapshot) {
-        #[cfg(test)]
-        self.bump_metric(|metrics| metrics.updates += 1);
         // Reconstruct exactly the frame/content coordinate spaces committed during layout. Widgets
         // see content-local geometry even though allocations and inherited clips use other spaces.
         let frame_role = node_frame_role(node);

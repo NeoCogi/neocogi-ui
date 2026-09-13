@@ -294,22 +294,6 @@ impl RootFrameKind {
     }
 }
 
-/// Focused chrome geometry exposed only to crate-internal window behavior tests.
-#[cfg(test)]
-#[derive(Copy, Clone, Debug)]
-pub(crate) struct DebugRootChromeControls {
-    /// Optional minimize-button rectangle.
-    pub(crate) minimize: Option<Recti>,
-    /// Optional maximize-or-restore-button rectangle.
-    pub(crate) maximize: Option<Recti>,
-    /// Optional right-edge width-resize rectangle.
-    pub(crate) resize_right: Option<Recti>,
-    /// Optional bottom-edge height-resize rectangle.
-    pub(crate) resize_bottom: Option<Recti>,
-    /// Optional bottom-right two-axis resize rectangle.
-    pub(crate) resize_corner: Option<Recti>,
-}
-
 impl RootChromeGeometry {
     /// Classifies a screen-space point in interaction-priority order.
     pub(super) fn hit_test(self, point: crate::Vec2i) -> Option<RootChromePart> {

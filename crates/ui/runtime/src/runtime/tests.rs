@@ -118,14 +118,9 @@ impl IRgbaImage for CountingAssets {
 /// Factory products, including fixed composites, reuse the runtime's one imported asset value.
 #[test]
 fn factory_construction_and_widget_phases_do_not_reimport_assets() {
-    let source = crate::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
+    let source = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
     let calls = Rc::new(Cell::new(0));
-    let counted: ComPtr<IAssetBundleAbi> = CountingAssets::from_value(CountingAssets {
-        source,
-        calls: calls.clone(),
-    })
-    .query()
-    .unwrap();
+    let counted: ComPtr<IAssetBundleAbi> = CountingAssets::from_value(CountingAssets { source, calls: calls.clone() }).query().unwrap();
     let runtime = crate::test_support::runtime_from_assets(counted.as_com_ref()).unwrap();
     calls.set(0);
     let factory = runtime.factory().unwrap();
@@ -158,10 +153,7 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
     let _linear = factory.create_linear(FlowDirection::TopToBottom, CrossSize::Stretch.into()).unwrap();
     let tracks = [LayoutTrack::Content.into()];
     let _grid = factory
-        .create_grid(
-            NcCopyFromBufferOffset::new(0, &tracks),
-            NcCopyFromBufferOffset::new(0, &tracks),
-        )
+        .create_grid(NcCopyFromBufferOffset::new(0, &tracks), NcCopyFromBufferOffset::new(0, &tracks))
         .unwrap();
     let _combo = factory.create_combo().unwrap();
     let _disclosure = factory.create_disclosure(label, DisclosureStyle::Header, false).unwrap();
@@ -281,10 +273,10 @@ fn rendering_requires_synchronized_geometry_and_streams_expire_after_success_and
     probe.fail.set(true);
     assert_eq!(runtime.render(resized, renderer.as_com_ref()), Err(UI_E_RENDER));
     for (stream, scope) in probe.streams.borrow().iter() {
-        assert_eq!(stream.vertices(*scope, NcCopyToBufferOffset::new(0, &mut [])), Err(UI_E_EXPIRED_SCOPE));
-        assert_eq!(stream.batches(*scope, NcCopyToBufferOffset::new(0, &mut [])), Err(UI_E_EXPIRED_SCOPE));
-        assert_eq!(stream.texture(*scope, 0).unwrap_err(), UI_E_EXPIRED_SCOPE);
-        assert_eq!(stream.item(*scope, 0).unwrap_err(), UI_E_EXPIRED_SCOPE);
+        assert_eq!(stream.vertices(*scope, NcCopyToBufferOffset::new(0, &mut [])), Err(NC_E_INVALID_ARG));
+        assert_eq!(stream.batches(*scope, NcCopyToBufferOffset::new(0, &mut [])), Err(NC_E_INVALID_ARG));
+        assert_eq!(stream.texture(*scope, 0).unwrap_err(), NC_E_INVALID_ARG);
+        assert_eq!(stream.item(*scope, 0).unwrap_err(), NC_E_INVALID_ARG);
     }
 }
 
@@ -1139,14 +1131,7 @@ impl IPainter for BuiltinPainter {
         panic!("expected UI-owned text expansion")
     }
     /// Captures the compact semantic frame before the runtime expands its nine-patch.
-    fn frame(
-        &mut self,
-        _scope: PaintScope,
-        rect: Rect,
-        _role: WidgetFrame,
-        _state: WidgetVisualState,
-        _center_only: bool,
-    ) -> Result<Rect, NcStatus> {
+    fn frame(&mut self, _scope: PaintScope, rect: Rect, _role: WidgetFrame, _state: WidgetVisualState, _center_only: bool) -> Result<Rect, NcStatus> {
         assert_eq!(self.button.label().err(), Some(NC_E_BUSY));
         Ok(rect)
     }
@@ -1155,14 +1140,7 @@ impl IPainter for BuiltinPainter {
         panic!("unexpected icon in text-only button paint")
     }
     /// Captures aligned text before the single runtime executor performs glyph expansion.
-    fn text_run(
-        &mut self,
-        _scope: PaintScope,
-        _font: PaintFont,
-        position: Point,
-        _rgba: u32,
-        _text: NcCopyFromBufferOffset<'_, u8>,
-    ) -> Result<(), NcStatus> {
+    fn text_run(&mut self, _scope: PaintScope, _font: PaintFont, position: Point, _rgba: u32, _text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         assert_eq!(self.button.label().err(), Some(NC_E_BUSY));
         self.probe.text_positions.borrow_mut().push(position);
         self.probe.order.borrow_mut().push(false);
@@ -1414,3 +1392,5 @@ fn static_leaf_content_recovers_from_reentry_and_errors_with_one_owned_lifetime(
 }
 
 mod images;
+
+mod retained;
