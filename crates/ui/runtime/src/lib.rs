@@ -70,7 +70,8 @@
     clippy::too_many_arguments,
     clippy::wildcard_imports
 )]
-//! Retained implementation used by the UI plugin and native rendering/asset assemblies.
+//! Retained implementation used by the UI plugin, with native executor fixtures compiled only
+//! for implementation tests.
 //!
 //! Applications use `neocogi-ui`, whose concrete COM clients link no UI implementation.
 //! Each retained COM node owns the widget capabilities used for routing, layout and painting.
@@ -106,6 +107,7 @@ mod guide_doctests {
 pub mod assets;
 pub mod atlas;
 mod boundary;
+#[cfg(test)]
 mod context;
 mod event;
 mod identity;
@@ -115,6 +117,8 @@ mod math;
 mod menu;
 pub mod render;
 mod runtime;
+#[cfg(not(test))]
+mod runtime_context;
 #[cfg(test)]
 mod test_support;
 pub mod theme;
@@ -152,7 +156,8 @@ pub mod prelude {
 pub use atlas::{AtlasHandle, CharEntry, FontId, IconId};
 #[cfg(test)]
 pub use atlas::{AtlasError, AtlasSource, FontEntry};
-pub(crate) use context::{Context};
+#[cfg(test)]
+pub(crate) use context::Context;
 #[cfg(test)]
 pub(crate) use test_support::ui::Ui;
 pub(crate) use window_manager::{PopupHandle, Window, WindowHandle, WindowOption};
@@ -220,8 +225,17 @@ impl neocogi_ui_core_contracts::UiPluginFactory for UiPluginFactoryObject {
     fn create_runtime(
         &self,
         assets: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IAssetBundleAbi>,
+        compositor: neocogi_com::ComRef<'_, neocogi_gfx_contracts::GfxCompositorAbi>,
     ) -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::UiRuntimeAbi>, neocogi_com::NcStatus> {
-        crate::create_runtime_from_assets(assets)
+        #[cfg(not(test))]
+        {
+            crate::create_runtime_from_assets(assets, compositor)
+        }
+        #[cfg(test)]
+        {
+            let _ = compositor;
+            crate::create_runtime_from_assets(assets)
+        }
     }
 }
 

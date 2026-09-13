@@ -140,11 +140,7 @@ fn host_key(event: KeyStroke) -> Result<KeyEvent, NcStatus> {
 }
 
 /// Validates one host event before changing the queue, then reuses existing normalization.
-pub(crate) fn enqueue(
-    context: &mut crate::Context<crate::render::external::Backend>,
-    event: UiInputAbi,
-    bytes: NcCopyFromBufferOffset<'_, u8>,
-) -> Result<(), NcStatus> {
+pub(crate) fn enqueue(context: &mut crate::window_manager::WindowManager, event: UiInputAbi, bytes: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
     let event = UiInput::try_from(event)?;
     let text = text(bytes)?;
     if !matches!(event, UiInput::Text) && !text.is_empty() {

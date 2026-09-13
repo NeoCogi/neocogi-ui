@@ -310,7 +310,6 @@ impl WindowManager {
     }
 
     /// Borrows the atomic resolved skin and atlas installed in this manager.
-    #[cfg(test)]
     pub(crate) fn skin_bundle(&self) -> &SkinBundle {
         // Context uses this same pair for public projections and renderer synchronization checks.
         &self.bundle
@@ -385,6 +384,7 @@ impl WindowManager {
     }
 
     /// Clears recorded drawing when a logical frame is cancelled or backend setup fails.
+    #[cfg(test)]
     pub(crate) fn cancel_frame(&mut self) {
         // Clearing preserves allocations while preventing stale operations from leaking forward.
         self.display_list.clear();

@@ -145,6 +145,7 @@ fn static_com_editing_and_webgl() {
         runtime
             .register_factory_plugin_description(neocogi_ui_runtime::factory_plugin_description())
             .unwrap();
+        runtime.register_factory_plugin_description(neocogi_gfx::factory_plugin_description()).unwrap();
         runtime.register_factory_plugin_description(crate::factory_plugin_description()).unwrap();
     }
     let platform = runtime
@@ -166,7 +167,11 @@ fn static_com_editing_and_webgl() {
     let factory = runtime
         .activate_plugin_factory::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))
         .unwrap();
-    let ui = neocogi_ui::Ui::from_interface(factory.create_runtime(assets.as_com_ref()).unwrap()).unwrap();
+    let gfx = runtime
+        .activate_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
+        .unwrap();
+    let compositor = gfx.create_compositor(assets.as_com_ref()).unwrap();
+    let ui = neocogi_ui::Ui::from_interface(factory.create_runtime(assets.as_com_ref(), compositor.as_com_ref()).unwrap()).unwrap();
     let editor = ui.widgets().textbox("").unwrap();
     let window = ui
         .window("Editable COM window", Rect { x: 10, y: 10, width: 400, height: 180 }, &editor)

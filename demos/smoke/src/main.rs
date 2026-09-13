@@ -103,8 +103,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         atlas.as_com_ref(),
     )?;
     let renderer: ComPtr<IRendererAbi> = native.query()?;
+    let gfx = runtime.activate_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+    let compositor = gfx.create_compositor(assets.as_com_ref())?;
     let ui_factory = runtime.activate_plugin_factory::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
-    let mut ui = Ui::from_interface(ui_factory.create_runtime(assets.as_com_ref())?)?;
+    let mut ui = Ui::from_interface(ui_factory.create_runtime(assets.as_com_ref(), compositor.as_com_ref())?)?;
     if options.rebuild_assets {
         // The optional builder owns packing/font/PNG implementation; the host sees only typed roots.
         let gfx = runtime.activate_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;

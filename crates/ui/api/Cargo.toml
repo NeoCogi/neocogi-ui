@@ -11,7 +11,7 @@ description = "Typed Rust client API for NeoCogi UI components"
 neocogi-ui-core-contracts.workspace = true
 neocogi-renderer-contracts.workspace = true
 neocogi-platform-contracts.workspace = true
-neocogi-gfx-contracts = { workspace = true, optional = true }
+neocogi-gfx-contracts.workspace = true
 neocogi-gfx-support.workspace = true
 neocogi-skin-contracts = { workspace = true, optional = true }
 neocogi-com = { workspace = true, features = ["macros", "std"] }
@@ -19,7 +19,7 @@ neocogi-com = { workspace = true, features = ["macros", "std"] }
 [features]
 default = []
 # Optional authoring clients keep unrelated plugin contracts out of UI/runtime binaries.
-gfx = ["dep:neocogi-gfx-contracts"]
+gfx = []
 skin = ["dep:neocogi-skin-contracts"]
 # Generated resource tables expand bounded zlib pixels; other clients need no decoder.
 compiled-assets = ["neocogi-gfx-support/compiled-assets"]

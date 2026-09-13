@@ -83,8 +83,10 @@ impl Host {
         let atlas = assets.query::<IRgbaImageAbi>()?;
         let window = platform.create_window(NcCopyFromBufferOffset::new(0, title.as_bytes()), size, atlas.as_com_ref())?;
         let renderer = window.query()?;
+        let gfx = runtime.activate_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+        let compositor = gfx.create_compositor(assets.as_com_ref())?;
         let ui_factory = runtime.activate_plugin_factory::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
-        let ui = Ui::from_interface(ui_factory.create_runtime(assets.as_com_ref())?)?;
+        let ui = Ui::from_interface(ui_factory.create_runtime(assets.as_com_ref(), compositor.as_com_ref())?)?;
         let input = ui.input_sink()?;
         Ok(Self { ui, renderer, window, input })
     }

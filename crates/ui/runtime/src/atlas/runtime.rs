@@ -42,6 +42,7 @@ fn clamp_text_coordinate(value: i128) -> i32 {
 
 impl AtlasHandle {
     /// Reports whether two handles reference the same immutable atlas allocation.
+    #[cfg(test)]
     pub(crate) fn ptr_eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.0, &other.0)
     }

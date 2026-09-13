@@ -37,7 +37,9 @@ use super::{
     geometry::{SolidGeometry, SolidTriangle, SolidTriangleRange},
 };
 use crate::atlas::{FontId, IconId};
-use crate::render::{Color, NinePatch, TextureId};
+use crate::render::{Color, NinePatch};
+#[cfg(test)]
+use crate::render::TextureId;
 use rs_math3d::{Color4b, Recti, Vec2f, Vec2i};
 
 /// An owned sequence of rendering operations and their solid geometry.
@@ -117,6 +119,7 @@ pub(super) enum DrawKind {
         color: Color,
     },
     /// Draws one backend-owned external texture.
+    #[cfg(test)]
     Image {
         /// External texture identifier.
         id: TextureId,
@@ -231,6 +234,7 @@ impl DisplayList {
     }
 
     /// Appends one image operation.
+    #[cfg(test)]
     pub(super) fn push_image(&mut self, clip: Recti, id: TextureId, rect: Recti, color: Color) {
         self.push(clip, DrawKind::Image { id, rect, color });
     }

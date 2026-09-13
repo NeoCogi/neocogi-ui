@@ -29,7 +29,9 @@
 //
 //! Stateless vertex construction, tessellation, bounds, translation, and final triangle clipping.
 
+#[cfg(test)]
 use neocogi_render_core::Vertex;
+#[cfg(test)]
 use crate::{math::RectExt, theme::Color};
 
 /// Sentinel clip rectangle used when command recording starts without a root clip.
@@ -39,7 +41,9 @@ pub(crate) static UNCLIPPED_RECT: Recti = Recti {
     width: i32::MAX,
     height: i32::MAX,
 };
-use rs_math3d::{Color4b, FloatVector, Recti, Vec2f, color4b};
+use rs_math3d::{Color4b, FloatVector, Recti, Vec2f};
+#[cfg(test)]
+use rs_math3d::color4b;
 use std::ops::Range;
 
 /// Floating-point tolerance shared by tessellation and clipping predicates.
@@ -48,6 +52,7 @@ pub(crate) const GEOM_EPS: f32 = 1.0e-5;
 const GEOM_EPS_SQ: f32 = GEOM_EPS * GEOM_EPS;
 
 /// Builds the four clockwise vertices for a textured rectangle draw using final normalized UVs.
+#[cfg(test)]
 pub(super) fn textured_quad_from_uv(dst: Recti, uv_min: Vec2f, uv_max: Vec2f, color: Color) -> [Vertex; 4] {
     let dst_min = Vec2f::new(dst.x as f32, dst.y as f32);
     let dst_max = dst_min + Vec2f::new(dst.width as f32, dst.height as f32);
@@ -392,6 +397,7 @@ impl SolidGeometry {
 }
 
 /// Coordinate axis tested by one rectangular clipping edge.
+#[cfg(test)]
 #[derive(Clone, Copy)]
 enum ClipAxis {
     /// Vertical boundary that compares x coordinates.
@@ -401,6 +407,7 @@ enum ClipAxis {
 }
 
 /// Half-plane retained by one rectangular clipping edge.
+#[cfg(test)]
 #[derive(Clone, Copy)]
 enum ClipSide {
     /// Retains coordinates greater than or equal to the boundary.
@@ -413,6 +420,7 @@ enum ClipSide {
 ///
 /// The edge owns its axis, retained side, and scalar boundary. Consequently, containment and
 /// intersection operations do not also need a `ClipRect` argument.
+#[cfg(test)]
 #[derive(Clone, Copy)]
 struct ClipEdge {
     /// Coordinate component inspected by this edge.
@@ -423,6 +431,7 @@ struct ClipEdge {
     boundary: f32,
 }
 
+#[cfg(test)]
 impl ClipEdge {
     /// Creates one clipping boundary with all information needed to operate independently.
     const fn new(axis: ClipAxis, side: ClipSide, boundary: f32) -> Self {
@@ -497,6 +506,7 @@ impl ClipEdge {
 /// A triangle clipped by an axis-aligned rectangle can contain at most seven vertices, so eight
 /// slots leave one defensive spare without allocating in the rendering loop. This type is not a
 /// general polygon container; it exists only to carry one triangle's result from edge to edge.
+#[cfg(test)]
 #[derive(Default)]
 struct TriangleClippingResult {
     /// Valid vertices stored in winding order.
@@ -505,6 +515,7 @@ struct TriangleClippingResult {
     len: usize,
 }
 
+#[cfg(test)]
 impl TriangleClippingResult {
     /// Creates a triangle polygon with adjacent and closing near-duplicates removed.
     fn from_triangle(triangle: [Vertex; 3]) -> Self {
@@ -601,11 +612,13 @@ impl TriangleClippingResult {
 ///
 /// The four edges are constructed once and then iterated by value for every triangle. This keeps
 /// the source rectangle and its derived boundary semantics hidden from individual edge operations.
+#[cfg(test)]
 pub(crate) struct ClipRect {
     /// Stable left, right, top, and bottom clipping order.
     edges: [ClipEdge; 4],
 }
 
+#[cfg(test)]
 impl ClipRect {
     /// Creates a non-empty clipping rectangle and precomputes its four edge objects.
     pub(crate) fn new(rect: Recti) -> Option<Self> {

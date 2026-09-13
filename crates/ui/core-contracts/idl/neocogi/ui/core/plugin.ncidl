@@ -1,6 +1,6 @@
-#[version(1)]
+#[version(2)]
 /// Process entry factory for the retained UI implementation plugin.
 factory UiPluginFactory {
-    /// Creates one independent retained UI from an immutable GFX resource bundle.
-    fn create_runtime(&self, assets: &IAssetBundle) -> Result<UiRuntime>;
+    /// Creates one independent retained UI from matching immutable resources and a GFX compositor.
+    fn create_runtime(&self, assets: &IAssetBundle, compositor: &GfxCompositor) -> Result<UiRuntime>;
 }

@@ -15,10 +15,9 @@ pub use neocogi_platform_contracts::{
     TextInputAreaAbi, TextInputAreaTag, UiInput, UiInputAbi, UiInputTag,
 };
 pub use neocogi_ui_core_contracts::*;
-#[cfg(feature = "gfx")]
 pub use neocogi_gfx_contracts::{
-    AssetLoader, AssetLoaderAbi, GfxPluginFactory, GfxPluginFactoryAbi, IAssetBuilder, IAssetBuilderAbi, IGfxDiagnostics, IGfxDiagnosticsAbi, PngDecoder,
-    PngDecoderAbi,
+    AssetLoader, AssetLoaderAbi, DrawPoint, GfxPluginFactory, GfxPluginFactoryAbi, IAssetBuilder, IAssetBuilderAbi, IGfxDiagnostics, IGfxDiagnosticsAbi,
+    GfxCompositor, GfxCompositorAbi, PngDecoder, PngDecoderAbi, SolidVertex,
 };
 #[cfg(feature = "skin")]
 pub use neocogi_skin_contracts::{

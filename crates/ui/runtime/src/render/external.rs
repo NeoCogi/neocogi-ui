@@ -11,12 +11,6 @@ use std::{
     rc::Rc,
 };
 
-/// Decodes canonical RGBA packing independently of machine byte order.
-pub(crate) fn color(rgba: u32) -> crate::render::Color {
-    let [r, g, b, a] = rgba.to_le_bytes();
-    crate::render::Color { r, g, b, a }
-}
-
 /// Owned frame storage is reused; invocation checks prevent stale readers observing reuse.
 #[derive(Default)]
 pub(super) struct Storage {

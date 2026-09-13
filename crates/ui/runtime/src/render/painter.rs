@@ -33,8 +33,10 @@ use super::display_list::DisplayList;
 use crate::{
     atlas::{FontId, IconId},
     math::RectExt,
-    render::{Color, SliceInsets, NinePatch, TextureId},
+    render::{Color, SliceInsets, NinePatch},
 };
+#[cfg(test)]
+use crate::render::TextureId;
 use rs_math3d::{Recti, Vec2f, Vec2i, color4b};
 
 /// Records backend-neutral drawing operations in local coordinates.
@@ -198,6 +200,7 @@ impl<'a> Painter<'a> {
     }
 
     /// Records one backend-owned external texture in a local rectangle.
+    #[cfg(test)]
     pub fn image(&mut self, id: TextureId, rect: Recti, color: Color) {
         self.record_rect(rect, color, |list, clip, screen_rect| list.push_image(clip, id, screen_rect, color));
     }

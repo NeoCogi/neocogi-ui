@@ -24,6 +24,7 @@ dynamic-plugin = []
 # Standard plugin-owned compositions reuse the static typed clients and owned event adapter.
 neocogi-ui.workspace = true
 neocogi-ui-core-contracts.workspace = true
+neocogi-gfx-contracts.workspace = true
 neocogi-renderer-contracts.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
 neocogi-render-core.workspace = true
@@ -31,6 +32,8 @@ bitflags.workspace = true
 rs-math3d.workspace = true
 
 [dev-dependencies]
+neocogi-com = { workspace = true, features = ["static-runtime"] }
+neocogi-demo-assets = { workspace = true, features = ["embed-assets"] }
 neocogi-gfx-impl = { workspace = true, features = ["publisher"] }
 neocogi-skin-impl.workspace = true
 neocogi-gfx-contracts.workspace = true

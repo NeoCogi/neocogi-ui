@@ -30,13 +30,17 @@
 
 #![doc = include_str!("../docs/RENDER.md")]
 
+#[cfg(not(test))]
+pub(crate) mod compositor;
 pub(crate) mod display_list;
+#[cfg(test)]
 pub(crate) mod external;
 pub(crate) mod geometry;
 mod nine_patch;
 mod painter;
 #[cfg(test)]
 mod performance;
+#[cfg(test)]
 mod renderer;
 #[cfg(test)]
 pub(crate) use neocogi_render_core::RendererId;
@@ -50,6 +54,14 @@ pub use crate::test_support::custom_render::{CustomRenderHandle, CustomRenderReg
 pub(crate) use crate::test_support::custom_render::CustomRenderKey;
 pub(crate) use display_list::DisplayList;
 pub use painter::Painter;
+#[cfg(test)]
 pub use renderer::RenderError;
+#[cfg(test)]
 pub(crate) use renderer::Renderer;
 pub use nine_patch::{NinePatch, NinePatchCell, NinePatchCells, NinePatchContent, NinePatchImage, SliceInsets};
+
+/// Decodes canonical contract RGBA packing independently of machine byte order.
+pub(crate) fn contract_color(rgba: u32) -> Color {
+    let [r, g, b, a] = rgba.to_le_bytes();
+    Color { r, g, b, a }
+}
