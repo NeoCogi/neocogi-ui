@@ -174,13 +174,13 @@ import table. The canonical description retains dependency module IDs and
 fingerprints so the runtime verifies the graph rather than trusting filename
 resolution alone.
 
-NeoCogi's optional asset-authoring contract is one concrete example. Its
-`neocogi/ui/assets/` source declares `extern neocogi.ui.core` and imports
-portable values and interfaces from `neocogi/ui/core/`; generated signatures
-refer to those original UI types, and `nc_contract_neocogi_ui_assets` links to
-the exact fingerprinted `nc_contract_neocogi_ui_core` description. The assets
-plugin needs to name only the `neocogi.ui.assets` module directly because
-registration follows that dependency edge to `neocogi.ui.core`.
+NeoCogi's optional authoring contracts are concrete examples. The
+`neocogi/gfx/` and `neocogi/skin/` sources declare `extern neocogi.ui.core` and
+import portable values and interfaces from their owning module; GFX additionally
+imports renderer texture declarations. Generated signatures refer to those
+original types, and each fingerprinted contract library links only its exact
+dependencies. The GFX and skin plugin descriptions name their own module
+directly because registration follows dependency edges transitively.
 
 ## Runtime activation
 

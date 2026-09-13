@@ -1,6 +1,6 @@
 #[version(1)]
-/// Constructible CPU decoder uploading through the target renderer's owned-image factory.
-factory PngDecoder: IAssetDiagnostics {
+/// Constructible CPU decoder uploading through the target renderer's image factory.
+factory PngDecoder: IGfxDiagnostics {
     /// Decodes one static PNG and uploads exact normalized RGBA through a borrowed factory.
     /// The complete input starts at offset zero; encoded and decoded data are bounded to 64 MiB.
     /// Decoder failures never call the factory. Upload failures preserve their original status.

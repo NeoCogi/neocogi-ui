@@ -1,6 +1,9 @@
 //! CPU PNG decoding and renderer upload share one bounded RGBA representation.
-use super::*;
-use neocogi_com::{ComRef, NcCopyFromBufferOffset, com_factory};
+use super::Diagnostic;
+use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, com_factory};
+use neocogi_gfx_contracts::*;
+use neocogi_renderer_contracts::*;
+use neocogi_gfx_contracts::MAX_ASSET_PIXELS_BYTES;
 use std::io::{self, Cursor};
 
 /// Decoded CPU pixels, ready for atlas packing or a texture-factory upload.
@@ -90,7 +93,7 @@ impl RgbaImage {
     }
 }
 
-#[com_factory(neocogi_ui_assets_contracts::PngDecoder)]
+#[com_factory(neocogi_gfx_contracts::PngDecoder)]
 #[derive(Default)]
 /// Decodes PNGs independently of the optional font rasterizer and JSON compiler.
 pub struct PngDecoderObject {
@@ -112,7 +115,7 @@ impl PngDecoder for PngDecoderObject {
             })
     }
 }
-impl IAssetDiagnostics for PngDecoderObject {
+impl IGfxDiagnostics for PngDecoderObject {
     /// Returns an immutable failure snapshot that remains usable through later uploads.
     fn diagnostic(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         Ok(self.diagnostic.snapshot())
@@ -122,7 +125,8 @@ impl IAssetDiagnostics for PngDecoderObject {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neocogi_com::{INcStringComPtrExt, com_object};
+    use neocogi_com::{INcStringComPtrExt, NC_E_INVALID_ARG, com_object};
+    use neocogi_renderer_contracts::RENDER_E_BACKEND;
     use std::{cell::Cell, rc::Rc};
 
     /// Encodes one tiny source image using an independent writer configuration.
@@ -195,7 +199,7 @@ mod tests {
         /// Controls one upload failure without replacing or recreating the decoder.
         fail: Rc<Cell<bool>>,
         /// Retained diagnostics exercise reentry across the borrowed upload boundary.
-        diagnostics: ComPtr<IAssetDiagnosticsAbi>,
+        diagnostics: ComPtr<IGfxDiagnosticsAbi>,
     }
     impl ITextureFactory for Factory {
         /// Validates normalized RGBA pixels and deliberately calls back before returning.
@@ -206,7 +210,7 @@ mod tests {
             assert!(pixels.as_slice().iter().all(|channel| *channel == 255));
             self.diagnostics.diagnostic()?.to_string()?;
             if self.fail.get() {
-                return Err(UI_E_RENDER);
+                return Err(RENDER_E_BACKEND);
             }
             Texture::from_value(Texture { size }).query()
         }
@@ -216,7 +220,7 @@ mod tests {
     #[test]
     fn bounded_png_upload_reentry_failure_and_recovery() {
         let decoder: ComPtr<PngDecoderAbi> = PngDecoderObject::from_value(PngDecoderObject::default()).query().unwrap();
-        let diagnostics: ComPtr<IAssetDiagnosticsAbi> = decoder.query().unwrap();
+        let diagnostics: ComPtr<IGfxDiagnosticsAbi> = decoder.query().unwrap();
         let calls = Rc::new(Cell::new(0));
         let fail = Rc::new(Cell::new(false));
         let factory: ComPtr<ITextureFactoryAbi> = Factory::from_value(Factory {
@@ -238,7 +242,7 @@ mod tests {
         fail.set(true);
         assert_eq!(
             decoder.upload(NcCopyFromBufferOffset::new(0, png), factory.as_com_ref()).unwrap_err(),
-            UI_E_RENDER
+            RENDER_E_BACKEND
         );
         let failure = diagnostics.diagnostic().unwrap();
         let message = failure.to_string().unwrap();

@@ -1,7 +1,7 @@
 //! Boundary tests use real generated COM calls, malformed producer tables and an upload-failing renderer.
 use super::*;
 use neocogi_ui::assets::AssetData;
-use neocogi_ui_assets_contracts::{PaletteEdit, PaletteEditAbi, PaletteEditTag, StyleCompilerAbi};
+use neocogi_skin_contracts::{PaletteEdit, PaletteEditAbi, PaletteEditTag, StyleCompilerAbi};
 use neocogi_com::{com_object, NcCopyFromBufferOffset, NcCopyToBufferOffset, NC_E_BUSY};
 use std::{
     cell::{Cell, RefCell},

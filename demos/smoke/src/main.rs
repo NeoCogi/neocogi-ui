@@ -79,7 +79,8 @@ fn register_plugins(runtime: &neocogi_com::Runtime, _directory: &std::path::Path
     unsafe {
         runtime.register_factory_plugin_description(neocogi_ui_runtime::factory_plugin_description())?;
         runtime.register_factory_plugin_description(neocogi_render_plugin::factory_plugin_description())?;
-        runtime.register_factory_plugin_description(neocogi_assets::factory_plugin_description())?;
+        runtime.register_factory_plugin_description(neocogi_gfx::factory_plugin_description())?;
+        runtime.register_factory_plugin_description(neocogi_skin::factory_plugin_description())?;
         #[cfg(feature = "extension")]
         runtime.register_factory_plugin_description(neocogi_example_ui_extension::factory_plugin_description())?;
     }
@@ -106,8 +107,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut ui = Ui::from_interface(ui_factory.create_runtime(assets.as_com_ref())?)?;
     if options.rebuild_assets {
         // The optional builder owns packing/font/PNG implementation; the host sees only typed roots.
-        let assets_factory = runtime.activate_plugin_factory::<AssetsPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.assets"))?;
-        let loader = assets_factory
+        let gfx = runtime.activate_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+        let loader = gfx
             .asset_loader()
             .map_err(|status| format!("--rebuild-assets requires a files package: {status}"))?;
         let builder = loader.derive_builder(Size { width: 1024, height: 512 }, assets.as_com_ref())?;
@@ -117,13 +118,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     if let Some(path) = &options.theme {
         // Relative paths belong to the staged package, so startup remains independent of cwd.
         let path = if path.is_absolute() { path.clone() } else { directory.join(path) };
-        let assets_factory = runtime.activate_plugin_factory::<AssetsPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.assets"))?;
-        let loader = assets_factory
-            .theme_loader()
-            .map_err(|status| format!("--theme requires a files package: {status}"))?;
+        let skin = runtime.activate_plugin_factory::<SkinPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.skin.runtime"))?;
+        let loader = skin.theme_loader().map_err(|status| format!("--theme requires a files package: {status}"))?;
         let theme = loader.load_theme(NativePath::new(&path).as_interface(), assets.as_com_ref()).map_err(|error| {
             let detail = loader
-                .query::<IAssetDiagnosticsAbi>()
+                .query::<ISkinDiagnosticsAbi>()
                 .and_then(|diagnostics| diagnostics.diagnostic())
                 .and_then(|text| neocogi_com::INcStringComPtrExt::to_string(&text))
                 .unwrap_or_default();

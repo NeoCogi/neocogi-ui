@@ -1,4 +1,0 @@
-extern neocogi.ui.core;
-extern neocogi.renderer;
-use neocogi.ui.core::{AssetMetrics, FlatPalette, IAssetBundle, INativePath};
-use neocogi.renderer::{ITexture, ITextureFactory, Size};

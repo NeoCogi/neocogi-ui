@@ -165,6 +165,23 @@ enum IconRole: u8 {
 }
 
 #[version(1)]
+/// Semantic font selection resolved from the current immutable GFX bundle.
+#[dense]
+#[names(snake_case)]
+enum FontRole: u8 {
+    /// Ordinary control and body text.
+    Body = 0,
+    /// Compact supporting text.
+    Small = 1,
+    /// Window-title typography.
+    Title = 2,
+    /// Larger display typography.
+    Heading = 3,
+    /// Monospace typography.
+    Mono = 4,
+}
+
+#[version(1)]
 /// Four nonnegative pixel insets used by resolved theme geometry.
 #[deserialize]
 struct Insets {
@@ -444,11 +461,4 @@ struct FlatPalette {
     disabled_foreground: Color,
     /// Disabled title and caption foreground.
     disabled_title_foreground: Color,
-}
-
-/// Process entry factory for the retained UI implementation plugin.
-#[version(1)]
-factory UiPluginFactory {
-    /// Creates one independent retained UI from an immutable asset bundle.
-    fn create_runtime(&self, assets: &IAssetBundle) -> Result<UiRuntime>;
 }

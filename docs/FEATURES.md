@@ -1,19 +1,23 @@
 # Cargo features
 
 Features belong to the crate that implements them. The `neocogi-ui` application
-facade has no renderer, font-builder or JSON feature. Its defaults are empty:
+facade keeps its defaults empty; applications opt into `gfx` or `skin` only when
+they want those authoring-contract re-exports:
 
 | Crate | Feature | Effect |
 | --- | --- | --- |
-| Native demos | `monolith` | Link the runtime plus UI, renderer, and asset implementations into the executable. |
+| Native demos | `monolith` | Link the runtime plus UI, renderer, GFX, and skin implementations into the executable. |
 | `neocogi-ui` | `runtime` | Link the shared neocogi-com runtime used by native hosts. |
 | `neocogi-ui` | `static-runtime` | Link one ordinary runtime implementation, including browser deployments. |
-| `neocogi-ui` | `compiled-assets` | Expand bounded zlib pixels from generated asset tables. |
+| `neocogi-gfx-support` | `compiled-assets` | Expand bounded zlib pixels from generated asset tables. |
+| `neocogi-ui` | `compiled-assets` | Compatibility forwarding to GFX support for existing applications. |
+| `neocogi-ui` | `gfx` / `skin` | Re-export only the selected optional plugin's typed contracts. |
 | `neocogi-ui-runtime` | none | Imports resolved resources for layout and painting; contains no asset compiler. |
-| `neocogi-assets` | none | PNG decoding and live metric/palette compilation, without font or JSON parsing. |
-| `neocogi-assets` | `builder` | Font rasterization and PNG atlas construction into portable tables. |
-| `neocogi-assets` | `theme-json` | Strict JSON compilation, including the atlas builder. |
-| `neocogi-assets` | `save-to-rust` | Atomic source export from validated portable tables. |
+| `neocogi-gfx` | none | PNG decoding and renderer-owned texture upload. |
+| `neocogi-gfx` | `builder` | Font rasterization and PNG atlas construction into portable tables. |
+| `neocogi-skin` | none | Live typed metric/palette compilation. |
+| `neocogi-skin` | `theme-json` | Strict external JSON-theme compilation, including private resource baking. |
+| `neocogi-assets` | `save-to-rust` | Build-tool-only atomic source export from validated portable tables. |
 | `neocogi-render-plugin` | `glow` / `vulkan` / `wgpu` / `webgl` | Build exactly one renderer plugin identity; WebGL is the browser choice. |
 | Full/basic demos | `embed-assets` | Explicitly embed resource bytes; native defaults read adjacent files. |
 | Full/basic demos | `webgl` | Select browser integration and explicitly enable `embed-assets`. |
@@ -51,9 +55,10 @@ separate from implementation-library features. A direct demo build does not stag
 its dynamic dependencies. See [native packaging](COM_NATIVE.md) and [WebGL](WEB.md).
 
 Native demos load executable-relative font/icon, theme, photo and mesh files by
-default. The asset plugin owns decoding and compilation; the host retains typed
-COM bundles and resource capabilities. `cargo neocogi` stages that plugin with
-`theme-json`, which includes its font/atlas builder.
+default. The GFX plugin owns decoding and resource baking; the skin plugin owns
+appearance and external-theme compilation. The host retains only typed COM bundles
+and resource capabilities. `cargo neocogi` stages both plugins for file-backed
+assemblies and selects their implementation features independently.
 
 Use `--variant embedded` to explicitly select `embed-assets`. Cargo's host build
 then processes fonts, PNGs and JSON into generated source under `OUT_DIR`, tracking
@@ -67,7 +72,8 @@ The asset compiler is an optional host build dependency enabled by `embed-assets
 modes use the same recipe and retain the original catalog when switching themes.
 
 For another application, call `neocogi_assets::export::write_rust` from a build tool and
-enable facade `compiled-assets` in the consumer. `load_bundle()` returns a fresh
+enable GFX support `compiled-assets` in the consumer (the UI facade forwards its
+compatibility feature). `load_bundle()` returns a fresh
 immutable catalog; `bundle_data()?` provides tables for a compatible revision.
 The exporter is also available as a workspace command:
 
@@ -81,7 +87,7 @@ UI `ImageError` and `AtlasError` classify invalid raw resource storage. Asset
 construction returns concrete I/O and theme errors; COM methods retain details
 through owned diagnostic interfaces. [COM_ASSETS.md](COM_ASSETS.md) describes validation and publication.
 
-CI tests the UI and each asset feature independently: no features, `builder`,
+CI tests the UI and each compiler feature independently: no features, `builder`,
 `theme-json` and `save-to-rust`. It checks native backends separately and runs browser
 DOM/input regressions. A workspace-wide feature union can hide a broken minimal
 configuration; `--all-features` also does not replace the three native backend runs.

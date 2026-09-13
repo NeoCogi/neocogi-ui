@@ -1,13 +1,15 @@
 //! Optional font/atlas construction and JSON theme assembly.
 use super::Diagnostic;
-use neocogi_ui_assets_contracts::*;
-use neocogi_ui_core_contracts::*;
+#[cfg(feature = "theme-json")]
+use neocogi_skin_contracts::{ISkinDiagnostics, ThemeLoader};
+use neocogi_gfx_contracts::*;
+use neocogi_platform_contracts::INativePathAbi;
 use crate::atlas::{Builder, Config};
-use neocogi_ui::assets::AssetData;
+use neocogi_gfx_support::AssetData;
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, INcStringAbi, NC_E_INVALID_ARG, com_factory, com_object};
 use std::cell::RefCell;
 
-#[com_factory(neocogi_ui_assets_contracts::AssetLoader)]
+#[com_factory(neocogi_gfx_contracts::AssetLoader)]
 #[derive(Default)]
 /// Stateless construction root with owned diagnostics; drafts contain the actual mutable builder.
 pub struct AssetLoaderObject {
@@ -19,7 +21,7 @@ impl AssetLoader for AssetLoaderObject {
     /// Checks dimensions before decoding the supplied path or reading the white tile.
     fn create_builder(&self, size: Size, white: ComRef<'_, INativePathAbi>) -> Result<ComPtr<IAssetBuilderAbi>, NcStatus> {
         dimensions(size)?;
-        let white_icon = neocogi_ui::path::decode(white)?;
+        let white_icon = crate::path::decode(white)?;
         let builder = Builder::from_config(&Config {
             texture_width: size.width as usize,
             texture_height: size.height as usize,
@@ -38,7 +40,7 @@ impl AssetLoader for AssetLoaderObject {
         Ok(BuildSession::create(Draft { builder, base: Some(base.add_ref()) }))
     }
 }
-impl IAssetDiagnostics for AssetLoaderObject {
+impl IGfxDiagnostics for AssetLoaderObject {
     /// Returns a snapshot that remains unchanged by later failures.
     fn diagnostic(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         Ok(self.diagnostic.snapshot())
@@ -63,7 +65,7 @@ enum BuildState {
     Finished,
 }
 
-#[com_object(interfaces(IAssetBuilder, IAssetDiagnostics))]
+#[com_object(interfaces(IAssetBuilder, IGfxDiagnostics))]
 /// Concrete builder object with no callbacks, native resource handles or erased payloads.
 struct BuildSession {
     /// State is taken, never borrowed, while caller-provided COM path methods run.
@@ -83,13 +85,13 @@ impl BuildSession {
     }
     /// Takes one native draft and rejects reentry before calling any foreign path capability.
     fn edit(&self) -> Result<Edit<'_>, NcStatus> {
-        let mut slot = self.state.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
+        let mut slot = self.state.try_borrow_mut().map_err(|_| GFX_E_BUSY)?;
         match std::mem::replace(&mut *slot, BuildState::Busy) {
             BuildState::Idle(draft) => Ok(Edit { session: self, draft: Some(draft) }),
-            BuildState::Busy => Err(UI_E_BUSY),
+            BuildState::Busy => Err(GFX_E_BUSY),
             BuildState::Finished => {
                 *slot = BuildState::Finished;
-                Err(UI_E_CLOSED)
+                Err(GFX_E_CLOSED)
             }
         }
     }
@@ -120,7 +122,7 @@ impl IAssetBuilder for BuildSession {
     fn add_icon(&self, name: NcCopyFromBufferOffset<'_, u8>, path: ComRef<'_, INativePathAbi>) -> Result<(), NcStatus> {
         let mut edit = self.edit()?;
         let name = text(name)?;
-        let path = neocogi_ui::path::decode(path)?;
+        let path = crate::path::decode(path)?;
         edit.draft()
             .builder
             .add_icon_named(name, &path)
@@ -134,7 +136,7 @@ impl IAssetBuilder for BuildSession {
         if pixels == 0 || pixels > i32::MAX as u32 {
             return Err(NC_E_INVALID_ARG);
         }
-        let path = neocogi_ui::path::decode(path)?;
+        let path = crate::path::decode(path)?;
         edit.draft()
             .builder
             .add_font_named(name, &path, pixels as usize)
@@ -153,7 +155,7 @@ impl IAssetBuilder for BuildSession {
         }
     }
 }
-impl IAssetDiagnostics for BuildSession {
+impl IGfxDiagnostics for BuildSession {
     /// Retains terminal failure detail without reopening or retaining a consumed native builder.
     fn diagnostic(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         Ok(self.diagnostic.snapshot())
@@ -161,7 +163,7 @@ impl IAssetDiagnostics for BuildSession {
 }
 
 #[cfg(feature = "theme-json")]
-#[com_factory(neocogi_ui_assets_contracts::ThemeLoader)]
+#[com_factory(neocogi_skin_contracts::ThemeLoader)]
 #[derive(Default)]
 /// Optional theme compiler is present only in asset assemblies built with theme-json.
 pub struct ThemeLoaderObject {
@@ -172,7 +174,7 @@ pub struct ThemeLoaderObject {
 impl ThemeLoader for ThemeLoaderObject {
     /// Reads a complete theme against immutable base resources and returns ordinary portable tables.
     fn load_theme(&self, path: ComRef<'_, INativePathAbi>, base: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
-        let path = neocogi_ui::path::decode(path)?;
+        let path = crate::path::decode(path)?;
         let data = AssetData::read(base)?;
         let loaded = crate::theme::load(&path, &data).map_err(|error| self.diagnostic.failure(error))?;
         loaded.into_data().into_revision(base).inspect_err(|error| {
@@ -181,7 +183,7 @@ impl ThemeLoader for ThemeLoaderObject {
     }
 }
 #[cfg(feature = "theme-json")]
-impl IAssetDiagnostics for ThemeLoaderObject {
+impl ISkinDiagnostics for ThemeLoaderObject {
     /// Copies the latest failure text without exposing mutable diagnostic storage.
     fn diagnostic(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         Ok(self.diagnostic.snapshot())

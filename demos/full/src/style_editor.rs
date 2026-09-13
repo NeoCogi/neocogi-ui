@@ -184,7 +184,7 @@ impl StyleEditor {
         let base = ui.assets()?;
         // Activation belongs to this application; the UI runtime has no asset-provider dependency.
         let factory =
-            neocogi_com::Runtime::global().activate_plugin_factory::<AssetsPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.assets"))?;
+            neocogi_com::Runtime::global().activate_plugin_factory::<SkinPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.skin.runtime"))?;
         let compiler = factory.style_compiler()?;
         let mut metrics = base.metrics()?;
         let mut palette = FlatPalette::default();

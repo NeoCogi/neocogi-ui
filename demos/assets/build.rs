@@ -38,7 +38,7 @@ use neocogi_assets::{
     theme,
 };
 #[cfg(feature = "embed-assets")]
-use neocogi_ui::assets::AssetData;
+use neocogi_gfx_support::AssetData;
 
 /// Shared source paths are compiled only for explicitly embedded builds.
 #[cfg(feature = "embed-assets")]

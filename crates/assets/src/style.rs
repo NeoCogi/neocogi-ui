@@ -6,10 +6,10 @@
 //
 
 //! Compiles flat palette rules into portable resolved appearance tables.
-use neocogi_ui_assets_contracts::*;
-use neocogi_ui_core_contracts::*;
-use neocogi_ui::assets::AssetData;
-use neocogi_ui::{ChromeState, ControlState, MenuState, PointerState, SurfaceState};
+#[cfg(feature = "skin")]
+use neocogi_skin_contracts::{ISkinDiagnostics, PaletteEdit, PaletteEditAbi, StyleCompiler};
+use neocogi_gfx_contracts::*;
+use neocogi_gfx_support::{AssetData, ChromeState, ControlState, MenuState, PointerState, SurfaceState};
 
 /// Resolves every state once, so UI painting only selects stored values.
 pub(crate) fn apply_flat(data: &mut AssetData, insets: Insets, palette: &FlatPalette) {
@@ -265,7 +265,8 @@ fn flat_chrome_visual(frame_insets: Insets, palette: &FlatPalette, role: ChromeR
     patch
 }
 
-#[neocogi_com::com_factory(neocogi_ui_assets_contracts::StyleCompiler)]
+#[cfg(feature = "skin")]
+#[neocogi_com::com_factory(neocogi_skin_contracts::StyleCompiler)]
 #[derive(Default)]
 /// Compiles resource revisions without borrowing a UI or retaining a renderer.
 pub struct StyleCompilerObject {
@@ -273,6 +274,7 @@ pub struct StyleCompilerObject {
     diagnostic: crate::Diagnostic,
 }
 
+#[cfg(feature = "skin")]
 impl StyleCompiler for StyleCompilerObject {
     /// Copies the base once, applies the explicit edit, validates and publishes in its catalog.
     fn derive_style(
@@ -300,7 +302,8 @@ impl StyleCompiler for StyleCompilerObject {
     }
 }
 
-impl IAssetDiagnostics for StyleCompilerObject {
+#[cfg(feature = "skin")]
+impl ISkinDiagnostics for StyleCompilerObject {
     /// Returns an owned failure snapshot without a borrow into the compiler.
     fn diagnostic(&self) -> Result<neocogi_com::ComPtr<neocogi_com::INcStringAbi>, neocogi_com::NcStatus> {
         Ok(self.diagnostic.snapshot())

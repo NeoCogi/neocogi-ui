@@ -15,7 +15,7 @@ same committed resource revision.
 
 A producer derives revisions from the original resource catalog, preserving every
 application font/icon identity and meaning. Loading a theme from the currently selected
-theme would accumulate private artwork across switches, so the assets plugin retains the
+theme would accumulate private artwork across switches, so the skin client retains the
 original catalog independently of the installed revision.
 
 ## Concrete types

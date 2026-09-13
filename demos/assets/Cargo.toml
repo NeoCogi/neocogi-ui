@@ -12,14 +12,16 @@ default = []
 # Additional themes, photo and mesh are exclusive to the full demo.
 full-demo = []
 # Explicit opt-in for self-contained resources, including browser deployments.
-embed-assets = ["neocogi-ui/compiled-assets", "dep:neocogi-assets", "dep:neocogi-ui"]
+embed-assets = ["neocogi-gfx-support/compiled-assets", "dep:neocogi-assets", "dep:neocogi-gfx-contracts", "dep:neocogi-gfx-support"]
 
 [dependencies]
-neocogi-ui.workspace = true
+neocogi-ui = { workspace = true, features = ["gfx", "skin"] }
 neocogi-com = { workspace = true, features = ["runtime"] }
+neocogi-gfx-contracts = { workspace = true, optional = true }
+neocogi-gfx-support = { workspace = true, optional = true }
 
 # Cargo builds these APIs for the host even when the demo target is WebAssembly.
 [build-dependencies]
 # Resolve the host facade only when the asset generator actually runs.
-neocogi-ui = { workspace = true, optional = true }
+neocogi-gfx-support = { workspace = true, optional = true }
 neocogi-assets = { workspace = true, optional = true, features = ["builder", "save-to-rust", "theme-json"] }

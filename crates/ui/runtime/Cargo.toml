@@ -31,8 +31,8 @@ bitflags.workspace = true
 rs-math3d.workspace = true
 
 [dev-dependencies]
-neocogi-assets.workspace = true
-neocogi-ui-assets-contracts.workspace = true
+neocogi-assets = { workspace = true, features = ["skin"] }
+neocogi-skin-contracts.workspace = true
 neocogi-ui = { workspace = true, features = ["test-support"] }
 rand.workspace = true
 tempfile.workspace = true

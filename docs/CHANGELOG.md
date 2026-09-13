@@ -57,11 +57,24 @@ wrappers. The accepted migration and outstanding validation are recorded in
 - Split the demo mesh protocol into `neocogi.demo.render`; the renderer plugin's
   normal dependency graph no longer reimports UI core through the unrelated
   widget-extension demonstration.
+- Replace the mixed `neocogi.ui.assets` service surface with deployable
+  `neocogi.gfx` and `neocogi.skin` plugins. GFX owns PNG/resource construction;
+  skin owns typed appearance and external-theme compilation. Optional facade
+  features prevent either contract from entering unrelated UI/plugin graphs.
+- Move portable bundles and their font, icon, metrics, and appearance records
+  from UI core into `neocogi.gfx`, and move immutable native paths into
+  `neocogi.platform`. UI and Skin now consume lower-level resource contracts;
+  GFX no longer imports the retained UI descriptor merely to build an atlas.
+- Extract portable bundle publication, validation, embedded expansion, and
+  concrete appearance-state helpers into non-plugin `neocogi-gfx-support`.
+  The GFX implementation no longer imports the UI Rust facade; UI retains only
+  compatibility re-exports for application source stability.
 - Compile generated Rust contract descriptions for the underlying platform ABI
   when the `min-size` build uses its fingerprint-distinct custom target.
-- Move UI appearance roles, appearance states, and semantic font/icon roles into
-  `neocogi/ui/core/resources.ncidl`, giving their names, representations, and
-  table order one generated source of truth.
+- Move portable appearance roles and semantic font/icon roles into
+  `neocogi/gfx/resources.ncidl`, giving their names, representations, and table
+  order one generated source of truth. Concrete runtime states remain Rust-only
+  GFX support values and never become wire discriminators.
 - Remove implementation-only widget state and window-chrome models from the UI
   contract crate. Widget state belongs to UI implementation support, runtime
   chrome state belongs to the runtime, and JSON chrome documents belong to the

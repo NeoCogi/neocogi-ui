@@ -1,5 +1,5 @@
 use super::*;
-use neocogi_ui::assets::AssetTables;
+use neocogi_gfx_support::AssetTables;
 
 /// Consumer adapter keeping runtime rendering assertions outside asset production code.
 struct TestTheme {
@@ -79,7 +79,7 @@ fn test_atlas() -> AssetData {
     data.validate().unwrap();
     data
 }
-use neocogi_ui_core_contracts::{ChromeRole, ControlRole, MenuRole};
+use neocogi_gfx_contracts::{ChromeRole, ControlRole, MenuRole};
 use std::fs;
 
 /// Installs one repository-bundled theme through the same filesystem and PNG path as Context.

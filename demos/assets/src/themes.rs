@@ -1,4 +1,4 @@
-//! Complete theme choices from the asset plugin, or explicitly embedded build-time tables.
+//! Complete theme choices from the skin plugin, or explicitly embedded build-time tables.
 use neocogi_ui::IAssetBundleAbi;
 use neocogi_com::{ComPtr, ComRef, NcStatus};
 
@@ -43,7 +43,7 @@ impl Theme {
         }
     }
     /// Loads a pristine theme into the original catalog, keeping existing widget resource handles valid.
-    /// Native callers must register the asset plugin first; its JSON loader owns all theme compilation.
+    /// Native callers must register the skin plugin first; its JSON loader owns all theme compilation.
     pub fn load(self, base: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         if self == Self::Default {
             return Ok(base.add_ref());
@@ -60,7 +60,7 @@ impl Theme {
         }
         #[cfg(not(feature = "embed-assets"))]
         {
-            use neocogi_ui::{AssetsPluginFactoryAbi, NativePath};
+            use neocogi_ui::{NativePath, SkinPluginFactoryAbi};
             let path = match self {
                 Self::Windows311 => "themes/windows-3.11/theme.json",
                 Self::Windows95 => "themes/windows-95/theme.json",
@@ -68,8 +68,8 @@ impl Theme {
                 Self::Default => unreachable!(),
             };
             let path = super::files::asset_path(path).map_err(|_| neocogi_com::NC_E_LOAD_FAILED)?;
-            let factory =
-                neocogi_com::Runtime::global().activate_plugin_factory::<AssetsPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.assets"))?;
+            let factory = neocogi_com::Runtime::global()
+                .activate_plugin_factory::<SkinPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.skin.runtime"))?;
             let loader = factory.theme_loader()?;
             loader.load_theme(NativePath::new(&path).as_interface(), base)
         }

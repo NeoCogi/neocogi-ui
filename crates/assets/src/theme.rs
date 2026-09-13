@@ -38,10 +38,9 @@ use std::{
 
 use serde::Deserialize;
 
-use neocogi_ui_core_contracts::*;
-use neocogi_ui_core_contracts::Insets as SliceInsets;
-use neocogi_ui::assets::AssetData;
-use neocogi_ui::{ChromeState, ControlState, MenuState, PointerState, SurfaceState};
+use neocogi_gfx_contracts::*;
+use neocogi_gfx_contracts::Insets as SliceInsets;
+use neocogi_gfx_support::{AssetData, ChromeState, ControlState, MenuState, PointerState, SurfaceState};
 use crate::atlas::Builder;
 use crate::style::{apply_flat, rgba};
 
@@ -882,7 +881,7 @@ struct WindowChromeDocument {
 impl WindowChromeDocument {
     /// Compiles this JSON document directly into the checked wire record.
     fn compile(self) -> AssetChrome {
-        // No runtime skin model is constructed or retained by the asset plugin.
+        // No runtime skin model is constructed or retained by the skin plugin.
         let captions = self.captions;
         AssetChrome {
             title_alignment: match self.title_alignment {

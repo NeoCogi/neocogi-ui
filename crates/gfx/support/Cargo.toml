@@ -1,0 +1,19 @@
+[package]
+name = "neocogi-gfx-support"
+version = "0.9.0-alpha.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Non-plugin Rust support for portable NeoCogi GFX bundles"
+publish = false
+
+[features]
+default = []
+compiled-assets = ["dep:miniz_oxide"]
+
+[dependencies]
+neocogi-gfx-contracts.workspace = true
+neocogi-renderer-contracts.workspace = true
+neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
+miniz_oxide = { workspace = true, optional = true }

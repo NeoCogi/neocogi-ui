@@ -1,8 +1,11 @@
 //! The runtime COM builder and generated direct exporter must publish equivalent portable data.
 use super::*;
+use neocogi_com::{ComPtr, INcStringAbi, INcStringComPtrExt, NcStatus, com_object};
+#[cfg(feature = "theme-json")]
+use neocogi_skin_contracts::*;
+use neocogi_ui::{NativePath, PathEncoding};
 use neocogi_ui_runtime::assets::ImportedAssets;
-use neocogi_com::INcStringComPtrExt;
-use neocogi_ui::NativePath;
+use neocogi_platform_contracts::*;
 
 #[com_object(interfaces(INativePath))]
 /// A caller-owned path deliberately tries to consume its builder during path decoding.
@@ -17,7 +20,7 @@ struct ReenterPath {
 impl INativePath for ReenterPath {
     /// A nested finish must report BUSY without consuming or exposing the outer draft.
     fn encoding(&self) -> Result<PathEncoding, NcStatus> {
-        assert_eq!(self.builder.finish().unwrap_err(), UI_E_BUSY);
+        assert_eq!(self.builder.finish().unwrap_err(), GFX_E_BUSY);
         self.calls.set(self.calls.get() + 1);
         self.path.as_interface().encoding()
     }
@@ -40,12 +43,12 @@ impl INativePath for ReenterPath {
 }
 
 /// Copies complete portable values out of an imported revision for deterministic comparisons.
-fn data(source: &ComPtr<IAssetBundleAbi>) -> neocogi_ui::assets::AssetData {
+fn data(source: &ComPtr<IAssetBundleAbi>) -> neocogi_gfx_support::AssetData {
     AssetData::read(source.as_com_ref()).unwrap()
 }
 
 /// Iterates every named appearance field for producer-output comparison only.
-fn visuals(tables: &neocogi_ui::assets::AssetTables) -> impl Iterator<Item = &AssetVisual> {
+fn visuals(tables: &neocogi_gfx_support::AssetTables) -> impl Iterator<Item = &AssetVisual> {
     let surfaces = tables.surfaces.iter().flat_map(|values| [&values.normal, &values.disabled]);
     let controls = tables.controls.iter().flat_map(|values| {
         [
@@ -103,7 +106,7 @@ fn com_builder_matches_direct_pixels_metrics_and_resolved_visuals() {
             .unwrap();
     }
     let runtime = builder.finish().unwrap();
-    assert_eq!(builder.finish().unwrap_err(), UI_E_CLOSED);
+    assert_eq!(builder.finish().unwrap_err(), GFX_E_CLOSED);
     let runtime = data(&runtime);
     let direct = data(&test_bundle());
     assert_eq!(runtime.tables.size, direct.tables.size);
@@ -157,12 +160,12 @@ fn failed_edit_can_retry_and_failed_finish_is_terminal() {
         builder.add_icon(NcCopyFromBufferOffset::new(0, b"extra"), white.as_interface()),
         Err(NC_E_INVALID_ARG)
     );
-    let diagnostic: ComPtr<IAssetDiagnosticsAbi> = builder.query().unwrap();
+    let diagnostic: ComPtr<IGfxDiagnosticsAbi> = builder.query().unwrap();
     let snapshot = diagnostic.diagnostic().unwrap();
     assert!(snapshot.to_string().unwrap().contains("extra"));
     // This draft intentionally omits the required body and semantic icons.
     assert_eq!(builder.finish().unwrap_err(), NC_E_INVALID_ARG);
-    assert_eq!(builder.finish().unwrap_err(), UI_E_CLOSED);
+    assert_eq!(builder.finish().unwrap_err(), GFX_E_CLOSED);
     assert!(snapshot.to_string().unwrap().contains("extra"));
 }
 
@@ -204,7 +207,7 @@ fn bundled_json_themes_preserve_original_resources_and_surface_diagnostics() {
     }
     let missing = NativePath::new(&root.join("missing-theme.json"));
     assert_eq!(loader.load_theme(missing.as_interface(), base.as_com_ref()).unwrap_err(), NC_E_INVALID_ARG);
-    let detail = loader.query::<IAssetDiagnosticsAbi>().unwrap().diagnostic().unwrap().to_string().unwrap();
+    let detail = loader.query::<ISkinDiagnosticsAbi>().unwrap().diagnostic().unwrap().to_string().unwrap();
     assert!(detail.contains("missing-theme.json"));
 }
 

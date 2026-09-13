@@ -4,8 +4,9 @@ Applications link `neocogi-ui`, canonical `neocogi-ui-core-contracts`, and neoco
 The facade contains concrete typed clients and application-local generic adapters.
 The UI implementation, retained window manager, built-in widgets and layout policies
 are packaged in the UI plugin. Native platform and GPU objects share the selected
-renderer plugin. PNG decoding and optional font/theme construction belong to the
-asset plugin. Several COM classes can share one assembly; a class is not a DLL.
+renderer plugin. PNG/font/atlas construction belongs to the GFX plugin; appearance
+and optional external-theme construction belong to the skin plugin. Several COM
+classes can share one assembly; a class is not a DLL.
 
 A plugin is a deployable implementation and lifetime boundary. A COM object is one
 typed allocation created by such an implementation. Built-in leaves, containers,
@@ -138,7 +139,7 @@ list positions. The renderer validates complete buffers and resource ownership
 before acquiring a frame. Owned images and scenes retain their device/window as
 needed; backend types remain local to their assembly.
 
-An immutable asset bundle supplies fonts, icons, styles and pixels. Installation
+An immutable GFX asset bundle supplies fonts, icons, styles and pixels. Installation
 validates the catalog, prepares CPU resources and uploads the GPU candidate before
 publishing the new revision. Failure preserves the prior working UI/resources.
 [COM_ASSETS.md](../../../../docs/COM_ASSETS.md) specifies catalog identity and format limits.

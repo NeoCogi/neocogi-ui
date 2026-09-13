@@ -2,7 +2,7 @@
 
 - Atlas building supports multiple baked fonts and sizes through `neocogi_assets::atlas::FontAsset`, and the same config can drive both runtime atlas construction and offline/prebuilt atlas export.
 - A compiled UI bundle resolves conventional `body`, `small`, `title`, `heading` and `mono`
-  font roles and the standard semantic icon roles. The assets plugin creates the bundle;
+  font roles and the standard semantic icon roles. The GFX plugin creates the bundle;
   mutable `Ui` access lets `Ui::install_assets` install it transactionally with the renderer.
 - Text-bearing COM widgets expose typed font selection through the facade. Resolve named
   fonts against the bundle catalog; use semantic roles when the selected theme should
@@ -32,7 +32,7 @@ scalar values and use the same lookup rules:
 - a character present in the selected atlas font uses its own glyph metrics and rectangle;
 - a missing character uses the selected font's mandatory underscore (`_`) entry.
 
-The asset plugin's atlas builder bakes only printable ASCII (`U+0020` through `U+007E`), which includes
+The GFX plugin's atlas builder bakes only printable ASCII (`U+0020` through `U+007E`), which includes
 underscore. `AssetGlyph` tables can describe arbitrary Unicode scalar values, so applications needing
 broader coverage must provide their own glyph table and must include `_` in every font. Atlas
 construction rejects a font without that explicit fallback. There is not yet a configurable

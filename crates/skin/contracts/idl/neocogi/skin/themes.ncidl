@@ -1,22 +1,22 @@
 #[version(1)]
-/// Constructible optional JSON/font/PNG root producing ordinary immutable bundles.
-factory ThemeLoader: IAssetDiagnostics {
-    /// Resolves a native theme path against the base's catalog, preserving original resource names.
+/// Constructible optional external theme compiler producing ordinary immutable bundles.
+factory ThemeLoader: ISkinDiagnostics {
+    /// Resolves a native theme path against the base catalog while preserving resource names.
     fn load_theme(&self, path: &INativePath, base: &IAssetBundle) -> Result<IAssetBundle>;
 }
 
 #[version(1)]
 /// Explicit choice between preserving authored artwork and replacing it with a flat recipe.
 enum PaletteEdit: u8 {
-    /// Keep the current role/state visuals, including image-backed theme artwork.
+    /// Keeps current role/state visuals, including image-backed theme artwork.
     Preserve,
-    /// Compile this complete named palette through the UI's shared flat-style rules.
+    /// Compiles this complete named palette through the shared flat-style rules.
     Flat(FlatPalette),
 }
 
 #[version(1)]
-/// Constructible asset authoring root independent of UI trees and renderer resources.
-factory StyleCompiler: IAssetDiagnostics {
+/// Constructible appearance compiler independent of UI trees and renderer resources.
+factory StyleCompiler: ISkinDiagnostics {
     /// Derives a complete immutable revision in the base catalog without installing it.
     /// Preserve retains artwork; Flat recompiles every appearance from one concrete palette.
     fn derive_style(&self, base: &IAssetBundle, metrics: AssetMetrics, palette: PaletteEdit) -> Result<IAssetBundle>;

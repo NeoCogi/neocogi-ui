@@ -5,32 +5,35 @@ authors.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "NeoCogi asset decoding, compilation, and plugin services"
+description = "Shared implementation for NeoCogi GFX and skin compilation plugins"
 publish = false
 
 [lib]
-# The assembly-generated cdylib root is the only native plugin artifact; this
-# implementation stays reusable as an rlib without triggering a redundant link.
+# Deployable GFX and skin crates wrap this implementation library independently.
 crate-type = ["rlib"]
 
 [features]
 default = []
-builder = ["dep:fontdue"]
-theme-json = ["builder", "dep:serde", "dep:serde_json"]
+gfx = ["dep:png"]
+skin = ["dep:neocogi-skin-contracts"]
+builder = ["gfx", "dep:fontdue"]
+theme-json = ["skin", "builder", "dep:serde", "dep:serde_json"]
 save-to-rust = ["dep:tempfile", "dep:miniz_oxide"]
-dynamic-plugin = []
 
 [dependencies]
 tempfile = { workspace = true, optional = true }
 miniz_oxide = { workspace = true, optional = true, features = ["with-alloc"] }
-neocogi-ui-assets-contracts.workspace = true
-neocogi-ui-core-contracts.workspace = true
-neocogi-ui.workspace = true
+neocogi-gfx-contracts.workspace = true
+neocogi-gfx-support.workspace = true
+neocogi-renderer-contracts.workspace = true
+neocogi-platform-contracts.workspace = true
+neocogi-skin-contracts = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
-png.workspace = true
+png = { workspace = true, optional = true }
 fontdue = { workspace = true, optional = true }
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
 
 [dev-dependencies]
+neocogi-ui.workspace = true
 neocogi-ui-runtime.workspace = true

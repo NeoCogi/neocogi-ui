@@ -1,0 +1,22 @@
+[package]
+name = "neocogi-skin"
+version = "0.9.0-alpha.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "NeoCogi appearance and external-theme plugin"
+publish = false
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = []
+theme-json = ["neocogi-assets/theme-json"]
+dynamic-plugin = []
+
+[dependencies]
+neocogi-assets = { workspace = true, features = ["skin"] }
+neocogi-skin-contracts.workspace = true
+neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }

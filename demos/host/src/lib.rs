@@ -115,12 +115,12 @@ impl Host {
     #[cfg(feature = "png-assets")]
     pub fn png_texture(&self, png: &[u8]) -> Result<ComPtr<ITextureAbi>, HostError> {
         let runtime = neocogi_com::Runtime::global();
-        let assets_factory = runtime.activate_plugin_factory::<AssetsPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.assets"))?;
-        let decoder = assets_factory.png_decoder()?;
+        let gfx = runtime.activate_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+        let decoder = gfx.png_decoder()?;
         let target = self.renderer.query::<ITextureFactoryAbi>()?;
         decoder.upload(NcCopyFromBufferOffset::new(0, png), target.as_com_ref()).map_err(|status| {
             let detail = decoder
-                .query::<IAssetDiagnosticsAbi>()
+                .query::<IGfxDiagnosticsAbi>()
                 .and_then(|diagnostics| diagnostics.diagnostic())
                 .and_then(|text| neocogi_com::INcStringComPtrExt::to_string(&text))
                 .unwrap_or_default();
@@ -228,7 +228,9 @@ fn register() -> Result<(), HostError> {
         runtime.register_factory_plugin_description(neocogi_ui_runtime::factory_plugin_description())?;
         runtime.register_factory_plugin_description(neocogi_render_plugin::factory_plugin_description())?;
         #[cfg(any(feature = "png-assets", feature = "monolith"))]
-        runtime.register_factory_plugin_description(neocogi_assets::factory_plugin_description())?;
+        runtime.register_factory_plugin_description(neocogi_gfx::factory_plugin_description())?;
+        #[cfg(feature = "monolith")]
+        runtime.register_factory_plugin_description(neocogi_skin::factory_plugin_description())?;
     }
     Ok(())
 }

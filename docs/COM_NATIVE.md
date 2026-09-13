@@ -84,7 +84,7 @@ staged runtime/plugin library and resource with the executable. `run` launches
 the staged binary and forwards arguments after `--`, preserving its exit code.
 
 Add `--variant monolith` after the renderer selection to statically link the COM
-runtime and the UI, renderer, and asset implementations. These assemblies
+runtime and the UI, renderer, GFX, and skin implementations. These assemblies
 register the linked descriptors directly with the same SHA-256 ABI validation
 and stage only the executable and configured resources. They therefore have no
 Neocogi shared-library or `plugins.txt` deployment requirement.
@@ -109,11 +109,11 @@ Linux is locally verified; CI exercises macOS and Windows independently.
 
 ## Resources and component boundaries
 
-The default assemblies include the asset plugin, `assets`, and `themes`.
+The default assemblies include the GFX and skin plugins plus `assets` and `themes`.
 Full-demo packaging also places its photograph at `assets/FACEPALM.png`. Inputs
 resolve relative to the owning manifest/configuration file; staged paths resolve
-relative to the application executable. Theme parsing, image decoding, and font
-rasterization run in the asset plugin. Call
+relative to the application executable. Theme parsing runs in the skin plugin;
+image decoding and font rasterization run behind the GFX boundary. Call
 `neocogi_demo_host::initialize()` before `load_bundle()`.
 
 ```sh
@@ -123,7 +123,8 @@ cargo neocogi run --assembly smoke -- --smoke --theme themes/windows-95/theme.js
 
 Place `--variant embedded` after the renderer variant. It adds the application's
 `embed-assets` feature and removes external resources. The full demo retains its
-PNG asset plugin; other embedded demos omit the asset plugin. The smoke assembly's
+PNG-capable GFX plugin and live style compiler; other embedded demos omit both
+optional plugins. The smoke assembly's
 `extension` variant adds the independent example plugin. Browser `webgl` selects
 embedded resources and retains its separate static registration workflow.
 
@@ -229,8 +230,8 @@ packages omit this assembly. See [its source and contracts](../examples/ui-exten
 
 ## Optional construction workflows
 
-The default file package exposes both construction interfaces. The smoke executable
-can derive a larger atlas or load a JSON theme through the same asset plugin:
+The default file package exposes both construction boundaries. The smoke executable
+can derive a larger atlas through GFX or load a JSON theme through skin:
 
 ```sh
 cargo neocogi run --assembly smoke --variant glow -- --smoke --rebuild-assets
@@ -239,8 +240,8 @@ cargo neocogi run --assembly smoke --variant glow -- --smoke --theme themes/wind
 
 Relative theme paths resolve against the executable directory. Use
 `cargo neocogi build --assembly full --variant glow --variant embedded` for an explicit embedded deployment;
-its asset plugin exposes PNG decoding and live style edits without runtime atlas
-building or JSON loading. See
+its GFX and skin plugins expose PNG decoding and live style edits without runtime
+atlas building or JSON loading. See
 [COM_ASSETS.md](COM_ASSETS.md) for immutable catalogs, bounded transfers, upload
 atomicity and decoder ownership.
 

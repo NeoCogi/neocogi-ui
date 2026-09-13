@@ -217,23 +217,6 @@ class Scrollbar: IWidget + ILeafLayout {
 }
 
 #[version(1)]
-/// Semantic font selection resolved by the current immutable resource revision.
-#[dense]
-#[names(snake_case)]
-enum FontRole: u8 {
-    /// Ordinary control and body text.
-    Body = 0,
-    /// Compact supporting text.
-    Small = 1,
-    /// Window-title typography.
-    Title = 2,
-    /// Larger display typography.
-    Heading = 3,
-    /// Monospace typography.
-    Mono = 4,
-}
-
-#[version(1)]
 /// Optional typography capability on concrete text-bearing widget objects.
 trait IFontStyle {
     /// Selects a semantic role and invalidates measurement only when it differs.

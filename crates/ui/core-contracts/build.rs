@@ -1,4 +1,4 @@
-//! Builds the canonical core UI contract module from its Rust-like IDL parts.
+//! Builds retained UI contracts that consume lower-level platform and GFX capabilities.
 
 /// Generates Rust bindings and the fingerprint-qualified native description.
 fn main() {

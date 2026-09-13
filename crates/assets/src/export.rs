@@ -1,14 +1,14 @@
 //! Build-time exporter for the ordinary immutable COM bundle implementation.
 //! Generated runtime code depends only on neocogi-ui and neocogi-com, with no UI/parser dependency.
-use neocogi_ui_core_contracts::*;
-use neocogi_ui::assets::AssetData;
+use neocogi_gfx_contracts::*;
+use neocogi_gfx_support::AssetData;
 use std::{
     io::{self, Write as _},
     path::Path,
 };
 
 /// Atomically writes self-contained Rust `load_bundle` and `bundle_data` functions.
-/// Generated code requires facade `compiled-assets`: metadata stays static and pixels expand
+/// Generated code requires GFX support `compiled-assets`: metadata stays static and pixels expand
 /// once into bounded owned storage. Fonts, PNG files and JSON are processed only by the exporter.
 /// A sibling temporary file keeps the previous output intact until the complete replacement is flushed.
 pub fn write_rust(data: &AssetData, destination: &Path) -> io::Result<()> {
@@ -19,17 +19,17 @@ pub fn write_rust(data: &AssetData, destination: &Path) -> io::Result<()> {
         .filter(|path| !path.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
     let mut rust = io::BufWriter::new(tempfile::NamedTempFile::new_in(parent)?);
-    rust.write_all(b"// Generated immutable COM bundle; regenerate from the owning asset recipe.\nuse neocogi_ui::*;\nuse std::borrow::Cow;\n\n/// Publishes one compiled resource catalog without parsing fonts, PNG or JSON at runtime.\npub fn load_bundle() -> Result<neocogi_com::ComPtr<IAssetBundleAbi>, neocogi_com::NcStatus> {\n    bundle_data()?.into_bundle()\n}\n\n/// Returns compiled tables for a fresh bundle or a revision of an existing catalog.\npub fn bundle_data() -> Result<neocogi_ui::assets::AssetData, neocogi_com::NcStatus> {\n    Ok(neocogi_ui::assets::AssetData {\n")?;
+    rust.write_all(b"// Generated immutable GFX bundle; regenerate from the owning asset recipe.\nuse neocogi_gfx_contracts::*;\nuse neocogi_gfx_support::{AssetData, AssetTables};\nuse std::borrow::Cow;\n\n/// Publishes one compiled resource catalog without parsing fonts, PNG or JSON at runtime.\npub fn load_bundle() -> Result<neocogi_com::ComPtr<IAssetBundleAbi>, neocogi_com::NcStatus> {\n    bundle_data()?.into_bundle()\n}\n\n/// Returns compiled tables for a fresh bundle or a revision of an existing catalog.\npub fn bundle_data() -> Result<AssetData, neocogi_com::NcStatus> {\n    Ok(AssetData {\n")?;
     // Debug formatting is Rust source for these plain named scalar records. Tagged union
     // storage is never dumped; resolved artwork is reconstructed through its checked enum.
     let compressed = miniz_oxide::deflate::compress_to_vec_zlib(&data.pixels, 9);
     writeln!(
         rust,
-        "        pixels: Cow::Owned(neocogi_ui::assets::decode_pixels(&{:?}, {})?),",
+        "        pixels: Cow::Owned(neocogi_gfx_support::decode_pixels(&{:?}, {})?),",
         compressed,
         data.pixels.len()
     )?;
-    writeln!(rust, "        tables: neocogi_ui::assets::AssetTables {{")?;
+    writeln!(rust, "        tables: AssetTables {{")?;
     writeln!(rust, "            size: {:?},", data.tables.size)?;
     writeln!(rust, "            names: Cow::Borrowed(&{:?}),", data.tables.names)?;
     writeln!(rust, "            fonts: Cow::Borrowed(&{:?}),", data.tables.fonts)?;

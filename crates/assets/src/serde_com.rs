@@ -57,7 +57,7 @@ where
     V: SerdeDeserialize<'de>,
 {
     // This bridge is intentionally mixed: IDL owns role values and order, this
-    // asset plugin owns their JSON spellings, and values remain private documents.
+    // skin plugin owns their JSON spellings, and values remain private documents.
     deserializer.deserialize_map(MixedMapVisitor {
         limits: DecodeLimits::THEME,
         marker: PhantomData,
@@ -784,7 +784,7 @@ mod tests {
     /// Generated record constructors enforce shape while supporting explicit defaults.
     #[test]
     fn record_generation_rejects_shape_errors_and_retains_defaults() {
-        use neocogi_ui_core_contracts::{AssetMetrics, Insets};
+        use neocogi_gfx_contracts::{AssetMetrics, Insets};
 
         let metrics = parse::<AssetMetrics>(r#"{"padding": 11}"#);
         assert_eq!(metrics.padding, 11);

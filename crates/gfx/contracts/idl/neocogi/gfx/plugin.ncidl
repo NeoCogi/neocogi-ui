@@ -1,0 +1,8 @@
+#[version(1)]
+/// Process entry for the cohesive CPU decoding and resource-baking plugin.
+factory GfxPluginFactory {
+    /// Creates one PNG upload service with independent diagnostic history.
+    fn png_decoder(&self) -> Result<PngDecoder>;
+    /// Creates the optional font and atlas builder selected by the deployment.
+    fn asset_loader(&self) -> Result<AssetLoader>;
+}

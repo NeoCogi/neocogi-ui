@@ -62,7 +62,8 @@ External leaves and containers implement the same typed contracts; their
 capabilities are discovered once at mount and cached for every hot-path phase.
 
 Platform-normalized input, polling, native text-input placement, and window
-construction live in `crates/platform/contracts`. The `neocogi.platform` ABI
+construction live in `crates/platform/contracts`; immutable native paths live
+there as well because both file dialogs and resource loaders consume them. The `neocogi.platform` ABI
 depends only on `neocogi.renderer`; it accepts a narrow `IRgbaImage` and contains
 no widget, skin, font, icon, or asset-catalog declaration. The current backend
 plugin still co-locates platform and renderer implementations so no raw native
@@ -76,15 +77,26 @@ Rust crates and shared helpers remain separate source concerns within that artif
 `crates/render/contracts` owns the independent `neocogi.renderer` ABI: geometry,
 raw RGBA images, GPU texture capabilities, and one bounded bulk frame stream. It
 contains no UI asset or skin declarations; `IAssetBundle` merely exposes an
-`IRgbaImage` projection to the renderer.
+`IRgbaImage` projection from the GFX contract to the renderer.
 `crates/render/core` is their small, statically linked backend SPI; it is not another
 plugin and does not depend on the UI runtime implementation.
 
-`crates/assets` is the optional decoding and authoring plugin. User-defined UI
-plugins belong outside the platform crates; `examples/ui-extension` demonstrates an
+`crates/gfx` owns the `neocogi.gfx` decoding and resource-baking plugin, while
+`crates/skin` owns the `neocogi.skin` appearance and external-theme plugin.
+The GFX contract owns complete portable bundles, so both UI and Skin depend on
+GFX instead of resource construction depending backward on the retained UI.
+Their concrete compiler machinery is shared privately through `crates/assets`;
+portable bundle publication and validation live in non-plugin
+`crates/gfx/support`. Neither support crate publishes a plugin identity. The split keeps PNG,
+font, and atlas services out of skin-only clients, and keeps JSON/schema services
+out of GFX clients. User-defined UI plugins belong outside the platform crates;
+`examples/ui-extension` demonstrates an
 independently compiled leaf and container. A COM object is not automatically a
 deployment plugin: buttons, containers, windows, menus, and file dialogs remain
 individual typed objects implemented inside the cohesive UI runtime plugin.
+
+See [component and plugin boundaries](docs/COMPONENTS.md) for the complete
+dependency graph, ownership rationale, resource policy, and frame-cost invariants.
 
 For the browser:
 

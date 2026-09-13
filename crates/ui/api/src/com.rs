@@ -15,9 +15,15 @@ pub use neocogi_platform_contracts::{
     TextInputAreaAbi, TextInputAreaTag, UiInput, UiInputAbi, UiInputTag,
 };
 pub use neocogi_ui_core_contracts::*;
-pub use neocogi_ui_assets_contracts::{
-    AssetLoader, AssetLoaderAbi, AssetsPluginFactory, AssetsPluginFactoryAbi, IAssetBuilder, IAssetBuilderAbi, IAssetDiagnostics, IAssetDiagnosticsAbi,
-    PaletteEdit, PaletteEditAbi, PaletteEditTag, PngDecoder, PngDecoderAbi, StyleCompiler, StyleCompilerAbi, ThemeLoader, ThemeLoaderAbi,
+#[cfg(feature = "gfx")]
+pub use neocogi_gfx_contracts::{
+    AssetLoader, AssetLoaderAbi, GfxPluginFactory, GfxPluginFactoryAbi, IAssetBuilder, IAssetBuilderAbi, IGfxDiagnostics, IGfxDiagnosticsAbi, PngDecoder,
+    PngDecoderAbi,
+};
+#[cfg(feature = "skin")]
+pub use neocogi_skin_contracts::{
+    ISkinDiagnostics, ISkinDiagnosticsAbi, PaletteEdit, PaletteEditAbi, PaletteEditTag, SkinPluginFactory, SkinPluginFactoryAbi, StyleCompiler,
+    StyleCompilerAbi, ThemeLoader, ThemeLoaderAbi,
 };
 use neocogi_com::{ComInterface, ComPtr, ComRef, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
 mod containers;

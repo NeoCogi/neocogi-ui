@@ -1,6 +1,6 @@
 # JSON themes
 
-Enable `theme-json` on `neocogi-assets` to compile strict, versioned JSON
+Enable `theme-json` on `neocogi-skin` to compile strict, versioned JSON
 and bake referenced fonts and PNGs into portable resource tables. It is optional;
 the UI implementation has no JSON feature or file-loading API. Native applications
 construct `ThemeLoader` and pass an explicit original base bundle. Build tools call
@@ -31,7 +31,7 @@ files were copied.
 The full demo loads the Default Skin and every bundled file once at startup. Choose them from
 `View > Theme`; each selection installs a pristine editable copy, so the existing Skin Editor can
 modify it without changing the stored base theme. Native file packages enable the
-asset plugin's `theme-json` feature and stage the theme directories beside the
+skin plugin's `theme-json` feature and stage the theme directories beside the
 executable. Embedded and browser packages compile
 those same themes on Cargo's host and ship resolved tables.
 
@@ -196,7 +196,7 @@ IDL-generated `AssetChrome` transfer record. It accepts
 `minimize_side`, `maximize_side`, `vertical_spacing`, `minimum_extent`, `inner_spacing`, and
 `show_without_activation`, and an optional `active_title_backdrop` containing `color` and
 `horizontal_padding`. Omitted fields produce the same values as the runtime's conventional
-`WindowChromeSkin` default without sharing that runtime-only Rust model with the asset plugin.
+`WindowChromeSkin` default without sharing that runtime-only Rust model with the skin plugin.
 `vertical_spacing` is the exact title-field clearance applied equally above and below every square
 caption button.
 
@@ -211,14 +211,14 @@ string-keyed appearance map exists between syntax parsing and the typed family d
 
 ## Loading and selecting
 
-Runtime theme construction is provided by the optional assets plugin. Its typed loader
+Runtime theme construction is provided by the optional skin plugin. Its typed loader
 reads a native-path document and produces a complete immutable IAssetBundle. The app
 installs that bundle through `Ui::install_assets`; CPU validation and GPU upload must
 succeed before the resource revision is published. Keep the original bundle interface
 when a selector needs to restore the initial theme.
 
 For programmatic changes, copy the current AssetMetrics, edit explicit fields, derive a
-revision with the asset plugin's `StyleCompiler::derive_style`, then install it. Stable named font/icon identities belong
+revision with the skin plugin's `StyleCompiler::derive_style`, then install it. Stable named font/icon identities belong
 to the bundle catalog; a derived revision cannot reinterpret existing resource meanings.
 See [asset authoring and export](../../../../docs/COM_ASSETS.md) and the full demo style editor.
 The palette editor is enabled only for the flat theme, while image-backed themes retain
@@ -311,7 +311,7 @@ set `content_color` alpha to zero. There are no separate caption-glyph roles or 
 so the same role/state visual fully describes each control without special handling in the loader.
 
 `skin.window_chrome` supplies exact platform geometry without a loader-owned preset enum. The
-asset plugin emits only `AssetChrome`; the UI runtime validates that record and constructs its
+skin plugin emits only `AssetChrome`; the UI runtime validates that record and constructs its
 local `WindowChromeSkin`. A
 conventional theme may omit it and receive leading text with trailing caption buttons. The bundled
 Mac theme directly selects centered text, a compact leading close box, trailing

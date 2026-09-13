@@ -68,7 +68,7 @@ mod prebuilt {
 #[cfg(feature = "embed-assets")]
 pub use prebuilt::{load_bundle, bundle_data};
 
-/// Native construction forwards file paths to the separately loaded asset provider.
+/// Native construction forwards file paths to the separately loaded GFX provider.
 #[cfg(not(feature = "embed-assets"))]
 mod files;
 #[cfg(not(feature = "embed-assets"))]

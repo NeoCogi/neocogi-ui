@@ -1,0 +1,4 @@
+extern neocogi.renderer;
+extern neocogi.platform;
+use neocogi.renderer::{Color, IRgbaImage, ITexture, ITextureFactory, Rect, Size};
+use neocogi.platform::INativePath;

@@ -42,7 +42,7 @@ pub use neocogi_ui_core_contracts::Insets as SliceInsets;
 ///
 /// The enum is intentionally closed and typed. A complete image-backed patch uses the separate
 /// [`NinePatchImage`] representation, so neither rendering mode needs a dynamic payload or a
-/// `std::any::Any` downcast.
+/// erased runtime downcast.
 #[derive(Copy, Clone)]
 pub enum NinePatchCell {
     /// Leaves the cell transparent and records no renderer work.

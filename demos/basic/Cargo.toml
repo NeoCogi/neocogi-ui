@@ -9,7 +9,7 @@ repository.workspace = true
 
 [features]
 default = ["glow"]
-# Link the runtime and all three implementation descriptors into one executable.
+# Link the runtime and all four implementation descriptors into one executable.
 monolith = ["neocogi-demo-host/monolith"]
 glow = ["neocogi-demo-host/glow", "neocogi-render-plugin/glow"]
 webgl = ["neocogi-demo-host/webgl", "embed-assets"]
@@ -29,8 +29,9 @@ rs-math3d.workspace = true
 # Dynamic assembly roots add `dynamic-plugin`; monoliths call descriptors directly.
 neocogi-com-runtime.workspace = true
 neocogi-ui-runtime = { path = "../../crates/ui/runtime" }
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "f2310738fee6709116bbc0753c1982aed9a86c9e", default-features = false }
-neocogi-assets = { workspace = true, features = ["theme-json"] }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "192715b770f227547ebd153d16d3afbe09e43ec7", default-features = false }
+neocogi-gfx = { workspace = true, features = ["builder"] }
+neocogi-skin = { workspace = true, features = ["theme-json"] }
 
 [[bin]]
 name = "backend-frame-cube"

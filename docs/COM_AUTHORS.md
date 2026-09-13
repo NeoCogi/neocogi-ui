@@ -4,7 +4,7 @@ These are the author-facing rules for the migration described in [COM_DESIGN.md]
 
 ## Linking and ownership
 
-Native applications always link the Rust facade. A dynamic assembly links one shared COM runtime and loads the UI, selected renderer, and optional asset plugins. A monolith instead links one runtime implementation plus those component rlibs and registers their descriptors directly. Browser builds use the same static registration model. Never link a separate runtime implementation into each dynamic plugin. Loaded or statically registered plugins remain active for the process lifetime; this design does not support hot unloading.
+Native applications always link the Rust facade. A dynamic assembly links one shared COM runtime and loads the UI, selected renderer, and optional GFX and skin plugins. A monolith instead links one runtime implementation plus those component rlibs and registers their descriptors directly. Browser builds use the same static registration model. Never link a separate runtime implementation into each dynamic plugin. Loaded or statically registered plugins remain active for the process lifetime; this design does not support hot unloading.
 
 A `ComPtr` keeps an allocation alive. It does not keep a widget attached, a logical window open, or a subscription connected. Closing a window/subtree ends its input, layout, editing, and painting eligibility even when the application retains typed pointers. Further operations report the documented closed status. Final Release frees allocation storage and must not submit GPU work, invoke application callbacks, or substitute for a fallible close/finish operation.
 
@@ -389,7 +389,7 @@ expands during the single final renderer pass.
 
 ## Local custom leaves and solid drawing
 
-The asset plugin's `StyleCompiler` class supports typed palette and metric editors.
+The skin plugin's `StyleCompiler` class supports typed palette and metric editors.
 `compiler.derive_style(base, metrics, PaletteEdit::Preserve.into())` keeps the base
 theme artwork; `PaletteEdit::Flat(palette)` compiles complete flat appearance tables.
 Both return a new immutable bundle in the current catalog without installing it

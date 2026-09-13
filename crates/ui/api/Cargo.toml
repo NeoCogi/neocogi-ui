@@ -8,17 +8,21 @@ repository.workspace = true
 description = "Typed Rust client API for NeoCogi UI components"
 
 [dependencies]
-neocogi-ui-assets-contracts.workspace = true
 neocogi-ui-core-contracts.workspace = true
 neocogi-renderer-contracts.workspace = true
 neocogi-platform-contracts.workspace = true
-miniz_oxide = { workspace = true, optional = true }
+neocogi-gfx-contracts = { workspace = true, optional = true }
+neocogi-gfx-support.workspace = true
+neocogi-skin-contracts = { workspace = true, optional = true }
 neocogi-com = { workspace = true, features = ["macros", "std"] }
 
 [features]
 default = []
+# Optional authoring clients keep unrelated plugin contracts out of UI/runtime binaries.
+gfx = ["dep:neocogi-gfx-contracts"]
+skin = ["dep:neocogi-skin-contracts"]
 # Generated resource tables expand bounded zlib pixels; other clients need no decoder.
-compiled-assets = ["dep:miniz_oxide"]
+compiled-assets = ["neocogi-gfx-support/compiled-assets"]
 # Internal behavior fixtures; ordinary plugin and application builds do not expose queue leases.
 test-support = []
 # Deployment policy belongs to the final application, not implementation plugins.

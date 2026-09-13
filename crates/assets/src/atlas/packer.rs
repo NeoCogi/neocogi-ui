@@ -53,7 +53,7 @@
 
 //! Packs small rectangles into a larger texture atlas.
 
-use neocogi_ui_core_contracts::Rect;
+use neocogi_renderer_contracts::Rect;
 
 /// Private rectangle-packing state used by the parent atlas builder.
 #[derive(Clone)]

@@ -1,0 +1,22 @@
+[package]
+name = "neocogi-gfx"
+version = "0.9.0-alpha.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "NeoCogi CPU image decoding and portable resource-baking plugin"
+publish = false
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = []
+builder = ["neocogi-assets/builder"]
+dynamic-plugin = []
+
+[dependencies]
+neocogi-assets = { workspace = true, features = ["gfx"] }
+neocogi-gfx-contracts.workspace = true
+neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }

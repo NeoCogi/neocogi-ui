@@ -1,4 +1,4 @@
-//! Bulk resource-table validation independent of UI state and asset construction.
+//! Bulk GFX resource validation independent of UI state and resource construction.
 use super::*;
 use std::collections::HashSet;
 use neocogi_com::NC_E_OUT_OF_MEMORY;

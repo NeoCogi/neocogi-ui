@@ -2,7 +2,7 @@
 //!
 //! Widget and application generics remain local to the host; implementation
 //! state, retained topology, native windows, and GPU ownership live in plugins.
-//! This crate depends only on the COM object support and shared UI contracts.
+//! This crate depends only on COM support, shared contracts, and non-plugin GFX bundle helpers.
 
 #![deny(missing_docs)]
 
