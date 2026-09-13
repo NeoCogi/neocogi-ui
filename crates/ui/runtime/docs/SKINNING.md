@@ -49,7 +49,8 @@ Ask the asset compiler for an immutable candidate in the UI's current catalog, t
 the same transactional asset boundary used for a complete theme replacement:
 
 ```rust,no_run
-use neocogi_ui::{FlatPalette, IRendererAbi, StyleCompilerAbi, PaletteEdit, Ui};
+use neocogi_ui::{FlatPalette, IRendererAbi, Ui};
+use neocogi_skin_contracts::{StyleCompilerAbi, PaletteEdit};
 use neocogi_com::{ComRef, NcStatus};
 fn customize(ui: &mut Ui, renderer: ComRef<'_, IRendererAbi>, compiler: ComRef<'_, StyleCompilerAbi>) -> Result<(), NcStatus> {
     let mut metrics = ui.assets()?.metrics()?;

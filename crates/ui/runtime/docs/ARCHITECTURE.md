@@ -322,3 +322,15 @@ Unit fixtures under `src/test_support` also exercise individual native algorithm
 Their borrowed-state callback driver uses the facade's test-only queue access;
 it is absent from normal application/plugin builds. Production event ownership and
 cross-assembly behavior are tested through COM sessions and staged deployments.
+
+## Runtime boundary tests
+
+Runtime boundary tests construct a real GFX compositor and invoke the same
+`create_runtime_from_assets(assets, compositor)` entrypoint as a deployed consumer.
+The retained context, resource installation, paint phase, and GFX submission path
+are identical in unit and ordinary builds. A headless `IRenderer` records or checks
+the resulting bounded render stream; it does not replace composition.
+
+Painting and submission are separate internal operations. The runtime checks the
+first foreign-widget failure after painting and discards partial commands before
+calling GFX. This ordering is covered by the retained-widget failure regression.

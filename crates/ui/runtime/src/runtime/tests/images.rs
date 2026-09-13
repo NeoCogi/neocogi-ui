@@ -53,7 +53,7 @@ fn image_controls_keep_owned_pixels_and_forward_ordered_semantic_paint_after_err
     };
     skin.apply_flat_palette(palette);
     let assets = crate::assets::export_bundle(&crate::SkinBundle::new(atlas, skin)).unwrap();
-    let ui = neocogi_ui::Ui::from_interface(create_runtime_from_assets(assets.as_com_ref()).unwrap()).unwrap();
+    let ui = neocogi_ui::Ui::from_interface(crate::test_support::runtime_from_assets(assets.as_com_ref()).unwrap()).unwrap();
     let mut button = ui.widgets().button("AB").unwrap();
     button.set_options(WidgetOptions::NONE).unwrap();
     button.set_fill_states(FillStates::NONE).unwrap();

@@ -9,40 +9,13 @@ use std::{
     rc::Rc,
 };
 use crate::ui_node::paint_service::{Metrics, PaintService};
-#[cfg(test)]
-use crate::render::external::Backend;
-use crate::Dimensioni;
-#[cfg(test)]
-use crate::AtlasHandle;
-#[cfg(test)]
-use crate::Context;
-#[cfg(test)]
-type RuntimeContext = Context<Backend>;
-#[cfg(not(test))]
-type RuntimeContext = crate::runtime_context::RuntimeContext;
+use crate::{Dimensioni, runtime_context::RuntimeContext};
 mod dialogs;
 mod menus;
 mod windows;
 use windows::NativeSurface;
 
-/// Builds a native atlas fixture through the same immutable COM import boundary.
-#[cfg(test)]
-pub(crate) fn create_runtime(atlas: AtlasHandle) -> ComPtr<UiRuntimeAbi> {
-    let bundle = crate::SkinBundle::from_atlas(atlas);
-    let source = crate::assets::export_bundle(&bundle).expect("native test/source bundle is valid");
-    create_runtime_from_assets(source.as_com_ref()).expect("exported native bundle imports")
-}
-
-/// Imports application-supplied resources before constructing any live runtime or widget service.
-#[cfg(test)]
-pub fn create_runtime_from_assets(source: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<UiRuntimeAbi>, NcStatus> {
-    let assets = crate::assets::ImportedAssets::read(source, None)?;
-    let runtime = Runtime { storage: create_storage(assets) };
-    Ok(Runtime::from_value(runtime).query().expect("runtime interface"))
-}
-
 /// Imports matching resources and a GFX-owned compositor before publishing a live UI runtime.
-#[cfg(not(test))]
 pub fn create_runtime_from_assets(
     source: ComRef<'_, IAssetBundleAbi>,
     mut compositor: ComRef<'_, neocogi_gfx_contracts::GfxCompositorAbi>,
@@ -56,46 +29,7 @@ pub fn create_runtime_from_assets(
     Ok(Runtime::from_value(runtime).query().expect("runtime interface"))
 }
 
-/// Creates the one authoritative storage allocation used by the runtime and its weak controllers.
-#[cfg(test)]
-fn create_storage(assets: crate::assets::ImportedAssets) -> Rc<RuntimeStorage> {
-    let bundle = assets.bundle().clone();
-    let state = Rc::new(HostState::default());
-    let host: ComPtr<IWidgetHostAbi> = WidgetHost::from_value(WidgetHost { state: state.clone() }).query().expect("host interface");
-    let resources = Rc::new(RefCell::new(assets));
-    let metrics = Metrics::from_value(Metrics { resources: resources.clone() })
-        .query()
-        .expect("metrics interface");
-    let backend = Backend::new(state.clone(), resources.clone());
-    let target = backend.target.clone();
-    let factory = Rc::new(crate::ui_node::node_factory::NodeFactory {
-        layout: crate::ui_node::layout_service::LayoutService::new(resources.clone(), state.clone()),
-        attaching: Cell::new(false),
-        state: state.clone(),
-        host,
-        metrics,
-        resources: resources.clone(),
-        painter: PaintService::new(resources.clone()),
-        children: RefCell::default(),
-    });
-    *state.factory.borrow_mut() = Rc::downgrade(&factory);
-    let widget_factory = crate::ui_factory::UiFactory::create(factory.host.clone(), factory.resources.clone()).expect("new runtime host creates its factory");
-    Rc::new(RuntimeStorage {
-        context: RefCell::new(Some(Context::from_bundle(backend, bundle))),
-        mounts: RefCell::new(Vec::new()),
-        factory,
-        widget_factory,
-        target,
-        dimensions: Cell::new(Size::default()),
-        pending: Cell::new(true),
-        updating: Cell::new(false),
-        menus: RefCell::new(Vec::new()),
-        dialogs: RefCell::new(Vec::new()),
-    })
-}
-
-/// Creates production storage whose graphics executor remains in the separately deployed GFX plugin.
-#[cfg(not(test))]
+/// Creates shared runtime storage while GFX retains exclusive ownership of graphics execution.
 fn create_storage(assets: crate::assets::ImportedAssets, compositor: ComPtr<neocogi_gfx_contracts::GfxCompositorAbi>) -> Rc<RuntimeStorage> {
     let bundle = assets.bundle().clone();
     let state = Rc::new(HostState::default());
@@ -146,9 +80,6 @@ struct RuntimeStorage {
     factory: Rc<crate::ui_node::node_factory::NodeFactory>,
     /// Dynamically implemented shorthand retains only the non-owning host capability.
     widget_factory: ComPtr<UiFactoryAbi>,
-    /// Renderer is retained only during explicit synchronous submission.
-    #[cfg(test)]
-    target: Rc<RefCell<Option<Rc<ComPtr<IRendererAbi>>>>>,
     /// Last successfully synchronized drawable dimensions.
     dimensions: Cell<Size>,
     /// Structural/setter changes require update before rendering.
@@ -258,7 +189,6 @@ impl UiRuntime for Runtime {
             return renderer.prepare_atlas(resources.image());
         };
         renderer.prepare_atlas(next.image())?;
-        #[cfg(not(test))]
         context.install_compositor_assets(source)?;
         // ImportedAssets has already proved every original identity survives. The COM backend's
         // atlas replacement is a local assignment; this commit performs no further foreign calls.
@@ -308,25 +238,16 @@ impl UiRuntime for Runtime {
         // The complete submission is observational, including calls into the native renderer.
         let _phase = Observation::begin(&storage.factory.state);
         storage.factory.state.error.set(None);
-        #[cfg(test)]
-        let result = {
-            let info = crate::render::FrameInfo::try_new(Dimensioni::new(size.width, size.height), crate::render::contract_color(0xff302820))
-                .map_err(|_| NC_E_INVALID_ARG)?;
-            let renderer = Rc::new(renderer.add_ref());
-            *storage.target.borrow_mut() = Some(renderer);
-            let result = context.frame(info).render_ui();
-            let renderer = storage.target.borrow_mut().take();
-            drop(renderer);
-            result.map_err(|_| UI_E_RENDER)
-        };
-        #[cfg(not(test))]
-        // GFX and renderer statuses remain implementation detail at this UI boundary. Preserve
-        // the established public error contract while renderer diagnostics retain native detail.
-        let result = context.render(size, 0xff302820, renderer).map_err(|_| UI_E_RENDER);
+        context.paint(size)?;
         if let Some(error) = storage.factory.state.error.take() {
+            // A foreign widget can fail after recording commands. Discard those owned commands
+            // before entering GFX so a failed observational phase cannot publish a partial frame.
+            context.discard_paint();
             return Err(error);
         }
-        result
+        // Only a successful paint phase may cross the GFX submission boundary. Native renderer
+        // diagnostics retain backend detail while the public UI operation reports UI_E_RENDER.
+        context.submit(size, 0xff302820, renderer).map_err(|_| UI_E_RENDER)
     }
     /// Removes every root while leaving independent retained COM handles safely closed.
     fn close(&self) -> Result<(), NcStatus> {

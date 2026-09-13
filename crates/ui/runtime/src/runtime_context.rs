@@ -1,8 +1,7 @@
-//! Production retained-state owner paired with an external GFX compositor.
+//! Retained-state owner shared by production and tests, paired with a GFX compositor.
 //!
-//! Generic native rendering remains available to implementation tests through [`crate::Context`].
-//! The deployable UI plugin uses this narrower owner so final graphics execution is monomorphized
-//! only in the GFX shared object.
+//! Painting records semantic commands; submission crosses the independently owned GFX boundary.
+//! The runtime checks foreign widget failures between these phases before submitting any frame.
 
 use crate::{Dimensioni, Recti, ResourceCatalog, SkinBundle, window_manager::WindowManager};
 use neocogi_com::{ComPtr, ComRef, NcStatus};
@@ -44,13 +43,23 @@ impl RuntimeContext {
         Ok(())
     }
 
-    /// Paints committed semantic state and delegates final composition to GFX exactly once.
-    pub(crate) fn render(&mut self, size: Size, clear: u32, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
+    /// Records the last committed UI state without acquiring a compositor or renderer frame.
+    pub(crate) fn paint(&mut self, size: Size) -> Result<(), NcStatus> {
         let dimensions = Dimensioni::new(size.width, size.height);
         if !self.window_manager.can_render(dimensions) {
             return Err(neocogi_ui_core_contracts::UI_E_UPDATE_REQUIRED);
         }
         self.window_manager.paint(dimensions);
+        Ok(())
+    }
+
+    /// Releases commands and their resource references after a rejected paint phase.
+    pub(crate) fn discard_paint(&mut self) {
+        self.window_manager.display_list_mut().clear();
+    }
+
+    /// Submits a successfully checked paint phase through the real GFX compositor.
+    pub(crate) fn submit(&mut self, size: Size, clear: u32, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
         // Clone the cheap immutable atlas handle before mutably borrowing the display list.
         let atlas = self.window_manager.skin_bundle().atlas().clone();
         crate::render::compositor::submit(

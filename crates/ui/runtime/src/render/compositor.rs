@@ -51,6 +51,12 @@ fn submit_once(
     for operation in ops.drain(..) {
         let clip = copied_rect(operation.clip);
         match operation.kind {
+            #[cfg(test)]
+            super::display_list::DrawKind::Image { .. } | super::display_list::DrawKind::Custom { .. } => {
+                // Legacy algorithm fixtures are migrated separately; runtime widgets can only
+                // record owned COM resources through their scope-checked painter capability.
+                return Err(NC_E_INVALID_ARG);
+            }
             super::display_list::DrawKind::AtlasTriangles { vertices } => {
                 let vertices = atlas_vertices.get(vertices).ok_or(NC_E_INVALID_ARG)?;
                 compositor.atlas_triangles(clip, NcCopyFromBufferOffset::new(0, vertices))?;

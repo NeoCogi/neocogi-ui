@@ -597,3 +597,20 @@ pub(crate) mod ui;
 
 /// Retained texture clipping and origin integration assertions.
 mod texture_clipping;
+
+/// Constructs an actual GFX compositor and then uses the production runtime entrypoint.
+///
+/// Keeping this composition in fixtures leaves the UI implementation dependent only on GFX
+/// contracts. Each fixture receives its own compositor and immutable source revision.
+pub(crate) fn runtime_from_assets(
+    source: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IAssetBundleAbi>,
+) -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::UiRuntimeAbi>, neocogi_com::NcStatus> {
+    let compositor = neocogi_gfx_impl::GfxCompositorObject::create(source)?;
+    crate::create_runtime_from_assets(source, compositor.as_com_ref())
+}
+
+/// Exports an algorithm fixture once before constructing the production runtime and compositor.
+pub(crate) fn create_runtime(atlas: AtlasHandle) -> neocogi_com::ComPtr<neocogi_ui_core_contracts::UiRuntimeAbi> {
+    let source = crate::assets::export_bundle(&crate::SkinBundle::from_atlas(atlas)).expect("fixture bundle is valid");
+    runtime_from_assets(source.as_com_ref()).expect("fixture constructs the production runtime")
+}

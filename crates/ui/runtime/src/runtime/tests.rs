@@ -10,7 +10,7 @@ const RECT: Rect = Rect { x: 20, y: 20, width: 400, height: 200 };
 
 /// Creates the production runtime with a small deterministic atlas.
 fn runtime() -> ComPtr<UiRuntimeAbi> {
-    create_runtime(crate::test_support::test_atlas())
+    crate::test_support::create_runtime(crate::test_support::test_atlas())
 }
 
 /// Creates a concrete button without bypassing its production factory.
@@ -126,7 +126,7 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
     })
     .query()
     .unwrap();
-    let runtime = create_runtime_from_assets(counted.as_com_ref()).unwrap();
+    let runtime = crate::test_support::runtime_from_assets(counted.as_com_ref()).unwrap();
     calls.set(0);
     let factory = runtime.factory().unwrap();
     let label = NcCopyFromBufferOffset::new(0, b"shared");

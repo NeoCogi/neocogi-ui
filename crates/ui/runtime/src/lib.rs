@@ -117,7 +117,6 @@ mod math;
 mod menu;
 pub mod render;
 mod runtime;
-#[cfg(not(test))]
 mod runtime_context;
 #[cfg(test)]
 mod test_support;
@@ -227,15 +226,7 @@ impl neocogi_ui_core_contracts::UiPluginFactory for UiPluginFactoryObject {
         assets: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IAssetBundleAbi>,
         compositor: neocogi_com::ComRef<'_, neocogi_gfx_contracts::GfxCompositorAbi>,
     ) -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::UiRuntimeAbi>, neocogi_com::NcStatus> {
-        #[cfg(not(test))]
-        {
-            crate::create_runtime_from_assets(assets, compositor)
-        }
-        #[cfg(test)]
-        {
-            let _ = compositor;
-            crate::create_runtime_from_assets(assets)
-        }
+        crate::create_runtime_from_assets(assets, compositor)
     }
 }
 

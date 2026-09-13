@@ -27,7 +27,8 @@ impl Fixture {
     fn new() -> Self {
         let bundle = crate::SkinBundle::from_atlas(crate::test_support::test_atlas());
         let source = crate::assets::export_bundle(&bundle).unwrap();
-        let storage = create_storage(crate::assets::ImportedAssets::read(source.as_com_ref(), None).unwrap());
+        let compositor = neocogi_gfx_impl::GfxCompositorObject::create(source.as_com_ref()).unwrap();
+        let storage = create_storage(crate::assets::ImportedAssets::read(source.as_com_ref(), None).unwrap(), compositor);
         let runtime: ComPtr<UiRuntimeAbi> = Runtime::from_value(Runtime { storage: storage.clone() }).query().unwrap();
         let ui = neocogi_ui::Ui::from_interface(runtime.clone()).unwrap();
         let body = ui.widgets().button("background").unwrap();

@@ -30,11 +30,8 @@
 
 #![doc = include_str!("../docs/RENDER.md")]
 
-#[cfg(not(test))]
 pub(crate) mod compositor;
 pub(crate) mod display_list;
-#[cfg(test)]
-pub(crate) mod external;
 pub(crate) mod geometry;
 mod nine_patch;
 mod painter;
