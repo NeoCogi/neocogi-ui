@@ -17,6 +17,6 @@ builder = ["neocogi-assets/builder"]
 dynamic-plugin = []
 
 [dependencies]
-neocogi-assets = { workspace = true, features = ["gfx"] }
+neocogi-assets = { workspace = true, features = ["gfx", "publisher"] }
 neocogi-gfx-contracts.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }

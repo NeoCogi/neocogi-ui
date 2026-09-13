@@ -1,12 +1,14 @@
 # JSON themes
 
 Enable `theme-json` on `neocogi-skin` to compile strict, versioned JSON
-and bake referenced fonts and PNGs into portable resource tables. It is optional;
-the UI implementation has no JSON feature or file-loading API. Native applications
-construct `ThemeLoader` and pass an explicit original base bundle. Build tools call
-`neocogi_assets::theme::load` or `load_bytes`; the latter reads referenced
-assets through an explicit `AssetSource` implementation. `LoadedTheme` contains a
-display name and validated `AssetData`, with no native UI skin or resource IDs.
+into portable resource tables. It is optional; the UI implementation has no JSON
+feature or file-loading API. Native applications construct `ThemeLoader` with an
+explicit GFX `AssetLoader` and `AssetPublisher`, then pass an explicit original
+base bundle. Skin reads and validates the document while GFX alone bakes referenced fonts and PNGs, copies
+the base resource bundle, validates references, and publishes the revision. Build
+tools call `neocogi_assets::theme::load` or `load_bytes`; the latter reads referenced
+assets through an explicit `AssetSource` implementation. Their offline `LoadedTheme`
+contains a display name and validated `AssetData`, with no native UI skin or resource IDs.
 
 Loading prepares an immutable candidate. Through a mutable `Ui` reference,
 `Ui::install_assets` validates its catalog and resources, asks the renderer to upload
@@ -212,7 +214,9 @@ string-keyed appearance map exists between syntax parsing and the typed family d
 ## Loading and selecting
 
 Runtime theme construction is provided by the optional skin plugin. Its typed loader
-reads a native-path document and produces a complete immutable IAssetBundle. The app
+retains the GFX `AssetLoader` explicitly supplied by the application, reads a
+native-path document, and produces a complete immutable `IAssetBundle`. Skin owns
+schema and appearance policy; GFX owns the transactional atlas draft. The app
 installs that bundle through `Ui::install_assets`; CPU validation and GPU upload must
 succeed before the resource revision is published. Keep the original bundle interface
 when a selector needs to restore the initial theme.
@@ -335,9 +339,10 @@ GPU work. An unrelated bundle with identical names is rejected with `UI_E_OWNER`
 a missing required resource is rejected with `NC_E_INVALID_ARG`. Failed validation
 or upload preserves the previous UI resources and GPU image.
 
-`AssetLoader::derive_builder` and `ThemeLoader::load_theme` publish in the base
-bundle's catalog. `StyleCompiler::derive_style` changes metrics or compiles a flat
-palette in that same namespace. Build tools publish `AssetData::into_revision(base)`
+`AssetLoader::derive_builder`, `AssetPublisher::revise_appearance`, and
+`ThemeLoader::load_theme` publish in the base bundle's catalog.
+`StyleCompiler::derive_style` changes metrics or compiles a flat palette in that
+same namespace through its explicit GFX publisher. Build tools publish `AssetData::into_revision(base)`
 when producing a compatible replacement. These services do not install their output.
 
 The UI preserves typed local IDs for original application resources. Theme-private

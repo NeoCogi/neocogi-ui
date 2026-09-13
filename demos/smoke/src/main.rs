@@ -111,15 +111,27 @@ fn main() -> Result<(), Box<dyn Error>> {
         let loader = gfx
             .asset_loader()
             .map_err(|status| format!("--rebuild-assets requires a files package: {status}"))?;
-        let builder = loader.derive_builder(Size { width: 1024, height: 512 }, assets.as_com_ref())?;
+        let builder = loader.derive_builder(
+            Size { width: 1024, height: 512 },
+            assets.as_com_ref(),
+            AssetDeriveOptions {
+                replace_semantic_fonts: false,
+                replace_semantic_icons: false,
+            },
+        )?;
         let rebuilt = builder.finish()?;
         ui.install_assets(rebuilt.as_com_ref(), renderer.as_com_ref())?;
     }
     if let Some(path) = &options.theme {
         // Relative paths belong to the staged package, so startup remains independent of cwd.
         let path = if path.is_absolute() { path.clone() } else { directory.join(path) };
+        let gfx = runtime.activate_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+        let assets_loader = gfx.asset_loader().map_err(|status| format!("--theme requires a GFX files package: {status}"))?;
+        let publisher = gfx.asset_publisher().map_err(|status| format!("--theme requires GFX publication: {status}"))?;
         let skin = runtime.activate_plugin_factory::<SkinPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.skin.runtime"))?;
-        let loader = skin.theme_loader().map_err(|status| format!("--theme requires a files package: {status}"))?;
+        let loader = skin
+            .theme_loader(assets_loader.as_com_ref(), publisher.as_com_ref())
+            .map_err(|status| format!("--theme requires a Skin files package: {status}"))?;
         let theme = loader.load_theme(NativePath::new(&path).as_interface(), assets.as_com_ref()).map_err(|error| {
             let detail = loader
                 .query::<ISkinDiagnosticsAbi>()

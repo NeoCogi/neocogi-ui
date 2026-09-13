@@ -8,40 +8,92 @@
 //! Compiles flat palette rules into portable resolved appearance tables.
 #[cfg(feature = "skin")]
 use neocogi_skin_contracts::{ISkinDiagnostics, PaletteEdit, PaletteEditAbi, StyleCompiler};
+#[cfg(feature = "skin")]
+use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus};
 use neocogi_gfx_contracts::*;
-use neocogi_gfx_support::{AssetData, ChromeState, ControlState, MenuState, PointerState, SurfaceState};
+#[cfg(feature = "builder")]
+use neocogi_gfx_support::AssetData;
+use neocogi_gfx_support::{ChromeState, ControlState, MenuState, PointerState, SurfaceState};
 
-/// Resolves every state once, so UI painting only selects stored values.
-pub(crate) fn apply_flat(data: &mut AssetData, insets: Insets, palette: &FlatPalette) {
-    // Role order remains the generated dense IDL axis. State structure is expressed by named
-    // record fields, so adding or moving a state cannot silently change an arithmetic offset.
-    data.tables.surfaces = SurfaceRole::ALL
-        .map(|role| AssetSurfaceVisuals {
+/// Complete appearance-only tables compiled by Skin without owning bundle storage.
+pub(crate) struct AppearanceTables {
+    /// One record for every dense structural surface role.
+    pub(crate) surfaces: [AssetSurfaceVisuals; SurfaceRole::COUNT],
+    /// One record for every dense interactive control role.
+    pub(crate) controls: [AssetControlVisuals; ControlRole::COUNT],
+    /// One record for every dense menu role.
+    pub(crate) menus: [AssetMenuVisuals; MenuRole::COUNT],
+    /// One record for every dense window-chrome role.
+    pub(crate) window_chrome: [AssetChromeVisuals; ChromeRole::COUNT],
+}
+
+impl AppearanceTables {
+    /// Resolves one flat palette into complete records without reading or publishing a bundle.
+    pub(crate) fn flat(insets: Insets, palette: &FlatPalette) -> Self {
+        // Role order remains the generated dense IDL axis. State structure is expressed by named
+        // record fields, so adding or moving a state cannot silently change an arithmetic offset.
+        let surfaces = SurfaceRole::ALL.map(|role| AssetSurfaceVisuals {
             normal: flat_surface_visual(insets, palette, role, SurfaceState::Normal),
             disabled: flat_surface_visual(insets, palette, role, SurfaceState::Disabled),
-        })
-        .to_vec()
-        .into();
-    data.tables.controls = ControlRole::ALL.map(|role| flat_control_visuals(insets, palette, role)).to_vec().into();
-    data.tables.menus = MenuRole::ALL
-        .map(|role| AssetMenuVisuals {
+        });
+        let controls = ControlRole::ALL.map(|role| flat_control_visuals(insets, palette, role));
+        let menus = MenuRole::ALL.map(|role| AssetMenuVisuals {
             normal: flat_menu_visual(insets, palette, role, MenuState::Normal),
             hovered: flat_menu_visual(insets, palette, role, MenuState::Hovered),
             pressed: flat_menu_visual(insets, palette, role, MenuState::Pressed),
             focused: flat_menu_visual(insets, palette, role, MenuState::Focused),
             open: flat_menu_visual(insets, palette, role, MenuState::Open),
             disabled: flat_menu_visual(insets, palette, role, MenuState::Disabled),
-        })
-        .to_vec()
-        .into();
-    data.tables.window_chrome = ChromeRole::ALL
-        .map(|role| AssetChromeVisuals {
+        });
+        let window_chrome = ChromeRole::ALL.map(|role| AssetChromeVisuals {
             base: flat_chrome_visual(insets, palette, role, ChromeState::Base),
             active: flat_chrome_visual(insets, palette, role, ChromeState::Active),
             disabled: flat_chrome_visual(insets, palette, role, ChromeState::Disabled),
-        })
-        .to_vec()
-        .into();
+        });
+        Self { surfaces, controls, menus, window_chrome }
+    }
+
+    /// Copies the current fixed appearance tables without importing fonts, icons, or pixels.
+    #[cfg(feature = "skin")]
+    fn read(base: ComRef<'_, IAssetBundleAbi>) -> Result<Self, NcStatus> {
+        // A complete flat table provides initialized storage without inventing invalid enum or
+        // union representations. Exact-count COM copies replace every record before it is read.
+        let mut tables = Self::flat(Insets::default(), &FlatPalette::default());
+        base.surface_visuals(NcCopyToBufferOffset::new(0, &mut tables.surfaces))?;
+        base.control_visuals(NcCopyToBufferOffset::new(0, &mut tables.controls))?;
+        base.menu_visuals(NcCopyToBufferOffset::new(0, &mut tables.menus))?;
+        base.chrome_visuals(NcCopyToBufferOffset::new(0, &mut tables.window_chrome))?;
+        Ok(tables)
+    }
+
+    /// Delegates validation and immutable revision publication to the owning GFX capability.
+    #[cfg(feature = "skin")]
+    pub(crate) fn publish(
+        &self,
+        publisher: ComRef<'_, AssetPublisherAbi>,
+        base: ComRef<'_, IAssetBundleAbi>,
+        metrics: AssetMetrics,
+        chrome: AssetChrome,
+    ) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
+        publisher.revise_appearance(
+            base,
+            AssetAppearanceRevision { metrics, chrome },
+            NcCopyFromBufferOffset::new(0, &self.surfaces),
+            NcCopyFromBufferOffset::new(0, &self.controls),
+            NcCopyFromBufferOffset::new(0, &self.menus),
+            NcCopyFromBufferOffset::new(0, &self.window_chrome),
+        )
+    }
+}
+
+/// Resolves every state once, so UI painting only selects stored values.
+#[cfg(feature = "builder")]
+pub(crate) fn apply_flat(data: &mut AssetData, insets: Insets, palette: &FlatPalette) {
+    let tables = AppearanceTables::flat(insets, palette);
+    data.tables.surfaces = Vec::from(tables.surfaces).into();
+    data.tables.controls = Vec::from(tables.controls).into();
+    data.tables.menus = Vec::from(tables.menus).into();
+    data.tables.window_chrome = Vec::from(tables.window_chrome).into();
 }
 
 /// Compiles one control role into its explicit disabled, enabled, and focused branches.
@@ -267,38 +319,44 @@ fn flat_chrome_visual(frame_insets: Insets, palette: &FlatPalette, role: ChromeR
 
 #[cfg(feature = "skin")]
 #[neocogi_com::com_factory(neocogi_skin_contracts::StyleCompiler)]
-#[derive(Default)]
 /// Compiles resource revisions without borrowing a UI or retaining a renderer.
 pub struct StyleCompilerObject {
+    /// GFX owns base validation, bundle copying, and immutable revision publication.
+    publisher: ComPtr<AssetPublisherAbi>,
     /// Owned diagnostics remain inspectable independently of each immutable result.
     diagnostic: crate::Diagnostic,
 }
 
 #[cfg(feature = "skin")]
+impl StyleCompilerObject {
+    /// Retains the explicit GFX revision capability supplied by the Skin plugin caller.
+    pub fn new(publisher: ComRef<'_, AssetPublisherAbi>) -> Self {
+        Self {
+            publisher: publisher.add_ref(),
+            diagnostic: crate::Diagnostic::default(),
+        }
+    }
+}
+
+#[cfg(feature = "skin")]
 impl StyleCompiler for StyleCompilerObject {
-    /// Copies the base once, applies the explicit edit, validates and publishes in its catalog.
-    fn derive_style(
-        &self,
-        base: neocogi_com::ComRef<'_, IAssetBundleAbi>,
-        metrics: AssetMetrics,
-        palette: PaletteEditAbi,
-    ) -> Result<neocogi_com::ComPtr<IAssetBundleAbi>, neocogi_com::NcStatus> {
-        // Validate foreign records and the closed edit tag before using their geometry or artwork.
+    /// Compiles appearance policy locally and delegates generic bundle publication to GFX.
+    fn derive_style(&self, base: ComRef<'_, IAssetBundleAbi>, metrics: AssetMetrics, palette: PaletteEditAbi) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
+        // The closed edit tag is validated before any current appearance record is interpreted.
         let edit = PaletteEdit::try_from(palette).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
-        let mut data = AssetData::read(base)?;
-        data.tables.metrics = metrics;
+        let mut tables = AppearanceTables::read(base)?;
+        let mut chrome = base.chrome()?;
         if let PaletteEdit::Flat(palette) = edit {
-            let insets = data.tables.surfaces[SurfaceRole::GenericFrame.raw() as usize].normal.insets;
-            apply_flat(&mut data, insets, &palette);
-            if data.tables.chrome.has_backdrop == 1 {
-                data.tables.chrome.backdrop_rgba = rgba(palette.title_background);
+            let insets = tables.surfaces[SurfaceRole::GenericFrame.raw() as usize].normal.insets;
+            tables = AppearanceTables::flat(insets, &palette);
+            if chrome.has_backdrop == 1 {
+                chrome.backdrop_rgba = rgba(palette.title_background);
             }
         }
-        // A rejected candidate leaves both the source and every UI using it unchanged.
-        data.validate().inspect_err(|error| {
+        // GFX checks all records against the base's actual resource table before publishing.
+        tables.publish(self.publisher.as_com_ref(), base, metrics, chrome).inspect_err(|error| {
             self.diagnostic.failure(error);
-        })?;
-        data.into_revision(base)
+        })
     }
 }
 

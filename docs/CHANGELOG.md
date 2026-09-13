@@ -80,6 +80,14 @@ wrappers. The accepted migration and outstanding validation are recorded in
 - Keep contract traversal state changes outside debug-only assertions, allowing
   optimized assembly inspection to accept the shared Renderer dependency reached
   through UI, GFX, and Platform without falsely diagnosing a cycle.
+- Give Skin explicit typed GFX `AssetLoader` and `AssetPublisher` capabilities and delegate
+  bounded font, PNG, and atlas operations to it. Skin no longer statically compiles
+  a second copy of GFX's font rasterizer, decoder, packer, bundle reader,
+  validator, or publisher. Both JSON themes and live style edits submit complete
+  appearance tables through a generic GFX revision transaction. Live style
+  compilation retains only the always-available publisher, so embedded GFX omits
+  native font and atlas construction while resource work remains a coarse loading
+  operation outside every frame.
 - Compile generated Rust contract descriptions for the underlying platform ABI
   when the `min-size` build uses its fingerprint-distinct custom target.
 - Move portable appearance roles and semantic font/icon roles into

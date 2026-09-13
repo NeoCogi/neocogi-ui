@@ -32,17 +32,23 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     error::Error,
-    fmt, io,
+    fmt,
+    fs::File,
+    io::{self, Read},
     path::{Path, PathBuf},
 };
 
 use serde::Deserialize;
 
+use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
+#[cfg(feature = "builder")]
+use crate::atlas::Builder;
+use crate::style::{AppearanceTables, rgba};
 use neocogi_gfx_contracts::*;
 use neocogi_gfx_contracts::Insets as SliceInsets;
-use neocogi_gfx_support::{AssetData, ChromeState, ControlState, MenuState, PointerState, SurfaceState};
-use crate::atlas::Builder;
-use crate::style::{apply_flat, rgba};
+#[cfg(feature = "builder")]
+use neocogi_gfx_support::AssetData;
+use neocogi_gfx_support::{ChromeState, ControlState, MenuState, PointerState, SurfaceState};
 
 /// Explicit byte source for a theme's referenced fonts and images.
 pub trait AssetSource {
@@ -56,15 +62,29 @@ pub struct FileAssets;
 impl AssetSource for FileAssets {
     /// Reads a bounded file without exposing a hidden capture or callback.
     fn read(&mut self, path: &Path) -> io::Result<Vec<u8>> {
-        // Centralize asset size limits with the builder used to decode these bytes.
-        Builder::read_asset_file(path)
+        read_asset_file(path)
     }
+}
+
+/// Reads one complete external theme resource without pulling the GFX builder into Skin.
+fn read_asset_file(path: &Path) -> io::Result<Vec<u8>> {
+    let file = File::open(path)?;
+    if file.metadata()?.len() > MAX_ASSET_PIXELS_BYTES as u64 {
+        return Err(io::Error::other(format!("{} exceeds 64 MiB", path.display())));
+    }
+    let mut bytes = Vec::new();
+    file.take(MAX_ASSET_PIXELS_BYTES as u64 + 1).read_to_end(&mut bytes)?;
+    if bytes.len() > MAX_ASSET_PIXELS_BYTES {
+        return Err(io::Error::other(format!("{} exceeds 64 MiB", path.display())));
+    }
+    Ok(bytes)
 }
 
 /// Theme-file schema version understood by this crate release.
 pub const THEME_SCHEMA_VERSION: u32 = 1;
 
 /// Named, fully resolved resource tables produced by a theme definition.
+#[cfg(feature = "builder")]
 #[derive(Clone)]
 pub struct LoadedTheme {
     /// Human-readable name supplied by the JSON definition.
@@ -73,6 +93,7 @@ pub struct LoadedTheme {
     data: AssetData,
 }
 
+#[cfg(feature = "builder")]
 impl LoadedTheme {
     /// Borrows the authored selection label without retaining the source document.
     pub fn name(&self) -> &str {
@@ -135,6 +156,13 @@ pub enum ThemeLoadError {
         /// Concrete atlas-builder failure retaining its asset or validation classification.
         source: io::Error,
     },
+    /// The explicitly supplied GFX capability rejected one construction operation.
+    GfxBuild {
+        /// Stable operation category without exposing a GFX implementation type.
+        operation: &'static str,
+        /// Exact status returned across the typed plugin boundary.
+        status: NcStatus,
+    },
 }
 
 impl fmt::Display for ThemeLoadError {
@@ -160,6 +188,7 @@ impl fmt::Display for ThemeLoadError {
                 Ok(())
             }
             Self::AtlasBuild { source } => write!(formatter, "failed to build theme resource atlas: {source}"),
+            Self::GfxBuild { operation, status } => write!(formatter, "GFX {operation} failed while building the theme: {status}"),
         }
     }
 }
@@ -172,7 +201,7 @@ impl Error for ThemeLoadError {
             Self::DefinitionRead { source, .. } => Some(source),
             Self::DefinitionJson { source, .. } => Some(source),
             Self::AtlasBuild { source } => Some(source),
-            Self::UnsupportedSchema { .. } | Self::EmptyName | Self::InvalidInsets { .. } => None,
+            Self::UnsupportedSchema { .. } | Self::EmptyName | Self::InvalidInsets { .. } | Self::GfxBuild { .. } => None,
         }
     }
 }
@@ -182,11 +211,46 @@ impl Error for ThemeLoadError {
 /// Keeping this intermediate concrete prevents installation from rediscovering numeric icon slots
 /// or decoding files a second time. It is private because only a matching [`ThemeDefinition`] may
 /// translate these construction slots into semantic appearances.
+#[cfg(feature = "builder")]
 struct ThemeAtlas {
     /// Immutable pixels and metadata ready for renderer installation.
     atlas: AssetData,
     /// Fully resolved image paths mapped to their packed icon slots.
-    images: BTreeMap<PathBuf, u32>,
+    images: BTreeMap<PathBuf, AssetImagePlacement>,
+}
+
+/// GFX-owned atlas revision and the placement returned for each authored appearance image.
+///
+/// Skin retains only the public immutable bundle capability and small placement values. It never
+/// copies pixels, resource metadata, or the concrete GFX publisher into its own implementation.
+struct GfxThemeAtlas {
+    /// Immutable resource revision constructed and validated by the selected GFX plugin.
+    bundle: ComPtr<IAssetBundleAbi>,
+    /// Fully resolved image paths mapped to bundle-local slots and decoded dimensions.
+    images: BTreeMap<PathBuf, AssetImagePlacement>,
+}
+
+/// Fully resolved appearance policy awaiting either offline installation or GFX publication.
+///
+/// This private value is deliberately resource-free: JSON interpretation ends here, while GFX
+/// remains responsible for pairing these records with pixels and publishing an immutable bundle.
+struct CompiledTheme {
+    /// Complete scalar geometry selected by the theme.
+    metrics: AssetMetrics,
+    /// Complete caption and backdrop policy selected by the theme.
+    chrome: AssetChrome,
+    /// Complete fixed role/state tables with all sparse overrides resolved.
+    appearance: AppearanceTables,
+}
+
+impl CompiledTheme {
+    /// Transfers complete appearance records to GFX for validation and immutable publication.
+    fn publish(self, publisher: ComRef<'_, AssetPublisherAbi>, base: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IAssetBundleAbi>, ThemeLoadError> {
+        let Self { metrics, chrome, appearance } = self;
+        appearance
+            .publish(publisher, base, metrics, chrome)
+            .map_err(|status| gfx_failure("appearance revision publication", status))
+    }
 }
 
 /// Strict syntax tree and compiler input for exactly one self-contained JSON theme file.
@@ -280,7 +344,7 @@ impl ThemeDefinition {
     fn read(path: &Path) -> Result<Self, ThemeLoadError> {
         // The file path is retained verbatim in diagnostics. Its lexical parent is sufficient to
         // anchor assets because one document is now their only possible owner.
-        let bytes = Builder::read_asset_file(path).map_err(|source| ThemeLoadError::DefinitionRead { path: path.to_path_buf(), source })?;
+        let bytes = read_asset_file(path).map_err(|source| ThemeLoadError::DefinitionRead { path: path.to_path_buf(), source })?;
         Self::read_bytes(path, bytes.as_slice())
     }
 
@@ -339,12 +403,14 @@ impl ThemeDefinition {
     /// Every unique image-patch source is packed once beside fonts and icons. A completely flat document
     /// without a font recipe can reuse the base allocation exactly; adding artwork without new
     /// fonts repacks existing glyph bitmaps so the original font files are not required.
+    #[cfg(feature = "builder")]
     fn build_atlas(&self, base: &AssetData) -> Result<ThemeAtlas, ThemeLoadError> {
         self.build_atlas_with(base, &mut FileAssets)
     }
 
     /// Builds a theme atlas from assets supplied by the caller instead of requiring filesystem
     /// access. The same builder validation and resource-identity rules apply to both paths.
+    #[cfg(feature = "builder")]
     fn build_atlas_with(&self, base: &AssetData, source: &mut impl AssetSource) -> Result<ThemeAtlas, ThemeLoadError> {
         let image_paths = self.image_paths();
         if self.fonts.is_none() && self.icons.is_none() && image_paths.is_empty() {
@@ -403,64 +469,159 @@ impl ThemeDefinition {
         Ok(ThemeAtlas { atlas, images })
     }
 
-    /// Resolves flat fallbacks and binds explicitly supplied image patches to baked atlas regions.
-    fn install(self, theme_atlas: ThemeAtlas) -> Result<LoadedTheme, ThemeLoadError> {
-        let ThemeAtlas { atlas, images } = theme_atlas;
-        let mut data = atlas;
-        // Compile directly into the transfer records; no native UI skin or atlas is constructed.
-        data.tables.metrics = self.skin.metrics;
-        data.tables.chrome = self.skin.window_chrome.compile();
+    /// Submits external resource bytes to one typed GFX construction session.
+    ///
+    /// Skin owns schema interpretation and final appearances, while GFX remains the sole owner of
+    /// PNG decoding, font rasterization, packing, and the mutable atlas draft. The boundary is
+    /// crossed once per authored resource, atlas finalization, and appearance publication, never
+    /// during rendering.
+    fn build_atlas_with_gfx(
+        &self,
+        base: ComRef<'_, IAssetBundleAbi>,
+        loader: ComRef<'_, AssetLoaderAbi>,
+        source: &mut impl AssetSource,
+    ) -> Result<GfxThemeAtlas, ThemeLoadError> {
+        let image_paths = self.image_paths();
+        if self.fonts.is_none() && self.icons.is_none() && image_paths.is_empty() {
+            return Ok(GfxThemeAtlas {
+                bundle: base.add_ref(),
+                images: BTreeMap::new(),
+            });
+        }
+
+        let base_size = base.info().map_err(|status| gfx_failure("base bundle metadata", status))?.size;
+        let (width, height) = self
+            .fonts
+            .as_ref()
+            .map(|fonts| (fonts.texture_width, fonts.texture_height))
+            .unwrap_or((base_size.width as usize, base_size.height as usize));
+        let size = Size {
+            width: i32::try_from(width).map_err(|source| ThemeLoadError::AtlasBuild { source: io::Error::other(source) })?,
+            height: i32::try_from(height).map_err(|source| ThemeLoadError::AtlasBuild { source: io::Error::other(source) })?,
+        };
+        let builder = loader
+            .derive_builder(
+                size,
+                base,
+                AssetDeriveOptions {
+                    replace_semantic_fonts: self.fonts.is_some(),
+                    replace_semantic_icons: self.icons.is_some(),
+                },
+            )
+            .map_err(|status| gfx_failure("derived-atlas creation", status))?;
+
+        if let Some(fonts) = &self.fonts {
+            for (role, font) in fonts.entries() {
+                let name = font_role_name(role);
+                let bytes = source.read(font.path.as_path()).map_err(|source| ThemeLoadError::AtlasBuild { source })?;
+                let pixels = u32::try_from(font.size).map_err(|source| ThemeLoadError::AtlasBuild { source: io::Error::other(source) })?;
+                builder
+                    .add_font_bytes(
+                        NcCopyFromBufferOffset::new(0, name.as_bytes()),
+                        NcCopyFromBufferOffset::new(0, bytes.as_slice()),
+                        pixels,
+                    )
+                    .map_err(|status| gfx_failure("font rasterization", status))?;
+            }
+        }
+
+        if let Some(icons) = &self.icons {
+            for (role, icon) in icons.entries() {
+                let name = icon_role_name(role);
+                let bytes = source.read(icon.path.as_path()).map_err(|source| ThemeLoadError::AtlasBuild { source })?;
+                builder
+                    .add_icon_bytes(
+                        NcCopyFromBufferOffset::new(0, name.as_bytes()),
+                        NcCopyFromBufferOffset::new(0, bytes.as_slice()),
+                    )
+                    .map_err(|status| gfx_failure("semantic icon decoding", status))?;
+            }
+        }
+
+        let mut images = BTreeMap::new();
+        for (index, path) in image_paths.into_iter().enumerate() {
+            let name = format!("@neocogi-theme-image/{index}");
+            let bytes = source.read(path.as_path()).map_err(|source| ThemeLoadError::AtlasBuild { source })?;
+            let icon = builder
+                .add_icon_bytes(
+                    NcCopyFromBufferOffset::new(0, name.as_bytes()),
+                    NcCopyFromBufferOffset::new(0, bytes.as_slice()),
+                )
+                .map_err(|status| gfx_failure("appearance image decoding", status))?;
+            images.insert(path, icon);
+        }
+
+        let bundle = builder.finish().map_err(|status| gfx_failure("atlas finalization", status))?;
+        Ok(GfxThemeAtlas { bundle, images })
+    }
+
+    /// Resolves flat fallbacks and binds image patches to placements assigned by GFX.
+    fn compile(&self, images: &BTreeMap<PathBuf, AssetImagePlacement>) -> Result<CompiledTheme, ThemeLoadError> {
+        let metrics = self.skin.metrics;
+        let chrome = self.skin.window_chrome.compile();
         let frame_insets = self.skin.fallback_frame_insets;
         validate_non_negative("generic_frame", "skin.fallback_frame_insets", frame_insets)?;
-        validate_non_negative(
-            "window_content",
-            "skin.metrics.window_content_insets",
-            data.tables.metrics.window_content_insets,
-        )?;
-        validate_non_negative("window_frame", "skin.metrics.window_border", data.tables.metrics.window_border)?;
-        apply_flat(&mut data, frame_insets, &self.skin.palette);
+        validate_non_negative("window_content", "skin.metrics.window_content_insets", metrics.window_content_insets)?;
+        validate_non_negative("window_frame", "skin.metrics.window_border", metrics.window_border)?;
+        let mut appearance = AppearanceTables::flat(frame_insets, &self.skin.palette);
         for (role, document) in &self.appearances.surface {
             // Shared role/state enums determine the wire-table order. Every authored override
             // replaces one concrete record without an intermediate runtime object.
             let name = format!("surface.{role:?}");
-            let destination_insets = destination_insets(&name, document.insets, data.tables.surfaces[role.raw() as usize].normal.insets)?;
+            let destination_insets = destination_insets(&name, document.insets, appearance.surfaces[role.raw() as usize].normal.insets)?;
             for (state, authored) in document.states() {
                 let role_index = role.raw() as usize;
-                let fallback = surface_visual(&data.tables.surfaces[role_index], state);
-                let visual = compile_visual(&data.tables.icons, &images, &name, destination_insets, authored, fallback)?;
-                *surface_visual_mut(&mut data.tables.surfaces.to_mut()[role_index], state) = visual;
+                let fallback = surface_visual(&appearance.surfaces[role_index], state);
+                let visual = compile_visual(images, &name, destination_insets, authored, fallback)?;
+                *surface_visual_mut(&mut appearance.surfaces[role_index], state) = visual;
             }
         }
         for (role, document) in &self.appearances.control {
             let name = format!("control.{role:?}");
-            let destination_insets = destination_insets(&name, document.insets, data.tables.controls[role.raw() as usize].enabled.normal.insets)?;
+            let destination_insets = destination_insets(&name, document.insets, appearance.controls[role.raw() as usize].enabled.normal.insets)?;
             for (state, authored) in document.states() {
                 let role_index = role.raw() as usize;
-                let fallback = control_visual(&data.tables.controls[role_index], state);
-                let visual = compile_visual(&data.tables.icons, &images, &name, destination_insets, authored, fallback)?;
-                *control_visual_mut(&mut data.tables.controls.to_mut()[role_index], state) = visual;
+                let fallback = control_visual(&appearance.controls[role_index], state);
+                let visual = compile_visual(images, &name, destination_insets, authored, fallback)?;
+                *control_visual_mut(&mut appearance.controls[role_index], state) = visual;
             }
         }
         for (role, document) in &self.appearances.menu {
             let name = format!("menu.{role:?}");
-            let destination_insets = destination_insets(&name, document.insets, data.tables.menus[role.raw() as usize].normal.insets)?;
+            let destination_insets = destination_insets(&name, document.insets, appearance.menus[role.raw() as usize].normal.insets)?;
             for (state, authored) in document.states() {
                 let role_index = role.raw() as usize;
-                let fallback = menu_visual(&data.tables.menus[role_index], state);
-                let visual = compile_visual(&data.tables.icons, &images, &name, destination_insets, authored, fallback)?;
-                *menu_visual_mut(&mut data.tables.menus.to_mut()[role_index], state) = visual;
+                let fallback = menu_visual(&appearance.menus[role_index], state);
+                let visual = compile_visual(images, &name, destination_insets, authored, fallback)?;
+                *menu_visual_mut(&mut appearance.menus[role_index], state) = visual;
             }
         }
         for (role, document) in &self.appearances.chrome {
             let name = format!("chrome.{role:?}");
-            let destination_insets = destination_insets(&name, document.insets, data.tables.window_chrome[role.raw() as usize].base.insets)?;
+            let destination_insets = destination_insets(&name, document.insets, appearance.window_chrome[role.raw() as usize].base.insets)?;
             for (state, authored) in document.states() {
                 let role_index = role.raw() as usize;
-                let fallback = chrome_visual(&data.tables.window_chrome[role_index], state);
-                let visual = compile_visual(&data.tables.icons, &images, &name, destination_insets, authored, fallback)?;
-                *chrome_visual_mut(&mut data.tables.window_chrome.to_mut()[role_index], state) = visual;
+                let fallback = chrome_visual(&appearance.window_chrome[role_index], state);
+                let visual = compile_visual(images, &name, destination_insets, authored, fallback)?;
+                *chrome_visual_mut(&mut appearance.window_chrome[role_index], state) = visual;
             }
         }
+
+        Ok(CompiledTheme { metrics, chrome, appearance })
+    }
+
+    /// Installs compiled appearance records into concrete storage for offline export and tests.
+    #[cfg(feature = "builder")]
+    fn install(self, theme_atlas: ThemeAtlas) -> Result<LoadedTheme, ThemeLoadError> {
+        let ThemeAtlas { atlas, images } = theme_atlas;
+        let compiled = self.compile(&images)?;
+        let mut data = atlas;
+        data.tables.metrics = compiled.metrics;
+        data.tables.chrome = compiled.chrome;
+        data.tables.surfaces = Vec::from(compiled.appearance.surfaces).into();
+        data.tables.controls = Vec::from(compiled.appearance.controls).into();
+        data.tables.menus = Vec::from(compiled.appearance.menus).into();
+        data.tables.window_chrome = Vec::from(compiled.appearance.window_chrome).into();
 
         // Validate the complete revision before publication or source export.
         data.validate().map_err(|status| ThemeLoadError::AtlasBuild {
@@ -503,6 +664,7 @@ impl ThemeDefinition {
 /// This is the loader module's only entry point. Definition parsing, path anchoring, atlas
 /// construction, and visual installation remain private stages that cannot be called out of order
 /// or supplied with mismatched intermediate values.
+#[cfg(feature = "builder")]
 pub fn load(path: &Path, base: &AssetData) -> Result<LoadedTheme, ThemeLoadError> {
     // Compilation is CPU-local. The caller publishes the resulting revision and explicitly
     // installs it through the UI runtime, which coordinates renderer preparation.
@@ -512,11 +674,34 @@ pub fn load(path: &Path, base: &AssetData) -> Result<LoadedTheme, ThemeLoadError
 }
 
 /// Compiles an in-memory definition through an explicit source for referenced assets.
+#[cfg(feature = "builder")]
 pub fn load_bytes(path: &Path, bytes: &[u8], base: &AssetData, source: &mut impl AssetSource) -> Result<LoadedTheme, ThemeLoadError> {
     // Both entry points use the same parser, resource builder and final validation.
     let definition = ThemeDefinition::read_bytes(path, bytes)?;
     let atlas = definition.build_atlas_with(base, source)?;
     definition.install(atlas)
+}
+
+/// Compiles one external theme through an explicitly supplied GFX construction capability.
+///
+/// JSON and appearance policy remain local to Skin. Encoded resource bytes cross the ABI only
+/// during this infrequent loading operation, and the resulting portable bundle contains no
+/// parser, builder, filesystem, or provider-specific object.
+pub fn load_with_gfx(
+    path: &Path,
+    base: ComRef<'_, IAssetBundleAbi>,
+    loader: ComRef<'_, AssetLoaderAbi>,
+    publisher: ComRef<'_, AssetPublisherAbi>,
+) -> Result<ComPtr<IAssetBundleAbi>, ThemeLoadError> {
+    let definition = ThemeDefinition::read(path)?;
+    let atlas = definition.build_atlas_with_gfx(base, loader, &mut FileAssets)?;
+    let compiled = definition.compile(&atlas.images)?;
+    compiled.publish(publisher, atlas.bundle.as_com_ref())
+}
+
+/// Classifies a failed typed GFX operation without exposing its implementation details.
+fn gfx_failure(operation: &'static str, status: NcStatus) -> ThemeLoadError {
+    ThemeLoadError::GfxBuild { operation, status }
 }
 
 /// Returns the generated canonical resource name for one known semantic font role.
@@ -624,8 +809,7 @@ fn destination_insets(name: &str, authored: Option<SliceInsets>, fallback: Slice
 
 /// Compiles one optional authored override over its exact family/state fallback visual.
 fn compile_visual(
-    icons: &[AssetIcon],
-    images: &BTreeMap<PathBuf, u32>,
+    images: &BTreeMap<PathBuf, AssetImagePlacement>,
     name: &str,
     destination_insets: SliceInsets,
     authored: Option<&VisualOverrideDocument>,
@@ -640,7 +824,7 @@ fn compile_visual(
             visual.content_color = rgba(content_color);
         }
         if let Some(patch) = &authored.patch {
-            visual.patch = patch.compile(icons, images, name, destination_insets)?.into();
+            visual.patch = patch.compile(images, name, destination_insets)?.into();
         }
     }
     Ok(visual)
@@ -1200,8 +1384,7 @@ impl PatchDocument {
     /// Compiles this closed source choice into one runtime patch owned by `atlas`.
     fn compile(
         &self,
-        icons: &[AssetIcon],
-        images: &BTreeMap<PathBuf, u32>,
+        images: &BTreeMap<PathBuf, AssetImagePlacement>,
         appearance: &str,
         destination_insets: SliceInsets,
     ) -> Result<AssetPatch, ThemeLoadError> {
@@ -1212,12 +1395,11 @@ impl PatchDocument {
             Self::Framed { border, center } => Ok(flat_patch(*border, *center)),
             Self::Image { path, source_insets, tint } => {
                 let source_insets = source_insets.unwrap_or(destination_insets);
-                let icon = *images.get(path).expect("every declared theme image must have one baked atlas capability");
-                let image_size = icons[icon as usize].rect;
-                validate_source_insets(appearance, source_insets, image_size.width, image_size.height)?;
+                let placement = *images.get(path).expect("every declared theme image must have one baked atlas capability");
+                validate_source_insets(appearance, source_insets, placement.size.width, placement.size.height)?;
                 let tint = tint.unwrap_or(Color { r: 255, g: 255, b: 255, a: 255 });
                 Ok(AssetPatch::Image {
-                    icon,
+                    icon: placement.index,
                     source: source_insets,
                     tint: rgba(tint),
                 })

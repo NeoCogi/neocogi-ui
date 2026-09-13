@@ -1,6 +1,9 @@
 //! The runtime COM builder and generated direct exporter must publish equivalent portable data.
 use super::*;
+use crate::AssetPublisherObject;
 use neocogi_com::{ComPtr, INcStringAbi, INcStringComPtrExt, NcStatus, com_object};
+#[cfg(feature = "theme-json")]
+use crate::ThemeLoaderObject;
 #[cfg(feature = "theme-json")]
 use neocogi_skin_contracts::*;
 use neocogi_ui::{NativePath, PathEncoding};
@@ -143,6 +146,16 @@ fn failed_edit_can_retry_and_failed_finish_is_terminal() {
         builder.add_icon(NcCopyFromBufferOffset::new(0, &[0xff]), white.as_interface()),
         Err(NC_E_INVALID_ARG)
     );
+    // Buffer forms accept only one complete, nonempty input beginning at offset zero. Rejecting
+    // either range leaves the same transactional draft available for the following valid edit.
+    assert_eq!(
+        builder.add_icon_bytes(NcCopyFromBufferOffset::new(0, b"empty-image"), NcCopyFromBufferOffset::new(0, &[]),),
+        Err(NC_E_INVALID_ARG)
+    );
+    assert_eq!(
+        builder.add_font_bytes(NcCopyFromBufferOffset::new(0, b"offset-font"), NcCopyFromBufferOffset::new(1, &[0]), 12,),
+        Err(NC_E_INVALID_ARG)
+    );
     builder.add_icon(NcCopyFromBufferOffset::new(0, b"extra"), white.as_interface()).unwrap();
     let calls = std::rc::Rc::new(std::cell::Cell::new(0));
     let reenter: ComPtr<INativePathAbi> = ReenterPath::from_value(ReenterPath {
@@ -175,7 +188,16 @@ fn derived_builder_preserves_catalog_and_can_add_private_resources() {
     let base = test_bundle();
     let imported = ImportedAssets::read(base.as_com_ref(), None).unwrap();
     let loader: ComPtr<AssetLoaderAbi> = AssetLoaderObject::from_value(AssetLoaderObject::default()).query().unwrap();
-    let builder = loader.derive_builder(Size { width: 1024, height: 512 }, base.as_com_ref()).unwrap();
+    let builder = loader
+        .derive_builder(
+            Size { width: 1024, height: 512 },
+            base.as_com_ref(),
+            AssetDeriveOptions {
+                replace_semantic_fonts: false,
+                replace_semantic_icons: false,
+            },
+        )
+        .unwrap();
     let config = crate::test_recipe::atlas_config();
     builder
         .add_icon(
@@ -190,13 +212,60 @@ fn derived_builder_preserves_catalog_and_can_add_private_resources() {
     assert!(changed.original().icon_id("theme-private").is_none());
 }
 
+/// Appearance publication preserves resources and rejects malformed bulk records inside GFX.
+#[test]
+fn appearance_revision_is_a_validated_resource_preserving_transaction() {
+    let base = test_bundle();
+    let original = data(&base);
+    let publisher: ComPtr<AssetPublisherAbi> = AssetPublisherObject::from_value(AssetPublisherObject::default()).query().unwrap();
+    let mut metrics = original.tables.metrics;
+    metrics.padding += 3;
+    let revision = AssetAppearanceRevision { metrics, chrome: original.tables.chrome };
+    let candidate = publisher
+        .revise_appearance(
+            base.as_com_ref(),
+            revision,
+            NcCopyFromBufferOffset::new(0, &original.tables.surfaces),
+            NcCopyFromBufferOffset::new(0, &original.tables.controls),
+            NcCopyFromBufferOffset::new(0, &original.tables.menus),
+            NcCopyFromBufferOffset::new(0, &original.tables.window_chrome),
+        )
+        .unwrap();
+    let changed = data(&candidate);
+    assert_eq!(candidate.catalog().unwrap().as_ptr(), base.catalog().unwrap().as_ptr());
+    assert_eq!(changed.pixels, original.pixels);
+    assert_eq!(changed.tables.fonts, original.tables.fonts);
+    assert_eq!(changed.tables.icons, original.tables.icons);
+    assert_eq!(changed.tables.metrics, metrics);
+
+    // A role table is all-or-nothing. The service validates range shape before copying any
+    // caller-owned record or publishing a candidate with a partially replaced appearance family.
+    assert_eq!(
+        publisher
+            .revise_appearance(
+                base.as_com_ref(),
+                revision,
+                NcCopyFromBufferOffset::new(1, &original.tables.surfaces),
+                NcCopyFromBufferOffset::new(0, &original.tables.controls),
+                NcCopyFromBufferOffset::new(0, &original.tables.menus),
+                NcCopyFromBufferOffset::new(0, &original.tables.window_chrome),
+            )
+            .unwrap_err(),
+        NC_E_INVALID_ARG
+    );
+}
+
 /// Actual bundled JSON/PNG/font themes cross the same bulk boundary as direct data.
 #[cfg(feature = "theme-json")]
 #[test]
 fn bundled_json_themes_preserve_original_resources_and_surface_diagnostics() {
     let base = test_bundle();
     let imported = ImportedAssets::read(base.as_com_ref(), None).unwrap();
-    let loader: ComPtr<ThemeLoaderAbi> = ThemeLoaderObject::from_value(ThemeLoaderObject::default()).query().unwrap();
+    let assets: ComPtr<AssetLoaderAbi> = AssetLoaderObject::from_value(AssetLoaderObject::default()).query().unwrap();
+    let publisher: ComPtr<AssetPublisherAbi> = AssetPublisherObject::from_value(AssetPublisherObject::default()).query().unwrap();
+    let loader: ComPtr<ThemeLoaderAbi> = ThemeLoaderObject::from_value(ThemeLoaderObject::new(assets.as_com_ref(), publisher.as_com_ref()))
+        .query()
+        .unwrap();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     for theme in ["windows-3.11", "windows-95", "mac-os-9"] {
         let path = NativePath::new(&root.join("themes").join(theme).join("theme.json"));

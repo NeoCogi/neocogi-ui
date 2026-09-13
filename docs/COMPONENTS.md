@@ -24,10 +24,15 @@ The GFX plugin deliberately groups bounded PNG decoding, font rasterization,
 icon loading, and atlas packing. These operations share one CPU pixel pipeline
 and produce immutable resource bundles or renderer-owned textures. The skin
 plugin groups typed palette/metric derivation and optional external JSON theme
-compilation. A JSON theme may use GFX implementation code privately to bake
-referenced fonts and images, but it publishes only a completed `IAssetBundle`;
-JSON syntax trees, parser callbacks, atlas drafts, and decoder buffers never
-cross the boundary.
+compilation. Its theme loader receives explicit typed `AssetLoader` and
+`AssetPublisher` capabilities from GFX and submits each bounded font or PNG
+buffer to one transactional build session. Live style compilation requires only
+the publisher, so embedded deployments omit the font builder. Skin therefore
+does not compile another copy of GFX's font rasterizer, PNG decoder, atlas packer, bundle reader, validator, or
+publisher. Source bytes, bundle-local image placements, complete appearance
+records, and the completed `IAssetBundle` cross the boundary in coarse calls;
+JSON syntax trees, parser callbacks, atlas drafts, pixels, and decoder state
+remain private to their owners.
 
 `neocogi-gfx-support` is an ordinary Rust support crate, not a sixth plugin. It
 publishes and validates concrete `IAssetBundle` objects for the GFX builder,
@@ -77,7 +82,9 @@ Plugin separation does not add per-widget or per-draw calls:
 - Clipping, geometry generation, and adjacent batching happen before backend
   submission; vertices and batches transfer through bulk slices.
 - Resource and skin plugins run only while loading, rebuilding, or editing an
-  immutable bundle. They are absent from ordinary update, layout, and paint.
+  immutable bundle. A JSON theme crosses the Skin-to-GFX boundary once per
+  referenced resource, once for atlas finalization, and once for bulk appearance
+  publication; both plugins are absent from ordinary update, layout, and paint.
 - The UI imports font/icon/appearance tables once per installed revision and
   caches the narrow `IRgbaImage` projection used by rendering.
 - The renderer compares image identity before upload and retains GPU textures;

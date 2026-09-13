@@ -60,7 +60,7 @@ impl Theme {
         }
         #[cfg(not(feature = "embed-assets"))]
         {
-            use neocogi_ui::{NativePath, SkinPluginFactoryAbi};
+            use neocogi_ui::{GfxPluginFactoryAbi, NativePath, SkinPluginFactoryAbi};
             let path = match self {
                 Self::Windows311 => "themes/windows-3.11/theme.json",
                 Self::Windows95 => "themes/windows-95/theme.json",
@@ -68,9 +68,12 @@ impl Theme {
                 Self::Default => unreachable!(),
             };
             let path = super::files::asset_path(path).map_err(|_| neocogi_com::NC_E_LOAD_FAILED)?;
-            let factory = neocogi_com::Runtime::global()
-                .activate_plugin_factory::<SkinPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.skin.runtime"))?;
-            let loader = factory.theme_loader()?;
+            let runtime = neocogi_com::Runtime::global();
+            let gfx = runtime.activate_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+            let assets = gfx.asset_loader()?;
+            let publisher = gfx.asset_publisher()?;
+            let factory = runtime.activate_plugin_factory::<SkinPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.skin.runtime"))?;
+            let loader = factory.theme_loader(assets.as_com_ref(), publisher.as_com_ref())?;
             loader.load_theme(NativePath::new(&path).as_interface(), base)
         }
     }

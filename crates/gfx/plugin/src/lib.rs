@@ -8,7 +8,7 @@
 
 #[cfg(feature = "builder")]
 use neocogi_assets::AssetLoaderObject;
-use neocogi_assets::PngDecoderObject;
+use neocogi_assets::{AssetPublisherObject, PngDecoderObject};
 use neocogi_com::{ComPtr, NcStatus};
 use neocogi_gfx_contracts::*;
 
@@ -32,6 +32,11 @@ impl GfxPluginFactory for GfxPluginFactoryObject {
         {
             Err(neocogi_com::NC_E_NOT_FOUND)
         }
+    }
+
+    /// Creates the narrow revision publisher available with or without native atlas construction.
+    fn asset_publisher(&self) -> Result<ComPtr<AssetPublisherAbi>, NcStatus> {
+        AssetPublisherObject::from_value(AssetPublisherObject::default()).query()
     }
 }
 

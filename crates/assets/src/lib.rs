@@ -19,9 +19,15 @@ pub use style::StyleCompilerObject;
 mod builder;
 #[cfg(feature = "builder")]
 pub use builder::AssetLoaderObject;
+#[cfg(feature = "publisher")]
+mod publisher;
+#[cfg(feature = "publisher")]
+pub use publisher::AssetPublisherObject;
 #[cfg(feature = "theme-json")]
-pub use builder::ThemeLoaderObject;
-#[cfg(feature = "builder")]
+mod theme_loader;
+#[cfg(feature = "theme-json")]
+pub use theme_loader::ThemeLoaderObject;
+#[cfg(any(feature = "builder", feature = "theme-json"))]
 mod path;
 #[cfg(feature = "gfx")]
 mod png;

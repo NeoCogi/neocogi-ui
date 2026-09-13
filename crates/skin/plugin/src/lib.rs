@@ -8,27 +8,32 @@
 use neocogi_assets::StyleCompilerObject;
 #[cfg(feature = "theme-json")]
 use neocogi_assets::ThemeLoaderObject;
-use neocogi_com::{ComPtr, NcStatus};
+use neocogi_com::{ComPtr, ComRef, NcGuid, NcStatus, guid_from_qualified_name};
+use neocogi_gfx_contracts::{AssetLoaderAbi, AssetPublisherAbi};
 use neocogi_skin_contracts::*;
+
+/// Hard provider dependency retained by the assembly planner before Skin activation.
+const GFX_PLUGIN_ID: NcGuid = guid_from_qualified_name("neocogi.gfx.runtime");
 
 /// Stateless activation root for cohesive skin compilation services.
 #[neocogi_com::com_factory(neocogi_skin_contracts::SkinPluginFactory)]
 struct SkinPluginFactoryObject;
 
 impl SkinPluginFactory for SkinPluginFactoryObject {
-    /// Creates a compiler whose mutable diagnostic history belongs to the returned object.
-    fn style_compiler(&self) -> Result<ComPtr<StyleCompilerAbi>, NcStatus> {
-        StyleCompilerObject::from_value(StyleCompilerObject::default()).query()
+    /// Creates a compiler that delegates generic revision publication to the supplied GFX root.
+    fn style_compiler(&self, publisher: ComRef<'_, AssetPublisherAbi>) -> Result<ComPtr<StyleCompilerAbi>, NcStatus> {
+        StyleCompilerObject::from_value(StyleCompilerObject::new(publisher)).query()
     }
 
     /// Creates the optional external JSON compiler selected by the deployment.
-    fn theme_loader(&self) -> Result<ComPtr<ThemeLoaderAbi>, NcStatus> {
+    fn theme_loader(&self, assets: ComRef<'_, AssetLoaderAbi>, publisher: ComRef<'_, AssetPublisherAbi>) -> Result<ComPtr<ThemeLoaderAbi>, NcStatus> {
         #[cfg(feature = "theme-json")]
         {
-            ThemeLoaderObject::from_value(ThemeLoaderObject::default()).query()
+            ThemeLoaderObject::from_value(ThemeLoaderObject::new(assets, publisher)).query()
         }
         #[cfg(not(feature = "theme-json"))]
         {
+            let _ = (assets, publisher);
             Err(neocogi_com::NC_E_NOT_FOUND)
         }
     }
@@ -37,6 +42,7 @@ impl SkinPluginFactory for SkinPluginFactoryObject {
 neocogi_com::factory_plugin! {
     name = "neocogi.skin.runtime",
     version = "0.9.0-alpha.0",
+    dependencies = [GFX_PLUGIN_ID],
     contracts = [neocogi_skin_contracts::MODULE],
     factory = SkinPluginFactoryObject,
 }

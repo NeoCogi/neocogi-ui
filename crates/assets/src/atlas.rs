@@ -202,20 +202,20 @@ impl Builder {
     }
 
     /// Decodes and inserts a named PNG after checking that the name is available.
-    pub fn add_icon_named(&mut self, name: &str, path: &Path) -> io::Result<u32> {
+    pub fn add_icon_named(&mut self, name: &str, path: &Path) -> io::Result<AssetImagePlacement> {
         self.check_icon_name(name)?;
         let bytes = Self::read_asset_file(path)?;
         self.add_icon_bytes_named(name, path, &bytes)
     }
 
     /// Inserts caller-supplied PNG bytes while preserving the source path in diagnostics.
-    pub fn add_icon_bytes_named(&mut self, name: &str, path: &Path, bytes: &[u8]) -> io::Result<u32> {
+    pub fn add_icon_bytes_named(&mut self, name: &str, path: &Path, bytes: &[u8]) -> io::Result<AssetImagePlacement> {
         self.check_icon_name(name)?;
         let image = RgbaImage::decode(bytes).map_err(|error| io::Error::other(format!("{}: {error}", path.display())))?;
         let rect = self.add_tile(image.size.width as usize, image.size.height as usize, &image.pixels)?;
         let index = self.icons.len() as u32;
         self.icons.push(Icon { name: name.into(), rect });
-        Ok(index)
+        Ok(AssetImagePlacement { index, size: image.size })
     }
 
     /// Rejects duplicate and unrepresentable icon names before file I/O or packing.

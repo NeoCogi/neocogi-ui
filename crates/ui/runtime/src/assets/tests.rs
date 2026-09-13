@@ -1,5 +1,6 @@
 //! Boundary tests use real generated COM calls, malformed producer tables and an upload-failing renderer.
 use super::*;
+use neocogi_gfx_contracts::AssetPublisherAbi;
 use neocogi_ui::assets::AssetData;
 use neocogi_skin_contracts::{PaletteEdit, PaletteEditAbi, PaletteEditTag, StyleCompilerAbi};
 use neocogi_com::{com_object, NcCopyFromBufferOffset, NcCopyToBufferOffset, NC_E_BUSY};
@@ -366,7 +367,10 @@ fn runtime_install_is_atomic_and_updates_shared_widget_measurement() {
 #[test]
 fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision() {
     let source = export_bundle(&bundle()).unwrap();
-    let compiler: ComPtr<StyleCompilerAbi> = neocogi_assets::StyleCompilerObject::from_value(neocogi_assets::StyleCompilerObject::default())
+    let publisher: ComPtr<AssetPublisherAbi> = neocogi_assets::AssetPublisherObject::from_value(neocogi_assets::AssetPublisherObject::default())
+        .query()
+        .unwrap();
+    let compiler: ComPtr<StyleCompilerAbi> = neocogi_assets::StyleCompilerObject::from_value(neocogi_assets::StyleCompilerObject::new(publisher.as_com_ref()))
         .query()
         .unwrap();
     let ui = neocogi_ui::Ui::from_interface(crate::create_runtime_from_assets(source.as_com_ref()).unwrap()).unwrap();

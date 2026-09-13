@@ -1,20 +1,72 @@
 #[version(1)]
+/// Explicit replacement policy chosen before a derived atlas copies base resources.
+struct AssetDeriveOptions {
+    /// Omit the complete semantic font catalog so the caller can supply one replacement per role.
+    replace_semantic_fonts: bool,
+    /// Omit the complete semantic icon catalog so the caller can supply one replacement per role.
+    replace_semantic_icons: bool,
+}
+
+#[version(1)]
+/// Bundle-local placement assigned to one image accepted by an asset build session.
+struct AssetImagePlacement {
+    /// Index valid only in the bundle produced by the originating session.
+    index: u32,
+    /// Positive decoded image dimensions used to validate authored source slicing.
+    size: Size,
+}
+
+#[version(1)]
+/// Complete scalar and caption policy accompanying one appearance-table revision.
+struct AssetAppearanceRevision {
+    /// Layout and interaction dimensions interpreted by UI consumers.
+    metrics: AssetMetrics,
+    /// Caption placement, spacing, and optional backdrop policy.
+    chrome: AssetChrome,
+}
+
+#[version(2)]
 /// One transactional font and image packing session with concrete named operations.
 trait IAssetBuilder {
     /// Adds a PNG icon under a distinct UTF-8 name and exact native path; byte offset is zero.
     fn add_icon(&self, name: &[u8], path: &INativePath) -> Result<()>;
+    /// Adds one complete bounded PNG buffer without exposing its decoder or atlas placement.
+    /// This form lets another plugin supply external resource bytes without constructing a
+    /// platform path value inside the receiving GFX implementation.
+    /// The returned placement is valid only in the bundle produced by this session.
+    fn add_icon_bytes(&self, name: &[u8], png: &[u8]) -> Result<AssetImagePlacement>;
     /// Adds a distinct font name at a positive pixel size; the native builder bakes printable ASCII.
     fn add_font(&self, name: &[u8], path: &INativePath, pixels: u32) -> Result<()>;
+    /// Adds one complete bounded font buffer and bakes printable ASCII at the requested size.
+    fn add_font_bytes(&self, name: &[u8], font: &[u8], pixels: u32) -> Result<()>;
     /// Consumes the session even on validation failure. A successful result has all required
     /// semantic resources and the ordinary immutable bundle form; nested operations return Busy.
     fn finish(&self) -> Result<IAssetBundle>;
 }
 
-#[version(1)]
+#[version(2)]
 /// Constructible CPU resource root; UI and hosts need no linked font or PNG implementation.
 factory AssetLoader: IGfxDiagnostics {
     /// Starts a fresh atlas using an opaque-white PNG tile; dimensions are validated before reading files.
     fn create_builder(&self, size: Size, white: &INativePath) -> Result<IAssetBuilder>;
     /// Copies an existing bundle into a new packing area while retaining its catalog namespace.
-    fn derive_builder(&self, size: Size, base: &IAssetBundle) -> Result<IAssetBuilder>;
+    /// Complete semantic catalogs selected for replacement are omitted before any new resource is packed.
+    fn derive_builder(&self, size: Size, base: &IAssetBundle, options: AssetDeriveOptions) -> Result<IAssetBuilder>;
+}
+
+#[version(1)]
+/// Resource-preserving immutable revision service available without font or image construction.
+factory AssetPublisher: IGfxDiagnostics {
+    /// Replaces only appearance-owned records while preserving a base bundle's resources and catalog.
+    /// Each slice starts at offset zero and contains exactly one record per corresponding dense role.
+    /// GFX validates image indices, source slices, metrics, and the complete candidate before publication.
+    fn revise_appearance(
+        &self,
+        base: &IAssetBundle,
+        revision: AssetAppearanceRevision,
+        surfaces: &[AssetSurfaceVisuals],
+        controls: &[AssetControlVisuals],
+        menus: &[AssetMenuVisuals],
+        window_chrome: &[AssetChromeVisuals],
+    ) -> Result<IAssetBundle>;
 }

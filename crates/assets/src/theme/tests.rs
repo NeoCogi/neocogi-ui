@@ -75,7 +75,7 @@ fn test_atlas() -> AssetData {
         },
     };
     // The same flat compiler supplies all omitted appearances in real theme construction.
-    apply_flat(&mut data, Insets::uniform(1), &FlatPalette::default());
+    crate::style::apply_flat(&mut data, Insets::uniform(1), &FlatPalette::default());
     data.validate().unwrap();
     data
 }

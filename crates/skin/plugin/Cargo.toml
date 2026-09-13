@@ -18,5 +18,6 @@ dynamic-plugin = []
 
 [dependencies]
 neocogi-assets = { workspace = true, features = ["skin"] }
+neocogi-gfx-contracts.workspace = true
 neocogi-skin-contracts.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }

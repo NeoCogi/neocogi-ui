@@ -27,10 +27,17 @@ factory or temporary decoded buffer is retained after the call. Calls may reente
 diagnostics because the decoder holds no mutable borrow across the upload.
 
 `neocogi-skin` registers `StyleCompiler`; its optional `theme-json` feature adds
-`ThemeLoader` and the private font/image baking needed by external themes. Native
-applications can therefore ship PNG services without a JSON/schema surface, or
-skin services without publishing decoder factories. Browser assemblies register
-the same selected descriptors statically. The [GFX decoder implementation](../crates/assets/src/png.rs)
+`ThemeLoader` for external schema and appearance compilation. `StyleCompiler`
+retains a narrow GFX `AssetPublisher`; `ThemeLoader` additionally retains the
+optional `AssetLoader` used for external resources. The Skin plugin declares GFX
+as a hard provider dependency. Skin reads each bounded external font or PNG and
+submits its bytes to the loader; it does not link another copy of the font
+rasterizer, PNG decoder, atlas packer, bundle reader, validator, or publisher.
+After resolving its closed appearance records, Skin calls GFX once to validate
+and publish the immutable revision. Native applications can therefore ship GFX
+services without a JSON/schema surface, while a JSON-enabled Skin deployment
+selects GFX as its one resource owner. Browser assemblies register the same
+selected descriptors statically. The [GFX decoder implementation](../crates/assets/src/png.rs)
 produces packed RGBA directly. Neither plugin links the UI runtime implementation.
 
 The JSON feature owns a private Serde-to-COM adapter. GFX contract values expose
@@ -67,12 +74,15 @@ borrowed static tables or owned builder output. Neither type contains a UI imple
 font rasterizer, PNG decoder or JSON parser. `crates/assets` supplies private
 implementation objects to the GFX and skin plugin roots. Those objects expose ordinary
 typed interfaces and keep all native builder/path/decoder state in their owning binary.
-The [JSON compiler](../crates/assets/src/theme.rs) reads a validated `AssetData`,
-rebuilds declared resources, and writes complete appearance tables directly.
-Plain geometry and semantic resource names live in the GFX contract. The UI resolves
-those records into its own runtime IDs only when a bundle is installed.
-In-memory compilation accepts an explicit `AssetSource` implementation for
-referenced files; filesystem compilation uses the bounded `FileAssets` source.
+The [JSON compiler](../crates/assets/src/theme.rs) submits declared resources to
+GFX and compiles complete appearance tables without copying the bundle into Skin.
+GFX owns bundle transfer, validation, and publication through the format-neutral
+`AssetPublisher::revise_appearance` transaction. The same compiler can still
+write directly into `AssetData` when used by offline build tools. Plain geometry and semantic resource
+names live in the GFX contract. The UI resolves those records into its own runtime
+IDs only when a bundle is installed. In-memory offline compilation accepts an
+explicit `AssetSource` implementation for referenced files; runtime filesystem
+compilation uses the bounded `FileAssets` source.
 
 ```rust,ignore
 let assets = neocogi_demo_assets::load_bundle()?;
@@ -189,8 +199,9 @@ bundle-local icon table position, never an opaque native handle.
 All copy offsets and lengths count elements of the declared type; name/pixel offsets
 therefore count bytes. Producers validate the entire range before writing any
 destination element, then write the exact requested count. Tables remain owned by
-their binary. Construction services use `AssetData::read` when they need metadata and
-the complete RGBA allocation. The UI uses `AssetTables::read`, which copies and validates
+their binary. The GFX construction service uses `AssetData::read` when it needs
+metadata and the complete RGBA allocation; Skin does not import that implementation.
+The UI uses `AssetTables::read`, which copies and validates
 portable metadata and reads only white-tile rows from the pixel method. Both paths cover
 duplicate keys, fallback glyphs, rectangle bounds, the white tile and resolved theme
 records without depending on the UI implementation. UI installation additionally
@@ -208,15 +219,28 @@ The receiving GPU may impose a smaller texture dimension limit than the portable
 Its [implementation](../crates/assets/src/atlas.rs) packs RGBA pixels and font
 records directly into `AssetData`; it constructs no UI atlas handles or skins.
 `add_icon(name, path)` and `add_font(name, path, pixels)` add distinct names;
-duplicates are rejected. Native filesystem paths retain exact Unix bytes or Windows
-UTF-16. A failed edit restores the draft. `finish()` consumes it even when final
-validation fails; later calls return `GFX_E_CLOSED`. Calls reentered from a supplied
-path object return `GFX_E_BUSY`. `derive_builder(size, base)` copies a validated base
-catalog into a new packing area and may add private resources.
+duplicates are rejected. `add_icon_bytes` and `add_font_bytes` provide the same
+bounded operations for a caller that already owns a complete encoded resource;
+the builder does not retain those source bytes. Native filesystem paths retain
+exact Unix bytes or Windows UTF-16. A failed edit restores the draft. `finish()`
+consumes it even when final validation fails; later calls return `GFX_E_CLOSED`.
+Calls reentered from a supplied path object return `GFX_E_BUSY`.
+`derive_builder(size, base, options)` copies a validated base catalog into a new
+packing area. Its closed options value explicitly chooses whether the semantic
+font or icon catalogs will be replaced; unrelated application resources remain.
+`AssetPublisher::revise_appearance(base, revision, ...)` accepts complete metrics
+and chrome plus exactly one record per fixed role, validates all resource references inside GFX,
+and publishes a same-catalog revision. It exposes neither Skin's JSON model nor
+GFX's storage.
 
 ```rust,ignore
 let draft = asset_loader.derive_builder(
-    Size { width: 1024, height: 512 }, assets.as_com_ref(),
+    Size { width: 1024, height: 512 },
+    assets.as_com_ref(),
+    AssetDeriveOptions {
+        replace_semantic_fonts: false,
+        replace_semantic_icons: false,
+    },
 )?;
 draft.add_icon(
     NcCopyFromBufferOffset::new(0, b"application-image"),
@@ -231,10 +255,17 @@ The example's new image belongs to that revision; introduce permanent applicatio
 names in the original base instead when built-in named setters must retain them
 through arbitrary later themes.
 
-`ThemeLoader::load_theme(native_path, base)` performs JSON, font and PNG processing
-entirely behind the optional skin plugin. The result is an ordinary immutable bundle:
+The host creates `ThemeLoader` with a typed `AssetLoader` from GFX.
+`ThemeLoader::load_theme(native_path, base)` keeps JSON and appearance processing
+inside Skin, while font, PNG, and atlas operations run in GFX. The result is an
+ordinary immutable bundle:
 
 ```rust,ignore
+let publisher = gfx_factory.asset_publisher()?;
+let theme_loader = skin_factory.theme_loader(
+    asset_loader.as_com_ref(),
+    publisher.as_com_ref(),
+)?;
 let theme = theme_loader.load_theme(
     NativePath::new(Path::new("themes/windows-95/theme.json")).as_interface(),
     assets.as_com_ref(),
@@ -251,8 +282,10 @@ finish. Renderer upload details use `IRenderDiagnostics`.
 
 ## Live metric and palette edits
 
-Construct `StyleCompilerAbi` through its callable class contract. Its `derive_style` method takes
-an explicit base bundle, complete metrics and a closed `PaletteEdit` value.
+Construct `StyleCompilerAbi` through `skin_factory.style_compiler(asset_publisher)`.
+Its `derive_style` method takes an explicit base bundle, complete metrics and a
+closed `PaletteEdit` value. The retained GFX capability performs the final generic
+bundle copy, validation, and publication; the compiler retains no resource storage.
 `Preserve` retains existing appearance tables; `Flat` compiles all role/state
 values using the base frame geometry and updates an enabled title backdrop.
 The result retains the base catalog and does not install itself. Applications
@@ -280,17 +313,19 @@ cargo neocogi build --assembly full --variant glow --variant embedded
 
 The command prints its managed staging directory under `target/neocogi`. Native
 file assets are the default: the assembly contains the runtime, UI, renderer, GFX,
-and skin libraries plus adjacent assets. The GFX plugin builds the atlas from
-font/icon files and the skin plugin loads JSON themes; the host does not embed the
-photo, mesh or compiled atlases. Register
+and skin libraries plus adjacent assets. The Skin plugin reads JSON and external
+resource files, then delegates font/icon atlas construction to the one GFX plugin;
+the host does not embed the photo, mesh or compiled atlases. Register
 the plugin catalog before loading a bundle. Resource paths resolve against the
 executable, so the complete staged directory can run from another working directory.
 
 `embedded` explicitly enables the demo's `embed-assets` Cargo feature. It compiles
 atlases and themes during the build and embeds the full demo's photo and mesh.
 The full demo still ships the GFX plugin's PNG decoder for the photograph and the
-skin plugin's typed style compiler for live edits. Its compiled themes need no JSON
-loader; simpler embedded demos need neither optional plugin.
+skin plugin's typed style compiler for live edits. GFX keeps its small
+`AssetPublisher` in that deployment while omitting the font rasterizer and atlas
+builder. Its compiled themes need no JSON loader; simpler embedded demos need
+neither optional plugin.
 Browser `webgl` explicitly enables embedding.
 The shared recipe gives both modes identical resource names and font sizes.
 

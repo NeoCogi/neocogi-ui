@@ -1,13 +1,12 @@
 //! Optional font/atlas construction and JSON theme assembly.
 use super::Diagnostic;
-#[cfg(feature = "theme-json")]
-use neocogi_skin_contracts::{ISkinDiagnostics, ThemeLoader};
-use neocogi_gfx_contracts::*;
-use neocogi_platform_contracts::INativePathAbi;
 use crate::atlas::{Builder, Config};
-use neocogi_gfx_support::AssetData;
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, INcStringAbi, NC_E_INVALID_ARG, com_factory, com_object};
+use neocogi_gfx_contracts::*;
+use neocogi_gfx_support::AssetData;
+use neocogi_platform_contracts::INativePathAbi;
 use std::cell::RefCell;
+use std::path::Path;
 
 #[com_factory(neocogi_gfx_contracts::AssetLoader)]
 #[derive(Default)]
@@ -33,10 +32,15 @@ impl AssetLoader for AssetLoaderObject {
         Ok(BuildSession::create(Draft { builder, base: None }))
     }
     /// Copies validated records before packing; the draft retains the original catalog for publication.
-    fn derive_builder(&self, size: Size, base: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IAssetBuilderAbi>, NcStatus> {
+    fn derive_builder(&self, size: Size, base: ComRef<'_, IAssetBundleAbi>, options: AssetDeriveOptions) -> Result<ComPtr<IAssetBuilderAbi>, NcStatus> {
         dimensions(size)?;
         let data = AssetData::read(base)?;
-        let builder = Builder::from_data(&data, size.width as usize, size.height as usize, &[], &[]).map_err(|error| self.diagnostic.failure(error))?;
+        let semantic_fonts = FontRole::ALL.map(|role| role.canonical_name().expect("declared font roles have canonical names"));
+        let semantic_icons = IconRole::ALL.map(|role| role.canonical_name().expect("declared icon roles have canonical names"));
+        let excluded_fonts = if options.replace_semantic_fonts { semantic_fonts.as_slice() } else { &[] };
+        let excluded_icons = if options.replace_semantic_icons { semantic_icons.as_slice() } else { &[] };
+        let builder = Builder::from_data(&data, size.width as usize, size.height as usize, excluded_fonts, excluded_icons)
+            .map_err(|error| self.diagnostic.failure(error))?;
         Ok(BuildSession::create(Draft { builder, base: Some(base.add_ref()) }))
     }
 }
@@ -129,6 +133,16 @@ impl IAssetBuilder for BuildSession {
             .map(|_| ())
             .map_err(|error| self.diagnostic.failure(error))
     }
+    /// Decodes and packs one caller-owned PNG buffer without retaining the input bytes.
+    fn add_icon_bytes(&self, name: NcCopyFromBufferOffset<'_, u8>, png: NcCopyFromBufferOffset<'_, u8>) -> Result<AssetImagePlacement, NcStatus> {
+        let mut edit = self.edit()?;
+        let name = text(name)?;
+        let png = blob(png)?;
+        edit.draft()
+            .builder
+            .add_icon_bytes_named(name, Path::new(name), png)
+            .map_err(|error| self.diagnostic.failure(error))
+    }
     /// Rasterizes named font data without constructing any UI runtime resource IDs.
     fn add_font(&self, name: NcCopyFromBufferOffset<'_, u8>, path: ComRef<'_, INativePathAbi>, pixels: u32) -> Result<(), NcStatus> {
         let mut edit = self.edit()?;
@@ -141,6 +155,19 @@ impl IAssetBuilder for BuildSession {
             .builder
             .add_font_named(name, &path, pixels as usize)
             .map(|_| ())
+            .map_err(|error| self.diagnostic.failure(error))
+    }
+    /// Rasterizes one caller-owned font buffer without retaining the source bytes.
+    fn add_font_bytes(&self, name: NcCopyFromBufferOffset<'_, u8>, font: NcCopyFromBufferOffset<'_, u8>, pixels: u32) -> Result<(), NcStatus> {
+        let mut edit = self.edit()?;
+        let name = text(name)?;
+        let font = blob(font)?;
+        if pixels == 0 || pixels > i32::MAX as u32 {
+            return Err(NC_E_INVALID_ARG);
+        }
+        edit.draft()
+            .builder
+            .add_font_bytes_named(name, Path::new(name), pixels as usize, font)
             .map_err(|error| self.diagnostic.failure(error))
     }
     /// Consumes native packing state, validates standard semantic resources and publishes one revision.
@@ -157,34 +184,6 @@ impl IAssetBuilder for BuildSession {
 }
 impl IGfxDiagnostics for BuildSession {
     /// Retains terminal failure detail without reopening or retaining a consumed native builder.
-    fn diagnostic(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
-        Ok(self.diagnostic.snapshot())
-    }
-}
-
-#[cfg(feature = "theme-json")]
-#[com_factory(neocogi_skin_contracts::ThemeLoader)]
-#[derive(Default)]
-/// Optional theme compiler is present only in asset assemblies built with theme-json.
-pub struct ThemeLoaderObject {
-    /// JSON, filesystem and packing details survive as owned diagnostic snapshots.
-    diagnostic: Diagnostic,
-}
-#[cfg(feature = "theme-json")]
-impl ThemeLoader for ThemeLoaderObject {
-    /// Reads a complete theme against immutable base resources and returns ordinary portable tables.
-    fn load_theme(&self, path: ComRef<'_, INativePathAbi>, base: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
-        let path = crate::path::decode(path)?;
-        let data = AssetData::read(base)?;
-        let loaded = crate::theme::load(&path, &data).map_err(|error| self.diagnostic.failure(error))?;
-        loaded.into_data().into_revision(base).inspect_err(|error| {
-            self.diagnostic.failure(error);
-        })
-    }
-}
-#[cfg(feature = "theme-json")]
-impl ISkinDiagnostics for ThemeLoaderObject {
-    /// Copies the latest failure text without exposing mutable diagnostic storage.
     fn diagnostic(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         Ok(self.diagnostic.snapshot())
     }
@@ -210,6 +209,14 @@ fn text(input: NcCopyFromBufferOffset<'_, u8>) -> Result<&str, NcStatus> {
         return Err(NC_E_INVALID_ARG);
     }
     std::str::from_utf8(input.as_slice()).map_err(|_| NC_E_INVALID_ARG)
+}
+
+/// Accepts one complete nonempty binary input within the shared decoding ceiling.
+fn blob(input: NcCopyFromBufferOffset<'_, u8>) -> Result<&[u8], NcStatus> {
+    if input.offset() != 0 || input.is_empty() || input.len() > MAX_ASSET_PIXELS_BYTES {
+        return Err(NC_E_INVALID_ARG);
+    }
+    Ok(input.as_slice())
 }
 
 #[cfg(test)]
