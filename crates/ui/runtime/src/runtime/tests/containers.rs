@@ -347,7 +347,10 @@ fn builtin_linear_reuses_track_resolution_and_validates_edges_before_mounting() 
         common.query::<IUnknown>().unwrap().as_ptr(),
         row.as_interface().add_ref().query::<IUnknown>().unwrap().as_ptr()
     );
-    assert_eq!(row.children().unwrap().query::<IChildrenEditorAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
+    assert_eq!(
+        row.children().unwrap().query::<IChildrenEditorAbi>().unwrap_err(),
+        neocogi_com::NC_E_NOINTERFACE
+    );
     let window = ui.window("Linear", RECT, &row).unwrap();
     runtime.update(SIZE).unwrap();
     let (first_rect, second_rect, third_rect) = (a.latest.get().unwrap().screen, b.latest.get().unwrap().screen, c.latest.get().unwrap().screen);
