@@ -98,22 +98,29 @@ let native = platform.create_window(
     atlas.as_com_ref(),
 )?;
 let renderer = native.query::<IRendererAbi>()?;
-let arguments = UiRuntimeAbi::arguments(assets.as_com_ref())?;
-let mut ui = Ui::from_interface(neocogi_com::Runtime::global().construct::<UiRuntimeAbi>(arguments)?)?;
+let runtime = neocogi_com::Runtime::global();
+let gfx = runtime.activate_plugin_factory::<GfxPluginFactoryAbi>(
+    neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"),
+)?;
+let compositor = gfx.create_compositor(assets.as_com_ref())?;
+let factory = runtime.activate_plugin_factory::<UiPluginFactoryAbi>(
+    neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"),
+)?;
+let mut ui = Ui::from_interface(factory.create_runtime(assets.as_com_ref(), compositor.as_com_ref())?)?;
 ```
 
 ## Installation and ownership
 
 `ui.install_assets(candidate, renderer)` requires mutable access to the `Ui` because it
 replaces that runtime's one shared resource value. The call owns one transaction: it validates
-and imports bounded metadata, caches the bundle's typed `IRgbaImage` projection, asks
-the renderer to copy and upload that complete image,
+and imports bounded metadata, asks the renderer to copy and upload that complete image,
+installs the same catalog-compatible revision in its retained GFX compositor,
 then publishes only local lookup tables and resolved painting state. Only success
 publishes the new revision to `IWidgetHost`, the window manager, text metrics, and
 scoped layout services together. Failed validation or upload leaves the previous UI
 resources and GPU atlas usable. The renderer is borrowed for the call; the UI retains
 neither a platform/window nor a second CPU image merely to remember its resources.
-The cached projection also avoids a `QueryInterface` call on every submitted frame.
+The compositor retains the narrow image projection used for final renderer submission.
 
 After a changed revision succeeds, call `update` or `update_with_events` before
 `render`. Old measurement entries, including hidden trees, are invalidated by the
@@ -330,7 +337,7 @@ The full demo still ships the GFX plugin's PNG decoder for the photograph and th
 skin plugin's typed style compiler for live edits. GFX keeps its small
 `AssetPublisher` in that deployment while omitting the font rasterizer and atlas
 builder. Its compiled themes need no JSON loader; simpler embedded demos need
-neither optional plugin.
+the compact GFX compositor but neither its builder nor the optional Skin plugin.
 Browser `webgl` explicitly enables embedding.
 The shared recipe gives both modes identical resource names and font sizes.
 

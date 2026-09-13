@@ -49,7 +49,8 @@ a second COM-side representation.
 `neocogi-ui-runtime` has no generic `src/com` implementation tree. Shared machinery follows
 its actual owner: node mounting, child transactions, input conversion, widget host
 state, scoped layout, and scoped painting live under `ui_node`; external frame
-submission lives under `render`; event projections live beside their semantic event
+composition lives in the GFX plugin while thin semantic replay lives under `render`;
+event projections live beside their semantic event
 types; and `Runtime` plus `UiFactory` live in their top-level implementation modules.
 The plugin registry imports those concrete object types directly from the crate root.
 
@@ -133,15 +134,17 @@ Painting uses an expiring `IPainter` scope with copied geometry. Neither interfa
 lends native tree, frame or application-state borrows across a dynamic call. Nested
 calls restore the parent scope; expired tokens cannot become valid again.
 
-Built-in text, frames and polygons share the UI's recording/tessellation code.
-Ordered atlas, immutable-image and custom-render-item batches preserve their display
-list positions. The renderer validates complete buffers and resource ownership
-before acquiring a frame. Owned images and scenes retain their device/window as
-needed; backend types remain local to their assembly.
+Built-in text, frames and polygons share the UI's semantic recording and tessellation
+code. Ordered atlas, immutable-image and custom-render-item operations preserve their
+display-list positions. The retained GFX compositor expands resource-backed geometry,
+clips final vertices, merges adjacent atlas work, and publishes one bounded bulk stream.
+The renderer validates that stream and resource ownership before acquiring a frame.
+Owned images and scenes retain their device/window as needed; backend types remain
+local to their assembly.
 
 An immutable GFX asset bundle supplies fonts, icons, styles and pixels. Installation
-validates the catalog, prepares CPU resources and uploads the GPU candidate before
-publishing the new revision. Failure preserves the prior working UI/resources.
+validates the catalog, prepares compositor resources and uploads the GPU candidate
+before publishing the new revision. Failure preserves the prior working UI/resources.
 [COM_ASSETS.md](../../../../docs/COM_ASSETS.md) specifies catalog identity and format limits.
 
 ## Surface forest

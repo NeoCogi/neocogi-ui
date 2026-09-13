@@ -1,8 +1,9 @@
 # Cargo features
 
 Features belong to the crate that implements them. The `neocogi-ui` application
-facade keeps its defaults empty; applications opt into `gfx` or `skin` only when
-they want those authoring-contract re-exports:
+facade keeps its defaults empty. Its required GFX contract exposes the frame compositor
+and resource bundle; applications opt into `skin` only when they need theme-authoring
+contracts. The retained `gfx` feature is an empty source-compatibility marker:
 
 | Crate | Feature | Effect |
 | --- | --- | --- |
@@ -11,9 +12,10 @@ they want those authoring-contract re-exports:
 | `neocogi-ui` | `static-runtime` | Link one ordinary runtime implementation, including browser deployments. |
 | `neocogi-gfx-support` | `compiled-assets` | Expand bounded zlib pixels from generated asset tables. |
 | `neocogi-ui` | `compiled-assets` | Compatibility forwarding to GFX support for existing applications. |
-| `neocogi-ui` | `gfx` / `skin` | Re-export only the selected optional plugin's typed contracts. |
-| `neocogi-ui-runtime` | none | Imports resolved resources for layout and painting; contains no asset compiler. |
-| `neocogi-gfx` | none | PNG decoding and renderer-owned texture upload. |
+| `neocogi-ui` | `gfx` | Empty compatibility marker; required GFX bundle/compositor contracts are always exported. |
+| `neocogi-ui` | `skin` | Re-export the optional Skin plugin's typed authoring contracts. |
+| `neocogi-ui-runtime` | none | Imports resolved resources for layout and painting; contains neither an asset compiler nor final graphics executor. |
+| `neocogi-gfx` | none | PNG decoding, resource publication, and renderer-neutral frame composition. |
 | `neocogi-gfx` | `builder` | Font rasterization and PNG atlas construction into portable tables. |
 | `neocogi-skin` | none | Live typed metric/palette compilation through the always-available GFX publisher. |
 | `neocogi-skin` | `theme-json` | Strict external JSON and appearance compilation; resource baking uses an explicit GFX loader. |

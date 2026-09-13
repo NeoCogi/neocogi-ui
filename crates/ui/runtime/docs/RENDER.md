@@ -13,22 +13,24 @@ call gate rejects retained or reentrant aliases while one operation mutates them
 
 ```text
 IWidget.paint -> scoped IPainter -> runtime frame display list
-             -> one clipping/expansion pass -> one bulk neocogi.renderer submission
+             -> coarse GfxCompositor operations -> one bulk neocogi.renderer submission
 ```
 
 The display list owns text, solid geometry and retained image/render-item interfaces.
-There is no per-widget COM command queue and no replay into a second display list. The
-executor clears reusable storage after submission or failure. Adjacent compatible
-geometry batches together; images and application render items preserve painter order.
+There is no per-widget COM command queue and no replay into a second display list. UI sends
+one typed compositor call per retained draw operation, never one call per glyph or vertex.
+The GFX compositor clears reusable output storage after submission or failure. Adjacent
+compatible geometry batches together; images and application render items preserve painter order.
 Inputs are validated before entering the list and the completed frame is validated
 before GPU work, including buffer bounds, finite values, resource provenance and
 supported batch kinds.
 
-The runtime and its dynamically linked widget factory also share one imported asset
+The runtime, its dynamically linked widget factory, and its retained GFX compositor share one imported asset
 value with every built-in product. Frame, icon, and font slots therefore resolve
 against that existing value without reconstructing an atlas or skin per widget. The
 import stores a separate `IRgbaImage` projection beside the UI bundle. Only that narrow
-projection crosses into `IRenderer::prepare_atlas` and `IRenderer::render`; no renderer
+projection crosses into `IRenderer::prepare_atlas` and `GfxCompositor::submit`; GFX passes
+it to `IRenderer::render`, and no renderer
 can inspect the bundle's theme, font, icon, chrome, or catalog tables.
 
 ## Update and frame validity
@@ -51,7 +53,7 @@ to screen space once. Every operation owns an effective clip; nested paint scope
 only narrow it. Root/child-window policy, container viewports and scrolling establish
 those clips from committed geometry, so paint and hit testing share their boundaries.
 
-The final executor clips atlas rectangles and adjusts their sampling coordinates,
+The GFX compositor clips atlas rectangles and adjusts their sampling coordinates,
 clips image quads while preserving UV projection, and clips solid triangles against
 the operation clip and viewport. Empty geometry is discarded. Backends receive final
 screen-space UI vertices. `RenderVertex` from the standalone `neocogi.renderer`
@@ -63,8 +65,10 @@ frame as one slice. Contiguous buffered backends append it once, while indexed b
 use the trait's per-triangle fallback. A render item additionally receives its authoritative
 visible region because its own mesh drawing happens at that ordered boundary.
 
-The COM recorder appends each generated triangle or six-vertex quad with one bounds check and
-one borrow of each reused output buffer. A quad is not replayed through two recorder calls.
+The COM recorder appends semantic operations to UI-local storage. At frame execution UI sends
+complete triangle, text, and rectangle inputs to GFX with one call per operation. GFX expands
+glyphs and quads locally, then exposes all final vertices and batch metadata to the renderer in
+two bulk reads. Texture and custom-item capabilities are fetched only for their corresponding batches.
 
 The portable target is a positive drawable up to 8192 by 8192 pixels. Translated logical
 edges must remain in `-32768..=40960`, allowing four maximum drawable spans off-screen.
@@ -90,10 +94,11 @@ rectangle and final visible region. There is no production native callback regis
 | Source | Responsibility |
 | --- | --- |
 | `ui_node/paint_service.rs` | Scoped foreign access to the runtime-owned frame paint context |
-| `render/external.rs` | Bulk frame transport to an external renderer |
+| [crates/gfx/impl/src/compositor.rs](../../../gfx/impl/src/compositor.rs) | Atlas expansion, final clipping, batching, and bulk frame transport |
 | `render/painter.rs` | Private built-in geometry recording |
 | `render/display_list.rs` | Owned ordered operations and reusable geometry |
-| `render/renderer.rs` | Atlas expansion, final clipping and execution |
+| `render/compositor.rs` | Thin production replay into the GFX compositor |
+| `render/renderer.rs` | Generic native executor retained only for implementation tests |
 | [crates/render/core](../../../render/core) | Backend-neutral frame contracts, texture identity, color, and upload validation |
 | [crates/render/plugin](../../../render/plugin) | Backend plugin identity, window/device ownership, and checked COM GPU submission |
 | [crates/render/{glow,vulkan,wgpu,webgl}](BACKENDS.md#backend-sources) | Concrete GPU implementations linked into one selected plugin |

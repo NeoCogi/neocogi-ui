@@ -21,15 +21,17 @@ separate libraries. The contract split allows that work without changing input,
 polling, or IME types again.
 
 The GFX plugin deliberately groups bounded PNG decoding, font rasterization,
-icon loading, and atlas packing. These operations share one CPU pixel pipeline
-and produce immutable resource bundles or renderer-owned textures. The skin
+icon loading, atlas packing, and renderer-neutral frame composition. Resource
+construction operations share one CPU pixel pipeline and produce immutable resource
+bundles or renderer-owned textures; the compositor consumes those same validated
+tables without exposing them to UI or a backend. The skin
 plugin groups typed palette/metric derivation and optional external JSON theme
 compilation. Its theme loader receives explicit typed `AssetLoader` and
 `AssetPublisher` capabilities from GFX and submits each bounded font or PNG
 buffer to one transactional build session. Live style compilation requires only
 the publisher, so embedded deployments omit the font builder. Skin therefore
-does not compile another copy of GFX's font rasterizer, PNG decoder, atlas packer, bundle reader, validator, or
-publisher. Source bytes, bundle-local image placements, complete appearance
+does not compile another copy of GFX's font rasterizer, PNG decoder, atlas packer,
+bundle reader, validator, or publisher. Source bytes, bundle-local image placements, complete appearance
 records, and the completed `IAssetBundle` cross the boundary in coarse calls;
 JSON syntax trees, parser callbacks, atlas drafts, pixels, and decoder state
 remain private to their owners.
@@ -73,8 +75,8 @@ identity, avoiding a dependency from either loading plugin back into UI.
 
 Generated shared contract libraries carry these exact dependencies. A plugin
 lists only its directly implemented module, and runtime registration validates
-the transitive fingerprints. Optional `gfx` and `skin` facade features prevent
-unrelated clients from linking either authoring descriptor merely to use UI.
+the transitive fingerprints. GFX contracts are part of the required UI frame and
+resource path; the optional `skin` facade feature exposes theme-authoring clients.
 
 All polymorphism is expressed through named IDL interfaces. No cross-component
 value uses `std::any::Any`, native Rust trait objects, or an untyped property bag.
@@ -85,14 +87,15 @@ receivers validate unknown tags before reading a payload.
 
 Plugin separation does not add per-widget or per-draw calls:
 
-- UI records one retained display list and submits one bounded `IRenderStream`
-  to the renderer per frame.
-- Clipping, geometry generation, and adjacent batching happen before backend
-  submission; vertices and batches transfer through bulk slices.
-- Resource and skin plugins run only while loading, rebuilding, or editing an
-  immutable bundle. A JSON theme crosses the Skin-to-GFX boundary once per
+- UI records one retained display list and sends one coarse typed call per draw operation
+  to its GFX compositor; there is no per-glyph or per-vertex ABI call.
+- GFX performs atlas expansion, final clipping, and adjacent batching, then submits one
+  bounded `IRenderStream` to the renderer; vertices and batches transfer through bulk slices.
+- Skin authoring and GFX construction services run only while loading, rebuilding, or
+  editing an immutable bundle. The GFX compositor remains active for coarse frame
+  execution. A JSON theme crosses the Skin-to-GFX boundary once per
   referenced resource, once for atlas finalization, and once for bulk appearance
-  publication; both plugins are absent from ordinary update, layout, and paint.
+  publication; those authoring services are absent from ordinary update, layout, and paint.
 - The UI imports font/icon/appearance tables once per installed revision and
   caches the narrow `IRgbaImage` projection used by rendering.
 - The renderer compares image identity before upload and retains GPU textures;
@@ -105,7 +108,9 @@ installation, texture churn, and excessive plugin activation. Bounded streams,
 revision/identity checks, retained renderer resources, and activation-time
 capability discovery address those cases. Benchmarks should measure commands,
 vertices, uploads, and dynamic calls per frame so a future boundary change cannot
-silently turn a bulk transaction into fine-grained IPC.
+silently turn a bulk transaction into fine-grained IPC. The exact min-size cost and
+symbol attribution of this boundary are recorded in
+COM_PERFORMANCE.md.
 
 ## Resource deployment
 
@@ -120,4 +125,5 @@ backend-frame examples stage GFX for their file-backed base bundle but omit Skin
 the full demo and smoke suite stage Skin because they exercise external themes.
 Their application feature graphs omit the Skin contract descriptor and their
 packages omit the corresponding authored theme directories as well.
-Embedded simple applications omit both plugins when their generated bundle is sufficient.
+Embedded applications keep the compact GFX compositor but can omit its builder and the
+Skin plugin when their generated bundle is sufficient.

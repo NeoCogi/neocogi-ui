@@ -43,7 +43,7 @@ are not additional runtime boundaries.
 | Source | Responsibility |
 | --- | --- |
 | [crates/render/plugin](../../../render/plugin) | Plugin descriptor plus window, input, and device ownership |
-| [crates/render/core](../../../render/core) | Backend-neutral frame, texture, color, and validated upload SPI shared with the UI runtime |
+| [crates/render/core](../../../render/core) | Backend-neutral frame, texture, color, and validated upload SPI used by renderer implementations and native test fixtures |
 | [crates/render/glow](../../../render/glow) | Glow rendering shared by native OpenGL and WebGL |
 | [crates/render/vulkan](../../../render/vulkan) | Vulkan rendering and UI shaders |
 | [crates/render/wgpu](../../../render/wgpu) | WGPU rendering |
@@ -51,9 +51,9 @@ are not additional runtime boundaries.
 | [crates/render/support](../../../render/support) | Shared frame preparation and resource validation |
 
 `core` is a statically linked Rust SPI, not a COM component or deployment plugin. It
-lets the UI runtime and each concrete backend agree on in-process renderer types
-without making a renderer plugin link the UI implementation. This prevents duplicate
-UI plugin entry points and keeps the dynamic boundary at one complete COM frame.
+lets native test fixtures and concrete backends share renderer implementation types
+without making a renderer plugin link the UI implementation. Production UI-to-GFX and
+GFX-to-renderer boundaries use generated contracts and one complete COM frame.
 
 ## Ordered application drawing
 
@@ -89,7 +89,7 @@ Application GPU implementations must own their GPU objects, establish every sett
 their commands consume, finish scoped operations such as queries or transform feedback,
 and restore extension-specific state outside that baseline. They must not modify or
 delete backend-owned resources. The backend cannot infer unfinished application work.
-UI drawing does not promise to restore the application's previous GPU state.
+GFX-composed UI drawing does not promise to restore the application's previous GPU state.
 
 WebGL context loss invalidates the current device. Recreate the window/device and its
 resources after loss; retained COM pointers do not restore native resources automatically.
@@ -106,8 +106,8 @@ Run `scripts/test-demo.sh BACKEND` for the full application and
 GPU atlas input is a borrowed `ImageSource` containing positive dimensions and
 packed RGBA bytes. Backends validate it, upload a complete candidate texture and
 publish that texture only on success. They retain no native atlas, font/icon IDs
-or skin. `RendererBackend::replace_atlas` uses this raw input; the UI's geometry
-executor owns its resolved resource tables independently. The host queries
+or skin. `RendererBackend::replace_atlas` uses this raw input in native fixtures; the
+production GFX compositor owns final atlas geometry independently. The host queries
 `IRgbaImage` once from its initial bundle and gives that projection to the platform.
 Subsequent renderer preparation and frame
 submission accept only that projection, whose `size` and `pixels` methods cannot

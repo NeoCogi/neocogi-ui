@@ -123,8 +123,8 @@ cargo neocogi run --assembly smoke -- --smoke --theme themes/windows-95/theme.js
 
 Place `--variant embedded` after the renderer variant. It adds the application's
 `embed-assets` feature and removes external resources. The full demo retains its
-PNG-capable GFX plugin and live style compiler; other embedded demos omit both
-optional plugins. The smoke assembly's
+PNG-capable GFX plugin and live style compiler. Other embedded demos keep the compact
+GFX compositor but omit its builder feature and the optional Skin plugin. The smoke assembly's
 `extension` variant adds the independent example plugin. Browser `webgl` selects
 embedded resources and retains its separate static registration workflow.
 
@@ -253,8 +253,9 @@ scripts/test-browser-input.sh input
 scripts/test-browser-input.sh full
 ```
 
-The browser statically registers the same UI, platform and optional PNG descriptors
-with one neocogi-com runtime in the wasm module. DOM listeners, IME, canvas and WebGL2
+The browser statically registers the same UI, GFX compositor, platform, and selected
+renderer descriptors with one neocogi-com runtime in the wasm module. DOM listeners,
+IME, canvas and WebGL2
 ownership stay in the selected renderer plugin. The host owns only application state and
 one `requestAnimationFrame` scheduling adapter. Every platform window appends its
 own canvas; page CSS controls its logical dimensions, and input/frame coordinates

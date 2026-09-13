@@ -72,7 +72,8 @@ window or graphics handle crosses a dynamic boundary.
 Rendering follows a deployment-oriented layout under `crates/render`. Glow,
 Vulkan, WGPU, and WebGL builds have distinct plugin identities. Each renderer plugin
 also owns the native window/device integration it needs, so graphics handles stay
-private and a frame does not cross an extra plugin boundary. The backend-specific
+private. UI sends coarse painter-order operations to GFX, which submits one bulk
+frame to the selected renderer. The backend-specific
 Rust crates and shared helpers remain separate source concerns within that artifact.
 `crates/render/contracts` owns the independent `neocogi.renderer` ABI: geometry,
 raw RGBA images, GPU texture capabilities, and one bounded bulk frame stream. It
@@ -83,8 +84,9 @@ plugin and does not depend on the UI runtime implementation.
 
 `crates/gfx` owns the `neocogi.gfx` decoding and resource-baking plugin, while
 `crates/skin` owns the `neocogi.skin` appearance and external-theme plugin.
-The GFX contract owns complete portable bundles, so both UI and Skin depend on
-GFX instead of resource construction depending backward on the retained UI.
+The GFX contract owns complete portable bundles and the renderer-neutral compositor,
+so both UI and Skin depend on GFX instead of resource construction or final graphics
+execution depending backward on the retained UI.
 Their concrete compiler machinery lives in separate private GFX and Skin
 implementation crates. Portable bundle publication and validation live in
 non-plugin `crates/gfx/support`, while a small appearance crate contains only

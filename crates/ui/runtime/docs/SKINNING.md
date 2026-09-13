@@ -7,11 +7,12 @@ patch and semantic-content-color model.
 
 ## Runtime ownership
 
-The UI runtime and renderer install one immutable IAssetBundle together. The plugin
-imports its canonical catalog identity, validates copied metrics/resource tables, prepares
-CPU state and uploads GPU pixels before publishing a new revision. Failed validation or
-upload preserves the current pair. All windows, widgets and scoped services use that
-same committed resource revision.
+The UI runtime, retained GFX compositor, and renderer install one immutable
+`IAssetBundle` together. UI imports its canonical catalog identity and validates copied
+metrics and appearance tables. GFX imports font/icon/atlas tables, while the renderer
+uploads the matching pixels before publication. Failed validation or upload preserves
+the current revision. All windows, widgets and scoped services use that same committed
+resource identity.
 
 A producer derives revisions from the original resource catalog, preserving every
 application font/icon identity and meaning. Loading a theme from the currently selected

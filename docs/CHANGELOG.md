@@ -95,6 +95,15 @@ wrappers. The accepted migration and outstanding validation are recorded in
   Skin implementation crates plus a small pure appearance compiler. Cargo no
   longer unifies decoder/builder and JSON/schema features into one compilation
   unit or relinks both fat-LTO plugins after an unrelated implementation edit.
+- Move atlas lookup, glyph and icon expansion, final rectangle/triangle clipping,
+  batch construction, scoped render-stream ownership, and the single renderer
+  submission from the deployable UI implementation into a typed GFX compositor.
+  UI retains semantic display-list construction and crosses the boundary once per
+  draw operation, never once per glyph or vertex. Generic native executor fixtures
+  remain test-only and no longer enter the UI runtime shared object. Exact custom-target
+  `cargo bloat` measurements show UI `.text` falling by 10.6 KiB, GFX `.text` growing
+  by 13.9 KiB, and the complete executable/shared-object set growing by 4,920 bytes;
+  the architectural split is deliberately not presented as a total-size reduction.
 - Compile generated Rust contract descriptions for the underlying platform ABI
   when the `min-size` build uses its fingerprint-distinct custom target.
 - Move portable appearance roles and semantic font/icon roles into
