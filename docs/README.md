@@ -13,7 +13,7 @@ cover the retained UI model, integration details, and repository workflows.
 - Assembly build performance — compiler reuse, shared-library LTO, and measured build times.
 - [IDL contract modules](IDL_MODULES.md) — Rust-like contract syntax, one-crate-per-module generation, exact native linking, and factory-only activation.
 - [Local COM implementation](../crates/com/README.md) and [ABI specification](../crates/com/docs/abi-v7.md).
-- [Accepted design](COM_DESIGN.md) and [implementation progress](COM_MIGRATION.md).
+- [Accepted design](COM_DESIGN.md), [feature ownership](FEATURES.md), and [unreleased changes](CHANGELOG.md).
 
 ## UI implementation notes
 

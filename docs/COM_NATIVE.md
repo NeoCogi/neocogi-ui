@@ -162,7 +162,7 @@ nightly size profile. The tool owns its layout under `target/neocogi`; callers a
 scripts should use the reported `Staged ...` directory rather than reconstructing
 that internal path.
 COM_PERFORMANCE.md records whole-deployment measurements;
-[COM_MIGRATION.md](COM_MIGRATION.md) records the component migration history.
+[FEATURES.md](FEATURES.md) records current deployment feature ownership.
 
 ## Native verification
 

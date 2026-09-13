@@ -156,8 +156,8 @@ Backend-owned Rust GPU types stay inside their renderer plugin.
 
 The [documentation index](docs/README.md) links authoring, assets, deployment and
 implementation references. [Examples](docs/EXAMPLES.md) maps each feature to working
-source. [COM_MIGRATION.md](docs/COM_MIGRATION.md) records completed gates and remaining
-cleanup; it distinguishes implementation progress from the accepted design.
+source. [FEATURES.md](docs/FEATURES.md) defines current feature ownership, while
+[COM_DESIGN.md](docs/COM_DESIGN.md) defines the accepted component architecture.
 
 ## License
 

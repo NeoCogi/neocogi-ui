@@ -1,6 +1,10 @@
 # COM widget and application contracts
 
-These are the author-facing rules for the migration described in [COM_DESIGN.md](COM_DESIGN.md). [COM_MIGRATION.md](COM_MIGRATION.md) records which implementation milestones are complete. The contract crate contains fixed interfaces and values; the application-facing Rust facade contains typed conveniences. Neither exposes implementation state through `Any`, untyped properties, or native Rust GPU objects.
+These are the author-facing rules for the component architecture defined in
+[COM_DESIGN.md](COM_DESIGN.md). The contract crate contains fixed interfaces and
+values; the application-facing Rust facade contains typed conveniences. Neither
+exposes implementation state through `Any`, untyped properties, or native Rust GPU
+objects.
 
 ## Linking and ownership
 

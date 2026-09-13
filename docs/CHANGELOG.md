@@ -4,8 +4,8 @@
 
 The application API now consists of a thin static facade over actual COM objects.
 This replaces the 0.8 native node/weak-handle authoring API without compatibility
-wrappers. The accepted migration and outstanding validation are recorded in
-[COM_MIGRATION.md](COM_MIGRATION.md).
+wrappers. [COM_DESIGN.md](COM_DESIGN.md) defines the accepted architecture, and
+[COM_AUTHORS.md](COM_AUTHORS.md) defines its current author-facing contracts.
 
 - Use `nc_com_shared_runtime` as the runtime library name in direct builds,
   native bindings, and generated LTO roots. Assemblies deploy one runtime library
