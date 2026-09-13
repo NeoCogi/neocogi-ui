@@ -99,3 +99,10 @@ executable by default. Embedding is an explicit variant, never the default. The
 GFX and skin plugins receive typed native paths or copied buffers and return
 immutable capabilities; resource directories and JSON representations are not
 part of the runtime renderer or UI abstractions.
+
+Assembly manifests select these plugins independently. Simple, calculator, and
+backend-frame examples stage GFX for their file-backed base bundle but omit Skin;
+the full demo and smoke suite stage Skin because they exercise external themes.
+Their application feature graphs omit the Skin contract descriptor and their
+packages omit the corresponding authored theme directories as well.
+Embedded simple applications omit both plugins when their generated bundle is sufficient.

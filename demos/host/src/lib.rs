@@ -228,9 +228,9 @@ fn register() -> Result<(), HostError> {
     unsafe {
         runtime.register_factory_plugin_description(neocogi_ui_runtime::factory_plugin_description())?;
         runtime.register_factory_plugin_description(neocogi_render_plugin::factory_plugin_description())?;
-        #[cfg(any(feature = "png-assets", feature = "monolith"))]
+        #[cfg(any(target_arch = "wasm32", feature = "monolith-gfx"))]
         runtime.register_factory_plugin_description(neocogi_gfx::factory_plugin_description())?;
-        #[cfg(feature = "monolith")]
+        #[cfg(feature = "monolith-skin")]
         runtime.register_factory_plugin_description(neocogi_skin::factory_plugin_description())?;
     }
     Ok(())

@@ -72,6 +72,11 @@ wrappers. The accepted migration and outstanding validation are recorded in
   concrete appearance-state helpers into non-plugin `neocogi-gfx-support`.
   The GFX implementation no longer imports the UI Rust facade; UI retains only
   compatibility re-exports for application source stability.
+- Select optional plugins per assembly: simple, calculator, and backend-frame
+  packages no longer stage or monolithically link Skin, while full and smoke
+  packages retain it for external-theme coverage. Demo asset facade features
+  likewise include the Skin contract only for the full theme-selection surface,
+  and assemblies without Skin no longer copy unused theme directories.
 - Compile generated Rust contract descriptions for the underlying platform ABI
   when the `min-size` build uses its fingerprint-distinct custom target.
 - Move portable appearance roles and semantic font/icon roles into

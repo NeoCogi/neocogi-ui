@@ -9,13 +9,14 @@ repository.workspace = true
 
 [features]
 default = []
-# Additional themes, photo and mesh are exclusive to the full demo.
-full-demo = []
+# Additional themes, photo and mesh are exclusive to the full demo. Only that
+# client needs the optional Skin contract for runtime theme activation.
+full-demo = ["neocogi-ui/skin"]
 # Explicit opt-in for self-contained resources, including browser deployments.
 embed-assets = ["neocogi-gfx-support/compiled-assets", "dep:neocogi-assets", "dep:neocogi-gfx-contracts", "dep:neocogi-gfx-support"]
 
 [dependencies]
-neocogi-ui = { workspace = true, features = ["gfx", "skin"] }
+neocogi-ui = { workspace = true, features = ["gfx"] }
 neocogi-com = { workspace = true, features = ["runtime"] }
 neocogi-gfx-contracts = { workspace = true, optional = true }
 neocogi-gfx-support = { workspace = true, optional = true }
