@@ -68,10 +68,10 @@ pub(crate) struct ProcessUniqueId(
 impl ProcessUniqueId {
     /// Allocates one process-unique identity or panics after exhausting the usable `u64` space.
     pub(crate) fn allocate() -> Self {
-        // `fetch_update` modifies the global source only when checked advancement succeeds. Once
+        // `try_update` modifies the global source only when checked advancement succeeds. Once
         // exhausted, every later attempt therefore fails consistently rather than reusing an ID.
         let raw = NEXT_PROCESS_UNIQUE_ID
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, advance_process_unique_id)
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, advance_process_unique_id)
             .expect("process-unique identity space exhausted");
         Self(NonZeroU64::new(raw).expect("process-unique identity allocator returned zero"))
     }
@@ -85,7 +85,7 @@ mod tests {
     #[test]
     fn process_unique_identity_advancement_stops_before_reuse() {
         // Ordinary values advance exactly once, while the terminal value remains unmodified by
-        // `fetch_update` because this helper rejects its transition.
+        // `try_update` because this helper rejects its transition.
         assert_eq!(advance_process_unique_id(1), Some(2));
         assert_eq!(advance_process_unique_id(u64::MAX), None);
     }

@@ -83,10 +83,10 @@ pub(crate) struct RuntimeNodeId(pub(super) NonZeroU64);
 impl RuntimeNodeId {
     /// Allocates a process-unique, non-zero identity or panics after exhausting the `u64` space.
     pub(super) fn allocate() -> Self {
-        // `fetch_update` changes the global counter only when checked increment succeeds. This is
+        // `try_update` changes the global counter only when checked increment succeeds. This is
         // important at exhaustion: a failed allocation must not wrap or corrupt later diagnostics.
         let raw = NEXT_RUNTIME_NODE_ID
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, advance_runtime_node_id)
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, advance_runtime_node_id)
             .expect("RuntimeNodeId space exhausted");
         Self(NonZeroU64::new(raw).expect("RuntimeNodeId allocator returned zero"))
     }
