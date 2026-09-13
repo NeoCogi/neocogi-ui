@@ -5,9 +5,9 @@
 
 #![deny(missing_docs)]
 
-use neocogi_assets::StyleCompilerObject;
+use neocogi_skin_impl::StyleCompilerObject;
 #[cfg(feature = "theme-json")]
-use neocogi_assets::ThemeLoaderObject;
+use neocogi_skin_impl::ThemeLoaderObject;
 use neocogi_com::{ComPtr, ComRef, NcGuid, NcStatus, guid_from_qualified_name};
 use neocogi_gfx_contracts::{AssetLoaderAbi, AssetPublisherAbi};
 use neocogi_skin_contracts::*;

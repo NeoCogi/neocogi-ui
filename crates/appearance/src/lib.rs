@@ -5,31 +5,28 @@
 // modification, are permitted provided that the conditions in LICENSE are met.
 //
 
-//! Compiles flat palette rules into portable resolved appearance tables.
-#[cfg(feature = "skin")]
-use neocogi_skin_contracts::{ISkinDiagnostics, PaletteEdit, PaletteEditAbi, StyleCompiler};
-#[cfg(feature = "skin")]
-use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus};
+//! Pure appearance compilation shared by resource construction and Skin policy.
+#![deny(missing_docs)]
+
 use neocogi_gfx_contracts::*;
-#[cfg(feature = "builder")]
 use neocogi_gfx_support::AssetData;
 use neocogi_gfx_support::{ChromeState, ControlState, MenuState, PointerState, SurfaceState};
 
-/// Complete appearance-only tables compiled by Skin without owning bundle storage.
-pub(crate) struct AppearanceTables {
+/// Complete appearance-only tables independent of bundle storage and plugin objects.
+pub struct AppearanceTables {
     /// One record for every dense structural surface role.
-    pub(crate) surfaces: [AssetSurfaceVisuals; SurfaceRole::COUNT],
+    pub surfaces: [AssetSurfaceVisuals; SurfaceRole::COUNT],
     /// One record for every dense interactive control role.
-    pub(crate) controls: [AssetControlVisuals; ControlRole::COUNT],
+    pub controls: [AssetControlVisuals; ControlRole::COUNT],
     /// One record for every dense menu role.
-    pub(crate) menus: [AssetMenuVisuals; MenuRole::COUNT],
+    pub menus: [AssetMenuVisuals; MenuRole::COUNT],
     /// One record for every dense window-chrome role.
-    pub(crate) window_chrome: [AssetChromeVisuals; ChromeRole::COUNT],
+    pub window_chrome: [AssetChromeVisuals; ChromeRole::COUNT],
 }
 
 impl AppearanceTables {
     /// Resolves one flat palette into complete records without reading or publishing a bundle.
-    pub(crate) fn flat(insets: Insets, palette: &FlatPalette) -> Self {
+    pub fn flat(insets: Insets, palette: &FlatPalette) -> Self {
         // Role order remains the generated dense IDL axis. State structure is expressed by named
         // record fields, so adding or moving a state cannot silently change an arithmetic offset.
         let surfaces = SurfaceRole::ALL.map(|role| AssetSurfaceVisuals {
@@ -52,43 +49,10 @@ impl AppearanceTables {
         });
         Self { surfaces, controls, menus, window_chrome }
     }
-
-    /// Copies the current fixed appearance tables without importing fonts, icons, or pixels.
-    #[cfg(feature = "skin")]
-    fn read(base: ComRef<'_, IAssetBundleAbi>) -> Result<Self, NcStatus> {
-        // A complete flat table provides initialized storage without inventing invalid enum or
-        // union representations. Exact-count COM copies replace every record before it is read.
-        let mut tables = Self::flat(Insets::default(), &FlatPalette::default());
-        base.surface_visuals(NcCopyToBufferOffset::new(0, &mut tables.surfaces))?;
-        base.control_visuals(NcCopyToBufferOffset::new(0, &mut tables.controls))?;
-        base.menu_visuals(NcCopyToBufferOffset::new(0, &mut tables.menus))?;
-        base.chrome_visuals(NcCopyToBufferOffset::new(0, &mut tables.window_chrome))?;
-        Ok(tables)
-    }
-
-    /// Delegates validation and immutable revision publication to the owning GFX capability.
-    #[cfg(feature = "skin")]
-    pub(crate) fn publish(
-        &self,
-        publisher: ComRef<'_, AssetPublisherAbi>,
-        base: ComRef<'_, IAssetBundleAbi>,
-        metrics: AssetMetrics,
-        chrome: AssetChrome,
-    ) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
-        publisher.revise_appearance(
-            base,
-            AssetAppearanceRevision { metrics, chrome },
-            NcCopyFromBufferOffset::new(0, &self.surfaces),
-            NcCopyFromBufferOffset::new(0, &self.controls),
-            NcCopyFromBufferOffset::new(0, &self.menus),
-            NcCopyFromBufferOffset::new(0, &self.window_chrome),
-        )
-    }
 }
 
 /// Resolves every state once, so UI painting only selects stored values.
-#[cfg(feature = "builder")]
-pub(crate) fn apply_flat(data: &mut AssetData, insets: Insets, palette: &FlatPalette) {
+pub fn apply_flat(data: &mut AssetData, insets: Insets, palette: &FlatPalette) {
     let tables = AppearanceTables::flat(insets, palette);
     data.tables.surfaces = Vec::from(tables.surfaces).into();
     data.tables.controls = Vec::from(tables.controls).into();
@@ -117,8 +81,7 @@ fn flat_pointer_visuals(insets: Insets, palette: &FlatPalette, role: ControlRole
 }
 
 /// Returns the conventional caption geometry in its checked transfer form.
-#[cfg(feature = "builder")]
-pub(crate) fn default_chrome() -> AssetChrome {
+pub fn default_chrome() -> AssetChrome {
     // Keep builder output identical to the default JSON document without
     // constructing a runtime-only skin representation in this plugin.
     AssetChrome {
@@ -138,7 +101,7 @@ pub(crate) fn default_chrome() -> AssetChrome {
 }
 
 /// Packs channels in the renderer's explicit little-endian RGBA convention.
-pub(crate) const fn rgba(color: Color) -> u32 {
+pub const fn rgba(color: Color) -> u32 {
     u32::from_le_bytes([color.r, color.g, color.b, color.a])
 }
 
@@ -315,55 +278,4 @@ fn flat_chrome_visual(frame_insets: Insets, palette: &FlatPalette, role: ChromeR
     };
     patch.content_color = rgba(content_color);
     patch
-}
-
-#[cfg(feature = "skin")]
-#[neocogi_com::com_factory(neocogi_skin_contracts::StyleCompiler)]
-/// Compiles resource revisions without borrowing a UI or retaining a renderer.
-pub struct StyleCompilerObject {
-    /// GFX owns base validation, bundle copying, and immutable revision publication.
-    publisher: ComPtr<AssetPublisherAbi>,
-    /// Owned diagnostics remain inspectable independently of each immutable result.
-    diagnostic: crate::Diagnostic,
-}
-
-#[cfg(feature = "skin")]
-impl StyleCompilerObject {
-    /// Retains the explicit GFX revision capability supplied by the Skin plugin caller.
-    pub fn new(publisher: ComRef<'_, AssetPublisherAbi>) -> Self {
-        Self {
-            publisher: publisher.add_ref(),
-            diagnostic: crate::Diagnostic::default(),
-        }
-    }
-}
-
-#[cfg(feature = "skin")]
-impl StyleCompiler for StyleCompilerObject {
-    /// Compiles appearance policy locally and delegates generic bundle publication to GFX.
-    fn derive_style(&self, base: ComRef<'_, IAssetBundleAbi>, metrics: AssetMetrics, palette: PaletteEditAbi) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
-        // The closed edit tag is validated before any current appearance record is interpreted.
-        let edit = PaletteEdit::try_from(palette).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
-        let mut tables = AppearanceTables::read(base)?;
-        let mut chrome = base.chrome()?;
-        if let PaletteEdit::Flat(palette) = edit {
-            let insets = tables.surfaces[SurfaceRole::GenericFrame.raw() as usize].normal.insets;
-            tables = AppearanceTables::flat(insets, &palette);
-            if chrome.has_backdrop == 1 {
-                chrome.backdrop_rgba = rgba(palette.title_background);
-            }
-        }
-        // GFX checks all records against the base's actual resource table before publishing.
-        tables.publish(self.publisher.as_com_ref(), base, metrics, chrome).inspect_err(|error| {
-            self.diagnostic.failure(error);
-        })
-    }
-}
-
-#[cfg(feature = "skin")]
-impl ISkinDiagnostics for StyleCompilerObject {
-    /// Returns an owned failure snapshot without a borrow into the compiler.
-    fn diagnostic(&self) -> Result<neocogi_com::ComPtr<neocogi_com::INcStringAbi>, neocogi_com::NcStatus> {
-        Ok(self.diagnostic.snapshot())
-    }
 }

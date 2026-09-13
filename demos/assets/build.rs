@@ -32,11 +32,12 @@
 #[cfg(feature = "embed-assets")]
 use std::{env, error::Error, path::PathBuf};
 #[cfg(feature = "embed-assets")]
-use neocogi_assets::{
+use neocogi_gfx_impl::{
     atlas::{self, Builder},
     export::write_rust,
-    theme,
 };
+#[cfg(feature = "embed-assets")]
+use neocogi_skin_impl::theme;
 #[cfg(feature = "embed-assets")]
 use neocogi_gfx_support::AssetData;
 

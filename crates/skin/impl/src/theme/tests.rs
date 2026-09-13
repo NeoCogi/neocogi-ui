@@ -67,7 +67,7 @@ fn test_atlas() -> AssetData {
             glyphs: glyphs.into(),
             icons: icons.into(),
             metrics: AssetMetrics::default(),
-            chrome: crate::style::default_chrome(),
+            chrome: neocogi_appearance::default_chrome(),
             surfaces: vec![].into(),
             controls: vec![].into(),
             menus: vec![].into(),
@@ -75,7 +75,7 @@ fn test_atlas() -> AssetData {
         },
     };
     // The same flat compiler supplies all omitted appearances in real theme construction.
-    crate::style::apply_flat(&mut data, Insets::uniform(1), &FlatPalette::default());
+    neocogi_appearance::apply_flat(&mut data, Insets::uniform(1), &FlatPalette::default());
     data.validate().unwrap();
     data
 }
@@ -85,7 +85,7 @@ use std::fs;
 /// Installs one repository-bundled theme through the same filesystem and PNG path as Context.
 fn install_bundled_theme(relative_path: &str) -> (TestTheme, usize) {
     // Resolve from the Cargo manifest so tests remain independent of the process working dir.
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(relative_path);
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").join(relative_path);
     let loaded = load(path.as_path(), &test_atlas()).expect("bundled theme must load through the complete entry point");
     let loaded = TestTheme::new(loaded);
     let image_count = loaded
@@ -102,7 +102,7 @@ fn install_bundled_theme(relative_path: &str) -> (TestTheme, usize) {
 /// the loader itself.
 #[test]
 fn in_memory_theme_uses_the_supplied_asset_provider() {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../themes/windows-95/theme.json");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../themes/windows-95/theme.json");
     let definition = fs::read(&path).expect("read bundled theme definition for test");
     let loaded = load_bytes(path.as_path(), definition.as_slice(), &test_atlas(), &mut FileAssets)
         .expect("in-memory theme must resolve every asset through the supplied provider");

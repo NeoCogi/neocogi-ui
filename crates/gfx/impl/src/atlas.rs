@@ -40,7 +40,8 @@ use std::{
     io::{self, Read},
     path::{Path, PathBuf},
 };
-use crate::{png::RgbaImage, style};
+use crate::png::RgbaImage;
+use neocogi_appearance as style;
 
 mod packer;
 use packer::Packer;

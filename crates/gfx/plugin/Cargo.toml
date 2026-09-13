@@ -13,10 +13,10 @@ crate-type = ["rlib"]
 
 [features]
 default = []
-builder = ["neocogi-assets/builder"]
+builder = ["neocogi-gfx-impl/builder"]
 dynamic-plugin = []
 
 [dependencies]
-neocogi-assets = { workspace = true, features = ["gfx", "publisher"] }
+neocogi-gfx-impl = { workspace = true, features = ["gfx", "publisher"] }
 neocogi-gfx-contracts.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }

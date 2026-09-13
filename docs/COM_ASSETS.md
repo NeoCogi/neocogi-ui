@@ -7,7 +7,9 @@
 | `neocogi-gfx-contracts` / `neocogi-gfx` | Portable bundle records, PNG upload, font/icon rasterization, and atlas packing. |
 | `neocogi-skin-contracts` / `neocogi-skin` | Typed appearance derivation and optional external JSON themes. |
 | `neocogi-gfx-support` | Bounded portable data validation, immutable publication, and embedded expansion; no plugin identity. |
-| `crates/assets` | Private shared implementation and build-time source export; no plugin identity. |
+| `crates/gfx/impl` | Private decoder, atlas, bundle, and source-export implementation; no plugin identity. |
+| `crates/appearance` | Pure typed appearance compilation shared with offline resource construction. |
+| `crates/skin/impl` | Private style and optional JSON-theme implementation; no plugin identity. |
 | `neocogi-ui-runtime` | Local IDs, text metrics, resolved appearances and retained layout/painting. |
 | `crates/render/plugin` and renderers | Pixel upload, GPU resources and ordered frame execution. |
 
@@ -37,7 +39,7 @@ After resolving its closed appearance records, Skin calls GFX once to validate
 and publish the immutable revision. Native applications can therefore ship GFX
 services without a JSON/schema surface, while a JSON-enabled Skin deployment
 selects GFX as its one resource owner. Browser assemblies register the same
-selected descriptors statically. The [GFX decoder implementation](../crates/assets/src/png.rs)
+selected descriptors statically. The [GFX decoder implementation](../crates/gfx/impl/src/png.rs)
 produces packed RGBA directly. Neither plugin links the UI runtime implementation.
 
 The JSON feature owns a private Serde-to-COM adapter. GFX contract values expose
@@ -71,10 +73,13 @@ GFX support separates `AssetTables` metadata from complete `AssetData`
 pixel-bearing compiler output. The UI facade keeps compatibility re-exports, but
 lower layers depend directly on `neocogi-gfx-support`. `AssetData` produces the same `IAssetBundle` object from
 borrowed static tables or owned builder output. Neither type contains a UI implementation,
-font rasterizer, PNG decoder or JSON parser. `crates/assets` supplies private
-implementation objects to the GFX and skin plugin roots. Those objects expose ordinary
-typed interfaces and keep all native builder/path/decoder state in their owning binary.
-The [JSON compiler](../crates/assets/src/theme.rs) submits declared resources to
+font rasterizer, PNG decoder or JSON parser. Separate `neocogi-gfx-impl` and
+`neocogi-skin-impl` packages supply private objects to their corresponding
+plugin roots. The small `neocogi-appearance` package contains only pure typed
+appearance compilation needed by both runtime Skin policy and offline default
+resource construction. The objects expose ordinary typed interfaces and keep
+all native builder/path/decoder state in their owning binary. The
+[JSON compiler](../crates/skin/impl/src/theme.rs) submits declared resources to
 GFX and compiles complete appearance tables without copying the bundle into Skin.
 GFX owns bundle transfer, validation, and publication through the format-neutral
 `AssetPublisher::revise_appearance` transaction. The same compiler can still
@@ -216,7 +221,7 @@ The receiving GPU may impose a smaller texture dimension limit than the portable
 ## Optional construction and themes
 
 `AssetLoader::create_builder(size, white_path)` starts a native builder.
-Its [implementation](../crates/assets/src/atlas.rs) packs RGBA pixels and font
+Its [implementation](../crates/gfx/impl/src/atlas.rs) packs RGBA pixels and font
 records directly into `AssetData`; it constructs no UI atlas handles or skins.
 `add_icon(name, path)` and `add_font(name, path, pixels)` add distinct names;
 duplicates are rejected. `add_icon_bytes` and `add_font_bytes` provide the same
@@ -294,7 +299,7 @@ Compilation remains usable after a UI closes because the service owns no UI stat
 
 ## Compiled resources and packaging
 
-`neocogi_assets::export::write_rust(&data, path)` (feature `save-to-rust`)
+`neocogi_gfx_impl::export::write_rust(&data, path)` (feature `save-to-rust`)
 atomically writes one self-contained source
 file from validated `AssetData`. The UI crate has no builder, PNG, JSON or source
 export features. Cargo build scripts and command-line tools call the same asset

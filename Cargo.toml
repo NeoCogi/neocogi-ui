@@ -4,11 +4,13 @@ members = [
     "crates/ui/core-contracts",
     "crates/gfx/contracts",
     "crates/gfx/support",
+    "crates/gfx/impl",
     "crates/gfx/plugin",
     "crates/skin/contracts",
+    "crates/appearance",
+    "crates/skin/impl",
     "crates/skin/plugin",
     "examples/ui-extension",
-    "crates/assets",
     "crates/ui/api",
     "crates/ui/runtime",
     "demos/assets",
@@ -34,8 +36,11 @@ neocogi-renderer-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platf
 neocogi-platform-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "863904dc171aab6794bc2a743dd29f19f8bf6439" }
 neocogi-gfx-contracts = { path = "crates/gfx/contracts" }
 neocogi-gfx-support = { path = "crates/gfx/support" }
+neocogi-gfx-impl = { path = "crates/gfx/impl", version = "0.9.0-alpha.0", default-features = false }
 neocogi-gfx = { path = "crates/gfx/plugin", default-features = false }
 neocogi-skin-contracts = { path = "crates/skin/contracts" }
+neocogi-appearance = { path = "crates/appearance", version = "0.9.0-alpha.0" }
+neocogi-skin-impl = { path = "crates/skin/impl", version = "0.9.0-alpha.0", default-features = false }
 neocogi-skin = { path = "crates/skin/plugin", default-features = false }
 neocogi-com-core = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "a1dd65b1a5259c980c2fff6c716a35061bf9da49", version = "0.1.0", default-features = false }
 neocogi-com-macros = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "a1dd65b1a5259c980c2fff6c716a35061bf9da49", version = "0.1.0", default-features = false }
@@ -49,7 +54,6 @@ proc-macro2 = { version = "1", features = ["span-locations"] }
 quote = "1"
 syn = { version = "2", features = ["full", "extra-traits"] }
 neocogi-ui = { path = "crates/ui/api", version = "0.9.0-alpha.0", default-features = false }
-neocogi-assets = { path = "crates/assets", version = "0.9.0-alpha.0", default-features = false }
 neocogi-ui-runtime = { path = "crates/ui/runtime", version = "0.9.0-alpha.0", default-features = false }
 neocogi-demo-assets = { path = "demos/assets", default-features = false }
 neocogi-demo-host = { path = "demos/host", default-features = false }

@@ -6,7 +6,7 @@ feature or file-loading API. Native applications construct `ThemeLoader` with an
 explicit GFX `AssetLoader` and `AssetPublisher`, then pass an explicit original
 base bundle. Skin reads and validates the document while GFX alone bakes referenced fonts and PNGs, copies
 the base resource bundle, validates references, and publishes the revision. Build
-tools call `neocogi_assets::theme::load` or `load_bytes`; the latter reads referenced
+tools call `neocogi_skin_impl::theme::load` or `load_bytes`; the latter reads referenced
 assets through an explicit `AssetSource` implementation. Their offline `LoadedTheme`
 contains a display name and validated `AssetData`, with no native UI skin or resource IDs.
 

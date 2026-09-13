@@ -1,0 +1,13 @@
+[package]
+name = "neocogi-appearance"
+version = "0.9.0-alpha.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Pure typed appearance compilation shared by NeoCogi GFX construction and Skin"
+publish = false
+
+[dependencies]
+neocogi-gfx-contracts.workspace = true
+neocogi-gfx-support.workspace = true

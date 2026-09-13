@@ -1,24 +1,22 @@
 [package]
-name = "neocogi-assets"
+name = "neocogi-gfx-impl"
 version = "0.9.0-alpha.0"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Shared implementation for NeoCogi GFX and skin compilation plugins"
+description = "Private image, atlas, and bundle implementation for the NeoCogi GFX plugin"
 publish = false
 
 [lib]
-# Deployable GFX and skin crates wrap this implementation library independently.
+# The deployable GFX crate wraps this implementation library without another DSO.
 crate-type = ["rlib"]
 
 [features]
 default = []
 gfx = ["dep:png"]
-skin = ["dep:neocogi-skin-contracts"]
 publisher = []
 builder = ["gfx", "dep:fontdue"]
-theme-json = ["skin", "dep:serde", "dep:serde_json"]
 save-to-rust = ["dep:tempfile", "dep:miniz_oxide"]
 
 [dependencies]
@@ -26,11 +24,9 @@ tempfile = { workspace = true, optional = true }
 miniz_oxide = { workspace = true, optional = true, features = ["with-alloc"] }
 neocogi-gfx-contracts.workspace = true
 neocogi-gfx-support.workspace = true
+neocogi-appearance.workspace = true
 neocogi-renderer-contracts.workspace = true
 neocogi-platform-contracts.workspace = true
-neocogi-skin-contracts = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
-serde_json = { workspace = true, optional = true }
 png = { workspace = true, optional = true }
 fontdue = { workspace = true, optional = true }
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }

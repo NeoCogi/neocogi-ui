@@ -13,11 +13,11 @@ crate-type = ["rlib"]
 
 [features]
 default = []
-theme-json = ["neocogi-assets/theme-json"]
+theme-json = ["neocogi-skin-impl/theme-json"]
 dynamic-plugin = []
 
 [dependencies]
-neocogi-assets = { workspace = true, features = ["skin"] }
+neocogi-skin-impl.workspace = true
 neocogi-gfx-contracts.workspace = true
 neocogi-skin-contracts.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }

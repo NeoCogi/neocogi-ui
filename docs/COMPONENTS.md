@@ -40,6 +40,14 @@ embedded resources, and the UI importer. Keeping this code below the UI facade
 prevents a GFX plugin from linking the UI core contract merely to return its own
 resource type.
 
+The private implementation packages follow the same ownership split.
+`neocogi-gfx-impl` contains decoding, rasterization, packing, bundle storage, and
+publication. `neocogi-skin-impl` contains style policy and optional JSON parsing.
+They share only `neocogi-appearance`, whose pure functions compile typed flat
+appearance records for runtime Skin policy and offline default bundles. A change
+to either heavyweight implementation therefore does not invalidate or relink
+the other plugin.
+
 The UI plugin remains one cohesive retained runtime. Nodes, layout, routing,
 window management, menus, and `FileDialog` share tree ownership and commit
 phases, so separating them would add dynamic calls to hot traversals without an

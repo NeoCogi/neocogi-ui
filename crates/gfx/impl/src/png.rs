@@ -230,7 +230,7 @@ mod tests {
         })
         .query()
         .unwrap();
-        let png = include_bytes!("../../../assets/WHITE.png");
+        let png = include_bytes!("../../../../assets/WHITE.png");
         for input in [
             NcCopyFromBufferOffset::new(1, png),
             NcCopyFromBufferOffset::new(0, &[]),

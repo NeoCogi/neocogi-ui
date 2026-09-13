@@ -85,11 +85,12 @@ plugin and does not depend on the UI runtime implementation.
 `crates/skin` owns the `neocogi.skin` appearance and external-theme plugin.
 The GFX contract owns complete portable bundles, so both UI and Skin depend on
 GFX instead of resource construction depending backward on the retained UI.
-Their concrete compiler machinery is shared privately through `crates/assets`;
-portable bundle publication and validation live in non-plugin
-`crates/gfx/support`. Neither support crate publishes a plugin identity. The split keeps PNG,
-font, and atlas services out of skin-only clients, and keeps JSON/schema services
-out of GFX clients. User-defined UI plugins belong outside the platform crates;
+Their concrete compiler machinery lives in separate private GFX and Skin
+implementation crates. Portable bundle publication and validation live in
+non-plugin `crates/gfx/support`, while a small appearance crate contains only
+pure typed appearance compilation. None of these support crates publishes a
+plugin identity. The split keeps PNG, font, and atlas services out of skin-only
+clients, and keeps JSON/schema services out of GFX clients. User-defined UI plugins belong outside the platform crates;
 `examples/ui-extension` demonstrates an
 independently compiled leaf and container. A COM object is not automatically a
 deployment plugin: buttons, containers, windows, menus, and file dialogs remain

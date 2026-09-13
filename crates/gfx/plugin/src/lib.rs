@@ -7,8 +7,8 @@
 #![deny(missing_docs)]
 
 #[cfg(feature = "builder")]
-use neocogi_assets::AssetLoaderObject;
-use neocogi_assets::{AssetPublisherObject, PngDecoderObject};
+use neocogi_gfx_impl::AssetLoaderObject;
+use neocogi_gfx_impl::{AssetPublisherObject, PngDecoderObject};
 use neocogi_com::{ComPtr, NcStatus};
 use neocogi_gfx_contracts::*;
 

@@ -17,7 +17,8 @@ they want those authoring-contract re-exports:
 | `neocogi-gfx` | `builder` | Font rasterization and PNG atlas construction into portable tables. |
 | `neocogi-skin` | none | Live typed metric/palette compilation through the always-available GFX publisher. |
 | `neocogi-skin` | `theme-json` | Strict external JSON and appearance compilation; resource baking uses an explicit GFX loader. |
-| `neocogi-assets` | `save-to-rust` | Build-tool-only atomic source export from validated portable tables. |
+| `neocogi-gfx-impl` | `save-to-rust` | Build-tool-only atomic source export from validated portable tables. |
+| `neocogi-skin-impl` | `builder` | Offline JSON-theme generation through the GFX implementation; never selected by the Skin plugin. |
 | `neocogi-render-plugin` | `glow` / `vulkan` / `wgpu` / `webgl` | Build exactly one renderer plugin identity; WebGL is the browser choice. |
 | Full/basic demos | `embed-assets` | Explicitly embed resource bytes; native defaults read adjacent files. |
 | Full/basic demos | `webgl` | Select browser integration and explicitly enable `embed-assets`. |
@@ -71,7 +72,7 @@ application's normal dependency graph.
 The asset compiler is an optional host build dependency enabled by `embed-assets`. Both storage
 modes use the same recipe and retain the original catalog when switching themes.
 
-For another application, call `neocogi_assets::export::write_rust` from a build tool and
+For another application, call `neocogi_gfx_impl::export::write_rust` from a build tool and
 enable GFX support `compiled-assets` in the consumer (the UI facade forwards its
 compatibility feature). `load_bundle()` returns a fresh
 immutable catalog; `bundle_data()?` provides tables for a compatible revision.

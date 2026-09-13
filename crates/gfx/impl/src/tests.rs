@@ -2,10 +2,6 @@
 use super::*;
 use crate::AssetPublisherObject;
 use neocogi_com::{ComPtr, INcStringAbi, INcStringComPtrExt, NcStatus, com_object};
-#[cfg(feature = "theme-json")]
-use crate::ThemeLoaderObject;
-#[cfg(feature = "theme-json")]
-use neocogi_skin_contracts::*;
 use neocogi_ui::{NativePath, PathEncoding};
 use neocogi_ui_runtime::assets::ImportedAssets;
 use neocogi_platform_contracts::*;
@@ -253,31 +249,6 @@ fn appearance_revision_is_a_validated_resource_preserving_transaction() {
             .unwrap_err(),
         NC_E_INVALID_ARG
     );
-}
-
-/// Actual bundled JSON/PNG/font themes cross the same bulk boundary as direct data.
-#[cfg(feature = "theme-json")]
-#[test]
-fn bundled_json_themes_preserve_original_resources_and_surface_diagnostics() {
-    let base = test_bundle();
-    let imported = ImportedAssets::read(base.as_com_ref(), None).unwrap();
-    let assets: ComPtr<AssetLoaderAbi> = AssetLoaderObject::from_value(AssetLoaderObject::default()).query().unwrap();
-    let publisher: ComPtr<AssetPublisherAbi> = AssetPublisherObject::from_value(AssetPublisherObject::default()).query().unwrap();
-    let loader: ComPtr<ThemeLoaderAbi> = ThemeLoaderObject::from_value(ThemeLoaderObject::new(assets.as_com_ref(), publisher.as_com_ref()))
-        .query()
-        .unwrap();
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    for theme in ["windows-3.11", "windows-95", "mac-os-9"] {
-        let path = NativePath::new(&root.join("themes").join(theme).join("theme.json"));
-        let source = loader.load_theme(path.as_interface(), base.as_com_ref()).unwrap();
-        let loaded = ImportedAssets::read(source.as_com_ref(), Some(&imported)).unwrap();
-        assert_eq!(loaded.bundle().atlas().font_id("body"), imported.original().font_id("body"));
-        assert_ne!(source.as_ptr(), base.as_ptr());
-    }
-    let missing = NativePath::new(&root.join("missing-theme.json"));
-    assert_eq!(loader.load_theme(missing.as_interface(), base.as_com_ref()).unwrap_err(), NC_E_INVALID_ARG);
-    let detail = loader.query::<ISkinDiagnosticsAbi>().unwrap().diagnostic().unwrap().to_string().unwrap();
-    assert!(detail.contains("missing-theme.json"));
 }
 
 /// Constructs one standalone catalog without importing application deployment machinery.

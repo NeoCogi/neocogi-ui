@@ -91,6 +91,10 @@ wrappers. The accepted migration and outstanding validation are recorded in
   compilation retains only the always-available publisher, so embedded GFX omits
   native font and atlas construction while resource work remains a coarse loading
   operation outside every frame.
+- Split the former shared asset implementation package into independent GFX and
+  Skin implementation crates plus a small pure appearance compiler. Cargo no
+  longer unifies decoder/builder and JSON/schema features into one compilation
+  unit or relinks both fat-LTO plugins after an unrelated implementation edit.
 - Compile generated Rust contract descriptions for the underlying platform ABI
   when the `min-size` build uses its fingerprint-distinct custom target.
 - Move portable appearance roles and semantic font/icon roles into

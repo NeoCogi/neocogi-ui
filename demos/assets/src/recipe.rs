@@ -81,5 +81,8 @@ pub fn atlas_config() -> builder::Config {
 
 /// Host tools resolve source paths from the package; native demos resolve the same paths beside their executable.
 fn workspace_path(relative: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(relative)
+    // The recipe is compiled both by its demo facade and by GFX implementation tests. Keep the
+    // shared authored paths stable while accounting for those two explicit repository depths.
+    let parent = if env!("CARGO_PKG_NAME") == "neocogi-gfx-impl" { "../../.." } else { "../.." };
+    Path::new(env!("CARGO_MANIFEST_DIR")).join(parent).join(relative)
 }

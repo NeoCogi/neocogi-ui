@@ -13,7 +13,7 @@ default = []
 # client needs the optional Skin contract for runtime theme activation.
 full-demo = ["neocogi-ui/skin"]
 # Explicit opt-in for self-contained resources, including browser deployments.
-embed-assets = ["neocogi-gfx-support/compiled-assets", "dep:neocogi-assets", "dep:neocogi-gfx-contracts", "dep:neocogi-gfx-support"]
+embed-assets = ["neocogi-gfx-support/compiled-assets", "dep:neocogi-gfx-impl", "dep:neocogi-skin-impl", "dep:neocogi-gfx-contracts", "dep:neocogi-gfx-support"]
 
 [dependencies]
 neocogi-ui = { workspace = true, features = ["gfx"] }
@@ -25,4 +25,5 @@ neocogi-gfx-support = { workspace = true, optional = true }
 [build-dependencies]
 # Resolve the host facade only when the asset generator actually runs.
 neocogi-gfx-support = { workspace = true, optional = true }
-neocogi-assets = { workspace = true, optional = true, features = ["builder", "save-to-rust", "theme-json"] }
+neocogi-gfx-impl = { workspace = true, optional = true, features = ["builder", "save-to-rust"] }
+neocogi-skin-impl = { workspace = true, optional = true, features = ["builder", "theme-json"] }

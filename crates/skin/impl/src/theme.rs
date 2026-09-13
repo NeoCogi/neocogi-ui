@@ -42,8 +42,8 @@ use serde::Deserialize;
 
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
 #[cfg(feature = "builder")]
-use crate::atlas::Builder;
-use crate::style::{AppearanceTables, rgba};
+use neocogi_gfx_impl::atlas::Builder;
+use neocogi_appearance::{AppearanceTables, rgba};
 use neocogi_gfx_contracts::*;
 use neocogi_gfx_contracts::Insets as SliceInsets;
 #[cfg(feature = "builder")]
@@ -247,9 +247,7 @@ impl CompiledTheme {
     /// Transfers complete appearance records to GFX for validation and immutable publication.
     fn publish(self, publisher: ComRef<'_, AssetPublisherAbi>, base: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IAssetBundleAbi>, ThemeLoadError> {
         let Self { metrics, chrome, appearance } = self;
-        appearance
-            .publish(publisher, base, metrics, chrome)
-            .map_err(|status| gfx_failure("appearance revision publication", status))
+        crate::style::publish_appearance(&appearance, publisher, base, metrics, chrome).map_err(|status| gfx_failure("appearance revision publication", status))
     }
 }
 
@@ -388,7 +386,7 @@ impl ThemeDefinition {
     }
 
     /// Strictly parses one standalone source string for schema-focused unit tests.
-    #[cfg(test)]
+    #[cfg(all(test, feature = "builder"))]
     fn parse_for_test(json: &str) -> Result<Self, ThemeLoadError> {
         // A synthetic relative path keeps schema diagnostics and asset anchoring deterministic.
         let path = Path::new("theme.json");
@@ -1470,5 +1468,5 @@ fn flat_patch(border: Color, center: Color) -> AssetPatch {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "builder"))]
 mod tests;
