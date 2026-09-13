@@ -32,7 +32,7 @@ pub(super) fn run<State: AppState>(driver: Driver<State>) -> Result<(), HostErro
     let owner = animation.clone();
     let mut driver = Some(driver);
     *animation.callback.borrow_mut() = Some(Closure::wrap(Box::new(move |milliseconds: f64| {
-        let result = driver.as_ref().expect("active callback owns the application").frame(milliseconds / 1000.0);
+        let result = driver.as_mut().expect("active callback owns the application").frame(milliseconds / 1000.0);
         let result = match result {
             Ok(true) => owner.schedule(),
             Ok(false) => {

@@ -95,7 +95,7 @@ impl Host {
         let driver = Driver {
             host: self,
             events,
-            remaining: std::cell::Cell::new(frame_limit()?),
+            remaining: frame_limit()?,
         };
         #[cfg(target_arch = "wasm32")]
         {
@@ -103,6 +103,7 @@ impl Host {
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
+            let mut driver = driver;
             // Native presentation already applies the backend's pacing policy. An extra sleep
             // caps throughput even when a mailbox swapchain can accept another frame immediately.
             while driver.frame(monotonic_seconds())? {}
@@ -142,11 +143,11 @@ struct Driver<State: AppState> {
     /// Session owns typed handlers and app state, and no producer retains either.
     events: EventSession<State>,
     /// Optional finite run counts successfully rendered frames, including the final frame.
-    remaining: std::cell::Cell<Option<u32>>,
+    remaining: Option<u32>,
 }
 impl<State: AppState> Driver<State> {
     /// Applies every queued host transition before delivering app work and committing the final frame.
-    fn frame(&self, seconds: f64) -> Result<bool, HostError> {
+    fn frame(&mut self, seconds: f64) -> Result<bool, HostError> {
         let host = &self.host;
         loop {
             match host.window.poll(host.input.as_com_ref())? {
@@ -176,8 +177,8 @@ impl<State: AppState> Driver<State> {
                 .unwrap_or_default();
             HostError::Message(format!("frame failed: {status}: {detail}"))
         })?;
-        if let Some(remaining) = self.remaining.get() {
-            self.remaining.set(Some(remaining - 1));
+        if let Some(remaining) = self.remaining {
+            self.remaining = Some(remaining - 1);
             return Ok(remaining > 1);
         }
         Ok(true)

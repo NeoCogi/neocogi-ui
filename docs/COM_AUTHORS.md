@@ -46,6 +46,12 @@ Scoped layout permits a container to measure/place its indexed children. It does
 
 Use `&mut self` for methods that change object state and store that state in ordinary fields. The generated object-wide call gate permits overlapping shared calls and returns `NC_E_BUSY` for conflicting mutable or recursive entry before it creates a Rust reference. Interior mutability is reserved for genuinely shared infrastructure such as event queues and runtime registries; release those short borrows before calling an external widget, container, painter, or application handler. Panics are implementation faults and follow the COM abort policy; they are not converted into recoverable statuses.
 
+The same rule applies outside COM objects. Event-loop drivers and other values
+with one clear owner use `&mut self` and ordinary fields. `Cell` or `RefCell` is
+appropriate only when an interface requires shared observation, ownership is
+genuinely shared, or state must be detached before a reentrant foreign call; the
+field comment must name that constraint.
+
 ## Typed events and application state
 
 `EventSession<State>` is the static application adapter. It owns the concrete

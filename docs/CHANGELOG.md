@@ -54,6 +54,9 @@ wrappers. The accepted migration and outstanding validation are recorded in
   `neocogi.platform`. Platform construction now consumes `IRgbaImage`, allowing
   platform/renderer plugins to omit the UI core contract and its complete widget,
   skin, and asset descriptor surface.
+- Route the browser DOM input adapter through `neocogi.platform` directly as
+  well, so WebGL builds enforce the same no-UI-core renderer dependency checked
+  by native backend builds.
 - Split the demo mesh protocol into `neocogi.demo.render`; the renderer plugin's
   normal dependency graph no longer reimports UI core through the unrelated
   widget-extension demonstration.
