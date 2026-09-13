@@ -80,6 +80,9 @@ wrappers. The accepted migration and outstanding validation are recorded in
 - Keep contract traversal state changes outside debug-only assertions, allowing
   optimized assembly inspection to accept the shared Renderer dependency reached
   through UI, GFX, and Platform without falsely diagnosing a cycle.
+- Deduplicate ABI-identical native contract artifacts emitted under the host and
+  compatible custom `min-size` Cargo target labels. Embedded builds can use host
+  build dependencies without turning one descriptor library into a false conflict.
 - Give Skin explicit typed GFX `AssetLoader` and `AssetPublisher` capabilities and delegate
   bounded font, PNG, and atlas operations to it. Skin no longer statically compiles
   a second copy of GFX's font rasterizer, decoder, packer, bundle reader,
