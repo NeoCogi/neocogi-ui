@@ -1,6 +1,5 @@
 //! Bulk GFX resource validation independent of UI state and resource construction.
 use super::*;
-use std::collections::HashSet;
 use neocogi_com::NC_E_OUT_OF_MEMORY;
 
 impl AssetData {
@@ -81,49 +80,53 @@ impl AssetTables {
 
     /// Checks metadata contents after their storage lengths and dimensions are known to be valid.
     fn validate_contents(&self) -> Result<(), NcStatus> {
-        // Names and glyphs form exact partitions. Preserve duplicates until this check;
-        // silently collecting into maps would discard malformed records.
+        // Names and glyphs form exact partitions. Temporary sorted vectors make duplicate
+        // detection deterministic, avoid randomized hashing, and reuse sorting machinery already
+        // needed by bundle consumers.
         let mut next_name = 0;
         let mut next_glyph = 0;
-        let mut font_names = HashSet::new();
+        let mut font_names = Vec::new();
+        font_names.try_reserve_exact(self.fonts.len()).map_err(|_| NC_E_OUT_OF_MEMORY)?;
         for font in self.fonts.iter() {
             let name = self.partitioned_name(font.name, &mut next_name)?;
-            if !font_names.insert(name)
-                || font.glyphs.first != next_glyph
-                || font.line_size <= 0
-                || font.font_size <= 0
-                || font.baseline < 0
-                || font.baseline > font.line_size
-            {
+            font_names.push(name);
+            if font.glyphs.first != next_glyph || font.line_size <= 0 || font.font_size <= 0 || font.baseline < 0 || font.baseline > font.line_size {
                 return Err(NC_E_INVALID_ARG);
             }
             next_glyph = next_glyph.checked_add(font.glyphs.count).ok_or(NC_E_INVALID_ARG)?;
             let entries = self.glyphs.get(font.glyphs.first as usize..next_glyph as usize).ok_or(NC_E_INVALID_ARG)?;
-            let mut scalars = HashSet::new();
+            let mut scalars = Vec::new();
+            scalars.try_reserve_exact(entries.len()).map_err(|_| NC_E_OUT_OF_MEMORY)?;
             for glyph in entries {
-                if char::from_u32(glyph.scalar).is_none() || !scalars.insert(glyph.scalar) {
+                if char::from_u32(glyph.scalar).is_none() {
                     return Err(NC_E_INVALID_ARG);
                 }
+                scalars.push(glyph.scalar);
                 self.validate_rect(glyph.rect, true)?;
             }
-            if !scalars.contains(&u32::from('_')) {
+            scalars.sort_unstable();
+            if has_adjacent_duplicates(&scalars) || scalars.binary_search(&u32::from('_')).is_err() {
                 return Err(NC_E_INVALID_ARG);
             }
         }
-        if next_glyph as usize != self.glyphs.len() || !font_names.contains("body") {
+        font_names.sort_unstable();
+        if next_glyph as usize != self.glyphs.len() || has_adjacent_duplicates(&font_names) || font_names.binary_search(&"body").is_err() {
             return Err(NC_E_INVALID_ARG);
         }
-        let mut icon_names = HashSet::new();
+        let mut icon_names = Vec::new();
+        icon_names.try_reserve_exact(self.icons.len()).map_err(|_| NC_E_OUT_OF_MEMORY)?;
         for icon in self.icons.iter() {
             let name = self.partitioned_name(icon.name, &mut next_name)?;
-            if !icon_names.insert(name) {
-                return Err(NC_E_INVALID_ARG);
-            }
+            icon_names.push(name);
             self.validate_rect(icon.rect, false)?;
+        }
+        icon_names.sort_unstable();
+        if has_adjacent_duplicates(&icon_names) {
+            return Err(NC_E_INVALID_ARG);
         }
         let required_icon_names = IconRole::ALL.map(|role| role.canonical_name().expect("IconRole::ALL contains only declared IDL values"));
         for name in core::iter::once("white").chain(required_icon_names) {
-            if !icon_names.contains(name) {
+            if icon_names.binary_search(&name).is_err() {
                 return Err(NC_E_INVALID_ARG);
             }
         }
@@ -263,6 +266,11 @@ impl AssetTables {
         }
         Ok(())
     }
+}
+
+/// Reports duplicate neighbors after a caller establishes deterministic sorted order.
+fn has_adjacent_duplicates<T: PartialEq>(values: &[T]) -> bool {
+    values.windows(2).any(|pair| pair[0] == pair[1])
 }
 
 /// Rejects negative scalar layout values before a producer creates a derived style.
