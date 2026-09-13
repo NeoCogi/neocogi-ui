@@ -77,6 +77,9 @@ wrappers. The accepted migration and outstanding validation are recorded in
   packages retain it for external-theme coverage. Demo asset facade features
   likewise include the Skin contract only for the full theme-selection surface,
   and assemblies without Skin no longer copy unused theme directories.
+- Keep contract traversal state changes outside debug-only assertions, allowing
+  optimized assembly inspection to accept the shared Renderer dependency reached
+  through UI, GFX, and Platform without falsely diagnosing a cycle.
 - Compile generated Rust contract descriptions for the underlying platform ABI
   when the `min-size` build uses its fingerprint-distinct custom target.
 - Move portable appearance roles and semantic font/icon roles into
