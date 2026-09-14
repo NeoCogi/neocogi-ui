@@ -259,36 +259,18 @@ impl DisplayList {
         self.ops.push(DrawOp { clip, kind });
     }
 
-    /// Returns fill rectangle, clip, and color snapshots for retained frame-geometry assertions.
+    /// Returns semantic patch destinations, clips, and payloads for UI recording assertions.
     #[cfg(test)]
-    pub(crate) fn debug_fill_rects(&self) -> Vec<(Recti, Recti, Color)> {
-        // Expand patches through production geometry so frame tests continue to assert physical
-        // colored rectangles rather than depending on the display list's compact operation count.
-        let mut rectangles = Vec::new();
-        for operation in &self.ops {
-            let DrawKind::NinePatch { rect, patch } = operation.kind else {
-                continue;
-            };
-            let crate::render::NinePatchContent::Flat { cells } = patch.content else {
-                continue;
-            };
-            let geometry = patch.geometry(rect);
-            let cells = cells.rows();
-            for row in 0..3 {
-                for column in 0..3 {
-                    if row == 1 && column == 1 && !patch.center_visible {
-                        continue;
-                    }
-                    let crate::render::NinePatchCell::Color { color } = cells[row][column] else {
-                        continue;
-                    };
-                    if geometry[row][column].width > 0 && geometry[row][column].height > 0 {
-                        rectangles.push((geometry[row][column], operation.clip, color));
-                    }
-                }
-            }
-        }
-        rectangles
+    pub(crate) fn debug_nine_patches(&self) -> Vec<(Recti, Recti, NinePatch)> {
+        // Tests may inspect what UI records, but they must not reproduce GFX expansion. Final cell
+        // geometry is asserted through production compositor-stream tests at the owning boundary.
+        self.ops
+            .iter()
+            .filter_map(|operation| match operation.kind {
+                DrawKind::NinePatch { rect, patch } => Some((rect, operation.clip, patch)),
+                _ => None,
+            })
+            .collect()
     }
 
     /// Returns the number of opaque operations for performance assertions.

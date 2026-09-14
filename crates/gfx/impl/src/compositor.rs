@@ -24,8 +24,10 @@ use std::{
 struct Resources {
     /// Namespace identity rejects unrelated revisions even when their local table slots coincide.
     catalog: ComPtr<IAssetCatalogAbi>,
-    /// Validated metadata used for font, icon, white-tile, and UV lookup.
+    /// Validated metadata used for font, icon, and UV lookup.
     tables: AssetTables,
+    /// Cached authenticated white tile used as the source for flat patch cells.
+    white: Rect,
     /// Narrow image projection supplied to the renderer for its already prepared atlas.
     image: ComPtr<IRgbaImageAbi>,
 }
@@ -45,9 +47,13 @@ impl Resources {
                 .ok_or(NC_E_INVALID_ARG)?
                 .sort_unstable_by_key(|glyph| glyph.scalar);
         }
+        // Validation already proved this named tile exists and is opaque. Cache its rectangle once
+        // per installed immutable revision instead of scanning icon names for every flat patch.
+        let white = tables.white_rect();
         Ok(Self {
             catalog: source.catalog()?,
             tables,
+            white,
             image: source.add_ref().query()?,
         })
     }
@@ -61,6 +67,9 @@ struct FrameState {
     /// Packed clear color forwarded unchanged to the renderer.
     clear: u32,
 }
+
+/// Maximum triangle vertices staged by the nine cells of one patch.
+const MAX_NINE_PATCH_VERTICES: usize = 9 * 6;
 
 /// Owned painter-order record retained until the synchronous renderer call finishes.
 enum Batch {
@@ -105,6 +114,10 @@ impl Batch {
 #[derive(Default)]
 struct Storage {
     /// Nonzero only while one renderer invocation is authorized to read this storage.
+    ///
+    /// This is the sole scalar `Cell` in composition: the independently retained `IRenderStream`
+    /// receives shared `&self` calls while the compositor must revoke that token immediately after
+    /// a foreign renderer returns. All compositor construction and mutation otherwise uses `&mut`.
     active: Cell<u64>,
     /// Final geometry copied in bulk by the selected renderer.
     vertices: RefCell<Vec<RenderVertex>>,
@@ -343,12 +356,16 @@ impl GfxCompositorObject {
         if !can_merge && batches.len() >= MAX_RENDER_BATCHES as usize {
             return Err(NC_E_OUT_OF_RANGE);
         }
+        // Reserve both independently fallible destinations before changing either one. A failed
+        // patch, text run, or primitive therefore cannot leave vertices without a matching batch.
+        if !can_merge {
+            batches.try_reserve(1).map_err(|_| NC_E_OUT_OF_MEMORY)?;
+        }
         output.try_reserve(vertices.len()).map_err(|_| NC_E_OUT_OF_MEMORY)?;
         output.extend_from_slice(vertices);
         if let Some(Batch::Atlas { count: existing, .. }) = batches.last_mut() {
             *existing = existing.checked_add(count).ok_or(NC_E_OUT_OF_RANGE)?;
         } else {
-            batches.try_reserve(1).map_err(|_| NC_E_OUT_OF_MEMORY)?;
             batches.push(Batch::Atlas { first, count });
         }
         Ok(())
@@ -404,20 +421,16 @@ impl GfxCompositorObject {
         Ok(())
     }
 
-    /// Appends one clipped atlas rectangle after validating its source against current resources.
-    fn append_atlas_rect(&mut self, clip: Rect, destination: Rect, source: Rect, rgba: u32) -> Result<(), NcStatus> {
+    /// Produces two clipped triangles after validating one private atlas-cell primitive.
+    fn atlas_rect_triangles(&self, destination: Rect, source: Rect, rgba: u32, clip: Rect) -> Result<Option<[RenderVertex; 6]>, NcStatus> {
         if destination.width < 0 || destination.height < 0 || !contains_nonnegative(atlas_bounds(&self.resources.tables), source) {
             return Err(NC_E_INVALID_ARG);
         }
-        // A nine-patch whose opposing source insets meet has an empty middle row or column. That
-        // cell is valid structural geometry but contributes no pixels, just like an empty clipped
-        // destination or transparent tint. Rejecting it would make the whole theme unrenderable.
+        // Empty structural cells and transparent colors contribute no pixels. Nine-patch expansion
+        // normally removes them first, while text and defensive direct helpers share this check.
         if destination.width == 0 || destination.height == 0 || source.width == 0 || source.height == 0 || rgba.to_le_bytes()[3] == 0 {
-            return Ok(());
+            return Ok(None);
         }
-        let Some(clip) = self.effective_clip(clip)? else {
-            return Ok(());
-        };
         let Some(vertices) = clipped_quad(
             destination,
             source.x as f32 / self.resources.tables.size.width as f32,
@@ -427,9 +440,44 @@ impl GfxCompositorObject {
             rgba,
             clip,
         ) else {
+            return Ok(None);
+        };
+        Ok(Some([vertices[0], vertices[1], vertices[2], vertices[0], vertices[2], vertices[3]]))
+    }
+
+    /// Clips and appends one private atlas rectangle used by text and icon expansion.
+    fn append_atlas_rect(&mut self, clip: Rect, destination: Rect, source: Rect, rgba: u32) -> Result<(), NcStatus> {
+        let Some(clip) = self.effective_clip(clip)? else {
             return Ok(());
         };
-        self.append_atlas(&[vertices[0], vertices[1], vertices[2], vertices[0], vertices[2], vertices[3]])
+        let Some(vertices) = self.atlas_rect_triangles(destination, source, rgba, clip)? else {
+            return Ok(());
+        };
+        self.append_atlas(&vertices)
+    }
+
+    /// Expands, clips, and commits one semantic patch as a single atlas-batch mutation.
+    fn append_nine_patch(&mut self, clip: Rect, destination: Rect, draw: NinePatchDraw) -> Result<(), NcStatus> {
+        // Validate the complete operation and resolve its current bundle resources before touching
+        // frame output. Invalid tags, booleans, insets, or image slots cannot leave partial cells.
+        let expanded = crate::nine_patch::expand(destination, draw, self.resources.white, self.resources.tables.icons.as_ref())?;
+        let Some(clip) = self.effective_clip(clip)? else {
+            return Ok(());
+        };
+        // A fixed stack buffer stages the whole semantic operation without another allocation or
+        // helper abstraction. Only its complete six-vertex cell prefix becomes frame-visible.
+        let mut vertices = [RenderVertex::default(); MAX_NINE_PATCH_VERTICES];
+        let mut vertex_count = 0;
+        for cell in expanded.visible_cells() {
+            if let Some(cell_vertices) = self.atlas_rect_triangles(cell.destination, cell.source, cell.rgba, clip)? {
+                let next_count = vertex_count + cell_vertices.len();
+                vertices[vertex_count..next_count].copy_from_slice(&cell_vertices);
+                vertex_count = next_count;
+            }
+        }
+        // One append enforces vertex and batch limits for the complete patch and lets adjacent
+        // atlas operations coalesce without exposing individual cells through the ABI.
+        self.append_atlas(&vertices[..vertex_count])
     }
 
     /// Finds one glyph in the sorted private partition, falling back to underscore when absent.
@@ -526,10 +574,10 @@ impl GfxCompositor for GfxCompositorObject {
         self.append_clipped_triangles(clip, vertices.as_slice())
     }
 
-    /// Projects and clips one source rectangle from the current primary atlas.
-    fn atlas_rect(&mut self, clip: Rect, destination: Rect, source: Rect, rgba: u32) -> Result<(), NcStatus> {
+    /// Resolves and appends one complete typed patch through current bundle resources.
+    fn nine_patch(&mut self, clip: Rect, destination: Rect, draw: NinePatchDraw) -> Result<(), NcStatus> {
         self.active_frame()?;
-        self.append_atlas_rect(clip, destination, source, rgba)
+        self.append_nine_patch(clip, destination, draw)
     }
 
     /// Expands UTF-8 with bundle-local metrics, CRLF normalization, and underscore fallback.

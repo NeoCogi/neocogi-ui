@@ -33,7 +33,7 @@
 //! therefore describe a background with nine typed cells, the display list can retain that exact
 //! description, and the renderer can expand it without consulting a widget or theme registry.
 
-use crate::{Color, IconId, Recti};
+use crate::{Color, IconId};
 
 /// Shared concrete inset record used by asset compilation, layout and painting.
 pub use neocogi_ui_core_contracts::Insets as SliceInsets;
@@ -60,13 +60,6 @@ impl NinePatchCell {
         // Canonicalizing transparent colors here makes visibility checks and renderer execution
         // agree without repeatedly inspecting alpha in every patch consumer.
         if color.a == 0 { Self::Empty } else { Self::Color { color } }
-    }
-
-    /// Reports whether this cell can contribute any visible pixels.
-    pub(crate) const fn is_visible(self) -> bool {
-        // Empty is the only non-rendering variant. Future image cells can extend this exhaustive
-        // match with their own explicit alpha or resource policy.
-        matches!(self, Self::Color { .. })
     }
 }
 
@@ -187,54 +180,13 @@ impl NinePatchCells {
             bottom_right: border,
         }
     }
-
-    /// Returns rows in geometric order without allocating or exposing positional storage publicly.
-    pub(crate) const fn rows(self) -> [[NinePatchCell; 3]; 3] {
-        // Renderer and diagnostic expansion consume the same ordering, making named construction
-        // authoritative while avoiding nine repeated matches at each call site.
-        [
-            [self.top_left, self.top, self.top_right],
-            [self.left, self.center, self.right],
-            [self.bottom_left, self.bottom, self.bottom_right],
-        ]
-    }
-
-    /// Reports whether at least one cell can produce visible output.
-    pub(crate) const fn has_visible_cell(self) -> bool {
-        // Spell out the fixed cells so the result stays allocation-free and a future field addition
-        // cannot accidentally be omitted from an iterator assembled elsewhere.
-        self.top_left.is_visible()
-            || self.top.is_visible()
-            || self.top_right.is_visible()
-            || self.left.is_visible()
-            || self.center.is_visible()
-            || self.right.is_visible()
-            || self.bottom_left.is_visible()
-            || self.bottom.is_visible()
-            || self.bottom_right.is_visible()
-    }
-
-    /// Reports whether one of the eight cells surrounding the center can produce pixels.
-    pub(crate) const fn has_visible_border(self) -> bool {
-        // Border-only window overlays must not be recorded when a flat patch contains only a center
-        // fill. Keeping this fixed expression adjacent to `has_visible_cell` makes the omission of
-        // the center deliberate and reviewable.
-        self.top_left.is_visible()
-            || self.top.is_visible()
-            || self.top_right.is_visible()
-            || self.left.is_visible()
-            || self.right.is_visible()
-            || self.bottom_left.is_visible()
-            || self.bottom.is_visible()
-            || self.bottom_right.is_visible()
-    }
 }
 
 /// Backend-neutral visual patch divided into three rows and three columns.
 ///
 /// The outer columns and rows retain the requested inset thickness while the center consumes the
-/// remaining destination. If a destination is too small, opposing insets are reduced
-/// proportionally so generated cells never overlap or escape the supplied rectangle.
+/// remaining destination. GFX owns proportional reduction when a destination is too small, so the
+/// UI value contains no derived rectangles or renderer-facing coordinates.
 #[derive(Copy, Clone)]
 pub struct NinePatch {
     /// Destination-space sizes of the outer columns and rows.
@@ -248,8 +200,8 @@ pub struct NinePatch {
 impl NinePatch {
     /// Creates a flat patch from explicit destination insets and named cells.
     pub const fn new(insets: SliceInsets, cells: NinePatchCells) -> Self {
-        // Preserve exact author input. All geometry consumers normalize through [`Self::geometry`]
-        // so skin construction does not need a second validation representation.
+        // Preserve exact author input. The GFX boundary normalizes it once before the compositor
+        // applies its sole partitioning policy, avoiding a second UI-side geometry representation.
         Self {
             insets,
             content: NinePatchContent::Flat { cells },
@@ -316,111 +268,15 @@ impl NinePatch {
         self
     }
 
-    /// Reports whether recording this patch can produce visible renderer work.
-    pub(crate) fn is_visible(self) -> bool {
-        // Destination area is checked by Painter because it owns coordinates. Flat patches inspect
-        // their cells, while an image needs positive source geometry and non-zero modulation alpha.
-        match self.content {
-            NinePatchContent::Flat { cells } => {
-                if self.center_visible {
-                    cells.has_visible_cell()
-                } else {
-                    cells.has_visible_border()
-                }
-            }
-            NinePatchContent::Image { image } => {
-                // A border-only image also requires at least one positive destination inset. With
-                // four zero insets all eight border destinations collapse to empty rectangles.
-                let has_destination = self.center_visible || self.insets.maximum_component() > 0;
-                has_destination && image.tint.a != 0
-            }
-        }
-    }
-
-    /// Returns the image payload when this patch references atlas-backed artwork.
-    pub(crate) const fn image_content(self) -> Option<NinePatchImage> {
-        // The exhaustive match gives renderer preflight a typed ownership query without inspecting
-        // private enum layout or maintaining a parallel list of theme atlas regions.
+    /// Returns the bundle-local image capability referenced by this patch, when present.
+    pub(crate) const fn referenced_image(self) -> Option<NinePatchImage> {
+        // Skin installation needs only the typed capability for atlas-membership validation. It
+        // does not inspect cells, source rectangles, or any geometry owned by GFX expansion.
         match self.content {
             NinePatchContent::Flat { .. } => None,
             NinePatchContent::Image { image } => Some(image),
         }
     }
-
-    /// Resolves the nine destination rectangles for one authoritative outer allocation.
-    pub(crate) fn geometry(self, outer: Recti) -> [[Recti; 3]; 3] {
-        // Resolve each axis independently. The returned partitions exactly consume the positive
-        // destination extent and remain zero-sized for a non-positive axis.
-        geometry_with_insets(outer, self.insets)
-    }
-}
-
-/// Resolves one rectangle into nine exact cells using the supplied slice insets.
-pub(crate) fn geometry_with_insets(outer: Recti, insets: SliceInsets) -> [[Recti; 3]; 3] {
-    // Source and destination grids share this partition policy. Source documents are validated
-    // to fit, while tiny destinations may proportionally collapse their fixed outer cells.
-    let insets = insets.normalized();
-    let widths = partition_axis(outer.width, insets.left, insets.right);
-    let heights = partition_axis(outer.height, insets.top, insets.bottom);
-    let xs = partition_origins(outer.x, widths);
-    let ys = partition_origins(outer.y, heights);
-
-    // Construct the fixed grid explicitly so callers cannot confuse row and column ordering.
-    [
-        [
-            Recti::new(xs[0], ys[0], widths[0], heights[0]),
-            Recti::new(xs[1], ys[0], widths[1], heights[0]),
-            Recti::new(xs[2], ys[0], widths[2], heights[0]),
-        ],
-        [
-            Recti::new(xs[0], ys[1], widths[0], heights[1]),
-            Recti::new(xs[1], ys[1], widths[1], heights[1]),
-            Recti::new(xs[2], ys[1], widths[2], heights[1]),
-        ],
-        [
-            Recti::new(xs[0], ys[2], widths[0], heights[2]),
-            Recti::new(xs[1], ys[2], widths[1], heights[2]),
-            Recti::new(xs[2], ys[2], widths[2], heights[2]),
-        ],
-    ]
-}
-
-/// Divides one non-negative destination extent into leading, center, and trailing lengths.
-fn partition_axis(extent: i32, leading: i32, trailing: i32) -> [i32; 3] {
-    // Non-positive destinations have no drawable cells. Keeping their partitions at zero avoids
-    // manufacturing positive geometry from an invalid outer rectangle.
-    let extent = extent.max(0);
-    if extent == 0 {
-        return [0, 0, 0];
-    }
-
-    let leading = leading.max(0);
-    let trailing = trailing.max(0);
-    let requested = leading.saturating_add(trailing);
-    if requested <= extent {
-        // The requested fixed cells fit exactly, leaving all remaining pixels to the center.
-        return [leading, extent - requested, trailing];
-    }
-    if requested == 0 {
-        // This branch is defensive because a positive extent cannot be smaller than a zero request.
-        return [0, extent, 0];
-    }
-
-    // Scale both fixed sides into the available extent using wide arithmetic. Rounding the leading
-    // side to nearest and assigning the remainder to the trailing side guarantees exact coverage
-    // without overlap even when only one pixel survives.
-    let scaled_leading = ((i64::from(extent) * i64::from(leading) + i64::from(requested) / 2) / i64::from(requested)) as i32;
-    let scaled_leading = scaled_leading.clamp(0, extent);
-    [scaled_leading, 0, extent - scaled_leading]
-}
-
-/// Derives the three axis origins from an initial coordinate and exact partition lengths.
-fn partition_origins(origin: i32, lengths: [i32; 3]) -> [i32; 3] {
-    // Saturating addition matches the rest of the retained geometry layer. Extreme application
-    // coordinates remain deterministic and clipping later discards any unreachable pixels.
-    let center = origin.saturating_add(lengths[0]);
-    let trailing = center.saturating_add(lengths[1]);
-    [origin, center, trailing]
 }
 
 #[cfg(test)]
@@ -428,53 +284,25 @@ mod tests {
     use super::*;
     use crate::color;
 
-    /// Verifies ordinary insets preserve fixed outer cells and assign the remainder to the center.
+    /// Verifies transparent color construction canonicalizes to the explicit empty variant.
     #[test]
-    fn patch_geometry_partitions_a_regular_destination() {
-        let patch = NinePatch::framed(SliceInsets::new(2, 3, 4, 5), color(1, 2, 3, 255), None);
-        let cells = patch.geometry(Recti::new(10, 20, 20, 18));
-
-        assert_eq!(rect_tuple(cells[0][0]), (10, 20, 2, 3));
-        assert_eq!(rect_tuple(cells[0][1]), (12, 20, 14, 3));
-        assert_eq!(rect_tuple(cells[1][1]), (12, 23, 14, 10));
-        assert_eq!(rect_tuple(cells[2][2]), (26, 33, 4, 5));
-    }
-
-    /// Verifies oversized opposing insets shrink without overlap and still cover the destination.
-    #[test]
-    fn patch_geometry_scales_insets_for_a_tiny_destination() {
-        let patch = NinePatch::framed(SliceInsets::new(4, 3, 6, 7), color(1, 2, 3, 255), None);
-        let cells = patch.geometry(Recti::new(5, 6, 3, 2));
-
-        assert_eq!(row_width(cells[0]), 3);
-        assert_eq!(row_width(cells[1]), 3);
-        assert_eq!(row_width(cells[2]), 3);
-        assert_eq!(column_height(&cells, 0), 2);
-        assert_eq!(column_height(&cells, 1), 2);
-        assert_eq!(column_height(&cells, 2), 2);
-        assert_eq!(cells[1][1].width, 0);
-        assert_eq!(cells[1][1].height, 0);
-    }
-
-    /// Verifies transparent color construction canonicalizes to a non-rendering cell.
-    #[test]
-    fn transparent_cells_are_not_visible() {
+    fn transparent_cells_are_canonicalized_before_recording() {
         let transparent = NinePatch::solid(color(1, 2, 3, 0));
         let opaque = NinePatch::solid(color(1, 2, 3, 1));
 
-        assert!(!transparent.is_visible());
-        assert!(opaque.is_visible());
+        assert!(matches!(transparent.content, NinePatchContent::Flat { cells } if matches!(cells.center, NinePatchCell::Empty)));
+        assert!(matches!(opaque.content, NinePatchContent::Flat { cells } if matches!(cells.center, NinePatchCell::Color { .. })));
     }
 
-    /// Verifies border-only overlays omit a visible center without losing their edge cells.
+    /// Verifies border-only values retain their typed edge cells and explicit center policy.
     #[test]
-    fn border_only_patch_visibility_ignores_the_center_cell() {
+    fn border_only_patch_retains_edges_and_hides_center() {
         let center_only = NinePatch::solid(color(1, 2, 3, 255)).without_center();
         let framed = NinePatch::framed(SliceInsets::uniform(1), color(4, 5, 6, 255), Some(color(7, 8, 9, 255))).without_center();
 
-        assert!(!center_only.is_visible());
-        assert!(framed.is_visible());
+        assert!(!center_only.center_visible);
         assert!(!framed.center_visible);
+        assert!(matches!(framed.content, NinePatchContent::Flat { cells } if matches!(cells.top, NinePatchCell::Color { .. })));
     }
 
     /// Verifies replacing the flat center never destroys a complete image-backed patch.
@@ -485,31 +313,10 @@ mod tests {
         let image = NinePatchImage::new(icon, SliceInsets::uniform(2), color(255, 255, 255, 255));
         let patch = NinePatch::image(SliceInsets::uniform(3), image).with_center(Some(color(1, 2, 3, 255)));
 
-        let Some(resolved) = patch.image_content() else {
-            panic!("image content was replaced by a flat center");
+        let NinePatchContent::Image { image: resolved } = patch.content else {
+            panic!("image content was replaced by flat cells");
         };
         assert_eq!(resolved.icon, icon);
         assert_eq!(resolved.source_insets.left, 2);
-    }
-
-    /// Converts an external rectangle into an equality-friendly tuple for focused assertions.
-    fn rect_tuple(rect: Recti) -> (i32, i32, i32, i32) {
-        // rs-math3d deliberately does not require structural equality for every generic rectangle.
-        (rect.x, rect.y, rect.width, rect.height)
-    }
-
-    /// Sums the widths of one resolved patch row.
-    fn row_width(row: [Recti; 3]) -> i32 {
-        // NinePatch geometry guarantees non-negative lengths, so saturation is only defensive here.
-        row[0].width.saturating_add(row[1].width).saturating_add(row[2].width)
-    }
-
-    /// Sums the heights of one resolved patch column.
-    fn column_height(cells: &[[Recti; 3]; 3], column: usize) -> i32 {
-        // The test supplies a fixed valid column index corresponding to the three patch columns.
-        cells[0][column]
-            .height
-            .saturating_add(cells[1][column].height)
-            .saturating_add(cells[2][column].height)
     }
 }

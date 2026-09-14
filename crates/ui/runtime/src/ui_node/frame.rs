@@ -243,7 +243,7 @@ mod tests {
     }
 
     #[test]
-    fn internal_frame_records_disjoint_inside_border_and_fill() {
+    fn internal_frame_records_one_semantic_border_and_fill_patch() {
         let outer = Recti::new(10, 20, 8, 7);
         let viewport = Recti::new(0, 0, 100, 100);
         let border = color(1, 2, 3, 255);
@@ -254,34 +254,29 @@ mod tests {
         let content = paint_internal_frame(&mut painter, outer, NinePatch::framed(SliceInsets::uniform(1), border, Some(fill)));
         assert_eq!(content.map(rect_tuple), Some((11, 21, 6, 5)));
 
-        let recorded = list.debug_fill_rects();
-        assert_eq!(recorded.len(), 9);
-        assert_eq!(
-            recorded.iter().map(|(rect, _, _)| rect_tuple(*rect)).collect::<Vec<_>>(),
-            vec![
-                (10, 20, 1, 1),
-                (11, 20, 6, 1),
-                (17, 20, 1, 1),
-                (10, 21, 1, 5),
-                (11, 21, 6, 5),
-                (17, 21, 1, 5),
-                (10, 26, 1, 1),
-                (11, 26, 6, 1),
-                (17, 26, 1, 1),
-            ]
-        );
-        assert!(
-            recorded
-                .iter()
-                .enumerate()
-                .filter(|(index, _)| *index != 4)
-                .all(|(_, (_, _, color))| color_tuple(*color) == color_tuple(border))
-        );
-        assert_eq!(color_tuple(recorded[4].2), color_tuple(fill));
+        let recorded = list.debug_nine_patches();
+        assert_eq!(recorded.len(), 1);
+        let (destination, clip, patch) = recorded[0];
+        assert_eq!(rect_tuple(destination), rect_tuple(outer));
+        assert_eq!(rect_tuple(clip), rect_tuple(outer));
+        assert_eq!(inset_tuple(patch.insets), (1, 1, 1, 1));
+        assert!(patch.center_visible);
+        let crate::NinePatchContent::Flat { cells } = patch.content else {
+            panic!("an internal flat frame must retain flat patch content");
+        };
+        assert_eq!(cell_color(cells.top_left).map(color_tuple), Some(color_tuple(border)));
+        assert_eq!(cell_color(cells.top).map(color_tuple), Some(color_tuple(border)));
+        assert_eq!(cell_color(cells.top_right).map(color_tuple), Some(color_tuple(border)));
+        assert_eq!(cell_color(cells.left).map(color_tuple), Some(color_tuple(border)));
+        assert_eq!(cell_color(cells.center).map(color_tuple), Some(color_tuple(fill)));
+        assert_eq!(cell_color(cells.right).map(color_tuple), Some(color_tuple(border)));
+        assert_eq!(cell_color(cells.bottom_left).map(color_tuple), Some(color_tuple(border)));
+        assert_eq!(cell_color(cells.bottom).map(color_tuple), Some(color_tuple(border)));
+        assert_eq!(cell_color(cells.bottom_right).map(color_tuple), Some(color_tuple(border)));
     }
 
     #[test]
-    fn tiny_internal_frame_records_border_once_without_fill() {
+    fn tiny_internal_frame_retains_one_patch_while_layout_has_no_content() {
         let outer = Recti::new(3, 4, 2, 9);
         let viewport = Recti::new(0, 0, 100, 100);
         let border = color(7, 8, 9, 255);
@@ -296,13 +291,20 @@ mod tests {
             )
             .is_none()
         );
-        let recorded = list.debug_fill_rects();
-        assert_eq!(recorded.len(), 6);
-        assert!(recorded.iter().all(|(_, _, color)| color_tuple(*color) == color_tuple(border)));
+        let recorded = list.debug_nine_patches();
+        assert_eq!(recorded.len(), 1);
+        let (destination, _, patch) = recorded[0];
+        assert_eq!(rect_tuple(destination), rect_tuple(outer));
+        assert_eq!(inset_tuple(patch.insets), (1, 1, 1, 1));
+        let crate::NinePatchContent::Flat { cells } = patch.content else {
+            panic!("a tiny internal frame must remain a semantic flat patch");
+        };
+        assert_eq!(cell_color(cells.top).map(color_tuple), Some(color_tuple(border)));
+        assert_eq!(cell_color(cells.center).map(color_tuple), Some((10, 11, 12, 255)));
     }
 
     #[test]
-    fn transparent_internal_border_insets_without_recording_border_pixels() {
+    fn transparent_internal_border_retains_insets_and_explicit_empty_cells() {
         let outer = Recti::new(5, 6, 9, 8);
         let viewport = Recti::new(0, 0, 100, 100);
         let fill = color(20, 30, 40, 255);
@@ -311,16 +313,42 @@ mod tests {
 
         let content = paint_internal_frame(&mut painter, outer, NinePatch::framed(SliceInsets::uniform(2), color(0, 0, 0, 0), Some(fill)));
         assert_eq!(content.map(rect_tuple), Some((7, 8, 5, 4)));
-        let recorded = list.debug_fill_rects();
+        let recorded = list.debug_nine_patches();
         assert_eq!(recorded.len(), 1);
-        assert_eq!(rect_tuple(recorded[0].0), (7, 8, 5, 4));
+        let (destination, _, patch) = recorded[0];
+        assert_eq!(rect_tuple(destination), rect_tuple(outer));
+        assert_eq!(inset_tuple(patch.insets), (2, 2, 2, 2));
+        let crate::NinePatchContent::Flat { cells } = patch.content else {
+            panic!("a transparent internal border must remain a semantic flat patch");
+        };
+        assert!(matches!(cells.top_left, crate::NinePatchCell::Empty));
+        assert_eq!(cell_color(cells.center).map(color_tuple), Some(color_tuple(fill)));
     }
 
+    /// Converts a rectangle into components supported by equality assertions.
     fn rect_tuple(rect: Recti) -> (i32, i32, i32, i32) {
+        // The external math type intentionally does not define structural equality.
         (rect.x, rect.y, rect.width, rect.height)
     }
 
+    /// Converts a color into components supported by equality assertions.
     fn color_tuple(color: Color) -> (u8, u8, u8, u8) {
+        // Component comparison makes failures report the complete expected channel sequence.
         (color.r, color.g, color.b, color.a)
+    }
+
+    /// Converts semantic insets into components supported by equality assertions.
+    fn inset_tuple(insets: SliceInsets) -> (i32, i32, i32, i32) {
+        // Keeping this assertion at the UI boundary verifies no destination slicing happened here.
+        (insets.left, insets.top, insets.right, insets.bottom)
+    }
+
+    /// Returns the concrete color of a visible flat patch cell.
+    fn cell_color(cell: crate::NinePatchCell) -> Option<Color> {
+        // Empty cells map to absence so assertions can distinguish structural insets from pixels.
+        match cell {
+            crate::NinePatchCell::Empty => None,
+            crate::NinePatchCell::Color { color } => Some(color),
+        }
     }
 }

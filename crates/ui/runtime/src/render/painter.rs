@@ -158,9 +158,9 @@ impl<'a> Painter<'a> {
 
     /// Records one backend-neutral three-by-three patch.
     pub fn nine_patch(&mut self, rect: Recti, patch: NinePatch) {
-        // Visibility and intersection are resolved before recording so an empty styled patch
-        // consumes neither display-list storage nor renderer traversal time.
-        if !rect.has_positive_area() || !patch.is_visible() {
+        // Painter owns only local-to-screen translation and coarse clip rejection. Cell visibility,
+        // source slicing, and final geometry are deliberately deferred to the typed GFX operation.
+        if !rect.has_positive_area() {
             return;
         }
         let screen_rect = self.screen_rect(rect);
@@ -416,7 +416,18 @@ mod tests {
         }
         assert_eq!(list.ops.len(), 1);
         assert!(matches!(list.ops[0].kind, DrawKind::NinePatch { .. }));
-        assert_eq!(list.debug_fill_rects().len(), 8);
+        let patches = list.debug_nine_patches();
+        assert_eq!(patches.len(), 1);
+        let (destination, clip, patch) = patches[0];
+        assert_eq!(rect_tuple(destination), (2, 2, 10, 10));
+        assert_eq!(rect_tuple(clip), (0, 0, 20, 20));
+        assert_eq!((patch.insets.left, patch.insets.top, patch.insets.right, patch.insets.bottom), (2, 2, 2, 2));
+        let crate::NinePatchContent::Flat { cells } = patch.content else {
+            panic!("a stroked rectangle must retain one typed flat patch");
+        };
+        assert!(matches!(cells.center, NinePatchCell::Empty));
+        assert!(matches!(cells.top_left, NinePatchCell::Color { .. }));
+        assert!(patch.center_visible);
         assert!(list.solid_geometry.is_empty());
     }
 

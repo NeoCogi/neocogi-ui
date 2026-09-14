@@ -7,7 +7,7 @@
 use super::{Color, DisplayList};
 use crate::{AtlasHandle, Recti};
 use neocogi_com::{ComPtr, ComRef, NC_E_INVALID_ARG, NcCopyFromBufferOffset, NcStatus};
-use neocogi_gfx_contracts::{DrawPoint, GfxCompositorAbi, SolidVertex};
+use neocogi_gfx_contracts::{AssetPatch, DrawPoint, GfxCompositorAbi, Insets, NinePatchDraw, SolidVertex};
 use neocogi_renderer_contracts::{IRendererAbi, Rect, Size};
 
 /// Replays one complete display list and clears it on success or failure.
@@ -62,41 +62,9 @@ fn submit_once(
                 compositor.item(clip, copied_rect(rect), item.as_com_ref())?;
             }
             super::display_list::DrawKind::NinePatch { rect, patch } => {
-                let destinations = patch.geometry(rect);
-                match patch.content {
-                    super::NinePatchContent::Flat { cells } => {
-                        let cells = cells.rows();
-                        let source = copied_rect(atlas.get_icon_rect(atlas.white_icon()));
-                        for row in 0..3 {
-                            for column in 0..3 {
-                                if row == 1 && column == 1 && !patch.center_visible {
-                                    continue;
-                                }
-                                let super::NinePatchCell::Color { color } = cells[row][column] else {
-                                    continue;
-                                };
-                                compositor.atlas_rect(clip, copied_rect(destinations[row][column]), source, packed(color))?;
-                            }
-                        }
-                    }
-                    super::NinePatchContent::Image { image } => {
-                        let source = atlas.get_icon_rect(image.icon);
-                        let sources = super::nine_patch::geometry_with_insets(source, image.source_insets);
-                        for row in 0..3 {
-                            for column in 0..3 {
-                                if row == 1 && column == 1 && !patch.center_visible {
-                                    continue;
-                                }
-                                compositor.atlas_rect(
-                                    clip,
-                                    copied_rect(destinations[row][column]),
-                                    copied_rect(sources[row][column]),
-                                    packed(image.tint),
-                                )?;
-                            }
-                        }
-                    }
-                }
+                // UI crosses the boundary once with the semantic value it recorded. GFX resolves
+                // all nine destination/source cells and owns their final clipping and batching.
+                compositor.nine_patch(clip, copied_rect(rect), copied_nine_patch(patch, atlas))?;
             }
             super::display_list::DrawKind::Text { font, pos, color, text: range } => {
                 let text = text.get(range).ok_or(NC_E_INVALID_ARG)?;
@@ -138,6 +106,59 @@ fn copied_rect(rect: Recti) -> Rect {
         y: rect.y,
         width: rect.width,
         height: rect.height,
+    }
+}
+
+/// Converts one UI patch into its pointer-free GFX operation without expanding any geometry.
+fn copied_nine_patch(patch: super::NinePatch, atlas: &AtlasHandle) -> NinePatchDraw {
+    // Programmatic UI values historically normalize negative insets at render time. Preserve that
+    // public behavior at the type boundary while leaving partitioning and visibility entirely to GFX.
+    let insets = copied_insets(patch.insets.normalized());
+    let content = match patch.content {
+        super::NinePatchContent::Flat { cells } => AssetPatch::Flat {
+            top_left: packed_cell(cells.top_left),
+            top: packed_cell(cells.top),
+            top_right: packed_cell(cells.top_right),
+            left: packed_cell(cells.left),
+            center: packed_cell(cells.center),
+            right: packed_cell(cells.right),
+            bottom_left: packed_cell(cells.bottom_left),
+            bottom: packed_cell(cells.bottom),
+            bottom_right: packed_cell(cells.bottom_right),
+        },
+        super::NinePatchContent::Image { image } => AssetPatch::Image {
+            // Stable UI identities become bundle-local slots only at this GFX boundary. No atlas
+            // rectangle or normalized texture coordinate leaks back into semantic display storage.
+            icon: atlas.icon_index(image.icon),
+            source: copied_insets(image.source_insets.normalized()),
+            tint: packed(image.tint),
+        },
+    };
+    NinePatchDraw {
+        insets,
+        center_visible: u8::from(patch.center_visible),
+        patch: content.into(),
+    }
+}
+
+/// Copies normalized UI insets into the equivalent GFX contract record.
+fn copied_insets(insets: crate::SliceInsets) -> Insets {
+    // Both modules deliberately use named edges, so this conversion cannot depend on field order.
+    Insets {
+        left: insets.left,
+        top: insets.top,
+        right: insets.right,
+        bottom: insets.bottom,
+    }
+}
+
+/// Encodes one closed flat-cell variant in the asset patch's transparent-zero convention.
+fn packed_cell(cell: super::NinePatchCell) -> u32 {
+    // `NinePatchCell::color` canonicalizes transparent colors to Empty. Encoding Empty as zero also
+    // matches authored `AssetPatch::Flat` records and gives GFX one visibility rule for both paths.
+    match cell {
+        super::NinePatchCell::Empty => 0,
+        super::NinePatchCell::Color { color } => packed(color),
     }
 }
 

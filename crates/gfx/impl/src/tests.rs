@@ -1,7 +1,7 @@
 //! The runtime COM builder and generated direct exporter must publish equivalent portable data.
 use super::*;
 use crate::{AssetPublisherObject, GfxCompositorObject};
-use neocogi_com::{ComPtr, INcStringAbi, INcStringComPtrExt, NC_E_INVALID_ARG, NcCopyToBufferOffset, NcStatus, com_object};
+use neocogi_com::{ComPtr, INcStringAbi, INcStringComPtrExt, NC_E_INVALID_ARG, NC_E_OUT_OF_RANGE, NcCopyToBufferOffset, NcStatus, com_object};
 use neocogi_ui::{NativePath, PathEncoding};
 use neocogi_ui_runtime::assets::ImportedAssets;
 use neocogi_platform_contracts::*;
@@ -302,50 +302,85 @@ fn appearance_revision_is_a_validated_resource_preserving_transaction() {
     );
 }
 
-/// Bounded empty atlas cells are structural nine-patch geometry, while out-of-bounds cells remain invalid.
+/// GFX expands one typed image patch atomically and rejects malformed semantic payloads.
 #[test]
-fn compositor_accepts_only_bounded_degenerate_atlas_rectangles() {
+fn compositor_expands_typed_image_patch_and_rejects_invalid_payloads() {
     let bundle = test_bundle();
-    let size = data(&bundle).tables.size;
+    let tables = data(&bundle).tables;
+    let close = tables
+        .icons
+        .iter()
+        .position(|icon| tables.name(icon.name) == Ok("close"))
+        .expect("test bundle contains close") as u32;
+    let source = tables.icons[close as usize].rect;
+    assert!(source.width >= 2 && source.height >= 2, "the fixture must provide four nonempty source corners");
     let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
     let clip = Rect { x: 0, y: 0, width: 32, height: 32 };
     let destination = Rect { x: 4, y: 4, width: 16, height: 16 };
     compositor.begin(Size { width: 32, height: 32 }, 0xff000000).unwrap();
-    for source in [
-        Rect { x: 0, y: 0, width: 0, height: 1 },
-        Rect { x: 0, y: 0, width: 1, height: 0 },
-        Rect {
-            x: size.width,
-            y: size.height,
-            width: 0,
-            height: 0,
-        },
-    ] {
-        // Empty rows, columns, and points are valid no-ops when their closed bounds fit the atlas.
-        compositor.atlas_rect(clip, destination, source, 0xffffffff).unwrap();
-    }
+    compositor
+        .nine_patch(
+            clip,
+            destination,
+            NinePatchDraw {
+                insets: Insets { left: 4, top: 4, right: 4, bottom: 4 },
+                center_visible: 1,
+                patch: AssetPatch::Image {
+                    icon: close,
+                    source: Insets {
+                        left: source.width / 2,
+                        top: source.height / 2,
+                        right: source.width - source.width / 2,
+                        bottom: source.height - source.height / 2,
+                    },
+                    tint: 0xffffffff,
+                }
+                .into(),
+            },
+        )
+        .unwrap();
     let capture = std::rc::Rc::new(RenderCapture::default());
     let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { capture: capture.clone() }).query().unwrap();
     compositor.submit(renderer.as_com_ref()).unwrap();
     assert_eq!(capture.calls.get(), 1);
-    assert!(capture.vertices.borrow().is_empty());
-    assert!(capture.batches.borrow().is_empty());
+    assert_eq!(capture.vertices.borrow().len(), 24, "four source corners must produce four atlas quads");
+    assert_eq!(capture.batches.borrow().len(), 1, "one patch must remain one adjacent atlas batch");
 
-    // A zero-area rectangle beyond the atlas is still malformed and cannot bypass validation.
+    // Invalid flags and resource slots are rejected before any prefix can reach frame storage.
     compositor.begin(Size { width: 32, height: 32 }, 0xff000000).unwrap();
     assert_eq!(
-        compositor.atlas_rect(
+        compositor.nine_patch(
             clip,
             destination,
-            Rect {
-                x: size.width + 1,
-                y: size.height,
-                width: 0,
-                height: 0,
+            NinePatchDraw {
+                insets: Insets::default(),
+                center_visible: 2,
+                patch: AssetPatch::Image {
+                    icon: close,
+                    source: Insets::default(),
+                    tint: 0xffffffff,
+                }
+                .into(),
             },
-            0xffffffff,
         ),
         Err(NC_E_INVALID_ARG)
+    );
+    assert_eq!(
+        compositor.nine_patch(
+            clip,
+            destination,
+            NinePatchDraw {
+                insets: Insets::default(),
+                center_visible: 1,
+                patch: AssetPatch::Image {
+                    icon: u32::MAX,
+                    source: Insets::default(),
+                    tint: 0xffffffff,
+                }
+                .into(),
+            },
+        ),
+        Err(NC_E_OUT_OF_RANGE)
     );
     compositor.cancel().unwrap();
 }

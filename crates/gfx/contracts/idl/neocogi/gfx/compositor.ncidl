@@ -21,6 +21,22 @@ struct DrawPoint {
 }
 
 #[version(1)]
+/// Complete renderer-neutral payload for one three-by-three patch draw.
+///
+/// The operation reuses the closed asset-patch vocabulary so UI and GFX cannot
+/// disagree about flat-cell order or image-source meaning. Destination geometry,
+/// source slicing, empty-cell removal, clipping, and batching remain private to
+/// the receiving compositor.
+struct NinePatchDraw {
+    /// Destination-space thickness of the fixed outer columns and rows.
+    insets: Insets,
+    /// Whether the stretchable center cell contributes geometry, zero or one.
+    center_visible: u8,
+    /// Nine flat colors or one bundle-local image and its source-space insets.
+    patch: AssetPatch,
+}
+
+#[version(2)]
 /// Renderer-neutral display-list executor owned by the GFX plugin.
 ///
 /// UI code supplies semantic operations in painter order. The compositor owns
@@ -36,8 +52,8 @@ factory GfxCompositor: IGfxDiagnostics {
     fn solid_triangles(&mut self, clip: Rect, vertices: &[SolidVertex]) -> Result<()>;
     /// Appends complete atlas triangles whose UV coordinates are already normalized.
     fn atlas_triangles(&mut self, clip: Rect, vertices: &[RenderVertex]) -> Result<()>;
-    /// Draws one atlas pixel rectangle into a drawable destination with clipping and tinting.
-    fn atlas_rect(&mut self, clip: Rect, destination: Rect, source: Rect, rgba: u32) -> Result<()>;
+    /// Expands one typed three-by-three patch through current bundle resources.
+    fn nine_patch(&mut self, clip: Rect, destination: Rect, draw: NinePatchDraw) -> Result<()>;
     /// Expands one UTF-8 run through a bundle-local font slot and appends its visible glyphs.
     fn text(&mut self, clip: Rect, font: u32, origin: DrawPoint, rgba: u32, text: &[u8]) -> Result<()>;
     /// Centers one bundle-local icon slot inside a destination and appends its visible quad.

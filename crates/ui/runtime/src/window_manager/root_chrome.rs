@@ -1032,9 +1032,19 @@ mod tests {
         );
 
         let backdrop_rects = display_list
-            .debug_fill_rects()
+            .debug_nine_patches()
             .into_iter()
-            .filter_map(|(rect, _, color)| ((color.r, color.g, color.b, color.a) == (backdrop.r, backdrop.g, backdrop.b, backdrop.a)).then_some(rect))
+            .filter_map(|(rect, _, patch)| {
+                // Title clearing is a center-only semantic patch. Inspect that retained payload
+                // without reimplementing the GFX compositor's cell partitioning in a UI test.
+                let crate::NinePatchContent::Flat { cells } = patch.content else {
+                    return None;
+                };
+                let crate::NinePatchCell::Color { color } = cells.center else {
+                    return None;
+                };
+                ((color.r, color.g, color.b, color.a) == (backdrop.r, backdrop.g, backdrop.b, backdrop.a)).then_some(rect)
+            })
             .collect::<Vec<_>>();
         assert_eq!(backdrop_rects.len(), 1);
         let rect = backdrop_rects[0];

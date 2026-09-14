@@ -16,6 +16,7 @@ mod builder;
 pub use builder::AssetLoaderObject;
 mod compositor;
 pub use compositor::GfxCompositorObject;
+mod nine_patch;
 #[cfg(feature = "publisher")]
 mod publisher;
 #[cfg(feature = "publisher")]

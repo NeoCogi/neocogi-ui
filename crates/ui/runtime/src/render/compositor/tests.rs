@@ -300,6 +300,20 @@ fn image_nine_patch_submits_nine_sliced_atlas_quads_without_a_flush() {
     vertex(capture.vertices[50], [30., 24.], [1., 0.5]);
 }
 
+/// Border-only policy is enforced by GFX after UI retains an otherwise complete flat patch.
+#[test]
+fn flat_nine_patch_filters_its_hidden_center_during_gfx_expansion() {
+    let mut fixture = Composition::new(atlas());
+    let patch = crate::NinePatch::framed(SliceInsets::uniform(2), color(10, 20, 30, 255), Some(color(40, 50, 60, 255))).without_center();
+    crate::render::Painter::screen_space(&mut fixture.list, Recti::new(0, 0, 32, 32)).nine_patch(Recti::new(4, 5, 20, 18), patch);
+
+    fixture.submit(Size { width: 32, height: 32 }).unwrap();
+
+    let capture = fixture.capture.borrow();
+    assert_eq!(capture.vertices.len(), 48, "eight visible border cells must produce eight quads");
+    assert!(matches!(capture.batches.as_slice(), [RenderBatch::Atlas { first: 0, count: 48 }]));
+}
+
 /// Rejected renderer calls expire their stream and clear commands before the next frame.
 #[test]
 fn frame_finish_failure_is_observable_and_the_next_frame_can_complete() {

@@ -853,11 +853,11 @@ mod tests {
 
         slider.paint(&mut ctx);
 
-        let fills = display_list.debug_fill_rects();
+        let patches = display_list.debug_nine_patches();
         assert!(
-            fills
+            patches
                 .iter()
-                .any(|(fill, _, _)| fill.x == 45 && fill.y == 0 && fill.width == 10 && fill.height == 20),
+                .any(|(destination, _, _)| destination.x == 45 && destination.y == 0 && destination.width == 10 && destination.height == 20),
             "the half-range value must place the ten-pixel thumb halfway across ninety available pixels",
         );
     }

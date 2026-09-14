@@ -331,7 +331,7 @@ impl Skin {
                 .appearances
                 .iter()
                 .map(|visual| visual.patch)
-                .filter_map(NinePatch::image_content)
+                .filter_map(NinePatch::referenced_image)
                 .all(|image| atlas.contains_icon(image.icon))
     }
 
