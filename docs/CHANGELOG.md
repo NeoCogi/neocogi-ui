@@ -10,9 +10,9 @@ wrappers. [COM_DESIGN.md](COM_DESIGN.md) defines the accepted architecture, and
 - Replace the caller-coordinated combo header with a runtime-owned composite. Combo construction
   now mounts a private ordinary widget through the generic popup API under an explicit window
   owner, while a separate composition manager keeps combo semantics outside the root forest. It
-  represents selection as
-  `Option<ComboSelection>`, supplies the visible `Select…` fallback by default, rejects invalid
-  indices instead of clamping, and atomically replaces labels with an explicit optional selection.
+  represents selection with the single NCIDL-generated `ComboSelection`, supplies the
+  visible `Select…` fallback by default, rejects invalid indices instead of clamping, and
+  atomically replaces labels with an explicit optional selection.
   Popup hover, keyboard candidate, and committed selection are separate typed states, so opening
   starts on the committed item and pointer departure restores it without a blank frame. The popup
   uses the header's theme-derived outer border box as its fixed horizontal extent, aligning both

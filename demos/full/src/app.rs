@@ -61,7 +61,7 @@ use super::{
 use neocogi_ui::{events::*, *};
 use neocogi_demo_assets::themes::Theme;
 use neocogi_demo_host::{AppState, Host, HostError};
-use neocogi_com::{ComInterface, ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
+use neocogi_com::{ComInterface, ComPtr, ComRef, NC_E_INVALID_ARG, NcCopyFromBufferOffset, NcStatus};
 use std::{cell::RefCell, rc::Rc};
 
 /// Application-owned combo values never cross the ABI as an erased generic collection.
@@ -333,10 +333,17 @@ impl EventHandler<State, TextSubmitted> for Observe {
         state.entry.clear()
     }
 }
-impl EventHandler<State, ComboChanged> for Observe {
-    /// Logs the immutable choice snapshot after the composite has committed its selection.
-    fn handle(&mut self, state: &mut State, event: &ComboChanged) -> Result<(), NcStatus> {
-        state.write_log(&format!("Selected {}", event.label))
+impl EventHandler<State, ComboSelection> for Observe {
+    /// Resolves display text separately from the generated selection event.
+    fn handle(&mut self, state: &mut State, event: &ComboSelection) -> Result<(), NcStatus> {
+        match *event {
+            ComboSelection::None => state.write_log("Selection cleared"),
+            ComboSelection::Selected(index) => {
+                let index = usize::try_from(index).map_err(|_| NC_E_INVALID_ARG)?;
+                let label = state.combo.item(index)?;
+                state.write_log(&format!("Selected {label}"))
+            }
+        }
     }
 }
 impl EventHandler<State, FileDialogCompleted> for Observe {
@@ -447,14 +454,7 @@ fn create() -> Result<(Host, EventSession<State>), HostError> {
     let demo = floating(ui, desktop.as_com_ref(), "Demo Window", rect(40, 40, 300, 450), &main_scroll)?;
     demo.set_options(WindowOptions::FRAME | WindowOptions::MINIMIZE_BUTTON | WindowOptions::MAXIMIZE_BUTTON)?;
     let info = [label(ui, "40, 40")?, label(ui, "300, 450")?, label(ui, "0.0")?];
-    let combo = ui.combo_box(
-        demo.as_com_ref(),
-        &FRUIT,
-        ComboBoxOptions {
-            selection: Some(0),
-            ..ComboBoxOptions::default()
-        },
-    )?;
+    let combo = ui.combo_box(demo.as_com_ref(), &FRUIT, ComboSelection::Selected(0))?;
     let menus = ui.menus()?;
     let mut pending = Vec::new();
     let popup_menu = menus.create("Test Popup")?;

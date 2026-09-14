@@ -329,14 +329,7 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let directory = SmokeDirectory::new()?;
     let mut root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     let window = ui.window("Dynamic components", Rect { x: 10, y: 10, width: 610, height: 300 }, &root)?;
-    let combo = ui.combo_box(
-        window.as_com_ref(),
-        &["First", "Selected across COM"],
-        ComboBoxOptions {
-            selection: Some(1),
-            ..ComboBoxOptions::default()
-        },
-    )?;
+    let combo = ui.combo_box(window.as_com_ref(), &["First", "Selected across COM"], ComboSelection::Selected(1))?;
     root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content))?.finish()?;
     let menus = ui.menus()?;
     let bar = menus.create("")?;

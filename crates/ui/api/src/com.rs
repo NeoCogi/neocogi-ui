@@ -429,47 +429,15 @@ pub struct Ui {
     windows: ComPtr<IWindowManagerAbi>,
 }
 
-/// Default fallback shown by a combo box with no committed selection.
-pub const DEFAULT_COMBO_PLACEHOLDER: &str = "Select…";
-
-/// Complete construction policy for one runtime-owned combo box.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct ComboBoxOptions<'a> {
-    /// Header fallback rendered while `selection` is `None`.
-    pub placeholder: &'a str,
-    /// Optional initial item position, validated strictly against the supplied items.
-    pub selection: Option<usize>,
-}
-
-impl Default for ComboBoxOptions<'_> {
-    /// Starts unselected with the standard visible fallback.
-    fn default() -> Self {
-        Self {
-            placeholder: DEFAULT_COMBO_PLACEHOLDER,
-            selection: None,
-        }
-    }
-}
-
-/// Owned snapshot of one committed combo-box selection.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ComboSelection {
-    /// Exact position in the combo box's current item sequence.
-    pub index: usize,
-    /// Display label captured from the same retained item sequence.
-    pub label: String,
-}
-
 impl Ui {
-    /// Creates one complete combo box whose private popup is structurally owned by `parent`.
-    pub fn combo_box<Item: AsRef<str>>(&self, parent: ComRef<'_, IWindowAbi>, items: &[Item], options: ComboBoxOptions<'_>) -> Result<ComboWidget, NcStatus> {
+    /// Creates one complete combo box with the contract-defined fallback and selection state.
+    pub fn combo_box<Item: AsRef<str>>(&self, parent: ComRef<'_, IWindowAbi>, items: &[Item], selection: ComboSelection) -> Result<ComboWidget, NcStatus> {
         let (item_text, ranges) = encoded_combo_items(items)?;
         let combo = self.runtime.query::<IComboBoxesAbi>()?.create_combo_box(
             parent,
-            NcCopyFromBufferOffset::new(0, options.placeholder.as_bytes()),
             NcCopyFromBufferOffset::new(0, &item_text),
             NcCopyFromBufferOffset::new(0, &ranges),
-            encoded_combo_selection(options.selection),
+            selection.into(),
         )?;
         Ok(ComboWidget::from_interface(combo))
     }
@@ -653,15 +621,9 @@ impl Widget<ButtonAbi> {
 /// Typed static wrapper for the concrete Combo class and its inherited widget state.
 pub type ComboWidget = Widget<ComboAbi>;
 impl Widget<ComboAbi> {
-    /// Returns `None` or one complete selected index/label snapshot.
-    pub fn selection(&self) -> Result<Option<ComboSelection>, NcStatus> {
-        match ComboSelectionIndex::try_from(self.interface.selection()?).map_err(|_| neocogi_com::NC_E_INVALID_ARG)? {
-            ComboSelectionIndex::None => Ok(None),
-            ComboSelectionIndex::Selected(index) => {
-                let index = usize::try_from(index).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
-                Ok(Some(ComboSelection { index, label: self.item(index)? }))
-            }
-        }
+    /// Returns the NCIDL-defined selection value without a parallel facade record.
+    pub fn selection(&self) -> Result<ComboSelection, NcStatus> {
+        ComboSelection::try_from(self.interface.selection()?).map_err(|_| neocogi_com::NC_E_INVALID_ARG)
     }
     /// Copies the exact selected label or visible placeholder currently painted by the header.
     pub fn display_text(&self) -> Result<String, NcStatus> {
@@ -676,17 +638,17 @@ impl Widget<ComboAbi> {
         self.interface.item(index as u64)?.to_string()
     }
     /// Atomically replaces all labels and the explicit optional selection.
-    pub fn replace_items<Item: AsRef<str>>(&mut self, items: &[Item], selection: Option<usize>) -> Result<(), NcStatus> {
+    pub fn replace_items<Item: AsRef<str>>(&mut self, items: &[Item], selection: ComboSelection) -> Result<(), NcStatus> {
         let (item_text, ranges) = encoded_combo_items(items)?;
         self.interface.replace_items(
             NcCopyFromBufferOffset::new(0, &item_text),
             NcCopyFromBufferOffset::new(0, &ranges),
-            encoded_combo_selection(selection),
+            selection.into(),
         )
     }
     /// Silently replaces the committed optional selection without clamping invalid indices.
-    pub fn set_selection(&mut self, selection: Option<usize>) -> Result<(), NcStatus> {
-        self.interface.set_selection(encoded_combo_selection(selection))
+    pub fn set_selection(&mut self, selection: ComboSelection) -> Result<(), NcStatus> {
+        self.interface.set_selection(selection.into())
     }
     /// Copies the fallback retained independently from the current selection.
     pub fn placeholder(&self) -> Result<String, NcStatus> {
@@ -704,15 +666,6 @@ impl Widget<ComboAbi> {
     pub fn set_named_font(&mut self, name: &str) -> Result<(), NcStatus> {
         self.interface.set_named_font(NcCopyFromBufferOffset::new(0, name.as_bytes()))
     }
-}
-
-/// Encodes optional selection with a structural absence variant instead of a sentinel index.
-fn encoded_combo_selection(selection: Option<usize>) -> ComboSelectionIndexAbi {
-    match selection {
-        Some(index) => ComboSelectionIndex::Selected(index as u64),
-        None => ComboSelectionIndex::None,
-    }
-    .into()
 }
 
 /// Packs labels once with checked ranges for one atomic COM construction or replacement call.

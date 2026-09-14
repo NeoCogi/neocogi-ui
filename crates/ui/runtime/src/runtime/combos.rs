@@ -2,20 +2,19 @@
 
 use super::*;
 use crate::{
-    combo_box::{ComboPopup, ComboState, copied_items, decoded_selection},
+    combo_box::{ComboPopup, ComboState, DEFAULT_COMBO_PLACEHOLDER, copied_items, decoded_selection},
     window_manager::WindowOption,
 };
-use neocogi_ui_core_contracts::{ComboAbi, ComboItemRange, ComboSelectionIndexAbi, IComboBoxes};
+use neocogi_ui_core_contracts::{ComboAbi, ComboItemRange, ComboSelectionAbi, IComboBoxes};
 
 impl IComboBoxes for Runtime {
     /// Validates the complete initial model before registering its private popup or returning a header.
     fn create_combo_box(
         &self,
         parent: ComRef<'_, IWindowAbi>,
-        placeholder: NcCopyFromBufferOffset<'_, u8>,
         item_text: NcCopyFromBufferOffset<'_, u8>,
         ranges: NcCopyFromBufferOffset<'_, ComboItemRange>,
-        selection: ComboSelectionIndexAbi,
+        selection: ComboSelectionAbi,
     ) -> Result<ComPtr<ComboAbi>, NcStatus> {
         let storage = &self.storage;
         storage.open()?;
@@ -23,10 +22,9 @@ impl IComboBoxes for Runtime {
 
         // Copy every foreign input before any manager mutation, leaving validation failure atomic.
         let parent = storage.parent(parent)?;
-        let placeholder = text(placeholder)?.to_owned();
         let items = copied_items(item_text, ranges)?;
         let selection = decoded_selection(selection)?;
-        let state = ComboState::create(items, selection, placeholder)?;
+        let state = ComboState::create(items, selection, DEFAULT_COMBO_PLACEHOLDER.to_owned())?;
         let combo = crate::Combo::create_com(storage.factory.host.clone(), storage.factory.resources.clone(), state.clone())?;
         let (popup_widget, presentation) = ComboPopup::create(storage.factory.host.clone(), storage.factory.resources.clone(), state.clone())?;
 

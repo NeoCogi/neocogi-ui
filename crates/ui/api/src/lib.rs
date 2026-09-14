@@ -3,6 +3,11 @@
 //! Widget and application generics remain local to the host; implementation
 //! state, retained topology, native windows, and GPU ownership live in plugins.
 //! This crate depends only on COM support, shared contracts, and non-plugin GFX bundle helpers.
+//!
+//! NCIDL-generated records are re-exported directly rather than redeclared by
+//! this facade. Handwritten records in this crate own application-only state or
+//! turn borrowed variable-length ABI data into queue-safe Rust snapshots; they
+//! must not mirror an available generated contract type.
 
 #![deny(missing_docs)]
 

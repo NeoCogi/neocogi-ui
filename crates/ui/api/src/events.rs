@@ -697,36 +697,28 @@ impl<State: 'static> EventSession<State> {
     }
 }
 
-/// Matching application-list index and label after an explicitly submitted combo selection.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ComboChanged {
-    /// Item position in the combo box's retained label sequence.
-    pub selected: usize,
-    /// Captured display value; generic list data never travels through this string.
-    pub label: String,
-}
 #[com_object(interfaces(IComboChangedSink))]
-/// Application-local specialization owns its concrete selection handler and shared state.
-struct ComboChangedSink<State: 'static, Handler: EventHandler<State, ComboChanged> + 'static> {
+/// Application-local specialization owns its concrete generated-selection handler and shared state.
+struct ComboSelectionSink<State: 'static, Handler: EventHandler<State, ComboSelection> + 'static> {
     /// Shared owned invocation discipline used by every event family.
     handler: HandlerState<State, Handler>,
 }
-impl<State: 'static, Handler: EventHandler<State, ComboChanged> + 'static> IComboChangedSink for ComboChangedSink<State, Handler> {
-    /// Validates the immutable UTF-8 snapshot before borrowing application state.
-    fn changed(&self, selected: u64, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        let selected = usize::try_from(selected).map_err(|_| NC_E_INVALID_ARG)?;
-        self.handler.deliver(ComboChanged { selected, label: copied_text(label)? })
+impl<State: 'static, Handler: EventHandler<State, ComboSelection> + 'static> IComboChangedSink for ComboSelectionSink<State, Handler> {
+    /// Validates the generated tagged selection before borrowing application state.
+    fn changed(&self, selection: ComboSelectionAbi) -> Result<(), NcStatus> {
+        let selection = ComboSelection::try_from(selection).map_err(|_| NC_E_INVALID_ARG)?;
+        self.handler.deliver(selection)
     }
 }
 impl<State: 'static> EventSession<State> {
-    /// Registers one captured-selection source without claiming the header's independent popup port.
-    pub fn subscribe_combo_changed<Handler: EventHandler<State, ComboChanged> + 'static>(
+    /// Registers the generated selection source without claiming the header's private popup port.
+    pub fn subscribe_combo_changed<Handler: EventHandler<State, ComboSelection> + 'static>(
         &self,
         combo: &crate::ComboWidget,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         let mut leases = self.registry.take()?;
-        let sink: ComPtr<IComboChangedSinkAbi> = ComboChangedSink::from_value(ComboChangedSink {
+        let sink: ComPtr<IComboChangedSinkAbi> = ComboSelectionSink::from_value(ComboSelectionSink {
             handler: HandlerState {
                 state: self.state.clone(),
                 handler: RefCell::new(Some(handler)),
@@ -839,6 +831,4 @@ event_payload!(TextSubmitted, ITextSubmittedSinkAbi, self, sink, {
 });
 event_payload!(WindowEvent, IWindowSinkAbi, self, sink, { sink.event((*self).into()) });
 event_payload!(PopupDismissed, IPopupSinkAbi, self, sink, { sink.dismissed() });
-event_payload!(ComboChanged, IComboChangedSinkAbi, self, sink, {
-    sink.changed(self.selected as u64, NcCopyFromBufferOffset::new(0, self.label.as_bytes()))
-});
+event_payload!(ComboSelection, IComboChangedSinkAbi, self, sink, { sink.changed((*self).into()) });

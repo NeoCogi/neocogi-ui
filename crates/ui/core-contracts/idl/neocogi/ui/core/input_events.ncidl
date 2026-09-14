@@ -231,8 +231,8 @@ trait IPopupEvents {
 #[version(1)]
 /// Captured user selection committed by a runtime-owned combo popup.
 trait IComboChangedSink {
-    /// Receives the matching item position and display label from one committed selection.
-    fn changed(&self, selected: u64, label: &str) -> Result<()>;
+    /// Receives the NCIDL-defined selection value from one committed interaction.
+    fn changed(&self, selection: ComboSelection) -> Result<()>;
 }
 
 #[version(1)]

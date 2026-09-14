@@ -59,13 +59,15 @@ remain silent. The [events guide](EVENTS.md) describes delivery; exact interface
 capabilities are documented in `neocogi-ui-core-contracts` and the facade's API reference.
 
 Combo boxes retain their display labels but no generic application payload. Create
-one with `Ui::combo_box(parent, items, ComboBoxOptions::default())`; its initial
-selection is `None` and its visible default fallback is `Select…`. `selection()`
-therefore returns `Option<ComboSelection>`, while `replace_items` requires an
-explicit optional selection and rejects invalid indices without clamping. Domain
-data remains in the application and is mapped from the committed index rather than
-reconstructed from a display string. File-dialog rows likewise retain exact native
-paths independently of lossy UTF-8 display labels.
+one with `Ui::combo_box(parent, items, ComboSelection::None)`; its visible
+default fallback is `Select…`, and `set_placeholder` customizes that fallback after
+construction. `selection()` returns the same NCIDL-generated
+`ComboSelection` used by the ABI; the facade does not maintain a parallel
+selection record. `replace_items` requires an explicit selection value and rejects
+invalid indices without clamping. Domain data remains in the application and is
+mapped from the committed index rather than reconstructed from a display string.
+File-dialog rows likewise retain exact native paths independently of lossy UTF-8
+display labels.
 
 ## Containers and child edits
 

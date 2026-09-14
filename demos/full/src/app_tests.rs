@@ -77,8 +77,8 @@ fn exercise() -> Result<(Host, EventSession<State>), HostError> {
         let mut state = events.state_mut()?;
         state.select_theme(Theme::Default)?;
         Action::Spacing(false).handle(&mut state, &Activation { label: String::new() })?;
-        state.combo.set_selection(Some(2))?;
-        assert_eq!(state.combo.selection()?, Some(ComboSelection { index: 2, label: "Cherry".to_owned() }));
+        state.combo.set_selection(ComboSelection::Selected(2))?;
+        assert_eq!(state.combo.selection()?, ComboSelection::Selected(2));
         assert_eq!(state.combo.display_text()?, "Cherry");
         state.entry.set_text("Unicode: 日本語")?;
         state.submit()?;

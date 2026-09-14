@@ -18,9 +18,12 @@ use neocogi_com::{
 #[allow(unused_imports)] // The object macro resolves these trait identifiers into generated types.
 use neocogi_ui_core_contracts::{ILeafLayout, IWidget};
 use neocogi_ui_core_contracts::{
-    ComboItemRange, ComboSelectionIndex, ComboSelectionIndexAbi, IComboChangedSinkAbi, IEventSubscriptionAbi, ILeafLayoutAbi, ILeafLayoutInterfacesFor,
-    IWidgetAbi, IWidgetHostAbi, IWidgetInterfacesFor, Rect,
+    ComboItemRange, ComboSelection, ComboSelectionAbi, IComboChangedSinkAbi, IEventSubscriptionAbi, ILeafLayoutAbi, ILeafLayoutInterfacesFor, IWidgetAbi,
+    IWidgetHostAbi, IWidgetInterfacesFor, Rect,
 };
+
+/// Contract-defined visible fallback for a combo with no committed selection.
+pub(crate) const DEFAULT_COMBO_PLACEHOLDER: &str = "Select…";
 
 com_int_enum! {
     /// Header intent understood only by the private combo state machine.
@@ -76,7 +79,7 @@ pub(crate) trait IComboState {
     /// Returns a revision changed only when popup row count changes its vertical geometry.
     fn row_revision(&self) -> Result<u64, NcStatus>;
     /// Returns the explicit optional committed item position.
-    fn selection(&self) -> Result<ComboSelectionIndexAbi, NcStatus>;
+    fn selection(&self) -> Result<ComboSelectionAbi, NcStatus>;
     /// Copies the selected label or placeholder currently displayed by the header.
     fn display_text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
     /// Returns the number of retained display labels.
@@ -88,10 +91,10 @@ pub(crate) trait IComboState {
         &mut self,
         item_text: NcCopyFromBufferOffset<'_, u8>,
         ranges: NcCopyFromBufferOffset<'_, ComboItemRange>,
-        selection: ComboSelectionIndexAbi,
+        selection: ComboSelectionAbi,
     ) -> Result<bool, NcStatus>;
     /// Silently replaces the optional committed selection without clamping.
-    fn set_selection(&mut self, selection: ComboSelectionIndexAbi) -> Result<bool, NcStatus>;
+    fn set_selection(&mut self, selection: ComboSelectionAbi) -> Result<bool, NcStatus>;
     /// Copies the fallback independently from current selection.
     fn placeholder(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
     /// Replaces the fallback without changing or publishing selection.
@@ -128,7 +131,7 @@ pub(crate) struct ComboState {
     /// Explicit popup lifecycle reconciled by the runtime composition owner.
     popup: ComboPopupLifecycle,
     /// Runtime-owned source for actual user commits only.
-    changed_event: crate::EventSource<crate::ComboChanged>,
+    changed_event: crate::EventSource<ComboSelection>,
 }
 
 impl ComboState {
@@ -232,7 +235,7 @@ impl IComboState for ComboState {
     }
 
     /// Encodes structural absence without manufacturing an in-band index sentinel.
-    fn selection(&self) -> Result<ComboSelectionIndexAbi, NcStatus> {
+    fn selection(&self) -> Result<ComboSelectionAbi, NcStatus> {
         Ok(encode_selection(self.selection))
     }
 
@@ -257,7 +260,7 @@ impl IComboState for ComboState {
         &mut self,
         item_text: NcCopyFromBufferOffset<'_, u8>,
         ranges: NcCopyFromBufferOffset<'_, ComboItemRange>,
-        selection: ComboSelectionIndexAbi,
+        selection: ComboSelectionAbi,
     ) -> Result<bool, NcStatus> {
         let items = copied_items(item_text, ranges)?;
         let selection = decoded_selection(selection)?;
@@ -277,7 +280,7 @@ impl IComboState for ComboState {
     }
 
     /// Replaces selection only after validating it against the current item sequence.
-    fn set_selection(&mut self, selection: ComboSelectionIndexAbi) -> Result<bool, NcStatus> {
+    fn set_selection(&mut self, selection: ComboSelectionAbi) -> Result<bool, NcStatus> {
         let selection = decoded_selection(selection)?;
         validate_selection(selection, self.items.len())?;
         if self.selection == selection {
@@ -323,11 +326,11 @@ impl IComboState for ComboState {
     /// Commits a checked item and closes the popup even when the value was already selected.
     fn submit(&mut self, index: u64) -> Result<u64, NcStatus> {
         let index = usize::try_from(index).map_err(|_| NC_E_INVALID_ARG)?;
-        let label = self.items.get(index).cloned().ok_or(NC_E_INVALID_ARG)?;
+        self.items.get(index).ok_or(NC_E_INVALID_ARG)?;
         if self.selection != Some(index) {
             self.selection = Some(index);
             self.advance_revision();
-            self.changed_event.emit(crate::ComboChanged { selected: index, label });
+            self.changed_event.emit(ComboSelection::Selected(index as u64));
         }
         self.popup = match self.popup {
             ComboPopupLifecycle::Open | ComboPopupLifecycle::OpenRequested => ComboPopupLifecycle::CloseRequested,
@@ -759,19 +762,19 @@ fn surface_status(error: SurfaceMutationError) -> NcStatus {
 }
 
 /// Encodes optional selection with a tagged absence variant rather than a sentinel index.
-pub(crate) fn encode_selection(selection: Option<usize>) -> ComboSelectionIndexAbi {
+pub(crate) fn encode_selection(selection: Option<usize>) -> ComboSelectionAbi {
     match selection {
-        Some(index) => ComboSelectionIndex::Selected(index as u64),
-        None => ComboSelectionIndex::None,
+        Some(index) => ComboSelection::Selected(index as u64),
+        None => ComboSelection::None,
     }
     .into()
 }
 
 /// Decodes the public tagged selection and rejects unknown or unrepresentable payloads.
-pub(crate) fn decoded_selection(selection: ComboSelectionIndexAbi) -> Result<Option<usize>, NcStatus> {
-    match ComboSelectionIndex::try_from(selection).map_err(|_| NC_E_INVALID_ARG)? {
-        ComboSelectionIndex::None => Ok(None),
-        ComboSelectionIndex::Selected(index) => usize::try_from(index).map(Some).map_err(|_| NC_E_INVALID_ARG),
+pub(crate) fn decoded_selection(selection: ComboSelectionAbi) -> Result<Option<usize>, NcStatus> {
+    match ComboSelection::try_from(selection).map_err(|_| NC_E_INVALID_ARG)? {
+        ComboSelection::None => Ok(None),
+        ComboSelection::Selected(index) => usize::try_from(index).map(Some).map_err(|_| NC_E_INVALID_ARG),
     }
 }
 

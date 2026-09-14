@@ -324,14 +324,13 @@ trait IWindowManager {
 #[version(1)]
 /// Runtime-owned combo-box construction binds each transient choice surface to its exact window owner.
 trait IComboBoxes {
-    /// Creates one unmounted header and its private popup from a complete, validated item snapshot.
+    /// Creates one unmounted header and private popup with the standard `Select…` fallback.
     fn create_combo_box(
         &self,
         parent: &IWindow,
-        placeholder: &[u8],
         item_text: &[u8],
         items: &[ComboItemRange],
-        selection: ComboSelectionIndex,
+        selection: ComboSelection,
     ) -> Result<Combo>;
 }
 

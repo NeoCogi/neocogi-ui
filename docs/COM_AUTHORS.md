@@ -112,7 +112,7 @@ once when subscribing. The session offers these concrete families:
 | `subscribe_text_submitted` | Textbox, TextArea | Submitted normalized text |
 | `subscribe_window` | Logical window | Typed lifecycle/chrome event with copied geometry where relevant |
 | `subscribe_popup` | Popup | Dismissal fact |
-| `subscribe_combo_changed` | Combo | Committed item index and matching label |
+| `subscribe_combo_changed` | Combo | NCIDL-generated committed selection |
 | `subscribe_menu_item` | Compact menu row | Submitted label |
 | `subscribe_file_dialog` | Standard file picker | Exact accepted native path or cancellation |
 
@@ -657,20 +657,24 @@ reference never transfers the parent's topology authority.
 
 ## Combo and compact menus
 
-Create a combo through `Ui::combo_box(parent, items, options)`, not the ordinary
+Create a combo through `Ui::combo_box(parent, items, selection)`, not the ordinary
 widget factory. The runtime needs the parent up front because it constructs one
 private popup definition with a real structural owner at the same time as the
 unmounted header. The caller then inserts the returned `ComboWidget` into that
 window's retained tree. The popup capability, row presentation, and coordination
 events are deliberately not exposed.
 
-The control owns its display labels and represents the committed position as
-`Option<ComboSelection>`. `None` is not item zero: it renders the configured
-placeholder, whose default is `Select…`. `replace_items(items, selection)` validates
-and installs the complete label/selection candidate atomically. Both it and
-`set_selection` reject an out-of-range index instead of clamping. These programmatic
-edits remain silent; `subscribe_combo_changed` receives an immutable index/label
-snapshot only after a pointer or keyboard choice actually commits.
+The control owns its display labels and represents the committed position with the
+NCIDL-generated `ComboSelection`. `ComboSelection::None` is not item zero:
+it renders the runtime-owned `Select…` fallback unless `set_placeholder` replaces
+it. The facade consumes and returns that generated contract type directly instead
+of declaring a parallel Rust selection record. `replace_items(items, selection)`
+validates and installs the complete label/selection candidate atomically. Both it
+and `set_selection` reject an out-of-range selected index instead of clamping.
+These programmatic edits remain silent; `subscribe_combo_changed` receives an
+immutable generated selection value only after a pointer or keyboard choice
+actually commits. Display labels remain independently available through `item`
+and `display_text`; generic application data is mapped from the committed index.
 
 Opening copies the committed selection into a transient keyboard candidate. The
 popup paints pointer hover, then keyboard candidate, then committed selection:

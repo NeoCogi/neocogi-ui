@@ -87,7 +87,7 @@ use control::{
 pub use button::{Button, ButtonParameters, ButtonSubmitted};
 pub use checkbox::{Checkbox, CheckboxChanged, CheckboxParameters};
 pub use color_swatch::{ColorSwatch, ColorSwatchParameters};
-pub use combo::{Combo, ComboChanged, ComboParameters};
+pub use combo::{Combo, ComboParameters};
 pub use list_box::{ListBox, ListBoxParameters, ListBoxSubmitted};
 pub use list_item::{ListItem, ListItemParameters, ListItemSubmitted};
 pub use number::{Number, NumberChanged, NumberParameters};

@@ -120,15 +120,6 @@ impl Combo {
     }
 }
 
-/// Selection snapshot emitted after a combo's selected value changes.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ComboChanged {
-    /// Selected item index after applying the change.
-    pub selected: usize,
-    /// Selected item label after applying the change.
-    pub label: String,
-}
-
 impl Combo {
     /// Measures the widest possible header label so selection changes remain paint-only.
     fn preferred_size_widget(&self, style: &Skin, atlas: &AtlasHandle, _constraints: Constraints) -> Dimensioni {
@@ -248,7 +239,7 @@ impl crate::ui_node::widget_object::FontState for Combo {
 }
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
 use neocogi_ui_core_contracts::{
-    ComboAbi, ComboItemRange, ComboSelectionIndexAbi, FontRole, GeometryChange, IComboChangedSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi,
+    ComboAbi, ComboItemRange, ComboSelectionAbi, FontRole, GeometryChange, IComboChangedSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi,
 };
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
 
@@ -276,7 +267,7 @@ impl Combo {
 
 impl neocogi_ui_core_contracts::Combo for Combo {
     /// Returns an explicit tagged optional position from the authoritative model.
-    fn selection(&self) -> Result<ComboSelectionIndexAbi, NcStatus> {
+    fn selection(&self) -> Result<ComboSelectionAbi, NcStatus> {
         self.runtime().state.readable()?;
         self.state.selection()
     }
@@ -304,7 +295,7 @@ impl neocogi_ui_core_contracts::Combo for Combo {
         &mut self,
         item_text: NcCopyFromBufferOffset<'_, u8>,
         ranges: NcCopyFromBufferOffset<'_, ComboItemRange>,
-        selection: ComboSelectionIndexAbi,
+        selection: ComboSelectionAbi,
     ) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
         let changed = self.state.replace_items(item_text, ranges, selection)?;
@@ -315,7 +306,7 @@ impl neocogi_ui_core_contracts::Combo for Combo {
     }
 
     /// Silently changes selection with strict range validation and truthful geometry invalidation.
-    fn set_selection(&mut self, selection: ComboSelectionIndexAbi) -> Result<(), NcStatus> {
+    fn set_selection(&mut self, selection: ComboSelectionAbi) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
         let _ = self.state.set_selection(selection)?;
         // Header measurement reserves the widest label, so changing only selection is paint-only.
@@ -353,14 +344,5 @@ impl neocogi_ui_core_contracts::Combo for Combo {
     fn subscribe_changed(&mut self, sink: ComRef<'_, IComboChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         self.state.subscribe_changed(sink)
-    }
-}
-
-impl crate::event::ComEvent for ComboChanged {
-    type Sink = IComboChangedSinkAbi;
-
-    /// Delivers the captured label rather than rereading possibly newer widget state.
-    fn deliver(&self, sink: ComRef<'_, Self::Sink>) -> Result<(), NcStatus> {
-        sink.changed(self.selected as u64, NcCopyFromBufferOffset::new(0, self.label.as_bytes()))
     }
 }
