@@ -41,6 +41,10 @@ fn select_win311_from_menu(host: &Host, events: &EventSession<State>) -> Result<
         )?;
     }
     host.ui.update_with_events(size, events)?;
+    // The application installs prepared theme assets in its frame phase after event dispatch.
+    // Reproduce that production ordering before the synchronization update and render assertions.
+    events.state_mut()?.frame(host, size, 0.)?;
+    host.ui.update_with_events(size, events)?;
     let state = events.state()?;
     assert_eq!(state.themes[1].1.mark()?, MenuMark::Radio { selected: true });
     assert_eq!(state.ui.assets()?.metrics()?, Theme::ALL[1].load(base.as_com_ref())?.metrics()?);
@@ -56,6 +60,8 @@ fn exercise() -> Result<(Host, EventSession<State>), HostError> {
     select_win311_from_menu(&host, &events)?;
     for theme in Theme::ALL {
         events.state_mut()?.select_theme(theme)?;
+        // Drive the same deferred asset installation that Host performs between its two updates.
+        events.state_mut()?.frame(&host, size, 0.)?;
         // The photograph is below the initial viewport. Requesting the measured end guarantees
         // every theme crosses real image forwarding, clipping, validation and native GPU upload.
         events.state_mut()?.sample_scroll.scroll_to_end()?;
@@ -71,7 +77,6 @@ fn exercise() -> Result<(Host, EventSession<State>), HostError> {
         let mut state = events.state_mut()?;
         state.select_theme(Theme::Default)?;
         Action::Spacing(false).handle(&mut state, &Activation { label: String::new() })?;
-        assert_eq!(state.ui.assets()?.metrics()?.spacing, 2);
         Action::Fruit(2).handle(&mut state, &Activation { label: "Cherry".to_owned() })?;
         assert_eq!(state.combo.selected()?, 2);
         assert_eq!(state.combo.label()?, "Cherry");
@@ -84,6 +89,9 @@ fn exercise() -> Result<(Host, EventSession<State>), HostError> {
         Action::ShowDemo.handle(&mut state, &Activation { label: String::new() })?;
         assert_eq!(state.demo.snapshot()?.visibility, Visibility::Visible);
     }
+    // Commit the final style edit before observing the installed immutable revision.
+    events.state_mut()?.frame(&host, size, 0.)?;
+    assert_eq!(events.state()?.ui.assets()?.metrics()?.spacing, 2);
     host.ui.update_with_events(size, &events)?;
     host.ui.render(size, host.renderer.as_com_ref())?;
     Ok((host, events))

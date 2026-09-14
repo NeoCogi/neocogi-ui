@@ -406,10 +406,13 @@ impl GfxCompositorObject {
 
     /// Appends one clipped atlas rectangle after validating its source against current resources.
     fn append_atlas_rect(&mut self, clip: Rect, destination: Rect, source: Rect, rgba: u32) -> Result<(), NcStatus> {
-        if destination.width < 0 || destination.height < 0 || !contains(atlas_bounds(&self.resources.tables), source) {
+        if destination.width < 0 || destination.height < 0 || !contains_nonnegative(atlas_bounds(&self.resources.tables), source) {
             return Err(NC_E_INVALID_ARG);
         }
-        if destination.width == 0 || destination.height == 0 || rgba.to_le_bytes()[3] == 0 {
+        // A nine-patch whose opposing source insets meet has an empty middle row or column. That
+        // cell is valid structural geometry but contributes no pixels, just like an empty clipped
+        // destination or transparent tint. Rejecting it would make the whole theme unrenderable.
+        if destination.width == 0 || destination.height == 0 || source.width == 0 || source.height == 0 || rgba.to_le_bytes()[3] == 0 {
             return Ok(());
         }
         let Some(clip) = self.effective_clip(clip)? else {
@@ -709,12 +712,14 @@ fn atlas_bounds(tables: &AssetTables) -> Rect {
     }
 }
 
-/// Reports whether one positive rectangle lies wholly inside another using overflow-safe edges.
-fn contains(outer: Rect, inner: Rect) -> bool {
+/// Reports whether one nonnegative rectangle lies wholly inside positive bounds.
+fn contains_nonnegative(outer: Rect, inner: Rect) -> bool {
+    // Empty source cells remain bounded data: their origin and nonempty axis must still lie inside
+    // the atlas. Wide edge arithmetic rejects overflow without excluding a zero-area no-op.
     outer.width > 0
         && outer.height > 0
-        && inner.width > 0
-        && inner.height > 0
+        && inner.width >= 0
+        && inner.height >= 0
         && inner.x >= outer.x
         && inner.y >= outer.y
         && i64::from(inner.x) + i64::from(inner.width) <= i64::from(outer.x) + i64::from(outer.width)

@@ -302,6 +302,54 @@ fn appearance_revision_is_a_validated_resource_preserving_transaction() {
     );
 }
 
+/// Bounded empty atlas cells are structural nine-patch geometry, while out-of-bounds cells remain invalid.
+#[test]
+fn compositor_accepts_only_bounded_degenerate_atlas_rectangles() {
+    let bundle = test_bundle();
+    let size = data(&bundle).tables.size;
+    let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
+    let clip = Rect { x: 0, y: 0, width: 32, height: 32 };
+    let destination = Rect { x: 4, y: 4, width: 16, height: 16 };
+    compositor.begin(Size { width: 32, height: 32 }, 0xff000000).unwrap();
+    for source in [
+        Rect { x: 0, y: 0, width: 0, height: 1 },
+        Rect { x: 0, y: 0, width: 1, height: 0 },
+        Rect {
+            x: size.width,
+            y: size.height,
+            width: 0,
+            height: 0,
+        },
+    ] {
+        // Empty rows, columns, and points are valid no-ops when their closed bounds fit the atlas.
+        compositor.atlas_rect(clip, destination, source, 0xffffffff).unwrap();
+    }
+    let capture = std::rc::Rc::new(RenderCapture::default());
+    let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { capture: capture.clone() }).query().unwrap();
+    compositor.submit(renderer.as_com_ref()).unwrap();
+    assert_eq!(capture.calls.get(), 1);
+    assert!(capture.vertices.borrow().is_empty());
+    assert!(capture.batches.borrow().is_empty());
+
+    // A zero-area rectangle beyond the atlas is still malformed and cannot bypass validation.
+    compositor.begin(Size { width: 32, height: 32 }, 0xff000000).unwrap();
+    assert_eq!(
+        compositor.atlas_rect(
+            clip,
+            destination,
+            Rect {
+                x: size.width + 1,
+                y: size.height,
+                width: 0,
+                height: 0,
+            },
+            0xffffffff,
+        ),
+        Err(NC_E_INVALID_ARG)
+    );
+    compositor.cancel().unwrap();
+}
+
 /// Coarse operations expand inside GFX, use one renderer call, and expire the retained stream.
 #[test]
 fn compositor_owns_final_geometry_batching_and_stream_scope() {
