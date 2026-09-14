@@ -66,9 +66,13 @@ use the trait's per-triangle fallback. A render item additionally receives its a
 visible region because its own mesh drawing happens at that ordered boundary.
 
 The COM recorder appends semantic operations to UI-local storage. At frame execution UI sends
-complete triangle, text, and rectangle inputs to GFX with one call per operation. GFX expands
-glyphs and quads locally, then exposes all final vertices and batch metadata to the renderer in
-two bulk reads. Texture and custom-item capabilities are fetched only for their corresponding batches.
+complete triangle, text, icon, and nine-patch inputs to GFX with one call per operation. A
+`NinePatchDraw` contains only destination insets, center visibility, and closed flat-or-image
+content; UI never derives its nine cell rectangles. GFX resolves bundle-local image sources,
+partitions source and destination cells, removes empty cells, clips final geometry, and folds the
+result into adjacent atlas work. It exposes all final vertices and batch metadata to the renderer
+in two bulk reads. Texture and custom-item capabilities are fetched only for their corresponding
+batches.
 
 The portable target is a positive drawable up to 8192 by 8192 pixels. Translated logical
 edges must remain in `-32768..=40960`, allowing four maximum drawable spans off-screen.
@@ -94,7 +98,8 @@ rectangle and final visible region. Render items are owned COM capabilities; no 
 | Source | Responsibility |
 | --- | --- |
 | `ui_node/paint_service.rs` | Scoped foreign access to the runtime-owned frame paint context |
-| [crates/gfx/impl/src/compositor.rs](../../../gfx/impl/src/compositor.rs) | Atlas expansion, final clipping, batching, and bulk frame transport |
+| [crates/gfx/impl/src/nine_patch.rs](../../../gfx/impl/src/nine_patch.rs) | Nine-patch validation, source resolution, cell partitioning, and visibility |
+| [crates/gfx/impl/src/compositor.rs](../../../gfx/impl/src/compositor.rs) | Final clipping, batching, and bulk frame transport |
 | `render/painter.rs` | Private built-in geometry recording |
 | `render/display_list.rs` | Owned ordered operations and reusable geometry |
 | `render/compositor.rs` | Thin production replay into the GFX compositor |
@@ -110,9 +115,10 @@ and resource obligations are detailed in [BACKENDS.md](BACKENDS.md).
 
 Headless tests inspect the actual compositor stream through `IRenderer`. They
 cover command order, resource expiry, texture UVs, clipped triangle attributes,
-text placement and nine-patch geometry. Pure painter/tessellation tests observe
-production buffers directly. No second UI executor or clipping implementation is
-compiled for tests. [TESTING.md](TESTING.md) describes these boundaries.
+text placement and physical nine-patch geometry. UI recording tests assert only
+the retained semantic patch and never reproduce GFX's partitioning algorithm.
+No second UI executor or clipping implementation is compiled for tests.
+[TESTING.md](TESTING.md) describes these boundaries.
 
 The warmed painter allocation assertion covers command recording only. Deployment
 measurements must include COM overhead, the executable, shipped plugins, assets,

@@ -17,8 +17,10 @@ so applications can prepare several choices before selection.
 
 All PNG paths are relative to the JSON file. Repeated state entries that resolve to the same path
 share one decoded atlas region; their source insets, destination insets, and tints remain
-independent typed patch metadata. Theme nine-patches therefore join text, icons, and flat fills in
-the ordinary atlas vertex batch. External textures remain reserved for application-owned images.
+independent typed patch metadata. UI submits that complete metadata as one operation; GFX resolves
+the referenced icon, slices all visible cells, clips them, and joins their output with text, icons,
+and flat fills in the ordinary atlas vertex batch. External textures remain reserved for
+application-owned images.
 A failed load leaves the active renderer and its external textures untouched.
 
 ## Bundled example themes

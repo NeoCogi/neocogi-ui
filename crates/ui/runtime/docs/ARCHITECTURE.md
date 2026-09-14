@@ -136,8 +136,10 @@ calls restore the parent scope; expired tokens cannot become valid again.
 
 Built-in text, frames and polygons share the UI's semantic recording and tessellation
 code. Ordered atlas, immutable-image and custom-render-item operations preserve their
-display-list positions. The retained GFX compositor expands resource-backed geometry,
-clips final vertices, merges adjacent atlas work, and publishes one bounded bulk stream.
+display-list positions. Each frame or themed background remains one typed nine-patch
+operation across the UI-to-GFX boundary. The retained GFX compositor alone partitions
+its destination and source, filters cells, clips final vertices, merges adjacent atlas
+work, and publishes one bounded bulk stream.
 The renderer validates that stream and resource ownership before acquiring a frame.
 Owned images and scenes retain their device/window as needed; backend types remain
 local to their assembly.

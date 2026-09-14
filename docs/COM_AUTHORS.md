@@ -802,8 +802,10 @@ specified terminal fact. No producer stores callbacks or retains the application
 
 `IRenderer::render` prepares and explicitly finishes one complete frame synchronously.
 There is no cloneable COM frame or borrowed native render-pass object. UI records translated
-semantic operations in painter order. Its retained GFX compositor expands text and atlas
-geometry, performs final clipping, and publishes the owned `IRenderStream`. A retained stream/token expires
+semantic operations in painter order. Each nine-patch crosses into the retained GFX compositor
+as one closed typed operation; GFX owns its source lookup, nine-cell expansion, visibility,
+final clipping, and atlas batching alongside text and icon expansion. It then publishes the owned
+`IRenderStream`. A retained stream/token expires
 on success and failure, including zero-length reads and indexed resource queries.
 
 A stream contains a bulk vertex buffer and ordered `RenderBatch` records. Atlas

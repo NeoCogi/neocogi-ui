@@ -104,6 +104,11 @@ wrappers. [COM_DESIGN.md](COM_DESIGN.md) defines the accepted architecture, and
   `cargo bloat` measurements show UI `.text` falling by 10.6 KiB, GFX `.text` growing
   by 13.9 KiB, and the complete executable/shared-object set growing by 4,920 bytes;
   the architectural split is deliberately not presented as a total-size reduction.
+- Replace the compositor's raw atlas-rectangle call with one closed `NinePatchDraw`.
+  UI now retains and replays one semantic operation while GFX alone resolves image
+  sources, partitions the destination and source grids, filters empty cells, clips
+  final triangles, and merges their atlas batch. UI tests inspect semantic patches;
+  compositor-stream tests verify the physical geometry at its owning boundary.
 - Compile generated Rust contract descriptions for the underlying platform ABI
   when the `min-size` build uses its fingerprint-distinct custom target.
 - Move portable appearance roles and semantic font/icon roles into

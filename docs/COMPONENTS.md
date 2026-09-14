@@ -88,9 +88,13 @@ receivers validate unknown tags before reading a payload.
 Plugin separation does not add per-widget or per-draw calls:
 
 - UI records one retained display list and sends one coarse typed call per draw operation
-  to its GFX compositor; there is no per-glyph or per-vertex ABI call.
-- GFX performs atlas expansion, final clipping, and adjacent batching, then submits one
-  bounded `IRenderStream` to the renderer; vertices and batches transfer through bulk slices.
+  to its GFX compositor; there is no per-glyph, per-nine-patch-cell, or per-vertex ABI call.
+  In particular, one `NinePatchDraw` carries destination insets, center policy, and either
+  nine flat colors or one typed bundle-local image description.
+- GFX validates and expands that complete nine-patch operation, including source slicing,
+  tiny-destination partitioning, cell visibility, final clipping, and adjacent batching. It
+  then submits one bounded `IRenderStream` to the renderer; vertices and batches transfer
+  through bulk slices.
 - Skin authoring and GFX construction services run only while loading, rebuilding, or
   editing an immutable bundle. The GFX compositor remains active for coarse frame
   execution. A JSON theme crosses the Skin-to-GFX boundary once per
