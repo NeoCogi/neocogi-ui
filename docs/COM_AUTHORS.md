@@ -42,7 +42,18 @@ Measurement constraints and allocated rectangles have different meanings. Unboun
 
 ## Borrowed calls, paint, and layout
 
-`ComRef` borrows a live interface for a call; it can be retained with `add_ref()`. Therefore it is not an exclusive, non-retainable Rust borrow. Never create a COM implementation containing a stack `&mut Painter`, borrowed child storage, a native frame borrow, or a borrowed application `&mut State` and assume a ComRef prevents it escaping.
+Generated interfaces have one safe calling convention. `ComPtr<IFooAbi>` and
+`ComRef<'_, IFooAbi>` both lend the generated `IFooClient` view, so callers use
+`pointer.method()` without importing an interface-specific extension trait.
+Derived client views dereference through their declared base views for inherited
+method lookup. An owned base projection still requires checked `QueryInterface`;
+method lookup alone never manufactures another COM reference.
+
+`ComRef` borrows a live interface for a call; it can be retained with `add_ref()`.
+Therefore it is not an exclusive, non-retainable Rust borrow. Never create a COM
+implementation containing a stack `&mut Painter`, borrowed child storage, a
+native frame borrow, or a borrowed application `&mut State` and assume a ComRef
+prevents it escaping.
 
 Paint/layout services own their storage and issue invocation tokens. The static `Painter<'a>`/layout convenience wrapper hides the token from ordinary drawing calls, but the implementation checks it on every ABI operation. The token expires on every exit, including errors. An old token never becomes valid again in a later frame. Retaining the object remains memory-safe and retaining its expired authority does not permit further painting/layout.
 
