@@ -90,6 +90,19 @@ pub(crate) fn frame_geometry_with_insets(outer: Recti, insets: SliceInsets) -> F
     FrameGeometry { outer, content }
 }
 
+/// Reconstructs a framed outer rectangle from one known content rectangle and matching insets.
+pub(crate) fn outer_from_content(content: Recti, insets: SliceInsets) -> Recti {
+    // This is the exact inverse of `checked_inset` for a valid content rectangle. Saturation keeps
+    // the operation total at coordinate limits while ordinary layout values round-trip exactly.
+    let insets = insets.normalized();
+    Recti::new(
+        content.x.saturating_sub(insets.left),
+        content.y.saturating_sub(insets.top),
+        content.width.saturating_add(insets.horizontal_extent()),
+        content.height.saturating_add(insets.vertical_extent()),
+    )
+}
+
 /// Removes a frame from each finite measurement bound while preserving unbounded axes.
 pub(crate) fn content_constraints(constraints: Constraints, insets: SliceInsets) -> Constraints {
     // Each axis removes its independently configured pair of patch cells. Unbounded space stays
@@ -193,6 +206,19 @@ mod tests {
         let geometry = frame_geometry(Recti::new(10, 20, 30, 40), Some(FrameRole::Surface(SurfaceRole::GenericFrame)), &style);
         assert_eq!(rect_tuple(geometry.outer), (10, 20, 30, 40));
         assert_eq!(geometry.content.map(rect_tuple), Some((12, 22, 26, 36)));
+    }
+
+    /// Inverting valid content geometry recovers all four outer edges without fixed offsets.
+    #[test]
+    fn outer_from_content_round_trips_frame_geometry() {
+        let insets = SliceInsets { left: 2, top: 3, right: 5, bottom: 7 };
+        let outer = Recti::new(11, 13, 80, 50);
+        let content = frame_geometry_with_insets(outer, insets).content.expect("frame leaves positive content");
+        let recovered = outer_from_content(content, insets);
+        assert_eq!(
+            (recovered.x, recovered.y, recovered.width, recovered.height),
+            (outer.x, outer.y, outer.width, outer.height)
+        );
     }
 
     #[test]

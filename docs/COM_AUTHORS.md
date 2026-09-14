@@ -678,6 +678,11 @@ leaving the rows therefore restores the keyboard/committed fallback. Arrows move
 only the candidate, Enter or a row press commits, and Escape/outside dismissal
 preserves the prior selection.
 
+Popup placement uses the header's complete outer border box rather than its inset
+content rectangle. Its horizontal extent remains fixed to that box while row
+content determines height, so theme-specific frames cannot shift the left edge or
+extend the right edge.
+
 The header and ordinary private popup widget use one runtime-private typed state
 capability because they are independently retained objects. That allocation owns
 ordinary label, selection, placeholder, revision, and lifecycle fields; every

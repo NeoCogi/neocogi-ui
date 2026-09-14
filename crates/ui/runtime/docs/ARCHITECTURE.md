@@ -259,8 +259,11 @@ removal of its popup definition, while closing the parent window removes the gen
 ordinary structural ownership. The popup keeps pointer-hot and keyboard-active candidates separate
 from committed optional selection, and paint resolves `hot`, then `active`, then `selected`. Thus
 first layout highlights the committed item, pointer departure restores it, and dismissal requires
-no application callback or mirrored header state. A separate item revision invalidates the popup's
-independent measurement cache when labels change while it is hidden or during a callback.
+no application callback or mirrored header state. A separate row-count revision invalidates the
+popup's independent vertical measurement cache when its number of choices changes. The
+header reconstructs its border box from the same theme insets used by traversal, and the generic
+popup keeps that exact outer width while deriving only its height from row content. Consequently
+both outer horizontal edges align without hard-coded offsets or double-counting popup chrome.
 
 An intrinsic `MenuBar` is consumed with its `Window` into one compact concrete `MenuSurface` for the
 bar and one directly owned `MenuSurface` body for each private popup definition. These are not

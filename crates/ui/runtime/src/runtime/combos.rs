@@ -44,7 +44,7 @@ impl IComboBoxes for Runtime {
             .window_manager
             .set_popup_options(
                 &popup,
-                WindowOption::FRAME | WindowOption::NO_PADDING | WindowOption::NO_TITLE | WindowOption::NO_RESIZE | WindowOption::AUTO_SIZE,
+                WindowOption::FRAME | WindowOption::NO_PADDING | WindowOption::NO_TITLE | WindowOption::NO_RESIZE | WindowOption::AUTO_HEIGHT,
             )
             .expect("newly registered popup must accept its presentation options");
         context.register_combo_box(state, popup, presentation);

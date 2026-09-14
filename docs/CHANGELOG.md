@@ -14,7 +14,9 @@ wrappers. [COM_DESIGN.md](COM_DESIGN.md) defines the accepted architecture, and
   `Option<ComboSelection>`, supplies the visible `Select…` fallback by default, rejects invalid
   indices instead of clamping, and atomically replaces labels with an explicit optional selection.
   Popup hover, keyboard candidate, and committed selection are separate typed states, so opening
-  starts on the committed item and pointer departure restores it without a blank frame.
+  starts on the committed item and pointer departure restores it without a blank frame. The popup
+  uses the header's theme-derived outer border box as its fixed horizontal extent, aligning both
+  edges without counting either control's frame twice.
 - Use `nc_com_shared_runtime` as the runtime library name in direct builds,
   native bindings, and generated LTO roots. Assemblies deploy one runtime library
   without the former duplicate filename. The Cargo package remains `neocogi-com-runtime`.

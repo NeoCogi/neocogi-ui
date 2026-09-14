@@ -94,6 +94,30 @@ impl Combo {
         // the private state object remains alive and valid for the header's complete lifetime.
         self.state.display_text().and_then(|text| text.to_string()).unwrap_or_default()
     }
+
+    /// Reconstructs the header border box used as the popup's exact outer-width anchor.
+    fn popup_anchor(&self, ctx: &WidgetUpdateCtx<'_>) -> neocogi_ui_core_contracts::Rect {
+        // Traversal intentionally gives widgets their content rectangle. Recover this control's
+        // border box with the same normal-state insets used by measurement and layout, including
+        // the valid unframed case without introducing theme-dependent pixel constants.
+        let options = self.runtime.state.options().expect("a mounted combo update has readable common state");
+        let options = WidgetOption::from_bits_retain(u32::from(options.raw()));
+        let insets = if options.intersects(WidgetOption::FRAME) {
+            crate::ui_node::frame::normal_frame_visual(ctx.skin(), self.frame_appearance_role())
+                .patch
+                .insets
+                .normalized()
+        } else {
+            crate::SliceInsets::ZERO
+        };
+        let header = crate::ui_node::frame::outer_from_content(ctx.screen_content_rect(), insets);
+        neocogi_ui_core_contracts::Rect {
+            x: header.x,
+            y: header.y.saturating_add(header.height),
+            width: header.width,
+            height: 1,
+        }
+    }
 }
 
 /// Selection snapshot emitted after a combo's selected value changes.
@@ -126,13 +150,7 @@ impl Combo {
     /// Converts header activation into one private popup-state-machine transition.
     fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
         if let Some(action) = ctx.action(input, self.keyboard_behavior()) {
-            let screen_header = ctx.screen_content_rect();
-            let anchor = neocogi_ui_core_contracts::Rect {
-                x: screen_header.x,
-                y: screen_header.y.saturating_add(screen_header.height),
-                width: screen_header.width,
-                height: 1,
-            };
+            let anchor = self.popup_anchor(ctx);
             let intent = match action {
                 KeyboardAction::Activate => Some(ComboPopupIntent::Toggle),
                 KeyboardAction::Expand => Some(ComboPopupIntent::Open),

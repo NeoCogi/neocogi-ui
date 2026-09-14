@@ -73,8 +73,8 @@ enum ComboPopupLifecycle {
 pub(crate) trait IComboState {
     /// Returns a revision changed by labels, placeholder, or committed selection.
     fn revision(&self) -> Result<u64, NcStatus>;
-    /// Returns a revision changed only when popup row labels or their count change.
-    fn items_revision(&self) -> Result<u64, NcStatus>;
+    /// Returns a revision changed only when popup row count changes its vertical geometry.
+    fn row_revision(&self) -> Result<u64, NcStatus>;
     /// Returns the explicit optional committed item position.
     fn selection(&self) -> Result<ComboSelectionIndexAbi, NcStatus>;
     /// Copies the selected label or placeholder currently displayed by the header.
@@ -121,8 +121,8 @@ pub(crate) struct ComboState {
     placeholder: String,
     /// Monotonic semantic revision used to invalidate transient popup candidates.
     revision: u64,
-    /// Monotonic row-geometry revision kept distinct from selection and placeholder changes.
-    items_revision: u64,
+    /// Monotonic row-count revision kept distinct from paint-only model changes.
+    row_revision: u64,
     /// Last valid screen-space anchor captured by header activation.
     popup_anchor: Rect,
     /// Explicit popup lifecycle reconciled by the runtime composition owner.
@@ -140,7 +140,7 @@ impl ComboState {
             selection,
             placeholder,
             revision: 0,
-            items_revision: 0,
+            row_revision: 0,
             popup_anchor: Rect::default(),
             popup: ComboPopupLifecycle::Closed,
             changed_event: crate::EventSource::new(),
@@ -227,8 +227,8 @@ impl IComboState for ComboState {
     }
 
     /// Reads the narrower revision used by the popup's independent measurement cache.
-    fn items_revision(&self) -> Result<u64, NcStatus> {
-        Ok(self.items_revision)
+    fn row_revision(&self) -> Result<u64, NcStatus> {
+        Ok(self.row_revision)
     }
 
     /// Encodes structural absence without manufacturing an in-band index sentinel.
@@ -265,12 +265,12 @@ impl IComboState for ComboState {
         if self.items == items && self.selection == selection {
             return Ok(false);
         }
-        let items_changed = self.items != items;
+        let row_count_changed = self.items.len() != items.len();
         self.items = items;
         self.selection = selection;
         self.advance_revision();
-        if items_changed {
-            self.items_revision = self.items_revision.wrapping_add(1);
+        if row_count_changed {
+            self.row_revision = self.row_revision.wrapping_add(1);
         }
         self.close_if_empty();
         Ok(true)
@@ -364,7 +364,7 @@ impl IComboState for ComboState {
 )]
 /// Runtime-private lifecycle control for the ordinary widget used as popup content.
 pub(crate) trait IComboPopupControl {
-    /// Synchronizes popup-local candidates and invalidates geometry only when rows changed.
+    /// Synchronizes popup-local candidates and invalidates geometry only when row count changed.
     fn synchronize_model(&mut self) -> Result<bool, NcStatus>;
     /// Resets hover and keyboard candidates immediately before generic popup activation.
     fn prepare_open(&mut self) -> Result<(), NcStatus>;
@@ -384,7 +384,7 @@ pub(crate) struct ComboPopup {
     /// State revision reflected by the transient candidates.
     observed_revision: u64,
     /// Row revision reflected by the popup widget's independent measurement cache.
-    observed_items_revision: u64,
+    observed_row_revision: u64,
 }
 
 /// Exact effects of synchronizing transient popup presentation with its semantic model.
@@ -405,14 +405,14 @@ impl ComboPopup {
     ) -> Result<(ComPtr<IWidgetAbi>, ComPtr<IComboPopupControlAbi>), NcStatus> {
         let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, WidgetOption::NONE, Some(&resources))?;
         let observed_revision = state.revision()?;
-        let observed_items_revision = state.items_revision()?;
+        let observed_row_revision = state.row_revision()?;
         let unknown = Self::from_value(Self {
             runtime,
             state,
             hot: None,
             active: None,
             observed_revision,
-            observed_items_revision,
+            observed_row_revision,
         });
         Ok((unknown.query()?, unknown.query()?))
     }
@@ -444,10 +444,10 @@ impl ComboPopup {
     /// Resets stale presentation candidates from the latest authoritative selection.
     fn synchronize_revision(&mut self) -> Result<PresentationChange, NcStatus> {
         let revision = self.state.revision()?;
-        let items_revision = self.state.items_revision()?;
+        let row_revision = self.state.row_revision()?;
         let change = PresentationChange {
             semantic: self.observed_revision != revision,
-            geometry: self.observed_items_revision != items_revision,
+            geometry: self.observed_row_revision != row_revision,
         };
         if change.semantic {
             self.hot = None;
@@ -455,7 +455,7 @@ impl ComboPopup {
             self.observed_revision = revision;
         }
         if change.geometry {
-            self.observed_items_revision = items_revision;
+            self.observed_row_revision = row_revision;
         }
         Ok(change)
     }
@@ -526,16 +526,10 @@ fn visible_popup_index(hot: Option<usize>, active: Option<usize>, selected: Opti
 impl crate::LeafWidget for ComboPopup {
     /// Measures every current label without retaining a second item collection.
     fn measure(&self, style: &Skin, atlas: &AtlasHandle, _constraints: Constraints) -> Dimensioni {
-        let font = style.resolve_font(atlas, &FontRef::Role(FontRole::Body));
-        let padding = style.metrics.padding.max(0);
-        let mut width = self.state.popup_anchor().map(|anchor| anchor.width.max(0)).unwrap_or(0);
-        for index in 0..self.item_count() {
-            if let Ok(label) = self.state.item(index as u64).and_then(|label| label.to_string()) {
-                width = width.max(atlas.get_text_size(font, &label).width.max(0).saturating_add(padding.saturating_mul(2)));
-            }
-        }
         let count = i32::try_from(self.item_count()).unwrap_or(i32::MAX);
-        Dimensioni::new(width, Self::row_height(style, atlas).saturating_mul(count))
+        // Width belongs to the header's exact outer anchor; only row count contributes intrinsic
+        // popup geometry now that the generic surface fixes the horizontal axis.
+        Dimensioni::new(0, Self::row_height(style, atlas).saturating_mul(count))
     }
 }
 
@@ -652,7 +646,7 @@ impl IComboPopupControl for ComboPopup {
         self.hot = None;
         self.active = self.selection()?;
         self.observed_revision = self.state.revision()?;
-        self.observed_items_revision = self.state.items_revision()?;
+        self.observed_row_revision = self.state.row_revision()?;
         Ok(())
     }
 }
@@ -820,7 +814,7 @@ mod tests {
             selection,
             placeholder: "Select…".into(),
             revision: 0,
-            items_revision: 0,
+            row_revision: 0,
             popup_anchor: Rect::default(),
             popup: ComboPopupLifecycle::Closed,
             changed_event: crate::EventSource::new(),
@@ -875,13 +869,13 @@ mod tests {
         assert_eq!(visible_popup_index(None, None, None), None);
     }
 
-    /// Popup geometry revision changes for row replacements but not paint-only selection edits.
+    /// Popup geometry revision changes for row-count replacements but not paint-only edits.
     #[test]
-    fn item_revision_tracks_only_popup_measurement_inputs() {
+    fn row_revision_tracks_only_popup_measurement_inputs() {
         let mut state = state(Some(1));
         state.set_selection(encode_selection(Some(2))).unwrap();
         state.set_placeholder(NcCopyFromBufferOffset::new(0, "Another fallback".as_bytes())).unwrap();
-        assert_eq!(state.items_revision, 0);
+        assert_eq!(state.row_revision, 0);
 
         let text = b"ApricotBlueberry";
         let ranges = [ComboItemRange { first: 0, count: 7 }, ComboItemRange { first: 7, count: 9 }];
@@ -892,6 +886,6 @@ mod tests {
                 encode_selection(Some(1)),
             )
             .unwrap();
-        assert_eq!(state.items_revision, 1);
+        assert_eq!(state.row_revision, 1);
     }
 }
