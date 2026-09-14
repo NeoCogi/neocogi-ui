@@ -1,11 +1,15 @@
 # Built-in widgets and containers
 
-Applications use `neocogi_ui::Ui::widgets()` to construct actual COM objects.
+Applications use `neocogi_ui::Ui::widgets()` to construct independent COM objects.
 A thin `Widget<C>` client owns a checked class projection, with no copied semantic
 state or native widget wrapper. Each callable widget class requires `IWidget` and
 the one applicable shared layout protocol. The class's concrete Rust allocation
 supplies common options, lifecycle, update, measurement, painting, editing, and
 optional event families.
+
+Controls that require a structural owner at construction use their dedicated `Ui`
+method. In particular, `Ui::combo_box` creates a header together with its private
+runtime-owned popup after receiving the popup's owning window.
 
 ## Construction and ownership
 
@@ -41,7 +45,7 @@ pointers. Final COM release frees the allocation separately.
 | --- | --- | --- |
 | `Button` | Text/image action | `subscribe_activation` |
 | `Checkbox` | Boolean choice | `subscribe_checkbox` |
-| `Combo` | Selection and popup header | `subscribe_combo_changed`, `subscribe_combo_popup` |
+| `Combo` | Optional selection and runtime-owned choice popup | `subscribe_combo_changed` |
 | `ListBox` | Activatable label/image | `subscribe_activation` |
 | `ListItem` | Activatable text/icon row | `subscribe_activation` |
 | `Slider`, `Number` | Numeric controls | `subscribe_numeric` |
@@ -54,11 +58,14 @@ Events own the value captured at the interaction. Ordinary programmatic setters
 remain silent. The [events guide](EVENTS.md) describes delivery; exact interfaces and
 capabilities are documented in `neocogi-ui-core-contracts` and the facade's API reference.
 
-Combo lists can keep generic Rust values in the application; selection indices and
-labels cross the concrete COM contract. Domain data crossing plugins requires its
-own declared interface or an owner-scoped key, without reconstructing identity from
-a display string. File-dialog rows retain exact native paths independently of lossy
-UTF-8 display labels.
+Combo boxes retain their display labels but no generic application payload. Create
+one with `Ui::combo_box(parent, items, ComboBoxOptions::default())`; its initial
+selection is `None` and its visible default fallback is `Select…`. `selection()`
+therefore returns `Option<ComboSelection>`, while `replace_items` requires an
+explicit optional selection and rejects invalid indices without clamping. Domain
+data remains in the application and is mapped from the committed index rather than
+reconstructed from a display string. File-dialog rows likewise retain exact native
+paths independently of lossy UTF-8 display labels.
 
 ## Containers and child edits
 
@@ -80,9 +87,13 @@ The structural children of a composed control are real, distinct COM objects, no
 second representations of the parent. For example, `TextArea` is the scrolling
 root and owns one `TextEditor` content child; the child alone owns the text buffer,
 cursor, font, and text-event sources. `ScrollArea` similarly owns a transform
-surface and two actual scrollbar children. Small scalar models are shared only
-where those distinct roles must coordinate. They contain no widget implementation,
-parent backpointer, or type-erased payload.
+surface and two actual scrollbar children. Small typed state capabilities are shared only where
+distinct roles must coordinate. A combo header and its ordinary private popup widget use one
+runtime-private state allocation for labels, optional selection, and an explicit popup state
+machine. Its fields are ordinary values mutated through exclusive interface receivers; pointer
+hover and keyboard candidate state remain solely in the popup widget. The composition manager above
+`WindowManager` owns the association with a generic popup handle, so neither shared state nor the
+surface forest contains a widget implementation, parent backpointer, or type-erased payload.
 
 ## Geometry and external state
 

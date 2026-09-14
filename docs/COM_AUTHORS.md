@@ -112,7 +112,7 @@ once when subscribing. The session offers these concrete families:
 | `subscribe_text_submitted` | Textbox, TextArea | Submitted normalized text |
 | `subscribe_window` | Logical window | Typed lifecycle/chrome event with copied geometry where relevant |
 | `subscribe_popup` | Popup | Dismissal fact |
-| `subscribe_combo_changed` / `subscribe_combo_popup` | Combo | Selected index/label or requested popup state/anchor |
+| `subscribe_combo_changed` | Combo | Committed item index and matching label |
 | `subscribe_menu_item` | Compact menu row | Submitted label |
 | `subscribe_file_dialog` | Standard file picker | Exact accepted native path or cancellation |
 
@@ -657,19 +657,36 @@ reference never transfers the parent's topology authority.
 
 ## Combo and compact menus
 
-`Combo: IWidget + ILeafLayout` owns the actual header label, selected position and intended
-popup state. The static `Combo::update_items` resolves generic list data locally
-and silently installs only an index/label snapshot. `Combo::select` represents an
-actual popup selection: it closes the header and publishes `ComboChanged` only
-when that snapshot differs. Programmatic `set_selection` and `set_open` remain
-silent. Neither the generic list nor its Rust element layout crosses COM.
+Create a combo through `Ui::combo_box(parent, items, options)`, not the ordinary
+widget factory. The runtime needs the parent up front because it constructs one
+private popup definition with a real structural owner at the same time as the
+unmounted header. The caller then inserts the returned `ComboWidget` into that
+window's retained tree. The popup capability, row presentation, and coordination
+events are deliberately not exposed.
 
-Subscribe to `subscribe_combo_popup` to coordinate an ordinary popup using the
-captured `open` flag and screen anchor. Subscribe to that popup's dismissal to
-call `combo.set_open(false)`. The header does not observe a separately owned
-popup automatically. This is an explicit composition dependency owned by the
-widget/application writer. `subscribe_combo_changed` receives the selected
-position and label captured together; later list edits cannot change that event.
+The control owns its display labels and represents the committed position as
+`Option<ComboSelection>`. `None` is not item zero: it renders the configured
+placeholder, whose default is `Select…`. `replace_items(items, selection)` validates
+and installs the complete label/selection candidate atomically. Both it and
+`set_selection` reject an out-of-range index instead of clamping. These programmatic
+edits remain silent; `subscribe_combo_changed` receives an immutable index/label
+snapshot only after a pointer or keyboard choice actually commits.
+
+Opening copies the committed selection into a transient keyboard candidate. The
+popup paints pointer hover, then keyboard candidate, then committed selection:
+leaving the rows therefore restores the keyboard/committed fallback. Arrows move
+only the candidate, Enter or a row press commits, and Escape/outside dismissal
+preserves the prior selection.
+
+The header and ordinary private popup widget use one runtime-private typed state
+capability because they are independently retained objects. That allocation owns
+ordinary label, selection, placeholder, revision, and lifecycle fields; every
+mutation has an exclusive `&mut self` receiver. A composition manager above
+`WindowManager` associates it with a generic `PopupHandle`, while the root forest
+receives only an ordinary `Node` through its generic popup API. No generic Rust
+payload, `Any`, `Rc<RefCell<_>>` semantic model, public popup handle, or mirrored
+index/label state crosses the boundary. Applications map the committed index back
+to their domain values.
 
 Menus retain their compact representation: one surface owns direct row values,
 with no synthetic widget tree per row. The runtime exposes `IMenus` alongside its

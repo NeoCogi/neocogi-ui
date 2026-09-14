@@ -154,7 +154,7 @@ before publishing the new revision. Failure preserves the prior working UI/resou
 ### Concrete surface forest and parent edges
 
 `WindowManager` owns one private `SurfaceForest`. Its single `Vec<SurfaceNode>` retains independent and
-child windows, dialogs, application popups, and menu popups. The key index and child adjacency
+child windows, dialogs, generic widget popups, and menu popups. The key index and child adjacency
 described below are derived access data and never own additional surfaces. Each node combines common screen-space geometry with a
 concrete role:
 
@@ -166,7 +166,9 @@ concrete role:
 
 The surface layer uses concrete enums for those bodies and roles. It does not store `Any`, erased
 surface payloads, or a manager-side menu controller. `Node` retains only the shared COM protocol
-projections needed for traversal; it does not store a second native widget implementation.
+projections needed for traversal; it does not store a second native widget implementation. A
+runtime-owned composite enters the forest as an ordinary widget `Node`, so the surface layer does
+not identify its concrete control class or retain control-specific state.
 
 Every forest node has at most one parent edge. An independent window has none; a structural child
 or dialog points to its ordinary owner; a top-level popup points to a window or dialog; and a
@@ -182,7 +184,8 @@ A popup has no independent layer, visibility flag, or destruction operation. `Su
 stores only the deepest active popup key and derives the visible parent-to-child chain by following
 parent edges. Opening another top-level popup replaces the branch, opening a submenu extends or
 replaces its suffix, and outside presses or owner changes truncate it. Each removed application
-popup emits exactly one `PopupEvent::Dismissed`; private menu popups need no public lifecycle port.
+popup emits exactly one `PopupEvent::Dismissed`; runtime-private compositions and relational menu
+popups need no public lifecycle port.
 The visible path is derived from that active key; there is no separately authored popup visibility state.
 
 ### Chronological order and visible traversal
@@ -235,11 +238,29 @@ independent family among fixed-layer peers or a child family among its siblings;
 that structural scope or cross a higher fixed layer. Pointer hit testing is the inverse of the
 recursive family paint order, so overlap selects the surface whose pixels are visually in front.
 
-A composed control creates a generic popup once in its stable window owner, then calls `show()` at
-the latest consumed pointer or `show_at(anchor)` at an exact screen-space rectangle. Generic popups
-keep that screen anchor until explicitly shown elsewhere;
-they do not follow later owner movement. `PopupHandle` parameters keep popup operations separate
-from window operations at compile time.
+An application-authored popup is created once in its stable window owner, then shown at the latest
+consumed pointer or at an exact screen-space rectangle. It keeps that screen anchor until explicitly
+shown elsewhere and does not follow later owner movement. `PopupHandle` parameters keep these
+operations separate from window operations at compile time.
+
+`Ui::combo_box` constructs an unmounted header and a private popup widget in one runtime operation.
+The popup enters `WindowManager` only through `create_popup(owner, Node)` and therefore has the same
+body and parent-edge representation as every generic widget popup. Above that boundary,
+`RuntimeContext` owns a `ComboBoxManager` association between the generic `PopupHandle`, a
+runtime-private typed state capability, and a narrow popup-presentation capability. The state
+allocation contains ordinary fields and exposes mutation only through `&mut self` methods; neither
+header nor popup uses `Rc<RefCell<_>>` or erased payloads for semantic state.
+
+Header activation advances the private
+`Closed | OpenRequested | Open | CloseRequested | RemoveRequested | Detached` state machine. The
+composition manager pattern-matches pending transitions only after widget traversal has returned,
+then invokes generic show, hide, or destroy operations. Closing the header requests permanent
+removal of its popup definition, while closing the parent window removes the generic popup through
+ordinary structural ownership. The popup keeps pointer-hot and keyboard-active candidates separate
+from committed optional selection, and paint resolves `hot`, then `active`, then `selected`. Thus
+first layout highlights the committed item, pointer departure restores it, and dismissal requires
+no application callback or mirrored header state. A separate item revision invalidates the popup's
+independent measurement cache when labels change while it is hidden or during a callback.
 
 An intrinsic `MenuBar` is consumed with its `Window` into one compact concrete `MenuSurface` for the
 bar and one directly owned `MenuSurface` body for each private popup definition. These are not
@@ -271,8 +292,10 @@ pointer-focus-only surfaces.
 
 Showing an application-addressable popup selects its concrete surface immediately. A widget popup
 focuses its first Tab stop after geometry is committed and then wraps Tab traversal inside its own
-tree. A popup menu instead uses the same direct-row keyboard navigation as an intrinsic menu.
-Escape or an outside press dismisses either body and restores its direct parent surface, whose
+tree. A popup menu uses the same direct-row keyboard navigation as an intrinsic menu. A combo popup
+initializes its keyboard candidate from the committed selection and handles arrows, Home, End,
+Enter, and Space through its ordinary focused widget. Generic root policy handles Escape or an outside press,
+dismisses any popup body and restores its direct parent surface, whose
 independently retained focused widget ID was never discarded. An Escape dismissal retains no
 key-tail state: only the initial non-repeated press is the dismissal command, while later repeats
 and release transitions route normally against the restored parent surface.

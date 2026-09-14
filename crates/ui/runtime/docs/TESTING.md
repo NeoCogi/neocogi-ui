@@ -43,7 +43,7 @@ The replacement coverage is organized by observable behavior:
 | Linear/grid relationships, spans, flexible tracks and changed metadata | `src/runtime/tests/containers.rs`, plus pure container arithmetic tests |
 | Scroll composition, boundary bubbling, disclosure participation and multiline caret reveal | `src/runtime/tests/containers.rs`, plus focused editor tests |
 | Event FIFO, immutable snapshots, handler errors, cancellation, recursion and bounded dispatch | `src/runtime/tests/events.rs` and facade event tests |
-| Combo popup ownership, selection and reentry | `src/runtime/tests/combo.rs` |
+| Combo popup ownership, optional selection, strict replacement, fallback and keyboard commit | `src/runtime/tests/combo.rs`, `src/combo_box.rs` |
 | Nested menu navigation, live row edits, disabled entries, standalone popup submission and focus restoration | `src/runtime/tests/menus.rs` |
 | Eventless phases, cached measurement, typed invalidation and independent auto-size axes | `src/runtime/tests/retained.rs` and `retained/policies.rs` |
 | Layer order, root families, clipping, modal scopes, popup dismissal, chrome movement/resize and window events | `src/runtime/tests/retained/policies.rs` and pure `root_chrome` geometry tests |
