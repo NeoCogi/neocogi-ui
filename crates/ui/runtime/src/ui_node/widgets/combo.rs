@@ -28,19 +28,18 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 
-//! Combo-box retained state.
+//! Header widget for the runtime-owned combo-box composite.
 //!
-//! The combo widget tracks selected item text and popup-open state; the context root layer owns the
-//! actual popup traversal.
+//! This leaf owns widget lifecycle, font selection, and header interaction. Semantic state lives in
+//! one private typed COM object also used by the ordinary widget-backed popup; all mutation crosses
+//! that boundary through an exclusive receiver rather than shared interior mutability.
 
-use crate::ControlRole;
+use crate::{
+    ControlRole,
+    combo_box::{ComboPopupIntent, IComboStateAbi},
+};
 
 use super::*;
-
-/// Compares rectangles structurally because the external geometry type does not implement equality.
-fn same_rect(left: Recti, right: Recti) -> bool {
-    (left.x, left.y, left.width, left.height) == (right.x, right.y, right.width, right.height)
-}
 
 /// One-shot construction input for a [`Combo`].
 pub struct ComboParameters {
@@ -77,65 +76,23 @@ impl Default for ComboParameters {
 pub struct Combo {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,
-    /// Currently selected item index.
-    selected: usize,
-    /// Whether the combo popup should be open.
-    open: bool,
-    /// Label text for the currently selected item.
-    label: String,
+    /// Typed capability for the sole authoritative semantic state allocation.
+    state: ComPtr<IComboStateAbi>,
     /// Initialization-only font.
     font: FontRef,
-    /// Base widget options.
-    /// Runtime-owned source for selection changes.
-    changed_event: crate::EventSource<ComboChanged>,
-    /// Runtime-owned source for header submissions.
-    submitted_event: crate::EventSource<ComboSubmitted>,
 }
 
 impl Combo {
-    /// Combines validated semantic parameters with one already bound common runtime.
-    pub(crate) fn from_runtime(runtime: crate::ui_node::widget_object::WidgetRuntime, parameters: ComboParameters) -> Self {
-        Self {
-            runtime,
-            selected: 0,
-            open: false,
-            label: String::new(),
-            font: parameters.font,
-            changed_event: crate::EventSource::new(),
-            submitted_event: crate::EventSource::new(),
-        }
+    /// Combines typed semantic state with already bound common widget runtime resources.
+    pub(crate) fn from_runtime(runtime: crate::ui_node::widget_object::WidgetRuntime, parameters: ComboParameters, state: ComPtr<IComboStateAbi>) -> Self {
+        Self { runtime, state, font: parameters.font }
     }
 
-    /// Returns the currently selected item index.
-    pub fn selected(&self) -> usize {
-        self.selected
-    }
-
-    /// Returns the current selected-item label.
-    pub fn label(&self) -> &str {
-        &self.label
-    }
-
-    /// Returns `true` while the combo popup should remain open.
-    pub fn is_open(&self) -> bool {
-        self.open
-    }
-
-    /// Opens the popup and marks the combo open.
-    pub fn open_popup(&mut self) {
-        self.open = true;
-    }
-
-    /// Closes the popup.
-    pub fn close_popup(&mut self) {
-        self.open = false;
-    }
-
-    fn emit_changed(&mut self) {
-        self.changed_event.emit(ComboChanged {
-            selected: self.selected,
-            label: self.label.clone(),
-        });
+    /// Copies the rendered header text for the infallible private paint algorithm.
+    fn display_text(&self) -> String {
+        // The public COM observation below preserves errors. Painting cannot return a status, and
+        // the private state object remains alive and valid for the header's complete lifetime.
+        self.state.display_text().and_then(|text| text.to_string()).unwrap_or_default()
     }
 }
 
@@ -148,61 +105,43 @@ pub struct ComboChanged {
     pub label: String,
 }
 
-/// Popup-state snapshot emitted when the user submits the combo header.
-#[derive(Copy, Clone, Debug)]
-pub struct ComboSubmitted {
-    /// Whether the triggering header submission left the popup open.
-    pub open: bool,
-    /// Screen-space popup anchor from the update that handled the submission.
-    pub anchor: Recti,
-}
-
-impl PartialEq for ComboSubmitted {
-    fn eq(&self, other: &Self) -> bool {
-        self.open == other.open && same_rect(self.anchor, other.anchor)
-    }
-}
-
 impl Combo {
-    /// Measures the combo header label plus dropdown indicator.
+    /// Measures the widest possible header label so selection changes remain paint-only.
     fn preferred_size_widget(&self, style: &Skin, atlas: &AtlasHandle, _constraints: Constraints) -> Dimensioni {
         let padding = style.metrics.padding.max(0);
-        let text_w = if self.label.is_empty() {
-            0
-        } else {
-            text_size(style, atlas, &self.font, self.label.as_str()).width
-        };
+        let placeholder = self.state.placeholder().and_then(|text| text.to_string()).unwrap_or_default();
+        let mut text_w = text_size(style, atlas, &self.font, &placeholder).width.max(0);
+        let count = self.state.item_count().ok().and_then(|count| usize::try_from(count).ok()).unwrap_or(0);
+        for index in 0..count {
+            if let Ok(label) = self.state.item(index as u64).and_then(|text| text.to_string()) {
+                text_w = text_w.max(text_size(style, atlas, &self.font, &label).width.max(0));
+            }
+        }
         let indicator = atlas.get_icon_size(style.resolve_icon_role(atlas, crate::IconRole::ExpandDown));
-        let width = padding.saturating_mul(3).saturating_add(text_w.max(0)).saturating_add(indicator.width.max(0));
+        let width = padding.saturating_mul(3).saturating_add(text_w).saturating_add(indicator.width.max(0));
         let height = content_height(style, atlas, &self.font, indicator.height);
         Dimensioni::new(width, height)
     }
 
-    /// Updates popup-open state and records header submissions with their routed geometry.
+    /// Converts header activation into one private popup-state-machine transition.
     fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
-        // The Combo owns only semantic open state. The application composes that state with whichever
-        // retained root it selected as popup content through the typed submission event below.
-        let action = ctx.action(input, self.keyboard_behavior());
-        let submitted = if let Some(action) = action {
-            let previous_open = self.open;
+        if let Some(action) = ctx.action(input, self.keyboard_behavior()) {
             let screen_header = ctx.screen_content_rect();
-            let anchor = rect(screen_header.x, screen_header.y.saturating_add(screen_header.height), screen_header.width, 1);
-            self.open = match action {
-                KeyboardAction::Activate => !self.open,
-                KeyboardAction::Expand => true,
-                KeyboardAction::Collapse => false,
-                // Combo headers declare no adjustment capability, so these branches remain a
-                // defensive no-op if a custom caller supplies inconsistent flags.
-                KeyboardAction::Decrease | KeyboardAction::Increase => self.open,
+            let anchor = neocogi_ui_core_contracts::Rect {
+                x: screen_header.x,
+                y: screen_header.y.saturating_add(screen_header.height),
+                width: screen_header.width,
+                height: 1,
             };
-            // Idempotent Expand/Collapse repeats do not ask the application to reapply identical
-            // popup state; every pointer or activation toggle necessarily changes the value.
-            (self.open != previous_open).then_some(ComboSubmitted { open: self.open, anchor })
-        } else {
-            None
-        };
-        if let Some(event) = submitted {
-            self.submitted_event.emit(event);
+            let intent = match action {
+                KeyboardAction::Activate => Some(ComboPopupIntent::Toggle),
+                KeyboardAction::Expand => Some(ComboPopupIntent::Open),
+                KeyboardAction::Collapse => Some(ComboPopupIntent::Close),
+                KeyboardAction::Decrease | KeyboardAction::Increase => None,
+            };
+            if let Some(intent) = intent {
+                let _ = self.state.request_popup(intent, anchor);
+            }
         }
     }
 
@@ -219,25 +158,14 @@ impl Combo {
         let reserved_width = indicator_size.width;
         text_rect.width = (text_rect.width - reserved_width).max(0);
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
-        ctx.draw_control_text_with_font(font, self.label.as_str(), text_rect, ControlRole::Combo, ctx.options());
+        let display_text = self.display_text();
+        ctx.draw_control_text_with_font(font, &display_text, text_rect, ControlRole::Combo, ctx.options());
 
         let indicator_content = ctx.draw_control(ControlRole::Button, indicator);
         let icon_color = ctx.control_content_color(ControlRole::Combo);
         if let Some(indicator_content) = indicator_content {
             ctx.draw_icon(indicator_id, indicator_content, icon_color);
         }
-    }
-}
-
-impl crate::TypedWidget<ComboChanged> for Combo {
-    fn event(&self) -> crate::WidgetEventPortHandle<ComboChanged> {
-        self.changed_event.event()
-    }
-}
-
-impl crate::TypedWidget<ComboSubmitted> for Combo {
-    fn event(&self) -> crate::WidgetEventPortHandle<ComboSubmitted> {
-        self.submitted_event.event()
     }
 }
 
@@ -264,10 +192,18 @@ impl Widget for Combo {
 }
 
 impl crate::ui_node::widget_object::WidgetAlgorithm for Combo {
-    /// Retained COM pointers cannot extend event delivery after logical widget closure.
+    /// Closes event delivery and retires the popup definition with the removed header.
     fn close_events(&mut self) {
-        self.changed_event.close_ordinary();
-        self.submitted_event.close_ordinary();
+        let _ = self.state.retire();
+    }
+}
+
+impl Drop for Combo {
+    /// Retires an unmounted combo's popup when its final application reference is released.
+    fn drop(&mut self) {
+        // Mounted headers request the same idempotent transition from `close_events`; this path
+        // covers construction followed by release without insertion into the retained tree.
+        let _ = self.state.retire();
     }
 }
 
@@ -292,83 +228,97 @@ impl crate::ui_node::widget_object::FontState for Combo {
         self.font = font;
     }
 }
-impl Combo {
-    /// Installs one complete selection; only an explicit user submission closes and publishes changed.
-    pub(crate) fn com_set_selection(&mut self, selected: usize, label: &str, submit: bool) {
-        let changed = self.selected != selected || self.label != label;
-        self.selected = selected;
-        self.label.clear();
-        self.label.push_str(label);
-        if submit {
-            self.close_popup();
-            if changed {
-                self.emit_changed();
-            }
-        }
-    }
-}
-impl Eq for ComboSubmitted {}
-
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_core_contracts::{ComboAbi, GeometryChange, IComboChangedSinkAbi, IComboPopupSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi, FontRole};
-use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG};
+use neocogi_ui_core_contracts::{
+    ComboAbi, ComboItemRange, ComboSelectionIndexAbi, FontRole, GeometryChange, IComboChangedSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi,
+};
+use neocogi_com::{ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
 
 direct_widget_phase_impl!(Combo);
 direct_leaf_layout_impl!(Combo);
 
 impl Combo {
-    /// Constructs the class for the host-bound factory through the registry's typed contract.
-    pub(crate) fn create_com(host: ComPtr<IWidgetHostAbi>, resources: crate::ui_node::widget_object::SharedAssets) -> Result<ComPtr<ComboAbi>, NcStatus> {
-        let value = Self::build(host, Some(&resources))?;
+    /// Constructs the header around the typed state also retained by its private popup widget.
+    pub(crate) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: crate::ui_node::widget_object::SharedAssets,
+        state: ComPtr<IComboStateAbi>,
+    ) -> Result<ComPtr<ComboAbi>, NcStatus> {
+        let value = Self::build(host, &resources, state)?;
         Ok(Self::from_value(value).query().expect("Combo declares its callable class contract"))
     }
 
-    /// Builds one combo header with either directly imported or runtime-shared resources.
-    fn build(host: ComPtr<IWidgetHostAbi>, resources: Option<&crate::ui_node::widget_object::SharedAssets>) -> Result<Self, NcStatus> {
+    /// Builds one header with runtime-shared resources and no semantic-state mirror.
+    fn build(host: ComPtr<IWidgetHostAbi>, resources: &crate::ui_node::widget_object::SharedAssets, state: ComPtr<IComboStateAbi>) -> Result<Self, NcStatus> {
         let parameters = crate::ComboParameters::new();
-        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
-        Ok(Self::from_runtime(runtime, parameters))
+        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, parameters.opt, Some(resources))?;
+        Ok(Self::from_runtime(runtime, parameters, state))
     }
 }
 
 impl neocogi_ui_core_contracts::Combo for Combo {
-    /// Reads the same position used by the semantic selection algorithm.
-    fn selected(&self) -> Result<u64, NcStatus> {
+    /// Returns an explicit tagged optional position from the authoritative model.
+    fn selection(&self) -> Result<ComboSelectionIndexAbi, NcStatus> {
         self.runtime().state.readable()?;
-        Ok(self.selected() as u64)
+        self.state.selection()
     }
 
-    /// Copies the current header label without exposing the plugin's string allocation.
-    fn label(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+    /// Copies the selected label or fallback without exposing the plugin's string allocation.
+    fn display_text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;
-        Ok(NcString::from_utf8_str(self.label()))
+        self.state.display_text()
     }
 
-    /// Reports semantic popup intent independently of the application's actual popup capability.
-    fn is_open(&self) -> Result<bool, NcStatus> {
+    /// Returns the exact number of labels in the authoritative sequence.
+    fn item_count(&self) -> Result<u64, NcStatus> {
         self.runtime().state.readable()?;
-        Ok(self.is_open())
+        self.state.item_count()
     }
 
-    /// Ordinary popup dismissal can synchronize intent without fabricating another request.
-    fn set_open(&mut self, open: bool) -> Result<(), NcStatus> {
+    /// Copies one checked item without exposing shared-model storage.
+    fn item(&self, index: u64) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+        self.runtime().state.readable()?;
+        self.state.item(index)
+    }
+
+    /// Validates and copies a complete candidate before changing any live model field.
+    fn replace_items(
+        &mut self,
+        item_text: NcCopyFromBufferOffset<'_, u8>,
+        ranges: NcCopyFromBufferOffset<'_, ComboItemRange>,
+        selection: ComboSelectionIndexAbi,
+    ) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
-        if open {
-            self.open_popup();
-        } else {
-            self.close_popup();
-        }
+        let changed = self.state.replace_items(item_text, ranges, selection)?;
+        self.runtime_mut()
+            .state
+            .record_change(if changed { GeometryChange::Changed } else { GeometryChange::NoChange });
         Ok(())
     }
 
-    /// Programmatic list synchronization remains silent and validates before changing either field.
-    fn set_selection(&mut self, index: u64, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        self.selection(index, label, false)
+    /// Silently changes selection with strict range validation and truthful geometry invalidation.
+    fn set_selection(&mut self, selection: ComboSelectionIndexAbi) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        let _ = self.state.set_selection(selection)?;
+        // Header measurement reserves the widest label, so changing only selection is paint-only.
+        self.runtime_mut().state.record_change(GeometryChange::NoChange);
+        Ok(())
     }
 
-    /// An actual popup action explicitly publishes the captured user selection after committing it.
-    fn submit_selection(&mut self, index: u64, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        self.selection(index, label, true)
+    /// Copies the fallback independently of whether the header currently needs it.
+    fn placeholder(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+        self.runtime().state.readable()?;
+        self.state.placeholder()
+    }
+
+    /// Validates a complete fallback before mutating model state.
+    fn set_placeholder(&mut self, placeholder: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        let changed = self.state.set_placeholder(placeholder)?;
+        self.runtime_mut()
+            .state
+            .record_change(if changed { GeometryChange::Changed } else { GeometryChange::NoChange });
+        Ok(())
     }
 
     /// Validates a semantic font role before changing the Combo's measurement input.
@@ -384,30 +334,7 @@ impl neocogi_ui_core_contracts::Combo for Combo {
     /// Connects the Combo's captured-selection source directly through its class contract.
     fn subscribe_changed(&mut self, sink: ComRef<'_, IComboChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
-        let endpoint = <Self as crate::TypedWidget<crate::ComboChanged>>::event(self);
-        crate::event::subscribe(endpoint, sink)
-    }
-
-    /// Connects popup coordination independently from captured selection delivery.
-    fn subscribe_popup(&mut self, sink: ComRef<'_, IComboPopupSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.runtime().state.writable()?;
-        let endpoint = <Self as crate::TypedWidget<crate::ComboSubmitted>>::event(self);
-        crate::event::subscribe(endpoint, sink)
-    }
-}
-
-impl Combo {
-    /// Replaces one complete selection after validating its copied text and representable index.
-    fn selection(&mut self, index: u64, label: NcCopyFromBufferOffset<'_, u8>, submit: bool) -> Result<(), NcStatus> {
-        self.runtime().state.writable()?;
-        let index = usize::try_from(index).map_err(|_| NC_E_INVALID_ARG)?;
-        let label = crate::boundary::text(label)?;
-        let changed_label = self.label() != label;
-        self.com_set_selection(index, label, submit);
-        self.runtime_mut()
-            .state
-            .record_change(if changed_label { GeometryChange::Changed } else { GeometryChange::NoChange });
-        Ok(())
+        self.state.subscribe_changed(sink)
     }
 }
 
@@ -417,14 +344,5 @@ impl crate::event::ComEvent for ComboChanged {
     /// Delivers the captured label rather than rereading possibly newer widget state.
     fn deliver(&self, sink: ComRef<'_, Self::Sink>) -> Result<(), NcStatus> {
         sink.changed(self.selected as u64, NcCopyFromBufferOffset::new(0, self.label.as_bytes()))
-    }
-}
-
-impl crate::event::ComEvent for ComboSubmitted {
-    type Sink = IComboPopupSinkAbi;
-
-    /// Converts the existing routed anchor once at the ABI boundary.
-    fn deliver(&self, sink: ComRef<'_, Self::Sink>) -> Result<(), NcStatus> {
-        sink.submitted(self.open, crate::boundary::copied_rect(self.anchor))
     }
 }

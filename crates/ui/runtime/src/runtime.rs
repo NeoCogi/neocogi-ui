@@ -10,6 +10,7 @@ use std::{
 };
 use crate::ui_node::paint_service::{Metrics, PaintService};
 use crate::{Dimensioni, runtime_context::RuntimeContext};
+mod combos;
 mod dialogs;
 mod menus;
 mod windows;
@@ -263,6 +264,7 @@ impl UiRuntime for Runtime {
             surface.close(&mut context.window_manager)?;
         }
         storage.mounts.borrow_mut().clear();
+        context.clear_combo_boxes();
         for dialog in storage.dialog_snapshot() {
             dialog.retire();
         }
@@ -368,8 +370,14 @@ impl Runtime {
     /// Runs one finite application sweep without retaining its borrowed capability or any context transaction.
     fn dispatch_boundary(&self, dispatcher: Option<ComRef<'_, IEventDispatcherAbi>>) -> Result<bool, NcStatus> {
         let mut delivered = 0;
+        let mut structural_change = false;
         loop {
             let before = delivered;
+            let reconciled = {
+                let mut context = self.storage.context()?;
+                context.reconcile_combo_boxes()?
+            };
+            structural_change |= reconciled;
             // Internal standard components and application callbacks share one
             // finite boundary. Neither owns a registry borrow across the other.
             for dialog in self.storage.dialog_snapshot() {
@@ -391,11 +399,11 @@ impl Runtime {
             }
             self.storage.open()?;
             self.storage.phase_result()?;
-            if before == delivered {
+            if before == delivered && !reconciled {
                 break;
             }
         }
-        Ok(delivered != 0)
+        Ok(delivered != 0 || structural_change)
     }
 }
 impl RuntimeStorage {

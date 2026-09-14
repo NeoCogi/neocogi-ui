@@ -28,12 +28,6 @@ impl neocogi_ui_core_contracts::UiFactory for UiFactory {
         Ok(self.host.clone())
     }
 
-    /// Constructs the complete semantic combo header with this factory's host.
-    fn create_combo(&self) -> Result<ComPtr<ComboAbi>, NcStatus> {
-        self.host.check_mutation()?;
-        crate::Combo::create_com(self.host.clone(), self.resources.clone())
-    }
-
     /// Validates complete text and wrapping before constructing the fixed scroll/editor composition.
     fn create_text_area(&self, input: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping, scrolling: bool) -> Result<ComPtr<TextAreaAbi>, NcStatus> {
         crate::TextArea::create_com(self.host.clone(), self.resources.clone(), input, wrapping, scrolling)

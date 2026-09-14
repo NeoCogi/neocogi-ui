@@ -106,6 +106,7 @@ mod guide_doctests {
 pub mod assets;
 pub mod atlas;
 mod boundary;
+mod combo_box;
 mod event;
 mod identity;
 pub mod image;
@@ -171,9 +172,9 @@ pub(crate) use ui_node::{
 pub use ui_node::{Disclosure, Grid, Linear, ScrollArea};
 pub use ui_node::widgets::{Button, Checkbox, ColorSwatch, Combo, ListBox, ListItem, Number, Scrollbar, Slider, TextArea, TextBlock, Textbox};
 pub(crate) use widgets::{
-    ButtonParameters, ButtonSubmitted, CheckboxChanged, CheckboxParameters, ColorSwatchParameters, ComboChanged, ComboParameters, ComboSubmitted,
-    DecimalPrecision, ListBoxParameters, ListBoxSubmitted, ListItemParameters, ListItemSubmitted, NumberChanged, NumberParameters, SliderChanged,
-    SliderParameters, TextAreaChanged, TextAreaSubmitted, Real, TextBlockParameters, TextboxChanged, TextboxParameters, TextboxSubmitted,
+    ButtonParameters, ButtonSubmitted, CheckboxChanged, CheckboxParameters, ColorSwatchParameters, ComboChanged, ComboParameters, DecimalPrecision,
+    ListBoxParameters, ListBoxSubmitted, ListItemParameters, ListItemSubmitted, NumberChanged, NumberParameters, SliderChanged, SliderParameters,
+    TextAreaChanged, TextAreaSubmitted, Real, TextBlockParameters, TextboxChanged, TextboxParameters, TextboxSubmitted,
 };
 
 #[allow(unused_imports)]

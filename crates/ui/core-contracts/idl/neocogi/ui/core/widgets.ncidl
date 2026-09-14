@@ -299,27 +299,46 @@ class TextArea: IWidget + IContainerLayout + IScrolling {
 }
 
 #[version(1)]
-/// Constructible combo header; generic list data and popup content remain with its composing owner.
-class Combo: IWidget + ILeafLayout {
+/// Checked byte range for one combo-box label in the operation's shared UTF-8 item buffer.
+struct ComboItemRange {
+    /// First byte of the label in the shared item buffer.
+    first: u32,
+    /// Number of UTF-8 bytes in the label, without a terminator.
+    count: u32,
+}
 
-    /// Returns the selected application-list position, with zero also used by an empty list.
-    fn selected(&self) -> Result<u64>;
-    /// Returns the captured display label, independently of generic application data.
-    fn label(&self) -> Result<String>;
-    /// Reports the header's intended popup state, not an independently observed window visibility.
-    fn is_open(&self) -> Result<bool>;
-    /// Synchronizes popup state silently after ordinary popup dismissal or programmatic coordination.
-    fn set_open(&mut self, open: bool) -> Result<()>;
-    /// Atomically installs a valid index/label snapshot without publishing user selection.
-    fn set_selection(&mut self, index: u64, label: &[u8]) -> Result<()>;
-    /// Commits an actual popup selection, closes the header, and emits changed only when index or label differs.
-    fn submit_selection(&mut self, index: u64, label: &[u8]) -> Result<()>;
+#[version(1)]
+/// Optional committed combo-box selection without an in-band sentinel index.
+enum ComboSelectionIndex: u8 {
+    /// No item is selected, so the header displays its configured placeholder.
+    None,
+    /// Exact selected position in the combo box's current item sequence.
+    Selected(u64),
+}
+
+#[version(2)]
+/// Runtime-owned combo box whose header, item model, popup, and interaction state form one control.
+class Combo: IWidget + ILeafLayout {
+    /// Returns the committed item position, preserving `None` independently of item zero.
+    fn selection(&self) -> Result<ComboSelectionIndex>;
+    /// Returns the exact rendered header text: the selected label or the configured placeholder.
+    fn display_text(&self) -> Result<String>;
+    /// Returns the number of labels retained by this combo box.
+    fn item_count(&self) -> Result<u64>;
+    /// Copies one exact retained label; an out-of-range index is rejected.
+    fn item(&self, index: u64) -> Result<String>;
+    /// Atomically replaces all labels and the optional selection after validating the complete candidate.
+    fn replace_items(&mut self, item_text: &[u8], items: &[ComboItemRange], selection: ComboSelectionIndex) -> Result<()>;
+    /// Silently replaces the committed optional selection; an out-of-range selected index is rejected.
+    fn set_selection(&mut self, selection: ComboSelectionIndex) -> Result<()>;
+    /// Returns the fallback rendered when the committed selection is `None`.
+    fn placeholder(&self) -> Result<String>;
+    /// Replaces the fallback without changing the committed selection or publishing a user event.
+    fn set_placeholder(&mut self, placeholder: &[u8]) -> Result<()>;
     /// Selects a semantic font role and invalidates measurement only when it differs.
     fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
-    /// Connects the independent captured-selection subscriber.
+    /// Connects the captured user-selection subscriber.
     fn subscribe_changed(&mut self, sink: &IComboChangedSink) -> Result<IEventSubscription>;
-    /// Connects the independent popup-coordination subscriber.
-    fn subscribe_popup(&mut self, sink: &IComboPopupSink) -> Result<IEventSubscription>;
 }

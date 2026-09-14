@@ -155,7 +155,6 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
     let _grid = factory
         .create_grid(NcCopyFromBufferOffset::new(0, &tracks), NcCopyFromBufferOffset::new(0, &tracks))
         .unwrap();
-    let _combo = factory.create_combo().unwrap();
     let _disclosure = factory.create_disclosure(label, DisclosureStyle::Header, false).unwrap();
     let content = button.query::<IWidgetAbi>().unwrap();
     let _scroll = factory.create_scroll_area(content.as_com_ref(), true).unwrap();

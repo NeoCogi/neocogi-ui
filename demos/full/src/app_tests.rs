@@ -77,10 +77,9 @@ fn exercise() -> Result<(Host, EventSession<State>), HostError> {
         let mut state = events.state_mut()?;
         state.select_theme(Theme::Default)?;
         Action::Spacing(false).handle(&mut state, &Activation { label: String::new() })?;
-        Action::Fruit(2).handle(&mut state, &Activation { label: "Cherry".to_owned() })?;
-        assert_eq!(state.combo.selected()?, 2);
-        assert_eq!(state.combo.label()?, "Cherry");
-        assert!(!state.combo.is_open()?);
+        state.combo.set_selection(Some(2))?;
+        assert_eq!(state.combo.selection()?, Some(ComboSelection { index: 2, label: "Cherry".to_owned() }));
+        assert_eq!(state.combo.display_text()?, "Cherry");
         state.entry.set_text("Unicode: 日本語")?;
         state.submit()?;
         assert!(state.entry.text()?.is_empty());
@@ -105,7 +104,7 @@ fn packaged_full_application_themes_images_actions_and_close() {
     let (host, events) = exercise().unwrap();
     let retained = events.state().unwrap().combo.clone();
     drop(host);
-    assert_eq!(retained.selected(), Err(UI_E_CLOSED));
+    assert_eq!(retained.selection(), Err(UI_E_CLOSED));
     drop(events);
 }
 

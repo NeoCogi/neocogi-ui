@@ -429,7 +429,51 @@ pub struct Ui {
     windows: ComPtr<IWindowManagerAbi>,
 }
 
+/// Default fallback shown by a combo box with no committed selection.
+pub const DEFAULT_COMBO_PLACEHOLDER: &str = "Select…";
+
+/// Complete construction policy for one runtime-owned combo box.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct ComboBoxOptions<'a> {
+    /// Header fallback rendered while `selection` is `None`.
+    pub placeholder: &'a str,
+    /// Optional initial item position, validated strictly against the supplied items.
+    pub selection: Option<usize>,
+}
+
+impl Default for ComboBoxOptions<'_> {
+    /// Starts unselected with the standard visible fallback.
+    fn default() -> Self {
+        Self {
+            placeholder: DEFAULT_COMBO_PLACEHOLDER,
+            selection: None,
+        }
+    }
+}
+
+/// Owned snapshot of one committed combo-box selection.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ComboSelection {
+    /// Exact position in the combo box's current item sequence.
+    pub index: usize,
+    /// Display label captured from the same retained item sequence.
+    pub label: String,
+}
+
 impl Ui {
+    /// Creates one complete combo box whose private popup is structurally owned by `parent`.
+    pub fn combo_box<Item: AsRef<str>>(&self, parent: ComRef<'_, IWindowAbi>, items: &[Item], options: ComboBoxOptions<'_>) -> Result<ComboWidget, NcStatus> {
+        let (item_text, ranges) = encoded_combo_items(items)?;
+        let combo = self.runtime.query::<IComboBoxesAbi>()?.create_combo_box(
+            parent,
+            NcCopyFromBufferOffset::new(0, options.placeholder.as_bytes()),
+            NcCopyFromBufferOffset::new(0, &item_text),
+            NcCopyFromBufferOffset::new(0, &ranges),
+            encoded_combo_selection(options.selection),
+        )?;
+        Ok(ComboWidget::from_interface(combo))
+    }
+
     /// Creates a hidden standard file picker using the actual runtime's modal and COM controls.
     pub fn file_dialog(&self, parent: ComRef<'_, IWindowAbi>) -> Result<crate::FileDialog, NcStatus> {
         Ok(crate::FileDialog::from_interface(self.runtime.query::<IFileDialogsAbi>()?.create(parent)?))
@@ -608,45 +652,49 @@ impl Widget<ButtonAbi> {
 
 /// Typed static wrapper for the concrete Combo class and its inherited widget state.
 pub type ComboWidget = Widget<ComboAbi>;
-impl WidgetFactory {
-    /// Creates an empty header; application-local list data never enters the UI plugin.
-    pub fn combo(&self) -> Result<ComboWidget, NcStatus> {
-        Ok(ComboWidget::from_interface(self.interface.create_combo()?))
-    }
-}
 impl Widget<ComboAbi> {
-    /// Reads the selected position without interpreting it as a global identity.
-    pub fn selected(&self) -> Result<u64, NcStatus> {
-        self.interface.selected()
+    /// Returns `None` or one complete selected index/label snapshot.
+    pub fn selection(&self) -> Result<Option<ComboSelection>, NcStatus> {
+        match ComboSelectionIndex::try_from(self.interface.selection()?).map_err(|_| neocogi_com::NC_E_INVALID_ARG)? {
+            ComboSelectionIndex::None => Ok(None),
+            ComboSelectionIndex::Selected(index) => {
+                let index = usize::try_from(index).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
+                Ok(Some(ComboSelection { index, label: self.item(index)? }))
+            }
+        }
     }
-    /// Copies the current display label independently of generic list values.
-    pub fn label(&self) -> Result<String, NcStatus> {
-        self.interface.label()?.to_string()
+    /// Copies the exact selected label or visible placeholder currently painted by the header.
+    pub fn display_text(&self) -> Result<String, NcStatus> {
+        self.interface.display_text()?.to_string()
     }
-    /// Reads the header's intended popup state.
-    pub fn is_open(&self) -> Result<bool, NcStatus> {
-        self.interface.is_open()
+    /// Returns the current number of retained choice labels.
+    pub fn item_count(&self) -> Result<usize, NcStatus> {
+        usize::try_from(self.interface.item_count()?).map_err(|_| neocogi_com::NC_E_INVALID_ARG)
     }
-    /// Synchronizes intent silently after actual popup visibility changes.
-    pub fn set_open(&mut self, open: bool) -> Result<(), NcStatus> {
-        self.interface.set_open(open)
+    /// Copies one exact item after strict range validation by the implementation.
+    pub fn item(&self, index: usize) -> Result<String, NcStatus> {
+        self.interface.item(index as u64)?.to_string()
     }
-    /// Installs an already-resolved application selection without publishing a user event.
-    pub fn set_selection(&mut self, index: u64, label: &str) -> Result<(), NcStatus> {
-        self.interface.set_selection(index, NcCopyFromBufferOffset::new(0, label.as_bytes()))
+    /// Atomically replaces all labels and the explicit optional selection.
+    pub fn replace_items<Item: AsRef<str>>(&mut self, items: &[Item], selection: Option<usize>) -> Result<(), NcStatus> {
+        let (item_text, ranges) = encoded_combo_items(items)?;
+        self.interface.replace_items(
+            NcCopyFromBufferOffset::new(0, &item_text),
+            NcCopyFromBufferOffset::new(0, &ranges),
+            encoded_combo_selection(selection),
+        )
     }
-    /// Resolves and clamps local list state, sending only its selected position and label across COM.
-    pub fn update_items<Item: AsRef<str>>(&mut self, items: &[Item]) -> Result<(), NcStatus> {
-        let index = usize::try_from(self.selected()?).unwrap_or(usize::MAX).min(items.len().saturating_sub(1));
-        self.set_selection(index as u64, items.get(index).map_or("", AsRef::as_ref))
+    /// Silently replaces the committed optional selection without clamping invalid indices.
+    pub fn set_selection(&mut self, selection: Option<usize>) -> Result<(), NcStatus> {
+        self.interface.set_selection(encoded_combo_selection(selection))
     }
-    /// Commits an actual popup submission, closes the header and publishes changed when its snapshot differs.
-    pub fn select<Item: AsRef<str>>(&mut self, index: usize, items: &[Item]) -> Result<Option<String>, NcStatus> {
-        let index = index.min(items.len().saturating_sub(1));
-        let label = items.get(index).map(AsRef::as_ref);
-        self.interface
-            .submit_selection(index as u64, NcCopyFromBufferOffset::new(0, label.unwrap_or("").as_bytes()))?;
-        Ok(label.map(str::to_owned))
+    /// Copies the fallback retained independently from the current selection.
+    pub fn placeholder(&self) -> Result<String, NcStatus> {
+        self.interface.placeholder()?.to_string()
+    }
+    /// Replaces the fallback without changing selection or publishing a user event.
+    pub fn set_placeholder(&mut self, placeholder: &str) -> Result<(), NcStatus> {
+        self.interface.set_placeholder(NcCopyFromBufferOffset::new(0, placeholder.as_bytes()))
     }
     /// Selects typography directly through the Combo class contract.
     pub fn set_font_role(&mut self, role: FontRole) -> Result<(), NcStatus> {
@@ -656,6 +704,29 @@ impl Widget<ComboAbi> {
     pub fn set_named_font(&mut self, name: &str) -> Result<(), NcStatus> {
         self.interface.set_named_font(NcCopyFromBufferOffset::new(0, name.as_bytes()))
     }
+}
+
+/// Encodes optional selection with a structural absence variant instead of a sentinel index.
+fn encoded_combo_selection(selection: Option<usize>) -> ComboSelectionIndexAbi {
+    match selection {
+        Some(index) => ComboSelectionIndex::Selected(index as u64),
+        None => ComboSelectionIndex::None,
+    }
+    .into()
+}
+
+/// Packs labels once with checked ranges for one atomic COM construction or replacement call.
+fn encoded_combo_items<Item: AsRef<str>>(items: &[Item]) -> Result<(Vec<u8>, Vec<ComboItemRange>), NcStatus> {
+    let mut text = Vec::new();
+    let mut ranges = Vec::with_capacity(items.len());
+    for item in items {
+        let label = item.as_ref().as_bytes();
+        let first = u32::try_from(text.len()).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
+        let count = u32::try_from(label.len()).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
+        text.extend_from_slice(label);
+        ranges.push(ComboItemRange { first, count });
+    }
+    Ok((text, ranges))
 }
 
 impl ListBoxWidget {

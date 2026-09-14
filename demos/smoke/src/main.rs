@@ -327,9 +327,17 @@ fn smoke_key(ui: &Ui, key: KeyCode, value: u32) -> Result<(), NcStatus> {
 /// Exercises COM combo painting, compact menu input and the full native-path picker across separate libraries.
 fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), Box<dyn Error>> {
     let directory = SmokeDirectory::new()?;
-    let mut combo = ui.widgets().combo()?;
-    combo.set_selection(1, "Selected across COM")?;
-    let window = ui.window("Dynamic components", Rect { x: 10, y: 10, width: 610, height: 300 }, &combo)?;
+    let mut root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
+    let window = ui.window("Dynamic components", Rect { x: 10, y: 10, width: 610, height: 300 }, &root)?;
+    let combo = ui.combo_box(
+        window.as_com_ref(),
+        &["First", "Selected across COM"],
+        ComboBoxOptions {
+            selection: Some(1),
+            ..ComboBoxOptions::default()
+        },
+    )?;
+    root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content))?.finish()?;
     let menus = ui.menus()?;
     let bar = menus.create("")?;
     let item = bar.submenu("File")?.item("Menu command")?;
@@ -365,7 +373,7 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     picker.close()?;
     window.close()?;
     ui.update_with_events(size, &events)?;
-    assert_eq!(combo.label(), Err(UI_E_CLOSED));
+    assert_eq!(combo.selection(), Err(UI_E_CLOSED));
     assert_eq!(item.label(), Err(UI_E_CLOSED));
     Ok(())
 }

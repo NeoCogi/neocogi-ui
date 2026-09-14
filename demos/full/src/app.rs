@@ -159,10 +159,8 @@ pub(super) struct State {
     themes: Vec<(Theme, MenuItem)>,
     /// Comfortable and compact spacing radio items share the style editor path.
     spacing: [MenuItem; 2],
-    /// Combo header owns the selected index and label.
+    /// Complete combo box owns its labels, optional selection, and private popup.
     combo: ComboWidget,
-    /// Actual generic-list popup is coordinated by captured submission/dismissal events.
-    combo_popup: ComPtr<IPopupAbi>,
     /// Standalone compact menu opened by the Popup button.
     test_popup: ComPtr<IPopupAbi>,
     /// Color preview reflects the model used to paint the fullscreen background.
@@ -273,8 +271,6 @@ enum Action {
     ShowTextures,
     /// Describe the active demo in its log.
     About,
-    /// Select one application-owned combo value.
-    Fruit(usize),
 }
 impl EventHandler<State, Activation> for Action {
     /// Runs after the UI releases its context, permitting ordinary concrete edits and menu coordination.
@@ -324,11 +320,6 @@ impl EventHandler<State, Activation> for Action {
             }
             Self::ShowTextures => state.sample_scroll.scroll_to_end(),
             Self::About => state.write_log("neocogi-ui COM demo: concrete widgets, typed events, shared layout, PNG images and renderer-owned 3D scenes."),
-            Self::Fruit(index) => {
-                state.combo.select(index, &FRUIT)?;
-                state.combo_popup.hide()?;
-                state.write_log(&format!("Selected {}", FRUIT[index]))
-            }
         }
     }
 }
@@ -342,20 +333,10 @@ impl EventHandler<State, TextSubmitted> for Observe {
         state.entry.clear()
     }
 }
-impl EventHandler<State, ComboSubmitted> for Observe {
-    /// Popup placement uses the exact routed screen-space header anchor.
-    fn handle(&mut self, state: &mut State, event: &ComboSubmitted) -> Result<(), NcStatus> {
-        if event.open {
-            state.combo_popup.show_at(event.anchor)
-        } else {
-            state.combo_popup.hide()
-        }
-    }
-}
-impl EventHandler<State, PopupDismissed> for Observe {
-    /// Dismissal synchronizes the header without synthesizing another selection event.
-    fn handle(&mut self, state: &mut State, _: &PopupDismissed) -> Result<(), NcStatus> {
-        state.combo.set_open(false)
+impl EventHandler<State, ComboChanged> for Observe {
+    /// Logs the immutable choice snapshot after the composite has committed its selection.
+    fn handle(&mut self, state: &mut State, event: &ComboChanged) -> Result<(), NcStatus> {
+        state.write_log(&format!("Selected {}", event.label))
     }
 }
 impl EventHandler<State, FileDialogCompleted> for Observe {
@@ -466,11 +447,14 @@ fn create() -> Result<(Host, EventSession<State>), HostError> {
     let demo = floating(ui, desktop.as_com_ref(), "Demo Window", rect(40, 40, 300, 450), &main_scroll)?;
     demo.set_options(WindowOptions::FRAME | WindowOptions::MINIMIZE_BUTTON | WindowOptions::MAXIMIZE_BUTTON)?;
     let info = [label(ui, "40, 40")?, label(ui, "300, 450")?, label(ui, "0.0")?];
-    let mut combo = ui.widgets().combo()?;
-    combo.update_items(&FRUIT)?;
-    let mut combo_content = column(ui)?;
-    let mut combo_popup = ui.popup(demo.as_com_ref(), "Combo Box Popup", &combo_content)?;
-    combo_popup.set_options(WindowOptions::FRAME | WindowOptions::AUTO_HEIGHT | WindowOptions::NO_RESIZE | WindowOptions::NO_TITLE)?;
+    let combo = ui.combo_box(
+        demo.as_com_ref(),
+        &FRUIT,
+        ComboBoxOptions {
+            selection: Some(0),
+            ..ComboBoxOptions::default()
+        },
+    )?;
     let menus = ui.menus()?;
     let mut pending = Vec::new();
     let popup_menu = menus.create("Test Popup")?;
@@ -543,7 +527,6 @@ fn create() -> Result<(Host, EventSession<State>), HostError> {
         themes,
         spacing,
         combo,
-        combo_popup,
         test_popup,
         background,
         file_dialog,
@@ -560,16 +543,10 @@ fn create() -> Result<(Host, EventSession<State>), HostError> {
         state.style.subscribe(&events)?;
         events.subscribe_window(state.demo.as_com_ref(), Observe)?;
         events.subscribe_text_submitted(&state.entry, Observe)?;
-        events.subscribe_combo_popup(&state.combo, Observe)?;
-        events.subscribe_popup(state.combo_popup.as_com_ref(), Observe)?;
+        events.subscribe_combo_changed(&state.combo, Observe)?;
         if let Some(dialog) = &state.file_dialog {
             events.subscribe_file_dialog(dialog, Observe)?;
         }
-    }
-    for (index, text) in FRUIT.into_iter().enumerate() {
-        let item = ui.widgets().list_item(text)?;
-        events.subscribe_activation(&item, Action::Fruit(index))?;
-        append(&mut combo_content, &item, LayoutTrack::Content)?;
     }
     build_controls(&host, &events, &mut main_body)?;
     build_examples(&host, &events)?;

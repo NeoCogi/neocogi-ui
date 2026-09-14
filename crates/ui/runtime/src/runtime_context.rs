@@ -3,7 +3,11 @@
 //! Painting records semantic commands; submission crosses the independently owned GFX boundary.
 //! The runtime checks foreign widget failures between these phases before submitting any frame.
 
-use crate::{Dimensioni, Recti, ResourceCatalog, SkinBundle, window_manager::WindowManager};
+use crate::{
+    Dimensioni, Recti, ResourceCatalog, SkinBundle,
+    combo_box::{ComboBoxManager, IComboPopupControlAbi, IComboStateAbi},
+    window_manager::{PopupHandle, WindowManager},
+};
 use neocogi_com::{ComPtr, ComRef, NcStatus};
 use neocogi_gfx_contracts::GfxCompositorAbi;
 use neocogi_renderer_contracts::{IRendererAbi, Size};
@@ -16,6 +20,8 @@ pub(crate) struct RuntimeContext {
     compositor: ComPtr<GfxCompositorAbi>,
     /// Authoritative retained windows, nodes, input, layout, and semantic display list.
     pub(crate) window_manager: WindowManager,
+    /// Composition-layer ownership for private combo state and ordinary popup handles.
+    combo_boxes: ComboBoxManager,
     /// Conversion scratch reused while sending solid geometry across the typed boundary.
     solid_scratch: Vec<neocogi_gfx_contracts::SolidVertex>,
 }
@@ -27,8 +33,24 @@ impl RuntimeContext {
             resource_catalog: ResourceCatalog::new(bundle.atlas().clone()),
             compositor,
             window_manager: WindowManager::new(bundle),
+            combo_boxes: ComboBoxManager::default(),
             solid_scratch: Vec::new(),
         }
+    }
+
+    /// Registers a complete combo composition without teaching the root forest about widgets.
+    pub(crate) fn register_combo_box(&mut self, state: ComPtr<IComboStateAbi>, popup: PopupHandle, presentation: ComPtr<IComboPopupControlAbi>) {
+        self.combo_boxes.register(state, popup, presentation);
+    }
+
+    /// Reconciles typed combo intent with generic popup operations through exclusive ownership.
+    pub(crate) fn reconcile_combo_boxes(&mut self) -> Result<bool, NcStatus> {
+        self.combo_boxes.reconcile(&mut self.window_manager)
+    }
+
+    /// Releases private combo capabilities after their structurally owned popups are gone.
+    pub(crate) fn clear_combo_boxes(&mut self) {
+        self.combo_boxes.clear();
     }
 
     /// Returns the focused editor's committed drawable rectangle, when one exists.

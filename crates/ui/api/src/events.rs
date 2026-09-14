@@ -700,8 +700,8 @@ impl<State: 'static> EventSession<State> {
 /// Matching application-list index and label after an explicitly submitted combo selection.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ComboChanged {
-    /// Application-owned list position, independent of the displayed text.
-    pub selected: u64,
+    /// Item position in the combo box's retained label sequence.
+    pub selected: usize,
     /// Captured display value; generic list data never travels through this string.
     pub label: String,
 }
@@ -714,30 +714,8 @@ struct ComboChangedSink<State: 'static, Handler: EventHandler<State, ComboChange
 impl<State: 'static, Handler: EventHandler<State, ComboChanged> + 'static> IComboChangedSink for ComboChangedSink<State, Handler> {
     /// Validates the immutable UTF-8 snapshot before borrowing application state.
     fn changed(&self, selected: u64, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        let selected = usize::try_from(selected).map_err(|_| NC_E_INVALID_ARG)?;
         self.handler.deliver(ComboChanged { selected, label: copied_text(label)? })
-    }
-}
-/// Desired popup state and routed screen anchor captured by the combo header.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ComboSubmitted {
-    /// True requests opening; false requests ordinary popup hiding.
-    pub open: bool,
-    /// Complete screen-space anchor, independent of subsequent header movement.
-    pub anchor: Rect,
-}
-#[com_object(interfaces(IComboPopupSink))]
-/// Concrete application coordinator can show/hide its selected popup at the safe runtime boundary.
-struct ComboPopupSink<State: 'static, Handler: EventHandler<State, ComboSubmitted> + 'static> {
-    /// One owned handler without a borrowed native state pointer.
-    handler: HandlerState<State, Handler>,
-}
-impl<State: 'static, Handler: EventHandler<State, ComboSubmitted> + 'static> IComboPopupSink for ComboPopupSink<State, Handler> {
-    /// Rejects malformed geometry before application popup coordination runs.
-    fn submitted(&self, open: bool, anchor: Rect) -> Result<(), NcStatus> {
-        if anchor.width < 0 || anchor.height < 0 {
-            return Err(NC_E_INVALID_ARG);
-        }
-        self.handler.deliver(ComboSubmitted { open, anchor })
     }
 }
 impl<State: 'static> EventSession<State> {
@@ -756,24 +734,6 @@ impl<State: 'static> EventSession<State> {
         })
         .query()?;
         let lease = combo.as_interface().subscribe_changed(sink.as_com_ref())?;
-        leases.push(lease.clone());
-        Ok(lease)
-    }
-    /// Registers the header-to-popup coordinator; ordinary popup dismissal uses its separate family.
-    pub fn subscribe_combo_popup<Handler: EventHandler<State, ComboSubmitted> + 'static>(
-        &self,
-        combo: &crate::ComboWidget,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        let mut leases = self.registry.take()?;
-        let sink: ComPtr<IComboPopupSinkAbi> = ComboPopupSink::from_value(ComboPopupSink {
-            handler: HandlerState {
-                state: self.state.clone(),
-                handler: RefCell::new(Some(handler)),
-            },
-        })
-        .query()?;
-        let lease = combo.as_interface().subscribe_popup(sink.as_com_ref())?;
         leases.push(lease.clone());
         Ok(lease)
     }
@@ -880,6 +840,5 @@ event_payload!(TextSubmitted, ITextSubmittedSinkAbi, self, sink, {
 event_payload!(WindowEvent, IWindowSinkAbi, self, sink, { sink.event((*self).into()) });
 event_payload!(PopupDismissed, IPopupSinkAbi, self, sink, { sink.dismissed() });
 event_payload!(ComboChanged, IComboChangedSinkAbi, self, sink, {
-    sink.changed(self.selected, NcCopyFromBufferOffset::new(0, self.label.as_bytes()))
+    sink.changed(self.selected as u64, NcCopyFromBufferOffset::new(0, self.label.as_bytes()))
 });
-event_payload!(ComboSubmitted, IComboPopupSinkAbi, self, sink, { sink.submitted(self.open, self.anchor) });

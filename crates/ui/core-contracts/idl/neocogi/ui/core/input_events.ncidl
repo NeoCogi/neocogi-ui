@@ -229,17 +229,10 @@ trait IPopupEvents {
 }
 
 #[version(1)]
-/// Captured user selection committed by a combo's composing popup owner.
+/// Captured user selection committed by a runtime-owned combo popup.
 trait IComboChangedSink {
-    /// Receives the matching application-list position and display label from one selection.
+    /// Receives the matching item position and display label from one committed selection.
     fn changed(&self, selected: u64, label: &str) -> Result<()>;
-}
-
-#[version(1)]
-/// Header activation requests ordinary popup coordination using copied routed geometry.
-trait IComboPopupSink {
-    /// Receives the desired open state and screen-space anchor captured at header activation.
-    fn submitted(&self, open: bool, anchor: Rect) -> Result<()>;
 }
 
 #[version(1)]
