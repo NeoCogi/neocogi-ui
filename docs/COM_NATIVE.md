@@ -90,7 +90,10 @@ Add `--variant monolith` after the renderer selection to statically link the COM
 runtime and the UI, renderer, GFX, and skin implementations. These assemblies
 register the linked descriptors directly with the same SHA-256 ABI validation
 and stage only the executable and configured resources. They therefore have no
-Neocogi shared-library or `plugins.txt` deployment requirement.
+Neocogi shared-library or `plugins.txt` deployment requirement. The assembly's
+remaining per-component features are enabled on those exact packages in the
+shared Cargo graph; for example, an external-resource monolith retains GFX's
+`builder` capability even though the host dependency only selects the GFX crate.
 
 The command discovers artifacts from Cargo's JSON output and snapshots the runtime
 and explicitly isolated plugins before later builds can replace their files.
