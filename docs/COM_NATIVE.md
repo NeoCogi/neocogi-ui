@@ -58,6 +58,9 @@ cargo neocogi build --assembly full --profile min-size
 The `min-size` preset selects nightly automatically and includes its x86_64 Linux
 GNU target JSON, size-oriented compiler settings, and rebuilt standard library.
 Consumers do not need our `build-min-size` alias or a custom profile definition.
+The preset omits generated `Debug` formatting; shipped demo entry points therefore
+report [`HostError`](../demos/host/src/lib.rs) through its explicit `Display`
+implementation so runtime failures still include their status or diagnostic text.
 Contract build scripts retain the custom Rust target as their artifact identity,
 but compile their self-contained Rust descriptions for its compatible built-in
 `x86_64-unknown-linux-gnu` ABI so `rustc` can reuse the installed `core` library.

@@ -53,6 +53,24 @@ impl std::error::Error for HostError {
     }
 }
 
+/// Reports a demo's concrete display error and converts its result into a process exit status.
+///
+/// The native min-size preset deliberately removes generated `Debug` formatting. Rust's blanket
+/// `Termination` implementation for `Result` prints errors with `Debug`, which would consequently
+/// reduce any failure to a bare `Error:` line. Demo entry points use this explicit display boundary
+/// so size optimization cannot discard the operational diagnostic.
+pub fn report_exit(result: Result<(), HostError>) -> std::process::ExitCode {
+    match result {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(error) => {
+            // Display preserves OS messages, COM status codes, and the richer contextual messages
+            // collected by the host without depending on generated enum-debug implementations.
+            eprintln!("Error: {error}");
+            std::process::ExitCode::FAILURE
+        }
+    }
+}
+
 /// Application-owned state participates through one explicit method, never a stored closure.
 pub trait AppState: 'static {
     /// Runs after input handlers and before the final update/render. Return false to stop the loop.

@@ -29,7 +29,7 @@
 //
 //! Calculator with concrete application state and typed COM button handlers.
 use neocogi_ui::*;
-use neocogi_demo_host::{AppState, Host, HostError};
+use neocogi_demo_host::{AppState, Host, HostError, report_exit};
 use neocogi_com::{ComPtr, NcStatus};
 
 /// Maximum typed display length; calculated results retain the existing decimal formatting policy.
@@ -357,7 +357,7 @@ impl EventHandler<State, events::Activation> for Action {
 }
 
 /// Builds one COM grid of buttons; no separate CalcButton, event port or shadow node list is needed.
-fn main() -> Result<(), HostError> {
+fn run() -> Result<(), HostError> {
     neocogi_demo_host::initialize()?;
     let host = Host::new("Calculator", Size { width: 320, height: 420 }, neocogi_demo_assets::load_bundle()?)?;
     let mut display = host.ui.widgets().textbox("0")?;
@@ -410,4 +410,9 @@ fn main() -> Result<(), HostError> {
         events.subscribe_activation(&button, action)?;
     }
     host.run(events)
+}
+
+/// Reports startup and frame failures through formatting retained by the min-size profile.
+fn main() -> std::process::ExitCode {
+    report_exit(run())
 }

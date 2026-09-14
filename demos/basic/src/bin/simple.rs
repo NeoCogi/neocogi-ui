@@ -52,14 +52,14 @@
 //
 //! Minimal facade-only application over dynamically or statically assembled COM plugins.
 use neocogi_ui::*;
-use neocogi_demo_host::{AppState, Host, HostError};
+use neocogi_demo_host::{AppState, Host, HostError, report_exit};
 
 /// This example has no mutable application state; the tree and button belong to the UI plugin.
 struct State;
 impl AppState for State {}
 
 /// Builds the same small tree on native SDL and browser WebGL through the typed facade.
-fn main() -> Result<(), HostError> {
+fn run() -> Result<(), HostError> {
     neocogi_demo_host::initialize()?;
     let host = Host::new("Hello", Size { width: 640, height: 480 }, neocogi_demo_assets::load_bundle()?)?;
     let mut hello = host.ui.widgets().button("Hello World!")?;
@@ -68,4 +68,9 @@ fn main() -> Result<(), HostError> {
     tree.insert(0, &hello, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))?.finish()?;
     host.ui.window("Hello Window", Rect { x: 40, y: 40, width: 300, height: 400 }, &tree)?;
     host.run(EventSession::new(State))
+}
+
+/// Reports startup and frame failures through formatting retained by the min-size profile.
+fn main() -> std::process::ExitCode {
+    report_exit(run())
 }
