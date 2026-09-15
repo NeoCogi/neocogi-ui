@@ -15,7 +15,7 @@ crate-type = ["rlib"]
 [features]
 default = []
 theme-json = ["dep:serde", "dep:serde_json"]
-# Offline theme generation uses GFX construction directly and never enters a deployed Skin DSO.
+# Offline theme generation statically instantiates the same GFX services used by deployed Skin.
 builder = ["dep:neocogi-gfx-impl"]
 
 [dependencies]

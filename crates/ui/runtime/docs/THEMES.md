@@ -9,6 +9,9 @@ the base resource bundle, validates references, and publishes the revision. Buil
 tools call `neocogi_skin_impl::theme::load` or `load_bytes`; the latter reads referenced
 assets through an explicit `AssetSource` implementation. Their offline `LoadedTheme`
 contains a display name and validated `AssetData`, with no native UI skin or resource IDs.
+Both forms resolve the document into one private typed `ThemeRecipe` and execute it through
+`AssetLoader` and `AssetPublisher`. Offline builds instantiate the same GFX implementation
+statically instead of maintaining a second native construction algorithm inside Skin.
 
 Loading prepares an immutable candidate. Through a mutable `Ui` reference,
 `Ui::install_assets` validates its catalog and resources, asks the renderer to upload

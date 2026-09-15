@@ -83,9 +83,11 @@ all native builder/path/decoder state in their owning binary. The
 [JSON compiler](../crates/skin/impl/src/theme.rs) submits declared resources to
 GFX and compiles complete appearance tables without copying the bundle into a runtime skin model.
 GFX owns bundle transfer, validation, and publication through the format-neutral
-`AssetPublisher::revise_appearance` transaction. The same compiler can still
-write directly into `AssetData` when used by offline build tools. Plain geometry and semantic resource
-names live in the GFX contract. The UI resolves those records into its own runtime
+`AssetPublisher::revise_appearance` transaction. Skin resolves one private typed `ThemeRecipe`
+for both deployment modes. Offline build tools statically instantiate the same GFX loader and
+publisher, execute that recipe, and copy the completed bundle back into `AssetData` for source
+export; Skin contains no second native packing path. Plain geometry and semantic resource names
+live in the GFX contract. The UI resolves those records into its own runtime
 IDs only when a bundle is installed. In-memory offline compilation accepts an
 explicit `AssetSource` implementation for referenced files; runtime filesystem
 compilation uses the bounded `FileAssets` source.
@@ -246,6 +248,14 @@ font or icon catalogs will be replaced; unrelated application resources remain.
 and chrome plus exactly one record per fixed role, validates all resource references inside GFX,
 and publishes a same-catalog revision. It exposes neither Skin's JSON model nor
 GFX's storage.
+
+The Skin compiler converts validated JSON into one `ThemeRecipe`: canonical semantic names,
+anchored paths, output dimensions, replacement options, deterministic private image names, and
+appearance policy. One executor reads each bounded file immediately before its GFX call, so the
+recipe does not retain every encoded font and PNG simultaneously. Runtime loading uses supplied
+GFX capabilities. Offline `builder` mode statically constructs those same concrete services and
+reads the final immutable bundle into `AssetData`; lightweight `theme-json` deployments do not
+link the builder, font rasterizer, or PNG implementation into Skin.
 
 ```rust,ignore
 let draft = asset_loader.derive_builder(

@@ -729,9 +729,9 @@ impl DerivedResourceRecipe {
 
 /// Reads and compiles one self-contained JSON theme against the stable application resource atlas.
 ///
-/// This is the loader module's only entry point. Definition parsing, path anchoring, atlas
-/// construction, and visual installation remain private stages that cannot be called out of order
-/// or supplied with mismatched intermediate values.
+/// This is the filesystem-based offline entrypoint. Definition parsing, path anchoring, recipe
+/// execution, and visual publication remain private stages that cannot be called out of order or
+/// supplied with mismatched intermediate values.
 #[cfg(feature = "builder")]
 pub fn load(path: &Path, base: &AssetData) -> Result<LoadedTheme, ThemeLoadError> {
     // Offline construction instantiates the same concrete GFX services used by the plugin path;

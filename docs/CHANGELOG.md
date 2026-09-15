@@ -22,6 +22,11 @@ wrappers. [COM_DESIGN.md](COM_DESIGN.md) defines the accepted architecture, and
   `Skin` borrows generated metrics and chrome policy and selects generated appearance fields
   directly. Remove the parallel font/glyph/icon records, native chrome and appearance catalogs,
   UI-only atlas validator, conversion layers, and test export/reimport machinery.
+- Resolve external JSON themes into one typed `ThemeRecipe` and execute every resource through
+  the GFX `AssetLoader` and `AssetPublisher`. Offline generation statically instantiates those same
+  services instead of using a second Skin-owned native builder loop. Preserve bounded one-at-a-time
+  reads, injectable sources, canonical ordering, and owned path/status/GFX diagnostics; verify exact
+  offline and plugin-facing output parity.
 - Use `nc_com_shared_runtime` as the runtime library name in direct builds,
   native bindings, and generated LTO roots. Assemblies deploy one runtime library
   without the former duplicate filename. The Cargo package remains `neocogi-com-runtime`.

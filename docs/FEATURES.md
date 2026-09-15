@@ -72,7 +72,9 @@ application's normal dependency graph.
 
 `neocogi-demo-assets/full-demo` adds theme choices, photo and mesh access.
 The asset compiler is an optional host build dependency enabled by `embed-assets`. Both storage
-modes use the same recipe and retain the original catalog when switching themes.
+modes execute the same typed Skin recipe through the same GFX loader and publisher implementation
+and retain the original catalog when switching themes. The offline route instantiates those GFX
+services statically; it does not maintain a second Skin-owned atlas algorithm.
 
 For another application, call `neocogi_gfx_impl::export::write_rust` from a build tool and
 enable `neocogi-gfx-support/compiled-assets` directly in the consumer.
