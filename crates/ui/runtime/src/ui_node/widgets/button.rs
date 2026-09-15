@@ -237,12 +237,6 @@ impl Widget for Button {
     }
 }
 
-impl crate::TypedWidget<ButtonSubmitted> for Button {
-    fn event(&self) -> crate::WidgetEventPortHandle<ButtonSubmitted> {
-        self.submitted_event.event()
-    }
-}
-
 impl crate::ui_node::widget_object::WidgetAlgorithm for Button {
     /// Logical COM closure cancels ordinary submissions while retained widget references remain safe.
     fn close_events(&mut self) {
@@ -384,7 +378,7 @@ impl neocogi_ui_core_contracts::Button for Button {
     /// Returns an application-owned lease over the Button's concrete activation source.
     fn subscribe(&mut self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
-        let endpoint = <Self as crate::TypedWidget<crate::ButtonSubmitted>>::event(self);
+        let endpoint = self.submitted_event.event();
         endpoint.subscribe(sink)
     }
 

@@ -155,12 +155,6 @@ impl Widget for ListBox {
     }
 }
 
-impl crate::TypedWidget<ListBoxSubmitted> for ListBox {
-    fn event(&self) -> crate::WidgetEventPortHandle<ListBoxSubmitted> {
-        self.submitted_event.event()
-    }
-}
-
 impl crate::ui_node::widget_object::WidgetAlgorithm for ListBox {
     /// Logical COM closure cancels ordinary submissions while retained widget references remain safe.
     fn close_events(&mut self) {
@@ -292,7 +286,7 @@ impl neocogi_ui_core_contracts::ListBox for ListBox {
     /// Connects the entry's existing semantic event source directly through the class contract.
     fn subscribe(&mut self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
-        let endpoint = <Self as crate::TypedWidget<crate::ListBoxSubmitted>>::event(self);
+        let endpoint = self.submitted_event.event();
         endpoint.subscribe(sink)
     }
 }

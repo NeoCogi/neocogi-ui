@@ -172,13 +172,13 @@ impl Textbox {
     /// Returns the native event endpoint emitted after every user-originated text change.
     #[cfg(test)]
     pub fn changed(&self) -> crate::WidgetEventPortHandle<TextboxChanged> {
-        <Self as crate::TypedWidget<TextboxChanged>>::event(self)
+        self.changed_event.event()
     }
 
     /// Returns the native event endpoint emitted whenever the user submits the current text.
     #[cfg(test)]
     pub fn submitted(&self) -> crate::WidgetEventPortHandle<TextboxSubmitted> {
-        <Self as crate::TypedWidget<TextboxSubmitted>>::event(self)
+        self.submitted_event.event()
     }
 
     /// Measures a single-line editor, bounded by available width when supplied.
@@ -225,18 +225,6 @@ impl Textbox {
     fn paint_widget(&self, ctx: &mut WidgetPaintCtx<'_>) {
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
         textbox_paint(ctx, self.buf.as_str(), self.cursor, ctx.options(), font);
-    }
-}
-
-impl crate::TypedWidget<TextboxChanged> for Textbox {
-    fn event(&self) -> crate::WidgetEventPortHandle<TextboxChanged> {
-        self.changed_event.event()
-    }
-}
-
-impl crate::TypedWidget<TextboxSubmitted> for Textbox {
-    fn event(&self) -> crate::WidgetEventPortHandle<TextboxSubmitted> {
-        self.submitted_event.event()
     }
 }
 
@@ -641,13 +629,13 @@ impl neocogi_ui_core_contracts::Textbox for Textbox {
     /// Connects the existing changed-text source directly through the class contract.
     fn subscribe_changed(&mut self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
-        let endpoint = <Self as crate::TypedWidget<crate::TextboxChanged>>::event(self);
+        let endpoint = self.changed_event.event();
         endpoint.subscribe(sink)
     }
     /// Connects the independent submitted-text source directly through the class contract.
     fn subscribe_submitted(&mut self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
-        let endpoint = <Self as crate::TypedWidget<crate::TextboxSubmitted>>::event(self);
+        let endpoint = self.submitted_event.event();
         endpoint.subscribe(sink)
     }
 }

@@ -59,14 +59,6 @@
 /// Floating-point type used by numeric widgets.
 pub type Real = f32;
 
-/// One concrete retained widget that owns a typed, weak native event endpoint.
-/// The widget trait owns the producer mapping; generic queues and subscriptions
-/// are implemented by `neocogi-com-events`, not by the retained UI runtime.
-pub trait TypedWidget<Event: 'static>: crate::Widget {
-    /// Projects the producer-owned port without retaining the widget or its queue.
-    fn event(&self) -> crate::WidgetEventPortHandle<Event>;
-}
-
 use crate::*;
 
 mod button;
@@ -92,16 +84,16 @@ use control::{
     same_image, image_size, inline_content_size, place_inline_content, place_scaled_visual_content, scaled_visual_content_size, text_size, widget_fill_visible,
 };
 
-pub use button::{Button, ButtonParameters, ButtonSubmitted};
-pub use checkbox::{Checkbox, CheckboxChanged, CheckboxParameters};
+pub use button::{Button, ButtonParameters};
+pub use checkbox::{Checkbox, CheckboxParameters};
 pub use color_swatch::{ColorSwatch, ColorSwatchParameters};
 pub use combo::{Combo, ComboParameters};
-pub use list_box::{ListBox, ListBoxParameters, ListBoxSubmitted};
-pub use list_item::{ListItem, ListItemParameters, ListItemSubmitted};
-pub use number::{Number, NumberChanged, NumberParameters};
+pub use list_box::{ListBox, ListBoxParameters};
+pub use list_item::{ListItem, ListItemParameters};
+pub use number::{Number, NumberParameters};
 pub use numeric_edit::{DecimalPrecision};
-pub use scrollbar::{Scrollbar, ScrollbarAxis, ScrollbarChanged, ScrollbarParameters};
-pub use slider::{Slider, SliderChanged, SliderParameters};
-pub use text_area::{TextArea, TextAreaChanged, TextAreaSubmitted};
+pub use scrollbar::{Scrollbar, ScrollbarAxis, ScrollbarParameters};
+pub use slider::{Slider, SliderParameters};
+pub use text_area::TextArea;
 pub use text_block::{TextBlock, TextBlockParameters};
-pub use textbox::{Textbox, TextboxChanged, TextboxParameters, TextboxSubmitted};
+pub use textbox::{Textbox, TextboxParameters};

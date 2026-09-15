@@ -405,14 +405,6 @@ impl Scrollbar {
     }
 }
 
-impl crate::TypedWidget<ScrollbarChanged> for Scrollbar {
-    /// Returns the runtime-owned event endpoint for user-originated offset changes.
-    fn event(&self) -> crate::WidgetEventPortHandle<ScrollbarChanged> {
-        // Clone only a weak view of the shared port; the retained scrollbar remains its sole owner.
-        self.changed_event.event()
-    }
-}
-
 impl Widget for Scrollbar {
     /// Applies track clicks and captured thumb dragging to the current offset.
     fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
@@ -633,7 +625,7 @@ impl neocogi_ui_core_contracts::Scrollbar for Scrollbar {
     /// Connects the Scrollbar's existing semantic event source directly through its class contract.
     fn subscribe(&mut self, sink: ComRef<'_, IScrollbarSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
-        let endpoint = <Self as crate::TypedWidget<crate::ScrollbarChanged>>::event(self);
+        let endpoint = self.changed_event.event();
         endpoint.subscribe(sink)
     }
 }

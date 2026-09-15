@@ -44,8 +44,8 @@ self.changed.subscribe(sink)
 
 Emission queues an owned snapshot. The producer does not retain the application's
 handler. The [acceptance host](../../demos/smoke/src/extension.rs) constructs the
-generated sink against its own typed application `EventSession`, subscribes to the
-custom port, and also uses an activation handler to edit the counter during
+generated connector against its own typed application `EventSession`, claims the
+custom port and its lease in one transaction, and also uses an activation handler to edit the counter during
 delivery. The value callback still observes the originally committed value;
 the UI commits the later edit's measurement before returning from the same update.
 

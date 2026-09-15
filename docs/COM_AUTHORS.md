@@ -127,10 +127,16 @@ once when subscribing. The session offers these concrete families:
 Independent producers share `neocogi_com_events::EventSource<E>` with built-ins;
 the UI facade reexports this type for UI authors.
 Standard UI snapshots are generated from `event` NCIDL declarations, and their
-source subscription calls are generated from `event` ports. Custom plugin
+source subscription calls and registration connectors are generated from `event`
+ports. The UI `EventSession` wrapper only groups several source capabilities
+under familiar family names; every lease transaction is performed by the
+generated connector against the generic COM session. Custom plugin
 families follow the same pattern: declare the concrete sink once, use the
 generated owned payload and adapter, and implement only the producer's typed
-port body. Commit semantic state, then
+port body. A checked generated connector can run a concrete semantic validator
+on the decoded payload before taking an application-state borrow. Keep such
+domain predicates in their contract/facade layer, not in generic COM transport.
+Commit semantic state, then
 call `emit` with its owned snapshot. Implement the event capability by returning
 `source.subscribe(sink)`, and close ordinary sources when the widget logically closes.
 The [extension example](../examples/ui-extension) demonstrates the full object,
@@ -184,10 +190,7 @@ fn private_dispatcher(&self) -> Result<ComPtr<IEventDispatcherAbi>, NcStatus> {
 
 // In an application or another plugin's State:
 let session = neocogi_com_events::EventSession::new(state);
-session.register(|| {
-    let sink = create_i_choice_sink_event_sink(&session, ChoiceHandler)?;
-    panel.subscribe_choice(sink.as_com_ref())
-})?;
+connect_choice_panel_subscribe_choice(&session, panel.as_com_ref(), ChoiceHandler)?;
 ui.update_with_events(size, &session)?;
 ```
 
@@ -830,7 +833,10 @@ picker.open(&request)?;
 ui.update_with_events(drawable_size, &events)?;
 ```
 
-The handler receives `FileDialogCompleted::Accepted(PathBuf)` or `Cancelled`.
+The handler receives the generated `IFileDialogSinkEvent::Accepted { path }`
+or `Cancelled`. `neocogi_ui::events::completed_file_path` copies the exact
+host-native `PathBuf` when the application needs it; display text is never
+reconstructed as a lookup key.
 Acceptance is lexical: application code decides whether the path must exist or
 have a particular type before using it. A selected row retains its exact native
 path while the filename field displays a possibly lossy basename. A real user

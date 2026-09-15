@@ -187,7 +187,7 @@ impl Slider {
     /// Returns the native event endpoint emitted after every user-originated value change.
     #[cfg(test)]
     pub fn changed(&self) -> crate::WidgetEventPortHandle<SliderChanged> {
-        <Self as crate::TypedWidget<SliderChanged>>::event(self)
+        self.changed_event.event()
     }
 
     /// Measures the slider track plus formatted value label.
@@ -306,12 +306,6 @@ impl Slider {
         let _ = ctx.draw_control(ControlRole::SliderThumb, thumb);
         let label = number_label(self.value, self.precision);
         ctx.draw_control_text_with_font(font, label.as_str(), base, ControlRole::SliderTrack, ctx.options());
-    }
-}
-
-impl crate::TypedWidget<SliderChanged> for Slider {
-    fn event(&self) -> crate::WidgetEventPortHandle<SliderChanged> {
-        self.changed_event.event()
     }
 }
 
@@ -510,7 +504,7 @@ mod tests {
         values.push(event.value);
     }
 
-    fn record_number_change(values: &mut Vec<Real>, event: &NumberChanged) {
+    fn record_number_change(values: &mut Vec<Real>, event: &SliderChanged) {
         values.push(event.value);
     }
 
@@ -1101,7 +1095,7 @@ impl neocogi_ui_core_contracts::Slider for Slider {
     /// Connects the slider's existing semantic event source directly through the class contract.
     fn subscribe(&mut self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
-        let endpoint = <Self as crate::TypedWidget<crate::SliderChanged>>::event(self);
+        let endpoint = self.changed_event.event();
         endpoint.subscribe(sink)
     }
 }

@@ -76,7 +76,7 @@ mod widget;
 mod widget_context;
 pub use widget::{Change, KeyboardAction, KeyboardBehavior, LeafWidget, Widget, WidgetFillOption, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx};
 pub mod widgets;
-pub use widgets::{ScrollbarAxis, ScrollbarChanged, ScrollbarParameters};
+pub use widgets::{ScrollbarAxis, ScrollbarParameters};
 
 mod children;
 pub use children::Children;

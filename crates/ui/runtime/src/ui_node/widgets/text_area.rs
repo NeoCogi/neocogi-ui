@@ -283,14 +283,14 @@ impl TextEditor {
     #[cfg(test)]
     pub fn changed(&self) -> crate::WidgetEventPortHandle<TextAreaChanged> {
         // Delegate to the typed-event implementation so widget and handle APIs share one endpoint.
-        <Self as crate::TypedWidget<TextAreaChanged>>::event(self)
+        self.changed_event.event()
     }
 
     /// Returns the native event endpoint emitted whenever the user submits the current text.
     #[cfg(test)]
     pub fn submitted(&self) -> crate::WidgetEventPortHandle<TextAreaSubmitted> {
         // Delegate to the typed-event implementation so widget and handle APIs share one endpoint.
-        <Self as crate::TypedWidget<TextAreaSubmitted>>::event(self)
+        self.submitted_event.event()
     }
 
     /// Measures intrinsic editable text using the wrapping width supplied by ScrollArea.
@@ -349,22 +349,6 @@ impl TextEditor {
         // the editor records no offset arithmetic or scrollbar operations.
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
         textarea_paint(ctx, self, font);
-    }
-}
-
-impl crate::TypedWidget<TextAreaChanged> for TextEditor {
-    /// Returns the runtime-owned user-change event endpoint.
-    fn event(&self) -> crate::WidgetEventPortHandle<TextAreaChanged> {
-        // Create a weak endpoint handle without transferring ownership from the retained leaf.
-        self.changed_event.event()
-    }
-}
-
-impl crate::TypedWidget<TextAreaSubmitted> for TextEditor {
-    /// Returns the runtime-owned submission event endpoint.
-    fn event(&self) -> crate::WidgetEventPortHandle<TextAreaSubmitted> {
-        // Create a weak endpoint handle without transferring ownership from the retained leaf.
-        self.submitted_event.event()
     }
 }
 
@@ -808,14 +792,14 @@ impl ITextEvents for TextEditor {
     /// Connects the editor's existing changed-text event source.
     fn subscribe_changed(&mut self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
-        let endpoint = <Self as crate::TypedWidget<crate::TextAreaChanged>>::event(self);
+        let endpoint = self.changed_event.event();
         endpoint.subscribe(sink)
     }
 
     /// Connects the editor's existing submitted-text event source.
     fn subscribe_submitted(&mut self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
-        let endpoint = <Self as crate::TypedWidget<crate::TextAreaSubmitted>>::event(self);
+        let endpoint = self.submitted_event.event();
         endpoint.subscribe(sink)
     }
 }

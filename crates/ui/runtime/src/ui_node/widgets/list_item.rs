@@ -121,7 +121,7 @@ impl ListItem {
     /// Returns the native event endpoint emitted once for every user submission.
     #[cfg(test)]
     pub fn submitted(&self) -> crate::WidgetEventPortHandle<ListItemSubmitted> {
-        <Self as crate::TypedWidget<ListItemSubmitted>>::event(self)
+        self.submitted_event.event()
     }
 
     /// Measures the row label and optional icon.
@@ -195,12 +195,6 @@ impl Widget for ListItem {
 
     fn keyboard_behavior(&self) -> KeyboardBehavior {
         KeyboardBehavior::TAB_STOP | KeyboardBehavior::ACTIVATE_ENTER | KeyboardBehavior::ACTIVATE_SPACE
-    }
-}
-
-impl crate::TypedWidget<ListItemSubmitted> for ListItem {
-    fn event(&self) -> crate::WidgetEventPortHandle<ListItemSubmitted> {
-        self.submitted_event.event()
     }
 }
 
@@ -358,7 +352,7 @@ impl neocogi_ui_core_contracts::ListItem for ListItem {
     /// Connects the row's existing semantic event source directly through the class contract.
     fn subscribe(&mut self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
-        let endpoint = <Self as crate::TypedWidget<crate::ListItemSubmitted>>::event(self);
+        let endpoint = self.submitted_event.event();
         endpoint.subscribe(sink)
     }
 }

@@ -171,12 +171,6 @@ impl Widget for Checkbox {
     }
 }
 
-impl crate::TypedWidget<CheckboxChanged> for Checkbox {
-    fn event(&self) -> crate::WidgetEventPortHandle<CheckboxChanged> {
-        self.changed_event.event()
-    }
-}
-
 impl crate::ui_node::widget_object::WidgetAlgorithm for Checkbox {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
@@ -289,7 +283,7 @@ impl neocogi_ui_core_contracts::Checkbox for Checkbox {
     /// Connects the Checkbox's existing semantic event source directly through its class contract.
     fn subscribe(&mut self, sink: ComRef<'_, ICheckboxSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
-        let endpoint = <Self as crate::TypedWidget<crate::CheckboxChanged>>::event(self);
+        let endpoint = self.changed_event.event();
         endpoint.subscribe(sink)
     }
 }

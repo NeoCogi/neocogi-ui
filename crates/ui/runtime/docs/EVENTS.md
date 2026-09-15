@@ -29,6 +29,10 @@ from `neocogi_ui::events`). The generated `neocogi.com.events` module owns the
 lease and dispatcher ABI; the support crate owns typed queues and application
 sessions. Standard snapshots are generated from UI NCIDL `event` declarations
 and already implement `EventPayload`, which names their concrete COM sink.
+Each source port generates plain and checked registration connectors. Checked
+adapters run a concrete domain validator after decoding and before application-
+state borrowing, replacing handwritten COM sink objects without putting UI
+rules into generic event transport.
 `emit` never invokes application code. `subscribe` returns the application-owned
 `IEventSubscription`; the source does not retain the sink or keep the widget alive.
 

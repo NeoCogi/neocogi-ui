@@ -148,7 +148,7 @@ impl Number {
     /// Returns the native event endpoint emitted after every user-originated value change.
     #[cfg(test)]
     pub fn changed(&self) -> crate::WidgetEventPortHandle<NumberChanged> {
-        <Self as crate::TypedWidget<NumberChanged>>::event(self)
+        self.changed_event.event()
     }
 
     /// Measures the formatted number label.
@@ -204,12 +204,6 @@ impl Number {
         }
         let label = number_label(self.value, self.precision);
         ctx.draw_control_text_with_font(font, label.as_str(), base, ControlRole::TextInput, ctx.options());
-    }
-}
-
-impl crate::TypedWidget<NumberChanged> for Number {
-    fn event(&self) -> crate::WidgetEventPortHandle<NumberChanged> {
-        self.changed_event.event()
     }
 }
 
@@ -351,7 +345,7 @@ impl neocogi_ui_core_contracts::Number for Number {
     /// Connects the number editor's existing semantic event source directly through the class contract.
     fn subscribe(&mut self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
-        let endpoint = <Self as crate::TypedWidget<crate::NumberChanged>>::event(self);
+        let endpoint = self.changed_event.event();
         endpoint.subscribe(sink)
     }
 }
