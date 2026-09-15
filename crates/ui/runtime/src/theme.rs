@@ -32,7 +32,6 @@
 
 mod appearance;
 mod bundle;
-pub(crate) mod catalog;
 mod icons;
 mod palette;
 mod resources;
@@ -48,6 +47,6 @@ pub use icons::{IconRef, IconRole};
 pub use palette::FlatPalette;
 pub use resources::ResourceCatalog;
 pub use neocogi_ui_core_contracts::{ChromeRole, ControlRole, MenuRole, SurfaceRole};
-pub use skin::{CaptionButtonSide, CaptionButtonsSkin, Skin, SkinMetrics, TitleBackdropSkin, WindowChromeSkin, WindowTitleAlignment};
+pub use skin::{CaptionButtonSide, Skin, SkinMetrics, WindowChromeSkin, WindowTitleAlignment};
 pub(crate) use skin::SkinRevision;
 pub use typography::{FontRef, FontRole};

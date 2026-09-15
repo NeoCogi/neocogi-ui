@@ -43,6 +43,12 @@ use crate::math::RectExt;
 use crate::render::Painter;
 use crate::{AtlasHandle, CaptionButtonSide, Dimensioni, Recti, Skin, WidgetEventPortHandle, WindowChromeSkin, WindowOption, WindowTitleAlignment};
 
+/// Decodes the canonical packed RGBA convention for transient root-chrome painting.
+fn packed_color(value: u32) -> crate::Color {
+    let [r, g, b, a] = value.to_le_bytes();
+    crate::Color { r, g, b, a }
+}
+
 /// Active pointer gesture owned by manager-rendered window chrome.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(super) enum RootInteraction {
@@ -288,7 +294,7 @@ impl RootFrameKind {
         // corner artwork may be much larger. Popups do not resize, so their semantic patch insets
         // directly define both the visible black outline and the content rectangle behind it.
         match self {
-            Self::Window | Self::Dialog => style.metrics.window_border.normalized(),
+            Self::Window | Self::Dialog => style.metrics().window_border.normalized(),
             Self::Popup => style.menu(MenuRole::Popup, MenuState::Normal).patch.insets.normalized(),
         }
     }
@@ -364,7 +370,7 @@ pub(super) fn root_chrome_geometry(
     let content_insets = if options.intersects(WindowOption::NO_PADDING) {
         crate::SliceInsets::ZERO
     } else {
-        style.metrics.window_content_insets.normalized()
+        style.metrics().window_content_insets.normalized()
     };
     let title_height = root_titlebar_height(style, atlas);
     let frame = if options.intersects(WindowOption::FRAME) {
@@ -379,7 +385,7 @@ pub(super) fn root_chrome_geometry(
     let vertical_content_extent = content_insets.vertical_extent();
     // Title text and caption controls still use the ordinary widget metric for internal breathing
     // room; changing application-body insets must not collapse title composition.
-    let title_padding_extent = style.metrics.padding.max(0).saturating_mul(2);
+    let title_padding_extent = style.metrics().padding.max(0).saturating_mul(2);
     let menu_width = menu_intrinsic.map(|size| size.width.max(0)).unwrap_or(0);
     let menu_height = menu_intrinsic.map(|size| size.height.max(0)).unwrap_or(0);
     let auto_width = options.intersects(WindowOption::AUTO_WIDTH);
@@ -390,7 +396,7 @@ pub(super) fn root_chrome_geometry(
     if !options.intersects(WindowOption::NO_TITLE) {
         // The title minimum retains enough room for text, padding, and every enabled caption button.
         let close_count = i32::from(!options.intersects(WindowOption::NO_CLOSE));
-        let caption_extent = root_caption_extent(&style.window_chrome, title_height);
+        let caption_extent = root_caption_extent(style.window_chrome(), title_height);
         let enabled_buttons = [
             (RootCaptionButton::Close, close_count),
             (RootCaptionButton::Maximize, i32::from(options.intersects(WindowOption::MAXIMIZE_BUTTON))),
@@ -398,27 +404,28 @@ pub(super) fn root_chrome_geometry(
         ];
         let leading_count = enabled_buttons
             .iter()
-            .filter(|(button, _)| caption_side(&style.window_chrome, *button) == CaptionButtonSide::Leading)
+            .filter(|(button, _)| caption_side(style.window_chrome(), *button) == CaptionButtonSide::Leading)
             .map(|(_, count)| *count)
             .sum::<i32>();
         let trailing_count = enabled_buttons
             .iter()
-            .filter(|(button, _)| caption_side(&style.window_chrome, *button) == CaptionButtonSide::Trailing)
+            .filter(|(button, _)| caption_side(style.window_chrome(), *button) == CaptionButtonSide::Trailing)
             .map(|(_, count)| *count)
             .sum::<i32>();
-        let inner_spacing = style.window_chrome.captions.inner_spacing.max(0);
+        let inner_spacing = style.window_chrome().inner_spacing.max(0);
         let leading_width = caption_extent
             .saturating_mul(leading_count)
             .saturating_add(if leading_count > 0 { inner_spacing } else { 0 });
         let trailing_width = caption_extent
             .saturating_mul(trailing_count)
             .saturating_add(if trailing_count > 0 { inner_spacing } else { 0 });
-        let caption_width = match style.window_chrome.title_alignment {
+        let caption_width = match style.window_chrome().title_alignment {
             WindowTitleAlignment::Leading => leading_width.saturating_add(trailing_width),
             WindowTitleAlignment::Centered => {
                 // Centered titles reserve equal space using the larger actual button bank.
                 leading_width.max(trailing_width).saturating_mul(2)
             }
+            _ => unreachable!("canonical validation accepts only declared title alignments"),
         };
         let title_font = style.resolve_font_role(atlas, crate::FontRole::Title);
         let title_minimum_width = atlas
@@ -459,15 +466,16 @@ pub(super) fn root_chrome_geometry(
     let title =
         (!options.intersects(WindowOption::NO_TITLE)).then(|| Recti::new(client.x, client.y, client.width.max(0), title_height.min(client.height.max(0))));
     let (close, maximize, minimize) = if let Some(title) = title {
-        let extent = root_caption_extent(&style.window_chrome, title.height).min(title.height.max(0));
+        let extent = root_caption_extent(style.window_chrome(), title.height).min(title.height.max(0));
         let button_y = title.y.saturating_add(title.height.saturating_sub(extent).max(0) / 2);
         // Allocate buttons in one stable semantic order. Each field independently selects its bank,
         // allowing recipes beyond the two built-in presets without adding manager mode branches.
         let mut leading_x = title.x;
         let mut trailing_x = title.x.saturating_add(title.width);
-        let mut allocate = |button| match caption_side(&style.window_chrome, button) {
+        let mut allocate = |button| match caption_side(style.window_chrome(), button) {
             CaptionButtonSide::Leading => allocate_leading_caption(&mut leading_x, trailing_x, button_y, extent),
             CaptionButtonSide::Trailing => allocate_trailing_caption(leading_x, button_y, extent, &mut trailing_x),
+            _ => unreachable!("canonical validation accepts only declared caption sides"),
         };
         let close = (!options.intersects(WindowOption::NO_CLOSE)).then(|| allocate(RootCaptionButton::Close));
         let maximize = options.intersects(WindowOption::MAXIMIZE_BUTTON).then(|| allocate(RootCaptionButton::Maximize));
@@ -503,7 +511,7 @@ pub(super) fn root_chrome_geometry(
         let right_thickness = frame.right.max(1).min(outer.width.max(0));
         let bottom_thickness = frame.bottom.max(1).min(outer.height.max(0));
         let corner_size = style
-            .metrics
+            .metrics()
             .scrollbar_size
             .max(right_thickness)
             .max(bottom_thickness)
@@ -550,9 +558,9 @@ fn caption_side(chrome: &WindowChromeSkin, button: RootCaptionButton) -> Caption
     // Exhaustive semantic mapping keeps geometry, title reservation, hit testing, and paint on the
     // same three recipe fields without indexing or string dispatch.
     match button {
-        RootCaptionButton::Close => chrome.captions.close_side,
-        RootCaptionButton::Minimize => chrome.captions.minimize_side,
-        RootCaptionButton::Maximize => chrome.captions.maximize_side,
+        RootCaptionButton::Close => chrome.close_side,
+        RootCaptionButton::Minimize => chrome.minimize_side,
+        RootCaptionButton::Maximize => chrome.maximize_side,
     }
 }
 
@@ -560,8 +568,8 @@ fn caption_side(chrome: &WindowChromeSkin, button: RootCaptionButton) -> Caption
 fn root_caption_extent(chrome: &WindowChromeSkin, title_height: i32) -> i32 {
     // Normalize authored negative values at consumption, then apply both independent recipe limits
     // without recognizing a named platform mode.
-    let vertical_extent = chrome.captions.vertical_spacing.max(0).saturating_mul(2);
-    title_height.max(0).saturating_sub(vertical_extent).max(chrome.captions.minimum_extent.max(0))
+    let vertical_extent = chrome.vertical_spacing.max(0).saturating_mul(2);
+    title_height.max(0).saturating_sub(vertical_extent).max(chrome.minimum_extent.max(0))
 }
 
 /// Removes one square caption allocation from the remaining leading title span.
@@ -588,7 +596,7 @@ fn allocate_trailing_caption(leading_x: i32, y: i32, extent: i32, trailing_x: &m
 fn root_title_text_rect(title: Recti, geometry: RootChromeGeometry, chrome: &WindowChromeSkin) -> Recti {
     let title_end = title.x.saturating_add(title.width);
     let (leading_bank_end, trailing_bank_start) = root_caption_bank_edges(geometry, chrome);
-    let inner_spacing = chrome.captions.inner_spacing.max(0);
+    let inner_spacing = chrome.inner_spacing.max(0);
     let leading_end = leading_bank_end
         .map(|edge| edge.saturating_add(inner_spacing).min(title_end))
         .unwrap_or(title.x);
@@ -613,6 +621,7 @@ fn root_title_text_rect(title: Recti, geometry: RootChromeGeometry, chrome: &Win
                 title.height,
             )
         }
+        _ => unreachable!("canonical validation accepts only declared title alignments"),
     }
 }
 
@@ -640,7 +649,7 @@ fn root_caption_bank_edges(geometry: RootChromeGeometry, chrome: &WindowChromeSk
 
 /// Returns unstriped fields between the title artwork and each populated caption bank.
 fn root_caption_bank_spacing_rects(title_content: Recti, geometry: RootChromeGeometry, chrome: &WindowChromeSkin) -> [Option<Recti>; 2] {
-    let spacing = chrome.captions.inner_spacing.max(0);
+    let spacing = chrome.inner_spacing.max(0);
     if spacing == 0 || !title_content.has_positive_area() {
         return [None, None];
     }
@@ -659,9 +668,9 @@ fn root_titlebar_height(style: &Skin, atlas: &AtlasHandle) -> i32 {
     // The style value acts as a minimum rather than allowing text to escape a too-short title.
     let title_font = style.resolve_font_role(atlas, crate::FontRole::Title);
     let font_height = atlas.get_font_height(title_font) as i32;
-    let vertical_padding = (style.metrics.padding.max(0) / 2).max(1);
+    let vertical_padding = (style.metrics().padding.max(0) / 2).max(1);
     let text_height = font_height.saturating_add(vertical_padding.saturating_mul(2));
-    style.metrics.title_height.max(text_height)
+    style.metrics().title_height.max(text_height)
 }
 
 /// Resolves window, dialog, or popup artwork while preserving each family's frame geometry.
@@ -757,34 +766,39 @@ pub(super) fn record_root_overlay(
     if let Some(title) = geometry.title {
         let title_visual = style.chrome(ChromeRole::Title, chrome_state);
         let title_content = crate::ui_node::frame::paint_internal_frame(&mut painter, title, title_visual.patch);
-        let title_backdrop = if chrome_active { style.window_chrome.active_title_backdrop } else { None };
-        if let (Some(backdrop), Some(title_content)) = (title_backdrop, title_content) {
+        let title_backdrop = match (chrome_active, style.window_chrome().has_backdrop) {
+            (true, 1) => Some((packed_color(style.window_chrome().backdrop_rgba), style.window_chrome().backdrop_padding)),
+            (false, _) | (true, 0) => None,
+            (true, _) => unreachable!("canonical validation accepts only boolean chrome flags"),
+        };
+        if let (Some((backdrop, _)), Some(title_content)) = (title_backdrop, title_content) {
             // Clear the inner side of each populated caption bank before painting its controls.
             // The same title color used behind the label makes the gap part of the title field.
-            for spacing in root_caption_bank_spacing_rects(title_content, geometry, &style.window_chrome)
+            for spacing in root_caption_bank_spacing_rects(title_content, geometry, style.window_chrome())
                 .into_iter()
                 .flatten()
             {
-                painter.fill_rect(spacing, backdrop.color);
+                painter.fill_rect(spacing, backdrop);
             }
         }
-        let text = root_title_text_rect(title, geometry, &style.window_chrome);
+        let text = root_title_text_rect(title, geometry, style.window_chrome());
         if text.width > 0 && text.height > 0 {
             let color = title_visual.content_color;
-            let options = match style.window_chrome.title_alignment {
+            let options = match style.window_chrome().title_alignment {
                 WindowTitleAlignment::Leading => crate::WidgetOption::NONE,
                 WindowTitleAlignment::Centered => crate::WidgetOption::ALIGN_CENTER,
+                _ => unreachable!("canonical validation accepts only declared title alignments"),
             };
             let title_font = style.resolve_font_role(atlas, crate::FontRole::Title);
             let position = crate::ui_node::text_layout::control_text_position_with_font(style, atlas, title_font, name, text, options);
-            if let Some(backdrop) = title_backdrop
+            if let Some((backdrop, horizontal_padding)) = title_backdrop
                 && let Some(title_content) = title_content
             {
                 // Keep the backdrop inside the title patch's content cell. Fixed patch rows such
                 // as Platinum's lower shadow and black separator must remain uninterrupted beneath
                 // the label even though text alignment still uses the complete title allocation.
                 let measured = atlas.get_text_size(title_font, name);
-                let horizontal_padding = backdrop.horizontal_padding.max(0);
+                let horizontal_padding = horizontal_padding.max(0);
                 let desired_label = Recti::new(
                     position.x.saturating_sub(horizontal_padding),
                     title_content.y,
@@ -795,12 +809,17 @@ pub(super) fn record_root_overlay(
                     .positive_intersection(text)
                     .and_then(|label| label.positive_intersection(title_content))
                 {
-                    painter.fill_rect(label, backdrop.color);
+                    painter.fill_rect(label, backdrop);
                 }
             }
             painter.with_clip(text, |painter| painter.text(title_font, name, position, color));
         }
-        if chrome_active || style.window_chrome.captions.show_without_activation {
+        let captions_visible = match style.window_chrome().show_without_activation {
+            0 => chrome_active,
+            1 => true,
+            _ => unreachable!("canonical validation accepts only boolean chrome flags"),
+        };
+        if captions_visible {
             // The activation-specific recipe flag controls presentation and matches pointer hit
             // testing without overloading the interaction state used to paint the button itself.
             for button in [RootCaptionButton::Minimize, RootCaptionButton::Maximize, RootCaptionButton::Close] {
@@ -967,7 +986,7 @@ mod tests {
         // The two-control trailing bank is twenty-four pixels wide, so the centered title must
         // reserve the same twenty-eight pixels, including the inner gap, even though the leading
         // bank contains only close. The resulting rectangle remains centered on the whole title.
-        let chrome = WindowChromeSkin::classic_mac(crate::color(0, 0, 0, 255));
+        let chrome = crate::test_support::classic_mac_chrome(crate::color(0, 0, 0, 255));
         let text = root_title_text_rect(title, geometry, &chrome);
         assert_eq!((text.x, text.y, text.width, text.height), (48, 30, 104, 18));
         assert_eq!(
@@ -987,7 +1006,7 @@ mod tests {
             maximize: Some(Recti::new(168, 33, 12, 12)),
             ..RootChromeGeometry::default()
         };
-        let chrome = WindowChromeSkin::classic_mac(crate::color(0, 0, 0, 255));
+        let chrome = crate::test_support::classic_mac_chrome(crate::color(0, 0, 0, 255));
         let [leading, trailing] = root_caption_bank_spacing_rects(content, geometry, &chrome);
         assert_eq!(leading.map(|rect| (rect.x, rect.y, rect.width, rect.height)), Some((32, 30, 4, 16)));
         assert_eq!(trailing.map(|rect| (rect.x, rect.y, rect.width, rect.height)), Some((152, 30, 4, 16)));
@@ -999,7 +1018,7 @@ mod tests {
         let atlas = crate::test_support::test_atlas();
         let backdrop = crate::color(17, 29, 43, 255);
         let mut style = crate::test_support::test_skin(&atlas);
-        style.window_chrome = WindowChromeSkin::classic_mac(backdrop);
+        *style.window_chrome_mut() = crate::test_support::classic_mac_chrome(backdrop);
         crate::test_support::replace_chrome_patch(
             &mut style,
             ChromeRole::Title,
@@ -1056,9 +1075,9 @@ mod tests {
     fn independent_caption_recipe_fields_support_mixed_banks_and_vertical_spacing() {
         let atlas = crate::test_support::test_atlas();
         let mut skin = crate::test_support::test_skin(&atlas);
-        skin.window_chrome.captions.maximize_side = CaptionButtonSide::Leading;
-        skin.window_chrome.captions.vertical_spacing = 2;
-        skin.window_chrome.captions.minimum_extent = 2;
+        skin.window_chrome_mut().maximize_side = CaptionButtonSide::Leading;
+        skin.window_chrome_mut().vertical_spacing = 2;
+        skin.window_chrome_mut().minimum_extent = 2;
         let geometry = root_chrome_geometry(
             Recti::new(10, 20, 180, 110),
             Dimensioni::new(20, 20),

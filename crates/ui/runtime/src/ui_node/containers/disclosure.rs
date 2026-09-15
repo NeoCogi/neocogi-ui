@@ -141,7 +141,7 @@ impl Disclosure {
 
     fn indent(&self, style: &Skin) -> i32 {
         if matches!(self.variant, DisclosureVariant::Tree) {
-            style.metrics.indent.max(0)
+            style.metrics().indent.max(0)
         } else {
             0
         }
@@ -167,7 +167,7 @@ impl DisclosureHeader {
     /// Measures intrinsic header content; retained traversal adds the optional common frame.
     fn preferred(&self, style: &Skin, atlas: &AtlasHandle) -> Dimensioni {
         // Resolve icon and text metrics independently, then build the one-row content preference.
-        let padding = style.metrics.padding.max(0);
+        let padding = style.metrics().padding.max(0);
         let vertical_pad = (padding / 2).max(1);
         let body_font = style.resolve_font_role(atlas, crate::FontRole::Body);
         let font_height = atlas.get_font_height(body_font) as i32;
@@ -233,7 +233,7 @@ impl Widget for DisclosureHeader {
         };
         ctx.draw_icon(icon, Recti::new(row.x, row.y, row.height, row.height), text_color);
         // text_offset = row_height - padding.
-        let offset = row.height.saturating_sub(ctx.skin().metrics.padding);
+        let offset = row.height.saturating_sub(ctx.skin().metrics().padding);
         // text_x = row_x + text_offset; text_width = row_width - text_offset.
         let text_rect = Recti::new(row.x.saturating_add(offset), row.y, row.width.saturating_sub(offset), row.height);
         let body_font = ctx.skin().resolve_font_role(ctx.atlas(), crate::FontRole::Body);
@@ -274,7 +274,7 @@ impl ContainerWidget for Disclosure {
             return header;
         }
         let indent = self.indent(ctx.skin());
-        let spacing = ctx.skin().metrics.spacing.max(0);
+        let spacing = ctx.skin().metrics().spacing.max(0);
         let body_constraints = crate::Constraints::new(
             constraints.width.shrink(indent),
             constraints.height.shrink(header.height.saturating_add(spacing)),
@@ -305,7 +305,7 @@ impl ContainerWidget for Disclosure {
         let _ = ctx.set_child_participation(Self::BODY, participation);
         if self.model.expanded.get() {
             let indent = self.indent(ctx.skin());
-            let spacing = ctx.skin().metrics.spacing.max(0);
+            let spacing = ctx.skin().metrics().spacing.max(0);
             // body_origin = container_origin + (indent, header_height + spacing).
             let body_x = rect.x.saturating_add(indent);
             let body_y = rect.y.saturating_add(header_height).saturating_add(spacing);

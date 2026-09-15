@@ -2,13 +2,10 @@
 //!
 //! Public values here are implementation-library helpers, never application ABI payloads.
 //! Each importing binary creates local resource IDs in an authenticated catalog namespace.
-use crate::{AtlasHandle, FontRole, IconRole, ResourceCatalog, Skin, SkinBundle};
-use crate::atlas::transfer::Tables;
+use crate::{AtlasHandle, ResourceCatalog, Skin, SkinBundle};
 use neocogi_ui_core_contracts::*;
 use neocogi_ui::assets::AssetTables;
 use neocogi_com::{ComPtr, ComRef, IUnknown, NcStatus, NC_E_INVALID_ARG};
-
-mod theme;
 
 /// One imported immutable revision and the original application catalog used by derived themes.
 pub struct ImportedAssets {
@@ -36,20 +33,13 @@ impl ImportedAssets {
         }
         // UI imports lookup metadata and validates only the required white-tile rows. Full
         // RGBA transfers belong to GFX and the renderer, including in test builds.
-        let mut data = AssetTables::read(source)?;
-        let size = data.size;
-        let tables = Tables {
-            fonts: std::mem::take(&mut data.fonts).into_owned(),
-            glyphs: std::mem::take(&mut data.glyphs).into_owned(),
-            icons: std::mem::take(&mut data.icons).into_owned(),
-            names: std::mem::take(&mut data.names).into_owned(),
-        };
-        let atlas = tables.import(size, previous.map(|previous| &previous.original))?;
-        // Skin's native constructor assumes the semantic resources exist. Prove that before
-        // calling it so malformed plugins produce a status, never a panic across the ABI.
-        semantic_resources(&atlas)?;
-        let skin = theme::read(&data, &atlas)?;
-        let bundle = SkinBundle::new(atlas.clone(), skin);
+        let tables = AssetTables::read(source)?;
+        // The canonical validator has already established every resource, geometry, and appearance
+        // invariant. UI import retains that exact value and derives only local identities and
+        // sorted lookup slots; it does not translate records into a parallel atlas or skin model.
+        let atlas = AtlasHandle::from_validated_tables(tables, previous.map(|previous| &previous.original))?;
+        let skin = Skin::from_atlas(atlas.clone());
+        let bundle = SkinBundle::from_skin(skin);
         let original = previous.map_or(atlas, |previous| previous.original.clone());
         ResourceCatalog::new(original.clone()).validate_bundle(&bundle).map_err(|_| NC_E_INVALID_ARG)?;
         Ok(Self {
@@ -80,21 +70,6 @@ impl ImportedAssets {
     pub fn original(&self) -> &AtlasHandle {
         &self.original
     }
-}
-
-/// Proves the required default skin lookups are total before invoking native constructors.
-fn semantic_resources(atlas: &AtlasHandle) -> Result<(), NcStatus> {
-    let body = FontRole::Body.canonical_name().expect("known body font role has an IDL name");
-    if atlas.font_id(body).is_none()
-        || IconRole::ALL.iter().any(|role| {
-            atlas
-                .icon_id(role.canonical_name().expect("IconRole::ALL contains only declared IDL values"))
-                .is_none()
-        })
-    {
-        return Err(NC_E_INVALID_ARG);
-    }
-    Ok(())
 }
 
 #[cfg(test)]

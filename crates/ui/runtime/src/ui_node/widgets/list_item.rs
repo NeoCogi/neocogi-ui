@@ -139,7 +139,7 @@ impl ListItem {
 
     /// Measures the row label and optional icon.
     fn preferred_size_widget(&self, style: &Skin, atlas: &AtlasHandle, _constraints: Constraints) -> Dimensioni {
-        let padding = style.metrics.padding.max(0);
+        let padding = style.metrics().padding.max(0);
         let mut width = padding.saturating_mul(2);
         let mut visual_h = 0;
         if let Some(icon) = &self.icon {
@@ -165,7 +165,7 @@ impl ListItem {
         if let Some(icon) = &self.icon {
             let icon = icon.resolve(ctx.skin(), ctx.atlas());
             // Icons consume the left padding + icon width before the text region starts.
-            let padding = ctx.skin().metrics.padding.max(0);
+            let padding = ctx.skin().metrics().padding.max(0);
             let icon_size = ctx.atlas().get_icon_size(icon);
             // Skin values and retained allocations can independently reach coordinate limits.
             // Saturating the nonnegative extents keeps paint total while preserving ordinary
@@ -277,7 +277,7 @@ mod tests {
     fn extreme_padding_keeps_icon_paint_total() {
         let atlas = test_atlas();
         let mut style = test_skin(&atlas);
-        style.metrics.padding = i32::MAX;
+        style.metrics_mut().padding = i32::MAX;
         let check = atlas.icon_id("check").expect("test atlas must contain the exact check resource");
         let item = crate::test_support::algorithm::Algorithm::<ListItem>::from(ListItemParameters::with_icon("item", IconRef::named(check)));
         let bounds = rect(0, 0, 20, 20);

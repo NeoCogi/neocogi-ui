@@ -854,7 +854,7 @@ impl SurfaceNode {
             SurfaceKind::Root(root) => root.menu_bar.as_mut(),
             SurfaceKind::Popup(_) => None,
         };
-        let minimized_content_height = unminimized_height.map(|_| style.window_chrome.minimized_content_height);
+        let minimized_content_height = unminimized_height.map(|_| style.window_chrome().minimized_content_height);
         self.surface.layout(menu_bar, frame_kind, style, atlas, viewport, minimized_content_height);
         if maximized || unminimized_height.is_some() {
             // Managed size modes keep caption actions but expose no conflicting resize regions.
@@ -3016,7 +3016,7 @@ impl WindowManager {
                             if chrome_captured {
                                 // Continuation belongs to an already-visible caption or another
                                 // chrome capture, so activation-time first-press filtering no longer applies.
-                                self.route_chrome_event(root, event, true, style.window_chrome.minimized_content_height)
+                                self.route_chrome_event(root, event, true, style.window_chrome().minimized_content_height)
                             } else {
                                 self.surfaces
                                     .surface_mut(surface)
@@ -3039,8 +3039,8 @@ impl WindowManager {
             if !handled && let Some(surface) = pointer {
                 handled = match surface {
                     SurfaceKey::Root(root) => {
-                        let caption_controls_visible = pointer_owner_was_active || style.window_chrome.captions.show_without_activation;
-                        self.route_chrome_event(root, event, caption_controls_visible, style.window_chrome.minimized_content_height)
+                        let caption_controls_visible = pointer_owner_was_active || style.window_chrome().show_without_activation == 1;
+                        self.route_chrome_event(root, event, caption_controls_visible, style.window_chrome().minimized_content_height)
                     }
                     SurfaceKey::Popup(_) => false,
                 };

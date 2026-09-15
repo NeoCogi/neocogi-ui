@@ -2,357 +2,423 @@
 // Copyright 2023-Present (c) Raja Lehtihet & Wael El Oraiby
 //
 // Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
-//
-// 1. Redistributions of source code must retain the above copyright notice,
-// this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright notice,
-// this list of conditions and the following disclaimer in the documentation
-// and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the copyright holder nor the names of its contributors
-// may be used to endorse or promote products derived from this software without
-// specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
+// modification, are permitted provided that the conditions in LICENSE are met.
 //
 
-//! Runtime immutable atlas lookup and text metrics.
+//! Runtime lookup indices over canonical NCIDL-backed asset tables.
 
 use super::*;
+use neocogi_com::{NcStatus, NC_E_OUT_OF_MEMORY};
+use neocogi_ui_core_contracts::{AssetRange, Rect as AssetRect};
 
-/// Clamps one mathematically accumulated text coordinate into the renderer's rectangle domain.
+/// Clamps one mathematically accumulated text coordinate into the renderer rectangle domain.
 fn clamp_text_coordinate(value: i128) -> i32 {
-    // A UTF-8 string cannot contain enough i32 advances to overflow i128, so retaining the wider
-    // value until each emitted rectangle preserves cancellation between positive and negative
-    // typography metrics. Only the renderer-facing coordinate is saturated.
+    // A UTF-8 string cannot contain enough i32 advances to overflow i128. Retaining the wider
+    // value until emission preserves cancellation between positive and negative font metrics.
     value.clamp(i128::from(i32::MIN), i128::from(i32::MAX)) as i32
 }
 
+/// Converts the generated renderer rectangle into the runtime math rectangle at point of use.
+fn runtime_rect(value: AssetRect) -> Recti {
+    // Both records use identical integer units; this is a transient API-boundary projection rather
+    // than retained resource storage.
+    Recti::new(value.x, value.y, value.width, value.height)
+}
+
 impl AtlasHandle {
+    /// Builds UI-specific indices for tables already accepted by the canonical GFX validator.
+    ///
+    /// `previous` is the original catalog snapshot for a derived revision. Matching names inherit
+    /// its opaque process identities, while revision-private resources receive new identities.
+    pub(crate) fn from_validated_tables(tables: AssetTables, previous: Option<&Self>) -> Result<Self, NcStatus> {
+        let mut font_ids = Vec::new();
+        font_ids.try_reserve_exact(tables.fonts.len()).map_err(|_| NC_E_OUT_OF_MEMORY)?;
+        for font in tables.fonts.iter() {
+            let name = tables.name(font.name).expect("validated font range must name UTF-8 text");
+            font_ids.push(previous.and_then(|atlas| atlas.font_id(name)).unwrap_or_else(FontId::allocate));
+        }
+
+        let mut icon_ids = Vec::new();
+        icon_ids.try_reserve_exact(tables.icons.len()).map_err(|_| NC_E_OUT_OF_MEMORY)?;
+        for icon in tables.icons.iter() {
+            let name = tables.name(icon.name).expect("validated icon range must name UTF-8 text");
+            icon_ids.push(previous.and_then(|atlas| atlas.icon_id(name)).unwrap_or_else(IconId::allocate));
+        }
+
+        let mut font_name_order = index_slots(tables.fonts.len())?;
+        font_name_order.sort_unstable_by(|left, right| {
+            let left = tables.name(tables.fonts[*left].name).expect("validated font name");
+            let right = tables.name(tables.fonts[*right].name).expect("validated font name");
+            left.cmp(right)
+        });
+        let mut icon_name_order = index_slots(tables.icons.len())?;
+        icon_name_order.sort_unstable_by(|left, right| {
+            let left = tables.name(tables.icons[*left].name).expect("validated icon name");
+            let right = tables.name(tables.icons[*right].name).expect("validated icon name");
+            left.cmp(right)
+        });
+
+        let mut glyph_order = index_slots(tables.glyphs.len())?;
+        for font in tables.fonts.iter() {
+            glyph_order[table_range(font.glyphs)].sort_unstable_by_key(|slot| tables.glyphs[*slot].scalar);
+        }
+
+        let body = find_font_slot(&tables, &font_name_order, "body")
+            .map(|slot| font_ids[slot])
+            .expect("AssetTables::validate requires the body font");
+        let font_roles = FontRole::ALL.map(|role| {
+            let name = role.canonical_name().expect("FontRole::ALL contains only declared values");
+            find_font_slot(&tables, &font_name_order, name).map_or(body, |slot| font_ids[slot])
+        });
+        let icon_roles = IconRole::ALL.map(|role| {
+            let name = role.canonical_name().expect("IconRole::ALL contains only declared values");
+            let slot = find_icon_slot(&tables, &icon_name_order, name).expect("AssetTables::validate requires every semantic icon");
+            icon_ids[slot]
+        });
+        let white_slot = find_icon_slot(&tables, &icon_name_order, "white").expect("AssetTables::validate requires the opaque white icon");
+        let white_icon = icon_ids[white_slot];
+
+        Ok(Self(Rc::new(Atlas {
+            tables,
+            font_ids,
+            font_name_order,
+            icon_ids,
+            icon_name_order,
+            glyph_order,
+            white_icon,
+            font_roles,
+            icon_roles,
+            #[cfg(test)]
+            pixels: Vec::new(),
+        })))
+    }
+
+    /// Installs exact fixture pixels after canonical validation and index construction.
+    #[cfg(test)]
+    pub(crate) fn from_validated_data(data: neocogi_ui::assets::AssetData, previous: Option<&Self>) -> Result<Self, NcStatus> {
+        // Tests deliberately cross the same canonical validator as a published bundle. The direct
+        // constructor avoids an export/import cycle while retaining pixels needed by test sources.
+        data.validate()?;
+        let pixels = data.pixels.into_owned();
+        let mut atlas = Self::from_validated_tables(data.tables, previous)?;
+        Rc::get_mut(&mut atlas.0).expect("new atlas handle has one owner").pixels = pixels;
+        Ok(atlas)
+    }
+
     /// Returns the atlas texture width in pixels.
     pub fn width(&self) -> usize {
-        self.0.width
+        self.0.tables.size.width as usize
     }
+
     /// Returns the atlas texture height in pixels.
     pub fn height(&self) -> usize {
-        self.0.height
+        self.0.tables.size.height as usize
     }
-    /// Borrows fixture RGBA pixels for test-only local round-trip export.
+
+    /// Borrows fixture RGBA bytes for direct publication by test infrastructure.
     #[cfg(test)]
-    pub fn pixels(&self) -> &[Color4b] {
-        // Test atlases retain immutable pixels so exporter tests can compare exact round trips.
+    pub(crate) fn pixels(&self) -> &[u8] {
         &self.0.pixels
     }
 
-    /// Returns a mapping from icon names to their identifiers.
+    /// Borrows the one canonical resource and appearance snapshot.
+    pub(crate) fn tables(&self) -> &AssetTables {
+        &self.0.tables
+    }
+
+    /// Mutably borrows canonical fixture tables after detaching a shared test snapshot.
+    #[cfg(test)]
+    pub(crate) fn tables_mut(&mut self) -> &mut AssetTables {
+        // Copy-on-write is confined to explicit test style editing. Production revisions arrive as
+        // new immutable bundles and never require interior mutability or parallel native records.
+        &mut Rc::make_mut(&mut self.0).tables
+    }
+
+    /// Returns a mapping from icon names to their catalog-scoped identifiers.
     pub fn clone_icon_table(&self) -> Vec<(String, IconId)> {
-        // Copy the baked identity stored with each icon. A derived builder uses this exact value
-        // when repacking the pixels, so retained references need no name-based rebinding.
-        self.0.icons.iter().map(|(name, icon)| (name.clone(), icon.id)).collect()
+        self.0
+            .tables
+            .icons
+            .iter()
+            .zip(self.0.icon_ids.iter().copied())
+            .map(|(icon, id)| (self.name(icon.name).to_owned(), id))
+            .collect()
     }
 
-    /// Returns a mapping from font names to their identifiers.
+    /// Returns a mapping from font names to their catalog-scoped identifiers.
     pub fn clone_font_table(&self) -> Vec<(String, FontId)> {
-        // IDs are logical resource identities rather than positions in this particular table.
-        self.0.fonts.iter().map(|(name, font)| (name.clone(), font.id)).collect()
+        self.0
+            .tables
+            .fonts
+            .iter()
+            .zip(self.0.font_ids.iter().copied())
+            .map(|(font, id)| (self.name(font.name).to_owned(), id))
+            .collect()
     }
 
-    /// Looks up a font by its stored atlas name.
+    /// Looks up a font by its canonical table name.
     pub fn font_id(&self, name: &str) -> Option<FontId> {
-        // Names are accepted at resource-loading and catalog boundaries only; callers retain the
-        // returned typed identity instead of repeating this lookup during every layout pass.
-        self.0.fonts.iter().find_map(|(font_name, font)| (font_name == name).then_some(font.id))
+        find_font_slot(&self.0.tables, &self.0.font_name_order, name).map(|slot| self.0.font_ids[slot])
     }
 
-    /// Looks up an icon by its stored atlas name.
+    /// Looks up an icon by its canonical table name.
     pub fn icon_id(&self, name: &str) -> Option<IconId> {
-        // The stable ID is baked into the icon record and survives any derived-atlas copy.
-        self.0.icons.iter().find_map(|(icon_name, icon)| (icon_name == name).then_some(icon.id))
+        find_icon_slot(&self.0.tables, &self.0.icon_name_order, name).map(|slot| self.0.icon_ids[slot])
     }
 
-    /// Returns the named opaque white tile used for solid rendering.
-    ///
-    /// Every [`AtlasHandle`] has already validated the exact name, positive rectangle, and opaque
-    /// white pixels, so this lookup cannot fail for a publicly constructible handle.
+    /// Returns the named opaque-white tile used for solid rendering.
     pub fn white_icon(&self) -> IconId {
-        // Finalization resolved the validated name once; solid drawing now carries only its typed
-        // identity through the renderer.
         self.0.white_icon
+    }
+
+    /// Returns the pre-resolved font identity for one semantic role.
+    pub(crate) fn font_role(&self, role: FontRole) -> FontId {
+        self.0.font_roles[role.raw() as usize]
+    }
+
+    /// Returns the pre-resolved icon identity for one semantic role.
+    pub(crate) fn icon_role(&self, role: IconRole) -> IconId {
+        self.0.icon_roles[role.raw() as usize]
     }
 
     /// Reports whether this atlas contains the logical font resource.
     pub(crate) fn contains_font(&self, font: FontId) -> bool {
-        // The authoritative record already carries the stable identity, so a
-        // second hashed index would duplicate immutable atlas state.
-        self.0.fonts.iter().any(|(_, candidate)| candidate.id == font)
+        self.0.font_ids.contains(&font)
     }
 
     /// Reports whether this atlas contains the logical icon resource.
     pub(crate) fn contains_icon(&self, icon: IconId) -> bool {
-        // Theme-private images have distinct resource identities and therefore
-        // cannot alias an equal position in a sibling theme atlas.
-        self.0.icons.iter().any(|(_, candidate)| candidate.id == icon)
+        self.0.icon_ids.contains(&icon)
     }
 
-    /// Returns the exact bundle-local slot for a font already authenticated by this atlas.
+    /// Returns the exact bundle-local slot for an authenticated font identity.
     pub(crate) fn font_index(&self, font: FontId) -> u32 {
-        let index = self
-            .0
-            .fonts
-            .iter()
-            .position(|(_, candidate)| candidate.id == font)
-            .expect("font ID does not belong to this atlas");
-        u32::try_from(index).expect("validated asset font count fits u32")
+        let slot = self.font_slot(font);
+        u32::try_from(slot).expect("validated asset font count fits u32")
     }
 
-    /// Returns the exact bundle-local slot for an icon already authenticated by this atlas.
+    /// Returns the exact bundle-local slot for an authenticated icon identity.
     pub(crate) fn icon_index(&self, icon: IconId) -> u32 {
-        let index = self
-            .0
-            .icons
-            .iter()
-            .position(|(_, candidate)| candidate.id == icon)
-            .expect("icon ID does not belong to this atlas");
-        u32::try_from(index).expect("validated asset icon count fits u32")
+        let slot = self.icon_slot(icon);
+        u32::try_from(slot).expect("validated asset icon count fits u32")
     }
 
     /// Resolves one checked bundle-local font slot for scoped semantic painting.
     pub(crate) fn font_at_index(&self, index: u32) -> Option<FontId> {
-        self.0.fonts.get(index as usize).map(|(_, font)| font.id)
+        self.0.font_ids.get(index as usize).copied()
     }
 
     /// Resolves one checked bundle-local icon slot for scoped semantic painting.
     pub(crate) fn icon_at_index(&self, index: u32) -> Option<IconId> {
-        self.0.icons.get(index as usize).map(|(_, icon)| icon.id)
+        self.0.icon_ids.get(index as usize).copied()
     }
 
-    /// Resolves a font identity through this atlas's immutable local index.
-    fn font(&self, font: FontId) -> &Font {
-        // Stable identity remains independent of ordering when a derived theme
-        // replaces or reorders its small font catalog.
-        self.0
-            .fonts
-            .iter()
-            .find_map(|(_, candidate)| (candidate.id == font).then_some(candidate))
-            .unwrap_or_else(|| panic!("font ID does not belong to this atlas: {font:?}"))
-    }
-
-    /// Resolves an icon identity through this atlas's immutable local index.
-    fn icon(&self, icon: IconId) -> &Icon {
-        // Resolve the authoritative record rather than trusting a numeric slot
-        // embedded in a public resource identity.
-        self.0
-            .icons
-            .iter()
-            .find_map(|(_, candidate)| (candidate.id == icon).then_some(candidate))
-            .unwrap_or_else(|| panic!("icon ID does not belong to this atlas: {icon:?}"))
-    }
-
-    /// Returns exact glyph metrics for the specified character, if available.
-    ///
-    /// This lookup does not apply the underscore fallback used by [`AtlasHandle::draw_string`] and
-    /// [`AtlasHandle::get_text_size`].
+    /// Returns exact canonical glyph metrics for a character without applying fallback policy.
     ///
     /// # Panics
     ///
-    /// Panics when this atlas does not contain the logical font resource.
-    pub fn get_char_entry(&self, font: FontId, c: char) -> Option<CharEntry> {
-        self.font(font).entry(c).cloned()
+    /// Panics when `font` belongs to another catalog.
+    pub fn get_char_entry(&self, font: FontId, character: char) -> Option<AssetGlyph> {
+        let slot = self.font_slot(font);
+        self.glyph(slot, character).copied()
     }
 
-    /// Returns the line height for the specified font.
-    ///
-    /// # Panics
-    ///
-    /// Panics when this atlas does not contain the logical font resource.
+    /// Returns the canonical line height for the specified font.
     pub fn get_font_height(&self, font: FontId) -> usize {
-        self.font(font).line_size
+        self.font(font).line_size as usize
     }
 
-    /// Returns the baseline offset (in pixels) for the specified font.
-    ///
-    /// # Panics
-    ///
-    /// Panics when this atlas does not contain the logical font resource.
+    /// Returns the canonical baseline offset for the specified font.
     pub fn get_font_baseline(&self, font: FontId) -> i32 {
         self.font(font).baseline
     }
 
-    /// Returns the baked pixel size requested for the specified font.
-    ///
-    /// # Panics
-    ///
-    /// Panics when this atlas does not contain the logical font resource.
+    /// Returns the canonical requested pixel size for the specified font.
     pub fn get_font_size(&self, font: FontId) -> usize {
-        self.font(font).font_size
+        self.font(font).font_size as usize
     }
 
-    /// Returns the dimensions of an icon.
-    ///
-    /// # Panics
-    ///
-    /// Panics when this atlas does not contain the logical icon resource.
+    /// Returns the dimensions of an icon from its canonical record.
     pub fn get_icon_size(&self, icon: IconId) -> Dimensioni {
-        let r = self.icon(icon).rect;
-        Dimensioni::new(r.width, r.height)
+        let rect = self.icon(icon).rect;
+        Dimensioni::new(rect.width, rect.height)
     }
 
     /// Returns the atlas rectangle storing an icon.
-    ///
-    /// # Panics
-    ///
-    /// Panics when this atlas does not contain the logical icon resource.
     pub fn get_icon_rect(&self, icon: IconId) -> Recti {
-        self.icon(icon).rect
+        runtime_rect(self.icon(icon).rect)
     }
 
     /// Returns the atlas texture dimensions.
     pub fn get_texture_dimension(&self) -> Dimensioni {
-        Dimension::new(self.0.width as _, self.0.height as _)
+        Dimension::new(self.0.tables.size.width, self.0.tables.size.height)
     }
 
-    /// Internal helper that walks glyphs applying baseline-aware placement and one run origin.
-    fn walk_glyphs<F>(&self, font: FontId, text: &str, origin: Vec2i, mut f: F)
+    /// Resolves a stable font identity to the canonical generated record.
+    fn font(&self, font: FontId) -> &AssetFont {
+        &self.0.tables.fonts[self.font_slot(font)]
+    }
+
+    /// Resolves a stable icon identity to the canonical generated record.
+    fn icon(&self, icon: IconId) -> &neocogi_ui_core_contracts::AssetIcon {
+        &self.0.tables.icons[self.icon_slot(icon)]
+    }
+
+    /// Resolves a stable font identity to its canonical table slot.
+    fn font_slot(&self, font: FontId) -> usize {
+        self.0
+            .font_ids
+            .iter()
+            .position(|candidate| *candidate == font)
+            .unwrap_or_else(|| panic!("font ID does not belong to this atlas: {font:?}"))
+    }
+
+    /// Resolves a stable icon identity to its canonical table slot.
+    fn icon_slot(&self, icon: IconId) -> usize {
+        self.0
+            .icon_ids
+            .iter()
+            .position(|candidate| *candidate == icon)
+            .unwrap_or_else(|| panic!("icon ID does not belong to this atlas: {icon:?}"))
+    }
+
+    /// Searches the pre-sorted glyph index inside one canonical font partition.
+    fn glyph(&self, font_slot: usize, character: char) -> Option<&AssetGlyph> {
+        let font = self.0.tables.fonts[font_slot];
+        let order = &self.0.glyph_order[table_range(font.glyphs)];
+        order
+            .binary_search_by_key(&u32::from(character), |slot| self.0.tables.glyphs[*slot].scalar)
+            .ok()
+            .map(|index| &self.0.tables.glyphs[order[index]])
+    }
+
+    /// Resolves a validated name range without retaining a second string table.
+    fn name(&self, range: AssetRange) -> &str {
+        self.0.tables.name(range).expect("validated asset name remains valid")
+    }
+
+    /// Walks glyphs with canonical metrics, baseline placement, and one run origin.
+    fn walk_glyphs<F>(&self, font: FontId, text: &str, origin: Vec2i, mut draw: F)
     where
         F: FnMut(char, Vec2i, Recti, Recti, i32),
     {
-        // Validate logical-resource membership once before the loop, then reuse the concrete font
-        // record for every glyph lookup and line metric.
-        let font = self.font(font);
-        let mut dst = Recti { x: 0, y: 0, width: 0, height: 0 };
-        let line_height = font.line_size as i128;
+        let font_slot = self.font_slot(font);
+        let font = self.0.tables.fonts[font_slot];
+        let mut destination = Recti::default();
+        let line_height = i128::from(font.line_size);
         let baseline = i128::from(font.baseline);
         let mut baseline_y = baseline;
         let mut pen_x = 0_i128;
+        let mut characters = text.chars().peekable();
 
-        let mut chars = text.chars().peekable();
-        while let Some(chr) = chars.next() {
-            if chr == '\n' || chr == '\r' {
-                // Treat CRLF as one platform line ending. Built-in multiline widgets canonicalize
-                // storage to LF at ingress, while this low-level public API remains deterministic
-                // for application-owned strings passed directly to atlas measurement or drawing.
-                if chr == '\r' && chars.peek() == Some(&'\n') {
-                    chars.next();
+        while let Some(character) = characters.next() {
+            match character {
+                '\r' => {
+                    if characters.peek() == Some(&'\n') {
+                        characters.next();
+                    }
+                    pen_x = 0;
+                    baseline_y += line_height;
                 }
-                pen_x = 0;
-                // Accumulate in a wider domain and clamp only values exposed to rendering. This
-                // keeps long inputs deterministic without losing later metric cancellation.
-                baseline_y += line_height;
-                continue;
+                '\n' => {
+                    pen_x = 0;
+                    baseline_y += line_height;
+                }
+                _ => {
+                    let glyph = self
+                        .glyph(font_slot, character)
+                        .or_else(|| self.glyph(font_slot, '_'))
+                        .expect("validated asset font contains the underscore fallback");
+                    let source = runtime_rect(glyph.rect);
+                    destination.width = source.width;
+                    destination.height = source.height;
+                    destination.x = clamp_text_coordinate(i128::from(origin.x) + pen_x + i128::from(glyph.offset_x));
+                    destination.y = clamp_text_coordinate(i128::from(origin.y) + baseline_y - i128::from(glyph.offset_y) - i128::from(glyph.rect.height));
+                    let advance = Vec2i::new(glyph.advance_x, glyph.advance_y);
+                    draw(
+                        character,
+                        advance,
+                        destination,
+                        source,
+                        clamp_text_coordinate(i128::from(origin.y) + baseline_y),
+                    );
+                    pen_x += i128::from(glyph.advance_x);
+                }
             }
-
-            let src = font
-                .entry(chr)
-                .or_else(|| font.entry('_'))
-                .cloned()
-                .expect("validated atlas font must contain the `_` fallback glyph");
-
-            dst.width = src.rect.width;
-            dst.height = src.rect.height;
-            // Include the run origin before the one renderer-facing clamp. Clamping atlas-local
-            // placement and then translating it would destroy cancellation between an extreme
-            // glyph advance/bearing and an oppositely signed application coordinate.
-            dst.x = clamp_text_coordinate(i128::from(origin.x) + pen_x + i128::from(src.offset.x));
-            dst.y = clamp_text_coordinate(i128::from(origin.y) + baseline_y - i128::from(src.offset.y) - i128::from(src.rect.height));
-
-            f(chr, src.advance, dst, src.rect, clamp_text_coordinate(i128::from(origin.y) + baseline_y));
-            pen_x += i128::from(src.advance.x);
         }
     }
 
-    /// Walks each Unicode scalar value in the string and invokes the closure with draw information.
+    /// Walks each drawable scalar and invokes `draw` with its resolved geometry.
     ///
-    /// LF, lone CR, and CRLF advance exactly one line without invoking the closure. A missing
-    /// character uses the selected font's validated `_` entry. `origin` participates in the wide
-    /// placement expression before coordinate saturation, and the callback still receives the
-    /// original character rather than the fallback key.
-    ///
-    /// # Panics
-    ///
-    /// Panics when this atlas does not contain the logical font resource.
-    pub fn draw_string<DrawFunction: FnMut(char, Vec2i, Recti, Recti)>(&self, font: FontId, text: &str, origin: Vec2i, mut f: DrawFunction) {
-        self.walk_glyphs(font, text, origin, |chr, advance, dst, src, _| f(chr, advance, dst, src));
+    /// LF, lone CR, and CRLF advance one line. Missing characters use the canonical underscore
+    /// record, while `draw` still receives the originally requested character.
+    pub fn draw_string<DrawFunction: FnMut(char, Vec2i, Recti, Recti)>(&self, font: FontId, text: &str, origin: Vec2i, mut draw: DrawFunction) {
+        self.walk_glyphs(font, text, origin, |character, advance, destination, source, _| {
+            draw(character, advance, destination, source);
+        });
     }
 
-    /// Measures the bounding box of the provided UTF-8 text.
-    ///
-    /// Measurement uses the same newline and missing-character fallback rules as
-    /// [`AtlasHandle::draw_string`].
-    ///
-    /// # Panics
-    ///
-    /// Panics when this atlas does not contain the logical font resource.
+    /// Measures text with the exact glyph walk used for drawing.
     pub fn get_text_size(&self, font: FontId, text: &str) -> Dimensioni {
-        let mut res = Dimensioni::new(0, 0);
+        let mut result = Dimensioni::new(0, 0);
         let line_height = self.get_font_height(font) as i32;
         let baseline = self.get_font_baseline(font);
         let descent = line_height.saturating_sub(baseline).max(0);
         let mut max_line_bottom = 0;
         let mut saw_glyph = false;
 
-        self.walk_glyphs(font, text, Vec2i::default(), |_, advance, dst, _, baseline_y| {
+        self.walk_glyphs(font, text, Vec2i::default(), |_, advance, destination, _, baseline_y| {
             saw_glyph = true;
-            // The number of characters is not bounded by atlas validation. Saturating coordinate
-            // arithmetic prevents cumulative advances or line heights from overflowing i32.
-            res.width = max(res.width, dst.x.saturating_add(max(advance.x, dst.width)));
-            res.height = max(res.height, dst.y.saturating_add(dst.height));
+            result.width = max(result.width, destination.x.saturating_add(max(advance.x, destination.width)));
+            result.height = max(result.height, destination.y.saturating_add(destination.height));
             max_line_bottom = max(max_line_bottom, baseline_y.saturating_add(descent));
         });
-
         if saw_glyph {
-            res.height = max(res.height, max_line_bottom);
+            result.height = max(result.height, max_line_bottom);
         }
-        res
+        result
     }
+}
+
+/// Converts one validated generated range to a native slice range.
+fn table_range(range: AssetRange) -> std::ops::Range<usize> {
+    let first = range.first as usize;
+    first..first + range.count as usize
+}
+
+/// Allocates a fallible identity ordering for one bounded canonical table.
+fn index_slots(count: usize) -> Result<Vec<usize>, NcStatus> {
+    // Asset validation bounds every count, but allocation failure still crosses the COM-facing
+    // import path as a status instead of becoming an unwinding implementation detail.
+    let mut slots = Vec::new();
+    slots.try_reserve_exact(count).map_err(|_| NC_E_OUT_OF_MEMORY)?;
+    slots.extend(0..count);
+    Ok(slots)
+}
+
+/// Finds one font slot through the name-sorted derived index.
+fn find_font_slot(tables: &AssetTables, order: &[usize], name: &str) -> Option<usize> {
+    order
+        .binary_search_by(|slot| tables.name(tables.fonts[*slot].name).expect("validated font name").cmp(name))
+        .ok()
+        .map(|index| order[index])
+}
+
+/// Finds one icon slot through the name-sorted derived index.
+fn find_icon_slot(tables: &AssetTables, order: &[usize], name: &str) -> Option<usize> {
+    order
+        .binary_search_by(|slot| tables.name(tables.icons[*slot].name).expect("validated icon name").cmp(name))
+        .ok()
+        .map(|index| order[index])
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{AtlasSource, FontEntry};
 
-    /// Rehydrates one minimal valid atlas so each call creates a distinct ownership domain.
+    /// Creates a separately owned canonical fixture on every call.
     fn make_atlas() -> AtlasHandle {
-        let pixels = [0xFF, 0xFF, 0xFF, 0xFF];
-        let icons = [("white", Recti::new(0, 0, 1, 1))];
-        let entries = [(
-            '_',
-            CharEntry {
-                offset: Vec2i::new(0, 0),
-                advance: Vec2i::new(1, 0),
-                rect: Recti::new(0, 0, 1, 1),
-            },
-        )];
-        let fonts = [(
-            "body",
-            FontEntry {
-                line_size: 1,
-                baseline: 1,
-                font_size: 1,
-                entries: &entries,
-            },
-        )];
-        // AtlasHandle copies all borrowed source data before these local tables leave scope.
-        AtlasHandle::try_from(&AtlasSource {
-            width: 1,
-            height: 1,
-            pixels: &pixels,
-            icons: &icons,
-            fonts: &fonts,
-        })
-        .expect("runtime fixture atlas must pass structural validation")
+        crate::test_support::test_atlas()
     }
 
     /// Verifies independently loaded resources remain distinct while handle clones share IDs.
@@ -361,43 +427,31 @@ mod tests {
         let first = make_atlas();
         let first_clone = first.clone();
         let second = make_atlas();
-
-        // Independently loaded identical metadata describes different logical resource sets even
-        // though names and local table positions happen to match.
         let first_font = first.font_id("body").unwrap();
         let second_font = second.font_id("body").unwrap();
         let first_icon = first.white_icon();
         let second_icon = second.white_icon();
+
         assert_ne!(first_font, second_font);
         assert_ne!(first_icon, second_icon);
-
-        // Clones expose the same logical resource records and therefore accept equal identities.
         assert_eq!(first_clone.font_id("body"), Some(first_font));
         assert_eq!(first_clone.white_icon(), first_icon);
         assert!(first_clone.contains_font(first_font));
         assert!(first_clone.contains_icon(first_icon));
         assert!(!second.contains_font(first_font));
         assert!(!second.contains_icon(first_icon));
-
-        // Table clones return the identities baked into their records, not ownerless positions.
-        assert_eq!(first.clone_font_table(), vec![(String::from("body"), first_font)]);
-        assert_eq!(first.clone_icon_table(), vec![(String::from("white"), first_icon)]);
     }
 
-    /// Verifies direct lookup rejects absent resource identities instead of aliasing table slots.
+    /// Verifies direct lookup rejects a same-position identity from another catalog.
     #[test]
     fn foreign_resource_lookup_panics_before_indexing_a_same_slot_entry() {
         let first = make_atlas();
         let second = make_atlas();
-        let foreign_font = first.font_id("body").unwrap();
-        let foreign_icon = first.white_icon();
+        let font = first.font_id("body").unwrap();
+        let icon = first.white_icon();
 
-        // The central accessors use release assertions, so every direct lookup path rejects the
-        // absent logical resource even though the second atlas has entries at both local slots.
-        let font_result = std::panic::catch_unwind(|| second.get_font_size(foreign_font));
-        let icon_result = std::panic::catch_unwind(|| second.get_icon_rect(foreign_icon));
-        assert!(font_result.is_err());
-        assert!(icon_result.is_err());
+        assert!(std::panic::catch_unwind(|| second.get_font_size(font)).is_err());
+        assert!(std::panic::catch_unwind(|| second.get_icon_rect(icon)).is_err());
     }
 
     /// Verifies a platform CRLF sequence advances exactly one visual row.
@@ -405,78 +459,8 @@ mod tests {
     fn text_runtime_treats_crlf_as_one_line_ending() {
         let atlas = make_atlas();
         let font = atlas.font_id("body").unwrap();
-
-        let crlf_size = atlas.get_text_size(font, "_\r\n_");
-        let lf_size = atlas.get_text_size(font, "_\n_");
-        assert_eq!((crlf_size.width, crlf_size.height), (lf_size.width, lf_size.height));
-        let mut crlf_destinations = Vec::new();
-        atlas.draw_string(font, "_\r\n_", Vec2i::default(), |_, _, destination, _| {
-            crlf_destinations.push((destination.x, destination.y, destination.width, destination.height))
-        });
-        let mut lf_destinations = Vec::new();
-        atlas.draw_string(font, "_\n_", Vec2i::default(), |_, _, destination, _| {
-            lf_destinations.push((destination.x, destination.y, destination.width, destination.height))
-        });
-        assert_eq!(crlf_destinations, lf_destinations);
-    }
-
-    /// Verifies valid per-glyph metrics cannot overflow when accumulated across arbitrary text.
-    #[test]
-    fn text_coordinate_accumulation_saturates_after_validation() {
-        let pixels = [0xFF; 4];
-        let icons = [("white", Recti::new(0, 0, 1, 1))];
-        let entries = [
-            (
-                '_',
-                CharEntry {
-                    // Bearings and advances are signed typography values, so validation
-                    // intentionally permits their complete range while runtime accumulation uses
-                    // a wider mathematical domain.
-                    offset: Vec2i::new(i32::MAX, i32::MIN),
-                    advance: Vec2i::new(i32::MAX, 0),
-                    rect: Recti::new(0, 0, 1, 1),
-                },
-            ),
-            (
-                'n',
-                CharEntry {
-                    offset: Vec2i::new(0, 0),
-                    advance: Vec2i::new(-i32::MAX, 0),
-                    rect: Recti::new(0, 0, 1, 1),
-                },
-            ),
-        ];
-        let fonts = [(
-            "body",
-            FontEntry {
-                line_size: i32::MAX as usize,
-                baseline: i32::MAX,
-                font_size: 1,
-                entries: &entries,
-            },
-        )];
-        let atlas = AtlasHandle::try_from(&AtlasSource {
-            width: 1,
-            height: 1,
-            pixels: &pixels,
-            icons: &icons,
-            fonts: &fonts,
-        })
-        .expect("extreme but representable text metrics must validate");
-        let font = atlas.font_id("body").unwrap();
-
-        // Two glyph advances and two newline increments would overflow ordinary i32 arithmetic.
-        // The result clamps at the coordinate limit and remains identical in debug and release.
-        let size = atlas.get_text_size(font, "__\n\n_");
-        assert_eq!((size.width, size.height), (i32::MAX, i32::MAX));
-
-        let mut destinations = Vec::new();
-        atlas.draw_string(font, "__nn", Vec2i::default(), |_, _, destination, _| destinations.push(destination));
-        assert_eq!(destinations[0].y, i32::MAX, "bearing subtraction must clamp once after the complete expression");
-        assert_eq!(
-            destinations[3].x,
-            i32::MAX,
-            "negative advances must cancel the wider pen position before its renderer coordinate is clamped"
-        );
+        let crlf = atlas.get_text_size(font, "_\r\n_");
+        let lf = atlas.get_text_size(font, "_\n_");
+        assert_eq!((crlf.width, crlf.height), (lf.width, lf.height));
     }
 }

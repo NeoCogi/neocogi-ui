@@ -2,523 +2,395 @@
 // Copyright 2022-Present (c) Raja Lehtihet & Wael El Oraiby
 //
 // Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// modification, are permitted provided that the conditions in LICENSE are met.
 //
-// 1. Redistributions of source code must retain the above copyright notice,
-// this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright notice,
-// this list of conditions and the following disclaimer in the documentation
-// and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the copyright holder nor the names of its contributors
-// may be used to endorse or promote products derived from this software without
-// specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// -----------------------------------------------------------------------------
-// Ported to rust from https://github.com/rxi/microui/ and the original license
-//
-// Copyright (c) 2020 rxi
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to
-// deal in the Software without restriction, including without limitation the
-// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
-// sell copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-// IN THE SOFTWARE.
-//
-//! Resolved, structured, atlas-bound skin values used across the crate.
 
-use super::{
-    ChromeRole, ChromeState, ControlRole, ControlState, FontRef, FontRole, IconRole, MenuRole, MenuState, SurfaceRole, SurfaceState, Visual,
-    catalog::AppearanceCatalog,
-};
+//! Typed views over one canonical, atlas-bound asset snapshot.
+
+use super::{ChromeRole, ChromeState, ControlRole, ControlState, FontRef, FontRole, IconRole, MenuRole, MenuState, PointerState, SurfaceRole, SurfaceState, Visual};
 use crate::atlas::{AtlasHandle, FontId};
-use crate::render::{Color, NinePatch};
-#[cfg(test)]
-use crate::SliceInsets;
-#[cfg(test)]
-use super::FlatPalette;
+use crate::render::{Color, NinePatch, NinePatchCell, NinePatchCells, NinePatchImage, SliceInsets};
+use neocogi_ui_core_contracts::{AssetPatch, AssetVisual, Insets};
 
-/// Returns the IDL-generated resource name for one declared font role.
-fn font_role_name(role: FontRole) -> &'static str {
-    role.canonical_name().expect("known FontRole must have a canonical IDL name")
-}
+/// Layout metrics are the generated NCIDL record itself.
+pub use neocogi_ui_core_contracts::AssetMetrics as SkinMetrics;
+/// Window chrome policy is the generated NCIDL record itself.
+pub use neocogi_ui_core_contracts::AssetChrome as WindowChromeSkin;
+/// Caption placement uses the generated NCIDL enum directly.
+pub use neocogi_ui_core_contracts::CaptionSide as CaptionButtonSide;
+/// Title alignment uses the generated NCIDL enum directly.
+pub use neocogi_ui_core_contracts::TitleAlignment as WindowTitleAlignment;
 
-/// Returns the IDL-generated resource name for one declared icon role.
-fn icon_role_name(role: IconRole) -> &'static str {
-    role.canonical_name().expect("known IconRole must have a canonical IDL name")
-}
-
-/// Opaque identity of one immutable skin value installed through a [`crate::SkinBundle`].
+/// Opaque identity of one immutable skin snapshot installed through [`crate::SkinBundle`].
 ///
-/// Retained measurement caches compare this concrete token rather than mirroring selected Skin
-/// fields or holding atlas pointers. The process-wide allocator never reuses a value, so an old
-/// cache entry cannot match a later skin even when both happen to contain equal metrics.
+/// Retained measurement caches compare this token rather than mirroring individual table fields.
+/// The process allocator never reuses a value, so an old cache cannot alias a later revision.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(crate) struct SkinRevision(
-    /// Non-reused process identity kept private to the skinning subsystem.
+    /// Non-reused process identity private to the skin subsystem.
     crate::identity::ProcessUniqueId,
 );
 
 impl SkinRevision {
-    /// Allocates a revision for one newly constructed or newly bundled skin value.
+    /// Allocates an identity for one completed immutable skin snapshot.
     fn allocate() -> Self {
-        // The identity source is shared with other capability domains but the wrapper prevents a
-        // renderer, node, or surface identity from entering measurement-cache comparisons.
         Self(crate::identity::ProcessUniqueId::allocate())
     }
 }
 
-/// Layout metrics use the generated checked transfer record without a second native shape.
-pub use neocogi_ui_core_contracts::AssetMetrics as SkinMetrics;
-
-/// Horizontal alignment policy for manager-owned window title text.
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
-pub enum WindowTitleAlignment {
-    /// Uses the available title span from its leading edge.
-    #[default]
-    Leading,
-    /// Reserves symmetric caption banks and centers text in the complete title.
-    Centered,
-}
-
-/// Edge selected for one manager-owned caption button.
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
-pub enum CaptionButtonSide {
-    /// Allocates the button from the title's leading edge.
-    Leading,
-    /// Allocates the button from the title's trailing edge.
-    #[default]
-    Trailing,
-}
-
-/// Runtime policy controlling caption-button geometry and presentation.
-#[derive(Copy, Clone)]
-pub struct CaptionButtonsSkin {
-    /// Edge used by the close button.
-    pub close_side: CaptionButtonSide,
-    /// Edge used by the minimize button.
-    pub minimize_side: CaptionButtonSide,
-    /// Edge used by the maximize or restore button.
-    pub maximize_side: CaptionButtonSide,
-    /// Title pixels retained above and below each square caption button.
-    pub vertical_spacing: i32,
-    /// Minimum square caption extent after applying the inset.
-    pub minimum_extent: i32,
-    /// Unstriped title pixels between each non-empty caption bank and title field.
-    pub inner_spacing: i32,
-    /// Whether caption controls remain visible without window activation.
-    pub show_without_activation: bool,
-}
-
-impl Default for CaptionButtonsSkin {
-    /// Returns the conventional trailing-edge caption-button policy.
-    fn default() -> Self {
-        Self {
-            close_side: CaptionButtonSide::Trailing,
-            minimize_side: CaptionButtonSide::Trailing,
-            maximize_side: CaptionButtonSide::Trailing,
-            vertical_spacing: 2,
-            minimum_extent: 0,
-            inner_spacing: 0,
-            show_without_activation: true,
-        }
-    }
-}
-
-/// Optional flat field painted behind active centered title text.
-#[derive(Copy, Clone)]
-pub struct TitleBackdropSkin {
-    /// Flat background color interrupting title artwork behind measured text.
-    pub color: Color,
-    /// Horizontal pixels added on each side of the measured title text.
-    pub horizontal_padding: i32,
-}
-
-/// Manager-owned window chrome policy selected by the resolved runtime skin.
-#[derive(Copy, Clone)]
-pub struct WindowChromeSkin {
-    /// Alignment and caption-bank reservation policy for title text.
-    pub title_alignment: WindowTitleAlignment,
-    /// Independent placement, extent, and visibility policy for caption buttons.
-    pub captions: CaptionButtonsSkin,
-    /// Application-content height retained while a window is minimized.
-    pub minimized_content_height: i32,
-    /// Optional active-title field painted behind measured text.
-    pub active_title_backdrop: Option<TitleBackdropSkin>,
-}
-
-impl WindowChromeSkin {
-    /// Creates a leading-title recipe with every caption button on the trailing edge.
-    pub const fn trailing_buttons() -> Self {
-        Self {
-            title_alignment: WindowTitleAlignment::Leading,
-            captions: CaptionButtonsSkin {
-                close_side: CaptionButtonSide::Trailing,
-                minimize_side: CaptionButtonSide::Trailing,
-                maximize_side: CaptionButtonSide::Trailing,
-                vertical_spacing: 2,
-                minimum_extent: 0,
-                inner_spacing: 0,
-                show_without_activation: true,
-            },
-            minimized_content_height: 2,
-            active_title_backdrop: None,
-        }
-    }
-
-    /// Creates a centered-title recipe with split compact caption banks.
-    pub const fn classic_mac(title_backdrop: Color) -> Self {
-        // The data expresses each behavior directly; manager code contains no
-        // theme-specific mode branch and also supports mixed arrangements.
-        Self {
-            title_alignment: WindowTitleAlignment::Centered,
-            captions: CaptionButtonsSkin {
-                close_side: CaptionButtonSide::Leading,
-                minimize_side: CaptionButtonSide::Trailing,
-                maximize_side: CaptionButtonSide::Trailing,
-                vertical_spacing: 3,
-                minimum_extent: 1,
-                inner_spacing: 4,
-                show_without_activation: false,
-            },
-            minimized_content_height: 2,
-            active_title_backdrop: Some(TitleBackdropSkin {
-                color: title_backdrop,
-                horizontal_padding: 4,
-            }),
-        }
-    }
-
-    /// Updates an existing title backdrop without changing chrome geometry.
-    pub fn set_backdrop_color(&mut self, color: Color) {
-        // Conventional recipes have no backdrop and therefore remain unchanged.
-        if let Some(backdrop) = &mut self.active_title_backdrop {
-            backdrop.color = color;
-        }
-    }
-}
-
-impl Default for WindowChromeSkin {
-    /// Returns the conventional trailing-caption recipe.
-    fn default() -> Self {
-        Self::trailing_buttons()
-    }
-}
-
-/// Complete resolved runtime skin installed with one matching atlas.
+/// Immutable runtime skin bound intrinsically to its canonical asset snapshot.
 ///
-/// A `Skin` contains only values consumed at runtime. Flat palettes and serialized authoring data
-/// are compiled into these concrete fields and are not retained as alternate sources of truth.
+/// `Skin` retains no duplicate metric, chrome, appearance, font-role, or icon-role records. The
+/// paired [`AtlasHandle`] owns the generated tables and the narrow lookup indices required by hot
+/// paths. Appearance getters select one generated record with exhaustive pattern matching and
+/// project it transiently into the renderer-facing [`Visual`] value.
 #[derive(Clone)]
 pub struct Skin {
-    /// Exact generation used by retained caches; refreshed whenever a bundle takes ownership.
+    /// Exact generation used by retained measurement caches.
     revision: SkinRevision,
-    /// Layout and widget geometry values.
-    pub metrics: SkinMetrics,
-    /// Complete patch and content-color visuals stored in their semantic state families.
-    ///
-    /// Storage stays private so every public read and replacement crosses the API as one `Visual`.
-    /// This prevents callers from temporarily or permanently pairing a new patch with the content
-    /// color belonging to an unrelated state.
-    appearances: AppearanceCatalog,
-    /// Concrete font identities selected once for every semantic typography role.
-    ///
-    /// Optional roles contain the required body ID when their conventional named resource is not
-    /// present, making runtime role lookup direct and total.
-    font_roles: [FontId; FontRole::COUNT],
-    /// Concrete icon identities selected once for every required semantic icon role.
-    icon_roles: [crate::IconId; IconRole::COUNT],
-    /// Window-title and caption-control arrangement.
-    pub window_chrome: WindowChromeSkin,
+    /// Canonical tables together with catalog-scoped identities and sorted lookup indices.
+    atlas: AtlasHandle,
 }
 
 impl Skin {
-    /// Binds validated semantic resources to already compiled geometry and appearance arrays.
-    /// The caller proves required names before this one-time local ID resolution.
-    pub(crate) fn from_resolved(atlas: &AtlasHandle, metrics: SkinMetrics, window_chrome: WindowChromeSkin, appearances: AppearanceCatalog) -> Self {
-        // Resolve names once at construction. Every retained value below is a stable resource ID,
-        // so layout and paint perform only typed table lookup against the selected atlas.
-        let body = atlas
-            .font_id(font_role_name(FontRole::Body))
-            .expect("atlas does not contain required font `body`");
-        let font_roles = FontRole::ALL.map(|role| atlas.font_id(font_role_name(role)).unwrap_or(body));
-        let icon_roles = IconRole::ALL.map(|role| {
-            let name = icon_role_name(role);
-            atlas
-                .icon_id(name)
-                .unwrap_or_else(|| panic!("atlas does not contain required skin icon `{name}`"))
-        });
+    /// Binds a skin to the exact canonical tables already owned by `atlas`.
+    pub(crate) fn from_atlas(atlas: AtlasHandle) -> Self {
+        // Semantic resources were resolved while building the atlas indices, so construction adds
+        // only the snapshot identity used by retained measurement caches.
         Self {
             revision: SkinRevision::allocate(),
-            metrics,
-            appearances,
-            font_roles,
-            icon_roles,
-            window_chrome,
+            atlas,
         }
     }
 
-    /// Builds the historical flat fixture only for native runtime regression tests.
-    #[cfg(test)]
-    pub(crate) fn from_atlas(atlas: &AtlasHandle) -> Self {
-        // Test defaults provide an independent oracle for the asset compiler's portable output.
-        Self::from_resolved(
-            atlas,
-            SkinMetrics::default(),
-            WindowChromeSkin::default(),
-            AppearanceCatalog::from_flat_palette(SliceInsets::uniform(1), &FlatPalette::default()),
-        )
-    }
-
-    /// Returns the opaque generation associated with this complete skin value.
+    /// Returns the opaque generation associated with this complete snapshot.
     pub(crate) const fn revision(&self) -> SkinRevision {
-        // Copies are safe because a revision is an immutable identity, not a mutable counter.
         self.revision
     }
 
-    /// Assigns a fresh generation when a bundle takes ownership of this skin.
+    /// Assigns a fresh generation when a bundle publishes this skin value.
     pub(crate) fn refresh_revision(&mut self) {
-        // Public Skin fields remain ordinary concrete values. The bundle boundary is the one place
-        // that turns their completed combination into a new cacheable immutable generation.
         self.revision = SkinRevision::allocate();
     }
 
-    /// Replaces flat visual fallbacks from one authored palette.
-    ///
-    /// This operation is intended for builders and live skin editors. It compiles the palette
-    /// immediately into the resolved catalog rather than retaining the palette as shadow state.
-    #[cfg(test)]
-    pub(crate) fn apply_flat_palette(&mut self, palette: FlatPalette) {
-        // Preserve the currently selected generic frame geometry while replacing all flat paint
-        // values. Callers that need different frame geometry can update that typed visual after.
-        let frame_insets = self.frame_insets();
-        self.appearances = AppearanceCatalog::from_flat_palette(frame_insets, &palette);
-        self.window_chrome.set_backdrop_color(palette.title_background);
+    /// Borrows the exact atlas and canonical tables intrinsic to this skin.
+    pub(crate) fn atlas(&self) -> &AtlasHandle {
+        &self.atlas
     }
 
-    /// Reports whether `atlas` contains every semantic and image resource used by this skin.
-    pub(crate) fn belongs_to(&self, atlas: &AtlasHandle) -> bool {
-        // Semantic resource tables and image-backed appearances all carry stable IDs. Checking the
-        // complete concrete skin here prevents a bundle from publishing unresolved resources.
-        self.font_roles.iter().all(|font| atlas.contains_font(*font))
-            && self.icon_roles.iter().all(|icon| atlas.contains_icon(*icon))
-            && self
-                .appearances
-                .iter()
-                .map(|visual| visual.patch)
-                .filter_map(NinePatch::referenced_image)
-                .all(|image| atlas.contains_icon(image.icon))
+    /// Borrows canonical layout metrics without copying them into a UI-owned model.
+    pub fn metrics(&self) -> &SkinMetrics {
+        &self.atlas.tables().metrics
     }
 
-    /// Returns normalized structural frame insets shared by measurement and placement.
-    #[cfg(test)]
-    pub(crate) fn frame_insets(&self) -> SliceInsets {
-        // NinePatch owns normalization so layout and renderer geometry cannot disagree on negative
-        // application-provided style components.
-        self.surface(SurfaceRole::GenericFrame, SurfaceState::Normal).patch.insets.normalized()
+    /// Borrows canonical title and caption policy without translating it to native structs.
+    pub fn window_chrome(&self) -> &WindowChromeSkin {
+        &self.atlas.tables().chrome
     }
 
-    /// Returns one structural surface visual.
+    /// Returns one structural surface visual selected from the generated role record.
     pub fn surface(&self, role: SurfaceRole, state: SurfaceState) -> Visual {
-        // Family-specific parameters make pointer, menu-open, and activation states unrepresentable.
-        self.appearances.surface(role, state)
+        let values = &self.atlas.tables().surfaces[role.raw() as usize];
+        let value = match state {
+            SurfaceState::Normal => values.normal,
+            SurfaceState::Disabled => values.disabled,
+        };
+        visual(value, &self.atlas)
     }
 
-    /// Replaces one complete structural surface visual.
-    pub fn set_surface(&mut self, role: SurfaceRole, state: SurfaceState, visual: Visual) {
-        // Patch and content color cross the mutation boundary together as one complete value.
-        self.appearances.set_surface(role, state, visual);
-    }
-
-    /// Returns one interactive control visual.
+    /// Returns one interactive control visual selected from its nested generated state record.
     pub fn control(&self, role: ControlRole, state: ControlState) -> Visual {
-        // Disabled controls cannot be queried with a contradictory hover or focus state.
-        self.appearances.control(role, state)
+        let values = &self.atlas.tables().controls[role.raw() as usize];
+        let value = match state {
+            ControlState::Disabled => values.disabled,
+            ControlState::Enabled(pointer) => pointer_visual(values.enabled, pointer),
+            ControlState::Focused(pointer) => pointer_visual(values.focused, pointer),
+        };
+        visual(value, &self.atlas)
     }
 
-    /// Replaces one complete interactive control visual.
-    pub fn set_control(&mut self, role: ControlRole, state: ControlState, visual: Visual) {
-        // Patch and content color cross the mutation boundary together as one complete value.
-        self.appearances.set_control(role, state, visual);
-    }
-
-    /// Returns one menu visual.
+    /// Returns one menu visual selected from the generated named-state record.
     pub fn menu(&self, role: MenuRole, state: MenuState) -> Visual {
-        // The menu family alone exposes the persistent Open selection state.
-        self.appearances.menu(role, state)
+        let values = &self.atlas.tables().menus[role.raw() as usize];
+        let value = match state {
+            MenuState::Normal => values.normal,
+            MenuState::Hovered => values.hovered,
+            MenuState::Pressed => values.pressed,
+            MenuState::Focused => values.focused,
+            MenuState::Open => values.open,
+            MenuState::Disabled => values.disabled,
+        };
+        visual(value, &self.atlas)
     }
 
-    /// Replaces one complete menu visual.
-    pub fn set_menu(&mut self, role: MenuRole, state: MenuState, visual: Visual) {
-        // Patch and content color cross the mutation boundary together as one complete value.
-        self.appearances.set_menu(role, state, visual);
-    }
-
-    /// Returns one manager-owned window chrome visual.
+    /// Returns one manager-owned chrome visual selected from the generated role record.
     pub fn chrome(&self, role: ChromeRole, state: ChromeState) -> Visual {
-        // Pointer and keyboard focus states cannot enter activation-driven chrome lookup.
-        self.appearances.chrome(role, state)
+        let values = &self.atlas.tables().window_chrome[role.raw() as usize];
+        let value = match state {
+            ChromeState::Base => values.base,
+            ChromeState::Active => values.active,
+            ChromeState::Disabled => values.disabled,
+        };
+        visual(value, &self.atlas)
     }
 
-    /// Replaces one complete manager-owned window chrome visual.
-    pub fn set_chrome(&mut self, role: ChromeRole, state: ChromeState, visual: Visual) {
-        // Patch and content color cross the mutation boundary together as one complete value.
-        self.appearances.set_chrome(role, state, visual);
-    }
-
-    /// Returns the active atlas capability for one semantic font role.
-    ///
-    /// Optional semantic names were mapped to the required body identity during construction, so
-    /// compact atlases remain useful without runtime name lookup.
+    /// Returns the pre-resolved font identity for one semantic role.
     pub fn resolve_font_role(&self, atlas: &AtlasHandle, role: FontRole) -> FontId {
-        let font = *self
-            .font_roles
-            .get(role.raw() as usize)
-            .expect("unknown FontRole cannot select a resolved font");
-        // Bundle construction proves this invariant for installed skins. Retain the assertion for
-        // direct callers pairing a cloned Skin with an unrelated atlas.
+        let font = self.atlas.font_role(role);
+        // The explicit atlas argument remains part of FontRef's ownership check. A skin can no
+        // longer be constructed with a different atlas, but named references still need this guard.
         assert!(atlas.contains_font(font), "semantic font ID does not belong to the supplied atlas: {font:?}");
         font
     }
 
-    /// Returns the active atlas identity for one semantic icon role.
+    /// Returns the pre-resolved icon identity for one semantic role.
     pub fn resolve_icon_role(&self, atlas: &AtlasHandle, role: IconRole) -> crate::IconId {
-        let icon = *self
-            .icon_roles
-            .get(role.raw() as usize)
-            .expect("unknown IconRole cannot select a resolved icon");
-        // Required icon names were resolved exactly once in from_atlas; runtime only validates the
-        // concrete skin/atlas pairing before returning that typed value.
+        let icon = self.atlas.icon_role(role);
         assert!(atlas.contains_icon(icon), "semantic icon ID does not belong to the supplied atlas: {icon:?}");
         icon
     }
 
-    /// Returns the active atlas capability for one stable retained font reference.
+    /// Resolves one stable font reference against the active atlas.
     pub fn resolve_font(&self, atlas: &AtlasHandle, font: &FontRef) -> FontId {
-        // Delegate to the typed reference so named and semantic references have one resolution
-        // implementation shared by application and built-in widgets.
         font.resolve(self, atlas)
+    }
+
+    /// Returns normalized structural frame insets for native geometry tests.
+    #[cfg(test)]
+    pub(crate) fn frame_insets(&self) -> SliceInsets {
+        self.surface(SurfaceRole::GenericFrame, SurfaceState::Normal).patch.insets.normalized()
+    }
+
+    /// Mutably borrows the canonical metric record in an explicitly edited test snapshot.
+    #[cfg(test)]
+    pub(crate) fn metrics_mut(&mut self) -> &mut SkinMetrics {
+        &mut self.atlas.tables_mut().metrics
+    }
+
+    /// Mutably borrows the canonical chrome policy in an explicitly edited test snapshot.
+    #[cfg(test)]
+    pub(crate) fn window_chrome_mut(&mut self) -> &mut WindowChromeSkin {
+        &mut self.atlas.tables_mut().chrome
+    }
+
+    /// Replaces one canonical surface record from a renderer-facing test visual.
+    #[cfg(test)]
+    pub(crate) fn set_surface(&mut self, role: SurfaceRole, state: SurfaceState, value: Visual) {
+        let value = self.asset_visual(value);
+        let values = &mut self.atlas.tables_mut().surfaces.to_mut()[role.raw() as usize];
+        *match state {
+            SurfaceState::Normal => &mut values.normal,
+            SurfaceState::Disabled => &mut values.disabled,
+        } = value;
+    }
+
+    /// Replaces one canonical control record from a renderer-facing test visual.
+    #[cfg(test)]
+    pub(crate) fn set_control(&mut self, role: ControlRole, state: ControlState, value: Visual) {
+        let value = self.asset_visual(value);
+        let values = &mut self.atlas.tables_mut().controls.to_mut()[role.raw() as usize];
+        *match state {
+            ControlState::Disabled => &mut values.disabled,
+            ControlState::Enabled(pointer) => pointer_visual_mut(&mut values.enabled, pointer),
+            ControlState::Focused(pointer) => pointer_visual_mut(&mut values.focused, pointer),
+        } = value;
+    }
+
+    /// Replaces one canonical chrome appearance from a renderer-facing test visual.
+    #[cfg(test)]
+    pub(crate) fn set_chrome(&mut self, role: ChromeRole, state: ChromeState, value: Visual) {
+        let value = self.asset_visual(value);
+        let values = &mut self.atlas.tables_mut().window_chrome.to_mut()[role.raw() as usize];
+        *match state {
+            ChromeState::Base => &mut values.base,
+            ChromeState::Active => &mut values.active,
+            ChromeState::Disabled => &mut values.disabled,
+        } = value;
+    }
+
+    /// Recompiles canonical flat appearance records for one edited test snapshot.
+    #[cfg(test)]
+    pub(crate) fn apply_flat_palette(&mut self, palette: super::FlatPalette) {
+        let insets = self.frame_insets();
+        let compiled = neocogi_appearance::AppearanceTables::flat(insets, &palette);
+        let tables = self.atlas.tables_mut();
+        tables.surfaces = Vec::from(compiled.surfaces).into();
+        tables.controls = Vec::from(compiled.controls).into();
+        tables.menus = Vec::from(compiled.menus).into();
+        tables.window_chrome = Vec::from(compiled.window_chrome).into();
+        match tables.chrome.has_backdrop {
+            0 => {}
+            1 => {
+                tables.chrome.backdrop_rgba = u32::from_le_bytes([
+                    palette.title_background.r,
+                    palette.title_background.g,
+                    palette.title_background.b,
+                    palette.title_background.a,
+                ])
+            }
+            _ => unreachable!("canonical validation accepts only boolean chrome flags"),
+        }
+    }
+
+    /// Converts one transient runtime visual back into the canonical test-edit record.
+    #[cfg(test)]
+    fn asset_visual(&self, value: Visual) -> AssetVisual {
+        use crate::render::NinePatchContent;
+
+        let patch = match value.patch.content {
+            NinePatchContent::Flat { cells } => AssetPatch::Flat {
+                top_left: packed_cell(cells.top_left),
+                top: packed_cell(cells.top),
+                top_right: packed_cell(cells.top_right),
+                left: packed_cell(cells.left),
+                center: packed_cell(cells.center),
+                right: packed_cell(cells.right),
+                bottom_left: packed_cell(cells.bottom_left),
+                bottom: packed_cell(cells.bottom),
+                bottom_right: packed_cell(cells.bottom_right),
+            },
+            NinePatchContent::Image { image } => AssetPatch::Image {
+                icon: self.atlas.icon_index(image.icon),
+                source: image.source_insets,
+                tint: packed_color(image.tint),
+            },
+        };
+        AssetVisual {
+            insets: value.patch.insets,
+            center_visible: u8::from(value.patch.center_visible),
+            content_color: packed_color(value.content_color),
+            patch: patch.into(),
+        }
+    }
+}
+
+/// Selects one named pointer branch without flattening the generated state structure.
+fn pointer_visual(values: neocogi_ui_core_contracts::AssetPointerVisuals, state: PointerState) -> AssetVisual {
+    match state {
+        PointerState::Normal => values.normal,
+        PointerState::Hovered => values.hovered,
+        PointerState::Pressed => values.pressed,
+    }
+}
+
+/// Selects one mutable named pointer branch for canonical test editing.
+#[cfg(test)]
+fn pointer_visual_mut(values: &mut neocogi_ui_core_contracts::AssetPointerVisuals, state: PointerState) -> &mut AssetVisual {
+    match state {
+        PointerState::Normal => &mut values.normal,
+        PointerState::Hovered => &mut values.hovered,
+        PointerState::Pressed => &mut values.pressed,
+    }
+}
+
+/// Projects one canonical visual into the short-lived renderer-facing drawing vocabulary.
+fn visual(value: AssetVisual, atlas: &AtlasHandle) -> Visual {
+    let insets = runtime_insets(value.insets);
+    let mut patch = match AssetPatch::try_from(value.patch).expect("validated asset patch tag") {
+        AssetPatch::Flat {
+            top_left,
+            top,
+            top_right,
+            left,
+            center,
+            right,
+            bottom_left,
+            bottom,
+            bottom_right,
+        } => NinePatch::new(
+            insets,
+            NinePatchCells {
+                top_left: NinePatchCell::color(color(top_left)),
+                top: NinePatchCell::color(color(top)),
+                top_right: NinePatchCell::color(color(top_right)),
+                left: NinePatchCell::color(color(left)),
+                center: NinePatchCell::color(color(center)),
+                right: NinePatchCell::color(color(right)),
+                bottom_left: NinePatchCell::color(color(bottom_left)),
+                bottom: NinePatchCell::color(color(bottom)),
+                bottom_right: NinePatchCell::color(color(bottom_right)),
+            },
+        ),
+        AssetPatch::Image { icon, source, tint } => NinePatch::image(
+            insets,
+            NinePatchImage::new(
+                atlas.icon_at_index(icon).expect("validated appearance icon index"),
+                runtime_insets(source),
+                color(tint),
+            ),
+        ),
+    };
+    patch.center_visible = match value.center_visible {
+        0 => false,
+        1 => true,
+        _ => unreachable!("canonical validation accepts only boolean center flags"),
+    };
+    Visual::new(patch, color(value.content_color))
+}
+
+/// Converts generated inset fields to the renderer-facing alias at point of use.
+fn runtime_insets(value: Insets) -> SliceInsets {
+    SliceInsets::new(value.left, value.top, value.right, value.bottom)
+}
+
+/// Decodes the renderer contract's stable packed RGBA convention.
+fn color(value: u32) -> Color {
+    let [r, g, b, a] = value.to_le_bytes();
+    Color { r, g, b, a }
+}
+
+/// Encodes one runtime color for canonical test fixture editing.
+#[cfg(test)]
+fn packed_color(value: Color) -> u32 {
+    u32::from_le_bytes([value.r, value.g, value.b, value.a])
+}
+
+/// Encodes one runtime flat cell for canonical test fixture editing.
+#[cfg(test)]
+fn packed_cell(value: NinePatchCell) -> u32 {
+    match value {
+        NinePatchCell::Empty => 0,
+        NinePatchCell::Color { color } => packed_color(color),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::Color;
     use super::*;
-    use crate::ControlRole;
-    use crate::test_support::test_atlas_with_font_sizes as make_test_atlas;
+    use crate::test_support::test_atlas_with_font_sizes;
 
-    /// Verifies semantic and named font references resolve through the active atlas.
+    /// Verifies semantic and exact font references resolve through the active snapshot.
     #[test]
     fn font_references_resolve_semantic_and_named_fonts() {
-        let atlas = make_test_atlas(&[(font_role_name(FontRole::Body), 12), (font_role_name(FontRole::Heading), 18)]);
-        let heading = atlas.font_id(font_role_name(FontRole::Heading)).unwrap();
-        let style = Skin::from_atlas(&atlas);
+        let atlas = test_atlas_with_font_sizes(&[("body", 12), ("heading", 18)]);
+        let heading = atlas.font_id("heading").unwrap();
+        let skin = Skin::from_atlas(atlas.clone());
 
-        assert_eq!(FontRef::from(FontRole::Heading), FontRef::role(FontRole::Heading));
-        assert_eq!(FontRef::role(FontRole::Heading).resolve(&style, &atlas), heading);
-        assert_eq!(FontRef::named(heading).resolve(&style, &atlas), heading);
+        assert_eq!(FontRef::role(FontRole::Heading).resolve(&skin, &atlas), heading);
+        assert_eq!(FontRef::named(heading).resolve(&skin, &atlas), heading);
     }
 
-    /// Verifies one-pass skin construction resolves named roles and uses body for missing roles.
+    /// Verifies missing optional semantic fonts resolve to the required body identity.
     #[test]
-    fn from_atlas_resolves_named_fonts_and_falls_back_to_body() {
-        let atlas = make_test_atlas(&[
-            (font_role_name(FontRole::Small), 10),
-            (font_role_name(FontRole::Body), 12),
-            (font_role_name(FontRole::Heading), 18),
-            (font_role_name(FontRole::Title), 16),
-        ]);
+    fn semantic_font_indices_fall_back_to_body() {
+        let atlas = test_atlas_with_font_sizes(&[("body", 12), ("heading", 18)]);
+        let skin = Skin::from_atlas(atlas.clone());
+        let body = atlas.font_id("body").unwrap();
 
-        let style = Skin::from_atlas(&atlas);
-
-        let body = atlas.font_id(font_role_name(FontRole::Body)).unwrap();
-        assert_eq!(style.resolve_font_role(&atlas, FontRole::Body), body);
-        assert_eq!(
-            style.resolve_font_role(&atlas, FontRole::Small),
-            atlas.font_id(font_role_name(FontRole::Small)).unwrap()
-        );
-        assert_eq!(
-            style.resolve_font_role(&atlas, FontRole::Title),
-            atlas.font_id(font_role_name(FontRole::Title)).unwrap()
-        );
-        assert_eq!(
-            style.resolve_font_role(&atlas, FontRole::Heading),
-            atlas.font_id(font_role_name(FontRole::Heading)).unwrap()
-        );
-        assert_eq!(style.resolve_font_role(&atlas, FontRole::Mono), body);
-        assert!(style.belongs_to(&atlas));
+        assert_eq!(skin.resolve_font_role(&atlas, FontRole::Heading), atlas.font_id("heading").unwrap());
+        assert_eq!(skin.resolve_font_role(&atlas, FontRole::Mono), body);
     }
 
-    /// Verifies every image-backed visual capability participates in the ownership predicate.
-    #[test]
-    fn belongs_to_rejects_a_foreign_appearance_capability() {
-        let local_atlas = make_test_atlas(&[(font_role_name(FontRole::Body), 12)]);
-        let foreign_atlas = make_test_atlas(&[(font_role_name(FontRole::Body), 12)]);
-        let local = Skin::from_atlas(&local_atlas);
-
-        // Semantic IDs already belong to the local atlas. Replacing one compiled image with a
-        // foreign resource must make the otherwise complete skin fail the same predicate.
-        let mut candidate = local;
-        crate::test_support::replace_control_patches(&mut candidate, ControlRole::Button, |_| {
-            NinePatch::image(
-                SliceInsets::ZERO,
-                crate::NinePatchImage::new(
-                    Skin::from_atlas(&foreign_atlas).resolve_icon_role(&foreign_atlas, IconRole::Close),
-                    SliceInsets::ZERO,
-                    Color { r: 255, g: 255, b: 255, a: 255 },
-                ),
-            )
-        });
-
-        assert!(!candidate.belongs_to(&local_atlas));
-    }
-
-    /// Verifies standard skin construction never substitutes a positional font for missing body.
-    #[test]
-    #[should_panic(expected = "atlas does not contain required font `body`")]
-    fn from_atlas_requires_the_exact_body_font_name() {
-        let atlas = make_test_atlas(&[("caption", 12)]);
-
-        // Even though slot zero is a valid font, its unrelated name cannot satisfy the body role.
-        let _ = Skin::from_atlas(&atlas);
-    }
-
-    /// Verifies frame normalization remains independent of atlas-bound asset construction.
+    /// Verifies normalized frame geometry is derived from the canonical appearance record.
     #[test]
     fn frame_insets_normalize_each_component_without_changing_cells() {
-        let atlas = make_test_atlas(&[(font_role_name(FontRole::Body), 12)]);
-        let mut style = Skin::from_atlas(&atlas);
-        crate::test_support::replace_surface_patches(&mut style, SurfaceRole::GenericFrame, |_| {
-            NinePatch::framed(SliceInsets::new(-4, 2, -3, 5), Color { r: 10, g: 20, b: 30, a: 255 }, None)
-        });
-        let insets = style.frame_insets();
+        let atlas = test_atlas_with_font_sizes(&[("body", 12)]);
+        let mut skin = Skin::from_atlas(atlas);
+        let patch = NinePatch::framed(SliceInsets::new(-4, 2, -3, 5), Color { r: 10, g: 20, b: 30, a: 255 }, None);
+        let current = skin.surface(SurfaceRole::GenericFrame, SurfaceState::Normal);
+        skin.set_surface(SurfaceRole::GenericFrame, SurfaceState::Normal, Visual::new(patch, current.content_color));
 
+        let insets = skin.frame_insets();
         assert_eq!((insets.left, insets.top, insets.right, insets.bottom), (0, 2, 0, 5));
     }
 }

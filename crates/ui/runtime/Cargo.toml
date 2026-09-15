@@ -32,6 +32,7 @@ bitflags.workspace = true
 rs-math3d.workspace = true
 
 [dev-dependencies]
+neocogi-appearance.workspace = true
 neocogi-com = { workspace = true, features = ["static-runtime"] }
 neocogi-demo-assets = { workspace = true, features = ["embed-assets"] }
 neocogi-gfx-impl = { workspace = true, features = ["publisher"] }

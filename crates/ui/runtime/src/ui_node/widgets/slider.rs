@@ -205,7 +205,7 @@ impl Slider {
 
     /// Measures the slider track plus formatted value label.
     fn preferred_size_widget(&self, style: &Skin, atlas: &AtlasHandle, _constraints: Constraints) -> Dimensioni {
-        let thumb_size = style.metrics.thumb_size.max(0);
+        let thumb_size = style.metrics().thumb_size.max(0);
         number_preferred_size(style, atlas, &self.font, self.value, self.precision, thumb_size, thumb_size)
     }
 
@@ -304,7 +304,7 @@ impl Slider {
         // Measurement already treats negative theme thumb sizes as zero. Paint applies the same
         // normalization and uses saturated extent arithmetic so either public style or layout
         // input may span the i32 domain without panicking.
-        let width = ctx.skin().metrics.thumb_size.max(0);
+        let width = ctx.skin().metrics().thumb_size.max(0);
         let available = base.width.max(0).saturating_sub(width);
         let x = if self.low != self.high && available > 0 {
             // Resolve the normalized numeric position in f64 before multiplying by pixel width.
@@ -825,7 +825,7 @@ mod tests {
         let atlas = make_test_atlas();
         let mut style = test_skin(&atlas);
         // A borderless ten-pixel thumb records one unambiguous fill rectangle at the computed x.
-        style.metrics.thumb_size = 10;
+        style.metrics_mut().thumb_size = 10;
         let frame = style
             .control(ControlRole::SliderThumb, crate::ControlState::Enabled(crate::PointerState::Normal))
             .patch
@@ -1017,7 +1017,7 @@ mod tests {
     fn negative_extreme_thumb_size_keeps_slider_paint_total() {
         let atlas = make_test_atlas();
         let mut style = test_skin(&atlas);
-        style.metrics.thumb_size = i32::MIN;
+        style.metrics_mut().thumb_size = i32::MIN;
         let slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
             SliderParameters::new(0.5, 0.0, 1.0).expect("finite ascending slider parameters must validate"),
         );

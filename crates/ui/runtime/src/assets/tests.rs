@@ -69,8 +69,8 @@ fn visuals(tables: &neocogi_ui::assets::AssetTables) -> impl Iterator<Item = &As
 #[test]
 fn round_trip_preserves_complete_resources_and_image_patches() {
     let atlas = bundle().atlas().clone();
-    let mut skin = Skin::from_atlas(&atlas);
-    skin.window_chrome = crate::WindowChromeSkin::classic_mac(crate::Color { r: 12, g: 34, b: 56, a: 255 });
+    let mut skin = Skin::from_atlas(atlas.clone());
+    *skin.window_chrome_mut() = crate::test_support::classic_mac_chrome(crate::Color { r: 12, g: 34, b: 56, a: 255 });
     skin.set_control(
         crate::ControlRole::Button,
         crate::ControlState::Disabled,
@@ -82,7 +82,7 @@ fn round_trip_preserves_complete_resources_and_image_patches() {
             crate::Color { r: 90, g: 60, b: 30, a: 255 },
         ),
     );
-    let original = SkinBundle::new(atlas, skin);
+    let original = SkinBundle::from_skin(skin);
     let source = export_bundle(&original).unwrap();
     let imported = ImportedAssets::read(source.as_com_ref(), None).unwrap();
     equivalent(
@@ -110,12 +110,12 @@ fn derived_identity_is_preserved_but_unrelated_and_incomplete_catalogs_are_rejec
     let source = export_bundle(&bundle()).unwrap();
     let first = ImportedAssets::read(source.as_com_ref(), None).unwrap();
     let mut skin = first.bundle().skin().clone();
-    skin.metrics.padding += 7;
-    let changed = SkinBundle::new(first.bundle().atlas().clone(), skin);
+    skin.metrics_mut().padding += 7;
+    let changed = SkinBundle::from_skin(skin);
     let revision = first.export_derived(&changed).unwrap();
     let second = ImportedAssets::read(revision.as_com_ref(), Some(&first)).unwrap();
     assert_eq!(first.bundle().atlas().font_id("application"), second.bundle().atlas().font_id("application"));
-    assert_eq!(second.bundle().skin().metrics.padding, changed.skin().metrics.padding);
+    assert_eq!(second.bundle().skin().metrics().padding, changed.skin().metrics().padding);
     assert_ne!(first.bundle().skin().revision(), second.bundle().skin().revision());
 
     let unrelated = export_bundle(&bundle()).unwrap();
@@ -400,9 +400,9 @@ fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision
     let flat = compiler.derive_style(source.as_com_ref(), metrics, PaletteEdit::Flat(palette).into()).unwrap();
     let imported = ImportedAssets::read(flat.as_com_ref(), Some(&original)).unwrap();
     let mut skin = original.bundle().skin().clone();
-    skin.metrics.padding = metrics.padding;
+    skin.metrics_mut().padding = metrics.padding;
     skin.apply_flat_palette(palette);
-    let native = SkinBundle::new(original.bundle().atlas().clone(), skin);
+    let native = SkinBundle::from_skin(skin);
     equivalent(
         &export_imported_data(&imported, imported.bundle()).unwrap(),
         &export_imported_data(&original, &native).unwrap(),

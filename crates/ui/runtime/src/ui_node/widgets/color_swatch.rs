@@ -117,7 +117,7 @@ impl ColorSwatch {
 
     /// Measures a square-ish color swatch with a text-friendly default height.
     fn preferred_size_widget(&self, style: &Skin, atlas: &AtlasHandle, _constraints: Constraints) -> Dimensioni {
-        let padding = style.metrics.padding.max(0);
+        let padding = style.metrics().padding.max(0);
         let font = style.resolve_font(atlas, &self.font);
         let label_width = if self.label.is_empty() {
             0

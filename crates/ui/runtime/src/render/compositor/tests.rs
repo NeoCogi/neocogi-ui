@@ -138,57 +138,32 @@ fn vertex(actual: RenderVertex, position: [f32; 2], uv: [f32; 2]) {
 
 /// Builds deterministic glyph geometry retained from the old executor's numerical regressions.
 fn atlas() -> AtlasHandle {
-    let pixels = [255; 8 * 8 * 4];
-    let names = [
-        "white",
-        "close",
-        "expand",
-        "collapse",
-        "check",
-        "expand_down",
-        "open_folder",
-        "closed_folder",
-        "file",
-    ];
-    let icons: Vec<_> = names
-        .into_iter()
-        .map(|name| (name, if name == "white" { Recti::new(0, 0, 1, 1) } else { Recti::new(4, 0, 4, 4) }))
-        .collect();
-    let glyphs = [
-        (
-            'a',
-            crate::CharEntry {
-                offset: Vec2i::default(),
-                advance: Vec2i::new(4, 0),
-                rect: Recti::new(0, 4, 4, 4),
-            },
-        ),
-        (
-            '_',
-            crate::CharEntry {
-                offset: Vec2i::default(),
-                advance: Vec2i::new(4, 0),
-                rect: Recti::new(4, 4, 4, 4),
-            },
-        ),
-    ];
-    let fonts = [(
-        "body",
-        crate::FontEntry {
-            line_size: 4,
-            baseline: 4,
-            font_size: 4,
-            entries: &glyphs,
-        },
-    )];
-    AtlasHandle::try_from(&crate::AtlasSource {
-        width: 8,
-        height: 8,
-        pixels: &pixels,
-        icons: &icons,
-        fonts: &fonts,
-    })
-    .unwrap()
+    let mut data = crate::test_support::test_asset_data_with_font_sizes(&[("body", 4)]);
+    data.tables.size = Size { width: 8, height: 8 };
+    data.tables.fonts.to_mut()[0].baseline = 4;
+    data.pixels = vec![255; 8 * 8 * 4].into();
+    let white_slots = data
+        .tables
+        .icons
+        .iter()
+        .map(|icon| data.tables.name(icon.name).unwrap() == "white")
+        .collect::<Vec<_>>();
+    for (icon, is_white) in data.tables.icons.to_mut().iter_mut().zip(white_slots) {
+        icon.rect = if is_white {
+            neocogi_ui_core_contracts::Rect { x: 0, y: 0, width: 1, height: 1 }
+        } else {
+            neocogi_ui_core_contracts::Rect { x: 4, y: 0, width: 4, height: 4 }
+        };
+    }
+    for glyph in data.tables.glyphs.to_mut() {
+        glyph.advance_x = 4;
+        glyph.rect = match char::from_u32(glyph.scalar) {
+            Some('_') => neocogi_ui_core_contracts::Rect { x: 4, y: 4, width: 4, height: 4 },
+            Some(_) => neocogi_ui_core_contracts::Rect { x: 0, y: 4, width: 4, height: 4 },
+            None => unreachable!("the canonical fixture contains only valid scalars"),
+        };
+    }
+    AtlasHandle::from_validated_data(data, None).unwrap()
 }
 
 /// Semantic primitives share one GFX frame and a coalesced atlas batch.

@@ -202,7 +202,7 @@ pub(crate) fn text_block_size(lines: &[TextLine], line_height: i32) -> Dimension
 /// Computes the top-left text position for a single-line control.
 pub(crate) fn control_text_position_with_font(style: &Skin, atlas: &AtlasHandle, font: FontId, text: &str, rect: Recti, opt: WidgetOption) -> Vec2i {
     let tsize = atlas.get_text_size(font, text);
-    let padding = style.metrics.padding;
+    let padding = style.metrics().padding;
     let line_height = atlas.get_font_height(font) as i32;
     let baseline = atlas.get_font_baseline(font);
     let y = baseline_aligned_top(rect, line_height, baseline);
@@ -221,40 +221,16 @@ mod tests {
     //! Boundary tests for shared text measurement and wrapping arithmetic.
 
     use super::*;
-    use crate::{AtlasSource, CharEntry, FontEntry};
 
     /// Constructs a valid atlas whose fallback advance occupies the complete positive i32 range.
     fn extreme_advance_atlas() -> AtlasHandle {
-        let pixels = [0xFF; 4];
-        let icons = [("white", Recti::new(0, 0, 1, 1))];
-        let entries = [(
-            '_',
-            CharEntry {
-                offset: Vec2i::new(0, 0),
-                advance: Vec2i::new(i32::MAX, 0),
-                rect: Recti::new(0, 0, 1, 1),
-            },
-        )];
-        let fonts = [(
-            "body",
-            FontEntry {
-                line_size: 1,
-                baseline: 1,
-                font_size: 1,
-                entries: &entries,
-            },
-        )];
-
-        // Atlas validation deliberately permits extreme but representable advances; wrapping owns
-        // the responsibility for combining those values without narrowing intermediate sums.
-        AtlasHandle::try_from(&AtlasSource {
-            width: 1,
-            height: 1,
-            pixels: &pixels,
-            icons: &icons,
-            fonts: &fonts,
-        })
-        .expect("the extreme-advance fixture must satisfy the complete atlas contract")
+        let mut data = crate::test_support::test_asset_data_with_font_sizes(&[("body", 1)]);
+        for glyph in data.tables.glyphs.to_mut() {
+            // Canonical glyph records permit every signed advance. Wrapping owns the wider
+            // accumulation policy and therefore receives the extreme value without translation.
+            glyph.advance_x = i32::MAX;
+        }
+        AtlasHandle::from_validated_data(data, None).expect("the extreme-advance fixture must satisfy the canonical contract")
     }
 
     /// Verifies two individually representable words wrap when their mathematical sum is wider.

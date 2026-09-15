@@ -444,7 +444,7 @@ impl<T: ScrollComposition> ContainerWidget for T {
     /// Measures content through the surface and includes Skin-owned viewport padding.
     fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: crate::Constraints) -> Dimensioni {
         // Scrollbars are responsive affordances and do not inflate intrinsic composite size.
-        let padding = ctx.skin().metrics.padding.max(0);
+        let padding = ctx.skin().metrics().padding.max(0);
         // inset = leading_padding + trailing_padding = padding * 2.
         let inset = padding.saturating_mul(2);
         let content_width = match constraints.width {
@@ -464,8 +464,8 @@ impl<T: ScrollComposition> ContainerWidget for T {
         // All committed summary geometry is parent-local; child scrollbar geometry passed to each
         // widget is normalized to that child's own local track by configure_bar.
         let surface = Recti::new(0, 0, rect.width.max(0), rect.height.max(0));
-        let padding = ctx.skin().metrics.padding.max(0);
-        let bar_size = ctx.skin().metrics.scrollbar_size.max(0);
+        let padding = ctx.skin().metrics().padding.max(0);
+        let bar_size = ctx.skin().metrics().scrollbar_size.max(0);
         let enabled = model.enabled.get();
         let requested = model.offset();
         let bars_usable = enabled && bar_size > 0 && surface.width > 0 && surface.height > 0;

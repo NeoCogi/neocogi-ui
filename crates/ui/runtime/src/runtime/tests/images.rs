@@ -46,13 +46,13 @@ impl Drop for ImageTexture {
 #[test]
 fn image_controls_keep_owned_pixels_and_forward_ordered_semantic_paint_after_errors() {
     let atlas = crate::test_support::test_atlas();
-    let mut skin = crate::Skin::from_atlas(&atlas);
+    let mut skin = crate::Skin::from_atlas(atlas);
     let palette = crate::FlatPalette {
         text: crate::color(0, 0, 0, 255),
         ..crate::FlatPalette::default()
     };
     skin.apply_flat_palette(palette);
-    let assets = crate::test_support::assets::export_bundle(&crate::SkinBundle::new(atlas, skin)).unwrap();
+    let assets = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_skin(skin)).unwrap();
     let ui = neocogi_ui::Ui::from_interface(crate::test_support::runtime_from_assets(assets.as_com_ref()).unwrap()).unwrap();
     let mut button = ui.widgets().button("AB").unwrap();
     button.set_options(WidgetOptions::NONE).unwrap();

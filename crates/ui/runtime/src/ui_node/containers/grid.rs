@@ -390,7 +390,7 @@ trait GridMeasureCtx {
 
 impl GridMeasureCtx for MeasureCtx<'_> {
     fn spacing(&self) -> i32 {
-        self.skin().metrics.spacing.max(0)
+        self.skin().metrics().spacing.max(0)
     }
 
     fn measure_child(&mut self, index: usize, constraints: crate::Constraints) -> Option<Dimensioni> {
@@ -402,7 +402,7 @@ impl GridMeasureCtx for MeasureCtx<'_> {
 impl GridMeasureCtx for ContainerLayoutCtx<'_> {
     /// Reads the common spacing policy used by both measurement phases.
     fn spacing(&self) -> i32 {
-        self.skin().metrics.spacing.max(0)
+        self.skin().metrics().spacing.max(0)
     }
     /// Measures a direct child through the bounded placement context.
     fn measure_child(&mut self, index: usize, constraints: crate::Constraints) -> Option<Dimensioni> {
@@ -433,7 +433,7 @@ impl Widget for Grid {
 /// Columns are resolved before rows because a child's allocated column span is its text-wrapping
 /// bound and therefore affects the preferred height contributed to row tracks.
 fn layout_grid(state: &Grid, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti, layout: &mut GridLayout) {
-    let spacing = ctx.skin().metrics.spacing.max(0);
+    let spacing = ctx.skin().metrics().spacing.max(0);
     // Resolve and retain each column width once for both row measurement and final placement.
     let available_width = AvailableSpace::bounded(rect.width);
     let available_height = AvailableSpace::bounded(rect.height);
@@ -460,7 +460,7 @@ fn layout_grid(state: &Grid, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti, layo
 /// The pure measurement path resolves scalar column spans on demand when measuring row content.
 /// This costs recomputation but preserves `Widget::measure(&self)` and performs no allocation.
 fn grid_size(ctx: &mut MeasureCtx<'_>, state: &Grid, constraints: crate::Constraints) -> Dimensioni {
-    let spacing = ctx.skin().metrics.spacing.max(0);
+    let spacing = ctx.skin().metrics().spacing.max(0);
     let (columns, rows) = grid_dimensions(state);
     // Column preferences depend only on intrinsic child widths and Grid column spans.
     let width = measured_tracks(&state.column_tracks, columns, constraints.width, spacing, |index| {

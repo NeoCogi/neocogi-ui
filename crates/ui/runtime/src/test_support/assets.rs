@@ -1,10 +1,8 @@
 //! Input construction for asset-boundary and algorithm tests; this code never imports a runtime frame.
-use crate::{SkinBundle, ResourceCatalog};
-use crate::assets::{ImportedAssets, theme};
-use crate::atlas::transfer::Tables;
-use neocogi_ui_core_contracts::*;
-use neocogi_ui::assets::AssetTables;
-use neocogi_com::{ComPtr, NcStatus, NcCopyToBufferOffset, NC_E_INVALID_ARG, NC_E_OUT_OF_MEMORY};
+use crate::{ResourceCatalog, SkinBundle};
+use crate::assets::ImportedAssets;
+use neocogi_ui_core_contracts::IAssetBundleAbi;
+use neocogi_com::{ComPtr, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG};
 
 /// Copies pixels explicitly for a fixture revision instead of adding transfers to runtime import.
 pub(crate) fn export_imported_data(imported: &ImportedAssets, bundle: &SkinBundle) -> Result<neocogi_ui::assets::AssetData, NcStatus> {
@@ -33,45 +31,10 @@ pub(crate) fn export_bundle(bundle: &SkinBundle) -> Result<ComPtr<IAssetBundleAb
 /// Produces the same concrete tables consumed by generated prebuilt source and runtime providers.
 pub(crate) fn export_bundle_data(bundle: &SkinBundle) -> Result<neocogi_ui::assets::AssetData, NcStatus> {
     let atlas = bundle.atlas();
-    let tables = Tables::export(atlas)?;
-    let info = AssetInfo {
-        schema: ASSET_SCHEMA_VERSION,
-        size: Size {
-            width: atlas.width() as i32,
-            height: atlas.height() as i32,
-        },
-        fonts: tables.fonts.len() as u32,
-        icons: tables.icons.len() as u32,
-        glyphs: tables.glyphs.len() as u32,
-        names: tables.names.len() as u32,
-    };
-    let mut pixels = filled(info.rgba_bytes()?, 0)?;
-    for (destination, color) in pixels.as_chunks_mut::<4>().0.iter_mut().zip(atlas.pixels()) {
-        destination.copy_from_slice(&[color.x, color.y, color.z, color.w]);
-    }
-    let theme = theme::ExportedTheme::new(bundle)?;
+    // Test publication copies the already canonical snapshot. It never reconstructs portable
+    // tables from a UI-specific atlas or appearance model, because neither model exists anymore.
     Ok(neocogi_ui::assets::AssetData {
-        pixels: pixels.into(),
-        tables: AssetTables {
-            size: info.size,
-            fonts: tables.fonts.into(),
-            glyphs: tables.glyphs.into(),
-            icons: tables.icons.into(),
-            names: tables.names.into(),
-            metrics: theme.metrics,
-            chrome: theme.chrome,
-            surfaces: theme.surfaces.into(),
-            controls: theme.controls.into(),
-            menus: theme.menus.into(),
-            window_chrome: theme.window_chrome.into(),
-        },
+        pixels: atlas.pixels().to_vec().into(),
+        tables: atlas.tables().clone(),
     })
-}
-
-/// Allocates bounded owned output without converting allocation failure into an ABI panic.
-fn filled<T: Clone>(count: usize, value: T) -> Result<Vec<T>, NcStatus> {
-    let mut values = Vec::new();
-    values.try_reserve_exact(count).map_err(|_| NC_E_OUT_OF_MEMORY)?;
-    values.resize(count, value);
-    Ok(values)
 }

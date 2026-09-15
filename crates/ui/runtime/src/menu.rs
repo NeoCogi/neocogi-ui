@@ -792,7 +792,7 @@ fn layout_bar(headings: &[MenuSlot], style: &Skin, atlas: &AtlasHandle, mut slot
     }
 
     // Headings use one body font and retain intrinsic widths even when the bar stretches.
-    let padding = style.metrics.padding.max(1);
+    let padding = style.metrics().padding.max(1);
     let font_choice = FontRef::Role(FontRole::Body);
     let font = style.resolve_font(atlas, &font_choice);
     let check = style.resolve_icon_role(atlas, crate::IconRole::Check);
@@ -823,7 +823,7 @@ fn layout_popup(rows: &[MenuSlot], style: &Skin, atlas: &AtlasHandle, mut slots:
     slots.clear();
     slots.reserve(rows.len());
     let panel_insets = style.menu(MenuRole::Popup, MenuState::Normal).patch.insets.normalized();
-    let padding = style.metrics.padding.max(1);
+    let padding = style.metrics().padding.max(1);
     let mut label_width = 0_i32;
     let mut trailing_width = 0_i32;
     let mut marker = false;
@@ -849,7 +849,7 @@ fn layout_popup(rows: &[MenuSlot], style: &Skin, atlas: &AtlasHandle, mut slots:
                     atlas.get_icon_size(style.resolve_icon_role(atlas, crate::IconRole::Check)).height,
                 )
             }
-            MenuSlot::Separator => style.metrics.spacing.max(3),
+            MenuSlot::Separator => style.metrics().spacing.max(3),
             MenuSlot::Branch { label, .. } => {
                 let font_choice = FontRef::Role(FontRole::Body);
                 let font = style.resolve_font(atlas, &font_choice);
@@ -957,14 +957,14 @@ fn paint_submenu_arrow(ctx: &mut WidgetPaintCtx<'_>, bounds: Recti, color: Color
     let style = ctx.skin().clone();
     let icon_id = ctx.skin().resolve_icon_role(ctx.atlas(), crate::IconRole::Expand);
     let size = ctx.atlas().get_icon_size(icon_id);
-    let icon = trailing_rect(bounds, size, style.metrics.padding.max(1));
+    let icon = trailing_rect(bounds, size, style.metrics().padding.max(1));
     ctx.draw_icon(icon_id, icon, color);
 }
 
 /// Paints one centered subdued separator rule.
 fn paint_separator(ctx: &mut WidgetPaintCtx<'_>, row: Recti) {
     // Keep horizontal breathing room and derive low contrast from the menu content color.
-    let padding = ctx.skin().metrics.padding.max(1);
+    let padding = ctx.skin().metrics().padding.max(1);
     let rule = Recti::new(
         row.x.saturating_add(padding),
         row.y.saturating_add(row.height / 2),

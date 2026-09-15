@@ -30,10 +30,9 @@
 
 //! Deterministic resources, direct algorithm ownership and public-runtime fixtures.
 
-use crate::{
-    AtlasHandle, AtlasSource, CharEntry, ChromeRole, ChromeState, ControlRole, ControlState, FontEntry, NinePatch, Recti, Skin, SurfaceRole, SurfaceState,
-    Vec2i, Visual,
-};
+use crate::{AtlasHandle, ChromeRole, ChromeState, ControlRole, ControlState, NinePatch, Skin, SurfaceRole, SurfaceState, Visual};
+use neocogi_ui::assets::{AssetData, AssetTables};
+use neocogi_ui_core_contracts::{AssetFont, AssetGlyph, AssetIcon, AssetRange, Insets, Rect, Size};
 use std::cell::Cell;
 use std::alloc::{GlobalAlloc, Layout, System};
 
@@ -158,65 +157,93 @@ pub(crate) fn test_atlas() -> AtlasHandle {
 
 /// Constructs a standard icon set plus caller-selected named font metrics.
 pub(crate) fn test_atlas_with_font_sizes(fonts: &[(&str, usize)]) -> AtlasHandle {
-    let pixels: [u8; 4] = [0xFF, 0xFF, 0xFF, 0xFF];
-    let icons: Vec<(&str, Recti)> = ICON_NAMES.iter().map(|name| (*name, Recti::new(0, 0, 1, 1))).collect();
-    let entries = vec![
-        (
-            '_',
-            CharEntry {
-                offset: Vec2i::new(0, 0),
-                advance: Vec2i::new(8, 0),
-                rect: Recti::new(0, 0, 1, 1),
-            },
-        ),
-        (
-            'a',
-            CharEntry {
-                offset: Vec2i::new(0, 0),
-                advance: Vec2i::new(8, 0),
-                rect: Recti::new(0, 0, 1, 1),
-            },
-        ),
-        (
-            'b',
-            CharEntry {
-                offset: Vec2i::new(0, 0),
-                advance: Vec2i::new(8, 0),
-                rect: Recti::new(0, 0, 1, 1),
-            },
-        ),
-    ];
-    let fonts: Vec<(&str, FontEntry<'_>)> = fonts
+    AtlasHandle::from_validated_data(test_asset_data_with_font_sizes(fonts), None).expect("shared fixture must satisfy the canonical asset contract")
+}
+
+/// Constructs complete canonical asset data for caller-selected named font metrics.
+pub(crate) fn test_asset_data_with_font_sizes(fonts: &[(&str, usize)]) -> AssetData {
+    let mut names = Vec::new();
+    let mut font_records = Vec::with_capacity(fonts.len());
+    let mut glyphs = Vec::with_capacity(fonts.len() * 3);
+    for (name, size) in fonts {
+        let name = append_name(&mut names, name);
+        let first = glyphs.len() as u32;
+        glyphs.extend(['_', 'a', 'b'].map(|character| AssetGlyph {
+            scalar: u32::from(character),
+            offset_x: 0,
+            offset_y: 0,
+            advance_x: 8,
+            advance_y: 0,
+            rect: Rect { x: 0, y: 0, width: 1, height: 1 },
+        }));
+        font_records.push(AssetFont {
+            name,
+            glyphs: AssetRange { first, count: 3 },
+            line_size: *size as i32,
+            baseline: (*size as i32 * 4) / 5,
+            font_size: *size as i32,
+        });
+    }
+    let icons = ICON_NAMES
         .iter()
-        .map(|(name, size)| {
-            (
-                *name,
-                FontEntry {
-                    line_size: *size,
-                    baseline: (*size as i32 * 4) / 5,
-                    font_size: *size,
-                    entries: &entries,
-                },
-            )
+        .map(|name| AssetIcon {
+            name: append_name(&mut names, name),
+            rect: Rect { x: 0, y: 0, width: 1, height: 1 },
         })
-        .collect();
-    let source = AtlasSource {
-        width: 1,
-        height: 1,
-        pixels: &pixels,
-        icons: &icons,
-        fonts: &fonts,
+        .collect::<Vec<_>>();
+    let appearance = neocogi_appearance::AppearanceTables::flat(Insets::uniform(1), &crate::FlatPalette::default());
+    AssetData {
+        pixels: vec![0xFF; 4].into(),
+        tables: AssetTables {
+            size: Size { width: 1, height: 1 },
+            fonts: font_records.into(),
+            glyphs: glyphs.into(),
+            icons: icons.into(),
+            names: names.into(),
+            metrics: crate::SkinMetrics::default(),
+            chrome: neocogi_appearance::default_chrome(),
+            surfaces: Vec::from(appearance.surfaces).into(),
+            controls: Vec::from(appearance.controls).into(),
+            menus: Vec::from(appearance.menus).into(),
+            window_chrome: Vec::from(appearance.window_chrome).into(),
+        },
+    }
+}
+
+/// Appends one UTF-8 resource name and returns its canonical byte range.
+fn append_name(names: &mut Vec<u8>, name: &str) -> AssetRange {
+    let range = AssetRange {
+        first: names.len() as u32,
+        count: name.len() as u32,
     };
-    // Shared fixtures use the public fallible loader so malformed test metadata cannot bypass the
-    // same validation boundary required of downstream applications.
-    AtlasHandle::try_from(&source).expect("shared test atlas must satisfy the complete atlas contract")
+    names.extend_from_slice(name.as_bytes());
+    range
+}
+
+/// Returns the canonical centered-title chrome recipe used by classic-theme tests.
+pub(crate) fn classic_mac_chrome(backdrop: crate::Color) -> crate::WindowChromeSkin {
+    // Start from the shared canonical default and edit only the authored policy fields. No runtime
+    // mirror type or preset-specific branch is introduced by this fixture convenience function.
+    let mut chrome = neocogi_appearance::default_chrome();
+    chrome.title_alignment = crate::WindowTitleAlignment::Centered;
+    chrome.close_side = crate::CaptionButtonSide::Leading;
+    chrome.minimize_side = crate::CaptionButtonSide::Trailing;
+    chrome.maximize_side = crate::CaptionButtonSide::Trailing;
+    chrome.vertical_spacing = 3;
+    chrome.minimum_extent = 1;
+    chrome.inner_spacing = 4;
+    chrome.show_without_activation = 0;
+    chrome.has_backdrop = 1;
+    chrome.backdrop_rgba = u32::from_le_bytes([backdrop.r, backdrop.g, backdrop.b, backdrop.a]);
+    chrome.backdrop_padding = 4;
+    chrome
 }
 
 /// Constructs a resolved skin whose resource capabilities belong to `atlas`.
 pub(crate) fn test_skin(atlas: &AtlasHandle) -> Skin {
     // Tests must retain and pass this same handle allocation; reconstructing identical metadata is
     // intentionally a different ownership domain after atlas IDs become scoped.
-    Skin::from_atlas(atlas)
+    Skin::from_atlas(atlas.clone())
 }
 
 /// Replaces every structural-surface patch while retaining fixture content colors.

@@ -57,7 +57,7 @@ fn popup_text_region_separates_labels_from_shortcuts_and_submenu_arrows() {
     let (_, item) = MenuItem::create(MenuItemParameters::new("aaaa").shortcut_hint("bbbb"));
     let rows = vec![MenuSlot::Item(item.record), MenuSlot::Branch { label: "aaaaaa".into() }];
     let layout = layout_popup(&rows, &style, &atlas, Vec::new());
-    let padding = style.metrics.padding.max(1);
+    let padding = style.metrics().padding.max(1);
 
     // The item label and right-aligned shortcut are positioned by the same production helper and
     // clipped by the same production region. Their measured extents must fit without intersecting.

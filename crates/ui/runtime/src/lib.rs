@@ -127,9 +127,7 @@ mod window_manager;
 /// Resource, geometry and backend imports for implementation crates.
 /// Applications and extension widgets use the neocogi-ui facade and canonical COM contracts.
 pub mod prelude {
-    pub use crate::atlas::{AtlasHandle, CharEntry, FontId, IconId};
-    #[cfg(test)]
-    pub use crate::atlas::{AtlasError, AtlasSource, FontEntry};
+    pub use crate::atlas::{AtlasHandle, FontId, IconId};
     pub use crate::image::{ImageError, ImageSource, ImageStorageError, MAX_DECODED_RGBA_BYTES, load_image_bytes};
     pub use crate::input::{Key, KeyEvent, KeyState, Modifiers, MouseButton};
     pub use crate::render::{
@@ -138,9 +136,9 @@ pub mod prelude {
     };
     pub use crate::math::{expand_rect, rect, vec2};
     pub use crate::theme::{
-        CaptionButtonSide, CaptionButtonsSkin, ChromeRole, ChromeState, Color, ControlRole, ControlState, FlatPalette, FontRef, FontRole, FrameRole, IconRef,
-        IconRole, MenuRole, MenuState, PointerState, ResourceCatalog, Skin, SkinBundle, SkinMetrics, SurfaceRole, SurfaceState, TitleBackdropSkin, Visual,
-        WindowChromeSkin, WindowTitleAlignment, color,
+        CaptionButtonSide, ChromeRole, ChromeState, Color, ControlRole, ControlState, FlatPalette, FontRef, FontRole, FrameRole, IconRef, IconRole, MenuRole,
+        MenuState, PointerState, ResourceCatalog, Skin, SkinBundle, SkinMetrics, SurfaceRole, SurfaceState, Visual, WindowChromeSkin, WindowTitleAlignment,
+        color,
     };
     pub use rs_math3d::{
         Box3f, Color4b, CrossProduct, Dimension, Dimensioni, FloatVector, Mat4f, Quat, Quatf, Rect, Recti, Vec2f, Vec2i, Vec3f, Vec4f, Vector, Vector3,
@@ -148,9 +146,7 @@ pub mod prelude {
     };
 }
 
-pub use atlas::{AtlasHandle, CharEntry, FontId, IconId};
-#[cfg(test)]
-pub use atlas::{AtlasError, AtlasSource, FontEntry};
+pub use atlas::{AtlasHandle, FontId, IconId};
 pub(crate) use window_manager::{PopupHandle, Window, WindowHandle, WindowOption};
 pub(crate) use event::{EventSource, TypedWidget, WidgetEventPortHandle};
 pub(crate) use menu::{Menu, MenuBar, MenuItem, MenuItemAccessError, MenuItemHandle, MenuItemMark, MenuItemParameters};
@@ -159,9 +155,8 @@ pub use input::{Key, KeyEvent, KeyState, Modifiers, MouseButton};
 pub use math::{expand_rect, rect, vec2};
 pub use render::{AtlasUploadError, NinePatch, NinePatchCell, NinePatchCells, NinePatchContent, NinePatchImage, SliceInsets, TextureError, TextureId};
 pub use theme::{
-    CaptionButtonSide, CaptionButtonsSkin, ChromeRole, ChromeState, Color, ControlRole, ControlState, FlatPalette, FontRef, FontRole, FrameRole, IconRef,
-    IconRole, MenuRole, MenuState, PointerState, ResourceCatalog, Skin, SkinBundle, SkinMetrics, SurfaceRole, SurfaceState, TitleBackdropSkin, Visual,
-    WindowChromeSkin, WindowTitleAlignment, color,
+    CaptionButtonSide, ChromeRole, ChromeState, Color, ControlRole, ControlState, FlatPalette, FontRef, FontRole, FrameRole, IconRef, IconRole, MenuRole,
+    MenuState, PointerState, ResourceCatalog, Skin, SkinBundle, SkinMetrics, SurfaceRole, SurfaceState, Visual, WindowChromeSkin, WindowTitleAlignment, color,
 };
 pub(crate) use theme::SkinInstallError;
 pub(crate) use ui_node::{

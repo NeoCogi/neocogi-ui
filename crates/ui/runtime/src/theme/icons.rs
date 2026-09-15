@@ -92,53 +92,12 @@ impl IconRef {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{AtlasSource, CharEntry, FontEntry, Recti, Vec2i};
 
     /// Verifies semantic names are compiled once into IDs independent of table position.
     #[test]
     fn icon_roles_resolve_independent_of_slot_order() {
-        let pixels = [0xFF, 0xFF, 0xFF, 0xFF];
-        let icons = [
-            ("white", Recti::new(0, 0, 1, 1)),
-            ("file", Recti::new(0, 0, 1, 1)),
-            ("check", Recti::new(0, 0, 1, 1)),
-            ("close", Recti::new(0, 0, 1, 1)),
-            ("expand_down", Recti::new(0, 0, 1, 1)),
-            ("collapse", Recti::new(0, 0, 1, 1)),
-            ("expand", Recti::new(0, 0, 1, 1)),
-            ("closed_folder", Recti::new(0, 0, 1, 1)),
-            ("open_folder", Recti::new(0, 0, 1, 1)),
-        ];
-        let glyphs = [(
-            '_',
-            CharEntry {
-                offset: Vec2i::new(0, 0),
-                advance: Vec2i::new(1, 0),
-                rect: Recti::new(0, 0, 1, 1),
-            },
-        )];
-        let fonts = [(
-            "body",
-            FontEntry {
-                line_size: 1,
-                baseline: 1,
-                font_size: 1,
-                entries: &glyphs,
-            },
-        )];
-        // Even test metadata crosses the same strict construction boundary as application atlases;
-        // this prevents a fixture from accidentally relying on malformed names, metrics, or
-        // rectangles that production loading rejects.
-        let atlas = AtlasHandle::try_from(&AtlasSource {
-            width: 1,
-            height: 1,
-            pixels: &pixels,
-            icons: &icons,
-            fonts: &fonts,
-        })
-        .expect("semantic-icon fixture atlas must satisfy the complete atlas contract");
-
-        let skin = Skin::from_atlas(&atlas);
+        let atlas = crate::test_support::test_atlas();
+        let skin = Skin::from_atlas(atlas.clone());
         for role in IconRole::ALL {
             let name = role.canonical_name().expect("IconRole::ALL contains only declared IDL values");
             assert_eq!(skin.resolve_icon_role(&atlas, role), atlas.icon_id(name).unwrap());

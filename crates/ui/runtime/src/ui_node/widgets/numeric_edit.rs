@@ -226,7 +226,7 @@ pub(super) fn number_preferred_size(
     // Resolve at measurement time so retained numeric widgets survive atlas replacement.
     let resolved_font = style.resolve_font(atlas, font);
     let text_w = atlas.get_text_size(resolved_font, label.as_str()).width;
-    let padding = style.metrics.padding.max(0);
+    let padding = style.metrics().padding.max(0);
     let vertical_pad = (padding / 2).max(1);
     let font_height = atlas.get_font_height(resolved_font) as i32;
     // Preferred sizes saturate because text metrics, visual hints, and style padding are independent

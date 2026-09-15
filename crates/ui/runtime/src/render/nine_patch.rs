@@ -267,16 +267,6 @@ impl NinePatch {
         self.center_visible = false;
         self
     }
-
-    /// Returns the bundle-local image capability referenced by this patch, when present.
-    pub(crate) const fn referenced_image(self) -> Option<NinePatchImage> {
-        // Skin installation needs only the typed capability for atlas-membership validation. It
-        // does not inspect cells, source rectangles, or any geometry owned by GFX expansion.
-        match self.content {
-            NinePatchContent::Flat { .. } => None,
-            NinePatchContent::Image { image } => Some(image),
-        }
-    }
 }
 
 #[cfg(test)]

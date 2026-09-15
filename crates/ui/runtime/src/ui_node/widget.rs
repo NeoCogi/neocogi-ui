@@ -329,7 +329,7 @@ impl Widget for WidgetOption {
 impl LeafWidget for WidgetOption {
     fn measure(&self, style: &Skin, atlas: &AtlasHandle, _constraints: Constraints) -> Dimensioni {
         // Internal placeholder widgets reserve enough room for text or an expand icon.
-        let padding = style.metrics.padding.max(0);
+        let padding = style.metrics().padding.max(0);
         let vertical_pad = max(1, padding / 2);
         let font_height = atlas.get_font_height(style.resolve_font_role(atlas, crate::FontRole::Body)) as i32;
         let icon_height = atlas.get_icon_size(style.resolve_icon_role(atlas, crate::IconRole::ExpandDown)).height;

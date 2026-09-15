@@ -28,71 +28,18 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 
-//! UI-local atlas handles and baked icon/font lookup metadata.
+//! UI-local indices over one canonical portable resource snapshot.
 //!
-//! Portable construction and validation belong to the asset boundary. This module only stores the
-//! local identities and lookup tables created while importing a validated asset revision. Runtime
-//! measurement and drawing substitute the selected font's underscore entry for a missing character.
+//! [`neocogi_ui::assets::AssetTables`] remains the sole retained representation of font metrics,
+//! glyph records, icon rectangles, layout metrics, chrome policy, and resolved appearances. The
+//! UI adds only lookup order and opaque process-local identities: neither index duplicates the
+//! underlying records. Runtime measurement and drawing substitute the selected font's underscore
+//! entry for a missing character.
 
 use super::*;
 use crate::identity::ProcessUniqueId;
-#[cfg(test)]
-use crate::image::CheckedImageDimensions;
-
-#[derive(Debug, Clone)]
-/// Metrics and atlas coordinates for a glyph.
-pub struct CharEntry {
-    /// Pixel offset relative to the draw origin.
-    pub offset: Vec2i,
-    /// Horizontal advance after drawing this glyph.
-    pub advance: Vec2i,
-    /// Rectangle inside the atlas texture.
-    pub rect: Recti, // coordinates in the atlas
-}
-
-/// Internal font record stored in the atlas.
-struct Font {
-    /// Stable identity preserved when this font is copied or replaced in a derived atlas.
-    id: FontId,
-    /// Distance between text baselines in pixels.
-    line_size: usize,
-    /// Distance from the top of a line to its baseline.
-    baseline: i32,
-    /// Requested font size in pixels.
-    font_size: usize,
-    /// Glyph entries sorted by Unicode scalar value for immutable binary search.
-    ///
-    /// The built-in builder populates printable ASCII; serialized sources may provide arbitrary
-    /// Unicode scalar values.
-    entries: Vec<(char, CharEntry)>,
-}
-
-impl Font {
-    /// Finds one glyph without hashing immutable scalar keys on every text pass.
-    fn entry(&self, character: char) -> Option<&CharEntry> {
-        self.entries
-            .binary_search_by_key(&character, |(candidate, _)| *candidate)
-            .ok()
-            .map(|index| &self.entries[index].1)
-    }
-}
-
-/// Unvalidated owned font metadata retained until atlas finalization succeeds.
-///
-/// A vector deliberately preserves duplicate characters from serialized input until validation.
-#[cfg(test)]
-struct FontCandidate {
-    /// Stable identity published with this font after the candidate passes validation.
-    id: FontId,
-    /// Distance between text baselines in pixels.
-    line_size: usize,
-    /// Distance from the top of a line to its baseline.
-    baseline: i32,
-    /// Requested font size in pixels.
-    font_size: usize,
-    /// Ordered glyph metadata, including any duplicate keys that validation must reject.
-    entries: Vec<(char, CharEntry)>,
-}
+use neocogi_ui::assets::AssetTables;
+use neocogi_ui_core_contracts::{AssetFont, AssetGlyph, FontRole, IconRole};
 
 /// Opaque identity of one logical font resource.
 ///
@@ -143,45 +90,34 @@ impl IconId {
     }
 }
 
-/// Internal bitmap icon record stored in the atlas.
-struct Icon {
-    /// Stable identity preserved when this icon is copied into a derived atlas.
-    id: IconId,
-    /// Rectangle occupied by the icon in atlas pixel coordinates.
-    rect: Recti,
-}
-
-/// Structurally validated immutable atlas storage shared through [`AtlasHandle`].
-struct Atlas {
-    /// Width of the atlas texture in pixels.
-    width: usize,
-    /// Height of the atlas texture in pixels.
-    height: usize,
-    /// RGBA pixel data retained only by native test fixtures that round-trip an atlas locally.
-    #[cfg(test)]
-    pixels: Vec<Color4b>,
-    /// Named fonts available to text layout and rendering.
-    fonts: Vec<(String, Font)>,
-    /// Named icons available to widgets.
-    icons: Vec<(String, Icon)>,
-    /// Required opaque-white rendering tile resolved once during finalization.
-    white_icon: IconId,
-}
-
-/// Owned atlas data that has not yet crossed the single validation boundary.
+/// UI-owned indices accompanying one canonical validated asset snapshot.
 ///
-/// Serialized sources and the build-time atlas builder both produce this concrete representation.
-/// Only atlas validation may convert it into the immutable runtime [`Atlas`].
-#[cfg(test)]
-struct AtlasCandidate {
-    /// Prevalidated dimensions and allocation counts for the texture.
-    dimensions: CheckedImageDimensions,
-    /// Decoded RGBA pixels in row-major order.
-    pixels: Vec<Color4b>,
-    /// Named fonts whose glyph vectors still preserve duplicate keys.
-    fonts: Vec<(String, FontCandidate)>,
-    /// Named icons and their proposed atlas rectangles.
-    icons: Vec<(String, Icon)>,
+/// The vectors contain only process-local identities or indices into [`Self::tables`]. They never
+/// copy a portable font, glyph, icon, metric, chrome, or appearance record. Keeping this boundary
+/// explicit makes generated NCIDL records the only source of resource semantics in the runtime.
+#[derive(Clone)]
+struct Atlas {
+    /// Complete validated NCIDL-backed resource and appearance snapshot.
+    tables: AssetTables,
+    /// Stable font identities in canonical font-table order.
+    font_ids: Vec<FontId>,
+    /// Canonical font slots sorted by their borrowed names for binary lookup.
+    font_name_order: Vec<usize>,
+    /// Stable icon identities in canonical icon-table order.
+    icon_ids: Vec<IconId>,
+    /// Canonical icon slots sorted by their borrowed names for binary lookup.
+    icon_name_order: Vec<usize>,
+    /// Canonical glyph slots, sorted by scalar inside each font's unchanged glyph partition.
+    glyph_order: Vec<usize>,
+    /// Required opaque-white rendering tile resolved once during index construction.
+    white_icon: IconId,
+    /// Font identities resolved once for the dense semantic role domain.
+    font_roles: [FontId; FontRole::COUNT],
+    /// Icon identities resolved once for the dense semantic role domain.
+    icon_roles: [IconId; IconRole::COUNT],
+    /// RGBA bytes retained only by direct algorithm fixtures that must publish a source bundle.
+    #[cfg(test)]
+    pixels: Vec<u8>,
 }
 
 #[derive(Clone)]
@@ -192,16 +128,5 @@ struct AtlasCandidate {
 /// Production handles contain dimensions, glyph metrics and icon rectangles; complete RGBA storage
 /// remains at the asset-to-platform upload boundary.
 pub struct AtlasHandle(Rc<Atlas>);
-
-pub(crate) mod transfer;
-#[cfg(test)]
-mod validation;
-#[cfg(test)]
-pub use validation::AtlasError;
-
-#[cfg(test)]
-mod source;
-#[cfg(test)]
-pub use source::{AtlasSource, FontEntry};
 
 mod runtime;

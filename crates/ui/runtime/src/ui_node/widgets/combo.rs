@@ -123,7 +123,7 @@ impl Combo {
 impl Combo {
     /// Measures the widest possible header label so selection changes remain paint-only.
     fn preferred_size_widget(&self, style: &Skin, atlas: &AtlasHandle, _constraints: Constraints) -> Dimensioni {
-        let padding = style.metrics.padding.max(0);
+        let padding = style.metrics().padding.max(0);
         let placeholder = self.state.placeholder().and_then(|text| text.to_string()).unwrap_or_default();
         let mut text_w = text_size(style, atlas, &self.font, &placeholder).width.max(0);
         let count = self.state.item_count().ok().and_then(|count| usize::try_from(count).ok()).unwrap_or(0);

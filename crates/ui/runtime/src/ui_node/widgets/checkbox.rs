@@ -126,7 +126,7 @@ impl Checkbox {
 
     /// Measures the checkbox square plus optional label.
     fn preferred_size(&self, style: &Skin, atlas: &AtlasHandle) -> Dimensioni {
-        let padding = style.metrics.padding.max(0);
+        let padding = style.metrics().padding.max(0);
         let check_icon = atlas.get_icon_size(style.resolve_icon_role(atlas, crate::IconRole::Check));
         let height = content_height(style, atlas, &self.font, check_icon.height);
         let mut width = padding.saturating_mul(2).saturating_add(height.max(0));

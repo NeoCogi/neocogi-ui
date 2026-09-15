@@ -2,153 +2,93 @@
 // Copyright 2023-Present (c) Raja Lehtihet & Wael El Oraiby
 //
 // Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// modification, are permitted provided that the conditions in LICENSE are met.
 //
-// 1. Redistributions of source code must retain the above copyright notice,
-// this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright notice,
-// this list of conditions and the following disclaimer in the documentation
-// and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the copyright holder nor the names of its contributors
-// may be used to endorse or promote products derived from this software without
-// specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
 
-//! Atomic ownership of one resolved skin and the immutable atlas it references.
+//! Atomic ownership of one canonical asset snapshot and its typed UI views.
 
 use crate::AtlasHandle;
 
-use super::{IconRole, Skin};
+use super::Skin;
 
-/// Failure to install a bundle without invalidating the Context's application resource catalog.
+/// Failure to install a bundle without invalidating the original application catalog.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum SkinInstallError {
     /// The candidate omits a logical font from the original application catalog.
     MissingFont {
-        /// Catalog spelling for diagnostics; matching is by the exact typed identity below.
+        /// Catalog spelling retained only for actionable diagnostics.
         name: String,
         /// Stable font identity that existing retained widgets may reference.
         id: crate::FontId,
     },
     /// The candidate omits a logical icon from the original application catalog.
     MissingIcon {
-        /// Catalog spelling for diagnostics; an unrelated icon with the same name is insufficient.
+        /// Catalog spelling retained only for actionable diagnostics.
         name: String,
         /// Stable icon identity that existing retained widgets may reference.
         id: crate::IconId,
     },
 }
 
-/// One resolved [`Skin`] paired with the exact immutable [`AtlasHandle`] it uses.
+/// One immutable canonical asset snapshot with its intrinsically bound UI skin view.
 ///
-/// Image-backed nine patches and semantic resource tables contain stable typed IDs that the paired
-/// atlas must contain. Keeping the skin and atlas behind this single concrete value prevents
-/// callers and retained runtime owners from replacing either half independently. Exact
-/// [`crate::FontRef`] and [`crate::IconRef`] values validate through this same pair.
+/// The atlas is reached through [`Skin`] instead of stored as a second independently pairable
+/// field. Consequently an image-backed appearance and its icon identities cannot be combined with
+/// an unrelated table allocation, and bundle construction needs no late ownership scan.
 #[derive(Clone)]
 pub struct SkinBundle {
-    /// Immutable font metrics, image rectangles and local resource identities used by the skin.
-    atlas: AtlasHandle,
-    /// Complete resolved geometry and visuals whose image capabilities belong to `atlas`.
+    /// Typed selectors and cache revision bound to the snapshot-owning atlas handle.
     skin: Skin,
 }
 
 impl SkinBundle {
-    /// Pairs an already resolved skin with its exact atlas after validating the full contract.
-    ///
-    /// # Panics
-    ///
-    /// Panics when the atlas lacks any semantic or image resource identity retained by the skin.
-    pub fn new(atlas: AtlasHandle, mut skin: Skin) -> Self {
-        // Validate the already-resolved semantic IDs. This keeps a successfully constructed bundle
-        // total for every built-in measure and paint operation without repeating name lookup.
-        let _ = skin.resolve_font_role(&atlas, crate::FontRole::Body);
-        for role in IconRole::ALL {
-            let _ = skin.resolve_icon_role(&atlas, role);
-        }
-        // Semantic tables and image visuals all use stable resource IDs. The full ownership check
-        // also covers optional font roles already resolved to their concrete fallback.
-        assert!(skin.belongs_to(&atlas), "skin contains resource identities absent from its atlas");
-        // Bundle construction publishes a completed concrete skin value. Give that value a fresh
-        // identity so retained caches need no partial field fingerprint or atlas-pointer key.
+    /// Publishes an already complete skin as one cache revision.
+    pub(crate) fn from_skin(mut skin: Skin) -> Self {
         skin.refresh_revision();
-        Self { atlas, skin }
+        Self { skin }
     }
 
-    /// Builds the default resolved skin for `atlas` and returns the validated pair.
-    ///
-    /// # Panics
-    ///
-    /// Panics when `atlas` does not satisfy the standard semantic resource contract.
+    /// Builds a canonical skin view for an atlas and publishes it atomically.
     #[cfg(test)]
     pub(crate) fn from_atlas(atlas: AtlasHandle) -> Self {
-        // Construct before moving the handle so Skin::from_atlas and the resulting bundle validate
-        // the exact same immutable allocation.
-        let skin = Skin::from_atlas(&atlas);
-        Self::new(atlas, skin)
+        Self::from_skin(Skin::from_atlas(atlas))
     }
 
-    /// Borrows the complete resolved runtime skin.
+    /// Borrows the typed skin view over the canonical snapshot.
     pub fn skin(&self) -> &Skin {
-        // Return a projection of this pair rather than cloning an independently mutable copy.
         &self.skin
     }
 
-    /// Borrows the immutable atlas paired with this skin.
+    /// Borrows the immutable atlas and lookup indices intrinsic to this snapshot.
     pub fn atlas(&self) -> &AtlasHandle {
-        // The handle exposes immutable metadata, so a shared borrow is sufficient for layout,
-        // paint, renderer synchronization, and application name lookup.
-        &self.atlas
+        self.skin.atlas()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Color, ControlRole, IconRole, NinePatch, NinePatchImage, SliceInsets};
 
-    /// Verifies the pair rejects an image identity absent from the paired atlas.
+    /// Verifies clones identify one value while republishing starts a new revision.
     #[test]
-    #[should_panic(expected = "skin contains resource identities absent from its atlas")]
-    fn bundle_rejects_foreign_image_visuals() {
-        let local_atlas = crate::test_support::test_atlas();
-        let foreign_atlas = crate::test_support::test_atlas();
-        let mut skin = Skin::from_atlas(&local_atlas);
-        let foreign_icon = Skin::from_atlas(&foreign_atlas).resolve_icon_role(&foreign_atlas, IconRole::Close);
-        crate::test_support::replace_control_patches(&mut skin, ControlRole::Button, |_| {
-            NinePatch::image(
-                SliceInsets::ZERO,
-                NinePatchImage::new(foreign_icon, SliceInsets::ZERO, Color { r: 255, g: 255, b: 255, a: 255 }),
-            )
-        });
-
-        // Construction is the sole public pairing boundary, so malformed ownership cannot enter a
-        // LoadedTheme or WindowManager and fail later during rendering.
-        let _ = SkinBundle::new(local_atlas, skin);
-    }
-
-    /// Verifies bundle clones identify one value while a new pairing starts a new generation.
-    #[test]
-    fn bundle_construction_assigns_one_complete_non_reused_skin_revision() {
+    fn bundle_publication_assigns_one_complete_non_reused_skin_revision() {
         let atlas = crate::test_support::test_atlas();
-        let first = SkinBundle::from_atlas(atlas.clone());
+        let first = SkinBundle::from_atlas(atlas);
         let first_clone = first.clone();
-        let second = SkinBundle::new(atlas, first.skin().clone());
+        let second = SkinBundle::from_skin(first.skin().clone());
 
         assert_eq!(first.skin().revision(), first_clone.skin().revision());
         assert_ne!(first.skin().revision(), second.skin().revision());
+    }
+
+    /// Verifies the skin and atlas expose fields from one canonical table allocation.
+    #[test]
+    fn skin_views_borrow_the_atlas_canonical_snapshot() {
+        let bundle = SkinBundle::from_atlas(crate::test_support::test_atlas());
+
+        // Pointer equality is intentional here: a merely equal copied metric record would recreate
+        // the dual model that this ownership boundary exists to prevent.
+        assert!(std::ptr::eq(bundle.skin().metrics(), &bundle.atlas().tables().metrics));
+        assert!(std::ptr::eq(bundle.skin().window_chrome(), &bundle.atlas().tables().chrome,));
     }
 }

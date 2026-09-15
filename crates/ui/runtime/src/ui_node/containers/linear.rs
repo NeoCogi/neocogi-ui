@@ -512,7 +512,7 @@ fn measure(ctx: &mut MeasureCtx<'_>, state: &Linear, constraints: Constraints) -
         return Dimensioni::default();
     }
     state.debug_assert_synchronized(count);
-    let gap = ctx.skin().metrics.spacing.max(0);
+    let gap = ctx.skin().metrics().spacing.max(0);
     let main_space = orientation.main_space(constraints);
     let cross_space = orientation.cross_space(constraints);
     let mut resolver = track_resolver_for_measure(ctx, state, orientation, main_space, cross_space, gap);
@@ -572,7 +572,7 @@ fn place(ctx: &mut ContainerLayoutCtx<'_>, state: &mut Linear, rect: Recti) {
         return;
     }
     state.debug_assert_synchronized(count);
-    let gap = ctx.skin().metrics.spacing.max(0);
+    let gap = ctx.skin().metrics().spacing.max(0);
     let main_space = AvailableSpace::Bounded(orientation.main_extent(rect).max(0));
     let cross_space = AvailableSpace::Bounded(orientation.cross_extent(rect).max(0));
 
@@ -686,7 +686,7 @@ fn minimum_content_cross(direction: LinearDirection, style: &Skin, atlas: &Atlas
     if !direction.is_horizontal() {
         return 0;
     }
-    let padding = style.metrics.padding.max(0);
+    let padding = style.metrics().padding.max(0);
     (atlas.get_font_height(style.resolve_font_role(atlas, crate::FontRole::Body)) as i32)
         .saturating_add(padding.saturating_mul(2))
         .max(padding.saturating_mul(2))

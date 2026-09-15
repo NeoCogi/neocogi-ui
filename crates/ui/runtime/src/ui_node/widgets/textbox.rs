@@ -212,7 +212,7 @@ impl Textbox {
 
     /// Measures a single-line editor, bounded by available width when supplied.
     fn preferred_size_widget(&self, style: &Skin, atlas: &AtlasHandle, constraints: Constraints) -> Dimensioni {
-        let padding = style.metrics.padding.max(0);
+        let padding = style.metrics().padding.max(0);
         let vertical_pad = (padding / 2).max(1);
         let font = style.resolve_font(atlas, &self.font);
         let font_height = atlas.get_font_height(font) as i32;
@@ -340,7 +340,7 @@ pub(crate) fn textbox_update(
     // remains authoritative and continues routing keyboard/text input to its focused node.
 
     let text_metrics = ctx.atlas().get_text_size(font, buf.as_str());
-    let padding = ctx.skin().metrics.padding;
+    let padding = ctx.skin().metrics().padding;
     let textx = textbox_text_x(r, padding, text_metrics.width);
 
     if ctx.focused() && mouse_pressed.intersects(MouseButton::LEFT) && ctx.mouse_over(r, mouse_pos) {
@@ -384,7 +384,7 @@ pub(crate) fn textbox_paint(ctx: &mut WidgetPaintCtx<'_>, buf: &str, cursor: usi
     let baseline_y = clamp_i64_to_i32(i64::from(texty) + i64::from(metrics.baseline));
 
     let text_metrics = ctx.atlas().get_text_size(font, buf);
-    let padding = ctx.skin().metrics.padding;
+    let padding = ctx.skin().metrics().padding;
     let textx = textbox_text_x(r, padding, text_metrics.width);
     let cursor_pos = clamp_cursor_boundary(buf, cursor);
     let caret_offset = if cursor_pos == 0 {

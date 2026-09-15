@@ -383,8 +383,8 @@ fn bundled_windows_95_theme_reuses_shared_png_regions() {
     let (loaded, images) = install_bundled_theme("themes/windows-95/theme.json");
     assert_eq!(loaded.name(), "Windows 95");
     assert_eq!(images, 11, "each shared PNG path must be baked exactly once");
-    assert_eq!(loaded.bundle().skin().window_chrome.minimized_content_height, 2);
-    assert_eq!(loaded.bundle().skin().window_chrome.captions.vertical_spacing, 2);
+    assert_eq!(loaded.bundle().skin().window_chrome().minimized_content_height, 2);
+    assert_eq!(loaded.bundle().skin().window_chrome().vertical_spacing, 2);
     let atlas = loaded.bundle().atlas();
     assert_eq!((atlas.width(), atlas.height()), (512, 256));
     assert_eq!(
@@ -421,13 +421,13 @@ fn bundled_windows_311_theme_draws_black_framed_white_and_blue_titles() {
     let (loaded, images) = install_bundled_theme("themes/windows-3.11/theme.json");
     assert_eq!(loaded.name(), "Windows 3.11 for Workgroups");
     assert_eq!(images, 12, "only referenced role-state artwork is baked into the theme atlas");
-    assert_eq!(loaded.bundle().skin().window_chrome.minimized_content_height, 2);
-    assert_eq!(loaded.bundle().skin().window_chrome.captions.vertical_spacing, 0);
+    assert_eq!(loaded.bundle().skin().window_chrome().minimized_content_height, 2);
+    assert_eq!(loaded.bundle().skin().window_chrome().vertical_spacing, 0);
     let insets = loaded.bundle().skin().chrome(ChromeRole::WindowFrame, ChromeState::Base).patch.insets;
     assert_eq!((insets.left, insets.top, insets.right, insets.bottom), (23, 23, 23, 23));
-    let border = loaded.bundle().skin().metrics.window_border;
+    let border = loaded.bundle().skin().metrics().window_border;
     assert_eq!((border.left, border.top, border.right, border.bottom), (4, 4, 4, 4));
-    let content = loaded.bundle().skin().metrics.window_content_insets;
+    let content = loaded.bundle().skin().metrics().window_content_insets;
     assert_eq!(
         (content.left, content.top, content.right, content.bottom),
         (2, 2, 2, 2),
@@ -570,14 +570,14 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
     let (loaded, images) = install_bundled_theme("themes/mac-os-9/theme.json");
     assert_eq!(loaded.name(), "Mac OS 9");
     assert_eq!(images, 29, "each shared PNG path must be baked exactly once");
-    let chrome = loaded.bundle().skin().window_chrome;
+    let chrome = loaded.bundle().skin().window_chrome();
     assert_eq!(chrome.title_alignment, neocogi_ui_runtime::WindowTitleAlignment::Centered);
-    assert_eq!(chrome.captions.close_side, neocogi_ui_runtime::CaptionButtonSide::Leading);
-    assert_eq!(chrome.captions.vertical_spacing, 3);
-    assert_eq!(chrome.captions.inner_spacing, 4);
+    assert_eq!(chrome.close_side, neocogi_ui_runtime::CaptionButtonSide::Leading);
+    assert_eq!(chrome.vertical_spacing, 3);
+    assert_eq!(chrome.inner_spacing, 4);
     assert_eq!(chrome.minimized_content_height, 2);
-    assert!(!chrome.captions.show_without_activation);
-    assert_eq!(loaded.bundle().skin().metrics.title_height, 20);
+    assert_eq!(chrome.show_without_activation, 0);
+    assert_eq!(loaded.bundle().skin().metrics().title_height, 20);
     for (role, expected_size) in [
         (FontRole::Body, 12),
         (FontRole::Small, 10),
@@ -602,7 +602,7 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
         let size = loaded.bundle().atlas().get_icon_size(icon);
         assert_eq!((size.width, size.height), expected_size);
     }
-    let content = loaded.bundle().skin().metrics.window_content_insets;
+    let content = loaded.bundle().skin().metrics().window_content_insets;
     assert_eq!(
         (content.left, content.top, content.right, content.bottom),
         (0, 0, 0, 0),
@@ -610,7 +610,7 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
     );
     let insets = loaded.bundle().skin().chrome(ChromeRole::WindowFrame, ChromeState::Base).patch.insets;
     assert_eq!((insets.left, insets.top, insets.right, insets.bottom), (6, 22, 6, 6));
-    let border = loaded.bundle().skin().metrics.window_border;
+    let border = loaded.bundle().skin().metrics().window_border;
     assert_eq!(
         (border.left, border.top, border.right, border.bottom),
         (6, 2, 6, 6),
