@@ -136,23 +136,8 @@ impl<T> std::error::Error for SurfaceCreationError<T> {
     }
 }
 
-/// Observable lifecycle event emitted by one application-authored popup.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum PopupEvent {
-    /// Popup policy removed this surface from the sole active branch.
-    Dismissed,
-}
-
-impl crate::event::ComEvent for PopupEvent {
-    type Sink = neocogi_ui_core_contracts::IPopupSinkAbi;
-
-    /// Delivers the captured dismissal without retaining or rereading its popup surface.
-    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
-        match self {
-            Self::Dismissed => sink.dismissed(),
-        }
-    }
-}
+/// Canonical generated popup dismissal fact emitted on active-branch removal.
+pub use neocogi_ui_core_contracts::IPopupSinkEvent as PopupEvent;
 
 /// Process-unique identifier for one popup definition inside its owning window.
 ///
@@ -815,7 +800,7 @@ impl SurfaceNode {
         self.surface.body.clear_transient_targets();
         if let Some(PopupState::Application { events, .. }) = self.popup() {
             // Menu popups have no unobservable lifecycle port; their visibility is wholly internal.
-            events.emit(PopupEvent::Dismissed);
+            events.emit(PopupEvent);
         }
     }
 
@@ -1308,6 +1293,21 @@ impl SurfaceForest {
 }
 
 impl WindowManager {
+    /// Captures every mounted component's private dispatcher after retained
+    /// traversal and before callback delivery. The forest's parent edges always
+    /// point to earlier nodes, so reverse order visits child surfaces first;
+    /// each widget tree contributes its own drivers in descendant-first order.
+    pub(crate) fn component_event_drivers(&self) -> Result<Vec<std::rc::Rc<crate::ui_node::mounted_node::ComponentEventDriver>>, neocogi_com::NcStatus> {
+        let mut drivers = Vec::new();
+        for surface in self.surfaces.nodes.iter().rev() {
+            match &surface.surface.body {
+                SurfaceBody::Widgets { root, .. } => root.collect_private_event_drivers(&mut drivers)?,
+                SurfaceBody::Menu(_) => {}
+            }
+        }
+        Ok(drivers)
+    }
+
     /// Borrows one mounted menu item's concrete public state through its stable typed capability.
     pub(crate) fn menu_item(&self, handle: &crate::MenuItemHandle) -> Result<&crate::MenuItemParameters, crate::MenuItemAccessError> {
         // Search authoritative bar and popup records by their process-unique item IDs. Forest

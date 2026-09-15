@@ -115,21 +115,8 @@ impl MenuItemParameters {
     }
 }
 
-/// Event emitted by one specific menu item after an enabled pointer or keyboard submission.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct MenuItemSubmitted {
-    /// Label captured during enabled user activation, independent of later presentation edits.
-    pub label: String,
-}
-
-impl crate::event::ComEvent for MenuItemSubmitted {
-    type Sink = neocogi_ui_core_contracts::IActivationSinkAbi;
-
-    /// Copies the captured item label through the menu activation contract.
-    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
-        crate::event::deliver_activation(&self.label, sink)
-    }
-}
+/// Canonical generated activation snapshot from an enabled menu item.
+pub use neocogi_ui_core_contracts::IActivationSinkEvent as MenuItemSubmitted;
 
 /// Failure reported when a [`Ui`](crate::Ui) cannot resolve one menu-item capability.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]

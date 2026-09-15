@@ -258,21 +258,8 @@ impl ScrollbarParameters {
     }
 }
 
-/// Offset snapshot emitted after a user-originated scrollbar movement.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct ScrollbarChanged {
-    /// Clamped content offset after applying the triggering pointer event.
-    pub offset: i32,
-}
-
-impl crate::event::ComEvent for ScrollbarChanged {
-    type Sink = neocogi_ui_core_contracts::IScrollbarSinkAbi;
-
-    /// Delivers the captured offset through the Scrollbar event contract.
-    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
-        sink.changed(self.offset)
-    }
-}
+/// Canonical generated scrollbar snapshot owned by the NCIDL event family.
+pub use neocogi_ui_core_contracts::IScrollbarSinkEvent as ScrollbarChanged;
 
 #[neocogi_com::com_object(neocogi_ui_core_contracts::Scrollbar)]
 /// Standalone one-axis scrollbar and dynamically constructible COM object.
@@ -647,6 +634,6 @@ impl neocogi_ui_core_contracts::Scrollbar for Scrollbar {
     fn subscribe(&mut self, sink: ComRef<'_, IScrollbarSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = <Self as crate::TypedWidget<crate::ScrollbarChanged>>::event(self);
-        crate::event::subscribe(endpoint, sink)
+        endpoint.subscribe(sink)
     }
 }

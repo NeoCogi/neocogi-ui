@@ -101,6 +101,8 @@ struct CounterObject {
     count: u32,
     /// The shared static producer retains queued snapshots, never the application's callback.
     submitted: EventSource<Activation>,
+    /// Independent generated domain-event port, with no application handler ownership.
+    changed: EventSource<ICounterChangedSinkEvent>,
 }
 impl CounterObject {
     /// Validates runtime authority and publishes one fully initialized counter identity.
@@ -110,6 +112,7 @@ impl CounterObject {
             common: Common::new(host, WidgetOptions::FRAME),
             count: 0,
             submitted: EventSource::new(),
+            changed: EventSource::new(),
         })
         .query()
     }
@@ -119,6 +122,7 @@ impl CounterObject {
         if state.clicked || state.action == WidgetAction::Activate {
             self.count = self.count.saturating_add(1);
             self.submitted.emit(Activation { label: self.count.to_string() });
+            self.changed.emit(ICounterChangedSinkEvent { value: self.count });
             GeometryChange::Changed
         } else {
             GeometryChange::NoChange
@@ -131,6 +135,7 @@ impl CounterObject {
     /// Ordinary interaction work expires even if callers retain the closed control.
     fn close_content(&mut self) -> Result<(), NcStatus> {
         self.submitted.close_ordinary();
+        self.changed.close_ordinary();
         Ok(())
     }
 }
@@ -150,6 +155,12 @@ impl Counter for CounterObject {
             self.common.state.record_change(GeometryChange::Changed);
         }
         Ok(())
+    }
+
+    /// Connects one generated value sink without claiming the labelled activation port.
+    fn subscribe_changed(&mut self, sink: ComRef<'_, ICounterChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.common.state.writable()?;
+        self.changed.subscribe(sink)
     }
 }
 impl IActivationEvents for CounterObject {

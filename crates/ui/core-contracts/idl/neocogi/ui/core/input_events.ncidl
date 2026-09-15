@@ -94,7 +94,7 @@ struct WidgetUpdate {
 
 #[version(1)]
 /// Concrete labelled activation consumer shared by Button, ListItem and ListBox.
-trait IActivationSink {
+event IActivationSink {
     /// Receives an immutable submission snapshot after widget traversal releases its borrows.
     fn submitted(&self, label: &str) -> Result<()>;
 }
@@ -103,40 +103,40 @@ trait IActivationSink {
 /// Shared labelled activation source; the producer never owns the returned lease or its sink.
 trait IActivationEvents {
     /// Connects the exclusive subscriber and returns its ownership lease.
-    fn subscribe(&self, sink: &IActivationSink) -> Result<IEventSubscription>;
+    event subscribe(&self): IActivationSink;
 }
 
 #[version(1)]
 /// Committed user checkbox state; programmatic setters do not publish it.
-trait ICheckboxSink {
+event ICheckboxSink {
     /// Receives the captured value after retained traversal releases its owned state.
     fn changed(&self, checked: bool) -> Result<()>;
 }
 
 #[version(1)]
 /// Committed finite user value shared by Slider and Number; programmatic setters do not publish it.
-trait INumericSink {
+event INumericSink {
     /// Receives the captured value after retained traversal releases its owned state.
     fn changed(&self, value: f32) -> Result<()>;
 }
 
 #[version(1)]
 /// Committed clamped scrollbar offset from pointer input; programmatic setters do not publish it.
-trait IScrollbarSink {
+event IScrollbarSink {
     /// Receives the captured value after retained traversal releases its owned state.
     fn changed(&self, offset: i32) -> Result<()>;
 }
 
 #[version(1)]
 /// Complete normalized text and scalar-aligned UTF-8 byte cursor at the moment of a user edit.
-trait ITextChangedSink {
+event ITextChangedSink {
     /// Receives an owned immutable text capability borrowed only for this synchronous delivery.
     fn changed(&self, text: &str, cursor: u64) -> Result<()>;
 }
 
 #[version(1)]
 /// Complete normalized text at submission, independent of later edits.
-trait ITextSubmittedSink {
+event ITextSubmittedSink {
     /// Receives the already captured submission value after traversal.
     fn submitted(&self, text: &str) -> Result<()>;
 }
@@ -145,9 +145,9 @@ trait ITextSubmittedSink {
 /// Shared editor event family; changed and submitted are independent exclusive ports.
 trait ITextEvents {
     /// Connects one changed consumer without claiming the separate submitted port.
-    fn subscribe_changed(&mut self, sink: &ITextChangedSink) -> Result<IEventSubscription>;
+    event subscribe_changed(&mut self): ITextChangedSink;
     /// Connects one submitted consumer without claiming the separate changed port.
-    fn subscribe_submitted(&mut self, sink: &ITextSubmittedSink) -> Result<IEventSubscription>;
+    event subscribe_submitted(&mut self): ITextSubmittedSink;
 }
 
 #[version(1)]
@@ -183,7 +183,7 @@ enum WindowEvent: u8 {
 
 #[version(1)]
 /// Concrete consumer of copied window events, including the terminal Destroyed fact.
-trait IWindowSink {
+event IWindowSink {
     /// Receives the exact committed lifecycle/chrome snapshot after the manager releases traversal ownership.
     fn event(&self, event: WindowEvent) -> Result<()>;
 }
@@ -192,12 +192,12 @@ trait IWindowSink {
 /// Subscription capability on the actual logical window object; the manager owns its existing native source.
 trait IWindowEvents {
     /// Connects the current source without making a retained window reference prolong native tree ownership.
-    fn subscribe(&self, sink: &IWindowSink) -> Result<IEventSubscription>;
+    event subscribe(&self): IWindowSink;
 }
 
 #[version(1)]
 /// Concrete consumer of ordinary popup dismissal; destruction does not fabricate replay history.
-trait IPopupSink {
+event IPopupSink {
     /// Reports removal from the active popup branch, independently of later activation.
     fn dismissed(&self) -> Result<()>;
 }
@@ -206,19 +206,19 @@ trait IPopupSink {
 /// Subscription capability on the actual popup object and its existing manager-owned source.
 trait IPopupEvents {
     /// Returns an exclusive application-owned dismissal lease without retaining application state on the producer.
-    fn subscribe(&self, sink: &IPopupSink) -> Result<IEventSubscription>;
+    event subscribe(&self): IPopupSink;
 }
 
 #[version(1)]
 /// Captured user selection committed by a runtime-owned combo popup.
-trait IComboChangedSink {
+event IComboChangedSink {
     /// Receives the NCIDL-defined selection value from one committed interaction.
     fn changed(&self, selection: ComboSelection) -> Result<()>;
 }
 
 #[version(1)]
 /// Concrete terminal outcome of one request; there is no impossible Pending event variant.
-trait IFileDialogSink {
+event IFileDialogSink {
     /// Accepts an exact native path independently of its potentially lossy filename label.
     fn accepted(&self, path: &INativePath) -> Result<()>;
     /// Reports explicit cancellation, hiding, close affordance or destruction of an active request.
@@ -226,10 +226,20 @@ trait IFileDialogSink {
 }
 
 #[version(1)]
+/// Optional event-driving capability on any mounted UI component.
+/// It yields a separate COM allocation, so callback edits never reenter the
+/// mounted widget's object-wide call gate through the driver itself.
+trait IComponentEventProvider {
+    /// Returns the component-owned private dispatcher used before application dispatch.
+    /// The dispatcher must have a distinct IUnknown identity from this widget.
+    fn private_dispatcher(&self) -> Result<IEventDispatcher>;
+}
+
+#[version(1)]
 /// Independent completion source for this reusable picker, using the shared application-owned lease transport.
 trait IFileDialogEvents {
     /// Connects one concrete completion consumer without retaining the application on the producer.
-    fn subscribe(&self, sink: &IFileDialogSink) -> Result<IEventSubscription>;
+    event subscribe(&self): IFileDialogSink;
 }
 
 #[version(1)]

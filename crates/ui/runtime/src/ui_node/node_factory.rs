@@ -70,6 +70,21 @@ impl NodeFactory {
         };
         let properties = widget.properties()?;
         properties.validate()?;
+        // The optional provider is queried before the one-way mount. A failed
+        // provider or a same-object driver leaves the widget unattached.
+        let event_driver = match widget.query::<IComponentEventProviderAbi>() {
+            Ok(provider) => {
+                let driver = provider.private_dispatcher()?;
+                let driver_identity = driver.query::<IUnknown>()?;
+                let widget_identity = widget.query::<IUnknown>()?;
+                if driver_identity.as_ptr() == widget_identity.as_ptr() {
+                    return Err(NC_E_INVALID_ARG);
+                }
+                Some(Rc::new(super::mounted_node::ComponentEventDriver::new(driver)))
+            }
+            Err(neocogi_com::NC_E_NOINTERFACE) => None,
+            Err(error) => return Err(error),
+        };
         widget.mount()?;
         if let NodeLayoutKind::Branch { children, .. } = &layout {
             // The host-wide attachment guard prevents another edit between the
@@ -78,6 +93,7 @@ impl NodeFactory {
         }
         Ok(crate::Node::com_widget(ComNode {
             widget,
+            event_driver,
             dirty: Cell::new(false),
             layout,
             properties,

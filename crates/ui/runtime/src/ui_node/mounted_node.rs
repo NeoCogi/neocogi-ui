@@ -27,10 +27,40 @@ pub(super) enum NodeLayoutKind {
     },
 }
 
+/// Private mount-lifetime ticket shared with detached callback-boundary snapshots.
+/// A component removed by an earlier callback is skipped later in the same
+/// sweep, even though a snapshot still owns its separate dispatcher pointer.
+pub(crate) struct ComponentEventDriver {
+    /// Only this shared lifecycle bit can change while a detached snapshot exists.
+    active: Cell<bool>,
+    /// Separate COM allocation, validated against the widget identity at mount.
+    dispatcher: ComPtr<IEventDispatcherAbi>,
+}
+
+impl ComponentEventDriver {
+    /// Constructs one active private driver after all provider checks succeed.
+    pub(crate) fn new(dispatcher: ComPtr<IEventDispatcherAbi>) -> Self {
+        Self { active: Cell::new(true), dispatcher }
+    }
+
+    /// Delivers one bounded sweep, or skips a component already removed from its mount.
+    pub(crate) fn dispatch(&self, limit: u32) -> Result<u32, NcStatus> {
+        if self.active.get() { self.dispatcher.dispatch(limit) } else { Ok(0) }
+    }
+
+    /// Invalidates a detached snapshot before any child or widget teardown call.
+    fn retire(&self) {
+        self.active.set(false);
+    }
+}
+
 /// Node-owned COM capabilities; geometry caches remain in the surrounding node.
 pub(crate) struct ComNode {
     /// Actual common widget capability, also retained by the application proxy.
     pub(super) widget: ComPtr<IWidgetAbi>,
+    /// Optional separately allocated private dispatcher queried once at mount.
+    /// It is invoked only after traversal releases this node and its descendants.
+    pub(super) event_driver: Option<Rc<ComponentEventDriver>>,
     /// Runtime-returned changes persist until ancestor invalidation consumes them.
     pub(super) dirty: Cell<bool>,
     /// Cached leaf or branch policy with runtime-owned geometry access.
@@ -259,6 +289,9 @@ impl ComNode {
 impl Drop for ComNode {
     /// Tree removal closes the widget while application COM references may remain.
     fn drop(&mut self) {
+        if let Some(driver) = &self.event_driver {
+            driver.retire();
+        }
         if let NodeLayoutKind::Branch { children, .. } = &self.layout {
             // The retained view remains registered until descendants close, even
             // when the external widget's own close implementation later fails.

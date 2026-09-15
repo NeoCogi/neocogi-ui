@@ -14,9 +14,9 @@ class Textbox: IWidget + ILeafLayout {
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
     /// Connects the independent changed-text subscriber.
-    fn subscribe_changed(&mut self, sink: &ITextChangedSink) -> Result<IEventSubscription>;
+    event subscribe_changed(&mut self): ITextChangedSink;
     /// Connects the independent submitted-text subscriber.
-    fn subscribe_submitted(&mut self, sink: &ITextSubmittedSink) -> Result<IEventSubscription>;
+    event subscribe_submitted(&mut self): ITextSubmittedSink;
 }
 
 #[version(1)]
@@ -62,7 +62,7 @@ class Checkbox: IWidget + ILeafLayout {
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
     /// Connects the exclusive checked-state subscriber and returns its ownership lease.
-    fn subscribe(&mut self, sink: &ICheckboxSink) -> Result<IEventSubscription>;
+    event subscribe(&mut self): ICheckboxSink;
 }
 
 #[version(1)]
@@ -105,7 +105,7 @@ class Slider: IWidget + ILeafLayout {
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
     /// Connects the exclusive finite-value subscriber and returns its ownership lease.
-    fn subscribe(&mut self, sink: &INumericSink) -> Result<IEventSubscription>;
+    event subscribe(&mut self): INumericSink;
 }
 
 #[version(1)]
@@ -122,7 +122,7 @@ class Number: IWidget + ILeafLayout {
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
     /// Connects the exclusive finite-value subscriber and returns its ownership lease.
-    fn subscribe(&mut self, sink: &INumericSink) -> Result<IEventSubscription>;
+    event subscribe(&mut self): INumericSink;
 }
 
 #[version(1)]
@@ -158,7 +158,7 @@ class ListItem: IWidget + ILeafLayout {
     /// Resolves an exact named icon before replacing the existing selection.
     fn set_named_icon(&mut self, name: &[u8]) -> Result<()>;
     /// Connects the exclusive activation subscriber and returns its ownership lease.
-    fn subscribe(&mut self, sink: &IActivationSink) -> Result<IEventSubscription>;
+    event subscribe(&mut self): IActivationSink;
 }
 
 #[version(1)]
@@ -177,7 +177,7 @@ class ListBox: IWidget + ILeafLayout {
     /// Removes image content while retaining the current label and font.
     fn clear_image(&mut self) -> Result<()>;
     /// Connects the exclusive activation subscriber and returns its ownership lease.
-    fn subscribe(&mut self, sink: &IActivationSink) -> Result<IEventSubscription>;
+    event subscribe(&mut self): IActivationSink;
 }
 
 #[version(1)]
@@ -213,7 +213,7 @@ class Scrollbar: IWidget + ILeafLayout {
     /// Clamps a requested offset to the current range without publishing user input.
     fn set_offset(&mut self, offset: i32) -> Result<()>;
     /// Connects the exclusive offset subscriber and returns its ownership lease.
-    fn subscribe(&mut self, sink: &IScrollbarSink) -> Result<IEventSubscription>;
+    event subscribe(&mut self): IScrollbarSink;
 }
 
 #[version(1)]
@@ -293,9 +293,9 @@ class TextArea: IWidget + IContainerLayout + IScrolling {
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
     /// Connects the actual editor's independent changed-text subscriber.
-    fn subscribe_changed(&mut self, sink: &ITextChangedSink) -> Result<IEventSubscription>;
+    event subscribe_changed(&mut self): ITextChangedSink;
     /// Connects the actual editor's independent submitted-text subscriber.
-    fn subscribe_submitted(&mut self, sink: &ITextSubmittedSink) -> Result<IEventSubscription>;
+    event subscribe_submitted(&mut self): ITextSubmittedSink;
 }
 
 #[version(1)]
@@ -340,5 +340,5 @@ class Combo: IWidget + ILeafLayout {
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
     /// Connects the captured user-selection subscriber.
-    fn subscribe_changed(&mut self, sink: &IComboChangedSink) -> Result<IEventSubscription>;
+    event subscribe_changed(&mut self): IComboChangedSink;
 }

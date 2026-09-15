@@ -75,7 +75,9 @@ application session, and local delivery adapter. This support crate does not
 depend on UI or on the process-global `neocogi-com-runtime`. UI adds only its
 family-specific sinks and validation through `neocogi_ui::EventSession<State>`.
 The generic `neocogi_com_events::EventSession<State>` can equally serve a
-non-UI plugin or application state. Both adapters own the concrete application
+non-UI plugin or application state. `Ui::update_with_events` accepts either
+through the borrowed `EventDispatchSource` capability; the host does not need
+to know the application's `State` type. Both adapters own the concrete application
 state and one registration sequence. Each handler is an owned
 `EventHandler<State, Event>` implementation stored inline in a local generic COM
 sink. The approved `FnMut(&mut State, &Event) -> Result<(), NcStatus>` convenience
@@ -124,8 +126,11 @@ once when subscribing. The session offers these concrete families:
 
 Independent producers share `neocogi_com_events::EventSource<E>` with built-ins;
 the UI facade reexports this type for UI authors.
-Standard facade snapshots implement `EventPayload`; custom snapshots implement it
-with their concrete sink interface and delivery method. Commit semantic state, then
+Standard UI snapshots are generated from `event` NCIDL declarations, and their
+source subscription calls are generated from `event` ports. Custom plugin
+families follow the same pattern: declare the concrete sink once, use the
+generated owned payload and adapter, and implement only the producer's typed
+port body. Commit semantic state, then
 call `emit` with its owned snapshot. Implement the event capability by returning
 `source.subscribe(sink)`, and close ordinary sources when the widget logically closes.
 The [extension example](../examples/ui-extension) demonstrates the full object,
@@ -150,6 +155,47 @@ releases their sinks. A retained dispatcher subsequently reports `UI_E_CLOSED`.
 Final subscription release disconnects; final producer release closes its queue.
 Neither invokes application handlers.
 
+A composite widget with private child handlers exposes the optional
+`IComponentEventProvider` UI capability. Its `private_dispatcher` returns a
+separate COM allocation—not the widget's own `IUnknown` identity—so callback
+edits cannot collide with a held widget call gate. The runtime validates that
+identity before the one-way mount, caches the driver on the mounted node, and
+copies child-first driver tickets after traversal. Private component sessions
+run before the application session at every finite callback boundary. A ticket
+is retired when its node is removed, so a callback that closes another
+component prevents that removed component's snapshot from firing later in the
+same sweep. No composite-specific branch or private widget type enters the
+window-root policy layer.
+
+```rust
+// In the composite's NCIDL contract module:
+// event IChoiceSink { fn chosen(&self, item: u64) -> Result<()>; }
+// class ChoicePanel: IWidget + IContainerLayout + IComponentEventProvider {
+//     event subscribe_choice(&mut self): IChoiceSink;
+// }
+
+// In the producer plugin binary, after committing a choice:
+source.emit(IChoiceSinkEvent { item });
+// Its IComponentEventProvider implementation returns an owned reference from
+// a component-owned private EventSession, not the ChoicePanel COM identity:
+fn private_dispatcher(&self) -> Result<ComPtr<IEventDispatcherAbi>, NcStatus> {
+    Ok(self.private_session.as_dispatcher().add_ref())
+}
+
+// In an application or another plugin's State:
+let session = neocogi_com_events::EventSession::new(state);
+session.register(|| {
+    let sink = create_i_choice_sink_event_sink(&session, ChoiceHandler)?;
+    panel.subscribe_choice(sink.as_com_ref())
+})?;
+ui.update_with_events(size, &session)?;
+```
+
+The example uses one generated domain payload and sink on both sides of the
+ABI. Private handlers and application handlers remain native, typed values in
+their respective binaries. A component without private handlers needs only
+its `event` source port and does not implement `IComponentEventProvider`.
+
 Dispatch sweeps sources in registration order, with FIFO inside each source.
 Each source detaches its batch before calling handlers; no producer, retained
 tree, registry or sink-slot borrow crosses the callback. Cross-source order is
@@ -162,7 +208,8 @@ an individual lease from its own handler is supported and stops the remainder
 of its batch. A cancelled old lease cannot disconnect a later replacement.
 
 `EVENT_DISPATCH_LIMIT` is 1,000,000 callbacks per runtime dispatch boundary,
-including standard-component and application sources and cascade sweeps. `dispatch_bounded(limit)` selects an
+including mounted private components, runtime-owned dialog services, application
+sources, and cascade sweeps. `dispatch_bounded(limit)` selects an
 explicit smaller budget for manual delivery. Exhaustion reports
 `UI_E_EVENT_LIMIT` (-1007) and preserves unattempted events. Delivering exactly
 the limit succeeds when nothing remains; limit zero succeeds only for empty

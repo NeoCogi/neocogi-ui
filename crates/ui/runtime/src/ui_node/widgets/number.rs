@@ -87,21 +87,8 @@ impl NumberParameters {
     }
 }
 
-/// Value snapshot emitted after a user-originated number change.
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct NumberChanged {
-    /// Number value after applying the triggering input event.
-    pub value: Real,
-}
-
-impl crate::event::ComEvent for NumberChanged {
-    type Sink = neocogi_ui_core_contracts::INumericSinkAbi;
-
-    /// Delivers the captured value through the Number numeric event contract.
-    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
-        sink.changed(self.value)
-    }
-}
+/// Canonical generated numeric snapshot owned by the NCIDL event family.
+pub use neocogi_ui_core_contracts::INumericSinkEvent as NumberChanged;
 
 #[neocogi_com::com_object(neocogi_ui_core_contracts::Number)]
 /// Concrete retained number input and dynamically constructible COM object.
@@ -365,6 +352,6 @@ impl neocogi_ui_core_contracts::Number for Number {
     fn subscribe(&mut self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = <Self as crate::TypedWidget<crate::NumberChanged>>::event(self);
-        crate::event::subscribe(endpoint, sink)
+        endpoint.subscribe(sink)
     }
 }

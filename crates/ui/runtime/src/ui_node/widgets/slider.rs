@@ -119,21 +119,8 @@ impl SliderParameters {
     }
 }
 
-/// Value snapshot emitted after a user-originated slider change.
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct SliderChanged {
-    /// Slider value after applying the triggering input event.
-    pub value: Real,
-}
-
-impl crate::event::ComEvent for SliderChanged {
-    type Sink = neocogi_ui_core_contracts::INumericSinkAbi;
-
-    /// Delivers the captured value through the Slider numeric event contract.
-    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
-        sink.changed(self.value)
-    }
-}
+/// Canonical generated numeric snapshot owned by the NCIDL event family.
+pub use neocogi_ui_core_contracts::INumericSinkEvent as SliderChanged;
 
 #[neocogi_com::com_object(neocogi_ui_core_contracts::Slider)]
 /// Concrete retained slider and dynamically constructible COM object.
@@ -1115,6 +1102,6 @@ impl neocogi_ui_core_contracts::Slider for Slider {
     fn subscribe(&mut self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = <Self as crate::TypedWidget<crate::SliderChanged>>::event(self);
-        crate::event::subscribe(endpoint, sink)
+        endpoint.subscribe(sink)
     }
 }

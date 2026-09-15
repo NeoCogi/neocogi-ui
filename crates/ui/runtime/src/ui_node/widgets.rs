@@ -59,6 +59,14 @@
 /// Floating-point type used by numeric widgets.
 pub type Real = f32;
 
+/// One concrete retained widget that owns a typed, weak native event endpoint.
+/// The widget trait owns the producer mapping; generic queues and subscriptions
+/// are implemented by `neocogi-com-events`, not by the retained UI runtime.
+pub trait TypedWidget<Event: 'static>: crate::Widget {
+    /// Projects the producer-owned port without retaining the widget or its queue.
+    fn event(&self) -> crate::WidgetEventPortHandle<Event>;
+}
+
 use crate::*;
 
 mod button;

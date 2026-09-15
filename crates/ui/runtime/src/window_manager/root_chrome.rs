@@ -121,7 +121,7 @@ pub enum WindowEvent {
     },
 }
 
-impl crate::event::ComEvent for WindowEvent {
+impl neocogi_com_events::EventPayload for WindowEvent {
     type Sink = neocogi_ui_core_contracts::IWindowSinkAbi;
 
     /// Copies the complete captured manager event into its stable boundary representation.

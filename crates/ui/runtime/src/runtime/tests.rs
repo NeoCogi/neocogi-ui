@@ -1205,6 +1205,7 @@ fn builtin_scoped_paint_preserves_alignment_with_inline_semantic_state() {
     );
 }
 
+mod component_events;
 mod events;
 
 mod combo;

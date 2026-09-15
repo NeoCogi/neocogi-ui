@@ -76,7 +76,7 @@ class Button: IWidget + ILeafLayout {
     fn label(&self) -> Result<String>;
 
     /// Connects the exclusive activation subscriber and returns its ownership lease.
-    fn subscribe(&mut self, sink: &IActivationSink) -> Result<IEventSubscription>;
+    event subscribe(&mut self): IActivationSink;
 
     /// Selects a semantic font role and invalidates measurement only when it differs.
     fn set_font_role(&mut self, role: FontRole) -> Result<()>;

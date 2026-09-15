@@ -70,8 +70,8 @@ pub const UI_E_RENDER: NcStatus = NcStatus::from_code(-1005);
 /// A live surface rejects the requested structural, modal or managed-layer operation.
 pub const UI_E_POLICY: NcStatus = NcStatus::from_code(-1006);
 
-/// A bounded event transaction exhausted its callback budget; undispatched queued events remain pending.
-pub const UI_E_EVENT_LIMIT: NcStatus = NcStatus::from_code(-1007);
+/// Shared COM event-budget status, exposed through the UI convenience namespace.
+pub use neocogi_com_events::EVENT_E_LIMIT as UI_E_EVENT_LIMIT;
 
 /// A native file/directory operation failed; the component's diagnostic preserves the concrete OS error.
 pub const UI_E_IO: NcStatus = NcStatus::from_code(-1008);
@@ -179,8 +179,8 @@ impl WidgetUpdate {
     }
 }
 
-/// Shared finite callback budget for one runtime dispatch boundary across all sources and cascade sweeps.
-pub const EVENT_DISPATCH_LIMIT: u32 = 1_000_000;
+/// Shared COM callback budget for one runtime dispatch boundary and cascade sweep.
+pub use neocogi_com_events::EVENT_DISPATCH_LIMIT;
 
 /// Initial native-picker geometry shared by static request defaults and hidden plugin construction.
 pub const FILE_DIALOG_RECT: crate::Rect = crate::Rect { x: 40, y: 40, width: 600, height: 400 };

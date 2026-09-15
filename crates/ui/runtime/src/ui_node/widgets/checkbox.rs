@@ -70,21 +70,8 @@ impl CheckboxParameters {
     }
 }
 
-/// Value snapshot emitted after a user-originated checkbox change.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct CheckboxChanged {
-    /// Checked value after applying the triggering user activation.
-    pub checked: bool,
-}
-
-impl crate::event::ComEvent for CheckboxChanged {
-    type Sink = neocogi_ui_core_contracts::ICheckboxSinkAbi;
-
-    /// Delivers the captured checked value through the Checkbox event contract.
-    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
-        sink.changed(self.checked)
-    }
-}
+/// Canonical generated checkbox snapshot owned by the NCIDL event family.
+pub use neocogi_ui_core_contracts::ICheckboxSinkEvent as CheckboxChanged;
 
 #[neocogi_com::com_object(neocogi_ui_core_contracts::Checkbox)]
 /// Concrete retained checkbox and dynamically constructible COM object.
@@ -303,6 +290,6 @@ impl neocogi_ui_core_contracts::Checkbox for Checkbox {
     fn subscribe(&mut self, sink: ComRef<'_, ICheckboxSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = <Self as crate::TypedWidget<crate::CheckboxChanged>>::event(self);
-        crate::event::subscribe(endpoint, sink)
+        endpoint.subscribe(sink)
     }
 }

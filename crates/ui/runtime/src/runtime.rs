@@ -373,13 +373,27 @@ impl Runtime {
         let mut structural_change = false;
         loop {
             let before = delivered;
-            let reconciled = {
+            let (reconciled, component_drivers) = {
                 let mut context = self.storage.context()?;
-                context.reconcile_combo_boxes()?
+                let reconciled = context.reconcile_combo_boxes()?;
+                let drivers = context.window_manager.component_event_drivers()?;
+                (reconciled, drivers)
             };
             structural_change |= reconciled;
-            // Internal standard components and application callbacks share one
-            // finite boundary. Neither owns a registry borrow across the other.
+            // Private component callbacks run child-first before application
+            // callbacks. The detached driver tickets own no retained-tree borrow;
+            // removal by an earlier callback retires a later snapshot ticket.
+            for component in component_drivers {
+                let remaining = EVENT_DISPATCH_LIMIT - delivered;
+                let count = component.dispatch(remaining)?;
+                if count > remaining {
+                    return Err(NC_E_INVALID_ARG);
+                }
+                delivered += count;
+                self.storage.open()?;
+            }
+            // Runtime-owned modal dialog services and application callbacks share
+            // the same finite boundary; neither lends a registry borrow to the other.
             for dialog in self.storage.dialog_snapshot() {
                 let remaining = EVENT_DISPATCH_LIMIT - delivered;
                 let count = dialog.dispatch(remaining)?;

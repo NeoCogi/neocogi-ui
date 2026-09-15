@@ -107,7 +107,6 @@ pub mod assets;
 pub mod atlas;
 mod boundary;
 mod combo_box;
-mod event;
 mod identity;
 pub mod image;
 mod input;
@@ -147,7 +146,8 @@ pub mod prelude {
 
 pub use atlas::{AtlasHandle, FontId, IconId};
 pub(crate) use window_manager::{PopupHandle, Window, WindowHandle, WindowOption};
-pub(crate) use event::{EventSource, TypedWidget, WidgetEventPortHandle};
+pub(crate) use neocogi_com_events::{EventEndpoint as WidgetEventPortHandle, EventSource};
+pub(crate) use ui_node::widgets::TypedWidget;
 pub(crate) use menu::{Menu, MenuBar, MenuItem, MenuItemAccessError, MenuItemHandle, MenuItemMark, MenuItemParameters};
 pub use image::{ImageError, ImageSource, ImageStorageError, MAX_DECODED_RGBA_BYTES, load_image_bytes};
 pub use input::{Key, KeyEvent, KeyState, Modifiers, MouseButton};

@@ -64,21 +64,8 @@ impl ListBoxParameters {
     }
 }
 
-/// Semantic payload emitted when the user submits a list box.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct ListBoxSubmitted {
-    /// Exact displayed label at user activation time, independent of later setter changes.
-    pub label: String,
-}
-
-impl crate::event::ComEvent for ListBoxSubmitted {
-    type Sink = neocogi_ui_core_contracts::IActivationSinkAbi;
-
-    /// Copies the captured selection label through the ListBox activation contract.
-    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
-        crate::event::deliver_activation(&self.label, sink)
-    }
-}
+/// Canonical generated activation snapshot owned by the NCIDL event family.
+pub use neocogi_ui_core_contracts::IActivationSinkEvent as ListBoxSubmitted;
 
 #[neocogi_com::com_object(neocogi_ui_core_contracts::ListBox)]
 /// Concrete retained list box and dynamically constructible COM object.
@@ -306,6 +293,6 @@ impl neocogi_ui_core_contracts::ListBox for ListBox {
     fn subscribe(&mut self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = <Self as crate::TypedWidget<crate::ListBoxSubmitted>>::event(self);
-        crate::event::subscribe(endpoint, sink)
+        endpoint.subscribe(sink)
     }
 }

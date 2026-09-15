@@ -27,11 +27,21 @@ fn update(ui: &Ui, button: &ButtonWidget, size: Size) -> Result<(), NcStatus> {
 Independent producers reuse `neocogi_com_events::EventSource<E>` (also reexported
 from `neocogi_ui::events`). The generated `neocogi.com.events` module owns the
 lease and dispatcher ABI; the support crate owns typed queues and application
-sessions. Standard
-snapshots already implement `EventPayload`, which names their concrete COM sink.
-A custom snapshot implements that trait for its own declared sink interface.
+sessions. Standard snapshots are generated from UI NCIDL `event` declarations
+and already implement `EventPayload`, which names their concrete COM sink.
 `emit` never invokes application code. `subscribe` returns the application-owned
 `IEventSubscription`; the source does not retain the sink or keep the widget alive.
+
+Custom composites can publish first-class `event` sinks and ports in their
+NCIDL contract. If a mounted component has private child-event handlers, it
+implements `IComponentEventProvider` and returns a separately allocated
+`IEventDispatcher`. The runtime rejects a provider that returns its own widget
+identity, then caches the driver at the mounted node. Drivers are copied in
+descendant-first order after traversal, invoked before the application session,
+and skipped if an earlier callback removed their owning mount. Both kinds of
+callback share the same finite dispatch budget. `Ui::update_with_events`
+accepts the generic `neocogi_com_events::EventSession<State>` as well as the UI
+family facade through `EventDispatchSource`.
 
 There is one subscriber per source. Delivery preserves FIFO within a source and
 registration order across a session. A failed callback consumes its attempted

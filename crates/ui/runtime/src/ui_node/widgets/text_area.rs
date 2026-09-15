@@ -219,39 +219,10 @@ impl crate::ui_node::widget_object::HostedWidget for TextArea {
     }
 }
 
-/// Snapshot emitted after a user-originated text-area value change.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TextAreaChanged {
-    /// Complete text value after applying the triggering input event.
-    pub text: String,
-    /// Scalar-aligned byte cursor after applying the triggering input event.
-    pub cursor: usize,
-}
-
-/// Snapshot emitted when the user submits a text-area value.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TextAreaSubmitted {
-    /// Complete text value at submission time.
-    pub text: String,
-}
-
-impl crate::event::ComEvent for TextAreaChanged {
-    type Sink = neocogi_ui_core_contracts::ITextChangedSinkAbi;
-
-    /// Delivers normalized text and its matching cursor from the same captured event.
-    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
-        crate::event::deliver_text_changed(&self.text, self.cursor, sink)
-    }
-}
-
-impl crate::event::ComEvent for TextAreaSubmitted {
-    type Sink = neocogi_ui_core_contracts::ITextSubmittedSinkAbi;
-
-    /// Delivers the captured submission without consulting the live TextArea editor.
-    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
-        crate::event::deliver_text_submitted(&self.text, sink)
-    }
-}
+/// Canonical generated text-and-cursor payload from a user text-area edit.
+pub use neocogi_ui_core_contracts::ITextChangedSinkEvent as TextAreaChanged;
+/// Canonical generated submission payload from a user text-area command.
+pub use neocogi_ui_core_contracts::ITextSubmittedSinkEvent as TextAreaSubmitted;
 
 /// Runtime-only cursor navigation state retained by the editable leaf.
 #[derive(Default)]
@@ -362,7 +333,7 @@ impl TextEditor {
         if outcome.changed {
             self.changed_event.emit(TextAreaChanged {
                 text: self.buf.clone(),
-                cursor: self.cursor,
+                cursor: self.cursor as u64,
             });
         }
         if outcome.submitted {
@@ -838,14 +809,14 @@ impl ITextEvents for TextEditor {
     fn subscribe_changed(&mut self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = <Self as crate::TypedWidget<crate::TextAreaChanged>>::event(self);
-        crate::event::subscribe(endpoint, sink)
+        endpoint.subscribe(sink)
     }
 
     /// Connects the editor's existing submitted-text event source.
     fn subscribe_submitted(&mut self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = <Self as crate::TypedWidget<crate::TextAreaSubmitted>>::event(self);
-        crate::event::subscribe(endpoint, sink)
+        endpoint.subscribe(sink)
     }
 }
 
@@ -956,7 +927,7 @@ mod tests {
 
     #[derive(Debug, Eq, PartialEq)]
     enum RecordedEvent {
-        Changed(String, usize),
+        Changed(String, u64),
         Submitted(String),
     }
 

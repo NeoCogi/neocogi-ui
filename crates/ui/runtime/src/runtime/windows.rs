@@ -437,14 +437,14 @@ impl IWindowEvents for LogicalWindow {
     /// Uses the manager's actual native source, releasing owner checks before foreign sink retention.
     fn subscribe(&self, sink: ComRef<'_, IWindowSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.owner()?.factory.host.check_mutation()?;
-        crate::event::subscribe(self.window.events(), sink)
+        self.window.events().subscribe(sink)
     }
 }
 impl IPopupEvents for LogicalPopup {
     /// Uses the popup's existing dismissal source without creating a second lifecycle record or queue.
     fn subscribe(&self, sink: ComRef<'_, IPopupSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.owner()?.factory.host.check_mutation()?;
-        crate::event::subscribe(self.popup.events(), sink)
+        self.popup.events().subscribe(sink)
     }
 }
 

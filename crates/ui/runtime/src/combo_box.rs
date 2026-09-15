@@ -25,18 +25,8 @@ use neocogi_ui_core_contracts::{
 /// Contract-defined visible fallback for a combo with no committed selection.
 pub(crate) const DEFAULT_COMBO_PLACEHOLDER: &str = "Select…";
 
-/// Captured NCIDL selection stored in this producer's native event queue.
-struct ComboChangedPayload(
-    /// The canonical generated selection value, independent of later model edits.
-    ComboSelection,
-);
-impl crate::event::ComEvent for ComboChangedPayload {
-    type Sink = IComboChangedSinkAbi;
-    /// Copies the committed value through the generated foreign sink contract.
-    fn deliver(&self, sink: ComRef<'_, Self::Sink>) -> Result<(), NcStatus> {
-        sink.changed(self.0.into())
-    }
-}
+/// Canonical generated selection snapshot stored in this producer's event queue.
+use neocogi_ui_core_contracts::IComboChangedSinkEvent as ComboChangedPayload;
 
 com_int_enum! {
     /// Header intent understood only by the private combo state machine.
@@ -343,7 +333,9 @@ impl IComboState for ComboState {
         if self.selection != Some(index) {
             self.selection = Some(index);
             self.advance_revision();
-            self.changed_event.emit(ComboChangedPayload(ComboSelection::Selected(index as u64)));
+            self.changed_event.emit(ComboChangedPayload {
+                selection: ComboSelection::Selected(index as u64),
+            });
         }
         self.popup = match self.popup {
             ComboPopupLifecycle::Open | ComboPopupLifecycle::OpenRequested => ComboPopupLifecycle::CloseRequested,
@@ -356,7 +348,7 @@ impl IComboState for ComboState {
 
     /// Uses the existing typed event bridge while keeping its source in this sole model.
     fn subscribe_changed(&mut self, sink: ComRef<'_, IComboChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        crate::event::subscribe(self.changed_event.event(), sink)
+        self.changed_event.event().subscribe(sink)
     }
 
     /// Makes retirement idempotent for both logical widget closure and final unmounted release.

@@ -15,6 +15,16 @@ impl EventHandler<Vec<String>, events::Activation> for Advance {
     }
 }
 
+/// Application handler for the independently generated counter-value event.
+struct RecordCount;
+impl EventHandler<Vec<String>, ICounterChangedSinkEvent> for RecordCount {
+    /// Records the committed value, not the later programmatic callback edit.
+    fn handle(&mut self, history: &mut Vec<String>, event: &ICounterChangedSinkEvent) -> Result<(), NcStatus> {
+        history.push(format!("count={}", event.value));
+        Ok(())
+    }
+}
+
 /// Runs real routing, layout, GPU recording and lifecycle through three independently built assemblies.
 pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
     let provider = neocogi_com::Runtime::global()
@@ -39,6 +49,10 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let window = ui.window("Independent extension", Rect { x: 10, y: 10, width: 400, height: 200 }, &root)?;
     let events = EventSession::new(Vec::new());
     events.subscribe_activation(&activation, Advance { counter: counter.clone() })?;
+    events.register(|| {
+        let sink = create_i_counter_changed_sink_event_sink(&events, RecordCount)?;
+        counter.subscribe_changed(sink.as_com_ref())
+    })?;
 
     ui.update_with_events(size, &events)?;
     ui.render(size, renderer)?;
@@ -57,7 +71,7 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     key(ui, KeyCode::Tab)?;
     key(ui, KeyCode::Space)?;
     ui.update_with_events(size, &events)?;
-    assert_eq!(&*events.state()?, &["1".to_owned()]);
+    assert_eq!(&*events.state()?, &["1".to_owned(), "count=1".to_owned()]);
     assert_eq!(counter.count()?, 100);
     ui.render(size, renderer)?;
     let activated = probe.calls()?;

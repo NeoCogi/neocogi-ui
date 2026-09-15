@@ -26,22 +26,28 @@ not distinguish these external classes from built-in nodes.
 
 The [implementation](src/lib.rs) uses `WidgetState` for common options, mount-once
 ownership, logical closure and sticky invalidation. The counter stores its value
-once and shares the same event transport as built-ins:
+once and shares the same event transport as built-ins. Its custom value event is
+declared in NCIDL, so the contract generator supplies the typed payload, sink
+adapter, and lease-bearing subscription signature:
 
 ```rust,ignore
 submitted: EventSource<Activation>,
+changed: EventSource<ICounterChangedSinkEvent>,
 
 // After committing the count:
 self.submitted.emit(Activation { label: self.count.to_string() });
+self.changed.emit(ICounterChangedSinkEvent { value: self.count });
 
-// IActivationEvents::subscribe returns the application-owned lease:
-self.submitted.subscribe(sink)
+// Counter::subscribe_changed is generated from an NCIDL event port:
+self.changed.subscribe(sink)
 ```
 
 Emission queues an owned snapshot. The producer does not retain the application's
-handler. The [acceptance host](../../demos/smoke/src/extension.rs) uses a concrete
-`EventHandler` to edit the counter during delivery; the UI commits that edit's
-measurement before returning from the same update.
+handler. The [acceptance host](../../demos/smoke/src/extension.rs) constructs the
+generated sink against its own typed application `EventSession`, subscribes to the
+custom port, and also uses an activation handler to edit the counter during
+delivery. The value callback still observes the originally committed value;
+the UI commits the later edit's measurement before returning from the same update.
 
 The inset retains one `IChildrenEditor` and exposes its read-only view. It reads
 the authoritative child count instead of maintaining a second topology flag. Its

@@ -163,39 +163,10 @@ impl Textbox {
     }
 }
 
-/// Snapshot emitted after a user-originated textbox value change.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TextboxChanged {
-    /// Complete text value after applying the triggering input event.
-    pub text: String,
-    /// Scalar-aligned byte cursor after applying the triggering input event.
-    pub cursor: usize,
-}
-
-/// Snapshot emitted when the user submits a textbox value.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TextboxSubmitted {
-    /// Complete text value at submission time.
-    pub text: String,
-}
-
-impl crate::event::ComEvent for TextboxChanged {
-    type Sink = neocogi_ui_core_contracts::ITextChangedSinkAbi;
-
-    /// Delivers normalized text and its matching cursor from the same captured event.
-    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
-        crate::event::deliver_text_changed(&self.text, self.cursor, sink)
-    }
-}
-
-impl crate::event::ComEvent for TextboxSubmitted {
-    type Sink = neocogi_ui_core_contracts::ITextSubmittedSinkAbi;
-
-    /// Delivers the captured submission without consulting the live Textbox.
-    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
-        crate::event::deliver_text_submitted(&self.text, sink)
-    }
-}
+/// Canonical generated text-and-cursor payload from a user textbox edit.
+pub use neocogi_ui_core_contracts::ITextChangedSinkEvent as TextboxChanged;
+/// Canonical generated text submission payload from a user textbox command.
+pub use neocogi_ui_core_contracts::ITextSubmittedSinkEvent as TextboxSubmitted;
 
 impl Textbox {
     /// Returns the native event endpoint emitted after every user-originated text change.
@@ -237,7 +208,7 @@ impl Textbox {
         let outcome = textbox_update(ctx, input, &mut self.buf, &mut self.cursor, font);
         let changed = outcome.changed.then(|| TextboxChanged {
             text: self.buf.clone(),
-            cursor: self.cursor,
+            cursor: self.cursor as u64,
         });
         let submitted = outcome.submitted.then(|| TextboxSubmitted { text: self.buf.clone() });
         if let Some(event) = changed {
@@ -471,7 +442,7 @@ mod tests {
 
     #[derive(Debug, Eq, PartialEq)]
     enum RecordedEvent {
-        Changed(String, usize),
+        Changed(String, u64),
         Submitted(String),
     }
 
@@ -671,12 +642,12 @@ impl neocogi_ui_core_contracts::Textbox for Textbox {
     fn subscribe_changed(&mut self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = <Self as crate::TypedWidget<crate::TextboxChanged>>::event(self);
-        crate::event::subscribe(endpoint, sink)
+        endpoint.subscribe(sink)
     }
     /// Connects the independent submitted-text source directly through the class contract.
     fn subscribe_submitted(&mut self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = <Self as crate::TypedWidget<crate::TextboxSubmitted>>::event(self);
-        crate::event::subscribe(endpoint, sink)
+        endpoint.subscribe(sink)
     }
 }

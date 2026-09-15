@@ -1,5 +1,14 @@
 extern neocogi.ui.core;
+extern neocogi.com.events;
+use neocogi.com.events::IEventSubscription;
 use neocogi.ui.core::{IWidget, ILeafLayout, IActivationEvents, IWidgetHost, IContainer, ChildEditResult};
+
+#[version(1)]
+/// Exact committed counter value published only after user activation.
+event ICounterChangedSink {
+    /// Receives one immutable value captured before later callback edits.
+    fn changed(&self, value: u32) -> Result<()>;
+}
 
 #[version(1)]
 /// Observable phase attempts on one example widget, without exposing its native state.
@@ -32,6 +41,9 @@ class Counter: IWidget + ILeafLayout + IActivationEvents + IWidgetProbe {
 
     /// Silently replaces the displayed count and invalidates its preferred text size when changed.
     fn set_count(&mut self, value: u32) -> Result<()>;
+
+    /// Claims the counter's independent typed value port and returns its lease.
+    event subscribe_changed(&mut self): ICounterChangedSink;
 }
 
 #[version(1)]

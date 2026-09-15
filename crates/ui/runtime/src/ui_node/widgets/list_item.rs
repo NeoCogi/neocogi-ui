@@ -77,21 +77,8 @@ impl ListItemParameters {
     }
 }
 
-/// Snapshot emitted when the user submits a list item.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ListItemSubmitted {
-    /// Item label at submission time.
-    pub label: String,
-}
-
-impl crate::event::ComEvent for ListItemSubmitted {
-    type Sink = neocogi_ui_core_contracts::IActivationSinkAbi;
-
-    /// Copies the captured row label through the ListItem activation contract.
-    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
-        crate::event::deliver_activation(&self.label, sink)
-    }
-}
+/// Canonical generated activation snapshot owned by the NCIDL event family.
+pub use neocogi_ui_core_contracts::IActivationSinkEvent as ListItemSubmitted;
 
 #[neocogi_com::com_object(neocogi_ui_core_contracts::ListItem)]
 /// Concrete retained list item and dynamically constructible COM object.
@@ -372,6 +359,6 @@ impl neocogi_ui_core_contracts::ListItem for ListItem {
     fn subscribe(&mut self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = <Self as crate::TypedWidget<crate::ListItemSubmitted>>::event(self);
-        crate::event::subscribe(endpoint, sink)
+        endpoint.subscribe(sink)
     }
 }
