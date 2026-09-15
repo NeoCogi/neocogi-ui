@@ -1,6 +1,6 @@
 //! Standard picker acceptance exercises public methods, routed input, and exact native filesystem values.
 use super::*;
-use neocogi_ui::events::FileDialogCompleted;
+use neocogi_ui::events::completed_file_path;
 
 /// Deterministic drawable keeps the full modal visible while testing its real flex layout.
 const SIZE: Size = Size { width: 900, height: 600 };
@@ -76,15 +76,15 @@ impl Fixture {
 }
 /// Concrete completion consumer owns exact native outcomes independently of dialog/UI lifetime.
 struct Record;
-impl EventHandler<Vec<FileDialogCompleted>, FileDialogCompleted> for Record {
+impl EventHandler<Vec<Option<PathBuf>>, IFileDialogSinkEvent> for Record {
     /// Clones only the immutable completed native path or cancellation value.
-    fn handle(&mut self, completed: &mut Vec<FileDialogCompleted>, event: &FileDialogCompleted) -> Result<(), NcStatus> {
-        completed.push(event.clone());
+    fn handle(&mut self, completed: &mut Vec<Option<PathBuf>>, event: &IFileDialogSinkEvent) -> Result<(), NcStatus> {
+        completed.push(completed_file_path(event)?);
         Ok(())
     }
 }
 /// Attaches a normal application-owned completion lease to the real picker source.
-fn session(fixture: &Fixture) -> EventSession<Vec<FileDialogCompleted>> {
+fn session(fixture: &Fixture) -> EventSession<Vec<Option<PathBuf>>> {
     let events = EventSession::new(Vec::new());
     events.subscribe_file_dialog(&fixture.handle, Record).unwrap();
     events
@@ -151,8 +151,8 @@ fn empty_acceptance_and_independent_picker_requests_use_actual_controls() {
     second.cancel().unwrap();
     fixture.ui.update_with_events(SIZE, &events).unwrap();
     second_events.dispatch().unwrap();
-    assert_eq!(&*events.state().unwrap(), &[FileDialogCompleted::Cancelled]);
-    assert_eq!(&*second_events.state().unwrap(), &[FileDialogCompleted::Cancelled]);
+    assert_eq!(&*events.state().unwrap(), &[None]);
+    assert_eq!(&*second_events.state().unwrap(), &[None]);
     second.close().unwrap();
 }
 
@@ -169,10 +169,7 @@ fn typed_filename_acceptance_uses_real_controls_and_completes_before_update_retu
     fixture.tabs(2);
     fixture.key(KeyCode::Space, 0);
     fixture.ui.update_with_events(SIZE, &events).unwrap();
-    assert_eq!(
-        &*events.state().unwrap(),
-        &[FileDialogCompleted::Accepted(directory.path().join(" file name "))]
-    );
+    assert_eq!(&*events.state().unwrap(), &[Some(directory.path().join(" file name "))]);
     assert_eq!(fixture.handle.active(), Ok(false));
     assert_eq!(fixture.handle.window().unwrap().snapshot().unwrap().visibility, Visibility::Hidden);
     assert_eq!(fixture.controller.session.state().unwrap().filename.text().unwrap(), " file name ");
@@ -203,7 +200,7 @@ fn selected_non_utf8_file_preserves_exact_native_identity_across_display_collisi
     fixture.tabs(4);
     fixture.key(KeyCode::Space, 0);
     fixture.ui.update_with_events(SIZE, &events).unwrap();
-    assert_eq!(&*events.state().unwrap(), &[FileDialogCompleted::Accepted(first)]);
+    assert_eq!(&*events.state().unwrap(), &[Some(first)]);
     fixture.handle.close().unwrap();
 }
 
@@ -245,7 +242,7 @@ fn lifecycle_cancellation_is_once_per_request_and_stale_hide_does_not_cancel_reo
     assert_eq!(fixture.handle.cancel(), Ok(true));
     fixture.open(directory.path());
     fixture.ui.update_with_events(SIZE, &events).unwrap();
-    assert_eq!(&*events.state().unwrap(), &[FileDialogCompleted::Cancelled]);
+    assert_eq!(&*events.state().unwrap(), &[None]);
     assert_eq!(fixture.handle.active(), Ok(true));
     fixture.owner.set_visibility(Visibility::Hidden).unwrap();
     fixture.ui.update_with_events(SIZE, &events).unwrap();
@@ -275,7 +272,7 @@ fn runtime_release_preserves_active_request_terminal_cancellation_without_a_cont
     assert!(events.state().unwrap().is_empty());
     assert_eq!(handle.active(), Err(UI_E_CLOSED));
     assert_eq!(events.dispatch(), Ok(1));
-    assert_eq!(&*events.state().unwrap(), &[FileDialogCompleted::Cancelled]);
+    assert_eq!(&*events.state().unwrap(), &[None]);
     assert_eq!(events.dispatch(), Ok(0));
 }
 
@@ -315,9 +312,9 @@ struct OpenPicker {
     /// Exact native directory included in the request without display conversion.
     directory: PathBuf,
 }
-impl EventHandler<Vec<FileDialogCompleted>, Activation> for OpenPicker {
+impl EventHandler<Vec<Option<PathBuf>>, Activation> for OpenPicker {
     /// Opens through the ordinary COM method while the runtime context is available between input phases.
-    fn handle(&mut self, _state: &mut Vec<FileDialogCompleted>, _event: &Activation) -> Result<(), NcStatus> {
+    fn handle(&mut self, _state: &mut Vec<Option<PathBuf>>, _event: &Activation) -> Result<(), NcStatus> {
         self.picker.open(&neocogi_ui::FileDialogRequest::new(&self.directory))
     }
 }
@@ -347,10 +344,7 @@ fn application_callback_opens_picker_and_later_input_reaches_its_new_modal_scope
     fixture.tabs(2);
     fixture.key(KeyCode::Space, 0);
     fixture.ui.update_with_events(SIZE, &events).unwrap();
-    assert_eq!(
-        &*events.state().unwrap(),
-        &[FileDialogCompleted::Accepted(directory.path().join("after callback"))]
-    );
+    assert_eq!(&*events.state().unwrap(), &[Some(directory.path().join("after callback"))]);
     assert_eq!(fixture.handle.active(), Ok(false));
     fixture.handle.close().unwrap();
     activator.close().unwrap();
@@ -365,10 +359,10 @@ struct ReentryState {
 }
 /// Concrete callback deliberately updates the runtime while the completion lease owns a detached multi-event batch.
 struct Reenter;
-impl EventHandler<ReentryState, FileDialogCompleted> for Reenter {
+impl EventHandler<ReentryState, IFileDialogSinkEvent> for Reenter {
     /// Updates ordinary UI state without reentering this event session; delivery must retain all committed outcomes.
-    fn handle(&mut self, state: &mut ReentryState, event: &FileDialogCompleted) -> Result<(), NcStatus> {
-        assert_eq!(*event, FileDialogCompleted::Cancelled);
+    fn handle(&mut self, state: &mut ReentryState, event: &IFileDialogSinkEvent) -> Result<(), NcStatus> {
+        assert!(matches!(event, IFileDialogSinkEvent::Cancelled));
         state.completions += 1;
         state.ui.update(SIZE)
     }

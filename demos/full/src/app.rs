@@ -346,13 +346,13 @@ impl EventHandler<State, ComboSelection> for Observe {
         }
     }
 }
-impl EventHandler<State, FileDialogCompleted> for Observe {
+impl EventHandler<State, IFileDialogSinkEvent> for Observe {
     /// Accepted paths remain native values until explicitly formatted for this human-readable log.
-    fn handle(&mut self, state: &mut State, event: &FileDialogCompleted) -> Result<(), NcStatus> {
+    fn handle(&mut self, state: &mut State, event: &IFileDialogSinkEvent) -> Result<(), NcStatus> {
         state.open_item.set_enabled(true)?;
-        match event {
-            FileDialogCompleted::Accepted(path) => state.write_log(&format!("Selected file: {}", path.display())),
-            FileDialogCompleted::Cancelled => state.write_log("File dialog cancelled"),
+        match completed_file_path(event)? {
+            Some(path) => state.write_log(&format!("Selected file: {}", path.display())),
+            None => state.write_log("File dialog cancelled"),
         }
     }
 }

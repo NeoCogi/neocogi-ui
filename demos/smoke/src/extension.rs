@@ -49,10 +49,7 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let window = ui.window("Independent extension", Rect { x: 10, y: 10, width: 400, height: 200 }, &root)?;
     let events = EventSession::new(Vec::new());
     events.subscribe_activation(&activation, Advance { counter: counter.clone() })?;
-    events.register(|| {
-        let sink = create_i_counter_changed_sink_event_sink(&events, RecordCount)?;
-        counter.subscribe_changed(sink.as_com_ref())
-    })?;
+    connect_counter_subscribe_changed(&events, counter.as_com_ref(), RecordCount)?;
 
     ui.update_with_events(size, &events)?;
     ui.render(size, renderer)?;

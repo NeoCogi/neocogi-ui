@@ -6,14 +6,15 @@
 //!
 //! ```no_run
 //! use neocogi_ui::{Ui, FileDialog, FileDialogRequest, EventHandler, EventSession, IWindowAbi};
-//! use neocogi_ui::events::FileDialogCompleted;
+//! use neocogi_ui::events::completed_file_path;
+//! use neocogi_ui::IFileDialogSinkEvent;
 //! use neocogi_com::{ComRef, NcStatus};
 //! use std::path::{Path, PathBuf};
 //!
 //! struct Selected;
-//! impl EventHandler<Option<PathBuf>, FileDialogCompleted> for Selected {
-//!     fn handle(&mut self, state: &mut Option<PathBuf>, event: &FileDialogCompleted) -> Result<(), NcStatus> {
-//!         if let FileDialogCompleted::Accepted(path) = event { *state = Some(path.clone()); }
+//! impl EventHandler<Option<PathBuf>, IFileDialogSinkEvent> for Selected {
+//!     fn handle(&mut self, state: &mut Option<PathBuf>, event: &IFileDialogSinkEvent) -> Result<(), NcStatus> {
+//!         *state = completed_file_path(event)?;
 //!         Ok(())
 //!     }
 //! }

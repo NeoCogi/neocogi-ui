@@ -42,6 +42,7 @@ use std::fmt;
 use crate::math::RectExt;
 use crate::render::Painter;
 use crate::{AssetChrome, AtlasHandle, CaptionSide, Dimensioni, Recti, Skin, TitleAlignment, WidgetEventPortHandle, WindowOption};
+use neocogi_ui_core_contracts::IWindowSinkEvent;
 
 /// Decodes the canonical packed RGBA convention for transient root-chrome painting.
 fn packed_color(value: u32) -> crate::Color {
@@ -84,77 +85,25 @@ pub(super) enum RootCaptionButton {
     Close,
 }
 
-/// Semantic event emitted by manager-owned window chrome.
-///
-/// One concrete event stream replaces separate changed/submitted allocations while retaining an
-/// explicit variant for each application-observable action.
-#[derive(Copy, Clone, Debug)]
-pub enum WindowEvent {
-    /// A user move or resize committed a new authoritative outer rectangle.
-    GeometryChanged {
-        /// Complete outer rectangle after applying the interaction.
-        rect: Recti,
-    },
-    /// The user released the manager-owned close affordance after a matching press.
-    CloseRequested,
-    /// Local visibility became false, including a modal dismissed because its owner was hidden.
-    ///
-    /// Delivery is deferred; query current visibility before acting on an old notification after
-    /// an explicit hide/show sequence. Structural children retain their local visibility intent.
-    Hidden,
-    /// The window and its retained content were destroyed; delivered once after producer removal.
-    Destroyed,
-    /// The user minimized the window to its configured compact content height.
-    Minimized {
-        /// Complete compact outer rectangle.
-        rect: Recti,
-    },
-    /// The user maximized the window into its complete inherited viewport.
-    Maximized {
-        /// Complete maximized outer rectangle.
-        rect: Recti,
-    },
-    /// The user restored the exact outer rectangle saved before minimizing or maximizing.
-    Restored {
-        /// Restored outer rectangle.
-        rect: Recti,
-    },
-}
-
-impl neocogi_com_events::EventPayload for WindowEvent {
-    type Sink = neocogi_ui_core_contracts::IWindowSinkAbi;
-
-    /// Copies the complete captured manager event into its stable boundary representation.
-    fn deliver(&self, sink: neocogi_com::ComRef<'_, Self::Sink>) -> Result<(), neocogi_com::NcStatus> {
-        let event = match *self {
-            Self::GeometryChanged { rect } => neocogi_ui_core_contracts::WindowEvent::GeometryChanged { rect: crate::boundary::copied_rect(rect) },
-            Self::CloseRequested => neocogi_ui_core_contracts::WindowEvent::CloseRequested,
-            Self::Hidden => neocogi_ui_core_contracts::WindowEvent::Hidden,
-            Self::Destroyed => neocogi_ui_core_contracts::WindowEvent::Destroyed,
-            Self::Minimized { rect } => neocogi_ui_core_contracts::WindowEvent::Minimized { rect: crate::boundary::copied_rect(rect) },
-            Self::Maximized { rect } => neocogi_ui_core_contracts::WindowEvent::Maximized { rect: crate::boundary::copied_rect(rect) },
-            Self::Restored { rect } => neocogi_ui_core_contracts::WindowEvent::Restored { rect: crate::boundary::copied_rect(rect) },
-        };
-        sink.event(event.into())
-    }
-}
+/// Authoritative NCIDL window fact; chrome policy uses private geometry, not a second event model.
+pub use neocogi_ui_core_contracts::WindowEvent;
 
 /// Cloneable non-owning capability for one manager-owned window or dialog.
 ///
 /// Stable object identity and event delivery are deliberately separate fields. The private root ID
 /// selects checked [`crate::Ui`] mutations and is never derived from an address; the weak typed
-/// endpoint only subscribes to [`WindowEvent`] values. Cloning or dropping this
+/// endpoint only subscribes to generated [`IWindowSinkEvent`] values. Cloning or dropping this
 /// aggregate application handle never changes retained window ownership.
 pub struct WindowHandle {
     /// Process-unique concrete identity used only by the owning window manager.
     id: super::RootId,
     /// Weak endpoint for geometry, caption, and visibility observations from this same window.
-    events: WidgetEventPortHandle<WindowEvent>,
+    events: WidgetEventPortHandle<IWindowSinkEvent>,
 }
 
 impl WindowHandle {
     /// Creates an application capability from an independently allocated identity and endpoint.
-    pub(super) fn new(id: super::RootId, events: WidgetEventPortHandle<WindowEvent>) -> Self {
+    pub(super) fn new(id: super::RootId, events: WidgetEventPortHandle<IWindowSinkEvent>) -> Self {
         // This private constructor is the sole pairing boundary. Manager registration creates both
         // values for the same root before either becomes observable to application code.
         Self { id, events }
@@ -167,7 +116,7 @@ impl WindowHandle {
     }
 
     /// Returns this window's weak typed event endpoint.
-    pub fn events(&self) -> WidgetEventPortHandle<WindowEvent> {
+    pub fn events(&self) -> WidgetEventPortHandle<IWindowSinkEvent> {
         // Clone only the weak endpoint so subscription remains independent from stable identity and
         // cannot retain the manager-owned window.
         self.events.clone()

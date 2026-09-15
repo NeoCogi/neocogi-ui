@@ -564,7 +564,7 @@ struct RootState {
     /// Expanded outer height retained while the minimize button shows a compact window.
     unminimized_height: Option<i32>,
     /// Strong owner of the unified window geometry/lifecycle event stream.
-    events: crate::EventSource<WindowEvent>,
+    events: crate::EventSource<neocogi_ui_core_contracts::IWindowSinkEvent>,
     /// Optional concrete menu bar laid out above the application widget body.
     menu_bar: Option<MenuSurface>,
     /// Descendant viewport policy applied when layout enters direct structural child windows.
@@ -701,7 +701,7 @@ impl SurfaceNode {
         let root = self.root_mut().expect("visibility is defined only for root nodes");
         if root.visible && !visible {
             // One policy transition produces one notification, including owner-driven dismissal.
-            root.events.emit(WindowEvent::Hidden);
+            root.events.emit(neocogi_ui_core_contracts::IWindowSinkEvent { event: WindowEvent::Hidden });
         }
         root.visible = visible;
         if !visible {
@@ -791,7 +791,10 @@ impl SurfaceNode {
     fn emit_window_event(&mut self, event: WindowEvent) {
         // The strong port shares the window node's exact lifetime, while subscribers carry only a
         // weak capability and cannot emit into this queue themselves.
-        self.root().expect("window events are emitted only by roots").events.emit(event);
+        self.root()
+            .expect("window events are emitted only by roots")
+            .events
+            .emit(neocogi_ui_core_contracts::IWindowSinkEvent { event });
     }
 
     /// Dismisses an active popup and emits exactly one policy event.
@@ -1876,7 +1879,7 @@ impl WindowManager {
                 .root()
                 .expect("collected roots have root policy")
                 .events
-                .close(WindowEvent::Destroyed);
+                .close(neocogi_ui_core_contracts::IWindowSinkEvent { event: WindowEvent::Destroyed });
         }
         self.surfaces.remove_roots(&removed);
         self.reconcile_active_surface();
@@ -2657,7 +2660,7 @@ impl WindowManager {
                 {
                     // Snapshot after geometry mutation so subscribers receive the committed value.
                     let rect = node.surface.rect;
-                    node.emit_window_event(WindowEvent::GeometryChanged { rect });
+                    node.emit_window_event(WindowEvent::GeometryChanged { rect: crate::boundary::copied_rect(rect) });
                     self.invalidate_ui_commit();
                 }
                 true
@@ -2710,7 +2713,9 @@ impl WindowManager {
                     // the exact height saved by the preceding minimize action.
                     let maximized = node.root().expect("caption target must be a root").restore_rect.is_some();
                     node.surface.rect.height = if maximized { node.surface.clip.height } else { height };
-                    WindowEvent::Restored { rect: node.surface.rect }
+                    WindowEvent::Restored {
+                        rect: crate::boundary::copied_rect(node.surface.rect),
+                    }
                 } else {
                     let expanded_height = node.surface.rect.height;
                     node.root_mut().expect("caption target must be a root").unminimized_height = Some(expanded_height);
@@ -2720,7 +2725,9 @@ impl WindowManager {
                         .height
                         .saturating_sub(node.surface.geometry.body.height)
                         .saturating_add(minimized_content_height.max(0));
-                    WindowEvent::Minimized { rect: node.surface.rect }
+                    WindowEvent::Minimized {
+                        rect: crate::boundary::copied_rect(node.surface.rect),
+                    }
                 };
                 node.emit_window_event(event);
                 self.invalidate_ui_commit();
@@ -2737,7 +2744,7 @@ impl WindowManager {
                 let event = if let Some(rect) = restore {
                     // Restore exactly the normal placement captured by the preceding maximize.
                     node.surface.rect = rect;
-                    WindowEvent::Restored { rect }
+                    WindowEvent::Restored { rect: crate::boundary::copied_rect(rect) }
                 } else {
                     // The committed clip is the complete available viewport for top-level, child,
                     // and modal roots. Save normal placement before replacing it.
@@ -2745,7 +2752,7 @@ impl WindowManager {
                     let rect = node.surface.clip;
                     node.root_mut().expect("caption target must be a root").restore_rect = Some(normal);
                     node.surface.rect = rect;
-                    WindowEvent::Maximized { rect }
+                    WindowEvent::Maximized { rect: crate::boundary::copied_rect(rect) }
                 };
                 node.emit_window_event(event);
                 self.invalidate_ui_commit();

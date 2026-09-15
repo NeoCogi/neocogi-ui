@@ -43,19 +43,8 @@ pub mod test_support {
 }
 
 use crate::com::*;
-use neocogi_com::{ComPtr, ComRef, NC_E_INVALID_ARG, NcCopyFromBufferOffset, NcStatus, com_object};
+use neocogi_com::{ComPtr, ComRef, NC_E_INVALID_ARG, NcStatus};
 use std::ops::Deref;
-
-/// Copies one complete offset-zero IDL string view into application-owned text.
-fn copied_text(value: NcCopyFromBufferOffset<'_, u8>) -> Result<String, NcStatus> {
-    // Event snapshots cross synchronously as UTF-8 bytes. Rejecting a nonzero
-    // logical offset prevents a producer from presenting a partial string as a
-    // complete semantic value.
-    if value.offset() != 0 {
-        return Err(NC_E_INVALID_ARG);
-    }
-    std::str::from_utf8(value.as_slice()).map(str::to_owned).map_err(|_| NC_E_INVALID_ARG)
-}
 
 pub use neocogi_com_events::{EventDelivery, EventHandler, EVENT_DISPATCH_LIMIT};
 
@@ -71,6 +60,54 @@ impl<State: 'static> EventSession<State> {
     /// Creates an empty UI event facade with application-owned state.
     pub fn new(state: State) -> Self {
         Self(neocogi_com_events::EventSession::new(state))
+    }
+}
+
+#[cfg(test)]
+mod checked_adapter_tests {
+    use super::*;
+    use neocogi_com::NcCopyFromBufferOffset;
+
+    /// Invalid numeric facts are rejected before a held application-state borrow
+    /// can change their error status; valid facts still obey the session borrow gate.
+    #[test]
+    fn generated_numeric_adapter_checks_before_state_borrow() {
+        let session = EventSession::new(0u32);
+        let sink = create_i_numeric_sink_checked_event_sink(
+            &session.0,
+            |count: &mut u32, _event: &NumericChanged| {
+                *count += 1;
+                Ok(())
+            },
+            valid_numeric,
+        )
+        .unwrap();
+        let held = session.state_mut().unwrap();
+        assert_eq!(sink.changed(f32::NAN), Err(NC_E_INVALID_ARG));
+        assert_eq!(sink.changed(1.0), Err(neocogi_com_events::EVENT_E_BUSY));
+        drop(held);
+        sink.changed(1.0).unwrap();
+        assert_eq!(*session.state().unwrap(), 1);
+    }
+
+    /// Generated UTF-8 decoding and the domain cursor check both precede
+    /// invocation, so neither a malformed string nor split scalar reaches state.
+    #[test]
+    fn generated_text_adapter_rejects_offset_and_split_cursor() {
+        let session = EventSession::new(0u32);
+        let sink = create_i_text_changed_sink_checked_event_sink(
+            &session.0,
+            |count: &mut u32, _event: &TextChanged| {
+                *count += 1;
+                Ok(())
+            },
+            valid_text_cursor,
+        )
+        .unwrap();
+        assert_eq!(sink.changed(NcCopyFromBufferOffset::new(1, "é".as_bytes()), 2), Err(NC_E_INVALID_ARG));
+        assert_eq!(sink.changed(NcCopyFromBufferOffset::new(0, "é".as_bytes()), 1), Err(NC_E_INVALID_ARG));
+        sink.changed(NcCopyFromBufferOffset::new(0, "é".as_bytes()), 2).unwrap();
+        assert_eq!(*session.state().unwrap(), 1);
     }
 }
 
@@ -94,35 +131,55 @@ pub use neocogi_ui_core_contracts::IActivationSinkEvent as Activation;
 
 /// Typed adapter for concrete widgets or an explicitly queried activation capability.
 pub trait ActivationSource {
-    /// Connects one sink through the concrete class or shared interface that owns the source.
-    fn subscribe_activation_sink(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
+    /// Uses the generated connector for this concrete source capability.
+    fn connect_activation<State: 'static, Handler: EventHandler<State, Activation> + 'static>(
+        &self,
+        session: &neocogi_com_events::EventSession<State>,
+        handler: Handler,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
 }
 
 impl ActivationSource for ComPtr<IActivationEventsAbi> {
     /// External widgets subscribe through the standard capability queried once during wiring.
-    fn subscribe_activation_sink(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.subscribe(sink)
+    fn connect_activation<State: 'static, Handler: EventHandler<State, Activation> + 'static>(
+        &self,
+        session: &neocogi_com_events::EventSession<State>,
+        handler: Handler,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        connect_i_activation_events_subscribe(session, self.as_com_ref(), handler)
     }
 }
 
 impl ActivationSource for ButtonWidget {
     /// Buttons expose subscription directly on their callable class contract.
-    fn subscribe_activation_sink(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.as_interface().subscribe(sink)
+    fn connect_activation<State: 'static, Handler: EventHandler<State, Activation> + 'static>(
+        &self,
+        session: &neocogi_com_events::EventSession<State>,
+        handler: Handler,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        connect_button_subscribe(session, self.as_interface(), handler)
     }
 }
 
 impl ActivationSource for ListItemWidget {
     /// List rows expose subscription directly on their callable class contract.
-    fn subscribe_activation_sink(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.as_interface().subscribe(sink)
+    fn connect_activation<State: 'static, Handler: EventHandler<State, Activation> + 'static>(
+        &self,
+        session: &neocogi_com_events::EventSession<State>,
+        handler: Handler,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        connect_list_item_subscribe(session, self.as_interface(), handler)
     }
 }
 
 impl ActivationSource for ListBoxWidget {
     /// List boxes expose subscription directly on their callable class contract.
-    fn subscribe_activation_sink(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.as_interface().subscribe(sink)
+    fn connect_activation<State: 'static, Handler: EventHandler<State, Activation> + 'static>(
+        &self,
+        session: &neocogi_com_events::EventSession<State>,
+        handler: Handler,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        connect_list_box_subscribe(session, self.as_interface(), handler)
     }
 }
 
@@ -134,11 +191,7 @@ impl<State: 'static> EventSession<State> {
         widget: &Source,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.0.register(|| {
-            let sink = create_i_activation_sink_event_sink(&self.0, handler)?;
-            let lease = widget.subscribe_activation_sink(sink.as_com_ref())?;
-            Ok(lease)
-        })
+        widget.connect_activation(&self.0, handler)
     }
 }
 
@@ -152,11 +205,7 @@ impl<State: 'static> EventSession<State> {
         widget: &crate::CheckboxWidget,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.0.register(|| {
-            let sink = create_i_checkbox_sink_event_sink(&self.0, handler)?;
-            let lease = widget.as_interface().subscribe(sink.as_com_ref())?;
-            Ok(lease)
-        })
+        connect_checkbox_subscribe(&self.0, widget.as_interface(), handler)
     }
 }
 
@@ -165,38 +214,39 @@ pub use neocogi_ui_core_contracts::INumericSinkEvent as NumericChanged;
 
 /// Static facade hook shared by the concrete Slider and Number class wrappers.
 pub trait NumericEventSource {
-    /// Connects a numeric sink through the concrete class contract.
-    fn subscribe_numeric_sink(&self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
+    /// Uses the class-specific generated checked connector without a second sink object.
+    fn connect_numeric<State: 'static, Handler: EventHandler<State, NumericChanged> + 'static>(
+        &self,
+        session: &neocogi_com_events::EventSession<State>,
+        handler: Handler,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
 }
 
 impl NumericEventSource for crate::SliderWidget {
     /// Delegates directly to the Slider class projection without an event-interface query.
-    fn subscribe_numeric_sink(&self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.as_interface().subscribe(sink)
+    fn connect_numeric<State: 'static, Handler: EventHandler<State, NumericChanged> + 'static>(
+        &self,
+        session: &neocogi_com_events::EventSession<State>,
+        handler: Handler,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        connect_slider_subscribe_checked(session, self.as_interface(), handler, valid_numeric)
     }
 }
 
 impl NumericEventSource for crate::NumberWidget {
     /// Delegates directly to the Number class projection without an event-interface query.
-    fn subscribe_numeric_sink(&self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.as_interface().subscribe(sink)
+    fn connect_numeric<State: 'static, Handler: EventHandler<State, NumericChanged> + 'static>(
+        &self,
+        session: &neocogi_com_events::EventSession<State>,
+        handler: Handler,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        connect_number_subscribe_checked(session, self.as_interface(), handler, valid_numeric)
     }
 }
 
-#[com_object(interfaces(INumericSink))]
-/// Concrete local sink specialization stores application state and its exact handler type directly.
-struct NumericSink<State: 'static, Handler: EventHandler<State, NumericChanged> + 'static> {
-    /// One shared local invocation helper; no erased handler or Rust value crosses COM.
-    handler: EventDelivery<State, Handler>,
-}
-impl<State: 'static, Handler: EventHandler<State, NumericChanged> + 'static> INumericSink for NumericSink<State, Handler> {
-    /// Validates and copies the concrete foreign snapshot before invoking application behavior.
-    fn changed(&self, value: f32) -> Result<(), NcStatus> {
-        if !value.is_finite() {
-            return Err(NC_E_INVALID_ARG);
-        }
-        self.handler.deliver(NumericChanged { value })
-    }
+/// Rejects a non-finite delivered value before generated delivery borrows application state.
+fn valid_numeric(event: &NumericChanged) -> Result<(), NcStatus> {
+    if event.value.is_finite() { Ok(()) } else { Err(NC_E_INVALID_ARG) }
 }
 impl<State: 'static> EventSession<State> {
     /// Connects the widget's concrete event capability and registers its lease in deterministic order.
@@ -206,30 +256,15 @@ impl<State: 'static> EventSession<State> {
         widget: &Source,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.0.register(|| {
-            let sink: ComPtr<INumericSinkAbi> = NumericSink::from_value(NumericSink { handler: self.0.delivery(handler) }).query()?;
-            let lease = widget.subscribe_numeric_sink(sink.as_com_ref())?;
-            Ok(lease)
-        })
+        widget.connect_numeric(&self.0, handler)
     }
 }
 
 /// Canonical generated clamped scrollbar snapshot.
 pub use neocogi_ui_core_contracts::IScrollbarSinkEvent as ScrollbarChanged;
-#[com_object(interfaces(IScrollbarSink))]
-/// Concrete local sink specialization stores application state and its exact handler type directly.
-struct ScrollbarSink<State: 'static, Handler: EventHandler<State, ScrollbarChanged> + 'static> {
-    /// One shared local invocation helper; no erased handler or Rust value crosses COM.
-    handler: EventDelivery<State, Handler>,
-}
-impl<State: 'static, Handler: EventHandler<State, ScrollbarChanged> + 'static> IScrollbarSink for ScrollbarSink<State, Handler> {
-    /// Validates and copies the concrete foreign snapshot before invoking application behavior.
-    fn changed(&self, offset: i32) -> Result<(), NcStatus> {
-        if offset < 0 {
-            return Err(NC_E_INVALID_ARG);
-        }
-        self.handler.deliver(ScrollbarChanged { offset })
-    }
+/// Rejects a negative offset before the generated sink borrows application state.
+fn valid_scrollbar(event: &ScrollbarChanged) -> Result<(), NcStatus> {
+    if event.offset >= 0 { Ok(()) } else { Err(NC_E_INVALID_ARG) }
 }
 impl<State: 'static> EventSession<State> {
     /// Connects the widget's concrete event capability and registers its lease in deterministic order.
@@ -239,11 +274,7 @@ impl<State: 'static> EventSession<State> {
         widget: &crate::ScrollbarWidget,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.0.register(|| {
-            let sink: ComPtr<IScrollbarSinkAbi> = ScrollbarSink::from_value(ScrollbarSink { handler: self.0.delivery(handler) }).query()?;
-            let lease = widget.as_interface().subscribe(sink.as_com_ref())?;
-            Ok(lease)
-        })
+        connect_scrollbar_subscribe_checked(&self.0, widget.as_interface(), handler, valid_scrollbar)
     }
 }
 
@@ -252,60 +283,84 @@ pub use neocogi_ui_core_contracts::ITextChangedSinkEvent as TextChanged;
 
 /// Typed facade hook shared by built-ins and explicitly queried text-event capabilities.
 pub trait TextEventSource {
-    /// Connects a changed-text sink through the concrete class contract.
-    fn subscribe_changed_sink(&self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
-    /// Connects a submitted-text sink through the concrete class contract.
-    fn subscribe_submitted_sink(&self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
+    /// Connects its independent changed port with the generated checked adapter.
+    fn connect_changed<State: 'static, Handler: EventHandler<State, TextChanged> + 'static>(
+        &self,
+        session: &neocogi_com_events::EventSession<State>,
+        handler: Handler,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
+    /// Connects its independent submitted port with the generated adapter.
+    fn connect_submitted<State: 'static, Handler: EventHandler<State, TextSubmitted> + 'static>(
+        &self,
+        session: &neocogi_com_events::EventSession<State>,
+        handler: Handler,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
 }
 
 impl TextEventSource for ComPtr<ITextEventsAbi> {
     /// External editors subscribe through the standard capability queried once during wiring.
-    fn subscribe_changed_sink(&self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.as_com_ref().subscribe_changed(sink)
+    fn connect_changed<State: 'static, Handler: EventHandler<State, TextChanged> + 'static>(
+        &self,
+        session: &neocogi_com_events::EventSession<State>,
+        handler: Handler,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        connect_i_text_events_subscribe_changed_checked(session, self.as_com_ref(), handler, valid_text_cursor)
     }
     /// External editors reuse the same capability for their independent submission port.
-    fn subscribe_submitted_sink(&self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.as_com_ref().subscribe_submitted(sink)
+    fn connect_submitted<State: 'static, Handler: EventHandler<State, TextSubmitted> + 'static>(
+        &self,
+        session: &neocogi_com_events::EventSession<State>,
+        handler: Handler,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        connect_i_text_events_subscribe_submitted(session, self.as_com_ref(), handler)
     }
 }
 
 impl TextEventSource for crate::TextboxWidget {
     /// Delegates directly to the Textbox class projection without an event-interface query.
-    fn subscribe_changed_sink(&self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.as_interface().subscribe_changed(sink)
+    fn connect_changed<State: 'static, Handler: EventHandler<State, TextChanged> + 'static>(
+        &self,
+        session: &neocogi_com_events::EventSession<State>,
+        handler: Handler,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        connect_textbox_subscribe_changed_checked(session, self.as_interface(), handler, valid_text_cursor)
     }
     /// Delegates directly to the Textbox class projection without an event-interface query.
-    fn subscribe_submitted_sink(&self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.as_interface().subscribe_submitted(sink)
+    fn connect_submitted<State: 'static, Handler: EventHandler<State, TextSubmitted> + 'static>(
+        &self,
+        session: &neocogi_com_events::EventSession<State>,
+        handler: Handler,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        connect_textbox_subscribe_submitted(session, self.as_interface(), handler)
     }
 }
 
 impl TextEventSource for crate::TextAreaWidget {
     /// Delegates directly to the TextArea class projection without an event-interface query.
-    fn subscribe_changed_sink(&self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.as_interface().subscribe_changed(sink)
+    fn connect_changed<State: 'static, Handler: EventHandler<State, TextChanged> + 'static>(
+        &self,
+        session: &neocogi_com_events::EventSession<State>,
+        handler: Handler,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        connect_text_area_subscribe_changed_checked(session, self.as_interface(), handler, valid_text_cursor)
     }
     /// Delegates directly to the TextArea class projection without an event-interface query.
-    fn subscribe_submitted_sink(&self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.as_interface().subscribe_submitted(sink)
+    fn connect_submitted<State: 'static, Handler: EventHandler<State, TextSubmitted> + 'static>(
+        &self,
+        session: &neocogi_com_events::EventSession<State>,
+        handler: Handler,
+    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        connect_text_area_subscribe_submitted(session, self.as_interface(), handler)
     }
 }
 
-#[com_object(interfaces(ITextChangedSink))]
-/// Concrete local sink specialization stores application state and its exact handler type directly.
-struct TextChangedSink<State: 'static, Handler: EventHandler<State, TextChanged> + 'static> {
-    /// One shared local invocation helper; no erased handler or Rust value crosses COM.
-    handler: EventDelivery<State, Handler>,
-}
-impl<State: 'static, Handler: EventHandler<State, TextChanged> + 'static> ITextChangedSink for TextChangedSink<State, Handler> {
-    /// Validates and copies the concrete foreign snapshot before invoking application behavior.
-    fn changed(&self, text: NcCopyFromBufferOffset<'_, u8>, cursor: u64) -> Result<(), NcStatus> {
-        let text = copied_text(text)?;
-        let position = usize::try_from(cursor).map_err(|_| NC_E_INVALID_ARG)?;
-        if !text.is_char_boundary(position) {
-            return Err(NC_E_INVALID_ARG);
-        }
-        self.handler.deliver(TextChanged { text, cursor })
+/// Checks the captured cursor against the complete generated UTF-8 text snapshot.
+fn valid_text_cursor(event: &TextChanged) -> Result<(), NcStatus> {
+    let position = usize::try_from(event.cursor).map_err(|_| NC_E_INVALID_ARG)?;
+    if event.text.is_char_boundary(position) {
+        Ok(())
+    } else {
+        Err(NC_E_INVALID_ARG)
     }
 }
 impl<State: 'static> EventSession<State> {
@@ -316,11 +371,7 @@ impl<State: 'static> EventSession<State> {
         widget: &Source,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.0.register(|| {
-            let sink: ComPtr<ITextChangedSinkAbi> = TextChangedSink::from_value(TextChangedSink { handler: self.0.delivery(handler) }).query()?;
-            let lease = widget.subscribe_changed_sink(sink.as_com_ref())?;
-            Ok(lease)
-        })
+        widget.connect_changed(&self.0, handler)
     }
 }
 
@@ -334,33 +385,31 @@ impl<State: 'static> EventSession<State> {
         widget: &Source,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.0.register(|| {
-            let sink = create_i_text_submitted_sink_event_sink(&self.0, handler)?;
-            let lease = widget.subscribe_submitted_sink(sink.as_com_ref())?;
-            Ok(lease)
-        })
+        widget.connect_submitted(&self.0, handler)
     }
 }
 
-#[com_object(interfaces(IWindowSink))]
-/// Concrete application window handler uses the same generic ownership as ordinary widget handlers.
-struct WindowSink<State: 'static, Handler: EventHandler<State, WindowEvent> + 'static> {
-    /// Stored application state and handler remain local to this binary.
-    handler: EventDelivery<State, Handler>,
-}
-impl<State: 'static, Handler: EventHandler<State, WindowEvent> + 'static> IWindowSink for WindowSink<State, Handler> {
-    /// Validates the complete tagged event and copied geometry before invoking application code.
-    fn event(&self, event: WindowEventAbi) -> Result<(), NcStatus> {
-        let event = WindowEvent::try_from(event).map_err(|_| NC_E_INVALID_ARG)?;
-        match event {
-            WindowEvent::GeometryChanged { rect } | WindowEvent::Minimized { rect } | WindowEvent::Maximized { rect } | WindowEvent::Restored { rect }
-                if rect.width < 0 || rect.height < 0 =>
-            {
-                return Err(NC_E_INVALID_ARG);
-            }
-            _ => {}
+/// Checks copied window geometry before the generated sink borrows application state.
+fn valid_window_event(event: &IWindowSinkEvent) -> Result<(), NcStatus> {
+    match event.event {
+        WindowEvent::GeometryChanged { rect } | WindowEvent::Minimized { rect } | WindowEvent::Maximized { rect } | WindowEvent::Restored { rect }
+            if rect.width < 0 || rect.height < 0 =>
+        {
+            Err(NC_E_INVALID_ARG)
         }
-        self.handler.deliver(event)
+        _ => Ok(()),
+    }
+}
+
+/// Thin application projection from a generated delivery wrapper to its canonical NCIDL event.
+struct WindowProject<Handler> {
+    /// Exact concrete handler stays inside the application binary.
+    handler: Handler,
+}
+impl<State, Handler: EventHandler<State, WindowEvent>> EventHandler<State, IWindowSinkEvent> for WindowProject<Handler> {
+    /// Forwards the validated canonical event without copying a second geometry model.
+    fn handle(&mut self, state: &mut State, event: &IWindowSinkEvent) -> Result<(), NcStatus> {
+        self.handler.handle(state, &event.event)
     }
 }
 /// Canonical generated dismissal fact; it does not imply permanent destruction.
@@ -372,11 +421,8 @@ impl<State: 'static> EventSession<State> {
         window: ComRef<'_, IWindowAbi>,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.0.register(|| {
-            let sink: ComPtr<IWindowSinkAbi> = WindowSink::from_value(WindowSink { handler: self.0.delivery(handler) }).query()?;
-            let lease = window.add_ref().query::<IWindowEventsAbi>()?.subscribe(sink.as_com_ref())?;
-            Ok(lease)
-        })
+        let source = window.add_ref().query::<IWindowEventsAbi>()?;
+        connect_i_window_events_subscribe_checked(&self.0, source.as_com_ref(), WindowProject { handler }, valid_window_event)
     }
     /// Registers the actual popup's dismissal source; later visibility is read independently from this snapshot.
     pub fn subscribe_popup<Handler: EventHandler<State, PopupDismissed> + 'static>(
@@ -384,39 +430,30 @@ impl<State: 'static> EventSession<State> {
         popup: ComRef<'_, IPopupAbi>,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.0.register(|| {
-            let sink = create_i_popup_sink_event_sink(&self.0, handler)?;
-            let lease = popup.add_ref().query::<IPopupEventsAbi>()?.subscribe(sink.as_com_ref())?;
-            Ok(lease)
-        })
+        let source = popup.add_ref().query::<IPopupEventsAbi>()?;
+        connect_i_popup_events_subscribe(&self.0, source.as_com_ref(), handler)
     }
 }
 
-#[com_object(interfaces(IComboChangedSink))]
-/// Application-local specialization owns its concrete generated-selection handler and shared state.
-struct ComboSelectionSink<State: 'static, Handler: EventHandler<State, ComboSelection> + 'static> {
-    /// Shared owned invocation discipline used by every event family.
-    handler: EventDelivery<State, Handler>,
+/// Thin application projection from the generated one-field event to its NCIDL selection value.
+struct SelectionProject<Handler> {
+    /// Concrete application handler remains native and is never stored by the producer.
+    handler: Handler,
 }
-impl<State: 'static, Handler: EventHandler<State, ComboSelection> + 'static> IComboChangedSink for ComboSelectionSink<State, Handler> {
-    /// Validates the generated tagged selection before borrowing application state.
-    fn changed(&self, selection: ComboSelectionAbi) -> Result<(), NcStatus> {
-        let selection = ComboSelection::try_from(selection).map_err(|_| NC_E_INVALID_ARG)?;
-        self.handler.deliver(selection)
+impl<State, Handler: EventHandler<State, ComboSelection>> EventHandler<State, IComboChangedSinkEvent> for SelectionProject<Handler> {
+    /// Forwards the already decoded selection without another COM object or parallel value type.
+    fn handle(&mut self, state: &mut State, event: &IComboChangedSinkEvent) -> Result<(), NcStatus> {
+        self.handler.handle(state, &event.selection)
     }
 }
 impl<State: 'static> EventSession<State> {
-    /// Registers the generated selection source without claiming the header's private popup port.
+    /// Registers the generated selection fact without claiming the header's private popup port.
     pub fn subscribe_combo_changed<Handler: EventHandler<State, ComboSelection> + 'static>(
         &self,
         combo: &crate::ComboWidget,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.0.register(|| {
-            let sink: ComPtr<IComboChangedSinkAbi> = ComboSelectionSink::from_value(ComboSelectionSink { handler: self.0.delivery(handler) }).query()?;
-            let lease = combo.as_interface().subscribe_changed(sink.as_com_ref())?;
-            Ok(lease)
-        })
+        connect_combo_subscribe_changed(&self.0, combo.as_interface(), SelectionProject { handler })
     }
 }
 
@@ -427,59 +464,32 @@ impl<State: 'static> EventSession<State> {
         item: &crate::MenuItem,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.0.register(|| {
-            let sink = create_i_activation_sink_event_sink(&self.0, handler)?;
-            let lease = item.as_interface().add_ref().query::<IActivationEventsAbi>()?.subscribe(sink.as_com_ref())?;
-            Ok(lease)
-        })
+        let source = item.as_interface().add_ref().query::<IActivationEventsAbi>()?;
+        connect_i_activation_events_subscribe(&self.0, source.as_com_ref(), handler)
     }
 }
 
-/// One completed file-picker request; accepted native identity remains independent of display text.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum FileDialogCompleted {
-    /// Exact native path selected or lexically entered by the user.
-    Accepted(std::path::PathBuf),
-    /// The active request ended without a selected file.
-    Cancelled,
-}
-#[com_object(interfaces(IFileDialogSink))]
-/// Concrete local completion adapter owns the application's exact state and handler specialization.
-struct FileDialogSink<State: 'static, Handler: EventHandler<State, FileDialogCompleted> + 'static> {
-    /// Existing owned invocation helper; native Rust paths are decoded before borrowing application state.
-    handler: EventDelivery<State, Handler>,
-}
-impl<State: 'static, Handler: EventHandler<State, FileDialogCompleted> + 'static> IFileDialogSink for FileDialogSink<State, Handler> {
-    /// Rejects an incompatible encoding and preserves exact native units when constructing the local event.
-    fn accepted(&self, path: ComRef<'_, INativePathAbi>) -> Result<(), NcStatus> {
-        self.handler.deliver(FileDialogCompleted::Accepted(crate::path::decode(path)?))
+/// Decodes an accepted generated completion to an exact host-native path.
+/// Cancellation yields `None`; lossy display text is never used as path identity.
+pub fn completed_file_path(event: &IFileDialogSinkEvent) -> Result<Option<std::path::PathBuf>, NcStatus> {
+    match event {
+        IFileDialogSinkEvent::Accepted { path } => crate::path::decode(path.as_com_ref()).map(Some),
+        IFileDialogSinkEvent::Cancelled => Ok(None),
     }
-    /// Emits the concrete cancellation outcome with no fabricated empty-path sentinel.
-    fn cancelled(&self) -> Result<(), NcStatus> {
-        self.handler.deliver(FileDialogCompleted::Cancelled)
-    }
+}
+
+/// Rejects a foreign native-path capability before generated delivery borrows application state.
+fn valid_file_dialog_path(event: &IFileDialogSinkEvent) -> Result<(), NcStatus> {
+    completed_file_path(event).map(|_| ())
 }
 impl<State: 'static> EventSession<State> {
     /// Registers the picker's actual completion queue in the same deterministic application sequence.
-    pub fn subscribe_file_dialog<Handler: EventHandler<State, FileDialogCompleted> + 'static>(
+    pub fn subscribe_file_dialog<Handler: EventHandler<State, IFileDialogSinkEvent> + 'static>(
         &self,
         dialog: &crate::FileDialog,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.0.register(|| {
-            let sink: ComPtr<IFileDialogSinkAbi> = FileDialogSink::from_value(FileDialogSink { handler: self.0.delivery(handler) }).query()?;
-            let lease = dialog.as_interface().add_ref().query::<IFileDialogEventsAbi>()?.subscribe(sink.as_com_ref())?;
-            Ok(lease)
-        })
-    }
-}
-impl EventPayload for FileDialogCompleted {
-    type Sink = IFileDialogSinkAbi;
-    /// Encodes native identity only at the boundary; lossy display text never becomes a selected path.
-    fn deliver(&self, sink: ComRef<'_, Self::Sink>) -> Result<(), NcStatus> {
-        match self {
-            FileDialogCompleted::Accepted(path) => sink.accepted(crate::NativePath::new(path).as_interface()),
-            FileDialogCompleted::Cancelled => sink.cancelled(),
-        }
+        let source = dialog.as_interface().add_ref().query::<IFileDialogEventsAbi>()?;
+        connect_i_file_dialog_events_subscribe_checked(&self.0, source.as_com_ref(), handler, valid_file_dialog_path)
     }
 }

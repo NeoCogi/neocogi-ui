@@ -1,7 +1,7 @@
 //! Standard picker composes actual callable controls and owns only explicit request and native-path state.
 use super::*;
 use neocogi_ui::{EventHandler, EventSession, LinearWidget, ListItemWidget, ScrollAreaWidget, TextBlockWidget, TextboxWidget};
-use neocogi_ui::events::{Activation, FileDialogCompleted, TextChanged, TextSubmitted};
+use neocogi_ui::events::{Activation, TextChanged, TextSubmitted};
 use neocogi_com::{INcStringAbi, NcString};
 use std::{
     path::{Path, PathBuf},
@@ -10,27 +10,73 @@ use std::{
 
 /// Shared request lifetime contains no control pointers, handlers or runtime ownership.
 struct Request {
-    /// True exactly while one request awaits a user outcome.
-    active: Cell<bool>,
-    /// Permanent component/window closure prevents reopening independently of allocation lifetime.
-    closed: Cell<bool>,
+    /// One shared phase is necessary because COM's shared receivers, model
+    /// callbacks, and runtime teardown all observe the same request lifetime.
+    phase: Cell<RequestPhase>,
     /// Real native semantic queue; only external subscriptions retain application callbacks.
-    completed: crate::EventSource<FileDialogCompleted>,
+    completed: crate::EventSource<IFileDialogSinkEvent>,
+}
+
+/// Mutually exclusive picker-request lifecycle; no two booleans can disagree.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RequestPhase {
+    /// Reusable controller has no request awaiting a user outcome.
+    Idle,
+    /// One request is awaiting acceptance or cancellation.
+    Active,
+    /// Logical controller/window closure permanently rejects new requests.
+    Closed,
 }
 impl Request {
+    /// Observes active request eligibility without lending a mutable model borrow.
+    fn active(&self) -> bool {
+        matches!(self.phase.get(), RequestPhase::Active)
+    }
+
+    /// Observes permanent closure independently of retained COM references.
+    fn closed(&self) -> bool {
+        matches!(self.phase.get(), RequestPhase::Closed)
+    }
+
+    /// Publishes a fully installed request only from the reusable idle phase.
+    fn begin(&self) -> Result<(), NcStatus> {
+        match self.phase.get() {
+            RequestPhase::Idle => {
+                self.phase.set(RequestPhase::Active);
+                Ok(())
+            }
+            RequestPhase::Active => Err(UI_E_BUSY),
+            RequestPhase::Closed => Err(UI_E_CLOSED),
+        }
+    }
+
     /// Emits one committed outcome after the modal has become idle.
-    fn finish(&self, status: FileDialogCompleted) {
-        if self.active.replace(false) {
-            self.completed.emit(status);
+    fn finish(&self, status: IFileDialogSinkEvent) {
+        match self.phase.get() {
+            RequestPhase::Active => {
+                self.phase.set(RequestPhase::Idle);
+                self.completed.emit(status);
+            }
+            RequestPhase::Idle | RequestPhase::Closed => {}
         }
     }
     /// Runtime teardown cannot borrow an active handler model, so retirement uses this independent concrete state.
     fn retire(&self) {
-        self.closed.set(true);
-        self.finish(FileDialogCompleted::Cancelled);
+        match self.phase.replace(RequestPhase::Closed) {
+            RequestPhase::Active => self.completed.emit(IFileDialogSinkEvent::Cancelled),
+            RequestPhase::Idle | RequestPhase::Closed => {}
+        }
         // Every payload on this source completes one request, so closure must
         // preserve earlier outcomes as well as an active request's cancellation.
         self.completed.finish_pending();
+    }
+
+    /// Permanently closes the controller while retaining one active terminal cancellation.
+    fn close(&self) {
+        match self.phase.replace(RequestPhase::Closed) {
+            RequestPhase::Active => self.completed.close(IFileDialogSinkEvent::Cancelled),
+            RequestPhase::Idle | RequestPhase::Closed => {}
+        }
     }
 }
 
@@ -74,7 +120,7 @@ struct Model {
 impl Model {
     /// Rejects closed components and upgrades runtime ownership for one synchronous operation.
     fn owner(&self) -> Result<Runtime, NcStatus> {
-        if self.request.closed.get() {
+        if self.request.closed() {
             return Err(UI_E_CLOSED);
         }
         let storage = self.runtime.upgrade().ok_or(UI_E_CLOSED)?;
@@ -94,8 +140,8 @@ impl Model {
         })
     }
     /// Hides before emitting the outcome so later callbacks observe an idle reusable component.
-    fn finish(&mut self, outcome: FileDialogCompleted) -> Result<(), NcStatus> {
-        if self.request.active.get() {
+    fn finish(&mut self, outcome: IFileDialogSinkEvent) -> Result<(), NcStatus> {
+        if self.request.active() {
             if self.window.snapshot().is_ok() {
                 self.window.set_visibility(Visibility::Hidden)?;
             }
@@ -114,7 +160,11 @@ impl Model {
             }
             self.directory.join(filename)
         };
-        self.finish(FileDialogCompleted::Accepted(path))
+        // Capture the exact native identity once at commit, not through a lossy
+        // display label or a dispatcher-time reconstruction of this model.
+        self.finish(IFileDialogSinkEvent::Accepted {
+            path: neocogi_ui::NativePath::new(&path).as_interface().add_ref(),
+        })
     }
 }
 
@@ -138,7 +188,7 @@ enum Action {
 impl EventHandler<Model, Activation> for Action {
     /// Callbacks read/edit ordinary COM controls only after the runtime releases its traversal context.
     fn handle(&mut self, model: &mut Model, _event: &Activation) -> Result<(), NcStatus> {
-        if !model.request.active.get() {
+        if !model.request.active() {
             return Ok(());
         }
         match self {
@@ -146,7 +196,7 @@ impl EventHandler<Model, Activation> for Action {
             Self::Home => model.navigate = home_dir(),
             Self::Go => model.navigate = model.resolve_path(&model.path.text()?),
             Self::Accept => model.accept()?,
-            Self::Cancel => model.finish(FileDialogCompleted::Cancelled)?,
+            Self::Cancel => model.finish(IFileDialogSinkEvent::Cancelled)?,
             Self::Folder(path) => model.navigate = Some(path.clone()),
             Self::File(path) => {
                 model.filename.set_text(&path.file_name().unwrap_or(path.as_os_str()).to_string_lossy())?;
@@ -178,7 +228,7 @@ struct Navigate;
 impl EventHandler<Model, TextSubmitted> for Navigate {
     /// Defers control reconstruction until the private event registration transaction has ended.
     fn handle(&mut self, model: &mut Model, event: &TextSubmitted) -> Result<(), NcStatus> {
-        if model.request.active.get() {
+        if model.request.active() {
             model.navigate = model.resolve_path(&event.text);
         }
         Ok(())
@@ -191,15 +241,12 @@ impl EventHandler<Model, WindowEvent> for Lifecycle {
     fn handle(&mut self, model: &mut Model, event: &WindowEvent) -> Result<(), NcStatus> {
         match event {
             WindowEvent::Hidden | WindowEvent::CloseRequested
-                if model.request.active.get() && model.window.snapshot().is_ok_and(|snapshot| snapshot.visibility == Visibility::Hidden) =>
+                if model.request.active() && model.window.snapshot().is_ok_and(|snapshot| snapshot.visibility == Visibility::Hidden) =>
             {
-                model.finish(FileDialogCompleted::Cancelled)?;
+                model.finish(IFileDialogSinkEvent::Cancelled)?;
             }
             WindowEvent::Destroyed => {
-                model.request.closed.set(true);
-                if model.request.active.replace(false) {
-                    model.request.completed.close(FileDialogCompleted::Cancelled);
-                }
+                model.request.close();
             }
             _ => {}
         }
@@ -366,8 +413,7 @@ impl Dialog {
         )?;
         window.set_options(WindowOptions::FRAME)?;
         let request = Rc::new(Request {
-            active: Cell::new(false),
-            closed: Cell::new(false),
+            phase: Cell::new(RequestPhase::Idle),
             completed: crate::EventSource::new(),
         });
         let dialog = Rc::new(Self {
@@ -467,7 +513,7 @@ impl Dialog {
     fn open(&self, title: &str, rect: Rect, directory: PathBuf) -> Result<(), NcStatus> {
         let mut model = self.session.state_mut()?;
         model.owner()?;
-        if self.request.active.get() {
+        if self.request.active() {
             return Err(UI_E_BUSY);
         }
         if rect.width < 0 || rect.height < 0 {
@@ -483,7 +529,7 @@ impl Dialog {
         self.install(&mut model, directory, listing, true)?;
         model.window.set_title(NcCopyFromBufferOffset::new(0, title.as_bytes()))?;
         model.window.set_rect(rect)?;
-        self.request.active.set(true);
+        self.request.begin()?;
         Ok(())
     }
 
@@ -491,7 +537,7 @@ impl Dialog {
     pub(super) fn dispatch(&self, limit: u32) -> Result<u32, NcStatus> {
         let count = self.session.dispatch_bounded(limit)?;
         let mut model = self.session.state_mut()?;
-        if let Some(directory) = model.navigate.take().filter(|_| self.request.active.get()) {
+        if let Some(directory) = model.navigate.take().filter(|_| self.request.active()) {
             match self.candidate(&mut model, &directory) {
                 Ok(listing) => self.install(&mut model, directory, listing, false)?,
                 Err(UI_E_IO) => {
@@ -511,7 +557,7 @@ impl Dialog {
 
     /// Finished request queues survive independently of their controller, so closed components retire immediately.
     pub(super) fn finished(&self) -> bool {
-        self.request.closed.get()
+        self.request.closed()
     }
     /// Runtime teardown closes outstanding requests without borrowing a potentially active private handler model.
     pub(super) fn retire(&self) {
@@ -542,29 +588,26 @@ impl IFileDialog for FileDialog {
     }
     /// Reports request state independently of hidden versus visible window allocation.
     fn active(&self) -> Result<bool, NcStatus> {
-        if self.dialog.request.closed.get() {
+        if self.dialog.request.closed() {
             return Err(UI_E_CLOSED);
         }
-        Ok(self.dialog.request.active.get())
+        Ok(self.dialog.request.active())
     }
     /// Explicit cancellation is idempotent and keeps the modal available for a later open.
     fn cancel(&self) -> Result<bool, NcStatus> {
         let mut model = self.dialog.session.state_mut()?;
         model.owner()?;
-        let active = self.dialog.request.active.get();
-        model.finish(FileDialogCompleted::Cancelled)?;
+        let active = self.dialog.request.active();
+        model.finish(IFileDialogSinkEvent::Cancelled)?;
         Ok(active)
     }
     /// Actual window destruction produces the same lifecycle cancellation as destroying its owner.
     fn close(&self) -> Result<(), NcStatus> {
-        if self.dialog.request.closed.get() {
+        if self.dialog.request.closed() {
             return Ok(());
         }
         self.dialog.session.state()?.window.close()?;
-        self.dialog.request.closed.set(true);
-        if self.dialog.request.active.replace(false) {
-            self.dialog.request.completed.close(FileDialogCompleted::Cancelled);
-        }
+        self.dialog.request.close();
         Ok(())
     }
     /// Diagnostics remain available after failure or closure to explain a rejected directory candidate.
