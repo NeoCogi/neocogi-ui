@@ -69,11 +69,14 @@ field comment must name that constraint.
 
 ## Typed events and application state
 
-The generated `neocogi.com.events` NCIDL module owns `IEventSubscription` and
-`IEventDispatcher`; `neocogi-com-events` owns the producer queue, weak endpoint,
-application session, and local delivery adapter. This support crate does not
-depend on UI or on the process-global `neocogi-com-runtime`. UI adds only its
-family-specific sinks and validation through `neocogi_ui::EventSession<State>`.
+The COM compiler treats the generated `neocogi.com.events` NCIDL module as its
+canonical event-lease ABI: a foreign same-named lease cannot satisfy an `event`
+port. That module owns `IEventSubscription` and `IEventDispatcher`;
+`neocogi-com-events` owns the producer queue, weak endpoint, application session,
+and local delivery adapter. Generated event bindings check the support API
+version at compile time. This support crate does not depend on UI or on the
+process-global `neocogi-com-runtime`. UI adds only domain validation and
+family-specific wiring conveniences through `neocogi_ui::EventSession<State>`.
 The generic `neocogi_com_events::EventSession<State>` can equally serve a
 non-UI plugin or application state. `Ui::update_with_events` accepts either
 through the borrowed `EventDispatchSource` capability; the host does not need
