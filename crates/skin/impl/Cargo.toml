@@ -19,7 +19,7 @@ theme-json = ["dep:serde", "dep:serde_json"]
 builder = ["dep:neocogi-gfx-impl"]
 
 [dependencies]
-neocogi-gfx-impl = { workspace = true, optional = true, features = ["builder"] }
+neocogi-gfx-impl = { workspace = true, optional = true, features = ["builder", "publisher"] }
 neocogi-gfx-contracts.workspace = true
 neocogi-gfx-support.workspace = true
 neocogi-skin-contracts.workspace = true

@@ -79,6 +79,55 @@ fn test_atlas() -> AssetData {
     data.validate().unwrap();
     data
 }
+
+/// Iterates generated visual fields only to compare complete producer output in tests.
+fn appearance_visuals(tables: &AssetTables) -> impl Iterator<Item = &AssetVisual> {
+    let surfaces = tables.surfaces.iter().flat_map(|values| [&values.normal, &values.disabled]);
+    let controls = tables.controls.iter().flat_map(|values| {
+        [
+            &values.disabled,
+            &values.enabled.normal,
+            &values.enabled.hovered,
+            &values.enabled.pressed,
+            &values.focused.normal,
+            &values.focused.hovered,
+            &values.focused.pressed,
+        ]
+    });
+    let menus = tables.menus.iter().flat_map(|values| {
+        [
+            &values.normal,
+            &values.hovered,
+            &values.pressed,
+            &values.focused,
+            &values.open,
+            &values.disabled,
+        ]
+    });
+    let chrome = tables.window_chrome.iter().flat_map(|values| [&values.base, &values.active, &values.disabled]);
+    surfaces.chain(controls).chain(menus).chain(chrome)
+}
+
+/// Asserts exact portable output while interpreting only the generated patch union tag.
+fn assert_data_equivalent(left: &AssetData, right: &AssetData) {
+    assert_eq!(left.tables.size, right.tables.size);
+    assert_eq!(left.pixels, right.pixels);
+    assert_eq!(left.tables.fonts, right.tables.fonts);
+    assert_eq!(left.tables.glyphs, right.tables.glyphs);
+    assert_eq!(left.tables.icons, right.tables.icons);
+    assert_eq!(left.tables.names, right.tables.names);
+    assert_eq!(left.tables.metrics, right.tables.metrics);
+    assert_eq!(left.tables.chrome, right.tables.chrome);
+    let left_visuals = appearance_visuals(&left.tables).collect::<Vec<_>>();
+    let right_visuals = appearance_visuals(&right.tables).collect::<Vec<_>>();
+    assert_eq!(left_visuals.len(), right_visuals.len());
+    for (left, right) in left_visuals.into_iter().zip(right_visuals) {
+        assert_eq!(left.insets, right.insets);
+        assert_eq!(left.center_visible, right.center_visible);
+        assert_eq!(left.content_color, right.content_color);
+        assert_eq!(AssetPatch::try_from(left.patch).unwrap(), AssetPatch::try_from(right.patch).unwrap());
+    }
+}
 use neocogi_gfx_contracts::{ChromeRole, ControlRole, MenuRole};
 use std::fs;
 
@@ -96,6 +145,13 @@ fn install_bundled_theme(relative_path: &str) -> (TestTheme, usize) {
         .filter(|(name, _)| name.starts_with("@neocogi-theme-image/"))
         .count();
     (loaded, image_count)
+}
+
+/// Executes a parsed test document through the same statically linked GFX services as `load`.
+fn install_definition(document: ThemeDefinition, base: &AssetData) -> LoadedTheme {
+    // Schema-focused tests construct definitions from inline JSON, but they must not regain a
+    // private native builder path merely for convenience.
+    load_offline(document, base, &mut FileAssets).expect("test theme recipe must execute")
 }
 
 /// Verifies an embedded host can compile the same complete theme without filesystem access in
@@ -116,6 +172,78 @@ fn in_memory_theme_uses_the_supplied_asset_provider() {
             .clone_icon_table()
             .iter()
             .any(|(name, _)| name.starts_with("@neocogi-theme-image/"))
+    );
+}
+
+/// Offline export and plugin-facing loading execute one recipe into byte-for-byte equivalent data.
+#[test]
+fn offline_and_supplied_gfx_entrypoints_publish_equivalent_complete_revisions() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../themes/windows-95/theme.json");
+    let base = test_atlas();
+    let offline = load(path.as_path(), &base).expect("offline entrypoint must execute the theme recipe");
+
+    let base_bundle = base.clone().into_bundle().expect("test base must publish");
+    let loader: ComPtr<AssetLoaderAbi> = AssetLoaderObject::from_value(AssetLoaderObject::default())
+        .query()
+        .expect("AssetLoaderObject declares AssetLoader");
+    let publisher: ComPtr<AssetPublisherAbi> = AssetPublisherObject::from_value(AssetPublisherObject::default())
+        .query()
+        .expect("AssetPublisherObject declares AssetPublisher");
+    let runtime_bundle = load_with_gfx(path.as_path(), base_bundle.as_com_ref(), loader.as_com_ref(), publisher.as_com_ref())
+        .expect("plugin-facing entrypoint must execute the theme recipe");
+    let runtime = AssetData::read(runtime_bundle.as_com_ref()).expect("runtime output must be canonical portable data");
+
+    assert_eq!(offline.name(), "Windows 95");
+    assert_data_equivalent(offline.data(), &runtime);
+}
+
+/// Failed resource execution retains the authored path, typed operation, status, and GFX detail.
+#[test]
+fn invalid_recipe_image_reports_the_shared_executor_diagnostic() {
+    /// Deterministic source supplying bytes that cannot be decoded as PNG.
+    struct InvalidImageSource;
+
+    impl AssetSource for InvalidImageSource {
+        /// Verifies the recipe resolved the relative path before requesting its contents.
+        fn read(&mut self, path: &Path) -> io::Result<Vec<u8>> {
+            assert_eq!(path, Path::new("invalid-image.png"));
+            Ok(b"not a png".to_vec())
+        }
+    }
+
+    let definition = br#"{
+        "schema_version": 1,
+        "name": "Invalid image",
+        "appearances": {
+            "surface": {
+                "panel": {
+                    "normal": {
+                        "patch": { "type": "image", "path": "invalid-image.png" }
+                    }
+                }
+            }
+        }
+    }"#;
+    let mut base = test_atlas();
+    base.tables.size = Size { width: 64, height: 64 };
+    base.pixels = vec![255; 64 * 64 * 4].into();
+    base.validate().expect("expanded test base must remain canonical");
+    let error = match load_bytes(Path::new("theme.json"), definition, &base, &mut InvalidImageSource) {
+        Ok(_) => panic!("invalid image bytes must fail in the common GFX executor"),
+        Err(error) => error,
+    };
+
+    assert!(
+        matches!(
+            &error,
+            ThemeLoadError::GfxBuild {
+                operation: "image decoding",
+                asset: Some(path),
+                status: neocogi_com::NC_E_INVALID_ARG,
+                diagnostic: Some(detail),
+            } if path == Path::new("invalid-image.png") && !detail.is_empty()
+        ),
+        "unexpected executor diagnostic: {error:?}"
     );
 }
 
@@ -141,9 +269,7 @@ fn omitted_patch_states_use_theme_flat_colors() {
             }"#,
     )
     .expect("test definition must match the strict schema");
-    let atlas = test_atlas();
-    let theme_atlas = document.build_atlas(&atlas).expect("flat theme must retain the base atlas");
-    let loaded = document.install(theme_atlas).expect("flat-only theme must install");
+    let loaded = install_definition(document, &test_atlas());
     let loaded = TestTheme::new(loaded);
 
     let normal = loaded
@@ -194,9 +320,7 @@ fn state_content_color_override_does_not_require_a_patch() {
             }"#,
     )
     .expect("content-color-only states must match the strict schema");
-    let atlas = test_atlas();
-    let theme_atlas = document.build_atlas(&atlas).expect("content-color-only theme must retain the base atlas");
-    let loaded = document.install(theme_atlas).expect("content-color-only theme must install");
+    let loaded = install_definition(document, &test_atlas());
     let loaded = TestTheme::new(loaded);
 
     let normal = loaded.bundle().skin().menu(MenuRole::Item, MenuState::Normal).content_color;
@@ -226,11 +350,9 @@ fn solid_patch_compiles_without_rebuilding_the_atlas() {
     )
     .expect("solid patch must match the strict tagged schema");
     let base = test_atlas();
-    let theme_atlas = document.build_atlas(&base).expect("solid patch must not require atlas work");
-    assert_eq!(theme_atlas.atlas.pixels, base.pixels);
-    assert_eq!(theme_atlas.atlas.tables.icons, base.tables.icons);
-    assert!(theme_atlas.images.is_empty());
-    let loaded = document.install(theme_atlas).expect("solid patch must install");
+    let loaded = install_definition(document, &base);
+    assert_eq!(loaded.data.pixels, base.pixels);
+    assert_eq!(loaded.data.tables.icons, base.tables.icons);
     let loaded = TestTheme::new(loaded);
     let patch = loaded.bundle().skin().surface(SurfaceRole::Panel, SurfaceState::Normal).patch;
 

@@ -40,9 +40,9 @@ use std::{
 
 use serde::Deserialize;
 
-use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
+use neocogi_com::{ComPtr, ComRef, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
 #[cfg(feature = "builder")]
-use neocogi_gfx_impl::atlas::Builder;
+use neocogi_gfx_impl::{AssetLoaderObject, AssetPublisherObject};
 use neocogi_appearance::{AppearanceTables, rgba};
 use neocogi_gfx_contracts::*;
 use neocogi_gfx_contracts::Insets as SliceInsets;
@@ -151,17 +151,23 @@ pub enum ThemeLoadError {
         /// Optional image dimensions used for source-bound validation.
         image_size: Option<(i32, i32)>,
     },
-    /// The theme's fonts or image artwork could not be read, decoded, packed, or finalized.
-    AtlasBuild {
-        /// Concrete atlas-builder failure retaining its asset or validation classification.
+    /// One resolved font or image resource could not be read from the selected source.
+    ResourceRead {
+        /// Exact anchored path requested from the source.
+        path: PathBuf,
+        /// Concrete source failure retained for programmatic inspection.
         source: io::Error,
     },
     /// The explicitly supplied GFX capability rejected one construction operation.
     GfxBuild {
         /// Stable operation category without exposing a GFX implementation type.
         operation: &'static str,
+        /// Optional authored resource involved in the rejected operation.
+        asset: Option<PathBuf>,
         /// Exact status returned across the typed plugin boundary.
         status: NcStatus,
+        /// Owned diagnostic snapshot supplied by the responsible GFX object, when available.
+        diagnostic: Option<String>,
     },
 }
 
@@ -187,8 +193,18 @@ impl fmt::Display for ThemeLoadError {
                 }
                 Ok(())
             }
-            Self::AtlasBuild { source } => write!(formatter, "failed to build theme resource atlas: {source}"),
-            Self::GfxBuild { operation, status } => write!(formatter, "GFX {operation} failed while building the theme: {status}"),
+            Self::ResourceRead { path, source } => write!(formatter, "failed to read theme resource {}: {source}", path.display()),
+            Self::GfxBuild { operation, asset, status, diagnostic } => {
+                write!(formatter, "GFX {operation}")?;
+                if let Some(path) = asset {
+                    write!(formatter, " for {}", path.display())?;
+                }
+                write!(formatter, " failed while building the theme: {status}")?;
+                if let Some(detail) = diagnostic {
+                    write!(formatter, ": {detail}")?;
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -200,34 +216,99 @@ impl Error for ThemeLoadError {
         match self {
             Self::DefinitionRead { source, .. } => Some(source),
             Self::DefinitionJson { source, .. } => Some(source),
-            Self::AtlasBuild { source } => Some(source),
+            Self::ResourceRead { source, .. } => Some(source),
             Self::UnsupportedSchema { .. } | Self::EmptyName | Self::InvalidInsets { .. } | Self::GfxBuild { .. } => None,
         }
     }
 }
 
-/// One fully constructed theme atlas and the icon slots assigned to unique image paths.
+/// One parsed theme converted into the only executable construction plan.
 ///
-/// Keeping this intermediate concrete prevents installation from rediscovering numeric icon slots
-/// or decoding files a second time. It is private because only a matching [`ThemeDefinition`] may
-/// translate these construction slots into semantic appearances.
-#[cfg(feature = "builder")]
-struct ThemeAtlas {
-    /// Immutable pixels and metadata ready for renderer installation.
-    atlas: AssetData,
-    /// Fully resolved image paths mapped to their packed icon slots.
-    images: BTreeMap<PathBuf, AssetImagePlacement>,
+/// Schema validation and path anchoring are complete before this value exists. The recipe keeps
+/// Skin-owned appearance policy beside a typed resource plan, while the executor delegates all
+/// decoding, rasterization, packing, validation, and publication to supplied GFX capabilities.
+struct ThemeRecipe {
+    /// Human-readable selector label copied into offline build output.
+    name: String,
+    /// Optional atlas derivation expressed without a native builder implementation type.
+    resources: ResourceRecipe,
+    /// Scalar geometry, caption policy, and flat appearance fallbacks.
+    skin: ThemeSkinDocument,
+    /// Sparse authored appearance overrides whose image paths are already anchored.
+    appearances: AppearanceCatalogDocument,
+}
+
+/// Closed resource-construction alternatives for one theme.
+enum ResourceRecipe {
+    /// A resource-free theme applies appearance policy directly to the supplied base bundle.
+    ReuseBase,
+    /// Fonts or images require exactly one derived GFX construction session.
+    Derive(DerivedResourceRecipe),
+}
+
+/// Complete inputs for one derived GFX atlas transaction.
+struct DerivedResourceRecipe {
+    /// Requested output dimensions after falling back to the base bundle when fonts omit sizing.
+    size: Size,
+    /// Explicit all-or-nothing semantic replacement policy passed unchanged to GFX.
+    options: AssetDeriveOptions,
+    /// Semantic fonts in stable NCIDL role order.
+    fonts: Vec<FontResourceRecipe>,
+    /// Semantic icons followed by deduplicated private appearance images.
+    images: Vec<ImageResourceRecipe>,
+}
+
+/// One semantic font insertion owned by the resolved recipe.
+struct FontResourceRecipe {
+    /// Canonical NCIDL role name used as the atlas resource key.
+    name: &'static str,
+    /// Anchored source path read only when the recipe executes.
+    path: PathBuf,
+    /// Positive raster size passed to the GFX construction capability.
+    pixels: u32,
+}
+
+/// One image insertion and its Skin-side placement purpose.
+struct ImageResourceRecipe {
+    /// Canonical semantic name or deterministic private appearance name.
+    name: String,
+    /// Anchored source path read only when the recipe executes.
+    path: PathBuf,
+    /// Whether the returned placement participates in appearance compilation.
+    purpose: ImagePurpose,
+}
+
+/// Typed disposition of the placement returned for one image insertion.
+enum ImagePurpose {
+    /// Semantic icons are resolved later by their canonical resource names.
+    Semantic,
+    /// Appearance images must retain their placement under this exact anchored path.
+    Appearance,
 }
 
 /// GFX-owned atlas revision and the placement returned for each authored appearance image.
-///
-/// Skin retains only the public immutable bundle capability and small placement values. It never
-/// copies pixels, resource metadata, or the concrete GFX publisher into its own implementation.
-struct GfxThemeAtlas {
+struct BuiltResources {
     /// Immutable resource revision constructed and validated by the selected GFX plugin.
     bundle: ComPtr<IAssetBundleAbi>,
     /// Fully resolved image paths mapped to bundle-local slots and decoded dimensions.
     images: BTreeMap<PathBuf, AssetImagePlacement>,
+}
+
+/// One completely published theme before an entrypoint chooses its return representation.
+struct PublishedTheme {
+    /// Human-readable name independent of resource construction and transport.
+    name: String,
+    /// Immutable bundle produced through the shared GFX execution path.
+    bundle: ComPtr<IAssetBundleAbi>,
+}
+
+impl PublishedTheme {
+    /// Separates author-facing metadata from the portable bundle at the entrypoint boundary.
+    fn into_parts(self) -> (String, ComPtr<IAssetBundleAbi>) {
+        // Offline export retains both values, while the runtime contract intentionally publishes
+        // only the bundle and drops the JSON selector label.
+        (self.name, self.bundle)
+    }
 }
 
 /// Fully resolved appearance policy awaiting either offline installation or GFX publication.
@@ -247,7 +328,9 @@ impl CompiledTheme {
     /// Transfers complete appearance records to GFX for validation and immutable publication.
     fn publish(self, publisher: ComRef<'_, AssetPublisherAbi>, base: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IAssetBundleAbi>, ThemeLoadError> {
         let Self { metrics, chrome, appearance } = self;
-        crate::style::publish_appearance(&appearance, publisher, base, metrics, chrome).map_err(|status| gfx_failure("appearance revision publication", status))
+        let diagnostics = publisher.add_ref().query::<IGfxDiagnosticsAbi>().ok();
+        crate::style::publish_appearance(&appearance, publisher, base, metrics, chrome)
+            .map_err(|status| gfx_failure("appearance revision publication", None, status, diagnostics.as_ref()))
     }
 }
 
@@ -335,6 +418,34 @@ impl AppearanceCatalogDocument {
             appearance.resolve_paths(directory);
         }
     }
+
+    /// Returns every anchored image path once in deterministic private-resource order.
+    fn image_paths(&self) -> BTreeSet<PathBuf> {
+        // Image patch variants retain independent slicing and tint metadata, while one path set is
+        // sufficient for immutable pixel packing. BTreeSet stabilizes generated resource names.
+        let mut paths = BTreeSet::new();
+        for appearance in self.surface.values() {
+            for (_, visual) in appearance.states() {
+                collect_image_path(visual, &mut paths);
+            }
+        }
+        for appearance in self.control.values() {
+            for (_, visual) in appearance.states() {
+                collect_image_path(visual, &mut paths);
+            }
+        }
+        for appearance in self.menu.values() {
+            for (_, visual) in appearance.states() {
+                collect_image_path(visual, &mut paths);
+            }
+        }
+        for appearance in self.chrome.values() {
+            for (_, visual) in appearance.states() {
+                collect_image_path(visual, &mut paths);
+            }
+        }
+        paths
+    }
 }
 
 impl ThemeDefinition {
@@ -396,173 +507,37 @@ impl ThemeDefinition {
         Ok(definition)
     }
 
-    /// Builds the atlas selected by this definition while preserving required base resources.
-    ///
-    /// Every unique image-patch source is packed once beside fonts and icons. A completely flat document
-    /// without a font recipe can reuse the base allocation exactly; adding artwork without new
-    /// fonts repacks existing glyph bitmaps so the original font files are not required.
-    #[cfg(feature = "builder")]
-    fn build_atlas(&self, base: &AssetData) -> Result<ThemeAtlas, ThemeLoadError> {
-        self.build_atlas_with(base, &mut FileAssets)
+    /// Consumes validated syntax into the sole typed construction recipe.
+    fn into_recipe(self, base: ComRef<'_, IAssetBundleAbi>) -> Result<ThemeRecipe, ThemeLoadError> {
+        let Self {
+            schema_version: _,
+            name,
+            fonts,
+            icons,
+            skin,
+            appearances,
+        } = self;
+        let image_paths = appearances.image_paths();
+        let resources = ResourceRecipe::resolve(base, fonts, icons, image_paths)?;
+        Ok(ThemeRecipe { name, resources, skin, appearances })
     }
+}
 
-    /// Builds a theme atlas from assets supplied by the caller instead of requiring filesystem
-    /// access. The same builder validation and resource-identity rules apply to both paths.
-    #[cfg(feature = "builder")]
-    fn build_atlas_with(&self, base: &AssetData, source: &mut impl AssetSource) -> Result<ThemeAtlas, ThemeLoadError> {
-        let image_paths = self.image_paths();
-        if self.fonts.is_none() && self.icons.is_none() && image_paths.is_empty() {
-            // No resource files need decoding. Retain the exact resource order and pixels while
-            // compiling a complete set of appearance values for this theme.
-            return Ok(ThemeAtlas {
-                atlas: base.clone(),
-                images: BTreeMap::new(),
-            });
-        }
-
-        let (width, height) = self
-            .fonts
-            .as_ref()
-            .map(|fonts| (fonts.texture_width, fonts.texture_height))
-            .unwrap_or_else(|| (base.tables.size.width as usize, base.tables.size.height as usize));
-        // Replacement is expressed entirely in the atlas's two resource namespaces. The builder
-        // copies application-owned resources and replaces only the declared semantic names.
-        // UI-local identities are assigned by the consumer when this revision is installed.
-        let semantic_font_names = FontRole::ALL.map(font_role_name);
-        let semantic_icon_names = IconRole::ALL.map(icon_role_name);
-        let excluded_fonts = self.fonts.as_ref().map(|_| semantic_font_names.as_slice()).unwrap_or(&[]);
-        let excluded_icons = self.icons.as_ref().map(|_| semantic_icon_names.as_slice()).unwrap_or(&[]);
-        let mut builder = Builder::from_data(base, width, height, excluded_fonts, excluded_icons).map_err(|source| ThemeLoadError::AtlasBuild { source })?;
-
-        if let Some(fonts) = &self.fonts {
-            for (role, font) in fonts.entries() {
-                let bytes = source.read(font.path.as_path()).map_err(|source| ThemeLoadError::AtlasBuild { source })?;
-                builder
-                    .add_font_bytes_named(font_role_name(role), font.path.as_path(), font.size, bytes.as_slice())
-                    .map_err(|source| ThemeLoadError::AtlasBuild { source })?;
-            }
-        }
-
-        if let Some(icons) = &self.icons {
-            for (role, icon) in icons.entries() {
-                let bytes = source.read(icon.path.as_path()).map_err(|source| ThemeLoadError::AtlasBuild { source })?;
-                builder
-                    .add_icon_bytes_named(icon_role_name(role), icon.path.as_path(), bytes.as_slice())
-                    .map_err(|source| ThemeLoadError::AtlasBuild { source })?;
-            }
-        }
-
-        let mut images = BTreeMap::new();
-        for (index, path) in image_paths.into_iter().enumerate() {
-            // Builder owns bounded file I/O, PNG decoding, transactional packing, and typed image
-            // diagnostics. The loader supplies only a deterministic private resource name.
-            let bytes = source.read(path.as_path()).map_err(|source| ThemeLoadError::AtlasBuild { source })?;
-            let icon = builder
-                .add_icon_bytes_named(format!("@neocogi-theme-image/{index}").as_str(), path.as_path(), bytes.as_slice())
-                .map_err(|source| ThemeLoadError::AtlasBuild { source })?;
-            images.insert(path, icon);
-        }
-
-        let atlas = builder.build().map_err(|source| ThemeLoadError::AtlasBuild { source })?;
-        Ok(ThemeAtlas { atlas, images })
-    }
-
-    /// Submits external resource bytes to one typed GFX construction session.
-    ///
-    /// Skin owns schema interpretation and final appearances, while GFX remains the sole owner of
-    /// PNG decoding, font rasterization, packing, and the mutable atlas draft. The boundary is
-    /// crossed once per authored resource, atlas finalization, and appearance publication, never
-    /// during rendering.
-    fn build_atlas_with_gfx(
-        &self,
-        base: ComRef<'_, IAssetBundleAbi>,
-        loader: ComRef<'_, AssetLoaderAbi>,
-        source: &mut impl AssetSource,
-    ) -> Result<GfxThemeAtlas, ThemeLoadError> {
-        let image_paths = self.image_paths();
-        if self.fonts.is_none() && self.icons.is_none() && image_paths.is_empty() {
-            return Ok(GfxThemeAtlas {
-                bundle: base.add_ref(),
-                images: BTreeMap::new(),
-            });
-        }
-
-        let base_size = base.info().map_err(|status| gfx_failure("base bundle metadata", status))?.size;
-        let (width, height) = self
-            .fonts
-            .as_ref()
-            .map(|fonts| (fonts.texture_width, fonts.texture_height))
-            .unwrap_or((base_size.width as usize, base_size.height as usize));
-        let size = Size {
-            width: i32::try_from(width).map_err(|source| ThemeLoadError::AtlasBuild { source: io::Error::other(source) })?,
-            height: i32::try_from(height).map_err(|source| ThemeLoadError::AtlasBuild { source: io::Error::other(source) })?,
-        };
-        let builder = loader
-            .derive_builder(
-                size,
-                base,
-                AssetDeriveOptions {
-                    replace_semantic_fonts: self.fonts.is_some(),
-                    replace_semantic_icons: self.icons.is_some(),
-                },
-            )
-            .map_err(|status| gfx_failure("derived-atlas creation", status))?;
-
-        if let Some(fonts) = &self.fonts {
-            for (role, font) in fonts.entries() {
-                let name = font_role_name(role);
-                let bytes = source.read(font.path.as_path()).map_err(|source| ThemeLoadError::AtlasBuild { source })?;
-                let pixels = u32::try_from(font.size).map_err(|source| ThemeLoadError::AtlasBuild { source: io::Error::other(source) })?;
-                builder
-                    .add_font_bytes(
-                        NcCopyFromBufferOffset::new(0, name.as_bytes()),
-                        NcCopyFromBufferOffset::new(0, bytes.as_slice()),
-                        pixels,
-                    )
-                    .map_err(|status| gfx_failure("font rasterization", status))?;
-            }
-        }
-
-        if let Some(icons) = &self.icons {
-            for (role, icon) in icons.entries() {
-                let name = icon_role_name(role);
-                let bytes = source.read(icon.path.as_path()).map_err(|source| ThemeLoadError::AtlasBuild { source })?;
-                builder
-                    .add_icon_bytes(
-                        NcCopyFromBufferOffset::new(0, name.as_bytes()),
-                        NcCopyFromBufferOffset::new(0, bytes.as_slice()),
-                    )
-                    .map_err(|status| gfx_failure("semantic icon decoding", status))?;
-            }
-        }
-
-        let mut images = BTreeMap::new();
-        for (index, path) in image_paths.into_iter().enumerate() {
-            let name = format!("@neocogi-theme-image/{index}");
-            let bytes = source.read(path.as_path()).map_err(|source| ThemeLoadError::AtlasBuild { source })?;
-            let icon = builder
-                .add_icon_bytes(
-                    NcCopyFromBufferOffset::new(0, name.as_bytes()),
-                    NcCopyFromBufferOffset::new(0, bytes.as_slice()),
-                )
-                .map_err(|status| gfx_failure("appearance image decoding", status))?;
-            images.insert(path, icon);
-        }
-
-        let bundle = builder.finish().map_err(|status| gfx_failure("atlas finalization", status))?;
-        Ok(GfxThemeAtlas { bundle, images })
-    }
-
+impl ThemeRecipe {
     /// Resolves flat fallbacks and binds image patches to placements assigned by GFX.
-    fn compile(&self, images: &BTreeMap<PathBuf, AssetImagePlacement>) -> Result<CompiledTheme, ThemeLoadError> {
-        let metrics = self.skin.metrics;
-        let chrome = self.skin.window_chrome.compile();
-        let frame_insets = self.skin.fallback_frame_insets;
+    fn compile(
+        skin: &ThemeSkinDocument,
+        appearances: &AppearanceCatalogDocument,
+        images: &BTreeMap<PathBuf, AssetImagePlacement>,
+    ) -> Result<CompiledTheme, ThemeLoadError> {
+        let metrics = skin.metrics;
+        let chrome = skin.window_chrome.compile();
+        let frame_insets = skin.fallback_frame_insets;
         validate_non_negative("generic_frame", "skin.fallback_frame_insets", frame_insets)?;
         validate_non_negative("window_content", "skin.metrics.window_content_insets", metrics.window_content_insets)?;
         validate_non_negative("window_frame", "skin.metrics.window_border", metrics.window_border)?;
-        let mut appearance = AppearanceTables::flat(frame_insets, &self.skin.palette);
-        for (role, document) in &self.appearances.surface {
+        let mut appearance = AppearanceTables::flat(frame_insets, &skin.palette);
+        for (role, document) in &appearances.surface {
             // Shared role/state enums determine the wire-table order. Every authored override
             // replaces one concrete record without an intermediate runtime object.
             let name = format!("surface.{role:?}");
@@ -574,7 +549,7 @@ impl ThemeDefinition {
                 *surface_visual_mut(&mut appearance.surfaces[role_index], state) = visual;
             }
         }
-        for (role, document) in &self.appearances.control {
+        for (role, document) in &appearances.control {
             let name = format!("control.{role:?}");
             let destination_insets = destination_insets(&name, document.insets, appearance.controls[role.raw() as usize].enabled.normal.insets)?;
             for (state, authored) in document.states() {
@@ -584,7 +559,7 @@ impl ThemeDefinition {
                 *control_visual_mut(&mut appearance.controls[role_index], state) = visual;
             }
         }
-        for (role, document) in &self.appearances.menu {
+        for (role, document) in &appearances.menu {
             let name = format!("menu.{role:?}");
             let destination_insets = destination_insets(&name, document.insets, appearance.menus[role.raw() as usize].normal.insets)?;
             for (state, authored) in document.states() {
@@ -594,7 +569,7 @@ impl ThemeDefinition {
                 *menu_visual_mut(&mut appearance.menus[role_index], state) = visual;
             }
         }
-        for (role, document) in &self.appearances.chrome {
+        for (role, document) in &appearances.chrome {
             let name = format!("chrome.{role:?}");
             let destination_insets = destination_insets(&name, document.insets, appearance.window_chrome[role.raw() as usize].base.insets)?;
             for (state, authored) in document.states() {
@@ -608,52 +583,147 @@ impl ThemeDefinition {
         Ok(CompiledTheme { metrics, chrome, appearance })
     }
 
-    /// Installs compiled appearance records into concrete storage for offline export and tests.
-    #[cfg(feature = "builder")]
-    fn install(self, theme_atlas: ThemeAtlas) -> Result<LoadedTheme, ThemeLoadError> {
-        let ThemeAtlas { atlas, images } = theme_atlas;
-        let compiled = self.compile(&images)?;
-        let mut data = atlas;
-        data.tables.metrics = compiled.metrics;
-        data.tables.chrome = compiled.chrome;
-        data.tables.surfaces = Vec::from(compiled.appearance.surfaces).into();
-        data.tables.controls = Vec::from(compiled.appearance.controls).into();
-        data.tables.menus = Vec::from(compiled.appearance.menus).into();
-        data.tables.window_chrome = Vec::from(compiled.appearance.window_chrome).into();
+    /// Executes resources and appearance publication through one supplied GFX service pair.
+    fn execute(
+        self,
+        base: ComRef<'_, IAssetBundleAbi>,
+        loader: ComRef<'_, AssetLoaderAbi>,
+        publisher: ComRef<'_, AssetPublisherAbi>,
+        source: &mut impl AssetSource,
+    ) -> Result<PublishedTheme, ThemeLoadError> {
+        // Resource placement must precede appearance compilation because generated image patches
+        // contain the exact bundle-local slots returned by this construction transaction.
+        let Self { name, resources, skin, appearances } = self;
+        let resources = resources.execute(base, loader, source)?;
+        let compiled = Self::compile(&skin, &appearances, &resources.images)?;
+        let bundle = compiled.publish(publisher, resources.bundle.as_com_ref())?;
+        Ok(PublishedTheme { name, bundle })
+    }
+}
 
-        // Validate the complete revision before publication or source export.
-        data.validate().map_err(|status| ThemeLoadError::AtlasBuild {
-            source: io::Error::other(status.to_string()),
-        })?;
-        Ok(LoadedTheme { name: self.name, data })
+impl ResourceRecipe {
+    /// Resolves schema-owned resource declarations into one closed construction alternative.
+    fn resolve(
+        base: ComRef<'_, IAssetBundleAbi>,
+        fonts: Option<FontCatalogDocument>,
+        icons: Option<IconCatalogDocument>,
+        appearance_paths: BTreeSet<PathBuf>,
+    ) -> Result<Self, ThemeLoadError> {
+        match (fonts, icons, appearance_paths.is_empty()) {
+            (None, None, true) => Ok(Self::ReuseBase),
+            (fonts, icons, _) => {
+                // A font catalog explicitly owns output dimensions. Image-only derivation retains
+                // the base dimensions without interpreting any concrete bundle representation.
+                let size = match &fonts {
+                    Some(fonts) => Size {
+                        width: fonts.texture_width,
+                        height: fonts.texture_height,
+                    },
+                    None => base.info().map_err(|status| gfx_failure("base bundle metadata", None, status, None))?.size,
+                };
+                let replace_semantic_fonts = fonts.is_some();
+                let replace_semantic_icons = icons.is_some();
+                let fonts = match fonts {
+                    Some(fonts) => Vec::from(fonts.into_entries().map(|(role, font)| FontResourceRecipe {
+                        name: font_role_name(role),
+                        path: font.path,
+                        pixels: font.size,
+                    })),
+                    None => Vec::new(),
+                };
+                let mut images = match icons {
+                    Some(icons) => Vec::from(icons.into_entries().map(|(role, icon)| ImageResourceRecipe {
+                        name: icon_role_name(role).to_owned(),
+                        path: icon.path,
+                        purpose: ImagePurpose::Semantic,
+                    })),
+                    None => Vec::new(),
+                };
+                images.reserve(appearance_paths.len());
+                for (index, path) in appearance_paths.into_iter().enumerate() {
+                    images.push(ImageResourceRecipe {
+                        name: format!("@neocogi-theme-image/{index}"),
+                        path,
+                        purpose: ImagePurpose::Appearance,
+                    });
+                }
+                Ok(Self::Derive(DerivedResourceRecipe {
+                    size,
+                    options: AssetDeriveOptions {
+                        replace_semantic_fonts,
+                        replace_semantic_icons,
+                    },
+                    fonts,
+                    images,
+                }))
+            }
+        }
     }
 
-    /// Returns every fully resolved image path in deterministic deduplicated order.
-    fn image_paths(&self) -> BTreeSet<PathBuf> {
-        // Image patch variants retain independent slicing/tint metadata, while one path set is
-        // sufficient for immutable pixel packing. BTreeSet also stabilizes generated atlas names.
-        let mut paths = BTreeSet::new();
-        for appearance in self.appearances.surface.values() {
-            for (_, visual) in appearance.states() {
-                collect_image_path(visual, &mut paths);
+    /// Runs the selected resource alternative without exposing GFX drafts to appearance policy.
+    fn execute(
+        self,
+        base: ComRef<'_, IAssetBundleAbi>,
+        loader: ComRef<'_, AssetLoaderAbi>,
+        source: &mut impl AssetSource,
+    ) -> Result<BuiltResources, ThemeLoadError> {
+        match self {
+            Self::ReuseBase => Ok(BuiltResources {
+                bundle: base.add_ref(),
+                images: BTreeMap::new(),
+            }),
+            Self::Derive(recipe) => recipe.execute(base, loader, source),
+        }
+    }
+}
+
+impl DerivedResourceRecipe {
+    /// Creates and consumes one GFX draft while reading each external resource exactly once.
+    fn execute(
+        self,
+        base: ComRef<'_, IAssetBundleAbi>,
+        loader: ComRef<'_, AssetLoaderAbi>,
+        source: &mut impl AssetSource,
+    ) -> Result<BuiltResources, ThemeLoadError> {
+        let loader_diagnostics = loader.add_ref().query::<IGfxDiagnosticsAbi>().ok();
+        let builder = loader
+            .derive_builder(self.size, base, self.options)
+            .map_err(|status| gfx_failure("derived-atlas creation", None, status, loader_diagnostics.as_ref()))?;
+        let builder_diagnostics = builder.query::<IGfxDiagnosticsAbi>().ok();
+
+        for font in self.fonts {
+            let bytes = read_resource(source, &font.path)?;
+            builder
+                .add_font_bytes(
+                    NcCopyFromBufferOffset::new(0, font.name.as_bytes()),
+                    NcCopyFromBufferOffset::new(0, bytes.as_slice()),
+                    font.pixels,
+                )
+                .map_err(|status| gfx_failure("font rasterization", Some(font.path), status, builder_diagnostics.as_ref()))?;
+        }
+
+        let mut placements = BTreeMap::new();
+        for image in self.images {
+            let bytes = read_resource(source, &image.path)?;
+            let placement = builder
+                .add_icon_bytes(
+                    NcCopyFromBufferOffset::new(0, image.name.as_bytes()),
+                    NcCopyFromBufferOffset::new(0, bytes.as_slice()),
+                )
+                .map_err(|status| gfx_failure("image decoding", Some(image.path.clone()), status, builder_diagnostics.as_ref()))?;
+            match image.purpose {
+                ImagePurpose::Semantic => {}
+                ImagePurpose::Appearance => {
+                    let previous = placements.insert(image.path, placement);
+                    debug_assert!(previous.is_none(), "appearance paths were deduplicated while resolving the recipe");
+                }
             }
         }
-        for appearance in self.appearances.control.values() {
-            for (_, visual) in appearance.states() {
-                collect_image_path(visual, &mut paths);
-            }
-        }
-        for appearance in self.appearances.menu.values() {
-            for (_, visual) in appearance.states() {
-                collect_image_path(visual, &mut paths);
-            }
-        }
-        for appearance in self.appearances.chrome.values() {
-            for (_, visual) in appearance.states() {
-                collect_image_path(visual, &mut paths);
-            }
-        }
-        paths
+
+        let bundle = builder
+            .finish()
+            .map_err(|status| gfx_failure("atlas finalization", None, status, builder_diagnostics.as_ref()))?;
+        Ok(BuiltResources { bundle, images: placements })
     }
 }
 
@@ -664,20 +734,40 @@ impl ThemeDefinition {
 /// or supplied with mismatched intermediate values.
 #[cfg(feature = "builder")]
 pub fn load(path: &Path, base: &AssetData) -> Result<LoadedTheme, ThemeLoadError> {
-    // Compilation is CPU-local. The caller publishes the resulting revision and explicitly
-    // installs it through the UI runtime, which coordinates renderer preparation.
+    // Offline construction instantiates the same concrete GFX services used by the plugin path;
+    // no dynamic plugin load is needed and no second native builder algorithm exists in Skin.
     let definition = ThemeDefinition::read(path)?;
-    let atlas = definition.build_atlas(base)?;
-    definition.install(atlas)
+    load_offline(definition, base, &mut FileAssets)
 }
 
 /// Compiles an in-memory definition through an explicit source for referenced assets.
 #[cfg(feature = "builder")]
 pub fn load_bytes(path: &Path, bytes: &[u8], base: &AssetData, source: &mut impl AssetSource) -> Result<LoadedTheme, ThemeLoadError> {
-    // Both entry points use the same parser, resource builder and final validation.
+    // Supplied bytes change only document and resource I/O; execution remains the common recipe.
     let definition = ThemeDefinition::read_bytes(path, bytes)?;
-    let atlas = definition.build_atlas_with(base, source)?;
-    definition.install(atlas)
+    load_offline(definition, base, source)
+}
+
+/// Executes one validated definition through statically linked instances of the GFX services.
+#[cfg(feature = "builder")]
+fn load_offline(definition: ThemeDefinition, base: &AssetData, source: &mut impl AssetSource) -> Result<LoadedTheme, ThemeLoadError> {
+    // Publishing a temporary base gives the shared executor the identical capability shape used
+    // at runtime. Reading the result back is confined to offline export, where complete pixels are
+    // the requested output rather than duplicated live runtime state.
+    let base = base
+        .clone()
+        .into_bundle()
+        .map_err(|status| gfx_failure("offline base publication", None, status, None))?;
+    let loader: ComPtr<AssetLoaderAbi> = AssetLoaderObject::from_value(AssetLoaderObject::default())
+        .query()
+        .map_err(|status| gfx_failure("offline loader construction", None, status, None))?;
+    let publisher: ComPtr<AssetPublisherAbi> = AssetPublisherObject::from_value(AssetPublisherObject::default())
+        .query()
+        .map_err(|status| gfx_failure("offline publisher construction", None, status, None))?;
+    let published = execute_definition(definition, base.as_com_ref(), loader.as_com_ref(), publisher.as_com_ref(), source)?;
+    let (name, bundle) = published.into_parts();
+    let data = AssetData::read(bundle.as_com_ref()).map_err(|status| gfx_failure("offline result extraction", None, status, None))?;
+    Ok(LoadedTheme { name, data })
 }
 
 /// Compiles one external theme through an explicitly supplied GFX construction capability.
@@ -692,14 +782,37 @@ pub fn load_with_gfx(
     publisher: ComRef<'_, AssetPublisherAbi>,
 ) -> Result<ComPtr<IAssetBundleAbi>, ThemeLoadError> {
     let definition = ThemeDefinition::read(path)?;
-    let atlas = definition.build_atlas_with_gfx(base, loader, &mut FileAssets)?;
-    let compiled = definition.compile(&atlas.images)?;
-    compiled.publish(publisher, atlas.bundle.as_com_ref())
+    let (_, bundle) = execute_definition(definition, base, loader, publisher, &mut FileAssets)?.into_parts();
+    Ok(bundle)
 }
 
-/// Classifies a failed typed GFX operation without exposing its implementation details.
-fn gfx_failure(operation: &'static str, status: NcStatus) -> ThemeLoadError {
-    ThemeLoadError::GfxBuild { operation, status }
+/// Converts one validated definition to a recipe and runs the sole construction executor.
+fn execute_definition(
+    definition: ThemeDefinition,
+    base: ComRef<'_, IAssetBundleAbi>,
+    loader: ComRef<'_, AssetLoaderAbi>,
+    publisher: ComRef<'_, AssetPublisherAbi>,
+    source: &mut impl AssetSource,
+) -> Result<PublishedTheme, ThemeLoadError> {
+    definition.into_recipe(base)?.execute(base, loader, publisher, source)
+}
+
+/// Reads one bounded resource through the selected source and preserves its anchored identity.
+fn read_resource(source: &mut impl AssetSource, path: &Path) -> Result<Vec<u8>, ThemeLoadError> {
+    source
+        .read(path)
+        .map_err(|source| ThemeLoadError::ResourceRead { path: path.to_path_buf(), source })
+}
+
+/// Classifies one failed GFX operation with its owned downstream diagnostic snapshot.
+fn gfx_failure(operation: &'static str, asset: Option<PathBuf>, status: NcStatus, diagnostics: Option<&ComPtr<IGfxDiagnosticsAbi>>) -> ThemeLoadError {
+    // Diagnostics are advisory: the original status and operation remain intact if a foreign GFX
+    // implementation cannot supply or encode its optional explanatory text.
+    let diagnostic = diagnostics
+        .and_then(|diagnostics| diagnostics.diagnostic().ok())
+        .and_then(|diagnostic| diagnostic.to_string().ok())
+        .filter(|diagnostic| !diagnostic.is_empty());
+    ThemeLoadError::GfxBuild { operation, asset, status, diagnostic }
 }
 
 /// Returns the generated canonical resource name for one known semantic font role.
@@ -846,9 +959,9 @@ fn collect_image_path(visual: Option<&VisualOverrideDocument>, paths: &mut BTree
 #[serde(deny_unknown_fields)]
 struct FontCatalogDocument {
     /// Width in pixels of the rebuilt atlas texture.
-    texture_width: usize,
+    texture_width: i32,
     /// Height in pixels of the rebuilt atlas texture.
-    texture_height: usize,
+    texture_height: i32,
     /// Default font used by controls and ordinary text.
     body: FontDocument,
     /// Compact font used by supporting text.
@@ -862,16 +975,16 @@ struct FontCatalogDocument {
 }
 
 impl FontCatalogDocument {
-    /// Returns all semantic recipes in stable atlas insertion order.
-    fn entries(&self) -> [(FontRole, &FontDocument); 5] {
+    /// Consumes all semantic recipes in stable NCIDL role and atlas insertion order.
+    fn into_entries(self) -> [(FontRole, FontDocument); FontRole::COUNT] {
         // The explicit table keeps JSON keys, public FontRole values, and atlas names aligned
-        // without reflection or string-driven role dispatch.
+        // without reflection, string-driven role dispatch, or cloned path storage.
         [
-            (FontRole::Body, &self.body),
-            (FontRole::Small, &self.small),
-            (FontRole::Title, &self.title),
-            (FontRole::Heading, &self.heading),
-            (FontRole::Mono, &self.mono),
+            (FontRole::Body, self.body),
+            (FontRole::Small, self.small),
+            (FontRole::Title, self.title),
+            (FontRole::Heading, self.heading),
+            (FontRole::Mono, self.mono),
         ]
     }
 
@@ -894,7 +1007,7 @@ struct FontDocument {
     /// Font file path resolved relative to the theme JSON directory.
     path: PathBuf,
     /// Pixel size rasterized into printable-ASCII atlas glyphs.
-    size: usize,
+    size: u32,
 }
 
 /// Complete semantic icon recipe for one rebuilt theme atlas.
@@ -924,19 +1037,19 @@ struct IconCatalogDocument {
 }
 
 impl IconCatalogDocument {
-    /// Returns every semantic recipe in stable atlas insertion order.
-    fn entries(&self) -> [(IconRole, &IconDocument); IconRole::COUNT] {
+    /// Consumes every semantic recipe in stable NCIDL role and atlas insertion order.
+    fn into_entries(self) -> [(IconRole, IconDocument); IconRole::COUNT] {
         // This explicit table is the single bridge from schema fields to runtime roles. Widgets
-        // remain unaware of filenames, while the loader remains unaware of widget implementations.
+        // remain unaware of filenames, while the recipe takes path ownership without cloning.
         [
-            (IconRole::Close, &self.close),
-            (IconRole::Expand, &self.expand),
-            (IconRole::Collapse, &self.collapse),
-            (IconRole::Check, &self.check),
-            (IconRole::ExpandDown, &self.expand_down),
-            (IconRole::OpenFolder, &self.open_folder),
-            (IconRole::ClosedFolder, &self.closed_folder),
-            (IconRole::File, &self.file),
+            (IconRole::Close, self.close),
+            (IconRole::Expand, self.expand),
+            (IconRole::Collapse, self.collapse),
+            (IconRole::Check, self.check),
+            (IconRole::ExpandDown, self.expand_down),
+            (IconRole::OpenFolder, self.open_folder),
+            (IconRole::ClosedFolder, self.closed_folder),
+            (IconRole::File, self.file),
         ]
     }
 
