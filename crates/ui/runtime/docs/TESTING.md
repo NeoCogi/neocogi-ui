@@ -12,7 +12,7 @@ alternate runtime, renderer executor or object model.
 | `test_support::runtime_from_assets` | Create an independent real GFX compositor and call the production two-argument UI constructor | Each runtime gets its own compositor |
 | `test_support::headless::Headless` | Drive public `Ui` input, update and render; copy final renderer streams | One shared observation cell is required by `IRenderer`'s shared receiver |
 | `test_support::algorithm::Algorithm<W>` | Keep a real host alive for focused tests of a concrete built-in algorithm | The host lives beside `W`; `W` retains its production representation and uses ordinary mutable borrows |
-| `test_support/assets.rs` | Construct deterministic input bundles and expected revisions | Explicit pixel transfers happen here, outside deployed resource import |
+| `test_support/assets.rs` | Publish deterministic canonical input tables and expected revisions | Explicit pixel transfers happen here, outside deployed resource import |
 | Runtime callback probes | Act as independent COM widgets, containers, renderers and resources, including deliberately failing/reentrant components | Concrete fields and typed interfaces; no `Any`, downcasting or native callback registry |
 
 A renderer fixture reads `IRenderStream` only while its invocation token is active.
@@ -21,11 +21,12 @@ retain the stream verify rejection after the renderer returns, including failure
 GFX owns that rejection status (`NC_E_INVALID_ARG`); UI scope errors do not replace
 renderer contract behavior.
 
-Native atlas source construction and the flat-palette reference remain test input
-helpers for resource validation and compiler comparisons. UI import itself reads
-only lookup metadata and the white-tile data required by portable validation,
-just as it does outside tests. Fixture exports of imported revisions explicitly
-read the source image; they do not make runtime import copy full pixel buffers.
+Fixtures construct `AssetData` and use the shared appearance compiler, then pass through
+`AssetData::validate` before direct algorithm use. UI import itself reads only metadata and the
+white-tile data required by portable validation, just as it does outside tests. Republishing a
+fixture clones its canonical tables; it does not export a UI-specific atlas or skin representation.
+Exports of already imported revisions explicitly read the source image and do not make deployed
+runtime import copy full pixel buffers.
 
 ## Coverage migration
 

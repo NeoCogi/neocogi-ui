@@ -166,7 +166,7 @@ opposing sides proportionally for tiny destinations.
 
 ## Skin fields
 
-The optional `skin.metrics` object is the concrete `SkinMetrics` value and accepts:
+The optional `skin.metrics` object compiles into the generated `AssetMetrics` record and accepts:
 
 - `default_cell_width`
 - `padding`
@@ -189,18 +189,18 @@ is the concrete `FlatPalette` and accepts RGBA byte arrays under these keys:
 - `selection_background`, `selection_foreground`, `window_active`
 - `menu_foreground`, `menu_background`
 
-These colors construct Skin's complete family catalogs before any per-state patch or `content_color`
-override is installed. Each family role/state cell is one concrete `Visual { patch, content_color }`;
-patches and content colors cannot drift through parallel catalogs, and no erased or string-keyed
-payload participates at runtime.
+These colors construct the canonical generated family records before any per-state patch or
+`content_color` override is installed. Each role/state field is one `AssetVisual`; runtime paint
+projects its patch and content color together, and no erased, string-keyed, or parallel native
+catalog participates.
 
 The optional `skin.window_chrome` object is an asset-document recipe compiled directly into the
 IDL-generated `AssetChrome` transfer record. It accepts
 `title_alignment` (`leading` or `centered`), `minimized_content_height`, a `captions` object containing `close_side`,
 `minimize_side`, `maximize_side`, `vertical_spacing`, `minimum_extent`, `inner_spacing`, and
 `show_without_activation`, and an optional `active_title_backdrop` containing `color` and
-`horizontal_padding`. Omitted fields produce the same values as the runtime's conventional
-`WindowChromeSkin` default without sharing that runtime-only Rust model with the skin plugin.
+`horizontal_padding`. Omitted fields produce the conventional generated `AssetChrome` values
+shared by compiler and runtime; there is no runtime-only chrome record to synchronize.
 `vertical_spacing` is the exact title-field clearance applied equally above and below every square
 caption button.
 
@@ -317,13 +317,13 @@ set `content_color` alpha to zero. There are no separate caption-glyph roles or 
 so the same role/state visual fully describes each control without special handling in the loader.
 
 `skin.window_chrome` supplies exact platform geometry without a loader-owned preset enum. The
-skin plugin emits only `AssetChrome`; the UI runtime validates that record and constructs its
-local `WindowChromeSkin`. A
+skin plugin emits `AssetChrome`; the UI runtime retains and consumes that generated record
+directly. A
 conventional theme may omit it and receive leading text with trailing caption buttons. The bundled
 Mac theme directly selects centered text, a compact leading close box, trailing
 zoom/windowshade controls, and an active-title backdrop. Its caption PNGs are complete faces, so
 these states use a transparent content color and do not show an additional manager-owned symbol. The
-manager consumes only its concrete `WindowChromeSkin` fields and never branches on a theme or
+manager consumes only its concrete `AssetChrome` fields and never branches on a theme or
 platform mode.
 
 Minimize keeps the retained window visible, saves its expanded height, reduces its application body

@@ -1,15 +1,17 @@
 # Skin architecture
 
-Skinning has one resolved runtime model. Built-in widgets, manager-owned window chrome, JSON
-themes, and programmatic edits all use the same context-owned concrete `Skin` value. There is no
+Skinning has one canonical resolved runtime model. Built-in widgets, manager-owned window chrome,
+JSON themes, and programmatic revisions all use the `AssetTables` snapshot of generated NCIDL records retained by
+the active `Skin`. There is no
 property bag, `Any` payload, string-keyed runtime lookup, local override cascade, or parallel
 patch and semantic-content-color model.
 
 ## Runtime ownership
 
 The UI runtime, retained GFX compositor, and renderer install one immutable
-`IAssetBundle` together. UI imports its canonical catalog identity and validates copied
-metrics and appearance tables. GFX imports font/icon/atlas tables, while the renderer
+`IAssetBundle` together. UI imports its canonical catalog identity and retains the validated
+table collection without translating its generated records to native resource records. GFX imports the tables it
+needs for final composition, while the renderer
 uploads the matching pixels before publication. Failed validation or upload preserves
 the current revision. All windows, widgets and scoped services use that same committed
 resource identity.
@@ -23,8 +25,8 @@ original catalog independently of the installed revision.
 
 | Type | Responsibility |
 | --- | --- |
-| `Skin` | One resolved value containing metrics, complete visuals, and chrome policy. |
-| `SkinMetrics` | Layout, spacing, window inset, border, title, scrollbar, and thumb geometry. |
+| `Skin` | Typed state selectors and one revision identity bound to the canonical snapshot. |
+| `AssetMetrics` | Generated layout, spacing, window inset, border, title, scrollbar, and thumb geometry. |
 | `Skin::surface` / `control` / `menu` / `chrome` | Resolves one complete `Visual { patch, content_color }` in a concrete family. |
 | `SurfaceRole` / `ControlRole` | Concrete structural and interactive widget-facing roles. |
 | `MenuRole` / `ChromeRole` | Concrete menu and manager-owned window-decoration roles. |
@@ -32,16 +34,17 @@ original catalog independently of the installed revision.
 | `ControlState` / `PointerState` | Disabled, or enabled/focused with a nested normal, hovered, or pressed pointer state. |
 | `MenuState` | Menu-local normal, hovered, pressed, focused, open, and disabled states. |
 | `ChromeState` | Window-local base, active, and disabled states. |
-| `WindowChromeSkin` | Data recipe for title alignment, caption placement, sizing, and backdrop. |
+| `AssetChrome` | Generated title alignment, caption placement, sizing, and backdrop policy. |
 | `FontRef` / `IconRef` | Stable semantic or named references resolved against the active bundle. |
-| `SkinBundle` | Validated atomic ownership of one skin and its exact atlas. |
+| `SkinBundle` | Atomic publication of an intrinsically atlas-bound skin snapshot. |
 
 IDL role enums expose generated `ALL` and `COUNT` metadata because they are the only dense table
-axes. Native state enums expose `ALL` for complete compilation, while the private catalog stores
-their values in named fields—including nested enabled/focused pointer branches for controls.
-Code therefore cannot pass menu-open state to a widget or pointer state to a window frame, and no
-payload state needs a numeric index. Paint resolves one `Visual`, keeping a state's artwork and
-content color adjacent without erased values or a universal role/state cross-product.
+axes. Native state enums expose `ALL` for complete compilation, while generated family records
+retain named fields—including nested enabled/focused pointer branches for controls. Exhaustive
+matches select those fields directly. Code therefore cannot pass menu-open state to a widget or
+pointer state to a window frame, and no payload state needs a numeric index. Paint projects one
+short-lived `Visual`, keeping a state's artwork and content color adjacent without retaining an
+erased value or a second universal role/state catalog.
 
 ## Programmatic construction
 
@@ -104,8 +107,8 @@ The optional `theme-json` feature adds a strict authoring format documented in
 1. Decode one strict, self-contained document and resolve its asset paths relative to that file.
 2. Deserialize family-local appearance keys directly into concrete role enums and reject unknown
    keys or invalid schema data before atlas work.
-3. Build one immutable atlas, compile flat fallbacks and authored state images into a complete
-   `Skin`, then construct one validated `SkinBundle`.
+3. Build one immutable `AssetData` value, compile flat fallbacks and authored state images into its
+   generated tables, then publish one validated bundle.
 
 The runtime never retains the source document, palette, or string appearance keys. Those are
 compiler inputs only.

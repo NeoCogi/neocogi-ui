@@ -10,16 +10,7 @@
 use super::{ChromeRole, ChromeState, ControlRole, ControlState, FontRef, FontRole, IconRole, MenuRole, MenuState, PointerState, SurfaceRole, SurfaceState, Visual};
 use crate::atlas::{AtlasHandle, FontId};
 use crate::render::{Color, NinePatch, NinePatchCell, NinePatchCells, NinePatchImage, SliceInsets};
-use neocogi_ui_core_contracts::{AssetPatch, AssetVisual, Insets};
-
-/// Layout metrics are the generated NCIDL record itself.
-pub use neocogi_ui_core_contracts::AssetMetrics as SkinMetrics;
-/// Window chrome policy is the generated NCIDL record itself.
-pub use neocogi_ui_core_contracts::AssetChrome as WindowChromeSkin;
-/// Caption placement uses the generated NCIDL enum directly.
-pub use neocogi_ui_core_contracts::CaptionSide as CaptionButtonSide;
-/// Title alignment uses the generated NCIDL enum directly.
-pub use neocogi_ui_core_contracts::TitleAlignment as WindowTitleAlignment;
+use neocogi_ui_core_contracts::{AssetChrome, AssetMetrics, AssetPatch, AssetVisual, Insets};
 
 /// Opaque identity of one immutable skin snapshot installed through [`crate::SkinBundle`].
 ///
@@ -41,7 +32,7 @@ impl SkinRevision {
 /// Immutable runtime skin bound intrinsically to its canonical asset snapshot.
 ///
 /// `Skin` retains no duplicate metric, chrome, appearance, font-role, or icon-role records. The
-/// paired [`AtlasHandle`] owns the generated tables and the narrow lookup indices required by hot
+/// paired [`AtlasHandle`] owns the table collection of generated records and the narrow lookup indices required by hot
 /// paths. Appearance getters select one generated record with exhaustive pattern matching and
 /// project it transiently into the renderer-facing [`Visual`] value.
 #[derive(Clone)]
@@ -79,12 +70,12 @@ impl Skin {
     }
 
     /// Borrows canonical layout metrics without copying them into a UI-owned model.
-    pub fn metrics(&self) -> &SkinMetrics {
+    pub fn metrics(&self) -> &AssetMetrics {
         &self.atlas.tables().metrics
     }
 
     /// Borrows canonical title and caption policy without translating it to native structs.
-    pub fn window_chrome(&self) -> &WindowChromeSkin {
+    pub fn window_chrome(&self) -> &AssetChrome {
         &self.atlas.tables().chrome
     }
 
@@ -163,13 +154,13 @@ impl Skin {
 
     /// Mutably borrows the canonical metric record in an explicitly edited test snapshot.
     #[cfg(test)]
-    pub(crate) fn metrics_mut(&mut self) -> &mut SkinMetrics {
+    pub(crate) fn metrics_mut(&mut self) -> &mut AssetMetrics {
         &mut self.atlas.tables_mut().metrics
     }
 
     /// Mutably borrows the canonical chrome policy in an explicitly edited test snapshot.
     #[cfg(test)]
-    pub(crate) fn window_chrome_mut(&mut self) -> &mut WindowChromeSkin {
+    pub(crate) fn window_chrome_mut(&mut self) -> &mut AssetChrome {
         &mut self.atlas.tables_mut().chrome
     }
 

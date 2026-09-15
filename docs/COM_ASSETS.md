@@ -10,16 +10,15 @@
 | `crates/gfx/impl` | Private decoder, atlas, bundle, and source-export implementation; no plugin identity. |
 | `crates/appearance` | Pure typed appearance compilation shared with offline resource construction. |
 | `crates/skin/impl` | Private style and optional JSON-theme implementation; no plugin identity. |
-| `neocogi-ui-runtime` | Local IDs, text metrics, resolved appearances and retained layout/painting. |
+| `neocogi-ui-runtime` | Canonical table retention, local lookup indices, and retained layout/painting. |
 | `crates/render/plugin` and renderers | Pixel upload, GPU resources and ordered frame execution. |
 
 The GFX plugin has no production dependency on either the UI facade or runtime;
 the skin plugin has no production dependency on `neocogi-ui-runtime`. UI construction
-fixtures and a native flat-palette reference remain test-only; they provide an
-independent check of portable compiler output. Runtime UI code only imports
-resolved resources. UI unit tests use this same metadata import and white-tile
-validation path. Full pixel copies needed to construct expected fixture revisions
-live in explicit test setup and do not alter runtime import.
+fixtures construct canonical `AssetData` directly and pass through its GFX validator.
+Runtime UI code retains the resulting `AssetTables` collection of generated NCIDL records without exporting or reimporting
+a native atlas model. Full pixel copies needed to publish fixture revisions live in
+explicit test setup and do not alter runtime import.
 
 `neocogi-gfx` registers `PngDecoder`; its optional `builder` feature also
 registers `AssetLoader`. `PngDecoder::upload` accepts one complete, nonempty PNG at offset zero and borrows an
@@ -55,21 +54,21 @@ Unknown and duplicate fields and role keys are rejected during typed decoding.
 Applications supply one `IAssetBundle` through the typed `UiRuntime` factory and
 pass its `IRgbaImage` projection to `Platform::create_window`. Neither implementation
 embeds demo assets. An asset bundle derives from that narrow renderer-owned capability, so one
-object can publish both views without duplicating its pixel storage. The UI imports
-metadata into its local font/icon tables once and samples only the required white-tile
-rows while validating it. It never copies or retains the complete image. The platform
+object can publish both views without duplicating its pixel storage. The UI copies and validates
+`AssetTables` once, retains that exact generated snapshot, and samples only the required white-tile
+rows during validation. It never copies or retains the complete image. The platform
 receives `IRgbaImage`, reads only its dimensions and packed RGBA bytes, then uploads
 them without importing a native atlas or skin. GPU backends retain textures and the
 renderer retains only the image projection; temporary CPU upload bytes are released
 after the synchronous upload. Frames pass that cached projection, and the renderer
 skips import/upload when the same image is already current.
 
-The immutable font and icon vectors are also the authoritative local identity tables.
-Runtime lookup compares the retained typed ID directly with those records instead of
-duplicating every ID and slot into randomized hash maps. Each font's glyph vector is sorted once
-after validation and binary-searched by Unicode scalar value. Portable input still preserves and
-rejects duplicate scalars before sorting, while measurement and paint avoid randomized hashing for
-every glyph they visit.
+The generated font, glyph, icon, metric, chrome, and appearance records remain the sole UI resource
+model. `AtlasHandle` adds opaque catalog-scoped IDs in canonical table order, sorted font/icon name
+slots, and a scalar-sorted glyph-slot index for each unchanged font partition. It neither copies
+records into native structs nor introduces randomized hash maps. `Skin` borrows metrics and chrome
+directly from the snapshot and selects a generated appearance record with typed state matching;
+only the short-lived renderer-facing `Visual` is projected at the call site.
 
 GFX support separates `AssetTables` metadata from complete `AssetData`
 pixel-bearing compiler output. The UI facade keeps compatibility re-exports, but
@@ -78,11 +77,11 @@ borrowed static tables or owned builder output. Neither type contains a UI imple
 font rasterizer, PNG decoder or JSON parser. Separate `neocogi-gfx-impl` and
 `neocogi-skin-impl` packages supply private objects to their corresponding
 plugin roots. The small `neocogi-appearance` package contains only pure typed
-appearance compilation needed by both runtime Skin policy and offline default
-resource construction. The objects expose ordinary typed interfaces and keep
+appearance compilation used by Skin/offline resource construction and canonical test fixtures.
+The objects expose ordinary typed interfaces and keep
 all native builder/path/decoder state in their owning binary. The
 [JSON compiler](../crates/skin/impl/src/theme.rs) submits declared resources to
-GFX and compiles complete appearance tables without copying the bundle into Skin.
+GFX and compiles complete appearance tables without copying the bundle into a runtime skin model.
 GFX owns bundle transfer, validation, and publication through the format-neutral
 `AssetPublisher::revise_appearance` transaction. The same compiler can still
 write directly into `AssetData` when used by offline build tools. Plain geometry and semantic resource
@@ -117,7 +116,7 @@ let mut ui = Ui::from_interface(factory.create_runtime(assets.as_com_ref(), comp
 replaces that runtime's one shared resource value. The call owns one transaction: it validates
 and imports bounded metadata, asks the renderer to copy and upload that complete image,
 installs the same catalog-compatible revision in its retained GFX compositor,
-then publishes only local lookup tables and resolved painting state. Only success
+then publishes the retained canonical tables and their local lookup indices. Only success
 publishes the new revision to `IWidgetHost`, the window manager, text metrics, and
 scoped layout services together. Failed validation or upload leaves the previous UI
 resources and GPU atlas usable. The renderer is borrowed for the call; the UI retains
@@ -215,8 +214,9 @@ therefore count bytes. Producers validate the entire range before writing any
 destination element, then write the exact requested count. Tables remain owned by
 their binary. The GFX construction service uses `AssetData::read` when it needs
 metadata and the complete RGBA allocation; Skin does not import that implementation.
-The UI uses `AssetTables::read`, which copies and validates
-portable metadata and reads only white-tile rows from the pixel method. Both paths cover
+The UI uses `AssetTables::read`, which copies and validates portable metadata, reads only
+white-tile rows from the pixel method, and becomes the runtime's immutable metadata snapshot.
+Both paths cover
 duplicate keys, fallback glyphs, rectangle bounds, the white tile and resolved theme
 records without depending on the UI implementation. UI installation additionally
 authenticates its catalog and preserves its local resource identities.

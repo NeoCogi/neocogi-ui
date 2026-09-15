@@ -86,8 +86,8 @@ cargo test -p neocogi-demo-assets --features 'full-demo embed-assets'
 ```
 
 Asset consumers enforce the shared 64 MiB RGBA limit and exact dimensions/storage.
-UI `ImageError` and `AtlasError` classify invalid raw resource storage. Asset
-construction returns concrete I/O and theme errors; COM methods retain details
+UI `ImageError` classifies direct raw image storage. Canonical `AssetData`/`AssetTables`
+validation returns `NC_E_INVALID_ARG` for portable resource violations. Asset construction returns concrete I/O and theme errors; COM methods retain details
 through owned diagnostic interfaces. [COM_ASSETS.md](COM_ASSETS.md) describes validation and publication.
 
 CI tests the UI and each compiler feature independently: no features, `builder`,

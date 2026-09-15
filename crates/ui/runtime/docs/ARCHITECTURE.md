@@ -65,6 +65,13 @@ The small private `boundary` module contains only representation-free UTF-8
 validation and geometry copies reused by multiple domains. It owns no objects,
 runtime state, registration catalog, or alternate implementation representation.
 
+Installed UI resources follow the same single-model rule. `AssetTables::read` is the one portable
+metadata validation boundary, and `AtlasHandle` retains that generated value unchanged. Its only
+additional storage is process-local font/icon identity arrays and sorted integer slots for name and
+glyph lookup. `Skin` is intrinsically bound to that handle; it borrows generated metrics and chrome
+policy directly and selects generated appearance fields with exhaustive typed matches. The old raw
+atlas source, UI validator, portable-to-native transfer, and native appearance catalog do not exist.
+
 ## External nodes and cached dispatch
 
 External leaves and containers use exactly the same retained-node representation

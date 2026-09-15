@@ -200,7 +200,7 @@ pub(crate) fn test_asset_data_with_font_sizes(fonts: &[(&str, usize)]) -> AssetD
             glyphs: glyphs.into(),
             icons: icons.into(),
             names: names.into(),
-            metrics: crate::SkinMetrics::default(),
+            metrics: crate::AssetMetrics::default(),
             chrome: neocogi_appearance::default_chrome(),
             surfaces: Vec::from(appearance.surfaces).into(),
             controls: Vec::from(appearance.controls).into(),
@@ -221,14 +221,14 @@ fn append_name(names: &mut Vec<u8>, name: &str) -> AssetRange {
 }
 
 /// Returns the canonical centered-title chrome recipe used by classic-theme tests.
-pub(crate) fn classic_mac_chrome(backdrop: crate::Color) -> crate::WindowChromeSkin {
+pub(crate) fn classic_mac_chrome(backdrop: crate::Color) -> crate::AssetChrome {
     // Start from the shared canonical default and edit only the authored policy fields. No runtime
     // mirror type or preset-specific branch is introduced by this fixture convenience function.
     let mut chrome = neocogi_appearance::default_chrome();
-    chrome.title_alignment = crate::WindowTitleAlignment::Centered;
-    chrome.close_side = crate::CaptionButtonSide::Leading;
-    chrome.minimize_side = crate::CaptionButtonSide::Trailing;
-    chrome.maximize_side = crate::CaptionButtonSide::Trailing;
+    chrome.title_alignment = crate::TitleAlignment::Centered;
+    chrome.close_side = crate::CaptionSide::Leading;
+    chrome.minimize_side = crate::CaptionSide::Trailing;
+    chrome.maximize_side = crate::CaptionSide::Trailing;
     chrome.vertical_spacing = 3;
     chrome.minimum_extent = 1;
     chrome.inner_spacing = 4;

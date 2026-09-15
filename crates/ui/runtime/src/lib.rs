@@ -136,9 +136,8 @@ pub mod prelude {
     };
     pub use crate::math::{expand_rect, rect, vec2};
     pub use crate::theme::{
-        CaptionButtonSide, ChromeRole, ChromeState, Color, ControlRole, ControlState, FlatPalette, FontRef, FontRole, FrameRole, IconRef, IconRole, MenuRole,
-        MenuState, PointerState, ResourceCatalog, Skin, SkinBundle, SkinMetrics, SurfaceRole, SurfaceState, Visual, WindowChromeSkin, WindowTitleAlignment,
-        color,
+        AssetChrome, AssetMetrics, CaptionSide, ChromeRole, ChromeState, Color, ControlRole, ControlState, FlatPalette, FontRef, FontRole, FrameRole, IconRef,
+        IconRole, MenuRole, MenuState, PointerState, ResourceCatalog, Skin, SkinBundle, SurfaceRole, SurfaceState, TitleAlignment, Visual, color,
     };
     pub use rs_math3d::{
         Box3f, Color4b, CrossProduct, Dimension, Dimensioni, FloatVector, Mat4f, Quat, Quatf, Rect, Recti, Vec2f, Vec2i, Vec3f, Vec4f, Vector, Vector3,
@@ -155,8 +154,8 @@ pub use input::{Key, KeyEvent, KeyState, Modifiers, MouseButton};
 pub use math::{expand_rect, rect, vec2};
 pub use render::{AtlasUploadError, NinePatch, NinePatchCell, NinePatchCells, NinePatchContent, NinePatchImage, SliceInsets, TextureError, TextureId};
 pub use theme::{
-    CaptionButtonSide, ChromeRole, ChromeState, Color, ControlRole, ControlState, FlatPalette, FontRef, FontRole, FrameRole, IconRef, IconRole, MenuRole,
-    MenuState, PointerState, ResourceCatalog, Skin, SkinBundle, SkinMetrics, SurfaceRole, SurfaceState, Visual, WindowChromeSkin, WindowTitleAlignment, color,
+    AssetChrome, AssetMetrics, CaptionSide, ChromeRole, ChromeState, Color, ControlRole, ControlState, FlatPalette, FontRef, FontRole, FrameRole, IconRef,
+    IconRole, MenuRole, MenuState, PointerState, ResourceCatalog, Skin, SkinBundle, SurfaceRole, SurfaceState, TitleAlignment, Visual, color,
 };
 pub(crate) use theme::SkinInstallError;
 pub(crate) use ui_node::{

@@ -18,9 +18,9 @@ pub use appearance::{ChromeState, ControlState, MenuState, PointerState, Surface
 
 /// Portable metadata and resolved appearances, independent of atlas pixel storage.
 ///
-/// UI consumers copy this value to create local resource identities and painting state. Keeping
-/// pixels out of the type prevents a metadata consumer from allocating or retaining the GPU's
-/// complete upload input.
+/// UI consumers retain this value directly and add only process-local resource identities and
+/// sorted lookup indices. Keeping pixels out of the type prevents a metadata consumer from
+/// allocating or retaining the GPU's complete upload input.
 #[derive(Clone)]
 pub struct AssetTables {
     /// Positive atlas dimensions whose bundle supplies bounded tightly packed RGBA storage.
