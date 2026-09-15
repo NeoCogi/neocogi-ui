@@ -100,18 +100,6 @@ trait IActivationSink {
 }
 
 #[version(1)]
-/// Lease owning one queue and typed consumer; the driver retains this lease.
-trait IEventSubscription {
-    /// Delivers at most limit callbacks from one detached FIFO prefix; zero rejects only when events are pending.
-    /// A callback error consumes that attempted event and preserves unattempted ordinary events ahead of later emissions.
-    fn dispatch(&self, limit: u32) -> Result<u32>;
-    /// Reports a live source or an undelivered terminal fact; cancelled and closed-empty leases are inactive.
-    fn active(&self) -> Result<bool>;
-    /// Disconnects explicitly; final object release also disconnects without invoking user code.
-    fn cancel(&self) -> Result<()>;
-}
-
-#[version(1)]
 /// Shared labelled activation source; the producer never owns the returned lease or its sink.
 trait IActivationEvents {
     /// Connects the exclusive subscriber and returns its ownership lease.
@@ -160,13 +148,6 @@ trait ITextEvents {
     fn subscribe_changed(&mut self, sink: &ITextChangedSink) -> Result<IEventSubscription>;
     /// Connects one submitted consumer without claiming the separate changed port.
     fn subscribe_submitted(&mut self, sink: &ITextSubmittedSink) -> Result<IEventSubscription>;
-}
-
-#[version(1)]
-/// Borrowed application-owned dispatcher; the UI runtime must never retain this capability.
-trait IEventDispatcher {
-    /// Sweeps registered sources in deterministic order until empty or the callback budget is exhausted.
-    fn dispatch(&self, limit: u32) -> Result<u32>;
 }
 
 #[version(1)]

@@ -25,6 +25,19 @@ use neocogi_ui_core_contracts::{
 /// Contract-defined visible fallback for a combo with no committed selection.
 pub(crate) const DEFAULT_COMBO_PLACEHOLDER: &str = "Select…";
 
+/// Captured NCIDL selection stored in this producer's native event queue.
+struct ComboChangedPayload(
+    /// The canonical generated selection value, independent of later model edits.
+    ComboSelection,
+);
+impl crate::event::ComEvent for ComboChangedPayload {
+    type Sink = IComboChangedSinkAbi;
+    /// Copies the committed value through the generated foreign sink contract.
+    fn deliver(&self, sink: ComRef<'_, Self::Sink>) -> Result<(), NcStatus> {
+        sink.changed(self.0.into())
+    }
+}
+
 com_int_enum! {
     /// Header intent understood only by the private combo state machine.
     pub(crate) enum ComboPopupIntent: u8 {
@@ -131,7 +144,7 @@ pub(crate) struct ComboState {
     /// Explicit popup lifecycle reconciled by the runtime composition owner.
     popup: ComboPopupLifecycle,
     /// Runtime-owned source for actual user commits only.
-    changed_event: crate::EventSource<ComboSelection>,
+    changed_event: crate::EventSource<ComboChangedPayload>,
 }
 
 impl ComboState {
@@ -330,7 +343,7 @@ impl IComboState for ComboState {
         if self.selection != Some(index) {
             self.selection = Some(index);
             self.advance_revision();
-            self.changed_event.emit(ComboSelection::Selected(index as u64));
+            self.changed_event.emit(ComboChangedPayload(ComboSelection::Selected(index as u64)));
         }
         self.popup = match self.popup {
             ComboPopupLifecycle::Open | ComboPopupLifecycle::OpenRequested => ComboPopupLifecycle::CloseRequested,

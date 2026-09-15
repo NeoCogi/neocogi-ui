@@ -69,8 +69,14 @@ field comment must name that constraint.
 
 ## Typed events and application state
 
-`EventSession<State>` is the static application adapter. It owns the concrete
-application state and one registration sequence. Each handler is an owned
+The generated `neocogi.com.events` NCIDL module owns `IEventSubscription` and
+`IEventDispatcher`; `neocogi-com-events` owns the producer queue, weak endpoint,
+application session, and local delivery adapter. This support crate does not
+depend on UI or on the process-global `neocogi-com-runtime`. UI adds only its
+family-specific sinks and validation through `neocogi_ui::EventSession<State>`.
+The generic `neocogi_com_events::EventSession<State>` can equally serve a
+non-UI plugin or application state. Both adapters own the concrete application
+state and one registration sequence. Each handler is an owned
 `EventHandler<State, Event>` implementation stored inline in a local generic COM
 sink. The approved `FnMut(&mut State, &Event) -> Result<(), NcStatus>` convenience
 implements that same trait; captures and Rust state never cross the ABI. Generic
@@ -116,14 +122,15 @@ once when subscribing. The session offers these concrete families:
 | `subscribe_menu_item` | Compact menu row | Submitted label |
 | `subscribe_file_dialog` | Standard file picker | Exact accepted native path or cancellation |
 
-Independent producers share `neocogi_ui::events::EventSource<E>` with built-ins.
+Independent producers share `neocogi_com_events::EventSource<E>` with built-ins;
+the UI facade reexports this type for UI authors.
 Standard facade snapshots implement `EventPayload`; custom snapshots implement it
 with their concrete sink interface and delivery method. Commit semantic state, then
 call `emit` with its owned snapshot. Implement the event capability by returning
 `source.subscribe(sink)`, and close ordinary sources when the widget logically closes.
 The [extension example](../examples/ui-extension) demonstrates the full object,
 its inherited editing interface, and an application callback across separate binaries.
-Raw queue leases are available only through the facade's internal `test-support`
+Raw queue leases are available only through the COM support crate's `test-support`
 feature for algorithm fixtures; ordinary applications use COM subscriptions.
 
 A source permits one subscriber per port. Editor changed/submitted ports are

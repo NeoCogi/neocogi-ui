@@ -33,23 +33,18 @@
 //! update. Recursive update/render and session dispatch/registration report BUSY.
 //! See `docs/COM_AUTHORS.md` for lifecycle, bounded cascades and author obligations.
 /// Static producer queues shared by built-ins, independent plugins and application components.
-mod source;
-pub use source::{EventEndpoint, EventPayload, EventSource};
+pub use neocogi_com_events::{EventEndpoint, EventPayload, EventSource};
 
 /// Internal queue access for isolated semantic-algorithm tests, absent from normal builds.
 /// Applications and plugin authors subscribe through EventSource/EventEndpoint instead.
 #[cfg(feature = "test-support")]
 pub mod test_support {
-    pub use super::source::{EventBatch, EventLease, SubscribeError};
+    pub use neocogi_com_events::test_support::{EventBatch, EventLease, SubscribeError};
 }
 
 use crate::com::*;
 use neocogi_com::{ComPtr, ComRef, NC_E_INVALID_ARG, NcCopyFromBufferOffset, NcStatus, com_object};
-use std::{
-    cell::{Cell, RefCell, Ref, RefMut},
-    rc::Rc,
-    ops::{Deref, DerefMut},
-};
+use std::ops::Deref;
 
 /// Copies one complete offset-zero IDL string view into application-owned text.
 fn copied_text(value: NcCopyFromBufferOffset<'_, u8>) -> Result<String, NcStatus> {
@@ -62,212 +57,28 @@ fn copied_text(value: NcCopyFromBufferOffset<'_, u8>) -> Result<String, NcStatus
     std::str::from_utf8(value.as_slice()).map(str::to_owned).map_err(|_| NC_E_INVALID_ARG)
 }
 
-/// Application-local behavior stored inline in the concrete COM sink specialization.
-pub trait EventHandler<State, Event> {
-    /// Handles one owned semantic snapshot while borrowing only local application state.
-    fn handle(&mut self, state: &mut State, event: &Event) -> Result<(), NcStatus>;
-}
-impl<State, Event, Callback> EventHandler<State, Event> for Callback
-where
-    Callback: FnMut(&mut State, &Event) -> Result<(), NcStatus>,
-{
-    /// Keeps the approved callback convenience local; neither its captures nor state borrow cross the ABI.
-    fn handle(&mut self, state: &mut State, event: &Event) -> Result<(), NcStatus> {
-        self(state, event)
-    }
-}
+pub use neocogi_com_events::{EventDelivery, EventHandler, EVENT_DISPATCH_LIMIT};
 
-/// Default finite callback budget for one deterministic dispatch boundary.
-pub use neocogi_ui_core_contracts::EVENT_DISPATCH_LIMIT;
+/// UI-family convenience facade over the COM-owned application event session.
+/// The inner session owns state, leases, and registration-order dispatch; this
+/// facade adds only typed connections to the UI NCIDL event families.
+pub struct EventSession<State: 'static>(
+    /// COM-owned transport core, never retained by a widget producer.
+    neocogi_com_events::EventSession<State>,
+);
 
-/// Static session owns application state and subscriptions; producers never retain this session.
-pub struct EventSession<State: 'static> {
-    /// The same owned state is borrowed by each concrete handler, never passed as a raw COM pointer.
-    state: Rc<RefCell<State>>,
-    /// One authoritative registration sequence shared with the retainable dispatcher object.
-    registry: Rc<Registry>,
-    /// Runtime borrows this projection synchronously and must not retain it.
-    dispatcher: ComPtr<IEventDispatcherAbi>,
-}
 impl<State: 'static> EventSession<State> {
-    /// Creates an empty session with owned application state and no subscriptions.
+    /// Creates an empty UI event facade with application-owned state.
     pub fn new(state: State) -> Self {
-        let registry = Rc::new(Registry {
-            leases: RefCell::new(Some(Vec::new())),
-            closed: Cell::new(false),
-        });
-        let dispatcher = Dispatcher::from_value(Dispatcher { registry: registry.clone() })
-            .query()
-            .expect("dispatcher declares IEventDispatcher");
-        Self {
-            state: Rc::new(RefCell::new(state)),
-            registry,
-            dispatcher,
-        }
-    }
-    /// Reads local state; an incompatible active handler borrow reports BUSY.
-    pub fn state(&self) -> Result<Ref<'_, State>, NcStatus> {
-        self.state.try_borrow().map_err(|_| UI_E_BUSY)
-    }
-    /// Mutates local state between callbacks; finish this borrow before dispatching events.
-    pub fn state_mut(&self) -> Result<RefMut<'_, State>, NcStatus> {
-        self.state.try_borrow_mut().map_err(|_| UI_E_BUSY)
-    }
-    /// Borrows the concrete dispatcher without transferring application/session ownership to a runtime.
-    pub fn as_dispatcher(&self) -> ComRef<'_, IEventDispatcherAbi> {
-        self.dispatcher.as_com_ref()
-    }
-    /// Delivers queued events and finite cascades without processing UI input or committing layout.
-    pub fn dispatch(&self) -> Result<u32, NcStatus> {
-        self.dispatcher.dispatch(EVENT_DISPATCH_LIMIT)
-    }
-    /// Selects a finite explicit callback budget; unattempted events survive budget exhaustion.
-    pub fn dispatch_bounded(&self, limit: u32) -> Result<u32, NcStatus> {
-        self.dispatcher.dispatch(limit)
-    }
-    /// Cancels all subscriptions and releases their sinks; active registration or dispatch reports BUSY.
-    pub fn cancel(&self) -> Result<(), NcStatus> {
-        let mut leases = self.registry.take()?;
-        for lease in leases.iter() {
-            lease.cancel()?;
-        }
-        leases.clear();
-        Ok(())
+        Self(neocogi_com_events::EventSession::new(state))
     }
 }
 
-impl<State: 'static> Drop for EventSession<State> {
-    /// Cancels retained leases even when application code keeps a lease or dispatcher pointer after session destruction.
-    fn drop(&mut self) {
-        let idle = self.registry.take();
-        self.registry.closed.set(true);
-        // If delivery owns the sequence, its transaction observes closed and
-        // performs the same cancellation before returning the vector.
-        drop(idle);
-    }
-}
-
-/// Registration storage is taken by value before any foreign subscription or callback call.
-struct Registry {
-    /// Session destruction requests cancellation even if a retained dispatcher is currently delivering a batch.
-    closed: Cell<bool>,
-    /// None represents an active transaction, so reentry rejects instead of borrowing a live vector.
-    leases: RefCell<Option<Vec<ComPtr<IEventSubscriptionAbi>>>>,
-}
-impl Registry {
-    /// Takes the sole sequence; both registration and delivery use this same exclusion boundary.
-    fn take(&self) -> Result<Registrations<'_>, NcStatus> {
-        if self.closed.get() {
-            return Err(UI_E_CLOSED);
-        }
-        let leases = self.leases.try_borrow_mut().map_err(|_| UI_E_BUSY)?.take().ok_or(UI_E_BUSY)?;
-        Ok(Registrations { registry: self, leases: Some(leases) })
-    }
-}
-/// Owned registration transaction restores its exact order on success and error.
-struct Registrations<'a> {
-    /// Vacant destination remains alive for this local synchronous operation.
-    registry: &'a Registry,
-    /// Sole sequence ownership; no RefCell guard crosses plugin calls or COM Release.
-    leases: Option<Vec<ComPtr<IEventSubscriptionAbi>>>,
-}
-impl Deref for Registrations<'_> {
-    type Target = Vec<ComPtr<IEventSubscriptionAbi>>;
-    /// Borrows only the locally owned vector.
+impl<State: 'static> Deref for EventSession<State> {
+    type Target = neocogi_com_events::EventSession<State>;
+    /// Exposes generic state and dispatch operations without duplicating them.
     fn deref(&self) -> &Self::Target {
-        self.leases.as_ref().expect("active registration transaction owns its leases")
-    }
-}
-impl DerefMut for Registrations<'_> {
-    /// Mutates only the locally owned vector.
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.leases.as_mut().expect("active registration transaction owns its leases")
-    }
-}
-impl Registrations<'_> {
-    /// Releases inactive sinks explicitly before pruning their retained leases, without changing surviving order.
-    fn prune(&mut self) -> Result<(), NcStatus> {
-        let mut index = 0;
-        while index < self.len() {
-            if self[index].active()? {
-                index += 1;
-            } else {
-                self[index].cancel()?;
-                let retired = self.remove(index);
-                drop(retired);
-            }
-        }
-        Ok(())
-    }
-}
-impl Drop for Registrations<'_> {
-    /// Restores the sequence after all foreign calls; the destination never contains another live vector.
-    fn drop(&mut self) {
-        if self.registry.closed.get() {
-            let leases = self.leases.as_mut().expect("active transaction owns its leases until drop");
-            for lease in leases.iter() {
-                let _ = lease.cancel();
-            }
-            leases.clear();
-        }
-        *self.registry.leases.borrow_mut() = self.leases.take();
-    }
-}
-
-#[com_object(interfaces(IEventDispatcher))]
-/// Concrete borrowed runtime capability knows only leases, not application state types or UI implementation storage.
-struct Dispatcher {
-    /// The static session and dispatcher share one registration sequence.
-    registry: Rc<Registry>,
-}
-impl IEventDispatcher for Dispatcher {
-    /// Sweeps in registration order and caps total successful callbacks across all FIFO sources and cascades.
-    fn dispatch(&self, limit: u32) -> Result<u32, NcStatus> {
-        let mut leases = self.registry.take()?;
-        leases.prune()?;
-        let mut delivered = 0;
-        loop {
-            let before = delivered;
-            for lease in leases.iter() {
-                if self.registry.closed.get() {
-                    return Err(UI_E_CLOSED);
-                }
-                let remaining = limit - delivered;
-                let count = lease.dispatch(remaining)?;
-                if count > remaining {
-                    return Err(NC_E_INVALID_ARG);
-                }
-                delivered += count;
-            }
-            if before == delivered {
-                break;
-            }
-        }
-        leases.prune()?;
-        Ok(delivered)
-    }
-}
-
-/// Concrete application data and behavior shared by the small per-family COM sink declarations.
-struct HandlerState<State, Handler> {
-    /// Explicit owned state, shared only inside the application binary.
-    state: Rc<RefCell<State>>,
-    /// Taking the handler prevents recursive invocation from aliasing its concrete mutable data.
-    handler: RefCell<Option<Handler>>,
-}
-impl<State, Handler> HandlerState<State, Handler> {
-    /// Owns the concrete handler during the local call and restores it before reporting any recoverable failure.
-    fn deliver<Event>(&self, event: Event) -> Result<(), NcStatus>
-    where
-        Handler: EventHandler<State, Event>,
-    {
-        let mut handler = self.handler.try_borrow_mut().map_err(|_| UI_E_BUSY)?.take().ok_or(UI_E_BUSY)?;
-        let result = match self.state.try_borrow_mut() {
-            Ok(mut state) => handler.handle(&mut state, &event),
-            Err(_) => Err(UI_E_BUSY),
-        };
-        *self.handler.borrow_mut() = Some(handler);
-        result
+        &self.0
     }
 }
 
@@ -316,7 +127,7 @@ impl ActivationSource for ListBoxWidget {
 /// Concrete local sink specialization stores application state and its exact handler type directly.
 struct ActivationSink<State: 'static, Handler: EventHandler<State, Activation> + 'static> {
     /// One shared local invocation helper; no erased handler or Rust value crosses COM.
-    handler: HandlerState<State, Handler>,
+    handler: EventDelivery<State, Handler>,
 }
 impl<State: 'static, Handler: EventHandler<State, Activation> + 'static> IActivationSink for ActivationSink<State, Handler> {
     /// Validates and copies the concrete foreign snapshot before invoking application behavior.
@@ -332,17 +143,14 @@ impl<State: 'static> EventSession<State> {
         widget: &Source,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        let mut leases = self.registry.take()?;
+        self.0.register(|| {
         let sink: ComPtr<IActivationSinkAbi> = ActivationSink::from_value(ActivationSink {
-            handler: HandlerState {
-                state: self.state.clone(),
-                handler: RefCell::new(Some(handler)),
-            },
+            handler: self.0.delivery(handler),
         })
         .query()?;
         let lease = widget.subscribe_activation_sink(sink.as_com_ref())?;
-        leases.push(lease.clone());
         Ok(lease)
+        })
     }
 }
 
@@ -356,7 +164,7 @@ pub struct CheckboxChanged {
 /// Concrete local sink specialization stores application state and its exact handler type directly.
 struct CheckboxSink<State: 'static, Handler: EventHandler<State, CheckboxChanged> + 'static> {
     /// One shared local invocation helper; no erased handler or Rust value crosses COM.
-    handler: HandlerState<State, Handler>,
+    handler: EventDelivery<State, Handler>,
 }
 impl<State: 'static, Handler: EventHandler<State, CheckboxChanged> + 'static> ICheckboxSink for CheckboxSink<State, Handler> {
     /// Validates and copies the concrete foreign snapshot before invoking application behavior.
@@ -372,17 +180,14 @@ impl<State: 'static> EventSession<State> {
         widget: &crate::CheckboxWidget,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        let mut leases = self.registry.take()?;
+        self.0.register(|| {
         let sink: ComPtr<ICheckboxSinkAbi> = CheckboxSink::from_value(CheckboxSink {
-            handler: HandlerState {
-                state: self.state.clone(),
-                handler: RefCell::new(Some(handler)),
-            },
+            handler: self.0.delivery(handler),
         })
         .query()?;
         let lease = widget.as_interface().subscribe(sink.as_com_ref())?;
-        leases.push(lease.clone());
         Ok(lease)
+        })
     }
 }
 
@@ -417,7 +222,7 @@ impl NumericEventSource for crate::NumberWidget {
 /// Concrete local sink specialization stores application state and its exact handler type directly.
 struct NumericSink<State: 'static, Handler: EventHandler<State, NumericChanged> + 'static> {
     /// One shared local invocation helper; no erased handler or Rust value crosses COM.
-    handler: HandlerState<State, Handler>,
+    handler: EventDelivery<State, Handler>,
 }
 impl<State: 'static, Handler: EventHandler<State, NumericChanged> + 'static> INumericSink for NumericSink<State, Handler> {
     /// Validates and copies the concrete foreign snapshot before invoking application behavior.
@@ -436,17 +241,14 @@ impl<State: 'static> EventSession<State> {
         widget: &Source,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        let mut leases = self.registry.take()?;
+        self.0.register(|| {
         let sink: ComPtr<INumericSinkAbi> = NumericSink::from_value(NumericSink {
-            handler: HandlerState {
-                state: self.state.clone(),
-                handler: RefCell::new(Some(handler)),
-            },
+            handler: self.0.delivery(handler),
         })
         .query()?;
         let lease = widget.subscribe_numeric_sink(sink.as_com_ref())?;
-        leases.push(lease.clone());
         Ok(lease)
+        })
     }
 }
 
@@ -460,7 +262,7 @@ pub struct ScrollbarChanged {
 /// Concrete local sink specialization stores application state and its exact handler type directly.
 struct ScrollbarSink<State: 'static, Handler: EventHandler<State, ScrollbarChanged> + 'static> {
     /// One shared local invocation helper; no erased handler or Rust value crosses COM.
-    handler: HandlerState<State, Handler>,
+    handler: EventDelivery<State, Handler>,
 }
 impl<State: 'static, Handler: EventHandler<State, ScrollbarChanged> + 'static> IScrollbarSink for ScrollbarSink<State, Handler> {
     /// Validates and copies the concrete foreign snapshot before invoking application behavior.
@@ -479,17 +281,14 @@ impl<State: 'static> EventSession<State> {
         widget: &crate::ScrollbarWidget,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        let mut leases = self.registry.take()?;
+        self.0.register(|| {
         let sink: ComPtr<IScrollbarSinkAbi> = ScrollbarSink::from_value(ScrollbarSink {
-            handler: HandlerState {
-                state: self.state.clone(),
-                handler: RefCell::new(Some(handler)),
-            },
+            handler: self.0.delivery(handler),
         })
         .query()?;
         let lease = widget.as_interface().subscribe(sink.as_com_ref())?;
-        leases.push(lease.clone());
         Ok(lease)
+        })
     }
 }
 
@@ -547,7 +346,7 @@ impl TextEventSource for crate::TextAreaWidget {
 /// Concrete local sink specialization stores application state and its exact handler type directly.
 struct TextChangedSink<State: 'static, Handler: EventHandler<State, TextChanged> + 'static> {
     /// One shared local invocation helper; no erased handler or Rust value crosses COM.
-    handler: HandlerState<State, Handler>,
+    handler: EventDelivery<State, Handler>,
 }
 impl<State: 'static, Handler: EventHandler<State, TextChanged> + 'static> ITextChangedSink for TextChangedSink<State, Handler> {
     /// Validates and copies the concrete foreign snapshot before invoking application behavior.
@@ -568,17 +367,14 @@ impl<State: 'static> EventSession<State> {
         widget: &Source,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        let mut leases = self.registry.take()?;
+        self.0.register(|| {
         let sink: ComPtr<ITextChangedSinkAbi> = TextChangedSink::from_value(TextChangedSink {
-            handler: HandlerState {
-                state: self.state.clone(),
-                handler: RefCell::new(Some(handler)),
-            },
+            handler: self.0.delivery(handler),
         })
         .query()?;
         let lease = widget.subscribe_changed_sink(sink.as_com_ref())?;
-        leases.push(lease.clone());
         Ok(lease)
+        })
     }
 }
 
@@ -592,7 +388,7 @@ pub struct TextSubmitted {
 /// Concrete local sink specialization stores application state and its exact handler type directly.
 struct TextSubmittedSink<State: 'static, Handler: EventHandler<State, TextSubmitted> + 'static> {
     /// One shared local invocation helper; no erased handler or Rust value crosses COM.
-    handler: HandlerState<State, Handler>,
+    handler: EventDelivery<State, Handler>,
 }
 impl<State: 'static, Handler: EventHandler<State, TextSubmitted> + 'static> ITextSubmittedSink for TextSubmittedSink<State, Handler> {
     /// Validates and copies the concrete foreign snapshot before invoking application behavior.
@@ -608,17 +404,14 @@ impl<State: 'static> EventSession<State> {
         widget: &Source,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        let mut leases = self.registry.take()?;
+        self.0.register(|| {
         let sink: ComPtr<ITextSubmittedSinkAbi> = TextSubmittedSink::from_value(TextSubmittedSink {
-            handler: HandlerState {
-                state: self.state.clone(),
-                handler: RefCell::new(Some(handler)),
-            },
+            handler: self.0.delivery(handler),
         })
         .query()?;
         let lease = widget.subscribe_submitted_sink(sink.as_com_ref())?;
-        leases.push(lease.clone());
         Ok(lease)
+        })
     }
 }
 
@@ -626,7 +419,7 @@ impl<State: 'static> EventSession<State> {
 /// Concrete application window handler uses the same generic ownership as ordinary widget handlers.
 struct WindowSink<State: 'static, Handler: EventHandler<State, WindowEvent> + 'static> {
     /// Stored application state and handler remain local to this binary.
-    handler: HandlerState<State, Handler>,
+    handler: EventDelivery<State, Handler>,
 }
 impl<State: 'static, Handler: EventHandler<State, WindowEvent> + 'static> IWindowSink for WindowSink<State, Handler> {
     /// Validates the complete tagged event and copied geometry before invoking application code.
@@ -650,7 +443,7 @@ pub struct PopupDismissed;
 /// Concrete application popup handler stores its actual callback type inline.
 struct PopupSink<State: 'static, Handler: EventHandler<State, PopupDismissed> + 'static> {
     /// Explicit application ownership has no reference from the popup's producer queue.
-    handler: HandlerState<State, Handler>,
+    handler: EventDelivery<State, Handler>,
 }
 impl<State: 'static, Handler: EventHandler<State, PopupDismissed> + 'static> IPopupSink for PopupSink<State, Handler> {
     /// Delivers the one concrete ordinary popup event without querying current visibility.
@@ -665,17 +458,14 @@ impl<State: 'static> EventSession<State> {
         window: ComRef<'_, IWindowAbi>,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        let mut leases = self.registry.take()?;
+        self.0.register(|| {
         let sink: ComPtr<IWindowSinkAbi> = WindowSink::from_value(WindowSink {
-            handler: HandlerState {
-                state: self.state.clone(),
-                handler: RefCell::new(Some(handler)),
-            },
+            handler: self.0.delivery(handler),
         })
         .query()?;
         let lease = window.add_ref().query::<IWindowEventsAbi>()?.subscribe(sink.as_com_ref())?;
-        leases.push(lease.clone());
         Ok(lease)
+        })
     }
     /// Registers the actual popup's dismissal source; later visibility is read independently from this snapshot.
     pub fn subscribe_popup<Handler: EventHandler<State, PopupDismissed> + 'static>(
@@ -683,17 +473,14 @@ impl<State: 'static> EventSession<State> {
         popup: ComRef<'_, IPopupAbi>,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        let mut leases = self.registry.take()?;
+        self.0.register(|| {
         let sink: ComPtr<IPopupSinkAbi> = PopupSink::from_value(PopupSink {
-            handler: HandlerState {
-                state: self.state.clone(),
-                handler: RefCell::new(Some(handler)),
-            },
+            handler: self.0.delivery(handler),
         })
         .query()?;
         let lease = popup.add_ref().query::<IPopupEventsAbi>()?.subscribe(sink.as_com_ref())?;
-        leases.push(lease.clone());
         Ok(lease)
+        })
     }
 }
 
@@ -701,7 +488,7 @@ impl<State: 'static> EventSession<State> {
 /// Application-local specialization owns its concrete generated-selection handler and shared state.
 struct ComboSelectionSink<State: 'static, Handler: EventHandler<State, ComboSelection> + 'static> {
     /// Shared owned invocation discipline used by every event family.
-    handler: HandlerState<State, Handler>,
+    handler: EventDelivery<State, Handler>,
 }
 impl<State: 'static, Handler: EventHandler<State, ComboSelection> + 'static> IComboChangedSink for ComboSelectionSink<State, Handler> {
     /// Validates the generated tagged selection before borrowing application state.
@@ -717,17 +504,14 @@ impl<State: 'static> EventSession<State> {
         combo: &crate::ComboWidget,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        let mut leases = self.registry.take()?;
+        self.0.register(|| {
         let sink: ComPtr<IComboChangedSinkAbi> = ComboSelectionSink::from_value(ComboSelectionSink {
-            handler: HandlerState {
-                state: self.state.clone(),
-                handler: RefCell::new(Some(handler)),
-            },
+            handler: self.0.delivery(handler),
         })
         .query()?;
         let lease = combo.as_interface().subscribe_changed(sink.as_com_ref())?;
-        leases.push(lease.clone());
         Ok(lease)
+        })
     }
 }
 
@@ -738,17 +522,14 @@ impl<State: 'static> EventSession<State> {
         item: &crate::MenuItem,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        let mut leases = self.registry.take()?;
+        self.0.register(|| {
         let sink: ComPtr<IActivationSinkAbi> = ActivationSink::from_value(ActivationSink {
-            handler: HandlerState {
-                state: self.state.clone(),
-                handler: RefCell::new(Some(handler)),
-            },
+            handler: self.0.delivery(handler),
         })
         .query()?;
         let lease = item.as_interface().add_ref().query::<IActivationEventsAbi>()?.subscribe(sink.as_com_ref())?;
-        leases.push(lease.clone());
         Ok(lease)
+        })
     }
 }
 
@@ -764,7 +545,7 @@ pub enum FileDialogCompleted {
 /// Concrete local completion adapter owns the application's exact state and handler specialization.
 struct FileDialogSink<State: 'static, Handler: EventHandler<State, FileDialogCompleted> + 'static> {
     /// Existing owned invocation helper; native Rust paths are decoded before borrowing application state.
-    handler: HandlerState<State, Handler>,
+    handler: EventDelivery<State, Handler>,
 }
 impl<State: 'static, Handler: EventHandler<State, FileDialogCompleted> + 'static> IFileDialogSink for FileDialogSink<State, Handler> {
     /// Rejects an incompatible encoding and preserves exact native units when constructing the local event.
@@ -783,20 +564,17 @@ impl<State: 'static> EventSession<State> {
         dialog: &crate::FileDialog,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        let mut leases = self.registry.take()?;
+        self.0.register(|| {
         let sink: ComPtr<IFileDialogSinkAbi> = FileDialogSink::from_value(FileDialogSink {
-            handler: HandlerState {
-                state: self.state.clone(),
-                handler: RefCell::new(Some(handler)),
-            },
+            handler: self.0.delivery(handler),
         })
         .query()?;
         let lease = dialog.as_interface().add_ref().query::<IFileDialogEventsAbi>()?.subscribe(sink.as_com_ref())?;
-        leases.push(lease.clone());
         Ok(lease)
+        })
     }
 }
-impl source::EventPayload for FileDialogCompleted {
+impl EventPayload for FileDialogCompleted {
     type Sink = IFileDialogSinkAbi;
     /// Encodes native identity only at the boundary; lossy display text never becomes a selected path.
     fn deliver(&self, sink: ComRef<'_, Self::Sink>) -> Result<(), NcStatus> {
@@ -810,7 +588,7 @@ impl source::EventPayload for FileDialogCompleted {
 /// One concrete serializer per standard snapshot; native Rust payloads never cross the ABI.
 macro_rules! event_payload {
     ($event:ty, $sink:ty, $value:ident, $target:ident, $body:block) => {
-        impl source::EventPayload for $event {
+        impl EventPayload for $event {
             type Sink = $sink;
             /// Delivers the captured snapshot without reading the live producer.
             fn deliver(&$value, $target: ComRef<'_, Self::Sink>) -> Result<(), NcStatus> $body
@@ -829,6 +607,5 @@ event_payload!(TextChanged, ITextChangedSinkAbi, self, sink, {
 event_payload!(TextSubmitted, ITextSubmittedSinkAbi, self, sink, {
     sink.submitted(NcCopyFromBufferOffset::new(0, self.text.as_bytes()))
 });
-event_payload!(WindowEvent, IWindowSinkAbi, self, sink, { sink.event((*self).into()) });
+
 event_payload!(PopupDismissed, IPopupSinkAbi, self, sink, { sink.dismissed() });
-event_payload!(ComboSelection, IComboChangedSinkAbi, self, sink, { sink.changed((*self).into()) });

@@ -24,7 +24,10 @@ fn update(ui: &Ui, button: &ButtonWidget, size: Size) -> Result<(), NcStatus> {
 }
 ```
 
-Independent producers reuse `neocogi_ui::events::EventSource<E>`. Standard
+Independent producers reuse `neocogi_com_events::EventSource<E>` (also reexported
+from `neocogi_ui::events`). The generated `neocogi.com.events` module owns the
+lease and dispatcher ABI; the support crate owns typed queues and application
+sessions. Standard
 snapshots already implement `EventPayload`, which names their concrete COM sink.
 A custom snapshot implements that trait for its own declared sink interface.
 `emit` never invokes application code. `subscribe` returns the application-owned

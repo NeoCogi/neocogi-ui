@@ -9,6 +9,7 @@ description = "Typed Rust client API for NeoCogi UI components"
 
 [dependencies]
 neocogi-ui-core-contracts.workspace = true
+neocogi-com-events.workspace = true
 neocogi-renderer-contracts.workspace = true
 neocogi-platform-contracts.workspace = true
 neocogi-gfx-contracts.workspace = true
@@ -21,7 +22,7 @@ default = []
 # Optional authoring clients keep unrelated plugin contracts out of UI/runtime binaries.
 skin = ["dep:neocogi-skin-contracts"]
 # Internal behavior fixtures; ordinary plugin and application builds do not expose queue leases.
-test-support = []
+test-support = ["neocogi-com-events/test-support"]
 # Deployment policy belongs to the final application, not implementation plugins.
 runtime = ["neocogi-com/runtime"]
 static-runtime = ["neocogi-com/static-runtime"]
