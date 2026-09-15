@@ -11,9 +11,12 @@ artifacts but does not construct arbitrary classes.
 .ncidl source
   -> generated Rust contract crate
        -> ABI layouts and typed wrappers compiled into host/plugin
-       -> MODULE reference imports the exact native description getter
-  -> fingerprint-qualified contract library
+       -> ordinary MODULE reference imports the exact native description getter
+       -> built-in events module exposes generated ID and fingerprint only
+  -> ordinary fingerprint-qualified contract library
        -> one compact immutable identity graph
+  -> intrinsic events description generated into com_shared_runtime
+       -> seeded on first catalog-dependent runtime API use
 
 plugin implementation
   -> private Rust state + generated COM object storage
@@ -30,8 +33,11 @@ The split is deliberate:
 
 - The contract crate gives Rust code types it can compile and call.
 - The native contract library is the single runtime source of descriptive
-  identity and dependency metadata for one exact module revision. It does not
+  identity and dependency metadata for one exact ordinary module revision. It does not
   expose the original IDL source.
+- `neocogi.com.events` is a COM intrinsic: the runtime owns its generated
+  immutable description. Dependents carry an ID/fingerprint built-in edge,
+  not an events-description getter or native library dependency.
 - The plugin owns executable implementation and construction policy.
 - The runtime owns cross-artifact validation, registration, inspection, and
   module lifetime.
