@@ -503,3 +503,7 @@ mod checked_adapter_tests {
         assert_eq!(*session.state().unwrap(), 1);
     }
 }
+
+/// Generated connectors are exercised against checked foreign producer calls.
+#[cfg(test)]
+mod connector_tests;
