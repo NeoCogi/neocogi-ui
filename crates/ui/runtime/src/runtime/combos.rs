@@ -2,8 +2,7 @@
 
 use super::*;
 use crate::{
-    combo_box::{ComboPopup, ComboState, DEFAULT_COMBO_PLACEHOLDER, copied_items, decoded_selection},
-    window_manager::WindowOption,
+    combo_box::{ComboState, DEFAULT_COMBO_PLACEHOLDER, choice_rows, copied_items, decoded_selection},
 };
 use neocogi_ui_core_contracts::{ComboAbi, ComboItemRange, ComboSelectionAbi, IComboBoxes};
 
@@ -26,26 +25,19 @@ impl IComboBoxes for Runtime {
         let selection = decoded_selection(selection)?;
         let state = ComboState::create(items, selection, DEFAULT_COMBO_PLACEHOLDER.to_owned())?;
         let combo = crate::Combo::create_com(storage.factory.host.clone(), storage.factory.resources.clone(), state.clone())?;
-        let (popup_widget, presentation) = ComboPopup::create(storage.factory.host.clone(), storage.factory.resources.clone(), state.clone())?;
+        let rows = choice_rows(&state)?;
+        let revision = state.revision()?;
 
-        // Mount the private presentation as an ordinary widget popup. The root forest owns only
-        // generic node, popup, and parent relationships; combo semantics stop at this module.
+        // Register the compact choice menu only after the entire foreign model was validated and
+        // copied. The root forest owns generic menu rows, popup, and parent relationships only.
         let mut context = storage.context()?;
         storage.prune_mounts(&context.window_manager);
         context.window_manager.window_visible(&parent).map_err(super::windows::status)?;
-        let node = storage.factory.mount_node(popup_widget.as_com_ref(), None)?;
         let popup = context
             .window_manager
-            .create_popup(&parent, "", node)
+            .create_choice_popup(&parent, rows, selection.map(|index| index as u64))
             .expect("authenticated popup owner cannot disappear during an exclusive transaction");
-        context
-            .window_manager
-            .set_popup_options(
-                &popup,
-                WindowOption::FRAME | WindowOption::NO_PADDING | WindowOption::NO_TITLE | WindowOption::NO_RESIZE | WindowOption::AUTO_HEIGHT,
-            )
-            .expect("newly registered popup must accept its presentation options");
-        context.register_combo_box(state, popup, presentation);
+        context.register_combo_box(state, popup, revision);
         storage.pending.set(true);
         Ok(combo)
     }

@@ -65,6 +65,16 @@ callback delivery, and the manager closes the selected popup path before the
 application handler runs. Check/radio-group transitions belong to application
 handlers; a shortcut hint does not register an accelerator.
 
+A combo popup is a choice-menu specialization of the same compact surface and popup
+forest. Its leaves carry choice identities rather than command-item event ports.
+The owning combo model supplies the committed identity and replaces the complete
+leaf snapshot after an item edit. Routing stages a leaf identity, closes the menu
+path, and commits it at the next checked composition boundary before application
+changed-event delivery. Pointer hover, keyboard focus, and committed choice are
+independent: hover wins only while the pointer has an actual row target, keyboard
+navigation wins while active, and otherwise the committed row remains highlighted.
+The trigger fixes popup width; menu rows determine only its intrinsic height.
+
 ## Placement and interaction
 
 Menu topology and placement remain manager-private. Every menu popup is a concrete forest node with

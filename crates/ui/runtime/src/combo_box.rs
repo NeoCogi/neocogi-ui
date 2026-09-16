@@ -1,25 +1,15 @@
-//! Private runtime composition for combo-box state and popup presentation.
+//! Private combo model and composition over the shared compact choice-menu surface.
 //!
-//! The window manager sees the choice list as an ordinary widget-backed popup. Combo semantics
-//! stay in this module: a private typed COM object owns the authoritative model, while the public
-//! header and private popup widget reach that object through exclusive `&mut self` calls. No
-//! combo-specific type, branch, or input policy enters the root/surface layer.
+//! The root forest stores only generic menu surfaces and popup ownership. This module connects
+//! one public header, one authoritative typed state, and one private choice-popup definition.
 
-use crate::ui_node::widgets::content_height;
-use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl};
+use crate::menu::MenuSlot;
 use crate::window_manager::{PopupHandle, SurfaceMutationError, WindowManager};
-use crate::{
-    AtlasHandle, Change, Constraints, ControlRole, ControlState, Dimensioni, FontRef, FontRole, KeyboardBehavior, MouseButton, PointerState, Recti, Skin,
-    UiInputEvent, Vec2i, Widget, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx,
-};
 use neocogi_com::{
     ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_int_enum, com_interface, com_object,
 };
-#[allow(unused_imports)] // The object macro resolves these trait identifiers into generated types.
-use neocogi_ui_core_contracts::{ILeafLayout, IWidget};
 use neocogi_ui_core_contracts::{
-    ComboItemRange, ComboSelection, ComboSelectionAbi, IComboChangedSinkAbi, IEventSubscriptionAbi, ILeafLayoutAbi, ILeafLayoutInterfacesFor, IWidgetAbi,
-    IWidgetHostAbi, IWidgetInterfacesFor, Rect,
+    ComboItemRange, ComboSelection, ComboSelectionAbi, IComboChangedSinkAbi, IEventSubscriptionAbi, Rect,
 };
 
 /// Contract-defined visible fallback for a combo with no committed selection.
@@ -79,8 +69,6 @@ enum ComboPopupLifecycle {
 pub(crate) trait IComboState {
     /// Returns a revision changed by labels, placeholder, or committed selection.
     fn revision(&self) -> Result<u64, NcStatus>;
-    /// Returns a revision changed only when popup row count changes its vertical geometry.
-    fn row_revision(&self) -> Result<u64, NcStatus>;
     /// Returns the explicit optional committed item position.
     fn selection(&self) -> Result<ComboSelectionAbi, NcStatus>;
     /// Copies the selected label or placeholder currently displayed by the header.
@@ -127,8 +115,6 @@ pub(crate) struct ComboState {
     placeholder: String,
     /// Monotonic semantic revision used to invalidate transient popup candidates.
     revision: u64,
-    /// Monotonic row-count revision kept distinct from paint-only model changes.
-    row_revision: u64,
     /// Last valid screen-space anchor captured by header activation.
     popup_anchor: Rect,
     /// Explicit popup lifecycle reconciled by the runtime composition owner.
@@ -146,7 +132,6 @@ impl ComboState {
             selection,
             placeholder,
             revision: 0,
-            row_revision: 0,
             popup_anchor: Rect::default(),
             popup: ComboPopupLifecycle::Closed,
             changed_event: crate::EventSource::new(),
@@ -232,11 +217,6 @@ impl IComboState for ComboState {
         Ok(self.revision)
     }
 
-    /// Reads the narrower revision used by the popup's independent measurement cache.
-    fn row_revision(&self) -> Result<u64, NcStatus> {
-        Ok(self.row_revision)
-    }
-
     /// Encodes structural absence without manufacturing an in-band index sentinel.
     fn selection(&self) -> Result<ComboSelectionAbi, NcStatus> {
         Ok(encode_selection(self.selection))
@@ -271,13 +251,9 @@ impl IComboState for ComboState {
         if self.items == items && self.selection == selection {
             return Ok(false);
         }
-        let row_count_changed = self.items.len() != items.len();
         self.items = items;
         self.selection = selection;
         self.advance_revision();
-        if row_count_changed {
-            self.row_revision = self.row_revision.wrapping_add(1);
-        }
         self.close_if_empty();
         Ok(true)
     }
@@ -366,310 +342,26 @@ impl IComboState for ComboState {
     }
 }
 
-#[com_interface(
-    auto_guid = "neocogi.ui.runtime.internal.ComboPopupControl:v1",
-    assigned_signature = b"00000000000000000000000000000052"
-)]
-/// Runtime-private lifecycle control for the ordinary widget used as popup content.
-pub(crate) trait IComboPopupControl {
-    /// Synchronizes popup-local candidates and invalidates geometry only when row count changed.
-    fn synchronize_model(&mut self) -> Result<bool, NcStatus>;
-    /// Resets hover and keyboard candidates immediately before generic popup activation.
-    fn prepare_open(&mut self) -> Result<(), NcStatus>;
+
+/// Builds one checked flat choice snapshot without a second retained item collection.
+pub(crate) fn choice_rows(state: &ComPtr<IComboStateAbi>) -> Result<Vec<MenuSlot>, NcStatus> {
+    let count = usize::try_from(state.item_count()?).map_err(|_| NC_E_INVALID_ARG)?;
+    let mut rows = Vec::with_capacity(count);
+    for index in 0..count {
+        let label = state.item(index as u64)?.to_string()?;
+        rows.push(MenuSlot::Choice { id: index as u64, label, enabled: true });
+    }
+    Ok(rows)
 }
 
-#[com_object(interfaces(IWidget, ILeafLayout, IComboPopupControl))]
-/// Ordinary private widget that measures, updates, and paints combo choices inside a generic popup.
-pub(crate) struct ComboPopup {
-    /// Common widget lifecycle and phase resources used by every retained leaf.
-    runtime: crate::ui_node::widget_object::WidgetRuntime,
-    /// Typed model capability; all mutation enters its `&mut self` interface methods.
-    state: ComPtr<IComboStateAbi>,
-    /// Pointer candidate present only while the pointer is over a concrete row.
-    hot: Option<usize>,
-    /// Keyboard candidate initialized from the committed selection at each opening.
-    active: Option<usize>,
-    /// State revision reflected by the transient candidates.
-    observed_revision: u64,
-    /// Row revision reflected by the popup widget's independent measurement cache.
-    observed_row_revision: u64,
-}
-
-/// Exact effects of synchronizing transient popup presentation with its semantic model.
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
-struct PresentationChange {
-    /// Whether hover or keyboard candidates were refreshed for a semantic change.
-    semantic: bool,
-    /// Whether current row labels require invalidating cached preferred geometry.
-    geometry: bool,
-}
-
-impl ComboPopup {
-    /// Builds both interfaces over one private widget allocation for mounting and coordination.
-    pub(crate) fn create(
-        host: ComPtr<IWidgetHostAbi>,
-        resources: crate::ui_node::widget_object::SharedAssets,
-        state: ComPtr<IComboStateAbi>,
-    ) -> Result<(ComPtr<IWidgetAbi>, ComPtr<IComboPopupControlAbi>), NcStatus> {
-        let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, WidgetOption::NONE, Some(&resources))?;
-        let observed_revision = state.revision()?;
-        let observed_row_revision = state.row_revision()?;
-        let unknown = Self::from_value(Self {
-            runtime,
-            state,
-            hot: None,
-            active: None,
-            observed_revision,
-            observed_row_revision,
-        });
-        Ok((unknown.query()?, unknown.query()?))
-    }
-
-    /// Reads and validates optional selection through the private typed state boundary.
-    fn selection(&self) -> Result<Option<usize>, NcStatus> {
-        decoded_selection(self.state.selection()?)
-    }
-
-    /// Reads a representable item count, treating impossible internal ABI failure as no rows.
-    fn item_count(&self) -> usize {
-        self.state.item_count().ok().and_then(|count| usize::try_from(count).ok()).unwrap_or(0)
-    }
-
-    /// Recomputes the shared row height from current immutable theme resources.
-    fn row_height(style: &Skin, atlas: &AtlasHandle) -> i32 {
-        content_height(style, atlas, &FontRef::Role(FontRole::Body), 0).max(0)
-    }
-
-    /// Resolves one local pointer position against the same row geometry used by paint.
-    fn row_at(&self, position: Vec2i, row_height: i32) -> Option<usize> {
-        if row_height <= 0 || position.y < 0 {
-            return None;
-        }
-        let index = usize::try_from(position.y / row_height).ok()?;
-        (index < self.item_count()).then_some(index)
-    }
-
-    /// Resets stale presentation candidates from the latest authoritative selection.
-    fn synchronize_revision(&mut self) -> Result<PresentationChange, NcStatus> {
-        let revision = self.state.revision()?;
-        let row_revision = self.state.row_revision()?;
-        let change = PresentationChange {
-            semantic: self.observed_revision != revision,
-            geometry: self.observed_row_revision != row_revision,
-        };
-        if change.semantic {
-            self.hot = None;
-            self.active = self.selection()?;
-            self.observed_revision = revision;
-        }
-        if change.geometry {
-            self.observed_row_revision = row_revision;
-        }
-        Ok(change)
-    }
-
-    /// Moves the keyboard candidate by one row with explicit wrapping behavior.
-    fn move_active(&mut self, forward: bool) {
-        let count = self.item_count();
-        self.active = match (count, self.active, forward) {
-            (0, _, _) => None,
-            (_, Some(index), true) => Some((index + 1) % count),
-            (_, Some(0), false) => Some(count - 1),
-            (_, Some(index), false) => Some(index - 1),
-            (_, None, true) => Some(0),
-            (_, None, false) => Some(count - 1),
-        };
-    }
-
-    /// Selects the first or last row as a keyboard candidate without committing it.
-    fn move_active_to_edge(&mut self, first: bool) {
-        self.active = match (self.item_count(), first) {
-            (0, _) => None,
-            (_, true) => Some(0),
-            (count, false) => Some(count - 1),
-        };
-    }
-
-    /// Commits one checked choice and keeps local presentation coherent with the new revision.
-    fn submit(&mut self, index: usize) {
-        if let Ok(revision) = self.state.submit(index as u64) {
-            self.active = Some(index);
-            self.observed_revision = revision;
-        }
-    }
-
-    /// Returns the visible row with pointer hover taking precedence only while it exists.
-    fn visible_index(&self) -> Option<usize> {
-        let selected = self.selection().ok().flatten();
-        match self.state.revision() {
-            Ok(revision) if revision == self.observed_revision => visible_popup_index(self.hot, self.active, selected),
-            Ok(_) => selected,
-            Err(_) => None,
-        }
-    }
-
-    /// Extracts a local pointer position from one normalized pointer transition.
-    fn pointer_position(input: Option<&UiInputEvent>) -> Option<Vec2i> {
-        match input {
-            Some(
-                UiInputEvent::MouseMove { pos, .. }
-                | UiInputEvent::MouseDrag { pos, .. }
-                | UiInputEvent::MouseDown { pos, .. }
-                | UiInputEvent::MouseUp { pos, .. }
-                | UiInputEvent::Scroll { pos, .. },
-            ) => Some(*pos),
-            Some(UiInputEvent::Cancel | UiInputEvent::Key { .. } | UiInputEvent::Text { .. }) | None => None,
-        }
-    }
-}
-
-/// Resolves popup emphasis without allowing absent hover to erase committed selection.
-fn visible_popup_index(hot: Option<usize>, active: Option<usize>, selected: Option<usize>) -> Option<usize> {
-    match (hot, active, selected) {
-        (Some(index), _, _) | (None, Some(index), _) | (None, None, Some(index)) => Some(index),
-        (None, None, None) => None,
-    }
-}
-
-impl crate::LeafWidget for ComboPopup {
-    /// Measures every current label without retaining a second item collection.
-    fn measure(&self, style: &Skin, atlas: &AtlasHandle, _constraints: Constraints) -> Dimensioni {
-        let count = i32::try_from(self.item_count()).unwrap_or(i32::MAX);
-        // Width belongs to the header's exact outer anchor; only row count contributes intrinsic
-        // popup geometry now that the generic surface fixes the horizontal axis.
-        Dimensioni::new(0, Self::row_height(style, atlas).saturating_mul(count))
-    }
-}
-
-impl Widget for ComboPopup {
-    /// Updates hover and keyboard candidates before committing only explicit row submissions.
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Change {
-        // The state capability is private, retained by this object, and populated only with
-        // validated values. A failed internal observation cannot be represented by `Widget::update`;
-        // retain the last complete presentation and let the next coordinator pass retry it.
-        let state_changed = self.synchronize_revision().unwrap_or_default();
-        let row_height = Self::row_height(ctx.skin(), ctx.atlas());
-        self.hot = match (ctx.hovered(), Self::pointer_position(input)) {
-            (true, Some(position)) => self.row_at(position, row_height),
-            (false, _) => None,
-            (true, None) => self.hot,
-        };
-
-        match input {
-            Some(UiInputEvent::MouseDown { button, .. }) if button.intersects(MouseButton::LEFT) => {
-                if let Some(index) = self.hot {
-                    self.submit(index);
-                }
-            }
-            Some(UiInputEvent::Key { event }) if ctx.focused() && event.is_pressed() => match event.key {
-                crate::Key::ArrowDown => self.move_active(true),
-                crate::Key::ArrowUp => self.move_active(false),
-                crate::Key::Home => self.move_active_to_edge(true),
-                crate::Key::End => self.move_active_to_edge(false),
-                crate::Key::Enter | crate::Key::Space if !event.repeat => {
-                    let selected = self.selection().ok().flatten();
-                    if let Some(index) = visible_popup_index(self.hot, self.active, selected) {
-                        self.submit(index);
-                    }
-                }
-                _ => {}
-            },
-            Some(
-                UiInputEvent::MouseMove { .. }
-                | UiInputEvent::MouseDrag { .. }
-                | UiInputEvent::MouseDown { .. }
-                | UiInputEvent::MouseUp { .. }
-                | UiInputEvent::Scroll { .. }
-                | UiInputEvent::Cancel
-                | UiInputEvent::Key { .. }
-                | UiInputEvent::Text { .. },
-            )
-            | None => {}
-        }
-        Change::from(state_changed.geometry)
-    }
-
-    /// Paints rows from current model values and transient presentation candidates.
-    fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
-        let row_height = Self::row_height(ctx.skin(), ctx.atlas());
-        let font = ctx.skin().resolve_font(ctx.atlas(), &FontRef::Role(FontRole::Body));
-        let visible = self.visible_index();
-        for index in 0..self.item_count() {
-            let Ok(label) = self.state.item(index as u64).and_then(|label| label.to_string()) else {
-                continue;
-            };
-            let y = i32::try_from(index).unwrap_or(i32::MAX).saturating_mul(row_height);
-            let row = Recti::new(0, y, ctx.local_rect().width.max(0), row_height);
-            let hovered = self.hot == Some(index);
-            let selected = visible == Some(index);
-            let state = match (ctx.enabled(), selected, hovered, ctx.active() && hovered) {
-                (false, _, _, _) => ControlState::Disabled,
-                (true, true, true, true) => ControlState::Focused(PointerState::Pressed),
-                (true, true, true, false) => ControlState::Focused(PointerState::Hovered),
-                (true, true, false, _) => ControlState::Focused(PointerState::Normal),
-                (true, false, true, true) => ControlState::Enabled(PointerState::Pressed),
-                (true, false, true, false) => ControlState::Enabled(PointerState::Hovered),
-                (true, false, false, _) => ControlState::Enabled(PointerState::Normal),
-            };
-            ctx.draw_control_center_state(ControlRole::Item, state, row);
-            let color = ctx.skin().control(ControlRole::Item, state).content_color;
-            ctx.draw_control_text_color_with_font(font, &label, row, color, WidgetOption::NONE);
-        }
-    }
-
-    /// Makes the private popup leaf the sole keyboard target inside its generic popup tree.
-    fn keyboard_behavior(&self) -> KeyboardBehavior {
-        KeyboardBehavior::TAB_STOP
-    }
-}
-
-impl crate::ui_node::widget_object::WidgetAlgorithm for ComboPopup {}
-
-impl HostedWidget for ComboPopup {
-    /// Borrows the ordinary widget runtime used by generic root traversal.
-    fn runtime(&self) -> &crate::ui_node::widget_object::WidgetRuntime {
-        &self.runtime
-    }
-
-    /// Mutably borrows ordinary widget runtime state for phase and lifecycle operations.
-    fn runtime_mut(&mut self) -> &mut crate::ui_node::widget_object::WidgetRuntime {
-        &mut self.runtime
-    }
-}
-
-impl IComboPopupControl for ComboPopup {
-    /// Applies semantic changes after callbacks, before roots perform their next generic layout.
-    fn synchronize_model(&mut self) -> Result<bool, NcStatus> {
-        self.runtime.state.writable()?;
-        let change = self.synchronize_revision()?;
-        if change.geometry {
-            self.runtime.state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
-        }
-        Ok(change.semantic)
-    }
-
-    /// Resets transient candidates from the authoritative selection before each opening.
-    fn prepare_open(&mut self) -> Result<(), NcStatus> {
-        self.runtime.state.writable()?;
-        self.hot = None;
-        self.active = self.selection()?;
-        self.observed_revision = self.state.revision()?;
-        self.observed_row_revision = self.state.row_revision()?;
-        Ok(())
-    }
-}
-
-direct_widget_phase_impl!(ComboPopup);
-direct_leaf_layout_impl!(ComboPopup);
-
-/// Runtime-owned association between private combo state and one ordinary popup handle.
+/// Runtime-owned association between private combo state and one shared menu popup handle.
 struct ComboController {
-    /// Typed semantic model shared by the header and popup widget through COM calls.
+    /// Typed semantic model shared by the header and composition coordinator.
     state: ComPtr<IComboStateAbi>,
-    /// Generic manager capability; no combo policy is embedded in its root node.
+    /// Generic popup capability; no combo policy is embedded in its forest node.
     popup: PopupHandle,
-    /// Typed control used only to reset transient presentation before generic activation.
-    presentation: ComPtr<IComboPopupControlAbi>,
+    /// Last model revision copied into the menu surface's compact leaf snapshot.
+    observed_revision: u64,
 }
 
 /// Whether one controller remains useful after a reconciliation step.
@@ -692,12 +384,24 @@ impl ComboController {
             }
             Err(error) => return Err(surface_status(error)),
         };
-        let presentation_changed = self.presentation.synchronize_model()?;
+        // Menu routing only stages a stable leaf identity. Commit it here, after the root forest
+        // released input borrows and before application event sinks can observe the new value.
+        if let Some(choice) = manager.take_choice_submission(&self.popup).map_err(surface_status)? {
+            self.state.submit(choice)?;
+        }
+        let revision = self.state.revision()?;
+        let presentation_changed = revision != self.observed_revision;
+        if presentation_changed {
+            let rows = choice_rows(&self.state)?;
+            let committed = decoded_selection(self.state.selection()?)?.map(|index| index as u64);
+            manager.replace_choice_popup(&self.popup, rows, committed).map_err(surface_status)?;
+            self.observed_revision = revision;
+        }
         let action = self.state.reconcile_popup(visible)?;
         match action {
             ComboPopupAction::None => Ok((ControllerDisposition::Keep, presentation_changed)),
             ComboPopupAction::Open => {
-                self.presentation.prepare_open()?;
+                manager.prepare_choice_popup(&self.popup).map_err(surface_status)?;
                 let anchor = crate::boundary::local_rect(self.state.popup_anchor()?);
                 manager.show_popup_at(&self.popup, anchor).map_err(surface_status)?;
                 Ok((ControllerDisposition::Keep, true))
@@ -726,9 +430,9 @@ pub(crate) struct ComboBoxManager {
 }
 
 impl ComboBoxManager {
-    /// Registers one fully constructed controller after its generic popup exists.
-    pub(crate) fn register(&mut self, state: ComPtr<IComboStateAbi>, popup: PopupHandle, presentation: ComPtr<IComboPopupControlAbi>) {
-        self.controllers.push(ComboController { state, popup, presentation });
+    /// Registers one fully constructed controller after its generic menu popup exists.
+    pub(crate) fn register(&mut self, state: ComPtr<IComboStateAbi>, popup: PopupHandle, observed_revision: u64) {
+        self.controllers.push(ComboController { state, popup, observed_revision });
     }
 
     /// Reconciles all controllers using exclusive manager and coordinator access.
@@ -822,7 +526,6 @@ mod tests {
             selection,
             placeholder: "Select…".into(),
             revision: 0,
-            row_revision: 0,
             popup_anchor: Rect::default(),
             popup: ComboPopupLifecycle::Closed,
             changed_event: crate::EventSource::new(),
@@ -868,22 +571,13 @@ mod tests {
         assert_eq!(state.selection, Some(2));
     }
 
-    /// A committed row remains visible until a concrete pointer or keyboard candidate supersedes it.
+    /// The menu coordinator observes every semantic edit through one authoritative revision.
     #[test]
-    fn popup_visibility_falls_back_to_committed_selection() {
-        assert_eq!(visible_popup_index(None, None, Some(1)), Some(1));
-        assert_eq!(visible_popup_index(Some(2), Some(0), Some(1)), Some(2));
-        assert_eq!(visible_popup_index(None, Some(0), Some(1)), Some(0));
-        assert_eq!(visible_popup_index(None, None, None), None);
-    }
-
-    /// Popup geometry revision changes for row-count replacements but not paint-only edits.
-    #[test]
-    fn row_revision_tracks_only_popup_measurement_inputs() {
+    fn menu_model_revision_tracks_selection_fallback_and_items() {
         let mut state = state(Some(1));
         state.set_selection(encode_selection(Some(2))).unwrap();
         state.set_placeholder(NcCopyFromBufferOffset::new(0, "Another fallback".as_bytes())).unwrap();
-        assert_eq!(state.row_revision, 0);
+        assert_eq!(state.revision, 2);
 
         let text = b"ApricotBlueberry";
         let ranges = [ComboItemRange { first: 0, count: 7 }, ComboItemRange { first: 7, count: 9 }];
@@ -894,6 +588,6 @@ mod tests {
                 encode_selection(Some(1)),
             )
             .unwrap();
-        assert_eq!(state.row_revision, 1);
+        assert_eq!(state.revision, 3);
     }
 }

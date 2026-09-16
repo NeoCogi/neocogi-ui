@@ -250,27 +250,24 @@ consumed pointer or at an exact screen-space rectangle. It keeps that screen anc
 shown elsewhere and does not follow later owner movement. `PopupHandle` parameters keep these
 operations separate from window operations at compile time.
 
-`Ui::combo_box` constructs an unmounted header and a private popup widget in one runtime operation.
-The popup enters `WindowManager` only through `create_popup(owner, Node)` and therefore has the same
-body and parent-edge representation as every generic widget popup. Above that boundary,
-`RuntimeContext` owns a `ComboBoxManager` association between the generic `PopupHandle`, a
-runtime-private typed state capability, and a narrow popup-presentation capability. The state
-allocation contains ordinary fields and exposes mutation only through `&mut self` methods; neither
-header nor popup uses `Rc<RefCell<_>>` or erased payloads for semantic state.
+`Ui::combo_box` constructs an unmounted header and one compact selection-menu popup in one runtime
+operation. Both command and choice menus occupy the same popup forest, layout, paint, pointer, and
+keyboard machinery; neither uses a retained row widget. Above that boundary, `RuntimeContext`
+owns a `ComboBoxManager` association between the generic `PopupHandle` and a runtime-private typed
+state capability. The state allocation contains ordinary fields and exposes mutation only through
+`&mut self` methods; no erased payload or second native widget represents combo choices.
 
 Header activation advances the private
 `Closed | OpenRequested | Open | CloseRequested | RemoveRequested | Detached` state machine. The
-composition manager pattern-matches pending transitions only after widget traversal has returned,
-then invokes generic show, hide, or destroy operations. Closing the header requests permanent
-removal of its popup definition, while closing the parent window removes the generic popup through
-ordinary structural ownership. The popup keeps pointer-hot and keyboard-active candidates separate
-from committed optional selection, and paint resolves `hot`, then `active`, then `selected`. Thus
-first layout highlights the committed item, pointer departure restores it, and dismissal requires
-no application callback or mirrored header state. A separate row-count revision invalidates the
-popup's independent vertical measurement cache when its number of choices changes. The
-header reconstructs its border box from the same theme insets used by traversal, and the generic
-popup keeps that exact outer width while deriving only its height from row content. Consequently
-both outer horizontal edges align without hard-coded offsets or double-counting popup chrome.
+composition manager pattern-matches pending transitions only after traversal has returned, then
+invokes generic show, hide, or destroy operations. Closing the header requests permanent removal
+of its popup definition; closing the parent window removes it by ordinary structural ownership.
+Menu routing stages a checked choice identity, and the composition manager commits that value
+before application event delivery. The choice surface keeps pointer-hover and keyboard-focused
+slots separate from the committed optional value: paint resolves hover, then keyboard, then
+commitment. Pointer departure therefore restores the selected row. Its complete leaf snapshot is
+replaced on semantic model revision. The header and popup share the exact trigger width, while the
+menu derives only its height from rows; no second window frame or hard-coded offset is involved.
 
 An intrinsic `MenuBar` is consumed with its `Window` into one compact concrete `MenuSurface` for the
 bar and one directly owned `MenuSurface` body for each private popup definition. These are not
@@ -302,9 +299,9 @@ pointer-focus-only surfaces.
 
 Showing an application-addressable popup selects its concrete surface immediately. A widget popup
 focuses its first Tab stop after geometry is committed and then wraps Tab traversal inside its own
-tree. A popup menu uses the same direct-row keyboard navigation as an intrinsic menu. A combo popup
-initializes its keyboard candidate from the committed selection and handles arrows, Home, End,
-Enter, and Space through its ordinary focused widget. Generic root policy handles Escape or an outside press,
+tree. A popup menu uses the same direct-row keyboard navigation as an intrinsic menu. A combo choice
+menu initializes its keyboard slot from the committed selection; arrows, Home, End, Enter, and
+Space route through that shared menu surface. Generic root policy handles Escape or an outside press,
 dismisses any popup body and restores its direct parent surface, whose
 independently retained focused widget ID was never discarded. An Escape dismissal retains no
 key-tail state: only the initial non-repeated press is the dismissal command, while later repeats

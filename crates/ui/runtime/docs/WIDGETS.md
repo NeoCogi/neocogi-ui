@@ -9,7 +9,7 @@ optional event families.
 
 Controls that require a structural owner at construction use their dedicated `Ui`
 method. In particular, `Ui::combo_box` creates a header together with its private
-runtime-owned popup after receiving the popup's owning window.
+selection-menu popup after receiving the popup's owning window.
 
 ## Construction and ownership
 
@@ -90,12 +90,13 @@ second representations of the parent. For example, `TextArea` is the scrolling
 root and owns one `TextEditor` content child; the child alone owns the text buffer,
 cursor, font, and text-event sources. `ScrollArea` similarly owns a transform
 surface and two actual scrollbar children. Small typed state capabilities are shared only where
-distinct roles must coordinate. A combo header and its ordinary private popup widget use one
+distinct roles must coordinate. A combo header and its compact choice-menu popup use one
 runtime-private state allocation for labels, optional selection, and an explicit popup state
 machine. Its fields are ordinary values mutated through exclusive interface receivers; pointer
-hover and keyboard candidate state remain solely in the popup widget. The composition manager above
-`WindowManager` owns the association with a generic popup handle, so neither shared state nor the
-surface forest contains a widget implementation, parent backpointer, or type-erased payload.
+hover and keyboard candidate state remain solely in the shared menu surface. The composition
+manager above `WindowManager` owns the association with a generic popup handle. The surface forest
+contains menu values and popup ownership, never a second combo widget, parent backpointer, or
+type-erased payload.
 
 ## Geometry and external state
 

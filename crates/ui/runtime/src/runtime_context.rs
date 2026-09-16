@@ -5,7 +5,7 @@
 
 use crate::{
     Dimensioni, Recti, ResourceCatalog, SkinBundle,
-    combo_box::{ComboBoxManager, IComboPopupControlAbi, IComboStateAbi},
+    combo_box::{ComboBoxManager, IComboStateAbi},
     window_manager::{PopupHandle, WindowManager},
 };
 use neocogi_com::{ComPtr, ComRef, NcStatus};
@@ -20,7 +20,7 @@ pub(crate) struct RuntimeContext {
     compositor: ComPtr<GfxCompositorAbi>,
     /// Authoritative retained windows, nodes, input, layout, and semantic display list.
     pub(crate) window_manager: WindowManager,
-    /// Composition-layer ownership for private combo state and ordinary popup handles.
+    /// Composition-layer ownership for private combo state and choice-menu popup handles.
     combo_boxes: ComboBoxManager,
     /// Conversion scratch reused while sending solid geometry across the typed boundary.
     solid_scratch: Vec<neocogi_gfx_contracts::SolidVertex>,
@@ -39,8 +39,8 @@ impl RuntimeContext {
     }
 
     /// Registers a complete combo composition without teaching the root forest about widgets.
-    pub(crate) fn register_combo_box(&mut self, state: ComPtr<IComboStateAbi>, popup: PopupHandle, presentation: ComPtr<IComboPopupControlAbi>) {
-        self.combo_boxes.register(state, popup, presentation);
+    pub(crate) fn register_combo_box(&mut self, state: ComPtr<IComboStateAbi>, popup: PopupHandle, observed_revision: u64) {
+        self.combo_boxes.register(state, popup, observed_revision);
     }
 
     /// Reconciles typed combo intent with generic popup operations through exclusive ownership.

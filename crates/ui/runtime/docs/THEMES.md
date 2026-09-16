@@ -303,10 +303,10 @@ the menubar and never changes ordinary widget padding. The Windows 3.11 theme us
 margin; the other bundled classic themes use zero, and the default flat Skin retains five pixels.
 `WindowOption::NO_PADDING` overrides the metric with zero for an individual root.
 
-Application-authored popup windows use the `menu.popup` appearance for both their structural
-client inset and their outer frame paint. This keeps combo/list popups aligned with themed menu
-panels instead of borrowing ordinary window L-corners or `skin.window_border`; compact menu
-popups already paint the same role as their complete manager-owned panel.
+Application-authored widget popup windows use the `menu.popup` appearance for both their structural
+client inset and outer frame paint. Combo choices instead occupy a compact manager-owned menu
+surface, which paints the same `menu.popup` panel as command menus. Neither path borrows ordinary
+window L-corners or `skin.window_border` for its popup outline.
 
 Window caption controls are enabled explicitly through `WindowOption::MINIMIZE_BUTTON` and
 `WindowOption::MAXIMIZE_BUTTON`. The close button remains enabled unless `WindowOption::NO_CLOSE`
