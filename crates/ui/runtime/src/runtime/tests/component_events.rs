@@ -1,11 +1,25 @@
 //! Production runtime regressions for plugin-style private composite events.
 
 use super::*;
-use neocogi_com_events::{EventHandler, EventSession as ComEventSession, EventSource};
+use neocogi_com_events::{EventConnector, EventHandler, EventSession as ComEventSession, EventSource};
 use neocogi_ui_core_contracts::{IActivationSinkEvent, create_i_activation_sink_event_sink};
 
 /// Shared test observation deliberately owned outside either COM component.
 type Trace = Rc<RefCell<Vec<&'static str>>>;
+
+/// Local fixture connector for a native producer without a declared COM source port.
+struct LocalActivation<'source> {
+    /// Producer borrowed for sink construction and subscription only.
+    source: &'source EventSource<IActivationSinkEvent>,
+}
+
+impl<State: 'static, Handler: EventHandler<State, IActivationSinkEvent> + 'static> EventConnector<State, Handler> for LocalActivation<'_> {
+    /// Uses the normal generated sink and production event queue inside registration.
+    fn connect(self, session: &ComEventSession<State>, handler: Handler) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        let sink = create_i_activation_sink_event_sink(session, handler)?;
+        self.source.subscribe(sink.as_com_ref())
+    }
+}
 
 /// Exact private handler type, with an optional ordinary window edit after delivery.
 struct PrivateRecord {
@@ -57,10 +71,7 @@ impl EventfulComposite {
         let source = EventSource::new();
         let private_session = ComEventSession::new(trace);
         private_session
-            .register(|| {
-                let sink = create_i_activation_sink_event_sink(&private_session, PrivateRecord { name, close_target })?;
-                source.subscribe(sink.as_com_ref())
-            })
+            .register(PrivateRecord { name, close_target }, LocalActivation { source: &source })
             .unwrap();
         source.emit(IActivationSinkEvent { label: name.to_owned() });
         EventfulComposite::from_value(Self {
@@ -138,12 +149,7 @@ fn mounted_component_events_dispatch_before_application_and_skip_removed_snapsho
 
     let app_source = EventSource::new();
     let app_session = ComEventSession::new(trace.clone());
-    app_session
-        .register(|| {
-            let sink = create_i_activation_sink_event_sink(&app_session, AppRecord)?;
-            app_source.subscribe(sink.as_com_ref())
-        })
-        .unwrap();
+    app_session.register(AppRecord, LocalActivation { source: &app_source }).unwrap();
     app_source.emit(IActivationSinkEvent { label: "app".to_owned() });
 
     ui.update_with_events(SIZE, &app_session).unwrap();
