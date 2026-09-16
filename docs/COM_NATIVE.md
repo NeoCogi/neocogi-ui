@@ -278,7 +278,11 @@ use physical pixels. Do not create an extra placeholder canvas in the page.
 
 `web-demo.sh` honors `CARGO_TARGET_DIR`, `NEOCOGI_WASM_BINDGEN` and
 `NEOCOGI_WEB_PROFILE=debug|release` (release by default). It installs the matching
-binding CLI when needed. A `?frames=8` query runs eight frames and stops, using the
+binding CLI when needed and does not require ripgrep. The full demo also statically registers
+Skin's live appearance compiler for its style editor, independently of embedded theme tables;
+the browser does not need Skin's external JSON loader. Startup errors are reported to the browser
+console, and the page retains a visible failure status if no live canvas was published.
+A `?frames=8` query runs eight frames and stops, using the
 same finite-run policy as native. Normal stop and asynchronous errors release the
 RAF closure, application session, canvas, input textarea and listeners. GPU
 capabilities retained outside that application still own their device until their
@@ -286,7 +290,7 @@ last release.
 
 The input suite checks actual DOM composition/paste, pointer chords, wheel scaling,
 static registration, inherited editing, IME placement and WebGL resize. The full
-suite exercises theme/image/action behavior and verifies both normal and failed RAF
+suite exercises theme/image/action behavior, observes real framebuffer color diversity, and verifies both normal and failed RAF
 cleanup in Chromium. Set `CHROME_BIN` and `NEOCOGI_BROWSER_TEST_PORT` where needed.
 
 A lost WebGL context reports a renderer error. Applications must recreate the

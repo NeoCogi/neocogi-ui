@@ -21,7 +21,9 @@ build() {
   if [[ "$profile" != release && "$profile" != debug ]]; then
     echo "NEOCOGI_WEB_PROFILE must be release or debug" >&2; exit 2
   fi
-  if ! rustup target list --installed | rg -q "^$target$"; then rustup target add "$target"; fi
+  # Build tooling must not require a developer's optional ripgrep installation. Match a whole
+  # literal target line so an installed sibling target cannot suppress the required installation.
+  if ! rustup target list --installed | grep -Fxq "$target"; then rustup target add "$target"; fi
   profile_args=()
   if [[ "$profile" == release ]]; then profile_args+=(--release); fi
   if [[ ! -x "$wasm_bindgen" ]] || [[ "$($wasm_bindgen --version)" != "wasm-bindgen $wasm_bindgen_version" ]]; then

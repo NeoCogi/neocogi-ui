@@ -36,7 +36,12 @@
   <div id="status">Loading neocogi-ui…</div>
   <script type="module">
     const status = document.getElementById("status");
+    // A synchronous WASM startup failure may return a Rust exit status after releasing its
+    // partially built window. Keep that failure visible instead of treating module loading alone
+    // as proof that the application started. Asynchronous JS failures use the same page state.
+    let failed = false;
     const showFailure = (message) => {
+      failed = true;
       const detail = message?.stack ?? message;
       status.textContent = `Demo failed: ${detail}`;
       if (!status.isConnected) {
@@ -49,8 +54,15 @@
     try {
       const { default: init } = await import("./neocogi-demo-full.js");
       await init();
+      const canvas = document.querySelector("canvas");
+      if (!canvas) {
+        throw new Error("Startup did not create a live canvas. See the browser console for the original error.");
+      }
       requestAnimationFrame(() => {
-        document.querySelector("canvas")?.focus();
+        if (failed) return;
+        // Initialization already published this window. A finite one-frame run may normally
+        // release it before this page callback; that successful stop is not a startup failure.
+        if (canvas.isConnected) canvas.focus();
         status.remove();
       });
     } catch (error) {

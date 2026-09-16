@@ -39,6 +39,12 @@ wrappers. [COM_DESIGN.md](COM_DESIGN.md) defines the accepted architecture, and
   real event delivery. Replace the scoped layout client's first-error `Cell` with an ordinary
   field mutated through `&mut self`, and reuse NCIDL `LayoutParticipation` instead of its parallel
   native enum.
+- Repair full-demo browser startup by explicitly linking/registering the live Skin compiler that
+  its style editor requires, without adding the native JSON loader. Preserve native monolithic
+  JSON support as an explicit feature. Report WASM startup errors to the browser console, retain
+  the page's failure status when initialization publishes no canvas, and remove ripgrep from the
+  web build/test scripts. Browser full-demo coverage now inspects the actual rendered framebuffer
+  as well as production theme/image/action and teardown behavior.
 - Retain the `AssetTables` collection of generated NCIDL records as the UI runtime's canonical immutable resource
   snapshot. `AtlasHandle` now adds only catalog-scoped identities and sorted integer lookup slots;
   `Skin` borrows generated metrics and chrome policy and selects generated appearance fields

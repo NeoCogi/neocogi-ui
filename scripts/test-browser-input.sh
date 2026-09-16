@@ -50,7 +50,8 @@ kill -0 "$server_pid" # Fail if another process already owned the requested port
 # also supports Snap Chromium, whose launcher does not preserve a regular-file output descriptor.
 "$browser" --headless --no-sandbox --enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader --virtual-time-budget=15000 \
   --dump-dom "http://127.0.0.1:$port" | cat > "$site_dir/result.html"
-if ! rg -q '<pre id="result">PASS</pre>' "$site_dir/result.html"; then
+# Like the package builder, the browser runner depends only on standard shell text utilities.
+if ! grep -Fq '<pre id="result">PASS</pre>' "$site_dir/result.html"; then
   cat "$site_dir/result.html" >&2
   exit 1
 fi

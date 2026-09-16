@@ -25,8 +25,15 @@ retained UI imports resources and submits composed frames. Applications opt into
 | `neocogi-skin-impl` | `builder` | Offline JSON-theme generation through the GFX implementation; never selected by the Skin plugin. |
 | `neocogi-render-plugin` | `glow` / `vulkan` / `wgpu` / `webgl` | Build exactly one renderer plugin identity; WebGL is the browser choice. |
 | `neocogi-demo-host` | `png-assets` | Expose the host PNG-upload client for applications that select the GFX plugin. |
+| `neocogi-demo-host` | `skin` | Link/register the live appearance compiler for browser or monolithic startup; does not enable JSON parsing. |
+| `neocogi-demo-host` | `monolith-skin` | Add Skin to a native monolith, including its external JSON theme loader. |
 | Full/basic demos | `embed-assets` | Explicitly embed resource bytes; native defaults read adjacent files. |
 | Full/basic demos | `webgl` | Select browser integration and explicitly enable `embed-assets`. |
+
+The full demo's `webgl` selection additionally enables the host's `skin` capability. Compiling
+authored themes into embedded tables does not replace the live appearance compiler used by its
+style editor. The browser links/registers that provider without its filesystem-based JSON loader;
+the simple demo does not need it.
 
 Shared native builds intentionally allow Cargo to unify the dynamic `runtime`
 feature. The facade contains no registry state: every dependent calls the same
