@@ -80,13 +80,14 @@ Run the isolated package tests first so workspace feature unification cannot hid
 missing direct dependencies:
 
 ```sh
-cargo test -p neocogi-ui-runtime --offline
-cargo clippy -p neocogi-ui-runtime --offline --lib --tests -- -D warnings
-cargo check -p neocogi-ui-runtime --offline --lib --no-default-features --features dynamic-plugin
+cargo test -p neocogi-ui-impl --offline
+cargo clippy -p neocogi-ui-impl --offline --lib --tests -- -D warnings
+cargo check -p neocogi-ui-runtime -p neocogi-ui-nodes --offline --no-default-features --features dynamic-plugin
 ```
 
-`--offline` assumes dependencies are already cached. The package suite includes
+`--offline` assumes dependencies are already cached. The implementation suite includes
 headless runtime tests, compositor integration, public API compile fixtures and
-guide doctests. It requires no window system or GPU. Broader workspace validation
+guide doctests. The two plugin checks independently compile both loader roots. These commands
+require no window system or GPU. Broader workspace validation
 uses `cargo test --workspace --offline`; actual native device and presentation
 checks still use the platform-specific scripts described in `BACKENDS.md`.

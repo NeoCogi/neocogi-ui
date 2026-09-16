@@ -13,7 +13,9 @@ retained UI imports resources and submits composed frames. Applications opt into
 | `neocogi-ui` | `static-runtime` | Link one ordinary runtime implementation, including browser deployments. |
 | `neocogi-gfx-support` | `compiled-assets` | Expand bounded zlib pixels from generated asset tables. |
 | `neocogi-ui` | `skin` | Re-export the optional Skin plugin's typed authoring contracts. |
-| `neocogi-ui-runtime` | none | Imports resolved resources for layout and painting; contains neither an asset compiler nor final graphics executor. |
+| `neocogi-ui-impl` | none | Non-plugin implementation support; exports no loader entrypoint. |
+| `neocogi-ui-runtime` | `dynamic-plugin` | Export the core runtime provider entrypoint in an assembled shared object. |
+| `neocogi-ui-nodes` | `dynamic-plugin` | Export the built-in nodes provider entrypoint in a separate assembled shared object. |
 | `neocogi-gfx` | none | PNG decoding, resource publication, and renderer-neutral frame composition. |
 | `neocogi-gfx` | `builder` | Font rasterization and PNG atlas construction into portable tables. |
 | `neocogi-skin` | none | Live typed metric/palette compilation through the always-available GFX publisher. |

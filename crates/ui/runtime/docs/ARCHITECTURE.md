@@ -2,20 +2,19 @@
 
 Applications link `neocogi-ui`, the core and built-in-node contract crates, and neocogi-com support.
 The facade contains concrete typed clients and application-local generic adapters.
-The UI implementation, retained window manager, built-in widgets and layout policies
-are packaged in the UI plugin. Native platform and GPU objects share the selected
+The retained window manager and generic menu policy are packaged in the core UI runtime plugin.
+Built-in widgets, containers, and standard compositions are packaged in the sibling nodes plugin.
+Native platform and GPU objects share the selected
 renderer plugin. PNG/font/atlas construction belongs to the GFX plugin; appearance
 and optional external-theme construction belong to the skin plugin. Several COM
 classes can share one assembly; a class is not a DLL.
 
-A plugin is a deployable implementation and lifetime boundary. A COM object is one
-typed allocation created by such an implementation. Built-in leaves, containers,
-logical windows, menus, popups, and `FileDialog` are distinct COM objects, but they
-share the UI runtime plugin because their behavior depends on its retained forest,
-input routing, and frame phases. Making each one a library would add loading and
-versioning boundaries without adding useful ownership isolation. External widgets and
-containers are the intentional exception: an application may ship their classes in
-its own plugin, and the runtime treats their cached interfaces exactly like built-ins.
+A plugin is a deployable implementation and lifetime boundary. A COM object is one typed allocation
+created by such an implementation. Logical windows, roots, command menus, popups, and choice-menu
+state share the core provider because they own retained policy. Built-in leaves, containers, Combo
+headers, and `FileDialog` share the nodes provider because they are optional concrete products over
+that policy. An application may ship additional classes in its own plugin, and the runtime treats
+their cached interfaces exactly like built-ins.
 
 `Button: IWidget + ILeafLayout` is a callable class contract. One COM allocation
 contains its private state, constructor, concrete editing methods, and shared
@@ -31,39 +30,38 @@ type that performs its input, layout, and paint algorithms; there is no parallel
 hold a semantic widget. Fixed compositions may own genuine child COM objects for
 different structural roles, such as a `TextArea` root and its `TextEditor` child.
 
-`UiFactory` is a separately implemented class in `neocogi.ui.nodes`. It retains the
-non-owning `IWidgetHost` and a weak runtime link used only by window-owned composites.
-`UiRuntime::factory()` returns the core `IConstructionHost`; COM query yields the typed
-nodes `UiFactory` without making core import the nodes module. It is not an
-`IUiFactory` projection on the runtime, and hosts may construct registered classes
-from their typed frames.
+`UiFactory` is implemented by `neocogi.ui.nodes.runtime`. Its independently activated
+`NodesPluginFactory` binds to a supplied `UiRuntime` and captures only generated public
+capabilities. `UiRuntime::construction_host()` returns the core `IConstructionHost`; it does not expose the
+nodes factory through `QueryInterface`. `Ui::from_interfaces` authenticates that the bound factory
+and runtime return the same canonical host identity. This prevents cross-runtime construction
+without leaking runtime storage or teaching core about concrete nodes.
 
 ## Source ownership
 
 `neocogi-ui-core-contracts` declares shared cross-binary node, layout, surface, menu, and
 window protocols. `neocogi-ui-nodes-contracts` declares concrete built-in classes, their
 specialized events and constructor factory. Neither contains UI implementation state.
-In `neocogi-ui-runtime`, each built-in under
+In the shared non-plugin `neocogi-ui-impl` package, each built-in under
 `ui_node/widgets` or `ui_node/containers` owns its `com_object`, constructor,
 callable-class implementation, shared protocol projections, semantic fields, and
 layout/paint algorithm in one family module. A change to `Button`, `Grid`, or
 `ScrollArea` therefore has one implementation source rather than a native type plus
 a second COM-side representation.
 
-`neocogi-ui-runtime` has no generic `src/com` implementation tree. Shared machinery follows
+`neocogi-ui-impl` has no generic `src/com` implementation tree. Shared machinery follows
 its actual owner: node mounting, child transactions, input conversion, widget host
 state, scoped layout, and scoped painting live under `ui_node`; external frame
 composition lives in the GFX plugin while thin semantic replay lives under `render`;
-event projections live beside their semantic event
-types; and `Runtime` plus `UiFactory` live in their top-level implementation modules.
-The plugin registry imports those concrete object types directly from the crate root.
+event projections live beside their semantic event types; and `Runtime` plus `UiFactory` live in
+their top-level implementation modules. Two thin plugin roots select the reachable core-runtime or
+nodes implementation and each exports exactly one loader entrypoint.
 
-The runtime, retained nodes, built-in leaves and containers, surfaces, and window
-manager intentionally remain one Rust crate and one deployed plugin. Their source
-modules separate responsibilities without introducing internal component calls or
-crate boundaries into recursive traversal. This keeps ordinary Rust calls and
-compiler-visible concrete code on the hot path while preserving COM only where an
-independently built object actually crosses the platform boundary.
+The shared support crate is not a deployment boundary. The resulting runtime and nodes shared
+objects are: the runtime artifact publishes only the core module and the nodes artifact publishes
+only the nodes module. Concrete built-ins are absent from the core artifact after link-time garbage
+collection. Recursive traversal remains ordinary core Rust code; mounted built-ins cross the same
+cached COM node interfaces already required for independent extensions.
 
 The small private `boundary` module contains only representation-free UTF-8
 validation and geometry copies reused by multiple domains. It owns no objects,
@@ -99,7 +97,7 @@ state stays in the implementation object behind typed methods; only copied routi
 properties and sticky invalidation are refreshed when the widget reports a real
 change. Adding a new external leaf or container therefore requires a typed class
 contract and the existing common capabilities, not a runtime source change or a
-registration-table entry in the UI plugin.
+registration-table entry in the core runtime plugin.
 
 ## Retained objects and frame phases
 

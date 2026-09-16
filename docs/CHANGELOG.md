@@ -10,7 +10,7 @@ wrappers. [COM_DESIGN.md](COM_DESIGN.md) defines the accepted architecture, and
 - Replace the caller-coordinated combo header with a runtime-owned composite. Combo construction
   now registers a compact choice menu through the generic popup API under an explicit window
   owner, while a separate composition manager keeps combo semantics outside the root forest. It
-  represents selection with the single NCIDL-generated `ComboSelection`, supplies the visible
+  represents selection with the single NCIDL-generated `ChoiceSelection`, supplies the visible
   `Select…` fallback by default, rejects unknown stable leaf IDs instead of clamping, and atomically
   replaces its generated preorder hierarchy with an explicit optional selection. The same choice
   menu supports relational submenus without `IComboBoxes`, a combo-only popup widget, or a second
@@ -20,6 +20,15 @@ wrappers. [COM_DESIGN.md](COM_DESIGN.md) defines the accepted architecture, and
   starts on the committed item and pointer departure restores it without a blank frame. The popup
   uses the header's theme-derived outer border box as its fixed horizontal extent, aligning both
   edges without counting either control's frame twice.
+- Deploy concrete built-in nodes and standard compositions through their own
+  `neocogi.ui.nodes.runtime` plugin. Core runtime activation now publishes only
+  `neocogi.ui.core`; the separately activated `NodesPluginFactory` binds to a `UiRuntime` through
+  generated public capabilities and returns the nodes `UiFactory`. `Ui::from_interfaces` validates
+  the canonical host identity, file dialogs dispatch through mounted component event providers,
+  and Combo delegates hierarchy, popup policy, selection, and its generated changed event to the
+  core `IChoiceMenu`. A non-plugin `neocogi-ui-impl` support package prevents sibling plugins from
+  linking each other's loader entrypoints while preserving one optimized Rust implementation per
+  reachable artifact.
 - Retain the `AssetTables` collection of generated NCIDL records as the UI runtime's canonical immutable resource
   snapshot. `AtlasHandle` now adds only catalog-scoped identities and sorted integer lookup slots;
   `Skin` borrows generated metrics and chrome policy and selects generated appearance fields
@@ -181,22 +190,23 @@ wrappers. [COM_DESIGN.md](COM_DESIGN.md) defines the accepted architecture, and
 - Replace the registered platform root's `IPlatform` plus separate class-ID
   declaration with a `Platform` IDL class. Renderer diagnostics
   remain a shared capability on the same native bootstrap object.
-- Replace `IUiFactory` with an IDL `UiFactory`. The plugin root returns a
-  host-bound instance whose typed methods construct `Button` and other classes.
+- Replace `IUiFactory` with an IDL `UiFactory`. The nodes plugin's generated root binds a
+  host-scoped instance to an independently created core runtime; its typed methods construct
+  `Button` and other classes.
 - Store the runtime's current imported assets as one shared value instead of a
   wrapper around nested reference-counted snapshots. Installing a replacement now
   requires a mutable `UiRuntime` receiver, making runtime-wide mutation explicit.
 - Store each independently constructed widget's imported resources directly as
   one `Rc<RefCell<ImportedAssets>>`; remove its redundant revision and resource
   wrappers and borrow that sole value during semantic phases.
-- Give the dynamically linked `UiFactory` the runtime's existing imported asset
-  handle and pass that same handle into every product and fixed internal child.
-  Factory construction and widget phases perform no repeated portable bundle
-  imports; directly activated classes retain their host-refreshing cache.
-- Co-package built-in widgets, containers and window-manager policy in the UI
-  plugin; keep each renderer and its OS/device owners together in the platform
-  plugin. An optional asset plugin and independently built extension demonstrate
-  additional deployment boundaries.
+- Give the dynamically linked `UiFactory` one shared imported-asset cache sourced from its bound
+  runtime host and pass it into every product and fixed internal child. Factory construction and
+  stable widget phases perform no repeated portable-bundle imports; revision changes refresh that
+  provider-local cache through the public host capability.
+- Separate built-in widgets, containers, Combo presentation, and standard file dialogs from the
+  core retained runtime and window-manager provider. Keep each renderer and its OS/device owners
+  together in the platform plugin; the independently built extension demonstrates a third UI
+  provider using the same public node protocols.
 - Keep common lifecycle/options/invalidation in WidgetState, authoritative child
   ownership behind scoped layout services, and semantic widget state concrete.
   Native authoring/closure-renderer support remains only in behavior fixtures.
@@ -208,8 +218,8 @@ wrappers. [COM_DESIGN.md](COM_DESIGN.md) defines the accepted architecture, and
 - Remove the UI implementation's generic `src/com` tree. Retained-node services now
   live under `ui_node`, external renderer submission under `render`, event sink
   projections beside their semantic event types, and the dynamically linked runtime
-  and factory in their top-level modules. The plugin registry imports concrete object
-  types directly from the `neocogi-ui-runtime` crate root.
+  and factory in their top-level modules. Thin runtime and nodes plugin roots select concrete
+  object types from the non-plugin `neocogi-ui-impl` support crate.
 - Share one typed EventSource transport between built-ins and independent widgets;
   EventSession owns app state and concrete handlers outside the producer graph.
 - Preserve menus, native-path file dialogs, immutable resources, full/basic demos,

@@ -53,14 +53,17 @@ integration. It remains separate from `tools/cargo-neocogi` so ordinary Cargo
 builds can regenerate contracts without invoking the assembly CLI.
 UI code follows the same role-based layout under `crates/ui`: `core-contracts` contains
 shared node, layout, popup, menu, and window protocols; `nodes-contracts` owns the concrete
-built-in widget/container classes and their typed factory; `api` is the application facade;
-and `runtime` is the one deployable implementation containing retained nodes, built-in
-widgets and containers, surfaces, and the window manager.
+built-in widget/container classes and their typed factory; and `api` is the application facade.
+`runtime-plugin` deploys the retained forest, surfaces, generic menus, and window manager.
+`nodes` deploys built-in leaves, containers, Combo headers, and standard file-dialog
+compositions as a separate provider. The non-plugin `runtime` package supplies ordinary Rust
+implementation support to both plugin roots and exports no loader entrypoint of its own.
 
-The UI runtime is deliberately one plugin. Source modules separate these concerns,
-but update, layout, paint, and window traversal stay in one optimization unit.
-External leaves and containers implement the same typed contracts; their
-capabilities are discovered once at mount and cached for every hot-path phase.
+The core runtime and built-in nodes are deliberately separate plugins. A host creates the core
+runtime, activates `neocogi.ui.nodes.runtime`, and binds its `NodesPluginFactory` to that exact
+runtime. The core never exposes or constructs `UiFactory`; host identity validation prevents a
+factory bound to one runtime from being paired with another. External leaves and containers use
+the same typed protocols and cached hot-path capabilities as built-ins.
 
 Platform-normalized input, polling, native text-input placement, and window
 construction live in `crates/platform/contracts`; immutable native paths live
@@ -96,8 +99,8 @@ plugin identity. The split keeps PNG, font, and atlas services out of skin-only
 clients, and keeps JSON/schema services out of GFX clients. User-defined UI plugins belong outside the platform crates;
 `examples/ui-extension` demonstrates an
 independently compiled leaf and container. A COM object is not automatically a
-deployment plugin: buttons, containers, windows, menus, and file dialogs remain
-individual typed objects implemented inside the cohesive UI runtime plugin.
+deployment plugin: the complete built-in family shares one nodes provider, while logical windows,
+generic menus, and popup policy share one core runtime provider.
 
 See [component and plugin boundaries](docs/COMPONENTS.md) for the complete
 dependency graph, ownership rationale, resource policy, and frame-cost invariants.
@@ -136,11 +139,12 @@ fn install(ui: &Ui) -> Result<ComPtr<IWindowAbi>, NcStatus> {
 }
 ```
 
-`UiFactory` belongs to `neocogi.ui.nodes` and is queried from the core
-`IConstructionHost` returned by `UiRuntime::factory()`. The facade uses it as a shorthand.
-A host may instead construct `ButtonAbi` directly from its generated typed
-arguments and the runtime's `IWidgetHost`; no Button-specific interface or
-untyped argument object is involved.
+`UiFactory` belongs to the independently activated `neocogi.ui.nodes.runtime` plugin. Its
+`NodesPluginFactory::bind` method consumes a borrowed `UiRuntime`, queries the public
+`IConstructionHost`, `IChoiceMenus`, window, and resource capabilities it needs, and returns one
+host-bound factory. `Ui::from_interfaces(runtime, factory)` verifies that both sides expose the
+same canonical `IWidgetHost` identity before the facade permits construction. No class ID,
+untyped argument object, private runtime pointer, or root identifier crosses that boundary.
 
 `EventSession<State>` owns application state and concrete `EventHandler<State, Event>`
 implementations. Producers do not retain that state. The host polls copied input,

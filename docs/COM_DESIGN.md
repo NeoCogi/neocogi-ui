@@ -135,14 +135,23 @@ interior mutability represents a real independent synchronization requirement.
 
 ## Plugin root
 
-One implementation is selected as the plugin root:
+Each deployable provider selects one generated root. Core runtime and concrete nodes are siblings,
+so neither Rust plugin crate depends on or embeds the other's bootstrap:
 
 ```rust,ignore
 neocogi_com::factory_plugin! {
     name = "neocogi.ui.runtime",
     version = "1.0.0",
-    contracts = [neocogi_ui_core_contracts::MODULE, neocogi_ui_nodes_contracts::MODULE],
-    factory = UiFactoryObject,
+    contracts = [neocogi_ui_core_contracts::MODULE],
+    factory = UiPluginFactoryObject,
+}
+
+neocogi_com::factory_plugin! {
+    name = "neocogi.ui.nodes.runtime",
+    version = "1.0.0",
+    dependencies = [UI_RUNTIME_PLUGIN_ID],
+    contracts = [neocogi_ui_nodes_contracts::MODULE],
+    factory = NodesPluginFactoryObject,
 }
 
 neocogi_com::export_factory_plugin!();
@@ -151,7 +160,8 @@ neocogi_com::export_factory_plugin!();
 The resulting `NcFactoryPluginDescription` stores plugin identity/version, hard
 plugin dependencies, exact linked contract references, root factory
 identity/threading, and one no-argument activation pointer. The
-final DSO exports `nc_get_factory_plugin_description` exactly once.
+final DSO exports `nc_get_factory_plugin_description` exactly once. The non-plugin implementation
+support crate exports no loader symbol.
 
 Static assemblies omit the export and pass `factory_plugin_description()`
 directly to `Runtime::register_factory_plugin_description`.
@@ -201,8 +211,10 @@ let loaded = unsafe { runtime.load_plugin_library(plugin_path) };
 let plugin = runtime.activate_plugin_factory::<UiPluginFactoryAbi>(
     loaded.plugin_id(),
 )?;
-let ui = plugin.create_runtime(assets, compositor)?;
-let factory = ui.factory()?.query::<UiFactoryAbi>()?;
+let ui_runtime = plugin.create_runtime(assets, compositor)?;
+let nodes = runtime.activate_plugin_factory::<NodesPluginFactoryAbi>(NODES_PLUGIN_ID)?;
+let factory = nodes.bind(ui_runtime.as_com_ref())?;
+let ui = Ui::from_interfaces(ui_runtime, factory.clone())?;
 let button = factory.create_button("OK")?;
 ```
 

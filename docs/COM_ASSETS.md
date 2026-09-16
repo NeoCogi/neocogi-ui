@@ -11,7 +11,9 @@
 | `crates/gfx/impl` | Private decoder, atlas, bundle, and source-export implementation; no plugin identity. |
 | `crates/appearance` | Pure typed appearance compilation shared with offline resource construction. |
 | `crates/skin/impl` | Private style and optional JSON-theme implementation; no plugin identity. |
-| `neocogi-ui-runtime` | Canonical table retention, local lookup indices, and retained layout/painting. |
+| `neocogi-ui-impl` | Non-plugin table retention and implementation support shared by the two UI providers. |
+| `neocogi-ui-runtime` | Core retained layout, painting, surfaces, and menu policy. |
+| `neocogi-ui-nodes` | Built-in controls and standard compositions over one bound runtime resource source. |
 | `crates/render/plugin` and renderers | Pixel upload, GPU resources and ordered frame execution. |
 
 The GFX plugin has no production dependency on either the UI facade or runtime;
@@ -107,10 +109,15 @@ let gfx = runtime.activate_plugin_factory::<GfxPluginFactoryAbi>(
     neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"),
 )?;
 let compositor = gfx.create_compositor(assets.as_com_ref())?;
-let factory = runtime.activate_plugin_factory::<UiPluginFactoryAbi>(
+let runtime_factory = runtime.activate_plugin_factory::<UiPluginFactoryAbi>(
     neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"),
 )?;
-let mut ui = Ui::from_interface(factory.create_runtime(assets.as_com_ref(), compositor.as_com_ref())?)?;
+let ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), compositor.as_com_ref())?;
+let node_provider = runtime.activate_plugin_factory::<NodesPluginFactoryAbi>(
+    neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"),
+)?;
+let factory = node_provider.bind(ui_runtime.as_com_ref())?;
+let mut ui = Ui::from_interfaces(ui_runtime, factory)?;
 ```
 
 ## Installation and ownership
@@ -147,11 +154,13 @@ independent widgets may share their own concrete cache. Fetch a bundle/table per
 revision, not per glyph. The ordinary
 `ITextMetrics::button_size` and `IPainter::text` conveniences still use body-font
 button styling; custom typography uses the full bundle records and bulk triangles.
-The UI runtime imports these records once. Its dynamically linked `UiFactory`
-passes the same `Rc<RefCell<ImportedAssets>>` to every built-in product and fixed
-internal child, so widget construction, measurement, update, and paint do not
-decode the portable tables again. A class activated directly from a host owns one
-such value and refreshes it when that host publishes a different bundle.
+The core runtime imports these records once. A bound nodes `UiFactory` creates one
+provider-local `Rc<RefCell<ImportedAssets>>` from the public host resource capability and shares
+it with every built-in product and fixed internal child. Stable widget phases do not decode the
+portable tables again; a phase refreshes that cache only after the host publishes a new revision.
+The `RefCell` is intentional here because independent COM objects share the cache and their
+generated receivers cannot borrow one factory mutably for every product's lifetime. Semantic
+widget fields continue to use exclusive `&mut self` methods.
 
 Bundle producers must keep **every** method result immutable for the allocation's
 lifetime. Mutation requires a new bundle object, even when pixels alone change.

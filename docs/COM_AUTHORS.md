@@ -306,13 +306,13 @@ checked projections from application code. IDL class definitions across crates s
 name protocol supertraits through their module path when needed so generated
 companion types resolve together.
 
-Use the generated `UiFactory` as the typed construction surface. The plugin's
-root factory creates the runtime. `UiRuntime::factory()` returns the core
-`IConstructionHost`, which callers query for the nodes-module `UiFactory`.
-Do not model it as a redundant `IUiFactory`
-projection or ask the shared runtime to construct a control by class ID. Hosts
-call the factory's typed methods, which keep host capabilities and constructor
-arguments explicit in the IDL.
+Use the generated `UiFactory` as the typed construction surface. The core plugin's root creates
+`UiRuntime`; the separately activated nodes plugin returns `NodesPluginFactory`, whose typed
+`bind(&UiRuntime)` method creates `UiFactory`. `UiRuntime::construction_host()` returns only the core
+`IConstructionHost`, allowing binding and facade construction to authenticate the exact host
+identity without making core expose a concrete nodes projection. Do not model construction as a
+redundant `IUiFactory`, class-ID lookup, or private runtime pointer. Hosts call typed generated
+methods, and `Ui::from_interfaces` rejects a factory bound to a different runtime.
 
 ## Common state, input and node ownership
 
@@ -726,7 +726,7 @@ window's retained tree. The popup capability, row presentation, and coordination
 events are deliberately not exposed.
 
 The control owns its display labels and represents the committed stable leaf ID with
-the NCIDL-generated `ComboSelection`. `ComboSelection::None` is not leaf zero: it
+the NCIDL-generated `ChoiceSelection`. `ChoiceSelection::None` is not leaf zero: it
 renders the runtime-owned `Select…` fallback unless `set_placeholder` replaces it.
 The facade consumes and returns that generated contract type directly instead of
 declaring a parallel Rust selection record. The flat `combo_box` and `replace_items`
@@ -735,7 +735,7 @@ generated core `ChoiceMenuEntry` preorder model and shared UTF-8 text directly, 
 arbitrary stable IDs and nested submenus without another handwritten public tree:
 
 ```rust,no_run
-use neocogi_ui::{ChoiceMenuEntry, ComboSelection, MenuTextRange};
+use neocogi_ui::{ChoiceMenuEntry, ChoiceSelection, MenuTextRange};
 
 let text = "FruitAppleBanana";
 let entries = [
@@ -753,7 +753,7 @@ let entries = [
     },
 ];
 let combo = ui.combo_menu(window.as_com_ref(), text, &entries,
-    ComboSelection::Selected(100))?;
+    ChoiceSelection::Selected(100))?;
 ```
 
 Every submenu is followed immediately by its declared number of direct children;

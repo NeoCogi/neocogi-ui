@@ -86,6 +86,13 @@ compilation platform. `dev` outputs use the `debug` directory name. Keep every
 staged runtime/plugin library and resource with the executable. `run` launches
 the staged binary and forwards arguments after `--`, preserving its exit code.
 
+UI assemblies contain two adjacent provider libraries: `libnc_com_shared_neocogi_ui_runtime`
+publishes the core retained runtime and `libnc_com_shared_neocogi_ui_nodes` publishes concrete
+built-in nodes. The manifest orders core before nodes because `neocogi.ui.nodes.runtime` declares a
+hard provider dependency on `neocogi.ui.runtime`. Each library exports exactly one plugin getter;
+the non-plugin `neocogi-ui-impl` support package is selected into those roots and is not staged as
+a third UI library.
+
 Add `--variant monolith` after the renderer selection to statically link the COM
 runtime and the UI, renderer, GFX, and skin implementations. These assemblies
 register the linked descriptors directly with the same SHA-256 ABI validation

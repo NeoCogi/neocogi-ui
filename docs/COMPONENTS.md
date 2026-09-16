@@ -10,7 +10,7 @@ its own deployment unit:
 | GFX resources | `neocogi.gfx` | `neocogi-gfx` |
 | Skin authoring | `neocogi.skin` | `neocogi-skin` |
 | Retained UI protocols | `neocogi.ui.core` | `neocogi-ui-runtime` |
-| Built-in UI classes | `neocogi.ui.nodes` | Same `neocogi-ui-runtime` plugin |
+| Built-in UI classes and standard composites | `neocogi.ui.nodes` | `neocogi-ui-nodes` |
 
 The platform contract is independent even though its current SDL/DOM
 implementation shares a binary and COM identity with the renderer. That
@@ -51,11 +51,19 @@ appearance records for runtime Skin policy and offline default bundles. A change
 to either heavyweight implementation therefore does not invalidate or relink
 the other plugin.
 
-The UI plugin remains one cohesive retained runtime. Nodes, layout, routing,
-window management, menus, and `FileDialog` share tree ownership and commit
-phases, so separating them would add dynamic calls to hot traversals without an
-independent lifetime boundary. Their source modules remain separate and custom
-widgets can still live in external plugins through typed widget capabilities.
+The UI deployment has two ownership boundaries. `neocogi-ui-runtime` owns the retained forest,
+layout traversal, routing, windows, command menus, generic choice-menu popup policy, and frame
+commit. `neocogi-ui-nodes` owns concrete built-in leaves and containers plus standard composites
+such as Combo and `FileDialog`. The nodes root binds through generated public capabilities and
+never receives runtime storage, a root handle, or an implementation callback. Built-ins therefore
+exercise the same cached `IWidget`, `ILeafLayout`, and `IContainerLayout` path as independently
+compiled custom controls.
+
+`neocogi-ui-impl` is a non-plugin Rust support package used to compile the reachable implementation
+of each sibling plugin. It exports no bootstrap symbol and has no deployable identity. Link-time
+garbage collection leaves concrete built-in implementations in the nodes shared object; the core
+shared object links only the core contract and retains only shared helpers actually required by
+its generic menu surfaces. This is the same implementation/plugin separation used by GFX and Skin.
 
 ## Dependency direction
 
@@ -80,6 +88,11 @@ lists only its directly implemented module, and runtime registration validates
 the transitive fingerprints. GFX contracts are part of the required UI frame and
 resource path; the optional `skin` facade feature exposes theme-authoring clients.
 
+At the provider level, `neocogi.ui.nodes.runtime` has a hard dependency on
+`neocogi.ui.runtime`. The assembly planner loads core first, then activates the nodes root and calls
+`bind(&UiRuntime)`. The core plugin advertises only `neocogi.ui.core`; the nodes plugin advertises
+only `neocogi.ui.nodes`. Neither plugin imports the other's bootstrap entrypoint.
+
 All polymorphism is expressed through named IDL interfaces. No cross-component
 value uses `std::any::Any`, native Rust trait objects, or an untyped property bag.
 IDL enums cross the ABI as generated explicit discriminators and payload layouts;
@@ -87,7 +100,11 @@ receivers validate unknown tags before reading a payload.
 
 ## Frame and loading costs
 
-Plugin separation does not add per-widget or per-draw calls:
+Plugin separation does not add a second per-widget dispatch layer or any per-draw provider lookup:
+
+- Runtime mounting queries each node's public capabilities once. Update, measure, placement, and
+  paint use those cached projections whether the object came from the built-in nodes provider or
+  an application plugin. `NodesPluginFactory::bind` and `Ui::from_interfaces` run only during setup.
 
 - UI records one retained display list and sends one coarse typed call per draw operation
   to its GFX compositor; there is no per-glyph, per-nine-patch-cell, or per-vertex ABI call.

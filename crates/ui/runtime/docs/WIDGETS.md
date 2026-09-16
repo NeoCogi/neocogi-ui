@@ -60,7 +60,7 @@ shared capabilities are documented in `neocogi-ui-core-contracts`, concrete
 classes in `neocogi-ui-nodes-contracts`, and clients in the facade's API reference.
 
 Combo boxes retain a selection-menu hierarchy but no generic application payload.
-`Ui::combo_box(parent, items, ComboSelection::None)` is the flat convenience: it
+`Ui::combo_box(parent, items, ChoiceSelection::None)` is the flat convenience: it
 assigns each label an ID equal to its ordinal, displays the `Select…` fallback, and
 allows `set_placeholder` to replace that fallback. `Ui::combo_menu` instead consumes
 the NCIDL-generated core `ChoiceMenuEntry` preorder sequence and `MenuTextRange` values,
@@ -68,7 +68,7 @@ so submenus and stable application-defined leaf IDs cross COM without a handwrit
 parallel structure. Every branch declares its direct-child count; invalid UTF-8
 ranges, empty or malformed branches, duplicate IDs, excessive nesting, and unknown
 selected IDs reject the complete candidate atomically. `selection()` and changed
-events return that same generated `ComboSelection`. Domain data remains in the
+events return that same generated `ChoiceSelection`. Domain data remains in the
 application and is mapped from the committed stable ID rather than reconstructed
 from a display string. File-dialog rows likewise retain exact native paths
 independently of lossy UTF-8 display labels.
