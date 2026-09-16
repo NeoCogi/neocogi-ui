@@ -83,8 +83,9 @@ through the borrowed `EventDispatchSource` capability; the host does not need
 to know the application's `State` type. Both adapters own the concrete application
 state and one registration sequence. Each handler is an owned
 `EventHandler<State, Event>` implementation stored inline in a local generic COM
-sink. The local `FnMut(&mut State, &Event) -> Result<(), NcStatus>` convenience
-implements that same trait; captures and Rust state never cross the ABI. Generic
+sink. Application handlers implement that trait on concrete structs or enums
+whose dependencies are explicitly named fields; closures and function pointers
+are not implicitly adapted into handlers. Handlers and Rust state never cross the ABI. Generic
 Rust list data also stays in the application; cross-plugin domain data needs a
 concrete domain interface and owner-scoped keys.
 
@@ -168,8 +169,8 @@ Compiler-generated bindings and `neocogi-com-events` use Rust event-support
 protocol version 2 and enforce agreement at compile time. This is independent
 of the NCIDL wire ABI: the connector change does not change event declarations,
 contract fingerprints, COM sink/lease methods, or runtime dispatch ordering.
-Handler `FnMut` convenience and validator function-pointer APIs remain separate
-from this consumed setup operation.
+Validator function-pointer APIs remain separate from this consumed setup
+operation; there is no closure-to-`EventHandler` blanket implementation.
 
 Commit semantic state, then
 call `emit` with its owned snapshot. Implement the event capability by returning

@@ -186,20 +186,29 @@ fn dropping_session_releases_application_owned_runtime_without_a_source_sink_cyc
     assert_eq!(window.title().unwrap_err(), UI_E_CLOSED);
 }
 
-/// Records a complete checkbox snapshot through the approved local callback adapter.
-fn record_checkbox(state: &mut Vec<String>, event: &neocogi_ui::events::CheckboxChanged) -> Result<(), NcStatus> {
-    state.push(format!("checked:{}", event.checked));
-    Ok(())
+/// Explicit stateless collector for scalar, editor, and popup semantic snapshots.
+struct RecordSnapshot;
+
+impl EventHandler<Vec<String>, neocogi_ui::events::CheckboxChanged> for RecordSnapshot {
+    /// Records the committed checkbox state supplied by the production source.
+    fn handle(&mut self, state: &mut Vec<String>, event: &neocogi_ui::events::CheckboxChanged) -> Result<(), NcStatus> {
+        state.push(format!("checked:{}", event.checked));
+        Ok(())
+    }
 }
-/// Both numeric controls deliver the same concrete finite-value event shape.
-fn record_numeric(state: &mut Vec<String>, event: &neocogi_ui::events::NumericChanged) -> Result<(), NcStatus> {
-    state.push(format!("numeric:{}", event.value));
-    Ok(())
+impl EventHandler<Vec<String>, neocogi_ui::events::NumericChanged> for RecordSnapshot {
+    /// Records the concrete finite-value event shape shared by both numeric controls.
+    fn handle(&mut self, state: &mut Vec<String>, event: &neocogi_ui::events::NumericChanged) -> Result<(), NcStatus> {
+        state.push(format!("numeric:{}", event.value));
+        Ok(())
+    }
 }
-/// Captures the installed clamped offset rather than recomputing it from current geometry.
-fn record_scroll(state: &mut Vec<String>, event: &neocogi_ui::events::ScrollbarChanged) -> Result<(), NcStatus> {
-    state.push(format!("scroll:{}", event.offset));
-    Ok(())
+impl EventHandler<Vec<String>, neocogi_ui::events::ScrollbarChanged> for RecordSnapshot {
+    /// Records the installed clamped offset without recomputing live geometry.
+    fn handle(&mut self, state: &mut Vec<String>, event: &neocogi_ui::events::ScrollbarChanged) -> Result<(), NcStatus> {
+        state.push(format!("scroll:{}", event.offset));
+        Ok(())
+    }
 }
 
 /// Every scalar and labelled-action source publishes only actual user interaction through the shared transport.
@@ -209,7 +218,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
     let session = EventSession::new(Vec::<String>::new());
     let mut checkbox = ui.widgets().checkbox("check", false).unwrap();
     let window = ui.window("checkbox", RECT, &checkbox).unwrap();
-    session.subscribe_checkbox(&checkbox, record_checkbox).unwrap();
+    session.subscribe_checkbox(&checkbox, RecordSnapshot).unwrap();
     checkbox.set_checked(true).unwrap();
     ui.update_with_events(SIZE, &session).unwrap();
     assert!(session.state().unwrap().is_empty());
@@ -230,7 +239,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
         })
         .unwrap();
     let window = ui.window("slider", RECT, &slider).unwrap();
-    session.subscribe_numeric(&slider, record_numeric).unwrap();
+    session.subscribe_numeric(&slider, RecordSnapshot).unwrap();
     slider.set_value(5.0).unwrap();
     ui.update_with_events(SIZE, &session).unwrap();
     assert_eq!(session.state().unwrap().len(), 1);
@@ -242,7 +251,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
 
     let number = ui.widgets().number(NumberOptions { value: 3.0, step: 1.0, precision: 0 }).unwrap();
     let window = ui.window("number", RECT, &number).unwrap();
-    session.subscribe_numeric(&number, record_numeric).unwrap();
+    session.subscribe_numeric(&number, RecordSnapshot).unwrap();
     key(&ui, KeyCode::Tab);
     // Numeric text controls use Up/Down; horizontal sliders use Left/Right.
     key(&ui, KeyCode::ArrowUp);
@@ -275,7 +284,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
         })
         .unwrap();
     let window = ui.window("bar", RECT, &bar).unwrap();
-    session.subscribe_scrollbar(&bar, record_scroll).unwrap();
+    session.subscribe_scrollbar(&bar, RecordSnapshot).unwrap();
     let previous = session.state().unwrap().len();
     bar.set_offset(0).unwrap();
     ui.update_with_events(SIZE, &session).unwrap();
@@ -294,20 +303,26 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
     window.close().unwrap();
 }
 
-/// Changed snapshots pair text and cursor from the same semantic edit.
-fn record_text_change(state: &mut Vec<String>, event: &neocogi_ui::events::TextChanged) -> Result<(), NcStatus> {
-    state.push(format!("changed:{}:{}", event.text, event.cursor));
-    Ok(())
+impl EventHandler<Vec<String>, neocogi_ui::events::TextChanged> for RecordSnapshot {
+    /// Records text and cursor copied from the same committed semantic edit.
+    fn handle(&mut self, state: &mut Vec<String>, event: &neocogi_ui::events::TextChanged) -> Result<(), NcStatus> {
+        state.push(format!("changed:{}:{}", event.text, event.cursor));
+        Ok(())
+    }
 }
-/// Submission is independent of the editor's changed port.
-fn record_text_submission(state: &mut Vec<String>, event: &neocogi_ui::events::TextSubmitted) -> Result<(), NcStatus> {
-    state.push(format!("submitted:{}", event.text));
-    Ok(())
+impl EventHandler<Vec<String>, neocogi_ui::events::TextSubmitted> for RecordSnapshot {
+    /// Records submission independently of the editor's changed event port.
+    fn handle(&mut self, state: &mut Vec<String>, event: &neocogi_ui::events::TextSubmitted) -> Result<(), NcStatus> {
+        state.push(format!("submitted:{}", event.text));
+        Ok(())
+    }
 }
-/// Ordinary dismissal records a fact independently of whether the popup was subsequently shown again.
-fn record_popup(state: &mut Vec<String>, _event: &neocogi_ui::events::PopupDismissed) -> Result<(), NcStatus> {
-    state.push("dismissed".to_owned());
-    Ok(())
+impl EventHandler<Vec<String>, neocogi_ui::events::PopupDismissed> for RecordSnapshot {
+    /// Records dismissal without consulting whether the popup was subsequently shown.
+    fn handle(&mut self, state: &mut Vec<String>, _event: &neocogi_ui::events::PopupDismissed) -> Result<(), NcStatus> {
+        state.push("dismissed".to_owned());
+        Ok(())
+    }
 }
 
 /// Both editor roots expose independent typed ports, and popup dismissal uses the manager's real lifecycle source.
@@ -317,9 +332,9 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     let session = EventSession::new(Vec::<String>::new());
     let mut textbox = ui.widgets().textbox("").unwrap();
     let window = ui.window("textbox", RECT, &textbox).unwrap();
-    session.subscribe_text_changed(&textbox, record_text_change).unwrap();
-    assert_eq!(session.subscribe_text_changed(&textbox, record_text_change).unwrap_err(), UI_E_BUSY);
-    session.subscribe_text_submitted(&textbox, record_text_submission).unwrap();
+    session.subscribe_text_changed(&textbox, RecordSnapshot).unwrap();
+    assert_eq!(session.subscribe_text_changed(&textbox, RecordSnapshot).unwrap_err(), UI_E_BUSY);
+    session.subscribe_text_submitted(&textbox, RecordSnapshot).unwrap();
     textbox.set_text("a").unwrap();
     ui.update_with_events(SIZE, &session).unwrap();
     assert!(session.state().unwrap().is_empty());
@@ -332,8 +347,8 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
 
     let area = ui.widgets().text_area("", TextWrapping::Word, true).unwrap();
     let window = ui.window("textarea", RECT, &area).unwrap();
-    session.subscribe_text_changed(&area, record_text_change).unwrap();
-    session.subscribe_text_submitted(&area, record_text_submission).unwrap();
+    session.subscribe_text_changed(&area, RecordSnapshot).unwrap();
+    session.subscribe_text_submitted(&area, RecordSnapshot).unwrap();
     key(&ui, KeyCode::Tab);
     ui.input(UiInput::Text, "☃").unwrap();
     ui.input(
@@ -351,7 +366,7 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     assert!(session.state().unwrap().ends_with(&["changed:☃:3".to_owned(), "submitted:☃".to_owned()]));
     let popup_content = ui.widgets().text_block("popup", TextWrapping::None).unwrap();
     let mut popup = ui.popup(window.as_com_ref(), "popup", &popup_content).unwrap();
-    let lease = session.subscribe_popup(popup.as_com_ref(), record_popup).unwrap();
+    let lease = session.subscribe_popup(popup.as_com_ref(), RecordSnapshot).unwrap();
     popup.show_at(Rect { x: 100, y: 100, width: 20, height: 20 }).unwrap();
     ui.update_with_events(SIZE, &session).unwrap();
     popup.hide().unwrap();

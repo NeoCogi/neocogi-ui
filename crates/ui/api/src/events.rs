@@ -464,20 +464,31 @@ mod checked_adapter_tests {
     use super::*;
     use neocogi_com::NcCopyFromBufferOffset;
 
+    /// Concrete counter behavior; these tests require no hidden captured dependencies.
+    struct Count;
+
+    impl EventHandler<u32, NumericChanged> for Count {
+        /// Counts one validated numeric delivery after the state borrow succeeds.
+        fn handle(&mut self, count: &mut u32, _event: &NumericChanged) -> Result<(), NcStatus> {
+            *count += 1;
+            Ok(())
+        }
+    }
+
+    impl EventHandler<u32, TextChanged> for Count {
+        /// Counts one decoded, cursor-validated text delivery after the state borrow succeeds.
+        fn handle(&mut self, count: &mut u32, _event: &TextChanged) -> Result<(), NcStatus> {
+            *count += 1;
+            Ok(())
+        }
+    }
+
     /// Invalid numeric facts are rejected before a held application-state borrow
     /// can change their error status; valid facts still obey the session borrow gate.
     #[test]
     fn generated_numeric_adapter_checks_before_state_borrow() {
         let session = EventSession::new(0u32);
-        let sink = create_i_numeric_sink_checked_event_sink(
-            &session.0,
-            |count: &mut u32, _event: &NumericChanged| {
-                *count += 1;
-                Ok(())
-            },
-            valid_numeric,
-        )
-        .unwrap();
+        let sink = create_i_numeric_sink_checked_event_sink(&session.0, Count, valid_numeric).unwrap();
         let held = session.state_mut().unwrap();
         assert_eq!(sink.changed(f32::NAN), Err(NC_E_INVALID_ARG));
         assert_eq!(sink.changed(1.0), Err(neocogi_com_events::EVENT_E_BUSY));
@@ -491,15 +502,7 @@ mod checked_adapter_tests {
     #[test]
     fn generated_text_adapter_rejects_offset_and_split_cursor() {
         let session = EventSession::new(0u32);
-        let sink = create_i_text_changed_sink_checked_event_sink(
-            &session.0,
-            |count: &mut u32, _event: &TextChanged| {
-                *count += 1;
-                Ok(())
-            },
-            valid_text_cursor,
-        )
-        .unwrap();
+        let sink = create_i_text_changed_sink_checked_event_sink(&session.0, Count, valid_text_cursor).unwrap();
         assert_eq!(sink.changed(NcCopyFromBufferOffset::new(1, "é".as_bytes()), 2), Err(NC_E_INVALID_ARG));
         assert_eq!(sink.changed(NcCopyFromBufferOffset::new(0, "é".as_bytes()), 1), Err(NC_E_INVALID_ARG));
         sink.changed(NcCopyFromBufferOffset::new(0, "é".as_bytes()), 2).unwrap();

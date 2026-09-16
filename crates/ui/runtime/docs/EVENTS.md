@@ -43,7 +43,9 @@ registration reentry before creating the sink or calling the source, restores
 the previous ordered sequence on failure, and retains only the successful lease.
 Applications and custom NCIDL plugin families need no handwritten connector.
 This subscription setup runs once; event delivery still invokes the local
-`EventHandler` trait. The Rust support protocol is version 2; NCIDL event and
+`EventHandler` trait implemented on concrete structs or enums with explicit
+dependencies. Closures and function pointers are not automatically event handlers.
+The Rust support protocol is version 2; NCIDL event and
 COM wire contracts are unchanged.
 
 `emit` never invokes application code. `subscribe` returns the application-owned
