@@ -11,8 +11,8 @@ alternate runtime, renderer executor or object model.
 | --- | --- | --- |
 | `test_support::runtime_from_assets` | Create an independent real GFX compositor and call the production two-argument UI constructor | Each runtime gets its own compositor |
 | `test_support::headless::Headless` | Drive public `Ui` input, update and render; copy final renderer streams | One shared observation cell is required by `IRenderer`'s shared receiver |
-| `test_support::algorithm::Algorithm<W>` | Keep a real host alive for focused tests of a concrete built-in algorithm | The host lives beside `W`; `W` retains its production representation and uses ordinary mutable borrows |
-| `test_support/assets.rs` | Publish deterministic canonical input tables and expected revisions | Explicit pixel transfers happen here, outside deployed resource import |
+| Nodes `test_support::algorithm::Algorithm<W>` | Keep a real host alive for focused tests of a concrete built-in algorithm | The host lives beside `W`; `W` retains its production representation and uses ordinary mutable borrows |
+| Support `test_support/assets.rs` | Publish deterministic canonical input tables and expected revisions | Explicit pixel transfers happen here, outside deployed resource import |
 | Runtime callback probes | Act as independent COM widgets, containers, renderers and resources, including deliberately failing/reentrant components | Concrete fields and typed interfaces; no `Any`, downcasting or native callback registry |
 
 A renderer fixture reads `IRenderStream` only while its invocation token is active.
@@ -44,7 +44,7 @@ The replacement coverage is organized by observable behavior:
 | Linear/grid relationships, spans, flexible tracks and changed metadata | `src/runtime/tests/containers.rs`, plus pure container arithmetic tests |
 | Scroll composition, boundary bubbling, disclosure participation and multiline caret reveal | `src/runtime/tests/containers.rs`, plus focused editor tests |
 | Event FIFO, immutable snapshots, handler errors, cancellation, recursion and bounded dispatch | `src/runtime/tests/events.rs` and facade event tests |
-| Combo popup ownership, optional stable selection, serialized hierarchy validation, nested-path restoration, fallback and keyboard commit | `src/runtime/tests/combo.rs`, `src/combo_box.rs` |
+| Combo popup ownership, optional stable selection, serialized hierarchy validation, nested-path restoration, fallback and keyboard commit | Core `src/runtime/tests/combo.rs` and `src/choice_menu.rs`, nodes `src/widgets/combo.rs` |
 | Nested menu navigation, live row edits, disabled entries, standalone popup submission and focus restoration | `src/runtime/tests/menus.rs` |
 | Eventless phases, cached measurement, typed invalidation and independent auto-size axes | `src/runtime/tests/retained.rs` and `retained/policies.rs` |
 | Layer order, root families, clipping, modal scopes, popup dismissal, chrome movement/resize and window events | `src/runtime/tests/retained/policies.rs` and pure `root_chrome` geometry tests |
@@ -53,7 +53,7 @@ The replacement coverage is organized by observable behavior:
 | Image ownership, failed edits, texture dimensions, stream ordering and clipping | `src/runtime/tests/images.rs`, `src/render/compositor/tests.rs` and `tests/image_api.rs` |
 | Text fallback/newlines, nine-patches, triangle attributes and both windings, hidden draws and extreme integer rectangles | `src/render/compositor/tests.rs` |
 | Atomic asset installation, catalog identity, measurement revision and failed upload | `src/assets/tests.rs` |
-| File-picker lifecycle and callback transactions | `src/runtime/dialogs/tests.rs` |
+| File-picker lifecycle and callback transactions | Nodes `src/dialogs/tests.rs` |
 
 Tests specific to deleted weak native handles, legacy texture IDs, native callback
 registries and the alternate context's panic/borrow APIs are retired with those
@@ -80,14 +80,20 @@ Run the isolated package tests first so workspace feature unification cannot hid
 missing direct dependencies:
 
 ```sh
-cargo test -p neocogi-ui-impl --offline
-cargo clippy -p neocogi-ui-impl --offline --lib --tests -- -D warnings
+cargo test -p neocogi-ui-runtime --offline
+cargo test -p neocogi-ui-nodes --offline
+cargo test -p neocogi-ui-support --offline
+cargo clippy -p neocogi-ui-runtime -p neocogi-ui-nodes -p neocogi-ui-support --offline --lib --tests --no-deps -- -D warnings
 cargo check -p neocogi-ui-runtime -p neocogi-ui-nodes --offline --no-default-features --features dynamic-plugin
 ```
 
-`--offline` assumes dependencies are already cached. The implementation suite includes
-headless runtime tests, compositor integration, public API compile fixtures and
-guide doctests. The two plugin checks independently compile both loader roots. These commands
+`--offline` assumes dependencies are already cached. Core retains headless runtime tests,
+compositor integration, public API compile fixtures and guide doctests. Concrete node and picker
+tests live in nodes; pure-helper tests live beside the production algorithms in support. Nodes
+fixtures construct the production runtime through public interfaces and never observe private
+core storage. The provider-boundary integration test activates both actual plugin roots,
+rejects cross-runtime factory binding, and delivers real node events through core routing.
+The two plugin checks independently compile both loader roots. These commands
 require no window system or GPU. Broader workspace validation
 uses `cargo test --workspace --offline`; actual native device and presentation
 checks still use the platform-specific scripts described in `BACKENDS.md`.

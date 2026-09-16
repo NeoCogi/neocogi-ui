@@ -1,0 +1,481 @@
+//! Shared phase execution for concrete built-in COM classes.
+//!
+//! Concrete widget types own their semantic fields directly. [`WidgetRuntime`] contains only the
+//! common host, lifecycle, option, and resource machinery required by every class.
+use crate::boundary::text;
+use neocogi_ui_core_contracts::*;
+use neocogi_ui_nodes_contracts::ContentIcon;
+use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
+use std::{cell::RefCell, rc::Rc};
+use neocogi_ui::com::widget::WidgetState;
+use crate::WidgetOption;
+
+/// Private semantic algorithms reused by each statically known built-in class.
+pub(crate) trait WidgetAlgorithm: crate::Widget {
+    /// Ends semantic event production on logical close; states without event sources need no work.
+    fn close_events(&mut self) {}
+    /// Adds concrete state-dependent routing policy to the common caller-authored options.
+    fn effective_options(&self, options: WidgetOption) -> WidgetOption {
+        options
+    }
+}
+
+/// One provider-local asset cache shared by independent concrete COM allocations.
+/// Factory products refresh this cache once per installed host revision. Unlike semantic widget
+/// fields, the cache has multiple owners, so one object's `&mut self` cannot exclusively own it.
+pub(crate) type SharedAssets = Rc<RefCell<crate::assets::ImportedAssets>>;
+
+/// Common non-semantic state embedded directly in every concrete widget COM allocation.
+///
+/// This helper deliberately has no type parameter and cannot contain a widget implementation. It
+/// owns only cross-cutting COM lifecycle and host-backed rendering resources. Concrete structs such
+/// as `Button` keep their label, font, interaction state, and event sources as ordinary fields.
+pub(crate) struct WidgetRuntime {
+    /// Shared logical lifetime, attachment state, options, and sticky geometry invalidation.
+    pub(crate) state: WidgetState,
+    /// The one imported asset value used by this widget's semantic phases.
+    resources: SharedAssets,
+}
+
+impl WidgetRuntime {
+    /// Binds a newly constructed concrete widget to its host without storing semantic state.
+    pub(crate) fn new(host: ComPtr<IWidgetHostAbi>, options: WidgetOption) -> Result<Self, NcStatus> {
+        host.check_mutation()?;
+        let source = host.assets()?;
+        let resources = Rc::new(RefCell::new(crate::assets::ImportedAssets::read(source.as_com_ref(), None)?));
+        Ok(Self {
+            state: WidgetState::new(host, WidgetOptions::from_raw(options.bits() as u16)),
+            resources,
+        })
+    }
+
+    /// Binds a factory product to a provider-shared cache that follows host revision replacement.
+    pub(crate) fn from_shared(host: ComPtr<IWidgetHostAbi>, options: WidgetOption, resources: SharedAssets) -> Result<Self, NcStatus> {
+        host.check_mutation()?;
+        Ok(Self {
+            state: WidgetState::new(host, WidgetOptions::from_raw(options.bits() as u16)),
+            resources,
+        })
+    }
+
+    /// Selects an independent import or an explicitly shared provider cache for composite construction.
+    pub(crate) fn for_resources(host: ComPtr<IWidgetHostAbi>, options: WidgetOption, resources: Option<&SharedAssets>) -> Result<Self, NcStatus> {
+        match resources {
+            Some(resources) => Self::from_shared(host, options, resources.clone()),
+            None => Self::new(host, options),
+        }
+    }
+
+    /// Follows the host's installed immutable revision for every class and factory product.
+    pub(crate) fn resources(&mut self) -> Result<SharedAssets, NcStatus> {
+        let source = self.state.host().assets()?;
+        if self.resources.borrow().source().as_ptr() != source.as_ptr() {
+            // Authenticate and completely import the replacement before publishing it to siblings.
+            let replacement = {
+                let current = self.resources.borrow();
+                crate::assets::ImportedAssets::read(source.as_com_ref(), Some(&current))?
+            };
+            *self.resources.borrow_mut() = replacement;
+        }
+        Ok(self.resources.clone())
+    }
+
+    /// Resolves one UTF-8 font name against this widget's exact current resource revision.
+    pub(crate) fn named_font(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<crate::FontRef, NcStatus> {
+        self.state.writable()?;
+        let name = text(input)?;
+        let assets = self.resources()?;
+        let font = assets.borrow().original().font_id(name).ok_or(neocogi_com::NC_E_NOT_FOUND)?;
+        Ok(crate::FontRef::Named(font))
+    }
+
+    /// Resolves one UTF-8 icon name against this widget's exact current resource revision.
+    pub(crate) fn named_icon(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<crate::IconRef, NcStatus> {
+        self.state.writable()?;
+        let name = text(input)?;
+        let assets = self.resources()?;
+        let icon = assets.borrow().original().icon_id(name).ok_or(neocogi_com::NC_E_NOT_FOUND)?;
+        Ok(crate::IconRef::Named(icon))
+    }
+}
+
+/// Gives shared COM phase plumbing access to a concrete widget's non-semantic runtime field.
+///
+/// This is a statically dispatched internal Rust trait, not a COM interface or an alternate widget
+/// representation. Each implementation returns the one `WidgetRuntime` physically stored beside
+/// that widget's concrete fields.
+pub(crate) trait HostedWidget: WidgetAlgorithm {
+    /// Borrows common state for observational lifecycle checks.
+    fn runtime(&self) -> &WidgetRuntime;
+    /// Borrows common state exclusively for mutation, resource refresh, or rendering.
+    fn runtime_mut(&mut self) -> &mut WidgetRuntime;
+    /// Closes resources owned specifically by this widget after its common lifetime ends.
+    fn close_contents(&mut self) -> Result<(), NcStatus> {
+        // Leaf controls own only their semantic event sources. Containers override this hook to
+        // close their child writer without making the common runtime aware of topology.
+        self.close_events();
+        Ok(())
+    }
+}
+
+/// Commits one validated semantic font role on a concrete widget allocation.
+pub(crate) fn set_direct_font_role<S: HostedWidget + FontState>(widget: &mut S, role: FontRole) -> Result<(), NcStatus> {
+    widget.runtime().state.writable()?;
+    let font = crate::FontRef::Role(local_font_role(role)?);
+    if widget.font() != &font {
+        widget.set_font(font);
+        widget.runtime_mut().state.record_change(GeometryChange::Changed);
+    }
+    Ok(())
+}
+
+/// Resolves and commits one named font against the concrete widget's current host resources.
+pub(crate) fn set_direct_named_font<S: HostedWidget + FontState>(widget: &mut S, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+    let font = widget.runtime_mut().named_font(name)?;
+    if widget.font() != &font {
+        widget.set_font(font);
+        widget.runtime_mut().state.record_change(GeometryChange::Changed);
+    }
+    Ok(())
+}
+
+/// Commits one validated semantic icon on a concrete widget allocation.
+pub(crate) fn set_direct_icon_role<S: HostedWidget + IconState>(widget: &mut S, icon: ContentIcon) -> Result<(), NcStatus> {
+    widget.runtime().state.writable()?;
+    if widget.set_icon(local_content_icon(icon)?) {
+        widget.runtime_mut().state.record_change(GeometryChange::Changed);
+    }
+    Ok(())
+}
+
+/// Resolves and commits one named icon against the concrete widget's current host resources.
+pub(crate) fn set_direct_named_icon<S: HostedWidget + IconState>(widget: &mut S, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+    let icon = widget.runtime_mut().named_icon(name)?;
+    if widget.set_icon(Some(icon)) {
+        widget.runtime_mut().state.record_change(GeometryChange::Changed);
+    }
+    Ok(())
+}
+
+pub(crate) use neocogi_ui_support::layout::available;
+
+/// Converts the callable text-wrapping vocabulary into the concrete layout policy.
+pub(crate) fn local_wrap(wrap: TextWrapping) -> Result<crate::TextWrap, NcStatus> {
+    match wrap {
+        TextWrapping::None => Ok(crate::TextWrap::None),
+        TextWrapping::Word => Ok(crate::TextWrap::Word),
+        _ => Err(neocogi_com::NC_E_INVALID_ARG),
+    }
+}
+
+/// Implements the shared COM lifecycle and update/paint phases for one concrete widget type.
+///
+/// The generated methods access only the concrete object's [`WidgetRuntime`] field through
+/// [`HostedWidget`]. Semantic update and paint execute directly on `$name`; there is no contained
+/// algorithm object, erased payload, or secondary widget identity.
+macro_rules! direct_widget_phase_impl {
+    ($name:ty) => {
+        impl neocogi_ui_core_contracts::IWidget for $name {
+            /// Returns the runtime authority without retaining a tree or parent.
+            fn host(&self) -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::IWidgetHostAbi>, neocogi_com::NcStatus> {
+                let runtime = <$name as crate::widget_object::HostedWidget>::runtime(self);
+                Ok(runtime.state.host().add_ref())
+            }
+
+            /// Claims this concrete allocation's only attachment after host validation.
+            fn mount(&mut self) -> Result<(), neocogi_com::NcStatus> {
+                <$name as crate::widget_object::HostedWidget>::runtime_mut(self).state.mount()
+            }
+
+            /// Closes the concrete widget's event sources exactly once.
+            fn close(&mut self) -> Result<(), neocogi_com::NcStatus> {
+                let closed = <$name as crate::widget_object::HostedWidget>::runtime_mut(self).state.close()?;
+                if closed {
+                    <$name as crate::widget_object::HostedWidget>::close_contents(self)?;
+                }
+                Ok(())
+            }
+
+            /// Copies routing and frame policy from the concrete widget and its common options.
+            fn properties(&self) -> Result<neocogi_ui_core_contracts::WidgetProperties, neocogi_com::NcStatus> {
+                let runtime = <$name as crate::widget_object::HostedWidget>::runtime(self);
+                let options = runtime.state.options()?;
+                Ok(neocogi_ui_core_contracts::WidgetProperties {
+                    options: neocogi_ui_core_contracts::WidgetOptions::from_raw(
+                        <$name as crate::widget_object::WidgetAlgorithm>::effective_options(
+                            self,
+                            crate::WidgetOption::from_bits_retain(u32::from(options.raw())),
+                        )
+                        .bits() as u16,
+                    ),
+                    keyboard: crate::Widget::keyboard_behavior(self).bits(),
+                    frame: crate::frame_contract(crate::Widget::frame_appearance_role(self)),
+                })
+            }
+
+            /// Replaces the single common option value after complete validation.
+            fn set_options(&mut self, options: neocogi_ui_core_contracts::WidgetOptions) -> Result<(), neocogi_com::NcStatus> {
+                options.validate()?;
+                <$name as crate::widget_object::HostedWidget>::runtime_mut(self)
+                    .state
+                    .set_options(options)
+            }
+
+            /// Runs copied input directly against this concrete widget's semantic fields.
+            fn update(
+                &mut self,
+                state: neocogi_ui_core_contracts::WidgetUpdate,
+                event: neocogi_ui_core_contracts::WidgetEventAbi,
+                text: neocogi_com::NcCopyFromBufferOffset<'_, u8>,
+            ) -> Result<neocogi_ui_core_contracts::GeometryChange, neocogi_com::NcStatus> {
+                <$name as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
+                state.validate()?;
+                let input = crate::input_contract::local_event(event, text)?;
+                let assets = <$name as crate::widget_object::HostedWidget>::runtime_mut(self).resources()?;
+                let assets = assets.borrow();
+                let mut ctx = crate::WidgetUpdateCtx::new_with_content_geometry(
+                    crate::boundary::local_rect(state.screen),
+                    crate::math::RectExt::translated(crate::boundary::local_rect(state.clip), crate::Vec2i::new(state.screen.x, state.screen.y)),
+                    assets.bundle().skin(),
+                    assets.bundle().atlas(),
+                    state.in_hover_root,
+                    state.hovered,
+                    state.focused,
+                    state.clicked,
+                    state.active,
+                    crate::MouseButton::from_bits(u32::from(state.mouse_buttons)).ok_or(neocogi_com::NC_E_INVALID_ARG)?,
+                    crate::Modifiers::from_bits(state.modifiers).ok_or(neocogi_com::NC_E_INVALID_ARG)?,
+                );
+                Ok(match crate::Widget::update(self, &mut ctx, input.as_ref()) {
+                    crate::Change::Changed => neocogi_ui_core_contracts::GeometryChange::Changed,
+                    crate::Change::NoChange => neocogi_ui_core_contracts::GeometryChange::NoChange,
+                })
+            }
+
+            /// Drains sticky common and explicitly shared semantic geometry changes together.
+            fn take_change(&mut self) -> Result<neocogi_ui_core_contracts::GeometryChange, neocogi_com::NcStatus> {
+                if crate::Widget::take_shared_change(self) {
+                    <$name as crate::widget_object::HostedWidget>::runtime_mut(self)
+                        .state
+                        .record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
+                }
+                <$name as crate::widget_object::HostedWidget>::runtime_mut(self).state.take_change()
+            }
+
+            /// Paints semantic fields directly into the runtime-owned scoped frame context.
+            fn paint(
+                &mut self,
+                scope: neocogi_ui_core_contracts::PaintScope,
+                state: neocogi_ui_core_contracts::WidgetPaint,
+                painter: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IPainterAbi>,
+            ) -> Result<(), neocogi_com::NcStatus> {
+                state.validate()?;
+                // Reading options performs the one lifecycle check required by
+                // the complete paint invocation. Repeating it before the same
+                // immutable state read would cross the host COM boundary twice.
+                let options = <$name as crate::widget_object::HostedWidget>::runtime(self).state.options()?;
+                let assets = <$name as crate::widget_object::HostedWidget>::runtime_mut(self).resources()?;
+                let assets = assets.borrow();
+                let mut ctx = crate::WidgetPaintCtx::new_scoped(
+                    crate::boundary::local_rect(state.rect),
+                    crate::boundary::local_rect(state.clip),
+                    assets.bundle().skin(),
+                    assets.bundle().atlas(),
+                    state.enabled,
+                    state.hovered,
+                    state.focused,
+                    state.clicked,
+                    state.active,
+                    state.window_active,
+                    crate::WidgetOption::from_bits_retain(u32::from(options.raw())),
+                    scope,
+                    painter,
+                );
+                crate::Widget::paint(self, &mut ctx);
+                ctx.finish()
+            }
+        }
+    };
+}
+
+pub(crate) use direct_widget_phase_impl;
+
+/// Implements intrinsic COM measurement directly on one concrete leaf widget.
+macro_rules! direct_leaf_layout_impl {
+    ($name:ty) => {
+        impl neocogi_ui_core_contracts::ILeafLayout for $name {
+            /// Measures the concrete semantic fields against one owned host-resource snapshot.
+            fn measure(
+                &mut self,
+                bounds: neocogi_ui_core_contracts::LayoutLimits,
+                _metrics: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::ITextMetricsAbi>,
+            ) -> Result<neocogi_ui_core_contracts::Size, neocogi_com::NcStatus> {
+                <$name as crate::widget_object::HostedWidget>::runtime(self).state.readable()?;
+                let constraints = crate::Constraints::new(
+                    crate::widget_object::available(bounds.width)?,
+                    crate::widget_object::available(bounds.height)?,
+                );
+                let assets = <$name as crate::widget_object::HostedWidget>::runtime_mut(self).resources()?;
+                let assets = assets.borrow();
+                let size = crate::LeafWidget::measure(self, assets.bundle().skin(), assets.bundle().atlas(), constraints);
+                Ok(neocogi_ui_core_contracts::Size {
+                    width: size.width.max(0),
+                    height: size.height.max(0),
+                })
+            }
+        }
+    };
+}
+
+pub(crate) use direct_leaf_layout_impl;
+
+/// Implements scoped layout directly on a concrete container allocation.
+macro_rules! direct_container_layout_impl {
+    ($name:ty) => {
+        impl neocogi_ui_core_contracts::IContainerLayout for $name {
+            /// Returns the read-only view paired with this concrete container's private writer.
+            fn children(&self) -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenAbi>, neocogi_com::NcStatus> {
+                <$name as crate::widget_object::HostedWidget>::runtime(self).state.readable()?;
+                self.editor.view()
+            }
+
+            /// Measures the concrete container against the caller's scoped child service.
+            fn measure(
+                &mut self,
+                scope: neocogi_ui_core_contracts::LayoutScope,
+                bounds: neocogi_ui_core_contracts::LayoutLimits,
+                service: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::ILayoutServiceAbi>,
+            ) -> Result<neocogi_ui_core_contracts::Size, neocogi_com::NcStatus> {
+                <$name as crate::widget_object::HostedWidget>::runtime(self).state.readable()?;
+                let constraints = crate::layout_client::constraints(bounds)?;
+                let layout = crate::layout_client::ScopedLayout::new(scope, service)?;
+                let assets = <$name as crate::widget_object::HostedWidget>::runtime_mut(self).resources()?;
+                let assets = assets.borrow();
+                let mut ctx = crate::MeasureCtx::scoped(assets.bundle().skin(), assets.bundle().atlas(), layout);
+                let size = crate::ContainerWidget::measure(self, &mut ctx, constraints);
+                ctx.result()?;
+                Ok(neocogi_ui_core_contracts::Size {
+                    width: size.width.max(0),
+                    height: size.height.max(0),
+                })
+            }
+
+            /// Places the concrete container and returns only its copied child geometry.
+            fn place(
+                &mut self,
+                scope: neocogi_ui_core_contracts::LayoutScope,
+                rect: neocogi_ui_core_contracts::Rect,
+                service: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::ILayoutServiceAbi>,
+            ) -> Result<neocogi_ui_core_contracts::ContainerGeometry, neocogi_com::NcStatus> {
+                <$name as crate::widget_object::HostedWidget>::runtime(self).state.readable()?;
+                if rect.width < 0 || rect.height < 0 {
+                    return Err(neocogi_com::NC_E_INVALID_ARG);
+                }
+                let layout = crate::layout_client::ScopedLayout::new(scope, service)?;
+                let assets = <$name as crate::widget_object::HostedWidget>::runtime_mut(self).resources()?;
+                let assets = assets.borrow();
+                let mut ctx = crate::ContainerLayoutCtx::scoped(assets.bundle().skin(), assets.bundle().atlas(), crate::boundary::local_rect(rect), layout);
+                crate::ContainerWidget::place(self, &mut ctx, crate::boundary::local_rect(rect));
+                ctx.result()
+            }
+
+            /// Applies the concrete container's post-target event filtering policy.
+            fn accepts_event(
+                &self,
+                event: neocogi_ui_core_contracts::WidgetEventAbi,
+                text: neocogi_com::NcCopyFromBufferOffset<'_, u8>,
+            ) -> Result<bool, neocogi_com::NcStatus> {
+                <$name as crate::widget_object::HostedWidget>::runtime(self).state.readable()?;
+                let event = crate::input_contract::local_event(event, text)?;
+                Ok(event.is_some_and(|event| crate::ContainerWidget::accepts_event(self, &event)))
+            }
+        }
+    };
+}
+
+pub(crate) use direct_container_layout_impl;
+
+/// Static typography access implemented only by semantic states which own a font.
+pub(crate) trait FontState: WidgetAlgorithm {
+    /// Borrows the actual stable font selection used by measurement and paint.
+    fn font(&self) -> &crate::FontRef;
+    /// Replaces that same selection after the resource owner validates it.
+    fn set_font(&mut self, font: crate::FontRef);
+}
+
+/// Static access to the adjacent visual stored by a button or list row.
+pub(crate) trait IconState: WidgetAlgorithm {
+    /// Replaces the visual while retaining label/font state; reports an actual visual change.
+    fn set_icon(&mut self, icon: Option<crate::IconRef>) -> bool;
+}
+
+/// Implements shared scrolling calls directly on a concrete fixed-composition class.
+macro_rules! direct_scrolling_impl {
+    ($name:ty) => {
+        impl neocogi_ui_core_contracts::IScrolling for $name {
+            /// Reads one coherent snapshot from the scalar model shared with both scrollbar children.
+            fn info(&self) -> Result<neocogi_ui_core_contracts::ScrollInfo, neocogi_com::NcStatus> {
+                <$name as crate::widget_object::HostedWidget>::runtime(self).state.readable()?;
+                Ok(self.model.com_info())
+            }
+
+            /// Records a sticky nonnegative request for the next concrete placement.
+            fn set_offset(&mut self, offset: neocogi_ui_core_contracts::Point) -> Result<(), neocogi_com::NcStatus> {
+                <$name as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
+                self.model.set_offset(crate::Vec2i::new(offset.x, offset.y));
+                Ok(())
+            }
+
+            /// Changes wheel and scrollbar participation through the shared scalar model.
+            fn set_enabled(&mut self, enabled: bool) -> Result<(), neocogi_com::NcStatus> {
+                <$name as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
+                self.model.set_enabled(enabled);
+                Ok(())
+            }
+
+            /// Preserves an end request until placement installs the freshly measured range.
+            fn scroll_to_end(&mut self) -> Result<(), neocogi_com::NcStatus> {
+                <$name as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
+                self.model.scroll_to_end();
+                Ok(())
+            }
+
+            /// Validates one content-local rectangle before changing either requested axis.
+            fn reveal(&mut self, rect: neocogi_ui_core_contracts::Rect) -> Result<(), neocogi_com::NcStatus> {
+                <$name as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
+                if rect.x < 0 || rect.y < 0 || rect.width < 0 || rect.height < 0 {
+                    return Err(neocogi_com::NC_E_INVALID_ARG);
+                }
+                self.model.reveal(crate::boundary::local_rect(rect));
+                Ok(())
+            }
+        }
+    };
+}
+
+pub(crate) use direct_scrolling_impl;
+
+pub(crate) use neocogi_ui_support::boundary::local_font_role;
+
+/// Converts the finite public content-icon vocabulary into concrete semantic state.
+pub(super) fn local_content_icon(icon: ContentIcon) -> Result<Option<crate::IconRef>, NcStatus> {
+    let role = match icon {
+        ContentIcon::None => return Ok(None),
+        ContentIcon::Close => crate::IconRole::Close,
+        ContentIcon::Expand => crate::IconRole::Expand,
+        ContentIcon::Collapse => crate::IconRole::Collapse,
+        ContentIcon::Check => crate::IconRole::Check,
+        ContentIcon::ExpandDown => crate::IconRole::ExpandDown,
+        ContentIcon::OpenFolder => crate::IconRole::OpenFolder,
+        ContentIcon::ClosedFolder => crate::IconRole::ClosedFolder,
+        ContentIcon::File => crate::IconRole::File,
+        _ => return Err(NC_E_INVALID_ARG),
+    };
+    Ok(Some(crate::IconRef::Role(role)))
+}
+
+/// Private shared editing hook over each algorithm's authoritative concrete image content.
+pub(crate) trait ImageState {
+    /// Receives only a validated owned image, with no caller buffer or native identifier.
+    fn set_image(&mut self, image: Option<neocogi_ui::Image>, fit_width: bool) -> bool;
+}

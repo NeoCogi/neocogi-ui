@@ -33,9 +33,9 @@ use crate::AtlasHandle;
 
 use super::{FontRef, IconRef, SkinBundle};
 
-/// The stable font and icon catalog supplied by the renderer when a context is created.
+/// The stable font and icon catalog authenticated when a provider imports its original assets.
 ///
-/// A [`crate::Context`] never replaces this catalog when it installs a [`SkinBundle`]. Theme
+/// A provider never replaces this original catalog when it installs a [`SkinBundle`]. Theme
 /// loaders consequently rebuild from the same application-owned inputs every time instead of
 /// treating the previously selected theme's private artwork as new source material. Named
 /// exact IDs created here remain meaningful for every correctly derived theme bundle.

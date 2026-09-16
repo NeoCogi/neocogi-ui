@@ -42,30 +42,38 @@ without leaking runtime storage or teaching core about concrete nodes.
 `neocogi-ui-core-contracts` declares shared cross-binary node, layout, surface, menu, and
 window protocols. `neocogi-ui-nodes-contracts` declares concrete built-in classes, their
 specialized events and constructor factory. Neither contains UI implementation state.
-In the shared non-plugin `neocogi-ui-impl` package, each built-in under
-`ui_node/widgets` or `ui_node/containers` owns its `com_object`, constructor,
+In `crates/ui/nodes`, each built-in under
+`src/widgets` or `src/containers` owns its `com_object`, constructor,
 callable-class implementation, shared protocol projections, semantic fields, and
 layout/paint algorithm in one family module. A change to `Button`, `Grid`, or
 `ScrollArea` therefore has one implementation source rather than a native type plus
 a second COM-side representation.
 
-`neocogi-ui-impl` has no generic `src/com` implementation tree. Shared machinery follows
-its actual owner: node mounting, child transactions, input conversion, widget host
-state, scoped layout, and scoped painting live under `ui_node`; external frame
-composition lives in the GFX plugin while thin semantic replay lives under `render`;
-event projections live beside their semantic event types; and `Runtime` plus `UiFactory` live in
-their top-level implementation modules. Two thin plugin roots select the reachable core-runtime or
-nodes implementation and each exports exactly one loader entrypoint.
+Source ownership and deployment ownership agree. `crates/ui/runtime/src/ui_node` contains
+retained-node mounting, authoritative child transactions, host validation, scoped service
+implementations, routing, and traversal. Its `render/compositor` replays complete frames into
+GFX. Core contains neither a built-in catalog nor the nodes factory or standard picker.
 
-The shared support crate is not a deployment boundary. The resulting runtime and nodes shared
-objects are: the runtime artifact publishes only the core module and the nodes artifact publishes
-only the nodes module. Concrete built-ins are absent from the core artifact after link-time garbage
-collection. Recursive traversal remains ordinary core Rust code; mounted built-ins cross the same
-cached COM node interfaces already required for independent extensions.
+`crates/ui/nodes/src/factory.rs` binds only public core capabilities. `widget_object.rs` owns
+concrete node phase projections; `layout_client.rs` adapts the borrowed core layout service
+without owning children or traversal. Its first-error field uses ordinary `&mut self` mutation,
+not a `Cell`. `dialogs.rs` owns the standard picker, including its mounted private event driver.
+The native `Widget`/`LeafWidget` algorithm traits live only in nodes' `widget.rs`, not in core
+or shared support.
 
-The small private `boundary` module contains only representation-free UTF-8
-validation and geometry copies reused by multiple domains. It owns no objects,
-runtime state, registration catalog, or alternate implementation representation.
+`crates/ui/support` is a non-deployable helper crate with no runtime, host authority, retained
+node/root, concrete class, factory, or plugin descriptor. It owns binary-local resource imports,
+pure text/frame/track geometry, and phase-local recording helpers. Core and nodes depend on it,
+but neither has a production Rust dependency on the other. Their plugin roots live in their
+actual implementation crates; the former `neocogi-ui-impl` and thin `runtime-plugin` arrangement
+is removed. Source separation does not depend on link-time garbage collection.
+
+Each deployable library exports one loader entrypoint and directly publishes only its own
+contract module. Recursive traversal stays ordinary core Rust code; mounted built-ins use
+the same cached COM node interfaces required for independent extensions.
+
+The support `boundary` module owns representation-free UTF-8 validation, geometry copies,
+and checked vocabulary conversions. It retains no object or runtime state.
 
 Installed UI resources follow the same single-model rule. `AssetTables::read` is the one portable
 metadata validation boundary, and `AtlasHandle` retains that generated value unchanged. Its only

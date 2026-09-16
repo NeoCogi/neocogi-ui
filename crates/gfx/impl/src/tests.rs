@@ -3,7 +3,7 @@ use super::*;
 use crate::{AssetPublisherObject, GfxCompositorObject};
 use neocogi_com::{ComPtr, INcStringAbi, INcStringComPtrExt, NC_E_INVALID_ARG, NC_E_OUT_OF_RANGE, NcCopyToBufferOffset, NcStatus, com_object};
 use neocogi_ui::{NativePath, PathEncoding};
-use neocogi_ui_runtime::assets::ImportedAssets;
+use neocogi_ui_support::assets::ImportedAssets;
 use neocogi_platform_contracts::*;
 use neocogi_renderer_contracts::{
     IRenderStreamAbi, IRenderer, IRendererAbi, IRendererInterfacesFor, IRgbaImageAbi, RenderBatch, RenderBatchAbi, RenderInfo, RenderVertex,

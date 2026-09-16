@@ -1,0 +1,1102 @@
+//
+// Copyright 2022-Present (c) Raja Lehtihet & Wael El Oraiby
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//
+// 1. Redistributions of source code must retain the above copyright notice,
+// this list of conditions and the following disclaimer.
+//
+// 2. Redistributions in binary form must reproduce the above copyright notice,
+// this list of conditions and the following disclaimer in the documentation
+// and/or other materials provided with the distribution.
+//
+// 3. Neither the name of the copyright holder nor the names of its contributors
+// may be used to endorse or promote products derived from this software without
+// specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+// POSSIBILITY OF SUCH DAMAGE.
+//
+// -----------------------------------------------------------------------------
+// Ported to rust from https://github.com/rxi/microui/ and the original license
+//
+// Copyright (c) 2020 rxi
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to
+// deal in the Software without restriction, including without limitation the
+// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+// sell copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+// IN THE SOFTWARE.
+//
+//! Retained slider widget.
+//!
+//! Sliders support dragging, wheel increments, snapping, and shift-click text entry.
+use crate::{ControlRole};
+
+use crate::*;
+
+use super::numeric_edit::*;
+
+/// One-shot construction input for a [`Slider`].
+pub struct SliderParameters {
+    /// Validated finite initial slider value.
+    value: Real,
+    /// Validated finite lower bound of the ascending slider range.
+    low: Real,
+    /// Validated finite upper bound of the ascending slider range.
+    high: Real,
+    /// Validated finite non-negative step used for snapping (zero for continuous).
+    step: Real,
+    /// Bounded number of digits after the decimal point when rendering.
+    precision: DecimalPrecision,
+    /// Font used for the numeric label and editor.
+    font: FontRef,
+    /// Base widget options.
+    pub(crate) opt: WidgetOption,
+}
+
+impl crate::LeafWidget for Slider {
+    fn measure(&self, style: &Skin, atlas: &AtlasHandle, constraints: Constraints) -> Dimensioni {
+        self.preferred_size_widget(style, atlas, constraints)
+    }
+}
+
+impl SliderParameters {
+    /// Creates slider parameters with default widget options.
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumericParameterError` unless `value` and both range bounds are finite, the
+    /// bounds satisfy `low <= high`, and their represented span remains finite.
+    #[cfg(test)]
+    pub fn new(value: Real, low: Real, high: Real) -> Result<Self, NumericParameterError> {
+        Self::with_opt(value, low, high, 0.0, DecimalPrecision::ZERO, WidgetOption::FRAME)
+    }
+
+    /// Creates slider parameters with explicit widget options.
+    ///
+    /// # Errors
+    ///
+    /// Returns `NumericParameterError` unless `value`, `low`, `high`, and `step` are finite,
+    /// `low <= high`, the range span is representable, and `step` is non-negative. Precision is
+    /// already bounded by construction through [`DecimalPrecision`].
+    pub fn with_opt(value: Real, low: Real, high: Real, step: Real, precision: DecimalPrecision, opt: WidgetOption) -> Result<Self, NumericParameterError> {
+        // Validate every arithmetic input before publishing the parameter value. Private fields
+        // then make ascending orientation and finite percentage math builder invariants.
+        validate_slider_range(low, high)?;
+        validate_numeric_value_and_step(value, step)?;
+        Ok(Self {
+            value,
+            low,
+            high,
+            step,
+            precision,
+            font: FontRef::Role(FontRole::Body),
+            opt: opt | WidgetOption::GRAB_SCROLL,
+        })
+    }
+}
+
+/// Canonical generated numeric snapshot owned by the NCIDL event family.
+pub use neocogi_ui_nodes_contracts::INumericSinkEvent as SliderChanged;
+
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Slider)]
+/// Concrete retained slider and dynamically constructible COM object.
+pub struct Slider {
+    /// Non-semantic COM lifecycle and host-backed phase resources.
+    runtime: crate::widget_object::WidgetRuntime,
+    /// Initialization-only validated non-negative step size.
+    step: Real,
+    /// Initialization-only bounded display precision.
+    precision: DecimalPrecision,
+    /// Initialization-only font.
+    font: FontRef,
+    /// Base widget options.
+    /// Current slider value.
+    value: Real,
+    /// Finite lower bound retained for immediate setter clamping.
+    low: Real,
+    /// Finite upper bound retained for immediate setter clamping.
+    high: Real,
+    /// Inline numeric editing state.
+    edit: NumberEditState,
+    /// Runtime-owned source for user-originated value changes.
+    changed_event: crate::EventSource<SliderChanged>,
+}
+
+impl Slider {
+    /// Combines validated semantic parameters with one already bound common runtime.
+    pub(crate) fn from_runtime(runtime: crate::widget_object::WidgetRuntime, parameters: SliderParameters) -> Self {
+        // Private parameters are finite and ordered; only the initial value needs endpoint clamping.
+        Self {
+            runtime,
+            step: parameters.step,
+            precision: parameters.precision,
+            font: parameters.font,
+            value: clamp_slider_value(parameters.value, parameters.low, parameters.high),
+            low: parameters.low,
+            high: parameters.high,
+            edit: NumberEditState::default(),
+            changed_event: crate::EventSource::new(),
+        }
+    }
+
+    /// Returns the current slider value.
+    pub fn value(&self) -> Real {
+        self.value
+    }
+
+    /// Updates the current value, clamping finite input to the slider range.
+    ///
+    /// NaN and infinities are ignored so invalid external input cannot select an arbitrary endpoint
+    /// or erase the last valid retained value. Programmatic values are not step-snapped and never
+    /// emit user-change events, including during subsequent eventless updates.
+    pub fn set_value(&mut self, value: Real) {
+        if value.is_finite() {
+            self.value = clamp_slider_value(value, self.low, self.high);
+        }
+    }
+
+    /// Returns whether the inline numeric editor is active.
+    pub fn is_editing(&self) -> bool {
+        self.edit.editing
+    }
+
+    /// Returns the native event endpoint emitted after every user-originated value change.
+    #[cfg(test)]
+    pub fn changed(&self) -> crate::WidgetEventPortHandle<SliderChanged> {
+        self.changed_event.event()
+    }
+
+    /// Measures the slider track plus formatted value label.
+    fn preferred_size_widget(&self, style: &Skin, atlas: &AtlasHandle, _constraints: Constraints) -> Dimensioni {
+        let thumb_size = style.metrics().thumb_size.max(0);
+        number_preferred_size(style, atlas, &self.font, self.value, self.precision, thumb_size, thumb_size)
+    }
+
+    /// Updates slider value from shift-click text entry, scroll, or pointer drag.
+    fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
+        let base = ctx.local_rect();
+        let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
+        let last = self.value;
+        let mut value = last;
+        // Distinguish a user adjustment from merely visiting an unsnapped programmatic value.
+        let mut adjusted = false;
+        if !self.edit.editing {
+            // The validated ascending range gives all inputs one direction: Right increases and
+            // Left decreases. Continuous sliders use one percent; stepped sliders use one step.
+            let range = self.high - self.low;
+            let amount = if self.step != 0.0 { self.step } else { range / 100.0 };
+            adjusted = match ctx.action(input, self.keyboard_behavior()) {
+                Some(KeyboardAction::Decrease) => {
+                    value -= amount;
+                    true
+                }
+                Some(KeyboardAction::Increase) => {
+                    value += amount;
+                    true
+                }
+                Some(KeyboardAction::Activate | KeyboardAction::Expand | KeyboardAction::Collapse) | None => false,
+            };
+        }
+        if number_textbox_update(ctx, input, &mut self.edit, self.precision, font, &mut value) {
+            return crate::Change::NoChange;
+        }
+        if let Some(UiInputEvent::Scroll { delta, .. }) = input {
+            let range = self.high - self.low;
+            if range != 0.0 {
+                let wheel = if delta.y != 0 { delta.y.signum() } else { delta.x.signum() };
+                if wheel != 0 {
+                    // Positive wheel direction follows Right Arrow and increasing pointer x.
+                    let step_amount = if self.step != 0. { self.step } else { range / 100.0 };
+                    value += wheel as Real * step_amount;
+                    adjusted = true;
+                }
+            }
+        }
+        let range = self.high - self.low;
+        let pointer_pos = match input {
+            Some(
+                UiInputEvent::MouseMove { pos, .. }
+                | UiInputEvent::MouseDrag { pos, .. }
+                | UiInputEvent::MouseDown { pos, .. }
+                | UiInputEvent::MouseUp { pos, .. },
+            ) => Some(*pos),
+            _ => None,
+        };
+        if ctx.focused()
+            && ctx.mouse_buttons().intersects(MouseButton::LEFT)
+            && let Some(pointer_pos) = pointer_pos
+            && base.width > 0
+            && range != 0.0
+        {
+            // Normalize screen space in f64, then interpolate from both endpoints. The endpoint
+            // form avoids both multiplication overflow and loss of a small upper bound while
+            // cancelling a much larger negative lower bound.
+            let fraction = (f64::from(pointer_pos.x) / f64::from(base.width)).clamp(0.0, 1.0);
+            value = slider_value_at_fraction(self.low, self.high, fraction);
+            adjusted = true;
+        }
+        if !adjusted && value == last {
+            // No user adjustment or committed text change occurred. In particular, an eventless
+            // visit must not normalize an off-step value installed by construction or a setter.
+            return crate::Change::NoChange;
+        }
+        // Keyboard, wheel, pointer, and committed text share one snap-and-clamp policy. Numeric
+        // text may commit on blur with no routed event; its changed candidate reaches this path.
+        value = clamp_slider_value(snap_slider_value(value, self.low, self.step), self.low, self.high);
+        self.value = value;
+        if last != value {
+            self.changed_event.emit(SliderChanged { value });
+        }
+        // Only committed value/text changes affect this widget's preferred dimensions.
+        crate::Change::from(self.value != last)
+    }
+
+    /// Paints either the inline numeric editor or the slider track/thumb/value label.
+    fn paint_widget(&self, ctx: &mut WidgetPaintCtx<'_>) {
+        let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
+        if self.edit.editing {
+            number_textbox_paint(ctx, &self.edit, font);
+            return;
+        }
+
+        let base = ctx.local_rect();
+        if !ctx.options().intersects(WidgetOption::FRAME) {
+            // Unframed sliders still retain the semantic track center without adding border space.
+            ctx.draw_control_center(ControlRole::SliderTrack, base);
+        }
+        // Measurement already treats negative theme thumb sizes as zero. Paint applies the same
+        // normalization and uses saturated extent arithmetic so either public style or layout
+        // input may span the i32 domain without panicking.
+        let width = ctx.skin().metrics().thumb_size.max(0);
+        let available = base.width.max(0).saturating_sub(width);
+        let x = if self.low != self.high && available > 0 {
+            // Resolve the normalized numeric position in f64 before multiplying by pixel width.
+            // Exact endpoints are handled explicitly by the helper, while all interior results
+            // remain bounded in `[0, 1]` and cannot overflow the layout intermediate.
+            let fraction = slider_value_fraction(self.value, self.low, self.high);
+            (fraction * f64::from(available)) as i32
+        } else {
+            0
+        };
+        let thumb = rect(base.x.saturating_add(x), base.y, width, base.height.max(0));
+        let _ = ctx.draw_control(ControlRole::SliderThumb, thumb);
+        let label = number_label(self.value, self.precision);
+        ctx.draw_control_text_with_font(font, label.as_str(), base, ControlRole::SliderTrack, ctx.options());
+    }
+}
+
+/// Interpolates one bounded slider fraction without overflowing or losing exact endpoints.
+fn slider_value_at_fraction(low: Real, high: Real, fraction: f64) -> Real {
+    // Pointer normalization supplies `[0, 1]`, but endpoint branches make this helper total and
+    // preserve low/high exactly. The weighted endpoint form avoids constructing `high - low`,
+    // whose later cancellation with a large `low` can discard a much smaller finite `high`.
+    if fraction <= 0.0 {
+        low
+    } else if fraction >= 1.0 {
+        high
+    } else {
+        ((1.0 - fraction) * f64::from(low) + fraction * f64::from(high)) as Real
+    }
+}
+
+/// Converts one retained slider value to a bounded fraction of its ascending range.
+fn slider_value_fraction(value: Real, low: Real, high: Real) -> f64 {
+    // Exact endpoint checks prevent wide-range subtraction from moving either thumb endpoint.
+    // Interior subtraction is widened first; every distinct finite f32 pair remains distinct in
+    // f64, and the final clamp contains ordinary rounding at the range edges.
+    if value <= low {
+        0.0
+    } else if value >= high {
+        1.0
+    } else {
+        ((f64::from(value) - f64::from(low)) / (f64::from(high) - f64::from(low))).clamp(0.0, 1.0)
+    }
+}
+
+/// Snaps a value to the nearest step relative to the lower bound.
+fn snap_slider_value(value: Real, low: Real, step: Real) -> Real {
+    // SliderParameters guarantees a finite non-negative step, so snapping never has to invent an
+    // orientation by taking an absolute value. Widening the step count is still necessary: the
+    // ratio of two finite f32 values can exceed f32 even when the reconstructed value is finite.
+    if step == 0.0 {
+        value
+    } else {
+        let steps = ((f64::from(value) - f64::from(low)) / f64::from(step)).round();
+        (f64::from(low) + steps * f64::from(step)) as Real
+    }
+}
+
+/// Clamps a slider value to its validated ascending range.
+fn clamp_slider_value(value: Real, low: Real, high: Real) -> Real {
+    // NaN has no direction and selects the lower bound. Signed infinities and finite overflow from
+    // one interaction retain their direction through the ordinary endpoint comparisons.
+    if value.is_nan() || value <= low {
+        low
+    } else if value >= high {
+        high
+    } else {
+        value
+    }
+}
+
+impl Widget for Slider {
+    fn frame_appearance_role(&self) -> FrameRole {
+        // Retained traversal paints the complete track before the slider paints its thumb and text.
+        FrameRole::Control(ControlRole::SliderTrack)
+    }
+
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
+        self.update_widget(ctx, input)
+    }
+
+    fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {
+        self.paint_widget(ctx);
+    }
+
+    fn keyboard_behavior(&self) -> KeyboardBehavior {
+        // Native text input is useful only while the numeric editor is active.
+        let text = if self.edit.editing {
+            KeyboardBehavior::TEXT_INPUT
+        } else {
+            KeyboardBehavior::NONE
+        };
+        KeyboardBehavior::TAB_STOP | KeyboardBehavior::ADJUST_HORIZONTAL | text
+    }
+}
+
+#[cfg(test)]
+impl From<SliderParameters> for crate::test_support::algorithm::Algorithm<Slider> {
+    /// Transfers one-shot parameters into the concrete Slider runtime.
+    fn from(parameters: SliderParameters) -> Self {
+        Self::new(parameters.opt, |runtime| Slider::from_runtime(runtime, parameters))
+    }
+}
+
+impl crate::widget_object::WidgetAlgorithm for Slider {
+    /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
+    fn close_events(&mut self) {
+        self.changed_event.close_ordinary();
+    }
+}
+
+impl crate::widget_object::HostedWidget for Slider {
+    /// Borrows common lifecycle and resource state without a second slider representation.
+    fn runtime(&self) -> &crate::widget_object::WidgetRuntime {
+        &self.runtime
+    }
+
+    /// Exclusively borrows common lifecycle and resource state for a COM mutation or phase.
+    fn runtime_mut(&mut self) -> &mut crate::widget_object::WidgetRuntime {
+        &mut self.runtime
+    }
+}
+
+impl crate::widget_object::FontState for Slider {
+    /// Borrows the semantic font reference already used by layout and painting.
+    fn font(&self) -> &crate::FontRef {
+        &self.font
+    }
+    /// Replaces the same field after the COM resource owner validates the selection.
+    fn set_font(&mut self, font: crate::FontRef) {
+        self.font = font;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Tests for slider and numeric editing behavior.
+
+    use super::*;
+    use crate::test_support::{test_atlas as make_test_atlas, test_skin};
+    use crate::{UiInputEvent, widget_context::localize_event};
+    use crate::{Number, NumberParameters};
+
+    fn run_slider_once(slider: &mut Slider, rect: Recti, events: Vec<UiInputEvent>, hovered: bool, focused: bool, active: bool, scroll: Option<Vec2i>) {
+        let atlas = make_test_atlas();
+        let style = test_skin(&atlas);
+        let held = if active { MouseButton::LEFT } else { MouseButton::NONE };
+        let mut events = events
+            .into_iter()
+            .map(|event| localize_event(Vec2i::new(rect.x, rect.y), event))
+            .collect::<Vec<_>>();
+        if let Some(delta) = scroll {
+            events.push(UiInputEvent::Scroll { pos: Vec2i::default(), delta });
+        }
+        for event in &events {
+            let mut ctx = WidgetUpdateCtx::new_with_interaction(rect, rect, &style, &atlas, true, hovered, focused, false, active, held, Modifiers::NONE);
+            slider.update(&mut ctx, Some(event));
+        }
+    }
+
+    fn run_number_once(number: &mut Number, events: Vec<UiInputEvent>) {
+        let atlas = make_test_atlas();
+        let style = test_skin(&atlas);
+        let bounds = rect(0, 0, 100, 20);
+        for event in &events {
+            let mut ctx = WidgetUpdateCtx::new_with_interaction(
+                bounds,
+                bounds,
+                &style,
+                &atlas,
+                true,
+                true,
+                true,
+                false,
+                true,
+                MouseButton::LEFT,
+                Modifiers::NONE,
+            );
+            number.update(&mut ctx, Some(event));
+        }
+    }
+
+    fn assert_real_close(actual: Real, expected: Real) {
+        assert!((actual - expected).abs() < 1.0e-5, "expected {expected}, got {actual}");
+    }
+
+    /// Converts a small test literal through the same public precision validation as applications.
+    fn precision(digits: usize) -> DecimalPrecision {
+        DecimalPrecision::try_from(digits).expect("test precision must stay within Real's meaningful bound")
+    }
+
+    /// Extracts a Number construction failure without requiring the intentionally opaque
+    /// `NumberParameters` success type to implement Debug.
+    fn number_parameter_error(result: Result<NumberParameters, NumericParameterError>) -> NumericParameterError {
+        match result {
+            Err(error) => error,
+            Ok(_) => panic!("invalid Number parameters unexpectedly validated"),
+        }
+    }
+
+    /// Extracts a Slider construction failure without exposing its private parameter fields.
+    fn slider_parameter_error(result: Result<SliderParameters, NumericParameterError>) -> NumericParameterError {
+        match result {
+            Err(error) => error,
+            Ok(_) => panic!("invalid Slider parameters unexpectedly validated"),
+        }
+    }
+
+    fn record_slider_change(values: &mut Vec<Real>, event: &SliderChanged) {
+        values.push(event.value);
+    }
+
+    fn record_number_change(values: &mut Vec<Real>, event: &SliderChanged) {
+        values.push(event.value);
+    }
+
+    /// Observes snapshots from the production event source without scheduling UI work.
+    fn slider_dispatcher(slider: &Slider) -> impl FnMut(&mut Vec<Real>) -> bool + use<> {
+        let lease = neocogi_ui::events::test_support::EventLease::connect(slider.changed()).unwrap();
+        move |values| {
+            let batch = lease.drain(1024).unwrap();
+            let delivered = !batch.events.is_empty();
+            for event in batch.events {
+                record_slider_change(values, &event);
+            }
+            delivered
+        }
+    }
+
+    /// Observes snapshots from the production event source without scheduling UI work.
+    fn number_dispatcher(number: &Number) -> impl FnMut(&mut Vec<Real>) -> bool + use<> {
+        let lease = neocogi_ui::events::test_support::EventLease::connect(number.changed()).unwrap();
+        move |values| {
+            let batch = lease.drain(1024).unwrap();
+            let delivered = !batch.events.is_empty();
+            for event in batch.events {
+                record_number_change(values, &event);
+            }
+            delivered
+        }
+    }
+
+    /// Verifies formatting precision is a small validated value rather than an allocation-sized
+    /// application integer.
+    #[test]
+    fn decimal_precision_rejects_huge_format_requests() {
+        assert_eq!(DecimalPrecision::MAX.digits(), Real::DIGITS as usize);
+        assert_eq!(DecimalPrecision::try_from(DecimalPrecision::MAX.digits()), Ok(DecimalPrecision::MAX));
+
+        let error = DecimalPrecision::try_from(usize::MAX).expect_err("usize::MAX precision must be rejected before formatting");
+        assert_eq!(error.requested(), usize::MAX);
+        assert_eq!(error.maximum(), DecimalPrecision::MAX.digits());
+
+        // The accepted maximum remains a fixed small allocation even for the longest permitted
+        // fractional suffix.
+        let label = number_label(1.0, DecimalPrecision::MAX);
+        assert_eq!(label, format!("1.{:0<width$}", "", width = DecimalPrecision::MAX.digits()));
+    }
+
+    /// Verifies Number construction rejects every non-finite scalar and does not reinterpret a
+    /// negative step as an opposite interaction direction.
+    #[test]
+    fn number_parameters_reject_non_finite_values_and_invalid_steps() {
+        for value in [Real::NAN, Real::INFINITY, Real::NEG_INFINITY] {
+            let error = number_parameter_error(NumberParameters::new(value, 1.0, DecimalPrecision::ZERO));
+            assert!(matches!(error, NumericParameterError::NonFiniteValue { value: rejected } if rejected.to_bits() == value.to_bits()));
+        }
+
+        for step in [Real::NAN, Real::INFINITY, Real::NEG_INFINITY] {
+            let error = number_parameter_error(NumberParameters::new(0.0, step, DecimalPrecision::ZERO));
+            assert!(matches!(error, NumericParameterError::NonFiniteStep { step: rejected } if rejected.to_bits() == step.to_bits()));
+        }
+
+        let error = number_parameter_error(NumberParameters::new(0.0, -1.0, DecimalPrecision::ZERO));
+        assert!(matches!(error, NumericParameterError::NegativeStep { step } if step == -1.0));
+        assert!(NumberParameters::new(0.0, 0.0, DecimalPrecision::ZERO).is_ok());
+    }
+
+    /// Verifies Slider construction admits only finite ascending ranges with finite non-negative
+    /// steps, eliminating the former conflicting descending orientation.
+    #[test]
+    fn slider_parameters_reject_non_finite_and_descending_ranges() {
+        for value in [Real::NAN, Real::INFINITY, Real::NEG_INFINITY] {
+            let error = slider_parameter_error(SliderParameters::new(value, 0.0, 1.0));
+            assert!(matches!(error, NumericParameterError::NonFiniteValue { value: rejected } if rejected.to_bits() == value.to_bits()));
+        }
+
+        for (low, high) in [(Real::NAN, 1.0), (0.0, Real::INFINITY), (Real::NEG_INFINITY, 1.0)] {
+            let error = slider_parameter_error(SliderParameters::new(0.0, low, high));
+            assert!(matches!(error, NumericParameterError::NonFiniteRangeBounds { .. }));
+        }
+
+        let descending = slider_parameter_error(SliderParameters::new(5.0, 10.0, 0.0));
+        assert!(matches!(descending, NumericParameterError::DescendingRange { low: 10.0, high: 0.0 }));
+
+        let excessive_span = slider_parameter_error(SliderParameters::new(0.0, -Real::MAX, Real::MAX));
+        assert!(matches!(excessive_span, NumericParameterError::NonFiniteRangeSpan { .. }));
+
+        for step in [Real::NAN, Real::INFINITY, Real::NEG_INFINITY] {
+            let error = slider_parameter_error(SliderParameters::with_opt(0.0, 0.0, 1.0, step, DecimalPrecision::ZERO, WidgetOption::FRAME));
+            assert!(matches!(error, NumericParameterError::NonFiniteStep { step: rejected } if rejected.to_bits() == step.to_bits()));
+        }
+        let negative_step = slider_parameter_error(SliderParameters::with_opt(0.0, 0.0, 1.0, -0.5, DecimalPrecision::ZERO, WidgetOption::FRAME));
+        assert!(matches!(negative_step, NumericParameterError::NegativeStep { step } if step == -0.5));
+    }
+
+    /// Verifies every ascending-slider input maps Left Arrow, negative wheel, and a lower pointer
+    /// coordinate to decrease, with their three opposites consistently increasing.
+    #[test]
+    fn ascending_slider_inputs_agree_on_direction() {
+        let parameters = || {
+            SliderParameters::with_opt(5.0, 0.0, 10.0, 1.0, DecimalPrecision::ZERO, WidgetOption::FRAME)
+                .expect("finite ascending direction fixture must validate")
+        };
+        let bounds = rect(0, 0, 100, 20);
+
+        let mut keyboard_increase = crate::test_support::algorithm::Algorithm::<Slider>::from(parameters());
+        run_slider_once(
+            &mut keyboard_increase,
+            bounds,
+            vec![UiInputEvent::Key {
+                event: KeyEvent::pressed(Key::ArrowRight, Modifiers::NONE),
+            }],
+            false,
+            true,
+            false,
+            None,
+        );
+        let mut wheel_increase = crate::test_support::algorithm::Algorithm::<Slider>::from(parameters());
+        run_slider_once(&mut wheel_increase, bounds, Vec::new(), true, false, false, Some(vec2(0, 1)));
+        let mut pointer_increase = crate::test_support::algorithm::Algorithm::<Slider>::from(parameters());
+        run_slider_once(
+            &mut pointer_increase,
+            bounds,
+            vec![UiInputEvent::MouseDrag {
+                pos: vec2(60, 10),
+                delta: Vec2i::default(),
+                buttons: MouseButton::LEFT,
+            }],
+            true,
+            true,
+            true,
+            None,
+        );
+        assert_eq!([keyboard_increase.value(), wheel_increase.value(), pointer_increase.value()], [6.0; 3]);
+
+        let mut keyboard_decrease = crate::test_support::algorithm::Algorithm::<Slider>::from(parameters());
+        run_slider_once(
+            &mut keyboard_decrease,
+            bounds,
+            vec![UiInputEvent::Key {
+                event: KeyEvent::pressed(Key::ArrowLeft, Modifiers::NONE),
+            }],
+            false,
+            true,
+            false,
+            None,
+        );
+        let mut wheel_decrease = crate::test_support::algorithm::Algorithm::<Slider>::from(parameters());
+        run_slider_once(&mut wheel_decrease, bounds, Vec::new(), true, false, false, Some(vec2(0, -1)));
+        let mut pointer_decrease = crate::test_support::algorithm::Algorithm::<Slider>::from(parameters());
+        run_slider_once(
+            &mut pointer_decrease,
+            bounds,
+            vec![UiInputEvent::MouseDrag {
+                pos: vec2(40, 10),
+                delta: Vec2i::default(),
+                buttons: MouseButton::LEFT,
+            }],
+            true,
+            true,
+            true,
+            None,
+        );
+        assert_eq!([keyboard_decrease.value(), wheel_decrease.value(), pointer_decrease.value()], [4.0; 3]);
+    }
+
+    #[test]
+    fn slider_zero_range_keeps_value() {
+        let atlas = make_test_atlas();
+        let style = test_skin(&atlas);
+
+        let mut slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
+            SliderParameters::new(5.0, 5.0, 5.0).expect("equal finite bounds form a valid inert slider"),
+        );
+        let rect = rect(0, 0, 100, 20);
+        let input = vec![UiInputEvent::MouseDrag {
+            pos: vec2(50, 10),
+            delta: vec2(5, 0),
+            buttons: MouseButton::LEFT,
+        }];
+        let mut ctx = WidgetUpdateCtx::new_with_interaction(rect, rect, &style, &atlas, true, true, true, false, true, MouseButton::LEFT, Modifiers::NONE);
+
+        let event = localize_event(Vec2i::new(rect.x, rect.y), input.into_iter().next().unwrap());
+        slider.update(&mut ctx, Some(&event));
+
+        assert!(slider.value().is_finite());
+        assert_eq!(slider.value(), 5.0);
+    }
+
+    #[test]
+    fn slider_wheel_snaps_fractional_step_from_lower_bound() {
+        let mut slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
+            SliderParameters::with_opt(1.15, 1.0, 2.0, 0.2, precision(2), WidgetOption::FRAME)
+                .expect("finite ascending fractional slider parameters must validate"),
+        );
+        let mut dispatcher = slider_dispatcher(&slider);
+        run_slider_once(&mut slider, rect(0, 0, 100, 20), Vec::new(), true, false, false, Some(vec2(0, 1)));
+
+        assert_real_close(slider.value(), 1.4);
+        let mut values = Vec::new();
+        assert!(dispatcher(&mut values));
+        assert_eq!(values, [1.4]);
+    }
+
+    #[test]
+    fn slider_drag_snaps_fractional_step_from_lower_bound() {
+        let mut slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
+            SliderParameters::with_opt(10.0, 10.0, 20.0, 0.25, precision(2), WidgetOption::FRAME)
+                .expect("finite ascending fractional slider parameters must validate"),
+        );
+        let input = vec![UiInputEvent::MouseDrag {
+            pos: vec2(33, 10),
+            delta: Vec2i::default(),
+            buttons: MouseButton::LEFT,
+        }];
+        run_slider_once(&mut slider, rect(0, 0, 100, 20), input, true, true, true, None);
+
+        assert_real_close(slider.value(), 13.25);
+    }
+
+    #[test]
+    fn slider_uses_widget_local_mouse_position() {
+        let atlas = make_test_atlas();
+        let style = test_skin(&atlas);
+
+        let mut slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
+            SliderParameters::new(0.0, 0.0, 100.0).expect("finite ascending slider parameters must validate"),
+        );
+        let rect = rect(40, 20, 100, 20);
+        let input = vec![UiInputEvent::MouseDrag {
+            pos: vec2(90, 30),
+            delta: Vec2i::default(),
+            buttons: MouseButton::LEFT,
+        }];
+        let mut ctx = WidgetUpdateCtx::new_with_interaction(rect, rect, &style, &atlas, true, true, true, false, true, MouseButton::LEFT, Modifiers::NONE);
+
+        let event = localize_event(Vec2i::new(rect.x, rect.y), input.into_iter().next().unwrap());
+        slider.update(&mut ctx, Some(&event));
+
+        assert_eq!(slider.value(), 50.0);
+    }
+
+    /// Verifies pointer mapping normalizes screen space before scaling a valid maximum-size range.
+    #[test]
+    fn slider_pointer_midpoint_does_not_overflow_a_large_finite_range() {
+        let mut slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
+            SliderParameters::new(0.0, 0.0, Real::MAX).expect("a maximum finite range span must remain usable"),
+        );
+        let input = vec![UiInputEvent::MouseDrag {
+            pos: vec2(50, 10),
+            delta: Vec2i::default(),
+            buttons: MouseButton::LEFT,
+        }];
+
+        run_slider_once(&mut slider, rect(0, 0, 100, 20), input, true, true, true, None);
+
+        assert_eq!(slider.value(), Real::MAX / 2.0);
+    }
+
+    /// Verifies the right edge selects a small upper bound exactly after a wide cancellation.
+    #[test]
+    fn slider_pointer_right_edge_preserves_a_small_upper_endpoint() {
+        let low = Real::MIN / 2.0;
+        let high = 1.0;
+        let mut slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
+            SliderParameters::new(low, low, high).expect("a finite wide-offset range must remain usable"),
+        );
+        let input = vec![UiInputEvent::MouseDrag {
+            pos: vec2(100, 10),
+            delta: Vec2i::default(),
+            buttons: MouseButton::LEFT,
+        }];
+
+        run_slider_once(&mut slider, rect(0, 0, 100, 20), input, true, true, true, None);
+
+        assert_eq!(slider.value(), high);
+    }
+
+    /// Verifies a finite subnormal step cannot overflow the intermediate snapping step count.
+    #[test]
+    fn slider_tiny_step_keeps_a_representable_pointer_value() {
+        let minimum_step = Real::from_bits(1);
+        let mut slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
+            SliderParameters::with_opt(0.0, 0.0, 1.0, minimum_step, DecimalPrecision::ZERO, WidgetOption::FRAME)
+                .expect("the smallest positive finite step must remain usable"),
+        );
+        let input = vec![UiInputEvent::MouseDrag {
+            pos: vec2(50, 10),
+            delta: Vec2i::default(),
+            buttons: MouseButton::LEFT,
+        }];
+
+        run_slider_once(&mut slider, rect(0, 0, 100, 20), input, true, true, true, None);
+
+        assert_eq!(slider.value(), 0.5);
+    }
+
+    /// Verifies paint normalizes numeric space before mapping a large finite midpoint to pixels.
+    #[test]
+    fn slider_thumb_midpoint_does_not_overflow_a_large_finite_range() {
+        let atlas = make_test_atlas();
+        let mut style = test_skin(&atlas);
+        // A borderless ten-pixel thumb records one unambiguous fill rectangle at the computed x.
+        style.metrics_mut().thumb_size = 10;
+        let frame = style
+            .control(ControlRole::SliderThumb, crate::ControlState::Enabled(crate::PointerState::Normal))
+            .patch
+            .with_insets(crate::SliceInsets::ZERO);
+        crate::test_support::replace_control_patches(&mut style, ControlRole::SliderThumb, |_| frame);
+        let slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
+            SliderParameters::new(Real::MAX / 2.0, 0.0, Real::MAX).expect("a maximum finite range span must remain usable"),
+        );
+        let bounds = rect(0, 0, 100, 20);
+        let mut display_list = crate::render::DisplayList::new();
+        let mut ctx = WidgetPaintCtx::new_with_content_geometry(
+            bounds,
+            &mut display_list,
+            bounds,
+            &style,
+            &atlas,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true,
+            WidgetOption::from_bits_retain(slider.runtime.state.options().unwrap().raw() as u32),
+        );
+
+        slider.paint(&mut ctx);
+
+        let patches = display_list.debug_nine_patches();
+        assert!(
+            patches
+                .iter()
+                .any(|(destination, _, _)| destination.x == 45 && destination.y == 0 && destination.width == 10 && destination.height == 20),
+            "the half-range value must place the ten-pixel thumb halfway across ninety available pixels",
+        );
+    }
+
+    #[test]
+    fn number_drag_records_a_typed_change_and_programmatic_setter_is_silent() {
+        let mut number = crate::test_support::algorithm::Algorithm::<Number>::from(
+            NumberParameters::new(0.0, 2.0, DecimalPrecision::ZERO).expect("finite non-negative number parameters must validate"),
+        );
+        let mut dispatcher = number_dispatcher(&number);
+        let mut values = Vec::new();
+        number.set_value(4.0);
+        assert!(!dispatcher(&mut values));
+
+        run_number_once(
+            &mut number,
+            vec![UiInputEvent::MouseDrag {
+                pos: vec2(10, 10),
+                delta: vec2(3, 0),
+                buttons: MouseButton::LEFT,
+            }],
+        );
+        assert_eq!(number.value(), 10.0);
+        assert!(dispatcher(&mut values));
+        assert_eq!(values, [10.0]);
+    }
+
+    /// Verifies wide drag arithmetic preserves representable cancellation in both directions.
+    #[test]
+    fn number_drag_does_not_overflow_before_a_representable_result() {
+        let mut increasing = crate::test_support::algorithm::Algorithm::<Number>::from(
+            NumberParameters::new(Real::MIN, Real::MAX, DecimalPrecision::ZERO).expect("finite extreme number parameters must validate"),
+        );
+        run_number_once(
+            &mut increasing,
+            vec![UiInputEvent::MouseDrag {
+                pos: vec2(10, 10),
+                delta: vec2(2, 0),
+                buttons: MouseButton::LEFT,
+            }],
+        );
+        assert_eq!(increasing.value(), Real::MAX);
+
+        let mut decreasing = crate::test_support::algorithm::Algorithm::<Number>::from(
+            NumberParameters::new(Real::MAX, Real::MAX, DecimalPrecision::ZERO).expect("finite extreme number parameters must validate"),
+        );
+        run_number_once(
+            &mut decreasing,
+            vec![UiInputEvent::MouseDrag {
+                pos: vec2(10, 10),
+                delta: vec2(-2, 0),
+                buttons: MouseButton::LEFT,
+            }],
+        );
+        assert_eq!(decreasing.value(), Real::MIN);
+    }
+
+    /// Verifies arrow arithmetic saturates at the finite Real endpoints instead of jumping to zero.
+    #[test]
+    fn number_arrow_overflow_saturates_in_the_requested_direction() {
+        let mut increasing = crate::test_support::algorithm::Algorithm::<Number>::from(
+            NumberParameters::new(Real::MAX, Real::MAX, DecimalPrecision::ZERO).expect("finite extreme number parameters must validate"),
+        );
+        run_number_once(
+            &mut increasing,
+            vec![UiInputEvent::Key {
+                event: KeyEvent::pressed(Key::ArrowUp, Modifiers::NONE),
+            }],
+        );
+        assert_eq!(increasing.value(), Real::MAX);
+
+        let mut decreasing = crate::test_support::algorithm::Algorithm::<Number>::from(
+            NumberParameters::new(Real::MIN, Real::MAX, DecimalPrecision::ZERO).expect("finite extreme number parameters must validate"),
+        );
+        run_number_once(
+            &mut decreasing,
+            vec![UiInputEvent::Key {
+                event: KeyEvent::pressed(Key::ArrowDown, Modifiers::NONE),
+            }],
+        );
+        assert_eq!(decreasing.value(), Real::MIN);
+    }
+
+    #[test]
+    fn slider_programmatic_setter_is_silent() {
+        let mut slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
+            SliderParameters::new(0.0, -5.0, 5.0).expect("finite ascending slider parameters must validate"),
+        );
+        let mut dispatcher = slider_dispatcher(&slider);
+        slider.set_value(4.0);
+        assert_eq!(slider.value(), 4.0);
+        assert!(!dispatcher(&mut Vec::new()));
+    }
+
+    /// Eventless blur commits are user edits and share the step policy of pointer/key/wheel input.
+    #[test]
+    fn slider_text_commit_on_blur_snaps_once_and_reports_changed_geometry() {
+        let mut slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
+            SliderParameters::with_opt(2.0, 0.0, 10.0, 1.0, DecimalPrecision::ZERO, WidgetOption::FRAME).unwrap(),
+        );
+        let mut dispatcher = slider_dispatcher(&slider);
+        slider.edit.editing = true;
+        // Enter through the editing contract instead of reaching into the private numeric buffer.
+        run_slider_once(
+            &mut slider,
+            rect(0, 0, 100, 20),
+            vec![UiInputEvent::Text { text: "4.4".to_owned() }],
+            true,
+            true,
+            false,
+            None,
+        );
+        let atlas = make_test_atlas();
+        let style = test_skin(&atlas);
+        let bounds = rect(0, 0, 100, 20);
+        let mut ctx = WidgetUpdateCtx::new_with_interaction(
+            bounds,
+            bounds,
+            &style,
+            &atlas,
+            true,
+            false,
+            false,
+            false,
+            false,
+            MouseButton::NONE,
+            Modifiers::NONE,
+        );
+        assert_eq!(slider.update(&mut ctx, None), crate::Change::Changed);
+        assert_eq!(slider.value(), 4.0);
+        let mut values = Vec::new();
+        assert!(dispatcher(&mut values));
+        assert_eq!(values, [4.0]);
+        assert_eq!(slider.update(&mut ctx, None), crate::Change::NoChange);
+        assert!(!dispatcher(&mut values));
+    }
+
+    /// Verifies both numeric setters retain their last finite value when given invalid input.
+    #[test]
+    fn numeric_programmatic_setters_ignore_non_finite_values() {
+        let mut number = crate::test_support::algorithm::Algorithm::<Number>::from(
+            NumberParameters::new(3.0, 1.0, DecimalPrecision::ZERO).expect("finite number parameters must validate"),
+        );
+        let mut slider =
+            crate::test_support::algorithm::Algorithm::<Slider>::from(SliderParameters::new(4.0, 0.0, 10.0).expect("finite slider parameters must validate"));
+
+        for invalid in [Real::NAN, Real::INFINITY, Real::NEG_INFINITY] {
+            number.set_value(invalid);
+            slider.set_value(invalid);
+            assert_eq!(number.value(), 3.0);
+            assert_eq!(slider.value(), 4.0);
+        }
+    }
+
+    /// Verifies paint shares measurement's negative-thumb normalization without subtract overflow.
+    #[test]
+    fn negative_extreme_thumb_size_keeps_slider_paint_total() {
+        let atlas = make_test_atlas();
+        let mut style = test_skin(&atlas);
+        style.metrics_mut().thumb_size = i32::MIN;
+        let slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
+            SliderParameters::new(0.5, 0.0, 1.0).expect("finite ascending slider parameters must validate"),
+        );
+        let bounds = rect(0, 0, 100, 20);
+        let mut display_list = crate::render::DisplayList::new();
+        let mut ctx = WidgetPaintCtx::new_with_content_geometry(
+            bounds,
+            &mut display_list,
+            bounds,
+            &style,
+            &atlas,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true,
+            WidgetOption::from_bits_retain(slider.runtime.state.options().unwrap().raw() as u32),
+        );
+
+        slider.paint(&mut ctx);
+
+        // The base fill and numeric label remain valid even though the zero-width thumb is omitted.
+        assert!(display_list.debug_operation_count() >= 1);
+    }
+}
+
+use crate::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
+use neocogi_ui_core_contracts::{GeometryChange, IEventSubscriptionAbi, IWidgetHostAbi, FontRole};
+use neocogi_ui_nodes_contracts::{INumericSinkAbi, SliderAbi, SliderOptions};
+use neocogi_com::*;
+
+direct_widget_phase_impl!(Slider);
+direct_leaf_layout_impl!(Slider);
+
+impl Slider {
+    /// Constructs the class for the host-bound factory through the registry's typed contract.
+    pub(crate) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: crate::widget_object::SharedAssets,
+        options: SliderOptions,
+    ) -> Result<ComPtr<SliderAbi>, NcStatus> {
+        let value = Self::build(host, options, Some(&resources))?;
+        Ok(Self::from_value(value).query().expect("Slider declares its callable class contract"))
+    }
+
+    /// Builds one slider with either directly imported or runtime-shared resources.
+    fn build(host: ComPtr<IWidgetHostAbi>, options: SliderOptions, resources: Option<&crate::widget_object::SharedAssets>) -> Result<Self, NcStatus> {
+        let parameters = crate::SliderParameters::with_opt(
+            options.value,
+            options.low,
+            options.high,
+            options.step,
+            crate::DecimalPrecision::try_from(usize::from(options.precision)).map_err(|_| NC_E_INVALID_ARG)?,
+            crate::WidgetOption::FRAME,
+        )
+        .map_err(|_| NC_E_INVALID_ARG)?;
+        let runtime = crate::widget_object::WidgetRuntime::for_resources(host, parameters.opt, resources)?;
+        Ok(Self::from_runtime(runtime, parameters))
+    }
+}
+
+impl neocogi_ui_nodes_contracts::Slider for Slider {
+    /// Reads the finite value owned by the slider's concrete semantic algorithm.
+    fn value(&self) -> Result<f32, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(self.value())
+    }
+    /// Rejects nonfinite input and dirties geometry only when clamping or snapping changes the value.
+    fn set_value(&mut self, value: f32) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        if !value.is_finite() {
+            return Err(NC_E_INVALID_ARG);
+        }
+        let previous = self.value();
+        self.set_value(value);
+        if self.value() != previous {
+            self.runtime_mut().state.record_change(GeometryChange::Changed);
+        }
+        Ok(())
+    }
+    /// Exposes the same edit mode that controls routed text input.
+    fn is_editing(&self) -> Result<bool, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(self.is_editing())
+    }
+    /// Validates a semantic font role before changing the slider's measurement input.
+    fn set_font_role(&mut self, role: FontRole) -> Result<(), NcStatus> {
+        set_direct_font_role(self, role)
+    }
+    /// Resolves one exact named font before replacing the slider's selection.
+    fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        set_direct_named_font(self, name)
+    }
+    /// Connects the slider's existing semantic event source directly through the class contract.
+    fn subscribe(&mut self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        self.runtime().state.writable()?;
+        let endpoint = self.changed_event.event();
+        endpoint.subscribe(sink)
+    }
+}

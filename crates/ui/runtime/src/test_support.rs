@@ -155,8 +155,5 @@ pub(crate) fn create_runtime(atlas: AtlasHandle) -> neocogi_com::ComPtr<neocogi_
 
 pub(crate) mod headless;
 
-/// Direct algorithm ownership keeps the host outside production widget storage.
-pub(crate) mod algorithm;
-
 /// Explicit test asset construction stays outside the deployed importer.
 pub(crate) use neocogi_ui_support::test_support::assets;

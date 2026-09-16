@@ -82,7 +82,7 @@ impl UiRuntime {
         let frame_geometry = crate::ui_node::frame::frame_geometry(local_rect, frame_role, style);
         let content_rect = frame_geometry.content_or_empty();
         let screen_clip = parent_transform.clip.positive_intersection(screen_rect).unwrap_or_default();
-        let enabled = ancestors_enabled && node.state.participation.accepts_input();
+        let enabled = ancestors_enabled && matches!(node.state.participation, crate::ChildParticipation::Active);
         let focused = focus_visible && node.state.focused;
         let control_state = crate::ControlState::from_interaction(enabled, node.state.hovered, focused, node.state.active && node.state.hovered);
         if let Some(role) = frame_role {

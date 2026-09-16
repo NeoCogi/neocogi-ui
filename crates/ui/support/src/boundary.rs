@@ -28,3 +28,15 @@ pub fn copied_rect(rect: crate::Recti) -> Rect {
         height: rect.height,
     }
 }
+
+/// Resolves one concrete font-role vocabulary for both widget and compact menu presentation.
+pub fn local_font_role(role: neocogi_ui_core_contracts::FontRole) -> Result<crate::FontRole, NcStatus> {
+    match role {
+        neocogi_ui_core_contracts::FontRole::Body => Ok(crate::FontRole::Body),
+        neocogi_ui_core_contracts::FontRole::Small => Ok(crate::FontRole::Small),
+        neocogi_ui_core_contracts::FontRole::Title => Ok(crate::FontRole::Title),
+        neocogi_ui_core_contracts::FontRole::Heading => Ok(crate::FontRole::Heading),
+        neocogi_ui_core_contracts::FontRole::Mono => Ok(crate::FontRole::Mono),
+        _ => Err(NC_E_INVALID_ARG),
+    }
+}

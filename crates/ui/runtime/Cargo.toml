@@ -1,11 +1,11 @@
 [package]
-name = "neocogi-ui-impl"
+name = "neocogi-ui-runtime"
 version = "0.9.0-alpha.0"
 authors.workspace = true
 edition.workspace = true
 readme.workspace = true
 license.workspace = true
-description = "Shared implementation support for the core UI runtime and built-in node plugins"
+description = "Deployable core retained UI runtime, scoped services, surfaces and menus"
 repository.workspace = true
 categories = ["gui", "rendering"]
 
@@ -17,21 +17,18 @@ crate-type = ["rlib"]
 
 [dependencies]
 neocogi-ui-support.workspace = true
-# Standard plugin-owned compositions reuse the static typed clients and owned event adapter.
-neocogi-ui.workspace = true
 neocogi-ui-core-contracts.workspace = true
-neocogi-ui-nodes-contracts.workspace = true
 neocogi-com-events.workspace = true
 neocogi-gfx-contracts.workspace = true
 neocogi-renderer-contracts.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
-neocogi-render-core.workspace = true
 bitflags.workspace = true
 rs-math3d.workspace = true
 
 [dev-dependencies]
+neocogi-ui-nodes.workspace = true
+neocogi-ui-nodes-contracts.workspace = true
 neocogi-ui-support = { workspace = true, features = ["test-support"] }
-neocogi-appearance.workspace = true
 neocogi-com = { workspace = true, features = ["static-runtime"] }
 neocogi-demo-assets = { workspace = true, features = ["embed-assets"] }
 neocogi-gfx-impl = { workspace = true, features = ["publisher"] }
@@ -41,3 +38,8 @@ neocogi-skin-contracts.workspace = true
 neocogi-ui = { workspace = true, features = ["test-support"] }
 tempfile.workspace = true
 trybuild.workspace = true
+
+[features]
+default = []
+# A final dynamic artifact owns the loader entrypoint; static clients use the descriptor directly.
+dynamic-plugin = []

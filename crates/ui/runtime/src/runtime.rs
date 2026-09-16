@@ -80,7 +80,7 @@ impl IConstructionHost for ConstructionHost {
 }
 
 #[com_object(UiRuntime)]
-/// One identity owns the runtime, its widget factory and window-management policy.
+/// One identity owns retained traversal, core construction authority and window-management policy.
 pub struct Runtime {
     /// Window handles use Weak references so retaining them cannot form a tree cycle.
     pub(crate) storage: Rc<RuntimeStorage>,

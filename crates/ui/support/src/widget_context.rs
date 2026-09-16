@@ -172,7 +172,7 @@ impl<'a> WidgetContextData<'a> {
     }
 }
 
-/// Interaction and state-mutation services available during [`Widget::update`](crate::Widget::update).
+/// Interaction and state-mutation services decoded from the copied core `IWidget::update` input.
 ///
 /// This context deliberately has no `DisplayList`, [`Painter`], or drawing helpers. Consequently
 /// an update implementation cannot record visual work, and retained traversal does not need to
@@ -334,7 +334,7 @@ impl<'a> WidgetUpdateCtx<'a> {
     }
 }
 
-/// Geometry and recording services available during [`Widget::paint`](crate::Widget::paint).
+/// Geometry and recording services backed by the scoped core `IWidget::paint` capability.
 ///
 /// Interaction values are immutable snapshots produced by update. Painting may inspect them to
 /// choose visuals, but it cannot mutate focus or consume input.

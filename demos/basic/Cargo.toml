@@ -28,8 +28,8 @@ rs-math3d.workspace = true
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Dynamic assembly roots add `dynamic-plugin`; monoliths call descriptors directly.
 neocogi-com-runtime.workspace = true
-neocogi-ui-runtime = { path = "../../crates/ui/runtime-plugin" }
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "00f219d3b9630684bc4d49624ed86b5f3c26808b", default-features = false }
+neocogi-ui-runtime = { path = "../../crates/ui/runtime" }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "1578bf2d67d59d0be95b3d6ff72ea1a1e65519ee", default-features = false }
 
 [[bin]]
 name = "backend-frame-cube"

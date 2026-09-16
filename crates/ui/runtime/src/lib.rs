@@ -70,7 +70,7 @@
     clippy::too_many_arguments,
     clippy::wildcard_imports
 )]
-//! Non-deployable UI implementation shared by the core-runtime and built-in-node plugins.
+//! Retained core UI runtime, window policy, and scoped COM services.
 //!
 //! Applications use `neocogi-ui`, whose concrete COM clients link no UI implementation.
 //! Each retained COM node owns the widget capabilities used for routing, layout and painting.
@@ -99,16 +99,14 @@ mod guide_doctests {
     mod skinning {}
     #[doc = include_str!("../docs/TYPOGRAPHY.md")]
     mod typography {}
-    #[doc = include_str!("../docs/WIDGETS.md")]
-    mod widgets {}
 }
 
-pub use neocogi_ui_support::{assets, atlas, boundary, image, math, theme};
+pub use neocogi_ui_support::{assets, atlas, image, theme};
+use neocogi_ui_support::{boundary, math};
 #[cfg(test)]
 #[path = "assets/tests.rs"]
 mod asset_tests;
 mod choice_menu;
-mod dialogs;
 use neocogi_ui_support::identity;
 mod input;
 mod menu;
@@ -118,30 +116,10 @@ mod runtime_context;
 #[cfg(test)]
 mod test_support;
 mod ui_node;
-pub(crate) use ui_node::widgets;
-mod ui_factory;
 mod window_manager;
 
-/// Resource, geometry and backend imports for implementation crates.
-/// Applications and extension widgets use the neocogi-ui facade and canonical COM contracts.
-pub mod prelude {
-    pub use crate::atlas::{AtlasHandle, FontId, IconId};
-    pub use crate::image::{ImageError, ImageSource, ImageStorageError, MAX_DECODED_RGBA_BYTES, load_image_bytes};
-    pub use crate::input::{Key, KeyEvent, KeyState, Modifiers, MouseButton};
-    pub use crate::render::{
-        AtlasUploadError, FrameError, FrameInfo, FrameInfoError, NinePatch, NinePatchCell, NinePatchCells, NinePatchContent, NinePatchImage, RendererBackend,
-        RendererFrame, SliceInsets, TextureError, TextureId,
-    };
-    pub use crate::math::{expand_rect, rect, vec2};
-    pub use crate::theme::{
-        AssetChrome, AssetMetrics, CaptionSide, ChromeRole, ChromeState, Color, ControlRole, ControlState, FlatPalette, FontRef, FontRole, FrameRole, IconRef,
-        IconRole, MenuRole, MenuState, PointerState, ResourceCatalog, Skin, SkinBundle, SurfaceRole, SurfaceState, TitleAlignment, Visual, color,
-    };
-    pub use rs_math3d::{
-        Box3f, Color4b, CrossProduct, Dimension, Dimensioni, FloatVector, Mat4f, Quat, Quatf, Rect, Recti, Vec2f, Vec2i, Vec3f, Vec4f, Vector, Vector3,
-        color4b, ortho4,
-    };
-}
+/// Provider-neutral resource, geometry and backend imports; one definition lives in support.
+pub use neocogi_ui_support::prelude;
 
 pub use atlas::{AtlasHandle, FontId, IconId};
 pub(crate) use window_manager::{PopupHandle, Window, WindowHandle, WindowOption};
@@ -157,15 +135,7 @@ pub use theme::{
 };
 pub(crate) use theme::SkinInstallError;
 pub(crate) use ui_node::{
-    AvailableSpace, Change, ChildParticipation, Children, Constraints, ContainerLayoutCtx, ContainerWidget, KeyboardAction, KeyboardBehavior, LeafWidget,
-    MeasureCtx, Node, ScrollbarAxis, ScrollbarParameters, TextWrap, TrackSize, UiInputEvent, Widget, WidgetFillOption, WidgetOption, WidgetPaintCtx,
-    WidgetUpdateCtx,
-};
-pub use ui_node::{Disclosure, Grid, Linear, ScrollArea};
-pub use ui_node::widgets::{Button, Checkbox, ColorSwatch, Combo, ListBox, ListItem, Number, Scrollbar, Slider, TextArea, TextBlock, Textbox};
-pub(crate) use widgets::{
-    ButtonParameters, CheckboxParameters, ColorSwatchParameters, ComboParameters, DecimalPrecision, ListBoxParameters, ListItemParameters, NumberParameters,
-    SliderParameters, Real, TextBlockParameters, TextboxParameters,
+    AvailableSpace, Change, ChildParticipation, Children, Constraints, KeyboardBehavior, Node, UiInputEvent, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx,
 };
 
 #[allow(unused_imports)]
@@ -173,18 +143,33 @@ pub(crate) use rs_math3d::{
     Box3f, Color4b, CrossProduct, Dimension, Dimensioni, FloatVector, Mat4f, Quat, Quatf, Rect, Recti, Vec2f, Vec2i, Vec3f, Vec4f, Vector, Vector3, color4b,
     ortho4,
 };
-pub(crate) use std::hash::Hash;
 pub(crate) use render::geometry::UNCLIPPED_RECT;
 pub(crate) use ui_node::UiRuntime;
 pub use runtime::{Runtime, create_runtime_from_assets};
-pub use ui_factory::UiFactory;
 
-/// Binds this package's concrete built-in nodes to a core runtime for static tests and monoliths.
-///
-/// Dynamic deployments activate `neocogi.ui.nodes.runtime` and call its generated `NodesPluginFactory`
-/// instead. This helper performs the same typed binding without a loader and does not make the
-/// core runtime object expose or construct `UiFactory`.
-pub fn bind_builtin_nodes(runtime: neocogi_com::ComPtr<neocogi_ui_core_contracts::UiRuntimeAbi>) -> Result<neocogi_ui::Ui, neocogi_com::NcStatus> {
-    let factory = UiFactory::bind(runtime.as_com_ref())?;
-    neocogi_ui::Ui::from_interfaces(runtime, factory)
+/// Stateless process entry that creates independent retained UI runtimes.
+#[neocogi_com::com_factory(neocogi_ui_core_contracts::UiPluginFactory)]
+struct UiPluginFactoryObject;
+
+impl neocogi_ui_core_contracts::UiPluginFactory for UiPluginFactoryObject {
+    /// Imports the complete asset revision before publishing any runtime capability.
+    fn create_runtime(
+        &self,
+        assets: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IAssetBundleAbi>,
+        compositor: neocogi_com::ComRef<'_, neocogi_gfx_contracts::GfxCompositorAbi>,
+    ) -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::UiRuntimeAbi>, neocogi_com::NcStatus> {
+        create_runtime_from_assets(assets, compositor)
+    }
 }
+
+neocogi_com::factory_plugin! {
+    name = "neocogi.ui.runtime",
+    version = "0.9.0-alpha.0",
+    contracts = [neocogi_ui_core_contracts::MODULE],
+    factory = UiPluginFactoryObject,
+}
+
+// Static consumers call `factory_plugin_description` directly. Only a final dynamic artifact
+// exposes the loader entrypoint, avoiding duplicate exports in monolithic applications.
+#[cfg(feature = "dynamic-plugin")]
+neocogi_com::export_factory_plugin!();

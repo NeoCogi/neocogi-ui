@@ -6,20 +6,20 @@ struct TestTheme {
     /// Authored display name checked by theme selection tests.
     name: String,
     /// Native view imported through the real COM consumer boundary.
-    bundle: neocogi_ui_runtime::SkinBundle,
+    bundle: neocogi_ui_support::SkinBundle,
 }
 impl TestTheme {
     /// Publishes one compiled result and imports it through the UI exactly once.
     fn new(theme: LoadedTheme) -> Self {
         let source = theme.data.into_bundle().unwrap();
-        let imported = neocogi_ui_runtime::assets::ImportedAssets::read(source.as_com_ref(), None).unwrap();
+        let imported = neocogi_ui_support::assets::ImportedAssets::read(source.as_com_ref(), None).unwrap();
         Self {
             name: theme.name,
             bundle: imported.bundle().clone(),
         }
     }
     /// Borrows the resolved runtime pair for measurement and patch assertions.
-    fn bundle(&self) -> &neocogi_ui_runtime::SkinBundle {
+    fn bundle(&self) -> &neocogi_ui_support::SkinBundle {
         &self.bundle
     }
     /// Borrows the authored name retained independently of compilation inputs.
@@ -286,18 +286,18 @@ fn omitted_patch_states_use_theme_flat_colors() {
     assert_eq!(normal.insets.left, 2);
     assert!(matches!(
         normal.content,
-        neocogi_ui_runtime::NinePatchContent::Flat { cells }
-            if matches!(cells.center, neocogi_ui_runtime::NinePatchCell::Color { color } if color.r == 1)
+        neocogi_ui_support::NinePatchContent::Flat { cells }
+            if matches!(cells.center, neocogi_ui_support::NinePatchCell::Color { color } if color.r == 1)
     ));
     assert!(matches!(
         hovered.content,
-        neocogi_ui_runtime::NinePatchContent::Flat { cells }
-            if matches!(cells.center, neocogi_ui_runtime::NinePatchCell::Color { color } if color.r == 4)
+        neocogi_ui_support::NinePatchContent::Flat { cells }
+            if matches!(cells.center, neocogi_ui_support::NinePatchCell::Color { color } if color.r == 4)
     ));
     assert!(matches!(
         disabled.content,
-        neocogi_ui_runtime::NinePatchContent::Flat { cells }
-            if matches!(cells.center, neocogi_ui_runtime::NinePatchCell::Color { color } if (color.r, color.g, color.b) == (7, 8, 9))
+        neocogi_ui_support::NinePatchContent::Flat { cells }
+            if matches!(cells.center, neocogi_ui_support::NinePatchCell::Color { color } if (color.r, color.g, color.b) == (7, 8, 9))
     ));
 }
 
@@ -359,9 +359,9 @@ fn solid_patch_compiles_without_rebuilding_the_atlas() {
     assert_eq!((patch.insets.left, patch.insets.top, patch.insets.right, patch.insets.bottom), (2, 3, 4, 5));
     assert!(matches!(
         patch.content,
-        neocogi_ui_runtime::NinePatchContent::Flat { cells }
-            if matches!(cells.top_left, neocogi_ui_runtime::NinePatchCell::Color { color } if (color.r, color.g, color.b, color.a) == (11, 22, 33, 255))
-                && matches!(cells.center, neocogi_ui_runtime::NinePatchCell::Color { color } if (color.r, color.g, color.b, color.a) == (11, 22, 33, 255))
+        neocogi_ui_support::NinePatchContent::Flat { cells }
+            if matches!(cells.top_left, neocogi_ui_support::NinePatchCell::Color { color } if (color.r, color.g, color.b, color.a) == (11, 22, 33, 255))
+                && matches!(cells.center, neocogi_ui_support::NinePatchCell::Color { color } if (color.r, color.g, color.b, color.a) == (11, 22, 33, 255))
     ));
 }
 
@@ -519,18 +519,18 @@ fn bundled_windows_95_theme_reuses_shared_png_regions() {
     assert_eq!((insets.left, insets.top, insets.right, insets.bottom), (4, 4, 4, 4));
     assert!(matches!(
         loaded.bundle().skin().control(ControlRole::Button, ControlState::Disabled).patch.content,
-        neocogi_ui_runtime::NinePatchContent::Image { .. }
+        neocogi_ui_support::NinePatchContent::Image { .. }
     ));
     assert!(matches!(
         loaded.bundle().skin().chrome(ChromeRole::DialogFrame, ChromeState::Active).patch.content,
-        neocogi_ui_runtime::NinePatchContent::Image { .. }
+        neocogi_ui_support::NinePatchContent::Image { .. }
     ));
     for state in [ControlState::Focused(PointerState::Normal), ControlState::Focused(PointerState::Hovered)] {
         let disclosure = loaded.bundle().skin().control(ControlRole::Item, state).patch;
         assert!(matches!(
             disclosure.content,
-            neocogi_ui_runtime::NinePatchContent::Flat { cells }
-                if matches!(cells.center, neocogi_ui_runtime::NinePatchCell::Color { color } if (color.r, color.g, color.b, color.a) == (0, 0, 128, 255))
+            neocogi_ui_support::NinePatchContent::Flat { cells }
+                if matches!(cells.center, neocogi_ui_support::NinePatchCell::Color { color } if (color.r, color.g, color.b, color.a) == (0, 0, 128, 255))
         ));
         let content_color = loaded.bundle().skin().control(ControlRole::Item, state).content_color;
         assert_eq!((content_color.r, content_color.g, content_color.b, content_color.a), (255, 255, 255, 255));
@@ -558,14 +558,14 @@ fn bundled_windows_311_theme_draws_black_framed_white_and_blue_titles() {
     let window_surface = loaded.bundle().skin().surface(SurfaceRole::Window, SurfaceState::Normal).patch;
     assert!(matches!(
         window_surface.content,
-        neocogi_ui_runtime::NinePatchContent::Flat { cells }
-            if matches!(cells.center, neocogi_ui_runtime::NinePatchCell::Color { color } if (color.r, color.g, color.b, color.a) == (255, 255, 255, 255))
+        neocogi_ui_support::NinePatchContent::Flat { cells }
+            if matches!(cells.center, neocogi_ui_support::NinePatchCell::Color { color } if (color.r, color.g, color.b, color.a) == (255, 255, 255, 255))
     ));
     // Ordinary windows retain their long L-corner bitmap. Only modal dialogs use the uniform
     // four-pixel blue focus frame visible around period Windows 3.11 dialog boxes.
     assert!(matches!(
         loaded.bundle().skin().chrome(ChromeRole::WindowFrame, ChromeState::Active).patch.content,
-        neocogi_ui_runtime::NinePatchContent::Image { .. }
+        neocogi_ui_support::NinePatchContent::Image { .. }
     ));
     let dialog_frame = loaded.bundle().skin().chrome(ChromeRole::DialogFrame, ChromeState::Active).patch;
     assert_eq!(
@@ -579,9 +579,9 @@ fn bundled_windows_311_theme_draws_black_framed_white_and_blue_titles() {
     );
     assert!(matches!(
         dialog_frame.content,
-        neocogi_ui_runtime::NinePatchContent::Flat { cells }
-            if matches!(cells.top, neocogi_ui_runtime::NinePatchCell::Color { color } if (color.r, color.g, color.b, color.a) == (0, 0, 170, 255))
-                && matches!(cells.center, neocogi_ui_runtime::NinePatchCell::Empty)
+        neocogi_ui_support::NinePatchContent::Flat { cells }
+            if matches!(cells.top, neocogi_ui_support::NinePatchCell::Color { color } if (color.r, color.g, color.b, color.a) == (0, 0, 170, 255))
+                && matches!(cells.center, neocogi_ui_support::NinePatchCell::Empty)
     ));
     let menu_popup = loaded.bundle().skin().menu(MenuRole::Popup, MenuState::Normal).patch;
     assert_eq!(
@@ -590,9 +590,9 @@ fn bundled_windows_311_theme_draws_black_framed_white_and_blue_titles() {
     );
     assert!(matches!(
         menu_popup.content,
-        neocogi_ui_runtime::NinePatchContent::Flat { cells }
-            if matches!(cells.top, neocogi_ui_runtime::NinePatchCell::Color { color } if (color.r, color.g, color.b, color.a) == (0, 0, 0, 255))
-                && matches!(cells.center, neocogi_ui_runtime::NinePatchCell::Color { color } if (color.r, color.g, color.b, color.a) == (255, 255, 255, 255))
+        neocogi_ui_support::NinePatchContent::Flat { cells }
+            if matches!(cells.top, neocogi_ui_support::NinePatchCell::Color { color } if (color.r, color.g, color.b, color.a) == (0, 0, 0, 255))
+                && matches!(cells.center, neocogi_ui_support::NinePatchCell::Color { color } if (color.r, color.g, color.b, color.a) == (255, 255, 255, 255))
     ));
     // The outer Windows frame already supplies the title's top, left, and right black edges.
     // The title patch contributes only the missing one-pixel bottom edge, avoiding a doubled
@@ -606,9 +606,9 @@ fn bundled_windows_311_theme_draws_black_framed_white_and_blue_titles() {
         assert_eq!((patch.insets.left, patch.insets.top, patch.insets.right, patch.insets.bottom), (0, 0, 0, 1));
         assert!(matches!(
             patch.content,
-            neocogi_ui_runtime::NinePatchContent::Flat { cells }
-                if matches!(cells.top, neocogi_ui_runtime::NinePatchCell::Color { color } if (color.r, color.g, color.b, color.a) == (0, 0, 0, 255))
-                    && matches!(cells.center, neocogi_ui_runtime::NinePatchCell::Color { color } if (color.r, color.g, color.b, color.a) == expected_center)
+            neocogi_ui_support::NinePatchContent::Flat { cells }
+                if matches!(cells.top, neocogi_ui_support::NinePatchCell::Color { color } if (color.r, color.g, color.b, color.a) == (0, 0, 0, 255))
+                    && matches!(cells.center, neocogi_ui_support::NinePatchCell::Color { color } if (color.r, color.g, color.b, color.a) == expected_center)
         ));
     }
     // Base Windows 3.11 titles are white and require black text, while active blue titles use
@@ -646,7 +646,7 @@ fn bundled_windows_311_theme_draws_black_framed_white_and_blue_titles() {
         let disabled = loaded.bundle().skin().control(role, ControlState::Disabled).patch;
         assert!(matches!(
             (normal.content, disabled.content),
-            (neocogi_ui_runtime::NinePatchContent::Image { image: normal }, neocogi_ui_runtime::NinePatchContent::Image { image: disabled })
+            (neocogi_ui_support::NinePatchContent::Image { image: normal }, neocogi_ui_support::NinePatchContent::Image { image: disabled })
                 if normal.icon == disabled.icon
         ));
     }
@@ -664,7 +664,7 @@ fn bundled_windows_311_theme_draws_black_framed_white_and_blue_titles() {
         .patch;
     assert!(matches!(
         (slider_normal.content, slider_focused.content),
-        (neocogi_ui_runtime::NinePatchContent::Image { image: normal }, neocogi_ui_runtime::NinePatchContent::Image { image: focused })
+        (neocogi_ui_support::NinePatchContent::Image { image: normal }, neocogi_ui_support::NinePatchContent::Image { image: focused })
             if normal.icon == focused.icon
     ));
     for state in [
@@ -678,7 +678,7 @@ fn bundled_windows_311_theme_draws_black_framed_white_and_blue_titles() {
         // interaction ladder carries both blue selection art and contrasting text.
         assert!(matches!(
             loaded.bundle().skin().control(ControlRole::Item, state).patch.content,
-            neocogi_ui_runtime::NinePatchContent::Image { .. }
+            neocogi_ui_support::NinePatchContent::Image { .. }
         ));
         let content_color = loaded.bundle().skin().control(ControlRole::Item, state).content_color;
         assert_eq!((content_color.r, content_color.g, content_color.b, content_color.a), (255, 255, 255, 255));
@@ -739,7 +739,7 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
         "the title begins below the two-pixel top edge while the remaining edges retain the six-layer frame"
     );
     let active_title = loaded.bundle().skin().chrome(ChromeRole::Title, ChromeState::Active).patch;
-    let neocogi_ui_runtime::NinePatchContent::Image { image: active_title_image } = active_title.content else {
+    let neocogi_ui_support::NinePatchContent::Image { image: active_title_image } = active_title.content else {
         panic!("Mac OS 9 active title must use baked artwork");
     };
     let active_title_size = loaded.bundle().atlas().get_icon_size(active_title_image.icon);
@@ -764,7 +764,7 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
         (0, 0, 0, 2)
     );
     let active_frame = loaded.bundle().skin().chrome(ChromeRole::WindowFrame, ChromeState::Active).patch;
-    let neocogi_ui_runtime::NinePatchContent::Image { image: active_frame_image } = active_frame.content else {
+    let neocogi_ui_support::NinePatchContent::Image { image: active_frame_image } = active_frame.content else {
         panic!("Mac OS 9 active frame must use baked title-and-body artwork");
     };
     let active_frame_size = loaded.bundle().atlas().get_icon_size(active_frame_image.icon);
@@ -773,7 +773,7 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
     // baked sizes prevents later theme edits from collapsing both controls back onto the same
     // generic frame merely because both expose the same typed interaction states.
     let button = loaded.bundle().skin().control(ControlRole::Button, ControlState::Enabled(PointerState::Normal));
-    let neocogi_ui_runtime::NinePatchContent::Image { image: button_image } = button.patch.content else {
+    let neocogi_ui_support::NinePatchContent::Image { image: button_image } = button.patch.content else {
         panic!("Mac OS 9 buttons must use baked artwork");
     };
     let button_size = loaded.bundle().atlas().get_icon_size(button_image.icon);
@@ -793,7 +793,7 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
     let disabled_checkbox = loaded.bundle().skin().control(ControlRole::Checkbox, ControlState::Disabled);
     let [checkbox_image, pressed_checkbox_image, focused_checkbox_image, disabled_checkbox_image] =
         [checkbox, pressed_checkbox, focused_checkbox, disabled_checkbox].map(|visual| {
-            let neocogi_ui_runtime::NinePatchContent::Image { image } = visual.patch.content else {
+            let neocogi_ui_support::NinePatchContent::Image { image } = visual.patch.content else {
                 panic!("Mac OS 9 checkbox states must use baked artwork");
             };
             image
@@ -805,7 +805,7 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
     assert_ne!(checkbox_image.icon, disabled_checkbox_image.icon);
     assert!(matches!(
         loaded.bundle().skin().chrome(ChromeRole::DialogFrame, ChromeState::Active).patch.content,
-        neocogi_ui_runtime::NinePatchContent::Image { .. }
+        neocogi_ui_support::NinePatchContent::Image { .. }
     ));
 
     // Base and active chrome retain their independently authored frame bitmaps without a
@@ -814,7 +814,7 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
     let active_frame = loaded.bundle().skin().chrome(ChromeRole::WindowFrame, ChromeState::Active).patch;
     assert!(matches!(
         (normal_frame.content, active_frame.content),
-        (neocogi_ui_runtime::NinePatchContent::Image { image: normal }, neocogi_ui_runtime::NinePatchContent::Image { image: active })
+        (neocogi_ui_support::NinePatchContent::Image { image: normal }, neocogi_ui_support::NinePatchContent::Image { image: active })
             if normal.icon != active.icon
     ));
 
@@ -830,7 +830,7 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
         .control(ControlRole::CloseButton, ControlState::Enabled(PointerState::Pressed));
     assert_eq!(close_visual.content_color.a, 0);
     assert_eq!(close_pressed_visual.content_color.a, 0);
-    let (neocogi_ui_runtime::NinePatchContent::Image { image: close_image }, neocogi_ui_runtime::NinePatchContent::Image { image: pressed_image }) =
+    let (neocogi_ui_support::NinePatchContent::Image { image: close_image }, neocogi_ui_support::NinePatchContent::Image { image: pressed_image }) =
         (close_visual.patch.content, close_pressed_visual.patch.content)
     else {
         panic!("Mac OS 9 close states must use baked artwork");
@@ -842,7 +842,7 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
     // Platinum selection uses black rows with white content text, while the popup itself retains
     // its authored one-pixel black and beveled frame.
     let menu_popup = loaded.bundle().skin().menu(MenuRole::Popup, MenuState::Normal).patch;
-    let neocogi_ui_runtime::NinePatchContent::Image { image: menu_popup_image } = menu_popup.content else {
+    let neocogi_ui_support::NinePatchContent::Image { image: menu_popup_image } = menu_popup.content else {
         panic!("Mac OS 9 popup must use baked artwork");
     };
     let menu_popup_size = loaded.bundle().atlas().get_icon_size(menu_popup_image.icon);
@@ -855,8 +855,8 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
         let visual = loaded.bundle().skin().control(ControlRole::Item, state);
         assert!(matches!(
             visual.patch.content,
-            neocogi_ui_runtime::NinePatchContent::Flat { cells }
-                if matches!(cells.center, neocogi_ui_runtime::NinePatchCell::Color { color }
+            neocogi_ui_support::NinePatchContent::Flat { cells }
+                if matches!(cells.center, neocogi_ui_support::NinePatchCell::Color { color }
                     if (color.r, color.g, color.b, color.a) == (0, 0, 0, 255))
         ));
         assert_eq!(
@@ -873,7 +873,7 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
         // foreground as the inherited enabled selection states above.
         assert!(matches!(
             loaded.bundle().skin().control(ControlRole::Item, state).patch.content,
-            neocogi_ui_runtime::NinePatchContent::Image { .. }
+            neocogi_ui_support::NinePatchContent::Image { .. }
         ));
         let content_color = loaded.bundle().skin().control(ControlRole::Item, state).content_color;
         assert_eq!((content_color.r, content_color.g, content_color.b, content_color.a), (255, 255, 255, 255));

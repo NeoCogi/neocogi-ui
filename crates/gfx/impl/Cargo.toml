@@ -33,4 +33,4 @@ neocogi-com = { workspace = true, default-features = false, features = ["macros"
 
 [dev-dependencies]
 neocogi-ui.workspace = true
-neocogi-ui-runtime.workspace = true
+neocogi-ui-support.workspace = true

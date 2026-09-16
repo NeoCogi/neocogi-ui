@@ -2,7 +2,7 @@
 use crate::boundary::text;
 use neocogi_com::{NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
 use neocogi_ui_core_contracts::*;
-pub(crate) use neocogi_ui_support::input_contract::{event, snapshot, local_event};
+pub(crate) use neocogi_ui_support::input_contract::{event, snapshot};
 use neocogi_ui_support::input_contract::host_key;
 
 /// Validates one host event before changing the queue, then reuses existing normalization.

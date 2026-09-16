@@ -301,7 +301,7 @@ impl Drop for ComNode {
     }
 }
 
-pub(crate) use neocogi_ui_support::frame::{frame_contract, local_frame};
+pub(crate) use neocogi_ui_support::frame::local_frame;
 
 impl ComNode {
     /// Visits branch storage under its transaction; leaves have an empty sequence.

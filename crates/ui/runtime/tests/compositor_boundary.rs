@@ -50,7 +50,7 @@ fn production_runtime_uses_the_gfx_compositor() {
     let compositor = GfxCompositorObject::create(assets.as_com_ref()).expect("valid assets must create a compositor");
     let runtime = neocogi_ui_runtime::create_runtime_from_assets(assets.as_com_ref(), compositor.as_com_ref())
         .expect("matching UI and GFX resources must create a runtime");
-    let ui = neocogi_ui_runtime::bind_builtin_nodes(runtime).expect("the object must expose every UI capability");
+    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime).expect("the object must expose every UI capability");
     let text = ui
         .widgets()
         .text_block("GFX boundary", TextWrapping::None)

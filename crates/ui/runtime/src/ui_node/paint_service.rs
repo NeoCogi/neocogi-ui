@@ -8,8 +8,8 @@ use crate::math::RectExt;
 #[com_object(interfaces(ITextMetrics))]
 /// Immutable text metrics for one installed resource bundle.
 pub(crate) struct Metrics {
-    /// Current imported assets shared with concrete built-ins in this runtime.
-    pub(crate) resources: super::widget_object::SharedAssets,
+    /// Engine-local imported assets shared only with core metrics and scoped services.
+    pub(crate) resources: super::SharedAssets,
 }
 
 impl ITextMetrics for Metrics {
@@ -17,7 +17,7 @@ impl ITextMetrics for Metrics {
     fn button_size(&self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<Size, NcStatus> {
         let label = text(input)?;
         let resources = self.resources.borrow();
-        let size = crate::ui_node::widgets::control::inline_content_size(
+        let size = neocogi_ui_support::text_layout::inline_content_size(
             resources.bundle().skin(),
             resources.bundle().atlas(),
             &crate::FontRef::Role(FontRole::Body),
@@ -48,12 +48,12 @@ struct Recorder {
     /// The active frame state exists only between this recorder's begin and finish operations.
     context: Option<PaintContext>,
     /// Installed resources resolve the legacy convenience text operation without per-widget import.
-    resources: super::widget_object::SharedAssets,
+    resources: super::SharedAssets,
 }
 
 impl Recorder {
     /// Creates an idle runtime paint context over the runtime's one installed asset value.
-    fn new(resources: super::widget_object::SharedAssets) -> Self {
+    fn new(resources: super::SharedAssets) -> Self {
         Self {
             active: 0,
             next: 0,
@@ -279,7 +279,7 @@ pub(crate) struct PaintService {
 
 impl PaintService {
     /// Allocates one service for the runtime, sharing its one installed resource value.
-    pub(crate) fn new(resources: super::widget_object::SharedAssets) -> Self {
+    pub(crate) fn new(resources: super::SharedAssets) -> Self {
         let painter = Recorder::from_value(Recorder::new(resources)).query().expect("Recorder declares IPainter");
         Self { painter }
     }

@@ -31,7 +31,7 @@ impl EventHandler<Vec<String>, Activation> for RecordActivation {
 #[test]
 fn static_session_preserves_registration_order_snapshot_values_and_bounded_progress() {
     let runtime = runtime();
-    let ui = crate::bind_builtin_nodes(runtime.clone()).unwrap();
+    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let mut a = ui.widgets().button("a").unwrap();
     let mut b = ui.widgets().button("b").unwrap();
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
@@ -113,12 +113,12 @@ impl EventHandler<MutationState, WindowEvent> for RecordWindow {
 #[test]
 fn eventful_runtime_releases_context_for_handlers_and_routes_later_input_to_their_new_tree() {
     let runtime = runtime();
-    let ui = crate::bind_builtin_nodes(runtime.clone()).unwrap();
+    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let button = ui.widgets().button("replace window").unwrap();
     let previous = ui.window("first", RECT, &button).unwrap();
     let (renderer, probe) = renderer();
     let session = EventSession::new(MutationState {
-        ui: crate::bind_builtin_nodes(runtime.clone()).unwrap(),
+        ui: neocogi_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap(),
         previous: previous.clone(),
         renderer: renderer.clone(),
         next: None,
@@ -171,7 +171,7 @@ impl EventHandler<OwnerState, Activation> for ObserveOwner {
 /// Session destruction cancels externally retained leases and releases state which itself owns the UI runtime.
 #[test]
 fn dropping_session_releases_application_owned_runtime_without_a_source_sink_cycle() {
-    let ui = crate::bind_builtin_nodes(runtime()).unwrap();
+    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let button = ui.widgets().button("owned runtime").unwrap();
     let window = ui.window("owner", RECT, &button).unwrap();
     let drops = Rc::new(Cell::new(0));
@@ -205,7 +205,7 @@ fn record_scroll(state: &mut Vec<String>, event: &neocogi_ui::events::ScrollbarC
 /// Every scalar and labelled-action source publishes only actual user interaction through the shared transport.
 #[test]
 fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters_silent() {
-    let ui = crate::bind_builtin_nodes(runtime()).unwrap();
+    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let session = EventSession::new(Vec::<String>::new());
     let mut checkbox = ui.widgets().checkbox("check", false).unwrap();
     let window = ui.window("checkbox", RECT, &checkbox).unwrap();
@@ -313,7 +313,7 @@ fn record_popup(state: &mut Vec<String>, _event: &neocogi_ui::events::PopupDismi
 /// Both editor roots expose independent typed ports, and popup dismissal uses the manager's real lifecycle source.
 #[test]
 fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_sources() {
-    let ui = crate::bind_builtin_nodes(runtime()).unwrap();
+    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let session = EventSession::new(Vec::<String>::new());
     let mut textbox = ui.widgets().textbox("").unwrap();
     let window = ui.window("textbox", RECT, &textbox).unwrap();
@@ -382,7 +382,7 @@ impl EventHandler<u32, Activation> for FailOnce {
 /// Callback failure invalidates the partial frame without discarding later native input or replaying the failed event.
 #[test]
 fn failed_callback_recovers_on_next_update_and_preserves_remaining_native_input() {
-    let ui = crate::bind_builtin_nodes(runtime()).unwrap();
+    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let button = ui.widgets().button("fail once").unwrap();
     let editor = ui.widgets().textbox("").unwrap();
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
@@ -444,7 +444,7 @@ impl EventHandler<Option<CascadeState>, WindowEvent> for Cascade {
 /// One budget spans successive queue snapshots; exhausting it preserves the next cascade event for explicit retry.
 #[test]
 fn real_lifecycle_cascade_obeys_global_budget_and_rejects_recursive_dispatch() {
-    let ui = crate::bind_builtin_nodes(runtime()).unwrap();
+    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let button = ui.widgets().button("cascade").unwrap();
     let window = ui.window("cascade", RECT, &button).unwrap();
     let session = EventSession::new(None);
@@ -478,7 +478,7 @@ impl IEventDispatcher for InvalidDispatcher {
 #[test]
 fn runtime_rejects_dispatch_count_larger_than_its_requested_bound() {
     let runtime = runtime();
-    let ui = crate::bind_builtin_nodes(runtime.clone()).unwrap();
+    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let button = ui.widgets().button("count").unwrap();
     let window = ui.window("count", RECT, &button).unwrap();
     let dispatcher: ComPtr<IEventDispatcherAbi> = InvalidDispatcher::from_value(InvalidDispatcher).query().unwrap();

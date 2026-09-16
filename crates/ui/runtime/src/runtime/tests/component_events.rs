@@ -127,7 +127,7 @@ impl IWidget for EventfulComposite {
 #[test]
 fn mounted_component_events_dispatch_before_application_and_skip_removed_snapshots() {
     let runtime = runtime();
-    let ui = crate::bind_builtin_nodes(runtime.clone()).unwrap();
+    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let trace: Trace = Rc::new(RefCell::new(Vec::new()));
     let close_target = Rc::new(RefCell::new(None));
     let older = EventfulComposite::create(&runtime, trace.clone(), "older", Rc::new(RefCell::new(None)));

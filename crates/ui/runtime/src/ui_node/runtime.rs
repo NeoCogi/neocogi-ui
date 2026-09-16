@@ -238,7 +238,7 @@ fn contains_focusable_node(node: &Node, id: RuntimeNodeId, parent_transform: Tra
 fn contains_active_node(node: &Node, id: RuntimeNodeId, parent_transform: Transform) -> bool {
     // A disabled or hidden child filters its complete subtree from router-owned identities.
     // Roots use the default active value, so the same predicate is valid at every depth.
-    if !node.state.participation.accepts_input() || !node.intersects_clip(parent_transform) {
+    if !matches!(node.state.participation, crate::ChildParticipation::Active) || !node.intersects_clip(parent_transform) {
         return false;
     }
     if node.id() == id {
@@ -264,12 +264,15 @@ fn node_children_visible(node: &Node) -> bool {
 
 /// Returns whether parent layout allows update and paint traversal through this node.
 fn node_is_visible(node: &Node) -> bool {
-    node.state.participation.is_visible()
+    matches!(
+        node.state.participation,
+        crate::ChildParticipation::Active | crate::ChildParticipation::Disabled
+    )
 }
 
 /// Returns whether parent layout allows the input router to enter this node's subtree.
 fn node_accepts_input(node: &Node) -> bool {
-    node.state.participation.accepts_input()
+    matches!(node.state.participation, crate::ChildParticipation::Active)
 }
 
 /// Resolves the semantic role used by a node's optional shared frame geometry.

@@ -32,4 +32,4 @@ serde_json = { workspace = true, optional = true }
 [dev-dependencies]
 neocogi-gfx-impl = { workspace = true, features = ["builder", "publisher"] }
 neocogi-ui.workspace = true
-neocogi-ui-runtime.workspace = true
+neocogi-ui-support.workspace = true

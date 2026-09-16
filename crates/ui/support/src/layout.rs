@@ -212,6 +212,40 @@ fn valid_weight(weight: f32) -> f64 {
     if weight.is_finite() && weight > 0.0 { f64::from(weight) } else { 0.0 }
 }
 
+use neocogi_ui_core_contracts::{AxisLimit, LimitKind, LayoutLimits};
+use neocogi_com::NcStatus;
+
+/// Converts one checked contract axis without treating finite zero as unbounded.
+pub fn available(axis: AxisLimit) -> Result<AvailableSpace, NcStatus> {
+    axis.validate()?;
+    Ok(match axis.kind {
+        LimitKind::Finite => AvailableSpace::Bounded(axis.extent),
+        LimitKind::Unbounded => AvailableSpace::Unbounded,
+        _ => return Err(neocogi_com::NC_E_INVALID_ARG),
+    })
+}
+
+/// Validates both axes before producing private finite/unbounded constraints.
+pub fn constraints(limits: LayoutLimits) -> Result<Constraints, NcStatus> {
+    Ok(Constraints::new(available(limits.width)?, available(limits.height)?))
+}
+
+/// Preserves zero versus unbounded when entering the COM layout boundary.
+pub fn limits(constraints: Constraints) -> LayoutLimits {
+    LayoutLimits {
+        width: axis_limit(constraints.width),
+        height: axis_limit(constraints.height),
+    }
+}
+
+/// Converts one private constraint without losing an explicitly bounded zero.
+fn axis_limit(space: AvailableSpace) -> AxisLimit {
+    match space.bound() {
+        Some(extent) => AxisLimit { kind: LimitKind::Finite, extent },
+        None => AxisLimit { kind: LimitKind::Unbounded, extent: 0 },
+    }
+}
+
 #[cfg(test)]
 mod explicit_constraint_tests {
     use super::*;

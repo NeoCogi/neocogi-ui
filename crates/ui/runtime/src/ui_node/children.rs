@@ -36,7 +36,7 @@ use super::Node;
 ///
 /// Public code can transfer new nodes in or drop existing owners but cannot borrow attached nodes,
 /// recover a removed owner, inspect runtime identity, or reparent a child. Framework-created
-/// [`crate::ContainerLayoutCtx`] provides scoped geometry operations without weakening those
+/// `ILayoutService` provides scoped geometry operations without weakening those
 /// ownership rules.
 pub struct Children {
     /// Unique mounted owners, available only to framework traversal.

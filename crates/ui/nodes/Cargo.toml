@@ -19,7 +19,20 @@ default = []
 dynamic-plugin = []
 
 [dependencies]
-neocogi-ui-implementation = { package = "neocogi-ui-impl", path = "../runtime" }
+neocogi-ui-support.workspace = true
+neocogi-ui.workspace = true
+neocogi-com-events.workspace = true
+rs-math3d.workspace = true
+bitflags.workspace = true
 neocogi-ui-core-contracts.workspace = true
 neocogi-ui-nodes-contracts.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
+
+[dev-dependencies]
+# Tests construct the real core runtime through its public entrypoint, never private storage.
+neocogi-ui-runtime.workspace = true
+neocogi-ui-support = { workspace = true, features = ["test-support"] }
+neocogi-ui = { workspace = true, features = ["test-support"] }
+neocogi-gfx-impl.workspace = true
+neocogi-com = { workspace = true, features = ["static-runtime"] }
+tempfile.workspace = true

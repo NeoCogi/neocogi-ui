@@ -6,7 +6,7 @@ use std::{
     cell::{Cell, RefCell},
     rc::Rc,
 };
-use super::{widget_object::SharedAssets, paint_service::PaintService};
+use super::{SharedAssets, paint_service::PaintService};
 use super::{
     child_store::ChildStore,
     mounted_node::{ComNode, NodeLayoutKind},

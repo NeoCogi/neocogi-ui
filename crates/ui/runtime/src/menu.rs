@@ -37,7 +37,7 @@
 
 use std::fmt;
 
-use crate::ui_node::widgets::content_height;
+use neocogi_ui_support::text_layout::content_height;
 use crate::math::RectExt;
 use crate::{
     AtlasHandle, Color, Dimensioni, FontRef, FontRole, MenuRole, MenuState, MouseButton, Recti, Skin, UiInputEvent, Vec2i, WidgetEventPortHandle, WidgetOption,

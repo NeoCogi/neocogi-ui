@@ -7,7 +7,7 @@ use neocogi_gfx_impl::{AssetLoaderObject, AssetPublisherObject};
 use neocogi_gfx_support::{AssetData, AssetTables};
 use neocogi_skin_contracts::{ISkinDiagnosticsAbi, ThemeLoaderAbi};
 use neocogi_ui::NativePath;
-use neocogi_ui_runtime::assets::ImportedAssets;
+use neocogi_ui_support::assets::ImportedAssets;
 
 /// Builds one small but complete semantic base without invoking the external theme loader.
 fn test_bundle() -> ComPtr<IAssetBundleAbi> {

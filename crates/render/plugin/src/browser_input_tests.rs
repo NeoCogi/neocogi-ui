@@ -4,6 +4,12 @@
 //! --features webgl`, then call `run_browser_input_tests()` after the generated module initializes.
 
 use super::*;
+// Provider activation imports the generated contracts directly, not implementation re-exports.
+use neocogi_gfx_contracts::GfxPluginFactoryAbi;
+use neocogi_renderer_contracts::{IRendererAbi, IRgbaImageAbi};
+use neocogi_ui::UI_E_UPDATE_REQUIRED;
+use neocogi_ui_core_contracts::UiPluginFactoryAbi;
+use neocogi_ui_nodes_contracts::NodesPluginFactoryAbi;
 use wasm_bindgen::prelude::*;
 
 // Synthetic DOM events exercise translation deterministically. Pointer capture itself requires
@@ -135,15 +141,18 @@ pub fn run_browser_input_tests() {
     static_com_editing_and_webgl();
 }
 
-/// Registers both assembly descriptors in one linked runtime, then exercises real DOM input,
+/// Registers all provider descriptors in one linked runtime, then exercises real DOM input,
 /// inherited editing, committed IME placement and WebGL submission through their COM interfaces.
 fn static_com_editing_and_webgl() {
     use neocogi_com::{ComPtr, Runtime};
     let runtime = Runtime::global();
-    // SAFETY: Both descriptors and all referenced code/data live in this statically linked wasm.
+    // SAFETY: All descriptions and referenced code/data live in this statically linked wasm.
     unsafe {
         runtime
             .register_factory_plugin_description(neocogi_ui_runtime::factory_plugin_description())
+            .unwrap();
+        runtime
+            .register_factory_plugin_description(neocogi_ui_nodes::factory_plugin_description())
             .unwrap();
         runtime.register_factory_plugin_description(neocogi_gfx::factory_plugin_description()).unwrap();
         runtime.register_factory_plugin_description(crate::factory_plugin_description()).unwrap();
@@ -171,7 +180,12 @@ fn static_com_editing_and_webgl() {
         .activate_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
         .unwrap();
     let compositor = gfx.create_compositor(assets.as_com_ref()).unwrap();
-    let ui = neocogi_ui_runtime::bind_builtin_nodes(factory.create_runtime(assets.as_com_ref(), compositor.as_com_ref()).unwrap()).unwrap();
+    let core = factory.create_runtime(assets.as_com_ref(), compositor.as_com_ref()).unwrap();
+    let nodes = runtime
+        .activate_plugin_factory::<NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))
+        .unwrap();
+    let widgets = nodes.bind(core.as_com_ref()).unwrap();
+    let ui = neocogi_ui::Ui::from_interfaces(core, widgets).unwrap();
     let editor = ui.widgets().textbox("").unwrap();
     let window = ui
         .window("Editable COM window", Rect { x: 10, y: 10, width: 400, height: 180 }, &editor)

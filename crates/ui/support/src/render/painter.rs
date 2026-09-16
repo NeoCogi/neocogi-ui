@@ -49,7 +49,7 @@ use rs_math3d::{Recti, Vec2f, Vec2i, color4b};
 /// A backend-local helper can record ordinary primitives without depending on widget ownership:
 ///
 /// ```
-/// use neocogi_ui_runtime::{prelude::{color, Recti, Vec2f}, render::Painter};
+/// use neocogi_ui_support::{prelude::{color, Recti, Vec2f}, render::Painter};
 /// fn swatch(painter: &mut Painter<'_>) {
 ///     let bounds = painter.local_rect();
 ///     painter.fill_rect(bounds, color(42, 48, 60, 255));

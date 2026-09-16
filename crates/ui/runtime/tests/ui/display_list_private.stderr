@@ -9,3 +9,8 @@ note: the struct `DisplayList` is defined here
   |
   | pub(crate) use display_list::DisplayList;
   |                ^^^^^^^^^^^^^^^^^^^^^^^^^
+help: import `DisplayList` directly
+  |
+3 - use neocogi_ui_runtime::render::DisplayList;
+3 + use neocogi_ui_support::render::display_list::DisplayList;
+  |

@@ -56,7 +56,7 @@
 //! baseline alignment, and control text placement consistent. Measurement follows
 //! [`AtlasHandle::get_text_size`], including its missing-character fallback.
 use crate::math::clamp_i64_to_i32;
-use crate::{vec2, AtlasHandle, Dimensioni, FontId, Recti, Skin, Vec2i, WidgetOption};
+use crate::{vec2, AtlasHandle, Dimensioni, FontId, FontRef, Recti, Skin, Vec2i, WidgetOption};
 
 /// Controls how text should wrap when rendered inside a container.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -84,13 +84,15 @@ pub struct TextLine {
 fn push_wrapped_line(
     lines: &mut Vec<TextLine>,
     buf: &str,
-    line_start: usize,
-    line_end: usize,
+    line_range: core::ops::Range<usize>,
     wrap: TextWrap,
     max_width: i32,
     font: FontId,
     atlas: &AtlasHandle,
 ) {
+    // One range keeps the UTF-8 source interval together instead of passing independent endpoints.
+    let line_start = line_range.start;
+    let line_end = line_range.end;
     let line = &buf[line_start..line_end];
     if line.is_empty() {
         // Preserve blank lines as zero-width ranges so cursor and display math keep line count.
@@ -150,13 +152,13 @@ pub fn build_text_lines(buf: &str, wrap: TextWrap, max_width: i32, font: FontId,
     for (idx, ch) in buf.char_indices() {
         if ch == '\n' {
             // `idx` is a UTF-8 boundary from `char_indices`, so slicing remains valid.
-            push_wrapped_line(&mut lines, buf, line_start, idx, wrap, max_width, font, atlas);
+            push_wrapped_line(&mut lines, buf, line_start..idx, wrap, max_width, font, atlas);
             line_start = idx + ch.len_utf8();
         }
     }
 
     if line_start <= buf.len() {
-        push_wrapped_line(&mut lines, buf, line_start, buf.len(), wrap, max_width, font, atlas);
+        push_wrapped_line(&mut lines, buf, line_start..buf.len(), wrap, max_width, font, atlas);
     }
 
     if lines.is_empty() {
@@ -214,6 +216,45 @@ pub fn control_text_position_with_font(style: &Skin, atlas: &AtlasHandle, font: 
         i64::from(rect.x) + i64::from(padding)
     };
     vec2(clamp_i64_to_i32(x), y)
+}
+
+/// Measures text with the widget's resolved font choice.
+pub fn text_size(style: &Skin, atlas: &AtlasHandle, font: &crate::FontRef, text: &str) -> Dimensioni {
+    // Resolve the stable reference only while the active atlas is available for measurement.
+    atlas.get_text_size(style.resolve_font(atlas, font), text)
+}
+
+/// Computes a control height that can fit both text and an optional visual element.
+pub fn content_height(style: &Skin, atlas: &AtlasHandle, font: &FontRef, visual_height: i32) -> i32 {
+    // Fit whichever visual is taller, then apply the theme's compact vertical breathing room.
+    let font_height = atlas.get_font_height(style.resolve_font(atlas, font)) as i32;
+    let vertical_pad = (style.metrics().padding / 2).max(1);
+    font_height.max(visual_height).max(0).saturating_add(vertical_pad.saturating_mul(2))
+}
+
+/// Computes preferred size for a single-line label plus an optional icon or texture.
+pub fn inline_content_size(style: &Skin, atlas: &AtlasHandle, font: &FontRef, label: &str, visual_size: Option<Dimensioni>) -> Dimensioni {
+    let padding = style.metrics().padding.max(0);
+    let text_size = if label.is_empty() {
+        Dimensioni::default()
+    } else {
+        text_size(style, atlas, font, label)
+    };
+    let visual_size = visual_size.unwrap_or_default();
+    let has_text = !label.is_empty();
+    let has_visual = visual_size.width > 0 && visual_size.height > 0;
+
+    // Text gets horizontal padding on both sides; visuals add one extra text/visual gap.
+    let mut width = padding.saturating_mul(2).saturating_add(text_size.width.max(0));
+    if has_visual {
+        width = width.saturating_add(visual_size.width.max(0));
+        if has_text {
+            width = width.saturating_add(padding);
+        }
+    }
+
+    let height = content_height(style, atlas, font, visual_size.height);
+    Dimensioni::new(width.max(0), height)
 }
 
 #[cfg(test)]

@@ -1,17 +1,17 @@
 //! Owned nested layout scopes; neither COM storage nor retained clients borrow a runtime stack.
-use crate::boundary::{copied_rect, local_rect};
+use crate::boundary::local_rect;
 use super::HostState;
 use neocogi_ui_core_contracts::*;
-use neocogi_com::{ComPtr, ComRef, NcStatus, NC_E_INVALID_ARG, com_object};
+use neocogi_com::{ComPtr, NcStatus, NC_E_INVALID_ARG, com_object};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
 };
 use super::{
     child_store::{ChildStore, ChildTransaction},
-    widget_object::SharedAssets,
+    SharedAssets,
 };
-use crate::{Constraints, Dimensioni};
+use crate::Dimensioni;
 use crate::ui_node::LayoutTraversal;
 
 /// One invocation owns the actual child sequence while layout policy calls out.
@@ -238,109 +238,4 @@ impl Drop for Invocation<'_> {
     }
 }
 
-/// Validates both axes before producing private finite/unbounded constraints.
-pub(crate) fn constraints(limits: LayoutLimits) -> Result<Constraints, NcStatus> {
-    Ok(Constraints::new(
-        super::widget_object::available(limits.width)?,
-        super::widget_object::available(limits.height)?,
-    ))
-}
-
-/// Preserves zero versus unbounded when entering the COM layout boundary.
-pub(super) fn limits(constraints: Constraints) -> LayoutLimits {
-    LayoutLimits {
-        width: axis_limit(constraints.width),
-        height: axis_limit(constraints.height),
-    }
-}
-
-/// Rust-local adapter lets existing concrete algorithms share the external scoped contract.
-/// It borrows a COM projection only during the synchronous implementation call; the service itself owns its frame.
-pub(crate) struct ScopedLayout<'a> {
-    /// Exact authority supplied to this container's current measurement or placement.
-    pub(crate) scope: LayoutScope,
-    /// Borrowed projection avoids per-child AddRef/Release operations.
-    pub(crate) service: ComRef<'a, ILayoutServiceAbi>,
-    /// Validated before running algorithms whose metadata must match this cardinality.
-    pub(crate) count: usize,
-    /// Legacy Option-returning algorithms cannot erase the first failed service call.
-    error: Cell<Option<NcStatus>>,
-}
-impl<'a> ScopedLayout<'a> {
-    /// Resolves cardinality before invoking any algorithm, never substituting a fabricated zero on failure.
-    pub(crate) fn new(scope: LayoutScope, service: ComRef<'a, ILayoutServiceAbi>) -> Result<Self, NcStatus> {
-        let count = service.child_count(scope)? as usize;
-        Ok(Self {
-            scope,
-            service,
-            count,
-            error: Cell::new(None),
-        })
-    }
-    /// Adapts copied results while retaining errors for the enclosing COM method's return value.
-    pub(crate) fn capture<T>(&self, result: Result<T, NcStatus>) -> Option<T> {
-        match result {
-            Ok(value) => Some(value),
-            Err(error) => {
-                if self.error.get().is_none() {
-                    self.error.set(Some(error));
-                }
-                None
-            }
-        }
-    }
-    /// Prevents usize truncation at the indexed ABI boundary.
-    pub(crate) fn index(&self, index: usize) -> Option<u32> {
-        self.capture(u32::try_from(index).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE))
-    }
-    /// Measures with the same constraints and node cache as an independent COM container.
-    pub(crate) fn measure(&self, index: usize, constraints: Constraints) -> Option<Dimensioni> {
-        let index = self.index(index)?;
-        self.capture(self.service.measure_child(self.scope, index, limits(constraints)))
-            .map(|size| Dimensioni::new(size.width, size.height))
-    }
-    /// Returns cardinality already authenticated for this scope.
-    pub(crate) fn child_count(&self) -> usize {
-        self.count
-    }
-    /// Places one child with copied geometry and retains any error for final propagation.
-    pub(crate) fn place(&self, index: usize, rect: crate::Recti) -> Option<Dimensioni> {
-        let index = self.index(index)?;
-        self.capture(self.service.place_child(self.scope, index, copied_rect(rect)))
-            .map(|size| Dimensioni::new(size.width, size.height))
-    }
-    /// Applies subtree participation through the authoritative runtime service.
-    pub(crate) fn set_participation(&self, index: usize, participation: crate::ChildParticipation) -> bool {
-        let Some(index) = self.index(index) else {
-            return false;
-        };
-        let participation = match participation {
-            crate::ChildParticipation::Active => LayoutParticipation::Active,
-            crate::ChildParticipation::Disabled => LayoutParticipation::Disabled,
-            crate::ChildParticipation::Hidden => LayoutParticipation::Hidden,
-        };
-        self.capture(self.service.set_participation(self.scope, index, participation)).is_some()
-    }
-    /// Marks a child placement dependency dirty without changing the assigned rectangle.
-    pub(crate) fn invalidate_placement(&self, index: usize) -> bool {
-        let Some(index) = self.index(index) else {
-            return false;
-        };
-        self.capture(self.service.child_placement_changed(self.scope, index)).is_some()
-    }
-    /// Makes ignored legacy Option errors observable before publishing a successful COM result.
-    pub(crate) fn result(&self) -> Result<(), NcStatus> {
-        match self.error.get() {
-            Some(error) => Err(error),
-            None => Ok(()),
-        }
-    }
-}
-
-/// Converts one private constraint without losing an explicitly bounded zero.
-fn axis_limit(space: crate::AvailableSpace) -> AxisLimit {
-    match space.bound() {
-        Some(extent) => AxisLimit { kind: LimitKind::Finite, extent },
-        None => AxisLimit { kind: LimitKind::Unbounded, extent: 0 },
-    }
-}
+pub(crate) use neocogi_ui_support::layout::{constraints, limits};

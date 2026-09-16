@@ -15,6 +15,7 @@ pub mod identity;
 pub mod image;
 pub mod input;
 pub mod input_contract;
+pub mod interaction;
 pub mod layout;
 pub mod math;
 pub mod render;
@@ -22,7 +23,6 @@ pub mod render;
 pub mod test_support;
 pub mod text_layout;
 pub mod theme;
-pub mod widget;
 pub mod widget_context;
 mod widget_input;
 
@@ -54,7 +54,8 @@ pub use layout::{AvailableSpace, Constraints, TrackSize};
 pub use math::{expand_rect, rect, vec2};
 pub use render::{AtlasUploadError, NinePatch, NinePatchCell, NinePatchCells, NinePatchContent, NinePatchImage, SliceInsets, TextureError, TextureId};
 pub use text_layout::TextWrap;
-pub use widget::{Change, KeyboardAction, KeyboardBehavior, LeafWidget, Widget, WidgetFillOption, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx};
+pub use interaction::{Change, KeyboardAction, KeyboardBehavior, WidgetOption};
+pub use widget_context::{WidgetPaintCtx, WidgetUpdateCtx};
 pub use widget_input::UiInputEvent;
 pub use theme::{
     AssetChrome, AssetMetrics, CaptionSide, ChromeRole, ChromeState, Color, ControlRole, ControlState, FlatPalette, FontRef, FontRole, FrameRole, IconRef,
