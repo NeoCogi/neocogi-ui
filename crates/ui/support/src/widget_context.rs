@@ -62,9 +62,9 @@ use crate::render::{DisplayList, Painter};
 use crate::input::{Modifiers, MouseButton};
 use crate::{KeyboardAction, KeyboardBehavior, WidgetOption};
 use crate::theme::{Color, ControlRole, ControlState, MenuRole, MenuState, Skin, SurfaceRole, SurfaceState};
-use crate::ui_node::text_layout::control_text_position_with_font;
+use crate::text_layout::control_text_position_with_font;
 
-use super::UiInputEvent;
+use crate::UiInputEvent;
 
 /// Converts one screen point into a saturated coordinate relative to `origin`.
 fn local_point(origin: Vec2i, point: Vec2i) -> Vec2i {
@@ -98,7 +98,7 @@ fn visual_state(state: ControlState) -> WidgetVisualState {
 }
 
 /// Converts one routed event into coordinates relative to `origin`.
-pub(crate) fn localize_event(origin: Vec2i, event: UiInputEvent) -> UiInputEvent {
+pub fn localize_event(origin: Vec2i, event: UiInputEvent) -> UiInputEvent {
     match event {
         UiInputEvent::MouseMove { pos, delta } => UiInputEvent::MouseMove { pos: local_point(origin, pos), delta },
         UiInputEvent::MouseDrag { pos, delta, buttons } => UiInputEvent::MouseDrag {
@@ -194,9 +194,9 @@ pub struct WidgetUpdateCtx<'a> {
 
 impl<'a> WidgetUpdateCtx<'a> {
     /// Creates an update context from router-owned interaction state.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new_with_interaction(
+    pub fn new_with_interaction(
         rect: Recti,
         screen_clip: Recti,
         style: &'a Skin,
@@ -226,7 +226,7 @@ impl<'a> WidgetUpdateCtx<'a> {
 
     /// Creates update services for one traversal-derived content rectangle.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new_with_content_geometry(
+    pub fn new_with_content_geometry(
         content_rect: Recti,
         screen_clip: Recti,
         style: &'a Skin,
@@ -266,7 +266,7 @@ impl<'a> WidgetUpdateCtx<'a> {
     }
 
     /// Whether local pointer tests belong to the current hover root.
-    pub(crate) fn in_hover_root(&self) -> bool {
+    pub fn in_hover_root(&self) -> bool {
         self.in_hover_root
     }
 
@@ -321,12 +321,12 @@ impl<'a> WidgetUpdateCtx<'a> {
     }
 
     /// Returns the active atlas for built-in metric queries.
-    pub(crate) fn atlas(&self) -> &AtlasHandle {
+    pub fn atlas(&self) -> &AtlasHandle {
         self.common.atlas
     }
 
     /// Hit-tests a widget-local rectangle against a routed local pointer and the active clip.
-    pub(crate) fn mouse_over(&self, local_rect: Recti, mouse_pos: Vec2i) -> bool {
+    pub fn mouse_over(&self, local_rect: Recti, mouse_pos: Vec2i) -> bool {
         if !self.in_hover_root {
             return false;
         }
@@ -371,7 +371,7 @@ enum PaintOutput<'a> {
 impl<'a> WidgetPaintCtx<'a> {
     /// Creates paint services for one traversal-derived content rectangle.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new_with_content_geometry(
+    pub fn new_with_content_geometry(
         content_rect: Recti,
         display_list: &'a mut DisplayList,
         screen_clip: Recti,
@@ -400,7 +400,7 @@ impl<'a> WidgetPaintCtx<'a> {
 
     /// Creates a built-in context whose semantic operations target the runtime's active COM scope.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new_scoped(
+    pub fn new_scoped(
         content_rect: Recti,
         screen_clip: Recti,
         style: &'a Skin,
@@ -429,12 +429,12 @@ impl<'a> WidgetPaintCtx<'a> {
     }
 
     /// Returns the first scoped recording failure after a built-in semantic paint completes.
-    pub(crate) fn finish(self) -> Result<(), NcStatus> {
+    pub fn finish(self) -> Result<(), NcStatus> {
         self.error.map_or(Ok(()), Err)
     }
 
     /// Reads one coherent option snapshot without retaining or borrowing widget state.
-    pub(crate) fn options(&self) -> WidgetOption {
+    pub fn options(&self) -> WidgetOption {
         self.options
     }
 
@@ -449,7 +449,7 @@ impl<'a> WidgetPaintCtx<'a> {
     ///
     /// The empty replacement contains no allocation. [`Self::restore_display_list`] returns the
     /// same owned buffers after the foreign call, so no mutable Rust reference crosses the ABI.
-    pub(crate) fn take_display_list(&mut self) -> DisplayList {
+    pub fn take_display_list(&mut self) -> DisplayList {
         match &mut self.output {
             PaintOutput::Frame(display_list) => std::mem::take(*display_list),
             PaintOutput::Scoped { .. } => unreachable!("only native traversal owns the frame display list"),
@@ -457,7 +457,7 @@ impl<'a> WidgetPaintCtx<'a> {
     }
 
     /// Restores the runtime's frame display list after a synchronous COM paint invocation.
-    pub(crate) fn restore_display_list(&mut self, display_list: DisplayList) {
+    pub fn restore_display_list(&mut self, display_list: DisplayList) {
         // Only PaintService can take the list, and it restores it before traversal can continue.
         match &mut self.output {
             PaintOutput::Frame(target) => **target = display_list,
@@ -466,12 +466,12 @@ impl<'a> WidgetPaintCtx<'a> {
     }
 
     /// Returns the traversal-derived content allocation in screen coordinates to the paint driver.
-    pub(crate) fn paint_content_rect(&self) -> Recti {
+    pub fn paint_content_rect(&self) -> Recti {
         self.common.content_rect
     }
 
     /// Returns the authoritative screen clip which a caller-authored scope may only narrow.
-    pub(crate) fn paint_screen_clip(&self) -> Recti {
+    pub fn paint_screen_clip(&self) -> Recti {
         self.common.screen_clip
     }
 
@@ -524,7 +524,7 @@ impl<'a> WidgetPaintCtx<'a> {
     }
 
     /// Executes drawing with a local clip narrowed inside this runtime-owned paint context.
-    pub(crate) fn with_clip(&mut self, rect: Recti, paint: impl FnOnce(&mut Self)) {
+    pub fn with_clip(&mut self, rect: Recti, paint: impl FnOnce(&mut Self)) {
         let previous = self.draw_clip;
         self.draw_clip = previous
             .positive_intersection(rect)
@@ -581,12 +581,12 @@ impl<'a> WidgetPaintCtx<'a> {
     }
 
     /// Returns the active atlas.
-    pub(crate) fn atlas(&self) -> &AtlasHandle {
+    pub fn atlas(&self) -> &AtlasHandle {
         self.common.atlas
     }
 
     /// Draws a filled rectangle through a widget-local painter.
-    pub(crate) fn draw_rect(&mut self, rect: Recti, color: Color) {
+    pub fn draw_rect(&mut self, rect: Recti, color: Color) {
         if let Some((scope, mut painter)) = self.scoped_paint() {
             let result = painter.fill(scope, crate::boundary::copied_rect(rect), packed_color(color));
             self.record(result);
@@ -596,7 +596,7 @@ impl<'a> WidgetPaintCtx<'a> {
     }
 
     /// Draws an atlas icon through a widget-local painter.
-    pub(crate) fn draw_icon(&mut self, id: IconId, rect: Recti, color: Color) {
+    pub fn draw_icon(&mut self, id: IconId, rect: Recti, color: Color) {
         // Callers resolve a semantic content color before reaching this primitive, so explicit image
         // tints and role-specific state colors are preserved exactly.
         if let Some((scope, mut painter)) = self.scoped_paint() {
@@ -613,7 +613,7 @@ impl<'a> WidgetPaintCtx<'a> {
     }
 
     /// Draws a renderer-owned image without creating a widget-local display list or geometry pass.
-    pub(crate) fn draw_texture(&mut self, rect: Recti, color: Color, texture: ComPtr<neocogi_ui_core_contracts::ITextureAbi>) {
+    pub fn draw_texture(&mut self, rect: Recti, color: Color, texture: ComPtr<neocogi_ui_core_contracts::ITextureAbi>) {
         if let Some((scope, mut painter)) = self.scoped_paint() {
             let result = painter.texture(
                 scope,
@@ -629,7 +629,7 @@ impl<'a> WidgetPaintCtx<'a> {
     }
 
     /// Draws one exact-font text run through the active native or scoped frame target.
-    pub(crate) fn draw_text(&mut self, font: FontId, text: &str, position: Vec2i, color: Color) {
+    pub fn draw_text(&mut self, font: FontId, text: &str, position: Vec2i, color: Color) {
         if let Some((scope, mut painter)) = self.scoped_paint() {
             let result = painter.text_run(
                 scope,
@@ -647,7 +647,7 @@ impl<'a> WidgetPaintCtx<'a> {
     }
 
     /// Draws one control using this widget's resolved interaction state.
-    pub(crate) fn draw_control(&mut self, role: ControlRole, rect: Recti) -> Option<Recti> {
+    pub fn draw_control(&mut self, role: ControlRole, rect: Recti) -> Option<Recti> {
         // Resolve state before borrowing the display list through Painter so immutable and mutable
         // context borrows do not overlap.
         let state = self.control_state();
@@ -655,14 +655,14 @@ impl<'a> WidgetPaintCtx<'a> {
     }
 
     /// Draws one control using an explicit nested control state.
-    pub(crate) fn draw_control_state(&mut self, role: ControlRole, state: ControlState, rect: Recti) -> Option<Recti> {
+    pub fn draw_control_state(&mut self, role: ControlRole, state: ControlState, rect: Recti) -> Option<Recti> {
         // Composite controls can select a child part's state without converting it into a universal
         // state accepted by unrelated surface, menu, or chrome families.
         if let Some((scope, mut painter)) = self.scoped_paint() {
             let result = painter.frame(
                 scope,
                 crate::boundary::copied_rect(rect),
-                crate::ui_node::frame_contract(crate::FrameRole::Control(role)),
+                crate::frame::frame_contract(crate::FrameRole::Control(role)),
                 visual_state(state),
                 false,
             );
@@ -677,17 +677,17 @@ impl<'a> WidgetPaintCtx<'a> {
         }
         let patch = self.common.style.control(role, state).patch;
         let mut painter = self.painter();
-        crate::ui_node::frame::paint_internal_frame(&mut painter, rect, patch)
+        crate::frame::paint_internal_frame(&mut painter, rect, patch)
     }
 
     /// Draws only the stretchable center of one control over an unframed rectangle.
-    pub(crate) fn draw_control_center(&mut self, role: ControlRole, rect: Recti) {
+    pub fn draw_control_center(&mut self, role: ControlRole, rect: Recti) {
         // Resolve the complete nested state before recording the center cell.
         self.draw_control_center_state(role, self.control_state(), rect);
     }
 
     /// Draws only the stretchable center of one control using an explicit state.
-    pub(crate) fn draw_control_center_state(&mut self, role: ControlRole, state: ControlState, rect: Recti) {
+    pub fn draw_control_center_state(&mut self, role: ControlRole, state: ControlState, rect: Recti) {
         // Zero destination insets collapse all eight outer cells. Flat patches retain their center
         // cell and image patches sample only their center source, preserving the old unframed fill
         // contract without introducing a second theme asset vocabulary.
@@ -696,7 +696,7 @@ impl<'a> WidgetPaintCtx<'a> {
                 .frame(
                     scope,
                     crate::boundary::copied_rect(rect),
-                    crate::ui_node::frame_contract(crate::FrameRole::Control(role)),
+                    crate::frame::frame_contract(crate::FrameRole::Control(role)),
                     visual_state(state),
                     true,
                 )
@@ -705,12 +705,12 @@ impl<'a> WidgetPaintCtx<'a> {
         } else {
             let patch = self.common.style.control(role, state).patch.with_insets(crate::SliceInsets::ZERO);
             let mut painter = self.painter();
-            let _ = crate::ui_node::frame::paint_internal_frame(&mut painter, rect, patch);
+            let _ = crate::frame::paint_internal_frame(&mut painter, rect, patch);
         }
     }
 
     /// Draws only the stretchable center of one structural surface.
-    pub(crate) fn draw_surface_center_state(&mut self, role: SurfaceRole, state: SurfaceState, rect: Recti) {
+    pub fn draw_surface_center_state(&mut self, role: SurfaceRole, state: SurfaceState, rect: Recti) {
         // Center-only structural fills share the same nine-patch behavior as unframed controls.
         if let Some((scope, mut painter)) = self.scoped_paint() {
             let state = match state {
@@ -721,7 +721,7 @@ impl<'a> WidgetPaintCtx<'a> {
                 .frame(
                     scope,
                     crate::boundary::copied_rect(rect),
-                    crate::ui_node::frame_contract(crate::FrameRole::Surface(role)),
+                    crate::frame::frame_contract(crate::FrameRole::Surface(role)),
                     state,
                     true,
                 )
@@ -730,32 +730,32 @@ impl<'a> WidgetPaintCtx<'a> {
         } else {
             let patch = self.common.style.surface(role, state).patch.with_insets(crate::SliceInsets::ZERO);
             let mut painter = self.painter();
-            let _ = crate::ui_node::frame::paint_internal_frame(&mut painter, rect, patch);
+            let _ = crate::frame::paint_internal_frame(&mut painter, rect, patch);
         }
     }
 
     /// Draws one menu part using its menu-specific state.
-    pub(crate) fn draw_menu_state(&mut self, role: MenuRole, state: MenuState, rect: Recti) -> Option<Recti> {
+    pub fn draw_menu_state(&mut self, role: MenuRole, state: MenuState, rect: Recti) -> Option<Recti> {
         // The Open state remains confined to menu rendering.
         let patch = self.common.style.menu(role, state).patch;
         let mut painter = self.painter();
-        crate::ui_node::frame::paint_internal_frame(&mut painter, rect, patch)
+        crate::frame::paint_internal_frame(&mut painter, rect, patch)
     }
 
     /// Resolves a control content color using this widget's complete interaction state.
-    pub(crate) fn control_content_color(&self, role: ControlRole) -> Color {
+    pub fn control_content_color(&self, role: ControlRole) -> Color {
         // ControlState gives disabling precedence and nests pointer state beneath focus ownership.
         self.common.style.control(role, self.control_state()).content_color
     }
 
     /// Resolves a menu content color using an explicit menu selection state.
-    pub(crate) fn menu_content_color(&self, role: MenuRole, state: MenuState) -> Color {
+    pub fn menu_content_color(&self, role: MenuRole, state: MenuState) -> Color {
         // Composite menu panels own their exact open, pointer, and keyboard selection state.
         self.common.style.menu(role, state).content_color
     }
 
     /// Draws aligned control text using the content color for one concrete control role.
-    pub(crate) fn draw_control_text_with_font(&mut self, font: FontId, text: &str, rect: Recti, role: ControlRole, opt: WidgetOption) {
+    pub fn draw_control_text_with_font(&mut self, font: FontId, text: &str, rect: Recti, role: ControlRole, opt: WidgetOption) {
         // Resolve the same state as the adjacent appearance before mutable display-list recording.
         let color = self.control_content_color(role);
         self.draw_control_text_color_with_font(font, text, rect, color, opt);
@@ -768,7 +768,7 @@ impl<'a> WidgetPaintCtx<'a> {
     /// a disabled-text color from that role while retaining the same padding, alignment, clipping,
     /// and glyph-placement rules. Keeping that variation here prevents each composite from
     /// duplicating the authoritative control-text geometry.
-    pub(crate) fn draw_control_text_color_with_font(&mut self, font: FontId, text: &str, rect: Recti, color: Color, opt: WidgetOption) {
+    pub fn draw_control_text_color_with_font(&mut self, font: FontId, text: &str, rect: Recti, color: Color, opt: WidgetOption) {
         // Composite callers have already resolved an exact role/state content color. This primitive
         // owns only authoritative text geometry, clipping, and recording.
         let pos = control_text_position_with_font(self.common.style, self.common.atlas, font, text, rect, opt);

@@ -28,25 +28,22 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 
-//! Semantic UI appearance, typography, resources, and resolved skin configuration.
+//! Shared phase-local recording and geometry helpers; core owns replay and submission.
 
-mod appearance;
-mod bundle;
-mod icons;
-mod palette;
-mod resources;
-mod skin;
-mod typography;
+pub mod display_list;
+pub mod geometry;
+mod nine_patch;
+mod painter;
 
-pub use appearance::{FrameRole, Visual};
-pub use neocogi_ui::{ChromeState, ControlState, MenuState, PointerState, SurfaceState};
-pub use bundle::SkinBundle;
-pub(crate) use bundle::SkinInstallError;
-pub use crate::render::{Color, color};
-pub use icons::{IconRef, IconRole};
-pub use palette::FlatPalette;
-pub use resources::ResourceCatalog;
-pub use neocogi_ui_core_contracts::{AssetChrome, AssetMetrics, CaptionSide, ChromeRole, ControlRole, MenuRole, SurfaceRole, TitleAlignment};
-pub use skin::Skin;
-pub(crate) use skin::SkinRevision;
-pub use typography::{FontRef, FontRole};
+pub use neocogi_render_core::{
+    AtlasUploadError, Color, FrameError, FrameInfo, FrameInfoError, RenderItemArgs, RendererBackend, RendererFrame, TextureError, TextureId, Vertex, color,
+};
+pub use display_list::DisplayList;
+pub use painter::Painter;
+pub use nine_patch::{NinePatch, NinePatchCell, NinePatchCells, NinePatchContent, NinePatchImage, SliceInsets};
+
+/// Decodes canonical contract RGBA packing independently of machine byte order.
+pub fn contract_color(rgba: u32) -> Color {
+    let [r, g, b, a] = rgba.to_le_bytes();
+    Color { r, g, b, a }
+}

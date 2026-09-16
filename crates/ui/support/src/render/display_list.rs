@@ -43,27 +43,27 @@ use rs_math3d::{Color4b, Recti, Vec2f, Vec2i};
 /// Operations are intentionally opaque. Framework traversal owns the list lifecycle and reuses its
 /// allocations between submitted frames.
 #[derive(Default)]
-pub(crate) struct DisplayList {
+pub struct DisplayList {
     /// Operations in final painter order.
-    pub(super) ops: Vec<DrawOp>,
+    pub ops: Vec<DrawOp>,
     /// Retained solid geometry and its reusable tessellation workspace.
-    pub(super) solid_geometry: SolidGeometry,
+    pub solid_geometry: SolidGeometry,
     /// Already expanded atlas geometry, shared by range-addressed operations in this frame.
-    pub(super) atlas_vertices: Vec<super::Vertex>,
+    pub atlas_vertices: Vec<super::Vertex>,
     /// Concatenated UTF-8 runs retain one allocation across frames; each operation owns a byte range.
-    pub(super) text: String,
+    pub text: String,
 }
 
 /// One recorded operation and its final screen-space clip.
-pub(super) struct DrawOp {
+pub struct DrawOp {
     /// Effective clip resolved when the operation was recorded.
-    pub(super) clip: Recti,
+    pub clip: Recti,
     /// Operation payload.
-    pub(super) kind: DrawKind,
+    pub kind: DrawKind,
 }
 
 /// Private rendering operation payload.
-pub(super) enum DrawKind {
+pub enum DrawKind {
     /// Atlas geometry already expanded by a COM widget's private UI algorithms.
     AtlasTriangles {
         /// Complete triples in this display list's screen-space atlas buffer.
@@ -123,12 +123,12 @@ pub(super) enum DrawKind {
 
 impl DisplayList {
     /// Reports whether a rejected or completed frame retains any operations.
-    #[cfg(test)]
-    pub(crate) fn is_empty(&self) -> bool {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn is_empty(&self) -> bool {
         self.ops.is_empty() && self.solid_geometry.is_empty() && self.atlas_vertices.is_empty() && self.text.is_empty()
     }
     /// Creates an empty display list.
-    pub(crate) const fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             ops: Vec::new(),
             solid_geometry: SolidGeometry::new(),
@@ -138,7 +138,7 @@ impl DisplayList {
     }
 
     /// Removes every recorded operation and triangle while retaining allocated storage for reuse.
-    pub(crate) fn clear(&mut self) {
+    pub fn clear(&mut self) {
         self.ops.clear();
         self.solid_geometry.clear();
         self.atlas_vertices.clear();
@@ -146,7 +146,7 @@ impl DisplayList {
     }
 
     /// Retains a complete atlas batch in painter order for final viewport clipping.
-    pub(super) fn push_atlas_triangles(&mut self, clip: Recti, origin: Vec2i, vertices: &[neocogi_ui_core_contracts::RenderVertex]) {
+    pub fn push_atlas_triangles(&mut self, clip: Recti, origin: Vec2i, vertices: &[neocogi_ui_core_contracts::RenderVertex]) {
         let first = self.atlas_vertices.len();
         // Translate directly into retained storage, with no intermediate per-operation vector.
         for vertex in vertices {
@@ -166,7 +166,7 @@ impl DisplayList {
     }
 
     /// Retains an image in source order; final clipping remains centralized in the executor.
-    pub(super) fn push_com_texture(
+    pub fn push_com_texture(
         &mut self,
         clip: Recti,
         rect: Recti,
@@ -178,12 +178,12 @@ impl DisplayList {
     }
 
     /// Retains application GPU work without creating a callback registry entry.
-    pub(super) fn push_com_item(&mut self, clip: Recti, rect: Recti, item: neocogi_com::ComPtr<neocogi_ui_core_contracts::IRenderItemAbi>) {
+    pub fn push_com_item(&mut self, clip: Recti, rect: Recti, item: neocogi_com::ComPtr<neocogi_ui_core_contracts::IRenderItemAbi>) {
         self.push(clip, DrawKind::ComItem { item, rect });
     }
 
     /// Appends one semantic three-by-three patch operation.
-    pub(super) fn push_nine_patch(&mut self, clip: Recti, rect: Recti, patch: NinePatch) {
+    pub fn push_nine_patch(&mut self, clip: Recti, rect: Recti, patch: NinePatch) {
         // Retain the compact patch value instead of expanding up to nine operations while the
         // display list is recorded. Renderer execution remains the sole clipping and tessellation
         // boundary for every concrete patch cell.
@@ -191,7 +191,7 @@ impl DisplayList {
     }
 
     /// Appends one owned text operation.
-    pub(super) fn push_text(&mut self, clip: Recti, font: FontId, pos: Vec2i, color: Color, text: &str) {
+    pub fn push_text(&mut self, clip: Recti, font: FontId, pos: Vec2i, color: Color, text: &str) {
         let first = self.text.len();
         self.text.push_str(text);
         self.push(
@@ -206,33 +206,33 @@ impl DisplayList {
     }
 
     /// Appends one atlas icon operation.
-    pub(super) fn push_icon(&mut self, clip: Recti, id: IconId, rect: Recti, color: Color) {
+    pub fn push_icon(&mut self, clip: Recti, id: IconId, rect: Recti, color: Color) {
         self.push(clip, DrawKind::Icon { id, rect, color });
     }
 
     /// Appends strongly typed solid triangles and records their valid contiguous range.
-    pub(super) fn push_solid_triangles(&mut self, clip: Recti, triangles: &[SolidTriangle]) {
+    pub fn push_solid_triangles(&mut self, clip: Recti, triangles: &[SolidTriangle]) {
         if let Some(range) = self.solid_geometry.append_triangles(triangles, Vec2f::new(0.0, 0.0)) {
             self.push_solid_range(clip, range);
         }
     }
 
     /// Tessellates and records one translated thick line.
-    pub(super) fn push_line(&mut self, clip: Recti, from: Vec2f, to: Vec2f, width: f32, color: Color4b, offset: Vec2f) {
+    pub fn push_line(&mut self, clip: Recti, from: Vec2f, to: Vec2f, width: f32, color: Color4b, offset: Vec2f) {
         if let Some(range) = self.solid_geometry.append_line(from, to, width, color, offset) {
             self.push_solid_range(clip, range);
         }
     }
 
     /// Tessellates and records one translated simple polygon.
-    pub(super) fn push_polygon(&mut self, clip: Recti, points: &[Vec2f], color: Color4b, offset: Vec2f) {
+    pub fn push_polygon(&mut self, clip: Recti, points: &[Vec2f], color: Color4b, offset: Vec2f) {
         if let Some(range) = self.solid_geometry.append_polygon(points, color, offset) {
             self.push_solid_range(clip, range);
         }
     }
 
     /// Converts copied COM polygon points directly into the reusable tessellation workspace.
-    pub(super) fn push_contract_polygon(&mut self, clip: Recti, points: &[neocogi_ui_core_contracts::PaintPoint], color: Color4b, offset: Vec2f) {
+    pub fn push_contract_polygon(&mut self, clip: Recti, points: &[neocogi_ui_core_contracts::PaintPoint], color: Color4b, offset: Vec2f) {
         let points = points.iter().map(|point| Vec2f::new(point.x, point.y));
         if let Some(range) = self.solid_geometry.append_polygon_points(points, color, offset) {
             self.push_solid_range(clip, range);
@@ -260,8 +260,8 @@ impl DisplayList {
     }
 
     /// Returns semantic patch destinations, clips, and payloads for UI recording assertions.
-    #[cfg(test)]
-    pub(crate) fn debug_nine_patches(&self) -> Vec<(Recti, Recti, NinePatch)> {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn debug_nine_patches(&self) -> Vec<(Recti, Recti, NinePatch)> {
         // Tests may inspect what UI records, but they must not reproduce GFX expansion. Final cell
         // geometry is asserted through production compositor-stream tests at the owning boundary.
         self.ops
@@ -274,8 +274,8 @@ impl DisplayList {
     }
 
     /// Returns the number of opaque operations for performance assertions.
-    #[cfg(test)]
-    pub(crate) fn debug_operation_count(&self) -> usize {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn debug_operation_count(&self) -> usize {
         self.ops.len()
     }
 }

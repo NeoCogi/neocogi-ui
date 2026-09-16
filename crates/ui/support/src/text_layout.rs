@@ -71,7 +71,7 @@ pub enum TextWrap {
 
 #[derive(Clone, Copy)]
 /// Byte range and measured width for one display line.
-pub(crate) struct TextLine {
+pub struct TextLine {
     /// Start byte offset in the source text.
     pub start: usize,
     /// Exclusive end byte offset in the source text.
@@ -139,7 +139,7 @@ fn push_wrapped_line(
 }
 
 /// Builds logical text lines, preserving the trailing blank line after a final newline.
-pub(crate) fn build_text_lines(buf: &str, wrap: TextWrap, max_width: i32, font: FontId, atlas: &AtlasHandle) -> Vec<TextLine> {
+pub fn build_text_lines(buf: &str, wrap: TextWrap, max_width: i32, font: FontId, atlas: &AtlasHandle) -> Vec<TextLine> {
     let mut lines = Vec::new();
     if buf.is_empty() {
         lines.push(TextLine { start: 0, end: 0, width: 0 });
@@ -166,7 +166,7 @@ pub(crate) fn build_text_lines(buf: &str, wrap: TextWrap, max_width: i32, font: 
 }
 
 /// Builds display lines for read-only text, suppressing the extra visual row after a final newline.
-pub(crate) fn build_display_text_lines(buf: &str, wrap: TextWrap, max_width: i32, font: FontId, atlas: &AtlasHandle) -> Vec<TextLine> {
+pub fn build_display_text_lines(buf: &str, wrap: TextWrap, max_width: i32, font: FontId, atlas: &AtlasHandle) -> Vec<TextLine> {
     let mut lines = build_text_lines(buf, wrap, max_width, font, atlas);
     if buf.ends_with('\n') && lines.last().is_some_and(|last| last.start == buf.len() && last.end == buf.len()) {
         lines.pop();
@@ -175,7 +175,7 @@ pub(crate) fn build_display_text_lines(buf: &str, wrap: TextWrap, max_width: i32
 }
 
 /// Returns the y coordinate that aligns a font baseline inside a control rectangle.
-pub(crate) fn baseline_aligned_top(rect: Recti, line_height: i32, baseline: i32) -> i32 {
+pub fn baseline_aligned_top(rect: Recti, line_height: i32, baseline: i32) -> i32 {
     let rect_y = i64::from(rect.y);
     let rect_height = i64::from(rect.height);
     let line_height = i64::from(line_height);
@@ -191,7 +191,7 @@ pub(crate) fn baseline_aligned_top(rect: Recti, line_height: i32, baseline: i32)
 }
 
 /// Computes the bounding size for a block of measured lines.
-pub(crate) fn text_block_size(lines: &[TextLine], line_height: i32) -> Dimensioni {
+pub fn text_block_size(lines: &[TextLine], line_height: i32) -> Dimensioni {
     let width = lines.iter().map(|line| line.width).max().unwrap_or(0).max(0);
     // block_height = line_height * max(line_count, 1).
     let line_count = i32::try_from(lines.len()).unwrap_or(i32::MAX).max(1);
@@ -200,7 +200,7 @@ pub(crate) fn text_block_size(lines: &[TextLine], line_height: i32) -> Dimension
 }
 
 /// Computes the top-left text position for a single-line control.
-pub(crate) fn control_text_position_with_font(style: &Skin, atlas: &AtlasHandle, font: FontId, text: &str, rect: Recti, opt: WidgetOption) -> Vec2i {
+pub fn control_text_position_with_font(style: &Skin, atlas: &AtlasHandle, font: FontId, text: &str, rect: Recti, opt: WidgetOption) -> Vec2i {
     let tsize = atlas.get_text_size(font, text);
     let padding = style.metrics().padding;
     let line_height = atlas.get_font_height(font) as i32;

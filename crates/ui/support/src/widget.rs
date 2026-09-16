@@ -63,8 +63,8 @@ use crate::atlas::AtlasHandle;
 use crate::input::{Key, Modifiers};
 use crate::theme::Skin;
 use crate::Constraints;
-use super::UiInputEvent;
-pub use super::widget_context::{WidgetPaintCtx, WidgetUpdateCtx};
+use crate::UiInputEvent;
+pub use crate::widget_context::{WidgetPaintCtx, WidgetUpdateCtx};
 
 bitflags! {
     #[derive(Copy, Clone)]
@@ -241,14 +241,14 @@ impl From<bool> for Change {
 /// Common retained runtime phase contract implemented by concrete widgets.
 ///
 /// Widgets participate in the retained update and paint phases. Geometry is deliberately split by
-/// node kind: [`LeafWidget`] measures intrinsic content, while [`crate::ContainerWidget`] measures
+/// node kind: [`LeafWidget`] measures intrinsic content, while a scoped container algorithm measures
 /// and places an authoritative child collection. A branch therefore has no meaningless leaf
 /// measurement implementation.
 ///
 /// The runtime routes an event before running that event's complete update traversal, then commits
 /// layout before considering the next queued event. [`Widget::keyboard_behavior`] is the sole
 /// keyboard-eligibility query. Event-kind filtering belongs to the dispatcher for ordinary widgets
-/// and to [`crate::ContainerWidget`] for an overloaded container surface.
+/// and to a scoped container algorithm for an overloaded container surface.
 pub trait Widget {
     /// Updates retained widget state for exactly one normalized input event.
     ///

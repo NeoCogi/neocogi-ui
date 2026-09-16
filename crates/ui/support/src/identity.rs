@@ -60,14 +60,14 @@ const fn advance_process_unique_id(current: u64) -> Option<u64> {
 /// not persistent: uniqueness lasts for the current process, matching every owner it identifies.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(transparent)]
-pub(crate) struct ProcessUniqueId(
+pub struct ProcessUniqueId(
     /// Non-zero raw value kept private so application code cannot forge concrete capabilities.
     NonZeroU64,
 );
 
 impl ProcessUniqueId {
     /// Allocates one process-unique identity or panics after exhausting the usable `u64` space.
-    pub(crate) fn allocate() -> Self {
+    pub fn allocate() -> Self {
         // `try_update` modifies the global source only when checked advancement succeeds. Once
         // exhausted, every later attempt therefore fails consistently rather than reusing an ID.
         let raw = NEXT_PROCESS_UNIQUE_ID

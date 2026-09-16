@@ -85,7 +85,7 @@ impl ResourceCatalog {
     }
 
     /// Checks catalog membership before an installation can mutate backend or retained state.
-    pub(crate) fn validate_bundle(&self, bundle: &SkinBundle) -> Result<(), super::SkinInstallError> {
+    pub fn validate_bundle(&self, bundle: &SkinBundle) -> Result<(), super::SkinInstallError> {
         // Reuse the atlas's concrete typed tables. Installation is an infrequent resource operation,
         // so these owned diagnostic names need no parallel cached catalog or dependency registry.
         for (name, id) in self.atlas.clone_font_table() {

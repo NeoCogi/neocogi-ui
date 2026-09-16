@@ -17,7 +17,7 @@ use neocogi_ui_core_contracts::{AssetChrome, AssetMetrics, AssetPatch, AssetVisu
 /// Retained measurement caches compare this token rather than mirroring individual table fields.
 /// The process allocator never reuses a value, so an old cache cannot alias a later revision.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub(crate) struct SkinRevision(
+pub struct SkinRevision(
     /// Non-reused process identity private to the skin subsystem.
     crate::identity::ProcessUniqueId,
 );
@@ -45,7 +45,7 @@ pub struct Skin {
 
 impl Skin {
     /// Binds a skin to the exact canonical tables already owned by `atlas`.
-    pub(crate) fn from_atlas(atlas: AtlasHandle) -> Self {
+    pub fn from_atlas(atlas: AtlasHandle) -> Self {
         // Semantic resources were resolved while building the atlas indices, so construction adds
         // only the snapshot identity used by retained measurement caches.
         Self {
@@ -55,7 +55,7 @@ impl Skin {
     }
 
     /// Returns the opaque generation associated with this complete snapshot.
-    pub(crate) const fn revision(&self) -> SkinRevision {
+    pub const fn revision(&self) -> SkinRevision {
         self.revision
     }
 
@@ -147,26 +147,26 @@ impl Skin {
     }
 
     /// Returns normalized structural frame insets for native geometry tests.
-    #[cfg(test)]
-    pub(crate) fn frame_insets(&self) -> SliceInsets {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn frame_insets(&self) -> SliceInsets {
         self.surface(SurfaceRole::GenericFrame, SurfaceState::Normal).patch.insets.normalized()
     }
 
     /// Mutably borrows the canonical metric record in an explicitly edited test snapshot.
-    #[cfg(test)]
-    pub(crate) fn metrics_mut(&mut self) -> &mut AssetMetrics {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn metrics_mut(&mut self) -> &mut AssetMetrics {
         &mut self.atlas.tables_mut().metrics
     }
 
     /// Mutably borrows the canonical chrome policy in an explicitly edited test snapshot.
-    #[cfg(test)]
-    pub(crate) fn window_chrome_mut(&mut self) -> &mut AssetChrome {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn window_chrome_mut(&mut self) -> &mut AssetChrome {
         &mut self.atlas.tables_mut().chrome
     }
 
     /// Replaces one canonical surface record from a renderer-facing test visual.
-    #[cfg(test)]
-    pub(crate) fn set_surface(&mut self, role: SurfaceRole, state: SurfaceState, value: Visual) {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn set_surface(&mut self, role: SurfaceRole, state: SurfaceState, value: Visual) {
         let value = self.asset_visual(value);
         let values = &mut self.atlas.tables_mut().surfaces.to_mut()[role.raw() as usize];
         *match state {
@@ -176,8 +176,8 @@ impl Skin {
     }
 
     /// Replaces one canonical control record from a renderer-facing test visual.
-    #[cfg(test)]
-    pub(crate) fn set_control(&mut self, role: ControlRole, state: ControlState, value: Visual) {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn set_control(&mut self, role: ControlRole, state: ControlState, value: Visual) {
         let value = self.asset_visual(value);
         let values = &mut self.atlas.tables_mut().controls.to_mut()[role.raw() as usize];
         *match state {
@@ -188,8 +188,8 @@ impl Skin {
     }
 
     /// Replaces one canonical chrome appearance from a renderer-facing test visual.
-    #[cfg(test)]
-    pub(crate) fn set_chrome(&mut self, role: ChromeRole, state: ChromeState, value: Visual) {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn set_chrome(&mut self, role: ChromeRole, state: ChromeState, value: Visual) {
         let value = self.asset_visual(value);
         let values = &mut self.atlas.tables_mut().window_chrome.to_mut()[role.raw() as usize];
         *match state {
@@ -200,8 +200,8 @@ impl Skin {
     }
 
     /// Recompiles canonical flat appearance records for one edited test snapshot.
-    #[cfg(test)]
-    pub(crate) fn apply_flat_palette(&mut self, palette: super::FlatPalette) {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn apply_flat_palette(&mut self, palette: super::FlatPalette) {
         let insets = self.frame_insets();
         let compiled = neocogi_appearance::AppearanceTables::flat(insets, &palette);
         let tables = self.atlas.tables_mut();
@@ -224,7 +224,7 @@ impl Skin {
     }
 
     /// Converts one transient runtime visual back into the canonical test-edit record.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     fn asset_visual(&self, value: Visual) -> AssetVisual {
         use crate::render::NinePatchContent;
 
@@ -265,7 +265,7 @@ fn pointer_visual(values: neocogi_ui_core_contracts::AssetPointerVisuals, state:
 }
 
 /// Selects one mutable named pointer branch for canonical test editing.
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 fn pointer_visual_mut(values: &mut neocogi_ui_core_contracts::AssetPointerVisuals, state: PointerState) -> &mut AssetVisual {
     match state {
         PointerState::Normal => &mut values.normal,
@@ -331,13 +331,13 @@ fn color(value: u32) -> Color {
 }
 
 /// Encodes one runtime color for canonical test fixture editing.
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 fn packed_color(value: Color) -> u32 {
     u32::from_le_bytes([value.r, value.g, value.b, value.a])
 }
 
 /// Encodes one runtime flat cell for canonical test fixture editing.
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 fn packed_cell(value: NinePatchCell) -> u32 {
     match value {
         NinePatchCell::Empty => 0,

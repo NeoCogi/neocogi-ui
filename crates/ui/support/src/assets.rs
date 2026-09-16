@@ -72,10 +72,7 @@ impl ImportedAssets {
     }
 }
 
-#[cfg(test)]
-mod tests;
-
 /// Asset writers belong to test setup; deployed import never reads their pixel buffers.
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 #[path = "test_support/assets.rs"]
-pub(crate) mod fixtures;
+pub mod fixtures;

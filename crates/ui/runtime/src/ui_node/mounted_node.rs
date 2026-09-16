@@ -81,11 +81,7 @@ impl ComNode {
     /// Resolves validated COM policy into the private retained router's concrete values.
     pub(crate) fn policy(&self) -> (WidgetOption, KeyboardBehavior, crate::FrameRole) {
         let properties = self.properties;
-        let frame = FRAME_ROLES
-            .iter()
-            .find(|(role, _)| *role == properties.frame)
-            .expect("node policy is validated")
-            .1;
+        let frame = local_frame(properties.frame).expect("node policy is validated");
         (
             WidgetOption::from_bits_retain(u32::from(properties.options.raw())),
             KeyboardBehavior::from_bits_retain(properties.keyboard),
@@ -305,40 +301,7 @@ impl Drop for ComNode {
     }
 }
 
-/// One mapping serves both COM policy decoding and concrete built-in reporting.
-const FRAME_ROLES: &[(WidgetFrame, crate::FrameRole)] = &[
-    (WidgetFrame::Generic, crate::FrameRole::Surface(crate::SurfaceRole::GenericFrame)),
-    (WidgetFrame::Button, crate::FrameRole::Control(crate::ControlRole::Button)),
-    (WidgetFrame::Checkbox, crate::FrameRole::Control(crate::ControlRole::Checkbox)),
-    (WidgetFrame::TextInput, crate::FrameRole::Control(crate::ControlRole::TextInput)),
-    (WidgetFrame::Item, crate::FrameRole::Control(crate::ControlRole::Item)),
-    (WidgetFrame::Combo, crate::FrameRole::Control(crate::ControlRole::Combo)),
-    (WidgetFrame::SliderTrack, crate::FrameRole::Control(crate::ControlRole::SliderTrack)),
-    (WidgetFrame::SliderThumb, crate::FrameRole::Control(crate::ControlRole::SliderThumb)),
-    (WidgetFrame::ScrollbarTrack, crate::FrameRole::Control(crate::ControlRole::ScrollbarTrack)),
-    (WidgetFrame::ScrollbarThumb, crate::FrameRole::Control(crate::ControlRole::ScrollbarThumb)),
-    (WidgetFrame::CloseButton, crate::FrameRole::Control(crate::ControlRole::CloseButton)),
-    (WidgetFrame::MinimizeButton, crate::FrameRole::Control(crate::ControlRole::MinimizeButton)),
-    (WidgetFrame::MaximizeButton, crate::FrameRole::Control(crate::ControlRole::MaximizeButton)),
-    (WidgetFrame::RestoreButton, crate::FrameRole::Control(crate::ControlRole::RestoreButton)),
-    (WidgetFrame::ResizeGrip, crate::FrameRole::Control(crate::ControlRole::ResizeGrip)),
-    (WidgetFrame::Window, crate::FrameRole::Surface(crate::SurfaceRole::Window)),
-    (WidgetFrame::Panel, crate::FrameRole::Surface(crate::SurfaceRole::Panel)),
-];
-
-/// Encodes the exact built-in frame family without collapsing input or item roles.
-pub(crate) fn frame_contract(role: crate::FrameRole) -> WidgetFrame {
-    FRAME_ROLES.iter().find(|(_, value)| *value == role).expect("all frame roles are represented").0
-}
-
-/// Decodes a validated semantic frame role for runtime-owned paint resolution.
-pub(crate) fn local_frame(role: WidgetFrame) -> Result<crate::FrameRole, NcStatus> {
-    FRAME_ROLES
-        .iter()
-        .find(|(contract, _)| *contract == role)
-        .map(|(_, local)| *local)
-        .ok_or(NC_E_INVALID_ARG)
-}
+pub(crate) use neocogi_ui_support::frame::{frame_contract, local_frame};
 
 impl ComNode {
     /// Visits branch storage under its transaction; leaves have an empty sequence.

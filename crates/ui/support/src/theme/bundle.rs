@@ -13,7 +13,7 @@ use super::Skin;
 
 /// Failure to install a bundle without invalidating the original application catalog.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum SkinInstallError {
+pub enum SkinInstallError {
     /// The candidate omits a logical font from the original application catalog.
     MissingFont {
         /// Catalog spelling retained only for actionable diagnostics.
@@ -43,14 +43,14 @@ pub struct SkinBundle {
 
 impl SkinBundle {
     /// Publishes an already complete skin as one cache revision.
-    pub(crate) fn from_skin(mut skin: Skin) -> Self {
+    pub fn from_skin(mut skin: Skin) -> Self {
         skin.refresh_revision();
         Self { skin }
     }
 
     /// Builds a canonical skin view for an atlas and publishes it atomically.
-    #[cfg(test)]
-    pub(crate) fn from_atlas(atlas: AtlasHandle) -> Self {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn from_atlas(atlas: AtlasHandle) -> Self {
         Self::from_skin(Skin::from_atlas(atlas))
     }
 

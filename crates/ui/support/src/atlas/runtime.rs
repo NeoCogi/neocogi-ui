@@ -88,14 +88,14 @@ impl AtlasHandle {
             white_icon,
             font_roles,
             icon_roles,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "test-support"))]
             pixels: Vec::new(),
         })))
     }
 
     /// Installs exact fixture pixels after canonical validation and index construction.
-    #[cfg(test)]
-    pub(crate) fn from_validated_data(data: neocogi_ui::assets::AssetData, previous: Option<&Self>) -> Result<Self, NcStatus> {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn from_validated_data(data: neocogi_ui::assets::AssetData, previous: Option<&Self>) -> Result<Self, NcStatus> {
         // Tests deliberately cross the same canonical validator as a published bundle. The direct
         // constructor avoids an export/import cycle while retaining pixels needed by test sources.
         data.validate()?;
@@ -116,19 +116,19 @@ impl AtlasHandle {
     }
 
     /// Borrows fixture RGBA bytes for direct publication by test infrastructure.
-    #[cfg(test)]
-    pub(crate) fn pixels(&self) -> &[u8] {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn pixels(&self) -> &[u8] {
         &self.0.pixels
     }
 
     /// Borrows the one canonical resource and appearance snapshot.
-    pub(crate) fn tables(&self) -> &AssetTables {
+    pub fn tables(&self) -> &AssetTables {
         &self.0.tables
     }
 
     /// Mutably borrows canonical fixture tables after detaching a shared test snapshot.
-    #[cfg(test)]
-    pub(crate) fn tables_mut(&mut self) -> &mut AssetTables {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn tables_mut(&mut self) -> &mut AssetTables {
         // Copy-on-write is confined to explicit test style editing. Production revisions arrive as
         // new immutable bundles and never require interior mutability or parallel native records.
         &mut Rc::make_mut(&mut self.0).tables
@@ -192,24 +192,24 @@ impl AtlasHandle {
     }
 
     /// Returns the exact bundle-local slot for an authenticated font identity.
-    pub(crate) fn font_index(&self, font: FontId) -> u32 {
+    pub fn font_index(&self, font: FontId) -> u32 {
         let slot = self.font_slot(font);
         u32::try_from(slot).expect("validated asset font count fits u32")
     }
 
     /// Returns the exact bundle-local slot for an authenticated icon identity.
-    pub(crate) fn icon_index(&self, icon: IconId) -> u32 {
+    pub fn icon_index(&self, icon: IconId) -> u32 {
         let slot = self.icon_slot(icon);
         u32::try_from(slot).expect("validated asset icon count fits u32")
     }
 
     /// Resolves one checked bundle-local font slot for scoped semantic painting.
-    pub(crate) fn font_at_index(&self, index: u32) -> Option<FontId> {
+    pub fn font_at_index(&self, index: u32) -> Option<FontId> {
         self.0.font_ids.get(index as usize).copied()
     }
 
     /// Resolves one checked bundle-local icon slot for scoped semantic painting.
-    pub(crate) fn icon_at_index(&self, index: u32) -> Option<IconId> {
+    pub fn icon_at_index(&self, index: u32) -> Option<IconId> {
         self.0.icon_ids.get(index as usize).copied()
     }
 

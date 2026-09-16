@@ -89,7 +89,7 @@ pub enum UiInputEvent {
 
 impl UiInputEvent {
     /// Returns the pointer position carried by this event, when it belongs to pointer routing.
-    pub(crate) fn position(&self) -> Option<Vec2i> {
+    pub fn position(&self) -> Option<Vec2i> {
         match self {
             Self::MouseMove { pos, .. } | Self::MouseDrag { pos, .. } | Self::MouseDown { pos, .. } | Self::MouseUp { pos, .. } | Self::Scroll { pos, .. } => {
                 Some(*pos)
@@ -99,7 +99,7 @@ impl UiInputEvent {
     }
 
     /// Returns whether this event belongs to pointer routing.
-    pub(crate) fn is_pointer(&self) -> bool {
+    pub fn is_pointer(&self) -> bool {
         matches!(
             self,
             Self::MouseMove { .. } | Self::MouseDrag { .. } | Self::MouseDown { .. } | Self::MouseUp { .. } | Self::Scroll { .. }
@@ -107,12 +107,12 @@ impl UiInputEvent {
     }
 
     /// Returns whether this event should be delivered to the focused node.
-    pub(crate) fn is_focus_input(&self) -> bool {
+    pub fn is_focus_input(&self) -> bool {
         matches!(self, Self::Key { .. } | Self::Text { .. })
     }
 
     /// Returns whether this event ends an active pointer capture when no buttons remain held.
-    pub(crate) fn is_pointer_release(&self) -> bool {
+    pub fn is_pointer_release(&self) -> bool {
         matches!(self, Self::MouseUp { .. })
     }
 }

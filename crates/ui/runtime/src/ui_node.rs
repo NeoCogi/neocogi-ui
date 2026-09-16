@@ -58,8 +58,8 @@
 //! projections, semantic state, and native algorithm all live in that same family file; the
 //! shared object projections and retained services live beside the node model that owns them.
 pub(crate) mod child_store;
-pub(crate) mod frame;
-mod input;
+pub(crate) use neocogi_ui_support::{frame, layout, text_layout, widget_context};
+pub use neocogi_ui_support::UiInputEvent;
 pub(crate) mod input_contract;
 pub(crate) mod layout_service;
 pub(crate) mod mounted_node;
@@ -67,13 +67,9 @@ pub(crate) mod node_factory;
 pub(crate) mod paint_service;
 pub(crate) mod widget_host;
 pub(crate) mod widget_object;
-pub use input::UiInputEvent;
-pub mod layout;
 pub use layout::{AvailableSpace, Constraints, TrackSize};
-pub(crate) mod text_layout;
 pub use text_layout::TextWrap;
-mod widget;
-mod widget_context;
+use neocogi_ui_support::widget;
 pub use widget::{Change, KeyboardAction, KeyboardBehavior, LeafWidget, Widget, WidgetFillOption, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx};
 pub mod widgets;
 pub use widgets::{ScrollbarAxis, ScrollbarParameters};

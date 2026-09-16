@@ -28,25 +28,28 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 
+//! Pure frame geometry and scoped recording, with no retained node or root ownership.
 use crate::render::Painter;
 use crate::{AvailableSpace, Constraints, ControlState, Dimensioni, FrameRole, NinePatch, Recti, SliceInsets, Skin, SurfaceState, Visual};
 
 /// Geometry derived from one authoritative outer allocation.
 #[derive(Copy, Clone, Debug)]
-pub(crate) struct FrameGeometry {
-    pub(crate) outer: Recti,
-    pub(crate) content: Option<Recti>,
+pub struct FrameGeometry {
+    /// Exact caller-owned outer border box in the caller's coordinate system.
+    pub outer: Recti,
+    /// Positive content box after insets, or no drawable content when the frame consumes it.
+    pub content: Option<Recti>,
 }
 
 impl FrameGeometry {
     /// Returns a non-negative rectangle suitable for layout/traversal when no content survives.
-    pub(crate) fn content_or_empty(self) -> Recti {
+    pub fn content_or_empty(self) -> Recti {
         self.content.unwrap_or_else(|| Recti::new(self.outer.x, self.outer.y, 0, 0))
     }
 }
 
 /// Resolves the border box and its derived content rectangle.
-pub(crate) fn frame_geometry(outer: Recti, role: Option<FrameRole>, style: &Skin) -> FrameGeometry {
+pub fn frame_geometry(outer: Recti, role: Option<FrameRole>, style: &Skin) -> FrameGeometry {
     // A non-framed node uses zero insets. A framed node uses its semantic normal-state geometry;
     // every interaction state for one role is required to preserve those destination insets.
     let insets = role
@@ -56,7 +59,7 @@ pub(crate) fn frame_geometry(outer: Recti, role: Option<FrameRole>, style: &Skin
 }
 
 /// Resolves one node frame from its deliberately limited surface-or-control role.
-pub(crate) fn frame_visual(style: &Skin, role: FrameRole, control_state: ControlState) -> Visual {
+pub fn frame_visual(style: &Skin, role: FrameRole, control_state: ControlState) -> Visual {
     match role {
         FrameRole::Surface(role) => {
             // Structural surfaces inherit only availability from the surrounding control state.
@@ -68,7 +71,7 @@ pub(crate) fn frame_visual(style: &Skin, role: FrameRole, control_state: Control
 }
 
 /// Resolves the stable state used for frame geometry during measurement and placement.
-pub(crate) fn normal_frame_visual(style: &Skin, role: FrameRole) -> Visual {
+pub fn normal_frame_visual(style: &Skin, role: FrameRole) -> Visual {
     match role {
         FrameRole::Surface(role) => style.surface(role, SurfaceState::Normal),
         FrameRole::Control(role) => style.control(role, ControlState::Enabled(crate::PointerState::Normal)),
@@ -76,7 +79,7 @@ pub(crate) fn normal_frame_visual(style: &Skin, role: FrameRole) -> Visual {
 }
 
 /// Resolves a border box using structural insets supplied independently from appearance artwork.
-pub(crate) fn frame_geometry_with_insets(outer: Recti, insets: SliceInsets) -> FrameGeometry {
+pub fn frame_geometry_with_insets(outer: Recti, insets: SliceInsets) -> FrameGeometry {
     // Window chrome uses this path because its fixed corner artwork may extend much farther along
     // an edge than the narrow client inset represented by that edge's real border thickness.
     let insets = insets.normalized();
@@ -91,7 +94,7 @@ pub(crate) fn frame_geometry_with_insets(outer: Recti, insets: SliceInsets) -> F
 }
 
 /// Reconstructs a framed outer rectangle from one known content rectangle and matching insets.
-pub(crate) fn outer_from_content(content: Recti, insets: SliceInsets) -> Recti {
+pub fn outer_from_content(content: Recti, insets: SliceInsets) -> Recti {
     // This is the exact inverse of `checked_inset` for a valid content rectangle. Saturation keeps
     // the operation total at coordinate limits while ordinary layout values round-trip exactly.
     let insets = insets.normalized();
@@ -104,7 +107,7 @@ pub(crate) fn outer_from_content(content: Recti, insets: SliceInsets) -> Recti {
 }
 
 /// Removes a frame from each finite measurement bound while preserving unbounded axes.
-pub(crate) fn content_constraints(constraints: Constraints, insets: SliceInsets) -> Constraints {
+pub fn content_constraints(constraints: Constraints, insets: SliceInsets) -> Constraints {
     // Each axis removes its independently configured pair of patch cells. Unbounded space stays
     // unbounded because a finite frame cannot constrain an intrinsically open measurement axis.
     Constraints::new(
@@ -114,7 +117,7 @@ pub(crate) fn content_constraints(constraints: Constraints, insets: SliceInsets)
 }
 
 /// Adds a resolved frame to positive preferred content dimensions.
-pub(crate) fn outer_preferred(preferred: Dimensioni, insets: SliceInsets) -> Dimensioni {
+pub fn outer_preferred(preferred: Dimensioni, insets: SliceInsets) -> Dimensioni {
     // Positive content receives both fixed patch sides on each axis. Non-positive sentinel
     // dimensions retain their established meaning instead of becoming visible solely due to chrome.
     Dimensioni::new(
@@ -124,7 +127,7 @@ pub(crate) fn outer_preferred(preferred: Dimensioni, insets: SliceInsets) -> Dim
 }
 
 /// Paints a checked inside-aligned internal frame and returns its usable interior.
-pub(crate) fn paint_internal_frame(painter: &mut Painter<'_>, outer: Recti, patch: NinePatch) -> Option<Recti> {
+pub fn paint_internal_frame(painter: &mut Painter<'_>, outer: Recti, patch: NinePatch) -> Option<Recti> {
     // Invalid outer geometry produces neither layout content nor paint. Positive rectangles share
     // the same normalized inset calculation used by node layout before one compact patch record.
     if outer.width <= 0 || outer.height <= 0 {
@@ -377,4 +380,90 @@ mod tests {
             crate::NinePatchCell::Color { color } => Some(color),
         }
     }
+}
+
+/// One mapping serves both COM policy decoding and concrete built-in reporting.
+pub(crate) const FRAME_ROLES: &[(neocogi_ui_core_contracts::WidgetFrame, crate::FrameRole)] = &[
+    (
+        neocogi_ui_core_contracts::WidgetFrame::Generic,
+        crate::FrameRole::Surface(crate::SurfaceRole::GenericFrame),
+    ),
+    (
+        neocogi_ui_core_contracts::WidgetFrame::Button,
+        crate::FrameRole::Control(crate::ControlRole::Button),
+    ),
+    (
+        neocogi_ui_core_contracts::WidgetFrame::Checkbox,
+        crate::FrameRole::Control(crate::ControlRole::Checkbox),
+    ),
+    (
+        neocogi_ui_core_contracts::WidgetFrame::TextInput,
+        crate::FrameRole::Control(crate::ControlRole::TextInput),
+    ),
+    (
+        neocogi_ui_core_contracts::WidgetFrame::Item,
+        crate::FrameRole::Control(crate::ControlRole::Item),
+    ),
+    (
+        neocogi_ui_core_contracts::WidgetFrame::Combo,
+        crate::FrameRole::Control(crate::ControlRole::Combo),
+    ),
+    (
+        neocogi_ui_core_contracts::WidgetFrame::SliderTrack,
+        crate::FrameRole::Control(crate::ControlRole::SliderTrack),
+    ),
+    (
+        neocogi_ui_core_contracts::WidgetFrame::SliderThumb,
+        crate::FrameRole::Control(crate::ControlRole::SliderThumb),
+    ),
+    (
+        neocogi_ui_core_contracts::WidgetFrame::ScrollbarTrack,
+        crate::FrameRole::Control(crate::ControlRole::ScrollbarTrack),
+    ),
+    (
+        neocogi_ui_core_contracts::WidgetFrame::ScrollbarThumb,
+        crate::FrameRole::Control(crate::ControlRole::ScrollbarThumb),
+    ),
+    (
+        neocogi_ui_core_contracts::WidgetFrame::CloseButton,
+        crate::FrameRole::Control(crate::ControlRole::CloseButton),
+    ),
+    (
+        neocogi_ui_core_contracts::WidgetFrame::MinimizeButton,
+        crate::FrameRole::Control(crate::ControlRole::MinimizeButton),
+    ),
+    (
+        neocogi_ui_core_contracts::WidgetFrame::MaximizeButton,
+        crate::FrameRole::Control(crate::ControlRole::MaximizeButton),
+    ),
+    (
+        neocogi_ui_core_contracts::WidgetFrame::RestoreButton,
+        crate::FrameRole::Control(crate::ControlRole::RestoreButton),
+    ),
+    (
+        neocogi_ui_core_contracts::WidgetFrame::ResizeGrip,
+        crate::FrameRole::Control(crate::ControlRole::ResizeGrip),
+    ),
+    (
+        neocogi_ui_core_contracts::WidgetFrame::Window,
+        crate::FrameRole::Surface(crate::SurfaceRole::Window),
+    ),
+    (
+        neocogi_ui_core_contracts::WidgetFrame::Panel,
+        crate::FrameRole::Surface(crate::SurfaceRole::Panel),
+    ),
+];
+
+/// Encodes the exact built-in frame family without collapsing input or item roles.
+pub fn frame_contract(role: crate::FrameRole) -> neocogi_ui_core_contracts::WidgetFrame {
+    FRAME_ROLES.iter().find(|(_, value)| *value == role).expect("all frame roles are represented").0
+}
+
+/// Decodes a validated semantic frame role for runtime-owned paint resolution.
+pub fn local_frame(role: neocogi_ui_core_contracts::WidgetFrame) -> Result<crate::FrameRole, neocogi_com::NcStatus> {
+    FRAME_ROLES
+        .iter()
+        .find(|(contract, _)| *contract == role)
+        .map(|(_, local)| *local)
+        .ok_or(neocogi_com::NC_E_INVALID_ARG)
 }

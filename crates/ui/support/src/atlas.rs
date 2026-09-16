@@ -116,7 +116,7 @@ struct Atlas {
     /// Icon identities resolved once for the dense semantic role domain.
     icon_roles: [IconId; IconRole::COUNT],
     /// RGBA bytes retained only by direct algorithm fixtures that must publish a source bundle.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pixels: Vec<u8>,
 }
 

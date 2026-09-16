@@ -1,0 +1,26 @@
+[package]
+name = "neocogi-ui-support"
+version = "0.9.0-alpha.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Non-deployable resource and presentation helpers shared by UI providers"
+
+[features]
+default = []
+# Fixtures supply canonical assets and phase snapshots without replacing runtime behavior.
+test-support = ["dep:neocogi-appearance"]
+
+[dependencies]
+neocogi-appearance = { workspace = true, optional = true }
+neocogi-ui.workspace = true
+neocogi-ui-core-contracts.workspace = true
+neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
+neocogi-render-core.workspace = true
+bitflags.workspace = true
+rs-math3d.workspace = true
+
+[dev-dependencies]
+neocogi-appearance.workspace = true
+neocogi-com = { workspace = true, features = ["static-runtime"] }

@@ -7,7 +7,7 @@ use neocogi_ui_core_contracts::Rect;
 use neocogi_com::{NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
 
 /// Validates a whole UTF-8 replacement before touching any live object state.
-pub(crate) fn text(input: NcCopyFromBufferOffset<'_, u8>) -> Result<&str, NcStatus> {
+pub fn text(input: NcCopyFromBufferOffset<'_, u8>) -> Result<&str, NcStatus> {
     if input.offset() != 0 {
         return Err(NC_E_INVALID_ARG);
     }
@@ -15,12 +15,12 @@ pub(crate) fn text(input: NcCopyFromBufferOffset<'_, u8>) -> Result<&str, NcStat
 }
 
 /// Copies canonical ABI geometry into the implementation's concrete math type.
-pub(crate) fn local_rect(rect: Rect) -> crate::Recti {
+pub fn local_rect(rect: Rect) -> crate::Recti {
     crate::rect(rect.x, rect.y, rect.width, rect.height)
 }
 
 /// Copies legacy geometry without passing a foreign crate's Rust type through COM.
-pub(crate) fn copied_rect(rect: crate::Recti) -> Rect {
+pub fn copied_rect(rect: crate::Recti) -> Rect {
     Rect {
         x: rect.x,
         y: rect.y,

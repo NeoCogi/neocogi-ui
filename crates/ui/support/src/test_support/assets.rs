@@ -5,7 +5,7 @@ use neocogi_ui_core_contracts::IAssetBundleAbi;
 use neocogi_com::{ComPtr, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG};
 
 /// Copies pixels explicitly for a fixture revision instead of adding transfers to runtime import.
-pub(crate) fn export_imported_data(imported: &ImportedAssets, bundle: &SkinBundle) -> Result<neocogi_ui::assets::AssetData, NcStatus> {
+pub fn export_imported_data(imported: &ImportedAssets, bundle: &SkinBundle) -> Result<neocogi_ui::assets::AssetData, NcStatus> {
     let mut data = export_bundle_data(bundle)?;
     let mut pixels = vec![0; imported.source().info()?.rgba_bytes()?];
     imported.image().pixels(NcCopyToBufferOffset::new(0, &mut pixels))?;
@@ -15,7 +15,7 @@ pub(crate) fn export_imported_data(imported: &ImportedAssets, bundle: &SkinBundl
 
 impl ImportedAssets {
     /// Exports a locally derived bundle with the same authenticated catalog namespace.
-    pub(crate) fn export_derived(&self, bundle: &SkinBundle) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
+    pub fn export_derived(&self, bundle: &SkinBundle) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         ResourceCatalog::new(self.original.clone())
             .validate_bundle(bundle)
             .map_err(|_| NC_E_INVALID_ARG)?;
@@ -24,12 +24,12 @@ impl ImportedAssets {
 }
 
 /// Exports a validated native bundle into a fresh logical catalog, with no parser dependency.
-pub(crate) fn export_bundle(bundle: &SkinBundle) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
+pub fn export_bundle(bundle: &SkinBundle) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
     export_bundle_data(bundle)?.into_bundle()
 }
 
 /// Produces the same concrete tables consumed by generated prebuilt source and runtime providers.
-pub(crate) fn export_bundle_data(bundle: &SkinBundle) -> Result<neocogi_ui::assets::AssetData, NcStatus> {
+pub fn export_bundle_data(bundle: &SkinBundle) -> Result<neocogi_ui::assets::AssetData, NcStatus> {
     let atlas = bundle.atlas();
     // Test publication copies the already canonical snapshot. It never reconstructs portable
     // tables from a UI-specific atlas or appearance model, because neither model exists anymore.

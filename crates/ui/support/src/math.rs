@@ -33,14 +33,14 @@
 use rs_math3d::{Recti, Vec2f, Vec2i};
 
 /// Clamps one wider geometry calculation into the crate's signed coordinate domain.
-pub(crate) fn clamp_i64_to_i32(value: i64) -> i32 {
+pub fn clamp_i64_to_i32(value: i64) -> i32 {
     // Multi-term expressions should retain cancellation in i64 and narrow exactly once at the
     // Recti/Vec2i boundary. A cast would wrap values outside the destination range.
     value.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
 }
 
 /// Internal rectangle operations not yet supplied by `rs-math3d`.
-pub(crate) trait RectExt: Sized {
+pub trait RectExt: Sized {
     /// Expands the rectangle uniformly on all sides with saturated coordinates and extents.
     fn expanded(self, amount: i32) -> Self;
 

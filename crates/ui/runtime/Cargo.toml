@@ -16,6 +16,7 @@ name = "neocogi_ui_runtime"
 crate-type = ["rlib"]
 
 [dependencies]
+neocogi-ui-support.workspace = true
 # Standard plugin-owned compositions reuse the static typed clients and owned event adapter.
 neocogi-ui.workspace = true
 neocogi-ui-core-contracts.workspace = true
@@ -29,6 +30,7 @@ bitflags.workspace = true
 rs-math3d.workspace = true
 
 [dev-dependencies]
+neocogi-ui-support = { workspace = true, features = ["test-support"] }
 neocogi-appearance.workspace = true
 neocogi-com = { workspace = true, features = ["static-runtime"] }
 neocogi-demo-assets = { workspace = true, features = ["embed-assets"] }

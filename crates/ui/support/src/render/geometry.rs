@@ -30,7 +30,7 @@
 //! Stateless vertex construction, tessellation, bounds, translation, and final triangle clipping.
 
 /// Sentinel clip rectangle used when command recording starts without a root clip.
-pub(crate) static UNCLIPPED_RECT: Recti = Recti {
+pub static UNCLIPPED_RECT: Recti = Recti {
     x: 0,
     y: 0,
     width: i32::MAX,
@@ -40,26 +40,26 @@ use rs_math3d::{Color4b, FloatVector, Recti, Vec2f};
 use std::ops::Range;
 
 /// Floating-point tolerance shared by tessellation and clipping predicates.
-pub(crate) const GEOM_EPS: f32 = 1.0e-5;
+pub const GEOM_EPS: f32 = 1.0e-5;
 /// Squared tolerance used for duplicate-position checks.
 const GEOM_EPS_SQ: f32 = GEOM_EPS * GEOM_EPS;
 
 /// Texture-independent vertex used by solid geometry.
 #[derive(Clone, Copy)]
-pub(crate) struct SolidVertex {
+pub struct SolidVertex {
     /// Screen-space position.
-    pub(crate) position: Vec2f,
+    pub position: Vec2f,
     /// Interpolated vertex color.
-    pub(crate) color: Color4b,
+    pub color: Color4b,
 }
 
 /// Strongly typed, texture-independent solid triangle.
 #[derive(Clone, Copy)]
-pub(crate) struct SolidTriangle([SolidVertex; 3]);
+pub struct SolidTriangle([SolidVertex; 3]);
 
 impl SolidTriangle {
     /// Creates a triangle from three positions sharing one color.
-    pub(crate) const fn new(positions: [Vec2f; 3], color: Color4b) -> Self {
+    pub const fn new(positions: [Vec2f; 3], color: Color4b) -> Self {
         Self([
             SolidVertex { position: positions[0], color },
             SolidVertex { position: positions[1], color },
@@ -68,7 +68,7 @@ impl SolidTriangle {
     }
 
     /// Returns the triangle's three vertices in winding order.
-    pub(crate) const fn vertices(&self) -> &[SolidVertex; 3] {
+    pub const fn vertices(&self) -> &[SolidVertex; 3] {
         &self.0
     }
 
@@ -89,7 +89,7 @@ impl From<[SolidVertex; 3]> for SolidTriangle {
 }
 
 /// Validated range inside a [`SolidGeometry`] triangle arena.
-pub(crate) struct SolidTriangleRange {
+pub struct SolidTriangleRange {
     /// Inclusive triangle index.
     start: usize,
     /// Exclusive triangle index.
@@ -103,12 +103,12 @@ impl SolidTriangleRange {
     }
 
     /// Returns a standard range for read-only execution.
-    pub(crate) fn as_range(&self) -> Range<usize> {
+    pub fn as_range(&self) -> Range<usize> {
         self.start..self.end
     }
 
     /// Extends this range over an immediately adjacent range.
-    pub(crate) fn extend(&mut self, next: &Self) -> bool {
+    pub fn extend(&mut self, next: &Self) -> bool {
         if self.end != next.start {
             return false;
         }
@@ -119,7 +119,7 @@ impl SolidTriangleRange {
 
 /// Retained solid-triangle arena with reusable polygon tessellation storage.
 #[derive(Default)]
-pub(crate) struct SolidGeometry {
+pub struct SolidGeometry {
     /// Screen-space triangles referenced by validated ranges.
     triangles: Vec<SolidTriangle>,
     /// Active polygon boundary reused by simplification and ear clipping.
@@ -128,7 +128,7 @@ pub(crate) struct SolidGeometry {
 
 impl SolidGeometry {
     /// Creates empty solid geometry.
-    pub(crate) const fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             triangles: Vec::new(),
             polygon_boundary: Vec::new(),
@@ -136,24 +136,24 @@ impl SolidGeometry {
     }
 
     /// Clears retained and working geometry while preserving allocations.
-    pub(crate) fn clear(&mut self) {
+    pub fn clear(&mut self) {
         self.triangles.clear();
         self.polygon_boundary.clear();
     }
 
     /// Returns whether no solid triangles are retained.
-    #[cfg(test)]
-    pub(crate) fn is_empty(&self) -> bool {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn is_empty(&self) -> bool {
         self.triangles.is_empty()
     }
 
     /// Returns all retained solid triangles.
-    pub(crate) fn triangles(&self) -> &[SolidTriangle] {
+    pub fn triangles(&self) -> &[SolidTriangle] {
         &self.triangles
     }
 
     /// Appends pre-tessellated triangles after applying a screen-space offset.
-    pub(crate) fn append_triangles(&mut self, triangles: &[SolidTriangle], offset: Vec2f) -> Option<SolidTriangleRange> {
+    pub fn append_triangles(&mut self, triangles: &[SolidTriangle], offset: Vec2f) -> Option<SolidTriangleRange> {
         let start = self.triangles.len();
         self.triangles.reserve(triangles.len());
         for triangle in triangles {
@@ -163,7 +163,7 @@ impl SolidGeometry {
     }
 
     /// Tessellates and appends one thick line.
-    pub(crate) fn append_line(&mut self, from: Vec2f, to: Vec2f, width: f32, color: Color4b, offset: Vec2f) -> Option<SolidTriangleRange> {
+    pub fn append_line(&mut self, from: Vec2f, to: Vec2f, width: f32, color: Color4b, offset: Vec2f) -> Option<SolidTriangleRange> {
         let triangles = Self::line_triangles(from, to, width, color)?;
         self.append_triangles(&triangles, offset)
     }
@@ -173,7 +173,7 @@ impl SolidGeometry {
     /// Convex polygons use a triangle fan. Concave polygons use ear clipping against the reusable
     /// `polygon_boundary` workspace. Both paths append strongly typed triangles directly, so no
     /// flat triangle-position buffer escapes this object.
-    pub(crate) fn append_polygon(&mut self, points: &[Vec2f], color: Color4b, offset: Vec2f) -> Option<SolidTriangleRange> {
+    pub fn append_polygon(&mut self, points: &[Vec2f], color: Color4b, offset: Vec2f) -> Option<SolidTriangleRange> {
         self.append_polygon_points(points.iter().copied(), color, offset)
     }
 
@@ -181,7 +181,7 @@ impl SolidGeometry {
     ///
     /// COM points can therefore enter the retained tessellation workspace directly instead of
     /// allocating a temporary vector merely to change between equivalent coordinate structs.
-    pub(crate) fn append_polygon_points(&mut self, points: impl ExactSizeIterator<Item = Vec2f>, color: Color4b, offset: Vec2f) -> Option<SolidTriangleRange> {
+    pub fn append_polygon_points(&mut self, points: impl ExactSizeIterator<Item = Vec2f>, color: Color4b, offset: Vec2f) -> Option<SolidTriangleRange> {
         let start = self.triangles.len();
         if points.len() < 3 || !self.prepare_polygon(points) {
             return None;
@@ -357,19 +357,19 @@ impl SolidGeometry {
 
     #[cfg(test)]
     /// Returns retained triangle allocation capacity.
-    pub(crate) fn triangle_capacity(&self) -> usize {
+    pub fn triangle_capacity(&self) -> usize {
         self.triangles.capacity()
     }
 
     #[cfg(test)]
     /// Returns polygon workspace allocation capacity.
-    pub(crate) fn polygon_capacity(&self) -> usize {
+    pub fn polygon_capacity(&self) -> usize {
         self.polygon_boundary.capacity()
     }
 
     #[cfg(test)]
     /// Reserves polygon workspace for allocation-reuse tests.
-    pub(crate) fn reserve_polygon_capacity(&mut self, additional: usize) {
+    pub fn reserve_polygon_capacity(&mut self, additional: usize) {
         self.polygon_boundary.reserve(additional);
     }
 }

@@ -103,22 +103,20 @@ mod guide_doctests {
     mod widgets {}
 }
 
-pub mod assets;
-pub mod atlas;
-mod boundary;
+pub use neocogi_ui_support::{assets, atlas, boundary, image, math, theme};
+#[cfg(test)]
+#[path = "assets/tests.rs"]
+mod asset_tests;
 mod choice_menu;
 mod dialogs;
-mod identity;
-pub mod image;
+use neocogi_ui_support::identity;
 mod input;
-mod math;
 mod menu;
 pub mod render;
 mod runtime;
 mod runtime_context;
 #[cfg(test)]
 mod test_support;
-pub mod theme;
 mod ui_node;
 pub(crate) use ui_node::widgets;
 mod ui_factory;
@@ -175,7 +173,7 @@ pub(crate) use rs_math3d::{
     Box3f, Color4b, CrossProduct, Dimension, Dimensioni, FloatVector, Mat4f, Quat, Quatf, Rect, Recti, Vec2f, Vec2i, Vec3f, Vec4f, Vector, Vector3, color4b,
     ortho4,
 };
-pub(crate) use std::{cmp::max, hash::Hash, rc::Rc};
+pub(crate) use std::hash::Hash;
 pub(crate) use render::geometry::UNCLIPPED_RECT;
 pub(crate) use ui_node::UiRuntime;
 pub use runtime::{Runtime, create_runtime_from_assets};
