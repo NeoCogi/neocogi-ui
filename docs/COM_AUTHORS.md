@@ -83,18 +83,23 @@ through the borrowed `EventDispatchSource` capability; the host does not need
 to know the application's `State` type. Both adapters own the concrete application
 state and one registration sequence. Each handler is an owned
 `EventHandler<State, Event>` implementation stored inline in a local generic COM
-sink. The approved `FnMut(&mut State, &Event) -> Result<(), NcStatus>` convenience
+sink. The local `FnMut(&mut State, &Event) -> Result<(), NcStatus>` convenience
 implements that same trait; captures and Rust state never cross the ABI. Generic
 Rust list data also stays in the application; cross-plugin domain data needs a
 concrete domain interface and owner-scoped keys.
 
 ```rust
-use neocogi_ui::{Button, EventHandler, EventSession};
+use neocogi_ui::{ButtonWidget, EventHandler, EventSession};
 use neocogi_com::NcStatus;
 use neocogi_ui::events::Activation;
 
-struct Submitted { button: Button }
+/// Submission behavior with an explicitly named widget dependency.
+struct Submitted {
+    /// Owned button capability updated after each delivered activation.
+    button: ButtonWidget,
+}
 impl EventHandler<u32, Activation> for Submitted {
+    /// Updates local state and the concrete control from the captured label.
     fn handle(&mut self, count: &mut u32, event: &Activation) -> Result<(), NcStatus> {
         *count += 1;
         // The event owns the label captured at activation, even after this setter.
@@ -139,6 +144,33 @@ generated owned payload and adapter, and implement only the producer's typed
 port body. A checked generated connector can run a concrete semantic validator
 on the decoded payload before taking an application-state borrow. Keep such
 domain predicates in their contract/facade layer, not in generic COM transport.
+
+Subscription setup uses `EventConnector<State, Handler>`, not an `FnOnce`
+registration closure. Each declared source port generates a private operation
+with an explicitly borrowed source projection and optional capture-free validator
+in named fields. Public generated `connect_*` helpers supply that operation to
+`session.register(handler, connector)`; applications continue using the same
+`subscribe_*` facade methods. No handwritten connector or COM sink is required
+for a declared NCIDL event port, including a custom plugin family.
+
+The session claims its ordered lease transaction before invoking the consumed
+connector's `connect(self, session, handler)` method. The operation constructs
+the concrete sink and calls the exact foreign source port within that boundary.
+Failure restores the previous registration sequence and releases uncommitted
+local sink/handler ownership; success retains only the returned lease. Neither
+the operation nor its borrowed source is stored for subsequent dispatch. A custom
+native connection operation may implement the same trait, but must release any
+uncommitted connection before returning an error. Keep the transaction private
+to the session: subscribing first and retaining a lease afterward does not provide
+the same registration-reentry guarantees.
+
+Compiler-generated bindings and `neocogi-com-events` use Rust event-support
+protocol version 2 and enforce agreement at compile time. This is independent
+of the NCIDL wire ABI: the connector change does not change event declarations,
+contract fingerprints, COM sink/lease methods, or runtime dispatch ordering.
+Handler `FnMut` convenience and validator function-pointer APIs remain separate
+from this consumed setup operation.
+
 Commit semantic state, then
 call `emit` with its owned snapshot. Implement the event capability by returning
 `source.subscribe(sink)`, and close ordinary sources when the widget logically closes.

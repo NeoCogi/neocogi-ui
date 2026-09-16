@@ -3,6 +3,9 @@
 //! A session owns its state and leases; producer queues own only immutable event
 //! snapshots. The runtime borrows the dispatcher while returning its context
 //! between input phases, so handlers can use ordinary widget/window methods.
+//! Subscription helpers delegate to generated, consumed `EventConnector` types;
+//! the generic COM session claims registration before sink construction or a
+//! foreign subscription call. The source-specific operation is not a delivery callback.
 //!
 //! ```no_run
 //! use neocogi_ui::{ButtonWidget, EventHandler, EventSession, Size, Ui};

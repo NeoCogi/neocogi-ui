@@ -93,6 +93,8 @@ mod guide_doctests {
     mod backends {}
     #[doc = include_str!("../docs/LAYOUT.md")]
     mod layout {}
+    #[doc = include_str!("../docs/EVENTS.md")]
+    mod events {}
     #[doc = include_str!("../docs/MENUS.md")]
     mod menus {}
     #[doc = include_str!("../docs/SKINNING.md")]

@@ -33,6 +33,19 @@ Each source port generates plain and checked registration connectors. Checked
 adapters run a concrete domain validator after decoding and before application-
 state borrowing, replacing handwritten COM sink objects without putting UI
 rules into generic event transport.
+
+The public generated `connect_*` helpers use private, consumed
+`EventConnector<State, Handler>` implementations. Each operation stores its
+borrowed source and optional validator in named fields, and calls
+`session.register(handler, connector)` rather than capturing them in a closure.
+Registration remains owned by the generic COM session: it excludes dispatch and
+registration reentry before creating the sink or calling the source, restores
+the previous ordered sequence on failure, and retains only the successful lease.
+Applications and custom NCIDL plugin families need no handwritten connector.
+This subscription setup runs once; event delivery still invokes the local
+`EventHandler` trait. The Rust support protocol is version 2; NCIDL event and
+COM wire contracts are unchanged.
+
 `emit` never invokes application code. `subscribe` returns the application-owned
 `IEventSubscription`; the source does not retain the sink or keep the widget alive.
 
