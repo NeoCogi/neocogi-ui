@@ -78,8 +78,8 @@ factory UiFactory: IConstructionHost {
     fn create_combo_box(
         &self,
         parent: &IWindow,
-        item_text: &[u8],
-        items: &[ComboItemRange],
+        menu_text: &[u8],
+        entries: &[ChoiceMenuEntry],
         selection: ComboSelection,
     ) -> Result<Combo>;
 }

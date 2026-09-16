@@ -20,11 +20,11 @@ pub mod nodes {
     pub use neocogi_ui_nodes_contracts::*;
 }
 pub use neocogi_ui_nodes_contracts::{
-    Button, ButtonAbi, Checkbox, CheckboxAbi, ChildCrossSize, ColorSwatch, ColorSwatchAbi, Combo, ComboAbi, ComboItemRange, ComboSelection, ComboSelectionAbi,
-    ContentIcon, CrossSize, CrossSizeAbi, Disclosure, DisclosureAbi, DisclosureStyle, FillStates, FlowDirection, Grid, GridAbi, GridExtent, LayoutTrack,
-    LayoutTrackAbi, Linear, LinearAbi, LinearEdge, ListBox, ListBoxAbi, ListItem, ListItemAbi, Number, NumberAbi, NumberOptions, ScrollArea, ScrollAreaAbi,
-    ScrollAxis, ScrollRange, Scrollbar, ScrollbarAbi, Slider, SliderAbi, SliderOptions, TextArea, TextAreaAbi, TextBlock, TextBlockAbi, Textbox, TextboxAbi,
-    UiFactory, UiFactoryAbi,
+    Button, ButtonAbi, Checkbox, CheckboxAbi, ChildCrossSize, ColorSwatch, ColorSwatchAbi, Combo, ComboAbi, ComboSelection, ComboSelectionAbi, ContentIcon,
+    CrossSize, CrossSizeAbi, Disclosure, DisclosureAbi, DisclosureStyle, FillStates, FlowDirection, Grid, GridAbi, GridExtent, LayoutTrack, LayoutTrackAbi,
+    Linear, LinearAbi, LinearEdge, ListBox, ListBoxAbi, ListItem, ListItemAbi, Number, NumberAbi, NumberOptions, ScrollArea, ScrollAreaAbi, ScrollAxis,
+    ScrollRange, Scrollbar, ScrollbarAbi, Slider, SliderAbi, SliderOptions, TextArea, TextAreaAbi, TextBlock, TextBlockAbi, Textbox, TextboxAbi, UiFactory,
+    UiFactoryAbi,
 };
 pub use neocogi_gfx_contracts::{
     AssetLoader, AssetLoaderAbi, DrawPoint, GfxPluginFactory, GfxPluginFactoryAbi, IAssetBuilder, IAssetBuilderAbi, IGfxDiagnostics, IGfxDiagnosticsAbi,
@@ -443,11 +443,29 @@ pub struct Ui {
 impl Ui {
     /// Creates one complete combo box with the contract-defined fallback and selection state.
     pub fn combo_box<Item: AsRef<str>>(&self, parent: ComRef<'_, IWindowAbi>, items: &[Item], selection: ComboSelection) -> Result<ComboWidget, NcStatus> {
-        let (item_text, ranges) = encoded_combo_items(items)?;
+        let (menu_text, entries) = encoded_combo_items(items)?;
         let combo = self.factory.interface.create_combo_box(
             parent,
-            NcCopyFromBufferOffset::new(0, &item_text),
-            NcCopyFromBufferOffset::new(0, &ranges),
+            NcCopyFromBufferOffset::new(0, &menu_text),
+            NcCopyFromBufferOffset::new(0, &entries),
+            selection.into(),
+        )?;
+        Ok(ComboWidget::from_interface(combo))
+    }
+
+    /// Creates a combo from the generated preorder menu contract and its shared UTF-8 storage.
+    pub fn combo_menu(
+        &self,
+        parent: ComRef<'_, IWindowAbi>,
+        menu_text: &str,
+        entries: &[ChoiceMenuEntry],
+        selection: ComboSelection,
+    ) -> Result<ComboWidget, NcStatus> {
+        let entries = combo_menu_abi(entries);
+        let combo = self.factory.interface.create_combo_box(
+            parent,
+            NcCopyFromBufferOffset::new(0, menu_text.as_bytes()),
+            NcCopyFromBufferOffset::new(0, &entries),
             selection.into(),
         )?;
         Ok(ComboWidget::from_interface(combo))
@@ -641,19 +659,29 @@ impl Widget<ComboAbi> {
         self.interface.display_text()?.to_string()
     }
     /// Returns the current number of retained choice labels.
-    pub fn item_count(&self) -> Result<usize, NcStatus> {
-        usize::try_from(self.interface.item_count()?).map_err(|_| neocogi_com::NC_E_INVALID_ARG)
+    pub fn choice_count(&self) -> Result<usize, NcStatus> {
+        usize::try_from(self.interface.choice_count()?).map_err(|_| neocogi_com::NC_E_INVALID_ARG)
     }
-    /// Copies one exact item after strict range validation by the implementation.
-    pub fn item(&self, index: usize) -> Result<String, NcStatus> {
-        self.interface.item(index as u64)?.to_string()
+    /// Copies one exact leaf label by its preorder ordinal after strict range validation.
+    pub fn choice_label(&self, ordinal: usize) -> Result<String, NcStatus> {
+        let ordinal = u64::try_from(ordinal).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
+        self.interface.choice_label(ordinal)?.to_string()
     }
     /// Atomically replaces all labels and the explicit optional selection.
     pub fn replace_items<Item: AsRef<str>>(&mut self, items: &[Item], selection: ComboSelection) -> Result<(), NcStatus> {
-        let (item_text, ranges) = encoded_combo_items(items)?;
-        self.interface.replace_items(
-            NcCopyFromBufferOffset::new(0, &item_text),
-            NcCopyFromBufferOffset::new(0, &ranges),
+        let (menu_text, entries) = encoded_combo_items(items)?;
+        self.interface.replace_menu(
+            NcCopyFromBufferOffset::new(0, &menu_text),
+            NcCopyFromBufferOffset::new(0, &entries),
+            selection.into(),
+        )
+    }
+    /// Atomically replaces the generated preorder hierarchy, shared text, and selection.
+    pub fn replace_menu(&mut self, menu_text: &str, entries: &[ChoiceMenuEntry], selection: ComboSelection) -> Result<(), NcStatus> {
+        let entries = combo_menu_abi(entries);
+        self.interface.replace_menu(
+            NcCopyFromBufferOffset::new(0, menu_text.as_bytes()),
+            NcCopyFromBufferOffset::new(0, &entries),
             selection.into(),
         )
     }
@@ -679,18 +707,29 @@ impl Widget<ComboAbi> {
     }
 }
 
-/// Packs labels once with checked ranges for one atomic COM construction or replacement call.
-fn encoded_combo_items<Item: AsRef<str>>(items: &[Item]) -> Result<(Vec<u8>, Vec<ComboItemRange>), NcStatus> {
+/// Packs a flat convenience list into the same generated menu contract used by nested choices.
+fn encoded_combo_items<Item: AsRef<str>>(items: &[Item]) -> Result<(Vec<u8>, Vec<ChoiceMenuEntryAbi>), NcStatus> {
     let mut text = Vec::new();
-    let mut ranges = Vec::with_capacity(items.len());
-    for item in items {
-        let label = item.as_ref().as_bytes();
-        let first = u32::try_from(text.len()).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
-        let count = u32::try_from(label.len()).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
-        text.extend_from_slice(label);
-        ranges.push(ComboItemRange { first, count });
+    let mut entries = Vec::with_capacity(items.len());
+    for (id, item) in items.iter().enumerate() {
+        let id = u64::try_from(id).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
+        let label = combo_label_range(&mut text, item.as_ref())?;
+        entries.push(ChoiceMenuEntry::Choice { id, label }.into());
     }
-    Ok((text, ranges))
+    Ok((text, entries))
+}
+
+/// Converts generated values to their fixed-layout call representation without another model.
+fn combo_menu_abi(entries: &[ChoiceMenuEntry]) -> Vec<ChoiceMenuEntryAbi> {
+    entries.iter().copied().map(Into::into).collect()
+}
+
+/// Appends one label and returns its checked range in the shared operation buffer.
+fn combo_label_range(text: &mut Vec<u8>, label: &str) -> Result<MenuTextRange, NcStatus> {
+    let first = u32::try_from(text.len()).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
+    let count = u32::try_from(label.len()).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
+    text.extend_from_slice(label.as_bytes());
+    Ok(MenuTextRange { first, count })
 }
 
 impl ListBoxWidget {

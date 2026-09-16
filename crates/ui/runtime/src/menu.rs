@@ -332,6 +332,13 @@ impl Menu {
 pub(crate) enum MenuEntry {
     /// Application-authored actionable item.
     Item(MenuItem),
+    /// Selection-oriented leaf used by combo and other choice-menu composites.
+    Choice {
+        /// Stable semantic identity independent from label or tree position.
+        id: u64,
+        /// Immutable label snapshot replaced with the complete owning choice model.
+        label: String,
+    },
     /// Explicit visual rule.
     Separator,
     /// Recursively owned child menu opened from this row.
@@ -500,6 +507,16 @@ impl MenuSurface {
             .position(|row| matches!(row, MenuSlot::Choice { id, enabled: true, .. } if Some(*id) == committed));
         self.captured = false;
         true
+    }
+
+    /// Returns the local committed leaf slot after choice preparation, if this surface owns it.
+    pub(crate) fn committed_choice_slot(&self) -> Option<usize> {
+        let MenuMode::Choices { committed: Some(committed), .. } = self.mode else {
+            return None;
+        };
+        self.rows
+            .iter()
+            .position(|row| matches!(row, MenuSlot::Choice { id, enabled: true, .. } if *id == committed))
     }
 
     /// Resolves choice emphasis with pointer hover, keyboard focus, and commitment in that order.

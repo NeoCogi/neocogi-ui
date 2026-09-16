@@ -1510,59 +1510,139 @@ impl WindowManager {
     pub(crate) fn create_choice_popup(
         &mut self,
         owner: &WindowHandle,
-        rows: Vec<MenuSlot>,
+        menu: crate::Menu,
         committed: Option<u64>,
-    ) -> Result<PopupHandle, SurfaceCreationError<Vec<MenuSlot>>> {
+    ) -> Result<PopupHandle, SurfaceCreationError<crate::Menu>> {
         let owner = match self.window_id(owner) {
             Ok(owner) => owner,
-            Err(reason) => return Err(SurfaceCreationError::new(reason, rows)),
+            Err(reason) => return Err(SurfaceCreationError::new(reason, menu)),
         };
-        let mut surface = Surface::menu(String::new(), MenuSurface::choices(rows, committed));
+        let (name, entries) = menu.into_parts();
+        let (rows, children) = Self::consume_menu_entries(entries);
+        let mut surface = Surface::menu(name, MenuSurface::choices(rows, committed));
         // The trigger determines horizontal extent; only menu height is intrinsic. The menu
         // surface draws its own outline, so a second window-frame or padding would misalign it.
         surface.options = WindowOption::NO_PADDING | WindowOption::NO_TITLE | WindowOption::NO_RESIZE | WindowOption::AUTO_HEIGHT;
-        Ok(self.register_application_popup(SurfaceKey::Root(owner), surface))
+        let handle = self.register_application_popup(SurfaceKey::Root(owner), surface);
+        for (trigger_slot, entries) in children {
+            self.register_choice_menu_popup(SurfaceKey::Popup(handle.id()), trigger_slot, entries, committed);
+        }
+        Ok(handle)
     }
 
-    /// Replaces one choice menu's complete leaf snapshot after its owner changed model revision.
-    pub(crate) fn replace_choice_popup(&mut self, popup: &PopupHandle, rows: Vec<MenuSlot>, committed: Option<u64>) -> Result<(), SurfaceMutationError> {
+    /// Replaces one choice menu's complete hierarchy after its owner changed model revision.
+    pub(crate) fn replace_choice_popup(&mut self, popup: &PopupHandle, menu: crate::Menu, committed: Option<u64>) -> Result<(), SurfaceMutationError> {
         let id = self.popup_id(popup)?;
-        let menu = self
+        let active = self.surfaces.popup_is_active(id);
+        if active {
+            // Retain the application popup while dismissing only its old relational suffix. This
+            // prevents programmatic selection or label edits from closing an already open combo.
+            let keep = self.surfaces.popup_depth(id).ok_or(SurfaceMutationError::UnknownPopup)? + 1;
+            self.truncate_active_popup_path(keep);
+        }
+        let (_, entries) = menu.into_parts();
+        let (rows, children) = Self::consume_menu_entries(entries);
+        let surface = self
             .surfaces
             .popup_node_mut(id)
             .and_then(|node| node.surface.body.menu_mut())
             .ok_or(SurfaceMutationError::UnknownPopup)?;
-        if !menu.replace_choices(rows, committed) {
+        if !surface.replace_choices(rows, committed) {
             return Err(SurfaceMutationError::UnknownPopup);
+        }
+        self.remove_popup_descendants(id);
+        for (trigger_slot, entries) in children {
+            self.register_choice_menu_popup(SurfaceKey::Popup(id), trigger_slot, entries, committed);
+        }
+        if active {
+            let path = self.prepare_choice_path(id)?;
+            self.active_surface = Some(SurfaceKey::Popup(id));
+            self.activate_choice_path(path)?;
         }
         self.invalidate_ui_commit();
         Ok(())
     }
 
-    /// Resets transient choice emphasis immediately before activating a retained popup definition.
-    pub(crate) fn prepare_choice_popup(&mut self, popup: &PopupHandle) -> Result<(), SurfaceMutationError> {
-        let id = self.popup_id(popup)?;
-        let menu = self
-            .surfaces
-            .popup_node_mut(id)
-            .and_then(|node| node.surface.body.menu_mut())
-            .ok_or(SurfaceMutationError::UnknownPopup)?;
-        if !menu.prepare_choices() {
+    /// Opens a choice menu and restores the complete branch containing its committed leaf.
+    pub(crate) fn show_choice_popup_at(&mut self, popup: &PopupHandle, anchor: Recti) -> Result<(), SurfaceMutationError> {
+        let root = self.popup_id(popup)?;
+        let path = self.prepare_choice_path(root)?;
+        self.show_popup_at(popup, anchor)?;
+        self.activate_choice_path(path)?;
+        self.invalidate_ui_commit();
+        Ok(())
+    }
+
+    /// Resets transient choice state and resolves the relational path to the committed leaf.
+    fn prepare_choice_path(&mut self, root: PopupId) -> Result<Vec<PopupId>, SurfaceMutationError> {
+        let keys = self.popup_subtree(root);
+        let mut prepared = false;
+        let mut selected = None;
+        for key in keys {
+            if let SurfaceKey::Popup(candidate) = key
+                && let Some(menu) = self.surfaces.popup_node_mut(candidate).and_then(|node| node.surface.body.menu_mut())
+            {
+                prepared |= menu.prepare_choices();
+                if menu.committed_choice_slot().is_some() {
+                    selected = Some(candidate);
+                }
+            }
+        }
+        if !prepared {
             return Err(SurfaceMutationError::UnknownPopup);
         }
-        self.invalidate_ui_commit();
+
+        // Resolve the selected ancestry before changing the active branch. Validation guarantees
+        // at most one matching stable leaf, while following retained parent edges avoids a second
+        // menu tree or application-visible submenu handle.
+        let mut path = Vec::new();
+        let mut current = selected;
+        while let Some(candidate) = current.filter(|candidate| *candidate != root) {
+            path.push(candidate);
+            current = match self.surfaces.popup_node(candidate).and_then(|node| node.parent) {
+                Some(SurfaceKey::Popup(parent)) => Some(parent),
+                Some(SurfaceKey::Root(_)) | None => return Err(SurfaceMutationError::InvalidPopupParent),
+            };
+        }
+        path.reverse();
+        Ok(path)
+    }
+
+    /// Opens one already validated choice path and focuses every branch leading to its leaf.
+    fn activate_choice_path(&mut self, path: Vec<PopupId>) -> Result<(), SurfaceMutationError> {
+        for child in path {
+            let (parent, trigger_slot) = {
+                let node = self.surfaces.popup_node(child).ok_or(SurfaceMutationError::UnknownPopup)?;
+                let parent = node.parent.ok_or(SurfaceMutationError::InvalidPopupParent)?;
+                let PopupState::Menu { trigger_slot } = node.popup().ok_or(SurfaceMutationError::UnknownPopup)? else {
+                    return Err(SurfaceMutationError::InvalidPopupParent);
+                };
+                (parent, *trigger_slot)
+            };
+            if !self.menu_surface_mut(parent).is_some_and(|menu| menu.focus_slot(trigger_slot)) {
+                return Err(SurfaceMutationError::InvalidPopupParent);
+            }
+            self.open_popup_id(child)?;
+            self.active_surface = Some(SurfaceKey::Popup(child));
+        }
         Ok(())
     }
 
     /// Takes an activated leaf identity after menu input and visibility changes have completed.
     pub(crate) fn take_choice_submission(&mut self, popup: &PopupHandle) -> Result<Option<u64>, SurfaceMutationError> {
         let id = self.popup_id(popup)?;
-        let menu = self
-            .surfaces
-            .popup_node_mut(id)
-            .and_then(|node| node.surface.body.menu_mut())
-            .ok_or(SurfaceMutationError::UnknownPopup)?;
-        Ok(menu.take_choice_submission())
+        for key in self.popup_subtree(id) {
+            if let SurfaceKey::Popup(candidate) = key
+                && let Some(submitted) = self
+                    .surfaces
+                    .popup_node_mut(candidate)
+                    .and_then(|node| node.surface.body.menu_mut())
+                    .and_then(MenuSurface::take_choice_submission)
+            {
+                return Ok(Some(submitted));
+            }
+        }
+        Ok(None)
     }
 
     /// Registers one application-addressable popup below an already validated root.
@@ -1593,6 +1673,7 @@ impl WindowManager {
         for (slot, entry) in entries.into_iter().enumerate() {
             match entry {
                 MenuEntry::Item(item) => rows.push(MenuSlot::Item(item.record)),
+                MenuEntry::Choice { id, label } => rows.push(MenuSlot::Choice { id, label, enabled: true }),
                 MenuEntry::Separator => rows.push(MenuSlot::Separator),
                 MenuEntry::Submenu(menu) => {
                     // A branch label stays in this parent surface; only its owned row vector waits
@@ -1620,6 +1701,45 @@ impl WindowManager {
         for (trigger_slot, entries) in children {
             self.register_menu_popup(SurfaceKey::Popup(id), trigger_slot, entries);
         }
+    }
+
+    /// Consumes one selection-menu branch using the same relational submenu forest as commands.
+    fn register_choice_menu_popup(&mut self, parent: SurfaceKey, trigger_slot: usize, entries: Vec<MenuEntry>, committed: Option<u64>) {
+        let (rows, children) = Self::consume_menu_entries(entries);
+        let id = PopupId::allocate();
+        self.surfaces.insert_popup(SurfaceNode {
+            key: SurfaceKey::Popup(id),
+            parent: Some(parent),
+            surface: Surface::menu(String::new(), MenuSurface::choices(rows, committed)),
+            kind: SurfaceKind::Popup(PopupState::Menu { trigger_slot }),
+        });
+        for (trigger_slot, entries) in children {
+            self.register_choice_menu_popup(SurfaceKey::Popup(id), trigger_slot, entries, committed);
+        }
+    }
+
+    /// Collects one application popup and every relational menu descendant in parent-first order.
+    fn popup_subtree(&self, popup: PopupId) -> Vec<SurfaceKey> {
+        let mut keys = vec![SurfaceKey::Popup(popup)];
+        let mut index = 0;
+        while index < keys.len() {
+            keys.extend_from_slice(&self.surfaces.index[&keys[index]].children);
+            index += 1;
+        }
+        keys
+    }
+
+    /// Removes only relational descendants while retaining the application popup's stable handle.
+    fn remove_popup_descendants(&mut self, popup: PopupId) {
+        let mut removed = self.popup_subtree(popup);
+        removed.remove(0);
+        let removed: HashSet<_> = removed.into_iter().collect();
+        self.surfaces.nodes.retain(|node| !removed.contains(&node.key));
+        // Rebuilding adjacency also replaces every cached policy entry. Restore the derived
+        // projection before a replacement child is inserted because incremental insertion reads
+        // its retained parent's policy rather than walking ancestry for each new descendant.
+        self.surfaces.rebuild_index();
+        self.surfaces.rebuild_visible_order();
     }
 
     /// Replaces a retained window title after authenticating its application capability.

@@ -4,7 +4,7 @@ extern neocogi.gfx;
 extern neocogi.com.events;
 
 use neocogi.ui.core::{
-    ChildEditResult, IActivationSink, IChildren, IConstructionHost, IContainerLayout,
+    ChildEditResult, ChoiceMenuEntry, IActivationSink, IChildren, IConstructionHost, IContainerLayout,
     ILeafLayout, IScrolling, ITextChangedSink, ITextSubmittedSink, ITextContent,
     IWidget, IWidgetHost, IWindow, ScrollInfo, TextWrapping, WidgetOptions,
 };

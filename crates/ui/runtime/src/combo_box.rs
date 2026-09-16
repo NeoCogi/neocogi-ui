@@ -3,16 +3,20 @@
 //! The root forest stores only generic menu surfaces and popup ownership. This module connects
 //! one public header, one authoritative typed state, and one private choice-popup definition.
 
-use crate::menu::MenuSlot;
+use crate::menu::{Menu, MenuEntry};
 use crate::window_manager::{PopupHandle, SurfaceMutationError, WindowManager};
 use neocogi_com::{
-    ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_int_enum, com_interface, com_object,
+    ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_int_enum,
+    com_interface, com_object,
 };
-use neocogi_ui_core_contracts::{IEventSubscriptionAbi, Rect};
-use neocogi_ui_nodes_contracts::{ComboItemRange, ComboSelection, ComboSelectionAbi, IComboChangedSinkAbi};
+use neocogi_ui_core_contracts::{ChoiceMenuEntry, ChoiceMenuEntryAbi, IEventSubscriptionAbi, MenuTextRange, Rect};
+use neocogi_ui_nodes_contracts::{ComboSelection, ComboSelectionAbi, IComboChangedSinkAbi};
 
 /// Contract-defined visible fallback for a combo with no committed selection.
 pub(crate) const DEFAULT_COMBO_PLACEHOLDER: &str = "Select…";
+
+/// Maximum accepted branch nesting, keeping foreign preorder input bounded on the native stack.
+const MAX_COMBO_MENU_DEPTH: usize = 32;
 
 /// Canonical generated selection snapshot stored in this producer's event queue.
 use neocogi_ui_nodes_contracts::IComboChangedSinkEvent as ComboChangedPayload;
@@ -68,19 +72,23 @@ enum ComboPopupLifecycle {
 pub(crate) trait IComboState {
     /// Returns a revision changed by labels, placeholder, or committed selection.
     fn revision(&self) -> Result<u64, NcStatus>;
-    /// Returns the explicit optional committed item position.
+    /// Returns the explicit optional committed leaf identity.
     fn selection(&self) -> Result<ComboSelectionAbi, NcStatus>;
+    /// Copies the hierarchy's shared UTF-8 storage for rebuilding its menu projection.
+    fn menu_text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
+    /// Copies a requested preorder entry range and returns the complete entry count.
+    fn menu_entries(&self, output: NcCopyToBufferOffset<'_, ChoiceMenuEntryAbi>) -> Result<u32, NcStatus>;
     /// Copies the selected label or placeholder currently displayed by the header.
     fn display_text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
     /// Returns the number of retained display labels.
-    fn item_count(&self) -> Result<u64, NcStatus>;
+    fn choice_count(&self) -> Result<u64, NcStatus>;
     /// Copies one exact display label after strict range validation.
-    fn item(&self, index: u64) -> Result<ComPtr<INcStringAbi>, NcStatus>;
+    fn choice_label(&self, ordinal: u64) -> Result<ComPtr<INcStringAbi>, NcStatus>;
     /// Atomically replaces every label and the explicit optional selection.
-    fn replace_items(
+    fn replace_menu(
         &mut self,
-        item_text: NcCopyFromBufferOffset<'_, u8>,
-        ranges: NcCopyFromBufferOffset<'_, ComboItemRange>,
+        menu_text: NcCopyFromBufferOffset<'_, u8>,
+        entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
         selection: ComboSelectionAbi,
     ) -> Result<bool, NcStatus>;
     /// Silently replaces the optional committed selection without clamping.
@@ -96,7 +104,7 @@ pub(crate) trait IComboState {
     /// Returns the most recently captured header-bottom anchor.
     fn popup_anchor(&self) -> Result<Rect, NcStatus>;
     /// Commits one user choice, publishes a changed snapshot, and requests popup closure.
-    fn submit(&mut self, index: u64) -> Result<u64, NcStatus>;
+    fn submit(&mut self, id: u64) -> Result<u64, NcStatus>;
     /// Connects the public changed sink to this model's sole event source.
     fn subscribe_changed(&mut self, sink: ComRef<'_, IComboChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
     /// Ends event delivery and requests permanent private-popup removal.
@@ -106,10 +114,12 @@ pub(crate) trait IComboState {
 #[com_object(interfaces(IComboState))]
 /// Plain authoritative combo state mutated exclusively through `IComboState`'s mutable receiver.
 pub(crate) struct ComboState {
-    /// Display labels in stable application order.
-    items: Vec<String>,
-    /// Committed selection; `None` remains distinct from item zero.
-    selection: Option<usize>,
+    /// Shared UTF-8 storage referenced by every checked preorder entry.
+    menu_text: String,
+    /// Authoritative preorder hierarchy with explicit direct-child counts.
+    entries: Vec<ChoiceMenuEntryAbi>,
+    /// Committed stable leaf identity; `None` remains distinct from every `u64` value.
+    selection: Option<u64>,
     /// Visible header fallback when selection is absent.
     placeholder: String,
     /// Monotonic semantic revision used to invalidate transient popup candidates.
@@ -124,10 +134,16 @@ pub(crate) struct ComboState {
 
 impl ComboState {
     /// Validates selection before allocating the private COM state identity.
-    pub(crate) fn create(items: Vec<String>, selection: Option<usize>, placeholder: String) -> Result<ComPtr<IComboStateAbi>, NcStatus> {
-        validate_selection(selection, items.len())?;
+    pub(crate) fn create(
+        menu_text: String,
+        entries: Vec<ChoiceMenuEntryAbi>,
+        selection: Option<u64>,
+        placeholder: String,
+    ) -> Result<ComPtr<IComboStateAbi>, NcStatus> {
+        validate_menu(&menu_text, &entries, selection)?;
         let state = Self {
-            items,
+            menu_text,
+            entries,
             selection,
             placeholder,
             revision: 0,
@@ -141,7 +157,7 @@ impl ComboState {
     /// Borrows the exact text rendered by the header from the current valid selection.
     fn display_text_value(&self) -> &str {
         match self.selection {
-            Some(index) => self.items[index].as_str(),
+            Some(id) => choice_label(&self.menu_text, &self.entries, id).expect("validated selection must retain its choice label"),
             None => self.placeholder.as_str(),
         }
     }
@@ -156,7 +172,7 @@ impl ComboState {
         if !intent.is_known() || anchor.width < 0 || anchor.height < 0 {
             return Err(NC_E_INVALID_ARG);
         }
-        if self.items.is_empty() && intent != ComboPopupIntent::Close {
+        if choice_count(&self.entries) == 0 && intent != ComboPopupIntent::Close {
             return Ok(());
         }
         self.popup = match (self.popup, intent) {
@@ -198,7 +214,7 @@ impl ComboState {
 
     /// Requests popup closure after replacing the item list with no choices.
     fn close_if_empty(&mut self) {
-        if !self.items.is_empty() {
+        if choice_count(&self.entries) != 0 {
             return;
         }
         self.popup = match self.popup {
@@ -221,36 +237,53 @@ impl IComboState for ComboState {
         Ok(encode_selection(self.selection))
     }
 
+    /// Copies the one authoritative UTF-8 backing store without exposing internal allocation.
+    fn menu_text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+        Ok(NcString::from_utf8_str(&self.menu_text))
+    }
+
+    /// Copies only the requested suffix while reporting complete preorder cardinality.
+    fn menu_entries(&self, mut output: NcCopyToBufferOffset<'_, ChoiceMenuEntryAbi>) -> Result<u32, NcStatus> {
+        let offset = usize::try_from(output.offset()).map_err(|_| NC_E_INVALID_ARG)?;
+        let source = self.entries.get(offset..).ok_or(NC_E_INVALID_ARG)?;
+        for (target, entry) in output.as_mut_slice().iter_mut().zip(source) {
+            *target = *entry;
+        }
+        u32::try_from(self.entries.len()).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)
+    }
+
     /// Copies one immutable display snapshot for the public header or facade.
     fn display_text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         Ok(NcString::from_utf8_str(self.display_text_value()))
     }
 
     /// Reports the authoritative label count without a second collection.
-    fn item_count(&self) -> Result<u64, NcStatus> {
-        Ok(self.items.len() as u64)
+    fn choice_count(&self) -> Result<u64, NcStatus> {
+        Ok(choice_count(&self.entries) as u64)
     }
 
     /// Copies one strictly checked label from the authoritative collection.
-    fn item(&self, index: u64) -> Result<ComPtr<INcStringAbi>, NcStatus> {
-        let index = usize::try_from(index).map_err(|_| NC_E_INVALID_ARG)?;
-        Ok(NcString::from_utf8_str(self.items.get(index).ok_or(NC_E_INVALID_ARG)?))
+    fn choice_label(&self, ordinal: u64) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+        let ordinal = usize::try_from(ordinal).map_err(|_| NC_E_INVALID_ARG)?;
+        let label = choice_at(&self.menu_text, &self.entries, ordinal).ok_or(NC_E_INVALID_ARG)?;
+        Ok(NcString::from_utf8_str(label))
     }
 
     /// Validates a complete candidate before committing either labels or selection.
-    fn replace_items(
+    fn replace_menu(
         &mut self,
-        item_text: NcCopyFromBufferOffset<'_, u8>,
-        ranges: NcCopyFromBufferOffset<'_, ComboItemRange>,
+        menu_text: NcCopyFromBufferOffset<'_, u8>,
+        entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
         selection: ComboSelectionAbi,
     ) -> Result<bool, NcStatus> {
-        let items = copied_items(item_text, ranges)?;
+        let (menu_text, entries) = copied_menu(menu_text, entries)?;
         let selection = decoded_selection(selection)?;
-        validate_selection(selection, items.len())?;
-        if self.items == items && self.selection == selection {
+        validate_menu(&menu_text, &entries, selection)?;
+        if self.menu_text == menu_text && self.entries == entries && self.selection == selection {
             return Ok(false);
         }
-        self.items = items;
+        self.menu_text = menu_text;
+        self.entries = entries;
         self.selection = selection;
         self.advance_revision();
         self.close_if_empty();
@@ -260,7 +293,7 @@ impl IComboState for ComboState {
     /// Replaces selection only after validating it against the current item sequence.
     fn set_selection(&mut self, selection: ComboSelectionAbi) -> Result<bool, NcStatus> {
         let selection = decoded_selection(selection)?;
-        validate_selection(selection, self.items.len())?;
+        validate_selection(selection, &self.menu_text, &self.entries)?;
         if self.selection == selection {
             return Ok(false);
         }
@@ -302,15 +335,12 @@ impl IComboState for ComboState {
     }
 
     /// Commits a checked item and closes the popup even when the value was already selected.
-    fn submit(&mut self, index: u64) -> Result<u64, NcStatus> {
-        let index = usize::try_from(index).map_err(|_| NC_E_INVALID_ARG)?;
-        self.items.get(index).ok_or(NC_E_INVALID_ARG)?;
-        if self.selection != Some(index) {
-            self.selection = Some(index);
+    fn submit(&mut self, id: u64) -> Result<u64, NcStatus> {
+        validate_selection(Some(id), &self.menu_text, &self.entries)?;
+        if self.selection != Some(id) {
+            self.selection = Some(id);
             self.advance_revision();
-            self.changed_event.emit(ComboChangedPayload {
-                selection: ComboSelection::Selected(index as u64),
-            });
+            self.changed_event.emit(ComboChangedPayload { selection: ComboSelection::Selected(id) });
         }
         self.popup = match self.popup {
             ComboPopupLifecycle::Open | ComboPopupLifecycle::OpenRequested => ComboPopupLifecycle::CloseRequested,
@@ -341,15 +371,21 @@ impl IComboState for ComboState {
     }
 }
 
-/// Builds one checked flat choice snapshot without a second retained item collection.
-pub(crate) fn choice_rows(state: &ComPtr<IComboStateAbi>) -> Result<Vec<MenuSlot>, NcStatus> {
-    let count = usize::try_from(state.item_count()?).map_err(|_| NC_E_INVALID_ARG)?;
-    let mut rows = Vec::with_capacity(count);
-    for index in 0..count {
-        let label = state.item(index as u64)?.to_string()?;
-        rows.push(MenuSlot::Choice { id: index as u64, label, enabled: true });
+/// Builds one checked recursive choice-menu snapshot from the authoritative serialized model.
+pub(crate) fn choice_menu(state: &ComPtr<IComboStateAbi>) -> Result<Menu, NcStatus> {
+    let menu_text = state.menu_text()?.to_string()?;
+    let count = usize::try_from(state.menu_entries(NcCopyToBufferOffset::new(0, &mut []))?).map_err(|_| NC_E_INVALID_ARG)?;
+    let placeholder: ChoiceMenuEntryAbi = ChoiceMenuEntry::Choice {
+        id: 0,
+        label: MenuTextRange { first: 0, count: 0 },
     }
-    Ok(rows)
+    .into();
+    let mut entries = vec![placeholder; count];
+    let copied = state.menu_entries(NcCopyToBufferOffset::new(0, &mut entries))?;
+    if usize::try_from(copied).ok() != Some(count) {
+        return Err(NC_E_INVALID_ARG);
+    }
+    native_menu(&menu_text, &entries)
 }
 
 /// Runtime-owned association between private combo state and one shared menu popup handle.
@@ -358,7 +394,7 @@ struct ComboController {
     state: ComPtr<IComboStateAbi>,
     /// Generic popup capability; no combo policy is embedded in its forest node.
     popup: PopupHandle,
-    /// Last model revision copied into the menu surface's compact leaf snapshot.
+    /// Last model revision copied into the compact relational menu hierarchy.
     observed_revision: u64,
 }
 
@@ -390,18 +426,17 @@ impl ComboController {
         let revision = self.state.revision()?;
         let presentation_changed = revision != self.observed_revision;
         if presentation_changed {
-            let rows = choice_rows(&self.state)?;
+            let menu = choice_menu(&self.state)?;
             let committed = decoded_selection(self.state.selection()?)?.map(|index| index as u64);
-            manager.replace_choice_popup(&self.popup, rows, committed).map_err(surface_status)?;
+            manager.replace_choice_popup(&self.popup, menu, committed).map_err(surface_status)?;
             self.observed_revision = revision;
         }
         let action = self.state.reconcile_popup(visible)?;
         match action {
             ComboPopupAction::None => Ok((ControllerDisposition::Keep, presentation_changed)),
             ComboPopupAction::Open => {
-                manager.prepare_choice_popup(&self.popup).map_err(surface_status)?;
                 let anchor = crate::boundary::local_rect(self.state.popup_anchor()?);
-                manager.show_popup_at(&self.popup, anchor).map_err(surface_status)?;
+                manager.show_choice_popup_at(&self.popup, anchor).map_err(surface_status)?;
                 Ok((ControllerDisposition::Keep, true))
             }
             ComboPopupAction::Close => {
@@ -468,47 +503,150 @@ fn surface_status(error: SurfaceMutationError) -> NcStatus {
     }
 }
 
-/// Encodes optional selection with a tagged absence variant rather than a sentinel index.
-pub(crate) fn encode_selection(selection: Option<usize>) -> ComboSelectionAbi {
+/// Encodes optional selection with a tagged absence variant rather than a sentinel identity.
+pub(crate) fn encode_selection(selection: Option<u64>) -> ComboSelectionAbi {
     match selection {
-        Some(index) => ComboSelection::Selected(index as u64),
+        Some(id) => ComboSelection::Selected(id),
         None => ComboSelection::None,
     }
     .into()
 }
 
-/// Decodes the public tagged selection and rejects unknown or unrepresentable payloads.
-pub(crate) fn decoded_selection(selection: ComboSelectionAbi) -> Result<Option<usize>, NcStatus> {
+/// Decodes the public tagged selection and rejects unknown discriminants.
+pub(crate) fn decoded_selection(selection: ComboSelectionAbi) -> Result<Option<u64>, NcStatus> {
     match ComboSelection::try_from(selection).map_err(|_| NC_E_INVALID_ARG)? {
         ComboSelection::None => Ok(None),
-        ComboSelection::Selected(index) => usize::try_from(index).map(Some).map_err(|_| NC_E_INVALID_ARG),
+        ComboSelection::Selected(id) => Ok(Some(id)),
     }
 }
 
-/// Validates one optional index against the complete candidate label count.
-fn validate_selection(selection: Option<usize>, count: usize) -> Result<(), NcStatus> {
+/// Validates one optional identity against every selectable leaf in the hierarchy.
+fn validate_selection(selection: Option<u64>, text: &str, entries: &[ChoiceMenuEntryAbi]) -> Result<(), NcStatus> {
     match selection {
-        Some(index) if index >= count => Err(NC_E_INVALID_ARG),
+        Some(id) if choice_label(text, entries, id).is_none() => Err(NC_E_INVALID_ARG),
         Some(_) | None => Ok(()),
     }
 }
 
-/// Validates shared UTF-8 storage and copies each checked item range atomically.
-pub(crate) fn copied_items(item_text: NcCopyFromBufferOffset<'_, u8>, ranges: NcCopyFromBufferOffset<'_, ComboItemRange>) -> Result<Vec<String>, NcStatus> {
-    if item_text.offset() != 0 || ranges.offset() != 0 {
+/// Validates shared UTF-8 storage and copies the complete serialized hierarchy atomically.
+pub(crate) fn copied_menu(
+    menu_text: NcCopyFromBufferOffset<'_, u8>,
+    entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
+) -> Result<(String, Vec<ChoiceMenuEntryAbi>), NcStatus> {
+    if menu_text.offset() != 0 || entries.offset() != 0 {
         return Err(NC_E_INVALID_ARG);
     }
-    let text = std::str::from_utf8(item_text.as_slice()).map_err(|_| NC_E_INVALID_ARG)?;
-    ranges
-        .as_slice()
+    let text = std::str::from_utf8(menu_text.as_slice()).map_err(|_| NC_E_INVALID_ARG)?;
+    u32::try_from(text.len()).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)?;
+    let entries = entries.as_slice().to_vec();
+    u32::try_from(entries.len()).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)?;
+    validate_menu(text, &entries, None)?;
+    Ok((text.to_owned(), entries))
+}
+
+/// Returns one checked UTF-8 label slice from the shared model storage.
+fn ranged_text(text: &str, range: MenuTextRange) -> Option<&str> {
+    let first = usize::try_from(range.first).ok()?;
+    let count = usize::try_from(range.count).ok()?;
+    text.get(first..first.checked_add(count)?)
+}
+
+/// Counts selectable leaves without creating a parallel flattened collection.
+fn choice_count(entries: &[ChoiceMenuEntryAbi]) -> usize {
+    entries
         .iter()
-        .map(|range| {
-            let first = usize::try_from(range.first).map_err(|_| NC_E_INVALID_ARG)?;
-            let count = usize::try_from(range.count).map_err(|_| NC_E_INVALID_ARG)?;
-            let end = first.checked_add(count).ok_or(NC_E_INVALID_ARG)?;
-            text.get(first..end).map(str::to_owned).ok_or(NC_E_INVALID_ARG)
+        .filter(|entry| matches!(ChoiceMenuEntry::try_from(**entry), Ok(ChoiceMenuEntry::Choice { .. })))
+        .count()
+}
+
+/// Resolves one preorder leaf ordinal directly from the authoritative serialized entries.
+fn choice_at<'a>(text: &'a str, entries: &[ChoiceMenuEntryAbi], ordinal: usize) -> Option<&'a str> {
+    entries
+        .iter()
+        .filter_map(|entry| match ChoiceMenuEntry::try_from(*entry).ok()? {
+            ChoiceMenuEntry::Choice { label, .. } => ranged_text(text, label),
+            ChoiceMenuEntry::Submenu { .. } => None,
         })
-        .collect()
+        .nth(ordinal)
+}
+
+/// Resolves a stable leaf identity independently from its label and hierarchy position.
+fn choice_label<'a>(text: &'a str, entries: &[ChoiceMenuEntryAbi], selected: u64) -> Option<&'a str> {
+    entries.iter().find_map(|entry| match ChoiceMenuEntry::try_from(*entry).ok()? {
+        ChoiceMenuEntry::Choice { id, label } if id == selected => ranged_text(text, label),
+        ChoiceMenuEntry::Choice { .. } | ChoiceMenuEntry::Submenu { .. } => None,
+    })
+}
+
+/// Validates tags, ranges, direct-child counts, unique leaf identities, and selection together.
+fn validate_menu(text: &str, entries: &[ChoiceMenuEntryAbi], selection: Option<u64>) -> Result<(), NcStatus> {
+    let mut ids = std::collections::HashSet::new();
+    let mut index = 0;
+    while index < entries.len() {
+        index = validate_node(text, entries, index, 0, &mut ids)?;
+    }
+    validate_selection(selection, text, entries)
+}
+
+/// Validates one preorder node and returns the first entry after all of its descendants.
+fn validate_node(text: &str, entries: &[ChoiceMenuEntryAbi], index: usize, depth: usize, ids: &mut std::collections::HashSet<u64>) -> Result<usize, NcStatus> {
+    let entry = ChoiceMenuEntry::try_from(*entries.get(index).ok_or(NC_E_INVALID_ARG)?).map_err(|_| NC_E_INVALID_ARG)?;
+    match entry {
+        ChoiceMenuEntry::Choice { id, label } => {
+            ranged_text(text, label).ok_or(NC_E_INVALID_ARG)?;
+            if !ids.insert(id) {
+                return Err(NC_E_INVALID_ARG);
+            }
+            index.checked_add(1).ok_or(NC_E_INVALID_ARG)
+        }
+        ChoiceMenuEntry::Submenu { label, children } => {
+            ranged_text(text, label).ok_or(NC_E_INVALID_ARG)?;
+            if children == 0 || depth >= MAX_COMBO_MENU_DEPTH {
+                return Err(NC_E_INVALID_ARG);
+            }
+            let mut next = index.checked_add(1).ok_or(NC_E_INVALID_ARG)?;
+            for _ in 0..children {
+                next = validate_node(text, entries, next, depth + 1, ids)?;
+            }
+            Ok(next)
+        }
+    }
+}
+
+/// Converts the checked preorder model into the manager's shared recursive menu declaration.
+fn native_menu(text: &str, entries: &[ChoiceMenuEntryAbi]) -> Result<Menu, NcStatus> {
+    validate_menu(text, entries, None)?;
+    let mut menu = Menu::new("");
+    let mut index = 0;
+    while index < entries.len() {
+        let (entry, next) = native_entry(text, entries, index)?;
+        menu.entries.push(entry);
+        index = next;
+    }
+    Ok(menu)
+}
+
+/// Converts one node and its exact descendants without reconstructing parent indices.
+fn native_entry(text: &str, entries: &[ChoiceMenuEntryAbi], index: usize) -> Result<(MenuEntry, usize), NcStatus> {
+    match ChoiceMenuEntry::try_from(*entries.get(index).ok_or(NC_E_INVALID_ARG)?).map_err(|_| NC_E_INVALID_ARG)? {
+        ChoiceMenuEntry::Choice { id, label } => Ok((
+            MenuEntry::Choice {
+                id,
+                label: ranged_text(text, label).ok_or(NC_E_INVALID_ARG)?.to_owned(),
+            },
+            index.checked_add(1).ok_or(NC_E_INVALID_ARG)?,
+        )),
+        ChoiceMenuEntry::Submenu { label, children } => {
+            let mut menu = Menu::new(ranged_text(text, label).ok_or(NC_E_INVALID_ARG)?);
+            let mut next = index.checked_add(1).ok_or(NC_E_INVALID_ARG)?;
+            for _ in 0..children {
+                let (child, after) = native_entry(text, entries, next)?;
+                menu.entries.push(child);
+                next = after;
+            }
+            Ok((MenuEntry::Submenu(menu), next))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -518,9 +656,18 @@ mod tests {
     use super::*;
 
     /// Creates a direct state value for exhaustive private transition tests.
-    fn state(selection: Option<usize>) -> ComboState {
+    fn state(selection: Option<u64>) -> ComboState {
+        let menu_text = "AppleBananaCherry".to_owned();
+        let entries = [
+            (0, MenuTextRange { first: 0, count: 5 }),
+            (1, MenuTextRange { first: 5, count: 6 }),
+            (2, MenuTextRange { first: 11, count: 6 }),
+        ]
+        .map(|(id, label)| ChoiceMenuEntry::Choice { id, label }.into())
+        .to_vec();
         ComboState {
-            items: vec!["Apple".into(), "Banana".into(), "Cherry".into()],
+            menu_text,
+            entries,
             selection,
             placeholder: "Select…".into(),
             revision: 0,
@@ -558,14 +705,18 @@ mod tests {
     fn replacement_is_atomic_and_strict() {
         let mut state = state(Some(2));
         let text = b"short";
-        let ranges = [ComboItemRange { first: 0, count: 5 }];
-        let result = state.replace_items(
+        let entries = [ChoiceMenuEntry::Choice {
+            id: 7,
+            label: MenuTextRange { first: 0, count: 5 },
+        }
+        .into()];
+        let result = state.replace_menu(
             NcCopyFromBufferOffset::new(0, text),
-            NcCopyFromBufferOffset::new(0, &ranges),
+            NcCopyFromBufferOffset::new(0, &entries),
             encode_selection(Some(2)),
         );
         assert_eq!(result, Err(NC_E_INVALID_ARG));
-        assert_eq!(state.items, ["Apple", "Banana", "Cherry"]);
+        assert_eq!(state.menu_text, "AppleBananaCherry");
         assert_eq!(state.selection, Some(2));
     }
 
@@ -578,14 +729,65 @@ mod tests {
         assert_eq!(state.revision, 2);
 
         let text = b"ApricotBlueberry";
-        let ranges = [ComboItemRange { first: 0, count: 7 }, ComboItemRange { first: 7, count: 9 }];
+        let entries = [
+            ChoiceMenuEntry::Choice {
+                id: 0,
+                label: MenuTextRange { first: 0, count: 7 },
+            }
+            .into(),
+            ChoiceMenuEntry::Choice {
+                id: 1,
+                label: MenuTextRange { first: 7, count: 9 },
+            }
+            .into(),
+        ];
         state
-            .replace_items(
+            .replace_menu(
                 NcCopyFromBufferOffset::new(0, text),
-                NcCopyFromBufferOffset::new(0, &ranges),
+                NcCopyFromBufferOffset::new(0, &entries),
                 encode_selection(Some(1)),
             )
             .unwrap();
         assert_eq!(state.revision, 3);
+    }
+
+    /// Foreign preorder input cannot smuggle ambiguous topology or duplicate stable identities.
+    #[test]
+    fn serialized_menu_rejects_malformed_hierarchy_and_duplicate_ids() {
+        let text = "BranchLeaf";
+        let missing_child = [
+            ChoiceMenuEntry::Submenu {
+                label: MenuTextRange { first: 0, count: 6 },
+                children: 2,
+            }
+            .into(),
+            ChoiceMenuEntry::Choice {
+                id: 9,
+                label: MenuTextRange { first: 6, count: 4 },
+            }
+            .into(),
+        ];
+        assert_eq!(validate_menu(text, &missing_child, Some(9)), Err(NC_E_INVALID_ARG));
+
+        let empty_branch = [ChoiceMenuEntry::Submenu {
+            label: MenuTextRange { first: 0, count: 6 },
+            children: 0,
+        }
+        .into()];
+        assert_eq!(validate_menu(text, &empty_branch, None), Err(NC_E_INVALID_ARG));
+
+        let duplicate_ids = [
+            ChoiceMenuEntry::Choice {
+                id: 9,
+                label: MenuTextRange { first: 6, count: 4 },
+            }
+            .into(),
+            ChoiceMenuEntry::Choice {
+                id: 9,
+                label: MenuTextRange { first: 6, count: 4 },
+            }
+            .into(),
+        ];
+        assert_eq!(validate_menu(text, &duplicate_ids, Some(9)), Err(NC_E_INVALID_ARG));
     }
 }

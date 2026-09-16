@@ -133,11 +133,11 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     fn create_combo_box(
         &self,
         parent: ComRef<'_, IWindowAbi>,
-        item_text: NcCopyFromBufferOffset<'_, u8>,
-        ranges: NcCopyFromBufferOffset<'_, ComboItemRange>,
+        menu_text: NcCopyFromBufferOffset<'_, u8>,
+        entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
         selection: ComboSelectionAbi,
     ) -> Result<ComPtr<ComboAbi>, NcStatus> {
         let storage = self.storage.upgrade().ok_or(UI_E_CLOSED)?;
-        crate::runtime::combos::create_combo_box(&storage, parent, item_text, ranges, selection)
+        crate::runtime::combos::create_combo_box(&storage, parent, menu_text, entries, selection)
     }
 }

@@ -16,6 +16,34 @@ enum MenuMark: u8 {
 }
 
 #[version(1)]
+/// Checked byte range for one choice or branch label in an operation's shared UTF-8 buffer.
+struct MenuTextRange {
+    /// First byte of the label in the shared text buffer.
+    first: u32,
+    /// Number of UTF-8 bytes in the label, without a terminator.
+    count: u32,
+}
+
+#[version(1)]
+/// One preorder entry in a selection-oriented menu; nesting beyond 32 branches is rejected.
+enum ChoiceMenuEntry: u8 {
+    /// Selectable leaf identified independently from its label or tree position.
+    Choice {
+        /// Stable application-defined identity returned by the owning selection control.
+        id: u64,
+        /// Checked UTF-8 label range in the operation's shared text buffer.
+        label: MenuTextRange,
+    },
+    /// Nonempty branch followed immediately by exactly `children` direct preorder entries.
+    Submenu {
+        /// Checked UTF-8 branch label range in the operation's shared text buffer.
+        label: MenuTextRange,
+        /// Positive number of direct children; nested descendants follow their owning child branch.
+        children: u32,
+    },
+}
+
+#[version(1)]
 /// Live compact row capability, editable before mounting and while its owning surface exists.
 trait IMenuItem {
     /// Returns the same label used by measurement, paint and captured submissions.

@@ -271,37 +271,28 @@ class TextArea: IWidget + IContainerLayout + IScrolling {
 }
 
 #[version(1)]
-/// Checked byte range for one combo-box label in the operation's shared UTF-8 item buffer.
-struct ComboItemRange {
-    /// First byte of the label in the shared item buffer.
-    first: u32,
-    /// Number of UTF-8 bytes in the label, without a terminator.
-    count: u32,
-}
-
-#[version(1)]
 /// Optional committed combo-box selection without an in-band sentinel index.
 enum ComboSelection: u8 {
     /// No item is selected, so the header displays its configured placeholder.
     None,
-    /// Exact selected position in the combo box's current item sequence.
+    /// Stable selected leaf identity in the combo box's current menu hierarchy.
     Selected(u64),
 }
 
 #[version(2)]
 /// Runtime-owned combo box whose header, item model, popup, and interaction state form one control.
 class Combo: IWidget + ILeafLayout {
-    /// Returns the committed item position, preserving `None` independently of item zero.
+    /// Returns the committed stable leaf identity, preserving `None` independently of every ID.
     fn selection(&self) -> Result<ComboSelection>;
     /// Returns the exact rendered header text: the selected label or the configured placeholder.
     fn display_text(&self) -> Result<String>;
-    /// Returns the number of labels retained by this combo box.
-    fn item_count(&self) -> Result<u64>;
-    /// Copies one exact retained label; an out-of-range index is rejected.
-    fn item(&self, index: u64) -> Result<String>;
-    /// Atomically replaces all labels and the optional selection after validating the complete candidate.
-    fn replace_items(&mut self, item_text: &[u8], items: &[ComboItemRange], selection: ComboSelection) -> Result<()>;
-    /// Silently replaces the committed optional selection; an out-of-range selected index is rejected.
+    /// Returns the number of selectable leaves retained across the complete hierarchy.
+    fn choice_count(&self) -> Result<u64>;
+    /// Copies one exact leaf label in preorder; an out-of-range ordinal is rejected.
+    fn choice_label(&self, ordinal: u64) -> Result<String>;
+    /// Atomically replaces the complete preorder menu and optional selection after validating both.
+    fn replace_menu(&mut self, menu_text: &[u8], entries: &[ChoiceMenuEntry], selection: ComboSelection) -> Result<()>;
+    /// Silently replaces the committed optional selection; an unknown leaf identity is rejected.
     fn set_selection(&mut self, selection: ComboSelection) -> Result<()>;
     /// Returns the fallback rendered when the committed selection is `None`.
     fn placeholder(&self) -> Result<String>;

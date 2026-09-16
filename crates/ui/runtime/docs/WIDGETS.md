@@ -59,16 +59,19 @@ remain silent. The [events guide](EVENTS.md) describes delivery; exact interface
 shared capabilities are documented in `neocogi-ui-core-contracts`, concrete
 classes in `neocogi-ui-nodes-contracts`, and clients in the facade's API reference.
 
-Combo boxes retain their display labels but no generic application payload. Create
-one with `Ui::combo_box(parent, items, ComboSelection::None)`; its visible
-default fallback is `Select…`, and `set_placeholder` customizes that fallback after
-construction. `selection()` returns the same NCIDL-generated
-`ComboSelection` used by the ABI; the facade does not maintain a parallel
-selection record. `replace_items` requires an explicit selection value and rejects
-invalid indices without clamping. Domain data remains in the application and is
-mapped from the committed index rather than reconstructed from a display string.
-File-dialog rows likewise retain exact native paths independently of lossy UTF-8
-display labels.
+Combo boxes retain a selection-menu hierarchy but no generic application payload.
+`Ui::combo_box(parent, items, ComboSelection::None)` is the flat convenience: it
+assigns each label an ID equal to its ordinal, displays the `Select…` fallback, and
+allows `set_placeholder` to replace that fallback. `Ui::combo_menu` instead consumes
+the NCIDL-generated core `ChoiceMenuEntry` preorder sequence and `MenuTextRange` values,
+so submenus and stable application-defined leaf IDs cross COM without a handwritten
+parallel structure. Every branch declares its direct-child count; invalid UTF-8
+ranges, empty or malformed branches, duplicate IDs, excessive nesting, and unknown
+selected IDs reject the complete candidate atomically. `selection()` and changed
+events return that same generated `ComboSelection`. Domain data remains in the
+application and is mapped from the committed stable ID rather than reconstructed
+from a display string. File-dialog rows likewise retain exact native paths
+independently of lossy UTF-8 display labels.
 
 ## Containers and child edits
 
@@ -92,12 +95,12 @@ root and owns one `TextEditor` content child; the child alone owns the text buff
 cursor, font, and text-event sources. `ScrollArea` similarly owns a transform
 surface and two actual scrollbar children. Small typed state capabilities are shared only where
 distinct roles must coordinate. A combo header and its compact choice-menu popup use one
-runtime-private state allocation for labels, optional selection, and an explicit popup state
-machine. Its fields are ordinary values mutated through exclusive interface receivers; pointer
-hover and keyboard candidate state remain solely in the shared menu surface. The composition
-manager above `WindowManager` owns the association with a generic popup handle. The surface forest
-contains menu values and popup ownership, never a second combo widget, parent backpointer, or
-type-erased payload.
+runtime-private state allocation for shared UTF-8 text, generated preorder entries, optional stable
+selection, and an explicit popup state machine. Its fields are ordinary values mutated through
+exclusive interface receivers; pointer hover and keyboard candidate state remain solely in the
+shared menu surfaces. The composition manager above `WindowManager` owns the association with a
+generic popup handle. The surface forest contains menu values and popup ownership, never a second
+combo widget, parent backpointer, or type-erased payload.
 
 ## Geometry and external state
 

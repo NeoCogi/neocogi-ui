@@ -725,38 +725,65 @@ unmounted header. The caller then inserts the returned `ComboWidget` into that
 window's retained tree. The popup capability, row presentation, and coordination
 events are deliberately not exposed.
 
-The control owns its display labels and represents the committed position with the
-NCIDL-generated `ComboSelection`. `ComboSelection::None` is not item zero:
-it renders the runtime-owned `Select…` fallback unless `set_placeholder` replaces
-it. The facade consumes and returns that generated contract type directly instead
-of declaring a parallel Rust selection record. `replace_items(items, selection)`
-validates and installs the complete label/selection candidate atomically. Both it
-and `set_selection` reject an out-of-range selected index instead of clamping.
-These programmatic edits remain silent; `subscribe_combo_changed` receives an
-immutable generated selection value only after a pointer or keyboard choice
-actually commits. Display labels remain independently available through `item`
-and `display_text`; generic application data is mapped from the committed index.
+The control owns its display labels and represents the committed stable leaf ID with
+the NCIDL-generated `ComboSelection`. `ComboSelection::None` is not leaf zero: it
+renders the runtime-owned `Select…` fallback unless `set_placeholder` replaces it.
+The facade consumes and returns that generated contract type directly instead of
+declaring a parallel Rust selection record. The flat `combo_box` and `replace_items`
+helpers assign IDs equal to item ordinals. `combo_menu` and `replace_menu` accept the
+generated core `ChoiceMenuEntry` preorder model and shared UTF-8 text directly, allowing
+arbitrary stable IDs and nested submenus without another handwritten public tree:
 
-Opening copies the committed selection into a transient keyboard candidate. The
-popup paints pointer hover, then keyboard candidate, then committed selection:
-leaving the rows therefore restores the keyboard/committed fallback. Arrows move
-only the candidate, Enter or a row press commits, and Escape/outside dismissal
-preserves the prior selection.
+```rust,no_run
+use neocogi_ui::{ChoiceMenuEntry, ComboSelection, MenuTextRange};
+
+let text = "FruitAppleBanana";
+let entries = [
+    ChoiceMenuEntry::Submenu {
+        label: MenuTextRange { first: 0, count: 5 },
+        children: 2,
+    },
+    ChoiceMenuEntry::Choice {
+        id: 100,
+        label: MenuTextRange { first: 5, count: 5 },
+    },
+    ChoiceMenuEntry::Choice {
+        id: 200,
+        label: MenuTextRange { first: 10, count: 6 },
+    },
+];
+let combo = ui.combo_menu(window.as_com_ref(), text, &entries,
+    ComboSelection::Selected(100))?;
+```
+
+Every submenu is followed immediately by its declared number of direct children;
+nested descendants follow their owning child branch. Construction and replacement
+atomically reject malformed counts, empty branches, invalid UTF-8 ranges, duplicate
+leaf IDs, nesting beyond 32 branches, or an unknown selected ID. Programmatic edits
+remain silent; `subscribe_combo_changed` receives an immutable generated selection
+only after a pointer or keyboard choice commits. Display labels remain independently
+available through `choice_label` and `display_text`; generic application data is
+mapped from the committed stable ID.
+
+Opening restores the retained submenu path containing the committed leaf and copies
+that leaf into the transient keyboard candidate. The popup paints pointer hover,
+then keyboard candidate, then committed selection: leaving the rows therefore
+restores the keyboard/committed fallback. Arrows move only the candidate, Enter or a
+row press commits, and Escape/outside dismissal preserves the prior selection.
 
 Popup placement uses the header's complete outer border box rather than its inset
 content rectangle. Its horizontal extent remains fixed to that box while row
 content determines height, so theme-specific frames cannot shift the left edge or
 extend the right edge.
 
-The header and ordinary private popup widget use one runtime-private typed state
-capability because they are independently retained objects. That allocation owns
-ordinary label, selection, placeholder, revision, and lifecycle fields; every
-mutation has an exclusive `&mut self` receiver. A composition manager above
-`WindowManager` associates it with a generic `PopupHandle`, while the root forest
-receives only an ordinary `Node` through its generic popup API. No generic Rust
-payload, `Any`, `Rc<RefCell<_>>` semantic model, public popup handle, or mirrored
-index/label state crosses the boundary. Applications map the committed index back
-to their domain values.
+The header and composition manager share one runtime-private typed state capability.
+That allocation owns ordinary text, generated preorder entries, stable selection,
+placeholder, revision, and lifecycle fields; every mutation has an exclusive
+`&mut self` receiver. The manager associates it with a generic `PopupHandle`, while
+the root forest receives only compact choice-menu values and ordinary relational
+submenu edges. No generic Rust payload, `Any`, `Rc<RefCell<_>>` semantic model,
+public popup handle, or mirrored menu tree crosses the boundary. Applications map
+the committed stable ID back to their domain values.
 
 Menus retain their compact representation: one surface owns direct row values,
 with no synthetic widget tree per row. The runtime exposes `IMenus` alongside its

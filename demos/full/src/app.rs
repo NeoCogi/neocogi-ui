@@ -340,7 +340,7 @@ impl EventHandler<State, ComboSelection> for Observe {
             ComboSelection::None => state.write_log("Selection cleared"),
             ComboSelection::Selected(index) => {
                 let index = usize::try_from(index).map_err(|_| NC_E_INVALID_ARG)?;
-                let label = state.combo.item(index)?;
+                let label = state.combo.choice_label(index)?;
                 state.write_log(&format!("Selected {label}"))
             }
         }

@@ -70,7 +70,7 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
 
     // Invalid candidates never clamp and never partially replace the valid live snapshot.
     assert_eq!(combo.replace_items(&["shorter"], ComboSelection::Selected(7)), Err(NC_E_INVALID_ARG));
-    assert_eq!(combo.item_count(), Ok(2));
+    assert_eq!(combo.choice_count(), Ok(2));
     assert_eq!(combo.display_text().unwrap(), "first");
     assert_eq!(combo.set_selection(ComboSelection::Selected(7)), Err(NC_E_INVALID_ARG));
 
@@ -100,4 +100,57 @@ fn combo_construction_is_atomic_for_invalid_selection() {
     let result = ui.combo_box(window.as_com_ref(), &["only"], ComboSelection::Selected(1));
     assert!(matches!(result, Err(NC_E_INVALID_ARG)));
     assert_eq!(window.snapshot().unwrap().visibility, Visibility::Visible);
+}
+
+/// Nested combo choices traverse the shared submenu forest and commit stable leaf identities.
+#[test]
+fn combo_choice_menu_uses_shared_submenu_navigation() {
+    let ui = neocogi_ui::Ui::from_interface(runtime()).unwrap();
+    let mut root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
+    let window = ui.window("nested combo", RECT, &root).unwrap();
+    let menu_text = "FruitAppleBanana";
+    let menu = [
+        neocogi_ui::ChoiceMenuEntry::Submenu {
+            label: neocogi_ui::MenuTextRange { first: 0, count: 5 },
+            children: 2,
+        },
+        neocogi_ui::ChoiceMenuEntry::Choice {
+            id: 10,
+            label: neocogi_ui::MenuTextRange { first: 5, count: 5 },
+        },
+        neocogi_ui::ChoiceMenuEntry::Choice {
+            id: 11,
+            label: neocogi_ui::MenuTextRange { first: 10, count: 6 },
+        },
+    ];
+    let mut combo = ui.combo_menu(window.as_com_ref(), menu_text, &menu, ComboSelection::Selected(10)).unwrap();
+    root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
+    let session = EventSession::new(Observations { changes: Vec::new() });
+    session.subscribe_combo_changed(&combo, RecordSelection).unwrap();
+    ui.update_with_events(SIZE, &session).unwrap();
+
+    // Opening restores the committed Apple branch automatically; Down then moves directly to
+    // Banana inside that already active submenu, and Enter commits its stable identity.
+    for key in [KeyCode::Tab, KeyCode::Enter, KeyCode::ArrowDown, KeyCode::Enter] {
+        press(&ui, key);
+    }
+    ui.update_with_events(SIZE, &session).unwrap();
+    assert_eq!(combo.selection().unwrap(), ComboSelection::Selected(11));
+    assert_eq!(combo.display_text().unwrap(), "Banana");
+    assert_eq!(combo.choice_count().unwrap(), 2);
+    assert_eq!(session.state().unwrap().changes, [ComboSelection::Selected(11)]);
+
+    // A silent selection edit while the hierarchy is open rebuilds and restores the selected
+    // branch instead of closing the popup. Down therefore moves from Apple back to Banana.
+    press(&ui, KeyCode::Enter);
+    ui.update_with_events(SIZE, &session).unwrap();
+    combo.set_selection(ComboSelection::Selected(10)).unwrap();
+    ui.update_with_events(SIZE, &session).unwrap();
+    assert_eq!(session.state().unwrap().changes, [ComboSelection::Selected(11)]);
+    for key in [KeyCode::ArrowDown, KeyCode::Enter] {
+        press(&ui, key);
+    }
+    ui.update_with_events(SIZE, &session).unwrap();
+    assert_eq!(combo.selection().unwrap(), ComboSelection::Selected(11));
+    assert_eq!(session.state().unwrap().changes, [ComboSelection::Selected(11), ComboSelection::Selected(11)]);
 }

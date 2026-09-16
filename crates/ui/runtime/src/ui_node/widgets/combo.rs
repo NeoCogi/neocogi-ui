@@ -126,9 +126,10 @@ impl Combo {
         let padding = style.metrics().padding.max(0);
         let placeholder = self.state.placeholder().and_then(|text| text.to_string()).unwrap_or_default();
         let mut text_w = text_size(style, atlas, &self.font, &placeholder).width.max(0);
-        let count = self.state.item_count().ok().and_then(|count| usize::try_from(count).ok()).unwrap_or(0);
-        for index in 0..count {
-            if let Ok(label) = self.state.item(index as u64).and_then(|text| text.to_string()) {
+        let count = self.state.choice_count().ok().and_then(|count| usize::try_from(count).ok()).unwrap_or(0);
+        for ordinal in 0..count {
+            let ordinal = u64::try_from(ordinal).expect("usize fits the generated u64 choice ordinal on supported targets");
+            if let Ok(label) = self.state.choice_label(ordinal).and_then(|text| text.to_string()) {
                 text_w = text_w.max(text_size(style, atlas, &self.font, &label).width.max(0));
             }
         }
@@ -238,15 +239,15 @@ impl crate::ui_node::widget_object::FontState for Combo {
     }
 }
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_core_contracts::{FontRole, GeometryChange, IEventSubscriptionAbi, IWidgetHostAbi};
-use neocogi_ui_nodes_contracts::{ComboAbi, ComboItemRange, ComboSelectionAbi, IComboChangedSinkAbi};
+use neocogi_ui_core_contracts::{ChoiceMenuEntryAbi, FontRole, GeometryChange, IEventSubscriptionAbi, IWidgetHostAbi};
+use neocogi_ui_nodes_contracts::{ComboAbi, ComboSelectionAbi, IComboChangedSinkAbi};
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
 
 direct_widget_phase_impl!(Combo);
 direct_leaf_layout_impl!(Combo);
 
 impl Combo {
-    /// Constructs the header around the typed state also retained by its private popup widget.
+    /// Constructs the header around the typed state also retained by its composition controller.
     pub(crate) fn create_com(
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::ui_node::widget_object::SharedAssets,
@@ -278,26 +279,26 @@ impl neocogi_ui_nodes_contracts::Combo for Combo {
     }
 
     /// Returns the exact number of labels in the authoritative sequence.
-    fn item_count(&self) -> Result<u64, NcStatus> {
+    fn choice_count(&self) -> Result<u64, NcStatus> {
         self.runtime().state.readable()?;
-        self.state.item_count()
+        self.state.choice_count()
     }
 
-    /// Copies one checked item without exposing shared-model storage.
-    fn item(&self, index: u64) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+    /// Copies one checked leaf label without exposing shared-model storage.
+    fn choice_label(&self, ordinal: u64) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;
-        self.state.item(index)
+        self.state.choice_label(ordinal)
     }
 
     /// Validates and copies a complete candidate before changing any live model field.
-    fn replace_items(
+    fn replace_menu(
         &mut self,
-        item_text: NcCopyFromBufferOffset<'_, u8>,
-        ranges: NcCopyFromBufferOffset<'_, ComboItemRange>,
+        menu_text: NcCopyFromBufferOffset<'_, u8>,
+        entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
         selection: ComboSelectionAbi,
     ) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
-        let changed = self.state.replace_items(item_text, ranges, selection)?;
+        let changed = self.state.replace_menu(menu_text, entries, selection)?;
         self.runtime_mut()
             .state
             .record_change(if changed { GeometryChange::Changed } else { GeometryChange::NoChange });

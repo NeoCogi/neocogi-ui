@@ -68,12 +68,16 @@ handlers; a shortcut hint does not register an accelerator.
 A combo popup is a choice-menu specialization of the same compact surface and popup
 forest. Its leaves carry choice identities rather than command-item event ports.
 The owning combo model supplies the committed identity and replaces the complete
-leaf snapshot after an item edit. Routing stages a leaf identity, closes the menu
-path, and commits it at the next checked composition boundary before application
-changed-event delivery. Pointer hover, keyboard focus, and committed choice are
-independent: hover wins only while the pointer has an actual row target, keyboard
-navigation wins while active, and otherwise the committed row remains highlighted.
-The trigger fixes popup width; menu rows determine only its intrinsic height.
+validated hierarchy after a model edit. Branches compile into the same relational
+submenu forest used by command menus; no combo-specific popup tree exists. Opening
+restores every branch leading to a nested committed leaf, so that exact leaf remains
+the keyboard and paint fallback from the first visible frame. Routing stages a leaf
+identity, closes the menu path, and commits it at the next checked composition
+boundary before application changed-event delivery. Pointer hover, keyboard focus,
+and committed choice are independent: hover wins only while the pointer has an
+actual row target, keyboard navigation wins while active, and otherwise the
+committed row remains highlighted. The trigger fixes the top-level popup width;
+submenu rows retain their ordinary intrinsic menu width.
 
 ## Placement and interaction
 
