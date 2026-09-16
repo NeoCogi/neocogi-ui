@@ -78,6 +78,7 @@ fn register_plugins(runtime: &neocogi_com::Runtime, _directory: &std::path::Path
     // retained by this executable for the process lifetime.
     unsafe {
         runtime.register_factory_plugin_description(neocogi_ui_runtime::factory_plugin_description())?;
+        runtime.register_factory_plugin_description(neocogi_ui_nodes::factory_plugin_description())?;
         runtime.register_factory_plugin_description(neocogi_render_plugin::factory_plugin_description())?;
         runtime.register_factory_plugin_description(neocogi_gfx::factory_plugin_description())?;
         runtime.register_factory_plugin_description(neocogi_skin::factory_plugin_description())?;
@@ -105,8 +106,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let renderer: ComPtr<IRendererAbi> = native.query()?;
     let gfx = runtime.activate_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
     let compositor = gfx.create_compositor(assets.as_com_ref())?;
-    let ui_factory = runtime.activate_plugin_factory::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
-    let mut ui = Ui::from_interface(ui_factory.create_runtime(assets.as_com_ref(), compositor.as_com_ref())?)?;
+    let runtime_factory = runtime.activate_plugin_factory::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
+    let ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), compositor.as_com_ref())?;
+    let node_provider = runtime.activate_plugin_factory::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
+    let node_factory = node_provider.bind(ui_runtime.as_com_ref())?;
+    let mut ui = Ui::from_interfaces(ui_runtime, node_factory)?;
     if options.rebuild_assets {
         // The optional builder owns packing/font/PNG implementation; the host sees only typed roots.
         let gfx = runtime.activate_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
@@ -329,7 +333,7 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let directory = SmokeDirectory::new()?;
     let mut root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     let window = ui.window("Dynamic components", Rect { x: 10, y: 10, width: 610, height: 300 }, &root)?;
-    let combo = ui.combo_box(window.as_com_ref(), &["First", "Selected across COM"], ComboSelection::Selected(1))?;
+    let combo = ui.combo_box(window.as_com_ref(), &["First", "Selected across COM"], ChoiceSelection::Selected(1))?;
     root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content))?.finish()?;
     let menus = ui.menus()?;
     let bar = menus.create("")?;

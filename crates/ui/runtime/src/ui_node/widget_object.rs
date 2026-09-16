@@ -50,13 +50,13 @@ impl WidgetRuntime {
         })
     }
 
-    /// Binds a factory product directly to the runtime's already imported asset value.
+    /// Binds a factory product to a provider-shared cache that follows host revision replacement.
     pub(crate) fn from_shared(host: ComPtr<IWidgetHostAbi>, options: WidgetOption, resources: SharedAssets) -> Result<Self, NcStatus> {
         host.check_mutation()?;
         Ok(Self {
             state: WidgetState::new(host, WidgetOptions::from_raw(options.bits() as u16)),
             resources,
-            refresh_resources: false,
+            refresh_resources: true,
         })
     }
 

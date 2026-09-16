@@ -20,11 +20,10 @@ pub mod nodes {
     pub use neocogi_ui_nodes_contracts::*;
 }
 pub use neocogi_ui_nodes_contracts::{
-    Button, ButtonAbi, Checkbox, CheckboxAbi, ChildCrossSize, ColorSwatch, ColorSwatchAbi, Combo, ComboAbi, ComboSelection, ComboSelectionAbi, ContentIcon,
-    CrossSize, CrossSizeAbi, Disclosure, DisclosureAbi, DisclosureStyle, FillStates, FlowDirection, Grid, GridAbi, GridExtent, LayoutTrack, LayoutTrackAbi,
-    Linear, LinearAbi, LinearEdge, ListBox, ListBoxAbi, ListItem, ListItemAbi, Number, NumberAbi, NumberOptions, ScrollArea, ScrollAreaAbi, ScrollAxis,
-    ScrollRange, Scrollbar, ScrollbarAbi, Slider, SliderAbi, SliderOptions, TextArea, TextAreaAbi, TextBlock, TextBlockAbi, Textbox, TextboxAbi, UiFactory,
-    UiFactoryAbi,
+    Button, ButtonAbi, Checkbox, CheckboxAbi, ChildCrossSize, ColorSwatch, ColorSwatchAbi, Combo, ComboAbi, ContentIcon, CrossSize, CrossSizeAbi, Disclosure,
+    DisclosureAbi, DisclosureStyle, FillStates, FlowDirection, Grid, GridAbi, GridExtent, LayoutTrack, LayoutTrackAbi, Linear, LinearAbi, LinearEdge, ListBox,
+    ListBoxAbi, ListItem, ListItemAbi, Number, NumberAbi, NumberOptions, ScrollArea, ScrollAreaAbi, ScrollAxis, ScrollRange, Scrollbar, ScrollbarAbi, Slider,
+    SliderAbi, SliderOptions, TextArea, TextAreaAbi, TextBlock, TextBlockAbi, Textbox, TextboxAbi, UiFactory, UiFactoryAbi,
 };
 pub use neocogi_gfx_contracts::{
     AssetLoader, AssetLoaderAbi, DrawPoint, GfxPluginFactory, GfxPluginFactoryAbi, IAssetBuilder, IAssetBuilderAbi, IGfxDiagnostics, IGfxDiagnosticsAbi,
@@ -35,7 +34,7 @@ pub use neocogi_skin_contracts::{
     ISkinDiagnostics, ISkinDiagnosticsAbi, PaletteEdit, PaletteEditAbi, PaletteEditTag, SkinPluginFactory, SkinPluginFactoryAbi, StyleCompiler,
     StyleCompilerAbi, ThemeLoader, ThemeLoaderAbi,
 };
-use neocogi_com::{ComInterface, ComPtr, ComRef, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
+use neocogi_com::{ComInterface, ComPtr, ComRef, INcStringComPtrExt, IUnknown, NcCopyFromBufferOffset, NcStatus};
 mod containers;
 pub use containers::{DisclosureWidget, GridWidget, LinearWidget, ScrollAreaWidget};
 
@@ -442,7 +441,7 @@ pub struct Ui {
 
 impl Ui {
     /// Creates one complete combo box with the contract-defined fallback and selection state.
-    pub fn combo_box<Item: AsRef<str>>(&self, parent: ComRef<'_, IWindowAbi>, items: &[Item], selection: ComboSelection) -> Result<ComboWidget, NcStatus> {
+    pub fn combo_box<Item: AsRef<str>>(&self, parent: ComRef<'_, IWindowAbi>, items: &[Item], selection: ChoiceSelection) -> Result<ComboWidget, NcStatus> {
         let (menu_text, entries) = encoded_combo_items(items)?;
         let combo = self.factory.interface.create_combo_box(
             parent,
@@ -459,7 +458,7 @@ impl Ui {
         parent: ComRef<'_, IWindowAbi>,
         menu_text: &str,
         entries: &[ChoiceMenuEntry],
-        selection: ComboSelection,
+        selection: ChoiceSelection,
     ) -> Result<ComboWidget, NcStatus> {
         let entries = combo_menu_abi(entries);
         let combo = self.factory.interface.create_combo_box(
@@ -473,7 +472,9 @@ impl Ui {
 
     /// Creates a hidden standard file picker using the actual runtime's modal and COM controls.
     pub fn file_dialog(&self, parent: ComRef<'_, IWindowAbi>) -> Result<crate::FileDialog, NcStatus> {
-        Ok(crate::FileDialog::from_interface(self.runtime.query::<IFileDialogsAbi>()?.create(parent)?))
+        Ok(crate::FileDialog::from_interface(
+            self.factory.interface.query::<IFileDialogsAbi>()?.create(parent)?,
+        ))
     }
 
     /// Queries compact menu construction on this same runtime identity without copying its forest.
@@ -481,9 +482,14 @@ impl Ui {
         Ok(crate::Menus::from_interface(self.runtime.query()?))
     }
 
-    /// Checks the complete runtime capability set before exposing a usable client.
-    pub fn from_interface(runtime: ComPtr<UiRuntimeAbi>) -> Result<Self, NcStatus> {
-        let factory = WidgetFactory::from_interface(runtime.factory()?.query::<UiFactoryAbi>()?);
+    /// Binds independently activated core-runtime and concrete-node providers after proving ownership.
+    pub fn from_interfaces(runtime: ComPtr<UiRuntimeAbi>, factory: ComPtr<UiFactoryAbi>) -> Result<Self, NcStatus> {
+        let runtime_host = runtime.construction_host()?.host()?.query::<IUnknown>()?;
+        let factory_host = factory.query::<IConstructionHostAbi>()?.host()?.query::<IUnknown>()?;
+        if runtime_host.as_ptr() != factory_host.as_ptr() {
+            return Err(UI_E_OWNER);
+        }
+        let factory = WidgetFactory::from_interface(factory);
         let windows = runtime.query()?;
         Ok(Self { runtime, factory, windows })
     }
@@ -651,8 +657,8 @@ impl Widget<ButtonAbi> {
 pub type ComboWidget = Widget<ComboAbi>;
 impl Widget<ComboAbi> {
     /// Returns the NCIDL-defined selection value without a parallel facade record.
-    pub fn selection(&self) -> Result<ComboSelection, NcStatus> {
-        ComboSelection::try_from(self.interface.selection()?).map_err(|_| neocogi_com::NC_E_INVALID_ARG)
+    pub fn selection(&self) -> Result<ChoiceSelection, NcStatus> {
+        ChoiceSelection::try_from(self.interface.selection()?).map_err(|_| neocogi_com::NC_E_INVALID_ARG)
     }
     /// Copies the exact selected label or visible placeholder currently painted by the header.
     pub fn display_text(&self) -> Result<String, NcStatus> {
@@ -668,7 +674,7 @@ impl Widget<ComboAbi> {
         self.interface.choice_label(ordinal)?.to_string()
     }
     /// Atomically replaces all labels and the explicit optional selection.
-    pub fn replace_items<Item: AsRef<str>>(&mut self, items: &[Item], selection: ComboSelection) -> Result<(), NcStatus> {
+    pub fn replace_items<Item: AsRef<str>>(&mut self, items: &[Item], selection: ChoiceSelection) -> Result<(), NcStatus> {
         let (menu_text, entries) = encoded_combo_items(items)?;
         self.interface.replace_menu(
             NcCopyFromBufferOffset::new(0, &menu_text),
@@ -677,7 +683,7 @@ impl Widget<ComboAbi> {
         )
     }
     /// Atomically replaces the generated preorder hierarchy, shared text, and selection.
-    pub fn replace_menu(&mut self, menu_text: &str, entries: &[ChoiceMenuEntry], selection: ComboSelection) -> Result<(), NcStatus> {
+    pub fn replace_menu(&mut self, menu_text: &str, entries: &[ChoiceMenuEntry], selection: ChoiceSelection) -> Result<(), NcStatus> {
         let entries = combo_menu_abi(entries);
         self.interface.replace_menu(
             NcCopyFromBufferOffset::new(0, menu_text.as_bytes()),
@@ -686,7 +692,7 @@ impl Widget<ComboAbi> {
         )
     }
     /// Silently replaces the committed optional selection without clamping invalid indices.
-    pub fn set_selection(&mut self, selection: ComboSelection) -> Result<(), NcStatus> {
+    pub fn set_selection(&mut self, selection: ChoiceSelection) -> Result<(), NcStatus> {
         self.interface.set_selection(selection.into())
     }
     /// Copies the fallback retained independently from the current selection.

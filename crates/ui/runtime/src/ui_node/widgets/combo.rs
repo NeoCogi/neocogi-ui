@@ -31,15 +31,15 @@
 //! Header widget for the runtime-owned combo-box composite.
 //!
 //! This leaf owns widget lifecycle, font selection, and header interaction. Semantic state lives in
-//! one private typed COM object also used by the ordinary widget-backed popup; all mutation crosses
-//! that boundary through an exclusive receiver rather than shared interior mutability.
+//! the core-owned `IChoiceMenu` also used by the ordinary widget-backed popup; all mutation crosses
+//! that public typed boundary through an exclusive receiver rather than shared interior mutability.
 
-use crate::{
-    ControlRole,
-    combo_box::{ComboPopupIntent, IComboStateAbi},
-};
+use crate::ControlRole;
 
 use super::*;
+
+/// Contract-defined visible fallback for a combo with no committed selection.
+pub(crate) const DEFAULT_COMBO_PLACEHOLDER: &str = "Select…";
 
 /// One-shot construction input for a [`Combo`].
 pub struct ComboParameters {
@@ -76,23 +76,42 @@ impl Default for ComboParameters {
 pub struct Combo {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,
-    /// Typed capability for the sole authoritative semantic state allocation.
-    state: ComPtr<IComboStateAbi>,
+    /// Core-owned hierarchy, popup lifecycle, committed selection, and user event source.
+    menu: ComPtr<IChoiceMenuAbi>,
+    /// Header-only fallback displayed when the generalized choice menu has no selection.
+    placeholder: String,
     /// Initialization-only font.
     font: FontRef,
 }
 
 impl Combo {
     /// Combines typed semantic state with already bound common widget runtime resources.
-    pub(crate) fn from_runtime(runtime: crate::ui_node::widget_object::WidgetRuntime, parameters: ComboParameters, state: ComPtr<IComboStateAbi>) -> Self {
-        Self { runtime, state, font: parameters.font }
+    pub(crate) fn from_runtime(
+        runtime: crate::ui_node::widget_object::WidgetRuntime,
+        parameters: ComboParameters,
+        menu: ComPtr<IChoiceMenuAbi>,
+        placeholder: String,
+    ) -> Self {
+        Self {
+            runtime,
+            menu,
+            placeholder,
+            font: parameters.font,
+        }
     }
 
     /// Copies the rendered header text for the infallible private paint algorithm.
     fn display_text(&self) -> String {
         // The public COM observation below preserves errors. Painting cannot return a status, and
         // the private state object remains alive and valid for the header's complete lifetime.
-        self.state.display_text().and_then(|text| text.to_string()).unwrap_or_default()
+        match self
+            .menu
+            .selection()
+            .and_then(|selection| ChoiceSelection::try_from(selection).map_err(|_| neocogi_com::NC_E_INVALID_ARG))
+        {
+            Ok(ChoiceSelection::Selected(_)) => self.menu.selected_label().and_then(|text| text.to_string()).unwrap_or_default(),
+            Ok(ChoiceSelection::None) | Err(_) => self.placeholder.clone(),
+        }
     }
 
     /// Reconstructs the header border box used as the popup's exact outer-width anchor.
@@ -124,12 +143,11 @@ impl Combo {
     /// Measures the widest possible header label so selection changes remain paint-only.
     fn preferred_size_widget(&self, style: &Skin, atlas: &AtlasHandle, _constraints: Constraints) -> Dimensioni {
         let padding = style.metrics().padding.max(0);
-        let placeholder = self.state.placeholder().and_then(|text| text.to_string()).unwrap_or_default();
-        let mut text_w = text_size(style, atlas, &self.font, &placeholder).width.max(0);
-        let count = self.state.choice_count().ok().and_then(|count| usize::try_from(count).ok()).unwrap_or(0);
+        let mut text_w = text_size(style, atlas, &self.font, &self.placeholder).width.max(0);
+        let count = self.menu.choice_count().ok().and_then(|count| usize::try_from(count).ok()).unwrap_or(0);
         for ordinal in 0..count {
             let ordinal = u64::try_from(ordinal).expect("usize fits the generated u64 choice ordinal on supported targets");
-            if let Ok(label) = self.state.choice_label(ordinal).and_then(|text| text.to_string()) {
+            if let Ok(label) = self.menu.choice_label(ordinal).and_then(|text| text.to_string()) {
                 text_w = text_w.max(text_size(style, atlas, &self.font, &label).width.max(0));
             }
         }
@@ -143,14 +161,17 @@ impl Combo {
     fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
         if let Some(action) = ctx.action(input, self.keyboard_behavior()) {
             let anchor = self.popup_anchor(ctx);
-            let intent = match action {
-                KeyboardAction::Activate => Some(ComboPopupIntent::Toggle),
-                KeyboardAction::Expand => Some(ComboPopupIntent::Open),
-                KeyboardAction::Collapse => Some(ComboPopupIntent::Close),
-                KeyboardAction::Decrease | KeyboardAction::Increase => None,
-            };
-            if let Some(intent) = intent {
-                let _ = self.state.request_popup(intent, anchor);
+            match action {
+                KeyboardAction::Activate => {
+                    let _ = self.menu.toggle_at(anchor);
+                }
+                KeyboardAction::Expand => {
+                    let _ = self.menu.show_at(anchor);
+                }
+                KeyboardAction::Collapse => {
+                    let _ = self.menu.hide();
+                }
+                KeyboardAction::Decrease | KeyboardAction::Increase => {}
             }
         }
     }
@@ -204,7 +225,7 @@ impl Widget for Combo {
 impl crate::ui_node::widget_object::WidgetAlgorithm for Combo {
     /// Closes event delivery and retires the popup definition with the removed header.
     fn close_events(&mut self) {
-        let _ = self.state.retire();
+        let _ = self.menu.close();
     }
 }
 
@@ -213,7 +234,7 @@ impl Drop for Combo {
     fn drop(&mut self) {
         // Mounted headers request the same idempotent transition from `close_events`; this path
         // covers construction followed by release without insertion into the retained tree.
-        let _ = self.state.retire();
+        let _ = self.menu.close();
     }
 }
 
@@ -239,9 +260,12 @@ impl crate::ui_node::widget_object::FontState for Combo {
     }
 }
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_core_contracts::{ChoiceMenuEntryAbi, FontRole, GeometryChange, IEventSubscriptionAbi, IWidgetHostAbi};
-use neocogi_ui_nodes_contracts::{ComboAbi, ComboSelectionAbi, IComboChangedSinkAbi};
-use neocogi_com::{ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
+use neocogi_ui_core_contracts::{
+    ChoiceMenuEntryAbi, ChoiceSelection, ChoiceSelectionAbi, FontRole, GeometryChange, IChoiceChangedSinkAbi, IChoiceMenuAbi, IEventSubscriptionAbi,
+    IWidgetHostAbi,
+};
+use neocogi_ui_nodes_contracts::ComboAbi;
+use neocogi_com::{ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus, NcString};
 
 direct_widget_phase_impl!(Combo);
 direct_leaf_layout_impl!(Combo);
@@ -251,43 +275,49 @@ impl Combo {
     pub(crate) fn create_com(
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::ui_node::widget_object::SharedAssets,
-        state: ComPtr<IComboStateAbi>,
+        menu: ComPtr<IChoiceMenuAbi>,
+        placeholder: String,
     ) -> Result<ComPtr<ComboAbi>, NcStatus> {
-        let value = Self::build(host, &resources, state)?;
+        let value = Self::build(host, &resources, menu, placeholder)?;
         Ok(Self::from_value(value).query().expect("Combo declares its callable class contract"))
     }
 
     /// Builds one header with runtime-shared resources and no semantic-state mirror.
-    fn build(host: ComPtr<IWidgetHostAbi>, resources: &crate::ui_node::widget_object::SharedAssets, state: ComPtr<IComboStateAbi>) -> Result<Self, NcStatus> {
+    fn build(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: &crate::ui_node::widget_object::SharedAssets,
+        menu: ComPtr<IChoiceMenuAbi>,
+        placeholder: String,
+    ) -> Result<Self, NcStatus> {
         let parameters = crate::ComboParameters::new();
         let runtime = crate::ui_node::widget_object::WidgetRuntime::for_resources(host, parameters.opt, Some(resources))?;
-        Ok(Self::from_runtime(runtime, parameters, state))
+        Ok(Self::from_runtime(runtime, parameters, menu, placeholder))
     }
 }
 
 impl neocogi_ui_nodes_contracts::Combo for Combo {
     /// Returns an explicit tagged optional position from the authoritative model.
-    fn selection(&self) -> Result<ComboSelectionAbi, NcStatus> {
+    fn selection(&self) -> Result<ChoiceSelectionAbi, NcStatus> {
         self.runtime().state.readable()?;
-        self.state.selection()
+        self.menu.selection()
     }
 
     /// Copies the selected label or fallback without exposing the plugin's string allocation.
     fn display_text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;
-        self.state.display_text()
+        Ok(NcString::from_utf8_str(&self.display_text()))
     }
 
     /// Returns the exact number of labels in the authoritative sequence.
     fn choice_count(&self) -> Result<u64, NcStatus> {
         self.runtime().state.readable()?;
-        self.state.choice_count()
+        self.menu.choice_count()
     }
 
     /// Copies one checked leaf label without exposing shared-model storage.
     fn choice_label(&self, ordinal: u64) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;
-        self.state.choice_label(ordinal)
+        self.menu.choice_label(ordinal)
     }
 
     /// Validates and copies a complete candidate before changing any live model field.
@@ -295,20 +325,18 @@ impl neocogi_ui_nodes_contracts::Combo for Combo {
         &mut self,
         menu_text: NcCopyFromBufferOffset<'_, u8>,
         entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
-        selection: ComboSelectionAbi,
+        selection: ChoiceSelectionAbi,
     ) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
-        let changed = self.state.replace_menu(menu_text, entries, selection)?;
-        self.runtime_mut()
-            .state
-            .record_change(if changed { GeometryChange::Changed } else { GeometryChange::NoChange });
+        self.menu.replace(menu_text, entries, selection)?;
+        self.runtime_mut().state.record_change(GeometryChange::Changed);
         Ok(())
     }
 
     /// Silently changes selection with strict range validation and truthful geometry invalidation.
-    fn set_selection(&mut self, selection: ComboSelectionAbi) -> Result<(), NcStatus> {
+    fn set_selection(&mut self, selection: ChoiceSelectionAbi) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
-        let _ = self.state.set_selection(selection)?;
+        self.menu.set_selection(selection)?;
         // Header measurement reserves the widest label, so changing only selection is paint-only.
         self.runtime_mut().state.record_change(GeometryChange::NoChange);
         Ok(())
@@ -317,16 +345,21 @@ impl neocogi_ui_nodes_contracts::Combo for Combo {
     /// Copies the fallback independently of whether the header currently needs it.
     fn placeholder(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;
-        self.state.placeholder()
+        Ok(NcString::from_utf8_str(&self.placeholder))
     }
 
     /// Validates a complete fallback before mutating model state.
     fn set_placeholder(&mut self, placeholder: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
-        let changed = self.state.set_placeholder(placeholder)?;
-        self.runtime_mut()
-            .state
-            .record_change(if changed { GeometryChange::Changed } else { GeometryChange::NoChange });
+        if placeholder.offset() != 0 {
+            return Err(neocogi_com::NC_E_INVALID_ARG);
+        }
+        let placeholder = std::str::from_utf8(placeholder.as_slice()).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
+        if self.placeholder != placeholder {
+            self.placeholder.clear();
+            self.placeholder.push_str(placeholder);
+            self.runtime_mut().state.record_change(GeometryChange::Changed);
+        }
         Ok(())
     }
 
@@ -341,8 +374,8 @@ impl neocogi_ui_nodes_contracts::Combo for Combo {
     }
 
     /// Connects the Combo's captured-selection source directly through its class contract.
-    fn subscribe_changed(&mut self, sink: ComRef<'_, IComboChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_changed(&mut self, sink: ComRef<'_, IChoiceChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
-        self.state.subscribe_changed(sink)
+        self.menu.subscribe_changed(sink)
     }
 }

@@ -21,7 +21,7 @@ impl<W> Algorithm<W> {
     /// Supplies the actual host and resource imports to the normal concrete constructor.
     pub(crate) fn new(options: WidgetOption, construct: impl FnOnce(WidgetRuntime) -> W) -> Self {
         let owner = super::create_runtime(super::test_atlas());
-        let host = owner.factory().unwrap().host().unwrap();
+        let host = owner.construction_host().unwrap().host().unwrap();
         let runtime = WidgetRuntime::new(host, options).unwrap();
         Self { value: construct(runtime), _owner: owner }
     }

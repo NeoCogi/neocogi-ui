@@ -3,7 +3,6 @@
 use crate::boundary::{local_rect, text};
 use crate::ui_node::{HostState, Observation, WidgetHost};
 use neocogi_ui_core_contracts::*;
-use neocogi_ui_nodes_contracts::UiFactoryAbi;
 use neocogi_com::{ComPtr, ComRef, IUnknown, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
 use std::{
     cell::{Cell, RefCell},
@@ -11,8 +10,7 @@ use std::{
 };
 use crate::ui_node::paint_service::{Metrics, PaintService};
 use crate::{Dimensioni, runtime_context::RuntimeContext};
-pub(crate) mod combos;
-mod dialogs;
+pub(crate) mod choices;
 mod menus;
 mod windows;
 use windows::NativeSurface;
@@ -32,7 +30,7 @@ pub fn create_runtime_from_assets(
 }
 
 /// Creates shared runtime storage while GFX retains exclusive ownership of graphics execution.
-fn create_storage(assets: crate::assets::ImportedAssets, compositor: ComPtr<neocogi_gfx_contracts::GfxCompositorAbi>) -> Rc<RuntimeStorage> {
+pub(crate) fn create_storage(assets: crate::assets::ImportedAssets, compositor: ComPtr<neocogi_gfx_contracts::GfxCompositorAbi>) -> Rc<RuntimeStorage> {
     let bundle = assets.bundle().clone();
     let state = Rc::new(HostState::default());
     let host: ComPtr<IWidgetHostAbi> = WidgetHost::from_value(WidgetHost { state: state.clone() }).query().expect("host interface");
@@ -51,28 +49,41 @@ fn create_storage(assets: crate::assets::ImportedAssets, compositor: ComPtr<neoc
         children: RefCell::default(),
     });
     *state.factory.borrow_mut() = Rc::downgrade(&factory);
-    Rc::new_cyclic(|weak_storage| {
-        let widget_factory = crate::ui_factory::UiFactory::create(factory.host.clone(), factory.resources.clone(), weak_storage.clone())
-            .expect("new runtime host creates its factory");
-        RuntimeStorage {
-            context: RefCell::new(Some(crate::runtime_context::RuntimeContext::new(compositor, bundle))),
-            mounts: RefCell::new(Vec::new()),
-            factory,
-            widget_factory,
-            dimensions: Cell::new(Size::default()),
-            pending: Cell::new(true),
-            updating: Cell::new(false),
-            menus: RefCell::new(Vec::new()),
-            dialogs: RefCell::new(Vec::new()),
-        }
+    let construction: ComPtr<IConstructionHostAbi> = ConstructionHost::from_value(ConstructionHost { host: factory.host.clone() })
+        .query()
+        .expect("construction host declares its callable contract");
+    Rc::new(RuntimeStorage {
+        context: RefCell::new(Some(crate::runtime_context::RuntimeContext::new(compositor, bundle))),
+        mounts: RefCell::new(Vec::new()),
+        factory,
+        construction,
+        dimensions: Cell::new(Size::default()),
+        pending: Cell::new(true),
+        updating: Cell::new(false),
+        menus: RefCell::new(Vec::new()),
     })
+}
+
+#[com_object(interfaces(IConstructionHost))]
+/// Runtime-owned construction projection containing no concrete node implementation.
+struct ConstructionHost {
+    /// Canonical non-owning widget authority returned to independently deployed node providers.
+    host: ComPtr<IWidgetHostAbi>,
+}
+
+impl IConstructionHost for ConstructionHost {
+    /// Returns the exact host identity used by root attachment and child collection validation.
+    fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
+        self.host.check_open()?;
+        Ok(self.host.clone())
+    }
 }
 
 #[com_object(UiRuntime)]
 /// One identity owns the runtime, its widget factory and window-management policy.
 pub struct Runtime {
     /// Window handles use Weak references so retaining them cannot form a tree cycle.
-    storage: Rc<RuntimeStorage>,
+    pub(crate) storage: Rc<RuntimeStorage>,
 }
 
 /// All authoritative runtime state is private to the UI plugin.
@@ -83,8 +94,8 @@ pub(crate) struct RuntimeStorage {
     mounts: RefCell<Vec<Mount>>,
     /// Shared construction services retain no root forest or owning runtime.
     factory: Rc<crate::ui_node::node_factory::NodeFactory>,
-    /// Dynamically implemented node factory retains only a weak reference to this storage.
-    widget_factory: ComPtr<UiFactoryAbi>,
+    /// Core-only construction endpoint queried by independent node provider plugins.
+    construction: ComPtr<IConstructionHostAbi>,
     /// Last successfully synchronized drawable dimensions.
     dimensions: Cell<Size>,
     /// Structural/setter changes require update before rendering.
@@ -93,8 +104,6 @@ pub(crate) struct RuntimeStorage {
     updating: Cell<bool>,
     /// Weak declaration authentication retains no unused menu tree or application state.
     menus: RefCell<Vec<(usize, std::rc::Weak<menus::Declaration>)>>,
-    /// Standard controllers own only weak runtime references, so runtime ownership keeps active modals functional without a cycle.
-    dialogs: RefCell<Vec<Rc<dialogs::Dialog>>>,
 }
 
 /// Temporary association between an actual COM widget and an existing retained root.
@@ -141,9 +150,6 @@ impl Drop for RuntimeStorage {
     /// Final release closes retained handles even without an explicit application close.
     fn drop(&mut self) {
         self.factory.state.closed.set(true);
-        for dialog in self.dialogs.get_mut().iter() {
-            dialog.retire();
-        }
         // Dropping the owned Context then closes every node in its authoritative forest.
     }
 }
@@ -160,11 +166,24 @@ impl IInputSink for Runtime {
     }
 }
 
+impl IChoiceMenus for Runtime {
+    /// Creates a reusable core-owned choice popup without constructing a concrete header widget.
+    fn create_choice_menu(
+        &self,
+        parent: ComRef<'_, IWindowAbi>,
+        menu_text: NcCopyFromBufferOffset<'_, u8>,
+        entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
+        selection: ChoiceSelectionAbi,
+    ) -> Result<ComPtr<IChoiceMenuAbi>, NcStatus> {
+        choices::create_choice_menu(&self.storage, parent, menu_text, entries, selection)
+    }
+}
+
 impl UiRuntime for Runtime {
-    /// Returns the cached factory object bound to this runtime's non-owning host.
-    fn factory(&self) -> Result<ComPtr<IConstructionHostAbi>, NcStatus> {
+    /// Returns the cached core authority used to authenticate independently bound node factories.
+    fn construction_host(&self) -> Result<ComPtr<IConstructionHostAbi>, NcStatus> {
         self.storage.open()?;
-        self.storage.widget_factory.query()
+        Ok(self.storage.construction.clone())
     }
     /// Exposes an owned immutable revision without borrowing mutable tree state.
     fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
@@ -268,10 +287,7 @@ impl UiRuntime for Runtime {
             surface.close(&mut context.window_manager)?;
         }
         storage.mounts.borrow_mut().clear();
-        context.clear_combo_boxes();
-        for dialog in storage.dialog_snapshot() {
-            dialog.retire();
-        }
+        context.clear_choice_menus();
         storage.factory.state.error.take().map_or(Ok(()), Err)
     }
 }
@@ -318,11 +334,6 @@ impl Drop for UpdateGuard<'_> {
     }
 }
 impl Runtime {
-    /// Borrows the cached construction service for plugin-internal standard compositions.
-    fn widget_factory(&self) -> ComRef<'_, UiFactoryAbi> {
-        self.storage.widget_factory.as_com_ref()
-    }
-
     /// Executes owned phases so callback edits use ordinary COM window/topology APIs with no borrowed runtime wrapper.
     fn update_cycle(&self, size: Size, dispatcher: Option<ComRef<'_, IEventDispatcherAbi>>) -> Result<(), NcStatus> {
         let storage = &self.storage;
@@ -379,7 +390,7 @@ impl Runtime {
             let before = delivered;
             let (reconciled, component_drivers) = {
                 let mut context = self.storage.context()?;
-                let reconciled = context.reconcile_combo_boxes()?;
+                let reconciled = context.reconcile_choice_menus()?;
                 let drivers = context.window_manager.component_event_drivers()?;
                 (reconciled, drivers)
             };
@@ -390,17 +401,6 @@ impl Runtime {
             for component in component_drivers {
                 let remaining = EVENT_DISPATCH_LIMIT - delivered;
                 let count = component.dispatch(remaining)?;
-                if count > remaining {
-                    return Err(NC_E_INVALID_ARG);
-                }
-                delivered += count;
-                self.storage.open()?;
-            }
-            // Runtime-owned modal dialog services and application callbacks share
-            // the same finite boundary; neither lends a registry borrow to the other.
-            for dialog in self.storage.dialog_snapshot() {
-                let remaining = EVENT_DISPATCH_LIMIT - delivered;
-                let count = dialog.dispatch(remaining)?;
                 if count > remaining {
                     return Err(NC_E_INVALID_ARG);
                 }
@@ -425,28 +425,6 @@ impl Runtime {
     }
 }
 impl RuntimeStorage {
-    /// Takes a pure local Rc snapshot and retires closed controllers outside the short registry borrow.
-    fn dialog_snapshot(&self) -> Vec<Rc<dialogs::Dialog>> {
-        let mut retired = Vec::new();
-        let snapshot = {
-            let mut dialogs = self.dialogs.borrow_mut();
-            let mut index = 0;
-            while index < dialogs.len() {
-                if dialogs[index].finished() {
-                    retired.push(dialogs.remove(index));
-                } else {
-                    index += 1;
-                }
-            }
-            dialogs.clone()
-        };
-        for dialog in &retired {
-            dialog.retire();
-        }
-        drop(retired);
-        snapshot
-    }
-
     /// Returns the first component failure before any subsequent collection can clear the phase latch.
     fn phase_result(&self) -> Result<(), NcStatus> {
         self.factory.state.error.take().map_or(Ok(()), Err)

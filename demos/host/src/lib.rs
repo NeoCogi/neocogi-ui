@@ -103,8 +103,12 @@ impl Host {
         let renderer = window.query()?;
         let gfx = runtime.activate_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
         let compositor = gfx.create_compositor(assets.as_com_ref())?;
-        let ui_factory = runtime.activate_plugin_factory::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
-        let ui = Ui::from_interface(ui_factory.create_runtime(assets.as_com_ref(), compositor.as_com_ref())?)?;
+        let runtime_factory = runtime.activate_plugin_factory::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
+        let ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), compositor.as_com_ref())?;
+        let node_provider =
+            runtime.activate_plugin_factory::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
+        let factory = node_provider.bind(ui_runtime.as_com_ref())?;
+        let ui = Ui::from_interfaces(ui_runtime, factory)?;
         let input = ui.input_sink()?;
         Ok(Self { ui, renderer, window, input })
     }
@@ -247,6 +251,7 @@ fn register() -> Result<(), HostError> {
     // implementation code remain static for this module's process lifetime.
     unsafe {
         runtime.register_factory_plugin_description(neocogi_ui_runtime::factory_plugin_description())?;
+        runtime.register_factory_plugin_description(neocogi_ui_nodes::factory_plugin_description())?;
         runtime.register_factory_plugin_description(neocogi_render_plugin::factory_plugin_description())?;
         #[cfg(any(target_arch = "wasm32", feature = "monolith-gfx"))]
         runtime.register_factory_plugin_description(neocogi_gfx::factory_plugin_description())?;

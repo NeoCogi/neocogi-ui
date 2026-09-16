@@ -5,7 +5,7 @@
 
 use crate::{
     Dimensioni, Recti, ResourceCatalog, SkinBundle,
-    combo_box::{ComboBoxManager, IComboStateAbi},
+    choice_menu::{ChoiceMenuManager, IChoiceMenuStateAbi},
     window_manager::{PopupHandle, WindowManager},
 };
 use neocogi_com::{ComPtr, ComRef, NcStatus};
@@ -20,8 +20,8 @@ pub(crate) struct RuntimeContext {
     compositor: ComPtr<GfxCompositorAbi>,
     /// Authoritative retained windows, nodes, input, layout, and semantic display list.
     pub(crate) window_manager: WindowManager,
-    /// Composition-layer ownership for private combo state and choice-menu popup handles.
-    combo_boxes: ComboBoxManager,
+    /// Composition-layer ownership for core choice-menu state and popup handles.
+    choice_menus: ChoiceMenuManager,
     /// Conversion scratch reused while sending solid geometry across the typed boundary.
     solid_scratch: Vec<neocogi_gfx_contracts::SolidVertex>,
 }
@@ -33,24 +33,24 @@ impl RuntimeContext {
             resource_catalog: ResourceCatalog::new(bundle.atlas().clone()),
             compositor,
             window_manager: WindowManager::new(bundle),
-            combo_boxes: ComboBoxManager::default(),
+            choice_menus: ChoiceMenuManager::default(),
             solid_scratch: Vec::new(),
         }
     }
 
-    /// Registers a complete combo composition without teaching the root forest about widgets.
-    pub(crate) fn register_combo_box(&mut self, state: ComPtr<IComboStateAbi>, popup: PopupHandle, observed_revision: u64) {
-        self.combo_boxes.register(state, popup, observed_revision);
+    /// Registers one core choice-menu composition without teaching the root forest about headers.
+    pub(crate) fn register_choice_menu(&mut self, state: ComPtr<IChoiceMenuStateAbi>, popup: PopupHandle, observed_revision: u64) {
+        self.choice_menus.register(state, popup, observed_revision);
     }
 
-    /// Reconciles typed combo intent with generic popup operations through exclusive ownership.
-    pub(crate) fn reconcile_combo_boxes(&mut self) -> Result<bool, NcStatus> {
-        self.combo_boxes.reconcile(&mut self.window_manager)
+    /// Reconciles typed choice-menu intent with generic popup operations through exclusive ownership.
+    pub(crate) fn reconcile_choice_menus(&mut self) -> Result<bool, NcStatus> {
+        self.choice_menus.reconcile(&mut self.window_manager)
     }
 
-    /// Releases private combo capabilities after their structurally owned popups are gone.
-    pub(crate) fn clear_combo_boxes(&mut self) {
-        self.combo_boxes.clear();
+    /// Releases private choice-menu capabilities after their structurally owned popups are gone.
+    pub(crate) fn clear_choice_menus(&mut self) {
+        self.choice_menus.clear();
     }
 
     /// Returns the focused editor's committed drawable rectangle, when one exists.

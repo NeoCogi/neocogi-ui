@@ -270,20 +270,11 @@ class TextArea: IWidget + IContainerLayout + IScrolling {
     event subscribe_submitted(&mut self): ITextSubmittedSink;
 }
 
-#[version(1)]
-/// Optional committed combo-box selection without an in-band sentinel index.
-enum ComboSelection: u8 {
-    /// No item is selected, so the header displays its configured placeholder.
-    None,
-    /// Stable selected leaf identity in the combo box's current menu hierarchy.
-    Selected(u64),
-}
-
 #[version(2)]
 /// Runtime-owned combo box whose header, item model, popup, and interaction state form one control.
 class Combo: IWidget + ILeafLayout {
     /// Returns the committed stable leaf identity, preserving `None` independently of every ID.
-    fn selection(&self) -> Result<ComboSelection>;
+    fn selection(&self) -> Result<ChoiceSelection>;
     /// Returns the exact rendered header text: the selected label or the configured placeholder.
     fn display_text(&self) -> Result<String>;
     /// Returns the number of selectable leaves retained across the complete hierarchy.
@@ -291,9 +282,9 @@ class Combo: IWidget + ILeafLayout {
     /// Copies one exact leaf label in preorder; an out-of-range ordinal is rejected.
     fn choice_label(&self, ordinal: u64) -> Result<String>;
     /// Atomically replaces the complete preorder menu and optional selection after validating both.
-    fn replace_menu(&mut self, menu_text: &[u8], entries: &[ChoiceMenuEntry], selection: ComboSelection) -> Result<()>;
+    fn replace_menu(&mut self, menu_text: &[u8], entries: &[ChoiceMenuEntry], selection: ChoiceSelection) -> Result<()>;
     /// Silently replaces the committed optional selection; an unknown leaf identity is rejected.
-    fn set_selection(&mut self, selection: ComboSelection) -> Result<()>;
+    fn set_selection(&mut self, selection: ChoiceSelection) -> Result<()>;
     /// Returns the fallback rendered when the committed selection is `None`.
     fn placeholder(&self) -> Result<String>;
     /// Replaces the fallback without changing the committed selection or publishing a user event.
@@ -303,5 +294,5 @@ class Combo: IWidget + ILeafLayout {
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
     /// Connects the captured user-selection subscriber.
-    event subscribe_changed(&mut self): IComboChangedSink;
+    event subscribe_changed(&mut self): IChoiceChangedSink;
 }

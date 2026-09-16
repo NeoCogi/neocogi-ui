@@ -70,7 +70,7 @@
     clippy::too_many_arguments,
     clippy::wildcard_imports
 )]
-//! Retained UI implementation shared by deployed plugins and headless boundary tests.
+//! Non-deployable UI implementation shared by the core-runtime and built-in-node plugins.
 //!
 //! Applications use `neocogi-ui`, whose concrete COM clients link no UI implementation.
 //! Each retained COM node owns the widget capabilities used for routing, layout and painting.
@@ -106,7 +106,8 @@ mod guide_doctests {
 pub mod assets;
 pub mod atlas;
 mod boundary;
-mod combo_box;
+mod choice_menu;
+mod dialogs;
 mod identity;
 pub mod image;
 mod input;
@@ -180,30 +181,12 @@ pub(crate) use ui_node::UiRuntime;
 pub use runtime::{Runtime, create_runtime_from_assets};
 pub use ui_factory::UiFactory;
 
-/// Stateless process entry that creates independent retained UI runtimes.
-#[neocogi_com::com_factory(neocogi_ui_core_contracts::UiPluginFactory)]
-struct UiPluginFactoryObject;
-
-impl neocogi_ui_core_contracts::UiPluginFactory for UiPluginFactoryObject {
-    /// Imports the complete asset revision before publishing any runtime capability.
-    fn create_runtime(
-        &self,
-        assets: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IAssetBundleAbi>,
-        compositor: neocogi_com::ComRef<'_, neocogi_gfx_contracts::GfxCompositorAbi>,
-    ) -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::UiRuntimeAbi>, neocogi_com::NcStatus> {
-        crate::create_runtime_from_assets(assets, compositor)
-    }
+/// Binds this package's concrete built-in nodes to a core runtime for static tests and monoliths.
+///
+/// Dynamic deployments activate `neocogi.ui.nodes.runtime` and call its generated `NodesPluginFactory`
+/// instead. This helper performs the same typed binding without a loader and does not make the
+/// core runtime object expose or construct `UiFactory`.
+pub fn bind_builtin_nodes(runtime: neocogi_com::ComPtr<neocogi_ui_core_contracts::UiRuntimeAbi>) -> Result<neocogi_ui::Ui, neocogi_com::NcStatus> {
+    let factory = UiFactory::bind(runtime.as_com_ref())?;
+    neocogi_ui::Ui::from_interfaces(runtime, factory)
 }
-
-neocogi_com::factory_plugin! {
-    name = "neocogi.ui.runtime",
-    version = "0.9.0-alpha.0",
-    contracts = [neocogi_ui_core_contracts::MODULE, neocogi_ui_nodes_contracts::MODULE],
-    factory = UiPluginFactoryObject,
-}
-
-// Static consumers call `factory_plugin_description` directly. Only a final dynamic
-// artifact exposes the stable loader entrypoint, avoiding duplicate exports in
-// applications that link the runtime as an ordinary Rust library.
-#[cfg(feature = "dynamic-plugin")]
-neocogi_com::export_factory_plugin!();

@@ -37,8 +37,8 @@ class Button: IWidget + ILeafLayout {
 }
 
 #[version(1)]
-/// Runtime-bound construction shorthand over concrete built-in node contracts.
-factory UiFactory: IConstructionHost {
+/// Runtime-bound construction shorthand over concrete built-in node contracts and compositions.
+factory UiFactory: IConstructionHost + IFileDialogs {
 
     /// Creates a fixed scrolling multiline editor; CRLF and CR normalize to LF and the cursor starts at the end.
     fn create_text_area(&self, text: &[u8], wrapping: TextWrapping, scrolling: bool) -> Result<TextArea>;
@@ -80,6 +80,13 @@ factory UiFactory: IConstructionHost {
         parent: &IWindow,
         menu_text: &[u8],
         entries: &[ChoiceMenuEntry],
-        selection: ComboSelection,
+        selection: ChoiceSelection,
     ) -> Result<Combo>;
+}
+
+#[version(1)]
+/// Stateless activation root for the independently deployed built-in nodes plugin.
+factory NodesPluginFactory {
+    /// Binds one concrete node factory to public services exposed by the supplied core runtime.
+    fn bind(&self, runtime: &UiRuntime) -> Result<UiFactory>;
 }

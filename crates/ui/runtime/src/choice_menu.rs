@@ -1,4 +1,4 @@
-//! Private combo model and composition over the shared compact choice-menu surface.
+//! Core choice-menu model and orchestration over the shared compact menu surface.
 //!
 //! The root forest stores only generic menu surfaces and popup ownership. This module connects
 //! one public header, one authoritative typed state, and one private choice-popup definition.
@@ -9,21 +9,20 @@ use neocogi_com::{
     ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_int_enum,
     com_interface, com_object,
 };
-use neocogi_ui_core_contracts::{ChoiceMenuEntry, ChoiceMenuEntryAbi, IEventSubscriptionAbi, MenuTextRange, Rect};
-use neocogi_ui_nodes_contracts::{ComboSelection, ComboSelectionAbi, IComboChangedSinkAbi};
-
-/// Contract-defined visible fallback for a combo with no committed selection.
-pub(crate) const DEFAULT_COMBO_PLACEHOLDER: &str = "Select…";
+use neocogi_ui_core_contracts::{
+    ChoiceMenuEntry, ChoiceMenuEntryAbi, ChoiceSelection, ChoiceSelectionAbi, IChoiceChangedSinkAbi, IChoiceMenu, IChoiceMenuAbi, IChoiceMenuInterfacesFor,
+    IEventSubscriptionAbi, MenuTextRange, Rect,
+};
 
 /// Maximum accepted branch nesting, keeping foreign preorder input bounded on the native stack.
-const MAX_COMBO_MENU_DEPTH: usize = 32;
+const MAX_CHOICE_MENU_DEPTH: usize = 32;
 
 /// Canonical generated selection snapshot stored in this producer's event queue.
-use neocogi_ui_nodes_contracts::IComboChangedSinkEvent as ComboChangedPayload;
+use neocogi_ui_core_contracts::IChoiceChangedSinkEvent as ChoiceChangedPayload;
 
 com_int_enum! {
-    /// Header intent understood only by the private combo state machine.
-    pub(crate) enum ComboPopupIntent: u8 {
+    /// Header intent understood only by the private choice menu state machine.
+    pub(crate) enum ChoicePopupIntent: u8 {
         /// Toggle the current popup intent after ordinary pointer, Enter, or Space activation.
         Toggle = 0,
         /// Request opening without closing an already-open popup.
@@ -34,8 +33,8 @@ com_int_enum! {
 }
 
 com_int_enum! {
-    /// Concrete operation returned to the runtime-level combo coordinator.
-    pub(crate) enum ComboPopupAction: u8 {
+    /// Concrete operation returned to the runtime-level choice menu coordinator.
+    pub(crate) enum ChoicePopupAction: u8 {
         /// Popup visibility already agrees with semantic intent.
         None = 0,
         /// Prepare and show the ordinary widget popup at the retained anchor.
@@ -47,9 +46,9 @@ com_int_enum! {
     }
 }
 
-/// Complete private popup lifecycle; every transition is centralized in [`ComboState`].
+/// Complete private popup lifecycle; every transition is centralized in [`ChoiceMenuState`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum ComboPopupLifecycle {
+enum ChoicePopupLifecycle {
     /// The generic popup definition exists but is not in the active popup path.
     Closed,
     /// Header interaction requested opening at the separately retained anchor.
@@ -65,21 +64,19 @@ enum ComboPopupLifecycle {
 }
 
 #[com_interface(
-    auto_guid = "neocogi.ui.runtime.internal.ComboState:v1",
+    auto_guid = "neocogi.ui.runtime.internal.ChoiceMenuState:v1",
     assigned_signature = b"00000000000000000000000000000051"
 )]
-/// Runtime-private typed access to one authoritative combo model.
-pub(crate) trait IComboState {
-    /// Returns a revision changed by labels, placeholder, or committed selection.
+/// Runtime-private typed access to one authoritative choice menu model.
+pub(crate) trait IChoiceMenuState {
+    /// Returns a revision changed by hierarchy labels or committed selection.
     fn revision(&self) -> Result<u64, NcStatus>;
     /// Returns the explicit optional committed leaf identity.
-    fn selection(&self) -> Result<ComboSelectionAbi, NcStatus>;
+    fn selection(&self) -> Result<ChoiceSelectionAbi, NcStatus>;
     /// Copies the hierarchy's shared UTF-8 storage for rebuilding its menu projection.
     fn menu_text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
     /// Copies a requested preorder entry range and returns the complete entry count.
     fn menu_entries(&self, output: NcCopyToBufferOffset<'_, ChoiceMenuEntryAbi>) -> Result<u32, NcStatus>;
-    /// Copies the selected label or placeholder currently displayed by the header.
-    fn display_text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
     /// Returns the number of retained display labels.
     fn choice_count(&self) -> Result<u64, NcStatus>;
     /// Copies one exact display label after strict range validation.
@@ -89,77 +86,57 @@ pub(crate) trait IComboState {
         &mut self,
         menu_text: NcCopyFromBufferOffset<'_, u8>,
         entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
-        selection: ComboSelectionAbi,
+        selection: ChoiceSelectionAbi,
     ) -> Result<bool, NcStatus>;
     /// Silently replaces the optional committed selection without clamping.
-    fn set_selection(&mut self, selection: ComboSelectionAbi) -> Result<bool, NcStatus>;
-    /// Copies the fallback independently from current selection.
-    fn placeholder(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
-    /// Replaces the fallback without changing or publishing selection.
-    fn set_placeholder(&mut self, placeholder: NcCopyFromBufferOffset<'_, u8>) -> Result<bool, NcStatus>;
+    fn set_selection(&mut self, selection: ChoiceSelectionAbi) -> Result<bool, NcStatus>;
     /// Applies one typed header intent and captures a valid screen-space anchor when opening.
-    fn request_popup(&mut self, intent: ComboPopupIntent, anchor: Rect) -> Result<(), NcStatus>;
+    fn request_popup(&mut self, intent: ChoicePopupIntent, anchor: Rect) -> Result<(), NcStatus>;
     /// Reconciles semantic lifecycle with actual generic-popup visibility.
-    fn reconcile_popup(&mut self, visible: bool) -> Result<ComboPopupAction, NcStatus>;
+    fn reconcile_popup(&mut self, visible: bool) -> Result<ChoicePopupAction, NcStatus>;
     /// Returns the most recently captured header-bottom anchor.
     fn popup_anchor(&self) -> Result<Rect, NcStatus>;
     /// Commits one user choice, publishes a changed snapshot, and requests popup closure.
     fn submit(&mut self, id: u64) -> Result<u64, NcStatus>;
     /// Connects the public changed sink to this model's sole event source.
-    fn subscribe_changed(&mut self, sink: ComRef<'_, IComboChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
+    fn subscribe_changed(&mut self, sink: ComRef<'_, IChoiceChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
     /// Ends event delivery and requests permanent private-popup removal.
     fn retire(&mut self) -> Result<(), NcStatus>;
 }
 
-#[com_object(interfaces(IComboState))]
-/// Plain authoritative combo state mutated exclusively through `IComboState`'s mutable receiver.
-pub(crate) struct ComboState {
+#[com_object(interfaces(IChoiceMenuState, IChoiceMenu))]
+/// Plain authoritative choice menu state mutated exclusively through `IChoiceMenuState`'s mutable receiver.
+pub(crate) struct ChoiceMenuState {
     /// Shared UTF-8 storage referenced by every checked preorder entry.
     menu_text: String,
     /// Authoritative preorder hierarchy with explicit direct-child counts.
     entries: Vec<ChoiceMenuEntryAbi>,
     /// Committed stable leaf identity; `None` remains distinct from every `u64` value.
     selection: Option<u64>,
-    /// Visible header fallback when selection is absent.
-    placeholder: String,
     /// Monotonic semantic revision used to invalidate transient popup candidates.
     revision: u64,
     /// Last valid screen-space anchor captured by header activation.
     popup_anchor: Rect,
     /// Explicit popup lifecycle reconciled by the runtime composition owner.
-    popup: ComboPopupLifecycle,
+    popup: ChoicePopupLifecycle,
     /// Runtime-owned source for actual user commits only.
-    changed_event: crate::EventSource<ComboChangedPayload>,
+    changed_event: crate::EventSource<ChoiceChangedPayload>,
 }
 
-impl ComboState {
+impl ChoiceMenuState {
     /// Validates selection before allocating the private COM state identity.
-    pub(crate) fn create(
-        menu_text: String,
-        entries: Vec<ChoiceMenuEntryAbi>,
-        selection: Option<u64>,
-        placeholder: String,
-    ) -> Result<ComPtr<IComboStateAbi>, NcStatus> {
+    pub(crate) fn create(menu_text: String, entries: Vec<ChoiceMenuEntryAbi>, selection: Option<u64>) -> Result<ComPtr<IChoiceMenuStateAbi>, NcStatus> {
         validate_menu(&menu_text, &entries, selection)?;
         let state = Self {
             menu_text,
             entries,
             selection,
-            placeholder,
             revision: 0,
             popup_anchor: Rect::default(),
-            popup: ComboPopupLifecycle::Closed,
+            popup: ChoicePopupLifecycle::Closed,
             changed_event: crate::EventSource::new(),
         };
         Self::from_value(state).query()
-    }
-
-    /// Borrows the exact text rendered by the header from the current valid selection.
-    fn display_text_value(&self) -> &str {
-        match self.selection {
-            Some(id) => choice_label(&self.menu_text, &self.entries, id).expect("validated selection must retain its choice label"),
-            None => self.placeholder.as_str(),
-        }
     }
 
     /// Advances the semantic revision after one observable model change.
@@ -168,45 +145,45 @@ impl ComboState {
     }
 
     /// Applies header popup intent using exhaustive lifecycle pattern matching.
-    fn apply_popup_intent(&mut self, intent: ComboPopupIntent, anchor: Rect) -> Result<(), NcStatus> {
+    fn apply_popup_intent(&mut self, intent: ChoicePopupIntent, anchor: Rect) -> Result<(), NcStatus> {
         if !intent.is_known() || anchor.width < 0 || anchor.height < 0 {
             return Err(NC_E_INVALID_ARG);
         }
-        if choice_count(&self.entries) == 0 && intent != ComboPopupIntent::Close {
+        if choice_count(&self.entries) == 0 && intent != ChoicePopupIntent::Close {
             return Ok(());
         }
         self.popup = match (self.popup, intent) {
-            (ComboPopupLifecycle::Closed | ComboPopupLifecycle::CloseRequested, ComboPopupIntent::Toggle | ComboPopupIntent::Open) => {
+            (ChoicePopupLifecycle::Closed | ChoicePopupLifecycle::CloseRequested, ChoicePopupIntent::Toggle | ChoicePopupIntent::Open) => {
                 self.popup_anchor = anchor;
-                ComboPopupLifecycle::OpenRequested
+                ChoicePopupLifecycle::OpenRequested
             }
-            (ComboPopupLifecycle::Open | ComboPopupLifecycle::OpenRequested, ComboPopupIntent::Toggle) => ComboPopupLifecycle::CloseRequested,
-            (ComboPopupLifecycle::OpenRequested, ComboPopupIntent::Open) => {
+            (ChoicePopupLifecycle::Open | ChoicePopupLifecycle::OpenRequested, ChoicePopupIntent::Toggle) => ChoicePopupLifecycle::CloseRequested,
+            (ChoicePopupLifecycle::OpenRequested, ChoicePopupIntent::Open) => {
                 self.popup_anchor = anchor;
-                ComboPopupLifecycle::OpenRequested
+                ChoicePopupLifecycle::OpenRequested
             }
-            (ComboPopupLifecycle::Open, ComboPopupIntent::Open) => ComboPopupLifecycle::Open,
-            (ComboPopupLifecycle::Open | ComboPopupLifecycle::OpenRequested, ComboPopupIntent::Close) => ComboPopupLifecycle::CloseRequested,
-            (ComboPopupLifecycle::Closed | ComboPopupLifecycle::CloseRequested, ComboPopupIntent::Close) => ComboPopupLifecycle::Closed,
-            (ComboPopupLifecycle::RemoveRequested, _) => ComboPopupLifecycle::RemoveRequested,
-            (ComboPopupLifecycle::Detached, _) => ComboPopupLifecycle::Detached,
+            (ChoicePopupLifecycle::Open, ChoicePopupIntent::Open) => ChoicePopupLifecycle::Open,
+            (ChoicePopupLifecycle::Open | ChoicePopupLifecycle::OpenRequested, ChoicePopupIntent::Close) => ChoicePopupLifecycle::CloseRequested,
+            (ChoicePopupLifecycle::Closed | ChoicePopupLifecycle::CloseRequested, ChoicePopupIntent::Close) => ChoicePopupLifecycle::Closed,
+            (ChoicePopupLifecycle::RemoveRequested, _) => ChoicePopupLifecycle::RemoveRequested,
+            (ChoicePopupLifecycle::Detached, _) => ChoicePopupLifecycle::Detached,
             (_, _) => return Err(NC_E_INVALID_ARG),
         };
         Ok(())
     }
 
     /// Converts one pending lifecycle transition into a generic-popup operation.
-    fn reconcile_popup_value(&mut self, visible: bool) -> ComboPopupAction {
+    fn reconcile_popup_value(&mut self, visible: bool) -> ChoicePopupAction {
         let (next, action) = match (self.popup, visible) {
-            (ComboPopupLifecycle::RemoveRequested, _) => (ComboPopupLifecycle::Detached, ComboPopupAction::Remove),
-            (ComboPopupLifecycle::Detached, _) => (ComboPopupLifecycle::Detached, ComboPopupAction::None),
-            (ComboPopupLifecycle::OpenRequested, _) => (ComboPopupLifecycle::Open, ComboPopupAction::Open),
-            (ComboPopupLifecycle::CloseRequested, true) => (ComboPopupLifecycle::Closed, ComboPopupAction::Close),
-            (ComboPopupLifecycle::CloseRequested, false) => (ComboPopupLifecycle::Closed, ComboPopupAction::None),
-            (ComboPopupLifecycle::Open, true) => (ComboPopupLifecycle::Open, ComboPopupAction::None),
-            (ComboPopupLifecycle::Open, false) => (ComboPopupLifecycle::Closed, ComboPopupAction::None),
-            (ComboPopupLifecycle::Closed, false) => (ComboPopupLifecycle::Closed, ComboPopupAction::None),
-            (ComboPopupLifecycle::Closed, true) => (ComboPopupLifecycle::Closed, ComboPopupAction::Close),
+            (ChoicePopupLifecycle::RemoveRequested, _) => (ChoicePopupLifecycle::Detached, ChoicePopupAction::Remove),
+            (ChoicePopupLifecycle::Detached, _) => (ChoicePopupLifecycle::Detached, ChoicePopupAction::None),
+            (ChoicePopupLifecycle::OpenRequested, _) => (ChoicePopupLifecycle::Open, ChoicePopupAction::Open),
+            (ChoicePopupLifecycle::CloseRequested, true) => (ChoicePopupLifecycle::Closed, ChoicePopupAction::Close),
+            (ChoicePopupLifecycle::CloseRequested, false) => (ChoicePopupLifecycle::Closed, ChoicePopupAction::None),
+            (ChoicePopupLifecycle::Open, true) => (ChoicePopupLifecycle::Open, ChoicePopupAction::None),
+            (ChoicePopupLifecycle::Open, false) => (ChoicePopupLifecycle::Closed, ChoicePopupAction::None),
+            (ChoicePopupLifecycle::Closed, false) => (ChoicePopupLifecycle::Closed, ChoicePopupAction::None),
+            (ChoicePopupLifecycle::Closed, true) => (ChoicePopupLifecycle::Closed, ChoicePopupAction::Close),
         };
         self.popup = next;
         action
@@ -218,22 +195,22 @@ impl ComboState {
             return;
         }
         self.popup = match self.popup {
-            ComboPopupLifecycle::Open | ComboPopupLifecycle::OpenRequested => ComboPopupLifecycle::CloseRequested,
-            ComboPopupLifecycle::Closed | ComboPopupLifecycle::CloseRequested => ComboPopupLifecycle::Closed,
-            ComboPopupLifecycle::RemoveRequested => ComboPopupLifecycle::RemoveRequested,
-            ComboPopupLifecycle::Detached => ComboPopupLifecycle::Detached,
+            ChoicePopupLifecycle::Open | ChoicePopupLifecycle::OpenRequested => ChoicePopupLifecycle::CloseRequested,
+            ChoicePopupLifecycle::Closed | ChoicePopupLifecycle::CloseRequested => ChoicePopupLifecycle::Closed,
+            ChoicePopupLifecycle::RemoveRequested => ChoicePopupLifecycle::RemoveRequested,
+            ChoicePopupLifecycle::Detached => ChoicePopupLifecycle::Detached,
         };
     }
 }
 
-impl IComboState for ComboState {
+impl IChoiceMenuState for ChoiceMenuState {
     /// Reads the scalar revision directly from the authoritative state.
     fn revision(&self) -> Result<u64, NcStatus> {
         Ok(self.revision)
     }
 
     /// Encodes structural absence without manufacturing an in-band index sentinel.
-    fn selection(&self) -> Result<ComboSelectionAbi, NcStatus> {
+    fn selection(&self) -> Result<ChoiceSelectionAbi, NcStatus> {
         Ok(encode_selection(self.selection))
     }
 
@@ -250,11 +227,6 @@ impl IComboState for ComboState {
             *target = *entry;
         }
         u32::try_from(self.entries.len()).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)
-    }
-
-    /// Copies one immutable display snapshot for the public header or facade.
-    fn display_text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
-        Ok(NcString::from_utf8_str(self.display_text_value()))
     }
 
     /// Reports the authoritative label count without a second collection.
@@ -274,7 +246,7 @@ impl IComboState for ComboState {
         &mut self,
         menu_text: NcCopyFromBufferOffset<'_, u8>,
         entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
-        selection: ComboSelectionAbi,
+        selection: ChoiceSelectionAbi,
     ) -> Result<bool, NcStatus> {
         let (menu_text, entries) = copied_menu(menu_text, entries)?;
         let selection = decoded_selection(selection)?;
@@ -291,7 +263,7 @@ impl IComboState for ComboState {
     }
 
     /// Replaces selection only after validating it against the current item sequence.
-    fn set_selection(&mut self, selection: ComboSelectionAbi) -> Result<bool, NcStatus> {
+    fn set_selection(&mut self, selection: ChoiceSelectionAbi) -> Result<bool, NcStatus> {
         let selection = decoded_selection(selection)?;
         validate_selection(selection, &self.menu_text, &self.entries)?;
         if self.selection == selection {
@@ -302,30 +274,13 @@ impl IComboState for ComboState {
         Ok(true)
     }
 
-    /// Copies the configured fallback even when a selected label is currently visible.
-    fn placeholder(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
-        Ok(NcString::from_utf8_str(&self.placeholder))
-    }
-
-    /// Mutates fallback text exclusively and reports whether the stored value changed.
-    fn set_placeholder(&mut self, placeholder: NcCopyFromBufferOffset<'_, u8>) -> Result<bool, NcStatus> {
-        let placeholder = crate::boundary::text(placeholder)?;
-        if self.placeholder == placeholder {
-            return Ok(false);
-        }
-        self.placeholder.clear();
-        self.placeholder.push_str(placeholder);
-        self.advance_revision();
-        Ok(true)
-    }
-
     /// Delegates every intent to the exhaustive semantic state machine.
-    fn request_popup(&mut self, intent: ComboPopupIntent, anchor: Rect) -> Result<(), NcStatus> {
+    fn request_popup(&mut self, intent: ChoicePopupIntent, anchor: Rect) -> Result<(), NcStatus> {
         self.apply_popup_intent(intent, anchor)
     }
 
     /// Synchronizes manager visibility without publishing application-facing lifecycle events.
-    fn reconcile_popup(&mut self, visible: bool) -> Result<ComboPopupAction, NcStatus> {
+    fn reconcile_popup(&mut self, visible: bool) -> Result<ChoicePopupAction, NcStatus> {
         Ok(self.reconcile_popup_value(visible))
     }
 
@@ -340,19 +295,19 @@ impl IComboState for ComboState {
         if self.selection != Some(id) {
             self.selection = Some(id);
             self.advance_revision();
-            self.changed_event.emit(ComboChangedPayload { selection: ComboSelection::Selected(id) });
+            self.changed_event.emit(ChoiceChangedPayload { selection: ChoiceSelection::Selected(id) });
         }
         self.popup = match self.popup {
-            ComboPopupLifecycle::Open | ComboPopupLifecycle::OpenRequested => ComboPopupLifecycle::CloseRequested,
-            ComboPopupLifecycle::Closed | ComboPopupLifecycle::CloseRequested => ComboPopupLifecycle::Closed,
-            ComboPopupLifecycle::RemoveRequested => ComboPopupLifecycle::RemoveRequested,
-            ComboPopupLifecycle::Detached => ComboPopupLifecycle::Detached,
+            ChoicePopupLifecycle::Open | ChoicePopupLifecycle::OpenRequested => ChoicePopupLifecycle::CloseRequested,
+            ChoicePopupLifecycle::Closed | ChoicePopupLifecycle::CloseRequested => ChoicePopupLifecycle::Closed,
+            ChoicePopupLifecycle::RemoveRequested => ChoicePopupLifecycle::RemoveRequested,
+            ChoicePopupLifecycle::Detached => ChoicePopupLifecycle::Detached,
         };
         Ok(self.revision)
     }
 
     /// Uses the existing typed event bridge while keeping its source in this sole model.
-    fn subscribe_changed(&mut self, sink: ComRef<'_, IComboChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_changed(&mut self, sink: ComRef<'_, IChoiceChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.changed_event.event().subscribe(sink)
     }
 
@@ -360,19 +315,85 @@ impl IComboState for ComboState {
     fn retire(&mut self) -> Result<(), NcStatus> {
         self.changed_event.close_ordinary();
         self.popup = match self.popup {
-            ComboPopupLifecycle::Detached => ComboPopupLifecycle::Detached,
-            ComboPopupLifecycle::Closed
-            | ComboPopupLifecycle::OpenRequested
-            | ComboPopupLifecycle::Open
-            | ComboPopupLifecycle::CloseRequested
-            | ComboPopupLifecycle::RemoveRequested => ComboPopupLifecycle::RemoveRequested,
+            ChoicePopupLifecycle::Detached => ChoicePopupLifecycle::Detached,
+            ChoicePopupLifecycle::Closed
+            | ChoicePopupLifecycle::OpenRequested
+            | ChoicePopupLifecycle::Open
+            | ChoicePopupLifecycle::CloseRequested
+            | ChoicePopupLifecycle::RemoveRequested => ChoicePopupLifecycle::RemoveRequested,
         };
         Ok(())
     }
 }
 
+impl IChoiceMenu for ChoiceMenuState {
+    /// Returns the exact optional stable identity from the authoritative menu model.
+    fn selection(&self) -> Result<ChoiceSelectionAbi, NcStatus> {
+        <Self as IChoiceMenuState>::selection(self)
+    }
+
+    /// Copies the selected label, using empty text only for the explicit absent-selection case.
+    fn selected_label(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+        let label = match self.selection {
+            Some(id) => choice_label(&self.menu_text, &self.entries, id).ok_or(NC_E_INVALID_ARG)?,
+            None => "",
+        };
+        Ok(NcString::from_utf8_str(label))
+    }
+
+    /// Reports selectable leaf cardinality without flattening the hierarchy.
+    fn choice_count(&self) -> Result<u64, NcStatus> {
+        <Self as IChoiceMenuState>::choice_count(self)
+    }
+
+    /// Copies one checked preorder leaf label.
+    fn choice_label(&self, ordinal: u64) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+        <Self as IChoiceMenuState>::choice_label(self, ordinal)
+    }
+
+    /// Validates the complete replacement before committing hierarchy or selection.
+    fn replace(
+        &mut self,
+        menu_text: NcCopyFromBufferOffset<'_, u8>,
+        entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
+        selection: ChoiceSelectionAbi,
+    ) -> Result<(), NcStatus> {
+        <Self as IChoiceMenuState>::replace_menu(self, menu_text, entries, selection).map(|_| ())
+    }
+
+    /// Silently commits one checked optional leaf identity.
+    fn set_selection(&mut self, selection: ChoiceSelectionAbi) -> Result<(), NcStatus> {
+        <Self as IChoiceMenuState>::set_selection(self, selection).map(|_| ())
+    }
+
+    /// Records an activation request whose popup mutation occurs after traversal returns.
+    fn show_at(&mut self, anchor: Rect) -> Result<(), NcStatus> {
+        <Self as IChoiceMenuState>::request_popup(self, ChoicePopupIntent::Open, anchor)
+    }
+
+    /// Records a dismissal request without destroying the reusable popup definition.
+    fn hide(&mut self) -> Result<(), NcStatus> {
+        <Self as IChoiceMenuState>::request_popup(self, ChoicePopupIntent::Close, Rect::default())
+    }
+
+    /// Selects the next requested lifecycle state using the existing reconciled transition table.
+    fn toggle_at(&mut self, anchor: Rect) -> Result<(), NcStatus> {
+        <Self as IChoiceMenuState>::request_popup(self, ChoicePopupIntent::Toggle, anchor)
+    }
+
+    /// Connects the generated core choice event directly to the sole native source.
+    fn subscribe_changed(&mut self, sink: ComRef<'_, IChoiceChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        <Self as IChoiceMenuState>::subscribe_changed(self, sink)
+    }
+
+    /// Permanently ends event delivery and asks the reconciler to remove the popup forest branch.
+    fn close(&mut self) -> Result<(), NcStatus> {
+        <Self as IChoiceMenuState>::retire(self)
+    }
+}
+
 /// Builds one checked recursive choice-menu snapshot from the authoritative serialized model.
-pub(crate) fn choice_menu(state: &ComPtr<IComboStateAbi>) -> Result<Menu, NcStatus> {
+pub(crate) fn choice_menu(state: &ComPtr<IChoiceMenuStateAbi>) -> Result<Menu, NcStatus> {
     let menu_text = state.menu_text()?.to_string()?;
     let count = usize::try_from(state.menu_entries(NcCopyToBufferOffset::new(0, &mut []))?).map_err(|_| NC_E_INVALID_ARG)?;
     let placeholder: ChoiceMenuEntryAbi = ChoiceMenuEntry::Choice {
@@ -388,11 +409,11 @@ pub(crate) fn choice_menu(state: &ComPtr<IComboStateAbi>) -> Result<Menu, NcStat
     native_menu(&menu_text, &entries)
 }
 
-/// Runtime-owned association between private combo state and one shared menu popup handle.
-struct ComboController {
+/// Runtime-owned association between private choice menu state and one shared menu popup handle.
+struct ChoiceMenuController {
     /// Typed semantic model shared by the header and composition coordinator.
-    state: ComPtr<IComboStateAbi>,
-    /// Generic popup capability; no combo policy is embedded in its forest node.
+    state: ComPtr<IChoiceMenuStateAbi>,
+    /// Generic popup capability; no choice menu policy is embedded in its forest node.
     popup: PopupHandle,
     /// Last model revision copied into the compact relational menu hierarchy.
     observed_revision: u64,
@@ -407,7 +428,7 @@ enum ControllerDisposition {
     Remove,
 }
 
-impl ComboController {
+impl ChoiceMenuController {
     /// Reconciles one semantic lifecycle against generic popup visibility and operations.
     fn reconcile(&mut self, manager: &mut WindowManager) -> Result<(ControllerDisposition, bool), NcStatus> {
         let visible = match manager.popup_visible(&self.popup) {
@@ -427,23 +448,23 @@ impl ComboController {
         let presentation_changed = revision != self.observed_revision;
         if presentation_changed {
             let menu = choice_menu(&self.state)?;
-            let committed = decoded_selection(self.state.selection()?)?.map(|index| index as u64);
+            let committed = decoded_selection(self.state.selection()?)?;
             manager.replace_choice_popup(&self.popup, menu, committed).map_err(surface_status)?;
             self.observed_revision = revision;
         }
         let action = self.state.reconcile_popup(visible)?;
         match action {
-            ComboPopupAction::None => Ok((ControllerDisposition::Keep, presentation_changed)),
-            ComboPopupAction::Open => {
+            ChoicePopupAction::None => Ok((ControllerDisposition::Keep, presentation_changed)),
+            ChoicePopupAction::Open => {
                 let anchor = crate::boundary::local_rect(self.state.popup_anchor()?);
                 manager.show_choice_popup_at(&self.popup, anchor).map_err(surface_status)?;
                 Ok((ControllerDisposition::Keep, true))
             }
-            ComboPopupAction::Close => {
+            ChoicePopupAction::Close => {
                 manager.hide_popup(&self.popup).map_err(surface_status)?;
                 Ok((ControllerDisposition::Keep, true))
             }
-            ComboPopupAction::Remove => {
+            ChoicePopupAction::Remove => {
                 match manager.destroy_popup(&self.popup) {
                     Ok(()) | Err(SurfaceMutationError::UnknownPopup) => {}
                     Err(error) => return Err(surface_status(error)),
@@ -455,17 +476,17 @@ impl ComboController {
     }
 }
 
-/// Composition-layer owner for combo controllers; mutation requires the runtime context's `&mut`.
+/// Composition-layer owner for choice menu controllers; mutation requires the runtime context's `&mut`.
 #[derive(Default)]
-pub(crate) struct ComboBoxManager {
+pub(crate) struct ChoiceMenuManager {
     /// Live controller set, independent from generic root storage and traversal.
-    controllers: Vec<ComboController>,
+    controllers: Vec<ChoiceMenuController>,
 }
 
-impl ComboBoxManager {
+impl ChoiceMenuManager {
     /// Registers one fully constructed controller after its generic menu popup exists.
-    pub(crate) fn register(&mut self, state: ComPtr<IComboStateAbi>, popup: PopupHandle, observed_revision: u64) {
-        self.controllers.push(ComboController { state, popup, observed_revision });
+    pub(crate) fn register(&mut self, state: ComPtr<IChoiceMenuStateAbi>, popup: PopupHandle, observed_revision: u64) {
+        self.controllers.push(ChoiceMenuController { state, popup, observed_revision });
     }
 
     /// Reconciles all controllers using exclusive manager and coordinator access.
@@ -504,19 +525,19 @@ fn surface_status(error: SurfaceMutationError) -> NcStatus {
 }
 
 /// Encodes optional selection with a tagged absence variant rather than a sentinel identity.
-pub(crate) fn encode_selection(selection: Option<u64>) -> ComboSelectionAbi {
+pub(crate) fn encode_selection(selection: Option<u64>) -> ChoiceSelectionAbi {
     match selection {
-        Some(id) => ComboSelection::Selected(id),
-        None => ComboSelection::None,
+        Some(id) => ChoiceSelection::Selected(id),
+        None => ChoiceSelection::None,
     }
     .into()
 }
 
 /// Decodes the public tagged selection and rejects unknown discriminants.
-pub(crate) fn decoded_selection(selection: ComboSelectionAbi) -> Result<Option<u64>, NcStatus> {
-    match ComboSelection::try_from(selection).map_err(|_| NC_E_INVALID_ARG)? {
-        ComboSelection::None => Ok(None),
-        ComboSelection::Selected(id) => Ok(Some(id)),
+pub(crate) fn decoded_selection(selection: ChoiceSelectionAbi) -> Result<Option<u64>, NcStatus> {
+    match ChoiceSelection::try_from(selection).map_err(|_| NC_E_INVALID_ARG)? {
+        ChoiceSelection::None => Ok(None),
+        ChoiceSelection::Selected(id) => Ok(Some(id)),
     }
 }
 
@@ -601,7 +622,7 @@ fn validate_node(text: &str, entries: &[ChoiceMenuEntryAbi], index: usize, depth
         }
         ChoiceMenuEntry::Submenu { label, children } => {
             ranged_text(text, label).ok_or(NC_E_INVALID_ARG)?;
-            if children == 0 || depth >= MAX_COMBO_MENU_DEPTH {
+            if children == 0 || depth >= MAX_CHOICE_MENU_DEPTH {
                 return Err(NC_E_INVALID_ARG);
             }
             let mut next = index.checked_add(1).ok_or(NC_E_INVALID_ARG)?;
@@ -656,7 +677,7 @@ mod tests {
     use super::*;
 
     /// Creates a direct state value for exhaustive private transition tests.
-    fn state(selection: Option<u64>) -> ComboState {
+    fn state(selection: Option<u64>) -> ChoiceMenuState {
         let menu_text = "AppleBananaCherry".to_owned();
         let entries = [
             (0, MenuTextRange { first: 0, count: 5 }),
@@ -665,14 +686,13 @@ mod tests {
         ]
         .map(|(id, label)| ChoiceMenuEntry::Choice { id, label }.into())
         .to_vec();
-        ComboState {
+        ChoiceMenuState {
             menu_text,
             entries,
             selection,
-            placeholder: "Select…".into(),
             revision: 0,
             popup_anchor: Rect::default(),
-            popup: ComboPopupLifecycle::Closed,
+            popup: ChoicePopupLifecycle::Closed,
             changed_event: crate::EventSource::new(),
         }
     }
@@ -681,9 +701,9 @@ mod tests {
     #[test]
     fn optional_selection_has_no_zero_sentinel() {
         let mut state = state(None);
-        assert_eq!(state.display_text_value(), "Select…");
-        state.set_selection(encode_selection(Some(0))).unwrap();
-        assert_eq!(state.display_text_value(), "Apple");
+        assert_eq!(state.selection, None);
+        IChoiceMenuState::set_selection(&mut state, encode_selection(Some(0))).unwrap();
+        assert_eq!(state.selection, Some(0));
     }
 
     /// Opening, outside dismissal, and retirement produce explicit typed transitions.
@@ -691,13 +711,13 @@ mod tests {
     fn popup_lifecycle_reconciles_without_root_specific_state() {
         let mut state = state(Some(1));
         state
-            .apply_popup_intent(ComboPopupIntent::Open, Rect { x: 10, y: 20, width: 100, height: 1 })
+            .apply_popup_intent(ChoicePopupIntent::Open, Rect { x: 10, y: 20, width: 100, height: 1 })
             .unwrap();
-        assert_eq!(state.reconcile_popup_value(false), ComboPopupAction::Open);
-        assert_eq!(state.reconcile_popup_value(true), ComboPopupAction::None);
-        assert_eq!(state.reconcile_popup_value(false), ComboPopupAction::None);
+        assert_eq!(state.reconcile_popup_value(false), ChoicePopupAction::Open);
+        assert_eq!(state.reconcile_popup_value(true), ChoicePopupAction::None);
+        assert_eq!(state.reconcile_popup_value(false), ChoicePopupAction::None);
         state.retire().unwrap();
-        assert_eq!(state.reconcile_popup_value(false), ComboPopupAction::Remove);
+        assert_eq!(state.reconcile_popup_value(false), ChoicePopupAction::Remove);
     }
 
     /// Invalid replacement fails before either labels or selection can change.
@@ -722,11 +742,10 @@ mod tests {
 
     /// The menu coordinator observes every semantic edit through one authoritative revision.
     #[test]
-    fn menu_model_revision_tracks_selection_fallback_and_items() {
+    fn menu_model_revision_tracks_selection_and_items() {
         let mut state = state(Some(1));
-        state.set_selection(encode_selection(Some(2))).unwrap();
-        state.set_placeholder(NcCopyFromBufferOffset::new(0, "Another fallback".as_bytes())).unwrap();
-        assert_eq!(state.revision, 2);
+        IChoiceMenuState::set_selection(&mut state, encode_selection(Some(2))).unwrap();
+        assert_eq!(state.revision, 1);
 
         let text = b"ApricotBlueberry";
         let entries = [
@@ -748,7 +767,7 @@ mod tests {
                 encode_selection(Some(1)),
             )
             .unwrap();
-        assert_eq!(state.revision, 3);
+        assert_eq!(state.revision, 2);
     }
 
     /// Foreign preorder input cannot smuggle ambiguous topology or duplicate stable identities.

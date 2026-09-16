@@ -14,6 +14,8 @@ members = [
     "examples/ui-extension",
     "crates/ui/api",
     "crates/ui/runtime",
+    "crates/ui/runtime-plugin",
+    "crates/ui/nodes",
     "demos/assets",
     "demos/host",
     "demos/contracts",
@@ -34,8 +36,8 @@ repository = "https://github.com/NeoCogi/neocogi-platform"
 [workspace.dependencies]
 neocogi-ui-core-contracts = { path = "crates/ui/core-contracts" }
 neocogi-ui-nodes-contracts = { path = "crates/ui/nodes-contracts" }
-neocogi-renderer-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9474691cbb4fbe94b5b5c2af302cfeeb5e767533" }
-neocogi-platform-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9474691cbb4fbe94b5b5c2af302cfeeb5e767533" }
+neocogi-renderer-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "00f219d3b9630684bc4d49624ed86b5f3c26808b" }
+neocogi-platform-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "00f219d3b9630684bc4d49624ed86b5f3c26808b" }
 neocogi-gfx-contracts = { path = "crates/gfx/contracts" }
 neocogi-gfx-support = { path = "crates/gfx/support" }
 neocogi-gfx-impl = { path = "crates/gfx/impl", version = "0.9.0-alpha.0", default-features = false }
@@ -58,18 +60,20 @@ proc-macro2 = { version = "1", features = ["span-locations"] }
 quote = "1"
 syn = { version = "2", features = ["full", "extra-traits"] }
 neocogi-ui = { path = "crates/ui/api", version = "0.9.0-alpha.0", default-features = false }
-neocogi-ui-runtime = { path = "crates/ui/runtime", version = "0.9.0-alpha.0", default-features = false }
+neocogi-ui-impl = { path = "crates/ui/runtime", version = "0.9.0-alpha.0", default-features = false }
+neocogi-ui-runtime = { path = "crates/ui/runtime-plugin", version = "0.9.0-alpha.0", default-features = false }
+neocogi-ui-nodes = { path = "crates/ui/nodes", version = "0.9.0-alpha.0", default-features = false }
 neocogi-demo-assets = { path = "demos/assets", default-features = false }
 neocogi-demo-host = { path = "demos/host", default-features = false }
 neocogi-demo-contracts = { path = "demos/contracts" }
-neocogi-demo-render-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9474691cbb4fbe94b5b5c2af302cfeeb5e767533" }
-neocogi-demo-renderer = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9474691cbb4fbe94b5b5c2af302cfeeb5e767533", default-features = false }
-neocogi-render-core = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9474691cbb4fbe94b5b5c2af302cfeeb5e767533" }
-neocogi-render-support = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9474691cbb4fbe94b5b5c2af302cfeeb5e767533" }
-neocogi-render-glow = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9474691cbb4fbe94b5b5c2af302cfeeb5e767533" }
-neocogi-render-webgl = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9474691cbb4fbe94b5b5c2af302cfeeb5e767533" }
-neocogi-render-vulkan = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9474691cbb4fbe94b5b5c2af302cfeeb5e767533" }
-neocogi-render-wgpu = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9474691cbb4fbe94b5b5c2af302cfeeb5e767533" }
+neocogi-demo-render-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "00f219d3b9630684bc4d49624ed86b5f3c26808b" }
+neocogi-demo-renderer = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "00f219d3b9630684bc4d49624ed86b5f3c26808b", default-features = false }
+neocogi-render-core = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "00f219d3b9630684bc4d49624ed86b5f3c26808b" }
+neocogi-render-support = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "00f219d3b9630684bc4d49624ed86b5f3c26808b" }
+neocogi-render-glow = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "00f219d3b9630684bc4d49624ed86b5f3c26808b" }
+neocogi-render-webgl = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "00f219d3b9630684bc4d49624ed86b5f3c26808b" }
+neocogi-render-vulkan = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "00f219d3b9630684bc4d49624ed86b5f3c26808b" }
+neocogi-render-wgpu = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "00f219d3b9630684bc4d49624ed86b5f3c26808b" }
 
 ash = { version = "0.38", default-features = false, features = ["linked"] }
 ash-window-handle = { package = "ash-window", version = "0.13" }
@@ -113,6 +117,7 @@ application = { package = "neocogi-demo-full", bin = "neocogi-demo-full", defaul
 runtime = { package = "neocogi-com-runtime", default-features = false }
 plugins = [
     { package = "neocogi-ui-runtime", features = ["dynamic-plugin"] },
+    { package = "neocogi-ui-nodes", features = ["dynamic-plugin"] },
     { package = "neocogi-render-plugin", default-features = false, features = ["dynamic-plugin", "glow"] },
     { package = "neocogi-gfx", default-features = false, features = ["builder", "dynamic-plugin"] },
     { package = "neocogi-skin", default-features = false, features = ["dynamic-plugin", "theme-json"] },
@@ -149,6 +154,7 @@ application = { package = "neocogi-demo-basic", bin = "simple", default-features
 runtime = { package = "neocogi-com-runtime", default-features = false }
 plugins = [
     { package = "neocogi-ui-runtime", features = ["dynamic-plugin"] },
+    { package = "neocogi-ui-nodes", features = ["dynamic-plugin"] },
     { package = "neocogi-render-plugin", default-features = false, features = ["dynamic-plugin", "glow"] },
     { package = "neocogi-gfx", default-features = false, features = ["builder", "dynamic-plugin"] },
 ]
@@ -181,6 +187,7 @@ application = { package = "neocogi-demo-basic", bin = "calculator", default-feat
 runtime = { package = "neocogi-com-runtime", default-features = false }
 plugins = [
     { package = "neocogi-ui-runtime", features = ["dynamic-plugin"] },
+    { package = "neocogi-ui-nodes", features = ["dynamic-plugin"] },
     { package = "neocogi-render-plugin", default-features = false, features = ["dynamic-plugin", "glow"] },
     { package = "neocogi-gfx", default-features = false, features = ["builder", "dynamic-plugin"] },
 ]
@@ -213,6 +220,7 @@ application = { package = "neocogi-demo-basic", bin = "backend-frame-cube", defa
 runtime = { package = "neocogi-com-runtime", default-features = false }
 plugins = [
     { package = "neocogi-ui-runtime", features = ["dynamic-plugin"] },
+    { package = "neocogi-ui-nodes", features = ["dynamic-plugin"] },
     { package = "neocogi-render-plugin", default-features = false, features = ["dynamic-plugin", "glow"] },
     { package = "neocogi-gfx", default-features = false, features = ["builder", "dynamic-plugin"] },
 ]
@@ -245,6 +253,7 @@ application = { package = "neocogi-demo-smoke", bin = "neocogi-demo-smoke", defa
 runtime = { package = "neocogi-com-runtime", default-features = false }
 plugins = [
     { package = "neocogi-ui-runtime", features = ["dynamic-plugin"] },
+    { package = "neocogi-ui-nodes", features = ["dynamic-plugin"] },
     { package = "neocogi-render-plugin", default-features = false, features = ["dynamic-plugin", "glow"] },
     { package = "neocogi-gfx", default-features = false, features = ["builder", "dynamic-plugin"] },
     { package = "neocogi-skin", default-features = false, features = ["dynamic-plugin", "theme-json"] },

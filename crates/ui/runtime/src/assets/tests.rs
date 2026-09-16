@@ -251,7 +251,7 @@ impl neocogi_ui::EventHandler<ThemeState, neocogi_ui::events::Activation> for In
 fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
     let source = export_bundle(&bundle()).unwrap();
     let runtime = crate::test_support::runtime_from_assets(source.as_com_ref()).unwrap();
-    let ui = neocogi_ui::Ui::from_interface(runtime.clone()).unwrap();
+    let ui = crate::bind_builtin_nodes(runtime.clone()).unwrap();
     let button = ui.widgets().button("switch theme").unwrap();
     let probe = Rc::new(Probe {
         runtime,
@@ -321,7 +321,7 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
 fn runtime_install_is_atomic_and_updates_shared_widget_measurement() {
     let source = export_bundle(&bundle()).unwrap();
     let runtime = crate::test_support::runtime_from_assets(source.as_com_ref()).unwrap();
-    let mut ui = neocogi_ui::Ui::from_interface(runtime.clone()).unwrap();
+    let mut ui = crate::bind_builtin_nodes(runtime.clone()).unwrap();
     let button = ui.widgets().button("resources").unwrap();
     let button_interface = button.as_interface().add_ref();
     let probe = Rc::new(Probe {
@@ -379,7 +379,7 @@ fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision
         neocogi_skin_impl::StyleCompilerObject::from_value(neocogi_skin_impl::StyleCompilerObject::new(publisher.as_com_ref()))
             .query()
             .unwrap();
-    let ui = neocogi_ui::Ui::from_interface(crate::test_support::runtime_from_assets(source.as_com_ref()).unwrap()).unwrap();
+    let ui = crate::bind_builtin_nodes(crate::test_support::runtime_from_assets(source.as_com_ref()).unwrap()).unwrap();
     let original = ImportedAssets::read(source.as_com_ref(), None).unwrap();
     let mut metrics = source.metrics().unwrap();
     metrics.padding += 4;

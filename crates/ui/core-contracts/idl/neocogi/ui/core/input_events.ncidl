@@ -215,7 +215,7 @@ trait IFileDialogEvents {
 }
 
 #[version(1)]
-/// UI-owned file picker controller and real COM controls; retaining its interface does not keep its runtime open.
+/// Nodes-provider file picker controller and real COM controls; retaining it does not keep its runtime open.
 trait IFileDialog {
     /// Returns the actual stable modal window capability for ordinary lifecycle and geometry operations.
     fn window(&self) -> Result<IWindow>;
@@ -232,7 +232,7 @@ trait IFileDialog {
 }
 
 #[version(1)]
-/// Standard picker construction capability on the same runtime identity as ordinary window management.
+/// Standard picker construction capability exposed by a nodes factory bound to window management.
 trait IFileDialogs {
     /// Creates one hidden reusable modal owned by the authenticated ordinary window.
     fn create(&self, parent: &IWindow) -> Result<IFileDialog>;

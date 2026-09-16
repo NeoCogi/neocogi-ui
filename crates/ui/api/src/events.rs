@@ -43,12 +43,16 @@ pub mod test_support {
 }
 
 use crate::com::*;
+use neocogi_ui_core_contracts::IChoiceChangedSinkEvent;
+#[cfg(test)]
+use neocogi_ui_core_contracts::create_i_text_changed_sink_checked_event_sink;
 use neocogi_ui_nodes_contracts::{
-    IComboChangedSinkEvent, connect_button_subscribe, connect_checkbox_subscribe, connect_combo_subscribe_changed, connect_list_box_subscribe,
-    connect_list_item_subscribe, connect_number_subscribe_checked, connect_scrollbar_subscribe_checked, connect_slider_subscribe_checked,
-    connect_text_area_subscribe_changed_checked, connect_text_area_subscribe_submitted, connect_textbox_subscribe_changed_checked,
-    connect_textbox_subscribe_submitted,
+    connect_button_subscribe, connect_checkbox_subscribe, connect_combo_subscribe_changed, connect_list_box_subscribe, connect_list_item_subscribe,
+    connect_number_subscribe_checked, connect_scrollbar_subscribe_checked, connect_slider_subscribe_checked, connect_text_area_subscribe_changed_checked,
+    connect_text_area_subscribe_submitted, connect_textbox_subscribe_changed_checked, connect_textbox_subscribe_submitted,
 };
+#[cfg(test)]
+use neocogi_ui_nodes_contracts::create_i_numeric_sink_checked_event_sink;
 use neocogi_com::{ComPtr, ComRef, NC_E_INVALID_ARG, NcStatus};
 use std::ops::Deref;
 
@@ -66,54 +70,6 @@ impl<State: 'static> EventSession<State> {
     /// Creates an empty UI event facade with application-owned state.
     pub fn new(state: State) -> Self {
         Self(neocogi_com_events::EventSession::new(state))
-    }
-}
-
-#[cfg(test)]
-mod checked_adapter_tests {
-    use super::*;
-    use neocogi_com::NcCopyFromBufferOffset;
-
-    /// Invalid numeric facts are rejected before a held application-state borrow
-    /// can change their error status; valid facts still obey the session borrow gate.
-    #[test]
-    fn generated_numeric_adapter_checks_before_state_borrow() {
-        let session = EventSession::new(0u32);
-        let sink = create_i_numeric_sink_checked_event_sink(
-            &session.0,
-            |count: &mut u32, _event: &NumericChanged| {
-                *count += 1;
-                Ok(())
-            },
-            valid_numeric,
-        )
-        .unwrap();
-        let held = session.state_mut().unwrap();
-        assert_eq!(sink.changed(f32::NAN), Err(NC_E_INVALID_ARG));
-        assert_eq!(sink.changed(1.0), Err(neocogi_com_events::EVENT_E_BUSY));
-        drop(held);
-        sink.changed(1.0).unwrap();
-        assert_eq!(*session.state().unwrap(), 1);
-    }
-
-    /// Generated UTF-8 decoding and the domain cursor check both precede
-    /// invocation, so neither a malformed string nor split scalar reaches state.
-    #[test]
-    fn generated_text_adapter_rejects_offset_and_split_cursor() {
-        let session = EventSession::new(0u32);
-        let sink = create_i_text_changed_sink_checked_event_sink(
-            &session.0,
-            |count: &mut u32, _event: &TextChanged| {
-                *count += 1;
-                Ok(())
-            },
-            valid_text_cursor,
-        )
-        .unwrap();
-        assert_eq!(sink.changed(NcCopyFromBufferOffset::new(1, "é".as_bytes()), 2), Err(NC_E_INVALID_ARG));
-        assert_eq!(sink.changed(NcCopyFromBufferOffset::new(0, "é".as_bytes()), 1), Err(NC_E_INVALID_ARG));
-        sink.changed(NcCopyFromBufferOffset::new(0, "é".as_bytes()), 2).unwrap();
-        assert_eq!(*session.state().unwrap(), 1);
     }
 }
 
@@ -446,15 +402,15 @@ struct SelectionProject<Handler> {
     /// Concrete application handler remains native and is never stored by the producer.
     handler: Handler,
 }
-impl<State, Handler: EventHandler<State, ComboSelection>> EventHandler<State, IComboChangedSinkEvent> for SelectionProject<Handler> {
+impl<State, Handler: EventHandler<State, ChoiceSelection>> EventHandler<State, IChoiceChangedSinkEvent> for SelectionProject<Handler> {
     /// Forwards the already decoded selection without another COM object or parallel value type.
-    fn handle(&mut self, state: &mut State, event: &IComboChangedSinkEvent) -> Result<(), NcStatus> {
+    fn handle(&mut self, state: &mut State, event: &IChoiceChangedSinkEvent) -> Result<(), NcStatus> {
         self.handler.handle(state, &event.selection)
     }
 }
 impl<State: 'static> EventSession<State> {
     /// Registers the generated selection fact without claiming the header's private popup port.
-    pub fn subscribe_combo_changed<Handler: EventHandler<State, ComboSelection> + 'static>(
+    pub fn subscribe_combo_changed<Handler: EventHandler<State, ChoiceSelection> + 'static>(
         &self,
         combo: &crate::ComboWidget,
         handler: Handler,
@@ -497,5 +453,53 @@ impl<State: 'static> EventSession<State> {
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         let source = dialog.as_interface().add_ref().query::<IFileDialogEventsAbi>()?;
         connect_i_file_dialog_events_subscribe_checked(&self.0, source.as_com_ref(), handler, valid_file_dialog_path)
+    }
+}
+
+#[cfg(test)]
+mod checked_adapter_tests {
+    use super::*;
+    use neocogi_com::NcCopyFromBufferOffset;
+
+    /// Invalid numeric facts are rejected before a held application-state borrow
+    /// can change their error status; valid facts still obey the session borrow gate.
+    #[test]
+    fn generated_numeric_adapter_checks_before_state_borrow() {
+        let session = EventSession::new(0u32);
+        let sink = create_i_numeric_sink_checked_event_sink(
+            &session.0,
+            |count: &mut u32, _event: &NumericChanged| {
+                *count += 1;
+                Ok(())
+            },
+            valid_numeric,
+        )
+        .unwrap();
+        let held = session.state_mut().unwrap();
+        assert_eq!(sink.changed(f32::NAN), Err(NC_E_INVALID_ARG));
+        assert_eq!(sink.changed(1.0), Err(neocogi_com_events::EVENT_E_BUSY));
+        drop(held);
+        sink.changed(1.0).unwrap();
+        assert_eq!(*session.state().unwrap(), 1);
+    }
+
+    /// Generated UTF-8 decoding and the domain cursor check both precede
+    /// invocation, so neither a malformed string nor split scalar reaches state.
+    #[test]
+    fn generated_text_adapter_rejects_offset_and_split_cursor() {
+        let session = EventSession::new(0u32);
+        let sink = create_i_text_changed_sink_checked_event_sink(
+            &session.0,
+            |count: &mut u32, _event: &TextChanged| {
+                *count += 1;
+                Ok(())
+            },
+            valid_text_cursor,
+        )
+        .unwrap();
+        assert_eq!(sink.changed(NcCopyFromBufferOffset::new(1, "é".as_bytes()), 2), Err(NC_E_INVALID_ARG));
+        assert_eq!(sink.changed(NcCopyFromBufferOffset::new(0, "é".as_bytes()), 1), Err(NC_E_INVALID_ARG));
+        sink.changed(NcCopyFromBufferOffset::new(0, "é".as_bytes()), 2).unwrap();
+        assert_eq!(*session.state().unwrap(), 1);
     }
 }

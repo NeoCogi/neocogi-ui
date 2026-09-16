@@ -4,9 +4,10 @@ extern neocogi.gfx;
 extern neocogi.com.events;
 
 use neocogi.ui.core::{
-    ChildEditResult, ChoiceMenuEntry, IActivationSink, IChildren, IConstructionHost, IContainerLayout,
-    ILeafLayout, IScrolling, ITextChangedSink, ITextSubmittedSink, ITextContent,
-    IWidget, IWidgetHost, IWindow, ScrollInfo, TextWrapping, WidgetOptions,
+    ChildEditResult, ChoiceMenuEntry, ChoiceSelection, IActivationSink, IChildren,
+    IChoiceChangedSink, IConstructionHost, IContainerLayout, IFileDialogs, ILeafLayout, IScrolling,
+    ITextChangedSink, ITextSubmittedSink, ITextContent, IWidget, IWidgetHost, IWindow, ScrollInfo,
+    TextWrapping, UiRuntime, WidgetOptions,
 };
 use neocogi.renderer::{ITexture, Rect};
 use neocogi.gfx::FontRole;

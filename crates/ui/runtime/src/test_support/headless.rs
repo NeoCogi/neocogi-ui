@@ -64,7 +64,7 @@ impl Headless {
         let frame = Rc::new(RefCell::new(Frame::default()));
         let renderer = CaptureRenderer::from_value(CaptureRenderer { frame: frame.clone() }).query().unwrap();
         Self {
-            ui: Ui::from_interface(runtime).unwrap(),
+            ui: crate::bind_builtin_nodes(runtime).unwrap(),
             renderer,
             frame,
         }

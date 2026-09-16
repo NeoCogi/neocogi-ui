@@ -6,15 +6,15 @@ use neocogi_ui::{EventHandler, EventSession};
 /// Application state observes only public committed-selection events.
 struct Observations {
     /// Immutable events captured in dispatch order.
-    changes: Vec<ComboSelection>,
+    changes: Vec<ChoiceSelection>,
 }
 
 /// Concrete changed-event recorder used by the runtime dispatch boundary.
 struct RecordSelection;
 
-impl EventHandler<Observations, ComboSelection> for RecordSelection {
+impl EventHandler<Observations, ChoiceSelection> for RecordSelection {
     /// Retains the delivered snapshot without rereading the live combo model.
-    fn handle(&mut self, state: &mut Observations, event: &ComboSelection) -> Result<(), NcStatus> {
+    fn handle(&mut self, state: &mut Observations, event: &ChoiceSelection) -> Result<(), NcStatus> {
         state.changes.push(*event);
         Ok(())
     }
@@ -38,17 +38,17 @@ fn press(ui: &neocogi_ui::Ui, key: KeyCode) {
 /// Explicit absence, strict replacement, popup fallback, and keyboard commit share one model.
 #[test]
 fn combo_owns_optional_selection_and_popup_state_end_to_end() {
-    let ui = neocogi_ui::Ui::from_interface(runtime()).unwrap();
+    let ui = crate::bind_builtin_nodes(runtime()).unwrap();
     let mut root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let window = ui.window("combo", RECT, &root).unwrap();
-    let mut combo = ui.combo_box(window.as_com_ref(), &["first", "second"], ComboSelection::Selected(1)).unwrap();
+    let mut combo = ui.combo_box(window.as_com_ref(), &["first", "second"], ChoiceSelection::Selected(1)).unwrap();
     combo.set_placeholder("Choose a value").unwrap();
     root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let session = EventSession::new(Observations { changes: Vec::new() });
     session.subscribe_combo_changed(&combo, RecordSelection).unwrap();
 
     ui.update_with_events(SIZE, &session).unwrap();
-    assert_eq!(combo.selection().unwrap(), ComboSelection::Selected(1));
+    assert_eq!(combo.selection().unwrap(), ChoiceSelection::Selected(1));
     assert_eq!(combo.display_text().unwrap(), "second");
 
     // Opening and cancelling cannot erase or transiently commit over the existing selection.
@@ -56,7 +56,7 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
         press(&ui, key);
     }
     ui.update_with_events(SIZE, &session).unwrap();
-    assert_eq!(combo.selection().unwrap(), ComboSelection::Selected(1));
+    assert_eq!(combo.selection().unwrap(), ChoiceSelection::Selected(1));
     assert!(session.state().unwrap().changes.is_empty());
 
     // Reopening initializes the keyboard candidate from item one; Down wraps to item zero and
@@ -65,18 +65,18 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
         press(&ui, key);
     }
     ui.update_with_events(SIZE, &session).unwrap();
-    assert_eq!(combo.selection().unwrap(), ComboSelection::Selected(0));
-    assert_eq!(session.state().unwrap().changes, [ComboSelection::Selected(0)]);
+    assert_eq!(combo.selection().unwrap(), ChoiceSelection::Selected(0));
+    assert_eq!(session.state().unwrap().changes, [ChoiceSelection::Selected(0)]);
 
     // Invalid candidates never clamp and never partially replace the valid live snapshot.
-    assert_eq!(combo.replace_items(&["shorter"], ComboSelection::Selected(7)), Err(NC_E_INVALID_ARG));
+    assert_eq!(combo.replace_items(&["shorter"], ChoiceSelection::Selected(7)), Err(NC_E_INVALID_ARG));
     assert_eq!(combo.choice_count(), Ok(2));
     assert_eq!(combo.display_text().unwrap(), "first");
-    assert_eq!(combo.set_selection(ComboSelection::Selected(7)), Err(NC_E_INVALID_ARG));
+    assert_eq!(combo.set_selection(ChoiceSelection::Selected(7)), Err(NC_E_INVALID_ARG));
 
     // A valid empty replacement has an explicit absent selection and a nonblank fallback.
-    combo.replace_items::<&str>(&[], ComboSelection::None).unwrap();
-    assert_eq!(combo.selection(), Ok(ComboSelection::None));
+    combo.replace_items::<&str>(&[], ChoiceSelection::None).unwrap();
+    assert_eq!(combo.selection(), Ok(ChoiceSelection::None));
     assert_eq!(combo.display_text().unwrap(), "Choose a value");
     assert_eq!(session.dispatch(), Ok(0));
     let (renderer, _) = renderer();
@@ -91,13 +91,13 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
 /// Construction rejects an invalid initial selection without altering the owner window.
 #[test]
 fn combo_construction_is_atomic_for_invalid_selection() {
-    let ui = neocogi_ui::Ui::from_interface(runtime()).unwrap();
+    let ui = crate::bind_builtin_nodes(runtime()).unwrap();
     let root = ui.widgets().text_block("owner", TextWrapping::None).unwrap();
     let window = ui.window("combo owner", RECT, &root).unwrap();
-    let defaulted = ui.combo_box(window.as_com_ref(), &["only"], ComboSelection::None).unwrap();
+    let defaulted = ui.combo_box(window.as_com_ref(), &["only"], ChoiceSelection::None).unwrap();
     assert_eq!(defaulted.placeholder().unwrap(), "Select…");
     assert_eq!(defaulted.display_text().unwrap(), "Select…");
-    let result = ui.combo_box(window.as_com_ref(), &["only"], ComboSelection::Selected(1));
+    let result = ui.combo_box(window.as_com_ref(), &["only"], ChoiceSelection::Selected(1));
     assert!(matches!(result, Err(NC_E_INVALID_ARG)));
     assert_eq!(window.snapshot().unwrap().visibility, Visibility::Visible);
 }
@@ -105,7 +105,7 @@ fn combo_construction_is_atomic_for_invalid_selection() {
 /// Nested combo choices traverse the shared submenu forest and commit stable leaf identities.
 #[test]
 fn combo_choice_menu_uses_shared_submenu_navigation() {
-    let ui = neocogi_ui::Ui::from_interface(runtime()).unwrap();
+    let ui = crate::bind_builtin_nodes(runtime()).unwrap();
     let mut root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let window = ui.window("nested combo", RECT, &root).unwrap();
     let menu_text = "FruitAppleBanana";
@@ -123,7 +123,7 @@ fn combo_choice_menu_uses_shared_submenu_navigation() {
             label: neocogi_ui::MenuTextRange { first: 10, count: 6 },
         },
     ];
-    let mut combo = ui.combo_menu(window.as_com_ref(), menu_text, &menu, ComboSelection::Selected(10)).unwrap();
+    let mut combo = ui.combo_menu(window.as_com_ref(), menu_text, &menu, ChoiceSelection::Selected(10)).unwrap();
     root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let session = EventSession::new(Observations { changes: Vec::new() });
     session.subscribe_combo_changed(&combo, RecordSelection).unwrap();
@@ -135,22 +135,22 @@ fn combo_choice_menu_uses_shared_submenu_navigation() {
         press(&ui, key);
     }
     ui.update_with_events(SIZE, &session).unwrap();
-    assert_eq!(combo.selection().unwrap(), ComboSelection::Selected(11));
+    assert_eq!(combo.selection().unwrap(), ChoiceSelection::Selected(11));
     assert_eq!(combo.display_text().unwrap(), "Banana");
     assert_eq!(combo.choice_count().unwrap(), 2);
-    assert_eq!(session.state().unwrap().changes, [ComboSelection::Selected(11)]);
+    assert_eq!(session.state().unwrap().changes, [ChoiceSelection::Selected(11)]);
 
     // A silent selection edit while the hierarchy is open rebuilds and restores the selected
     // branch instead of closing the popup. Down therefore moves from Apple back to Banana.
     press(&ui, KeyCode::Enter);
     ui.update_with_events(SIZE, &session).unwrap();
-    combo.set_selection(ComboSelection::Selected(10)).unwrap();
+    combo.set_selection(ChoiceSelection::Selected(10)).unwrap();
     ui.update_with_events(SIZE, &session).unwrap();
-    assert_eq!(session.state().unwrap().changes, [ComboSelection::Selected(11)]);
+    assert_eq!(session.state().unwrap().changes, [ChoiceSelection::Selected(11)]);
     for key in [KeyCode::ArrowDown, KeyCode::Enter] {
         press(&ui, key);
     }
     ui.update_with_events(SIZE, &session).unwrap();
-    assert_eq!(combo.selection().unwrap(), ComboSelection::Selected(11));
-    assert_eq!(session.state().unwrap().changes, [ComboSelection::Selected(11), ComboSelection::Selected(11)]);
+    assert_eq!(combo.selection().unwrap(), ChoiceSelection::Selected(11));
+    assert_eq!(session.state().unwrap().changes, [ChoiceSelection::Selected(11), ChoiceSelection::Selected(11)]);
 }

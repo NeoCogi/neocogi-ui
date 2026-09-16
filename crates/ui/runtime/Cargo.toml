@@ -1,11 +1,11 @@
 [package]
-name = "neocogi-ui-runtime"
+name = "neocogi-ui-impl"
 version = "0.9.0-alpha.0"
 authors.workspace = true
 edition.workspace = true
 readme.workspace = true
 license.workspace = true
-description = "Retained UI runtime, built-in nodes, surfaces, and window manager"
+description = "Shared implementation support for the core UI runtime and built-in node plugins"
 repository.workspace = true
 categories = ["gui", "rendering"]
 
@@ -14,11 +14,6 @@ categories = ["gui", "rendering"]
 # cdylib root, avoiding an additional shared-library link for the same code.
 name = "neocogi_ui_runtime"
 crate-type = ["rlib"]
-
-[features]
-default = []
-# Only deployable dynamic libraries publish the plugin descriptor entrypoint.
-dynamic-plugin = []
 
 [dependencies]
 # Standard plugin-owned compositions reuse the static typed clients and owned event adapter.

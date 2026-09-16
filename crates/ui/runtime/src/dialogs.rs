@@ -1,13 +1,16 @@
-//! Standard picker composes actual callable controls and owns only explicit request and native-path state.
-use super::*;
+//! Standard picker composed by the independently deployed concrete-nodes provider.
+use crate::ui_factory::NodeServices;
+use neocogi_ui_core_contracts::*;
 use neocogi_ui_nodes_contracts::{ContentIcon, CrossSize, FlowDirection, LayoutTrack, LinearEdge};
 use neocogi_ui::{EventHandler, EventSession, LinearWidget, ListItemWidget, ScrollAreaWidget, TextBlockWidget, TextboxWidget};
 use neocogi_ui::events::{Activation, TextChanged, TextSubmitted};
-use neocogi_com::{INcStringAbi, NcString};
+use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_object};
 use std::{
+    cell::Cell,
     path::{Path, PathBuf},
-    rc::Weak,
+    rc::{Rc, Weak},
 };
+use crate::boundary::text;
 
 /// Shared request lifetime contains no control pointers, handlers or runtime ownership.
 struct Request {
@@ -81,20 +84,146 @@ impl Request {
     }
 }
 
-/// Runtime-owned controller retains only weak runtime authority and ordinary concrete UI capabilities.
-pub(super) struct Dialog {
+#[com_object(interfaces(IWidget, IContainerLayout, IComponentEventProvider))]
+/// Transparent dialog root that adds a private dispatcher to one concrete Linear allocation.
+///
+/// Layout, routing, paint and lifetime remain owned by the wrapped concrete container. The only
+/// added capability is the separate dispatcher identity discovered by the production runtime when
+/// this root is mounted, so the nodes plugin requires no private runtime controller registry.
+struct DialogRoot {
+    /// Common widget projection of the exact concrete shell allocation.
+    widget: ComPtr<IWidgetAbi>,
+    /// Container projection of that same shell allocation.
+    layout: ComPtr<IContainerLayoutAbi>,
+    /// Separate component-owned dispatcher allocation, never the root's IUnknown identity.
+    dispatcher: ComPtr<IEventDispatcherAbi>,
+    /// Terminal component closure settles an active request even after this driver leaves the forest.
+    request: Rc<Request>,
+}
+
+impl DialogRoot {
+    /// Captures every required shell capability before publishing the wrapper object.
+    fn create(shell: &LinearWidget, dispatcher: ComPtr<IEventDispatcherAbi>, request: Rc<Request>) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
+        let shell = shell.as_interface().add_ref();
+        let value = Self {
+            widget: shell.query()?,
+            layout: shell.query()?,
+            dispatcher,
+            request,
+        };
+        Ok(Self::from_value(value).query().expect("DialogRoot declares IWidget"))
+    }
+}
+
+impl IComponentEventProvider for DialogRoot {
+    /// Returns the component session's distinct dispatcher for runtime boundary dispatch.
+    fn private_dispatcher(&self) -> Result<ComPtr<IEventDispatcherAbi>, NcStatus> {
+        Ok(self.dispatcher.clone())
+    }
+}
+
+impl IWidget for DialogRoot {
+    /// Delegates runtime ownership to the concrete shell.
+    fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
+        self.widget.host()
+    }
+
+    /// Claims the concrete shell's one-way attachment exactly once.
+    fn mount(&mut self) -> Result<(), NcStatus> {
+        self.widget.mount()
+    }
+
+    /// Closes the concrete shell and its complete child topology.
+    fn close(&mut self) -> Result<(), NcStatus> {
+        let result = self.widget.close();
+        self.request.close();
+        result
+    }
+
+    /// Returns the shell's routing and frame policy without a shadow copy.
+    fn properties(&self) -> Result<WidgetProperties, NcStatus> {
+        self.widget.properties()
+    }
+
+    /// Applies common presentation options to the concrete shell.
+    fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus> {
+        self.widget.set_options(options)
+    }
+
+    /// Forwards one routed transaction to the concrete shell allocation.
+    fn update(&mut self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
+        self.widget.update(state, event, text)
+    }
+
+    /// Drains the shell's single sticky geometry-change source.
+    fn take_change(&mut self) -> Result<GeometryChange, NcStatus> {
+        self.widget.take_change()
+    }
+
+    /// Forwards scoped paint directly to the concrete shell.
+    fn paint(&mut self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
+        self.widget.paint(scope, state, painter)
+    }
+}
+
+impl IContainerLayout for DialogRoot {
+    /// Returns the concrete shell's stable child collection identity.
+    fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
+        self.layout.children()
+    }
+
+    /// Delegates intrinsic measurement without translating layout scopes.
+    fn measure(&mut self, scope: LayoutScope, bounds: LayoutLimits, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<Size, NcStatus> {
+        self.layout.measure(scope, bounds, layout)
+    }
+
+    /// Delegates child placement and returns the shell's exact copied geometry.
+    fn place(&mut self, scope: LayoutScope, rect: Rect, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<ContainerGeometry, NcStatus> {
+        self.layout.place(scope, rect, layout)
+    }
+
+    /// Preserves the concrete shell's ancestor-bubbling filter.
+    fn accepts_event(&self, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<bool, NcStatus> {
+        self.layout.accepts_event(event, text)
+    }
+}
+
+/// Node-plugin controller owns typed handlers and ordinary public COM capabilities.
+struct Dialog {
     /// Private typed handlers reuse the static session instead of adding a second callback transport.
     session: EventSession<Model>,
     /// Shared independently of an active mutable model borrow during runtime retirement.
     request: Rc<Request>,
 }
 
+#[com_object(interfaces(IEventDispatcher))]
+/// Separate mounted-component driver that dispatches handlers and then applies deferred navigation.
+struct DialogDriver {
+    /// Non-owning controller link prevents the mounted root from prolonging a released picker.
+    dialog: Weak<Dialog>,
+}
+
+/// Node construction data retained by the picker without retaining the core runtime identity.
+struct DialogNodes {
+    /// Non-owning host authority reports logical closure after the owning UI is released.
+    host: ComPtr<IWidgetHostAbi>,
+    /// Provider-shared imported resources used by dynamically rebuilt directory rows.
+    resources: crate::ui_node::widget_object::SharedAssets,
+}
+
+impl IEventDispatcher for DialogDriver {
+    /// Runs the same bounded private session and post-handler reconciliation as any application session.
+    fn dispatch(&self, limit: u32) -> Result<u32, NcStatus> {
+        self.dialog.upgrade().ok_or(UI_E_CLOSED)?.dispatch(limit)
+    }
+}
+
 /// One authoritative picker model; live control values are read through their actual COM interfaces.
 struct Model {
-    /// Construction and window operations upgrade the engine for one local operation only.
-    runtime: Weak<RuntimeStorage>,
-    /// Actual stable hidden/reusable modal definition.
-    window: ComPtr<IWindowAbi>,
+    /// Concrete-node construction data with no runtime or window-manager projection.
+    nodes: Rc<DialogNodes>,
+    /// Stable hidden/reusable modal installed after the eventful root is mounted.
+    window: Option<ComPtr<IWindowAbi>>,
     /// Request source and activity shared with the controller's lifetime operations.
     request: Rc<Request>,
     /// Exact committed native directory; lossy path-field display never replaces its identity.
@@ -119,15 +248,19 @@ struct Model {
     diagnostic: String,
 }
 impl Model {
-    /// Rejects closed components and upgrades runtime ownership for one synchronous operation.
-    fn owner(&self) -> Result<Runtime, NcStatus> {
+    /// Returns the modal after the one-time construction transaction has installed it.
+    fn window(&self) -> Result<&ComPtr<IWindowAbi>, NcStatus> {
+        self.window.as_ref().ok_or(UI_E_BUSY)
+    }
+
+    /// Rejects closed components and validates public runtime mutation authority.
+    fn owner(&self) -> Result<(), NcStatus> {
         if self.request.closed() {
             return Err(UI_E_CLOSED);
         }
-        let storage = self.runtime.upgrade().ok_or(UI_E_CLOSED)?;
-        storage.factory.host.check_mutation()?;
-        self.window.snapshot()?;
-        Ok(Runtime { storage })
+        self.nodes.host.check_mutation()?;
+        self.window()?.snapshot()?;
+        Ok(())
     }
     /// Resolves untrimmed user text, preserving the exact native directory when its display was not edited.
     fn resolve_path(&self, input: &str) -> Option<PathBuf> {
@@ -143,8 +276,8 @@ impl Model {
     /// Hides before emitting the outcome so later callbacks observe an idle reusable component.
     fn finish(&mut self, outcome: IFileDialogSinkEvent) -> Result<(), NcStatus> {
         if self.request.active() {
-            if self.window.snapshot().is_ok() {
-                self.window.set_visibility(Visibility::Hidden)?;
+            if self.window().is_ok_and(|window| window.snapshot().is_ok()) {
+                self.window()?.set_visibility(Visibility::Hidden)?;
             }
             self.request.finish(outcome);
         }
@@ -242,7 +375,10 @@ impl EventHandler<Model, WindowEvent> for Lifecycle {
     fn handle(&mut self, model: &mut Model, event: &WindowEvent) -> Result<(), NcStatus> {
         match event {
             WindowEvent::Hidden | WindowEvent::CloseRequested
-                if model.request.active() && model.window.snapshot().is_ok_and(|snapshot| snapshot.visibility == Visibility::Hidden) =>
+                if model.request.active()
+                    && model
+                        .window()
+                        .is_ok_and(|window| window.snapshot().is_ok_and(|snapshot| snapshot.visibility == Visibility::Hidden)) =>
             {
                 model.finish(IFileDialogSinkEvent::Cancelled)?;
             }
@@ -271,35 +407,39 @@ struct Listing {
 }
 
 /// Constructs an ordinary concrete Linear from heterogeneous existing COM widget capabilities.
-fn line(runtime: &Runtime, direction: FlowDirection, cross: CrossSize, children: Vec<(ComPtr<IWidgetAbi>, LayoutTrack)>) -> Result<LinearWidget, NcStatus> {
-    let line = LinearWidget::from_interface(runtime.widget_factory().create_linear(direction, cross.into())?);
+fn line(
+    nodes: &Rc<DialogNodes>,
+    direction: FlowDirection,
+    cross: CrossSize,
+    children: Vec<(ComPtr<IWidgetAbi>, LayoutTrack)>,
+) -> Result<LinearWidget, NcStatus> {
+    let line = LinearWidget::from_interface(crate::Linear::create_com(nodes.host.clone(), nodes.resources.clone(), direction, cross.into())?);
     for (index, (child, track)) in children.into_iter().enumerate() {
         line.as_interface().insert(index as u32, child.as_com_ref(), LinearEdge::new(track))?.finish()?;
     }
     Ok(line)
 }
 /// Constructs a text display through the ordinary widget factory.
-fn label(runtime: &Runtime, value: &str) -> Result<TextBlockWidget, NcStatus> {
-    Ok(TextBlockWidget::from_interface(
-        runtime
-            .widget_factory()
-            .create_text_block(NcCopyFromBufferOffset::new(0, value.as_bytes()), TextWrapping::None)?,
-    ))
+fn label(nodes: &Rc<DialogNodes>, value: &str) -> Result<TextBlockWidget, NcStatus> {
+    Ok(TextBlockWidget::from_interface(crate::TextBlock::create_com(
+        nodes.host.clone(),
+        nodes.resources.clone(),
+        NcCopyFromBufferOffset::new(0, value.as_bytes()),
+        TextWrapping::None,
+    )?))
 }
 /// Constructs a complete command Button through the dynamically implemented factory shorthand.
-fn button(runtime: &Runtime, value: &str) -> Result<neocogi_ui::ButtonWidget, NcStatus> {
-    Ok(neocogi_ui::ButtonWidget::from_interface(
-        runtime
-            .widget_factory()
-            .create_button(NcCopyFromBufferOffset::new(0, value.as_bytes()), WidgetOptions::FRAME)?,
-    ))
+fn button(nodes: &Rc<DialogNodes>, value: &str) -> Result<neocogi_ui::ButtonWidget, NcStatus> {
+    Ok(neocogi_ui::ButtonWidget::from_interface(crate::Button::create_com(
+        nodes.host.clone(),
+        nodes.resources.clone(),
+        NcCopyFromBufferOffset::new(0, value.as_bytes()),
+        WidgetOptions::FRAME,
+    )?))
 }
 /// Builds a complete column with exact path actions and fixed ordinary list-row measurements.
-fn column(runtime: &Runtime, directory: &Path, paths: Vec<PathBuf>, folder: bool) -> Result<Column, NcStatus> {
-    let mut children = vec![(
-        label(runtime, if folder { "Folders" } else { "Files" })?.node_interface()?,
-        LayoutTrack::Content,
-    )];
+fn column(nodes: &Rc<DialogNodes>, directory: &Path, paths: Vec<PathBuf>, folder: bool) -> Result<Column, NcStatus> {
+    let mut children = vec![(label(nodes, if folder { "Folders" } else { "Files" })?.node_interface()?, LayoutTrack::Content)];
     let mut rows = Vec::with_capacity(paths.len());
     for path in paths {
         let display = if folder && directory.parent() == Some(path.as_path()) {
@@ -307,56 +447,73 @@ fn column(runtime: &Runtime, directory: &Path, paths: Vec<PathBuf>, folder: bool
         } else {
             path.file_name().unwrap_or(path.as_os_str()).to_string_lossy()
         };
-        let mut item = ListItemWidget::from_interface(runtime.widget_factory().create_list_item(NcCopyFromBufferOffset::new(0, display.as_bytes()))?);
+        let mut item = ListItemWidget::from_interface(crate::ListItem::create_com(
+            nodes.host.clone(),
+            nodes.resources.clone(),
+            NcCopyFromBufferOffset::new(0, display.as_bytes()),
+        )?);
         item.set_icon_role(if folder { ContentIcon::ClosedFolder } else { ContentIcon::File })?;
         children.push((item.node_interface()?, LayoutTrack::Content));
         rows.push((item, if folder { Action::Folder(path) } else { Action::File(path) }));
     }
     if rows.is_empty() {
-        children.push((label(runtime, "(empty)")?.node_interface()?, LayoutTrack::Content));
+        children.push((label(nodes, "(empty)")?.node_interface()?, LayoutTrack::Content));
     }
     Ok(Column {
-        root: line(runtime, FlowDirection::TopToBottom, CrossSize::Stretch, children)?,
+        root: line(nodes, FlowDirection::TopToBottom, CrossSize::Stretch, children)?,
         rows,
     })
 }
 impl Listing {
     /// Builds actual COM rows only after a complete native directory read succeeded.
-    fn new(runtime: &Runtime, directory: &Path, entries: (Vec<PathBuf>, Vec<PathBuf>)) -> Result<Self, NcStatus> {
+    fn new(nodes: &Rc<DialogNodes>, directory: &Path, entries: (Vec<PathBuf>, Vec<PathBuf>)) -> Result<Self, NcStatus> {
         Ok(Self {
-            folders: column(runtime, directory, entries.0, true)?,
-            files: column(runtime, directory, entries.1, false)?,
+            folders: column(nodes, directory, entries.0, true)?,
+            files: column(nodes, directory, entries.1, false)?,
         })
     }
 }
 
 impl Dialog {
     /// Constructs one hidden modal from actual COM controls; no native widget handle or generic application state enters its ABI.
-    fn new(runtime: &Runtime, parent: ComRef<'_, IWindowAbi>) -> Result<Rc<Self>, NcStatus> {
-        runtime.storage.factory.host.check_mutation()?;
-        runtime.storage.parent(parent)?;
-        let path = TextboxWidget::from_interface(runtime.widget_factory().create_textbox(NcCopyFromBufferOffset::new(0, b""))?);
-        let filename = TextboxWidget::from_interface(runtime.widget_factory().create_textbox(NcCopyFromBufferOffset::new(0, b""))?);
-        let up = button(runtime, "Up")?;
-        let home = button(runtime, "Home")?;
-        let go = button(runtime, "Go")?;
-        let accept = button(runtime, "Open")?;
-        let cancel = button(runtime, "Cancel")?;
-        let folder_content = column(runtime, Path::new(""), Vec::new(), true)?;
-        let file_content = column(runtime, Path::new(""), Vec::new(), false)?;
-        let folders = ScrollAreaWidget::from_interface(
-            runtime
-                .widget_factory()
-                .create_scroll_area(folder_content.root.node_interface()?.as_com_ref(), true)?,
-        );
-        let files = ScrollAreaWidget::from_interface(
-            runtime
-                .widget_factory()
-                .create_scroll_area(file_content.root.node_interface()?.as_com_ref(), true)?,
-        );
-        let error = label(runtime, "")?;
+    fn new(services: Rc<NodeServices>, parent: ComRef<'_, IWindowAbi>) -> Result<Rc<Self>, NcStatus> {
+        services.host.check_mutation()?;
+        let nodes = Rc::new(DialogNodes {
+            host: services.host.clone(),
+            resources: services.resources.clone(),
+        });
+        let path = TextboxWidget::from_interface(crate::Textbox::create_com(
+            nodes.host.clone(),
+            nodes.resources.clone(),
+            NcCopyFromBufferOffset::new(0, b""),
+        )?);
+        let filename = TextboxWidget::from_interface(crate::Textbox::create_com(
+            nodes.host.clone(),
+            nodes.resources.clone(),
+            NcCopyFromBufferOffset::new(0, b""),
+        )?);
+        let up = button(&nodes, "Up")?;
+        let home = button(&nodes, "Home")?;
+        let go = button(&nodes, "Go")?;
+        let accept = button(&nodes, "Open")?;
+        let cancel = button(&nodes, "Cancel")?;
+        let folder_content = column(&nodes, Path::new(""), Vec::new(), true)?;
+        let file_content = column(&nodes, Path::new(""), Vec::new(), false)?;
+        let folders = ScrollAreaWidget::from_interface(crate::ScrollArea::create_com(
+            nodes.host.clone(),
+            nodes.resources.clone(),
+            folder_content.root.node_interface()?.as_com_ref(),
+            true,
+        )?);
+        let files = ScrollAreaWidget::from_interface(crate::ScrollArea::create_com(
+            nodes.host.clone(),
+            nodes.resources.clone(),
+            file_content.root.node_interface()?.as_com_ref(),
+            true,
+        )?);
+        let error = label(&nodes, "")?;
         let toolbar = line(
-            runtime,
+            &nodes,
             FlowDirection::LeftToRight,
             CrossSize::Content,
             vec![
@@ -367,7 +524,7 @@ impl Dialog {
             ],
         )?;
         let browser = line(
-            runtime,
+            &nodes,
             FlowDirection::LeftToRight,
             CrossSize::Stretch,
             vec![
@@ -376,26 +533,26 @@ impl Dialog {
             ],
         )?;
         let filename_line = line(
-            runtime,
+            &nodes,
             FlowDirection::LeftToRight,
             CrossSize::Content,
             vec![
-                (label(runtime, "File name:")?.node_interface()?, LayoutTrack::Fixed { extent: 86 }),
+                (label(&nodes, "File name:")?.node_interface()?, LayoutTrack::Fixed { extent: 86 }),
                 (filename.node_interface()?, LayoutTrack::Flex { weight: 1.0 }),
             ],
         )?;
         let actions = line(
-            runtime,
+            &nodes,
             FlowDirection::LeftToRight,
             CrossSize::Content,
             vec![
-                (label(runtime, "")?.node_interface()?, LayoutTrack::Flex { weight: 1.0 }),
+                (label(&nodes, "")?.node_interface()?, LayoutTrack::Flex { weight: 1.0 }),
                 (cancel.node_interface()?, LayoutTrack::Fixed { extent: 96 }),
                 (accept.node_interface()?, LayoutTrack::Fixed { extent: 96 }),
             ],
         )?;
         let shell = line(
-            runtime,
+            &nodes,
             FlowDirection::TopToBottom,
             CrossSize::Stretch,
             vec![
@@ -406,35 +563,34 @@ impl Dialog {
                 (actions.node_interface()?, LayoutTrack::Content),
             ],
         )?;
-        let window = runtime.create_dialog(
-            parent,
-            NcCopyFromBufferOffset::new(0, b"Open File"),
-            FILE_DIALOG_RECT,
-            shell.node_interface()?.as_com_ref(),
-        )?;
-        window.set_options(WindowOptions::FRAME)?;
         let request = Rc::new(Request {
             phase: Cell::new(RequestPhase::Idle),
             completed: crate::EventSource::new(),
         });
-        let dialog = Rc::new(Self {
-            session: EventSession::new(Model {
-                runtime: Rc::downgrade(&runtime.storage),
-                window: window.clone(),
-                request: request.clone(),
-                directory: PathBuf::new(),
-                path_dirty: false,
-                selected: None,
-                path: path.clone(),
-                filename: filename.clone(),
-                error,
-                folders,
-                files,
-                navigate: None,
-                diagnostic: String::new(),
-            }),
-            request,
+        let session = EventSession::new(Model {
+            nodes,
+            window: None,
+            request: request.clone(),
+            directory: PathBuf::new(),
+            path_dirty: false,
+            selected: None,
+            path: path.clone(),
+            filename: filename.clone(),
+            error,
+            folders,
+            files,
+            navigate: None,
+            diagnostic: String::new(),
         });
+        let dialog = Rc::new(Self { session, request });
+        let driver: ComPtr<IEventDispatcherAbi> = DialogDriver::from_value(DialogDriver { dialog: Rc::downgrade(&dialog) })
+            .query()
+            .expect("DialogDriver declares IEventDispatcher");
+        let root = DialogRoot::create(&shell, driver, dialog.request.clone())?;
+        let windows = services.windows.clone();
+        let window = windows.create_dialog(parent, NcCopyFromBufferOffset::new(0, b"Open File"), FILE_DIALOG_RECT, root.as_com_ref())?;
+        window.set_options(WindowOptions::FRAME)?;
+        dialog.session.state_mut()?.window = Some(window.clone());
         let connected = dialog.connect(
             &path,
             &filename,
@@ -475,7 +631,7 @@ impl Dialog {
 
     /// Prepares both complete columns without publishing a partial listing when any directory entry fails.
     fn candidate(&self, model: &mut Model, directory: &Path) -> Result<Listing, NcStatus> {
-        let runtime = model.owner()?;
+        model.owner()?;
         let entries = match read_directory(directory) {
             Ok(entries) => entries,
             Err(error) => {
@@ -483,7 +639,7 @@ impl Dialog {
                 return Err(UI_E_IO);
             }
         };
-        Listing::new(&runtime, directory, entries)
+        Listing::new(&model.nodes, directory, entries)
     }
 
     /// Registers complete candidates while the private session is idle, then replaces only dynamic content roles.
@@ -526,10 +682,10 @@ impl Dialog {
         })?;
         let listing = self.candidate(&mut model, &directory)?;
         // Modal eligibility is checked before replacing existing request data.
-        model.window.set_visibility(Visibility::Visible)?;
+        model.window()?.set_visibility(Visibility::Visible)?;
         self.install(&mut model, directory, listing, true)?;
-        model.window.set_title(NcCopyFromBufferOffset::new(0, title.as_bytes()))?;
-        model.window.set_rect(rect)?;
+        model.window()?.set_title(NcCopyFromBufferOffset::new(0, title.as_bytes()))?;
+        model.window()?.set_rect(rect)?;
         self.request.begin()?;
         Ok(())
     }
@@ -555,19 +711,15 @@ impl Dialog {
         }
         Ok(count)
     }
-
-    /// Finished request queues survive independently of their controller, so closed components retire immediately.
-    pub(super) fn finished(&self) -> bool {
-        self.request.closed()
-    }
-    /// Runtime teardown closes outstanding requests without borrowing a potentially active private handler model.
-    pub(super) fn retire(&self) {
-        self.request.retire();
-    }
 }
 impl Drop for Dialog {
-    /// Final controller destruction preserves one active-request cancellation for an already connected consumer.
+    /// Final controller destruction closes its mounted modal and preserves one terminal cancellation.
     fn drop(&mut self) {
+        if let Ok(model) = self.session.state()
+            && let Some(window) = &model.window
+        {
+            let _ = window.close();
+        }
         self.request.retire();
     }
 }
@@ -581,7 +733,7 @@ struct FileDialog {
 impl IFileDialog for FileDialog {
     /// Returns the actual modal capability; application code cannot replace its private structural roles.
     fn window(&self) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-        Ok(self.dialog.session.state()?.window.clone())
+        Ok(self.dialog.session.state()?.window()?.clone())
     }
     /// Decodes native units before request mutation and preserves the prior request/listing on a read failure.
     fn open(&self, title: NcCopyFromBufferOffset<'_, u8>, rect: Rect, directory: ComRef<'_, INativePathAbi>) -> Result<(), NcStatus> {
@@ -607,7 +759,7 @@ impl IFileDialog for FileDialog {
         if self.dialog.request.closed() {
             return Ok(());
         }
-        self.dialog.session.state()?.window.close()?;
+        self.dialog.session.state()?.window()?.close()?;
         self.dialog.request.close();
         Ok(())
     }
@@ -623,13 +775,10 @@ impl IFileDialogEvents for FileDialog {
         self.dialog.request.completed.event().subscribe(sink)
     }
 }
-impl IFileDialogs for Runtime {
-    /// Creates and retains a concrete internal controller whose runtime reference remains weak.
-    fn create(&self, parent: ComRef<'_, IWindowAbi>) -> Result<ComPtr<IFileDialogAbi>, NcStatus> {
-        let dialog = Dialog::new(self, parent)?;
-        self.storage.dialogs.borrow_mut().push(dialog.clone());
-        Ok(FileDialog::from_value(FileDialog { dialog }).query().expect("file picker declares IFileDialog"))
-    }
+/// Creates one nodes-owned picker whose mounted root drives all private component events.
+pub(crate) fn create(services: Rc<NodeServices>, parent: ComRef<'_, IWindowAbi>) -> Result<ComPtr<IFileDialogAbi>, NcStatus> {
+    let dialog = Dialog::new(services, parent)?;
+    Ok(FileDialog::from_value(FileDialog { dialog }).query().expect("file picker declares IFileDialog"))
 }
 
 /// Reads the platform home setting without converting its native encoding to Unicode.

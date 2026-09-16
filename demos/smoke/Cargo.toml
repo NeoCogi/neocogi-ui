@@ -31,8 +31,9 @@ neocogi-demo-assets.workspace = true
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Dynamic assembly roots add `dynamic-plugin`; monoliths call descriptors directly.
 neocogi-com-runtime.workspace = true
-neocogi-ui-runtime = { path = "../../crates/ui/runtime" }
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9474691cbb4fbe94b5b5c2af302cfeeb5e767533", default-features = false }
+neocogi-ui-runtime = { path = "../../crates/ui/runtime-plugin" }
+neocogi-ui-nodes.workspace = true
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "00f219d3b9630684bc4d49624ed86b5f3c26808b", default-features = false }
 neocogi-gfx = { workspace = true, features = ["builder"] }
 neocogi-skin = { workspace = true, features = ["theme-json"] }
 neocogi-example-ui-extension = { path = "../../examples/ui-extension", optional = true }

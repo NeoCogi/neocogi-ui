@@ -333,12 +333,12 @@ impl EventHandler<State, TextSubmitted> for Observe {
         state.entry.clear()
     }
 }
-impl EventHandler<State, ComboSelection> for Observe {
+impl EventHandler<State, ChoiceSelection> for Observe {
     /// Resolves display text separately from the generated selection event.
-    fn handle(&mut self, state: &mut State, event: &ComboSelection) -> Result<(), NcStatus> {
+    fn handle(&mut self, state: &mut State, event: &ChoiceSelection) -> Result<(), NcStatus> {
         match *event {
-            ComboSelection::None => state.write_log("Selection cleared"),
-            ComboSelection::Selected(index) => {
+            ChoiceSelection::None => state.write_log("Selection cleared"),
+            ChoiceSelection::Selected(index) => {
                 let index = usize::try_from(index).map_err(|_| NC_E_INVALID_ARG)?;
                 let label = state.combo.choice_label(index)?;
                 state.write_log(&format!("Selected {label}"))
@@ -454,7 +454,7 @@ fn create() -> Result<(Host, EventSession<State>), HostError> {
     let demo = floating(ui, desktop.as_com_ref(), "Demo Window", rect(40, 40, 300, 450), &main_scroll)?;
     demo.set_options(WindowOptions::FRAME | WindowOptions::MINIMIZE_BUTTON | WindowOptions::MAXIMIZE_BUTTON)?;
     let info = [label(ui, "40, 40")?, label(ui, "300, 450")?, label(ui, "0.0")?];
-    let combo = ui.combo_box(demo.as_com_ref(), &FRUIT, ComboSelection::Selected(0))?;
+    let combo = ui.combo_box(demo.as_com_ref(), &FRUIT, ChoiceSelection::Selected(0))?;
     let menus = ui.menus()?;
     let mut pending = Vec::new();
     let popup_menu = menus.create("Test Popup")?;

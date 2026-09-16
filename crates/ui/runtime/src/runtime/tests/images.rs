@@ -53,7 +53,7 @@ fn image_controls_keep_owned_pixels_and_forward_ordered_semantic_paint_after_err
     };
     skin.apply_flat_palette(palette);
     let assets = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_skin(skin)).unwrap();
-    let ui = neocogi_ui::Ui::from_interface(crate::test_support::runtime_from_assets(assets.as_com_ref()).unwrap()).unwrap();
+    let ui = crate::bind_builtin_nodes(crate::test_support::runtime_from_assets(assets.as_com_ref()).unwrap()).unwrap();
     let mut button = ui.widgets().button("AB").unwrap();
     button.set_options(WidgetOptions::NONE).unwrap();
     button.set_fill_states(FillStates::NONE).unwrap();
@@ -154,7 +154,7 @@ impl IRenderer for ImageFrameRenderer {
 /// Rendering a narrow real window must retain the cropped image's source coordinates and ownership.
 #[test]
 fn image_buttons_survive_both_builtin_and_runtime_clipping_in_a_complete_frame() {
-    let ui = neocogi_ui::Ui::from_interface(runtime()).unwrap();
+    let ui = crate::bind_builtin_nodes(runtime()).unwrap();
     let mut button = ui.widgets().button("AB").unwrap();
     button.set_options(WidgetOptions::NONE).unwrap();
     let image_probe = Rc::new(ImageProbe::default());

@@ -1,18 +1,17 @@
-//! Runtime construction boundary for complete combo-box composites.
+//! Runtime construction boundary for core-owned hierarchical choice menus.
 
 use super::*;
-use crate::combo_box::{ComboState, DEFAULT_COMBO_PLACEHOLDER, choice_menu, copied_menu, decoded_selection};
-use neocogi_ui_core_contracts::ChoiceMenuEntryAbi;
-use neocogi_ui_nodes_contracts::{ComboAbi, ComboSelectionAbi};
+use crate::choice_menu::{ChoiceMenuState, choice_menu, copied_menu, decoded_selection};
+use neocogi_ui_core_contracts::{ChoiceMenuEntryAbi, ChoiceSelectionAbi, IChoiceMenuAbi};
 
-/// Validates the complete composite before registering its private selection-menu popup.
-pub(crate) fn create_combo_box(
+/// Creates the core-owned choice model and popup without constructing any presentation widget.
+pub(crate) fn create_choice_menu(
     storage: &Rc<RuntimeStorage>,
     parent: ComRef<'_, IWindowAbi>,
     menu_text: NcCopyFromBufferOffset<'_, u8>,
     entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
-    selection: ComboSelectionAbi,
-) -> Result<ComPtr<ComboAbi>, NcStatus> {
+    selection: ChoiceSelectionAbi,
+) -> Result<ComPtr<IChoiceMenuAbi>, NcStatus> {
     storage.open()?;
     storage.factory.host.check_mutation()?;
 
@@ -20,8 +19,7 @@ pub(crate) fn create_combo_box(
     let parent = storage.parent(parent)?;
     let (menu_text, entries) = copied_menu(menu_text, entries)?;
     let selection = decoded_selection(selection)?;
-    let state = ComboState::create(menu_text, entries, selection, DEFAULT_COMBO_PLACEHOLDER.to_owned())?;
-    let combo = crate::Combo::create_com(storage.factory.host.clone(), storage.factory.resources.clone(), state.clone())?;
+    let state = ChoiceMenuState::create(menu_text, entries, selection)?;
     let menu = choice_menu(&state)?;
     let revision = state.revision()?;
 
@@ -34,7 +32,7 @@ pub(crate) fn create_combo_box(
         .window_manager
         .create_choice_popup(&parent, menu, selection)
         .expect("authenticated popup owner cannot disappear during an exclusive transaction");
-    context.register_combo_box(state, popup, revision);
+    context.register_choice_menu(state.clone(), popup, revision);
     storage.pending.set(true);
-    Ok(combo)
+    state.query()
 }

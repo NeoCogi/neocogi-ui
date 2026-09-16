@@ -16,13 +16,20 @@ fn runtime() -> ComPtr<UiRuntimeAbi> {
 
 /// Creates a concrete button without bypassing its production factory.
 fn button(runtime: &ComPtr<UiRuntimeAbi>) -> ComPtr<ButtonAbi> {
-    runtime
-        .factory()
-        .unwrap()
-        .query::<UiFactoryAbi>()
+    crate::UiFactory::bind(runtime.as_com_ref())
         .unwrap()
         .create_button(NcCopyFromBufferOffset::new(0, b""), WidgetOptions::FRAME)
         .unwrap()
+}
+
+/// The facade cannot combine a node provider bound to one retained forest with another runtime.
+#[test]
+fn facade_rejects_a_node_factory_bound_to_another_runtime() {
+    let first = runtime();
+    let second = runtime();
+    let factory = crate::UiFactory::bind(first.as_com_ref()).unwrap();
+    let result = neocogi_ui::Ui::from_interfaces(second, factory);
+    assert!(matches!(result, Err(UI_E_OWNER)));
 }
 
 #[com_object(interfaces(IAssetBundle))]
@@ -118,7 +125,7 @@ impl IRgbaImage for CountingAssets {
     }
 }
 
-/// Factory products, including fixed composites, reuse the runtime's one imported asset value.
+/// A separately bound node provider imports once, then all products reuse that provider cache.
 #[test]
 fn factory_construction_and_widget_phases_do_not_reimport_assets() {
     let source = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
@@ -126,7 +133,9 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
     let counted: ComPtr<IAssetBundleAbi> = CountingAssets::from_value(CountingAssets { source, calls: calls.clone() }).query().unwrap();
     let runtime = crate::test_support::runtime_from_assets(counted.as_com_ref()).unwrap();
     calls.set(0);
-    let factory = runtime.factory().unwrap().query::<UiFactoryAbi>().unwrap();
+    let factory = crate::UiFactory::bind(runtime.as_com_ref()).unwrap();
+    assert!(calls.get() > 0, "an independent provider must validate and import its initial revision");
+    calls.set(0);
     let label = NcCopyFromBufferOffset::new(0, b"shared");
     let button = factory.create_button(label, WidgetOptions::FRAME).unwrap();
     let _checkbox = factory.create_checkbox(false, label).unwrap();
@@ -165,7 +174,7 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
     let root = area.query::<IWidgetAbi>().unwrap();
     let _window = mount(&runtime, &root).unwrap();
     runtime.update(SIZE).unwrap();
-    assert_eq!(calls.get(), 0, "factory construction and update must use the runtime's imported value");
+    assert_eq!(calls.get(), 0, "factory products and update must reuse the provider's imported value");
 }
 
 /// Mounts the common capability through the production manager's transactional boundary.
@@ -513,11 +522,11 @@ fn window_com_capabilities_preserve_hierarchy_layers_visibility_and_subtree_clos
     let identity: ComPtr<IUnknown> = runtime.query().unwrap();
     assert_eq!(identity.as_ptr(), manager.query::<IUnknown>().unwrap().as_ptr());
     assert_eq!(runtime.query::<UiFactoryAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
-    let factory = runtime.factory().unwrap();
-    assert_ne!(identity.as_ptr(), factory.query::<IUnknown>().unwrap().as_ptr());
+    let construction = runtime.construction_host().unwrap();
+    assert_ne!(identity.as_ptr(), construction.query::<IUnknown>().unwrap().as_ptr());
     let root_button = button(&runtime);
     assert_eq!(
-        factory.host().unwrap().query::<IUnknown>().unwrap().as_ptr(),
+        construction.host().unwrap().query::<IUnknown>().unwrap().as_ptr(),
         root_button.host().unwrap().query::<IUnknown>().unwrap().as_ptr()
     );
     let root = mount(&runtime, &root_button.query().unwrap()).unwrap();
@@ -851,7 +860,7 @@ fn child_edit_reports_committed_topology_separately_from_teardown_failure() {
 #[test]
 fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validation() {
     let runtime = runtime();
-    let ui = neocogi_ui::com::Ui::from_interface(runtime.clone()).unwrap();
+    let ui = crate::bind_builtin_nodes(runtime.clone()).unwrap();
     let mut checkbox = ui.widgets().checkbox("Check", false).unwrap();
     let mut common = checkbox.node_interface().unwrap();
     common.take_change().unwrap();
@@ -906,7 +915,7 @@ fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validati
 #[test]
 fn builtin_numeric_and_scrollbar_facades_reject_invalid_inputs_without_losing_state() {
     let runtime = runtime();
-    let ui = neocogi_ui::com::Ui::from_interface(runtime).unwrap();
+    let ui = crate::bind_builtin_nodes(runtime).unwrap();
     let mut slider = ui
         .widgets()
         .slider(SliderOptions {
@@ -977,7 +986,7 @@ fn builtin_numeric_and_scrollbar_facades_reject_invalid_inputs_without_losing_st
 #[test]
 fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
     let runtime = runtime();
-    let ui = neocogi_ui::com::Ui::from_interface(runtime.clone()).unwrap();
+    let ui = crate::bind_builtin_nodes(runtime.clone()).unwrap();
     let textbox = ui.widgets().textbox("start").unwrap();
     let window = ui.window("editor", RECT, &textbox).unwrap();
     ui.input(
@@ -1153,7 +1162,7 @@ impl IPainter for BuiltinPainter {
 /// Button style changes retain the full algorithm and failed semantic recording does not poison reuse.
 #[test]
 fn builtin_scoped_paint_preserves_alignment_with_inline_semantic_state() {
-    let ui = neocogi_ui::com::Ui::from_interface(runtime()).unwrap();
+    let ui = crate::bind_builtin_nodes(runtime()).unwrap();
     let mut button = ui.widgets().button("AB").unwrap();
     button.set_options(WidgetOptions::NONE).unwrap();
     button.set_fill_states(FillStates::NONE).unwrap();
@@ -1218,7 +1227,7 @@ mod menus;
 #[test]
 fn platform_input_projection_and_committed_text_area_share_runtime_state() {
     let runtime = runtime();
-    let ui = neocogi_ui::Ui::from_interface(runtime.clone()).unwrap();
+    let ui = crate::bind_builtin_nodes(runtime.clone()).unwrap();
     let input = ui.input_sink().unwrap();
     let identity: ComPtr<neocogi_com::IUnknown> = input.query().unwrap();
     assert_eq!(identity.as_ptr(), runtime.query::<neocogi_com::IUnknown>().unwrap().as_ptr());
@@ -1344,7 +1353,7 @@ impl Drop for LocalContent {
 /// The generic local helper is one real COM object, survives failures and preserves normal cache rules.
 #[test]
 fn static_leaf_content_recovers_from_reentry_and_errors_with_one_owned_lifetime() {
-    let ui = neocogi_ui::Ui::from_interface(runtime()).unwrap();
+    let ui = crate::bind_builtin_nodes(runtime()).unwrap();
     let target = Rc::new(RefCell::new(None));
     let probe = Rc::new(LocalContentProbe::default());
     probe.width.set(80);

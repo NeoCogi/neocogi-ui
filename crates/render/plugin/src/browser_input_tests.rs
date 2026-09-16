@@ -171,7 +171,7 @@ fn static_com_editing_and_webgl() {
         .activate_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
         .unwrap();
     let compositor = gfx.create_compositor(assets.as_com_ref()).unwrap();
-    let ui = neocogi_ui::Ui::from_interface(factory.create_runtime(assets.as_com_ref(), compositor.as_com_ref()).unwrap()).unwrap();
+    let ui = neocogi_ui_runtime::bind_builtin_nodes(factory.create_runtime(assets.as_com_ref(), compositor.as_com_ref()).unwrap()).unwrap();
     let editor = ui.widgets().textbox("").unwrap();
     let window = ui
         .window("Editable COM window", Rect { x: 10, y: 10, width: 400, height: 180 }, &editor)

@@ -44,6 +44,66 @@ enum ChoiceMenuEntry: u8 {
 }
 
 #[version(1)]
+/// Optional committed selection for a choice menu, with no reserved in-band identity.
+enum ChoiceSelection: u8 {
+    /// No leaf is committed.
+    None,
+    /// One application-defined leaf identity is committed.
+    Selected(u64),
+}
+
+#[version(1)]
+/// Captured choice committed by pointer or keyboard interaction.
+event IChoiceChangedSink {
+    /// Receives the complete optional selection after retained traversal releases its borrows.
+    fn changed(&self, selection: ChoiceSelection) -> Result<()>;
+}
+
+#[version(1)]
+/// Live selection-oriented menu owned by the core popup manager.
+///
+/// The menu owns hierarchy, navigation, placement and committed selection. A header control such
+/// as Combo owns only its presentation and delegates these menu responsibilities through this
+/// interface. Mutations are silent; only user submission publishes `IChoiceChangedSink`.
+trait IChoiceMenu {
+    /// Returns the exact committed stable identity, including explicit absence.
+    fn selection(&self) -> Result<ChoiceSelection>;
+    /// Copies the selected leaf label, or an empty string when no leaf is committed.
+    fn selected_label(&self) -> Result<String>;
+    /// Returns the number of selectable leaves across the complete hierarchy.
+    fn choice_count(&self) -> Result<u64>;
+    /// Copies one leaf label in preorder; an out-of-range ordinal is rejected.
+    fn choice_label(&self, ordinal: u64) -> Result<String>;
+    /// Atomically replaces the complete hierarchy and optional selection after validating both.
+    fn replace(&mut self, menu_text: &[u8], entries: &[ChoiceMenuEntry], selection: ChoiceSelection) -> Result<()>;
+    /// Silently changes the committed selection; an unknown identity is rejected.
+    fn set_selection(&mut self, selection: ChoiceSelection) -> Result<()>;
+    /// Requests activation below an exact screen-space anchor after the current traversal phase.
+    fn show_at(&mut self, anchor: Rect) -> Result<()>;
+    /// Requests dismissal after the current traversal phase while retaining the menu definition.
+    fn hide(&mut self) -> Result<()>;
+    /// Requests activation or dismissal according to the menu's current reconciled intent.
+    fn toggle_at(&mut self, anchor: Rect) -> Result<()>;
+    /// Connects the exclusive user-commit subscriber without retaining application state.
+    event subscribe_changed(&mut self): IChoiceChangedSink;
+    /// Permanently retires the private popup and ends event delivery.
+    fn close(&mut self) -> Result<()>;
+}
+
+#[version(1)]
+/// Construction capability for selection menus managed by the core popup forest.
+trait IChoiceMenus {
+    /// Creates one validated hidden choice hierarchy owned by an authenticated ordinary window.
+    fn create_choice_menu(
+        &self,
+        parent: &IWindow,
+        menu_text: &[u8],
+        entries: &[ChoiceMenuEntry],
+        selection: ChoiceSelection,
+    ) -> Result<IChoiceMenu>;
+}
+
+#[version(1)]
 /// Live compact row capability, editable before mounting and while its owning surface exists.
 trait IMenuItem {
     /// Returns the same label used by measurement, paint and captured submissions.

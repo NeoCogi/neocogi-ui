@@ -1,5 +1,7 @@
 //! Standard picker acceptance exercises public methods, routed input, and exact native filesystem values.
 use super::*;
+use crate::Runtime;
+use crate::runtime::{RuntimeStorage, create_storage};
 use neocogi_ui::events::completed_file_path;
 
 /// Deterministic drawable keeps the full modal visible while testing its real flex layout.
@@ -30,11 +32,13 @@ impl Fixture {
         let compositor = neocogi_gfx_impl::GfxCompositorObject::create(source.as_com_ref()).unwrap();
         let storage = create_storage(crate::assets::ImportedAssets::read(source.as_com_ref(), None).unwrap(), compositor);
         let runtime: ComPtr<UiRuntimeAbi> = Runtime::from_value(Runtime { storage: storage.clone() }).query().unwrap();
-        let ui = neocogi_ui::Ui::from_interface(runtime.clone()).unwrap();
+        let ui = crate::bind_builtin_nodes(runtime.clone()).unwrap();
         let body = ui.widgets().button("background").unwrap();
         let owner = ui.window("owner", OWNER_RECT, &body).unwrap();
-        let handle = ui.file_dialog(owner.as_com_ref()).unwrap();
-        let controller = storage.dialogs.borrow()[0].clone();
+        let services = crate::ui_factory::NodeServices::bind(runtime.as_com_ref()).unwrap();
+        let controller = Dialog::new(services, owner.as_com_ref()).unwrap();
+        let interface = FileDialog::from_value(FileDialog { dialog: controller.clone() }).query().unwrap();
+        let handle = neocogi_ui::FileDialog::from_interface(interface);
         Self {
             ui,
             storage,
@@ -374,7 +378,7 @@ fn closed_picker_preserves_all_completed_requests_during_manual_handler_runtime_
     let fixture = Fixture::new();
     let directory = tempfile::tempdir().unwrap();
     let events = EventSession::new(ReentryState {
-        ui: neocogi_ui::Ui::from_interface(fixture.runtime.clone()).unwrap(),
+        ui: crate::bind_builtin_nodes(fixture.runtime.clone()).unwrap(),
         completions: 0,
     });
     events.subscribe_file_dialog(&fixture.handle, Reenter).unwrap();

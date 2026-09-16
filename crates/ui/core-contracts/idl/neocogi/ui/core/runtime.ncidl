@@ -242,7 +242,7 @@ trait IWindowManager {
 }
 
 #[version(1)]
-/// Runtime-bound construction endpoint whose concrete factory roles are queried through COM.
+/// Runtime-bound authority used to authenticate independently provided node factories.
 trait IConstructionHost {
     /// Returns the non-owning widget authority used by independently implemented node classes.
     fn host(&self) -> Result<IWidgetHost>;
@@ -250,10 +250,10 @@ trait IConstructionHost {
 
 #[version(2)]
 /// One constructible retained UI with input, rendering, and resource ownership.
-class UiRuntime: IInputSink + IWindowManager + IMenus + IFileDialogs {
+class UiRuntime: IInputSink + IWindowManager + IMenus + IChoiceMenus {
 
-    /// Returns a typed construction endpoint; installed node contracts supply additional roles.
-    fn factory(&self) -> Result<IConstructionHost>;
+    /// Returns the core construction authority without exposing a concrete nodes factory.
+    fn construction_host(&self) -> Result<IConstructionHost>;
 
     /// Retains the currently installed immutable revision, suitable for restoration or another consumer.
     fn assets(&self) -> Result<IAssetBundle>;

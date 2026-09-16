@@ -1,6 +1,7 @@
 //! Exercises the static facade against independent concrete COM implementations.
 mod tests {
     use neocogi_ui::com::*;
+    use neocogi_ui::com::nodes::ButtonInterfacesFor;
     use neocogi_com::{ComRef, NcCopyFromBufferOffset, NcStatus};
     use neocogi_com::{ComPtr, IUnknown, NcString, NC_E_INVALID_ARG, com_object};
 

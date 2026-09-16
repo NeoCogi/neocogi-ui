@@ -18,10 +18,3 @@ event IScrollbarSink {
     /// Receives the captured value after retained traversal releases its owned state.
     fn changed(&self, offset: i32) -> Result<()>;
 }
-
-#[version(1)]
-/// Captured user selection committed by a runtime-owned combo popup.
-event IComboChangedSink {
-    /// Receives the NCIDL-defined selection value from one committed interaction.
-    fn changed(&self, selection: ComboSelection) -> Result<()>;
-}
