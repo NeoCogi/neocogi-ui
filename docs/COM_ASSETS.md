@@ -11,7 +11,7 @@
 | `crates/gfx/impl` | Private decoder, atlas, bundle, and source-export implementation; no plugin identity. |
 | `crates/appearance` | Pure typed appearance compilation shared with offline resource construction. |
 | `crates/skin/impl` | Private style and optional JSON-theme implementation; no plugin identity. |
-| `neocogi-ui-impl` | Non-plugin table retention and implementation support shared by the two UI providers. |
+| `neocogi-ui-support` | Non-plugin table retention, pure geometry/text algorithms, and phase-local presentation helpers; no retained tree or concrete classes. |
 | `neocogi-ui-runtime` | Core retained layout, painting, surfaces, and menu policy. |
 | `neocogi-ui-nodes` | Built-in controls and standard compositions over one bound runtime resource source. |
 | `crates/render/plugin` and renderers | Pixel upload, GPU resources and ordered frame execution. |

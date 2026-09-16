@@ -16,10 +16,12 @@ wgpu = ["neocogi-render-plugin?/wgpu"]
 webgl = ["dep:neocogi-ui-runtime", "dep:neocogi-ui-nodes", "dep:neocogi-render-plugin", "dep:neocogi-gfx", "neocogi-render-plugin/webgl"]
 # Expose PNG upload through the GFX plugin selected by the owning application.
 png-assets = []
+# Link/register live appearance compilation without the native JSON theme loader.
+skin = ["dep:neocogi-skin"]
 # Native monoliths retain only the implementations selected by their assembly.
 monolith = ["neocogi-com/static-runtime", "dep:neocogi-ui-runtime", "dep:neocogi-ui-nodes", "dep:neocogi-render-plugin"]
 monolith-gfx = ["monolith", "dep:neocogi-gfx"]
-monolith-skin = ["monolith", "dep:neocogi-skin"]
+monolith-skin = ["monolith", "skin", "neocogi-skin/theme-json"]
 
 [dependencies]
 neocogi-ui.workspace = true
@@ -28,7 +30,7 @@ neocogi-ui-runtime = { path = "../../crates/ui/runtime", optional = true }
 neocogi-ui-nodes = { workspace = true, optional = true }
 neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "1578bf2d67d59d0be95b3d6ff72ea1a1e65519ee", optional = true, default-features = false }
 neocogi-gfx = { workspace = true, optional = true, default-features = false }
-neocogi-skin = { workspace = true, optional = true, default-features = false, features = ["theme-json"] }
+neocogi-skin = { workspace = true, optional = true, default-features = false }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 neocogi-com = { workspace = true, features = ["runtime"] }

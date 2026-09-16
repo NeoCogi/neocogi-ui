@@ -8,7 +8,46 @@ const result = document.getElementById('result');
 try {
   const test = await import('./input-test.js');
   await test.default();
+  // Observe the production startup reporter, not a replacement error implementation. WASM has
+  // no OS stderr; preserve the exact status in the console and retain a failure exit code.
+  const originalConsoleError = console.error;
+  const startupErrors = [];
+  let startupFailed;
+  console.error = (...arguments_) => startupErrors.push(arguments_.map(String).join(' '));
+  try {
+    startupFailed = test.report_failed_startup();
+  } finally {
+    console.error = originalConsoleError;
+  }
+  if (!startupFailed || !startupErrors.some(message => message.includes('Demo startup failed: NC_E_NOT_FOUND(-7)'))) {
+    throw new Error('Original startup error was not reported to the browser console');
+  }
   test.full_demo_checks();
+  // The synchronous production checks just rendered the full application. Inspect its actual
+  // default framebuffer before returning to the browser, which may discard unpreserved WebGL
+  // contents between animation turns. Successful COM calls alone do not prove a visible frame.
+  const canvas = document.querySelector('canvas');
+  if (!canvas) throw new Error('Full application did not retain its platform canvas');
+  const gl = canvas.getContext('webgl2');
+  if (!gl) throw new Error('Full application did not create a WebGL2 context');
+  const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+  const previousReadTarget = gl.getParameter(gl.READ_FRAMEBUFFER_BINDING);
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+  try {
+    gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+  } finally {
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, previousReadTarget);
+  }
+  if (gl.getError() !== gl.NO_ERROR) throw new Error('Full application framebuffer read failed');
+  // Text, controls, and the background must produce multiple opaque colors, not a transparent
+  // canvas or a uniformly cleared backbuffer. Stop once the small diversity threshold is met.
+  const colors = new Set();
+  for (let offset = 0; offset < pixels.length && colors.size < 8; offset += 4) {
+    if (pixels[offset + 3] === 255) {
+      colors.add((pixels[offset] << 16) | (pixels[offset + 1] << 8) | pixels[offset + 2]);
+    }
+  }
+  if (colors.size < 8) throw new Error('Full application rendered a blank or uniform framebuffer');
   let attempts = 0;
   function complete() {
     if (test.demo_loops_released()) {

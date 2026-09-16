@@ -26,9 +26,19 @@ wrappers. [COM_DESIGN.md](COM_DESIGN.md) defines the accepted architecture, and
   generated public capabilities and returns the nodes `UiFactory`. `Ui::from_interfaces` validates
   the canonical host identity, file dialogs dispatch through mounted component event providers,
   and Combo delegates hierarchy, popup policy, selection, and its generated changed event to the
-  core `IChoiceMenu`. A non-plugin `neocogi-ui-impl` support package prevents sibling plugins from
-  linking each other's loader entrypoints while preserving one optimized Rust implementation per
-  reachable artifact.
+  core `IChoiceMenu`.
+- Complete the physical UI source split: move concrete widgets, containers, factory, file picker,
+  and node phase adapters into `crates/ui/nodes`. Keep retained topology, scoped service
+  implementations, traversal, and GFX submission in `crates/ui/runtime`; both implementation
+  crates now own their actual plugin roots. Remove the shared `neocogi-ui-impl` arrangement and
+  redundant `runtime-plugin` wrapper. `neocogi-ui-support` contains only binary-local canonical
+  resource imports, pure geometry/text algorithms, and phase-local recording helpers, not either
+  provider's implementation. Neither provider has a production Rust dependency on the other.
+  Move useful node/picker and pure-helper tests to their production owners, eliminate private
+  core storage from picker fixtures, and verify independent activation, host authentication, and
+  real event delivery. Replace the scoped layout client's first-error `Cell` with an ordinary
+  field mutated through `&mut self`, and reuse NCIDL `LayoutParticipation` instead of its parallel
+  native enum.
 - Retain the `AssetTables` collection of generated NCIDL records as the UI runtime's canonical immutable resource
   snapshot. `AtlasHandle` now adds only catalog-scoped identities and sorted integer lookup slots;
   `Skin` borrows generated metrics and chrome policy and selects generated appearance fields
@@ -218,8 +228,8 @@ wrappers. [COM_DESIGN.md](COM_DESIGN.md) defines the accepted architecture, and
 - Remove the UI implementation's generic `src/com` tree. Retained-node services now
   live under `ui_node`, external renderer submission under `render`, event sink
   projections beside their semantic event types, and the dynamically linked runtime
-  and factory in their top-level modules. Thin runtime and nodes plugin roots select concrete
-  object types from the non-plugin `neocogi-ui-impl` support crate.
+  and factory in their owning core/nodes crates. Provider-neutral resource/presentation helpers
+  live in `neocogi-ui-support`, without concrete object types or retained runtime machinery.
 - Share one typed EventSource transport between built-ins and independent widgets;
   EventSession owns app state and concrete handlers outside the producer graph.
 - Preserve menus, native-path file dialogs, immutable resources, full/basic demos,

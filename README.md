@@ -54,10 +54,13 @@ builds can regenerate contracts without invoking the assembly CLI.
 UI code follows the same role-based layout under `crates/ui`: `core-contracts` contains
 shared node, layout, popup, menu, and window protocols; `nodes-contracts` owns the concrete
 built-in widget/container classes and their typed factory; and `api` is the application facade.
-`runtime-plugin` deploys the retained forest, surfaces, generic menus, and window manager.
+`runtime` implements and deploys the retained forest, surfaces, generic menus, and window manager.
 `nodes` deploys built-in leaves, containers, Combo headers, and standard file-dialog
-compositions as a separate provider. The non-plugin `runtime` package supplies ordinary Rust
-implementation support to both plugin roots and exports no loader entrypoint of its own.
+compositions as a separate provider. Their concrete `.rs` implementations live under
+`nodes/src/widgets`, `nodes/src/containers`, and `nodes/src/dialogs.rs`; core contains no built-in
+catalog or concrete factory. `support` holds only binary-local resource imports, pure presentation
+algorithms, and phase-local drawing helpers. Neither provider has a production dependency on the
+other provider's Rust implementation, and there is no extra runtime-plugin wrapper crate.
 
 The core runtime and built-in nodes are deliberately separate plugins. A host creates the core
 runtime, activates `neocogi.ui.nodes.runtime`, and binds its `NodesPluginFactory` to that exact

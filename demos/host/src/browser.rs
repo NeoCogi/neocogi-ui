@@ -3,11 +3,14 @@ use super::*;
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{closure::Closure, JsCast};
 
+/// Owned JavaScript scheduling boundary; each invocation supplies the browser's timestamp.
+type AnimationCallback = Closure<dyn FnMut(f64)>;
+
 #[derive(Default)]
 /// One browser callback owns the running application until an explicit stop or error breaks the loop.
 struct Animation {
     /// Keeping this Rust closure alive keeps its JavaScript function callable between frames.
-    callback: RefCell<Option<Closure<dyn FnMut(f64)>>>,
+    callback: RefCell<Option<AnimationCallback>>,
 }
 impl Animation {
     /// Schedules exactly one asynchronous frame; failure is handled by the caller's teardown path.

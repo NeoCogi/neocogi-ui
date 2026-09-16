@@ -24,7 +24,7 @@ start with [COM_AUTHORS.md](COM_AUTHORS.md) and the working [examples](EXAMPLES.
 
 - [Architecture](../crates/ui/runtime/docs/ARCHITECTURE.md) — retained trees, concrete surfaces, ownership, and stable identity.
 - [Events](../crates/ui/runtime/docs/EVENTS.md) — typed widget events, dispatch ordering, roots, and retained services.
-- [Built-in widgets](../crates/ui/runtime/docs/WIDGETS.md) — control and container selection, typed events, ownership, and
+- [Built-in widgets](../crates/ui/nodes/docs/WIDGETS.md) — control and container selection, typed events, ownership, and
   retained mutation.
 - [Layout](../crates/ui/runtime/docs/LAYOUT.md) — measurement, tracks, placement, invalidation, and update/paint boundaries.
 - [Application menus](../crates/ui/runtime/docs/MENUS.md) — concrete registered items, retained composition, popup

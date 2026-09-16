@@ -59,13 +59,18 @@ impl std::error::Error for HostError {
 /// `Termination` implementation for `Result` prints errors with `Debug`, which would consequently
 /// reduce any failure to a bare `Error:` line. Demo entry points use this explicit display boundary
 /// so size optimization cannot discard the operational diagnostic.
+/// Browser binaries have no OS stderr: their startup errors go to the JavaScript console. The page
+/// separately verifies that successful initialization published a canvas before hiding its status.
 pub fn report_exit(result: Result<(), HostError>) -> std::process::ExitCode {
     match result {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(error) => {
             // Display preserves OS messages, COM status codes, and the richer contextual messages
             // collected by the host without depending on generated enum-debug implementations.
+            #[cfg(not(target_arch = "wasm32"))]
             eprintln!("Error: {error}");
+            #[cfg(target_arch = "wasm32")]
+            web_sys::console::error_1(&format!("Demo startup failed: {error}").into());
             std::process::ExitCode::FAILURE
         }
     }
@@ -83,7 +88,7 @@ pub trait AppState: 'static {
 
 /// One demo UI and platform window; these fields are concrete capabilities, with no native handles.
 pub struct Host {
-    /// Retained runtime, widget factory and window manager share one UI COM allocation.
+    /// Bound core runtime and nodes factory share canonical host identity, not one COM allocation.
     pub ui: Ui,
     /// Selected backend owns all images and custom render items used by this host.
     pub renderer: ComPtr<IRendererAbi>,
@@ -255,7 +260,7 @@ fn register() -> Result<(), HostError> {
         runtime.register_factory_plugin_description(neocogi_render_plugin::factory_plugin_description())?;
         #[cfg(any(target_arch = "wasm32", feature = "monolith-gfx"))]
         runtime.register_factory_plugin_description(neocogi_gfx::factory_plugin_description())?;
-        #[cfg(feature = "monolith-skin")]
+        #[cfg(feature = "skin")]
         runtime.register_factory_plugin_description(neocogi_skin::factory_plugin_description())?;
     }
     Ok(())

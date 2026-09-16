@@ -166,6 +166,13 @@ mod browser {
         }))
         .map_err(|error| JsValue::from_str(&error.to_string()))
     }
+    /// Exercises the real binary reporting boundary with a deliberately failed startup result.
+    /// The JavaScript fixture observes console output and the returned exit status; it does not
+    /// replace initialization, a runtime, a provider, or an application implementation.
+    #[wasm_bindgen]
+    pub fn report_failed_startup() -> bool {
+        neocogi_demo_host::report_exit(Err(HostError::Status(neocogi_com::NC_E_NOT_FOUND))) == std::process::ExitCode::FAILURE
+    }
     /// The HTML harness also checks that both platform-owned canvases and input textareas disappeared.
     #[wasm_bindgen]
     pub fn demo_loops_released() -> bool {

@@ -12,7 +12,8 @@ default = ["glow"]
 # Link the full assembly's runtime, UI, renderer, GFX, and Skin implementations.
 monolith = ["neocogi-demo-host/monolith-gfx", "neocogi-demo-host/monolith-skin"]
 glow = ["neocogi-demo-host/glow", "neocogi-render-plugin/glow"]
-webgl = ["neocogi-demo-host/webgl", "embed-assets"]
+# The browser's live style editor needs Skin even though authored themes are precompiled.
+webgl = ["neocogi-demo-host/webgl", "neocogi-demo-host/skin", "embed-assets"]
 # Native deployments read adjacent files unless this feature is explicitly requested.
 embed-assets = ["neocogi-demo-assets/embed-assets"]
 vulkan = ["neocogi-demo-host/vulkan", "neocogi-render-plugin/vulkan"]

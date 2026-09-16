@@ -59,11 +59,13 @@ never receives runtime storage, a root handle, or an implementation callback. Bu
 exercise the same cached `IWidget`, `ILeafLayout`, and `IContainerLayout` path as independently
 compiled custom controls.
 
-`neocogi-ui-impl` is a non-plugin Rust support package used to compile the reachable implementation
-of each sibling plugin. It exports no bootstrap symbol and has no deployable identity. Link-time
-garbage collection leaves concrete built-in implementations in the nodes shared object; the core
-shared object links only the core contract and retains only shared helpers actually required by
-its generic menu surfaces. This is the same implementation/plugin separation used by GFX and Skin.
+The Rust sources follow those boundaries: core implementation and activation live in
+`crates/ui/runtime`; concrete widgets, containers, factory, picker, and node phase adapters live
+in `crates/ui/nodes`. Neither provider has a production dependency on the other provider's
+implementation. `neocogi-ui-support` holds only binary-local resource imports, pure geometry/text
+algorithms, and phase-local recording helpers, with no retained tree, host authority, concrete
+classes, runtime, or plugin getter. There is no shared implementation containing both halves,
+and core's exclusion of concrete nodes does not rely on linker garbage collection.
 
 ## Dependency direction
 
