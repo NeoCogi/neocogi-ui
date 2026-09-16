@@ -122,21 +122,6 @@ impl ChildEditResult {
     }
 }
 
-impl LinearEdge {
-    /// Creates an ordinary relationship that follows the Linear line's resolved cross extent.
-    pub fn new(main: LayoutTrack) -> Self {
-        Self {
-            main: main.into(),
-            cross: ChildCrossSize::Stretch.into(),
-        }
-    }
-    /// Requests an exact cross extent; the receiving container validates it before mutation.
-    pub fn with_fixed_cross(mut self, extent: i32) -> Self {
-        self.cross = ChildCrossSize::Fixed { extent }.into();
-        self
-    }
-}
-
 /// Decodes a tagged event and validates its matching whole-text argument.
 /// The returned text borrow lasts only as long as the caller's original buffer.
 pub fn decode_widget_event<'a>(event: WidgetEventAbi, text: neocogi_com::NcCopyFromBufferOffset<'a, u8>) -> Result<(WidgetEvent, &'a str), NcStatus> {

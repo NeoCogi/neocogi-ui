@@ -4,6 +4,7 @@
 //! common host, lifecycle, option, and resource machinery required by every class.
 use crate::boundary::text;
 use neocogi_ui_core_contracts::*;
+use neocogi_ui_nodes_contracts::ContentIcon;
 use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
 use std::{cell::RefCell, rc::Rc};
 use neocogi_ui::com::widget::WidgetState;

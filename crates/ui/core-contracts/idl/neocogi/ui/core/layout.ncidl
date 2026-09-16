@@ -184,80 +184,6 @@ struct ChildEditResult {
 }
 
 #[version(1)]
-/// One parent-owned track; variants carry only the data relevant to their policy.
-enum LayoutTrack: u8 {
-    /// Uses the child's intrinsic preferred extent.
-    Content,
-    /// Uses an exact nonnegative pixel extent.
-    Fixed {
-        /// Exact nonnegative pixel extent.
-        extent: i32,
-    },
-    /// Receives a strictly positive finite weighted share of bounded remaining space.
-    Flex {
-        /// Strictly positive finite share of bounded remaining space.
-        weight: f32,
-    },
-}
-
-#[version(1)]
-/// Shared cross-axis size of a linear container's line.
-enum CrossSize: u8 {
-    /// Fits the largest child's preferred cross extent.
-    Content,
-    /// Reports preferred content, then stretches to its exact placement allocation.
-    Stretch,
-    /// Uses an exact nonnegative pixel extent.
-    Fixed {
-        /// Exact nonnegative pixel extent.
-        extent: i32,
-    },
-}
-
-#[version(1)]
-/// Optional exact child cross extent; Stretch uses the owning linear line's cross size.
-enum ChildCrossSize: u8 {
-    /// Uses the line's resolved cross extent.
-    Stretch,
-    /// Uses an exact nonnegative pixel extent.
-    Fixed {
-        /// Exact nonnegative pixel extent.
-        extent: i32,
-    },
-}
-
-#[version(1)]
-/// Main axis and leading edge, without independent potentially inconsistent flags.
-    enum FlowDirection: u8 {
-        /// Horizontal sequence starting at the left edge.
-        LeftToRight = 0,
-        /// Horizontal sequence starting at the right edge.
-        RightToLeft = 1,
-        /// Vertical sequence starting at the top edge.
-        TopToBottom = 2,
-        /// Vertical sequence starting at the bottom edge.
-        BottomToTop = 3,
-    }
-
-#[version(1)]
-/// Linear-owned relationship stored beside one direct child.
-struct LinearEdge {
-    /// Main-axis content, exact or weighted-flexible policy.
-    main: LayoutTrack,
-    /// Optional exact cross extent for this child only.
-    cross: ChildCrossSize,
-}
-
-#[version(1)]
-/// Positive Grid-owned cell span; placement clamps columns at the right grid boundary.
-struct GridExtent {
-    /// Number of logical columns, greater than zero.
-    columns: u32,
-    /// Number of logical rows, greater than zero.
-    rows: u32,
-}
-
-#[version(1)]
 /// Common editing capability inherited by built-in concrete container interfaces.
 trait IContainer: IWidget {
     /// Returns the stable read-only view; editing stays on the concrete container to preserve edge metadata.
@@ -266,60 +192,6 @@ trait IContainer: IWidget {
     fn remove(&mut self, index: u32) -> Result<ChildEditResult>;
     /// Removes all owned subtrees and their matching metadata while retaining reusable capacity.
     fn clear(&mut self) -> Result<ChildEditResult>;
-}
-
-#[version(1)]
-/// Constructible directional container whose concrete editing API is one class contract.
-class Linear: IWidget + IContainerLayout {
-    /// Returns the stable read-only topology view for this container's lifetime.
-    fn children(&self) -> Result<IChildren>;
-    /// Removes one complete subtree and matching edge metadata.
-    fn remove(&mut self, index: u32) -> Result<ChildEditResult>;
-    /// Removes all owned subtrees and matching metadata while retaining reusable capacity.
-    fn clear(&mut self) -> Result<ChildEditResult>;
-    /// Returns its complete axis and leading-edge policy.
-    fn direction(&self) -> Result<FlowDirection>;
-    /// Replaces the direction without reordering child ownership.
-    fn set_direction(&mut self, direction: FlowDirection) -> Result<()>;
-    /// Returns the shared cross-axis size policy.
-    fn cross_size(&self) -> Result<CrossSize>;
-    /// Validates and replaces the shared cross-axis policy.
-    fn set_cross_size(&mut self, cross: CrossSize) -> Result<()>;
-    /// Returns one child's exact parent-owned sizing relationship.
-    fn edge(&self, index: u32) -> Result<LinearEdge>;
-    /// Replaces sizing metadata without replacing the child's identity.
-    fn set_edge(&mut self, index: u32, edge: LinearEdge) -> Result<()>;
-    /// Validates child and relationship before committing insertion at index, including count.
-    fn insert(&mut self, index: u32, child: &IWidget, edge: LinearEdge) -> Result<ChildEditResult>;
-    /// Validates replacement before permanently closing the previous indexed subtree.
-    fn replace(&mut self, index: u32, child: &IWidget, edge: LinearEdge) -> Result<ChildEditResult>;
-}
-
-#[version(1)]
-/// Constructible Grid whose topology, spans, and both track axes share one class contract.
-class Grid: IWidget + IContainerLayout {
-    /// Returns the stable read-only topology view for this container's lifetime.
-    fn children(&self) -> Result<IChildren>;
-    /// Removes one complete subtree and matching span metadata.
-    fn remove(&mut self, index: u32) -> Result<ChildEditResult>;
-    /// Removes all owned subtrees and matching metadata while retaining reusable capacity.
-    fn clear(&mut self) -> Result<ChildEditResult>;
-    /// Copies a range of column policies; offset indexes tracks and the return value is total count.
-    fn columns(&self, output: &mut [LayoutTrack]) -> Result<u32>;
-    /// Replaces the complete column sequence after validating every track; input offset must be zero.
-    fn set_columns(&mut self, tracks: &[LayoutTrack]) -> Result<()>;
-    /// Copies a range of row policies; offset indexes tracks and the return value is total count.
-    fn rows(&self, output: &mut [LayoutTrack]) -> Result<u32>;
-    /// Replaces the complete row sequence after validating every track; input offset must be zero.
-    fn set_rows(&mut self, tracks: &[LayoutTrack]) -> Result<()>;
-    /// Returns one child's positive Grid-owned span.
-    fn edge(&self, index: u32) -> Result<GridExtent>;
-    /// Changes span without replacing the child's identity.
-    fn set_edge(&mut self, index: u32, edge: GridExtent) -> Result<()>;
-    /// Validates a positive span and unmounted child before committing insertion.
-    fn insert(&mut self, index: u32, child: &IWidget, edge: GridExtent) -> Result<ChildEditResult>;
-    /// Validates replacement before permanently closing the previous indexed subtree.
-    fn replace(&mut self, index: u32, child: &IWidget, edge: GridExtent) -> Result<ChildEditResult>;
 }
 
 #[version(1)]
@@ -348,37 +220,6 @@ trait IScrolling: IWidget {
     fn scroll_to_end(&mut self) -> Result<()>;
     /// Requests the nearest offsets that reveal a nonnegative content-local rectangle.
     fn reveal(&mut self, rect: Rect) -> Result<()>;
-}
-
-#[version(1)]
-/// Constructible scroll composite with one replaceable content root and private structural roles.
-class ScrollArea: IWidget + IContainerLayout + IScrolling {
-    /// Returns the actual application content widget, without its surrounding transform surface.
-    fn content(&self) -> Result<IWidget>;
-    /// Validates replacement before closing old content; structural roles and model identity stay fixed.
-    fn replace_content(&mut self, content: &IWidget) -> Result<ChildEditResult>;
-}
-
-#[version(1)]
-/// Immutable disclosure presentation; expansion and child ownership use one shared policy.
-    enum DisclosureStyle: u8 {
-        /// Full framed header above the body.
-        Header = 0,
-        /// Compact tree row with an indented body.
-        Tree = 1,
-    }
-
-#[version(1)]
-/// Constructible fixed header/body composition exposing its actual editable child objects.
-class Disclosure: IWidget + IContainerLayout {
-    /// Returns shared expansion state also changed by header activation and keyboard input.
-    fn expanded(&self) -> Result<bool>;
-    /// Changes expansion and retains layout invalidation even while this subtree is hidden.
-    fn set_expanded(&mut self, expanded: bool) -> Result<()>;
-    /// Returns the real header's text capability, including its inherited widget options.
-    fn header(&self) -> Result<ITextContent>;
-    /// Returns the real body container; its child editor keeps topology and edge metadata consistent.
-    fn body(&self) -> Result<Linear>;
 }
 
 #[version(1)]

@@ -1,6 +1,6 @@
 # Architecture
 
-Applications link `neocogi-ui`, canonical `neocogi-ui-core-contracts`, and neocogi-com support.
+Applications link `neocogi-ui`, the core and built-in-node contract crates, and neocogi-com support.
 The facade contains concrete typed clients and application-local generic adapters.
 The UI implementation, retained window manager, built-in widgets and layout policies
 are packaged in the UI plugin. Native platform and GPU objects share the selected
@@ -31,15 +31,19 @@ type that performs its input, layout, and paint algorithms; there is no parallel
 hold a semantic widget. Fixed compositions may own genuine child COM objects for
 different structural roles, such as a `TextArea` root and its `TextEditor` child.
 
-`UiFactory` is a separately registered, dynamically implemented class retaining
-only `IWidgetHost`. `UiRuntime::factory()` returns that shorthand for ordinary
-application ergonomics. It is not an `IUiFactory` projection on the runtime, and
-hosts remain free to construct any registered widget class from its typed frame.
+`UiFactory` is a separately implemented class in `neocogi.ui.nodes`. It retains the
+non-owning `IWidgetHost` and a weak runtime link used only by window-owned composites.
+`UiRuntime::factory()` returns the core `IConstructionHost`; COM query yields the typed
+nodes `UiFactory` without making core import the nodes module. It is not an
+`IUiFactory` projection on the runtime, and hosts may construct registered classes
+from their typed frames.
 
 ## Source ownership
 
-`neocogi-ui-core-contracts` declares cross-binary interfaces and callable class contracts;
-it contains no UI implementation state. In `neocogi-ui-runtime`, each built-in under
+`neocogi-ui-core-contracts` declares shared cross-binary node, layout, surface, menu, and
+window protocols. `neocogi-ui-nodes-contracts` declares concrete built-in classes, their
+specialized events and constructor factory. Neither contains UI implementation state.
+In `neocogi-ui-runtime`, each built-in under
 `ui_node/widgets` or `ui_node/containers` owns its `com_object`, constructor,
 callable-class implementation, shared protocol projections, semantic fields, and
 layout/paint algorithm in one family module. A change to `Button`, `Grid`, or

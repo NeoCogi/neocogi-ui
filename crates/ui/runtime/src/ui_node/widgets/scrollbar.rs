@@ -259,9 +259,9 @@ impl ScrollbarParameters {
 }
 
 /// Canonical generated scrollbar snapshot owned by the NCIDL event family.
-pub use neocogi_ui_core_contracts::IScrollbarSinkEvent as ScrollbarChanged;
+pub use neocogi_ui_nodes_contracts::IScrollbarSinkEvent as ScrollbarChanged;
 
-#[neocogi_com::com_object(neocogi_ui_core_contracts::Scrollbar)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Scrollbar)]
 /// Standalone one-axis scrollbar and dynamically constructible COM object.
 pub struct Scrollbar {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -552,7 +552,8 @@ mod tests {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl};
-use neocogi_ui_core_contracts::{IEventSubscriptionAbi, IScrollbarSinkAbi, IWidgetHostAbi, ScrollAxis, ScrollRange, ScrollbarAbi};
+use neocogi_ui_core_contracts::{IEventSubscriptionAbi, IWidgetHostAbi};
+use neocogi_ui_nodes_contracts::{IScrollbarSinkAbi, ScrollAxis, ScrollRange, ScrollbarAbi};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Scrollbar);
@@ -590,7 +591,7 @@ impl Scrollbar {
     }
 }
 
-impl neocogi_ui_core_contracts::Scrollbar for Scrollbar {
+impl neocogi_ui_nodes_contracts::Scrollbar for Scrollbar {
     /// Reads all range fields from one consistent semantic snapshot.
     fn range(&self) -> Result<ScrollRange, NcStatus> {
         self.runtime().state.readable()?;

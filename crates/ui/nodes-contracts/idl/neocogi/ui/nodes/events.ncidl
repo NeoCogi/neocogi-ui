@@ -1,0 +1,27 @@
+#[version(1)]
+/// Committed user checkbox state; programmatic setters do not publish it.
+event ICheckboxSink {
+    /// Receives the captured value after retained traversal releases its owned state.
+    fn changed(&self, checked: bool) -> Result<()>;
+}
+
+#[version(1)]
+/// Committed finite user value shared by Slider and Number; programmatic setters do not publish it.
+event INumericSink {
+    /// Receives the captured value after retained traversal releases its owned state.
+    fn changed(&self, value: f32) -> Result<()>;
+}
+
+#[version(1)]
+/// Committed clamped scrollbar offset from pointer input; programmatic setters do not publish it.
+event IScrollbarSink {
+    /// Receives the captured value after retained traversal releases its owned state.
+    fn changed(&self, offset: i32) -> Result<()>;
+}
+
+#[version(1)]
+/// Captured user selection committed by a runtime-owned combo popup.
+event IComboChangedSink {
+    /// Receives the NCIDL-defined selection value from one committed interaction.
+    fn changed(&self, selection: ComboSelection) -> Result<()>;
+}

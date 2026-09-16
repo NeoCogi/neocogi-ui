@@ -56,7 +56,8 @@ pointers. Final COM release frees the allocation separately.
 
 Events own the value captured at the interaction. Ordinary programmatic setters
 remain silent. The [events guide](EVENTS.md) describes delivery; exact interfaces and
-capabilities are documented in `neocogi-ui-core-contracts` and the facade's API reference.
+shared capabilities are documented in `neocogi-ui-core-contracts`, concrete
+classes in `neocogi-ui-nodes-contracts`, and clients in the facade's API reference.
 
 Combo boxes retain their display labels but no generic application payload. Create
 one with `Ui::combo_box(parent, items, ComboSelection::None)`; its visible

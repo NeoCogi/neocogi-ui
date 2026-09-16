@@ -307,8 +307,9 @@ name protocol supertraits through their module path when needed so generated
 companion types resolve together.
 
 Use the generated `UiFactory` as the typed construction surface. The plugin's
-root factory creates the runtime, and `UiRuntime::factory()` returns a
-runtime-bound widget factory. Do not model it as a redundant `IUiFactory`
+root factory creates the runtime. `UiRuntime::factory()` returns the core
+`IConstructionHost`, which callers query for the nodes-module `UiFactory`.
+Do not model it as a redundant `IUiFactory`
 projection or ask the shared runtime to construct a control by class ID. Hosts
 call the factory's typed methods, which keep host capabilities and constructor
 arguments explicit in the IDL.

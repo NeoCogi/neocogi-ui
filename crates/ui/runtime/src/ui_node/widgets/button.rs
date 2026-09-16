@@ -39,6 +39,7 @@ use crate::ui_node::widget_object::{
     set_direct_named_icon,
 };
 use neocogi_ui_core_contracts::*;
+use neocogi_ui_nodes_contracts::{ButtonAbi, ContentIcon, FillStates};
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString};
 
 use super::*;
@@ -99,7 +100,7 @@ impl ButtonParameters {
 /// Canonical generated activation snapshot owned by the NCIDL event family.
 pub use neocogi_ui_core_contracts::IActivationSinkEvent as ButtonSubmitted;
 
-#[neocogi_com::com_object(neocogi_ui_core_contracts::Button)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Button)]
 /// Concrete retained button and dynamically constructible COM object.
 ///
 /// The allocation owns its semantic fields directly. `runtime` contains only common host,
@@ -357,7 +358,7 @@ impl Button {
 direct_widget_phase_impl!(Button);
 direct_leaf_layout_impl!(Button);
 
-impl neocogi_ui_core_contracts::Button for Button {
+impl neocogi_ui_nodes_contracts::Button for Button {
     /// Validates before committing and only dirties geometry when text actually differs.
     fn set_label(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;

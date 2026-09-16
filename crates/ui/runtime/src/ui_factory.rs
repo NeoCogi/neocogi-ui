@@ -1,33 +1,43 @@
 //! Dynamically linked widget-construction shorthand over concrete COM contracts.
 
 use neocogi_ui_core_contracts::*;
+use neocogi_ui_nodes_contracts::*;
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, com_factory};
+use std::rc::Weak;
 
-#[com_factory(neocogi_ui_core_contracts::UiFactory)]
+#[com_factory(neocogi_ui_nodes_contracts::UiFactory)]
 /// Dynamically linked construction shorthand retaining its products' host and one asset value.
 pub struct UiFactory {
     /// Non-owning runtime authority used for lifetime checks, resources, and child stores.
     host: ComPtr<IWidgetHostAbi>,
     /// One imported value shared by every widget produced through this factory.
     resources: crate::ui_node::widget_object::SharedAssets,
+    /// Non-owning link used only by composites that need a window-owned popup definition.
+    storage: Weak<crate::runtime::RuntimeStorage>,
 }
 
 impl UiFactory {
     /// Builds the factory projection used by a newly constructed UI runtime.
-    pub(crate) fn create(host: ComPtr<IWidgetHostAbi>, resources: crate::ui_node::widget_object::SharedAssets) -> Result<ComPtr<UiFactoryAbi>, NcStatus> {
+    pub(crate) fn create(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: crate::ui_node::widget_object::SharedAssets,
+        storage: Weak<crate::runtime::RuntimeStorage>,
+    ) -> Result<ComPtr<UiFactoryAbi>, NcStatus> {
         host.check_open()?;
-        let value = Self { host, resources };
+        let value = Self { host, resources, storage };
         Ok(Self::from_value(value).query().expect("UiFactory declares its callable class contract"))
     }
 }
 
-impl neocogi_ui_core_contracts::UiFactory for UiFactory {
+impl IConstructionHost for UiFactory {
     /// Returns the exact host used by every product without retaining a UI tree.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
         self.host.check_open()?;
         Ok(self.host.clone())
     }
+}
 
+impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     /// Validates complete text and wrapping before constructing the fixed scroll/editor composition.
     fn create_text_area(&self, input: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping, scrolling: bool) -> Result<ComPtr<TextAreaAbi>, NcStatus> {
         crate::TextArea::create_com(self.host.clone(), self.resources.clone(), input, wrapping, scrolling)
@@ -117,5 +127,17 @@ impl neocogi_ui_core_contracts::UiFactory for UiFactory {
     fn create_button(&self, label: NcCopyFromBufferOffset<'_, u8>, options: WidgetOptions) -> Result<ComPtr<ButtonAbi>, NcStatus> {
         self.host.check_mutation()?;
         crate::Button::create_com(self.host.clone(), self.resources.clone(), label, options)
+    }
+
+    /// Binds the concrete combo model to this factory's live window-owning runtime.
+    fn create_combo_box(
+        &self,
+        parent: ComRef<'_, IWindowAbi>,
+        item_text: NcCopyFromBufferOffset<'_, u8>,
+        ranges: NcCopyFromBufferOffset<'_, ComboItemRange>,
+        selection: ComboSelectionAbi,
+    ) -> Result<ComPtr<ComboAbi>, NcStatus> {
+        let storage = self.storage.upgrade().ok_or(UI_E_CLOSED)?;
+        crate::runtime::combos::create_combo_box(&storage, parent, item_text, ranges, selection)
     }
 }

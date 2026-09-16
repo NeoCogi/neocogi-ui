@@ -129,7 +129,7 @@ pub struct TextEditor {
 }
 
 /// Concrete fixed scrolling text-area class with one actual editor child.
-#[neocogi_com::com_object(neocogi_ui_core_contracts::TextArea)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::TextArea)]
 pub struct TextArea {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,
@@ -698,8 +698,9 @@ use crate::ui_node::widget_object::{
 };
 use neocogi_ui_core_contracts::{
     GeometryChange, IEventSubscriptionAbi, IFontStyle, IMultilineEditor, IMultilineEditorAbi, ITextChangedSinkAbi, ITextContent, ITextEditor, ITextEvents,
-    ITextSubmittedSinkAbi, IWidgetAbi, IWidgetHostAbi, TextAreaAbi, FontRole, TextWrapping,
+    ITextSubmittedSinkAbi, IWidgetAbi, IWidgetHostAbi, FontRole, TextWrapping,
 };
+use neocogi_ui_nodes_contracts::{TextAreaAbi};
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString};
 
 direct_widget_phase_impl!(TextEditor);
@@ -841,7 +842,7 @@ impl TextArea {
     }
 }
 
-impl neocogi_ui_core_contracts::TextArea for TextArea {
+impl neocogi_ui_nodes_contracts::TextArea for TextArea {
     /// Forwards snapshots after checking the outer object's logical lifetime.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;

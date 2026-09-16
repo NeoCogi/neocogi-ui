@@ -72,9 +72,12 @@ threading capability, callable surface, and required `IWidget` projection. It
 has no constructor. The generated `UiFactory` description defines the typed
 construction call.
 
-Names are exact. If this source is `neocogi/ui/core.ncidl`, the declarations are
+Names are exact. In this simplified single-module illustration, if the source is
+`neocogi/ui/core.ncidl`, the declarations are
 `neocogi.ui.core.IWidget`, `neocogi.ui.core.Button`, and
 `neocogi.ui.core.UiFactory`.
+The actual UI contracts now place shared `IWidget` in `neocogi.ui.core` and
+concrete `Button` and `UiFactory` in `neocogi.ui.nodes`, which imports core.
 `#[version(1)]` derives identity from that name and version;
 `#[id(1, "UUID")]` pins an identity when migration or external compatibility
 requires it. IDL members are public by definition and do not use `pub`.
@@ -84,7 +87,7 @@ requires it. IDL members are public by definition and do not use `pub`.
 Implementation types contain only private state and method bodies:
 
 ```rust,ignore
-#[com_object(neocogi_ui_core_contracts::Button)]
+#[com_object(neocogi_ui_nodes_contracts::Button)]
 struct ButtonObject {
     enabled: bool,
     label: String,
@@ -107,7 +110,7 @@ impl Button for ButtonObject {
     }
 }
 
-#[com_factory(neocogi_ui_core_contracts::UiFactory)]
+#[com_factory(neocogi_ui_nodes_contracts::UiFactory)]
 struct UiFactoryObject;
 
 impl UiFactory for UiFactoryObject {
@@ -138,7 +141,7 @@ One implementation is selected as the plugin root:
 neocogi_com::factory_plugin! {
     name = "neocogi.ui.runtime",
     version = "1.0.0",
-    contracts = [neocogi_ui_core_contracts::MODULE],
+    contracts = [neocogi_ui_core_contracts::MODULE, neocogi_ui_nodes_contracts::MODULE],
     factory = UiFactoryObject,
 }
 
@@ -195,9 +198,11 @@ Dynamic host code has one bootstrap sequence:
 ```rust,ignore
 let runtime = Runtime::global();
 let loaded = unsafe { runtime.load_plugin_library(plugin_path) };
-let factory = runtime.activate_plugin_factory::<UiFactoryAbi>(
+let plugin = runtime.activate_plugin_factory::<UiPluginFactoryAbi>(
     loaded.plugin_id(),
 )?;
+let ui = plugin.create_runtime(assets, compositor)?;
+let factory = ui.factory()?.query::<UiFactoryAbi>()?;
 let button = factory.create_button("OK")?;
 ```
 

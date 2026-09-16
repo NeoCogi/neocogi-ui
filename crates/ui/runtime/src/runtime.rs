@@ -3,6 +3,7 @@
 use crate::boundary::{local_rect, text};
 use crate::ui_node::{HostState, Observation, WidgetHost};
 use neocogi_ui_core_contracts::*;
+use neocogi_ui_nodes_contracts::UiFactoryAbi;
 use neocogi_com::{ComPtr, ComRef, IUnknown, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
 use std::{
     cell::{Cell, RefCell},
@@ -10,7 +11,7 @@ use std::{
 };
 use crate::ui_node::paint_service::{Metrics, PaintService};
 use crate::{Dimensioni, runtime_context::RuntimeContext};
-mod combos;
+pub(crate) mod combos;
 mod dialogs;
 mod menus;
 mod windows;
@@ -50,17 +51,20 @@ fn create_storage(assets: crate::assets::ImportedAssets, compositor: ComPtr<neoc
         children: RefCell::default(),
     });
     *state.factory.borrow_mut() = Rc::downgrade(&factory);
-    let widget_factory = crate::ui_factory::UiFactory::create(factory.host.clone(), factory.resources.clone()).expect("new runtime host creates its factory");
-    Rc::new(RuntimeStorage {
-        context: RefCell::new(Some(crate::runtime_context::RuntimeContext::new(compositor, bundle))),
-        mounts: RefCell::new(Vec::new()),
-        factory,
-        widget_factory,
-        dimensions: Cell::new(Size::default()),
-        pending: Cell::new(true),
-        updating: Cell::new(false),
-        menus: RefCell::new(Vec::new()),
-        dialogs: RefCell::new(Vec::new()),
+    Rc::new_cyclic(|weak_storage| {
+        let widget_factory = crate::ui_factory::UiFactory::create(factory.host.clone(), factory.resources.clone(), weak_storage.clone())
+            .expect("new runtime host creates its factory");
+        RuntimeStorage {
+            context: RefCell::new(Some(crate::runtime_context::RuntimeContext::new(compositor, bundle))),
+            mounts: RefCell::new(Vec::new()),
+            factory,
+            widget_factory,
+            dimensions: Cell::new(Size::default()),
+            pending: Cell::new(true),
+            updating: Cell::new(false),
+            menus: RefCell::new(Vec::new()),
+            dialogs: RefCell::new(Vec::new()),
+        }
     })
 }
 
@@ -72,14 +76,14 @@ pub struct Runtime {
 }
 
 /// All authoritative runtime state is private to the UI plugin.
-struct RuntimeStorage {
+pub(crate) struct RuntimeStorage {
     /// Idle engine slot; transactions take ownership so no RefCell borrow spans a COM call.
     context: RefCell<Option<RuntimeContext>>,
     /// Surface capabilities authenticate parents; the forest alone owns widget nodes.
     mounts: RefCell<Vec<Mount>>,
     /// Shared construction services retain no root forest or owning runtime.
     factory: Rc<crate::ui_node::node_factory::NodeFactory>,
-    /// Dynamically implemented shorthand retains only the non-owning host capability.
+    /// Dynamically implemented node factory retains only a weak reference to this storage.
     widget_factory: ComPtr<UiFactoryAbi>,
     /// Last successfully synchronized drawable dimensions.
     dimensions: Cell<Size>,
@@ -158,9 +162,9 @@ impl IInputSink for Runtime {
 
 impl UiRuntime for Runtime {
     /// Returns the cached factory object bound to this runtime's non-owning host.
-    fn factory(&self) -> Result<ComPtr<UiFactoryAbi>, NcStatus> {
+    fn factory(&self) -> Result<ComPtr<IConstructionHostAbi>, NcStatus> {
         self.storage.open()?;
-        Ok(self.storage.widget_factory.clone())
+        self.storage.widget_factory.query()
     }
     /// Exposes an owned immutable revision without borrowing mutable tree state.
     fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {

@@ -1,5 +1,6 @@
 //! Runtime boundary regressions use deliberately retaining and reentrant components.
 use super::*;
+use neocogi_ui_nodes_contracts::*;
 use neocogi_com::{INcStringComPtrExt, NC_E_BUSY, NcCopyToBufferOffset};
 mod containers;
 
@@ -17,6 +18,8 @@ fn runtime() -> ComPtr<UiRuntimeAbi> {
 fn button(runtime: &ComPtr<UiRuntimeAbi>) -> ComPtr<ButtonAbi> {
     runtime
         .factory()
+        .unwrap()
+        .query::<UiFactoryAbi>()
         .unwrap()
         .create_button(NcCopyFromBufferOffset::new(0, b""), WidgetOptions::FRAME)
         .unwrap()
@@ -123,7 +126,7 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
     let counted: ComPtr<IAssetBundleAbi> = CountingAssets::from_value(CountingAssets { source, calls: calls.clone() }).query().unwrap();
     let runtime = crate::test_support::runtime_from_assets(counted.as_com_ref()).unwrap();
     calls.set(0);
-    let factory = runtime.factory().unwrap();
+    let factory = runtime.factory().unwrap().query::<UiFactoryAbi>().unwrap();
     let label = NcCopyFromBufferOffset::new(0, b"shared");
     let button = factory.create_button(label, WidgetOptions::FRAME).unwrap();
     let _checkbox = factory.create_checkbox(false, label).unwrap();

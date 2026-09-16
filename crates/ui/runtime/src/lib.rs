@@ -198,7 +198,7 @@ impl neocogi_ui_core_contracts::UiPluginFactory for UiPluginFactoryObject {
 neocogi_com::factory_plugin! {
     name = "neocogi.ui.runtime",
     version = "0.9.0-alpha.0",
-    contracts = [neocogi_ui_core_contracts::MODULE],
+    contracts = [neocogi_ui_core_contracts::MODULE, neocogi_ui_nodes_contracts::MODULE],
     factory = UiPluginFactoryObject,
 }
 

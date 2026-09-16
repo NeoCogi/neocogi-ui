@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/ui/core-contracts",
+    "crates/ui/nodes-contracts",
     "crates/gfx/contracts",
     "crates/gfx/support",
     "crates/gfx/impl",
@@ -32,6 +33,7 @@ repository = "https://github.com/NeoCogi/neocogi-platform"
 
 [workspace.dependencies]
 neocogi-ui-core-contracts = { path = "crates/ui/core-contracts" }
+neocogi-ui-nodes-contracts = { path = "crates/ui/nodes-contracts" }
 neocogi-renderer-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9474691cbb4fbe94b5b5c2af302cfeeb5e767533" }
 neocogi-platform-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9474691cbb4fbe94b5b5c2af302cfeeb5e767533" }
 neocogi-gfx-contracts = { path = "crates/gfx/contracts" }

@@ -84,7 +84,7 @@ impl DisclosureState {
 ///
 /// Expansion gates descendant traversal while retaining every owned runtime and its state. It does
 /// not expose or mutate generic node visibility.
-#[neocogi_com::com_object(neocogi_ui_core_contracts::Disclosure)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Disclosure)]
 pub struct Disclosure {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,
@@ -93,7 +93,7 @@ pub struct Disclosure {
     /// Text capability of the actual header child.
     header: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextContentAbi>,
     /// Typed editing capability of the actual vertical body child.
-    body: neocogi_com::ComPtr<neocogi_ui_core_contracts::LinearAbi>,
+    body: neocogi_com::ComPtr<neocogi_ui_nodes_contracts::LinearAbi>,
     /// Same expansion scalar read by the actual header object and parent layout.
     model: Rc<DisclosureState>,
     variant: DisclosureVariant,
@@ -105,7 +105,7 @@ impl Disclosure {
         runtime: crate::ui_node::widget_object::WidgetRuntime,
         editor: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
         header: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextContentAbi>,
-        body: neocogi_com::ComPtr<neocogi_ui_core_contracts::LinearAbi>,
+        body: neocogi_com::ComPtr<neocogi_ui_nodes_contracts::LinearAbi>,
         model: Rc<DisclosureState>,
         variant: DisclosureVariant,
     ) -> Self {
@@ -383,9 +383,8 @@ impl crate::ui_node::widget_object::HostedWidget for DisclosureHeader {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_leaf_layout_impl, direct_widget_phase_impl};
-use neocogi_ui_core_contracts::{
-    CrossSize, DisclosureAbi, DisclosureStyle, FlowDirection, IChildrenEditorAbi, ITextContent, ITextContentAbi, IWidgetAbi, IWidgetHostAbi, LinearAbi,
-};
+use neocogi_ui_core_contracts::{IChildrenEditorAbi, ITextContent, ITextContentAbi, IWidgetAbi, IWidgetHostAbi};
+use neocogi_ui_nodes_contracts::{CrossSize, DisclosureAbi, DisclosureStyle, FlowDirection, LinearAbi};
 use neocogi_com::{ComPtr, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString};
 
 direct_widget_phase_impl!(DisclosureHeader);
@@ -465,7 +464,7 @@ impl Disclosure {
     }
 }
 
-impl neocogi_ui_core_contracts::Disclosure for Disclosure {
+impl neocogi_ui_nodes_contracts::Disclosure for Disclosure {
     /// Observes the same expansion bit used by header input and container layout.
     fn expanded(&self) -> Result<bool, NcStatus> {
         self.runtime().state.readable()?;

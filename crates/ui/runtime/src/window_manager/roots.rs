@@ -1525,14 +1525,13 @@ impl WindowManager {
     }
 
     /// Replaces one choice menu's complete leaf snapshot after its owner changed model revision.
-    pub(crate) fn replace_choice_popup(
-        &mut self,
-        popup: &PopupHandle,
-        rows: Vec<MenuSlot>,
-        committed: Option<u64>,
-    ) -> Result<(), SurfaceMutationError> {
+    pub(crate) fn replace_choice_popup(&mut self, popup: &PopupHandle, rows: Vec<MenuSlot>, committed: Option<u64>) -> Result<(), SurfaceMutationError> {
         let id = self.popup_id(popup)?;
-        let menu = self.surfaces.popup_node_mut(id).and_then(|node| node.surface.body.menu_mut()).ok_or(SurfaceMutationError::UnknownPopup)?;
+        let menu = self
+            .surfaces
+            .popup_node_mut(id)
+            .and_then(|node| node.surface.body.menu_mut())
+            .ok_or(SurfaceMutationError::UnknownPopup)?;
         if !menu.replace_choices(rows, committed) {
             return Err(SurfaceMutationError::UnknownPopup);
         }
@@ -1543,7 +1542,11 @@ impl WindowManager {
     /// Resets transient choice emphasis immediately before activating a retained popup definition.
     pub(crate) fn prepare_choice_popup(&mut self, popup: &PopupHandle) -> Result<(), SurfaceMutationError> {
         let id = self.popup_id(popup)?;
-        let menu = self.surfaces.popup_node_mut(id).and_then(|node| node.surface.body.menu_mut()).ok_or(SurfaceMutationError::UnknownPopup)?;
+        let menu = self
+            .surfaces
+            .popup_node_mut(id)
+            .and_then(|node| node.surface.body.menu_mut())
+            .ok_or(SurfaceMutationError::UnknownPopup)?;
         if !menu.prepare_choices() {
             return Err(SurfaceMutationError::UnknownPopup);
         }
@@ -1554,7 +1557,11 @@ impl WindowManager {
     /// Takes an activated leaf identity after menu input and visibility changes have completed.
     pub(crate) fn take_choice_submission(&mut self, popup: &PopupHandle) -> Result<Option<u64>, SurfaceMutationError> {
         let id = self.popup_id(popup)?;
-        let menu = self.surfaces.popup_node_mut(id).and_then(|node| node.surface.body.menu_mut()).ok_or(SurfaceMutationError::UnknownPopup)?;
+        let menu = self
+            .surfaces
+            .popup_node_mut(id)
+            .and_then(|node| node.surface.body.menu_mut())
+            .ok_or(SurfaceMutationError::UnknownPopup)?;
         Ok(menu.take_choice_submission())
     }
 

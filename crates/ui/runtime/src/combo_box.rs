@@ -8,15 +8,14 @@ use crate::window_manager::{PopupHandle, SurfaceMutationError, WindowManager};
 use neocogi_com::{
     ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_int_enum, com_interface, com_object,
 };
-use neocogi_ui_core_contracts::{
-    ComboItemRange, ComboSelection, ComboSelectionAbi, IComboChangedSinkAbi, IEventSubscriptionAbi, Rect,
-};
+use neocogi_ui_core_contracts::{IEventSubscriptionAbi, Rect};
+use neocogi_ui_nodes_contracts::{ComboItemRange, ComboSelection, ComboSelectionAbi, IComboChangedSinkAbi};
 
 /// Contract-defined visible fallback for a combo with no committed selection.
 pub(crate) const DEFAULT_COMBO_PLACEHOLDER: &str = "Select…";
 
 /// Canonical generated selection snapshot stored in this producer's event queue.
-use neocogi_ui_core_contracts::IComboChangedSinkEvent as ComboChangedPayload;
+use neocogi_ui_nodes_contracts::IComboChangedSinkEvent as ComboChangedPayload;
 
 com_int_enum! {
     /// Header intent understood only by the private combo state machine.
@@ -341,7 +340,6 @@ impl IComboState for ComboState {
         Ok(())
     }
 }
-
 
 /// Builds one checked flat choice snapshot without a second retained item collection.
 pub(crate) fn choice_rows(state: &ComPtr<IComboStateAbi>) -> Result<Vec<MenuSlot>, NcStatus> {

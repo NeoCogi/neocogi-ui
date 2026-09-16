@@ -117,8 +117,16 @@ fn choice_hover_does_not_erase_committed_selection() {
     let atlas = test_atlas();
     let style = test_skin(&atlas);
     let rows = vec![
-        MenuSlot::Choice { id: 11, label: "first".into(), enabled: true },
-        MenuSlot::Choice { id: 22, label: "second".into(), enabled: true },
+        MenuSlot::Choice {
+            id: 11,
+            label: "first".into(),
+            enabled: true,
+        },
+        MenuSlot::Choice {
+            id: 22,
+            label: "second".into(),
+            enabled: true,
+        },
     ];
     let mut surface = MenuSurface::choices(rows, Some(11));
     let measured = surface.measure(&style, &atlas);
@@ -140,8 +148,16 @@ fn choice_hover_does_not_erase_committed_selection() {
 #[test]
 fn choice_submission_and_model_replacement_are_distinct() {
     let rows = vec![
-        MenuSlot::Choice { id: 11, label: "duplicate".into(), enabled: true },
-        MenuSlot::Choice { id: 22, label: "duplicate".into(), enabled: true },
+        MenuSlot::Choice {
+            id: 11,
+            label: "duplicate".into(),
+            enabled: true,
+        },
+        MenuSlot::Choice {
+            id: 22,
+            label: "duplicate".into(),
+            enabled: true,
+        },
     ];
     let mut surface = MenuSurface::choices(rows, Some(11));
     assert!(surface.move_keyboard_focus(true));
@@ -150,7 +166,14 @@ fn choice_submission_and_model_replacement_are_distinct() {
     assert_eq!(surface.take_choice_submission(), Some(22));
     assert_eq!(surface.take_choice_submission(), None);
 
-    assert!(surface.replace_choices(vec![MenuSlot::Choice { id: 33, label: "new".into(), enabled: true }], Some(33)));
+    assert!(surface.replace_choices(
+        vec![MenuSlot::Choice {
+            id: 33,
+            label: "new".into(),
+            enabled: true
+        }],
+        Some(33)
+    ));
     assert_eq!(surface.highlighted_choice_slot(), Some(0));
     assert_eq!(surface.take_choice_submission(), None);
 }

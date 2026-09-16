@@ -66,86 +66,6 @@ trait IChildren {
 }
 
 #[version(1)]
-/// Constructible button class with only its shared widget and leaf-layout protocols separated.
-class Button: IWidget + ILeafLayout {
-
-    /// Replaces the complete UTF-8 label; the logical input offset must be zero.
-    fn set_label(&mut self, label: &[u8]) -> Result<()>;
-
-    /// Returns the current label as an independently owned immutable string object.
-    fn label(&self) -> Result<String>;
-
-    /// Connects the exclusive activation subscriber and returns its ownership lease.
-    event subscribe(&mut self): IActivationSink;
-
-    /// Selects a semantic font role and invalidates measurement only when it differs.
-    fn set_font_role(&mut self, role: FontRole) -> Result<()>;
-
-    /// Resolves an exact named font in the current host bundle before committing.
-    fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
-
-    /// Selects a semantic icon or removes it while retaining the label.
-    fn set_icon_role(&mut self, icon: ContentIcon) -> Result<()>;
-
-    /// Resolves an exact named icon in the current host bundle before committing.
-    fn set_named_icon(&mut self, name: &[u8]) -> Result<()>;
-
-    /// Returns the interaction states that fill an unframed button's center.
-    fn fill_states(&self) -> Result<FillStates>;
-
-    /// Replaces the validated paint-only center-fill mask.
-    fn set_fill_states(&mut self, states: FillStates) -> Result<()>;
-
-    /// Installs a positive-sized renderer-owned image, optionally fitted to width.
-    fn set_image(&mut self, image: &ITexture, fit_width: bool) -> Result<()>;
-
-    /// Removes image content while retaining the current label and font.
-    fn clear_image(&mut self) -> Result<()>;
-}
-
-#[version(1)]
-/// Dynamically implemented construction shorthand over registered widget contracts.
-factory UiFactory {
-
-    /// Returns this factory's non-owning authority for inline WidgetState in independent widget classes.
-    fn host(&self) -> Result<IWidgetHost>;
-    /// Creates a fixed scrolling multiline editor; CRLF and CR normalize to LF and the cursor starts at the end.
-    fn create_text_area(&self, text: &[u8], wrapping: TextWrapping, scrolling: bool) -> Result<TextArea>;
-    /// Creates an empty disclosure with a real text header and editable vertical Linear body.
-    fn create_disclosure(&self, label: &[u8], style: DisclosureStyle, expanded: bool) -> Result<Disclosure>;
-    /// Creates a framed scroll composite around one unmounted content object; generic options can subsequently change its frame.
-    fn create_scroll_area(&self, content: &IWidget, enabled: bool) -> Result<ScrollArea>;
-    /// Creates an empty directional container after validating its complete initial policy.
-    fn create_linear(&self, direction: FlowDirection, cross: CrossSize) -> Result<Linear>;
-    /// Creates an empty Grid with validated complete column and row policies; input offsets must be zero.
-    fn create_grid(
-        &self,
-        columns: &[LayoutTrack],
-        rows: &[LayoutTrack],
-    ) -> Result<Grid>;
-    /// Constructs an unmounted boolean control with body-font presentation.
-    fn create_checkbox(&self, checked: bool, label: &[u8]) -> Result<Checkbox>;
-    /// Constructs an unmounted normalized single-line editor.
-    fn create_textbox(&self, text: &[u8]) -> Result<Textbox>;
-    /// Constructs multiline display text using the explicit wrapping policy.
-    fn create_text_block(&self, text: &[u8], wrapping: TextWrapping) -> Result<TextBlock>;
-    /// Constructs a slider after validating every arithmetic input.
-    fn create_slider(&self, options: SliderOptions) -> Result<Slider>;
-    /// Constructs standalone numeric entry after validating arithmetic inputs.
-    fn create_number(&self, options: NumberOptions) -> Result<Number>;
-    /// Constructs an RGBA swatch with an optional label.
-    fn create_color_swatch(&self, rgba: u32, label: &[u8]) -> Result<ColorSwatch>;
-    /// Constructs one list row; application data is attached in its static adapter.
-    fn create_list_item(&self, label: &[u8]) -> Result<ListItem>;
-    /// Constructs a button-like list entry.
-    fn create_list_box(&self, label: &[u8]) -> Result<ListBox>;
-    /// Constructs a scrollbar with a validated orientation and normalized range.
-    fn create_scrollbar(&self, range: ScrollRange) -> Result<Scrollbar>;
-    /// Constructs an initialized, unmounted Button through its concrete class contract.
-    fn create_button(&self, label: &[u8], options: WidgetOptions) -> Result<Button>;
-}
-
-#[version(1)]
 /// Immutable resource view shared for a complete layout transaction.
 trait ITextMetrics {
     /// Measures a UTF-8 button label, including theme padding.
@@ -322,24 +242,18 @@ trait IWindowManager {
 }
 
 #[version(1)]
-/// Runtime-owned combo-box construction binds each transient choice surface to its exact window owner.
-trait IComboBoxes {
-    /// Creates one unmounted header and private popup with the standard `Select…` fallback.
-    fn create_combo_box(
-        &self,
-        parent: &IWindow,
-        item_text: &[u8],
-        items: &[ComboItemRange],
-        selection: ComboSelection,
-    ) -> Result<Combo>;
+/// Runtime-bound construction endpoint whose concrete factory roles are queried through COM.
+trait IConstructionHost {
+    /// Returns the non-owning widget authority used by independently implemented node classes.
+    fn host(&self) -> Result<IWidgetHost>;
 }
 
-#[version(1)]
+#[version(2)]
 /// One constructible retained UI with input, rendering, and resource ownership.
-class UiRuntime: IInputSink + IWindowManager + IComboBoxes + IMenus + IFileDialogs {
+class UiRuntime: IInputSink + IWindowManager + IMenus + IFileDialogs {
 
-    /// Returns the dynamically implemented construction shorthand bound to this UI.
-    fn factory(&self) -> Result<UiFactory>;
+    /// Returns a typed construction endpoint; installed node contracts supply additional roles.
+    fn factory(&self) -> Result<IConstructionHost>;
 
     /// Retains the currently installed immutable revision, suitable for restoration or another consumer.
     fn assets(&self) -> Result<IAssetBundle>;

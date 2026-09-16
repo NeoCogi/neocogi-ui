@@ -107,27 +107,6 @@ trait IActivationEvents {
 }
 
 #[version(1)]
-/// Committed user checkbox state; programmatic setters do not publish it.
-event ICheckboxSink {
-    /// Receives the captured value after retained traversal releases its owned state.
-    fn changed(&self, checked: bool) -> Result<()>;
-}
-
-#[version(1)]
-/// Committed finite user value shared by Slider and Number; programmatic setters do not publish it.
-event INumericSink {
-    /// Receives the captured value after retained traversal releases its owned state.
-    fn changed(&self, value: f32) -> Result<()>;
-}
-
-#[version(1)]
-/// Committed clamped scrollbar offset from pointer input; programmatic setters do not publish it.
-event IScrollbarSink {
-    /// Receives the captured value after retained traversal releases its owned state.
-    fn changed(&self, offset: i32) -> Result<()>;
-}
-
-#[version(1)]
 /// Complete normalized text and scalar-aligned UTF-8 byte cursor at the moment of a user edit.
 event ITextChangedSink {
     /// Receives an owned immutable text capability borrowed only for this synchronous delivery.
@@ -207,13 +186,6 @@ event IPopupSink {
 trait IPopupEvents {
     /// Returns an exclusive application-owned dismissal lease without retaining application state on the producer.
     event subscribe(&self): IPopupSink;
-}
-
-#[version(1)]
-/// Captured user selection committed by a runtime-owned combo popup.
-event IComboChangedSink {
-    /// Receives the NCIDL-defined selection value from one committed interaction.
-    fn changed(&self, selection: ComboSelection) -> Result<()>;
 }
 
 #[version(1)]

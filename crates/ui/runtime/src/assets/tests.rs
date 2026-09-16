@@ -1,5 +1,6 @@
 //! Boundary tests use real generated COM calls, malformed producer tables and an upload-failing renderer.
 use super::*;
+use neocogi_ui_nodes_contracts::ButtonAbi;
 use crate::test_support::assets::{export_bundle, export_bundle_data, export_imported_data};
 use neocogi_gfx_contracts::AssetPublisherAbi;
 use neocogi_ui::assets::AssetData;

@@ -3,7 +3,8 @@
 | Owner | Responsibility |
 | --- | --- |
 | `neocogi-renderer-contracts` | Renderer-neutral geometry, images, textures and bulk frame interfaces. |
-| `neocogi-ui-core-contracts` | Retained widgets, layout, events, windows, menus, and file dialogs. |
+| `neocogi-ui-core-contracts` | Shared widget/layout, window, popup, menu, and file-dialog protocols. |
+| `neocogi-ui-nodes-contracts` | Concrete built-in widgets, containers, specialized events, and factory. |
 | `neocogi-gfx-contracts` / `neocogi-gfx` | Portable bundle records, PNG upload, font/icon rasterization, and atlas packing. |
 | `neocogi-skin-contracts` / `neocogi-skin` | Typed appearance derivation and optional external JSON themes. |
 | `neocogi-gfx-support` | Bounded portable data validation, immutable publication, and embedded expansion; no plugin identity. |

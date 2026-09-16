@@ -67,7 +67,7 @@ impl ListBoxParameters {
 /// Canonical generated activation snapshot owned by the NCIDL event family.
 pub use neocogi_ui_core_contracts::IActivationSinkEvent as ListBoxSubmitted;
 
-#[neocogi_com::com_object(neocogi_ui_core_contracts::ListBox)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::ListBox)]
 /// Concrete retained list box and dynamically constructible COM object.
 pub struct ListBox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -210,7 +210,8 @@ impl crate::ui_node::widget_object::ImageState for ListBox {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, ImageState, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_core_contracts::{GeometryChange, IActivationSinkAbi, IEventSubscriptionAbi, ITextureAbi, IWidgetHostAbi, ListBoxAbi, FontRole};
+use neocogi_ui_core_contracts::{GeometryChange, IActivationSinkAbi, IEventSubscriptionAbi, ITextureAbi, IWidgetHostAbi, FontRole};
+use neocogi_ui_nodes_contracts::{ListBoxAbi};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(ListBox);
@@ -239,7 +240,7 @@ impl ListBox {
     }
 }
 
-impl neocogi_ui_core_contracts::ListBox for ListBox {
+impl neocogi_ui_nodes_contracts::ListBox for ListBox {
     /// Returns an immutable label snapshot from the concrete list box.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;

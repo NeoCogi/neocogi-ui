@@ -71,7 +71,7 @@ impl Default for ComboParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_core_contracts::Combo)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Combo)]
 /// Concrete retained combo and dynamically constructible COM object.
 pub struct Combo {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -238,9 +238,8 @@ impl crate::ui_node::widget_object::FontState for Combo {
     }
 }
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_core_contracts::{
-    ComboAbi, ComboItemRange, ComboSelectionAbi, FontRole, GeometryChange, IComboChangedSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi,
-};
+use neocogi_ui_core_contracts::{FontRole, GeometryChange, IEventSubscriptionAbi, IWidgetHostAbi};
+use neocogi_ui_nodes_contracts::{ComboAbi, ComboItemRange, ComboSelectionAbi, IComboChangedSinkAbi};
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
 
 direct_widget_phase_impl!(Combo);
@@ -265,7 +264,7 @@ impl Combo {
     }
 }
 
-impl neocogi_ui_core_contracts::Combo for Combo {
+impl neocogi_ui_nodes_contracts::Combo for Combo {
     /// Returns an explicit tagged optional position from the authoritative model.
     fn selection(&self) -> Result<ComboSelectionAbi, NcStatus> {
         self.runtime().state.readable()?;

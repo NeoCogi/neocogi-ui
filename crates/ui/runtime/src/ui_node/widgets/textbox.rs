@@ -92,7 +92,7 @@ impl TextboxParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_core_contracts::Textbox)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Textbox)]
 /// Concrete retained textbox and dynamically constructible COM object.
 pub struct Textbox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -561,7 +561,8 @@ mod tests {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_core_contracts::{GeometryChange, IEventSubscriptionAbi, ITextChangedSinkAbi, ITextSubmittedSinkAbi, IWidgetHostAbi, FontRole, TextboxAbi};
+use neocogi_ui_core_contracts::{GeometryChange, IEventSubscriptionAbi, ITextChangedSinkAbi, ITextSubmittedSinkAbi, IWidgetHostAbi, FontRole};
+use neocogi_ui_nodes_contracts::{TextboxAbi};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Textbox);
@@ -590,7 +591,7 @@ impl Textbox {
     }
 }
 
-impl neocogi_ui_core_contracts::Textbox for Textbox {
+impl neocogi_ui_nodes_contracts::Textbox for Textbox {
     /// Returns an immutable snapshot without exposing the semantic String allocation.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;

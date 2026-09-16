@@ -52,9 +52,10 @@ and fingerprints, while `build` is the reusable contract-crate `build.rs`
 integration. It remains separate from `tools/cargo-neocogi` so ordinary Cargo
 builds can regenerate contracts without invoking the assembly CLI.
 UI code follows the same role-based layout under `crates/ui`: `core-contracts` contains
-UI-specific cross-component types, `api` is the application facade, and `runtime` is the one
-deployable implementation containing retained nodes, built-in widgets and
-containers, surfaces, and the window manager.
+shared node, layout, popup, menu, and window protocols; `nodes-contracts` owns the concrete
+built-in widget/container classes and their typed factory; `api` is the application facade;
+and `runtime` is the one deployable implementation containing retained nodes, built-in
+widgets and containers, surfaces, and the window manager.
 
 The UI runtime is deliberately one plugin. Source modules separate these concerns,
 but update, layout, paint, and window traversal stay in one optimization unit.
@@ -135,7 +136,8 @@ fn install(ui: &Ui) -> Result<ComPtr<IWindowAbi>, NcStatus> {
 }
 ```
 
-`UiFactory` is a dynamically implemented class used by the facade as a shorthand.
+`UiFactory` belongs to `neocogi.ui.nodes` and is queried from the core
+`IConstructionHost` returned by `UiRuntime::factory()`. The facade uses it as a shorthand.
 A host may instead construct `ButtonAbi` directly from its generated typed
 arguments and the runtime's `IWidgetHost`; no Button-specific interface or
 untyped argument object is involved.

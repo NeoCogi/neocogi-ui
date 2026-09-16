@@ -43,6 +43,12 @@ pub mod test_support {
 }
 
 use crate::com::*;
+use neocogi_ui_nodes_contracts::{
+    IComboChangedSinkEvent, connect_button_subscribe, connect_checkbox_subscribe, connect_combo_subscribe_changed, connect_list_box_subscribe,
+    connect_list_item_subscribe, connect_number_subscribe_checked, connect_scrollbar_subscribe_checked, connect_slider_subscribe_checked,
+    connect_text_area_subscribe_changed_checked, connect_text_area_subscribe_submitted, connect_textbox_subscribe_changed_checked,
+    connect_textbox_subscribe_submitted,
+};
 use neocogi_com::{ComPtr, ComRef, NC_E_INVALID_ARG, NcStatus};
 use std::ops::Deref;
 
@@ -196,7 +202,7 @@ impl<State: 'static> EventSession<State> {
 }
 
 /// Canonical generated checkbox snapshot committed by user activation.
-pub use neocogi_ui_core_contracts::ICheckboxSinkEvent as CheckboxChanged;
+pub use neocogi_ui_nodes_contracts::ICheckboxSinkEvent as CheckboxChanged;
 impl<State: 'static> EventSession<State> {
     /// Connects the widget's concrete event capability and registers its lease in deterministic order.
     /// Registration during an active session transaction reports BUSY before claiming the producer's port.
@@ -210,7 +216,7 @@ impl<State: 'static> EventSession<State> {
 }
 
 /// Canonical generated numeric snapshot from a Slider or Number.
-pub use neocogi_ui_core_contracts::INumericSinkEvent as NumericChanged;
+pub use neocogi_ui_nodes_contracts::INumericSinkEvent as NumericChanged;
 
 /// Static facade hook shared by the concrete Slider and Number class wrappers.
 pub trait NumericEventSource {
@@ -261,7 +267,7 @@ impl<State: 'static> EventSession<State> {
 }
 
 /// Canonical generated clamped scrollbar snapshot.
-pub use neocogi_ui_core_contracts::IScrollbarSinkEvent as ScrollbarChanged;
+pub use neocogi_ui_nodes_contracts::IScrollbarSinkEvent as ScrollbarChanged;
 /// Rejects a negative offset before the generated sink borrows application state.
 fn valid_scrollbar(event: &ScrollbarChanged) -> Result<(), NcStatus> {
     if event.offset >= 0 { Ok(()) } else { Err(NC_E_INVALID_ARG) }

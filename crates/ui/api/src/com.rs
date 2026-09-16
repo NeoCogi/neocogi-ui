@@ -15,6 +15,17 @@ pub use neocogi_platform_contracts::{
     TextInputAreaAbi, TextInputAreaTag, UiInput, UiInputAbi, UiInputTag,
 };
 pub use neocogi_ui_core_contracts::*;
+/// Complete generated built-in node contract namespace, including its distinct module metadata.
+pub mod nodes {
+    pub use neocogi_ui_nodes_contracts::*;
+}
+pub use neocogi_ui_nodes_contracts::{
+    Button, ButtonAbi, Checkbox, CheckboxAbi, ChildCrossSize, ColorSwatch, ColorSwatchAbi, Combo, ComboAbi, ComboItemRange, ComboSelection, ComboSelectionAbi,
+    ContentIcon, CrossSize, CrossSizeAbi, Disclosure, DisclosureAbi, DisclosureStyle, FillStates, FlowDirection, Grid, GridAbi, GridExtent, LayoutTrack,
+    LayoutTrackAbi, Linear, LinearAbi, LinearEdge, ListBox, ListBoxAbi, ListItem, ListItemAbi, Number, NumberAbi, NumberOptions, ScrollArea, ScrollAreaAbi,
+    ScrollAxis, ScrollRange, Scrollbar, ScrollbarAbi, Slider, SliderAbi, SliderOptions, TextArea, TextAreaAbi, TextBlock, TextBlockAbi, Textbox, TextboxAbi,
+    UiFactory, UiFactoryAbi,
+};
 pub use neocogi_gfx_contracts::{
     AssetLoader, AssetLoaderAbi, DrawPoint, GfxPluginFactory, GfxPluginFactoryAbi, IAssetBuilder, IAssetBuilderAbi, IGfxDiagnostics, IGfxDiagnosticsAbi,
     GfxCompositor, GfxCompositorAbi, PngDecoder, PngDecoderAbi, SolidVertex,
@@ -262,7 +273,7 @@ pub struct WidgetFactory {
 impl WidgetFactory {
     /// Supplies runtime authority for an independent COM widget's inline WidgetState.
     pub fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
-        self.interface.host()
+        self.interface.query::<IConstructionHostAbi>()?.host()
     }
 
     /// Creates a fixed multiline editor and its real scroll children with one shared offset model.
@@ -433,7 +444,7 @@ impl Ui {
     /// Creates one complete combo box with the contract-defined fallback and selection state.
     pub fn combo_box<Item: AsRef<str>>(&self, parent: ComRef<'_, IWindowAbi>, items: &[Item], selection: ComboSelection) -> Result<ComboWidget, NcStatus> {
         let (item_text, ranges) = encoded_combo_items(items)?;
-        let combo = self.runtime.query::<IComboBoxesAbi>()?.create_combo_box(
+        let combo = self.factory.interface.create_combo_box(
             parent,
             NcCopyFromBufferOffset::new(0, &item_text),
             NcCopyFromBufferOffset::new(0, &ranges),
@@ -454,7 +465,7 @@ impl Ui {
 
     /// Checks the complete runtime capability set before exposing a usable client.
     pub fn from_interface(runtime: ComPtr<UiRuntimeAbi>) -> Result<Self, NcStatus> {
-        let factory = WidgetFactory::from_interface(runtime.factory()?);
+        let factory = WidgetFactory::from_interface(runtime.factory()?.query::<UiFactoryAbi>()?);
         let windows = runtime.query()?;
         Ok(Self { runtime, factory, windows })
     }

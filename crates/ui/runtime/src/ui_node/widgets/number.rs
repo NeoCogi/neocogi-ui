@@ -88,9 +88,9 @@ impl NumberParameters {
 }
 
 /// Canonical generated numeric snapshot owned by the NCIDL event family.
-pub use neocogi_ui_core_contracts::INumericSinkEvent as NumberChanged;
+pub use neocogi_ui_nodes_contracts::INumericSinkEvent as NumberChanged;
 
-#[neocogi_com::com_object(neocogi_ui_core_contracts::Number)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Number)]
 /// Concrete retained number input and dynamically constructible COM object.
 pub struct Number {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -280,7 +280,8 @@ impl crate::ui_node::widget_object::FontState for Number {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_core_contracts::{GeometryChange, IEventSubscriptionAbi, INumericSinkAbi, IWidgetHostAbi, NumberAbi, NumberOptions, FontRole};
+use neocogi_ui_core_contracts::{GeometryChange, IEventSubscriptionAbi, IWidgetHostAbi, FontRole};
+use neocogi_ui_nodes_contracts::{INumericSinkAbi, NumberAbi, NumberOptions};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Number);
@@ -310,7 +311,7 @@ impl Number {
     }
 }
 
-impl neocogi_ui_core_contracts::Number for Number {
+impl neocogi_ui_nodes_contracts::Number for Number {
     /// Reads the finite value owned by the number editor's concrete semantic algorithm.
     fn value(&self) -> Result<f32, NcStatus> {
         self.runtime().state.readable()?;

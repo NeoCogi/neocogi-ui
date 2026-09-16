@@ -159,7 +159,7 @@ pub(crate) struct LinearItemSpec {
 /// consumes only an exact placement allocation and does not manufacture desired size during
 /// measurement. Content and Fixed overflow remain visible, and every geometry accumulation uses
 /// saturating arithmetic.
-#[neocogi_com::com_object(neocogi_ui_core_contracts::Linear)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Linear)]
 pub struct Linear {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,
@@ -280,7 +280,8 @@ impl super::ContainerAlgorithm for Linear {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
-use neocogi_ui_core_contracts::{ChildCrossSize, CrossSize, CrossSizeAbi, FlowDirection, IWidgetHostAbi, LinearAbi, LinearEdge};
+use neocogi_ui_core_contracts::{IWidgetHostAbi};
+use neocogi_ui_nodes_contracts::{ChildCrossSize, CrossSize, CrossSizeAbi, FlowDirection, LinearAbi, LinearEdge};
 use neocogi_com::{ComPtr, NcStatus};
 
 direct_widget_phase_impl!(Linear);
@@ -313,7 +314,7 @@ impl Linear {
     }
 }
 
-impl neocogi_ui_core_contracts::Linear for Linear {
+impl neocogi_ui_nodes_contracts::Linear for Linear {
     container_methods!();
 
     /// Returns the exact retained axis and leading-edge policy.

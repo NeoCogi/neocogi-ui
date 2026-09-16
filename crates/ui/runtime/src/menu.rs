@@ -458,18 +458,26 @@ impl MenuSurface {
     pub(crate) fn choices(rows: Vec<MenuSlot>, committed: Option<u64>) -> Self {
         let mut surface = Self::new(rows, true);
         surface.mode = MenuMode::Choices { committed, submitted: None };
-        surface.keyboard_slot = surface.rows.iter().position(|row| matches!(row, MenuSlot::Choice { id, enabled: true, .. } if Some(*id) == committed));
+        surface.keyboard_slot = surface
+            .rows
+            .iter()
+            .position(|row| matches!(row, MenuSlot::Choice { id, enabled: true, .. } if Some(*id) == committed));
         surface
     }
 
     /// Replaces a complete choice snapshot while preserving unrelated pointer and keyboard state.
     pub(crate) fn replace_choices(&mut self, rows: Vec<MenuSlot>, committed: Option<u64>) -> bool {
-        let MenuMode::Choices { committed: current, submitted } = &mut self.mode else { return false };
+        let MenuMode::Choices { committed: current, submitted } = &mut self.mode else {
+            return false;
+        };
         *current = committed;
         *submitted = None;
         self.rows = rows;
         self.hovered_slot = None;
-        self.keyboard_slot = self.rows.iter().position(|row| matches!(row, MenuSlot::Choice { id, enabled: true, .. } if Some(*id) == committed));
+        self.keyboard_slot = self
+            .rows
+            .iter()
+            .position(|row| matches!(row, MenuSlot::Choice { id, enabled: true, .. } if Some(*id) == committed));
         self.geometry = MenuSurfaceLayout::default();
         true
     }
@@ -486,7 +494,10 @@ impl MenuSurface {
     pub(crate) fn prepare_choices(&mut self) -> bool {
         let MenuMode::Choices { committed, .. } = self.mode else { return false };
         self.hovered_slot = None;
-        self.keyboard_slot = self.rows.iter().position(|row| matches!(row, MenuSlot::Choice { id, enabled: true, .. } if Some(*id) == committed));
+        self.keyboard_slot = self
+            .rows
+            .iter()
+            .position(|row| matches!(row, MenuSlot::Choice { id, enabled: true, .. } if Some(*id) == committed));
         self.captured = false;
         true
     }
@@ -496,7 +507,10 @@ impl MenuSurface {
         let MenuMode::Choices { committed, .. } = self.mode else { return None };
         match (self.hovered_slot, self.keyboard_slot, committed) {
             (Some(slot), _, _) | (None, Some(slot), _) => Some(slot),
-            (None, None, Some(id)) => self.rows.iter().position(|row| matches!(row, MenuSlot::Choice { id: candidate, .. } if *candidate == id)),
+            (None, None, Some(id)) => self
+                .rows
+                .iter()
+                .position(|row| matches!(row, MenuSlot::Choice { id: candidate, .. } if *candidate == id)),
             (None, None, None) => None,
         }
     }

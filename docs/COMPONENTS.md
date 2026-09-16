@@ -9,7 +9,8 @@ its own deployment unit:
 | Platform | `neocogi.platform` | Currently co-owned by the selected backend artifact |
 | GFX resources | `neocogi.gfx` | `neocogi-gfx` |
 | Skin authoring | `neocogi.skin` | `neocogi-skin` |
-| Retained UI | `neocogi.ui.core` | `neocogi-ui-runtime` |
+| Retained UI protocols | `neocogi.ui.core` | `neocogi-ui-runtime` |
+| Built-in UI classes | `neocogi.ui.nodes` | Same `neocogi-ui-runtime` plugin |
 
 The platform contract is independent even though its current SDL/DOM
 implementation shares a binary and COM identity with the renderer. That
@@ -61,6 +62,7 @@ widgets can still live in external plugins through typed widget capabilities.
 The contract graph is acyclic and follows ownership toward lower layers:
 
 ```text
+neocogi.ui.nodes ───────────> neocogi.ui.core
 neocogi.ui.core ────────────> neocogi.gfx ────────> neocogi.platform
       ├─────────────────────> neocogi.platform             │
       └─────────────────────> neocogi.renderer <───────────┘

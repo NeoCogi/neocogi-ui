@@ -257,7 +257,7 @@ impl ScrollModel {
 }
 
 /// Concrete three-child scroll composite; its model owns data but no widget or tree backpointer.
-#[neocogi_com::com_object(neocogi_ui_core_contracts::ScrollArea)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::ScrollArea)]
 pub struct ScrollArea {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::ui_node::widget_object::WidgetRuntime,
@@ -648,7 +648,8 @@ impl crate::ui_node::widget_object::HostedWidget for ScrollSurface {
 }
 
 use crate::ui_node::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_scrolling_impl, direct_widget_phase_impl};
-use neocogi_ui_core_contracts::{ChildEditResult, IChildrenEditorAbi, IWidgetAbi, IWidgetHostAbi, ScrollAreaAbi};
+use neocogi_ui_core_contracts::{ChildEditResult, IChildrenEditorAbi, IWidgetAbi, IWidgetHostAbi};
+use neocogi_ui_nodes_contracts::{ScrollAreaAbi};
 use neocogi_com::{ComPtr, ComRef, NcStatus};
 
 direct_widget_phase_impl!(ScrollSurface);
@@ -728,7 +729,7 @@ impl ScrollArea {
     }
 }
 
-impl neocogi_ui_core_contracts::ScrollArea for ScrollArea {
+impl neocogi_ui_nodes_contracts::ScrollArea for ScrollArea {
     /// Reads the actual content identity through the fixed one-child surface writer.
     fn content(&self) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
         self.runtime().state.readable()?;
