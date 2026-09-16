@@ -342,12 +342,35 @@ pub(crate) enum MenuEntry {
 pub(crate) enum MenuSlot {
     /// Concrete live item record owned directly by this row.
     Item(MenuItemRecord),
+    /// One stable leaf choice in a selection-oriented popup menu.
+    Choice {
+        /// Identity published to the owning composite when this leaf is activated.
+        id: u64,
+        /// Immutable display snapshot replaced atomically with the choice model.
+        label: String,
+        /// Whether pointer and keyboard input may activate this choice.
+        enabled: bool,
+    },
     /// Non-interactive visual rule.
     Separator,
     /// Label whose child popup is resolved from the surface forest's direct edges.
     Branch {
         /// Immutable user-visible branch label.
         label: String,
+    },
+}
+
+/// Policy attached to a compact menu surface independently of its popup placement.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum MenuMode {
+    /// Ordinary application commands publish their individual item events.
+    Commands,
+    /// A choice menu retains its committed value separately from transient input targets.
+    Choices {
+        /// Last value committed by the owner; absence is never confused with leaf zero.
+        committed: Option<u64>,
+        /// Leaf submitted during the current input sweep, consumed at the next checked boundary.
+        submitted: Option<u64>,
     },
 }
 
@@ -372,12 +395,16 @@ struct MenuSurfaceLayout {
     slots: Vec<Recti>,
     /// Width before the shared control-text region in popup rows.
     marker_width: i32,
+    /// Intrinsic popup row width before an owner may constrain its exact horizontal extent.
+    intrinsic_row_width: i32,
 }
 
 /// Manager-owned concrete presentation for one complete menu bar or popup.
 pub(crate) struct MenuSurface {
     /// Bar headings or popup rows owned directly by this surface.
     rows: Vec<MenuSlot>,
+    /// Whether leaf activation publishes a command or reports a typed choice to its owner.
+    mode: MenuMode,
     /// Whether rows flow vertically and paint popup-only marker and arrow decoration.
     popup: bool,
     /// Slot currently under the pointer, or `None` when no logical row is hovered.
@@ -415,6 +442,7 @@ impl MenuSurface {
         // Geometry and transient pointer state begin empty and become authoritative during layout.
         Self {
             rows,
+            mode: MenuMode::Commands,
             popup,
             hovered_slot: None,
             keyboard_slot: None,
@@ -423,6 +451,53 @@ impl MenuSurface {
             rect: Recti::default(),
             clip: Recti::default(),
             geometry: MenuSurfaceLayout::default(),
+        }
+    }
+
+    /// Creates a selection-oriented popup over the same row geometry and submenu policy.
+    pub(crate) fn choices(rows: Vec<MenuSlot>, committed: Option<u64>) -> Self {
+        let mut surface = Self::new(rows, true);
+        surface.mode = MenuMode::Choices { committed, submitted: None };
+        surface.keyboard_slot = surface.rows.iter().position(|row| matches!(row, MenuSlot::Choice { id, enabled: true, .. } if Some(*id) == committed));
+        surface
+    }
+
+    /// Replaces a complete choice snapshot while preserving unrelated pointer and keyboard state.
+    pub(crate) fn replace_choices(&mut self, rows: Vec<MenuSlot>, committed: Option<u64>) -> bool {
+        let MenuMode::Choices { committed: current, submitted } = &mut self.mode else { return false };
+        *current = committed;
+        *submitted = None;
+        self.rows = rows;
+        self.hovered_slot = None;
+        self.keyboard_slot = self.rows.iter().position(|row| matches!(row, MenuSlot::Choice { id, enabled: true, .. } if Some(*id) == committed));
+        self.geometry = MenuSurfaceLayout::default();
+        true
+    }
+
+    /// Takes one leaf submission after routing has released every surface and input borrow.
+    pub(crate) fn take_choice_submission(&mut self) -> Option<u64> {
+        match &mut self.mode {
+            MenuMode::Choices { submitted, .. } => submitted.take(),
+            MenuMode::Commands => None,
+        }
+    }
+
+    /// Resets a choice popup's transient input targets from its committed value before reopening.
+    pub(crate) fn prepare_choices(&mut self) -> bool {
+        let MenuMode::Choices { committed, .. } = self.mode else { return false };
+        self.hovered_slot = None;
+        self.keyboard_slot = self.rows.iter().position(|row| matches!(row, MenuSlot::Choice { id, enabled: true, .. } if Some(*id) == committed));
+        self.captured = false;
+        true
+    }
+
+    /// Resolves choice emphasis with pointer hover, keyboard focus, and commitment in that order.
+    fn highlighted_choice_slot(&self) -> Option<usize> {
+        let MenuMode::Choices { committed, .. } = self.mode else { return None };
+        match (self.hovered_slot, self.keyboard_slot, committed) {
+            (Some(slot), _, _) | (None, Some(slot), _) => Some(slot),
+            (None, None, Some(id)) => self.rows.iter().position(|row| matches!(row, MenuSlot::Choice { id: candidate, .. } if *candidate == id)),
+            (None, None, None) => None,
         }
     }
 
@@ -446,6 +521,14 @@ impl MenuSurface {
         // may be wider than its headings; popup surfaces retain their measured intrinsic allocation.
         self.rect = rect;
         self.clip = viewport;
+        if matches!(self.mode, MenuMode::Choices { .. }) {
+            // A combo-like trigger supplies the exact horizontal extent. Preserve the menu
+            // panel's measured margins while stretching every hit and paint row together.
+            let difference = rect.width.saturating_sub(self.geometry.size.width);
+            for slot in &mut self.geometry.slots {
+                slot.width = self.geometry.intrinsic_row_width.saturating_add(difference).max(0);
+            }
+        }
     }
 
     /// Returns whether this concrete surface owns a menu pointer gesture.
@@ -550,6 +633,11 @@ impl MenuSurface {
         let slot = self.keyboard_slot?;
         match self.rows.get_mut(slot)? {
             MenuSlot::Branch { .. } => Some(MenuAction::OpenSlot(slot)),
+            MenuSlot::Choice { id, enabled: true, .. } => {
+                let MenuMode::Choices { submitted, .. } = &mut self.mode else { return None };
+                *submitted = Some(*id);
+                Some(MenuAction::SubmitAndClose)
+            }
             MenuSlot::Item(item) if item.parameters.enabled => {
                 // Queue only the semantic event; WindowManager closes the complete path after this
                 // mutable surface borrow ends and before application dispatch begins.
@@ -558,7 +646,7 @@ impl MenuSurface {
                 }
                 Some(MenuAction::SubmitAndClose)
             }
-            MenuSlot::Item(_) | MenuSlot::Separator => None,
+            MenuSlot::Choice { enabled: false, .. } | MenuSlot::Item(_) | MenuSlot::Separator => None,
         }
     }
 
@@ -567,6 +655,7 @@ impl MenuSurface {
         match slot {
             MenuSlot::Branch { .. } => true,
             MenuSlot::Item(item) => item.parameters.enabled,
+            MenuSlot::Choice { enabled, .. } => *enabled,
             MenuSlot::Separator => false,
         }
     }
@@ -589,7 +678,8 @@ impl MenuSurface {
             .then(|| self.geometry.slots.iter().position(|bounds| bounds.contains_point(local)))
             .flatten();
         self.hovered_slot = slot;
-        if self.keyboard_slot.is_some()
+        if matches!(self.mode, MenuMode::Commands)
+            && self.keyboard_slot.is_some()
             && let Some(slot) = slot
             && self.rows.get(slot).is_some_and(Self::slot_accepts_keyboard)
         {
@@ -606,8 +696,8 @@ impl MenuSurface {
         if hot_tracking && matches!(input, UiInputEvent::MouseMove { .. } | UiInputEvent::MouseDrag { .. }) {
             let action = slot.and_then(|slot| match self.rows.get(slot)? {
                 MenuSlot::Branch { .. } if self.open_slot != Some(slot) => Some(MenuAction::HoverOpenSlot(slot)),
-                MenuSlot::Item(_) | MenuSlot::Separator if self.open_slot.is_some() => Some(MenuAction::HoverCloseChild),
-                MenuSlot::Branch { .. } | MenuSlot::Item(_) | MenuSlot::Separator => None,
+                MenuSlot::Item(_) | MenuSlot::Choice { .. } | MenuSlot::Separator if self.open_slot.is_some() => Some(MenuAction::HoverCloseChild),
+                MenuSlot::Branch { .. } | MenuSlot::Item(_) | MenuSlot::Choice { .. } | MenuSlot::Separator => None,
             });
             if action.is_some() {
                 return MenuRoute::handled(action);
@@ -620,6 +710,11 @@ impl MenuSurface {
             self.captured = true;
             let action = slot.and_then(|slot| match self.rows.get_mut(slot)? {
                 MenuSlot::Branch { .. } => Some(MenuAction::OpenSlot(slot)),
+                MenuSlot::Choice { id, enabled: true, .. } => {
+                    let MenuMode::Choices { submitted, .. } = &mut self.mode else { return None };
+                    *submitted = Some(*id);
+                    Some(MenuAction::SubmitAndClose)
+                }
                 MenuSlot::Item(item) if item.parameters.enabled => {
                     // Emission only queues a typed value. Application code cannot run until the
                     // manager has consumed `SubmitAndClose` and released every surface borrow.
@@ -628,7 +723,7 @@ impl MenuSurface {
                     }
                     Some(MenuAction::SubmitAndClose)
                 }
-                MenuSlot::Item(_) | MenuSlot::Separator => None,
+                MenuSlot::Choice { enabled: false, .. } | MenuSlot::Item(_) | MenuSlot::Separator => None,
             });
             return MenuRoute::handled(action);
         }
@@ -686,6 +781,20 @@ impl MenuSurface {
                         ctx.draw_control_text_color_with_font(font, hint, text, color, WidgetOption::ALIGN_RIGHT);
                     }
                 }
+                MenuSlot::Choice { label, enabled: choice_enabled, .. } => {
+                    let hovered = self.hovered_slot == Some(slot);
+                    // Hover applies only while the pointer lies over a row. Keyboard navigation
+                    // supersedes the committed value until the scope ends; otherwise the selected
+                    // leaf remains visibly emphasized when the pointer leaves the popup.
+                    let focused = self.highlighted_choice_slot() == Some(slot);
+                    let state = MenuState::from_interaction(enabled && *choice_enabled, false, hovered, focused, self.captured && hovered);
+                    let role = MenuRole::Item;
+                    let _ = ctx.draw_menu_state(role, state, row);
+                    let text = text_region(row, self.geometry.marker_width);
+                    let font = style.resolve_font(ctx.atlas(), &FontRef::Role(FontRole::Body));
+                    let color = ctx.menu_content_color(role, state);
+                    ctx.draw_control_text_color_with_font(font, label, text, color, WidgetOption::NONE);
+                }
                 MenuSlot::Separator => paint_separator(&mut ctx, row),
                 MenuSlot::Branch { label } => {
                     let hovered = self.hovered_slot == Some(slot);
@@ -730,7 +839,7 @@ impl MenuSurface {
         // former allocation address becomes eligible for reuse.
         self.rows.iter().find_map(|row| match row {
             MenuSlot::Item(item) if handle.id() == item.id => Some(item),
-            MenuSlot::Item(_) | MenuSlot::Separator | MenuSlot::Branch { .. } => None,
+            MenuSlot::Item(_) | MenuSlot::Choice { .. } | MenuSlot::Separator | MenuSlot::Branch { .. } => None,
         })
     }
 
@@ -740,7 +849,7 @@ impl MenuSurface {
         // state and endpoint allocation never influence which record is lent.
         self.rows.iter_mut().find_map(|row| match row {
             MenuSlot::Item(item) if handle.id() == item.id => Some(item),
-            MenuSlot::Item(_) | MenuSlot::Separator | MenuSlot::Branch { .. } => None,
+            MenuSlot::Item(_) | MenuSlot::Choice { .. } | MenuSlot::Separator | MenuSlot::Branch { .. } => None,
         })
     }
 }
@@ -775,6 +884,7 @@ fn layout_bar(headings: &[MenuSlot], style: &Skin, atlas: &AtlasHandle, mut slot
             size: Dimensioni::default(),
             slots,
             marker_width: 0,
+            intrinsic_row_width: 0,
         };
     }
 
@@ -800,6 +910,7 @@ fn layout_bar(headings: &[MenuSlot], style: &Skin, atlas: &AtlasHandle, mut slot
         size: Dimensioni::new(x, preferred_height),
         slots,
         marker_width: 0,
+        intrinsic_row_width: 0,
     }
 }
 
@@ -835,6 +946,12 @@ fn layout_popup(rows: &[MenuSlot], style: &Skin, atlas: &AtlasHandle, mut slots:
                     &item.parameters.font,
                     atlas.get_icon_size(style.resolve_icon_role(atlas, crate::IconRole::Check)).height,
                 )
+            }
+            MenuSlot::Choice { label, .. } => {
+                let font_choice = FontRef::Role(FontRole::Body);
+                let font = style.resolve_font(atlas, &font_choice);
+                label_width = label_width.max(atlas.get_text_size(font, label).width.max(0));
+                content_height(style, atlas, &font_choice, 0)
             }
             MenuSlot::Separator => style.metrics().spacing.max(3),
             MenuSlot::Branch { label, .. } => {
@@ -881,6 +998,7 @@ fn layout_popup(rows: &[MenuSlot], style: &Skin, atlas: &AtlasHandle, mut slots:
         size: Dimensioni::new(preferred_width, y.saturating_add(panel_insets.bottom)),
         slots,
         marker_width,
+        intrinsic_row_width: row_width,
     }
 }
 

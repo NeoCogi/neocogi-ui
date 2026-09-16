@@ -110,3 +110,47 @@ fn keyboard_selection_skips_disabled_items_and_separators_with_wrapping() {
     assert!(surface.move_keyboard_focus(false));
     assert_eq!(surface.keyboard_slot(), Some(3), "reverse traversal must wrap");
 }
+
+/// Selection menus retain the committed leaf until pointer hover has a concrete row target.
+#[test]
+fn choice_hover_does_not_erase_committed_selection() {
+    let atlas = test_atlas();
+    let style = test_skin(&atlas);
+    let rows = vec![
+        MenuSlot::Choice { id: 11, label: "first".into(), enabled: true },
+        MenuSlot::Choice { id: 22, label: "second".into(), enabled: true },
+    ];
+    let mut surface = MenuSurface::choices(rows, Some(11));
+    let measured = surface.measure(&style, &atlas);
+    surface.layout(Recti::new(10, 20, measured.width.max(100), measured.height), Recti::new(0, 0, 300, 300));
+    assert_eq!(surface.highlighted_choice_slot(), Some(0));
+
+    let second = surface.slot_rect(1).unwrap();
+    let pointer = Vec2i::new(second.x + 1, second.y + 1);
+    let route = surface.route_pointer(&UiInputEvent::MouseMove { pos: pointer, delta: Vec2i::new(0, 0) }, true);
+    assert!(route.handled);
+    assert_eq!(surface.highlighted_choice_slot(), Some(1));
+
+    let outside = Vec2i::new(300, 300);
+    surface.route_pointer(&UiInputEvent::MouseMove { pos: outside, delta: Vec2i::new(0, 0) }, true);
+    assert_eq!(surface.highlighted_choice_slot(), Some(0));
+}
+
+/// Choice activation is stored as a typed leaf identity rather than a command-menu label event.
+#[test]
+fn choice_submission_and_model_replacement_are_distinct() {
+    let rows = vec![
+        MenuSlot::Choice { id: 11, label: "duplicate".into(), enabled: true },
+        MenuSlot::Choice { id: 22, label: "duplicate".into(), enabled: true },
+    ];
+    let mut surface = MenuSurface::choices(rows, Some(11));
+    assert!(surface.move_keyboard_focus(true));
+    assert_eq!(surface.keyboard_slot(), Some(1));
+    assert!(matches!(surface.activate_keyboard_slot(), Some(MenuAction::SubmitAndClose)));
+    assert_eq!(surface.take_choice_submission(), Some(22));
+    assert_eq!(surface.take_choice_submission(), None);
+
+    assert!(surface.replace_choices(vec![MenuSlot::Choice { id: 33, label: "new".into(), enabled: true }], Some(33)));
+    assert_eq!(surface.highlighted_choice_slot(), Some(0));
+    assert_eq!(surface.take_choice_submission(), None);
+}

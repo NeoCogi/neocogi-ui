@@ -1506,6 +1506,58 @@ impl WindowManager {
         Ok(handle)
     }
 
+    /// Creates a hidden selection menu using the same popup forest and compact menu surface.
+    pub(crate) fn create_choice_popup(
+        &mut self,
+        owner: &WindowHandle,
+        rows: Vec<MenuSlot>,
+        committed: Option<u64>,
+    ) -> Result<PopupHandle, SurfaceCreationError<Vec<MenuSlot>>> {
+        let owner = match self.window_id(owner) {
+            Ok(owner) => owner,
+            Err(reason) => return Err(SurfaceCreationError::new(reason, rows)),
+        };
+        let mut surface = Surface::menu(String::new(), MenuSurface::choices(rows, committed));
+        // The trigger determines horizontal extent; only menu height is intrinsic. The menu
+        // surface draws its own outline, so a second window-frame or padding would misalign it.
+        surface.options = WindowOption::NO_PADDING | WindowOption::NO_TITLE | WindowOption::NO_RESIZE | WindowOption::AUTO_HEIGHT;
+        Ok(self.register_application_popup(SurfaceKey::Root(owner), surface))
+    }
+
+    /// Replaces one choice menu's complete leaf snapshot after its owner changed model revision.
+    pub(crate) fn replace_choice_popup(
+        &mut self,
+        popup: &PopupHandle,
+        rows: Vec<MenuSlot>,
+        committed: Option<u64>,
+    ) -> Result<(), SurfaceMutationError> {
+        let id = self.popup_id(popup)?;
+        let menu = self.surfaces.popup_node_mut(id).and_then(|node| node.surface.body.menu_mut()).ok_or(SurfaceMutationError::UnknownPopup)?;
+        if !menu.replace_choices(rows, committed) {
+            return Err(SurfaceMutationError::UnknownPopup);
+        }
+        self.invalidate_ui_commit();
+        Ok(())
+    }
+
+    /// Resets transient choice emphasis immediately before activating a retained popup definition.
+    pub(crate) fn prepare_choice_popup(&mut self, popup: &PopupHandle) -> Result<(), SurfaceMutationError> {
+        let id = self.popup_id(popup)?;
+        let menu = self.surfaces.popup_node_mut(id).and_then(|node| node.surface.body.menu_mut()).ok_or(SurfaceMutationError::UnknownPopup)?;
+        if !menu.prepare_choices() {
+            return Err(SurfaceMutationError::UnknownPopup);
+        }
+        self.invalidate_ui_commit();
+        Ok(())
+    }
+
+    /// Takes an activated leaf identity after menu input and visibility changes have completed.
+    pub(crate) fn take_choice_submission(&mut self, popup: &PopupHandle) -> Result<Option<u64>, SurfaceMutationError> {
+        let id = self.popup_id(popup)?;
+        let menu = self.surfaces.popup_node_mut(id).and_then(|node| node.surface.body.menu_mut()).ok_or(SurfaceMutationError::UnknownPopup)?;
+        Ok(menu.take_choice_submission())
+    }
+
     /// Registers one application-addressable popup below an already validated root.
     fn register_application_popup(&mut self, parent: SurfaceKey, surface: Surface) -> PopupHandle {
         let id = PopupId::allocate();
