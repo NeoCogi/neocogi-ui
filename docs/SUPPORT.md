@@ -41,9 +41,10 @@ it. There is no compatibility or long-term-support commitment. Pin the checkout 
 your application and every plugin together, and review the [changelog](CHANGELOG.md) before upgrading. The manifest version
 is not a promise that the unreleased checkout matches a published package.
 
-The neocogi-com sources in `crates/com` are part of this checkout. Core ABI 7,
-runtime API table version 2, and IDL module-fingerprint format version 1 are
-separate discriminators.
+The neocogi-com sources in `crates/com` are part of this checkout. Plugin
+descriptor and runtime table ABIs both remain at version 1 during pre-alpha.
+Core ABI 7 and IDL module-fingerprint format version 2 are separate discriminators.
+These numbers do not promise compatibility across pre-alpha checkout revisions.
 Use the workspace sources for both producer and consumer; a crates.io dependency
 with the same pre-alpha package version is not a substitute for this fork. Native
 modules stay loaded for the process lifetime; hot reload/unload is unsupported.

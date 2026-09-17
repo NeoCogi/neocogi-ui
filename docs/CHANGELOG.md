@@ -9,9 +9,12 @@
   factory construction, required sibling projections, exact signatures, and
   mutable call gating; remove duplicate object descriptions and ordinary unit
   objects' generated zero-argument constructors.
-- Introduce plugin descriptor ABI v2, runtime tables v3, and inspection schema 9.
+- Keep plugin descriptor and runtime table ABIs at v1 during pre-alpha, with
+  matching exported symbols and Rust types; use inspection schema 9.
   Reject incompatible factory signatures before bootstrap. Add an ordinary-Cargo
   sample exercising both dynamic deployment and a self-contained monolith.
+- Remove an unused runtime import and the demo's warning-only build script so
+  valid workspace checks do not report deployment guidance as a build warning.
 
 
 The application API now consists of a thin static facade over actual COM objects.

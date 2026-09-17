@@ -101,16 +101,15 @@ are returned as statuses.
 
 A plugin normally builds as an `rlib`. The final dynamic build overrides its
 crate type and enables `dynamic-plugin`, which gates the single
-`nc_get_factory_plugin_description_v2` export. A monolith links that same rlib,
+`nc_get_factory_plugin_description_v1` export. A monolith links that same rlib,
 registers its Rust `factory_plugin_description()` result, and links one runtime
 with `static-runtime`. Both paths share factory activation and pointer checks.
 
-Core object ABI remains v7. The changed plugin descriptor is independently
-versioned as v2, with a versioned getter so an old layout is never read as the
-new one. Removing the contract-registry slot changes runtime discovery to v3;
-old table getters are removed. These experimental interfaces require rebuilding
-hosts and plugins; there is no compatibility adapter retaining the deleted
-mechanisms.
+Plugin descriptor and runtime table ABIs both remain v1 during pre-alpha; their
+exported getters and Rust table types use that version consistently. Core object
+ABI remains v7. These version numbers are not a compatibility promise across
+pre-alpha revisions: build hosts, runtimes, and plugins from the same checkout.
+There is no compatibility adapter retaining the deleted mechanisms.
 
 Inspection schema 9 contains plugin/dependency information and complete root
 factory compatibility data. Full module/declaration inventories remain available
