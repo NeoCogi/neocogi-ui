@@ -213,6 +213,19 @@ session.subscribe(choice_panel_subscribe_choice_port(panel.clone()), ChoiceHandl
 ui.update_with_events(size, &session)?;
 ```
 
+Private composite logic can translate these deliveries into one local message enum
+and `Model::update(&mut self, message)`. The file picker demonstrates this for row
+commands, text changes/submission, and window lifecycle. Translation runs directly
+inside the existing delivery; it adds no inbox or second queue. Private events reach
+parents only through the composite's explicitly declared public outputs.
+
+Nested components are scheduled at arbitrary tree depth. A child mounted during a
+callback joins the next sweep at that same boundary. Removing an ancestor retires
+its descendant tickets before teardown, including tickets already collected for
+later delivery. Runtime tests exercise three nested component levels, automatic
+private dispatch without an application session, insertion during a callback, and
+ancestor removal from a descendant handler.
+
 The example uses one generated domain payload and sink on both sides of the
 ABI. Private handlers and application handlers remain native, typed values in
 their respective binaries. A component without private handlers needs only
@@ -237,7 +250,7 @@ explicit smaller budget for manual delivery. Exhaustion reports
 `UI_E_EVENT_LIMIT` (-1007) and preserves unattempted events. Delivering exactly
 the limit succeeds when nothing remains; limit zero succeeds only for empty
 queues. A handler error consumes the attempted event, stops delivery, and
-restores unattempted ordinary events ahead of events emitted by that callback.
+leaves unattempted events queued ahead of events emitted by that callback.
 Retry never replays the failed attempt. Changes already made by a handler are
 not rolled back. Panics follow the COM abort policy and are not recoverable
 handler errors. A custom dispatcher must report its actual successful callback
@@ -246,8 +259,8 @@ count and honor the supplied bound.
 Ordinary widget setters are silent; changing a value does not manufacture a
 user submission. Window visibility transitions and popup dismissal explicitly
 publish lifecycle facts even when initiated by application code. Logical source
-closure discards ordinary queued work, including the remainder of a detached
-batch. Window destruction preserves exactly one terminal `Destroyed` fact for
+closure discards ordinary queued work, including the remainder of an active
+delivery window. Window destruction preserves exactly one terminal `Destroyed` fact for
 its existing subscriber; it can be delivered after the window is closed. A new
 subscriber cannot replay historical events. Cancellation discards terminal facts
 too. Terminal delivery is attempted once, even if its handler returns an error.
@@ -262,7 +275,8 @@ uncommitted, so render reports `UI_E_UPDATE_REQUIRED`; another update can finish
 remaining queued input. If a handler closes the runtime, the outer update
 reports `UI_E_CLOSED`.
 
-`Ui::update` supports polling without event dispatch. `EventSession::dispatch`
+`Ui::update` drives mounted private components automatically, without supplying
+an application dispatcher. `EventSession::dispatch`
 only delivers semantic events: it neither processes native input nor commits
 layout. After manual callbacks mutate geometry, call update before rendering.
 Directly dispatching a raw lease bypasses session ordering and its global budget;

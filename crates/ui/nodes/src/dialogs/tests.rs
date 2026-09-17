@@ -349,7 +349,7 @@ struct ReentryState {
     /// Every already committed request must survive component retirement during its first callback.
     completions: usize,
 }
-/// Concrete callback deliberately updates the runtime while the completion lease owns a detached multi-event batch.
+/// Concrete callback deliberately updates the runtime while the completion lease owns a bounded multi-event delivery window.
 struct Reenter;
 impl EventHandler<ReentryState, IFileDialogSinkEvent> for Reenter {
     /// Updates ordinary UI state without reentering this event session; delivery must retain all committed outcomes.
@@ -360,7 +360,7 @@ impl EventHandler<ReentryState, IFileDialogSinkEvent> for Reenter {
     }
 }
 
-/// Request completion is a committed fact even after the closed controller is retired during a detached delivery batch.
+/// Request completion is a committed fact even after the closed controller is retired during an active delivery window.
 #[test]
 fn closed_picker_preserves_all_completed_requests_during_manual_handler_runtime_reentry() {
     let fixture = Fixture::new();

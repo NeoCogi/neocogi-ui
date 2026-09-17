@@ -54,7 +54,15 @@ descendant-first order after traversal, invoked before the application session,
 and skipped if an earlier callback removed their owning mount. Both kinds of
 callback share the same finite dispatch budget. `Ui::update_with_events`
 accepts the same generic `EventSession<State>` for applications and components.
-Ordinary `Ui::update` also drives mounted private sessions automatically.
+Ordinary `Ui::update` also drives mounted private sessions automatically. Nesting
+has no special depth limit: child outputs can reach parent handlers and then the
+application in one update. A callback-mounted child joins the next sweep, while
+ancestor removal retires all descendant tickets before subsequent delivery.
+
+A composite may use one private message enum and an `&mut self` update method;
+the file picker does so without adding a second event queue. Only declared public
+outputs cross component boundaries. Internal child events do not implicitly bubble
+through every ancestor; raw input routing remains a separate concern.
 
 There is one subscriber per source. Delivery preserves FIFO within a source and
 registration order across a session. A dispatch window fixes the eligible prefix length; each callback pops one

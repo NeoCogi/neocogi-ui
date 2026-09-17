@@ -30,20 +30,42 @@ impl EventPort for LocalActivation<'_> {
 struct PrivateRecord {
     /// Component name used to prove child/surface ordering at the boundary.
     name: &'static str,
-    /// Foreign capability edited after all retained traversal borrows have ended.
-    close_target: Rc<RefCell<Option<ComPtr<IWindowAbi>>>>,
+    /// Optional public output makes upward delivery explicit rather than exposing child events.
+    forward: Option<Rc<EventSource<IActivationSinkEvent>>>,
+    /// One ordinary tree edit, consumed before entering foreign topology code.
+    edit: Edit,
 }
 
 impl EventHandler<Trace, IActivationSinkEvent> for PrivateRecord {
     /// Records the captured fact and may remove another mounted component.
     fn handle(&mut self, trace: &mut Trace, _event: &IActivationSinkEvent) -> Result<(), NcStatus> {
         trace.borrow_mut().push(self.name);
-        let target = self.close_target.borrow_mut().take();
-        if let Some(target) = target {
-            target.close()?;
+        if let Some(source) = &self.forward {
+            source.emit(IActivationSinkEvent { label: self.name.to_owned() });
+        }
+        // A consumed edit cannot repeat during a later dispatch sweep.
+        match std::mem::replace(&mut self.edit, Edit::None) {
+            Edit::None => {}
+            Edit::Close(window) => window.close()?,
+            Edit::Insert { mut parent, child } => parent.insert(0, &child, LinearEdge::new(LayoutTrack::Content))?.finish()?,
         }
         Ok(())
     }
+}
+
+/// Deliberate topology mutations exercise the real runtime after traversal releases ownership.
+enum Edit {
+    /// The handler only records and optionally emits its public output.
+    None,
+    /// Removes a window and its whole subtree before later snapshot tickets run.
+    Close(ComPtr<IWindowAbi>),
+    /// Mounts a previously unmounted component during delivery.
+    Insert {
+        /// Existing parent accepts the new child through its ordinary COM editing interface.
+        parent: neocogi_ui::LinearWidget,
+        /// Child carries its own private session; the application never registers that session.
+        child: neocogi_ui::Widget<IWidgetAbi>,
+    },
 }
 
 /// Application-owned handler running only after all eligible private drivers.
@@ -57,42 +79,59 @@ impl EventHandler<Trace, IActivationSinkEvent> for AppRecord {
     }
 }
 
-#[com_object(interfaces(IWidget, ILeafLayout, IComponentEventProvider))]
+#[com_object(interfaces(IWidget, IContainerLayout, IComponentEventProvider))]
 /// Plugin-style composite allocation with its own event source and private session.
 /// Its dispatcher is the session's separate COM allocation, never this widget.
 struct EventfulComposite {
     /// Real host-bound widget lifetime delegated without storing any runtime root.
     lifetime: ComPtr<IWidgetAbi>,
     /// Producer-owned captured events; the source never stores the private handler.
-    _source: EventSource<IActivationSinkEvent>,
+    source: Rc<EventSource<IActivationSinkEvent>>,
+    /// Actual container policy and authoritative child collection permit arbitrary nesting.
+    layout: ComPtr<IContainerLayoutAbi>,
     /// Component-owned typed handler/session, entirely inside this binary.
     private_session: ComEventSession<Trace>,
 }
 
 impl EventfulComposite {
-    /// Connects its native event queue before publishing one committed snapshot.
-    fn create(runtime: &ComPtr<UiRuntimeAbi>, trace: Trace, name: &'static str, close_target: Rc<RefCell<Option<ComPtr<IWindowAbi>>>>) -> ComPtr<IWidgetAbi> {
-        let lifetime = button(runtime).query::<IWidgetAbi>().unwrap();
-        let source = EventSource::new();
+    /// Builds an ordinary container with one private session and returns its editing capability.
+    fn create(
+        ui: &neocogi_ui::Ui,
+        trace: Trace,
+        source: Rc<EventSource<IActivationSinkEvent>>,
+        handler: PrivateRecord,
+    ) -> (neocogi_ui::Widget<IWidgetAbi>, neocogi_ui::LinearWidget) {
+        let shell = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
         let private_session = ComEventSession::new(trace);
-        private_session
-            .subscribe(LocalActivation { source: &source }, PrivateRecord { name, close_target })
-            .unwrap();
-        source.emit(IActivationSinkEvent { label: name.to_owned() });
-        EventfulComposite::from_value(Self {
-            lifetime,
-            _source: source,
+        private_session.subscribe(LocalActivation { source: &source }, handler).unwrap();
+        let widget = Self::from_value(Self {
+            lifetime: shell.node_interface().unwrap(),
+            layout: shell.as_interface().add_ref().query().unwrap(),
+            source,
             private_session,
         })
         .query()
-        .unwrap()
+        .unwrap();
+        (neocogi_ui::Widget::from_interface(widget), shell)
     }
 }
 
-impl ILeafLayout for EventfulComposite {
-    /// Returns fixed content geometry without retaining the measurement service.
-    fn measure(&mut self, _bounds: LayoutLimits, _metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
-        Ok(Size { width: 120, height: 30 })
+impl IContainerLayout for EventfulComposite {
+    /// Exposes the real host-issued collection, never a copied child list.
+    fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
+        self.layout.children()
+    }
+    /// Delegates measurement to the same concrete shell that owns the children.
+    fn measure(&mut self, scope: LayoutScope, bounds: LayoutLimits, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<Size, NcStatus> {
+        self.layout.measure(scope, bounds, layout)
+    }
+    /// Preserves ordinary descendant placement and viewport handling.
+    fn place(&mut self, scope: LayoutScope, rect: Rect, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<ContainerGeometry, NcStatus> {
+        self.layout.place(scope, rect, layout)
+    }
+    /// Uses the shell's input policy independently of semantic event delivery.
+    fn accepts_event(&self, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<bool, NcStatus> {
+        self.layout.accepts_event(event, text)
     }
 }
 
@@ -114,8 +153,13 @@ impl IWidget for EventfulComposite {
     }
     /// Cancels private leases before closing its independently retained lifetime.
     fn close(&mut self) -> Result<(), NcStatus> {
-        self.private_session.cancel()?;
-        self.lifetime.close()
+        self.source.close_ordinary();
+        match self.private_session.cancel() {
+            // Self-removal during dispatch retires the queue immediately; the active
+            // transaction prunes the now-inactive lease when its callback returns.
+            Ok(()) | Err(neocogi_com_events::EVENT_E_BUSY) => self.lifetime.close(),
+            Err(error) => Err(error),
+        }
     }
     /// Uses the same real common routing policy as its factory-created lifetime.
     fn properties(&self) -> Result<WidgetProperties, NcStatus> {
@@ -139,25 +183,121 @@ impl IWidget for EventfulComposite {
     }
 }
 
-/// Private dispatch precedes application dispatch and a removed later mount is skipped.
+/// Builds one real eventful container, supplying defaults for ordinary forwarding.
+fn component(
+    ui: &neocogi_ui::Ui,
+    trace: &Trace,
+    name: &'static str,
+    source: &Rc<EventSource<IActivationSinkEvent>>,
+    forward: Option<Rc<EventSource<IActivationSinkEvent>>>,
+    edit: Edit,
+) -> (neocogi_ui::Widget<IWidgetAbi>, neocogi_ui::LinearWidget) {
+    EventfulComposite::create(ui, trace.clone(), source.clone(), PrivateRecord { name, forward, edit })
+}
+
+/// Emits a captured fixture fact without entering any application callback.
+fn emit(source: &EventSource<IActivationSinkEvent>) {
+    source.emit(IActivationSinkEvent { label: String::new() });
+}
+
+/// Three actual component levels forward upward before the application, with no manual child pumping.
+#[test]
+fn nested_components_dispatch_child_first_and_promote_only_explicit_outputs() {
+    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let trace: Trace = Rc::new(RefCell::new(Vec::new()));
+    let sources = (0..4).map(|_| Rc::new(EventSource::new())).collect::<Vec<_>>();
+    let (child, _) = component(&ui, &trace, "child", &sources[0], Some(sources[1].clone()), Edit::None);
+    let (parent, mut parent_shell) = component(&ui, &trace, "parent", &sources[1], Some(sources[2].clone()), Edit::None);
+    let (root, mut root_shell) = component(&ui, &trace, "root", &sources[2], Some(sources[3].clone()), Edit::None);
+    parent_shell.insert(0, &child, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
+    root_shell.insert(0, &parent, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
+    let window = ui.window("nested", RECT, &root).unwrap();
+    let app = ComEventSession::new(trace.clone());
+    app.subscribe(LocalActivation { source: &sources[3] }, AppRecord).unwrap();
+
+    emit(&sources[0]);
+    ui.update(SIZE).unwrap(); // No application dispatcher is needed to drive every private level.
+    assert_eq!(&*trace.borrow(), &["child", "parent", "root"]);
+    ui.update_with_events(SIZE, &app).unwrap();
+    assert_eq!(&*trace.borrow(), &["child", "parent", "root", "application"]);
+    trace.borrow_mut().clear();
+    emit(&sources[0]);
+    ui.update_with_events(SIZE, &app).unwrap();
+    assert_eq!(&*trace.borrow(), &["child", "parent", "root", "application"]);
+    window.close().unwrap();
+    emit(&sources[0]);
+    ui.update_with_events(SIZE, &app).unwrap();
+    assert_eq!(trace.borrow().len(), 4, "removed descendants never run again");
+}
+
+/// A component mounted by a handler joins the next sweep of the same safe boundary.
+#[test]
+fn callback_mounted_descendant_is_discovered_without_application_registration() {
+    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let trace: Trace = Rc::new(RefCell::new(Vec::new()));
+    let child_source = Rc::new(EventSource::new());
+    let (child, _) = component(&ui, &trace, "inserted", &child_source, None, Edit::None);
+    emit(&child_source);
+    let parent_source = Rc::new(EventSource::new());
+    let (parent, shell) = component(&ui, &trace, "parent", &parent_source, None, Edit::None);
+    let window = ui.window("dynamic", RECT, &parent).unwrap();
+    let trigger = EventSource::new();
+    let app = ComEventSession::new(trace.clone());
+    app.subscribe(
+        LocalActivation { source: &trigger },
+        PrivateRecord {
+            name: "application",
+            forward: None,
+            edit: Edit::Insert { parent: shell, child },
+        },
+    )
+    .unwrap();
+    emit(&trigger);
+    ui.update_with_events(SIZE, &app).unwrap();
+    assert_eq!(&*trace.borrow(), &["application", "inserted"]);
+    window.close().unwrap();
+}
+
+/// Removing an ancestor inside its descendant handler retires the remaining parent ticket safely.
+#[test]
+fn descendant_removal_retires_ancestor_and_sibling_dispatch_snapshots() {
+    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let trace: Trace = Rc::new(RefCell::new(Vec::new()));
+    let root_source = Rc::new(EventSource::new());
+    let (root, mut shell) = component(&ui, &trace, "root", &root_source, None, Edit::None);
+    let window = ui.window("removed", RECT, &root).unwrap();
+    let source = Rc::new(EventSource::new());
+    let (child, _) = component(&ui, &trace, "remover", &source, None, Edit::Close(window.clone()));
+    shell.insert(0, &child, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
+    let sibling_source = Rc::new(EventSource::new());
+    let (sibling, _) = component(&ui, &trace, "sibling", &sibling_source, None, Edit::None);
+    shell.insert(1, &sibling, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
+    for source in [&source, &sibling_source, &root_source] {
+        emit(source);
+    }
+    ui.update(SIZE).unwrap();
+    assert_eq!(&*trace.borrow(), &["remover"]);
+    assert_eq!(window.snapshot(), Err(UI_E_CLOSED));
+}
+
+/// Child-surface ordering still precedes application delivery and skips a removed later surface.
 #[test]
 fn mounted_component_events_dispatch_before_application_and_skip_removed_snapshots() {
-    let runtime = runtime();
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
+    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let trace: Trace = Rc::new(RefCell::new(Vec::new()));
-    let close_target = Rc::new(RefCell::new(None));
-    let older = EventfulComposite::create(&runtime, trace.clone(), "older", Rc::new(RefCell::new(None)));
-    let older_window = ui.window("older", RECT, &neocogi_ui::Widget::from_interface(older)).unwrap();
-    let newer = EventfulComposite::create(&runtime, trace.clone(), "newer", close_target.clone());
-    let newer_window = ui.window("newer", RECT, &neocogi_ui::Widget::from_interface(newer)).unwrap();
-    *close_target.borrow_mut() = Some(older_window.clone());
-
+    let older_source = Rc::new(EventSource::new());
+    let (older, _) = component(&ui, &trace, "older", &older_source, None, Edit::None);
+    let older_window = ui.window("older", RECT, &older).unwrap();
+    let newer_source = Rc::new(EventSource::new());
+    let (newer, _) = component(&ui, &trace, "newer", &newer_source, None, Edit::Close(older_window.clone()));
+    let newer_window = ui.window("newer", RECT, &newer).unwrap();
     let app_source = EventSource::new();
-    let app_session = ComEventSession::new(trace.clone());
-    app_session.subscribe(LocalActivation { source: &app_source }, AppRecord).unwrap();
-    app_source.emit(IActivationSinkEvent { label: "app".to_owned() });
-
-    ui.update_with_events(SIZE, &app_session).unwrap();
+    let app = ComEventSession::new(trace.clone());
+    app.subscribe(LocalActivation { source: &app_source }, AppRecord).unwrap();
+    for source in [older_source.as_ref(), newer_source.as_ref(), &app_source] {
+        emit(source);
+    }
+    ui.update_with_events(SIZE, &app).unwrap();
     assert_eq!(&*trace.borrow(), &["newer", "application"]);
     assert_eq!(older_window.snapshot(), Err(UI_E_CLOSED));
     newer_window.close().unwrap();

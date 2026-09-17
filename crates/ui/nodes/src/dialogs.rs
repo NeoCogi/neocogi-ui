@@ -302,93 +302,98 @@ impl Model {
     }
 }
 
-/// Explicit private button/row actions carry their data visibly instead of hiding it in callback captures.
-enum Action {
-    /// Navigate to the committed directory's parent, if any.
+/// Private component messages. Only synchronous delivery borrows captured text
+/// or lifecycle data; configured row messages own their exact native path.
+enum Message<'event> {
+    /// Navigate to the committed directory's parent.
     Up,
-    /// Navigate to the platform's exact native home setting, if available.
+    /// Navigate to the platform's native home setting.
     Home,
-    /// Resolve the current path field using its user-edit marker.
+    /// Resolve the path field when the Go control activates.
     Go,
-    /// Accept a nonempty typed filename or exact native row selection.
+    /// Accept the selected native file or nonempty typed filename.
     Accept,
-    /// Cancel the active request while retaining its stable modal.
+    /// Complete the current request with cancellation.
     Cancel,
-    /// Navigate by this row's exact native payload, independent of display-label collisions.
+    /// Navigate using an exact row identity, independent of its display label.
     Folder(PathBuf),
-    /// Select this exact native file while showing only its lossy basename.
+    /// Select the exact native file represented by a row.
     File(PathBuf),
+    /// Mark the path field as user-authored rather than programmatically displayed.
+    PathEdited,
+    /// Clear a native selection after a user edits the filename.
+    FilenameEdited,
+    /// Submit the captured path text without reading a later editor value.
+    Navigate(&'event str),
+    /// Observe the existing modal's committed lifecycle fact.
+    Lifecycle(&'event WindowEvent),
 }
-impl EventHandler<Model, Activation> for Action {
-    /// Callbacks read/edit ordinary COM controls only after the runtime releases its traversal context.
-    fn handle(&mut self, model: &mut Model, _event: &Activation) -> Result<(), NcStatus> {
-        if !model.request.active() {
-            return Ok(());
-        }
-        match self {
-            Self::Up => model.navigate = model.directory.parent().map(Path::to_owned),
-            Self::Home => model.navigate = home_dir(),
-            Self::Go => model.navigate = model.resolve_path(&model.path.text()?),
-            Self::Accept => model.accept()?,
-            Self::Cancel => model.finish(IFileDialogSinkEvent::Cancelled)?,
-            Self::Folder(path) => model.navigate = Some(path.clone()),
-            Self::File(path) => {
-                model.filename.set_text(&path.file_name().unwrap_or(path.as_os_str()).to_string_lossy())?;
-                model.selected = Some(path.clone());
+
+impl Model {
+    /// Handles every private message under one exclusive component-state borrow.
+    /// This is a synchronous translation of typed deliveries, not another queue.
+    fn update(&mut self, message: &Message<'_>) -> Result<(), NcStatus> {
+        match message {
+            Message::PathEdited => self.path_dirty = true,
+            Message::FilenameEdited => self.selected = None,
+            Message::Lifecycle(event) => match event {
+                WindowEvent::Hidden | WindowEvent::CloseRequested
+                    if self.request.active()
+                        && self
+                            .window()
+                            .is_ok_and(|window| window.snapshot().is_ok_and(|snapshot| snapshot.visibility == Visibility::Hidden)) =>
+                {
+                    // A stale Hidden after cancel/reopen cannot cancel the new visible request.
+                    self.finish(IFileDialogSinkEvent::Cancelled)?;
+                }
+                WindowEvent::Destroyed => self.request.close(),
+                _ => {}
+            },
+            _ if !self.request.active() => {}
+            Message::Up => self.navigate = self.directory.parent().map(Path::to_owned),
+            Message::Home => self.navigate = home_dir(),
+            Message::Go => self.navigate = self.resolve_path(&self.path.text()?),
+            Message::Accept => self.accept()?,
+            Message::Cancel => self.finish(IFileDialogSinkEvent::Cancelled)?,
+            Message::Folder(path) => self.navigate = Some(path.clone()),
+            Message::File(path) => {
+                self.filename.set_text(&path.file_name().unwrap_or(path.as_os_str()).to_string_lossy())?;
+                self.selected = Some(path.clone());
             }
+            Message::Navigate(text) => self.navigate = self.resolve_path(text),
         }
         Ok(())
     }
 }
-/// Concrete dirty-marker roles distinguish real text input from silent programmatic display updates.
-enum Edited {
-    /// A user path edit makes typed UTF-8 authoritative for future navigation.
-    Path,
-    /// A user filename edit replaces any previously selected native row identity.
-    Filename,
+
+impl EventHandler<Model, Activation> for Message<'static> {
+    /// The configured command owns its dependencies; activation only triggers it.
+    fn handle(&mut self, model: &mut Model, _event: &Activation) -> Result<(), NcStatus> {
+        model.update(self)
+    }
 }
-impl EventHandler<Model, TextChanged> for Edited {
-    /// Updates only the corresponding explicit model dependency; no string equality guesses user intent.
+impl EventHandler<Model, TextChanged> for Message<'static> {
+    /// Field-specific wiring selects the corresponding explicit dirty-marker message.
     fn handle(&mut self, model: &mut Model, _event: &TextChanged) -> Result<(), NcStatus> {
-        match self {
-            Self::Path => model.path_dirty = true,
-            Self::Filename => model.selected = None,
-        }
-        Ok(())
+        model.update(self)
     }
 }
-/// Enter in the path editor submits its captured text rather than a later live value.
+
+/// Typed submission adapter borrows captured text only for the local update call.
 struct Navigate;
 impl EventHandler<Model, TextSubmitted> for Navigate {
-    /// Defers control reconstruction until the private event registration transaction has ended.
+    /// Navigation reconstruction remains deferred until registration is idle.
     fn handle(&mut self, model: &mut Model, event: &TextSubmitted) -> Result<(), NcStatus> {
-        if model.request.active() {
-            model.navigate = model.resolve_path(&event.text);
-        }
-        Ok(())
+        model.update(&Message::Navigate(&event.text))
     }
 }
-/// Existing window lifecycle settles active requests, including owner-induced hiding and destruction.
+
+/// Typed lifecycle adapter keeps public window facts distinct from private messages.
 struct Lifecycle;
 impl EventHandler<Model, neocogi_ui::events::WindowChanged> for Lifecycle {
-    /// A stale Hidden from cancel/reopen must not cancel a newly visible request.
+    /// Observes the captured lifecycle value without allocating a second snapshot.
     fn handle(&mut self, model: &mut Model, event: &neocogi_ui::events::WindowChanged) -> Result<(), NcStatus> {
-        let event = &event.event;
-        match event {
-            WindowEvent::Hidden | WindowEvent::CloseRequested
-                if model.request.active()
-                    && model
-                        .window()
-                        .is_ok_and(|window| window.snapshot().is_ok_and(|snapshot| snapshot.visibility == Visibility::Hidden)) =>
-            {
-                model.finish(IFileDialogSinkEvent::Cancelled)?;
-            }
-            WindowEvent::Destroyed => {
-                model.request.close();
-            }
-            _ => {}
-        }
-        Ok(())
+        model.update(&Message::Lifecycle(&event.event))
     }
 }
 
@@ -397,7 +402,7 @@ struct Column {
     /// Actual COM content root to install into the stable scroll controller.
     root: LinearWidget,
     /// Concrete exact-path actions registered only after the complete directory candidate succeeds.
-    rows: Vec<(ListItemWidget, Action)>,
+    rows: Vec<(ListItemWidget, Message<'static>)>,
 }
 /// Complete directory candidate; neither column becomes live if any native read fails.
 struct Listing {
@@ -455,7 +460,7 @@ fn column(nodes: &Rc<DialogNodes>, directory: &Path, paths: Vec<PathBuf>, folder
         )?);
         item.set_icon_role(if folder { ContentIcon::ClosedFolder } else { ContentIcon::File })?;
         children.push((item.node_interface()?, LayoutTrack::Content));
-        rows.push((item, if folder { Action::Folder(path) } else { Action::File(path) }));
+        rows.push((item, if folder { Message::Folder(path) } else { Message::File(path) }));
     }
     if rows.is_empty() {
         children.push((label(nodes, "(empty)")?.node_interface()?, LayoutTrack::Content));
@@ -597,11 +602,11 @@ impl Dialog {
             &filename,
             &window,
             [
-                (up, Action::Up),
-                (home, Action::Home),
-                (go, Action::Go),
-                (accept, Action::Accept),
-                (cancel, Action::Cancel),
+                (up, Message::Up),
+                (home, Message::Home),
+                (go, Message::Go),
+                (accept, Message::Accept),
+                (cancel, Message::Cancel),
             ],
         );
         if let Err(error) = connected {
@@ -618,11 +623,11 @@ impl Dialog {
         path: &TextboxWidget,
         filename: &TextboxWidget,
         window: &ComPtr<IWindowAbi>,
-        buttons: [(neocogi_ui::ButtonWidget, Action); 5],
+        buttons: [(neocogi_ui::ButtonWidget, Message<'static>); 5],
     ) -> Result<(), NcStatus> {
-        self.session.subscribe(path.changed(), Edited::Path)?;
+        self.session.subscribe(path.changed(), Message::PathEdited)?;
         self.session.subscribe(path.submitted(), Navigate)?;
-        self.session.subscribe(filename.changed(), Edited::Filename)?;
+        self.session.subscribe(filename.changed(), Message::FilenameEdited)?;
         for (button, action) in buttons {
             self.session.subscribe(button.activated(), action)?;
         }

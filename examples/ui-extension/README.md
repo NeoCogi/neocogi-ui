@@ -8,21 +8,26 @@ loaded separately from the host, UI, and renderer; ordinary demo packages omit i
 cargo neocogi run --assembly smoke --variant glow --variant extension -- --smoke
 ```
 
+The same event path runs in a plain-Cargo monolith with embedded resources:
+
+```sh
+cargo run -p neocogi-demo-smoke --bin neocogi-demo-smoke --features monolith,extension,embed-assets -- --smoke
+```
+
+For a headless Glow smoke run, set `SDL_VIDEODRIVER=offscreen`.
+
 Use `vulkan` or `wgpu` for the other native renderers. The same crate also compiles
 for `wasm32-unknown-unknown`; static applications register its descriptor explicitly.
 
 The contracts live in [the demo IDL module](../../demos/contracts/idl/neocogi/demo.ncidl).
-`Counter: IWidget + ILeafLayout + IActivationEvents + IWidgetProbe` is a callable
-class contract, while `IInset: IContainer` demonstrates ordinary interface
-inheritance. The host constructs the registered counter directly with a typed
-`IWidgetHost` argument; the provider remains only as the inset's shorthand factory.
-Both implementations authenticate attachment to the requesting UI.
+`Counter: IWidget + ILeafLayout + IActivationEvents + IWidgetProbe` and
+`Inset: IWidget + IContainerLayout + IInset + IWidgetProbe` are callable interfaces.
+The registered `ExtensionProvider` factory constructs both with a typed
+`IWidgetHost` argument. Factories are the only parameterless activation roots.
 
-Registration is used only to construct the extension class. During attachment the
-UI runtime queries and caches the counter's `ILeafLayout` or the inset's
-`IContainerLayout` beside `IWidget`; subsequent update, layout, and paint phases
-call those cached pointers directly. They perform no class-registry lookup and do
-not distinguish these external classes from built-in nodes.
+During attachment the runtime queries and caches each control's layout capability
+beside `IWidget`; later update, layout, and paint calls use those cached pointers.
+External controls share the built-in ownership and routing rules.
 
 The [implementation](src/lib.rs) uses `WidgetState` for common options, mount-once
 ownership, logical closure and sticky invalidation. The counter stores its value
@@ -44,8 +49,8 @@ self.changed.subscribe(sink)
 
 Emission queues an owned snapshot. The producer does not retain the application's
 handler. The [acceptance host](../../demos/smoke/src/extension.rs) constructs the
-generated connector against its own typed application `EventSession`, claims the
-custom port and its lease in one transaction, and also uses an activation handler to edit the counter during
+generated `counter_subscribe_changed_port(counter.clone())` and passes it to
+`events.subscribe(port, RecordCount)`. The same typed session owns its lease, and also uses an activation handler to edit the counter during
 delivery. The value callback still observes the originally committed value;
 the UI commits the later edit's measurement before returning from the same update.
 
