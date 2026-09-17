@@ -2,6 +2,18 @@
 
 ## 0.9.0-alpha.0 (unreleased)
 
+- Simplify contracts to compile-time Rust bindings and transitive signatures;
+  remove native contract libraries/archives, module getters/registries, and
+  intrinsic-event seeding. Plugins remain dynamically loadable or statically linked.
+- Unify callable declarations as interfaces with factory/event roles. Keep typed
+  factory construction, required sibling projections, exact signatures, and
+  mutable call gating; remove duplicate object descriptions and ordinary unit
+  objects' generated zero-argument constructors.
+- Introduce plugin descriptor ABI v2, runtime tables v3, and inspection schema 9.
+  Reject incompatible factory signatures before bootstrap. Add an ordinary-Cargo
+  sample exercising both dynamic deployment and a self-contained monolith.
+
+
 The application API now consists of a thin static facade over actual COM objects.
 This replaces the 0.8 native node/weak-handle authoring API without compatibility
 wrappers. [COM_DESIGN.md](COM_DESIGN.md) defines the accepted architecture, and

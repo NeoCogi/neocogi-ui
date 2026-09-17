@@ -85,10 +85,11 @@ their bounded bulk-copy interface. `neocogi.skin` authors new revisions of that
 format; it does not own the runtime value. `neocogi.platform` owns native path
 identity, avoiding a dependency from either loading plugin back into UI.
 
-Generated shared contract libraries carry these exact dependencies. A plugin
-lists only its directly implemented module, and runtime registration validates
-the transitive fingerprints. GFX contracts are part of the required UI frame and
-resource path; the optional `skin` facade feature exposes theme-authoring clients.
+Contract build scripts carry these dependencies through Cargo's source graph.
+Generated declaration signatures include their exact transitive revisions.
+Plugins publish a complete root-factory signature; the runtime checks it before
+bootstrap and checks subsequent COM pointer transfers. No contract libraries or
+runtime module graphs are shipped.
 
 At the provider level, `neocogi.ui.nodes.runtime` has a hard dependency on
 `neocogi.ui.runtime`. The assembly planner loads core first, then activates the nodes root and calls

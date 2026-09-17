@@ -8,11 +8,10 @@ cargo neocogi build --assembly full
 cargo neocogi run --assembly full
 ```
 
-Contract build scripts use the Cargo-selected `rustc` to compile a small,
-self-contained `no_std` description library beside the generated bindings. No
-nested Cargo build or C compiler is involved. Static builds additionally need
-the target archiver used for ordinary native libraries. The ownership model is
-documented in [IDL contract modules](IDL_MODULES.md#cargo-package-shape).
+Contracts generate Rust bindings and source-graph metadata through ordinary
+Cargo build scripts. They produce no native libraries or description archives.
+`cargo-neocogi` is optional: the [sample plugin](../examples/com-plugin/README.md)
+has complete plain-Cargo commands for dynamic and monolithic deployment.
 
 `cargo neocogi` builds the runtime, selected plugins, and application in order,
 then stages the executable, native libraries, plugin manifest, and assets. It
@@ -61,9 +60,8 @@ Consumers do not need our `build-min-size` alias or a custom profile definition.
 The preset omits generated `Debug` formatting; shipped demo entry points therefore
 report [`HostError`](../demos/host/src/lib.rs) through its explicit `Display`
 implementation so runtime failures still include their status or diagnostic text.
-Contract build scripts retain the custom Rust target as their artifact identity,
-but compile their self-contained Rust descriptions for its compatible built-in
-`x86_64-unknown-linux-gnu` ABI so `rustc` can reuse the installed `core` library.
+Generated contract bindings compile in the same Cargo target graph as their
+consumers; build scripts do not invoke a separate native compiler for contracts.
 Use `--toolchain nightly-YYYY-MM-DD` to select an installed dated toolchain. Custom
 nightly targets can change with the compiler, so pin and test the toolchain used
 for a release. Ordinary custom profiles remain defined by the application's
@@ -227,7 +225,7 @@ crashed inside `driCreateNewScreen3` when accessible hardware was combined with
 `LIBGL_ALWAYS_SOFTWARE=1`, before renderer construction. The ordinary native display
 passed; CI uses Xvfb with its available software GPU drivers.
 
-The optional independent extension adds a factory-created counter class
+The optional independent extension adds a factory-created counter object
 and a custom inset container, with no dependency on the UI or renderer implementation:
 
 ```sh
