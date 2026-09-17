@@ -936,11 +936,11 @@ mod tests {
         move |values| {
             let changed = changed.drain(1024).unwrap();
             let submitted = submitted.drain(1024).unwrap();
-            let delivered = !changed.events.is_empty() || !submitted.events.is_empty();
-            for event in changed.events {
+            let delivered = !changed.is_empty() || !submitted.is_empty();
+            for event in changed {
                 record_changed(values, &event);
             }
-            for event in submitted.events {
+            for event in submitted {
                 record_submitted(values, &event);
             }
             delivered

@@ -42,7 +42,7 @@ pub use neocogi_com_events::{EventEndpoint, EventPayload, EventSource};
 /// Applications and plugin authors subscribe through EventSource/EventEndpoint instead.
 #[cfg(feature = "test-support")]
 pub mod test_support {
-    pub use neocogi_com_events::test_support::{EventBatch, EventLease, SubscribeError};
+    pub use neocogi_com_events::test_support::{DeliveryWindow, EventLease, SubscribeError};
 }
 
 use crate::com::*;

@@ -513,8 +513,8 @@ mod tests {
         let lease = neocogi_ui::events::test_support::EventLease::connect(slider.changed()).unwrap();
         move |values| {
             let batch = lease.drain(1024).unwrap();
-            let delivered = !batch.events.is_empty();
-            for event in batch.events {
+            let delivered = !batch.is_empty();
+            for event in batch {
                 record_slider_change(values, &event);
             }
             delivered
@@ -526,8 +526,8 @@ mod tests {
         let lease = neocogi_ui::events::test_support::EventLease::connect(number.changed()).unwrap();
         move |values| {
             let batch = lease.drain(1024).unwrap();
-            let delivered = !batch.events.is_empty();
-            for event in batch.events {
+            let delivered = !batch.is_empty();
+            for event in batch {
                 record_number_change(values, &event);
             }
             delivered
