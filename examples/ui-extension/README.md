@@ -21,7 +21,7 @@ for `wasm32-unknown-unknown`; static applications register its descriptor explic
 
 The contracts live in [the demo IDL module](../../demos/contracts/idl/neocogi/demo.ncidl).
 `Counter: IWidget + ILeafLayout + IActivationEvents + IWidgetProbe` and
-`Inset: IWidget + IContainerLayout + IInset + IWidgetProbe` are callable interfaces.
+`IInset: IContainer` are callable interfaces.
 The registered `ExtensionProvider` factory constructs both with a typed
 `IWidgetHost` argument. Factories are the only parameterless activation roots.
 

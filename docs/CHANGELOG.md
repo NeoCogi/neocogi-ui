@@ -2,6 +2,13 @@
 
 ## 0.9.0-alpha.0 (unreleased)
 
+- Use one typed event session and source-side ports for built-ins and plugins.
+  Mutable sink receivers protect ordinary handler fields; bounded FIFO windows
+  preserve unattempted events without detaching or restoring batches.
+- Keep automatic descendant-first component dispatch, including callback-mounted
+  children and retirement during delivery. The file picker handles private
+  messages through one mutable update method without a second queue.
+
 - Simplify contracts to compile-time Rust bindings and transitive signatures;
   remove native contract libraries/archives, module getters/registries, and
   intrinsic-event seeding. Plugins remain dynamically loadable or statically linked.

@@ -1,4 +1,4 @@
-//! End-to-end subscription regressions through generated connectors and COM source calls.
+//! End-to-end subscription regressions through generated ports and COM source calls.
 
 use super::*;
 use neocogi_com::{com_object, ComPtr};
@@ -72,7 +72,7 @@ fn source(session: &neocogi_com_events::EventSession<Vec<String>>, fail_once: bo
     (source, probe)
 }
 
-/// Existing validator-function policy remains installed by the checked connector.
+/// Existing validator-function policy remains installed by the checked port.
 fn valid_label(event: &Activation) -> Result<(), NcStatus> {
     match event.label.is_empty() {
         true => Err(NC_E_INVALID_ARG),
@@ -80,9 +80,9 @@ fn valid_label(event: &Activation) -> Result<(), NcStatus> {
     }
 }
 
-/// Plain and checked connectors preserve failed-call cleanup, retry, order, and cancellation.
+/// Plain and checked ports preserve failed-call cleanup, retry, order, and cancellation.
 #[test]
-fn generated_connectors_preserve_foreign_failure_and_checked_delivery() {
+fn generated_ports_preserve_foreign_failure_and_checked_delivery() {
     let session = neocogi_com_events::EventSession::new(Vec::<String>::new());
     let drops = Rc::new(Cell::new(0));
     let (first_source, first) = source(&session, false);
@@ -111,7 +111,7 @@ fn generated_connectors_preserve_foreign_failure_and_checked_delivery() {
     assert_eq!(first.attempts.get(), 1);
     assert_eq!(second.attempts.get(), 2);
 
-    // The connector must install validation before delivery can borrow local state.
+    // The port must install validation before delivery can borrow local state.
     second.queue.emit(Activation { label: String::new() });
     let held = session.state_mut().unwrap();
     assert_eq!(second_lease.dispatch(10), Err(NC_E_INVALID_ARG));
