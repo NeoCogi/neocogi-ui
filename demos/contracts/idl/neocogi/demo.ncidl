@@ -7,7 +7,7 @@ use neocogi.ui.core::{IWidget, ILeafLayout, IActivationEvents, IWidgetHost, ICon
 /// Exact committed counter value published only after user activation.
 event ICounterChangedSink {
     /// Receives one immutable value captured before later callback edits.
-    fn changed(&self, value: u32) -> Result<()>;
+    fn changed(&mut self, value: u32) -> Result<()>;
 }
 
 #[version(1)]

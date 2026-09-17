@@ -370,9 +370,10 @@ impl EventHandler<Model, TextSubmitted> for Navigate {
 }
 /// Existing window lifecycle settles active requests, including owner-induced hiding and destruction.
 struct Lifecycle;
-impl EventHandler<Model, WindowEvent> for Lifecycle {
+impl EventHandler<Model, neocogi_ui::events::WindowChanged> for Lifecycle {
     /// A stale Hidden from cancel/reopen must not cancel a newly visible request.
-    fn handle(&mut self, model: &mut Model, event: &WindowEvent) -> Result<(), NcStatus> {
+    fn handle(&mut self, model: &mut Model, event: &neocogi_ui::events::WindowChanged) -> Result<(), NcStatus> {
+        let event = &event.event;
         match event {
             WindowEvent::Hidden | WindowEvent::CloseRequested
                 if model.request.active()
@@ -619,13 +620,13 @@ impl Dialog {
         window: &ComPtr<IWindowAbi>,
         buttons: [(neocogi_ui::ButtonWidget, Action); 5],
     ) -> Result<(), NcStatus> {
-        self.session.subscribe_text_changed(path, Edited::Path)?;
-        self.session.subscribe_text_submitted(path, Navigate)?;
-        self.session.subscribe_text_changed(filename, Edited::Filename)?;
+        self.session.subscribe(path.changed(), Edited::Path)?;
+        self.session.subscribe(path.submitted(), Navigate)?;
+        self.session.subscribe(filename.changed(), Edited::Filename)?;
         for (button, action) in buttons {
-            self.session.subscribe_activation(&button, action)?;
+            self.session.subscribe(button.activated(), action)?;
         }
-        self.session.subscribe_window(window.as_com_ref(), Lifecycle)?;
+        self.session.subscribe(neocogi_ui::events::window_events(window.as_com_ref())?, Lifecycle)?;
         Ok(())
     }
 
@@ -645,7 +646,7 @@ impl Dialog {
     /// Registers complete candidates while the private session is idle, then replaces only dynamic content roles.
     fn install(&self, model: &mut Model, directory: PathBuf, listing: Listing, reset_scroll: bool) -> Result<(), NcStatus> {
         for (row, action) in listing.folders.rows.into_iter().chain(listing.files.rows) {
-            self.session.subscribe_activation(&row, action)?;
+            self.session.subscribe(row.activated(), action)?;
         }
         // These are private built-in roles: their controller validates the live
         // modal before replacement and no caller can substitute a foreign child.

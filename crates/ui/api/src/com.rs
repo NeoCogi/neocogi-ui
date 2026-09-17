@@ -548,7 +548,7 @@ impl Ui {
         self.runtime.update(size)
     }
     /// Dispatches typed application events between input phases and commits handler edits before routing subsequent input.
-    pub fn update_with_events(&self, size: Size, events: &impl neocogi_com_events::EventDispatchSource) -> Result<(), NcStatus> {
+    pub fn update_with_events<State: 'static>(&self, size: Size, events: &crate::EventSession<State>) -> Result<(), NcStatus> {
         self.runtime.update_with_events(size, events.as_dispatcher())
     }
     /// Submits a synchronized UI frame to a native window's renderer capability.

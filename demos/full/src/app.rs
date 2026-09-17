@@ -109,7 +109,7 @@ pub(super) fn slider(ui: &Ui, value: f32, high: f32) -> Result<SliderWidget, NcS
 fn button(ui: &Ui, events: &EventSession<State>, text: &str, action: Action) -> Result<ButtonWidget, NcStatus> {
     let mut control = ui.widgets().button(text)?;
     control.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
-    events.subscribe_activation(&control, action)?;
+    events.subscribe(control.activated(), action)?;
     Ok(control)
 }
 /// A disclosure body is its actual editable Linear COM object, with no placeholder replacement tree.
@@ -333,9 +333,10 @@ impl EventHandler<State, TextSubmitted> for Observe {
         state.entry.clear()
     }
 }
-impl EventHandler<State, ChoiceSelection> for Observe {
+impl EventHandler<State, neocogi_ui::events::ChoiceChanged> for Observe {
     /// Resolves display text separately from the generated selection event.
-    fn handle(&mut self, state: &mut State, event: &ChoiceSelection) -> Result<(), NcStatus> {
+    fn handle(&mut self, state: &mut State, event: &neocogi_ui::events::ChoiceChanged) -> Result<(), NcStatus> {
+        let event = &event.selection;
         match *event {
             ChoiceSelection::None => state.write_log("Selection cleared"),
             ChoiceSelection::Selected(index) => {
@@ -356,9 +357,10 @@ impl EventHandler<State, IFileDialogSinkEvent> for Observe {
         }
     }
 }
-impl EventHandler<State, WindowEvent> for Observe {
+impl EventHandler<State, neocogi_ui::events::WindowChanged> for Observe {
     /// Preserves manager-owned minimize/maximize/restore rectangles and clamps only ordinary geometry.
-    fn handle(&mut self, state: &mut State, event: &WindowEvent) -> Result<(), NcStatus> {
+    fn handle(&mut self, state: &mut State, event: &neocogi_ui::events::WindowChanged) -> Result<(), NcStatus> {
+        let event = &event.event;
         let (mut area, clamp) = match *event {
             WindowEvent::GeometryChanged { rect } => (rect, !state.minimized),
             WindowEvent::Minimized { .. } => {
@@ -536,16 +538,16 @@ fn create() -> Result<(Host, EventSession<State>), HostError> {
         next_fps: 0.,
     });
     for (item, action) in pending {
-        events.subscribe_menu_item(&item, action)?;
+        events.subscribe(item.activated()?, action)?;
     }
     {
         let state = events.state()?;
         state.style.subscribe(&events)?;
-        events.subscribe_window(state.demo.as_com_ref(), Observe)?;
-        events.subscribe_text_submitted(&state.entry, Observe)?;
-        events.subscribe_combo_changed(&state.combo, Observe)?;
+        events.subscribe(neocogi_ui::events::window_events(state.demo.as_com_ref())?, Observe)?;
+        events.subscribe(state.entry.submitted(), Observe)?;
+        events.subscribe(state.combo.changed(), Observe)?;
         if let Some(dialog) = &state.file_dialog {
-            events.subscribe_file_dialog(dialog, Observe)?;
+            events.subscribe(dialog.completed()?, Observe)?;
         }
     }
     build_controls(&host, &events, &mut main_body)?;
@@ -627,7 +629,7 @@ fn build_controls(host: &Host, events: &EventSession<State>, content: &mut Linea
     for (name, shift) in [("Red", 0), ("Green", 8), ("Blue", 16)] {
         let mut line = row(ui)?;
         let control = slider(ui, ((state.grid.borrow().background >> shift) & 255) as f32, 255.)?;
-        events.subscribe_numeric(&control, Background { shift })?;
+        events.subscribe(control.changed(), Background { shift })?;
         append(&mut line, &label(ui, name)?, LayoutTrack::Fixed { extent: 46 })?;
         append(&mut line, &control, FLEX)?;
         append(&mut controls, &line, LayoutTrack::Content)?;

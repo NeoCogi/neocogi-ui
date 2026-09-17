@@ -96,7 +96,7 @@ struct WidgetUpdate {
 /// Concrete labelled activation consumer shared by Button, ListItem and ListBox.
 event IActivationSink {
     /// Receives an immutable submission snapshot after widget traversal releases its borrows.
-    fn submitted(&self, label: &str) -> Result<()>;
+    fn submitted(&mut self, label: &str) -> Result<()>;
 }
 
 #[version(1)]
@@ -110,14 +110,14 @@ interface IActivationEvents {
 /// Complete normalized text and scalar-aligned UTF-8 byte cursor at the moment of a user edit.
 event ITextChangedSink {
     /// Receives an owned immutable text capability borrowed only for this synchronous delivery.
-    fn changed(&self, text: &str, cursor: u64) -> Result<()>;
+    fn changed(&mut self, text: &str, cursor: u64) -> Result<()>;
 }
 
 #[version(1)]
 /// Complete normalized text at submission, independent of later edits.
 event ITextSubmittedSink {
     /// Receives the already captured submission value after traversal.
-    fn submitted(&self, text: &str) -> Result<()>;
+    fn submitted(&mut self, text: &str) -> Result<()>;
 }
 
 #[version(1)]
@@ -164,7 +164,7 @@ enum WindowEvent: u8 {
 /// Concrete consumer of copied window events, including the terminal Destroyed fact.
 event IWindowSink {
     /// Receives the exact committed lifecycle/chrome snapshot after the manager releases traversal ownership.
-    fn event(&self, event: WindowEvent) -> Result<()>;
+    fn event(&mut self, event: WindowEvent) -> Result<()>;
 }
 
 #[version(1)]
@@ -178,7 +178,7 @@ interface IWindowEvents {
 /// Concrete consumer of ordinary popup dismissal; destruction does not fabricate replay history.
 event IPopupSink {
     /// Reports removal from the active popup branch, independently of later activation.
-    fn dismissed(&self) -> Result<()>;
+    fn dismissed(&mut self) -> Result<()>;
 }
 
 #[version(1)]
@@ -192,9 +192,9 @@ interface IPopupEvents {
 /// Concrete terminal outcome of one request; there is no impossible Pending event variant.
 event IFileDialogSink {
     /// Accepts an exact native path independently of its potentially lossy filename label.
-    fn accepted(&self, path: &INativePath) -> Result<()>;
+    fn accepted(&mut self, path: &INativePath) -> Result<()>;
     /// Reports explicit cancellation, hiding, close affordance or destruction of an active request.
-    fn cancelled(&self) -> Result<()>;
+    fn cancelled(&mut self) -> Result<()>;
 }
 
 #[version(1)]

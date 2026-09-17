@@ -76,12 +76,11 @@ port. That module owns `IEventSubscription` and `IEventDispatcher`;
 and local delivery adapter. Generated event bindings check the support API
 version at compile time. This support crate does not depend on UI or on the
 process-global `neocogi-com-runtime`. UI adds only domain validation and
-family-specific wiring conveniences through `neocogi_ui::EventSession<State>`.
-The generic `neocogi_com_events::EventSession<State>` can equally serve a
-non-UI plugin or application state. `Ui::update_with_events` accepts either
-through the borrowed `EventDispatchSource` capability; the host does not need
-to know the application's `State` type. Both adapters own the concrete application
-state and one registration sequence. Each handler is an owned
+typed port getters. `neocogi_ui::EventSession<State>` reexports the same
+`neocogi_com_events::EventSession<State>` used by non-UI components.
+`Ui::update_with_events` borrows its dispatcher; only the native facade sees the
+state parameter, and the runtime receives a concrete COM capability.
+Each handler is an owned
 `EventHandler<State, Event>` implementation stored inline in a local generic COM
 sink. Application handlers implement that trait on concrete structs or enums
 whose dependencies are explicitly named fields; closures and function pointers
@@ -109,7 +108,7 @@ impl EventHandler<u32, Activation> for Submitted {
 }
 
 let events = EventSession::new(0u32);
-let lease = events.subscribe_activation(&button, Submitted { button: button.clone() })?;
+let lease = events.subscribe(button.activated(), Submitted { button: button.clone() })?;
 ui.update_with_events(drawable_size, &events)?;
 println!("{} submissions", *events.state()?);
 ui.render(drawable_size, renderer.as_com_ref())?;
@@ -117,60 +116,44 @@ lease.cancel()?; // Explicit cancellation; dropping the session also cancels its
 ```
 
 The event capabilities are separate from editing capabilities and may be queried
-once when subscribing. The session offers these concrete families:
+once when subscribing. Pass these ports to the same session API:
 
-| Registration | Producers | Captured payload |
+| Port | Producers | Captured payload |
 | --- | --- | --- |
-| `subscribe_activation` | Button, ListItem, ListBox | Submitted label |
-| `subscribe_checkbox` | Checkbox | Checked boolean |
-| `subscribe_numeric` | Slider, Number | Finite committed value |
-| `subscribe_scrollbar` | Scrollbar | Nonnegative clamped offset |
-| `subscribe_text_changed` | Textbox, TextArea | Normalized text and matching UTF-8 byte cursor |
-| `subscribe_text_submitted` | Textbox, TextArea | Submitted normalized text |
-| `subscribe_window` | Logical window | Typed lifecycle/chrome event with copied geometry where relevant |
-| `subscribe_popup` | Popup | Dismissal fact |
-| `subscribe_combo_changed` | Combo | NCIDL-generated committed selection |
-| `subscribe_menu_item` | Compact menu row | Submitted label |
-| `subscribe_file_dialog` | Standard file picker | Exact accepted native path or cancellation |
+| `activated()` | Button, ListItem, ListBox | Submitted label |
+| `changed()` | Checkbox | Checked boolean |
+| `changed()` | Slider, Number | Finite committed value |
+| `changed()` | Scrollbar | Nonnegative clamped offset |
+| `changed()` | Textbox, TextArea | Normalized text and matching UTF-8 byte cursor |
+| `submitted()` | Textbox, TextArea | Submitted normalized text |
+| `window_events(window)?` | Logical window | Typed lifecycle/chrome event with copied geometry where relevant |
+| `popup_events(popup)?` | Popup | Dismissal fact |
+| `changed()` | Combo | NCIDL-generated committed selection |
+| `activated()` | Compact menu row | Submitted label |
+| `completed()` | Standard file picker | Exact accepted native path or cancellation |
 
 Independent producers share `neocogi_com_events::EventSource<E>` with built-ins;
 the UI facade reexports this type for UI authors.
 Standard UI snapshots are generated from `event` NCIDL declarations, and their
-source subscription calls and registration connectors are generated from `event`
-ports. The UI `EventSession` wrapper only groups several source capabilities
-under familiar family names; every lease transaction is performed by the
-generated connector against the generic COM session. Custom plugin
-families follow the same pattern: declare the concrete sink once, use the
-generated owned payload and adapter, and implement only the producer's typed
-port body. A checked generated connector can run a concrete semantic validator
-on the decoded payload before taking an application-state borrow. Keep such
-domain predicates in their contract/facade layer, not in generic COM transport.
+source subscription methods and typed port values are generated from `event`
+ports. Use one `session.subscribe(port, handler)` operation for built-in and
+independently loaded controls. UI getters such as `button.activated()` and
+`editor.changed()` select the exact generated port and any required domain check.
+A raw generated port constructor accepts an owned source projection; its
+`.checked(validate)` method installs a concrete predicate before state borrowing.
+The port releases its source after setup; only the returned lease is retained.
 
-Subscription setup uses `EventConnector<State, Handler>`, not an `FnOnce`
-registration closure. Each declared source port generates a private operation
-with an explicitly borrowed source projection and optional capture-free validator
-in named fields. Public generated `connect_*` helpers supply that operation to
-`session.register(handler, connector)`; applications continue using the same
-`subscribe_*` facade methods. No handwritten connector or COM sink is required
-for a declared NCIDL event port, including a custom plugin family.
+`EventPort` associates each source with its concrete owned `Event` type.
+Subscription claims the registration transaction before the port creates its
+sink or calls the foreign subscription method. Failure restores registration
+order and releases uncommitted ownership. Native sources may implement the same
+trait; declared NCIDL ports need no handwritten setup adapter.
 
-The session claims its ordered lease transaction before invoking the consumed
-connector's `connect(self, session, handler)` method. The operation constructs
-the concrete sink and calls the exact foreign source port within that boundary.
-Failure restores the previous registration sequence and releases uncommitted
-local sink/handler ownership; success retains only the returned lease. Neither
-the operation nor its borrowed source is stored for subsequent dispatch. A custom
-native connection operation may implement the same trait, but must release any
-uncommitted connection before returning an error. Keep the transaction private
-to the session: subscribing first and retaining a lease afterward does not provide
-the same registration-reentry guarantees.
-
-Compiler-generated bindings and `neocogi-com-events` use Rust event-support
-protocol version 2 and enforce agreement at compile time. This is independent
-of the NCIDL wire ABI: the connector change does not change event declarations,
-contract fingerprints, COM sink/lease methods, or runtime dispatch ordering.
-Validator function-pointer APIs remain separate from this consumed setup
-operation; there is no closure-to-`EventHandler` blanket implementation.
+Event sinks use `&mut self`, letting the generated COM call gate protect a plain
+handler field. The shared state still needs one `RefCell` because independent
+sinks borrow the same owner. Rust binding protocol 3 checks compiler/support
+agreement. Event delivery signatures change accordingly; plugin descriptor and
+runtime table ABIs remain v1. Rebuild contracts and plugins together.
 
 Commit semantic state, then
 call `emit` with its owned snapshot. Implement the event capability by returning
@@ -211,8 +194,8 @@ window-root policy layer.
 
 ```rust
 // In the composite's NCIDL contract module:
-// event IChoiceSink { fn chosen(&self, item: u64) -> Result<()>; }
-// class ChoicePanel: IWidget + IContainerLayout + IComponentEventProvider {
+// event IChoiceSink { fn chosen(&mut self, item: u64) -> Result<()>; }
+// interface ChoicePanel: IWidget + IContainerLayout + IComponentEventProvider {
 //     event subscribe_choice(&mut self): IChoiceSink;
 // }
 
@@ -226,7 +209,7 @@ fn private_dispatcher(&self) -> Result<ComPtr<IEventDispatcherAbi>, NcStatus> {
 
 // In an application or another plugin's State:
 let session = neocogi_com_events::EventSession::new(state);
-connect_choice_panel_subscribe_choice(&session, panel.as_com_ref(), ChoiceHandler)?;
+session.subscribe(choice_panel_subscribe_choice_port(panel.clone()), ChoiceHandler)?;
 ui.update_with_events(size, &session)?;
 ```
 
@@ -236,8 +219,9 @@ their respective binaries. A component without private handlers needs only
 its `event` source port and does not implement `IComponentEventProvider`.
 
 Dispatch sweeps sources in registration order, with FIFO inside each source.
-Each source detaches its batch before calling handlers; no producer, retained
-tree, registry or sink-slot borrow crosses the callback. Cross-source order is
+Each source captures a bounded delivery window, then pops one event before each
+callback. Unattempted events stay queued; no producer, retained tree, registry
+or sink-slot borrow crosses the callback. Cross-source order is
 registration order, not a global timestamp order. For example, if B was
 registered before A, A produced `a1, a2`, and B produced `b1`, a sweep delivers
 `b1, a1, a2`. Callback emissions participate in subsequent source visits or
@@ -793,7 +777,7 @@ Every submenu is followed immediately by its declared number of direct children;
 nested descendants follow their owning child branch. Construction and replacement
 atomically reject malformed counts, empty branches, invalid UTF-8 ranges, duplicate
 leaf IDs, nesting beyond 32 branches, or an unknown selected ID. Programmatic edits
-remain silent; `subscribe_combo_changed` receives an immutable generated selection
+remain silent; `combo.changed()` yields immutable `ChoiceChanged` snapshots containing the selection
 only after a pointer or keyboard choice commits. Display labels remain independently
 available through `choice_label` and `display_text`; generic application data is
 mapped from the committed stable ID.
@@ -838,7 +822,7 @@ file.submenu("Recent")?.item("Document")?;
 menus.attach_bar(window.as_com_ref(), &bar)?;
 // The actual compact rows now belong exclusively to the manager's forest.
 open.set_label("Open file")?;
-events.subscribe_menu_item(&open, ConcreteOpenHandler)?;
+events.subscribe(open.activated()?, ConcreteOpenHandler)?;
 ```
 
 A bar's direct entries must be submenus. `attach_bar` installs one intrinsic bar
@@ -890,7 +874,7 @@ application handler:
 
 ```rust
 let picker = ui.file_dialog(window.as_com_ref())?;
-events.subscribe_file_dialog(&picker, ConcreteSelectionHandler)?;
+events.subscribe(picker.completed()?, ConcreteSelectionHandler)?;
 let mut request = FileDialogRequest::new(native_directory);
 request.title = "Choose a document".to_owned();
 picker.open(&request)?;
@@ -939,7 +923,7 @@ without invoking application callbacks during destruction.
 
 Each payload on the completion source is already a terminal outcome of a request.
 This source therefore finishes by preserving **all committed request outcomes**,
-including a currently detached delivery batch. It rejects further emission and
+including the unattempted remainder of an active dispatch window. It rejects further emission and
 new subscriptions after finishing; its existing lease can drain outcomes after
 the controller/runtime has been destroyed. Failed handlers consume the attempted
 outcome and preserve unattempted outcomes for retry. Cancellation of the lease

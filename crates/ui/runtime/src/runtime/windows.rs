@@ -478,7 +478,7 @@ mod tests {
         let item = builder.item("Run at pointer").unwrap();
         let mut popup = menus.popup(owner.as_com_ref(), &builder).unwrap();
         let events = EventSession::new(Vec::new());
-        events.subscribe_menu_item(&item, RecordActivation).unwrap();
+        events.subscribe(item.activated().unwrap(), RecordActivation).unwrap();
         let size = Size { width: 640, height: 400 };
 
         // Consume a pointer transition before opening. The popup request must use this committed

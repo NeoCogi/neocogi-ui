@@ -48,8 +48,8 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let activation: ComPtr<IActivationEventsAbi> = counter.query()?;
     let window = ui.window("Independent extension", Rect { x: 10, y: 10, width: 400, height: 200 }, &root)?;
     let events = EventSession::new(Vec::new());
-    events.subscribe_activation(&activation, Advance { counter: counter.clone() })?;
-    connect_counter_subscribe_changed(&events, counter.as_com_ref(), RecordCount)?;
+    events.subscribe(i_activation_events_subscribe_port(activation), Advance { counter: counter.clone() })?;
+    events.subscribe(counter_subscribe_changed_port(counter.clone()), RecordCount)?;
 
     ui.update_with_events(size, &events)?;
     ui.render(size, renderer)?;

@@ -67,7 +67,7 @@ fn independently_activated_nodes_bind_only_to_their_core_host_and_deliver_events
     let button = ui.widgets().button("nodes-owned activation").unwrap();
     ui.window("provider boundary", Rect { x: 10, y: 10, width: 300, height: 150 }, &button).unwrap();
     let events = EventSession::new(Vec::<String>::new());
-    events.subscribe_activation(&button, RecordActivation).unwrap();
+    events.subscribe(button.activated(), RecordActivation).unwrap();
     key(&ui, KeyCode::Tab);
     key(&ui, KeyCode::Space);
     ui.update_with_events(Size { width: 640, height: 400 }, &events).unwrap();

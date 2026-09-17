@@ -48,8 +48,8 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
     assert_eq!(item.mark().unwrap(), MenuMark::Checked { checked: false });
     assert_eq!(item.shortcut_hint().unwrap(), "Ctrl+O");
     let session = EventSession::new(Vec::new());
-    let lease = session.subscribe_menu_item(&item, Record).unwrap();
-    session.subscribe_menu_item(&disabled, Record).unwrap();
+    let lease = session.subscribe(item.activated().unwrap(), Record).unwrap();
+    session.subscribe(disabled.activated().unwrap(), Record).unwrap();
     menus.attach_bar(window.as_com_ref(), &bar).unwrap();
     assert_eq!(bar.separator(), Err(UI_E_CLOSED));
     drop(bar);
@@ -127,7 +127,7 @@ fn standalone_menu_popup_submits_then_hides_without_destroying_its_live_rows() {
     let item = builder.item("Run").unwrap();
     let mut popup = menus.popup(window.as_com_ref(), &builder).unwrap();
     let session = EventSession::new(Vec::new());
-    session.subscribe_menu_item(&item, Record).unwrap();
+    session.subscribe(item.activated().unwrap(), Record).unwrap();
     popup.show_at(Rect { x: 60, y: 60, width: 20, height: 20 }).unwrap();
     // Standalone menus begin without row selection; Down selects their first actionable row.
     key(&ui, KeyCode::ArrowDown, 0);

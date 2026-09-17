@@ -56,7 +56,7 @@ enum ChoiceSelection: u8 {
 /// Captured choice committed by pointer or keyboard interaction.
 event IChoiceChangedSink {
     /// Receives the complete optional selection after retained traversal releases its borrows.
-    fn changed(&self, selection: ChoiceSelection) -> Result<()>;
+    fn changed(&mut self, selection: ChoiceSelection) -> Result<()>;
 }
 
 #[version(1)]

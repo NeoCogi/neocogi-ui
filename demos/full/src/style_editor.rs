@@ -239,11 +239,11 @@ impl StyleEditor {
     pub(super) fn subscribe(&self, events: &EventSession<State>) -> Result<(), NcStatus> {
         for row in &self.colors {
             for (channel, control) in Channel::ALL.into_iter().zip(&row.channels) {
-                events.subscribe_numeric(control, Edit::Color(row.role, channel))?;
+                events.subscribe(control.changed(), Edit::Color(row.role, channel))?;
             }
         }
         for (metric, control) in &self.values {
-            events.subscribe_numeric(control, Edit::Metric(*metric))?;
+            events.subscribe(control.changed(), Edit::Metric(*metric))?;
         }
         Ok(())
     }

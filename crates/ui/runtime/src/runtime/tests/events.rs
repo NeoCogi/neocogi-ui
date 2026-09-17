@@ -39,8 +39,8 @@ fn static_session_preserves_registration_order_snapshot_values_and_bounded_progr
     column.insert(1, &b, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let window = ui.window("order", RECT, &column).unwrap();
     let session = EventSession::new(Vec::<String>::new());
-    session.subscribe_activation(&b, RecordActivation).unwrap();
-    session.subscribe_activation(&a, RecordActivation).unwrap();
+    session.subscribe(b.activated(), RecordActivation).unwrap();
+    session.subscribe(a.activated(), RecordActivation).unwrap();
     key(&ui, KeyCode::Tab);
     key(&ui, KeyCode::Space);
     ui.update(SIZE).unwrap();
@@ -99,9 +99,10 @@ impl EventHandler<MutationState, Activation> for ReplaceWindow {
 }
 /// Window lifecycle shares the same application state but its own concrete sink contract.
 struct RecordWindow;
-impl EventHandler<MutationState, WindowEvent> for RecordWindow {
+impl EventHandler<MutationState, neocogi_ui::events::WindowChanged> for RecordWindow {
     /// Captures the terminal event even though the old window is already permanently closed.
-    fn handle(&mut self, state: &mut MutationState, event: &WindowEvent) -> Result<(), NcStatus> {
+    fn handle(&mut self, state: &mut MutationState, event: &neocogi_ui::events::WindowChanged) -> Result<(), NcStatus> {
+        let event = &event.event;
         if *event == WindowEvent::Destroyed {
             state.observations.push("destroyed");
         }
@@ -125,8 +126,10 @@ fn eventful_runtime_releases_context_for_handlers_and_routes_later_input_to_thei
         editor: None,
         observations: Vec::new(),
     });
-    let activation = session.subscribe_activation(&button, ReplaceWindow).unwrap();
-    let lifecycle = session.subscribe_window(previous.as_com_ref(), RecordWindow).unwrap();
+    let activation = session.subscribe(button.activated(), ReplaceWindow).unwrap();
+    let lifecycle = session
+        .subscribe(neocogi_ui::events::window_events(previous.as_com_ref()).unwrap(), RecordWindow)
+        .unwrap();
     for input in [KeyCode::Tab, KeyCode::Space, KeyCode::Tab] {
         key(&ui, input);
     }
@@ -176,7 +179,7 @@ fn dropping_session_releases_application_owned_runtime_without_a_source_sink_cyc
     let window = ui.window("owner", RECT, &button).unwrap();
     let drops = Rc::new(Cell::new(0));
     let session = EventSession::new(OwnerState { _ui: ui, drops: drops.clone() });
-    let lease = session.subscribe_activation(&button, ObserveOwner).unwrap();
+    let lease = session.subscribe(button.activated(), ObserveOwner).unwrap();
     let retained_driver = session.as_dispatcher().add_ref();
     drop(session);
     assert_eq!(drops.get(), 1);
@@ -218,7 +221,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
     let session = EventSession::new(Vec::<String>::new());
     let mut checkbox = ui.widgets().checkbox("check", false).unwrap();
     let window = ui.window("checkbox", RECT, &checkbox).unwrap();
-    session.subscribe_checkbox(&checkbox, RecordSnapshot).unwrap();
+    session.subscribe(checkbox.changed(), RecordSnapshot).unwrap();
     checkbox.set_checked(true).unwrap();
     ui.update_with_events(SIZE, &session).unwrap();
     assert!(session.state().unwrap().is_empty());
@@ -239,7 +242,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
         })
         .unwrap();
     let window = ui.window("slider", RECT, &slider).unwrap();
-    session.subscribe_numeric(&slider, RecordSnapshot).unwrap();
+    session.subscribe(slider.changed(), RecordSnapshot).unwrap();
     slider.set_value(5.0).unwrap();
     ui.update_with_events(SIZE, &session).unwrap();
     assert_eq!(session.state().unwrap().len(), 1);
@@ -251,7 +254,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
 
     let number = ui.widgets().number(NumberOptions { value: 3.0, step: 1.0, precision: 0 }).unwrap();
     let window = ui.window("number", RECT, &number).unwrap();
-    session.subscribe_numeric(&number, RecordSnapshot).unwrap();
+    session.subscribe(number.changed(), RecordSnapshot).unwrap();
     key(&ui, KeyCode::Tab);
     // Numeric text controls use Up/Down; horizontal sliders use Left/Right.
     key(&ui, KeyCode::ArrowUp);
@@ -265,8 +268,8 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
     column.insert(0, &item, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     column.insert(1, &list_box, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let window = ui.window("lists", RECT, &column).unwrap();
-    session.subscribe_activation(&item, RecordActivation).unwrap();
-    session.subscribe_activation(&list_box, RecordActivation).unwrap();
+    session.subscribe(item.activated(), RecordActivation).unwrap();
+    session.subscribe(list_box.activated(), RecordActivation).unwrap();
     for input in [KeyCode::Tab, KeyCode::Space, KeyCode::Tab, KeyCode::Space] {
         key(&ui, input);
     }
@@ -284,7 +287,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
         })
         .unwrap();
     let window = ui.window("bar", RECT, &bar).unwrap();
-    session.subscribe_scrollbar(&bar, RecordSnapshot).unwrap();
+    session.subscribe(bar.changed(), RecordSnapshot).unwrap();
     let previous = session.state().unwrap().len();
     bar.set_offset(0).unwrap();
     ui.update_with_events(SIZE, &session).unwrap();
@@ -332,9 +335,9 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     let session = EventSession::new(Vec::<String>::new());
     let mut textbox = ui.widgets().textbox("").unwrap();
     let window = ui.window("textbox", RECT, &textbox).unwrap();
-    session.subscribe_text_changed(&textbox, RecordSnapshot).unwrap();
-    assert_eq!(session.subscribe_text_changed(&textbox, RecordSnapshot).unwrap_err(), UI_E_BUSY);
-    session.subscribe_text_submitted(&textbox, RecordSnapshot).unwrap();
+    session.subscribe(textbox.changed(), RecordSnapshot).unwrap();
+    assert_eq!(session.subscribe(textbox.changed(), RecordSnapshot).unwrap_err(), UI_E_BUSY);
+    session.subscribe(textbox.submitted(), RecordSnapshot).unwrap();
     textbox.set_text("a").unwrap();
     ui.update_with_events(SIZE, &session).unwrap();
     assert!(session.state().unwrap().is_empty());
@@ -347,8 +350,8 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
 
     let area = ui.widgets().text_area("", TextWrapping::Word, true).unwrap();
     let window = ui.window("textarea", RECT, &area).unwrap();
-    session.subscribe_text_changed(&area, RecordSnapshot).unwrap();
-    session.subscribe_text_submitted(&area, RecordSnapshot).unwrap();
+    session.subscribe(area.changed(), RecordSnapshot).unwrap();
+    session.subscribe(area.submitted(), RecordSnapshot).unwrap();
     key(&ui, KeyCode::Tab);
     ui.input(UiInput::Text, "☃").unwrap();
     ui.input(
@@ -366,7 +369,9 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     assert!(session.state().unwrap().ends_with(&["changed:☃:3".to_owned(), "submitted:☃".to_owned()]));
     let popup_content = ui.widgets().text_block("popup", TextWrapping::None).unwrap();
     let mut popup = ui.popup(window.as_com_ref(), "popup", &popup_content).unwrap();
-    let lease = session.subscribe_popup(popup.as_com_ref(), RecordSnapshot).unwrap();
+    let lease = session
+        .subscribe(neocogi_ui::events::popup_events(popup.as_com_ref()).unwrap(), RecordSnapshot)
+        .unwrap();
     popup.show_at(Rect { x: 100, y: 100, width: 20, height: 20 }).unwrap();
     ui.update_with_events(SIZE, &session).unwrap();
     popup.hide().unwrap();
@@ -405,7 +410,7 @@ fn failed_callback_recovers_on_next_update_and_preserves_remaining_native_input(
     column.insert(1, &editor, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let window = ui.window("recovery", RECT, &column).unwrap();
     let session = EventSession::new(0);
-    session.subscribe_activation(&button, FailOnce { fail: true }).unwrap();
+    session.subscribe(button.activated(), FailOnce { fail: true }).unwrap();
     for input in [KeyCode::Tab, KeyCode::Space, KeyCode::Tab] {
         key(&ui, input);
     }
@@ -439,9 +444,10 @@ struct CascadeState {
 }
 /// Concrete handler emits another lifecycle fact without replacing or registering a source.
 struct Cascade;
-impl EventHandler<Option<CascadeState>, WindowEvent> for Cascade {
+impl EventHandler<Option<CascadeState>, neocogi_ui::events::WindowChanged> for Cascade {
     /// Recursive delivery rejects before borrowing state; ordinary window edits remain available.
-    fn handle(&mut self, state: &mut Option<CascadeState>, event: &WindowEvent) -> Result<(), NcStatus> {
+    fn handle(&mut self, state: &mut Option<CascadeState>, event: &neocogi_ui::events::WindowChanged) -> Result<(), NcStatus> {
+        let event = &event.event;
         let state = state.as_mut().unwrap();
         if *event == WindowEvent::Hidden {
             assert_eq!(state.dispatcher.dispatch(1), Err(UI_E_BUSY));
@@ -469,7 +475,9 @@ fn real_lifecycle_cascade_obeys_global_budget_and_rejects_recursive_dispatch() {
         remaining: 2,
         observed: 0,
     });
-    session.subscribe_window(window.as_com_ref(), Cascade).unwrap();
+    session
+        .subscribe(neocogi_ui::events::window_events(window.as_com_ref()).unwrap(), Cascade)
+        .unwrap();
     window.set_visibility(Visibility::Hidden).unwrap();
     assert_eq!(session.dispatch_bounded(2), Err(UI_E_EVENT_LIMIT));
     assert_eq!(session.state().unwrap().as_ref().unwrap().observed, 2);

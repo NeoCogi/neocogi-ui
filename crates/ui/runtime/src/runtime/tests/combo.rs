@@ -12,9 +12,10 @@ struct Observations {
 /// Concrete changed-event recorder used by the runtime dispatch boundary.
 struct RecordSelection;
 
-impl EventHandler<Observations, ChoiceSelection> for RecordSelection {
+impl EventHandler<Observations, neocogi_ui::events::ChoiceChanged> for RecordSelection {
     /// Retains the delivered snapshot without rereading the live combo model.
-    fn handle(&mut self, state: &mut Observations, event: &ChoiceSelection) -> Result<(), NcStatus> {
+    fn handle(&mut self, state: &mut Observations, event: &neocogi_ui::events::ChoiceChanged) -> Result<(), NcStatus> {
+        let event = &event.selection;
         state.changes.push(*event);
         Ok(())
     }
@@ -45,7 +46,7 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
     combo.set_placeholder("Choose a value").unwrap();
     root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let session = EventSession::new(Observations { changes: Vec::new() });
-    session.subscribe_combo_changed(&combo, RecordSelection).unwrap();
+    session.subscribe(combo.changed(), RecordSelection).unwrap();
 
     ui.update_with_events(SIZE, &session).unwrap();
     assert_eq!(combo.selection().unwrap(), ChoiceSelection::Selected(1));
@@ -126,7 +127,7 @@ fn combo_choice_menu_uses_shared_submenu_navigation() {
     let mut combo = ui.combo_menu(window.as_com_ref(), menu_text, &menu, ChoiceSelection::Selected(10)).unwrap();
     root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let session = EventSession::new(Observations { changes: Vec::new() });
-    session.subscribe_combo_changed(&combo, RecordSelection).unwrap();
+    session.subscribe(combo.changed(), RecordSelection).unwrap();
     ui.update_with_events(SIZE, &session).unwrap();
 
     // Opening restores the committed Apple branch automatically; Down then moves directly to

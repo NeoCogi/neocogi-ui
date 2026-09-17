@@ -273,7 +273,7 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
         renderer: renderer.clone(),
         installed: 0,
     });
-    session.subscribe_activation(&button, InstallTheme).unwrap();
+    session.subscribe(button.activated(), InstallTheme).unwrap();
     for key in [KeyCode::Tab, KeyCode::Space] {
         ui.input(
             UiInput::Key(KeyStroke {

@@ -33,7 +33,7 @@ fn install(ui: &Ui, events: &EventSession<Vec<String>>) -> Result<ComPtr<IWindow
     let file = bar.submenu("File")?;
     let open = file.item("Open")?;
     open.set_shortcut_hint("Ctrl+O")?;
-    events.subscribe_menu_item(&open, Open)?;
+    events.subscribe(open.activated()?, Open)?;
     let save = file.item("Save")?;
     save.set_enabled(false)?;
     file.separator()?;

@@ -1,7 +1,7 @@
 //! End-to-end subscription regressions through generated connectors and COM source calls.
 
 use super::*;
-use neocogi_com::com_object;
+use neocogi_com::{com_object, ComPtr};
 use std::{cell::Cell, rc::Rc};
 
 /// Foreign producer observations shared with the test, not with application state.
@@ -87,18 +87,27 @@ fn generated_connectors_preserve_foreign_failure_and_checked_delivery() {
     let drops = Rc::new(Cell::new(0));
     let (first_source, first) = source(&session, false);
     let (second_source, second) = source(&session, true);
-    let first_lease = connect_i_activation_events_subscribe(&session, first_source.as_com_ref(), Record { drops: drops.clone() }).unwrap();
+    let first_lease = session
+        .subscribe(i_activation_events_subscribe_port(first_source.clone()), Record { drops: drops.clone() })
+        .unwrap();
 
     // A foreign failure drops the uncommitted sink/handler and preserves old registrations.
-    let failure = connect_i_activation_events_subscribe_checked(&session, second_source.as_com_ref(), Record { drops: drops.clone() }, valid_label);
+    let failure = session.subscribe(
+        i_activation_events_subscribe_port(second_source.clone()).checked(valid_label),
+        Record { drops: drops.clone() },
+    );
     assert_eq!(failure.unwrap_err(), NC_E_INVALID_ARG);
     assert_eq!(drops.get(), 1);
     assert_eq!(second.attempts.get(), 1);
     assert!(!second.queue.connected());
     assert_eq!(first_lease.active(), Ok(true));
 
-    let second_lease =
-        connect_i_activation_events_subscribe_checked(&session, second_source.as_com_ref(), Record { drops: drops.clone() }, valid_label).unwrap();
+    let second_lease = session
+        .subscribe(
+            i_activation_events_subscribe_port(second_source.clone()).checked(valid_label),
+            Record { drops: drops.clone() },
+        )
+        .unwrap();
     assert_eq!(first.attempts.get(), 1);
     assert_eq!(second.attempts.get(), 2);
 

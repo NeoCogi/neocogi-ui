@@ -31,7 +31,7 @@ impl EventHandler<bool, CheckboxChanged> for Preview {
 }
 fn install(ui: &Ui, events: &EventSession<bool>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
     let checkbox = ui.widgets().checkbox("Enable preview", false)?;
-    events.subscribe_checkbox(&checkbox, Preview)?;
+    events.subscribe(checkbox.changed(), Preview)?;
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     column.insert(0, &checkbox, LinearEdge::new(LayoutTrack::Content))?.finish()?;
     ui.window("Settings", Rect { x: 40, y: 40, width: 260, height: 120 }, &column)
@@ -47,14 +47,14 @@ pointers. Final COM release frees the allocation separately.
 
 | Client | Purpose | EventSession method |
 | --- | --- | --- |
-| `Button` | Text/image action | `subscribe_activation` |
-| `Checkbox` | Boolean choice | `subscribe_checkbox` |
-| `Combo` | Optional selection and runtime-owned choice popup | `subscribe_combo_changed` |
-| `ListBox` | Activatable label/image | `subscribe_activation` |
-| `ListItem` | Activatable text/icon row | `subscribe_activation` |
-| `Slider`, `Number` | Numeric controls | `subscribe_numeric` |
-| `Textbox`, `TextArea` | UTF-8 editors | `subscribe_text_changed`, `subscribe_text_submitted` |
-| `Scrollbar` | Horizontal/vertical range | `subscribe_scrollbar` |
+| `Button` | Text/image action | `activated()` |
+| `Checkbox` | Boolean choice | `changed()` |
+| `Combo` | Optional selection and runtime-owned choice popup | `changed()` |
+| `ListBox` | Activatable label/image | `activated()` |
+| `ListItem` | Activatable text/icon row | `activated()` |
+| `Slider`, `Number` | Numeric controls | `changed()` |
+| `Textbox`, `TextArea` | UTF-8 editors | `changed()`, `submitted()` |
+| `Scrollbar` | Horizontal/vertical range | `changed()` |
 | `TextBlock` | Read-only text with explicit wrapping | None |
 | `ColorSwatch` | Color preview and optional label | None |
 

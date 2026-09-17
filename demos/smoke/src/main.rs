@@ -155,7 +155,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut button = ui.widgets().button("Hello across COM")?;
     let window = ui.window("Dynamic UI", Rect { x: 40, y: 40, width: 500, height: 200 }, &button)?;
     let session = EventSession::new(0u32);
-    let subscription = session.subscribe_activation(&button, Submitted { button: button.clone() })?;
+    let subscription = session.subscribe(button.activated(), Submitted { button: button.clone() })?;
     let size = native.size()?;
     ui.update_with_events(size, &session)?;
     ui.render(size, renderer.as_com_ref())?;
@@ -340,7 +340,7 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let item = bar.submenu("File")?.item("Menu command")?;
     menus.attach_bar(window.as_com_ref(), &bar)?;
     let events = EventSession::new(0u32);
-    events.subscribe_menu_item(&item, MenuSubmission)?;
+    events.subscribe(item.activated()?, MenuSubmission)?;
     ui.update_with_events(size, &events)?;
     ui.render(size, renderer)?;
     for (key, value) in [(KeyCode::Function, 10), (KeyCode::ArrowDown, 0), (KeyCode::Enter, 0)] {
@@ -349,7 +349,7 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     ui.update_with_events(size, &events)?;
     assert_eq!(*events.state()?, 1);
     let picker = ui.file_dialog(window.as_com_ref())?;
-    events.subscribe_file_dialog(&picker, FileSelection(directory.0.join(" native file ")))?;
+    events.subscribe(picker.completed()?, FileSelection(directory.0.join(" native file ")))?;
     let mut request = FileDialogRequest::new(&directory.0);
     request.rect = Rect { x: 10, y: 10, width: 620, height: 370 };
     picker.open(&request)?;

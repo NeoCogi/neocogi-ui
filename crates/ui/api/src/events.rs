@@ -3,7 +3,7 @@
 //! A session owns its state and leases; producer queues own only immutable event
 //! snapshots. The runtime borrows the dispatcher while returning its context
 //! between input phases, so handlers can use ordinary widget/window methods.
-//! Subscription helpers delegate to generated, consumed `EventConnector` types;
+//! Typed ports delegate to generated, consumed source projections;
 //! the generic COM session claims registration before sink construction or a
 //! foreign subscription call. The source-specific operation is not a delivery callback.
 //!
@@ -21,7 +21,7 @@
 //! }
 //! fn update(ui: &Ui, button: &ButtonWidget, size: Size) -> Result<u32, NcStatus> {
 //!     let events = EventSession::new(0u32);
-//!     events.subscribe_activation(button, Count)?;
+//!     events.subscribe(button.activated(), Count)?;
 //!     ui.update_with_events(size, &events)?;
 //!     let count = *events.state()?;
 //!     Ok(count) // Dropping events cancels its leases, even when separately retained.
@@ -35,177 +35,84 @@
 //! update (for example a newly requested caret reveal) waits for the next eligible
 //! update. Recursive update/render and session dispatch/registration report BUSY.
 //! See `docs/COM_AUTHORS.md` for lifecycle, bounded cascades and author obligations.
-/// Static producer queues shared by built-ins, independent plugins and application components.
-pub use neocogi_com_events::{EventEndpoint, EventPayload, EventSource};
+/// One owner/session implementation serves applications and nested components.
+pub use neocogi_com_events::{EventDelivery, EventEndpoint, EventHandler, EventPayload, EventPort, EventSession, EventSource, EVENT_DISPATCH_LIMIT};
 
-/// Internal queue access for isolated semantic-algorithm tests, absent from normal builds.
-/// Applications and plugin authors subscribe through EventSource/EventEndpoint instead.
+/// Native queue access is reserved for isolated widget algorithm tests.
 #[cfg(feature = "test-support")]
-pub mod test_support {
-    pub use neocogi_com_events::test_support::{DeliveryWindow, EventLease, SubscribeError};
-}
+pub use neocogi_com_events::test_support;
 
 use crate::com::*;
-use neocogi_ui_core_contracts::IChoiceChangedSinkEvent;
-#[cfg(test)]
-use neocogi_ui_core_contracts::create_i_text_changed_sink_checked_event_sink;
-use neocogi_ui_nodes_contracts::{
-    connect_button_subscribe, connect_checkbox_subscribe, connect_combo_subscribe_changed, connect_list_box_subscribe, connect_list_item_subscribe,
-    connect_number_subscribe_checked, connect_scrollbar_subscribe_checked, connect_slider_subscribe_checked, connect_text_area_subscribe_changed_checked,
-    connect_text_area_subscribe_submitted, connect_textbox_subscribe_changed_checked, connect_textbox_subscribe_submitted,
-};
-#[cfg(test)]
-use neocogi_ui_nodes_contracts::create_i_numeric_sink_checked_event_sink;
-use neocogi_com::{ComPtr, ComRef, NC_E_INVALID_ARG, NcStatus};
-use std::ops::Deref;
+use neocogi_com::{ComRef, NC_E_INVALID_ARG, NcStatus};
+use neocogi_ui_nodes_contracts::*;
 
-pub use neocogi_com_events::{EventDelivery, EventHandler, EVENT_DISPATCH_LIMIT};
-
-/// UI-family convenience facade over the COM-owned application event session.
-/// The inner session owns state, leases, and registration-order dispatch; this
-/// facade adds only typed connections to the UI NCIDL event families.
-pub struct EventSession<State: 'static>(
-    /// COM-owned transport core, never retained by a widget producer.
-    neocogi_com_events::EventSession<State>,
-);
-
-impl<State: 'static> EventSession<State> {
-    /// Creates an empty UI event facade with application-owned state.
-    pub fn new(state: State) -> Self {
-        Self(neocogi_com_events::EventSession::new(state))
-    }
-}
-
-impl<State: 'static> Deref for EventSession<State> {
-    type Target = neocogi_com_events::EventSession<State>;
-    /// Exposes generic state and dispatch operations without duplicating them.
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<State: 'static> neocogi_com_events::EventDispatchSource for EventSession<State> {
-    /// Supplies the COM-owned dispatcher without exposing UI family wiring.
-    fn as_dispatcher(&self) -> ComRef<'_, IEventDispatcherAbi> {
-        self.0.as_dispatcher()
-    }
-}
-
-/// Canonical generated activation snapshot shared by built-ins and plugins.
+/// Canonical generated activation snapshot shared by built-ins and external controls.
 pub use neocogi_ui_core_contracts::IActivationSinkEvent as Activation;
-
-/// Typed adapter for concrete widgets or an explicitly queried activation capability.
-pub trait ActivationSource {
-    /// Uses the generated connector for this concrete source capability.
-    fn connect_activation<State: 'static, Handler: EventHandler<State, Activation> + 'static>(
-        &self,
-        session: &neocogi_com_events::EventSession<State>,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
-}
-
-impl ActivationSource for ComPtr<IActivationEventsAbi> {
-    /// External widgets subscribe through the standard capability queried once during wiring.
-    fn connect_activation<State: 'static, Handler: EventHandler<State, Activation> + 'static>(
-        &self,
-        session: &neocogi_com_events::EventSession<State>,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        connect_i_activation_events_subscribe(session, self.as_com_ref(), handler)
-    }
-}
-
-impl ActivationSource for ButtonWidget {
-    /// Buttons expose subscription directly on their callable class contract.
-    fn connect_activation<State: 'static, Handler: EventHandler<State, Activation> + 'static>(
-        &self,
-        session: &neocogi_com_events::EventSession<State>,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        connect_button_subscribe(session, self.as_interface(), handler)
-    }
-}
-
-impl ActivationSource for ListItemWidget {
-    /// List rows expose subscription directly on their callable class contract.
-    fn connect_activation<State: 'static, Handler: EventHandler<State, Activation> + 'static>(
-        &self,
-        session: &neocogi_com_events::EventSession<State>,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        connect_list_item_subscribe(session, self.as_interface(), handler)
-    }
-}
-
-impl ActivationSource for ListBoxWidget {
-    /// List boxes expose subscription directly on their callable class contract.
-    fn connect_activation<State: 'static, Handler: EventHandler<State, Activation> + 'static>(
-        &self,
-        session: &neocogi_com_events::EventSession<State>,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        connect_list_box_subscribe(session, self.as_interface(), handler)
-    }
-}
-
-impl<State: 'static> EventSession<State> {
-    /// Connects the widget's concrete event capability and registers its lease in deterministic order.
-    /// Registration during an active session transaction reports BUSY before claiming the producer's port.
-    pub fn subscribe_activation<Source: ActivationSource, Handler: EventHandler<State, Activation> + 'static>(
-        &self,
-        widget: &Source,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        widget.connect_activation(&self.0, handler)
-    }
-}
-
-/// Canonical generated checkbox snapshot committed by user activation.
+/// Canonical generated text-and-cursor snapshot.
+pub use neocogi_ui_core_contracts::ITextChangedSinkEvent as TextChanged;
+/// Canonical generated complete text submission.
+pub use neocogi_ui_core_contracts::ITextSubmittedSinkEvent as TextSubmitted;
+/// Canonical generated lifecycle snapshot containing its WindowEvent value.
+pub use neocogi_ui_core_contracts::IWindowSinkEvent as WindowChanged;
+/// Canonical generated popup dismissal fact.
+pub use neocogi_ui_core_contracts::IPopupSinkEvent as PopupDismissed;
+/// Canonical generated choice snapshot containing its ChoiceSelection value.
+pub use neocogi_ui_core_contracts::IChoiceChangedSinkEvent as ChoiceChanged;
+/// Canonical generated checkbox state captured on user activation.
 pub use neocogi_ui_nodes_contracts::ICheckboxSinkEvent as CheckboxChanged;
-impl<State: 'static> EventSession<State> {
-    /// Connects the widget's concrete event capability and registers its lease in deterministic order.
-    /// Registration during an active session transaction reports BUSY before claiming the producer's port.
-    pub fn subscribe_checkbox<Handler: EventHandler<State, CheckboxChanged> + 'static>(
-        &self,
-        widget: &crate::CheckboxWidget,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        connect_checkbox_subscribe(&self.0, widget.as_interface(), handler)
-    }
-}
-
-/// Canonical generated numeric snapshot from a Slider or Number.
+/// Canonical generated finite numeric value.
 pub use neocogi_ui_nodes_contracts::INumericSinkEvent as NumericChanged;
+/// Canonical generated nonnegative scrollbar offset.
+pub use neocogi_ui_nodes_contracts::IScrollbarSinkEvent as ScrollbarChanged;
 
-/// Static facade hook shared by the concrete Slider and Number class wrappers.
-pub trait NumericEventSource {
-    /// Uses the class-specific generated checked connector without a second sink object.
-    fn connect_numeric<State: 'static, Handler: EventHandler<State, NumericChanged> + 'static>(
-        &self,
-        session: &neocogi_com_events::EventSession<State>,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
+/// Defines a source-side convenience getter while leaving all session policy in COM.
+/// Each expansion selects an exact generated port and, where needed, its domain check.
+macro_rules! widget_port {
+    ($widget:ty, $method:ident, $event:ty, $port:ident $(, $check:ident)?) => {
+        impl $widget {
+            /// Returns the typed event port for subscription by an application or component.
+            /// Taking this capability never mounts the control or invokes its handler.
+            pub fn $method(&self) -> impl EventPort<Event = $event> {
+                $port(self.as_interface().add_ref())$(.checked($check))?
+            }
+        }
+    };
 }
 
-impl NumericEventSource for crate::SliderWidget {
-    /// Delegates directly to the Slider class projection without an event-interface query.
-    fn connect_numeric<State: 'static, Handler: EventHandler<State, NumericChanged> + 'static>(
-        &self,
-        session: &neocogi_com_events::EventSession<State>,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        connect_slider_subscribe_checked(session, self.as_interface(), handler, valid_numeric)
+widget_port!(ButtonWidget, activated, Activation, button_subscribe_port);
+widget_port!(ListItemWidget, activated, Activation, list_item_subscribe_port);
+widget_port!(ListBoxWidget, activated, Activation, list_box_subscribe_port);
+widget_port!(CheckboxWidget, changed, CheckboxChanged, checkbox_subscribe_port);
+widget_port!(crate::SliderWidget, changed, NumericChanged, slider_subscribe_port, valid_numeric);
+widget_port!(crate::NumberWidget, changed, NumericChanged, number_subscribe_port, valid_numeric);
+widget_port!(crate::ScrollbarWidget, changed, ScrollbarChanged, scrollbar_subscribe_port, valid_scrollbar);
+widget_port!(crate::TextboxWidget, changed, TextChanged, textbox_subscribe_changed_port, valid_text_cursor);
+widget_port!(crate::TextboxWidget, submitted, TextSubmitted, textbox_subscribe_submitted_port);
+widget_port!(crate::TextAreaWidget, changed, TextChanged, text_area_subscribe_changed_port, valid_text_cursor);
+widget_port!(crate::TextAreaWidget, submitted, TextSubmitted, text_area_subscribe_submitted_port);
+widget_port!(crate::ComboWidget, changed, ChoiceChanged, combo_subscribe_changed_port);
+
+/// Queries the actual window's lifecycle source without retaining it after subscription.
+pub fn window_events(window: ComRef<'_, IWindowAbi>) -> Result<impl EventPort<Event = WindowChanged>, NcStatus> {
+    Ok(i_window_events_subscribe_port(window.add_ref().query()?).checked(valid_window_event))
+}
+
+/// Queries the popup's independent dismissal source; delivery describes a captured fact.
+pub fn popup_events(popup: ComRef<'_, IPopupAbi>) -> Result<impl EventPort<Event = PopupDismissed>, NcStatus> {
+    Ok(i_popup_events_subscribe_port(popup.add_ref().query()?))
+}
+
+impl crate::MenuItem {
+    /// Queries this row's actual activation queue, shared by native and plugin clients.
+    pub fn activated(&self) -> Result<impl EventPort<Event = Activation>, NcStatus> {
+        Ok(i_activation_events_subscribe_port(self.as_interface().add_ref().query()?))
     }
 }
 
-impl NumericEventSource for crate::NumberWidget {
-    /// Delegates directly to the Number class projection without an event-interface query.
-    fn connect_numeric<State: 'static, Handler: EventHandler<State, NumericChanged> + 'static>(
-        &self,
-        session: &neocogi_com_events::EventSession<State>,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        connect_number_subscribe_checked(session, self.as_interface(), handler, valid_numeric)
+impl crate::FileDialog {
+    /// Returns checked native-path completions, including outcomes retained after closure.
+    pub fn completed(&self) -> Result<impl EventPort<Event = IFileDialogSinkEvent>, NcStatus> {
+        Ok(i_file_dialog_events_subscribe_port(self.as_interface().add_ref().query()?).checked(valid_file_dialog_path))
     }
 }
 
@@ -213,110 +120,10 @@ impl NumericEventSource for crate::NumberWidget {
 fn valid_numeric(event: &NumericChanged) -> Result<(), NcStatus> {
     if event.value.is_finite() { Ok(()) } else { Err(NC_E_INVALID_ARG) }
 }
-impl<State: 'static> EventSession<State> {
-    /// Connects the widget's concrete event capability and registers its lease in deterministic order.
-    /// Registration during an active session transaction reports BUSY before claiming the producer's port.
-    pub fn subscribe_numeric<Source: NumericEventSource, Handler: EventHandler<State, NumericChanged> + 'static>(
-        &self,
-        widget: &Source,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        widget.connect_numeric(&self.0, handler)
-    }
-}
 
-/// Canonical generated clamped scrollbar snapshot.
-pub use neocogi_ui_nodes_contracts::IScrollbarSinkEvent as ScrollbarChanged;
 /// Rejects a negative offset before the generated sink borrows application state.
 fn valid_scrollbar(event: &ScrollbarChanged) -> Result<(), NcStatus> {
     if event.offset >= 0 { Ok(()) } else { Err(NC_E_INVALID_ARG) }
-}
-impl<State: 'static> EventSession<State> {
-    /// Connects the widget's concrete event capability and registers its lease in deterministic order.
-    /// Registration during an active session transaction reports BUSY before claiming the producer's port.
-    pub fn subscribe_scrollbar<Handler: EventHandler<State, ScrollbarChanged> + 'static>(
-        &self,
-        widget: &crate::ScrollbarWidget,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        connect_scrollbar_subscribe_checked(&self.0, widget.as_interface(), handler, valid_scrollbar)
-    }
-}
-
-/// Canonical generated text-and-cursor snapshot from an editor.
-pub use neocogi_ui_core_contracts::ITextChangedSinkEvent as TextChanged;
-
-/// Typed facade hook shared by built-ins and explicitly queried text-event capabilities.
-pub trait TextEventSource {
-    /// Connects its independent changed port with the generated checked adapter.
-    fn connect_changed<State: 'static, Handler: EventHandler<State, TextChanged> + 'static>(
-        &self,
-        session: &neocogi_com_events::EventSession<State>,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
-    /// Connects its independent submitted port with the generated adapter.
-    fn connect_submitted<State: 'static, Handler: EventHandler<State, TextSubmitted> + 'static>(
-        &self,
-        session: &neocogi_com_events::EventSession<State>,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
-}
-
-impl TextEventSource for ComPtr<ITextEventsAbi> {
-    /// External editors subscribe through the standard capability queried once during wiring.
-    fn connect_changed<State: 'static, Handler: EventHandler<State, TextChanged> + 'static>(
-        &self,
-        session: &neocogi_com_events::EventSession<State>,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        connect_i_text_events_subscribe_changed_checked(session, self.as_com_ref(), handler, valid_text_cursor)
-    }
-    /// External editors reuse the same capability for their independent submission port.
-    fn connect_submitted<State: 'static, Handler: EventHandler<State, TextSubmitted> + 'static>(
-        &self,
-        session: &neocogi_com_events::EventSession<State>,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        connect_i_text_events_subscribe_submitted(session, self.as_com_ref(), handler)
-    }
-}
-
-impl TextEventSource for crate::TextboxWidget {
-    /// Delegates directly to the Textbox class projection without an event-interface query.
-    fn connect_changed<State: 'static, Handler: EventHandler<State, TextChanged> + 'static>(
-        &self,
-        session: &neocogi_com_events::EventSession<State>,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        connect_textbox_subscribe_changed_checked(session, self.as_interface(), handler, valid_text_cursor)
-    }
-    /// Delegates directly to the Textbox class projection without an event-interface query.
-    fn connect_submitted<State: 'static, Handler: EventHandler<State, TextSubmitted> + 'static>(
-        &self,
-        session: &neocogi_com_events::EventSession<State>,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        connect_textbox_subscribe_submitted(session, self.as_interface(), handler)
-    }
-}
-
-impl TextEventSource for crate::TextAreaWidget {
-    /// Delegates directly to the TextArea class projection without an event-interface query.
-    fn connect_changed<State: 'static, Handler: EventHandler<State, TextChanged> + 'static>(
-        &self,
-        session: &neocogi_com_events::EventSession<State>,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        connect_text_area_subscribe_changed_checked(session, self.as_interface(), handler, valid_text_cursor)
-    }
-    /// Delegates directly to the TextArea class projection without an event-interface query.
-    fn connect_submitted<State: 'static, Handler: EventHandler<State, TextSubmitted> + 'static>(
-        &self,
-        session: &neocogi_com_events::EventSession<State>,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        connect_text_area_subscribe_submitted(session, self.as_interface(), handler)
-    }
 }
 
 /// Checks the captured cursor against the complete generated UTF-8 text snapshot.
@@ -326,31 +133,6 @@ fn valid_text_cursor(event: &TextChanged) -> Result<(), NcStatus> {
         Ok(())
     } else {
         Err(NC_E_INVALID_ARG)
-    }
-}
-impl<State: 'static> EventSession<State> {
-    /// Connects the widget's concrete event capability and registers its lease in deterministic order.
-    /// Registration during an active session transaction reports BUSY before claiming the producer's port.
-    pub fn subscribe_text_changed<Source: TextEventSource, Handler: EventHandler<State, TextChanged> + 'static>(
-        &self,
-        widget: &Source,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        widget.connect_changed(&self.0, handler)
-    }
-}
-
-/// Canonical generated normalized text submission snapshot.
-pub use neocogi_ui_core_contracts::ITextSubmittedSinkEvent as TextSubmitted;
-impl<State: 'static> EventSession<State> {
-    /// Connects the widget's concrete event capability and registers its lease in deterministic order.
-    /// Registration during an active session transaction reports BUSY before claiming the producer's port.
-    pub fn subscribe_text_submitted<Source: TextEventSource, Handler: EventHandler<State, TextSubmitted> + 'static>(
-        &self,
-        widget: &Source,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        widget.connect_submitted(&self.0, handler)
     }
 }
 
@@ -366,75 +148,6 @@ fn valid_window_event(event: &IWindowSinkEvent) -> Result<(), NcStatus> {
     }
 }
 
-/// Thin application projection from a generated delivery wrapper to its canonical NCIDL event.
-struct WindowProject<Handler> {
-    /// Exact concrete handler stays inside the application binary.
-    handler: Handler,
-}
-impl<State, Handler: EventHandler<State, WindowEvent>> EventHandler<State, IWindowSinkEvent> for WindowProject<Handler> {
-    /// Forwards the validated canonical event without copying a second geometry model.
-    fn handle(&mut self, state: &mut State, event: &IWindowSinkEvent) -> Result<(), NcStatus> {
-        self.handler.handle(state, &event.event)
-    }
-}
-/// Canonical generated dismissal fact; it does not imply permanent destruction.
-pub use neocogi_ui_core_contracts::IPopupSinkEvent as PopupDismissed;
-impl<State: 'static> EventSession<State> {
-    /// Registers the actual window's lifecycle source, including terminal delivery after its closure.
-    pub fn subscribe_window<Handler: EventHandler<State, WindowEvent> + 'static>(
-        &self,
-        window: ComRef<'_, IWindowAbi>,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        let source = window.add_ref().query::<IWindowEventsAbi>()?;
-        connect_i_window_events_subscribe_checked(&self.0, source.as_com_ref(), WindowProject { handler }, valid_window_event)
-    }
-    /// Registers the actual popup's dismissal source; later visibility is read independently from this snapshot.
-    pub fn subscribe_popup<Handler: EventHandler<State, PopupDismissed> + 'static>(
-        &self,
-        popup: ComRef<'_, IPopupAbi>,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        let source = popup.add_ref().query::<IPopupEventsAbi>()?;
-        connect_i_popup_events_subscribe(&self.0, source.as_com_ref(), handler)
-    }
-}
-
-/// Thin application projection from the generated one-field event to its NCIDL selection value.
-struct SelectionProject<Handler> {
-    /// Concrete application handler remains native and is never stored by the producer.
-    handler: Handler,
-}
-impl<State, Handler: EventHandler<State, ChoiceSelection>> EventHandler<State, IChoiceChangedSinkEvent> for SelectionProject<Handler> {
-    /// Forwards the already decoded selection without another COM object or parallel value type.
-    fn handle(&mut self, state: &mut State, event: &IChoiceChangedSinkEvent) -> Result<(), NcStatus> {
-        self.handler.handle(state, &event.selection)
-    }
-}
-impl<State: 'static> EventSession<State> {
-    /// Registers the generated selection fact without claiming the header's private popup port.
-    pub fn subscribe_combo_changed<Handler: EventHandler<State, ChoiceSelection> + 'static>(
-        &self,
-        combo: &crate::ComboWidget,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        connect_combo_subscribe_changed(&self.0, combo.as_interface(), SelectionProject { handler })
-    }
-}
-
-impl<State: 'static> EventSession<State> {
-    /// Registers a compact menu row's actual activation queue in the same deterministic sequence as widget events.
-    pub fn subscribe_menu_item<Handler: EventHandler<State, Activation> + 'static>(
-        &self,
-        item: &crate::MenuItem,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        let source = item.as_interface().add_ref().query::<IActivationEventsAbi>()?;
-        connect_i_activation_events_subscribe(&self.0, source.as_com_ref(), handler)
-    }
-}
-
-/// Decodes an accepted generated completion to an exact host-native path.
 /// Cancellation yields `None`; lossy display text is never used as path identity.
 pub fn completed_file_path(event: &IFileDialogSinkEvent) -> Result<Option<std::path::PathBuf>, NcStatus> {
     match event {
@@ -447,21 +160,11 @@ pub fn completed_file_path(event: &IFileDialogSinkEvent) -> Result<Option<std::p
 fn valid_file_dialog_path(event: &IFileDialogSinkEvent) -> Result<(), NcStatus> {
     completed_file_path(event).map(|_| ())
 }
-impl<State: 'static> EventSession<State> {
-    /// Registers the picker's actual completion queue in the same deterministic application sequence.
-    pub fn subscribe_file_dialog<Handler: EventHandler<State, IFileDialogSinkEvent> + 'static>(
-        &self,
-        dialog: &crate::FileDialog,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        let source = dialog.as_interface().add_ref().query::<IFileDialogEventsAbi>()?;
-        connect_i_file_dialog_events_subscribe_checked(&self.0, source.as_com_ref(), handler, valid_file_dialog_path)
-    }
-}
 
 #[cfg(test)]
 mod checked_adapter_tests {
     use super::*;
+    use neocogi_ui_core_contracts::create_i_text_changed_sink_event_sink;
     use neocogi_com::NcCopyFromBufferOffset;
 
     /// Concrete counter behavior; these tests require no hidden captured dependencies.
@@ -488,7 +191,7 @@ mod checked_adapter_tests {
     #[test]
     fn generated_numeric_adapter_checks_before_state_borrow() {
         let session = EventSession::new(0u32);
-        let sink = create_i_numeric_sink_checked_event_sink(&session.0, Count, valid_numeric).unwrap();
+        let mut sink = create_i_numeric_sink_event_sink(&session, Count, Some(valid_numeric)).unwrap();
         let held = session.state_mut().unwrap();
         assert_eq!(sink.changed(f32::NAN), Err(NC_E_INVALID_ARG));
         assert_eq!(sink.changed(1.0), Err(neocogi_com_events::EVENT_E_BUSY));
@@ -502,7 +205,7 @@ mod checked_adapter_tests {
     #[test]
     fn generated_text_adapter_rejects_offset_and_split_cursor() {
         let session = EventSession::new(0u32);
-        let sink = create_i_text_changed_sink_checked_event_sink(&session.0, Count, valid_text_cursor).unwrap();
+        let mut sink = create_i_text_changed_sink_event_sink(&session, Count, Some(valid_text_cursor)).unwrap();
         assert_eq!(sink.changed(NcCopyFromBufferOffset::new(1, "é".as_bytes()), 2), Err(NC_E_INVALID_ARG));
         assert_eq!(sink.changed(NcCopyFromBufferOffset::new(0, "é".as_bytes()), 1), Err(NC_E_INVALID_ARG));
         sink.changed(NcCopyFromBufferOffset::new(0, "é".as_bytes()), 2).unwrap();

@@ -407,7 +407,7 @@ fn run() -> Result<(), HostError> {
         let mut button = host.ui.widgets().button(label)?;
         button.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
         grid.insert(index as u32, &button, GridExtent { columns: 1, rows: 1 })?.finish()?;
-        events.subscribe_activation(&button, action)?;
+        events.subscribe(button.activated(), action)?;
     }
     host.run(events)
 }

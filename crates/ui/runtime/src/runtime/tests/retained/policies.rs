@@ -298,9 +298,10 @@ fn deep_window_family_preserves_inherited_policy_through_mutation_and_teardown()
 
 /// Captures the production window event stream in the application-owned session.
 struct WindowEvents;
-impl EventHandler<Vec<WindowEvent>, WindowEvent> for WindowEvents {
+impl EventHandler<Vec<WindowEvent>, neocogi_ui::events::WindowChanged> for WindowEvents {
     /// Preserves immutable event order rather than inspecting a mutable window later.
-    fn handle(&mut self, values: &mut Vec<WindowEvent>, event: &WindowEvent) -> Result<(), NcStatus> {
+    fn handle(&mut self, values: &mut Vec<WindowEvent>, event: &neocogi_ui::events::WindowChanged) -> Result<(), NcStatus> {
+        let event = &event.event;
         values.push(*event);
         Ok(())
     }
@@ -313,7 +314,9 @@ fn title_drag_and_close_deliver_window_events_through_the_production_session() {
     let body = fixture.ui.widgets().button("body").unwrap();
     let owner = fixture.ui.window("chrome", Rect { x: 30, y: 30, width: 180, height: 120 }, &body).unwrap();
     let events = EventSession::new(Vec::new());
-    events.subscribe_window(owner.as_com_ref(), WindowEvents).unwrap();
+    events
+        .subscribe(neocogi_ui::events::window_events(owner.as_com_ref()).unwrap(), WindowEvents)
+        .unwrap();
     fixture.frame(VIEW).unwrap();
     pointer(&fixture.ui, Point { x: 70, y: 40 }, true);
     fixture.ui.input(UiInput::Pointer(Point { x: 80, y: 48 }), "").unwrap();

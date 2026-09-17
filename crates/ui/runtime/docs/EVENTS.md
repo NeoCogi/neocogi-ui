@@ -19,7 +19,7 @@ impl EventHandler<u32, Activation> for Count {
 }
 fn update(ui: &Ui, button: &ButtonWidget, size: Size) -> Result<(), NcStatus> {
     let events = EventSession::new(0u32);
-    events.subscribe_activation(button, Count)?;
+    events.subscribe(button.activated(), Count)?;
     ui.update_with_events(size, &events)
 }
 ```
@@ -29,24 +29,18 @@ from `neocogi_ui::events`). The generated `neocogi.com.events` module owns the
 lease and dispatcher ABI; the support crate owns typed queues and application
 sessions. Standard snapshots are generated from UI NCIDL `event` declarations
 and already implement `EventPayload`, which names their concrete COM sink.
-Each source port generates plain and checked registration connectors. Checked
-adapters run a concrete domain validator after decoding and before application-
-state borrowing, replacing handwritten COM sink objects without putting UI
-rules into generic event transport.
+Each source port generates one `EventPort` with a concrete associated event and
+an optional domain validator. Applications call `session.subscribe(port, handler)`;
+UI getters install their domain checks before exposing the port. The generic COM
+session claims registration before constructing the sink or calling the source,
+restores order on failure, and retains only the successful lease. The port's owned
+source projection is released after setup.
 
-The public generated `connect_*` helpers use private, consumed
-`EventConnector<State, Handler>` implementations. Each operation stores its
-borrowed source and optional validator in named fields, and calls
-`session.register(handler, connector)` rather than capturing them in a closure.
-Registration remains owned by the generic COM session: it excludes dispatch and
-registration reentry before creating the sink or calling the source, restores
-the previous ordered sequence on failure, and retains only the successful lease.
-Applications and custom NCIDL plugin families need no handwritten connector.
-This subscription setup runs once; event delivery still invokes the local
-`EventHandler` trait implemented on concrete structs or enums with explicit
-dependencies. Closures and function pointers are not automatically event handlers.
-The Rust support protocol is version 2; NCIDL event and
-COM wire contracts are unchanged.
+Generated sinks use `&mut self`, so their handlers are ordinary concrete fields.
+Named structs and enums implement `EventHandler`; closures are not implicitly
+adapted. The one session implementation is reexported by UI. Rust binding protocol
+3 enforces compiler/support agreement; rebuild plugins for the changed sink
+signatures. Plugin descriptor and runtime table ABIs remain v1.
 
 `emit` never invokes application code. `subscribe` returns the application-owned
 `IEventSubscription`; the source does not retain the sink or keep the widget alive.
@@ -59,12 +53,13 @@ identity, then caches the driver at the mounted node. Drivers are copied in
 descendant-first order after traversal, invoked before the application session,
 and skipped if an earlier callback removed their owning mount. Both kinds of
 callback share the same finite dispatch budget. `Ui::update_with_events`
-accepts the generic `neocogi_com_events::EventSession<State>` as well as the UI
-family facade through `EventDispatchSource`.
+accepts the same generic `EventSession<State>` for applications and components.
+Ordinary `Ui::update` also drives mounted private sessions automatically.
 
 There is one subscriber per source. Delivery preserves FIFO within a source and
-registration order across a session. A failed callback consumes its attempted
-snapshot and preserves the unattempted remainder ahead of newer emissions.
+registration order across a session. A dispatch window fixes the eligible prefix length; each callback pops one
+snapshot, leaving unattempted events in place on failure. Newly emitted events
+wait for a later source visit, so callback recursion cannot extend the current window.
 Cancellation releases callback ownership even if another caller retains the lease.
 Source closure discards ordinary interaction work; explicit terminal events and
 finished request outcomes follow their documented distinct lifetime rules.
