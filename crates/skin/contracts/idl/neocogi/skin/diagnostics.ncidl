@@ -1,6 +1,6 @@
 #[version(1)]
 /// Owned diagnostic snapshots for appearance and external-theme compilation failures.
-trait ISkinDiagnostics {
+interface ISkinDiagnostics {
     /// Returns the latest schema, filesystem, decoding, or validation cause as immutable text.
     fn diagnostic(&self) -> Result<String>;
 }

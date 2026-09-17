@@ -1,6 +1,6 @@
 #[version(1)]
 /// Constructible button class with only its shared widget and leaf-layout protocols separated.
-class Button: IWidget + ILeafLayout {
+interface Button: IWidget + ILeafLayout {
 
     /// Replaces the complete UTF-8 label; the logical input offset must be zero.
     fn set_label(&mut self, label: &[u8]) -> Result<()>;

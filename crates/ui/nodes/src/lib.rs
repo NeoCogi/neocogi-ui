@@ -101,7 +101,6 @@ neocogi_com::factory_plugin! {
     name = "neocogi.ui.nodes.runtime",
     version = "0.9.0-alpha.0",
     dependencies = [UI_RUNTIME_PLUGIN_ID],
-    contracts = [neocogi_ui_nodes_contracts::MODULE],
     factory = NodesPluginFactoryObject,
 }
 

@@ -125,7 +125,7 @@ struct ContainerGeometry {
 /// Owned scoped child geometry service; no borrowed runtime node crosses COM.
 /// Measurement permits only count and measure. Placement permits every method.
 /// Calls reject expired/parent tokens and direct reentry while a child is active.
-trait ILayoutService {
+interface ILayoutService {
     /// Returns the direct child count for this exact active invocation.
     fn child_count(&self, scope: LayoutScope) -> Result<u32>;
     /// Measures a child's outer preference, including its own frame geometry.
@@ -142,7 +142,7 @@ trait ILayoutService {
 
 #[version(1)]
 /// Container policy beside IWidget on the same object; mutually exclusive with ILeafLayout.
-trait IContainerLayout {
+interface IContainerLayout {
     /// Returns this container's immutable, host-issued collection identity for its entire lifetime.
     /// The implementation retains its matching editor privately and publishes metadata after every committed edit.
     fn children(&self) -> Result<IChildren>;
@@ -159,7 +159,7 @@ trait IContainerLayout {
 /// Private topology authority retained by a container implementation.
 /// Its read-only view is a distinct COM identity: querying that view cannot
 /// bypass a concrete container's matching Linear/Grid/domain edge metadata.
-trait IChildrenEditor {
+interface IChildrenEditor {
     /// Returns the read-only capability used by the runtime's authoritative traversal.
     fn view(&self) -> Result<IChildren>;
     /// Inserts one unmounted child at index (including count), committing only after validation.
@@ -185,7 +185,7 @@ struct ChildEditResult {
 
 #[version(1)]
 /// Common editing capability inherited by built-in concrete container interfaces.
-trait IContainer: IWidget {
+interface IContainer: IWidget {
     /// Returns the stable read-only view; editing stays on the concrete container to preserve edge metadata.
     fn children(&self) -> Result<IChildren>;
     /// Removes one complete subtree and matching edge metadata; Ok reports a committed edit.
@@ -209,7 +209,7 @@ struct ScrollInfo {
 
 #[version(1)]
 /// Shared scroll policy; this capability cannot replace the fixed content of a composed editor.
-trait IScrolling: IWidget {
+interface IScrolling: IWidget {
     /// Returns one coherent request/range/viewport observation without a parent-widget backpointer.
     fn info(&self) -> Result<ScrollInfo>;
     /// Requests nonnegative offsets; next placement clamps against freshly measured content.
@@ -224,7 +224,7 @@ trait IScrolling: IWidget {
 
 #[version(1)]
 /// Shared whole-text editing inherited by text controls and labelled list entries.
-trait ITextContent: IWidget {
+interface ITextContent: IWidget {
     /// Returns an independently owned immutable UTF-8 snapshot.
     fn text(&self) -> Result<String>;
     /// Replaces complete UTF-8 text at offset zero, applying the control's line policy.
@@ -233,7 +233,7 @@ trait ITextContent: IWidget {
 
 #[version(1)]
 /// Common byte-cursor editing on the same allocation as the text/widget bases.
-trait ITextEditor: ITextContent {
+interface ITextEditor: ITextContent {
     /// Returns the byte offset at a Unicode scalar boundary, independent of glyph width.
     fn cursor(&self) -> Result<u64>;
     /// Clamps to the preceding Unicode scalar boundary and the current text length.

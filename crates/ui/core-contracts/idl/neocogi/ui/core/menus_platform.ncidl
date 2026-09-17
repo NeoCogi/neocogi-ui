@@ -65,7 +65,7 @@ event IChoiceChangedSink {
 /// The menu owns hierarchy, navigation, placement and committed selection. A header control such
 /// as Combo owns only its presentation and delegates these menu responsibilities through this
 /// interface. Mutations are silent; only user submission publishes `IChoiceChangedSink`.
-trait IChoiceMenu {
+interface IChoiceMenu {
     /// Returns the exact committed stable identity, including explicit absence.
     fn selection(&self) -> Result<ChoiceSelection>;
     /// Copies the selected leaf label, or an empty string when no leaf is committed.
@@ -92,7 +92,7 @@ trait IChoiceMenu {
 
 #[version(1)]
 /// Construction capability for selection menus managed by the core popup forest.
-trait IChoiceMenus {
+interface IChoiceMenus {
     /// Creates one validated hidden choice hierarchy owned by an authenticated ordinary window.
     fn create_choice_menu(
         &self,
@@ -105,7 +105,7 @@ trait IChoiceMenus {
 
 #[version(1)]
 /// Live compact row capability, editable before mounting and while its owning surface exists.
-trait IMenuItem {
+interface IMenuItem {
     /// Returns the same label used by measurement, paint and captured submissions.
     fn label(&self) -> Result<String>;
     /// Replaces complete UTF-8 display text without publishing user activation.
@@ -126,7 +126,7 @@ trait IMenuItem {
 
 #[version(1)]
 /// Unique declaration tree consumed once by the owning manager; retained item capabilities remain live afterward.
-trait IMenuBuilder {
+interface IMenuBuilder {
     /// Appends an enabled unmarked row and returns its editing/event capability.
     fn item(&self, label: &[u8]) -> Result<IMenuItem>;
     /// Appends one noninteractive separator in exact declaration order.
@@ -137,7 +137,7 @@ trait IMenuBuilder {
 
 #[version(1)]
 /// Menu construction and attachment capability on the same runtime identity as the window manager.
-trait IMenus {
+interface IMenus {
     /// Creates one root declaration; for a bar its direct entries must all be submenus.
     fn create(&self, label: &[u8]) -> Result<IMenuBuilder>;
     /// Installs a bar once on a live window; validates owner, declaration shape and prior attachment before transfer.

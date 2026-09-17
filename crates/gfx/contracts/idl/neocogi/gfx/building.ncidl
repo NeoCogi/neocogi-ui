@@ -27,7 +27,7 @@ struct AssetAppearanceRevision {
 
 #[version(2)]
 /// One transactional font and image packing session with concrete named operations.
-trait IAssetBuilder {
+interface IAssetBuilder {
     /// Adds a PNG icon under a distinct UTF-8 name and exact native path; byte offset is zero.
     fn add_icon(&self, name: &[u8], path: &INativePath) -> Result<()>;
     /// Adds one complete bounded PNG buffer without exposing its decoder or atlas placement.

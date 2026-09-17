@@ -48,7 +48,6 @@ impl GfxPluginFactory for GfxPluginFactoryObject {
 neocogi_com::factory_plugin! {
     name = "neocogi.gfx.runtime",
     version = "0.9.0-alpha.0",
-    contracts = [neocogi_gfx_contracts::MODULE],
     factory = GfxPluginFactoryObject,
 }
 

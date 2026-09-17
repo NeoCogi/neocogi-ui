@@ -9,7 +9,7 @@
 
 #[version(1)]
 /// Optional typography capability on concrete text-bearing widget objects.
-trait IFontStyle {
+interface IFontStyle {
     /// Selects a semantic role and invalidates measurement only when it differs.
     fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact font in this widget's runtime bundle before committing.
@@ -19,7 +19,7 @@ trait IFontStyle {
 
 #[version(1)]
 /// Multiline editing and wrapping, implemented by the real editor and forwarded by its composed root.
-trait IMultilineEditor: ITextEditor {
+interface IMultilineEditor: ITextEditor {
     /// Returns the current explicit wrapping policy.
     fn wrapping(&self) -> Result<TextWrapping>;
     /// Changes wrapping and schedules both geometry refresh and caret reveal.

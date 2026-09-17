@@ -1,6 +1,6 @@
 //! Independent provider roots bind and deliver real node events through the production engine.
 
-use neocogi_com::{ComPtr, NcStatus, Runtime, guid_from_qualified_name, NC_E_NOINTERFACE};
+use neocogi_com::{ComInterface, ComPtr, NcStatus, Runtime, guid_from_qualified_name, NC_E_NOINTERFACE};
 use neocogi_ui::{EventHandler, EventSession, KeyCode, KeyStroke, Rect, Size, Ui, UiInput, UI_E_OWNER};
 use neocogi_ui::events::Activation;
 use neocogi_ui_core_contracts::UiPluginFactoryAbi;
@@ -38,8 +38,8 @@ fn independently_activated_nodes_bind_only_to_their_core_host_and_deliver_events
     let registry = Runtime::global();
     let core_description = neocogi_ui_runtime::factory_plugin_description();
     let nodes_description = neocogi_ui_nodes::factory_plugin_description();
-    assert_eq!(core_description.contract_count, 1);
-    assert_eq!(nodes_description.contract_count, 1);
+    assert_eq!(core_description.root_factory, UiPluginFactoryAbi::INTERFACE_ID);
+    assert_eq!(nodes_description.root_factory, NodesPluginFactoryAbi::INTERFACE_ID);
     assert_eq!(nodes_description.dependency_count, 1);
     // SAFETY: Both descriptions and their code/data remain in this linked test executable.
     unsafe {

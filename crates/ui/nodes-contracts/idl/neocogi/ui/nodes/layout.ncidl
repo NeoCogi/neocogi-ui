@@ -74,7 +74,7 @@ struct GridExtent {
 
 #[version(1)]
 /// Constructible directional container whose concrete editing API is one class contract.
-class Linear: IWidget + IContainerLayout {
+interface Linear: IWidget + IContainerLayout {
     /// Returns the stable read-only topology view for this container's lifetime.
     fn children(&self) -> Result<IChildren>;
     /// Removes one complete subtree and matching edge metadata.
@@ -101,7 +101,7 @@ class Linear: IWidget + IContainerLayout {
 
 #[version(1)]
 /// Constructible Grid whose topology, spans, and both track axes share one class contract.
-class Grid: IWidget + IContainerLayout {
+interface Grid: IWidget + IContainerLayout {
     /// Returns the stable read-only topology view for this container's lifetime.
     fn children(&self) -> Result<IChildren>;
     /// Removes one complete subtree and matching span metadata.
@@ -128,7 +128,7 @@ class Grid: IWidget + IContainerLayout {
 
 #[version(1)]
 /// Constructible scroll composite with one replaceable content root and private structural roles.
-class ScrollArea: IWidget + IContainerLayout + IScrolling {
+interface ScrollArea: IWidget + IContainerLayout + IScrolling {
     /// Returns the actual application content widget, without its surrounding transform surface.
     fn content(&self) -> Result<IWidget>;
     /// Validates replacement before closing old content; structural roles and model identity stay fixed.
@@ -146,7 +146,7 @@ class ScrollArea: IWidget + IContainerLayout + IScrolling {
 
 #[version(1)]
 /// Constructible fixed header/body composition exposing its actual editable child objects.
-class Disclosure: IWidget + IContainerLayout {
+interface Disclosure: IWidget + IContainerLayout {
     /// Returns shared expansion state also changed by header activation and keyboard input.
     fn expanded(&self) -> Result<bool>;
     /// Changes expansion and retains layout invalidation even while this subtree is hidden.

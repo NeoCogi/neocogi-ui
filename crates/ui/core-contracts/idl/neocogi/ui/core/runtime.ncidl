@@ -1,6 +1,6 @@
 #[version(2)]
 /// Scoped facade which appends typed operations to the runtime's current frame paint context.
-trait IPainter {
+interface IPainter {
     /// Records a nonnegative-width solid line with finite local endpoints. Zero width draws nothing.
     fn stroke_line(&mut self, scope: PaintScope, from: PaintPoint, to: PaintPoint, width: f32, rgba: u32) -> Result<()>;
     /// Records finite local polygon points at offset zero; fewer than three points draw nothing.
@@ -34,7 +34,7 @@ trait IPainter {
 
 #[version(1)]
 /// Common retained widget capability shared by all concrete widget interfaces.
-trait IWidget {
+interface IWidget {
     /// Returns the allocating runtime's identity service, which owns no tree.
     fn host(&self) -> Result<IWidgetHost>;
     /// Claims the only tree attachment; a second call fails without changing state.
@@ -58,7 +58,7 @@ trait IWidget {
 
 #[version(1)]
 /// Ordered child access, independent of concrete container layout policy.
-trait IChildren {
+interface IChildren {
     /// Returns the current number of direct children.
     fn child_count(&self) -> Result<u32>;
     /// Returns an owned reference to one direct child; topology ownership is a separate contract.
@@ -67,7 +67,7 @@ trait IChildren {
 
 #[version(1)]
 /// Immutable resource view shared for a complete layout transaction.
-trait ITextMetrics {
+interface ITextMetrics {
     /// Measures a UTF-8 button label, including theme padding.
     fn button_size(&self, text: &[u8]) -> Result<Size>;
 }
@@ -101,7 +101,7 @@ struct LayoutLimits {
 
 #[version(1)]
 /// Preferred-size capability for a leaf; measurement may refresh private resource caches.
-trait ILeafLayout {
+interface ILeafLayout {
     /// Computes preferred dimensions from explicit finite/unbounded axis constraints.
     fn measure(&mut self, bounds: LayoutLimits, metrics: &ITextMetrics) -> Result<Size>;
 }
@@ -188,7 +188,7 @@ struct WindowSnapshot {
 
 #[version(1)]
 /// Logical UI window retained independently of its runtime's tree membership.
-trait IWindow {
+interface IWindow {
     /// Copies current authoritative geometry, visibility and policy without caching app-side state.
     fn snapshot(&self) -> Result<WindowSnapshot>;
     /// Returns an immutable UTF-8 title snapshot.
@@ -213,7 +213,7 @@ trait IWindow {
 
 #[version(1)]
 /// Window policy and topology are owned by the UI runtime object.
-trait IWindowManager {
+interface IWindowManager {
     /// Creates a visible structural child; a modal parent is rejected before claiming the widget.
     fn create_child(
         &self,
@@ -243,14 +243,14 @@ trait IWindowManager {
 
 #[version(1)]
 /// Runtime-bound authority used to authenticate independently provided node factories.
-trait IConstructionHost {
+interface IConstructionHost {
     /// Returns the non-owning widget authority used by independently implemented node classes.
     fn host(&self) -> Result<IWidgetHost>;
 }
 
 #[version(2)]
 /// One constructible retained UI with input, rendering, and resource ownership.
-class UiRuntime: IInputSink + IWindowManager + IMenus + IChoiceMenus {
+interface UiRuntime: IInputSink + IWindowManager + IMenus + IChoiceMenus {
 
     /// Returns the core construction authority without exposing a concrete nodes factory.
     fn construction_host(&self) -> Result<IConstructionHost>;
@@ -279,7 +279,7 @@ class UiRuntime: IInputSink + IWindowManager + IMenus + IChoiceMenus {
 
 #[version(1)]
 /// Runtime identity and mutation authority without a reference back to its tree.
-trait IWidgetHost {
+interface IWidgetHost {
     /// Retains the current immutable resource revision without owning the runtime tree.
     /// Custom widgets cache bulk metadata by this bundle identity and refresh it during the next
     /// measure/paint after replacement; never retain UVs or glyph metrics across a different revision.
@@ -294,7 +294,7 @@ trait IWidgetHost {
 
 #[version(2)]
 /// A popup has transient placement and cannot be passed to ordinary window operations.
-trait IPopup {
+interface IPopup {
     /// Reports whether this popup belongs to the manager's active visible branch.
     fn visibility(&self) -> Result<Visibility>;
     /// Activates the popup's input scope at the latest consumed pointer position.

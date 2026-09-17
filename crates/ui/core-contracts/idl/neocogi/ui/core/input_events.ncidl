@@ -101,7 +101,7 @@ event IActivationSink {
 
 #[version(1)]
 /// Shared labelled activation source; the producer never owns the returned lease or its sink.
-trait IActivationEvents {
+interface IActivationEvents {
     /// Connects the exclusive subscriber and returns its ownership lease.
     event subscribe(&self): IActivationSink;
 }
@@ -122,7 +122,7 @@ event ITextSubmittedSink {
 
 #[version(1)]
 /// Shared editor event family; changed and submitted are independent exclusive ports.
-trait ITextEvents {
+interface ITextEvents {
     /// Connects one changed consumer without claiming the separate submitted port.
     event subscribe_changed(&mut self): ITextChangedSink;
     /// Connects one submitted consumer without claiming the separate changed port.
@@ -169,7 +169,7 @@ event IWindowSink {
 
 #[version(1)]
 /// Subscription capability on the actual logical window object; the manager owns its existing native source.
-trait IWindowEvents {
+interface IWindowEvents {
     /// Connects the current source without making a retained window reference prolong native tree ownership.
     event subscribe(&self): IWindowSink;
 }
@@ -183,7 +183,7 @@ event IPopupSink {
 
 #[version(1)]
 /// Subscription capability on the actual popup object and its existing manager-owned source.
-trait IPopupEvents {
+interface IPopupEvents {
     /// Returns an exclusive application-owned dismissal lease without retaining application state on the producer.
     event subscribe(&self): IPopupSink;
 }
@@ -201,7 +201,7 @@ event IFileDialogSink {
 /// Optional event-driving capability on any mounted UI component.
 /// It yields a separate COM allocation, so callback edits never reenter the
 /// mounted widget's object-wide call gate through the driver itself.
-trait IComponentEventProvider {
+interface IComponentEventProvider {
     /// Returns the component-owned private dispatcher used before application dispatch.
     /// The dispatcher must have a distinct IUnknown identity from this widget.
     fn private_dispatcher(&self) -> Result<IEventDispatcher>;
@@ -209,14 +209,14 @@ trait IComponentEventProvider {
 
 #[version(1)]
 /// Independent completion source for this reusable picker, using the shared application-owned lease transport.
-trait IFileDialogEvents {
+interface IFileDialogEvents {
     /// Connects one concrete completion consumer without retaining the application on the producer.
     event subscribe(&self): IFileDialogSink;
 }
 
 #[version(1)]
 /// Nodes-provider file picker controller and real COM controls; retaining it does not keep its runtime open.
-trait IFileDialog {
+interface IFileDialog {
     /// Returns the actual stable modal window capability for ordinary lifecycle and geometry operations.
     fn window(&self) -> Result<IWindow>;
     /// Reads and validates a complete native directory before changing request state or showing the modal.
@@ -233,7 +233,7 @@ trait IFileDialog {
 
 #[version(1)]
 /// Standard picker construction capability exposed by a nodes factory bound to window management.
-trait IFileDialogs {
+interface IFileDialogs {
     /// Creates one hidden reusable modal owned by the authenticated ordinary window.
     fn create(&self, parent: &IWindow) -> Result<IFileDialog>;
 }

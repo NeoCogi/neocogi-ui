@@ -377,14 +377,14 @@ struct AssetChromeVisuals {
 /// Logical resource namespace authenticated by canonical COM identity.
 /// Derived bundles retain this capability and preserve the meaning of existing names.
 /// Independently created catalogs remain unrelated even when their names match.
-trait IAssetCatalog {}
+interface IAssetCatalog {}
 
 #[version(3)]
 /// Immutable, self-contained resource revision. Every copy writes the exact requested range.
 /// Names partition their byte table in font-then-icon order. Fonts require an underscore
 /// fallback; body and the standard semantic icon names are mandatory. Consumers import
 /// once, validating all records and pixels before publication. No per-glyph COM calls occur.
-trait IAssetBundle: IRgbaImage {
+interface IAssetBundle: IRgbaImage {
     /// Retains the logical namespace shared by compatible derived revisions.
     fn catalog(&self) -> Result<IAssetCatalog>;
     /// Returns bounded allocation counts and dimensions.

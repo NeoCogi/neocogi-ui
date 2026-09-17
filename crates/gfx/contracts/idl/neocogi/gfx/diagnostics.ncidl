@@ -1,6 +1,6 @@
 #[version(1)]
 /// Owned diagnostic snapshots for decoding, rasterization, and packing failures.
-trait IGfxDiagnostics {
+interface IGfxDiagnostics {
     /// Returns the latest native or decoder cause as independent immutable text.
     fn diagnostic(&self) -> Result<String>;
 }

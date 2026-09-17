@@ -27,14 +27,14 @@ struct WidgetCalls {
 
 #[version(1)]
 /// Example diagnostics remain readable after logical closure for lifetime assertions.
-trait IWidgetProbe {
+interface IWidgetProbe {
     /// Returns counts from the actual allocation, with no callback or copied semantic model.
     fn calls(&self) -> Result<WidgetCalls>;
 }
 
 #[version(1)]
 /// A custom control created only through ExtensionProvider whose shared widget capabilities remain queryable.
-class Counter: IWidget + ILeafLayout + IActivationEvents + IWidgetProbe {
+interface Counter: IWidget + ILeafLayout + IActivationEvents + IWidgetProbe {
 
     /// Reads the actual current activation count.
     fn count(&self) -> Result<u32>;
@@ -48,7 +48,7 @@ class Counter: IWidget + ILeafLayout + IActivationEvents + IWidgetProbe {
 
 #[version(1)]
 /// A one-child container demonstrates a domain-specific layout policy over the shared child editor.
-trait IInset: IContainer {
+interface IInset: IContainer {
     /// Installs or replaces its one child; removed-child teardown uses the ordinary committed outcome.
     fn set_child(&mut self, child: &IWidget) -> Result<ChildEditResult>;
     /// Sets a nonnegative inset, bounded to avoid arithmetic overflow in doubled extents.

@@ -43,7 +43,6 @@ neocogi_com::factory_plugin! {
     name = "neocogi.skin.runtime",
     version = "0.9.0-alpha.0",
     dependencies = [GFX_PLUGIN_ID],
-    contracts = [neocogi_skin_contracts::MODULE],
     factory = SkinPluginFactoryObject,
 }
 
