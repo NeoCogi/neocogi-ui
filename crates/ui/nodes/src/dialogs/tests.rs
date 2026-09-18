@@ -78,7 +78,7 @@ impl EventHandler<Vec<Option<PathBuf>>, IFileDialogSinkEvent> for Record {
 /// Attaches a normal application-owned completion lease to the real picker source.
 fn session(fixture: &Fixture) -> EventSession<Vec<Option<PathBuf>>> {
     let events = EventSession::new(Vec::new());
-    events.subscribe(fixture.handle.completed().unwrap(), Record).unwrap();
+    events.subscribe(fixture.handle.completed(), Record).unwrap();
     events
 }
 
@@ -138,7 +138,7 @@ fn empty_acceptance_and_independent_picker_requests_use_actual_controls() {
 
     let second = fixture.ui.file_dialog(fixture.owner.as_com_ref()).unwrap();
     let second_events = EventSession::new(Vec::new());
-    second_events.subscribe(second.completed().unwrap(), Record).unwrap();
+    second_events.subscribe(second.completed(), Record).unwrap();
     second.open(&neocogi_ui::FileDialogRequest::new(directory.path())).unwrap();
     second.cancel().unwrap();
     fixture.ui.update_with_events(SIZE, &events).unwrap();
@@ -369,7 +369,7 @@ fn closed_picker_preserves_all_completed_requests_during_manual_handler_runtime_
         ui: crate::bind_builtin_nodes(fixture.runtime.clone()).unwrap(),
         completions: 0,
     });
-    events.subscribe(fixture.handle.completed().unwrap(), Reenter).unwrap();
+    events.subscribe(fixture.handle.completed(), Reenter).unwrap();
     for _ in 0..2 {
         fixture.open(directory.path());
         fixture.handle.cancel().unwrap();

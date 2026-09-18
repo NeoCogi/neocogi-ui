@@ -349,7 +349,7 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     ui.update_with_events(size, &events)?;
     assert_eq!(*events.state()?, 1);
     let picker = ui.file_dialog(window.as_com_ref())?;
-    events.subscribe(picker.completed()?, FileSelection(directory.0.join(" native file ")))?;
+    events.subscribe(picker.completed(), FileSelection(directory.0.join(" native file ")))?;
     let mut request = FileDialogRequest::new(&directory.0);
     request.rect = Rect { x: 10, y: 10, width: 620, height: 370 };
     picker.open(&request)?;

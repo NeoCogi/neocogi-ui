@@ -547,7 +547,7 @@ fn create() -> Result<(Host, EventSession<State>), HostError> {
         events.subscribe(state.entry.submitted(), Observe)?;
         events.subscribe(state.combo.changed(), Observe)?;
         if let Some(dialog) = &state.file_dialog {
-            events.subscribe(dialog.completed()?, Observe)?;
+            events.subscribe(dialog.completed(), Observe)?;
         }
     }
     build_controls(&host, &events, &mut main_body)?;

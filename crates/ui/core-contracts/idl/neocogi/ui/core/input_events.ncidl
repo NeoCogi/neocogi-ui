@@ -208,13 +208,6 @@ interface IComponentEventProvider {
 }
 
 #[version(1)]
-/// Independent completion source for this reusable picker, using the shared application-owned lease transport.
-interface IFileDialogEvents {
-    /// Connects one concrete completion consumer without retaining the application on the producer.
-    port: IFileDialogSink;
-}
-
-#[version(1)]
 /// Nodes-provider file picker controller and real COM controls; retaining it does not keep its runtime open.
 interface IFileDialog {
     /// Returns the actual stable modal window capability for ordinary lifecycle and geometry operations.
@@ -229,6 +222,8 @@ interface IFileDialog {
     fn close(&self) -> Result<()>;
     /// Copies the latest failed directory-read diagnostic without replacing the previous valid listing.
     fn diagnostic(&self) -> Result<String>;
+    /// Reports acceptance or cancellation of a request through the dialog's own capability.
+    port completed: IFileDialogSink;
 }
 
 #[version(1)]

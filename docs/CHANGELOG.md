@@ -2,6 +2,11 @@
 
 ## 0.9.0-alpha.0 (unreleased)
 
+- Declare ports by stream name and sink, generate native `.name()` accessors,
+  and remove public subscription helper functions. Put file-dialog completion
+  directly on `IFileDialog`; `picker.completed()` is now infallible. Keep domain
+  validation, queued delivery, and automatic nested-component dispatch.
+
 - Use one typed event session and source-side ports for built-ins and plugins.
   Mutable sink receivers protect ordinary handler fields; bounded FIFO windows
   preserve unattempted events without detaching or restoring batches.

@@ -111,13 +111,8 @@ impl crate::MenuItem {
 
 impl crate::FileDialog {
     /// Returns checked native-path completions, including outcomes retained after closure.
-    pub fn completed(&self) -> Result<impl EventPort<Event = IFileDialogSinkEvent>, NcStatus> {
-        Ok(self
-            .as_interface()
-            .add_ref()
-            .query::<IFileDialogEventsAbi>()?
-            .port()
-            .checked(valid_file_dialog_path))
+    pub fn completed(&self) -> impl EventPort<Event = IFileDialogSinkEvent> {
+        self.as_interface().completed().checked(valid_file_dialog_path)
     }
 }
 

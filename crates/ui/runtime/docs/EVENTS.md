@@ -29,12 +29,18 @@ from `neocogi_ui::events`). The generated `neocogi.com.events` module owns the
 lease and dispatcher ABI; the support crate owns typed queues and application
 sessions. Standard snapshots are generated from UI NCIDL `event` declarations
 and already implement `EventPayload`, which names their concrete COM sink.
-Each source port generates one `EventPort` with a concrete associated event and
-an optional domain validator. Applications call `session.subscribe(port, handler)`;
+Each `port name: Sink;` generates a `.name()` accessor returning an `EventPort`
+with a concrete associated event and an optional domain validator. Import the
+source's generated `Ports` trait to use it on owned or borrowed COM handles.
+Accessors do not query or connect; the session calls the generated shared-receiver
+subscription operation. Applications call `session.subscribe(port, handler)`;
 UI getters install their domain checks before exposing the port. The generic COM
 session claims registration before constructing the sink or calling the source,
 restores order on failure, and retains only the successful lease. The port's owned
-source projection is released after setup.
+source projection is released after setup. The file dialog declares
+`port completed: IFileDialogSink;` directly on `IFileDialog`, so
+`session.subscribe(picker.completed(), handler)` needs no extra capability query
+or fallible getter. The UI wrapper still validates native-path completions.
 
 Generated sinks use `&mut self`, so their handlers are ordinary concrete fields.
 Named structs and enums implement `EventHandler`; closures are not implicitly

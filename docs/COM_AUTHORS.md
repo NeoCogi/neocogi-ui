@@ -115,8 +115,10 @@ ui.render(drawable_size, renderer.as_com_ref())?;
 lease.cancel()?; // Explicit cancellation; dropping the session also cancels its leases.
 ```
 
-The event capabilities are separate from editing capabilities and may be queried
-once when subscribing. Pass these ports to the same session API:
+Ports normally belong directly to their owning interface alongside editing
+methods. A separate source interface is useful for an optional or shared
+capability, such as generic activation, and can be queried when subscribing.
+Pass all ports to the same session API:
 
 | Port | Producers | Captured payload |
 | --- | --- | --- |
@@ -135,12 +137,14 @@ once when subscribing. Pass these ports to the same session API:
 Independent producers share `neocogi_com_events::EventSource<E>` with built-ins;
 the UI facade reexports this type for UI authors.
 Standard UI snapshots are generated from `event` NCIDL declarations, and their
-source subscription methods and typed port values are generated from `event`
-ports. Use one `session.subscribe(port, handler)` operation for built-in and
+source subscription methods and typed port accessors are generated from `port`
+declarations. Use one `session.subscribe(port, handler)` operation for built-in and
 independently loaded controls. UI getters such as `button.activated()` and
 `editor.changed()` select the exact generated port and any required domain check.
-A raw generated port constructor accepts an owned source projection; its
-`.checked(validate)` method installs a concrete predicate before state borrowing.
+Generated accessors work on both owned and borrowed COM handles. Import the
+source's generated `Ports` extension trait to call `object.port_name()`; no free
+constructor function or extra subscription interface is required. The accessor
+cannot fail, and `.checked(validate)` installs a predicate before state borrowing.
 The port releases its source after setup; only the returned lease is retained.
 
 `EventPort` associates each source with its concrete owned `Event` type.
@@ -888,7 +892,7 @@ application handler:
 
 ```rust
 let picker = ui.file_dialog(window.as_com_ref())?;
-events.subscribe(picker.completed()?, ConcreteSelectionHandler)?;
+events.subscribe(picker.completed(), ConcreteSelectionHandler)?;
 let mut request = FileDialogRequest::new(native_directory);
 request.title = "Choose a document".to_owned();
 picker.open(&request)?;

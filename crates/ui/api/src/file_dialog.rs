@@ -23,7 +23,7 @@
 //! {
 //!     let picker = ui.file_dialog(owner)?;
 //!     let events = EventSession::new(None);
-//!     events.subscribe(picker.completed()?, Selected)?;
+//!     events.subscribe(picker.completed(), Selected)?;
 //!     picker.open(&FileDialogRequest::new(directory))?;
 //!     Ok((picker, events)) // Later: ui.update_with_events(size, &events)?;
 //! }

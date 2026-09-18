@@ -730,7 +730,7 @@ impl Drop for Dialog {
     }
 }
 
-#[com_object(interfaces(IFileDialog, IFileDialogEvents))]
+#[com_object(interfaces(IFileDialog))]
 /// One public controller identity owns no application callback, generic state pointer or native filesystem borrow.
 struct FileDialog {
     /// Runtime ownership keeps an active picker functional even if its caller releases the editing pointer.
@@ -773,10 +773,8 @@ impl IFileDialog for FileDialog {
     fn diagnostic(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         Ok(NcString::from_utf8_str(&self.dialog.session.state()?.diagnostic))
     }
-}
-impl IFileDialogEvents for FileDialog {
     /// Returns the same completion source for every request without letting producers retain application state.
-    fn subscribe(&self, sink: ComRef<'_, IFileDialogSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_completed(&self, sink: ComRef<'_, IFileDialogSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.dialog.session.state()?.owner()?;
         self.dialog.request.completed.event().subscribe(sink)
     }
