@@ -164,9 +164,9 @@ impl Textbox {
 }
 
 /// Canonical generated text-and-cursor payload from a user textbox edit.
-pub use neocogi_ui_core_contracts::ITextChangedSinkEvent as TextboxChanged;
+pub use neocogi_ui_core_contracts::TextChangesMessage as TextboxChanged;
 /// Canonical generated text submission payload from a user textbox command.
-pub use neocogi_ui_core_contracts::ITextSubmittedSinkEvent as TextboxSubmitted;
+pub use neocogi_ui_core_contracts::TextSubmissionMessage as TextboxSubmitted;
 
 impl Textbox {
     /// Returns the native event endpoint emitted after every user-originated text change.
@@ -561,7 +561,7 @@ mod tests {
 }
 
 use crate::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_core_contracts::{GeometryChange, IEventSubscriptionAbi, ITextChangedSinkAbi, ITextSubmittedSinkAbi, IWidgetHostAbi, FontRole};
+use neocogi_ui_core_contracts::{GeometryChange, IEventSubscriptionAbi, TextChangesPortAbi, TextSubmissionPortAbi, IWidgetHostAbi, FontRole};
 use neocogi_ui_nodes_contracts::{TextboxAbi};
 use neocogi_com::*;
 
@@ -628,13 +628,13 @@ impl neocogi_ui_nodes_contracts::Textbox for Textbox {
         set_direct_named_font(self, name)
     }
     /// Connects the existing changed-text source directly through the class contract.
-    fn subscribe_changed(&self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_changed(&self, sink: ComRef<'_, TextChangesPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = self.changed_event.event();
         endpoint.subscribe(sink)
     }
     /// Connects the independent submitted-text source directly through the class contract.
-    fn subscribe_submitted(&self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_submitted(&self, sink: ComRef<'_, TextSubmissionPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = self.submitted_event.event();
         endpoint.subscribe(sink)

@@ -98,7 +98,7 @@ impl ButtonParameters {
 }
 
 /// Canonical generated activation snapshot owned by the NCIDL event family.
-pub use neocogi_ui_core_contracts::IActivationSinkEvent as ButtonSubmitted;
+pub use neocogi_ui_core_contracts::ActivationMessage as ButtonSubmitted;
 
 #[neocogi_com::com_object(neocogi_ui_nodes_contracts::Button)]
 /// Concrete retained button and dynamically constructible COM object.
@@ -377,7 +377,7 @@ impl neocogi_ui_nodes_contracts::Button for Button {
     }
 
     /// Returns an application-owned lease over the Button's concrete activation source.
-    fn subscribe_activated(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_activated(&self, sink: ComRef<'_, ActivationPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = self.submitted_event.event();
         endpoint.subscribe(sink)

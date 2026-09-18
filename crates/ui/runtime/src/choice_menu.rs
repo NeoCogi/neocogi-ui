@@ -10,7 +10,7 @@ use neocogi_com::{
     com_interface, com_object,
 };
 use neocogi_ui_core_contracts::{
-    ChoiceMenuEntry, ChoiceMenuEntryAbi, ChoiceSelection, ChoiceSelectionAbi, IChoiceChangedSinkAbi, IChoiceMenu, IChoiceMenuAbi, IChoiceMenuInterfacesFor,
+    ChoiceMenuEntry, ChoiceMenuEntryAbi, ChoiceSelection, ChoiceSelectionAbi, ChoiceChangesPortAbi, IChoiceMenu, IChoiceMenuAbi, IChoiceMenuInterfacesFor,
     IEventSubscriptionAbi, MenuTextRange, Rect,
 };
 
@@ -18,7 +18,7 @@ use neocogi_ui_core_contracts::{
 const MAX_CHOICE_MENU_DEPTH: usize = 32;
 
 /// Canonical generated selection snapshot stored in this producer's event queue.
-use neocogi_ui_core_contracts::IChoiceChangedSinkEvent as ChoiceChangedPayload;
+use neocogi_ui_core_contracts::ChoiceChangesMessage as ChoiceChangedPayload;
 
 com_int_enum! {
     /// Header intent understood only by the private choice menu state machine.
@@ -99,7 +99,7 @@ pub(crate) trait IChoiceMenuState {
     /// Commits one user choice, publishes a changed snapshot, and requests popup closure.
     fn submit(&mut self, id: u64) -> Result<u64, NcStatus>;
     /// Connects the public changed sink to this model's sole event source.
-    fn subscribe_changed(&self, sink: ComRef<'_, IChoiceChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
+    fn subscribe_changed(&self, sink: ComRef<'_, ChoiceChangesPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
     /// Ends event delivery and requests permanent private-popup removal.
     fn retire(&mut self) -> Result<(), NcStatus>;
 }
@@ -307,7 +307,7 @@ impl IChoiceMenuState for ChoiceMenuState {
     }
 
     /// Uses the existing typed event bridge while keeping its source in this sole model.
-    fn subscribe_changed(&self, sink: ComRef<'_, IChoiceChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_changed(&self, sink: ComRef<'_, ChoiceChangesPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.changed_event.event().subscribe(sink)
     }
 
@@ -382,7 +382,7 @@ impl IChoiceMenu for ChoiceMenuState {
     }
 
     /// Connects the generated core choice event directly to the sole native source.
-    fn subscribe_changed(&self, sink: ComRef<'_, IChoiceChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_changed(&self, sink: ComRef<'_, ChoiceChangesPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         <Self as IChoiceMenuState>::subscribe_changed(self, sink)
     }
 

@@ -220,9 +220,9 @@ impl crate::widget_object::HostedWidget for TextArea {
 }
 
 /// Canonical generated text-and-cursor payload from a user text-area edit.
-pub use neocogi_ui_core_contracts::ITextChangedSinkEvent as TextAreaChanged;
+pub use neocogi_ui_core_contracts::TextChangesMessage as TextAreaChanged;
 /// Canonical generated submission payload from a user text-area command.
-pub use neocogi_ui_core_contracts::ITextSubmittedSinkEvent as TextAreaSubmitted;
+pub use neocogi_ui_core_contracts::TextSubmissionMessage as TextAreaSubmitted;
 
 /// Runtime-only cursor navigation state retained by the editable leaf.
 #[derive(Default)]
@@ -697,8 +697,8 @@ use crate::widget_object::{
     set_direct_named_font,
 };
 use neocogi_ui_core_contracts::{
-    GeometryChange, IEventSubscriptionAbi, IFontStyle, IMultilineEditor, IMultilineEditorAbi, ITextChangedSinkAbi, ITextContent, ITextEditor, ITextEvents,
-    ITextSubmittedSinkAbi, IWidgetAbi, IWidgetHostAbi, FontRole, TextWrapping,
+    GeometryChange, IEventSubscriptionAbi, IFontStyle, IMultilineEditor, IMultilineEditorAbi, TextChangesPortAbi, ITextContent, ITextEditor, ITextEvents,
+    TextSubmissionPortAbi, IWidgetAbi, IWidgetHostAbi, FontRole, TextWrapping,
 };
 use neocogi_ui_nodes_contracts::{TextAreaAbi};
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString};
@@ -791,14 +791,14 @@ impl IFontStyle for TextEditor {
 
 impl ITextEvents for TextEditor {
     /// Connects the editor's existing changed-text event source.
-    fn subscribe_changed(&self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_changed(&self, sink: ComRef<'_, TextChangesPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = self.changed_event.event();
         endpoint.subscribe(sink)
     }
 
     /// Connects the editor's existing submitted-text event source.
-    fn subscribe_submitted(&self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_submitted(&self, sink: ComRef<'_, TextSubmissionPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = self.submitted_event.event();
         endpoint.subscribe(sink)
@@ -892,13 +892,13 @@ impl neocogi_ui_nodes_contracts::TextArea for TextArea {
     }
 
     /// Forwards changed subscriptions to the actual fixed content editor.
-    fn subscribe_changed(&self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_changed(&self, sink: ComRef<'_, TextChangesPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         self.events.subscribe_changed(sink)
     }
 
     /// Forwards the independent submitted port without adding root queue ownership.
-    fn subscribe_submitted(&self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_submitted(&self, sink: ComRef<'_, TextSubmissionPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         self.events.subscribe_submitted(sink)
     }

@@ -120,7 +120,7 @@ impl SliderParameters {
 }
 
 /// Canonical generated numeric snapshot owned by the NCIDL event family.
-pub use neocogi_ui_nodes_contracts::INumericSinkEvent as SliderChanged;
+pub use neocogi_ui_nodes_contracts::NumericChangesMessage as SliderChanged;
 
 #[neocogi_com::com_object(neocogi_ui_nodes_contracts::Slider)]
 /// Concrete retained slider and dynamically constructible COM object.
@@ -1028,7 +1028,7 @@ mod tests {
 
 use crate::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
 use neocogi_ui_core_contracts::{GeometryChange, IEventSubscriptionAbi, IWidgetHostAbi, FontRole};
-use neocogi_ui_nodes_contracts::{INumericSinkAbi, SliderAbi, SliderOptions};
+use neocogi_ui_nodes_contracts::{NumericChangesPortAbi, SliderAbi, SliderOptions};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Slider);
@@ -1094,7 +1094,7 @@ impl neocogi_ui_nodes_contracts::Slider for Slider {
         set_direct_named_font(self, name)
     }
     /// Connects the slider's existing semantic event source directly through the class contract.
-    fn subscribe_changed(&self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_changed(&self, sink: ComRef<'_, NumericChangesPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = self.changed_event.event();
         endpoint.subscribe(sink)

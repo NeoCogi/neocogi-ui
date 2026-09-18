@@ -307,9 +307,9 @@ impl EventHandler<u32, events::Activation> for MenuSubmission {
 }
 /// Concrete native completion handler carries the exact expected path as explicit owned data.
 struct FileSelection(std::path::PathBuf);
-impl EventHandler<u32, IFileDialogSinkEvent> for FileSelection {
+impl EventHandler<u32, FileDialogCompletionMessage> for FileSelection {
     /// The generated event retains native identity until this application requests a native copy.
-    fn handle(&mut self, count: &mut u32, event: &IFileDialogSinkEvent) -> Result<(), NcStatus> {
+    fn handle(&mut self, count: &mut u32, event: &FileDialogCompletionMessage) -> Result<(), NcStatus> {
         assert_eq!(events::completed_file_path(event)?, Some(self.0.clone()));
         *count += 1;
         Ok(())

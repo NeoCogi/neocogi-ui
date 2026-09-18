@@ -25,7 +25,7 @@ struct ForeignActivation {
 
 impl IActivationEvents for ForeignActivation {
     /// Rejects dispatch reentry before failure injection or real queue subscription.
-    fn subscribe_activated(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_activated(&self, sink: ComRef<'_, ActivationPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         assert_eq!(self.dispatcher.dispatch(10), Err(neocogi_com_events::EVENT_E_BUSY));
         self.probe.attempts.set(self.probe.attempts.get() + 1);
         match self.probe.fail_once.replace(false) {

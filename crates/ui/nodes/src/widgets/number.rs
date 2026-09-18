@@ -88,7 +88,7 @@ impl NumberParameters {
 }
 
 /// Canonical generated numeric snapshot owned by the NCIDL event family.
-pub use neocogi_ui_nodes_contracts::INumericSinkEvent as NumberChanged;
+pub use neocogi_ui_nodes_contracts::NumericChangesMessage as NumberChanged;
 
 #[neocogi_com::com_object(neocogi_ui_nodes_contracts::Number)]
 /// Concrete retained number input and dynamically constructible COM object.
@@ -281,7 +281,7 @@ impl crate::widget_object::FontState for Number {
 
 use crate::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
 use neocogi_ui_core_contracts::{GeometryChange, IEventSubscriptionAbi, IWidgetHostAbi, FontRole};
-use neocogi_ui_nodes_contracts::{INumericSinkAbi, NumberAbi, NumberOptions};
+use neocogi_ui_nodes_contracts::{NumericChangesPortAbi, NumberAbi, NumberOptions};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Number);
@@ -344,7 +344,7 @@ impl neocogi_ui_nodes_contracts::Number for Number {
         set_direct_named_font(self, name)
     }
     /// Connects the number editor's existing semantic event source directly through the class contract.
-    fn subscribe_changed(&self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_changed(&self, sink: ComRef<'_, NumericChangesPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = self.changed_event.event();
         endpoint.subscribe(sink)

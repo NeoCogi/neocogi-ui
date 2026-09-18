@@ -71,7 +71,7 @@ impl CheckboxParameters {
 }
 
 /// Canonical generated checkbox snapshot owned by the NCIDL event family.
-pub use neocogi_ui_nodes_contracts::ICheckboxSinkEvent as CheckboxChanged;
+pub use neocogi_ui_nodes_contracts::CheckboxChangesMessage as CheckboxChanged;
 
 #[neocogi_com::com_object(neocogi_ui_nodes_contracts::Checkbox)]
 /// Concrete retained checkbox and dynamically constructible COM object.
@@ -215,7 +215,7 @@ impl crate::widget_object::FontState for Checkbox {
 
 use crate::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
 use neocogi_ui_core_contracts::{GeometryChange, IEventSubscriptionAbi, IWidgetHostAbi, FontRole};
-use neocogi_ui_nodes_contracts::{CheckboxAbi, ICheckboxSinkAbi};
+use neocogi_ui_nodes_contracts::{CheckboxAbi, CheckboxChangesPortAbi};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Checkbox);
@@ -282,7 +282,7 @@ impl neocogi_ui_nodes_contracts::Checkbox for Checkbox {
         set_direct_named_font(self, name)
     }
     /// Connects the Checkbox's existing semantic event source directly through its class contract.
-    fn subscribe_changed(&self, sink: ComRef<'_, ICheckboxSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_changed(&self, sink: ComRef<'_, CheckboxChangesPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = self.changed_event.event();
         endpoint.subscribe(sink)

@@ -68,9 +68,9 @@ impl Fixture {
 }
 /// Concrete completion consumer owns exact native outcomes independently of dialog/UI lifetime.
 struct Record;
-impl EventHandler<Vec<Option<PathBuf>>, IFileDialogSinkEvent> for Record {
+impl EventHandler<Vec<Option<PathBuf>>, FileDialogCompletionMessage> for Record {
     /// Clones only the immutable completed native path or cancellation value.
-    fn handle(&mut self, completed: &mut Vec<Option<PathBuf>>, event: &IFileDialogSinkEvent) -> Result<(), NcStatus> {
+    fn handle(&mut self, completed: &mut Vec<Option<PathBuf>>, event: &FileDialogCompletionMessage) -> Result<(), NcStatus> {
         completed.push(completed_file_path(event)?);
         Ok(())
     }
@@ -351,10 +351,10 @@ struct ReentryState {
 }
 /// Concrete callback deliberately updates the runtime while the completion lease owns a bounded multi-event delivery window.
 struct Reenter;
-impl EventHandler<ReentryState, IFileDialogSinkEvent> for Reenter {
+impl EventHandler<ReentryState, FileDialogCompletionMessage> for Reenter {
     /// Updates ordinary UI state without reentering this event session; delivery must retain all committed outcomes.
-    fn handle(&mut self, state: &mut ReentryState, event: &IFileDialogSinkEvent) -> Result<(), NcStatus> {
-        assert!(matches!(event, IFileDialogSinkEvent::Cancelled));
+    fn handle(&mut self, state: &mut ReentryState, event: &FileDialogCompletionMessage) -> Result<(), NcStatus> {
+        assert!(matches!(event, FileDialogCompletionMessage::Cancelled));
         state.completions += 1;
         state.ui.update(SIZE)
     }

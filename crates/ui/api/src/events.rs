@@ -47,23 +47,23 @@ use neocogi_com::{ComRef, NC_E_INVALID_ARG, NcStatus};
 use neocogi_ui_nodes_contracts::*;
 
 /// Canonical generated activation snapshot shared by built-ins and external controls.
-pub use neocogi_ui_core_contracts::IActivationSinkEvent as Activation;
+pub use neocogi_ui_core_contracts::ActivationMessage as Activation;
 /// Canonical generated text-and-cursor snapshot.
-pub use neocogi_ui_core_contracts::ITextChangedSinkEvent as TextChanged;
+pub use neocogi_ui_core_contracts::TextChangesMessage as TextChanged;
 /// Canonical generated complete text submission.
-pub use neocogi_ui_core_contracts::ITextSubmittedSinkEvent as TextSubmitted;
+pub use neocogi_ui_core_contracts::TextSubmissionMessage as TextSubmitted;
 /// Canonical generated lifecycle snapshot containing its WindowEvent value.
-pub use neocogi_ui_core_contracts::IWindowSinkEvent as WindowChanged;
+pub use neocogi_ui_core_contracts::WindowLifecycleMessage as WindowChanged;
 /// Canonical generated popup dismissal fact.
-pub use neocogi_ui_core_contracts::IPopupSinkEvent as PopupDismissed;
+pub use neocogi_ui_core_contracts::PopupDismissalMessage as PopupDismissed;
 /// Canonical generated choice snapshot containing its ChoiceSelection value.
-pub use neocogi_ui_core_contracts::IChoiceChangedSinkEvent as ChoiceChanged;
+pub use neocogi_ui_core_contracts::ChoiceChangesMessage as ChoiceChanged;
 /// Canonical generated checkbox state captured on user activation.
-pub use neocogi_ui_nodes_contracts::ICheckboxSinkEvent as CheckboxChanged;
+pub use neocogi_ui_nodes_contracts::CheckboxChangesMessage as CheckboxChanged;
 /// Canonical generated finite numeric value.
-pub use neocogi_ui_nodes_contracts::INumericSinkEvent as NumericChanged;
+pub use neocogi_ui_nodes_contracts::NumericChangesMessage as NumericChanged;
 /// Canonical generated nonnegative scrollbar offset.
-pub use neocogi_ui_nodes_contracts::IScrollbarSinkEvent as ScrollbarChanged;
+pub use neocogi_ui_nodes_contracts::ScrollbarChangesMessage as ScrollbarChanged;
 
 /// Defines a source-side convenience getter while leaving all session policy in COM.
 /// Each expansion selects an exact generated port and, where needed, its domain check.
@@ -111,7 +111,7 @@ impl crate::MenuItem {
 
 impl crate::FileDialog {
     /// Returns checked native-path completions, including outcomes retained after closure.
-    pub fn completed(&self) -> impl EventPort<Event = IFileDialogSinkEvent> {
+    pub fn completed(&self) -> impl EventPort<Event = FileDialogCompletionMessage> {
         self.as_interface().completed().checked(valid_file_dialog_path)
     }
 }
@@ -137,7 +137,7 @@ fn valid_text_cursor(event: &TextChanged) -> Result<(), NcStatus> {
 }
 
 /// Checks copied window geometry before the generated sink borrows application state.
-fn valid_window_event(event: &IWindowSinkEvent) -> Result<(), NcStatus> {
+fn valid_window_event(event: &WindowLifecycleMessage) -> Result<(), NcStatus> {
     match event.event {
         WindowEvent::GeometryChanged { rect } | WindowEvent::Minimized { rect } | WindowEvent::Maximized { rect } | WindowEvent::Restored { rect }
             if rect.width < 0 || rect.height < 0 =>
@@ -149,22 +149,22 @@ fn valid_window_event(event: &IWindowSinkEvent) -> Result<(), NcStatus> {
 }
 
 /// Cancellation yields `None`; lossy display text is never used as path identity.
-pub fn completed_file_path(event: &IFileDialogSinkEvent) -> Result<Option<std::path::PathBuf>, NcStatus> {
+pub fn completed_file_path(event: &FileDialogCompletionMessage) -> Result<Option<std::path::PathBuf>, NcStatus> {
     match event {
-        IFileDialogSinkEvent::Accepted { path } => crate::path::decode(path.as_com_ref()).map(Some),
-        IFileDialogSinkEvent::Cancelled => Ok(None),
+        FileDialogCompletionMessage::Accepted { path } => crate::path::decode(path.as_com_ref()).map(Some),
+        FileDialogCompletionMessage::Cancelled => Ok(None),
     }
 }
 
 /// Rejects a foreign native-path capability before generated delivery borrows application state.
-fn valid_file_dialog_path(event: &IFileDialogSinkEvent) -> Result<(), NcStatus> {
+fn valid_file_dialog_path(event: &FileDialogCompletionMessage) -> Result<(), NcStatus> {
     completed_file_path(event).map(|_| ())
 }
 
 #[cfg(test)]
 mod checked_adapter_tests {
     use super::*;
-    use neocogi_ui_core_contracts::create_i_text_changed_sink_event_sink;
+    use neocogi_ui_core_contracts::create_text_changes_port_sink;
     use neocogi_com::NcCopyFromBufferOffset;
 
     /// Concrete counter behavior; these tests require no hidden captured dependencies.
@@ -191,7 +191,7 @@ mod checked_adapter_tests {
     #[test]
     fn generated_numeric_adapter_checks_before_state_borrow() {
         let session = EventSession::new(0u32);
-        let mut sink = create_i_numeric_sink_event_sink(&session, Count, Some(valid_numeric)).unwrap();
+        let mut sink = create_numeric_changes_port_sink(&session, Count, Some(valid_numeric)).unwrap();
         let held = session.state_mut().unwrap();
         assert_eq!(sink.changed(f32::NAN), Err(NC_E_INVALID_ARG));
         assert_eq!(sink.changed(1.0), Err(neocogi_com_events::EVENT_E_BUSY));
@@ -205,7 +205,7 @@ mod checked_adapter_tests {
     #[test]
     fn generated_text_adapter_rejects_offset_and_split_cursor() {
         let session = EventSession::new(0u32);
-        let mut sink = create_i_text_changed_sink_event_sink(&session, Count, Some(valid_text_cursor)).unwrap();
+        let mut sink = create_text_changes_port_sink(&session, Count, Some(valid_text_cursor)).unwrap();
         assert_eq!(sink.changed(NcCopyFromBufferOffset::new(1, "é".as_bytes()), 2), Err(NC_E_INVALID_ARG));
         assert_eq!(sink.changed(NcCopyFromBufferOffset::new(0, "é".as_bytes()), 1), Err(NC_E_INVALID_ARG));
         sink.changed(NcCopyFromBufferOffset::new(0, "é".as_bytes()), 2).unwrap();

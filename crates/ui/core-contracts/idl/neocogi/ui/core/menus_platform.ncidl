@@ -54,7 +54,7 @@ enum ChoiceSelection: u8 {
 
 #[version(1)]
 /// Captured choice committed by pointer or keyboard interaction.
-port IChoiceChangedSink {
+port ChoiceChangesPort {
     /// Receives the complete optional selection after retained traversal releases its borrows.
     fn changed(&mut self, selection: ChoiceSelection) -> Result<()>;
 }
@@ -64,7 +64,7 @@ port IChoiceChangedSink {
 ///
 /// The menu owns hierarchy, navigation, placement and committed selection. A header control such
 /// as Combo owns only its presentation and delegates these menu responsibilities through this
-/// interface. Mutations are silent; only user submission publishes `IChoiceChangedSink`.
+/// interface. Mutations are silent; only user submission publishes `ChoiceChangesPort`.
 interface IChoiceMenu {
     /// Returns the exact committed stable identity, including explicit absence.
     fn selection(&self) -> Result<ChoiceSelection>;
@@ -85,7 +85,7 @@ interface IChoiceMenu {
     /// Requests activation or dismissal according to the menu's current reconciled intent.
     fn toggle_at(&mut self, anchor: Rect) -> Result<()>;
     /// Connects the exclusive user-commit subscriber without retaining application state.
-    changed: IChoiceChangedSink;
+    changed: ChoiceChangesPort;
     /// Permanently retires the private popup and ends event delivery.
     fn close(&mut self) -> Result<()>;
 }

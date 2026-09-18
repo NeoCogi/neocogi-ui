@@ -37,11 +37,11 @@ adapter, and lease-bearing subscription signature:
 
 ```rust,ignore
 submitted: EventSource<Activation>,
-changed: EventSource<ICounterChangedSinkEvent>,
+changed: EventSource<CounterChangesMessage>,
 
 // After committing the count:
 self.submitted.emit(Activation { label: self.count.to_string() });
-self.changed.emit(ICounterChangedSinkEvent { value: self.count });
+self.changed.emit(CounterChangesMessage { value: self.count });
 
 // Counter::subscribe_changed is generated from an NCIDL event port:
 self.changed.subscribe(sink)

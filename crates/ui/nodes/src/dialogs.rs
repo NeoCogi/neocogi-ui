@@ -18,7 +18,7 @@ struct Request {
     /// callbacks, and runtime teardown all observe the same request lifetime.
     phase: Cell<RequestPhase>,
     /// Real native semantic queue; only external subscriptions retain application callbacks.
-    completed: crate::EventSource<IFileDialogSinkEvent>,
+    completed: crate::EventSource<FileDialogCompletionMessage>,
 }
 
 /// Mutually exclusive picker-request lifecycle; no two booleans can disagree.
@@ -55,7 +55,7 @@ impl Request {
     }
 
     /// Emits one committed outcome after the modal has become idle.
-    fn finish(&self, status: IFileDialogSinkEvent) {
+    fn finish(&self, status: FileDialogCompletionMessage) {
         match self.phase.get() {
             RequestPhase::Active => {
                 self.phase.set(RequestPhase::Idle);
@@ -67,7 +67,7 @@ impl Request {
     /// Runtime teardown cannot borrow an active handler model, so retirement uses this independent concrete state.
     fn retire(&self) {
         match self.phase.replace(RequestPhase::Closed) {
-            RequestPhase::Active => self.completed.emit(IFileDialogSinkEvent::Cancelled),
+            RequestPhase::Active => self.completed.emit(FileDialogCompletionMessage::Cancelled),
             RequestPhase::Idle | RequestPhase::Closed => {}
         }
         // Every payload on this source completes one request, so closure must
@@ -78,7 +78,7 @@ impl Request {
     /// Permanently closes the controller while retaining one active terminal cancellation.
     fn close(&self) {
         match self.phase.replace(RequestPhase::Closed) {
-            RequestPhase::Active => self.completed.close(IFileDialogSinkEvent::Cancelled),
+            RequestPhase::Active => self.completed.close(FileDialogCompletionMessage::Cancelled),
             RequestPhase::Idle | RequestPhase::Closed => {}
         }
     }
@@ -274,7 +274,7 @@ impl Model {
         })
     }
     /// Hides before emitting the outcome so later callbacks observe an idle reusable component.
-    fn finish(&mut self, outcome: IFileDialogSinkEvent) -> Result<(), NcStatus> {
+    fn finish(&mut self, outcome: FileDialogCompletionMessage) -> Result<(), NcStatus> {
         if self.request.active() {
             if self.window().is_ok_and(|window| window.snapshot().is_ok()) {
                 self.window()?.set_visibility(Visibility::Hidden)?;
@@ -296,7 +296,7 @@ impl Model {
         };
         // Capture the exact native identity once at commit, not through a lossy
         // display label or a dispatcher-time reconstruction of this model.
-        self.finish(IFileDialogSinkEvent::Accepted {
+        self.finish(FileDialogCompletionMessage::Accepted {
             path: neocogi_ui::NativePath::new(&path).as_interface().add_ref(),
         })
     }
@@ -344,7 +344,7 @@ impl Model {
                             .is_ok_and(|window| window.snapshot().is_ok_and(|snapshot| snapshot.visibility == Visibility::Hidden)) =>
                 {
                     // A stale Hidden after cancel/reopen cannot cancel the new visible request.
-                    self.finish(IFileDialogSinkEvent::Cancelled)?;
+                    self.finish(FileDialogCompletionMessage::Cancelled)?;
                 }
                 WindowEvent::Destroyed => self.request.close(),
                 _ => {}
@@ -354,7 +354,7 @@ impl Model {
             Message::Home => self.navigate = home_dir(),
             Message::Go => self.navigate = self.resolve_path(&self.path.text()?),
             Message::Accept => self.accept()?,
-            Message::Cancel => self.finish(IFileDialogSinkEvent::Cancelled)?,
+            Message::Cancel => self.finish(FileDialogCompletionMessage::Cancelled)?,
             Message::Folder(path) => self.navigate = Some(path.clone()),
             Message::File(path) => {
                 self.filename.set_text(&path.file_name().unwrap_or(path.as_os_str()).to_string_lossy())?;
@@ -757,7 +757,7 @@ impl IFileDialog for FileDialog {
         let mut model = self.dialog.session.state_mut()?;
         model.owner()?;
         let active = self.dialog.request.active();
-        model.finish(IFileDialogSinkEvent::Cancelled)?;
+        model.finish(FileDialogCompletionMessage::Cancelled)?;
         Ok(active)
     }
     /// Actual window destruction produces the same lifecycle cancellation as destroying its owner.
@@ -774,7 +774,7 @@ impl IFileDialog for FileDialog {
         Ok(NcString::from_utf8_str(&self.dialog.session.state()?.diagnostic))
     }
     /// Returns the same completion source for every request without letting producers retain application state.
-    fn subscribe_completed(&self, sink: ComRef<'_, IFileDialogSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_completed(&self, sink: ComRef<'_, FileDialogCompletionPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.dialog.session.state()?.owner()?;
         self.dialog.request.completed.event().subscribe(sink)
     }

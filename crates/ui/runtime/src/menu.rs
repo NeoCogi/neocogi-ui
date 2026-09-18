@@ -116,7 +116,7 @@ impl MenuItemParameters {
 }
 
 /// Canonical generated activation snapshot from an enabled menu item.
-pub use neocogi_ui_core_contracts::IActivationSinkEvent as MenuItemSubmitted;
+pub use neocogi_ui_core_contracts::ActivationMessage as MenuItemSubmitted;
 
 /// Failure reported when a [`Ui`](crate::Ui) cannot resolve one menu-item capability.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]

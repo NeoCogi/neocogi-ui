@@ -347,9 +347,9 @@ impl EventHandler<State, neocogi_ui::events::ChoiceChanged> for Observe {
         }
     }
 }
-impl EventHandler<State, IFileDialogSinkEvent> for Observe {
+impl EventHandler<State, FileDialogCompletionMessage> for Observe {
     /// Accepted paths remain native values until explicitly formatted for this human-readable log.
-    fn handle(&mut self, state: &mut State, event: &IFileDialogSinkEvent) -> Result<(), NcStatus> {
+    fn handle(&mut self, state: &mut State, event: &FileDialogCompletionMessage) -> Result<(), NcStatus> {
         state.open_item.set_enabled(true)?;
         match completed_file_path(event)? {
             Some(path) => state.write_log(&format!("Selected file: {}", path.display())),

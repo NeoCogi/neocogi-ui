@@ -42,7 +42,7 @@ use std::fmt;
 use crate::math::RectExt;
 use crate::render::Painter;
 use crate::{AssetChrome, AtlasHandle, CaptionSide, Dimensioni, Recti, Skin, TitleAlignment, WidgetEventPortHandle, WindowOption};
-use neocogi_ui_core_contracts::IWindowSinkEvent;
+use neocogi_ui_core_contracts::WindowLifecycleMessage;
 
 /// Decodes the canonical packed RGBA convention for transient root-chrome painting.
 fn packed_color(value: u32) -> crate::Color {
@@ -92,18 +92,18 @@ pub use neocogi_ui_core_contracts::WindowEvent;
 ///
 /// Stable object identity and event delivery are deliberately separate fields. The private root ID
 /// selects checked [`crate::Ui`] mutations and is never derived from an address; the weak typed
-/// endpoint only subscribes to generated [`IWindowSinkEvent`] values. Cloning or dropping this
+/// endpoint only subscribes to generated [`WindowLifecycleMessage`] values. Cloning or dropping this
 /// aggregate application handle never changes retained window ownership.
 pub struct WindowHandle {
     /// Process-unique concrete identity used only by the owning window manager.
     id: super::RootId,
     /// Weak endpoint for geometry, caption, and visibility observations from this same window.
-    events: WidgetEventPortHandle<IWindowSinkEvent>,
+    events: WidgetEventPortHandle<WindowLifecycleMessage>,
 }
 
 impl WindowHandle {
     /// Creates an application capability from an independently allocated identity and endpoint.
-    pub(super) fn new(id: super::RootId, events: WidgetEventPortHandle<IWindowSinkEvent>) -> Self {
+    pub(super) fn new(id: super::RootId, events: WidgetEventPortHandle<WindowLifecycleMessage>) -> Self {
         // This private constructor is the sole pairing boundary. Manager registration creates both
         // values for the same root before either becomes observable to application code.
         Self { id, events }
@@ -116,7 +116,7 @@ impl WindowHandle {
     }
 
     /// Returns this window's weak typed event endpoint.
-    pub fn events(&self) -> WidgetEventPortHandle<IWindowSinkEvent> {
+    pub fn events(&self) -> WidgetEventPortHandle<WindowLifecycleMessage> {
         // Clone only the weak endpoint so subscription remains independent from stable identity and
         // cannot retain the manager-owned window.
         self.events.clone()

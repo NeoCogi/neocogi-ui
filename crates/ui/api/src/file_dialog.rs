@@ -7,13 +7,13 @@
 //! ```no_run
 //! use neocogi_ui::{Ui, FileDialog, FileDialogRequest, EventHandler, EventSession, IWindowAbi};
 //! use neocogi_ui::events::completed_file_path;
-//! use neocogi_ui::IFileDialogSinkEvent;
+//! use neocogi_ui::FileDialogCompletionMessage;
 //! use neocogi_com::{ComRef, NcStatus};
 //! use std::path::{Path, PathBuf};
 //!
 //! struct Selected;
-//! impl EventHandler<Option<PathBuf>, IFileDialogSinkEvent> for Selected {
-//!     fn handle(&mut self, state: &mut Option<PathBuf>, event: &IFileDialogSinkEvent) -> Result<(), NcStatus> {
+//! impl EventHandler<Option<PathBuf>, FileDialogCompletionMessage> for Selected {
+//!     fn handle(&mut self, state: &mut Option<PathBuf>, event: &FileDialogCompletionMessage) -> Result<(), NcStatus> {
 //!         *state = completed_file_path(event)?;
 //!         Ok(())
 //!     }

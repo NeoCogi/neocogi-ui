@@ -2,7 +2,7 @@
 
 use super::*;
 use neocogi_com_events::{EventPort, EventHandler, EventSession as ComEventSession, EventSource};
-use neocogi_ui_core_contracts::{IActivationSinkEvent, create_i_activation_sink_event_sink};
+use neocogi_ui_core_contracts::{ActivationMessage, create_activation_port_sink};
 
 /// Shared test observation deliberately owned outside either COM component.
 type Trace = Rc<RefCell<Vec<&'static str>>>;
@@ -10,18 +10,18 @@ type Trace = Rc<RefCell<Vec<&'static str>>>;
 /// Local fixture connector for a native producer without a declared COM source port.
 struct LocalActivation<'source> {
     /// Producer borrowed for sink construction and subscription only.
-    source: &'source EventSource<IActivationSinkEvent>,
+    source: &'source EventSource<ActivationMessage>,
 }
 
 impl EventPort for LocalActivation<'_> {
-    type Event = IActivationSinkEvent;
+    type Event = ActivationMessage;
     /// Uses the normal generated sink and production event queue inside registration.
     fn connect<State: 'static, Handler: EventHandler<State, Self::Event> + 'static>(
         self,
         session: &ComEventSession<State>,
         handler: Handler,
     ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        let sink = create_i_activation_sink_event_sink(session, handler, None)?;
+        let sink = create_activation_port_sink(session, handler, None)?;
         self.source.subscribe(sink.as_com_ref())
     }
 }
@@ -31,17 +31,17 @@ struct PrivateRecord {
     /// Component name used to prove child/surface ordering at the boundary.
     name: &'static str,
     /// Optional public output makes upward delivery explicit rather than exposing child events.
-    forward: Option<Rc<EventSource<IActivationSinkEvent>>>,
+    forward: Option<Rc<EventSource<ActivationMessage>>>,
     /// One ordinary tree edit, consumed before entering foreign topology code.
     edit: Edit,
 }
 
-impl EventHandler<Trace, IActivationSinkEvent> for PrivateRecord {
+impl EventHandler<Trace, ActivationMessage> for PrivateRecord {
     /// Records the captured fact and may remove another mounted component.
-    fn handle(&mut self, trace: &mut Trace, _event: &IActivationSinkEvent) -> Result<(), NcStatus> {
+    fn handle(&mut self, trace: &mut Trace, _event: &ActivationMessage) -> Result<(), NcStatus> {
         trace.borrow_mut().push(self.name);
         if let Some(source) = &self.forward {
-            source.emit(IActivationSinkEvent { label: self.name.to_owned() });
+            source.emit(ActivationMessage { label: self.name.to_owned() });
         }
         // A consumed edit cannot repeat during a later dispatch sweep.
         match std::mem::replace(&mut self.edit, Edit::None) {
@@ -71,9 +71,9 @@ enum Edit {
 /// Application-owned handler running only after all eligible private drivers.
 struct AppRecord;
 
-impl EventHandler<Trace, IActivationSinkEvent> for AppRecord {
+impl EventHandler<Trace, ActivationMessage> for AppRecord {
     /// Marks the public session's position in the deterministic sweep.
-    fn handle(&mut self, trace: &mut Trace, _event: &IActivationSinkEvent) -> Result<(), NcStatus> {
+    fn handle(&mut self, trace: &mut Trace, _event: &ActivationMessage) -> Result<(), NcStatus> {
         trace.borrow_mut().push("application");
         Ok(())
     }
@@ -86,7 +86,7 @@ struct EventfulComposite {
     /// Real host-bound widget lifetime delegated without storing any runtime root.
     lifetime: ComPtr<IWidgetAbi>,
     /// Producer-owned captured events; the source never stores the private handler.
-    source: Rc<EventSource<IActivationSinkEvent>>,
+    source: Rc<EventSource<ActivationMessage>>,
     /// Actual container policy and authoritative child collection permit arbitrary nesting.
     layout: ComPtr<IContainerLayoutAbi>,
     /// Component-owned typed handler/session, entirely inside this binary.
@@ -98,7 +98,7 @@ impl EventfulComposite {
     fn create(
         ui: &neocogi_ui::Ui,
         trace: Trace,
-        source: Rc<EventSource<IActivationSinkEvent>>,
+        source: Rc<EventSource<ActivationMessage>>,
         handler: PrivateRecord,
     ) -> (neocogi_ui::Widget<IWidgetAbi>, neocogi_ui::LinearWidget) {
         let shell = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
@@ -188,16 +188,16 @@ fn component(
     ui: &neocogi_ui::Ui,
     trace: &Trace,
     name: &'static str,
-    source: &Rc<EventSource<IActivationSinkEvent>>,
-    forward: Option<Rc<EventSource<IActivationSinkEvent>>>,
+    source: &Rc<EventSource<ActivationMessage>>,
+    forward: Option<Rc<EventSource<ActivationMessage>>>,
     edit: Edit,
 ) -> (neocogi_ui::Widget<IWidgetAbi>, neocogi_ui::LinearWidget) {
     EventfulComposite::create(ui, trace.clone(), source.clone(), PrivateRecord { name, forward, edit })
 }
 
 /// Emits a captured fixture fact without entering any application callback.
-fn emit(source: &EventSource<IActivationSinkEvent>) {
-    source.emit(IActivationSinkEvent { label: String::new() });
+fn emit(source: &EventSource<ActivationMessage>) {
+    source.emit(ActivationMessage { label: String::new() });
 }
 
 /// Three actual component levels forward upward before the application, with no manual child pumping.

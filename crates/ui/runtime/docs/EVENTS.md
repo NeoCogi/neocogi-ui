@@ -38,7 +38,7 @@ UI getters install their domain checks before exposing the port. The generic COM
 session claims registration before constructing the sink or calling the source,
 restores order on failure, and retains only the successful lease. The port's owned
 source projection is released after setup. The file dialog declares
-`completed: IFileDialogSink;` directly on `IFileDialog`, so
+`completed: FileDialogCompletionPort;` directly on `IFileDialog`, so
 `session.subscribe(picker.completed(), handler)` needs no extra capability query
 or fallible getter. The UI wrapper still validates native-path completions.
 

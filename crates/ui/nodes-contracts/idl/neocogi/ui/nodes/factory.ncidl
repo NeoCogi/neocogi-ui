@@ -9,7 +9,7 @@ interface Button: IWidget + ILeafLayout {
     fn label(&self) -> Result<String>;
 
     /// Connects the exclusive activation subscriber and returns its ownership lease.
-    activated: IActivationSink;
+    activated: ActivationPort;
 
     /// Selects a semantic font role and invalidates measurement only when it differs.
     fn set_font_role(&mut self, role: FontRole) -> Result<()>;

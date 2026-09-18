@@ -137,7 +137,7 @@ impl<T> std::error::Error for SurfaceCreationError<T> {
 }
 
 /// Canonical generated popup dismissal fact emitted on active-branch removal.
-pub use neocogi_ui_core_contracts::IPopupSinkEvent as PopupEvent;
+pub use neocogi_ui_core_contracts::PopupDismissalMessage as PopupEvent;
 
 /// Process-unique identifier for one popup definition inside its owning window.
 ///
@@ -564,7 +564,7 @@ struct RootState {
     /// Expanded outer height retained while the minimize button shows a compact window.
     unminimized_height: Option<i32>,
     /// Strong owner of the unified window geometry/lifecycle event stream.
-    events: crate::EventSource<neocogi_ui_core_contracts::IWindowSinkEvent>,
+    events: crate::EventSource<neocogi_ui_core_contracts::WindowLifecycleMessage>,
     /// Optional concrete menu bar laid out above the application widget body.
     menu_bar: Option<MenuSurface>,
     /// Descendant viewport policy applied when layout enters direct structural child windows.
@@ -701,7 +701,8 @@ impl SurfaceNode {
         let root = self.root_mut().expect("visibility is defined only for root nodes");
         if root.visible && !visible {
             // One policy transition produces one notification, including owner-driven dismissal.
-            root.events.emit(neocogi_ui_core_contracts::IWindowSinkEvent { event: WindowEvent::Hidden });
+            root.events
+                .emit(neocogi_ui_core_contracts::WindowLifecycleMessage { event: WindowEvent::Hidden });
         }
         root.visible = visible;
         if !visible {
@@ -794,7 +795,7 @@ impl SurfaceNode {
         self.root()
             .expect("window events are emitted only by roots")
             .events
-            .emit(neocogi_ui_core_contracts::IWindowSinkEvent { event });
+            .emit(neocogi_ui_core_contracts::WindowLifecycleMessage { event });
     }
 
     /// Dismisses an active popup and emits exactly one policy event.
@@ -2058,7 +2059,7 @@ impl WindowManager {
                 .root()
                 .expect("collected roots have root policy")
                 .events
-                .close(neocogi_ui_core_contracts::IWindowSinkEvent { event: WindowEvent::Destroyed });
+                .close(neocogi_ui_core_contracts::WindowLifecycleMessage { event: WindowEvent::Destroyed });
         }
         self.surfaces.remove_roots(&removed);
         self.reconcile_active_surface();

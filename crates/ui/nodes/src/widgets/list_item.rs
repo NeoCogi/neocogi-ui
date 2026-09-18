@@ -78,7 +78,7 @@ impl ListItemParameters {
 }
 
 /// Canonical generated activation snapshot owned by the NCIDL event family.
-pub use neocogi_ui_core_contracts::IActivationSinkEvent as ListItemSubmitted;
+pub use neocogi_ui_core_contracts::ActivationMessage as ListItemSubmitted;
 
 #[neocogi_com::com_object(neocogi_ui_nodes_contracts::ListItem)]
 /// Concrete retained list item and dynamically constructible COM object.
@@ -288,7 +288,7 @@ mod tests {
 use crate::widget_object::{
     HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_icon_role, set_direct_named_font, set_direct_named_icon,
 };
-use neocogi_ui_core_contracts::{GeometryChange, IActivationSinkAbi, IEventSubscriptionAbi, IWidgetHostAbi, FontRole};
+use neocogi_ui_core_contracts::{GeometryChange, ActivationPortAbi, IEventSubscriptionAbi, IWidgetHostAbi, FontRole};
 use neocogi_ui_nodes_contracts::{ContentIcon, ListItemAbi};
 use neocogi_com::*;
 
@@ -351,7 +351,7 @@ impl neocogi_ui_nodes_contracts::ListItem for ListItem {
         set_direct_named_icon(self, name)
     }
     /// Connects the row's existing semantic event source directly through the class contract.
-    fn subscribe_activated(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_activated(&self, sink: ComRef<'_, ActivationPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = self.submitted_event.event();
         endpoint.subscribe(sink)

@@ -102,7 +102,7 @@ struct CounterObject {
     /// The shared static producer retains queued snapshots, never the application's callback.
     submitted: EventSource<Activation>,
     /// Independent generated domain-event port, with no application handler ownership.
-    changed: EventSource<ICounterChangedSinkEvent>,
+    changed: EventSource<CounterChangesMessage>,
 }
 impl CounterObject {
     /// Validates runtime authority and publishes one fully initialized counter identity.
@@ -122,7 +122,7 @@ impl CounterObject {
         if state.clicked || state.action == WidgetAction::Activate {
             self.count = self.count.saturating_add(1);
             self.submitted.emit(Activation { label: self.count.to_string() });
-            self.changed.emit(ICounterChangedSinkEvent { value: self.count });
+            self.changed.emit(CounterChangesMessage { value: self.count });
             GeometryChange::Changed
         } else {
             GeometryChange::NoChange
@@ -158,14 +158,14 @@ impl Counter for CounterObject {
     }
 
     /// Connects one generated value sink without claiming the labelled activation port.
-    fn subscribe_changed(&self, sink: ComRef<'_, ICounterChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_changed(&self, sink: ComRef<'_, CounterChangesPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.common.state.writable()?;
         self.changed.subscribe(sink)
     }
 }
 impl IActivationEvents for CounterObject {
     /// Subscription uses the exact same producer/lease implementation as built-in controls.
-    fn subscribe_activated(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_activated(&self, sink: ComRef<'_, ActivationPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.common.state.writable()?;
         self.submitted.subscribe(sink)
     }

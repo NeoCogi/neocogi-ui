@@ -17,9 +17,9 @@ impl EventHandler<Vec<String>, events::Activation> for Advance {
 
 /// Application handler for the independently generated counter-value event.
 struct RecordCount;
-impl EventHandler<Vec<String>, ICounterChangedSinkEvent> for RecordCount {
+impl EventHandler<Vec<String>, CounterChangesMessage> for RecordCount {
     /// Records the committed value, not the later programmatic callback edit.
-    fn handle(&mut self, history: &mut Vec<String>, event: &ICounterChangedSinkEvent) -> Result<(), NcStatus> {
+    fn handle(&mut self, history: &mut Vec<String>, event: &CounterChangesMessage) -> Result<(), NcStatus> {
         history.push(format!("count={}", event.value));
         Ok(())
     }

@@ -198,13 +198,13 @@ window-root policy layer.
 
 ```rust
 // In the composite's NCIDL contract module:
-// port IChoiceSink { fn chosen(&mut self, item: u64) -> Result<()>; }
+// port ChoicePort { fn chosen(&mut self, item: u64) -> Result<()>; }
 // interface ChoicePanel: IWidget + IContainerLayout + IComponentEventProvider {
-//     choice: IChoiceSink;
+//     choice: ChoicePort;
 // }
 
 // In the producer plugin binary, after committing a choice:
-source.emit(IChoiceSinkEvent { item });
+source.emit(ChoiceMessage { item });
 // Its IComponentEventProvider implementation returns an owned reference from
 // a component-owned private EventSession, not the ChoicePanel COM identity:
 fn private_dispatcher(&self) -> Result<ComPtr<IEventDispatcherAbi>, NcStatus> {
@@ -899,7 +899,7 @@ picker.open(&request)?;
 ui.update_with_events(drawable_size, &events)?;
 ```
 
-The handler receives the generated `IFileDialogSinkEvent::Accepted { path }`
+The handler receives the generated `FileDialogCompletionMessage::Accepted { path }`
 or `Cancelled`. `neocogi_ui::events::completed_file_path` copies the exact
 host-native `PathBuf` when the application needs it; display text is never
 reconstructed as a lookup key.

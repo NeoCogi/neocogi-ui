@@ -259,7 +259,7 @@ impl ScrollbarParameters {
 }
 
 /// Canonical generated scrollbar snapshot owned by the NCIDL event family.
-pub use neocogi_ui_nodes_contracts::IScrollbarSinkEvent as ScrollbarChanged;
+pub use neocogi_ui_nodes_contracts::ScrollbarChangesMessage as ScrollbarChanged;
 
 #[neocogi_com::com_object(neocogi_ui_nodes_contracts::Scrollbar)]
 /// Standalone one-axis scrollbar and dynamically constructible COM object.
@@ -553,7 +553,7 @@ mod tests {
 
 use crate::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl};
 use neocogi_ui_core_contracts::{IEventSubscriptionAbi, IWidgetHostAbi};
-use neocogi_ui_nodes_contracts::{IScrollbarSinkAbi, ScrollAxis, ScrollRange, ScrollbarAbi};
+use neocogi_ui_nodes_contracts::{ScrollbarChangesPortAbi, ScrollAxis, ScrollRange, ScrollbarAbi};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Scrollbar);
@@ -624,7 +624,7 @@ impl neocogi_ui_nodes_contracts::Scrollbar for Scrollbar {
         Ok(())
     }
     /// Connects the Scrollbar's existing semantic event source directly through its class contract.
-    fn subscribe_changed(&self, sink: ComRef<'_, IScrollbarSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_changed(&self, sink: ComRef<'_, ScrollbarChangesPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = self.changed_event.event();
         endpoint.subscribe(sink)
