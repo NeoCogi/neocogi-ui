@@ -29,7 +29,7 @@ from `neocogi_ui::events`). The generated `neocogi.com.events` module owns the
 lease and dispatcher ABI; the support crate owns typed queues and application
 sessions. Standard snapshots are generated from UI NCIDL `port` declarations
 and already implement `EventPayload`, which names their concrete COM sink.
-Each `name: Sink;` generates a `.name()` accessor returning an `EventPort`
+Each `name: Protocol;` generates a `.name()` accessor returning an `EventPort`
 with a concrete associated event and an optional domain validator. Import the
 source's generated `Ports` trait to use it on owned or borrowed COM handles.
 Accessors do not query or connect; the session calls the generated shared-receiver

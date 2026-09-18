@@ -70,8 +70,8 @@ field comment must name that constraint.
 ## Typed events and application state
 
 The COM compiler treats the generated `neocogi.com.events` NCIDL module as its
-canonical event-lease ABI: a foreign same-named lease cannot satisfy an `event`
-port. That module owns `IEventSubscription` and `IEventDispatcher`;
+canonical event-lease ABI: a foreign same-named lease cannot satisfy a named
+port binding. That module owns `IEventSubscription` and `IEventDispatcher`;
 `neocogi-com-events` owns the producer queue, weak endpoint, application session,
 and local delivery adapter. Generated event bindings check the support API
 version at compile time. This support crate does not depend on UI or on the
@@ -233,7 +233,7 @@ ancestor removal from a descendant handler.
 The example uses one generated domain payload and sink on both sides of the
 ABI. Private handlers and application handlers remain native, typed values in
 their respective binaries. A component without private handlers needs only
-its `event` source port and does not implement `IComponentEventProvider`.
+its declared port binding and does not implement `IComponentEventProvider`.
 
 Dispatch sweeps sources in registration order, with FIFO inside each source.
 Each source captures a bounded delivery window, then pops one event before each

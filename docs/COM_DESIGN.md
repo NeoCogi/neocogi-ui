@@ -32,7 +32,7 @@ host with ordinary Cargo, including a monolith.
 
 ## Interfaces and construction
 
-`interface`, `factory`, and `event` lower to the same `Interface` model. Role,
+`interface`, `factory`, and `port` lower to the same `Interface` model. Role,
 threading, required projections, and ordered methods are contract inputs.
 The old IDL `trait` and `class` spellings are removed. Generated Rust still uses
 traits as its statically typed implementation surface.

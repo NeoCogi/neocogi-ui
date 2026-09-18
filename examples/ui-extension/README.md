@@ -31,9 +31,9 @@ External controls share the built-in ownership and routing rules.
 
 The [implementation](src/lib.rs) uses `WidgetState` for common options, mount-once
 ownership, logical closure and sticky invalidation. The counter stores its value
-once and shares the same event transport as built-ins. Its custom value event is
-declared in NCIDL, so the contract generator supplies the typed payload, sink
-adapter, and lease-bearing subscription signature:
+once and shares the same event transport as built-ins. Its NCIDL contract binds
+`changed: CounterChangesPort;`, generating the owned `CounterChangesMessage`,
+receiver adapter, and lease-bearing subscription operation:
 
 ```rust,ignore
 submitted: EventSource<Activation>,
@@ -43,13 +43,13 @@ changed: EventSource<CounterChangesMessage>,
 self.submitted.emit(Activation { label: self.count.to_string() });
 self.changed.emit(CounterChangesMessage { value: self.count });
 
-// Counter::subscribe_changed is generated from an NCIDL event port:
+// Counter::subscribe_changed is generated from the named protocol binding:
 self.changed.subscribe(sink)
 ```
 
 Emission queues an owned snapshot. The producer does not retain the application's
 handler. The [acceptance host](../../demos/smoke/src/extension.rs) constructs the
-generated `counter.changed()` and passes it to
+port through generated `counter.changed()` and passes it to
 `events.subscribe(port, RecordCount)`. The same typed session owns its lease, and also uses an activation handler to edit the counter during
 delivery. The value callback still observes the originally committed value;
 the UI commits the later edit's measurement before returning from the same update.

@@ -2,10 +2,10 @@
 
 ## 0.9.0-alpha.0 (unreleased)
 
-- Declare ports by stream name and sink, generate native `.name()` accessors,
-  and remove public subscription helper functions. Put file-dialog completion
-  directly on `IFileDialog`; `picker.completed()` is now infallible. Keep domain
-  validation, queued delivery, and automatic nested-component dispatch.
+- Declare `port` protocols and expose named `name: Protocol;` bindings. Generate
+  `.name()` accessors and owned `Message` payloads; remove the `event` declaration
+  keyword, unnamed bindings, and public subscription helper functions. File-dialog
+  completion belongs directly to `IFileDialog`; `picker.completed()` is infallible.
 
 - Use one typed event session and source-side ports for built-ins and plugins.
   Mutable sink receivers protect ordinary handler fields; bounded FIFO windows
@@ -17,7 +17,7 @@
 - Simplify contracts to compile-time Rust bindings and transitive signatures;
   remove native contract libraries/archives, module getters/registries, and
   intrinsic-event seeding. Plugins remain dynamically loadable or statically linked.
-- Unify callable declarations as interfaces with factory/event roles. Keep typed
+- Unify callable declarations as interfaces with factory/port roles. Keep typed
   factory construction, required sibling projections, exact signatures, and
   mutable call gating; remove duplicate object descriptions and ordinary unit
   objects' generated zero-argument constructors.
