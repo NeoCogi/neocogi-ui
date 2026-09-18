@@ -165,7 +165,7 @@ impl Counter for CounterObject {
 }
 impl IActivationEvents for CounterObject {
     /// Subscription uses the exact same producer/lease implementation as built-in controls.
-    fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_activated(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.common.state.writable()?;
         self.submitted.subscribe(sink)
     }

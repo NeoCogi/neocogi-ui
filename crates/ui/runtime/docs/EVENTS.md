@@ -27,9 +27,9 @@ fn update(ui: &Ui, button: &ButtonWidget, size: Size) -> Result<(), NcStatus> {
 Independent producers reuse `neocogi_com_events::EventSource<E>` (also reexported
 from `neocogi_ui::events`). The generated `neocogi.com.events` module owns the
 lease and dispatcher ABI; the support crate owns typed queues and application
-sessions. Standard snapshots are generated from UI NCIDL `event` declarations
+sessions. Standard snapshots are generated from UI NCIDL `port` declarations
 and already implement `EventPayload`, which names their concrete COM sink.
-Each `port name: Sink;` generates a `.name()` accessor returning an `EventPort`
+Each `name: Sink;` generates a `.name()` accessor returning an `EventPort`
 with a concrete associated event and an optional domain validator. Import the
 source's generated `Ports` trait to use it on owned or borrowed COM handles.
 Accessors do not query or connect; the session calls the generated shared-receiver
@@ -38,7 +38,7 @@ UI getters install their domain checks before exposing the port. The generic COM
 session claims registration before constructing the sink or calling the source,
 restores order on failure, and retains only the successful lease. The port's owned
 source projection is released after setup. The file dialog declares
-`port completed: IFileDialogSink;` directly on `IFileDialog`, so
+`completed: IFileDialogSink;` directly on `IFileDialog`, so
 `session.subscribe(picker.completed(), handler)` needs no extra capability query
 or fallible getter. The UI wrapper still validates native-path completions.
 
@@ -51,7 +51,7 @@ signatures. Plugin descriptor and runtime table ABIs remain v1.
 `emit` never invokes application code. `subscribe` returns the application-owned
 `IEventSubscription`; the source does not retain the sink or keep the widget alive.
 
-Custom composites can publish first-class `event` sinks and ports in their
+Custom composites can publish port protocols and named bindings in their
 NCIDL contract. If a mounted component has private child-event handlers, it
 implements `IComponentEventProvider` and returns a separately allocated
 `IEventDispatcher`. The runtime rejects a provider that returns its own widget

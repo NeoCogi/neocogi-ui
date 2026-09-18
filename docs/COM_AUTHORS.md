@@ -136,9 +136,9 @@ Pass all ports to the same session API:
 
 Independent producers share `neocogi_com_events::EventSource<E>` with built-ins;
 the UI facade reexports this type for UI authors.
-Standard UI snapshots are generated from `event` NCIDL declarations, and their
-source subscription methods and typed port accessors are generated from `port`
-declarations. Use one `session.subscribe(port, handler)` operation for built-in and
+Standard UI snapshots are generated from `port` NCIDL declarations, and their
+source subscription methods and typed port accessors are generated from named protocol
+bindings. Use one `session.subscribe(port, handler)` operation for built-in and
 independently loaded controls. UI getters such as `button.activated()` and
 `editor.changed()` select the exact generated port and any required domain check.
 Generated accessors work on both owned and borrowed COM handles. Import the
@@ -198,9 +198,9 @@ window-root policy layer.
 
 ```rust
 // In the composite's NCIDL contract module:
-// event IChoiceSink { fn chosen(&mut self, item: u64) -> Result<()>; }
+// port IChoiceSink { fn chosen(&mut self, item: u64) -> Result<()>; }
 // interface ChoicePanel: IWidget + IContainerLayout + IComponentEventProvider {
-//     port choice: IChoiceSink;
+//     choice: IChoiceSink;
 // }
 
 // In the producer plugin binary, after committing a choice:

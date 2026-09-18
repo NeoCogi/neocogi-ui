@@ -94,7 +94,7 @@ struct WidgetUpdate {
 
 #[version(1)]
 /// Concrete labelled activation consumer shared by Button, ListItem and ListBox.
-event IActivationSink {
+port IActivationSink {
     /// Receives an immutable submission snapshot after widget traversal releases its borrows.
     fn submitted(&mut self, label: &str) -> Result<()>;
 }
@@ -103,19 +103,19 @@ event IActivationSink {
 /// Shared labelled activation source; the producer never owns the returned lease or its sink.
 interface IActivationEvents {
     /// Connects the exclusive subscriber and returns its ownership lease.
-    port: IActivationSink;
+    activated: IActivationSink;
 }
 
 #[version(1)]
 /// Complete normalized text and scalar-aligned UTF-8 byte cursor at the moment of a user edit.
-event ITextChangedSink {
+port ITextChangedSink {
     /// Receives an owned immutable text capability borrowed only for this synchronous delivery.
     fn changed(&mut self, text: &str, cursor: u64) -> Result<()>;
 }
 
 #[version(1)]
 /// Complete normalized text at submission, independent of later edits.
-event ITextSubmittedSink {
+port ITextSubmittedSink {
     /// Receives the already captured submission value after traversal.
     fn submitted(&mut self, text: &str) -> Result<()>;
 }
@@ -124,9 +124,9 @@ event ITextSubmittedSink {
 /// Shared editor event family; changed and submitted are independent exclusive ports.
 interface ITextEvents {
     /// Connects one changed consumer without claiming the separate submitted port.
-    port changed: ITextChangedSink;
+    changed: ITextChangedSink;
     /// Connects one submitted consumer without claiming the separate changed port.
-    port submitted: ITextSubmittedSink;
+    submitted: ITextSubmittedSink;
 }
 
 #[version(1)]
@@ -162,7 +162,7 @@ enum WindowEvent: u8 {
 
 #[version(1)]
 /// Concrete consumer of copied window events, including the terminal Destroyed fact.
-event IWindowSink {
+port IWindowSink {
     /// Receives the exact committed lifecycle/chrome snapshot after the manager releases traversal ownership.
     fn event(&mut self, event: WindowEvent) -> Result<()>;
 }
@@ -171,12 +171,12 @@ event IWindowSink {
 /// Subscription capability on the actual logical window object; the manager owns its existing native source.
 interface IWindowEvents {
     /// Connects the current source without making a retained window reference prolong native tree ownership.
-    port: IWindowSink;
+    changed: IWindowSink;
 }
 
 #[version(1)]
 /// Concrete consumer of ordinary popup dismissal; destruction does not fabricate replay history.
-event IPopupSink {
+port IPopupSink {
     /// Reports removal from the active popup branch, independently of later activation.
     fn dismissed(&mut self) -> Result<()>;
 }
@@ -185,12 +185,12 @@ event IPopupSink {
 /// Subscription capability on the actual popup object and its existing manager-owned source.
 interface IPopupEvents {
     /// Returns an exclusive application-owned dismissal lease without retaining application state on the producer.
-    port: IPopupSink;
+    dismissed: IPopupSink;
 }
 
 #[version(1)]
 /// Concrete terminal outcome of one request; there is no impossible Pending event variant.
-event IFileDialogSink {
+port IFileDialogSink {
     /// Accepts an exact native path independently of its potentially lossy filename label.
     fn accepted(&mut self, path: &INativePath) -> Result<()>;
     /// Reports explicit cancellation, hiding, close affordance or destruction of an active request.
@@ -223,7 +223,7 @@ interface IFileDialog {
     /// Copies the latest failed directory-read diagnostic without replacing the previous valid listing.
     fn diagnostic(&self) -> Result<String>;
     /// Reports acceptance or cancellation of a request through the dialog's own capability.
-    port completed: IFileDialogSink;
+    completed: IFileDialogSink;
 }
 
 #[version(1)]

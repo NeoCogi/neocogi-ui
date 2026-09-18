@@ -5,7 +5,7 @@ use neocogi.ui.core::{IWidget, ILeafLayout, IActivationEvents, IWidgetHost, ICon
 
 #[version(1)]
 /// Exact committed counter value published only after user activation.
-event ICounterChangedSink {
+port ICounterChangedSink {
     /// Receives one immutable value captured before later callback edits.
     fn changed(&mut self, value: u32) -> Result<()>;
 }
@@ -43,7 +43,7 @@ interface Counter: IWidget + ILeafLayout + IActivationEvents + IWidgetProbe {
     fn set_count(&mut self, value: u32) -> Result<()>;
 
     /// Claims the counter's independent typed value port and returns its lease.
-    port changed: ICounterChangedSink;
+    changed: ICounterChangedSink;
 }
 
 #[version(1)]

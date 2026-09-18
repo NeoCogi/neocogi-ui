@@ -1,20 +1,20 @@
 #[version(1)]
 /// Committed user checkbox state; programmatic setters do not publish it.
-event ICheckboxSink {
+port ICheckboxSink {
     /// Receives the captured value after retained traversal releases its owned state.
     fn changed(&mut self, checked: bool) -> Result<()>;
 }
 
 #[version(1)]
 /// Committed finite user value shared by Slider and Number; programmatic setters do not publish it.
-event INumericSink {
+port INumericSink {
     /// Receives the captured value after retained traversal releases its owned state.
     fn changed(&mut self, value: f32) -> Result<()>;
 }
 
 #[version(1)]
 /// Committed clamped scrollbar offset from pointer input; programmatic setters do not publish it.
-event IScrollbarSink {
+port IScrollbarSink {
     /// Receives the captured value after retained traversal releases its owned state.
     fn changed(&mut self, offset: i32) -> Result<()>;
 }

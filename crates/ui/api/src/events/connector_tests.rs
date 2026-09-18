@@ -25,7 +25,7 @@ struct ForeignActivation {
 
 impl IActivationEvents for ForeignActivation {
     /// Rejects dispatch reentry before failure injection or real queue subscription.
-    fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_activated(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         assert_eq!(self.dispatcher.dispatch(10), Err(neocogi_com_events::EVENT_E_BUSY));
         self.probe.attempts.set(self.probe.attempts.get() + 1);
         match self.probe.fail_once.replace(false) {
@@ -89,13 +89,13 @@ fn generated_ports_preserve_foreign_failure_and_checked_delivery() {
     let (second_source, second) = source(&session, true);
     // Constructing a port is infallible and must not attempt a subscription.
     // The borrowed-handle accessor owns its projection after this block ends.
-    let first_port = { first_source.as_com_ref().port() };
+    let first_port = { first_source.as_com_ref().activated() };
     assert_eq!(first.attempts.get(), 0);
     drop(first_source);
     let first_lease = session.subscribe(first_port, Record { drops: drops.clone() }).unwrap();
 
     // A foreign failure drops the uncommitted sink/handler and preserves old registrations.
-    let failure = session.subscribe(second_source.port().checked(valid_label), Record { drops: drops.clone() });
+    let failure = session.subscribe(second_source.activated().checked(valid_label), Record { drops: drops.clone() });
     assert_eq!(failure.unwrap_err(), NC_E_INVALID_ARG);
     assert_eq!(drops.get(), 1);
     assert_eq!(second.attempts.get(), 1);
@@ -103,7 +103,7 @@ fn generated_ports_preserve_foreign_failure_and_checked_delivery() {
     assert_eq!(first_lease.active(), Ok(true));
 
     let second_lease = session
-        .subscribe(second_source.port().checked(valid_label), Record { drops: drops.clone() })
+        .subscribe(second_source.activated().checked(valid_label), Record { drops: drops.clone() })
         .unwrap();
     assert_eq!(first.attempts.get(), 1);
     assert_eq!(second.attempts.get(), 2);

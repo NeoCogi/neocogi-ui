@@ -94,18 +94,18 @@ widget_port!(crate::ComboWidget, changed, ChoiceChanged);
 
 /// Queries the actual window's lifecycle source without retaining it after subscription.
 pub fn window_events(window: ComRef<'_, IWindowAbi>) -> Result<impl EventPort<Event = WindowChanged>, NcStatus> {
-    Ok(window.add_ref().query::<IWindowEventsAbi>()?.port().checked(valid_window_event))
+    Ok(window.add_ref().query::<IWindowEventsAbi>()?.changed().checked(valid_window_event))
 }
 
 /// Queries the popup's independent dismissal source; delivery describes a captured fact.
 pub fn popup_events(popup: ComRef<'_, IPopupAbi>) -> Result<impl EventPort<Event = PopupDismissed>, NcStatus> {
-    Ok(popup.add_ref().query::<IPopupEventsAbi>()?.port())
+    Ok(popup.add_ref().query::<IPopupEventsAbi>()?.dismissed())
 }
 
 impl crate::MenuItem {
     /// Queries this row's actual activation queue, shared by native and plugin clients.
     pub fn activated(&self) -> Result<impl EventPort<Event = Activation>, NcStatus> {
-        Ok(self.as_interface().add_ref().query::<IActivationEventsAbi>()?.port())
+        Ok(self.as_interface().add_ref().query::<IActivationEventsAbi>()?.activated())
     }
 }
 
