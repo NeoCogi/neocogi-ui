@@ -209,7 +209,7 @@ fn private_dispatcher(&self) -> Result<ComPtr<IEventDispatcherAbi>, NcStatus> {
 
 // In an application or another plugin's State:
 let session = neocogi_com_events::EventSession::new(state);
-session.subscribe(choice_panel_subscribe_choice_port(panel.clone()), ChoiceHandler)?;
+session.subscribe(panel.choice(), ChoiceHandler)?;
 ui.update_with_events(size, &session)?;
 ```
 

@@ -90,13 +90,6 @@ impl Widget<ButtonAbi> {
     pub fn label(&self) -> Result<String, NcStatus> {
         self.interface.label()?.to_string()
     }
-
-    /// Connects a concrete typed sink and returns the caller-owned subscription.
-    /// Retain this lease in the application event session; the runtime never owns
-    /// an application handler. A second live subscriber is rejected by the source.
-    pub fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.interface.subscribe(sink)
-    }
 }
 
 /// Static convenience wrapper around the dynamically constructed Checkbox class projection.

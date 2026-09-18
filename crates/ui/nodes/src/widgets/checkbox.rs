@@ -282,7 +282,7 @@ impl neocogi_ui_nodes_contracts::Checkbox for Checkbox {
         set_direct_named_font(self, name)
     }
     /// Connects the Checkbox's existing semantic event source directly through its class contract.
-    fn subscribe(&self, sink: ComRef<'_, ICheckboxSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_changed(&self, sink: ComRef<'_, ICheckboxSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = self.changed_event.event();
         endpoint.subscribe(sink)

@@ -87,15 +87,15 @@ fn generated_ports_preserve_foreign_failure_and_checked_delivery() {
     let drops = Rc::new(Cell::new(0));
     let (first_source, first) = source(&session, false);
     let (second_source, second) = source(&session, true);
-    let first_lease = session
-        .subscribe(i_activation_events_subscribe_port(first_source.clone()), Record { drops: drops.clone() })
-        .unwrap();
+    // Constructing a port is infallible and must not attempt a subscription.
+    // The borrowed-handle accessor owns its projection after this block ends.
+    let first_port = { first_source.as_com_ref().port() };
+    assert_eq!(first.attempts.get(), 0);
+    drop(first_source);
+    let first_lease = session.subscribe(first_port, Record { drops: drops.clone() }).unwrap();
 
     // A foreign failure drops the uncommitted sink/handler and preserves old registrations.
-    let failure = session.subscribe(
-        i_activation_events_subscribe_port(second_source.clone()).checked(valid_label),
-        Record { drops: drops.clone() },
-    );
+    let failure = session.subscribe(second_source.port().checked(valid_label), Record { drops: drops.clone() });
     assert_eq!(failure.unwrap_err(), NC_E_INVALID_ARG);
     assert_eq!(drops.get(), 1);
     assert_eq!(second.attempts.get(), 1);
@@ -103,10 +103,7 @@ fn generated_ports_preserve_foreign_failure_and_checked_delivery() {
     assert_eq!(first_lease.active(), Ok(true));
 
     let second_lease = session
-        .subscribe(
-            i_activation_events_subscribe_port(second_source.clone()).checked(valid_label),
-            Record { drops: drops.clone() },
-        )
+        .subscribe(second_source.port().checked(valid_label), Record { drops: drops.clone() })
         .unwrap();
     assert_eq!(first.attempts.get(), 1);
     assert_eq!(second.attempts.get(), 2);

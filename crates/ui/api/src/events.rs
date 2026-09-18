@@ -68,51 +68,56 @@ pub use neocogi_ui_nodes_contracts::IScrollbarSinkEvent as ScrollbarChanged;
 /// Defines a source-side convenience getter while leaving all session policy in COM.
 /// Each expansion selects an exact generated port and, where needed, its domain check.
 macro_rules! widget_port {
-    ($widget:ty, $method:ident, $event:ty, $port:ident $(, $check:ident)?) => {
+    ($widget:ty, $method:ident, $event:ty $(, $check:ident)?) => {
         impl $widget {
             /// Returns the typed event port for subscription by an application or component.
             /// Taking this capability never mounts the control or invokes its handler.
             pub fn $method(&self) -> impl EventPort<Event = $event> {
-                $port(self.as_interface().add_ref())$(.checked($check))?
+                self.as_interface().$method()$(.checked($check))?
             }
         }
     };
 }
 
-widget_port!(ButtonWidget, activated, Activation, button_subscribe_port);
-widget_port!(ListItemWidget, activated, Activation, list_item_subscribe_port);
-widget_port!(ListBoxWidget, activated, Activation, list_box_subscribe_port);
-widget_port!(CheckboxWidget, changed, CheckboxChanged, checkbox_subscribe_port);
-widget_port!(crate::SliderWidget, changed, NumericChanged, slider_subscribe_port, valid_numeric);
-widget_port!(crate::NumberWidget, changed, NumericChanged, number_subscribe_port, valid_numeric);
-widget_port!(crate::ScrollbarWidget, changed, ScrollbarChanged, scrollbar_subscribe_port, valid_scrollbar);
-widget_port!(crate::TextboxWidget, changed, TextChanged, textbox_subscribe_changed_port, valid_text_cursor);
-widget_port!(crate::TextboxWidget, submitted, TextSubmitted, textbox_subscribe_submitted_port);
-widget_port!(crate::TextAreaWidget, changed, TextChanged, text_area_subscribe_changed_port, valid_text_cursor);
-widget_port!(crate::TextAreaWidget, submitted, TextSubmitted, text_area_subscribe_submitted_port);
-widget_port!(crate::ComboWidget, changed, ChoiceChanged, combo_subscribe_changed_port);
+widget_port!(ButtonWidget, activated, Activation);
+widget_port!(ListItemWidget, activated, Activation);
+widget_port!(ListBoxWidget, activated, Activation);
+widget_port!(CheckboxWidget, changed, CheckboxChanged);
+widget_port!(crate::SliderWidget, changed, NumericChanged, valid_numeric);
+widget_port!(crate::NumberWidget, changed, NumericChanged, valid_numeric);
+widget_port!(crate::ScrollbarWidget, changed, ScrollbarChanged, valid_scrollbar);
+widget_port!(crate::TextboxWidget, changed, TextChanged, valid_text_cursor);
+widget_port!(crate::TextboxWidget, submitted, TextSubmitted);
+widget_port!(crate::TextAreaWidget, changed, TextChanged, valid_text_cursor);
+widget_port!(crate::TextAreaWidget, submitted, TextSubmitted);
+widget_port!(crate::ComboWidget, changed, ChoiceChanged);
 
 /// Queries the actual window's lifecycle source without retaining it after subscription.
 pub fn window_events(window: ComRef<'_, IWindowAbi>) -> Result<impl EventPort<Event = WindowChanged>, NcStatus> {
-    Ok(i_window_events_subscribe_port(window.add_ref().query()?).checked(valid_window_event))
+    Ok(window.add_ref().query::<IWindowEventsAbi>()?.port().checked(valid_window_event))
 }
 
 /// Queries the popup's independent dismissal source; delivery describes a captured fact.
 pub fn popup_events(popup: ComRef<'_, IPopupAbi>) -> Result<impl EventPort<Event = PopupDismissed>, NcStatus> {
-    Ok(i_popup_events_subscribe_port(popup.add_ref().query()?))
+    Ok(popup.add_ref().query::<IPopupEventsAbi>()?.port())
 }
 
 impl crate::MenuItem {
     /// Queries this row's actual activation queue, shared by native and plugin clients.
     pub fn activated(&self) -> Result<impl EventPort<Event = Activation>, NcStatus> {
-        Ok(i_activation_events_subscribe_port(self.as_interface().add_ref().query()?))
+        Ok(self.as_interface().add_ref().query::<IActivationEventsAbi>()?.port())
     }
 }
 
 impl crate::FileDialog {
     /// Returns checked native-path completions, including outcomes retained after closure.
     pub fn completed(&self) -> Result<impl EventPort<Event = IFileDialogSinkEvent>, NcStatus> {
-        Ok(i_file_dialog_events_subscribe_port(self.as_interface().add_ref().query()?).checked(valid_file_dialog_path))
+        Ok(self
+            .as_interface()
+            .add_ref()
+            .query::<IFileDialogEventsAbi>()?
+            .port()
+            .checked(valid_file_dialog_path))
     }
 }
 

@@ -285,7 +285,7 @@ impl neocogi_ui_nodes_contracts::ListBox for ListBox {
         Ok(())
     }
     /// Connects the entry's existing semantic event source directly through the class contract.
-    fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_activated(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = self.submitted_event.event();
         endpoint.subscribe(sink)

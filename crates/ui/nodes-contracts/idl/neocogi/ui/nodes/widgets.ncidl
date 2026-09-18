@@ -53,7 +53,7 @@ interface Checkbox: IWidget + ILeafLayout {
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
     /// Connects the exclusive checked-state subscriber and returns its ownership lease.
-    port: ICheckboxSink;
+    port changed: ICheckboxSink;
 }
 
 #[version(1)]
@@ -96,7 +96,7 @@ interface Slider: IWidget + ILeafLayout {
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
     /// Connects the exclusive finite-value subscriber and returns its ownership lease.
-    port: INumericSink;
+    port changed: INumericSink;
 }
 
 #[version(1)]
@@ -113,7 +113,7 @@ interface Number: IWidget + ILeafLayout {
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
     /// Connects the exclusive finite-value subscriber and returns its ownership lease.
-    port: INumericSink;
+    port changed: INumericSink;
 }
 
 #[version(1)]
@@ -149,7 +149,7 @@ interface ListItem: IWidget + ILeafLayout {
     /// Resolves an exact named icon before replacing the existing selection.
     fn set_named_icon(&mut self, name: &[u8]) -> Result<()>;
     /// Connects the exclusive activation subscriber and returns its ownership lease.
-    port: IActivationSink;
+    port activated: IActivationSink;
 }
 
 #[version(1)]
@@ -168,7 +168,7 @@ interface ListBox: IWidget + ILeafLayout {
     /// Removes image content while retaining the current label and font.
     fn clear_image(&mut self) -> Result<()>;
     /// Connects the exclusive activation subscriber and returns its ownership lease.
-    port: IActivationSink;
+    port activated: IActivationSink;
 }
 
 #[version(1)]
@@ -204,7 +204,7 @@ interface Scrollbar: IWidget + ILeafLayout {
     /// Clamps a requested offset to the current range without publishing user input.
     fn set_offset(&mut self, offset: i32) -> Result<()>;
     /// Connects the exclusive offset subscriber and returns its ownership lease.
-    port: IScrollbarSink;
+    port changed: IScrollbarSink;
 }
 
 #[version(1)]

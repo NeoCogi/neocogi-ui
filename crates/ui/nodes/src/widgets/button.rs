@@ -377,7 +377,7 @@ impl neocogi_ui_nodes_contracts::Button for Button {
     }
 
     /// Returns an application-owned lease over the Button's concrete activation source.
-    fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_activated(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = self.submitted_event.event();
         endpoint.subscribe(sink)
