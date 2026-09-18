@@ -57,7 +57,7 @@ impl Drop for Record {
 }
 
 /// Creates a foreign producer without borrowing or retaining application state.
-fn source(session: &neocogi_com_events::EventSession<Vec<String>>, fail_once: bool) -> (ComPtr<IActivationEventsAbi>, Rc<SourceProbe>) {
+fn source<State: 'static>(session: &EventSession<State>, fail_once: bool) -> (ComPtr<IActivationEventsAbi>, Rc<SourceProbe>) {
     let probe = Rc::new(SourceProbe {
         queue: EventSource::new(),
         attempts: Cell::new(0),
@@ -95,7 +95,11 @@ fn generated_ports_preserve_foreign_failure_and_checked_delivery() {
     let first_lease = session.subscribe(first_port, Record { drops: drops.clone() }).unwrap();
 
     // A foreign failure drops the uncommitted sink/handler and preserves old registrations.
-    let failure = session.subscribe(second_source.activated().checked(valid_label), Record { drops: drops.clone() });
+    let mut rejected = Record { drops: drops.clone() };
+    let failure = session.subscribe(
+        second_source.activated().checked(valid_label),
+        move |labels: &mut Vec<String>, event: &Activation| rejected.handle(labels, event),
+    );
     assert_eq!(failure.unwrap_err(), NC_E_INVALID_ARG);
     assert_eq!(drops.get(), 1);
     assert_eq!(second.attempts.get(), 1);
@@ -126,4 +130,67 @@ fn generated_ports_preserve_foreign_failure_and_checked_delivery() {
     assert_eq!(drops.get(), 3);
     assert_eq!(first_lease.active(), Ok(false));
     assert_eq!(second_lease.active(), Ok(false));
+}
+
+/// Independent application destinations updated by different subscriptions.
+#[derive(Default)]
+struct Selections {
+    /// Values routed by a directly registered application method.
+    input: Vec<String>,
+    /// Values routed by a closure with its own mutable delivery counter.
+    output: Vec<String>,
+}
+
+impl Selections {
+    /// A normal state method doubles as a typed callback without a handler type.
+    fn input_selected(&mut self, event: &Activation) -> Result<(), NcStatus> {
+        self.input.push(event.label.clone());
+        Ok(())
+    }
+}
+
+/// Methods and mutable closures share state while preserving FIFO errors and capture lifetime.
+#[test]
+fn callable_subscriptions_route_state_and_release_captures_on_cancellation() {
+    let session = EventSession::new(Selections::default());
+    let (input_source, input) = source(&session, false);
+    let (output_source, output) = source(&session, false);
+    session.subscribe(input_source.activated(), Selections::input_selected).unwrap();
+
+    let drops = Rc::new(Cell::new(0));
+    let lifetime = Record { drops: drops.clone() };
+    let mut attempt = 0;
+    let lease = session
+        .subscribe(output_source.activated(), move |state: &mut Selections, event: &Activation| {
+            // Retain the whole observed value and mutate a plain capture, without a Cell.
+            let _retained = &lifetime;
+            attempt += 1;
+            match attempt {
+                2 => Err(NC_E_INVALID_ARG),
+                _ => {
+                    state.output.push(format!("{attempt}:{}", event.label));
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
+    input.queue.emit(Activation { label: "input".to_owned() });
+    for label in ["first", "rejected", "third"] {
+        output.queue.emit(Activation { label: label.to_owned() });
+    }
+    assert!(session.state().unwrap().input.is_empty(), "emission must remain deferred");
+    assert_eq!(session.dispatch(), Err(NC_E_INVALID_ARG));
+    assert_eq!(session.state().unwrap().input, ["input"]);
+    assert_eq!(session.state().unwrap().output, ["1:first"]);
+    // The failed attempt advances its capture once and leaves the successor queued.
+    assert_eq!(session.dispatch(), Ok(1));
+    assert_eq!(session.state().unwrap().output, ["1:first", "3:third"]);
+    assert_eq!(drops.get(), 0);
+
+    // Session and lease remain alive; cancellation alone releases closure captures.
+    lease.cancel().unwrap();
+    assert_eq!(drops.get(), 1);
+    output.queue.emit(Activation { label: "discarded".to_owned() });
+    assert_eq!(session.dispatch(), Ok(0));
 }
