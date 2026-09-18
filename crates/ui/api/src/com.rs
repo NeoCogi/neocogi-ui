@@ -94,7 +94,7 @@ impl Widget<ButtonAbi> {
     /// Connects a concrete typed sink and returns the caller-owned subscription.
     /// Retain this lease in the application event session; the runtime never owns
     /// an application handler. A second live subscriber is rejected by the source.
-    pub fn subscribe(&mut self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    pub fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.interface.subscribe(sink)
     }
 }

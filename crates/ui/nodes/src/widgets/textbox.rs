@@ -628,13 +628,13 @@ impl neocogi_ui_nodes_contracts::Textbox for Textbox {
         set_direct_named_font(self, name)
     }
     /// Connects the existing changed-text source directly through the class contract.
-    fn subscribe_changed(&mut self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_changed(&self, sink: ComRef<'_, ITextChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = self.changed_event.event();
         endpoint.subscribe(sink)
     }
     /// Connects the independent submitted-text source directly through the class contract.
-    fn subscribe_submitted(&mut self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_submitted(&self, sink: ComRef<'_, ITextSubmittedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = self.submitted_event.event();
         endpoint.subscribe(sink)

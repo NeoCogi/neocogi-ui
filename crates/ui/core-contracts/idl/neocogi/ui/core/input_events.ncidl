@@ -103,7 +103,7 @@ event IActivationSink {
 /// Shared labelled activation source; the producer never owns the returned lease or its sink.
 interface IActivationEvents {
     /// Connects the exclusive subscriber and returns its ownership lease.
-    event subscribe(&self): IActivationSink;
+    port: IActivationSink;
 }
 
 #[version(1)]
@@ -124,9 +124,9 @@ event ITextSubmittedSink {
 /// Shared editor event family; changed and submitted are independent exclusive ports.
 interface ITextEvents {
     /// Connects one changed consumer without claiming the separate submitted port.
-    event subscribe_changed(&mut self): ITextChangedSink;
+    port changed: ITextChangedSink;
     /// Connects one submitted consumer without claiming the separate changed port.
-    event subscribe_submitted(&mut self): ITextSubmittedSink;
+    port submitted: ITextSubmittedSink;
 }
 
 #[version(1)]
@@ -171,7 +171,7 @@ event IWindowSink {
 /// Subscription capability on the actual logical window object; the manager owns its existing native source.
 interface IWindowEvents {
     /// Connects the current source without making a retained window reference prolong native tree ownership.
-    event subscribe(&self): IWindowSink;
+    port: IWindowSink;
 }
 
 #[version(1)]
@@ -185,7 +185,7 @@ event IPopupSink {
 /// Subscription capability on the actual popup object and its existing manager-owned source.
 interface IPopupEvents {
     /// Returns an exclusive application-owned dismissal lease without retaining application state on the producer.
-    event subscribe(&self): IPopupSink;
+    port: IPopupSink;
 }
 
 #[version(1)]
@@ -211,7 +211,7 @@ interface IComponentEventProvider {
 /// Independent completion source for this reusable picker, using the shared application-owned lease transport.
 interface IFileDialogEvents {
     /// Connects one concrete completion consumer without retaining the application on the producer.
-    event subscribe(&self): IFileDialogSink;
+    port: IFileDialogSink;
 }
 
 #[version(1)]

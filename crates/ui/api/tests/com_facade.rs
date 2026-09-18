@@ -34,7 +34,7 @@ mod tests {
         }
 
         /// This editing-only fixture has no event producer.
-        fn subscribe(&mut self, _sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+        fn subscribe(&self, _sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
             Err(neocogi_com::NC_E_NOINTERFACE)
         }
 

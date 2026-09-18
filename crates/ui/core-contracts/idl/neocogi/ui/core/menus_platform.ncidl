@@ -85,7 +85,7 @@ interface IChoiceMenu {
     /// Requests activation or dismissal according to the menu's current reconciled intent.
     fn toggle_at(&mut self, anchor: Rect) -> Result<()>;
     /// Connects the exclusive user-commit subscriber without retaining application state.
-    event subscribe_changed(&mut self): IChoiceChangedSink;
+    port changed: IChoiceChangedSink;
     /// Permanently retires the private popup and ends event delivery.
     fn close(&mut self) -> Result<()>;
 }

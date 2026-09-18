@@ -99,7 +99,7 @@ pub(crate) trait IChoiceMenuState {
     /// Commits one user choice, publishes a changed snapshot, and requests popup closure.
     fn submit(&mut self, id: u64) -> Result<u64, NcStatus>;
     /// Connects the public changed sink to this model's sole event source.
-    fn subscribe_changed(&mut self, sink: ComRef<'_, IChoiceChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
+    fn subscribe_changed(&self, sink: ComRef<'_, IChoiceChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
     /// Ends event delivery and requests permanent private-popup removal.
     fn retire(&mut self) -> Result<(), NcStatus>;
 }
@@ -307,7 +307,7 @@ impl IChoiceMenuState for ChoiceMenuState {
     }
 
     /// Uses the existing typed event bridge while keeping its source in this sole model.
-    fn subscribe_changed(&mut self, sink: ComRef<'_, IChoiceChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_changed(&self, sink: ComRef<'_, IChoiceChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.changed_event.event().subscribe(sink)
     }
 
@@ -382,7 +382,7 @@ impl IChoiceMenu for ChoiceMenuState {
     }
 
     /// Connects the generated core choice event directly to the sole native source.
-    fn subscribe_changed(&mut self, sink: ComRef<'_, IChoiceChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_changed(&self, sink: ComRef<'_, IChoiceChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         <Self as IChoiceMenuState>::subscribe_changed(self, sink)
     }
 

@@ -1094,7 +1094,7 @@ impl neocogi_ui_nodes_contracts::Slider for Slider {
         set_direct_named_font(self, name)
     }
     /// Connects the slider's existing semantic event source directly through the class contract.
-    fn subscribe(&mut self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe(&self, sink: ComRef<'_, INumericSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = self.changed_event.event();
         endpoint.subscribe(sink)

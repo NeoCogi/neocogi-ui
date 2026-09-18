@@ -43,7 +43,7 @@ interface Counter: IWidget + ILeafLayout + IActivationEvents + IWidgetProbe {
     fn set_count(&mut self, value: u32) -> Result<()>;
 
     /// Claims the counter's independent typed value port and returns its lease.
-    event subscribe_changed(&mut self): ICounterChangedSink;
+    port changed: ICounterChangedSink;
 }
 
 #[version(1)]

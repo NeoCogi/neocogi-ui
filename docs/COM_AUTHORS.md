@@ -196,7 +196,7 @@ window-root policy layer.
 // In the composite's NCIDL contract module:
 // event IChoiceSink { fn chosen(&mut self, item: u64) -> Result<()>; }
 // interface ChoicePanel: IWidget + IContainerLayout + IComponentEventProvider {
-//     event subscribe_choice(&mut self): IChoiceSink;
+//     port choice: IChoiceSink;
 // }
 
 // In the producer plugin binary, after committing a choice:

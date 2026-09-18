@@ -374,7 +374,7 @@ impl neocogi_ui_nodes_contracts::Combo for Combo {
     }
 
     /// Connects the Combo's captured-selection source directly through its class contract.
-    fn subscribe_changed(&mut self, sink: ComRef<'_, IChoiceChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_changed(&self, sink: ComRef<'_, IChoiceChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         self.menu.subscribe_changed(sink)
     }

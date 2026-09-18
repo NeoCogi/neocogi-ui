@@ -158,7 +158,7 @@ impl Counter for CounterObject {
     }
 
     /// Connects one generated value sink without claiming the labelled activation port.
-    fn subscribe_changed(&mut self, sink: ComRef<'_, ICounterChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe_changed(&self, sink: ComRef<'_, ICounterChangedSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.common.state.writable()?;
         self.changed.subscribe(sink)
     }

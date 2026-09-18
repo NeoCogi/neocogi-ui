@@ -624,7 +624,7 @@ impl neocogi_ui_nodes_contracts::Scrollbar for Scrollbar {
         Ok(())
     }
     /// Connects the Scrollbar's existing semantic event source directly through its class contract.
-    fn subscribe(&mut self, sink: ComRef<'_, IScrollbarSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe(&self, sink: ComRef<'_, IScrollbarSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = self.changed_event.event();
         endpoint.subscribe(sink)

@@ -351,7 +351,7 @@ impl neocogi_ui_nodes_contracts::ListItem for ListItem {
         set_direct_named_icon(self, name)
     }
     /// Connects the row's existing semantic event source directly through the class contract.
-    fn subscribe(&mut self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
+    fn subscribe(&self, sink: ComRef<'_, IActivationSinkAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
         self.runtime().state.writable()?;
         let endpoint = self.submitted_event.event();
         endpoint.subscribe(sink)
