@@ -497,36 +497,13 @@ mod tests {
         }
     }
 
-    fn record_slider_change(values: &mut Vec<Real>, event: &SliderChanged) {
-        values.push(event.value);
-    }
-
-    fn record_number_change(values: &mut Vec<Real>, event: &SliderChanged) {
-        values.push(event.value);
-    }
-
-    /// Observes snapshots from the production event source without scheduling UI work.
-    fn slider_dispatcher(slider: &Slider) -> impl FnMut(&mut Vec<Real>) -> bool + use<> {
-        let mut lease = neocogi_ui::events::test_support::Capture::connect(slider.changed_event.as_ref()).unwrap();
+    /// Collects the shared numeric message from either control through its production port.
+    fn numeric_dispatcher(port: crate::PortRef<neocogi_ui_nodes_contracts::NumericChanged>) -> impl FnMut(&mut Vec<Real>) -> bool + use<> {
+        let mut capture = neocogi_ui::events::test_support::Capture::connect(port).unwrap();
         move |values| {
-            let batch = lease.drain(1024).unwrap();
+            let batch = capture.drain(1024).unwrap();
             let delivered = !batch.is_empty();
-            for event in batch {
-                record_slider_change(values, &event);
-            }
-            delivered
-        }
-    }
-
-    /// Observes snapshots from the production event source without scheduling UI work.
-    fn number_dispatcher(number: &Number) -> impl FnMut(&mut Vec<Real>) -> bool + use<> {
-        let mut lease = neocogi_ui::events::test_support::Capture::connect(number.changed()).unwrap();
-        move |values| {
-            let batch = lease.drain(1024).unwrap();
-            let delivered = !batch.is_empty();
-            for event in batch {
-                record_number_change(values, &event);
-            }
+            values.extend(batch.into_iter().map(|event| event.value));
             delivered
         }
     }
@@ -695,7 +672,7 @@ mod tests {
             SliderParameters::with_opt(1.15, 1.0, 2.0, 0.2, precision(2), WidgetOption::FRAME)
                 .expect("finite ascending fractional slider parameters must validate"),
         );
-        let mut dispatcher = slider_dispatcher(&slider);
+        let mut dispatcher = numeric_dispatcher(slider.changed_event.as_ref());
         run_slider_once(&mut slider, rect(0, 0, 100, 20), Vec::new(), true, false, false, Some(vec2(0, 1)));
 
         assert_real_close(slider.value(), 1.4);
@@ -845,7 +822,7 @@ mod tests {
         let mut number = crate::test_support::algorithm::Algorithm::<Number>::from(
             NumberParameters::new(0.0, 2.0, DecimalPrecision::ZERO).expect("finite non-negative number parameters must validate"),
         );
-        let mut dispatcher = number_dispatcher(&number);
+        let mut dispatcher = numeric_dispatcher(number.changed());
         let mut values = Vec::new();
         number.set_value(4.0);
         assert!(!dispatcher(&mut values));
@@ -924,7 +901,7 @@ mod tests {
         let mut slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
             SliderParameters::new(0.0, -5.0, 5.0).expect("finite ascending slider parameters must validate"),
         );
-        let mut dispatcher = slider_dispatcher(&slider);
+        let mut dispatcher = numeric_dispatcher(slider.changed_event.as_ref());
         slider.set_value(4.0);
         assert_eq!(slider.value(), 4.0);
         assert!(!dispatcher(&mut Vec::new()));
@@ -936,7 +913,7 @@ mod tests {
         let mut slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
             SliderParameters::with_opt(2.0, 0.0, 10.0, 1.0, DecimalPrecision::ZERO, WidgetOption::FRAME).unwrap(),
         );
-        let mut dispatcher = slider_dispatcher(&slider);
+        let mut dispatcher = numeric_dispatcher(slider.changed_event.as_ref());
         slider.edit.editing = true;
         // Enter through the editing contract instead of reaching into the private numeric buffer.
         run_slider_once(

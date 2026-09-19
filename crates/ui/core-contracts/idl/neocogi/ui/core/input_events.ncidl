@@ -101,9 +101,9 @@ struct Activation {
 }
 
 #[version(1)]
-/// Shared labelled activation source; the producer never owns the returned lease or its sink.
+/// Shared connection access for labelled activation from the actual control.
 interface IActivationEvents {
-    /// Connects the exclusive subscriber and returns its ownership lease.
+    /// Connection access for captured Activation values.
     activated: Activation;
 }
 
@@ -128,9 +128,9 @@ struct TextSubmitted {
 #[version(1)]
 /// Shared editor event family; changed and submitted are independent exclusive ports.
 interface ITextEvents {
-    /// Connects one changed consumer without claiming the separate submitted port.
+    /// Connection access for captured TextChanged values.
     changed: TextChanged;
-    /// Connects one submitted consumer without claiming the separate changed port.
+    /// Connection access for captured TextSubmitted values.
     submitted: TextSubmitted;
 }
 
@@ -169,9 +169,9 @@ enum WindowEvent: u8 {
 
 
 #[version(1)]
-/// Subscription capability on the actual logical window object; the manager owns its existing native source.
+/// Connection access on the actual window; the manager owns its emission storage.
 interface IWindowEvents {
-    /// Connects the current source without making a retained window reference prolong native tree ownership.
+    /// Connection access for captured WindowEvent values.
     changed: WindowEvent;
 }
 
@@ -184,9 +184,9 @@ enum PopupDismissed: u8 {
 }
 
 #[version(1)]
-/// Subscription capability on the actual popup object and its existing manager-owned source.
+/// Connection access on the actual popup and its manager-owned emission storage.
 interface IPopupEvents {
-    /// Returns an exclusive application-owned dismissal lease without retaining application state on the producer.
+    /// Connection access for this popup's captured dismissal facts.
     dismissed: PopupDismissed;
 }
 

@@ -80,7 +80,7 @@ interface IChoiceMenu {
     fn hide(&mut self) -> Result<()>;
     /// Requests activation or dismissal according to the menu's current reconciled intent.
     fn toggle_at(&mut self, anchor: Rect) -> Result<()>;
-    /// Connects the exclusive user-commit subscriber without retaining application state.
+    /// Connection access for captured ChoiceSelection values.
     changed: ChoiceSelection;
     /// Permanently retires the private popup and ends event delivery.
     fn close(&mut self) -> Result<()>;

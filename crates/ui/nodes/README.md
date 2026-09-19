@@ -18,7 +18,7 @@ Core owns retained topology, root identity, authoritative child stores, traversa
 scope validation, and frame submission. `src/layout_client.rs` is only a borrowed COM client:
 its copied scope and first-error value are ordinary fields, with mutation through `&mut self`.
 Concrete controls communicate through cached `IWidget`, `ILeafLayout`, and `IContainerLayout`,
-exactly like independent extensions. Their events use generated sink contracts and COM-owned
+exactly like independent extensions. Their outputs use concrete message contracts and COM-owned
 transport. Producers post directly into `Events<Message>` inboxes; ordinary application
 state is borrowed only by its deferred consumer, outside the producer graph.
 

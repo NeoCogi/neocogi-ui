@@ -105,9 +105,9 @@ struct CounterObject {
     common: Common,
     /// The one semantic counter value; labels are short-lived snapshots of it.
     count: u32,
-    /// The shared static producer retains queued snapshots, never the application's callback.
+    /// Activation port posts captured labels directly into the connected consumer inbox.
     submitted: Port<Activation>,
-    /// Independent generated domain-event port, with no application handler ownership.
+    /// Independent concrete output for committed count changes.
     changed: Port<CounterChanged>,
 }
 impl CounterObject {

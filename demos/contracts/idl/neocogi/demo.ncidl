@@ -43,7 +43,7 @@ interface Counter: IWidget + ILeafLayout + IActivationEvents + IWidgetProbe {
     /// Silently replaces the displayed count and invalidates its preferred text size when changed.
     fn set_count(&mut self, value: u32) -> Result<()>;
 
-    /// Claims the counter's independent typed value port and returns its lease.
+    /// Connection access for captured CounterChanged values.
     changed: CounterChanged;
 }
 

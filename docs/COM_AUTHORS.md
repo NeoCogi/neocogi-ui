@@ -79,7 +79,7 @@ enum AppMessage {
     /// The button's immutable activation label.
     Activated(String),
     /// One reusable dialog's native completion, routed by the application.
-    Completed { destination: usize, result: FileDialogCompletionMessage },
+    Completed { destination: usize, result: FileDialogCompletion },
 }
 let mut events = Events::new();
 events.map(button.activated(), |event| AppMessage::Activated(event.label))?;
@@ -95,100 +95,54 @@ instances can map their same protocol to different destinations. When reusing on
 dialog across requests, request identity remains application/domain policy; mapping
 a port does not manufacture an invocation ID absent from the protocol.
 
-The compiler treats `neocogi.com.events.IEventSubscription` as the canonical lease
-for named ports. The contract owns `active` and `cancel`; dispatch is a separate
-consumer capability. The generic `neocogi-com-events` crate supplies connections,
-inboxes, generated receiver support, and scoped consumer dispatch without depending
-on UI or the process-global runtime. UI adds domain checks and convenient getters.
-Both plugin descriptor and runtime table ABIs remain v1. Generated Rust event
-bindings require support API 4 and must be regenerated together with this transport.
+Declare published cross-COM outputs as concrete `#[message]` structs/enums in
+NCIDL: `completed: FileDialogCompletion;`. Application and component-private enums
+stay in Rust. `Port<T>` owns emission storage; the generated `PortRef<T>` getter
+grants connection access to that same port without retaining its producer.
+`com_object(..., ports(...))` binds storage or forwards a child's output, replacing
+handwritten subscription methods. See [IDL syntax](IDL_MODULES.md#concrete-messages-and-outputs).
 
-| Port | Producers | Owned protocol message |
+| Port | Producers | Concrete message |
 | --- | --- | --- |
-| `activated()` | Buttons, list rows, menu items | Captured label |
-| `changed()` | Checkbox | Checked boolean |
-| `changed()` | Slider, Number | Finite numeric value |
-| `changed()` | Scrollbar | Nonnegative offset |
-| `changed()`, `submitted()` | Textbox, TextArea | UTF-8 text and, for changes, cursor |
-| `changed()` | Combo | Committed `ChoiceSelection` |
-| `completed()` | FileDialog | Native path capability or cancellation |
+| `activated()` | Buttons, list rows, menu items | `Activation` |
+| `changed()` | Checkbox | `CheckboxChanged` |
+| `changed()` | Slider, Number | `NumericChanged` |
+| `changed()` | Scrollbar | `ScrollbarChanged` |
+| `changed()`, `submitted()` | Textbox, TextArea | `TextChanged`, `TextSubmitted` |
+| `changed()` | Combo | `ChoiceSelection` |
+| `completed()` | FileDialog | `FileDialogCompletion` |
 
-`name: Protocol;` generates an accessor on `ComPtr` and `ComRef`. The temporary
-port retains that exact source only until connection finishes; it neither queries
-another capability nor subscribes merely by being constructed. A separate source
-interface remains useful for optional shared behavior such as activation. The file
-dialog's completion binding belongs directly to `IFileDialog`.
+Commit state before calling `port.emit(message)?`. Mapping runs synchronously and
+must only translate data or attach routing IDs; UI behavior belongs in the later
+consumer. Rust cannot prove closure purity. Captures must be owned or `'static`,
+while the consumer may borrow ordinary state for the update. Generated receivers
+validate/copy/retain a concrete C message before mapping; Rust values and closures
+never cross COM. Keep domain validation in the UI facade with `.checked(validate)`.
 
-A producer stores `EventSource<GeneratedMessage>`, returns `source.subscribe(sink)`
-from the generated connection method, and uses `source.emit(message)?` only after
-committing the state described by the fact. Generated delivery copies strings and
-slices, retains concrete object references, checks domain invariants, invokes the
-mapper, and posts the result directly into the consumer inbox. There is no source
-queue followed by a second application queue.
+One port admits one live connection. Each consumer owns one FIFO, ordered by
+actual emission. Cancellation and closure stop future posts without retracting
+committed facts. Dropping the inbox cancels its connections. A retained port view
+cannot retain the producer, and the generated receiver cannot retain the inbox.
+Getter, decoding and posting failures propagate; committed state does not roll back.
 
-Mappers run synchronously during emission and should only translate data or attach
-routing IDs. They must not do UI work or consume application state; the producer
-may still hold traversal or semantic borrows. Rust does not prove closure purity.
-Mapper captures must be owned or otherwise `'static`. The generated mutable receiver
-stores the concrete `FnMut` directly and protects ordinary captures through the COM
-call gate. Consumer behavior is deferred and needs no `'static` borrow. A private
-scoped adapter revokes every retained foreign dispatcher on return or unwind, so
-borrowing an ordinary application consumer does not extend its lifetime across COM.
+Behavioral composites own a private Rust enum and inbox, map child outputs into it,
+and expose a framework component driver through `IComponentEventProvider`. That
+driver uses weak ownership and a distinct COM identity. A shared `Rc<RefCell<Model>>`
+is needed only when controller and mounted-driver identities access the same model;
+its fields and behavior use ordinary `&mut self`. Structural containers such as
+`ScrollArea` need no inbox merely because they have children.
 
-One source supports one live connection. The lease owns its receiver; the source
-holds a weak link and the receiver has weak posting access. Connecting a second
-consumer reports BUSY. Cancelling an old lease cannot disconnect its replacement.
-Failed setup releases uncommitted receiver ownership. Applications must still avoid
-cycles they explicitly create in their own captured data.
+The runtime discovers nested drivers automatically, including in `Ui::update`.
+It settles child messages and layout before dispatching an application message,
+then settles any resulting private work before continuing. Authors need no private
+dispatch loop, child registry or update-cycle object. The [events guide](../crates/ui/runtime/docs/EVENTS.md)
+defines the full descendant-first schedule, cancellation ownership, work budget,
+reentrancy and failure rules. Posting does not itself request a platform frame.
+Layout/paint remain observational, and asset installation belongs after update.
 
-Every port mapped into one inbox shares **emission order**, regardless of connection
-order. An emitted fact belongs to that consumer once posted. Cancelling the lease,
-closing the source, or dropping the producer prevents future posting and releases
-the mapper without retracting committed messages. Dropping the inbox cancels its
-leases, invalidates separately retained leases, and drops all pending messages.
-No subscriber means no replay history. Closing a source may post one final fact;
-request outcomes need no special finished queue or terminal-delivery state machine.
-
-A behavioral composite owns a private enum and inbox and maps its children into
-that enum. Its ordinary mutable `update` method consumes one message and may emit
-public results. Internal messages do not implicitly bubble to all ancestors.
-`ScrollArea` needs no inbox merely because its structural children share scroll
-state. When separate COM controller and mounted-driver identities need access to
-a behavioral model, one `Rc<RefCell<Model>>` provides the necessary checked boundary;
-the model's fields, inbox registration, and update method use normal mutable access.
-
-The framework constructs a component driver with
-`model.borrow().events.component_dispatcher(&model, Model::update)?`. The mounted
-root exposes it through `IComponentEventProvider::private_dispatcher`. That driver
-has a separate COM identity and weak ownership; neither a private dispatch loop nor
-an application-side child registry is needed. The runtime discovers arbitrary
-nested providers during mount and drives them even in ordinary `Ui::update`.
-
-The runtime synchronizes layout and settles pending messages before routing input.
-It then routes one raw input, releases traversal borrows, and visits private inboxes
-descendant-first in stable tree order. Each component
-gets at most one message per pass. Passes repeat until private work and layout
-settle, then one application message runs. Its resulting private work settles before
-the next application message or raw input. Newly mounted children join the next
-pass; removed mounts retire their tickets before further visits, including a second
-message for the component that removed itself. There is no total ordering across
-independent inboxes beyond this explicit schedule. An empty input queue still gets
-an eventless update. The renderer receives a committed frame only after settlement.
-
-One finite work budget spans the whole update, including component messages,
-application messages and choice-menu reconciliation. Exhaustion reports LIMIT,
-leaves unattempted messages queued and keeps the frame uncommitted. Consumer errors
-consume the attempted message and preserve successors; state edits do not roll back.
-An error claiming a component's mutable model leaves its message unattempted.
-Receiver decoding/mapping errors return at emission; built-ins surface them through
-the enclosing widget/window operation while preserving committed state and geometry
-invalidation. Drop paths release ownership but cannot return a failure to callers.
-
-Recursive runtime update/render and recursive mutable dispatcher invocation reject.
-Layout/paint remain observational. Consumers may prepare immutable asset candidates,
-but asset installation belongs after update returns. Posting does not request a
-future platform frame; timers, animation and external data still need host scheduling.
-`Events::pop` is available for non-UI consumers that explicitly own their own loop.
+The same transport serves ordinary-Cargo plugins and static monoliths. Plugin
+descriptor and runtime table ABIs remain v1; generated Rust bindings require support
+API 5 and must be regenerated with the transport.
 
 Layout settlement does not repeat a widget's ordinary behavior for the same input.
 Requests such as caret reveal, made after an editor's ordinary update, remain pending
@@ -686,7 +640,7 @@ Every submenu is followed immediately by its declared number of direct children;
 nested descendants follow their owning child branch. Construction and replacement
 atomically reject malformed counts, empty branches, invalid UTF-8 ranges, duplicate
 leaf IDs, nesting beyond 32 branches, or an unknown selected ID. Programmatic edits
-remain silent; `combo.changed()` yields immutable `ChoiceChanged` snapshots containing the selection
+remain silent; `combo.changed()` yields immutable `ChoiceSelection` values
 only after a pointer or keyboard choice commits. Display labels remain independently
 available through `choice_label` and `display_text`; generic application data is
 mapped from the committed stable ID.
@@ -790,7 +744,7 @@ picker.open(&request)?;
 ui.update_with_events(drawable_size, &mut events, |message| app.update(message))?;
 ```
 
-The mapper receives the generated `FileDialogCompletionMessage::Accepted { path }`
+The mapper receives the generated `FileDialogCompletion::Accepted { path }`
 or `Cancelled`. `neocogi_ui::events::completed_file_path` copies the exact
 host-native `PathBuf` when the application needs it; display text is never
 reconstructed as a lookup key.

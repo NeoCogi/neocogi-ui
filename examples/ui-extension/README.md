@@ -1,7 +1,7 @@
 # Independent widget and container example
 
 This optional assembly depends only on the facade, UI contracts, example contracts,
-and neocogi-com. It contains a counter and a one-child inset container. It is built and
+neocogi-com, and neocogi-com-events. It contains a counter and a one-child inset container. It is built and
 loaded separately from the host, UI, and renderer; ordinary demo packages omit it.
 
 ```sh
@@ -40,32 +40,22 @@ External controls share the built-in ownership and routing rules.
 The [implementation](src/lib.rs) uses `WidgetState` for common options, mount-once
 ownership, logical closure and sticky invalidation. The counter stores its value
 once and shares the same event transport as built-ins. Its NCIDL contract binds
-`changed: CounterChangesPort;`, generating the owned `CounterChangesMessage`,
-receiver adapter, and lease-bearing subscription operation:
+`changed: CounterChanged;` to the concrete message
+`#[message] struct CounterChanged { value: u32 }`.
 
-```rust,ignore
-submitted: EventSource<Activation>,
-changed: EventSource<CounterChangesMessage>,
+The producer stores `Port<CounterChanged>`, binds it in `com_object`'s `ports(...)`
+attribute, then calls `self.changed.emit(CounterChanged { value: self.count })?`
+after committing the count. The activation output independently carries `Activation`.
+Host-mutation checks live in the binding blocks; no subscription methods are
+implemented by the counter.
 
-// After committing the count:
-self.submitted.emit(Activation { label: self.count.to_string() })?;
-self.changed.emit(CounterChangesMessage { value: self.count })?;
-
-// Counter::subscribe_changed is generated from the named protocol binding:
-self.changed.subscribe(sink)
-```
-
-Emission maps and posts an owned snapshot directly into the consumer's inbox. The
-producer holds only a weak connection to its typed receiver. The
-[acceptance host](../../demos/smoke/src/extension.rs) maps the generated port with
-`events.map(counter.changed(), Message::Changed)`. Its one consumer matches the
-ordinary enum through `ui.update_with_events(size, &mut events, |message|
-message.consume(&mut labels, &mut counter))`.
-The mapper runs at emission and only translates data; behavior runs after traversal.
-The inbox owns both leases. Its single consumer matches activation and count facts,
-then edits the counter through its ordinary capability. The captured count remains
-the originally committed value; the UI incorporates the later edit's measurement
-before the same update returns.
+The [acceptance host](../../demos/smoke/src/extension.rs) defines its own ordinary
+Rust enum and maps the output with `events.map(counter.changed(), Message::Changed)`.
+Mapping immediately translates the concrete value and posts it into that consumer's
+FIFO. The later mutable consumer runs through `ui.update_with_events`, after
+traversal borrows are released, and may edit the counter. Captured values remain
+the committed facts; resulting geometry is synchronized before update returns.
+The same implementation and generated contracts serve both build commands above.
 
 The inset retains one `IChildrenEditor` and exposes its read-only view. It reads
 the authoritative child count instead of maintaining a second topology flag. Its

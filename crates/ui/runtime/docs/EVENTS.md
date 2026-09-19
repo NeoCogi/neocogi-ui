@@ -31,20 +31,27 @@ It needs no handler types, borrowed-state session, or update-cycle protocol.
 
 ## Posting and ownership
 
-A generated NCIDL `port` defines a concrete protocol and owned message type.
-A named binding such as `completed: FileDialogCompletionPort;` generates the
-`.completed()` accessor and its typed connection operation. UI convenience getters
-also install domain validation, including native-path and numeric checks.
+NCIDL declares concrete `#[message]` structs/enums and named outputs such as
+`completed: FileDialogCompletion;`. The generated `.completed()` accessor returns
+`PortRef<FileDialogCompletion>`, a connection view weak to the producer. A getter
+error is reported when `events.map` attempts to connect. UI getters also attach
+domain checks, including native-path and finite-number validation.
 
-`events.map(port, mapper)` creates a generated receiver and retains the successful
-`IEventSubscription` lease. The temporary port releases its source after setup.
-There is one subscriber per source. Producers use `EventSource<E>` with no queue:
+Producers own `Port<E>` fields and bind them with `com_object(..., ports(...))`.
+The compiler generates their COM getters and typed receiver adapters. `events.map`
+installs one receiver and retains its `IEventSubscription` lease. No authored sink,
+subscription method, per-output wrapper type, or producer queue is required:
 
 ```text
-producer commits state → protocol receiver copies/validates arguments
-                       → mapper translates the owned protocol message
-                       → message enters the consumer's FIFO
+producer commits state → post a borrowed concrete C message across COM
+                       → decode/copy/retain the owned message
+                       → mapper translates into the consumer's Rust enum
+                       → enqueue in that consumer's FIFO
 ```
+
+Application and component-private enums remain ordinary Rust declarations. Only
+published COM output messages need NCIDL. Native code and plugins use the same
+concrete posting path; raw Rust layouts never cross the boundary.
 
 The mapper runs synchronously at emission. It should only translate data or attach
 routing IDs; it must not perform UI work or consume application state. Rust cannot
@@ -52,8 +59,9 @@ prove closure purity. Captures must be owned or otherwise `'static`. The generat
 mutable receiver protects ordinary `FnMut` captures without extra cells. Application
 behavior runs later, after traversal releases its borrows.
 
-A source retains a weak connection; its lease owns the receiver, and the receiver
-has weak posting access. Neither prolongs the consumer. `emit` returns receiver
+The producer slot owns its installed receiver. Its lease and connection projection
+are weak to the slot, and the receiver has weak posting access to the FIFO. Neither
+a retained projection nor a lease prolongs the producer or consumer. `emit` returns receiver
 errors. Built-in controls preserve committed state and return posting failures
 through the enclosing UI operation. No event is retained without a subscriber.
 
@@ -107,4 +115,4 @@ candidates may be prepared during consumption, but installation requires the fra
 boundary after update returns. Posting does not schedule a future frame; timers and
 external data still need host scheduling. Dynamic plugins and static monoliths use
 the same transport. Plugin descriptor and runtime table ABIs remain v1; generated
-Rust event bindings require support API 4.
+Rust event bindings require support API 5.

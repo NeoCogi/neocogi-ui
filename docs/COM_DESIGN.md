@@ -4,8 +4,8 @@ A contract is a compile-time description of values and callable interfaces.
 An object is private Rust state implementing those interfaces. A factory is an
 interface with construction policy: it is the only role eligible for the
 runtime's zero-argument bootstrap. A plugin packages implementations and one
-root factory. An event is an interface role with immutable delivery rules and
-generated typed adapters.
+root factory. A published event is concrete message data; generated port
+connections carry it across COM into a consumer-owned inbox.
 
 ## Ownership
 
@@ -32,8 +32,8 @@ host with ordinary Cargo, including a monolith.
 
 ## Interfaces and construction
 
-`interface`, `factory`, and `port` lower to the same `Interface` model. Role,
-threading, required projections, and ordered methods are contract inputs.
+`interface` and `factory` use one callable model. Role, threading, required
+projections, ordered methods and named message outputs are contract inputs.
 The old IDL `trait` and `class` spellings are removed. Generated Rust still uses
 traits as its statically typed implementation surface.
 
@@ -61,7 +61,7 @@ conflicting/reentrant access as `NC_E_BUSY`. Its internal `UnsafeCell` is the
 single audited bridge from ABI pointers to a guarded Rust borrow; ordinary
 implementation fields do not need `Cell` or `RefCell` for this purpose.
 
-Event ports use exact typed protocols and connection leases. A generated receiver
+Event ports carry concrete `#[message]` data through generated COM posting. A receiver
 copies and maps each emitted fact directly into one consumer-owned `Events<Message>`
 FIFO. Application state remains an ordinary value borrowed during runtime dispatch.
 Nested components use private inboxes and framework-created drivers discovered at

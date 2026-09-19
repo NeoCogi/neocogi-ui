@@ -13,9 +13,9 @@ interface Textbox: IWidget + ILeafLayout {
     fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
-    /// Connects the independent changed-text subscriber.
+    /// Connection access for captured TextChanged values.
     changed: TextChanged;
-    /// Connects the independent submitted-text subscriber.
+    /// Connection access for captured TextSubmitted values.
     submitted: TextSubmitted;
 }
 
@@ -52,7 +52,7 @@ interface Checkbox: IWidget + ILeafLayout {
     fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
-    /// Connects the exclusive checked-state subscriber and returns its ownership lease.
+    /// Connection access for captured CheckboxChanged values.
     changed: CheckboxChanged;
 }
 
@@ -95,7 +95,7 @@ interface Slider: IWidget + ILeafLayout {
     fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
-    /// Connects the exclusive finite-value subscriber and returns its ownership lease.
+    /// Connection access for captured NumericChanged values.
     changed: NumericChanged;
 }
 
@@ -112,7 +112,7 @@ interface Number: IWidget + ILeafLayout {
     fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
-    /// Connects the exclusive finite-value subscriber and returns its ownership lease.
+    /// Connection access for captured NumericChanged values.
     changed: NumericChanged;
 }
 
@@ -148,7 +148,7 @@ interface ListItem: IWidget + ILeafLayout {
     fn set_icon_role(&mut self, icon: ContentIcon) -> Result<()>;
     /// Resolves an exact named icon before replacing the existing selection.
     fn set_named_icon(&mut self, name: &[u8]) -> Result<()>;
-    /// Connects the exclusive activation subscriber and returns its ownership lease.
+    /// Connection access for captured Activation values.
     activated: Activation;
 }
 
@@ -167,7 +167,7 @@ interface ListBox: IWidget + ILeafLayout {
     fn set_image(&mut self, image: &ITexture, fit_width: bool) -> Result<()>;
     /// Removes image content while retaining the current label and font.
     fn clear_image(&mut self) -> Result<()>;
-    /// Connects the exclusive activation subscriber and returns its ownership lease.
+    /// Connection access for captured Activation values.
     activated: Activation;
 }
 
@@ -203,7 +203,7 @@ interface Scrollbar: IWidget + ILeafLayout {
     fn set_lengths(&mut self, viewport: i32, content: i32) -> Result<()>;
     /// Clamps a requested offset to the current range without publishing user input.
     fn set_offset(&mut self, offset: i32) -> Result<()>;
-    /// Connects the exclusive offset subscriber and returns its ownership lease.
+    /// Connection access for captured ScrollbarChanged values.
     changed: ScrollbarChanged;
 }
 
@@ -264,9 +264,9 @@ interface TextArea: IWidget + IContainerLayout + IScrolling {
     fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
-    /// Connects the actual editor's independent changed-text subscriber.
+    /// Connection access for captured TextChanged values.
     changed: TextChanged;
-    /// Connects the actual editor's independent submitted-text subscriber.
+    /// Connection access for captured TextSubmitted values.
     submitted: TextSubmitted;
 }
 
@@ -293,6 +293,6 @@ interface Combo: IWidget + ILeafLayout {
     fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
-    /// Connects the captured user-selection subscriber.
+    /// Connection access for captured ChoiceSelection values.
     changed: ChoiceSelection;
 }

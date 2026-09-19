@@ -8,7 +8,7 @@ interface Button: IWidget + ILeafLayout {
     /// Returns the current label as an independently owned immutable string object.
     fn label(&self) -> Result<String>;
 
-    /// Connects the exclusive activation subscriber and returns its ownership lease.
+    /// Connection access for captured Activation values.
     activated: Activation;
 
     /// Selects a semantic font role and invalidates measurement only when it differs.
