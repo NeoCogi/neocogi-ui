@@ -43,12 +43,12 @@ impl ComponentEventDriver {
         Self { active: Cell::new(true), dispatcher }
     }
 
-    /// Delivers one bounded sweep, or skips a component already removed from its mount.
-    pub(crate) fn dispatch(&self, limit: u32) -> Result<u32, NcStatus> {
+    /// Delivers one message, or skips a component already removed from its mount.
+    pub(crate) fn dispatch(&self) -> Result<bool, NcStatus> {
         if self.active.get() {
-            self.dispatcher.as_com_ref().dispatch(limit)
+            self.dispatcher.as_com_ref().dispatch()
         } else {
-            Ok(0)
+            Ok(false)
         }
     }
 

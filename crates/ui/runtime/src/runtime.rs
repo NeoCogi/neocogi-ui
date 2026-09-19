@@ -386,47 +386,56 @@ impl Runtime {
     /// Every visit rediscovers mounted drivers; removed tickets are retired immediately.
     fn dispatch_boundary(&self, dispatcher: Option<ComRef<'_, IEventDispatcherAbi>>, dimensions: Dimensioni, remaining: &mut u32) -> Result<(), NcStatus> {
         loop {
-            // Layout itself may post messages, so it precedes the next queue visit.
-            // No context transaction survives any component or application callback.
+            // Exhaustion stops before another dequeue. Reaching the exact ceiling also
+            // returns LIMIT: proving quiescence would require inspecting foreign queues.
+            if *remaining == 0 {
+                return Err(neocogi_com_events::EVENT_E_LIMIT);
+            }
             self.storage.layout_boundary(dimensions)?;
             let (reconciled, component_drivers) = {
                 let mut context = self.storage.context()?;
                 (context.reconcile_choice_menus()?, context.window_manager.component_event_drivers()?)
             };
-            let before = *remaining;
+            let mut progressed = reconciled;
             if reconciled {
-                *remaining = remaining.checked_sub(1).ok_or(neocogi_com_events::EVENT_E_LIMIT)?;
+                spend_dispatch_budget(remaining)?;
             }
             for component in component_drivers {
                 // One message per visit lets retirement take effect before this
-                // same component receives a successor from its private inbox.
-                let count = component.dispatch((*remaining).min(1))?;
-                if count > 1 {
-                    return Err(NC_E_INVALID_ARG);
+                // same component receives a successor from its private channel.
+                if component.dispatch()? {
+                    progressed = true;
+                    spend_dispatch_budget(remaining)?;
                 }
-                *remaining = remaining.checked_sub(count).ok_or(NC_E_INVALID_ARG)?;
                 self.storage.open()?;
             }
             self.storage.phase_result()?;
-            if before != *remaining {
+            if progressed {
                 continue;
             }
-            // One app message may create child work. Settle that work before the
-            // next app message, preserving FIFO without exposing a public pump.
-            let count = match dispatcher {
-                Some(mut dispatcher) => dispatcher.dispatch((*remaining).min(1))?,
-                None => 0,
+            // One app message may create child work. Settle it before the next
+            // application visit; callbacks never retain a traversal borrow.
+            let delivered = match dispatcher {
+                Some(mut dispatcher) => dispatcher.dispatch()?,
+                None => false,
             };
-            if count > 1 {
-                return Err(NC_E_INVALID_ARG);
-            }
-            *remaining = remaining.checked_sub(count).ok_or(NC_E_INVALID_ARG)?;
             self.storage.open()?;
             self.storage.phase_result()?;
-            if count == 0 {
-                return Ok(());
+            match delivered {
+                true => spend_dispatch_budget(remaining)?,
+                false => return Ok(()),
             }
         }
+    }
+}
+
+/// Charges one completed unit of work without dequeuing or probing the next one.
+/// The ceiling is conservative: even an exactly exhausted, now-empty update must retry.
+fn spend_dispatch_budget(remaining: &mut u32) -> Result<(), NcStatus> {
+    *remaining -= 1;
+    match *remaining {
+        0 => Err(neocogi_com_events::EVENT_E_LIMIT),
+        _ => Ok(()),
     }
 }
 impl RuntimeStorage {

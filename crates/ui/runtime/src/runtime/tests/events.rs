@@ -427,23 +427,23 @@ fn real_lifecycle_cascade_is_deferred_until_each_consumer_returns() {
 }
 
 #[com_object(interfaces(IEventDispatcher))]
-/// A foreign dispatcher deliberately violates the requested callback bound.
-struct InvalidDispatcher;
-impl IEventDispatcher for InvalidDispatcher {
-    /// Runtime must reject this impossible report rather than accepting an unchecked frame boundary.
-    fn dispatch(&mut self, limit: u32) -> Result<u32, NcStatus> {
-        Ok(limit + 1)
+/// A foreign consumer fails while the runtime is settling the frame.
+struct FailingDispatcher;
+impl IEventDispatcher for FailingDispatcher {
+    /// Propagates the consumer failure through the actual COM dispatcher boundary.
+    fn dispatch(&mut self) -> Result<bool, NcStatus> {
+        Err(NC_E_INVALID_ARG)
     }
 }
 
-/// Invalid plugin reports leave the frame uncommitted and allow an ordinary successful retry.
+/// Failed foreign consumers leave the frame uncommitted and allow an ordinary successful retry.
 #[test]
-fn runtime_rejects_dispatch_count_larger_than_its_requested_bound() {
+fn runtime_preserves_uncommitted_frame_on_foreign_consumer_failure() {
     let runtime = runtime();
     let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let button = ui.widgets().button("count").unwrap();
     let window = ui.window("count", RECT, &button).unwrap();
-    let dispatcher: ComPtr<IEventDispatcherAbi> = InvalidDispatcher::from_value(InvalidDispatcher).query().unwrap();
+    let dispatcher: ComPtr<IEventDispatcherAbi> = FailingDispatcher::from_value(FailingDispatcher).query().unwrap();
     assert_eq!(runtime.update_with_events(SIZE, dispatcher.as_com_ref()), Err(NC_E_INVALID_ARG));
     let (renderer, _) = renderer();
     assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
@@ -461,25 +461,34 @@ fn boundary_budget_stops_a_cascade_and_preserves_the_unattempted_message() {
     let runtime = Runtime {
         storage: create_storage(assets, compositor),
     };
-    let mut events = Events::new();
-    let sender = events.sender();
-    sender.post(()).unwrap();
-    let mut delivered = 0;
-    let mut remaining = 2;
-    let result = neocogi_com_events::with_dispatcher(
-        &mut |limit| {
-            events.dispatch(limit, |_| {
-                delivered += 1;
-                sender.post(())
-            })
-        },
-        |dispatcher| runtime.dispatch_boundary(Some(dispatcher), Dimensioni::new(SIZE.width, SIZE.height), &mut remaining),
-    );
-    assert_eq!(result, Err(UI_E_EVENT_LIMIT));
-    assert_eq!(remaining, 0);
-    assert_eq!(delivered, 2);
-    assert_eq!(events.len(), 1);
-    assert_eq!(events.pop(), Some(()));
+    // Both a continuing cascade and an exactly empty channel stop at the ceiling.
+    // No extra dequeue may be used to distinguish these cases.
+    for repeat in [false, true] {
+        let mut events = Events::new();
+        let sender = events.sender();
+        sender.post(()).unwrap();
+        sender.post(()).unwrap();
+        let mut delivered = 0;
+        let mut remaining = 2;
+        let result = neocogi_com_events::with_dispatcher(
+            &mut || {
+                events
+                    .dispatch(1, |_| {
+                        delivered += 1;
+                        match repeat {
+                            true => sender.post(()),
+                            false => Ok(()),
+                        }
+                    })
+                    .map(|count| count != 0)
+            },
+            |dispatcher| runtime.dispatch_boundary(Some(dispatcher), Dimensioni::new(SIZE.width, SIZE.height), &mut remaining),
+        );
+        assert_eq!(result, Err(UI_E_EVENT_LIMIT));
+        assert_eq!(remaining, 0);
+        assert_eq!(delivered, 2);
+        assert_eq!(events.len(), if repeat { 2 } else { 0 });
+    }
 }
 
 /// A generated receiver's domain failure must propagate out of native widget routing.
