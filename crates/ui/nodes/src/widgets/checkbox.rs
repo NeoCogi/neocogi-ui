@@ -33,6 +33,7 @@
 //! The checkbox toggles persistent boolean state on pointer or keyboard activation and paints the
 //! atlas check icon when selected.
 
+use neocogi_ui_nodes_contracts::__CheckboxChangedReceiverAbi;
 use crate::{ControlRole};
 
 use super::*;
@@ -70,10 +71,7 @@ impl CheckboxParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Checkbox, ports(neocogi_ui_nodes_contracts::Checkbox::changed = {
-        self.runtime().state.writable()?;
-        Ok(self.changed_event.as_ref())
-    }))]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Checkbox)]
 /// Concrete retained checkbox and dynamically constructible COM object.
 pub struct Checkbox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -86,7 +84,7 @@ pub struct Checkbox {
     /// Current checked value.
     checked: bool,
     /// Runtime-owned source for user-originated value changes.
-    changed_event: crate::Port<crate::CheckboxChanged>,
+    changed_event: Option<neocogi_com::ComPtr<__CheckboxChangedReceiverAbi>>,
 }
 
 impl Checkbox {
@@ -97,7 +95,7 @@ impl Checkbox {
             label: parameters.label,
             font: parameters.font,
             checked: parameters.checked,
-            changed_event: crate::Port::new(),
+            changed_event: None,
         }
     }
 
@@ -156,7 +154,7 @@ impl Widget for Checkbox {
         // Windows-style checkboxes toggle with Space; Enter remains available to a default button.
         self.checked = !self.checked;
         let checked = self.checked;
-        ctx.posted(self.changed_event.emit(crate::CheckboxChanged { checked }));
+        ctx.posted(crate::CheckboxChanged { checked }.post_to(&mut self.changed_event));
 
         // The check mark changes paint only; both states reserve the same icon space.
         crate::Change::NoChange
@@ -174,7 +172,7 @@ impl Widget for Checkbox {
 impl crate::widget_object::WidgetAlgorithm for Checkbox {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
-        self.changed_event.close_ordinary();
+        self.changed_event = None;
     }
 }
 
@@ -247,6 +245,13 @@ impl Checkbox {
 }
 
 impl neocogi_ui_nodes_contracts::Checkbox for Checkbox {
+    /// Replaces this output's concrete destination after checking widget access.
+    fn __map_changed(&mut self, destination: neocogi_com::ComRef<'_, __CheckboxChangedReceiverAbi>) -> Result<(), neocogi_com::NcStatus> {
+        self.runtime().state.writable()?;
+        self.changed_event = Some(destination.add_ref());
+        Ok(())
+    }
+
     /// Reads the same boolean state used by pointer/Space updates and paint.
     fn checked(&self) -> Result<bool, NcStatus> {
         self.runtime().state.readable()?;

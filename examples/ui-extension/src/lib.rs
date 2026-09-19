@@ -3,13 +3,12 @@
 //! The two concrete objects share only lifecycle plumbing. The counter owns its scalar value and
 //! event producer; the inset owns its padding and the host's sole authoritative child editor.
 #![deny(missing_docs)]
+use neocogi_demo_contracts::__CounterChangedReceiverAbi;
+use neocogi_ui_core_contracts::__ActivationReceiverAbi;
 use neocogi_ui::com::widget::WidgetState;
 use neocogi_ui_core_contracts::*;
 use neocogi_demo_contracts::*;
-use neocogi_ui::{
-    Painter,
-    events::{Activation, Port},
-};
+use neocogi_ui::{Painter, events::Activation};
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, com_factory, com_object};
 
 /// Common state is inline; the example adds no second widget allocation or type-erased data.
@@ -92,23 +91,17 @@ macro_rules! widget {
     };
 }
 
-#[com_object(neocogi_demo_contracts::Counter, ports(neocogi_demo_contracts::Counter::changed = {
-        self.common.state.writable()?;
-        Ok(self.changed.as_ref())
-    }, neocogi_ui_core_contracts::IActivationEvents::activated = {
-        self.common.state.writable()?;
-        Ok(self.submitted.as_ref())
-    }))]
+#[com_object(neocogi_demo_contracts::Counter)]
 /// Private implementation of the externally declared counter class.
 struct CounterObject {
     /// Common options are authoritative here, without a duplicate presentation copy.
     common: Common,
     /// The one semantic counter value; labels are short-lived snapshots of it.
     count: u32,
-    /// Activation port posts captured labels directly into the connected consumer inbox.
-    submitted: Port<Activation>,
+    /// Installed activation receiver maps captured labels into its consumer FIFO.
+    submitted: Option<ComPtr<__ActivationReceiverAbi>>,
     /// Independent concrete output for committed count changes.
-    changed: Port<CounterChanged>,
+    changed: Option<ComPtr<__CounterChangedReceiverAbi>>,
 }
 impl CounterObject {
     /// Validates runtime authority and publishes one fully initialized counter identity.
@@ -117,8 +110,8 @@ impl CounterObject {
         Self::from_value(Self {
             common: Common::new(host, WidgetOptions::FRAME),
             count: 0,
-            submitted: Port::new(),
-            changed: Port::new(),
+            submitted: None,
+            changed: None,
         })
         .query()
     }
@@ -129,8 +122,8 @@ impl CounterObject {
             self.count = self.count.saturating_add(1);
             // A rejected foreign post cannot erase this already committed change.
             self.common.state.record_change(GeometryChange::Changed);
-            self.submitted.emit(Activation { label: self.count.to_string() })?;
-            self.changed.emit(CounterChanged { value: self.count })?;
+            Activation { label: self.count.to_string() }.post_to(&mut self.submitted)?;
+            CounterChanged { value: self.count }.post_to(&mut self.changed)?;
             Ok(GeometryChange::Changed)
         } else {
             Ok(GeometryChange::NoChange)
@@ -142,14 +135,21 @@ impl CounterObject {
     }
     /// Ordinary interaction work expires even if callers retain the closed control.
     fn close_content(&mut self) -> Result<(), NcStatus> {
-        self.submitted.close_ordinary();
-        self.changed.close_ordinary();
+        self.submitted = None;
+        self.changed = None;
         Ok(())
     }
 }
 // Focus=1, Tab=2, Enter=4 and Space=8 are the canonical WidgetProperties keyboard bits.
 widget!(CounterObject, 1 | 2 | 4 | 8, WidgetFrame::Button);
 impl Counter for CounterObject {
+    /// Replaces this output's concrete destination after checking widget access.
+    fn __map_changed(&mut self, destination: ComRef<'_, __CounterChangedReceiverAbi>) -> Result<(), NcStatus> {
+        self.common.state.writable()?;
+        self.changed = Some(destination.add_ref());
+        Ok(())
+    }
+
     /// Reads the committed scalar directly from the real object.
     fn count(&self) -> Result<u32, NcStatus> {
         self.common.state.readable()?;
@@ -165,7 +165,14 @@ impl Counter for CounterObject {
         Ok(())
     }
 }
-impl IActivationEvents for CounterObject {}
+impl IActivationEvents for CounterObject {
+    /// Replaces this output's concrete destination after checking widget access.
+    fn __map_activated(&mut self, destination: ComRef<'_, __ActivationReceiverAbi>) -> Result<(), NcStatus> {
+        self.common.state.writable()?;
+        self.submitted = Some(destination.add_ref());
+        Ok(())
+    }
+}
 impl ILeafLayout for CounterObject {
     /// The host's current metrics supply button text geometry; constraints are checked before call-out.
     fn measure(&mut self, bounds: LayoutLimits, metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {

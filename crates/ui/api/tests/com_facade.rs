@@ -5,10 +5,7 @@ mod tests {
     use neocogi_com::{ComRef, NcCopyFromBufferOffset, NcStatus};
     use neocogi_com::{ComPtr, IUnknown, NcString, NC_E_INVALID_ARG, com_object};
 
-    #[com_object(Button, ports(neocogi_ui_nodes_contracts::Button::activated = {
-        // Editing-only fixture deliberately has no producer.
-        Err(neocogi_com::NC_E_NOINTERFACE)
-    }))]
+    #[com_object(Button)]
     /// Concrete stand-in for a plugin button, using the same COM macro and ownership path.
     struct TestButton {
         /// Plugin-local UTF-8 storage; its Rust layout never crosses the boundary.
@@ -18,6 +15,11 @@ mod tests {
     }
 
     impl Button for TestButton {
+        /// This editing-only fixture rejects delivery setup explicitly.
+        fn __map_activated(&mut self, _: ComRef<'_, neocogi_ui_core_contracts::__ActivationReceiverAbi>) -> Result<(), NcStatus> {
+            Err(neocogi_com::NC_E_NOINTERFACE)
+        }
+
         /// Validates the complete replacement before mutating retained text.
         fn set_label(&mut self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
             if label.offset() != 0 {

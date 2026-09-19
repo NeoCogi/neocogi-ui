@@ -141,7 +141,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut button = ui.widgets().button("Hello across COM")?;
     let window = ui.window("Dynamic UI", Rect { x: 40, y: 40, width: 500, height: 200 }, &button)?;
     let mut session = Events::new();
-    let subscription = session.map(button.activated(), |event| event.label)?;
+    session.map(button.activated(), |event| event.label)?;
     let mut count = 0u32;
     let mut callback_button = button.clone();
     let size = native.size()?;
@@ -192,7 +192,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         ui.render(size, renderer.as_com_ref())?;
         window.close()?;
         assert_eq!(button.set_label("closed"), Err(UI_E_CLOSED));
-        subscription.cancel()?;
         smoke_containers(&ui, size, renderer.as_com_ref())?;
         smoke_components(&ui, size, renderer.as_com_ref())?;
         gpu::smoke(&ui, size, renderer.as_com_ref())?;
@@ -226,7 +225,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         std::thread::sleep(Duration::from_millis(8));
     }
-    subscription.cancel()?;
     ui.close()?;
     Ok(())
 }

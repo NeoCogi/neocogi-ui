@@ -33,6 +33,7 @@
 //! `ListItem` represents one selectable row in a retained list. Application payloads stay in the
 //! statically linked caller and are mapped from the row's typed activation event.
 
+use neocogi_ui_core_contracts::__ActivationReceiverAbi;
 use crate::{ControlRole};
 
 use super::*;
@@ -77,10 +78,7 @@ impl ListItemParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::ListItem, ports(neocogi_ui_nodes_contracts::ListItem::activated = {
-        self.runtime().state.writable()?;
-        Ok(self.submitted_event.as_ref())
-    }))]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::ListItem)]
 /// Concrete retained list item and dynamically constructible COM object.
 pub struct ListItem {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -92,8 +90,8 @@ pub struct ListItem {
     /// Base widget options.
     /// Mutable label displayed for the item.
     label: String,
-    /// Runtime-owned source for user submissions.
-    submitted_event: crate::Port<crate::Activation>,
+    /// Installed destination for captured text submissions.
+    submitted_event: Option<neocogi_com::ComPtr<__ActivationReceiverAbi>>,
 }
 
 impl ListItem {
@@ -104,7 +102,7 @@ impl ListItem {
             icon: parameters.icon,
             font: parameters.font,
             label: parameters.label,
-            submitted_event: crate::Port::new(),
+            submitted_event: None,
         }
     }
 
@@ -177,7 +175,7 @@ impl Widget for ListItem {
         }
         // Clone before emission so observers receive an immutable selection snapshot.
         let label = self.label.clone();
-        ctx.posted(self.submitted_event.emit(crate::Activation { label }));
+        ctx.posted(crate::Activation { label }.post_to(&mut self.submitted_event));
 
         // Submitting preserves the label and icon used by intrinsic measurement.
         crate::Change::NoChange
@@ -203,7 +201,7 @@ impl From<ListItemParameters> for crate::test_support::algorithm::Algorithm<List
 impl crate::widget_object::WidgetAlgorithm for ListItem {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
-        self.submitted_event.close_ordinary();
+        self.submitted_event = None;
     }
 }
 
@@ -313,6 +311,13 @@ impl ListItem {
 }
 
 impl neocogi_ui_nodes_contracts::ListItem for ListItem {
+    /// Replaces this output's concrete destination after checking widget access.
+    fn __map_activated(&mut self, destination: neocogi_com::ComRef<'_, __ActivationReceiverAbi>) -> Result<(), neocogi_com::NcStatus> {
+        self.runtime().state.writable()?;
+        self.submitted_event = Some(destination.add_ref());
+        Ok(())
+    }
+
     /// Returns an immutable label snapshot from the concrete row.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;

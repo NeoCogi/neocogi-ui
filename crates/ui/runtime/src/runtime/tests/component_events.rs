@@ -1,8 +1,36 @@
 //! Production runtime regressions for plugin-style private composite events.
 
 use super::*;
-use neocogi_com_events::{Events, Port};
-use neocogi_ui_core_contracts::Activation;
+use neocogi_com_events::Events;
+use neocogi_ui_core_contracts::{
+    Activation, IActivationEvents, IActivationEventsAbi, IActivationEventsInterfacesFor, IActivationEventsOutputs, __ActivationReceiverAbi,
+};
+
+#[com_object(interfaces(neocogi_ui_core_contracts::__ActivationReceiver, IActivationEvents))]
+/// Minimal producer; there is no event-specific shared slot or lifetime state.
+struct Emitter {
+    /// The one installed receiver owns mapping and weak consumer access.
+    destination: Option<ComPtr<__ActivationReceiverAbi>>,
+}
+impl Emitter {
+    /// Allocates a fixture producer with no receiver and no event queue.
+    fn create() -> ComPtr<__ActivationReceiverAbi> {
+        Self::from_value(Self { destination: None }).query().unwrap()
+    }
+}
+impl neocogi_ui_core_contracts::__ActivationReceiver for Emitter {
+    /// The generated concrete receiver also supplies this fixture's posting entry point.
+    fn post(&mut self, message: neocogi_com::NcMessage<'_, Activation>) -> Result<(), NcStatus> {
+        message.to_owned()?.post_to(&mut self.destination)
+    }
+}
+impl IActivationEvents for Emitter {
+    /// Replaces future delivery without affecting values already in any queue.
+    fn __map_activated(&mut self, destination: ComRef<'_, __ActivationReceiverAbi>) -> Result<(), NcStatus> {
+        self.destination = Some(destination.add_ref());
+        Ok(())
+    }
+}
 
 /// Shared test observation deliberately owned outside either COM component.
 type Trace = Rc<RefCell<Vec<&'static str>>>;
@@ -12,7 +40,7 @@ struct PrivateRecord {
     /// Component name used to prove child/surface ordering at the boundary.
     name: &'static str,
     /// Optional public output makes upward delivery explicit rather than exposing child events.
-    forward: Option<Rc<Port<Activation>>>,
+    forward: Option<ComPtr<__ActivationReceiverAbi>>,
     /// One ordinary tree edit, consumed before entering foreign topology code.
     edit: Edit,
 }
@@ -22,7 +50,7 @@ impl PrivateRecord {
     fn handle(&mut self, trace: &Trace) -> Result<(), NcStatus> {
         trace.borrow_mut().push(self.name);
         if let Some(source) = &self.forward {
-            source.emit(Activation { label: self.name.to_owned() })?;
+            source.clone().post(neocogi_com::NcMessage::new(&Activation { label: self.name.into() }))?;
         }
         // A consumed edit cannot repeat during a later dispatch sweep.
         match std::mem::replace(&mut self.edit, Edit::None) {
@@ -69,8 +97,6 @@ impl Consumer {
 struct EventfulComposite {
     /// Real host-bound widget lifetime delegated without storing any runtime root.
     lifetime: ComPtr<IWidgetAbi>,
-    /// Producer-owned captured events; the source never stores the private handler.
-    source: Rc<Port<Activation>>,
     /// Actual container policy and authoritative child collection permit arbitrary nesting.
     layout: ComPtr<IContainerLayoutAbi>,
     /// Component-owned typed handler/inbox, entirely inside this binary.
@@ -86,18 +112,19 @@ impl EventfulComposite {
     fn create(
         ui: &neocogi_ui::Ui,
         trace: Trace,
-        source: Rc<Port<Activation>>,
+        source: ComPtr<__ActivationReceiverAbi>,
         handler: PrivateRecord,
     ) -> (neocogi_ui::Widget<IWidgetAbi>, neocogi_ui::LinearWidget) {
         let shell = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
         let mut private_events = Events::new();
-        private_events.map(Port::as_ref(&source), |event| event).unwrap();
+        private_events
+            .map(source.query::<IActivationEventsAbi>().unwrap().activated(), |event| event)
+            .unwrap();
         let consumer = Rc::new(RefCell::new(Consumer { trace, record: handler }));
         let dispatcher = private_events.component_dispatcher(&consumer, Consumer::update).unwrap();
         let widget = Self::from_value(Self {
             lifetime: shell.node_interface().unwrap(),
             layout: shell.as_interface().add_ref().query().unwrap(),
-            source,
             private_events,
             _consumer: consumer,
             dispatcher,
@@ -143,15 +170,10 @@ impl IWidget for EventfulComposite {
     fn mount(&mut self) -> Result<(), NcStatus> {
         self.lifetime.mount()
     }
-    /// Cancels private leases before closing its independently retained lifetime.
+    /// Ordinary widget closure retires its private queue and destination.
     fn close(&mut self) -> Result<(), NcStatus> {
-        self.source.close_ordinary();
-        match self.private_events.cancel() {
-            // Self-removal during dispatch retires the queue immediately; the active
-            // transaction prunes the now-inactive lease when its callback returns.
-            Ok(()) | Err(neocogi_com_events::EVENT_E_BUSY) => self.lifetime.close(),
-            Err(error) => Err(error),
-        }
+        self.private_events = Events::new();
+        self.lifetime.close()
     }
     /// Uses the same real common routing policy as its factory-created lifetime.
     fn properties(&self) -> Result<WidgetProperties, NcStatus> {
@@ -180,16 +202,19 @@ fn component(
     ui: &neocogi_ui::Ui,
     trace: &Trace,
     name: &'static str,
-    source: &Rc<Port<Activation>>,
-    forward: Option<Rc<Port<Activation>>>,
+    source: &ComPtr<__ActivationReceiverAbi>,
+    forward: Option<ComPtr<__ActivationReceiverAbi>>,
     edit: Edit,
 ) -> (neocogi_ui::Widget<IWidgetAbi>, neocogi_ui::LinearWidget) {
     EventfulComposite::create(ui, trace.clone(), source.clone(), PrivateRecord { name, forward, edit })
 }
 
 /// Emits a captured fixture fact without entering any application callback.
-fn emit(source: &Port<Activation>) {
-    source.emit(Activation { label: String::new() }).unwrap();
+fn emit(source: &ComPtr<__ActivationReceiverAbi>) {
+    source
+        .clone()
+        .post(neocogi_com::NcMessage::new(&Activation { label: "fixture".into() }))
+        .unwrap();
 }
 
 /// Three actual component levels forward upward before the application, with no manual child pumping.
@@ -197,7 +222,7 @@ fn emit(source: &Port<Activation>) {
 fn nested_components_dispatch_child_first_and_promote_only_explicit_outputs() {
     let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let trace: Trace = Rc::new(RefCell::new(Vec::new()));
-    let sources = (0..4).map(|_| Rc::new(Port::new())).collect::<Vec<_>>();
+    let sources = (0..4).map(|_| Emitter::create()).collect::<Vec<_>>();
     let (child, _) = component(&ui, &trace, "child", &sources[0], Some(sources[1].clone()), Edit::None);
     let (parent, mut parent_shell) = component(&ui, &trace, "parent", &sources[1], Some(sources[2].clone()), Edit::None);
     let (root, mut root_shell) = component(&ui, &trace, "root", &sources[2], Some(sources[3].clone()), Edit::None);
@@ -205,7 +230,7 @@ fn nested_components_dispatch_child_first_and_promote_only_explicit_outputs() {
     root_shell.insert(0, &parent, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let window = ui.window("nested", RECT, &root).unwrap();
     let mut app = Events::new();
-    app.map(Port::as_ref(&sources[3]), |_| ()).unwrap();
+    app.map(sources[3].query::<IActivationEventsAbi>().unwrap().activated(), |_| ()).unwrap();
 
     emit(&sources[0]);
     ui.update(SIZE).unwrap(); // No application dispatcher is needed to drive every private level.
@@ -239,15 +264,15 @@ fn nested_components_dispatch_child_first_and_promote_only_explicit_outputs() {
 fn callback_mounted_descendant_is_discovered_without_application_registration() {
     let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let trace: Trace = Rc::new(RefCell::new(Vec::new()));
-    let child_source = Rc::new(Port::new());
+    let child_source = Emitter::create();
     let (child, _) = component(&ui, &trace, "inserted", &child_source, None, Edit::None);
     emit(&child_source);
-    let parent_source = Rc::new(Port::new());
+    let parent_source = Emitter::create();
     let (parent, shell) = component(&ui, &trace, "parent", &parent_source, None, Edit::None);
     let window = ui.window("dynamic", RECT, &parent).unwrap();
-    let trigger = Port::new();
+    let trigger = Emitter::create();
     let mut app = Events::new();
-    app.map(trigger.as_ref(), |_| ()).unwrap();
+    app.map(trigger.query::<IActivationEventsAbi>().unwrap().activated(), |_| ()).unwrap();
     let mut action = PrivateRecord {
         name: "application",
         forward: None,
@@ -264,13 +289,13 @@ fn callback_mounted_descendant_is_discovered_without_application_registration() 
 fn descendant_removal_retires_ancestor_and_sibling_dispatch_snapshots() {
     let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let trace: Trace = Rc::new(RefCell::new(Vec::new()));
-    let root_source = Rc::new(Port::new());
+    let root_source = Emitter::create();
     let (root, mut shell) = component(&ui, &trace, "root", &root_source, None, Edit::None);
     let window = ui.window("removed", RECT, &root).unwrap();
-    let source = Rc::new(Port::new());
+    let source = Emitter::create();
     let (child, _) = component(&ui, &trace, "remover", &source, None, Edit::Close(window.clone()));
     shell.insert(0, &child, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
-    let sibling_source = Rc::new(Port::new());
+    let sibling_source = Emitter::create();
     let (sibling, _) = component(&ui, &trace, "sibling", &sibling_source, None, Edit::None);
     shell.insert(1, &sibling, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     for source in [&source, &sibling_source, &root_source] {
@@ -286,16 +311,16 @@ fn descendant_removal_retires_ancestor_and_sibling_dispatch_snapshots() {
 fn mounted_component_events_dispatch_before_application_and_skip_removed_snapshots() {
     let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let trace: Trace = Rc::new(RefCell::new(Vec::new()));
-    let older_source = Rc::new(Port::new());
+    let older_source = Emitter::create();
     let (older, _) = component(&ui, &trace, "older", &older_source, None, Edit::None);
     let older_window = ui.window("older", RECT, &older).unwrap();
-    let newer_source = Rc::new(Port::new());
+    let newer_source = Emitter::create();
     let (newer, _) = component(&ui, &trace, "newer", &newer_source, None, Edit::Close(older_window.clone()));
     let newer_window = ui.window("newer", RECT, &newer).unwrap();
-    let app_source = Port::new();
+    let app_source = Emitter::create();
     let mut app = Events::new();
-    app.map(Port::as_ref(&app_source), |_| ()).unwrap();
-    for source in [older_source.as_ref(), newer_source.as_ref(), &app_source] {
+    app.map(app_source.query::<IActivationEventsAbi>().unwrap().activated(), |_| ()).unwrap();
+    for source in [&older_source, &newer_source, &app_source] {
         emit(source);
     }
     ui.update_with_events(SIZE, &mut app, |_| {
@@ -313,7 +338,7 @@ fn mounted_component_events_dispatch_before_application_and_skip_removed_snapsho
 fn application_messages_interleave_with_automatic_private_settlement() {
     let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let trace: Trace = Rc::new(RefCell::new(Vec::new()));
-    let source = Rc::new(Port::new());
+    let source = Emitter::create();
     let (child, _) = component(&ui, &trace, "child", &source, None, Edit::None);
     let window = ui.window("interleaving", RECT, &child).unwrap();
     let mut events = Events::new();
@@ -338,7 +363,7 @@ fn self_removal_stops_private_delivery_before_the_next_message() {
     let trace: Trace = Rc::new(RefCell::new(Vec::new()));
     let parent = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let window = ui.window("self removal", RECT, &parent).unwrap();
-    let source = Rc::new(Port::new());
+    let source = Emitter::create();
     let (child, _) = component(&ui, &trace, "remover", &source, None, Edit::Close(window.clone()));
     parent
         .as_interface()

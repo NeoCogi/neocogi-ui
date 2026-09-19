@@ -199,10 +199,7 @@ enum WindowEdit {
     ChildClip(ChildWindowClip),
 }
 
-#[com_object(interfaces(IWindow, IWindowEvents), ports(neocogi_ui_core_contracts::IWindowEvents::changed = {
-        self.owner()?.factory.host.check_mutation()?;
-        Ok(self.window.events())
-    }))]
+#[com_object(interfaces(IWindow, IWindowEvents))]
 /// One retained COM window capability; all semantic state remains in the manager's forest.
 struct LogicalWindow {
     /// Weak owner access avoids a manager/window reference cycle.
@@ -324,10 +321,7 @@ impl IWindow for LogicalWindow {
     }
 }
 
-#[com_object(interfaces(IPopup, IPopupEvents), ports(neocogi_ui_core_contracts::IPopupEvents::dismissed = {
-        self.owner()?.factory.host.check_mutation()?;
-        Ok(self.popup.events())
-    }))]
+#[com_object(interfaces(IPopup, IPopupEvents))]
 /// Popup projection has its own placement/lifetime methods and cannot impersonate a window.
 pub(super) struct LogicalPopup {
     /// Retaining the popup never retains the runtime through a strong cycle.
@@ -443,8 +437,30 @@ impl IPopup for LogicalPopup {
     }
 }
 
-impl IWindowEvents for LogicalWindow {}
-impl IPopupEvents for LogicalPopup {}
+impl IWindowEvents for LogicalWindow {
+    /// Resolves the existing owner and installs delivery directly in its record.
+    fn __map_changed(&mut self, destination: ComRef<'_, __WindowEventReceiverAbi>) -> Result<(), NcStatus> {
+        let runtime = self.owner()?;
+        runtime.factory.host.check_mutation()?;
+        runtime
+            .context()?
+            .window_manager
+            .map_window_events(&self.window, destination.add_ref())
+            .map_err(status)
+    }
+}
+impl IPopupEvents for LogicalPopup {
+    /// Resolves the existing owner and installs delivery directly in its record.
+    fn __map_dismissed(&mut self, destination: ComRef<'_, __PopupDismissedReceiverAbi>) -> Result<(), NcStatus> {
+        let runtime = self.owner()?;
+        runtime.factory.host.check_mutation()?;
+        runtime
+            .context()?
+            .window_manager
+            .map_popup_events(&self.popup, destination.add_ref())
+            .map_err(status)
+    }
+}
 
 #[cfg(test)]
 mod tests {

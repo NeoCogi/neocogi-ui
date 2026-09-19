@@ -3,6 +3,7 @@
 //! The root forest stores only generic menu surfaces and popup ownership. This module connects
 //! one public header, one authoritative typed state, and one private choice-popup definition.
 
+use neocogi_ui_core_contracts::__ChoiceSelectionReceiverAbi;
 use crate::menu::{Menu, MenuEntry};
 use crate::window_manager::{PopupHandle, SurfaceMutationError, WindowManager};
 use neocogi_com::{
@@ -98,9 +99,7 @@ pub(crate) trait IChoiceMenuState {
     fn retire(&mut self) -> Result<(), NcStatus>;
 }
 
-#[com_object(interfaces(IChoiceMenuState, IChoiceMenu), ports(neocogi_ui_core_contracts::IChoiceMenu::changed = {
-        Ok(self.changed_event.as_ref())
-    }))]
+#[com_object(interfaces(IChoiceMenuState, IChoiceMenu))]
 /// Plain authoritative choice menu state mutated exclusively through `IChoiceMenuState`'s mutable receiver.
 pub(crate) struct ChoiceMenuState {
     /// Shared UTF-8 storage referenced by every checked preorder entry.
@@ -116,7 +115,7 @@ pub(crate) struct ChoiceMenuState {
     /// Explicit popup lifecycle reconciled by the runtime composition owner.
     popup: ChoicePopupLifecycle,
     /// Runtime-owned source for actual user commits only.
-    changed_event: crate::Port<ChoiceSelection>,
+    changed_event: Option<ComPtr<__ChoiceSelectionReceiverAbi>>,
 }
 
 impl ChoiceMenuState {
@@ -130,7 +129,7 @@ impl ChoiceMenuState {
             revision: 0,
             popup_anchor: Rect::default(),
             popup: ChoicePopupLifecycle::Closed,
-            changed_event: crate::Port::new(),
+            changed_event: None,
         };
         Self::from_value(state).query()
     }
@@ -301,14 +300,14 @@ impl IChoiceMenuState for ChoiceMenuState {
         };
         // Commit the complete popup transition before entering even a pure mapper.
         if changed {
-            self.changed_event.emit(ChoiceSelection::Selected(id))?;
+            ChoiceSelection::Selected(id).post_to(&mut self.changed_event)?;
         }
         Ok(self.revision)
     }
 
     /// Makes retirement idempotent for both logical widget closure and final unmounted release.
     fn retire(&mut self) -> Result<(), NcStatus> {
-        self.changed_event.close_ordinary();
+        self.changed_event = None;
         self.popup = match self.popup {
             ChoicePopupLifecycle::Detached => ChoicePopupLifecycle::Detached,
             ChoicePopupLifecycle::Closed
@@ -322,6 +321,12 @@ impl IChoiceMenuState for ChoiceMenuState {
 }
 
 impl IChoiceMenu for ChoiceMenuState {
+    /// Replaces this output's concrete destination after checking widget access.
+    fn __map_changed(&mut self, destination: neocogi_com::ComRef<'_, __ChoiceSelectionReceiverAbi>) -> Result<(), NcStatus> {
+        self.changed_event = Some(destination.add_ref());
+        Ok(())
+    }
+
     /// Returns the exact optional stable identity from the authoritative menu model.
     fn selection(&self) -> Result<ChoiceSelectionAbi, NcStatus> {
         <Self as IChoiceMenuState>::selection(self)
@@ -683,7 +688,7 @@ mod tests {
             revision: 0,
             popup_anchor: Rect::default(),
             popup: ChoicePopupLifecycle::Closed,
-            changed_event: crate::Port::new(),
+            changed_event: None,
         }
     }
 

@@ -125,7 +125,6 @@ pub use neocogi_ui_support::prelude;
 
 pub use atlas::{AtlasHandle, FontId, IconId};
 pub(crate) use window_manager::{PopupHandle, Window, WindowHandle, WindowOption};
-pub(crate) use neocogi_com_events::{PortRef, Port};
 pub(crate) use menu::{Menu, MenuBar, MenuItem, MenuItemAccessError, MenuItemHandle, MenuItemMark, MenuItemParameters};
 pub use image::{ImageError, ImageSource, ImageStorageError, MAX_DECODED_RGBA_BYTES, load_image_bytes};
 pub use input::{Key, KeyEvent, KeyState, Modifiers, MouseButton};

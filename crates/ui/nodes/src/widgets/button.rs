@@ -33,6 +33,7 @@
 //! Buttons support text, arbitrary atlas icons, and external textures through one shared inline
 //! placement path.
 
+use neocogi_ui_core_contracts::__ActivationReceiverAbi;
 use crate::ControlRole;
 use crate::widget_object::{
     HostedWidget, ImageState, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_icon_role, set_direct_named_font,
@@ -97,10 +98,7 @@ impl ButtonParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Button, ports(neocogi_ui_nodes_contracts::Button::activated = {
-        self.runtime().state.writable()?;
-        Ok(self.submitted_event.as_ref())
-    }))]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Button)]
 /// Concrete retained button and dynamically constructible COM object.
 ///
 /// The allocation owns its semantic fields directly. `runtime` contains only common host,
@@ -115,8 +113,8 @@ pub struct Button {
     /// Base widget options.
     /// Initialization-only fill behavior.
     fill: WidgetFillOption,
-    /// Runtime-owned source for user submissions.
-    submitted_event: crate::Port<crate::Activation>,
+    /// Installed destination for captured text submissions.
+    submitted_event: Option<ComPtr<__ActivationReceiverAbi>>,
 }
 
 impl Button {
@@ -127,7 +125,7 @@ impl Button {
             content: parameters.content,
             font: parameters.font,
             fill: parameters.fill,
-            submitted_event: crate::Port::new(),
+            submitted_event: None,
         }
     }
 
@@ -219,8 +217,8 @@ impl Widget for Button {
             return crate::Change::NoChange;
         }
         // Pointer click, Enter, and Space converge on the button's single typed submission port.
-        if self.submitted_event.connected() {
-            ctx.posted(self.submitted_event.emit(crate::Activation { label: self.com_label().to_owned() }));
+        if self.submitted_event.is_some() {
+            ctx.posted(crate::Activation { label: self.com_label().to_owned() }.post_to(&mut self.submitted_event));
         }
 
         // Submitting leaves the label and preferred dimensions unchanged.
@@ -241,7 +239,7 @@ impl Widget for Button {
 impl crate::widget_object::WidgetAlgorithm for Button {
     /// Logical COM closure cancels ordinary submissions while retained widget references remain safe.
     fn close_events(&mut self) {
-        self.submitted_event.close_ordinary();
+        self.submitted_event = None;
     }
 }
 
@@ -359,6 +357,13 @@ direct_widget_phase_impl!(Button);
 direct_leaf_layout_impl!(Button);
 
 impl neocogi_ui_nodes_contracts::Button for Button {
+    /// Replaces this output's concrete destination after checking widget access.
+    fn __map_activated(&mut self, destination: ComRef<'_, __ActivationReceiverAbi>) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        self.submitted_event = Some(destination.add_ref());
+        Ok(())
+    }
+
     /// Validates before committing and only dirties geometry when text actually differs.
     fn set_label(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;

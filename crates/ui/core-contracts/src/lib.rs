@@ -14,7 +14,7 @@ include!(concat!(env!("OUT_DIR"), "/neocogi_ui_core.rs"));
 pub use neocogi_renderer_contracts::*;
 pub use neocogi_platform_contracts::*;
 pub use neocogi_gfx_contracts::*;
-pub use neocogi_com_events_contracts::{IEventDispatcherAbi, IEventDispatcherInterfacesFor, IEventSubscriptionAbi, IEventSubscriptionInterfacesFor};
+pub use neocogi_com_events_contracts::{IEventDispatcherAbi, IEventDispatcherInterfacesFor};
 
 mod helpers;
 pub use helpers::*;

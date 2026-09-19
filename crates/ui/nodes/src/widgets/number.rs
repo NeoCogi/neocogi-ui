@@ -30,6 +30,7 @@
 
 //! Retained numeric-entry widget.
 
+use neocogi_ui_nodes_contracts::__NumericChangedReceiverAbi;
 use crate::{ControlRole};
 
 use crate::*;
@@ -87,10 +88,7 @@ impl NumberParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Number, ports(neocogi_ui_nodes_contracts::Number::changed = {
-        self.runtime().state.writable()?;
-        Ok(self.changed_event.as_ref())
-    }))]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Number)]
 /// Concrete retained number input and dynamically constructible COM object.
 pub struct Number {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -107,7 +105,7 @@ pub struct Number {
     /// Text editing state for shift-click numeric entry.
     edit: NumberEditState,
     /// Runtime-owned source for user-originated value changes.
-    changed_event: crate::Port<crate::NumericChanged>,
+    changed_event: Option<neocogi_com::ComPtr<__NumericChangedReceiverAbi>>,
 }
 
 impl Number {
@@ -121,7 +119,7 @@ impl Number {
             font: parameters.font,
             value: parameters.value,
             edit: NumberEditState::default(),
-            changed_event: crate::Port::new(),
+            changed_event: None,
         }
     }
 
@@ -147,8 +145,13 @@ impl Number {
 
     /// Returns the native event endpoint emitted after every user-originated value change.
     #[cfg(test)]
-    pub fn changed(&self) -> crate::PortRef<crate::NumericChanged> {
-        self.changed_event.as_ref()
+    pub fn changed(
+        &mut self,
+    ) -> impl FnOnce(Box<dyn FnMut(crate::NumericChanged) -> Result<(), neocogi_com::NcStatus>>) -> Result<(), neocogi_com::NcStatus> + '_ {
+        |consume| {
+            self.changed_event = Some(crate::NumericChanged::__receiver(consume)?);
+            Ok(())
+        }
     }
 
     /// Measures the formatted number label.
@@ -183,7 +186,7 @@ impl Number {
         }
         let changed = (self.value != last).then_some(crate::NumericChanged { value: self.value });
         if let Some(event) = changed {
-            ctx.posted(self.changed_event.emit(event));
+            ctx.posted(event.post_to(&mut self.changed_event));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(self.value != last)
@@ -252,7 +255,7 @@ impl From<NumberParameters> for crate::test_support::algorithm::Algorithm<Number
 impl crate::widget_object::WidgetAlgorithm for Number {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
-        self.changed_event.close_ordinary();
+        self.changed_event = None;
     }
 }
 
@@ -312,6 +315,13 @@ impl Number {
 }
 
 impl neocogi_ui_nodes_contracts::Number for Number {
+    /// Replaces this output's concrete destination after checking widget access.
+    fn __map_changed(&mut self, destination: neocogi_com::ComRef<'_, __NumericChangedReceiverAbi>) -> Result<(), neocogi_com::NcStatus> {
+        self.runtime().state.writable()?;
+        self.changed_event = Some(destination.add_ref());
+        Ok(())
+    }
+
     /// Reads the finite value owned by the number editor's concrete semantic algorithm.
     fn value(&self) -> Result<f32, NcStatus> {
         self.runtime().state.readable()?;

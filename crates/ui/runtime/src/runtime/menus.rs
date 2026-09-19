@@ -112,10 +112,7 @@ fn item_at<'a>(menu: &'a mut Menu, path: &[usize], slot: usize) -> Result<&'a mu
     }
 }
 
-#[com_object(interfaces(IMenuItem, IActivationEvents, IFontStyle), ports(neocogi_ui_core_contracts::IActivationEvents::activated = {
-        self.owner()?.factory.host.check_mutation()?;
-        Ok(self.handle.submitted())
-    }))]
+#[com_object(interfaces(IMenuItem, IActivationEvents, IFontStyle))]
 /// Menu rows expose direct live editing without synthesizing independent widget or container subtrees.
 struct Item {
     /// Live manager resolution never retains the runtime through a row capability.
@@ -245,7 +242,26 @@ impl IFontStyle for Item {
         self.edit(Edit::Font(crate::FontRef::Named(font)))
     }
 }
-impl IActivationEvents for Item {}
+impl IActivationEvents for Item {
+    /// Installs into the declaration before mounting, or the same moved record afterward.
+    fn __map_activated(&mut self, destination: ComRef<'_, __ActivationReceiverAbi>) -> Result<(), NcStatus> {
+        let runtime = self.owner()?;
+        runtime.factory.host.check_mutation()?;
+        if let Some(declaration) = self.declaration.upgrade() {
+            let mut data = declaration.menu.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
+            if let Some(menu) = data.as_mut() {
+                match menu_at(menu, &self.path)?.entries.get_mut(self.slot) {
+                    Some(MenuEntry::Item(item)) => {
+                        item.record.submitted_event = Some(destination.add_ref());
+                        return Ok(());
+                    }
+                    _ => return Err(UI_E_CLOSED),
+                }
+            }
+        }
+        runtime.context()?.window_manager.map_menu_item(&self.handle, destination.add_ref())
+    }
+}
 
 impl RuntimeStorage {
     /// Authenticates a root builder by canonical COM identity and live weak registration before taking native data.

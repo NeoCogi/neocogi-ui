@@ -39,10 +39,7 @@ use std::fmt;
 
 use neocogi_ui_support::text_layout::content_height;
 use crate::math::RectExt;
-use crate::{
-    AtlasHandle, Color, Dimensioni, FontRef, FontRole, MenuRole, MenuState, MouseButton, Recti, Skin, UiInputEvent, Vec2i, PortRef, WidgetOption,
-    WidgetPaintCtx,
-};
+use crate::{AtlasHandle, Color, Dimensioni, FontRef, FontRole, MenuRole, MenuState, MouseButton, Recti, Skin, UiInputEvent, Vec2i, WidgetOption, WidgetPaintCtx};
 
 #[cfg(test)]
 mod tests;
@@ -203,14 +200,14 @@ pub(crate) struct MenuItemRecord {
     id: MenuItemId,
     /// Mutable presentation and interaction values stored without a second mirror type.
     pub(crate) parameters: MenuItemParameters,
-    /// Strong source of this item's independently subscribable typed event.
-    submitted_event: crate::Port<MenuItemSubmitted>,
+    /// Installed concrete activation receiver; no pending messages belong to the item.
+    pub(crate) submitted_event: Option<neocogi_com::ComPtr<neocogi_ui_core_contracts::__ActivationReceiverAbi>>,
 }
 
 /// Uniquely owned declaration value for one actionable menu row.
 ///
 /// Move this value into [`Menu::item`]. Keep the separately returned [`MenuItemHandle`] when the
-/// application needs to subscribe or change live presentation state after mounting into a surface.
+/// application needs to change live presentation state after mounting into a surface.
 pub struct MenuItem {
     /// Sole semantic owner until this declaration moves into a manager-owned menu surface.
     pub(crate) record: MenuItemRecord,
@@ -219,11 +216,11 @@ pub struct MenuItem {
 impl MenuItem {
     /// Creates one uniquely owned item declaration and its non-owning application capability.
     pub fn create(parameters: MenuItemParameters) -> (MenuItemHandle, Self) {
-        // Stable identity is a plain value; only the event queue is shared because subscriptions
-        // are weak capabilities. The semantic record itself remains uniquely owned throughout.
+        // The record owns its optional destination through declaration-to-surface transfer;
+        // its handle needs only the stable identity used for checked lookup.
         let id = MenuItemId::allocate();
-        let submitted_event = crate::Port::new();
-        let handle = MenuItemHandle::new(id, submitted_event.as_ref());
+        let submitted_event = None;
+        let handle = MenuItemHandle::new(id);
         let item = Self {
             record: MenuItemRecord { id, parameters, submitted_event },
         };
@@ -231,56 +228,26 @@ impl MenuItem {
     }
 }
 
-/// Cloneable non-owning capability for one concrete menu item.
-///
-/// The private stable ID selects presentation state through [`crate::Ui::menu_item`], while the
-/// weak typed endpoint subscribes to [`MenuItemSubmitted`]. Both describe the same uniquely owned
-/// record, but identity never depends on the endpoint's allocation address.
+/// Stable lookup identity; the manager or declaration owns all presentation and delivery state.
+#[derive(Clone)]
 pub struct MenuItemHandle {
-    /// Process-unique concrete identity used only by the owning menu surface manager.
+    /// Process-unique identity; never reused or derived from a receiver allocation.
     id: MenuItemId,
-    /// Weak endpoint for enabled user submissions from this same item.
-    submitted: PortRef<MenuItemSubmitted>,
 }
-
 impl MenuItemHandle {
-    /// Creates an application capability from an independently allocated identity and endpoint.
-    fn new(id: MenuItemId, submitted: PortRef<MenuItemSubmitted>) -> Self {
-        // MenuItem construction establishes this pair before moving the record into any declaration
-        // hierarchy, so public code can never manufacture a mismatched handle.
-        Self { id, submitted }
+    /// Captures the identity allocated by the sole semantic owner.
+    fn new(id: MenuItemId) -> Self {
+        Self { id }
     }
-
-    /// Returns the private concrete key used for mounted presentation lookup.
+    /// Selects the authoritative record without retaining its owner.
     pub(crate) const fn id(&self) -> MenuItemId {
-        // Copying identity neither inspects nor extends the weak submission endpoint lifetime.
         self.id
     }
-
-    /// Returns this item's weak typed submission endpoint.
-    pub fn submitted(&self) -> PortRef<MenuItemSubmitted> {
-        // Clone only the weak endpoint so subscribing cannot retain the declaration or mounted menu
-        // record and does not participate in identity lookup.
-        self.submitted.clone()
-    }
 }
-
-impl Clone for MenuItemHandle {
-    /// Clones the application capability without allocating identity or retaining the item.
-    fn clone(&self) -> Self {
-        // Every clone preserves the ID/endpoint pairing established by MenuItem::create.
-        Self {
-            id: self.id,
-            submitted: self.submitted.clone(),
-        }
-    }
-}
-
 impl fmt::Debug for MenuItemHandle {
-    /// Reports endpoint liveness without exposing the private process-local identifier.
+    /// Keeps the private process-local key out of public diagnostics.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Keep the numeric identity private because it is neither forgeable nor persistent API.
-        f.debug_struct("MenuItemHandle").field("submitted", &self.submitted).finish_non_exhaustive()
+        f.debug_struct("MenuItemHandle").finish_non_exhaustive()
     }
 }
 
@@ -672,7 +639,7 @@ impl MenuSurface {
             MenuSlot::Item(item) if item.parameters.enabled => {
                 // Queue only the semantic event; WindowManager closes the complete path after this
                 // mutable surface borrow ends and before application dispatch begins.
-                let posted = item.submitted_event.emit(MenuItemSubmitted { label: item.parameters.label.clone() });
+                let posted = MenuItemSubmitted { label: item.parameters.label.clone() }.post_to(&mut item.submitted_event);
                 Some(MenuAction::SubmitAndClose(posted))
             }
             MenuSlot::Choice { enabled: false, .. } | MenuSlot::Item(_) | MenuSlot::Separator => None,
@@ -747,7 +714,7 @@ impl MenuSurface {
                 MenuSlot::Item(item) if item.parameters.enabled => {
                     // Emission only queues a typed value. Application code cannot run until the
                     // manager has consumed `SubmitAndClose` and released every surface borrow.
-                    let posted = item.submitted_event.emit(MenuItemSubmitted { label: item.parameters.label.clone() });
+                    let posted = MenuItemSubmitted { label: item.parameters.label.clone() }.post_to(&mut item.submitted_event);
                     Some(MenuAction::SubmitAndClose(posted))
                 }
                 MenuSlot::Choice { enabled: false, .. } | MenuSlot::Item(_) | MenuSlot::Separator => None,

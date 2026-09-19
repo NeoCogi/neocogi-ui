@@ -5,7 +5,7 @@ use neocogi_ui_nodes_contracts::{ContentIcon, CrossSize, FlowDirection, LayoutTr
 use neocogi_ui::{Events, LinearWidget, ListItemWidget, ScrollAreaWidget, TextBlockWidget, TextboxWidget};
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_object};
 use std::{
-    cell::{Cell, RefCell},
+    cell::RefCell,
     path::{Path, PathBuf},
     rc::Rc,
 };
@@ -13,11 +13,11 @@ use crate::boundary::text;
 
 /// Shared request lifetime contains no control pointers, handlers or runtime ownership.
 struct Request {
-    /// One shared phase is necessary because COM's shared receivers, model
-    /// messages, and runtime teardown all observe the same request lifetime.
-    phase: Cell<RequestPhase>,
-    /// Queue-free completion source; external consumers own their committed outcomes.
-    completed: crate::Port<FileDialogCompletion>,
+    /// One request phase is shared by the controller, private model and teardown.
+    /// The enclosing RefCell provides their single checked mutation boundary.
+    phase: RequestPhase,
+    /// Installed concrete completion receiver; consumers own their committed outcomes.
+    completed: Option<ComPtr<__FileDialogCompletionReceiverAbi>>,
 }
 
 /// Mutually exclusive picker-request lifecycle; no two booleans can disagree.
@@ -33,19 +33,19 @@ enum RequestPhase {
 impl Request {
     /// Observes active request eligibility without lending a mutable model borrow.
     fn active(&self) -> bool {
-        matches!(self.phase.get(), RequestPhase::Active)
+        matches!(self.phase, RequestPhase::Active)
     }
 
     /// Observes permanent closure independently of retained COM references.
     fn closed(&self) -> bool {
-        matches!(self.phase.get(), RequestPhase::Closed)
+        matches!(self.phase, RequestPhase::Closed)
     }
 
     /// Publishes a fully installed request only from the reusable idle phase.
-    fn begin(&self) -> Result<(), NcStatus> {
-        match self.phase.get() {
+    fn begin(&mut self) -> Result<(), NcStatus> {
+        match self.phase {
             RequestPhase::Idle => {
-                self.phase.set(RequestPhase::Active);
+                self.phase = RequestPhase::Active;
                 Ok(())
             }
             RequestPhase::Active => Err(UI_E_BUSY),
@@ -54,27 +54,27 @@ impl Request {
     }
 
     /// Emits one committed outcome after the modal has become idle.
-    fn finish(&self, status: FileDialogCompletion) -> Result<(), NcStatus> {
-        match self.phase.get() {
+    fn finish(&mut self, status: FileDialogCompletion) -> Result<(), NcStatus> {
+        match self.phase {
             RequestPhase::Active => {
-                self.phase.set(RequestPhase::Idle);
-                self.completed.emit(status)?;
+                self.phase = RequestPhase::Idle;
+                status.post_to(&mut self.completed)?;
             }
             RequestPhase::Idle | RequestPhase::Closed => {}
         }
         Ok(())
     }
-    /// Retirement settles an active request and disconnects future posts.
-    fn retire(&self) -> Result<(), NcStatus> {
+    /// Retirement settles an active request and releases its destination.
+    fn retire(&mut self) -> Result<(), NcStatus> {
         self.close()
     }
 
     /// Closes future completion delivery; already posted outcomes remain in the consumer inbox.
-    fn close(&self) -> Result<(), NcStatus> {
-        match self.phase.replace(RequestPhase::Closed) {
-            RequestPhase::Active => self.completed.close(FileDialogCompletion::Cancelled),
+    fn close(&mut self) -> Result<(), NcStatus> {
+        match std::mem::replace(&mut self.phase, RequestPhase::Closed) {
+            RequestPhase::Active => FileDialogCompletion::Cancelled.post_to(&mut self.completed.take()),
             RequestPhase::Idle | RequestPhase::Closed => {
-                self.completed.close_ordinary();
+                self.completed = None;
                 Ok(())
             }
         }
@@ -95,12 +95,12 @@ struct DialogRoot {
     /// Separate component-owned dispatcher allocation, never the root's IUnknown identity.
     dispatcher: ComPtr<IEventDispatcherAbi>,
     /// Terminal component closure settles an active request even after this driver leaves the forest.
-    request: Rc<Request>,
+    request: Rc<RefCell<Request>>,
 }
 
 impl DialogRoot {
     /// Captures every required shell capability before publishing the wrapper object.
-    fn create(shell: &LinearWidget, dispatcher: ComPtr<IEventDispatcherAbi>, request: Rc<Request>) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
+    fn create(shell: &LinearWidget, dispatcher: ComPtr<IEventDispatcherAbi>, request: Rc<RefCell<Request>>) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
         let shell = shell.as_interface().add_ref();
         let value = Self {
             widget: shell.query()?,
@@ -133,7 +133,7 @@ impl IWidget for DialogRoot {
     /// Closes the concrete shell and its complete child topology.
     fn close(&mut self) -> Result<(), NcStatus> {
         let result = self.widget.close();
-        let completion = self.request.close();
+        let completion = self.request.borrow_mut().close();
         result.and(completion)
     }
 
@@ -190,7 +190,7 @@ struct Dialog {
     /// Ordinary mutable model shared only by the controller and its separate mounted driver.
     model: Rc<RefCell<Model>>,
     /// Shared independently of an active mutable model borrow during runtime retirement.
-    request: Rc<Request>,
+    request: Rc<RefCell<Request>>,
 }
 
 /// Node construction data retained by the picker without retaining the core runtime identity.
@@ -210,7 +210,7 @@ struct Model {
     /// Stable hidden/reusable modal installed after the eventful root is mounted.
     window: Option<ComPtr<IWindowAbi>>,
     /// Request source and activity shared with the controller's lifetime operations.
-    request: Rc<Request>,
+    request: Rc<RefCell<Request>>,
     /// Exact committed native directory; lossy path-field display never replaces its identity.
     directory: PathBuf,
     /// User-edited path display becomes authoritative only after a real changed event.
@@ -238,7 +238,7 @@ impl Model {
 
     /// Rejects closed components and validates public runtime mutation authority.
     fn owner(&self) -> Result<(), NcStatus> {
-        if self.request.closed() {
+        if self.request.borrow().closed() {
             return Err(UI_E_CLOSED);
         }
         self.nodes.host.check_mutation()?;
@@ -258,11 +258,11 @@ impl Model {
     }
     /// Hides before emitting the outcome so later messages observe an idle reusable component.
     fn finish(&mut self, outcome: FileDialogCompletion) -> Result<(), NcStatus> {
-        if self.request.active() {
+        if self.request.borrow().active() {
             if self.window().is_ok_and(|window| window.snapshot().is_ok()) {
                 self.window()?.set_visibility(Visibility::Hidden)?;
             }
-            self.request.finish(outcome)?;
+            self.request.borrow_mut().finish(outcome)?;
         }
         Ok(())
     }
@@ -485,10 +485,10 @@ impl Dialog {
                 (actions.node_interface()?, LayoutTrack::Content),
             ],
         )?;
-        let request = Rc::new(Request {
-            phase: Cell::new(RequestPhase::Idle),
-            completed: crate::Port::new(),
-        });
+        let request = Rc::new(RefCell::new(Request {
+            phase: RequestPhase::Idle,
+            completed: None,
+        }));
         let model = Rc::new(RefCell::new(Model {
             events: Events::new(),
             nodes,
@@ -591,7 +591,7 @@ impl Model {
     /// Opens only after the complete native request and directory listing validate successfully.
     fn open(&mut self, title: &str, rect: Rect, directory: PathBuf) -> Result<(), NcStatus> {
         self.owner()?;
-        if self.request.active() {
+        if self.request.borrow().active() {
             return Err(UI_E_BUSY);
         }
         if rect.width < 0 || rect.height < 0 {
@@ -607,7 +607,7 @@ impl Model {
         self.install(directory, listing, true)?;
         self.window()?.set_title(NcCopyFromBufferOffset::new(0, title.as_bytes()))?;
         self.window()?.set_rect(rect)?;
-        self.request.begin()?;
+        self.request.borrow_mut().begin()?;
         Ok(())
     }
 
@@ -617,7 +617,7 @@ impl Model {
             Message::Lifecycle(event) => {
                 match event {
                     WindowEvent::Hidden | WindowEvent::CloseRequested
-                        if self.request.active()
+                        if self.request.borrow().active()
                             && self
                                 .window()
                                 .is_ok_and(|window| window.snapshot().is_ok_and(|snapshot| snapshot.visibility == Visibility::Hidden)) =>
@@ -625,12 +625,12 @@ impl Model {
                         // An older hide fact must not cancel a newly visible request.
                         self.finish(FileDialogCompletion::Cancelled)?;
                     }
-                    WindowEvent::Destroyed => self.request.close()?,
+                    WindowEvent::Destroyed => self.request.borrow_mut().close()?,
                     _ => {}
                 }
                 None
             }
-            _ if !self.request.active() => None,
+            _ if !self.request.borrow().active() => None,
             Message::PathEdited => {
                 self.path_dirty = true;
                 None
@@ -681,20 +681,24 @@ impl Drop for Dialog {
         {
             let _ = window.close();
         }
-        let _ = self.request.retire();
+        let _ = self.request.borrow_mut().retire();
     }
 }
 
-#[com_object(interfaces(IFileDialog), ports(neocogi_ui_core_contracts::IFileDialog::completed = {
-        self.dialog.model.try_borrow().map_err(|_| UI_E_BUSY)?.owner()?;
-        Ok(self.dialog.request.completed.as_ref())
-    }))]
+#[com_object(interfaces(IFileDialog))]
 /// One public controller identity owns no application callback, generic state pointer or native filesystem borrow.
 struct FileDialog {
     /// Runtime ownership keeps an active picker functional even if its caller releases the editing pointer.
     dialog: Rc<Dialog>,
 }
 impl IFileDialog for FileDialog {
+    /// Installs one concrete destination in the shared request's actual state.
+    fn __map_completed(&mut self, destination: ComRef<'_, __FileDialogCompletionReceiverAbi>) -> Result<(), NcStatus> {
+        self.dialog.model.try_borrow().map_err(|_| UI_E_BUSY)?.owner()?;
+        self.dialog.request.try_borrow_mut().map_err(|_| UI_E_BUSY)?.completed = Some(destination.add_ref());
+        Ok(())
+    }
+
     /// Returns the actual modal capability; application code cannot replace its private structural roles.
     fn window(&self) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         Ok(self.dialog.model.try_borrow().map_err(|_| UI_E_BUSY)?.window()?.clone())
@@ -709,26 +713,26 @@ impl IFileDialog for FileDialog {
     }
     /// Reports request state independently of hidden versus visible window allocation.
     fn active(&self) -> Result<bool, NcStatus> {
-        if self.dialog.request.closed() {
+        if self.dialog.request.try_borrow().map_err(|_| UI_E_BUSY)?.closed() {
             return Err(UI_E_CLOSED);
         }
-        Ok(self.dialog.request.active())
+        Ok(self.dialog.request.try_borrow().map_err(|_| UI_E_BUSY)?.active())
     }
     /// Explicit cancellation is idempotent and keeps the modal available for a later open.
     fn cancel(&self) -> Result<bool, NcStatus> {
         let mut model = self.dialog.model.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
         model.owner()?;
-        let active = self.dialog.request.active();
+        let active = self.dialog.request.try_borrow().map_err(|_| UI_E_BUSY)?.active();
         model.finish(FileDialogCompletion::Cancelled)?;
         Ok(active)
     }
     /// Actual window destruction produces the same lifecycle cancellation as destroying its owner.
     fn close(&self) -> Result<(), NcStatus> {
-        if self.dialog.request.closed() {
+        if self.dialog.request.try_borrow().map_err(|_| UI_E_BUSY)?.closed() {
             return Ok(());
         }
         self.dialog.model.try_borrow().map_err(|_| UI_E_BUSY)?.window()?.close()?;
-        self.dialog.request.close()?;
+        self.dialog.request.try_borrow_mut().map_err(|_| UI_E_BUSY)?.close()?;
         Ok(())
     }
     /// Diagnostics remain available after failure or closure to explain a rejected directory candidate.

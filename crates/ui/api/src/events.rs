@@ -15,7 +15,7 @@
 //! }
 //! ```
 /// Shared typed transport for applications and nested components.
-pub use neocogi_com_events::{Events, EventSender, PortRef, Port, EVENT_DISPATCH_LIMIT};
+pub use neocogi_com_events::{Events, EventSender, EVENT_DISPATCH_LIMIT};
 
 /// Isolated native algorithm collectors using the production inbox transport.
 #[cfg(feature = "test-support")]
@@ -30,54 +30,77 @@ pub use neocogi_ui_core_contracts::{Activation, TextChanged, TextSubmitted, Wind
 /// Node-specific outputs preserve their concrete contract types and field documentation.
 pub use neocogi_ui_nodes_contracts::{CheckboxChanged, NumericChanged, ScrollbarChanged};
 
-/// Defines a source-side convenience getter while leaving all consumer ownership in COM.
-/// Each expansion selects an exact generated port and, where needed, its domain check.
-macro_rules! widget_port {
-    ($widget:ty, $method:ident, $event:ty $(, $check:ident)?) => {
+/// Delegates setup directly to the generated producer operation.
+macro_rules! widget_output {
+    ($widget:ty, $method:ident, $event:ty) => {
         impl $widget {
-            /// Returns the typed event port for subscription by an application or component.
-            /// Taking this capability never mounts the control or invokes its handler.
-            pub fn $method(&self) -> PortRef<$event> {
-                self.as_interface().$method()$(.checked($check))?
+            /// Installs one destination when passed to `Events::map`.
+            pub fn $method(&self) -> impl FnOnce(Box<dyn FnMut($event) -> Result<(), NcStatus>>) -> Result<(), NcStatus> + use<> {
+                self.as_interface().add_ref().$method()
+            }
+        }
+    };
+    ($widget:ty, $method:ident, $event:ty, $check:ident) => {
+        impl $widget {
+            /// Checks domain values before translating them into consumer messages.
+            pub fn $method(&self) -> impl FnOnce(Box<dyn FnMut($event) -> Result<(), NcStatus>>) -> Result<(), NcStatus> + use<> {
+                checked(self.as_interface().add_ref().$method(), $check)
             }
         }
     };
 }
 
-widget_port!(ButtonWidget, activated, Activation);
-widget_port!(ListItemWidget, activated, Activation);
-widget_port!(ListBoxWidget, activated, Activation);
-widget_port!(CheckboxWidget, changed, CheckboxChanged);
-widget_port!(crate::SliderWidget, changed, NumericChanged, valid_numeric);
-widget_port!(crate::NumberWidget, changed, NumericChanged, valid_numeric);
-widget_port!(crate::ScrollbarWidget, changed, ScrollbarChanged, valid_scrollbar);
-widget_port!(crate::TextboxWidget, changed, TextChanged, valid_text_cursor);
-widget_port!(crate::TextboxWidget, submitted, TextSubmitted);
-widget_port!(crate::TextAreaWidget, changed, TextChanged, valid_text_cursor);
-widget_port!(crate::TextAreaWidget, submitted, TextSubmitted);
-widget_port!(crate::ComboWidget, changed, ChoiceSelection);
-
-/// Queries the actual window's lifecycle source without retaining it after subscription.
-pub fn window_events(window: ComRef<'_, IWindowAbi>) -> Result<PortRef<WindowEvent>, NcStatus> {
-    Ok(window.add_ref().query::<IWindowEventsAbi>()?.changed().checked(valid_window_event))
+/// Adds one domain check to a setup closure; no output identity or lifecycle is introduced.
+fn checked<E: 'static>(
+    install: impl FnOnce(Box<dyn FnMut(E) -> Result<(), NcStatus>>) -> Result<(), NcStatus>,
+    validate: fn(&E) -> Result<(), NcStatus>,
+) -> impl FnOnce(Box<dyn FnMut(E) -> Result<(), NcStatus>>) -> Result<(), NcStatus> {
+    move |mut consume| {
+        install(Box::new(move |event| {
+            validate(&event)?;
+            consume(event)
+        }))
+    }
 }
 
-/// Queries the popup's independent dismissal source; delivery describes a captured fact.
-pub fn popup_events(popup: ComRef<'_, IPopupAbi>) -> Result<PortRef<PopupDismissed>, NcStatus> {
+widget_output!(ButtonWidget, activated, Activation);
+widget_output!(ListItemWidget, activated, Activation);
+widget_output!(ListBoxWidget, activated, Activation);
+widget_output!(CheckboxWidget, changed, CheckboxChanged);
+widget_output!(crate::SliderWidget, changed, NumericChanged, valid_numeric);
+widget_output!(crate::NumberWidget, changed, NumericChanged, valid_numeric);
+widget_output!(crate::ScrollbarWidget, changed, ScrollbarChanged, valid_scrollbar);
+widget_output!(crate::TextboxWidget, changed, TextChanged, valid_text_cursor);
+widget_output!(crate::TextboxWidget, submitted, TextSubmitted);
+widget_output!(crate::TextAreaWidget, changed, TextChanged, valid_text_cursor);
+widget_output!(crate::TextAreaWidget, submitted, TextSubmitted);
+widget_output!(crate::ComboWidget, changed, ChoiceSelection);
+
+/// Obtains lifecycle output installation; setup temporarily retains the actual window.
+pub fn window_events(
+    window: ComRef<'_, IWindowAbi>,
+) -> Result<impl FnOnce(Box<dyn FnMut(WindowEvent) -> Result<(), NcStatus>>) -> Result<(), NcStatus> + use<>, NcStatus> {
+    Ok(checked(window.add_ref().query::<IWindowEventsAbi>()?.changed(), valid_window_event))
+}
+
+/// Obtains dismissal output installation; delivery describes a captured fact.
+pub fn popup_events(
+    popup: ComRef<'_, IPopupAbi>,
+) -> Result<impl FnOnce(Box<dyn FnMut(PopupDismissed) -> Result<(), NcStatus>>) -> Result<(), NcStatus> + use<>, NcStatus> {
     Ok(popup.add_ref().query::<IPopupEventsAbi>()?.dismissed())
 }
 
 impl crate::MenuItem {
-    /// Queries this row's actual activation port, shared by native and plugin clients.
-    pub fn activated(&self) -> Result<PortRef<Activation>, NcStatus> {
+    /// Obtains this row's activation installation operation through its actual COM interface.
+    pub fn activated(&self) -> Result<impl FnOnce(Box<dyn FnMut(Activation) -> Result<(), NcStatus>>) -> Result<(), NcStatus> + use<>, NcStatus> {
         Ok(self.as_interface().add_ref().query::<IActivationEventsAbi>()?.activated())
     }
 }
 
 impl crate::FileDialog {
     /// Returns checked native-path completions, including outcomes already posted before closure.
-    pub fn completed(&self) -> PortRef<FileDialogCompletion> {
-        self.as_interface().completed().checked(valid_file_dialog_path)
+    pub fn completed(&self) -> impl FnOnce(Box<dyn FnMut(FileDialogCompletion) -> Result<(), NcStatus>>) -> Result<(), NcStatus> + use<> {
+        checked(self.as_interface().add_ref().completed(), valid_file_dialog_path)
     }
 }
 

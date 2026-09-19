@@ -34,6 +34,7 @@
 //! the core-owned `IChoiceMenu` also used by the ordinary widget-backed popup; all mutation crosses
 //! that public typed boundary through an exclusive receiver rather than shared interior mutability.
 
+use neocogi_ui_core_contracts::__ChoiceSelectionReceiverAbi;
 use crate::ControlRole;
 
 use super::*;
@@ -71,10 +72,7 @@ impl Default for ComboParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Combo, ports(neocogi_ui_nodes_contracts::Combo::changed = {
-        self.runtime().state.writable()?;
-        Ok(self.menu.changed())
-    }))]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Combo)]
 /// Concrete retained combo and dynamically constructible COM object.
 pub struct Combo {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -263,9 +261,7 @@ impl crate::widget_object::FontState for Combo {
     }
 }
 use crate::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_core_contracts::{
-    ChoiceMenuEntryAbi, ChoiceSelection, ChoiceSelectionAbi, FontRole, GeometryChange, IChoiceMenuAbi, IChoiceMenuPorts, IWidgetHostAbi,
-};
+use neocogi_ui_core_contracts::{ChoiceMenuEntryAbi, ChoiceSelection, ChoiceSelectionAbi, FontRole, GeometryChange, IChoiceMenuAbi, IWidgetHostAbi};
 use neocogi_ui_nodes_contracts::ComboAbi;
 use neocogi_com::{ComPtr, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus, NcString};
 
@@ -298,6 +294,12 @@ impl Combo {
 }
 
 impl neocogi_ui_nodes_contracts::Combo for Combo {
+    /// Replaces this output's concrete destination after checking widget access.
+    fn __map_changed(&mut self, destination: neocogi_com::ComRef<'_, __ChoiceSelectionReceiverAbi>) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        self.menu.__map_changed(destination)
+    }
+
     /// Returns an explicit tagged optional position from the authoritative model.
     fn selection(&self) -> Result<ChoiceSelectionAbi, NcStatus> {
         self.runtime().state.readable()?;

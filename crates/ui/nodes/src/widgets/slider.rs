@@ -53,6 +53,7 @@
 //! Retained slider widget.
 //!
 //! Sliders support dragging, wheel increments, snapping, and shift-click text entry.
+use neocogi_ui_nodes_contracts::__NumericChangedReceiverAbi;
 use crate::{ControlRole};
 
 use crate::*;
@@ -119,10 +120,7 @@ impl SliderParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Slider, ports(neocogi_ui_nodes_contracts::Slider::changed = {
-        self.runtime().state.writable()?;
-        Ok(self.changed_event.as_ref())
-    }))]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Slider)]
 /// Concrete retained slider and dynamically constructible COM object.
 pub struct Slider {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -143,7 +141,7 @@ pub struct Slider {
     /// Inline numeric editing state.
     edit: NumberEditState,
     /// Runtime-owned source for user-originated value changes.
-    changed_event: crate::Port<crate::NumericChanged>,
+    changed_event: Option<neocogi_com::ComPtr<__NumericChangedReceiverAbi>>,
 }
 
 impl Slider {
@@ -159,7 +157,7 @@ impl Slider {
             low: parameters.low,
             high: parameters.high,
             edit: NumberEditState::default(),
-            changed_event: crate::Port::new(),
+            changed_event: None,
         }
     }
 
@@ -263,7 +261,7 @@ impl Slider {
         value = clamp_slider_value(snap_slider_value(value, self.low, self.step), self.low, self.high);
         self.value = value;
         if last != value {
-            ctx.posted(self.changed_event.emit(crate::NumericChanged { value }));
+            ctx.posted(crate::NumericChanged { value }.post_to(&mut self.changed_event));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(self.value != last)
@@ -393,7 +391,7 @@ impl From<SliderParameters> for crate::test_support::algorithm::Algorithm<Slider
 impl crate::widget_object::WidgetAlgorithm for Slider {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
-        self.changed_event.close_ordinary();
+        self.changed_event = None;
     }
 }
 
@@ -495,14 +493,16 @@ mod tests {
     }
 
     /// Collects the shared numeric message from either control through its production port.
-    fn numeric_dispatcher(port: crate::PortRef<neocogi_ui_nodes_contracts::NumericChanged>) -> impl FnMut(&mut Vec<Real>) -> bool + use<> {
-        let mut capture = neocogi_ui::events::test_support::Capture::connect(port).unwrap();
-        move |values| {
+    fn numeric_dispatcher(
+        install: impl FnOnce(Box<dyn FnMut(neocogi_ui_nodes_contracts::NumericChanged) -> Result<(), NcStatus>>) -> Result<(), NcStatus>,
+    ) -> Box<dyn FnMut(&mut Vec<Real>) -> bool> {
+        let mut capture = neocogi_ui::events::test_support::Capture::connect(install).unwrap();
+        Box::new(move |values| {
             let batch = capture.drain(1024).unwrap();
             let delivered = !batch.is_empty();
             values.extend(batch.into_iter().map(|event| event.value));
             delivered
-        }
+        })
     }
 
     /// Verifies formatting precision is a small validated value rather than an allocation-sized
@@ -669,7 +669,10 @@ mod tests {
             SliderParameters::with_opt(1.15, 1.0, 2.0, 0.2, precision(2), WidgetOption::FRAME)
                 .expect("finite ascending fractional slider parameters must validate"),
         );
-        let mut dispatcher = numeric_dispatcher(slider.changed_event.as_ref());
+        let mut dispatcher = numeric_dispatcher(|consume| {
+            slider.changed_event = Some(crate::NumericChanged::__receiver(consume)?);
+            Ok(())
+        });
         run_slider_once(&mut slider, rect(0, 0, 100, 20), Vec::new(), true, false, false, Some(vec2(0, 1)));
 
         assert_real_close(slider.value(), 1.4);
@@ -898,7 +901,10 @@ mod tests {
         let mut slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
             SliderParameters::new(0.0, -5.0, 5.0).expect("finite ascending slider parameters must validate"),
         );
-        let mut dispatcher = numeric_dispatcher(slider.changed_event.as_ref());
+        let mut dispatcher = numeric_dispatcher(|consume| {
+            slider.changed_event = Some(crate::NumericChanged::__receiver(consume)?);
+            Ok(())
+        });
         slider.set_value(4.0);
         assert_eq!(slider.value(), 4.0);
         assert!(!dispatcher(&mut Vec::new()));
@@ -910,7 +916,10 @@ mod tests {
         let mut slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
             SliderParameters::with_opt(2.0, 0.0, 10.0, 1.0, DecimalPrecision::ZERO, WidgetOption::FRAME).unwrap(),
         );
-        let mut dispatcher = numeric_dispatcher(slider.changed_event.as_ref());
+        let mut dispatcher = numeric_dispatcher(|consume| {
+            slider.changed_event = Some(crate::NumericChanged::__receiver(consume)?);
+            Ok(())
+        });
         slider.edit.editing = true;
         // Enter through the editing contract instead of reaching into the private numeric buffer.
         run_slider_once(
@@ -1033,6 +1042,13 @@ impl Slider {
 }
 
 impl neocogi_ui_nodes_contracts::Slider for Slider {
+    /// Replaces this output's concrete destination after checking widget access.
+    fn __map_changed(&mut self, destination: neocogi_com::ComRef<'_, __NumericChangedReceiverAbi>) -> Result<(), neocogi_com::NcStatus> {
+        self.runtime().state.writable()?;
+        self.changed_event = Some(destination.add_ref());
+        Ok(())
+    }
+
     /// Reads the finite value owned by the slider's concrete semantic algorithm.
     fn value(&self) -> Result<f32, NcStatus> {
         self.runtime().state.readable()?;

@@ -11,4 +11,3 @@ use neocogi.ui.core::{
 };
 use neocogi.renderer::{ITexture, Rect};
 use neocogi.gfx::FontRole;
-use neocogi.com.events::IEventSubscription;

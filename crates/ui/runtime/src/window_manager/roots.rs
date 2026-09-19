@@ -155,57 +155,31 @@ impl PopupId {
     /// Allocates one popup key that cannot collide across Contexts or later object lifetimes.
     fn allocate() -> Self {
         // Menu and application popups share this concrete wrapper because both occupy popup nodes;
-        // only application popups expose a handle and event endpoint.
+        // only application popups expose a handle and dismissal output.
         Self(crate::identity::ProcessUniqueId::allocate())
     }
 }
 
-/// Cloneable non-owning capability for one application-authored popup.
-///
-/// The private stable ID selects popup mutations; the weak typed endpoint observes dismissal. The
-/// two values describe the same registered popup but neither derives identity from the other's
-/// allocation, so allocator address reuse cannot retarget a stale capability.
+/// Stable lookup identity; the manager or declaration owns all presentation and delivery state.
+#[derive(Clone)]
 pub struct PopupHandle {
-    /// Process-unique concrete identity used only by the owning window manager.
+    /// Process-unique identity; never reused or derived from a receiver allocation.
     id: PopupId,
-    /// Weak endpoint for policy-driven dismissal observations from this same popup.
-    events: crate::PortRef<PopupEvent>,
 }
-
 impl PopupHandle {
-    /// Creates an application capability from an independently allocated identity and endpoint.
-    fn new(id: PopupId, events: crate::PortRef<PopupEvent>) -> Self {
-        // Registration establishes this pairing once while it owns both concrete values.
-        Self { id, events }
+    /// Captures the identity allocated by the sole semantic owner.
+    fn new(id: PopupId) -> Self {
+        Self { id }
     }
-
-    /// Returns the private concrete key used by popup forest traversal.
+    /// Selects the authoritative record without retaining its owner.
     pub(super) const fn id(&self) -> PopupId {
-        // The typed value is copied directly without inspecting the weak event allocation.
         self.id
     }
-
-    /// Returns this popup's weak typed dismissal endpoint.
-    pub fn events(&self) -> crate::PortRef<PopupEvent> {
-        // Subscription receives only the weak endpoint; object selection remains a separate ID
-        // operation performed by checked Ui methods.
-        self.events.clone()
-    }
 }
-
-impl Clone for PopupHandle {
-    /// Clones the application capability without allocating identity or retaining the popup.
-    fn clone(&self) -> Self {
-        // Preserve the original stable ID/endpoint association in every application-held clone.
-        Self { id: self.id, events: self.events.clone() }
-    }
-}
-
 impl fmt::Debug for PopupHandle {
-    /// Reports endpoint liveness without exposing the private process-local identifier.
+    /// Keeps the private process-local key out of public diagnostics.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Debug output intentionally describes only the observable endpoint state.
-        f.debug_struct("PopupHandle").field("events", &self.events).finish_non_exhaustive()
+        f.debug_struct("PopupHandle").finish_non_exhaustive()
     }
 }
 
@@ -564,7 +538,7 @@ struct RootState {
     /// Expanded outer height retained while the minimize button shows a compact window.
     unminimized_height: Option<i32>,
     /// Strong owner of the unified window geometry/lifecycle event stream.
-    events: crate::Port<neocogi_ui_core_contracts::WindowEvent>,
+    events: Option<neocogi_com::ComPtr<neocogi_ui_core_contracts::__WindowEventReceiverAbi>>,
     /// Optional concrete menu bar laid out above the application widget body.
     menu_bar: Option<MenuSurface>,
     /// Descendant viewport policy applied when layout enters direct structural child windows.
@@ -591,7 +565,7 @@ enum PopupState {
         /// Exact screen rectangle supplied by the public popup API.
         anchor: Recti,
         /// Strong owner of policy-driven popup lifecycle events.
-        events: crate::Port<PopupEvent>,
+        events: Option<neocogi_com::ComPtr<neocogi_ui_core_contracts::__PopupDismissedReceiverAbi>>,
         /// Whether the next committed layout must select this popup's first keyboard target.
         focus_on_layout: bool,
     },
@@ -791,18 +765,17 @@ impl SurfaceNode {
 
     /// Emits one concrete window event at the next safe application dispatch boundary.
     fn emit_window_event(&mut self, event: WindowEvent) -> Result<(), neocogi_com::NcStatus> {
-        // The strong port shares the window node's exact lifetime, while subscribers carry only a
-        // weak capability and cannot emit into this queue themselves.
-        self.root().expect("window events are emitted only by roots").events.emit(event)
+        // The record owns its receiver; posting owns no queue and invokes no app behavior.
+        event.post_to(&mut self.root_mut().expect("window events are emitted only by roots").events)
     }
 
     /// Dismisses an active popup and emits exactly one policy event.
     fn dismiss_popup(&mut self) -> Result<(), neocogi_com::NcStatus> {
         // The caller walks the active leaf upward, so descendants are always notified first.
         self.surface.body.clear_transient_targets();
-        if let Some(PopupState::Application { events, .. }) = self.popup() {
+        if let Some(PopupState::Application { events, .. }) = self.popup_mut() {
             // Menu popups have no unobservable lifecycle port; their visibility is wholly internal.
-            events.emit(PopupEvent::Dismissed)?;
+            PopupEvent::Dismissed.post_to(events)?;
         }
         Ok(())
     }
@@ -1296,6 +1269,50 @@ impl SurfaceForest {
 }
 
 impl WindowManager {
+    /// Installs the window destination in its actual forest record.
+    pub(crate) fn map_window_events(
+        &mut self,
+        window: &WindowHandle,
+        destination: neocogi_com::ComPtr<neocogi_ui_core_contracts::__WindowEventReceiverAbi>,
+    ) -> Result<(), SurfaceMutationError> {
+        let id = self.window_id(window)?;
+        self.root_node_mut(id)?.root_mut().expect("window ID resolves a root").events = Some(destination);
+        Ok(())
+    }
+    /// Installs dismissal delivery without allocating a popup projection or queue.
+    pub(crate) fn map_popup_events(
+        &mut self,
+        popup: &PopupHandle,
+        destination: neocogi_com::ComPtr<neocogi_ui_core_contracts::__PopupDismissedReceiverAbi>,
+    ) -> Result<(), SurfaceMutationError> {
+        let id = self.popup_id(popup)?;
+        match self.surfaces.popup_node_mut(id).and_then(SurfaceNode::popup_mut) {
+            Some(PopupState::Application { events, .. }) => {
+                *events = Some(destination);
+                Ok(())
+            }
+            _ => unreachable!("validated application popup has application policy"),
+        }
+    }
+    /// Resolves a mounted row by its existing identity before installing its receiver.
+    pub(crate) fn map_menu_item(
+        &mut self,
+        handle: &crate::MenuItemHandle,
+        destination: neocogi_com::ComPtr<neocogi_ui_core_contracts::__ActivationReceiverAbi>,
+    ) -> Result<(), neocogi_com::NcStatus> {
+        for node in &mut self.surfaces.nodes {
+            if let Some(item) = node.root_mut().and_then(|root| root.menu_bar.as_mut()).and_then(|menu| menu.item_mut(handle)) {
+                item.submitted_event = Some(destination);
+                return Ok(());
+            }
+            if let Some(item) = node.surface.body.menu_mut().and_then(|menu| menu.item_mut(handle)) {
+                item.submitted_event = Some(destination);
+                return Ok(());
+            }
+        }
+        Err(neocogi_ui_core_contracts::UI_E_CLOSED)
+    }
+
     /// Captures every mounted component's private dispatcher after retained
     /// traversal and before callback delivery. The forest's parent edges always
     /// point to earlier nodes, so reverse order visits child surfaces first;
@@ -1409,11 +1426,9 @@ impl WindowManager {
         let (name, rect, content, menu_bar, child_window_clip) = window.into_parts();
         let (menu_bar, menu_popups) = Self::prepare_menu_bar(menu_bar);
 
-        // Identity and event delivery are allocated separately, then paired once in the returned
-        // application handle. The forest owns the same ID and the only strong event endpoint.
+        // The handle copies only identity. The forest owns the optional destination directly.
         let id = RootId::allocate();
-        let events = crate::Port::new();
-        let event_handle = events.as_ref();
+        let events = None;
         self.surfaces.insert_root(SurfaceNode {
             key: SurfaceKey::Root(id),
             parent: parent.map(SurfaceKey::Root),
@@ -1437,7 +1452,7 @@ impl WindowManager {
             self.register_menu_popup(SurfaceKey::Root(id), trigger_slot, entries);
         }
         self.invalidate_ui_commit();
-        WindowHandle::new(id, event_handle)
+        WindowHandle::new(id)
     }
 
     /// Creates an open independent window from one complete retained definition.
@@ -1648,10 +1663,8 @@ impl WindowManager {
     /// Registers one application-addressable popup below an already validated root.
     fn register_application_popup(&mut self, parent: SurfaceKey, surface: Surface) -> PopupHandle {
         let id = PopupId::allocate();
-        // The forest node retains the strong lifecycle port while the application handle combines
-        // an independent stable ID with a weak endpoint for the same registered popup.
-        let events = crate::Port::new();
-        let event_handle = events.as_ref();
+        // The forest record owns delivery; the handle needs only its existing lookup identity.
+        let events = None;
         self.surfaces.insert_popup(SurfaceNode {
             key: SurfaceKey::Popup(id),
             parent: Some(parent),
@@ -1663,7 +1676,7 @@ impl WindowManager {
             }),
         });
         self.invalidate_ui_commit();
-        PopupHandle::new(id, event_handle)
+        PopupHandle::new(id)
     }
 
     /// Separates direct menu rows from recursive children without creating a parallel menu tree.
@@ -2055,14 +2068,9 @@ impl WindowManager {
             self.active_surface = self.surfaces.root_node(root).and_then(|node| node.parent);
         }
         for &id in &removed {
-            // The source closes before its root disappears. Its existing subscription retains
-            // only this terminal fact, so components can settle requests without retaining UI.
-            let result = self
-                .root_node(id)?
-                .root()
-                .expect("collected roots have root policy")
-                .events
-                .close(WindowEvent::Destroyed);
+            // Commit the final fact before removing the record. Consumer queues own it
+            // independently, so components can settle requests after native teardown.
+            let result = WindowEvent::Destroyed.post_to(&mut self.root_node_mut(id)?.root_mut().expect("collected roots have root policy").events);
             self.posted(result);
         }
         self.surfaces.remove_roots(&removed);

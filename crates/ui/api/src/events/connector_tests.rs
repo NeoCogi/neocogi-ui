@@ -1,47 +1,57 @@
-//! Generated foreign connections exercise immediate mapping and deferred consumer behavior.
+//! Concrete foreign producers exercise direct replacement, ownership and deferred behavior.
 use super::*;
 use neocogi_com::{com_object, ComPtr, NcMessage};
 use std::{cell::Cell, rc::Rc};
 
-/// Observable source state belongs to the producer, independently of its consumers.
-struct SourceProbe {
-    /// Production connection point; it has no pending-message storage.
-    source: Port<Activation>,
-    /// One rejected connection proves unsuccessful setup releases mapper captures.
-    fail_once: Cell<bool>,
-}
-#[com_object(interfaces(IActivationEvents), ports(neocogi_ui_core_contracts::IActivationEvents::activated = {
-        match self.probe.fail_once.replace(false) {
-            true => Err(NC_E_INVALID_ARG),
-            false => Ok(self.probe.source.as_ref()),
-        }
-    }))]
-/// Foreign source delegates to the same native connection used by widgets.
+#[com_object(interfaces(IActivationEvents, __ActivationReceiver))]
+/// Foreign producer uses only ordinary fields and mutable COM methods.
 struct ForeignActivation {
-    /// Fixture access observes source lifecycle without retaining any consumer state.
-    probe: Rc<SourceProbe>,
+    /// The complete delivery storage: one optional typed destination.
+    destination: Option<ComPtr<__ActivationReceiverAbi>>,
+    /// One failed setup proves mapper captures are released on installation errors.
+    fail_once: bool,
 }
-impl IActivationEvents for ForeignActivation {}
-/// Records release of a concrete mapping capture, including failed connection attempts.
+impl IActivationEvents for ForeignActivation {
+    /// Failed setup leaves the old destination intact; successful setup replaces it.
+    fn __map_activated(&mut self, destination: ComRef<'_, __ActivationReceiverAbi>) -> Result<(), NcStatus> {
+        match std::mem::replace(&mut self.fail_once, false) {
+            true => Err(NC_E_INVALID_ARG),
+            false => {
+                self.destination = Some(destination.add_ref());
+                Ok(())
+            }
+        }
+    }
+}
+impl __ActivationReceiver for ForeignActivation {
+    /// Acquires the input before publishing through the installed receiver.
+    fn post(&mut self, message: NcMessage<'_, Activation>) -> Result<(), NcStatus> {
+        message.to_owned()?.post_to(&mut self.destination)
+    }
+}
+/// Creates one independently owned foreign producer, initially without a destination.
+fn source(fail_once: bool) -> ComPtr<__ActivationReceiverAbi> {
+    ForeignActivation::from_value(ForeignActivation { destination: None, fail_once })
+        .query()
+        .unwrap()
+}
+/// Uses the producer's generated output accessor, including its checked COM installation call.
+fn output(source: &ComPtr<__ActivationReceiverAbi>) -> impl FnOnce(Box<dyn FnMut(Activation) -> Result<(), NcStatus>>) -> Result<(), NcStatus> + use<> {
+    source.query::<IActivationEventsAbi>().unwrap().activated()
+}
+/// Lends an input string only for one fixture producer call.
+fn emit(source: &ComPtr<__ActivationReceiverAbi>, label: &str) -> Result<(), NcStatus> {
+    source.clone().post(NcMessage::new(&Activation { label: label.into() }))
+}
+/// Makes capture destruction observable independently of both producer and consumer ownership.
 struct Lifetime(Rc<Cell<u32>>);
 impl Drop for Lifetime {
-    /// Destruction remains observable even while a foreign lease is separately retained.
+    /// Counts the release caused by failed setup, replacement or producer destruction.
     fn drop(&mut self) {
         self.0.set(self.0.get() + 1);
     }
 }
-/// Creates a real foreign source whose port can outlive a temporary borrowed projection.
-fn source(fail_once: bool) -> (ComPtr<IActivationEventsAbi>, Rc<SourceProbe>) {
-    let probe = Rc::new(SourceProbe {
-        source: Port::new(),
-        fail_once: Cell::new(fail_once),
-    });
-    (
-        ForeignActivation::from_value(ForeignActivation { probe: probe.clone() }).query().unwrap(),
-        probe,
-    )
-}
-/// Domain validation runs before translation can post an invalid fact.
+/// Rejects an invalid domain value before invoking application translation.
 fn valid_label(event: &Activation) -> Result<(), NcStatus> {
     match event.label.is_empty() {
         true => Err(NC_E_INVALID_ARG),
@@ -49,103 +59,145 @@ fn valid_label(event: &Activation) -> Result<(), NcStatus> {
     }
 }
 
-/// All protocols mapped to one inbox preserve actual emission order, not registration order.
+/// Failed setup releases captures; successful outputs preserve actual post order across producers.
 #[test]
-fn foreign_mapping_failure_validation_fifo_and_lifetime() {
+fn failure_validation_fifo_and_producer_lifetime() {
     let mut events = Events::new();
     let drops = Rc::new(Cell::new(0));
-    let (first, a) = source(false);
-    let (second, b) = source(true);
+    let a = source(false);
+    let b = source(true);
     let lifetime = Lifetime(drops.clone());
-    let rejected = events.map(second.activated(), move |event| {
-        let _ = &lifetime;
-        event.label
-    });
-    assert_eq!(rejected.unwrap_err(), NC_E_INVALID_ARG);
+    assert_eq!(
+        events.map(output(&b), move |event| {
+            let _ = &lifetime;
+            event.label
+        }),
+        Err(NC_E_INVALID_ARG)
+    );
     assert_eq!(drops.get(), 1);
-    assert!(!b.source.connected());
     let lifetime = Lifetime(drops.clone());
-    let lease_a = events
-        .map(first.as_com_ref().activated(), move |event| {
+    events
+        .map(output(&a), move |event| {
             let _ = &lifetime;
             event.label
         })
         .unwrap();
-    let lease_b = events.map(second.activated().checked(valid_label), |event| event.label).unwrap();
-    assert_eq!(b.source.emit(Activation { label: String::new() }), Err(NC_E_INVALID_ARG));
+    events.map(checked(output(&b), valid_label), |event| event.label).unwrap();
+    assert_eq!(emit(&b, ""), Err(NC_E_INVALID_ARG));
     assert!(events.is_empty());
-    b.source.emit(Activation { label: "second".into() }).unwrap();
-    a.source.emit(Activation { label: "first".into() }).unwrap();
-    lease_b.cancel().unwrap();
-    a.source.close_ordinary();
+    emit(&b, "second").unwrap();
+    emit(&a, "first").unwrap();
+    drop(a);
     assert_eq!(drops.get(), 2);
-    // Cancellation and producer closure cannot retract already committed consumer facts.
     assert_eq!(events.pop().as_deref(), Some("second"));
     assert_eq!(events.pop().as_deref(), Some("first"));
-    assert_eq!(lease_a.active(), Ok(false));
-    drop(events);
-    assert_eq!(lease_b.active(), Ok(false));
 }
 
-/// Concrete routing IDs allow one protocol to serve multiple application destinations.
+/// Remapping changes only future delivery, even between different consumer message types.
 #[test]
-fn direct_mapping_is_immediate_and_consumption_is_deferred() {
-    let mut events = Events::new();
-    let (first, a) = source(false);
-    let (second, b) = source(false);
-    let mut sequence = 0;
-    events
-        .map(first.activated(), move |event| {
-            sequence += 1;
-            (0, sequence, event.label)
-        })
-        .unwrap();
-    events.map(second.activated(), |event| (1, 0, event.label)).unwrap();
-    a.source.emit(Activation { label: "a".into() }).unwrap();
-    b.source.emit(Activation { label: "b".into() }).unwrap();
-    a.source.emit(Activation { label: "c".into() }).unwrap();
-    let mut consumed = Vec::new();
-    assert_eq!(events.len(), 3);
-    assert_eq!(
-        events.dispatch(2, |message| {
-            consumed.push(message);
-            Ok(())
-        }),
-        Ok(2)
-    );
-    assert_eq!(consumed, [(0, 1, "a".into()), (1, 0, "b".into())]);
-    assert_eq!(events.pop(), Some((0, 2, "c".into())));
-}
-
-/// A cancelled old lease cannot disconnect a replacement, and source drop preserves posted messages.
-#[test]
-fn reconnect_and_source_drop_do_not_change_inbox_ownership() {
+fn replacement_preserves_queued_values_and_routing_ids() {
+    let producer = source(false);
     let mut first = Events::new();
     let mut second = Events::new();
-    let source = Port::<Activation>::new();
-    let old = first.map(source.as_ref(), |event| event.label).unwrap();
-    assert_eq!(second.map(source.as_ref(), |event| event.label).unwrap_err(), crate::UI_E_BUSY);
-    old.cancel().unwrap();
-    let current = second.map(source.as_ref(), |event| event.label).unwrap();
-    old.cancel().unwrap();
-    source.emit(Activation { label: "survives".into() }).unwrap();
-    drop(source);
-    assert_eq!(current.active(), Ok(false));
-    assert_eq!(second.pop().as_deref(), Some("survives"));
+    first.map(output(&producer), |event| (10, event.label)).unwrap();
+    emit(&producer, "old").unwrap();
+    second.map(output(&producer), |event| event.label.len()).unwrap();
+    emit(&producer, "replacement").unwrap();
+    drop(producer);
+    assert_eq!(first.pop(), Some((10, "old".into())));
+    assert_eq!(second.pop(), Some(11));
     assert!(first.is_empty());
 }
 
-/// ABI decoding and domain validation occur before mapping, without application-state borrow gates.
+/// Consumer destruction makes retained receivers inert; producer replacement releases their captures.
 #[test]
-fn generated_receivers_validate_before_posting_owned_snapshots() {
-    use neocogi_com_events::PortMessage;
+fn abandoned_consumer_does_not_run_its_mapper_or_stay_alive() {
+    let producer = source(false);
+    let mut events = Events::new();
+    let calls = Rc::new(Cell::new(0));
+    let observed = calls.clone();
+    let drops = Rc::new(Cell::new(0));
+    let lifetime = Lifetime(drops.clone());
+    events
+        .map(output(&producer), move |_| {
+            let _ = &lifetime;
+            observed.set(observed.get() + 1);
+        })
+        .unwrap();
+    emit(&producer, "live").unwrap();
+    assert_eq!(calls.get(), 1);
+    drop(events);
+    emit(&producer, "abandoned").unwrap();
+    assert_eq!(calls.get(), 1);
+    assert_eq!(drops.get(), 0, "producer owns the adapter until replacement or destruction");
+    let mut replacement = Events::new();
+    replacement.map(output(&producer), |_| ()).unwrap();
+    assert_eq!(drops.get(), 1);
+}
+
+/// Mapping runs synchronously while ordinary consumer behavior waits for a dispatch boundary.
+#[test]
+fn translation_is_immediate_and_behavior_is_deferred() {
+    let producer = source(false);
+    let mut events = Events::new();
+    let mapped = Rc::new(Cell::new(0));
+    let observed = mapped.clone();
+    events
+        .map(output(&producer), move |event| {
+            observed.set(observed.get() + 1);
+            event.label
+        })
+        .unwrap();
+    emit(&producer, "a").unwrap();
+    emit(&producer, "b").unwrap();
+    assert_eq!(mapped.get(), 2);
+    let mut consumed = Vec::new();
+    assert_eq!(
+        events.dispatch(1, |message| {
+            consumed.push(message);
+            Ok(())
+        }),
+        Ok(1)
+    );
+    assert_eq!(consumed, ["a"]);
+    assert_eq!(events.pop().as_deref(), Some("b"));
+}
+
+/// Decoder-owned snapshots still pass domain checks before any app value enters its FIFO.
+#[test]
+fn generated_receiver_checks_domain_values_before_mapping() {
     let mut numeric = Events::new();
-    let mut receiver = NumericChanged::mapping(numeric.sender(), |event| event.value, Some(valid_numeric)).unwrap();
+    let mut receiver = None;
+    numeric
+        .map(
+            checked(
+                |consume| {
+                    receiver = Some(NumericChanged::__receiver(consume)?);
+                    Ok(())
+                },
+                valid_numeric,
+            ),
+            |event| event.value,
+        )
+        .unwrap();
+    let receiver = receiver.as_mut().unwrap();
     assert_eq!(receiver.post(NcMessage::new(&NumericChanged { value: f32::NAN })), Err(NC_E_INVALID_ARG));
     receiver.post(NcMessage::new(&NumericChanged { value: 1.0 })).unwrap();
     assert_eq!(numeric.pop(), Some(1.0));
     let mut text = Events::new();
-    let mut receiver = TextChanged::mapping(text.sender(), |event| event.text, Some(valid_text_cursor)).unwrap();
+    let mut receiver = None;
+    text.map(
+        checked(
+            |consume| {
+                receiver = Some(TextChanged::__receiver(consume)?);
+                Ok(())
+            },
+            valid_text_cursor,
+        ),
+        |event| event.text,
+    )
+    .unwrap();
+    let receiver = receiver.as_mut().unwrap();
     assert_eq!(
         receiver.post(NcMessage::new(&TextChanged { text: "é".into(), cursor: 1 })),
         Err(NC_E_INVALID_ARG)
@@ -154,20 +206,20 @@ fn generated_receivers_validate_before_posting_owned_snapshots() {
     assert_eq!(text.pop().as_deref(), Some("é"));
 }
 
-/// Immediate mappers cannot recursively post through the same source; cancellation during posting is safe.
+/// The existing COM mutable gate rejects recursive producer calls without a posting phase machine.
 #[test]
-fn recursive_post_rejects_and_closure_during_post_keeps_the_committed_message() {
-    let source = Rc::new(Port::<Activation>::new());
-    let captured = source.clone();
+fn ordinary_com_gate_rejects_recursive_emission() {
+    let producer = source(false);
+    let captured = producer.clone();
     let mut events = Events::new();
-    let lease = events
-        .map(Port::as_ref(&source), move |event| {
-            assert_eq!(captured.emit(Activation { label: "recursive".into() }), Err(neocogi_com_events::EVENT_E_BUSY));
-            captured.close_ordinary();
+    events
+        .map(output(&producer), move |event| {
+            assert_eq!(emit(&captured, "recursive"), Err(neocogi_com::NC_E_BUSY));
             event.label
         })
         .unwrap();
-    source.emit(Activation { label: "committed".into() }).unwrap();
-    assert_eq!(lease.active(), Ok(false));
-    assert_eq!(events.pop().as_deref(), Some("committed"));
+    emit(&producer, "outer").unwrap();
+    assert_eq!(events.pop().as_deref(), Some("outer"));
+    // Release the deliberately self-capturing test mapper by replacing it.
+    events.map(output(&producer), |event| event.label).unwrap();
 }

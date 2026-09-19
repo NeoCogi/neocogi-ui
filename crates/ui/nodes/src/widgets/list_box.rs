@@ -30,6 +30,7 @@
 
 //! Retained list-box widget.
 
+use neocogi_ui_core_contracts::__ActivationReceiverAbi;
 use crate::{ControlRole};
 
 use super::*;
@@ -64,10 +65,7 @@ impl ListBoxParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::ListBox, ports(neocogi_ui_nodes_contracts::ListBox::activated = {
-        self.runtime().state.writable()?;
-        Ok(self.submitted_event.as_ref())
-    }))]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::ListBox)]
 /// Concrete retained list box and dynamically constructible COM object.
 pub struct ListBox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -81,8 +79,8 @@ pub struct ListBox {
     /// Initialization-only font.
     font: FontRef,
     /// Base widget options.
-    /// Runtime-owned source for user submissions.
-    submitted_event: crate::Port<crate::Activation>,
+    /// Installed destination for captured text submissions.
+    submitted_event: Option<neocogi_com::ComPtr<__ActivationReceiverAbi>>,
 }
 
 impl ListBox {
@@ -94,7 +92,7 @@ impl ListBox {
             image: parameters.image,
             fit_width: false,
             font: parameters.font,
-            submitted_event: crate::Port::new(),
+            submitted_event: None,
         }
     }
 
@@ -138,8 +136,8 @@ impl Widget for ListBox {
             return crate::Change::NoChange;
         }
         // Pointer and keyboard activation publish the same application-facing submission.
-        if self.submitted_event.connected() {
-            ctx.posted(self.submitted_event.emit(crate::Activation { label: self.com_label().to_owned() }));
+        if self.submitted_event.is_some() {
+            ctx.posted(crate::Activation { label: self.com_label().to_owned() }.post_to(&mut self.submitted_event));
         }
 
         // The submitted event does not change this header's intrinsic inputs.
@@ -158,7 +156,7 @@ impl Widget for ListBox {
 impl crate::widget_object::WidgetAlgorithm for ListBox {
     /// Logical COM closure cancels ordinary submissions while retained widget references remain safe.
     fn close_events(&mut self) {
-        self.submitted_event.close_ordinary();
+        self.submitted_event = None;
     }
 }
 
@@ -241,6 +239,13 @@ impl ListBox {
 }
 
 impl neocogi_ui_nodes_contracts::ListBox for ListBox {
+    /// Replaces this output's concrete destination after checking widget access.
+    fn __map_activated(&mut self, destination: neocogi_com::ComRef<'_, __ActivationReceiverAbi>) -> Result<(), neocogi_com::NcStatus> {
+        self.runtime().state.writable()?;
+        self.submitted_event = Some(destination.add_ref());
+        Ok(())
+    }
+
     /// Returns an immutable label snapshot from the concrete list box.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;

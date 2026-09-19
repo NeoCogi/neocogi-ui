@@ -41,7 +41,7 @@ use std::fmt;
 
 use crate::math::RectExt;
 use crate::render::Painter;
-use crate::{AssetChrome, AtlasHandle, CaptionSide, Dimensioni, Recti, Skin, TitleAlignment, PortRef, WindowOption};
+use crate::{AssetChrome, AtlasHandle, CaptionSide, Dimensioni, Recti, Skin, TitleAlignment, WindowOption};
 
 /// Decodes the canonical packed RGBA convention for transient root-chrome painting.
 fn packed_color(value: u32) -> crate::Color {
@@ -87,55 +87,26 @@ pub(super) enum RootCaptionButton {
 /// Authoritative NCIDL window fact; chrome policy uses private geometry, not a second event model.
 pub use neocogi_ui_core_contracts::WindowEvent;
 
-/// Cloneable non-owning capability for one manager-owned window or dialog.
-///
-/// Stable object identity and event delivery are deliberately separate fields. The private root ID
-/// selects checked [`crate::Ui`] mutations and is never derived from an address; the weak typed
-/// endpoint only subscribes to generated [`WindowEvent`] values. Cloning or dropping this
-/// aggregate application handle never changes retained window ownership.
+/// Stable lookup identity; the manager or declaration owns all presentation and delivery state.
+#[derive(Clone)]
 pub struct WindowHandle {
-    /// Process-unique concrete identity used only by the owning window manager.
+    /// Process-unique identity; never reused or derived from a receiver allocation.
     id: super::RootId,
-    /// Weak endpoint for geometry, caption, and visibility observations from this same window.
-    events: PortRef<WindowEvent>,
 }
-
 impl WindowHandle {
-    /// Creates an application capability from an independently allocated identity and endpoint.
-    pub(super) fn new(id: super::RootId, events: PortRef<WindowEvent>) -> Self {
-        // This private constructor is the sole pairing boundary. Manager registration creates both
-        // values for the same root before either becomes observable to application code.
-        Self { id, events }
+    /// Captures the identity allocated by the sole semantic owner.
+    pub(super) fn new(id: super::RootId) -> Self {
+        Self { id }
     }
-
-    /// Returns the private concrete key used by forest traversal and test diagnostics.
+    /// Selects the authoritative record without retaining its owner.
     pub(crate) const fn id(&self) -> super::RootId {
-        // Copying the small typed value neither consults nor extends the event endpoint lifetime.
         self.id
     }
-
-    /// Returns this window's weak typed event endpoint.
-    pub fn events(&self) -> PortRef<WindowEvent> {
-        // Clone only the weak endpoint so subscription remains independent from stable identity and
-        // cannot retain the manager-owned window.
-        self.events.clone()
-    }
 }
-
-impl Clone for WindowHandle {
-    /// Clones the application capability without allocating a new identity or owning the window.
-    fn clone(&self) -> Self {
-        // Every clone must preserve the original ID/endpoint pairing established at registration.
-        Self { id: self.id, events: self.events.clone() }
-    }
-}
-
 impl fmt::Debug for WindowHandle {
-    /// Reports endpoint liveness without exposing the private process-local identifier.
+    /// Keeps the private process-local key out of public diagnostics.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // The numeric identity is intentionally absent because it is an implementation key rather
-        // than an application-visible or persistent window identifier.
-        f.debug_struct("WindowHandle").field("events", &self.events).finish_non_exhaustive()
+        f.debug_struct("WindowHandle").finish_non_exhaustive()
     }
 }
 

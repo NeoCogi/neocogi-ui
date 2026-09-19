@@ -59,6 +59,8 @@
 //! programmatic replacement, and text input convert CRLF and lone CR at ingress. Rendering uses the
 //! selected atlas's glyph coverage and missing-character fallback.
 
+use neocogi_ui_core_contracts::__TextChangedReceiverAbi;
+use neocogi_ui_core_contracts::__TextSubmittedReceiverAbi;
 use crate::{ControlRole};
 
 use crate::text_layout::{TextLine, build_text_lines, text_block_size};
@@ -102,13 +104,7 @@ use super::text_edit::{
     neocogi_ui_core_contracts::ILeafLayout,
     neocogi_ui_core_contracts::IFontStyle,
     neocogi_ui_core_contracts::ITextEvents
-), ports(neocogi_ui_core_contracts::ITextEvents::changed = {
-        self.runtime().state.writable()?;
-        Ok(self.changed_event.as_ref())
-    }, neocogi_ui_core_contracts::ITextEvents::submitted = {
-        self.runtime().state.writable()?;
-        Ok(self.submitted_event.as_ref())
-    }))]
+))]
 pub struct TextEditor {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::widget_object::WidgetRuntime,
@@ -128,31 +124,25 @@ pub struct TextEditor {
     interaction: TextAreaInteraction,
     /// Shared scalar scroll data supports caret reveal without retaining a parent widget or tree.
     scroll_area: Option<std::rc::Rc<crate::ScrollModel>>,
-    /// Runtime-owned source for user-originated text changes.
-    changed_event: crate::Port<crate::TextChanged>,
-    /// Runtime-owned source for user submissions.
-    submitted_event: crate::Port<crate::TextSubmitted>,
+    /// Installed destination for captured user edits.
+    changed_event: Option<ComPtr<__TextChangedReceiverAbi>>,
+    /// Installed destination for captured text submissions.
+    submitted_event: Option<ComPtr<__TextSubmittedReceiverAbi>>,
 }
 
 /// Concrete fixed scrolling text-area class with one actual editor child.
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::TextArea, ports(neocogi_ui_nodes_contracts::TextArea::changed = {
-        self.runtime().state.writable()?;
-        Ok(self.events.changed())
-    }, neocogi_ui_nodes_contracts::TextArea::submitted = {
-        self.runtime().state.writable()?;
-        Ok(self.events.submitted())
-    }))]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::TextArea)]
 pub struct TextArea {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::widget_object::WidgetRuntime,
     /// Exactly three owned structural children: surface and both scrollbar objects.
-    pub(crate) editor: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
+    pub(crate) editor: ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
     /// Multiline editing capability of the sole content child.
-    pub(crate) text: neocogi_com::ComPtr<neocogi_ui_core_contracts::IMultilineEditorAbi>,
+    pub(crate) text: ComPtr<neocogi_ui_core_contracts::IMultilineEditorAbi>,
     /// Font capability queried from that same content child.
-    pub(crate) font: neocogi_com::ComPtr<neocogi_ui_core_contracts::IFontStyleAbi>,
+    pub(crate) font: ComPtr<neocogi_ui_core_contracts::IFontStyleAbi>,
     /// Event capability queried from that same content child.
-    pub(crate) events: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextEventsAbi>,
+    pub(crate) events: ComPtr<neocogi_ui_core_contracts::ITextEventsAbi>,
     /// Scalar scrolling state shared with the surface, scrollbars, and editor caret requests.
     pub(crate) model: std::rc::Rc<crate::ScrollModel>,
 }
@@ -161,10 +151,10 @@ impl TextArea {
     /// Combines the completed fixed topology and its queried editor capabilities in one class value.
     pub(crate) fn from_runtime(
         runtime: crate::widget_object::WidgetRuntime,
-        editor: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
-        text: neocogi_com::ComPtr<neocogi_ui_core_contracts::IMultilineEditorAbi>,
-        font: neocogi_com::ComPtr<neocogi_ui_core_contracts::IFontStyleAbi>,
-        events: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextEventsAbi>,
+        editor: ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
+        text: ComPtr<neocogi_ui_core_contracts::IMultilineEditorAbi>,
+        font: ComPtr<neocogi_ui_core_contracts::IFontStyleAbi>,
+        events: ComPtr<neocogi_ui_core_contracts::ITextEventsAbi>,
         model: std::rc::Rc<crate::ScrollModel>,
     ) -> Self {
         Self {
@@ -226,7 +216,7 @@ impl crate::widget_object::HostedWidget for TextArea {
     }
 
     /// Closes the surface, editor, and both scrollbar children through their fixed writer.
-    fn close_contents(&mut self) -> Result<(), neocogi_com::NcStatus> {
+    fn close_contents(&mut self) -> Result<(), NcStatus> {
         self.editor.close()?.finish()
     }
 }
@@ -324,13 +314,16 @@ impl TextEditor {
 
         // Emit complete immutable snapshots after the semantic update has committed cursor and text.
         if outcome.changed {
-            ctx.posted(self.changed_event.emit(crate::TextChanged {
-                text: self.buf.clone(),
-                cursor: self.cursor as u64,
-            }));
+            ctx.posted(
+                crate::TextChanged {
+                    text: self.buf.clone(),
+                    cursor: self.cursor as u64,
+                }
+                .post_to(&mut self.changed_event),
+            );
         }
         if outcome.submitted {
-            ctx.posted(self.submitted_event.emit(crate::TextSubmitted { text: self.buf.clone() }));
+            ctx.posted(crate::TextSubmitted { text: self.buf.clone() }.post_to(&mut self.submitted_event));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(outcome.changed)
@@ -637,8 +630,8 @@ impl TextEditor {
             font,
             interaction: TextAreaInteraction::default(),
             scroll_area: model,
-            changed_event: crate::Port::new(),
-            submitted_event: crate::Port::new(),
+            changed_event: None,
+            submitted_event: None,
         }
     }
     /// Reads the one wrapping choice consumed by both measurement and caret geometry.
@@ -655,8 +648,8 @@ impl TextEditor {
 impl crate::widget_object::WidgetAlgorithm for TextEditor {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
-        self.changed_event.close_ordinary();
-        self.submitted_event.close_ordinary();
+        self.changed_event = None;
+        self.submitted_event = None;
     }
 }
 
@@ -690,8 +683,8 @@ use crate::widget_object::{
     set_direct_named_font,
 };
 use neocogi_ui_core_contracts::{
-    GeometryChange, IFontStyle, IMultilineEditor, IMultilineEditorAbi, ITextContent, ITextEditor, ITextEvents, ITextEventsPorts, IWidgetAbi, IWidgetHostAbi,
-    FontRole, TextWrapping,
+    GeometryChange, IFontStyle, IMultilineEditor, IMultilineEditorAbi, ITextContent, ITextEditor, ITextEvents, IWidgetAbi, IWidgetHostAbi, FontRole,
+    TextWrapping,
 };
 use neocogi_ui_nodes_contracts::{TextAreaAbi};
 use neocogi_com::{ComPtr, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString};
@@ -782,7 +775,21 @@ impl IFontStyle for TextEditor {
     }
 }
 
-impl ITextEvents for TextEditor {}
+impl ITextEvents for TextEditor {
+    /// Replaces this output's concrete destination after checking widget access.
+    fn __map_submitted(&mut self, destination: neocogi_com::ComRef<'_, __TextSubmittedReceiverAbi>) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        self.submitted_event = Some(destination.add_ref());
+        Ok(())
+    }
+
+    /// Replaces this output's concrete destination after checking widget access.
+    fn __map_changed(&mut self, destination: neocogi_com::ComRef<'_, __TextChangedReceiverAbi>) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        self.changed_event = Some(destination.add_ref());
+        Ok(())
+    }
+}
 
 direct_widget_phase_impl!(TextArea);
 direct_container_layout_impl!(TextArea);
@@ -822,6 +829,18 @@ impl TextArea {
 }
 
 impl neocogi_ui_nodes_contracts::TextArea for TextArea {
+    /// Replaces this output's concrete destination after checking widget access.
+    fn __map_submitted(&mut self, destination: neocogi_com::ComRef<'_, __TextSubmittedReceiverAbi>) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        self.events.__map_submitted(destination)
+    }
+
+    /// Replaces this output's concrete destination after checking widget access.
+    fn __map_changed(&mut self, destination: neocogi_com::ComRef<'_, __TextChangedReceiverAbi>) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        self.events.__map_changed(destination)
+    }
+
     /// Forwards snapshots after checking the outer object's logical lifetime.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;
@@ -897,9 +916,17 @@ mod tests {
 
     /// Creates a dispatcher subscribed to both native TextEditor event ports.
     /// Reads complete production queue snapshots; runtime dispatch is tested through Events.
-    fn text_dispatcher(text_area: &TextEditor) -> impl FnMut(&mut Vec<RecordedEvent>) -> bool + use<> {
-        let mut changed = neocogi_ui::events::test_support::Capture::connect(text_area.changed_event.as_ref()).unwrap();
-        let mut submitted = neocogi_ui::events::test_support::Capture::connect(text_area.submitted_event.as_ref()).unwrap();
+    fn text_dispatcher(text_area: &mut TextEditor) -> impl FnMut(&mut Vec<RecordedEvent>) -> bool + use<> {
+        let mut changed = neocogi_ui::events::test_support::Capture::connect(|consume| {
+            text_area.changed_event = Some(crate::TextChanged::__receiver(consume)?);
+            Ok(())
+        })
+        .unwrap();
+        let mut submitted = neocogi_ui::events::test_support::Capture::connect(|consume| {
+            text_area.submitted_event = Some(crate::TextSubmitted::__receiver(consume)?);
+            Ok(())
+        })
+        .unwrap();
         move |values| {
             let changed = changed.drain(1024).unwrap();
             let submitted = submitted.drain(1024).unwrap();
@@ -942,7 +969,7 @@ mod tests {
         // Directly exercise the inner leaf because scrolling composition is orthogonal to event
         // payload order and the constructor uses this exact semantic initialization path.
         let mut text_area = TextEditor::new_editor(TextAreaParameters::new(""));
-        let mut dispatcher = text_dispatcher(&text_area);
+        let mut dispatcher = text_dispatcher(&mut text_area);
         update_text_area(
             &mut text_area,
             vec![

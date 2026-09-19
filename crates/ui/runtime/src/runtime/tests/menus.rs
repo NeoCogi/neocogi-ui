@@ -39,7 +39,7 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
     assert_eq!(item.shortcut_hint().unwrap(), "Ctrl+O");
     let mut session = Events::new();
     let mut labels = Vec::new();
-    let lease = session.map(item.activated().unwrap(), |event| event.label).unwrap();
+    session.map(item.activated().unwrap(), |event| event.label).unwrap();
     session.map(disabled.activated().unwrap(), |event| event.label).unwrap();
     menus.attach_bar(window.as_com_ref(), &bar).unwrap();
     assert_eq!(bar.separator(), Err(UI_E_CLOSED));
@@ -75,7 +75,6 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
     assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
     window.close().unwrap();
     assert_eq!(item.label(), Err(UI_E_CLOSED));
-    assert_eq!(lease.active(), Ok(false));
 }
 
 /// Wrong owner, invalid bar shape and duplicate bar attachment reject before consuming a candidate declaration.

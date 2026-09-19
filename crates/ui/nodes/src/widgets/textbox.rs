@@ -56,6 +56,8 @@
 //! and deletion on valid Unicode scalar-value boundaries. Construction, programmatic replacement,
 //! and text input remove CR and LF so the stored value always matches the one-line measurement
 //! contract. Other characters absent from the selected atlas render through its fallback.
+use neocogi_ui_core_contracts::__TextChangedReceiverAbi;
+use neocogi_ui_core_contracts::__TextSubmittedReceiverAbi;
 use crate::{ControlRole};
 
 use crate::*;
@@ -92,13 +94,7 @@ impl TextboxParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Textbox, ports(neocogi_ui_nodes_contracts::Textbox::changed = {
-        self.runtime().state.writable()?;
-        Ok(self.changed_event.as_ref())
-    }, neocogi_ui_nodes_contracts::Textbox::submitted = {
-        self.runtime().state.writable()?;
-        Ok(self.submitted_event.as_ref())
-    }))]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Textbox)]
 /// Concrete retained textbox and dynamically constructible COM object.
 pub struct Textbox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -110,10 +106,10 @@ pub struct Textbox {
     /// Initialization-only font.
     font: FontRef,
     /// Base widget options.
-    /// Runtime-owned source for user-originated text changes.
-    changed_event: crate::Port<crate::TextChanged>,
-    /// Runtime-owned source for user submissions.
-    submitted_event: crate::Port<crate::TextSubmitted>,
+    /// Installed destination for captured user edits.
+    changed_event: Option<neocogi_com::ComPtr<__TextChangedReceiverAbi>>,
+    /// Installed destination for captured text submissions.
+    submitted_event: Option<neocogi_com::ComPtr<__TextSubmittedReceiverAbi>>,
 }
 
 impl Textbox {
@@ -127,8 +123,8 @@ impl Textbox {
             buf,
             cursor,
             font: parameters.font,
-            changed_event: crate::Port::new(),
-            submitted_event: crate::Port::new(),
+            changed_event: None,
+            submitted_event: None,
         }
     }
 
@@ -201,10 +197,10 @@ impl Textbox {
         });
         let submitted = outcome.submitted.then(|| crate::TextSubmitted { text: self.buf.clone() });
         if let Some(event) = changed {
-            ctx.posted(self.changed_event.emit(event));
+            ctx.posted(event.post_to(&mut self.changed_event));
         }
         if let Some(event) = submitted {
-            ctx.posted(self.submitted_event.emit(event));
+            ctx.posted(event.post_to(&mut self.submitted_event));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(outcome.changed)
@@ -384,8 +380,8 @@ impl From<TextboxParameters> for crate::test_support::algorithm::Algorithm<Textb
 impl crate::widget_object::WidgetAlgorithm for Textbox {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
-        self.changed_event.close_ordinary();
-        self.submitted_event.close_ordinary();
+        self.changed_event = None;
+        self.submitted_event = None;
     }
 }
 
@@ -432,9 +428,17 @@ mod tests {
     }
 
     /// Reads complete production queue snapshots; runtime dispatch is tested through Events.
-    fn text_dispatcher(textbox: &Textbox) -> impl FnMut(&mut Vec<RecordedEvent>) -> bool + use<> {
-        let mut changed = neocogi_ui::events::test_support::Capture::connect(textbox.changed_event.as_ref()).unwrap();
-        let mut submitted = neocogi_ui::events::test_support::Capture::connect(textbox.submitted_event.as_ref()).unwrap();
+    fn text_dispatcher(textbox: &mut Textbox) -> impl FnMut(&mut Vec<RecordedEvent>) -> bool + use<> {
+        let mut changed = neocogi_ui::events::test_support::Capture::connect(|consume| {
+            textbox.changed_event = Some(crate::TextChanged::__receiver(consume)?);
+            Ok(())
+        })
+        .unwrap();
+        let mut submitted = neocogi_ui::events::test_support::Capture::connect(|consume| {
+            textbox.submitted_event = Some(crate::TextSubmitted::__receiver(consume)?);
+            Ok(())
+        })
+        .unwrap();
         move |values| {
             let changed = changed.drain(1024).unwrap();
             let submitted = submitted.drain(1024).unwrap();
@@ -467,7 +471,7 @@ mod tests {
     #[test]
     fn text_events_preserve_complete_snapshots_and_per_port_fifo() {
         let mut textbox = crate::test_support::algorithm::Algorithm::<Textbox>::from(TextboxParameters::new(""));
-        let mut dispatcher = text_dispatcher(&textbox);
+        let mut dispatcher = text_dispatcher(&mut textbox);
 
         update_textbox(
             &mut textbox,
@@ -499,7 +503,7 @@ mod tests {
     #[test]
     fn programmatic_text_and_cursor_setters_are_silent() {
         let mut textbox = crate::test_support::algorithm::Algorithm::<Textbox>::from(TextboxParameters::new("initial"));
-        let mut dispatcher = text_dispatcher(&textbox);
+        let mut dispatcher = text_dispatcher(&mut textbox);
         textbox.set_text("replacement");
         textbox.set_cursor(3);
         textbox.move_cursor_to_end();
@@ -581,6 +585,20 @@ impl Textbox {
 }
 
 impl neocogi_ui_nodes_contracts::Textbox for Textbox {
+    /// Replaces this output's concrete destination after checking widget access.
+    fn __map_submitted(&mut self, destination: neocogi_com::ComRef<'_, __TextSubmittedReceiverAbi>) -> Result<(), neocogi_com::NcStatus> {
+        self.runtime().state.writable()?;
+        self.submitted_event = Some(destination.add_ref());
+        Ok(())
+    }
+
+    /// Replaces this output's concrete destination after checking widget access.
+    fn __map_changed(&mut self, destination: neocogi_com::ComRef<'_, __TextChangedReceiverAbi>) -> Result<(), neocogi_com::NcStatus> {
+        self.runtime().state.writable()?;
+        self.changed_event = Some(destination.add_ref());
+        Ok(())
+    }
+
     /// Returns an immutable snapshot without exposing the semantic String allocation.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;

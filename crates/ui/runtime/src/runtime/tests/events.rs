@@ -89,8 +89,8 @@ fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
     let previous = ui.window("first", RECT, &button).unwrap();
     let (renderer, probe) = renderer();
     let mut events = Events::new();
-    let activation = events.map(button.activated(), |_| Mutation::Replace).unwrap();
-    let lifecycle = events
+    events.map(button.activated(), |_| Mutation::Replace).unwrap();
+    events
         .map(neocogi_ui::events::window_events(previous.as_com_ref()).unwrap(), |event| {
             Mutation::Window(event)
         })
@@ -123,22 +123,19 @@ fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
     assert_eq!(button.label(), Err(UI_E_CLOSED));
     assert_eq!(observations, ["activated", "destroyed"]);
     assert_eq!(editor.unwrap().text().unwrap(), "arrived after replacement");
-    assert_eq!(activation.active(), Ok(false));
-    assert_eq!(lifecycle.active(), Ok(false));
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
     next.unwrap().close().unwrap();
 }
 
-/// Dropping the consumer cancels retained leases while application state remains an independent owner.
+/// Dropping the consumer leaves application state independent and cannot retain the runtime.
 #[test]
 fn dropping_inbox_and_application_releases_runtime_without_a_source_sink_cycle() {
     let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let button = ui.widgets().button("owned runtime").unwrap();
     let window = ui.window("owner", RECT, &button).unwrap();
     let mut events = Events::new();
-    let lease = events.map(button.activated(), |event| event.label).unwrap();
+    events.map(button.activated(), |event| event.label).unwrap();
     drop(events);
-    assert_eq!(lease.active(), Ok(false));
     assert!(button.label().is_ok());
     drop(ui);
     assert_eq!(button.label(), Err(UI_E_CLOSED));
@@ -281,12 +278,10 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     session
         .map(textbox.changed(), |event| format!("changed:{}:{}", event.text, event.cursor))
         .unwrap();
-    assert_eq!(
-        session
-            .map(textbox.changed(), |event| format!("changed:{}:{}", event.text, event.cursor))
-            .unwrap_err(),
-        UI_E_BUSY
-    );
+    // Replacing the destination succeeds; only this mapper receives later edits.
+    session
+        .map(textbox.changed(), |event| format!("changed:{}:{}", event.text, event.cursor))
+        .unwrap();
     session.map(textbox.submitted(), |event| format!("submitted:{}", event.text)).unwrap();
     textbox.set_text("a").unwrap();
     ui.update_with_events(SIZE, &mut session, |message| {
@@ -331,7 +326,7 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     assert!(labels.ends_with(&["changed:☃:3".to_owned(), "submitted:☃".to_owned()]));
     let popup_content = ui.widgets().text_block("popup", TextWrapping::None).unwrap();
     let mut popup = ui.popup(window.as_com_ref(), "popup", &popup_content).unwrap();
-    let lease = session
+    session
         .map(neocogi_ui::events::popup_events(popup.as_com_ref()).unwrap(), |_| "dismissed".to_owned())
         .unwrap();
     popup.show_at(Rect { x: 100, y: 100, width: 20, height: 20 }).unwrap();
@@ -353,7 +348,6 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
         Ok(())
     })
     .unwrap();
-    assert_eq!(lease.active(), Ok(false));
 }
 
 /// A failed consumer invalidates the frame without replaying the attempt or losing later raw input.
@@ -492,14 +486,14 @@ fn boundary_budget_stops_a_cascade_and_preserves_the_unattempted_message() {
 #[test]
 fn failed_post_preserves_committed_widget_state_and_requires_a_new_frame() {
     /// Deliberately rejects an otherwise valid numeric fact at the foreign receiver boundary.
-    fn reject(_: &neocogi_ui::events::NumericChanged) -> Result<(), NcStatus> {
+    fn reject(_: neocogi_ui::events::NumericChanged) -> Result<(), NcStatus> {
         Err(NC_E_INVALID_ARG)
     }
     let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let number = ui.widgets().number(NumberOptions { value: 9.0, step: 1.0, precision: 0 }).unwrap();
     let window = ui.window("post failure", RECT, &number).unwrap();
     let mut events = Events::new();
-    let lease = events.map(number.as_interface().changed().checked(reject), |event| event.value).unwrap();
+    number.changed()(Box::new(reject)).unwrap();
     let (renderer, _) = renderer();
     ui.update(SIZE).unwrap();
     key(&ui, KeyCode::Tab);
@@ -508,7 +502,7 @@ fn failed_post_preserves_committed_widget_state_and_requires_a_new_frame() {
     assert_eq!(number.value(), Ok(10.0));
     assert!(events.is_empty());
     assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
-    lease.cancel().unwrap();
+    events.map(number.changed(), |event| event.value).unwrap();
     ui.update(SIZE).unwrap();
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
     window.close().unwrap();
@@ -518,7 +512,7 @@ fn failed_post_preserves_committed_widget_state_and_requires_a_new_frame() {
 #[test]
 fn failed_lifecycle_post_preserves_visibility_and_returns_its_receiver_error() {
     /// Foreign consumer rejects this committed lifecycle fact without enqueueing it.
-    fn reject(_: &WindowEvent) -> Result<(), NcStatus> {
+    fn reject(_: WindowEvent) -> Result<(), NcStatus> {
         Err(NC_E_INVALID_ARG)
     }
     let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
@@ -526,10 +520,10 @@ fn failed_lifecycle_post_preserves_visibility_and_returns_its_receiver_error() {
     let window = ui.window("post failure", RECT, &button).unwrap();
     let source = window.query::<IWindowEventsAbi>().unwrap();
     let mut events = Events::new();
-    let lease = events.map(source.changed().checked(reject), |event| event).unwrap();
+    source.changed()(Box::new(reject)).unwrap();
     assert_eq!(window.set_visibility(Visibility::Hidden), Err(NC_E_INVALID_ARG));
     assert_eq!(window.snapshot().unwrap().visibility, Visibility::Hidden);
     assert!(events.is_empty());
-    lease.cancel().unwrap();
+    events.map(source.changed(), |event| event).unwrap();
     window.close().unwrap();
 }
