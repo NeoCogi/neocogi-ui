@@ -258,9 +258,6 @@ impl ScrollbarParameters {
     }
 }
 
-/// Canonical generated scrollbar snapshot owned by the NCIDL event family.
-pub use neocogi_ui_nodes_contracts::ScrollbarChanged;
-
 #[neocogi_com::com_object(neocogi_ui_nodes_contracts::Scrollbar, ports(neocogi_ui_nodes_contracts::Scrollbar::changed = {
         self.runtime().state.writable()?;
         Ok(self.changed_event.as_ref())
@@ -275,7 +272,7 @@ pub struct Scrollbar {
     pub(crate) axis_state: std::rc::Rc<ScrollAxisState>,
     /// Caller-authored options; dynamic range policy is resolved from the same shared state.
     /// Typed source for user-originated movement; programmatic requests remain silent.
-    changed_event: crate::Port<ScrollbarChanged>,
+    changed_event: crate::Port<crate::ScrollbarChanged>,
 }
 
 /// Coherent copied values shared by a real scrollbar and its co-packaged scroll layout.
@@ -435,7 +432,7 @@ impl Widget for Scrollbar {
         if self.offset() != previous {
             // Publish only user-originated movement. Programmatic setters intentionally remain
             // silent so owners can synchronize range and offset without recursive notifications.
-            ctx.posted(self.changed_event.emit(ScrollbarChanged { offset: self.offset() }));
+            ctx.posted(self.changed_event.emit(crate::ScrollbarChanged { offset: self.offset() }));
         }
 
         // A containing ScrollArea reads this offset when placing its content.

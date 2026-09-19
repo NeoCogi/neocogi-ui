@@ -111,9 +111,9 @@ pub struct Textbox {
     font: FontRef,
     /// Base widget options.
     /// Runtime-owned source for user-originated text changes.
-    changed_event: crate::Port<TextboxChanged>,
+    changed_event: crate::Port<crate::TextChanged>,
     /// Runtime-owned source for user submissions.
-    submitted_event: crate::Port<TextboxSubmitted>,
+    submitted_event: crate::Port<crate::TextSubmitted>,
 }
 
 impl Textbox {
@@ -169,11 +169,6 @@ impl Textbox {
     }
 }
 
-/// Canonical generated text-and-cursor payload from a user textbox edit.
-pub use neocogi_ui_core_contracts::TextChanged as TextboxChanged;
-/// Canonical generated text submission payload from a user textbox command.
-pub use neocogi_ui_core_contracts::TextSubmitted as TextboxSubmitted;
-
 impl Textbox {
     /// Measures a single-line editor, bounded by available width when supplied.
     fn preferred_size_widget(&self, style: &Skin, atlas: &AtlasHandle, constraints: Constraints) -> Dimensioni {
@@ -200,11 +195,11 @@ impl Textbox {
     fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
         let outcome = textbox_update(ctx, input, &mut self.buf, &mut self.cursor, font);
-        let changed = outcome.changed.then(|| TextboxChanged {
+        let changed = outcome.changed.then(|| crate::TextChanged {
             text: self.buf.clone(),
             cursor: self.cursor as u64,
         });
-        let submitted = outcome.submitted.then(|| TextboxSubmitted { text: self.buf.clone() });
+        let submitted = outcome.submitted.then(|| crate::TextSubmitted { text: self.buf.clone() });
         if let Some(event) = changed {
             ctx.posted(self.changed_event.emit(event));
         }
@@ -428,11 +423,11 @@ mod tests {
         Submitted(String),
     }
 
-    fn record_changed(events: &mut Vec<RecordedEvent>, event: &TextboxChanged) {
+    fn record_changed(events: &mut Vec<RecordedEvent>, event: &crate::TextChanged) {
         events.push(RecordedEvent::Changed(event.text.clone(), event.cursor));
     }
 
-    fn record_submitted(events: &mut Vec<RecordedEvent>, event: &TextboxSubmitted) {
+    fn record_submitted(events: &mut Vec<RecordedEvent>, event: &crate::TextSubmitted) {
         events.push(RecordedEvent::Submitted(event.text.clone()));
     }
 

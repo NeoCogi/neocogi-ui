@@ -70,9 +70,6 @@ impl CheckboxParameters {
     }
 }
 
-/// Canonical generated checkbox snapshot owned by the NCIDL event family.
-pub use neocogi_ui_nodes_contracts::CheckboxChanged;
-
 #[neocogi_com::com_object(neocogi_ui_nodes_contracts::Checkbox, ports(neocogi_ui_nodes_contracts::Checkbox::changed = {
         self.runtime().state.writable()?;
         Ok(self.changed_event.as_ref())
@@ -89,7 +86,7 @@ pub struct Checkbox {
     /// Current checked value.
     checked: bool,
     /// Runtime-owned source for user-originated value changes.
-    changed_event: crate::Port<CheckboxChanged>,
+    changed_event: crate::Port<crate::CheckboxChanged>,
 }
 
 impl Checkbox {
@@ -159,7 +156,7 @@ impl Widget for Checkbox {
         // Windows-style checkboxes toggle with Space; Enter remains available to a default button.
         self.checked = !self.checked;
         let checked = self.checked;
-        ctx.posted(self.changed_event.emit(CheckboxChanged { checked }));
+        ctx.posted(self.changed_event.emit(crate::CheckboxChanged { checked }));
 
         // The check mark changes paint only; both states reserve the same icon space.
         crate::Change::NoChange

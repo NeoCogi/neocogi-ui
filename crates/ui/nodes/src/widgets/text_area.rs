@@ -129,9 +129,9 @@ pub struct TextEditor {
     /// Shared scalar scroll data supports caret reveal without retaining a parent widget or tree.
     scroll_area: Option<std::rc::Rc<crate::ScrollModel>>,
     /// Runtime-owned source for user-originated text changes.
-    changed_event: crate::Port<TextAreaChanged>,
+    changed_event: crate::Port<crate::TextChanged>,
     /// Runtime-owned source for user submissions.
-    submitted_event: crate::Port<TextAreaSubmitted>,
+    submitted_event: crate::Port<crate::TextSubmitted>,
 }
 
 /// Concrete fixed scrolling text-area class with one actual editor child.
@@ -231,11 +231,6 @@ impl crate::widget_object::HostedWidget for TextArea {
     }
 }
 
-/// Canonical generated text-and-cursor payload from a user text-area edit.
-pub use neocogi_ui_core_contracts::TextChanged as TextAreaChanged;
-/// Canonical generated submission payload from a user text-area command.
-pub use neocogi_ui_core_contracts::TextSubmitted as TextAreaSubmitted;
-
 /// Runtime-only cursor navigation state retained by the editable leaf.
 #[derive(Default)]
 struct TextAreaInteraction {
@@ -329,13 +324,13 @@ impl TextEditor {
 
         // Emit complete immutable snapshots after the semantic update has committed cursor and text.
         if outcome.changed {
-            ctx.posted(self.changed_event.emit(TextAreaChanged {
+            ctx.posted(self.changed_event.emit(crate::TextChanged {
                 text: self.buf.clone(),
                 cursor: self.cursor as u64,
             }));
         }
         if outcome.submitted {
-            ctx.posted(self.submitted_event.emit(TextAreaSubmitted { text: self.buf.clone() }));
+            ctx.posted(self.submitted_event.emit(crate::TextSubmitted { text: self.buf.clone() }));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(outcome.changed)
@@ -889,13 +884,13 @@ mod tests {
     }
 
     /// Records one changed snapshot in dispatcher order.
-    fn record_changed(events: &mut Vec<RecordedEvent>, event: &TextAreaChanged) {
+    fn record_changed(events: &mut Vec<RecordedEvent>, event: &crate::TextChanged) {
         // Clone the event payload because the test log outlives this dispatch callback.
         events.push(RecordedEvent::Changed(event.text.clone(), event.cursor));
     }
 
     /// Records one submitted snapshot in dispatcher order.
-    fn record_submitted(events: &mut Vec<RecordedEvent>, event: &TextAreaSubmitted) {
+    fn record_submitted(events: &mut Vec<RecordedEvent>, event: &crate::TextSubmitted) {
         // Clone the event payload because the test log outlives this dispatch callback.
         events.push(RecordedEvent::Submitted(event.text.clone()));
     }

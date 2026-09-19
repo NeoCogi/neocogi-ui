@@ -25,24 +25,10 @@ use crate::com::*;
 use neocogi_com::{ComRef, NC_E_INVALID_ARG, NcStatus};
 use neocogi_ui_nodes_contracts::*;
 
-/// Canonical generated activation snapshot shared by built-ins and external controls.
-pub use neocogi_ui_core_contracts::Activation;
-/// Canonical generated text-and-cursor snapshot.
-pub use neocogi_ui_core_contracts::TextChanged;
-/// Canonical generated complete text submission.
-pub use neocogi_ui_core_contracts::TextSubmitted;
-/// Canonical generated lifecycle snapshot containing its WindowEvent value.
-pub use neocogi_ui_core_contracts::WindowEvent;
-/// Canonical generated popup dismissal fact.
-pub use neocogi_ui_core_contracts::PopupDismissed;
-/// Canonical generated choice snapshot containing its ChoiceSelection value.
-pub use neocogi_ui_core_contracts::ChoiceSelection;
-/// Canonical generated checkbox state captured on user activation.
-pub use neocogi_ui_nodes_contracts::CheckboxChanged;
-/// Canonical generated finite numeric value.
-pub use neocogi_ui_nodes_contracts::NumericChanged;
-/// Canonical generated nonnegative scrollbar offset.
-pub use neocogi_ui_nodes_contracts::ScrollbarChanged;
+/// Core output values are the contract data itself; no facade message wrappers are introduced.
+pub use neocogi_ui_core_contracts::{Activation, TextChanged, TextSubmitted, WindowEvent, PopupDismissed, ChoiceSelection};
+/// Node-specific outputs preserve their concrete contract types and field documentation.
+pub use neocogi_ui_nodes_contracts::{CheckboxChanged, NumericChanged, ScrollbarChanged};
 
 /// Defines a source-side convenience getter while leaving all consumer ownership in COM.
 /// Each expansion selects an exact generated port and, where needed, its domain check.

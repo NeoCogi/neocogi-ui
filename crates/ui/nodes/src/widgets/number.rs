@@ -87,9 +87,6 @@ impl NumberParameters {
     }
 }
 
-/// Canonical generated numeric snapshot owned by the NCIDL event family.
-pub use neocogi_ui_nodes_contracts::NumericChanged as NumberChanged;
-
 #[neocogi_com::com_object(neocogi_ui_nodes_contracts::Number, ports(neocogi_ui_nodes_contracts::Number::changed = {
         self.runtime().state.writable()?;
         Ok(self.changed_event.as_ref())
@@ -110,7 +107,7 @@ pub struct Number {
     /// Text editing state for shift-click numeric entry.
     edit: NumberEditState,
     /// Runtime-owned source for user-originated value changes.
-    changed_event: crate::Port<NumberChanged>,
+    changed_event: crate::Port<crate::NumericChanged>,
 }
 
 impl Number {
@@ -150,7 +147,7 @@ impl Number {
 
     /// Returns the native event endpoint emitted after every user-originated value change.
     #[cfg(test)]
-    pub fn changed(&self) -> crate::PortRef<NumberChanged> {
+    pub fn changed(&self) -> crate::PortRef<crate::NumericChanged> {
         self.changed_event.as_ref()
     }
 
@@ -184,7 +181,7 @@ impl Number {
             let drag_delta = f64::from(delta.x) * f64::from(self.step);
             self.value = add_number_delta(self.value, drag_delta);
         }
-        let changed = (self.value != last).then_some(NumberChanged { value: self.value });
+        let changed = (self.value != last).then_some(crate::NumericChanged { value: self.value });
         if let Some(event) = changed {
             ctx.posted(self.changed_event.emit(event));
         }

@@ -77,9 +77,6 @@ impl ListItemParameters {
     }
 }
 
-/// Canonical generated activation snapshot owned by the NCIDL event family.
-pub use neocogi_ui_core_contracts::Activation as ListItemSubmitted;
-
 #[neocogi_com::com_object(neocogi_ui_nodes_contracts::ListItem, ports(neocogi_ui_nodes_contracts::ListItem::activated = {
         self.runtime().state.writable()?;
         Ok(self.submitted_event.as_ref())
@@ -96,7 +93,7 @@ pub struct ListItem {
     /// Mutable label displayed for the item.
     label: String,
     /// Runtime-owned source for user submissions.
-    submitted_event: crate::Port<ListItemSubmitted>,
+    submitted_event: crate::Port<crate::Activation>,
 }
 
 impl ListItem {
@@ -180,7 +177,7 @@ impl Widget for ListItem {
         }
         // Clone before emission so observers receive an immutable selection snapshot.
         let label = self.label.clone();
-        ctx.posted(self.submitted_event.emit(ListItemSubmitted { label }));
+        ctx.posted(self.submitted_event.emit(crate::Activation { label }));
 
         // Submitting preserves the label and icon used by intrinsic measurement.
         crate::Change::NoChange

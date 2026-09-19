@@ -97,9 +97,6 @@ impl ButtonParameters {
     }
 }
 
-/// Canonical generated activation snapshot owned by the NCIDL event family.
-pub use neocogi_ui_core_contracts::Activation as ButtonSubmitted;
-
 #[neocogi_com::com_object(neocogi_ui_nodes_contracts::Button, ports(neocogi_ui_nodes_contracts::Button::activated = {
         self.runtime().state.writable()?;
         Ok(self.submitted_event.as_ref())
@@ -119,7 +116,7 @@ pub struct Button {
     /// Initialization-only fill behavior.
     fill: WidgetFillOption,
     /// Runtime-owned source for user submissions.
-    submitted_event: crate::Port<ButtonSubmitted>,
+    submitted_event: crate::Port<crate::Activation>,
 }
 
 impl Button {
@@ -223,7 +220,7 @@ impl Widget for Button {
         }
         // Pointer click, Enter, and Space converge on the button's single typed submission port.
         if self.submitted_event.connected() {
-            ctx.posted(self.submitted_event.emit(ButtonSubmitted { label: self.com_label().to_owned() }));
+            ctx.posted(self.submitted_event.emit(crate::Activation { label: self.com_label().to_owned() }));
         }
 
         // Submitting leaves the label and preferred dimensions unchanged.

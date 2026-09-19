@@ -64,9 +64,6 @@ impl ListBoxParameters {
     }
 }
 
-/// Canonical generated activation snapshot owned by the NCIDL event family.
-pub use neocogi_ui_core_contracts::Activation as ListBoxSubmitted;
-
 #[neocogi_com::com_object(neocogi_ui_nodes_contracts::ListBox, ports(neocogi_ui_nodes_contracts::ListBox::activated = {
         self.runtime().state.writable()?;
         Ok(self.submitted_event.as_ref())
@@ -85,7 +82,7 @@ pub struct ListBox {
     font: FontRef,
     /// Base widget options.
     /// Runtime-owned source for user submissions.
-    submitted_event: crate::Port<ListBoxSubmitted>,
+    submitted_event: crate::Port<crate::Activation>,
 }
 
 impl ListBox {
@@ -142,7 +139,7 @@ impl Widget for ListBox {
         }
         // Pointer and keyboard activation publish the same application-facing submission.
         if self.submitted_event.connected() {
-            ctx.posted(self.submitted_event.emit(ListBoxSubmitted { label: self.com_label().to_owned() }));
+            ctx.posted(self.submitted_event.emit(crate::Activation { label: self.com_label().to_owned() }));
         }
 
         // The submitted event does not change this header's intrinsic inputs.

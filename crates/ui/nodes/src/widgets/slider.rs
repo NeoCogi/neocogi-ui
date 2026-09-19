@@ -119,9 +119,6 @@ impl SliderParameters {
     }
 }
 
-/// Canonical generated numeric snapshot owned by the NCIDL event family.
-pub use neocogi_ui_nodes_contracts::NumericChanged as SliderChanged;
-
 #[neocogi_com::com_object(neocogi_ui_nodes_contracts::Slider, ports(neocogi_ui_nodes_contracts::Slider::changed = {
         self.runtime().state.writable()?;
         Ok(self.changed_event.as_ref())
@@ -146,7 +143,7 @@ pub struct Slider {
     /// Inline numeric editing state.
     edit: NumberEditState,
     /// Runtime-owned source for user-originated value changes.
-    changed_event: crate::Port<SliderChanged>,
+    changed_event: crate::Port<crate::NumericChanged>,
 }
 
 impl Slider {
@@ -266,7 +263,7 @@ impl Slider {
         value = clamp_slider_value(snap_slider_value(value, self.low, self.step), self.low, self.high);
         self.value = value;
         if last != value {
-            ctx.posted(self.changed_event.emit(SliderChanged { value }));
+            ctx.posted(self.changed_event.emit(crate::NumericChanged { value }));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(self.value != last)
