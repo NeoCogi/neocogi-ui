@@ -432,7 +432,7 @@ impl Widget for Scrollbar {
         if self.offset() != previous {
             // Publish only user-originated movement. Programmatic setters intentionally remain
             // silent so owners can synchronize range and offset without recursive notifications.
-            self.changed_event.emit(ScrollbarChanged { offset: self.offset() });
+            ctx.posted(self.changed_event.emit(ScrollbarChanged { offset: self.offset() }));
         }
 
         // A containing ScrollArea reads this offset when placing its content.

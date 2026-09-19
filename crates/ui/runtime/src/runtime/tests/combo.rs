@@ -1,25 +1,7 @@
 //! End-to-end regressions for the runtime-owned combo-box composite.
 
 use super::*;
-use neocogi_ui::{EventHandler, EventSession};
-
-/// Application state observes only public committed-selection events.
-struct Observations {
-    /// Immutable events captured in dispatch order.
-    changes: Vec<ChoiceSelection>,
-}
-
-/// Concrete changed-event recorder used by the runtime dispatch boundary.
-struct RecordSelection;
-
-impl EventHandler<Observations, neocogi_ui::events::ChoiceChanged> for RecordSelection {
-    /// Retains the delivered snapshot without rereading the live combo model.
-    fn handle(&mut self, state: &mut Observations, event: &neocogi_ui::events::ChoiceChanged) -> Result<(), NcStatus> {
-        let event = &event.selection;
-        state.changes.push(*event);
-        Ok(())
-    }
-}
+use neocogi_ui::{Events};
 
 /// Queues one non-repeated key press for the next production update cycle.
 fn press(ui: &neocogi_ui::Ui, key: KeyCode) {
@@ -45,10 +27,15 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
     let mut combo = ui.combo_box(window.as_com_ref(), &["first", "second"], ChoiceSelection::Selected(1)).unwrap();
     combo.set_placeholder("Choose a value").unwrap();
     root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
-    let session = EventSession::new(Observations { changes: Vec::new() });
-    session.subscribe(combo.changed(), RecordSelection).unwrap();
+    let mut session = Events::new();
+    let mut changes = Vec::new();
+    session.map(combo.changed(), |event| event.selection).unwrap();
 
-    ui.update_with_events(SIZE, &session).unwrap();
+    ui.update_with_events(SIZE, &mut session, |message| {
+        changes.push(message);
+        Ok(())
+    })
+    .unwrap();
     assert_eq!(combo.selection().unwrap(), ChoiceSelection::Selected(1));
     assert_eq!(combo.display_text().unwrap(), "second");
 
@@ -56,18 +43,26 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
     for key in [KeyCode::Tab, KeyCode::Enter, KeyCode::Escape] {
         press(&ui, key);
     }
-    ui.update_with_events(SIZE, &session).unwrap();
+    ui.update_with_events(SIZE, &mut session, |message| {
+        changes.push(message);
+        Ok(())
+    })
+    .unwrap();
     assert_eq!(combo.selection().unwrap(), ChoiceSelection::Selected(1));
-    assert!(session.state().unwrap().changes.is_empty());
+    assert!(changes.is_empty());
 
     // Reopening initializes the keyboard candidate from item one; Down wraps to item zero and
     // Enter is the only transition that commits and publishes the changed snapshot.
     for key in [KeyCode::Enter, KeyCode::ArrowDown, KeyCode::Enter] {
         press(&ui, key);
     }
-    ui.update_with_events(SIZE, &session).unwrap();
+    ui.update_with_events(SIZE, &mut session, |message| {
+        changes.push(message);
+        Ok(())
+    })
+    .unwrap();
     assert_eq!(combo.selection().unwrap(), ChoiceSelection::Selected(0));
-    assert_eq!(session.state().unwrap().changes, [ChoiceSelection::Selected(0)]);
+    assert_eq!(changes, [ChoiceSelection::Selected(0)]);
 
     // Invalid candidates never clamp and never partially replace the valid live snapshot.
     assert_eq!(combo.replace_items(&["shorter"], ChoiceSelection::Selected(7)), Err(NC_E_INVALID_ARG));
@@ -79,10 +74,20 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
     combo.replace_items::<&str>(&[], ChoiceSelection::None).unwrap();
     assert_eq!(combo.selection(), Ok(ChoiceSelection::None));
     assert_eq!(combo.display_text().unwrap(), "Choose a value");
-    assert_eq!(session.dispatch(), Ok(0));
+    assert_eq!(
+        session.dispatch(100, |message| {
+            changes.push(message);
+            Ok(())
+        }),
+        Ok(0)
+    );
     let (renderer, _) = renderer();
     assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
-    ui.update_with_events(SIZE, &session).unwrap();
+    ui.update_with_events(SIZE, &mut session, |message| {
+        changes.push(message);
+        Ok(())
+    })
+    .unwrap();
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
 
     window.close().unwrap();
@@ -126,32 +131,53 @@ fn combo_choice_menu_uses_shared_submenu_navigation() {
     ];
     let mut combo = ui.combo_menu(window.as_com_ref(), menu_text, &menu, ChoiceSelection::Selected(10)).unwrap();
     root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
-    let session = EventSession::new(Observations { changes: Vec::new() });
-    session.subscribe(combo.changed(), RecordSelection).unwrap();
-    ui.update_with_events(SIZE, &session).unwrap();
+    let mut session = Events::new();
+    let mut changes = Vec::new();
+    session.map(combo.changed(), |event| event.selection).unwrap();
+    ui.update_with_events(SIZE, &mut session, |message| {
+        changes.push(message);
+        Ok(())
+    })
+    .unwrap();
 
     // Opening restores the committed Apple branch automatically; Down then moves directly to
     // Banana inside that already active submenu, and Enter commits its stable identity.
     for key in [KeyCode::Tab, KeyCode::Enter, KeyCode::ArrowDown, KeyCode::Enter] {
         press(&ui, key);
     }
-    ui.update_with_events(SIZE, &session).unwrap();
+    ui.update_with_events(SIZE, &mut session, |message| {
+        changes.push(message);
+        Ok(())
+    })
+    .unwrap();
     assert_eq!(combo.selection().unwrap(), ChoiceSelection::Selected(11));
     assert_eq!(combo.display_text().unwrap(), "Banana");
     assert_eq!(combo.choice_count().unwrap(), 2);
-    assert_eq!(session.state().unwrap().changes, [ChoiceSelection::Selected(11)]);
+    assert_eq!(changes, [ChoiceSelection::Selected(11)]);
 
     // A silent selection edit while the hierarchy is open rebuilds and restores the selected
     // branch instead of closing the popup. Down therefore moves from Apple back to Banana.
     press(&ui, KeyCode::Enter);
-    ui.update_with_events(SIZE, &session).unwrap();
+    ui.update_with_events(SIZE, &mut session, |message| {
+        changes.push(message);
+        Ok(())
+    })
+    .unwrap();
     combo.set_selection(ChoiceSelection::Selected(10)).unwrap();
-    ui.update_with_events(SIZE, &session).unwrap();
-    assert_eq!(session.state().unwrap().changes, [ChoiceSelection::Selected(11)]);
+    ui.update_with_events(SIZE, &mut session, |message| {
+        changes.push(message);
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(changes, [ChoiceSelection::Selected(11)]);
     for key in [KeyCode::ArrowDown, KeyCode::Enter] {
         press(&ui, key);
     }
-    ui.update_with_events(SIZE, &session).unwrap();
+    ui.update_with_events(SIZE, &mut session, |message| {
+        changes.push(message);
+        Ok(())
+    })
+    .unwrap();
     assert_eq!(combo.selection().unwrap(), ChoiceSelection::Selected(11));
-    assert_eq!(session.state().unwrap().changes, [ChoiceSelection::Selected(11), ChoiceSelection::Selected(11)]);
+    assert_eq!(changes, [ChoiceSelection::Selected(11), ChoiceSelection::Selected(11)]);
 }

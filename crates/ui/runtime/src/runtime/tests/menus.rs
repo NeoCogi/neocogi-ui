@@ -1,17 +1,7 @@
 //! Compact menu declarations, live row edits, and manager keyboard policy cross only concrete capabilities.
 use super::*;
-use neocogi_ui::{EventHandler, EventSession};
-use neocogi_ui::events::Activation;
+use neocogi_ui::{Events};
 
-/// Records the immutable submitted label without looking up mutable live menu state.
-struct Record;
-impl EventHandler<Vec<String>, Activation> for Record {
-    /// Both widget and compact-menu activations share this same concrete snapshot shape.
-    fn handle(&mut self, values: &mut Vec<String>, event: &Activation) -> Result<(), NcStatus> {
-        values.push(event.label.clone());
-        Ok(())
-    }
-}
 /// Queues a concrete key including the function-key number carried by FUNCTION.
 fn key(ui: &neocogi_ui::Ui, key: KeyCode, value: u32) {
     ui.input(
@@ -47,9 +37,10 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
     item.set_font_role(FontRole::Body).unwrap();
     assert_eq!(item.mark().unwrap(), MenuMark::Checked { checked: false });
     assert_eq!(item.shortcut_hint().unwrap(), "Ctrl+O");
-    let session = EventSession::new(Vec::new());
-    let lease = session.subscribe(item.activated().unwrap(), Record).unwrap();
-    session.subscribe(disabled.activated().unwrap(), Record).unwrap();
+    let mut session = Events::new();
+    let mut labels = Vec::new();
+    let lease = session.map(item.activated().unwrap(), |event| event.label).unwrap();
+    session.map(disabled.activated().unwrap(), |event| event.label).unwrap();
     menus.attach_bar(window.as_com_ref(), &bar).unwrap();
     assert_eq!(bar.separator(), Err(UI_E_CLOSED));
     drop(bar);
@@ -64,10 +55,20 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
     ui.input(UiInput::Text, "focus restored").unwrap();
     ui.update(SIZE).unwrap();
     item.set_label("Later").unwrap();
-    assert_eq!(session.dispatch(), Ok(1));
-    assert_eq!(&*session.state().unwrap(), &["Captured"]);
+    assert_eq!(
+        session.dispatch(100, |message| {
+            labels.push(message);
+            Ok(())
+        }),
+        Ok(1)
+    );
+    assert_eq!(&labels, &["Captured"]);
     assert_eq!(editor.text().unwrap(), "focus restored");
-    ui.update_with_events(SIZE, &session).unwrap();
+    ui.update_with_events(SIZE, &mut session, |message| {
+        labels.push(message);
+        Ok(())
+    })
+    .unwrap();
     let (renderer, _) = renderer();
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
     item.set_shortcut_hint("A longer accelerator").unwrap();
@@ -126,14 +127,19 @@ fn standalone_menu_popup_submits_then_hides_without_destroying_its_live_rows() {
     let builder = menus.create("Actions").unwrap();
     let item = builder.item("Run").unwrap();
     let mut popup = menus.popup(window.as_com_ref(), &builder).unwrap();
-    let session = EventSession::new(Vec::new());
-    session.subscribe(item.activated().unwrap(), Record).unwrap();
+    let mut session = Events::new();
+    let mut labels = Vec::new();
+    session.map(item.activated().unwrap(), |event| event.label).unwrap();
     popup.show_at(Rect { x: 60, y: 60, width: 20, height: 20 }).unwrap();
     // Standalone menus begin without row selection; Down selects their first actionable row.
     key(&ui, KeyCode::ArrowDown, 0);
     key(&ui, KeyCode::Enter, 0);
-    ui.update_with_events(SIZE, &session).unwrap();
-    assert_eq!(&*session.state().unwrap(), &["Run"]);
+    ui.update_with_events(SIZE, &mut session, |message| {
+        labels.push(message);
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(&labels, &["Run"]);
     assert_eq!(popup.visibility(), Ok(Visibility::Hidden));
     assert_eq!(item.label().unwrap(), "Run");
     popup.close().unwrap();

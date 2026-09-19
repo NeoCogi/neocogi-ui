@@ -183,7 +183,7 @@ impl Number {
         }
         let changed = (self.value != last).then_some(NumberChanged { value: self.value });
         if let Some(event) = changed {
-            self.changed_event.emit(event);
+            ctx.posted(self.changed_event.emit(event));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(self.value != last)

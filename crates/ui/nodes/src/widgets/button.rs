@@ -220,7 +220,7 @@ impl Widget for Button {
         }
         // Pointer click, Enter, and Space converge on the button's single typed submission port.
         if self.submitted_event.connected() {
-            self.submitted_event.emit(ButtonSubmitted { label: self.com_label().to_owned() });
+            ctx.posted(self.submitted_event.emit(ButtonSubmitted { label: self.com_label().to_owned() }));
         }
 
         // Submitting leaves the label and preferred dimensions unchanged.

@@ -541,8 +541,17 @@ impl Ui {
         self.runtime.update(size)
     }
     /// Dispatches typed application events between input phases and commits handler edits before routing subsequent input.
-    pub fn update_with_events<State: 'static>(&self, size: Size, events: &crate::EventSession<State>) -> Result<(), NcStatus> {
-        self.runtime.update_with_events(size, events.as_dispatcher())
+    pub fn update_with_events<Message>(
+        &self,
+        size: Size,
+        events: &mut crate::Events<Message>,
+        mut consume: impl FnMut(Message) -> Result<(), NcStatus>,
+    ) -> Result<(), NcStatus> {
+        // The callback may borrow stack state. Every retained foreign dispatcher is
+        // revoked before this call returns, including error and unwinding paths.
+        neocogi_com_events::with_dispatcher(&mut |limit| events.dispatch(limit, &mut consume), |dispatcher| {
+            self.runtime.update_with_events(size, dispatcher)
+        })
     }
     /// Submits a synchronized UI frame to a native window's renderer capability.
     pub fn render(&self, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {

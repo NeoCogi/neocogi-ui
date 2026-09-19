@@ -1,30 +1,11 @@
 //! Production runtime regressions for plugin-style private composite events.
 
 use super::*;
-use neocogi_com_events::{EventPort, EventHandler, EventSession as ComEventSession, EventSource};
-use neocogi_ui_core_contracts::{ActivationMessage, create_activation_port_sink};
+use neocogi_com_events::{Events, EventSource};
+use neocogi_ui_core_contracts::ActivationMessage;
 
 /// Shared test observation deliberately owned outside either COM component.
 type Trace = Rc<RefCell<Vec<&'static str>>>;
-
-/// Local fixture connector for a native producer without a declared COM source port.
-struct LocalActivation<'source> {
-    /// Producer borrowed for sink construction and subscription only.
-    source: &'source EventSource<ActivationMessage>,
-}
-
-impl EventPort for LocalActivation<'_> {
-    type Event = ActivationMessage;
-    /// Uses the normal generated sink and production event queue inside registration.
-    fn connect<State: 'static, Handler: EventHandler<State, Self::Event> + 'static>(
-        self,
-        session: &ComEventSession<State>,
-        handler: Handler,
-    ) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        let sink = create_activation_port_sink(session, handler, None)?;
-        self.source.subscribe(sink.as_com_ref())
-    }
-}
 
 /// Exact private handler type, with an optional ordinary window edit after delivery.
 struct PrivateRecord {
@@ -36,12 +17,12 @@ struct PrivateRecord {
     edit: Edit,
 }
 
-impl EventHandler<Trace, ActivationMessage> for PrivateRecord {
+impl PrivateRecord {
     /// Records the captured fact and may remove another mounted component.
-    fn handle(&mut self, trace: &mut Trace, _event: &ActivationMessage) -> Result<(), NcStatus> {
+    fn handle(&mut self, trace: &Trace) -> Result<(), NcStatus> {
         trace.borrow_mut().push(self.name);
         if let Some(source) = &self.forward {
-            source.emit(ActivationMessage { label: self.name.to_owned() });
+            source.emit(ActivationMessage { label: self.name.to_owned() })?;
         }
         // A consumed edit cannot repeat during a later dispatch sweep.
         match std::mem::replace(&mut self.edit, Edit::None) {
@@ -63,25 +44,28 @@ enum Edit {
     Insert {
         /// Existing parent accepts the new child through its ordinary COM editing interface.
         parent: neocogi_ui::LinearWidget,
-        /// Child carries its own private session; the application never registers that session.
+        /// Child carries its own private inbox; the application never registers that inbox.
         child: neocogi_ui::Widget<IWidgetAbi>,
     },
 }
 
-/// Application-owned handler running only after all eligible private drivers.
-struct AppRecord;
-
-impl EventHandler<Trace, ActivationMessage> for AppRecord {
-    /// Marks the public session's position in the deterministic sweep.
-    fn handle(&mut self, trace: &mut Trace, _event: &ActivationMessage) -> Result<(), NcStatus> {
-        trace.borrow_mut().push("application");
-        Ok(())
+/// Fixture consumer owns ordinary command state, independently of the runtime's tree.
+struct Consumer {
+    /// Shared assertion history is outside every component's COM allocation.
+    trace: Trace,
+    /// Shared component access requires one checked mutable boundary.
+    record: RefCell<PrivateRecord>,
+}
+impl Consumer {
+    /// Handles one message; framework code owns all queue traversal and timing.
+    fn update(&self, _: ActivationMessage) -> Result<(), NcStatus> {
+        self.record.try_borrow_mut().map_err(|_| UI_E_BUSY)?.handle(&self.trace)
     }
 }
 
 #[com_object(interfaces(IWidget, IContainerLayout, IComponentEventProvider))]
-/// Plugin-style composite allocation with its own event source and private session.
-/// Its dispatcher is the session's separate COM allocation, never this widget.
+/// Plugin-style composite allocation with its own event source and private inbox.
+/// Its dispatcher is the inbox's separate COM allocation, never this widget.
 struct EventfulComposite {
     /// Real host-bound widget lifetime delegated without storing any runtime root.
     lifetime: ComPtr<IWidgetAbi>,
@@ -89,12 +73,16 @@ struct EventfulComposite {
     source: Rc<EventSource<ActivationMessage>>,
     /// Actual container policy and authoritative child collection permit arbitrary nesting.
     layout: ComPtr<IContainerLayoutAbi>,
-    /// Component-owned typed handler/session, entirely inside this binary.
-    private_session: ComEventSession<Trace>,
+    /// Component-owned typed handler/inbox, entirely inside this binary.
+    private_events: Events<ActivationMessage>,
+    /// Component ownership outlives its weak framework driver.
+    _consumer: Rc<Consumer>,
+    /// Separate allocation supplied by the framework, never a handwritten dispatcher.
+    dispatcher: ComPtr<IEventDispatcherAbi>,
 }
 
 impl EventfulComposite {
-    /// Builds an ordinary container with one private session and returns its editing capability.
+    /// Builds an ordinary container with one private inbox and returns its editing capability.
     fn create(
         ui: &neocogi_ui::Ui,
         trace: Trace,
@@ -102,13 +90,17 @@ impl EventfulComposite {
         handler: PrivateRecord,
     ) -> (neocogi_ui::Widget<IWidgetAbi>, neocogi_ui::LinearWidget) {
         let shell = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
-        let private_session = ComEventSession::new(trace);
-        private_session.subscribe(LocalActivation { source: &source }, handler).unwrap();
+        let mut private_events = Events::new();
+        private_events.map(source.event(), |event| event).unwrap();
+        let consumer = Rc::new(Consumer { trace, record: RefCell::new(handler) });
+        let dispatcher = private_events.component_dispatcher(&consumer, Consumer::update).unwrap();
         let widget = Self::from_value(Self {
             lifetime: shell.node_interface().unwrap(),
             layout: shell.as_interface().add_ref().query().unwrap(),
             source,
-            private_session,
+            private_events,
+            _consumer: consumer,
+            dispatcher,
         })
         .query()
         .unwrap();
@@ -136,9 +128,9 @@ impl IContainerLayout for EventfulComposite {
 }
 
 impl IComponentEventProvider for EventfulComposite {
-    /// Yields the separate, typed session dispatcher as an owned COM reference.
+    /// Yields the separate, typed inbox dispatcher as an owned COM reference.
     fn private_dispatcher(&self) -> Result<ComPtr<IEventDispatcherAbi>, NcStatus> {
-        Ok(self.private_session.as_dispatcher().add_ref())
+        Ok(self.dispatcher.clone())
     }
 }
 
@@ -154,7 +146,7 @@ impl IWidget for EventfulComposite {
     /// Cancels private leases before closing its independently retained lifetime.
     fn close(&mut self) -> Result<(), NcStatus> {
         self.source.close_ordinary();
-        match self.private_session.cancel() {
+        match self.private_events.cancel() {
             // Self-removal during dispatch retires the queue immediately; the active
             // transaction prunes the now-inactive lease when its callback returns.
             Ok(()) | Err(neocogi_com_events::EVENT_E_BUSY) => self.lifetime.close(),
@@ -197,7 +189,7 @@ fn component(
 
 /// Emits a captured fixture fact without entering any application callback.
 fn emit(source: &EventSource<ActivationMessage>) {
-    source.emit(ActivationMessage { label: String::new() });
+    source.emit(ActivationMessage { label: String::new() }).unwrap();
 }
 
 /// Three actual component levels forward upward before the application, with no manual child pumping.
@@ -212,21 +204,33 @@ fn nested_components_dispatch_child_first_and_promote_only_explicit_outputs() {
     parent_shell.insert(0, &child, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     root_shell.insert(0, &parent, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let window = ui.window("nested", RECT, &root).unwrap();
-    let app = ComEventSession::new(trace.clone());
-    app.subscribe(LocalActivation { source: &sources[3] }, AppRecord).unwrap();
+    let mut app = Events::new();
+    app.map(sources[3].event(), |_| ()).unwrap();
 
     emit(&sources[0]);
     ui.update(SIZE).unwrap(); // No application dispatcher is needed to drive every private level.
     assert_eq!(&*trace.borrow(), &["child", "parent", "root"]);
-    ui.update_with_events(SIZE, &app).unwrap();
+    ui.update_with_events(SIZE, &mut app, |_| {
+        trace.borrow_mut().push("application");
+        Ok(())
+    })
+    .unwrap();
     assert_eq!(&*trace.borrow(), &["child", "parent", "root", "application"]);
     trace.borrow_mut().clear();
     emit(&sources[0]);
-    ui.update_with_events(SIZE, &app).unwrap();
+    ui.update_with_events(SIZE, &mut app, |_| {
+        trace.borrow_mut().push("application");
+        Ok(())
+    })
+    .unwrap();
     assert_eq!(&*trace.borrow(), &["child", "parent", "root", "application"]);
     window.close().unwrap();
     emit(&sources[0]);
-    ui.update_with_events(SIZE, &app).unwrap();
+    ui.update_with_events(SIZE, &mut app, |_| {
+        trace.borrow_mut().push("application");
+        Ok(())
+    })
+    .unwrap();
     assert_eq!(trace.borrow().len(), 4, "removed descendants never run again");
 }
 
@@ -242,18 +246,15 @@ fn callback_mounted_descendant_is_discovered_without_application_registration() 
     let (parent, shell) = component(&ui, &trace, "parent", &parent_source, None, Edit::None);
     let window = ui.window("dynamic", RECT, &parent).unwrap();
     let trigger = EventSource::new();
-    let app = ComEventSession::new(trace.clone());
-    app.subscribe(
-        LocalActivation { source: &trigger },
-        PrivateRecord {
-            name: "application",
-            forward: None,
-            edit: Edit::Insert { parent: shell, child },
-        },
-    )
-    .unwrap();
+    let mut app = Events::new();
+    app.map(trigger.event(), |_| ()).unwrap();
+    let mut action = PrivateRecord {
+        name: "application",
+        forward: None,
+        edit: Edit::Insert { parent: shell, child },
+    };
     emit(&trigger);
-    ui.update_with_events(SIZE, &app).unwrap();
+    ui.update_with_events(SIZE, &mut app, |_| action.handle(&trace)).unwrap();
     assert_eq!(&*trace.borrow(), &["application", "inserted"]);
     window.close().unwrap();
 }
@@ -292,12 +293,16 @@ fn mounted_component_events_dispatch_before_application_and_skip_removed_snapsho
     let (newer, _) = component(&ui, &trace, "newer", &newer_source, None, Edit::Close(older_window.clone()));
     let newer_window = ui.window("newer", RECT, &newer).unwrap();
     let app_source = EventSource::new();
-    let app = ComEventSession::new(trace.clone());
-    app.subscribe(LocalActivation { source: &app_source }, AppRecord).unwrap();
+    let mut app = Events::new();
+    app.map(app_source.event(), |_| ()).unwrap();
     for source in [older_source.as_ref(), newer_source.as_ref(), &app_source] {
         emit(source);
     }
-    ui.update_with_events(SIZE, &app).unwrap();
+    ui.update_with_events(SIZE, &mut app, |_| {
+        trace.borrow_mut().push("application");
+        Ok(())
+    })
+    .unwrap();
     assert_eq!(&*trace.borrow(), &["newer", "application"]);
     assert_eq!(older_window.snapshot(), Err(UI_E_CLOSED));
     newer_window.close().unwrap();

@@ -269,7 +269,7 @@ impl Slider {
         value = clamp_slider_value(snap_slider_value(value, self.low, self.step), self.low, self.high);
         self.value = value;
         if last != value {
-            self.changed_event.emit(SliderChanged { value });
+            ctx.posted(self.changed_event.emit(SliderChanged { value }));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(self.value != last)
@@ -510,7 +510,7 @@ mod tests {
 
     /// Observes snapshots from the production event source without scheduling UI work.
     fn slider_dispatcher(slider: &Slider) -> impl FnMut(&mut Vec<Real>) -> bool + use<> {
-        let lease = neocogi_ui::events::test_support::EventLease::connect(slider.changed()).unwrap();
+        let lease = neocogi_ui::events::test_support::Capture::connect(slider.changed()).unwrap();
         move |values| {
             let batch = lease.drain(1024).unwrap();
             let delivered = !batch.is_empty();
@@ -523,7 +523,7 @@ mod tests {
 
     /// Observes snapshots from the production event source without scheduling UI work.
     fn number_dispatcher(number: &Number) -> impl FnMut(&mut Vec<Real>) -> bool + use<> {
-        let lease = neocogi_ui::events::test_support::EventLease::connect(number.changed()).unwrap();
+        let lease = neocogi_ui::events::test_support::Capture::connect(number.changed()).unwrap();
         move |values| {
             let batch = lease.drain(1024).unwrap();
             let delivered = !batch.is_empty();

@@ -183,7 +183,7 @@ impl Widget for ListItem {
         }
         // Clone before emission so observers receive an immutable selection snapshot.
         let label = self.label.clone();
-        self.submitted_event.emit(ListItemSubmitted { label });
+        ctx.posted(self.submitted_event.emit(ListItemSubmitted { label }));
 
         // Submitting preserves the label and icon used by intrinsic measurement.
         crate::Change::NoChange

@@ -337,6 +337,14 @@ struct State {
     calculator: Calculator,
 }
 impl AppState for State {
+    /// All keypad ports map to the existing calculator command enum.
+    type Message = Action;
+    /// Consumes one command using exclusive access to the ordinary arithmetic model.
+    fn update(&mut self, action: Action) -> Result<(), NcStatus> {
+        self.calculator.apply(action);
+        self.display.set_text(self.calculator.display_text())
+    }
+
     /// Resizing updates the actual logical window; unchanged geometry is an inexpensive no-op.
     fn frame(&mut self, _host: &Host, size: Size, _seconds: f64) -> Result<bool, NcStatus> {
         self.window.set_rect(Rect {
@@ -366,11 +374,12 @@ fn run() -> Result<(), HostError> {
         .finish()?;
     let window = host.ui.window("Calculator", Rect { x: 0, y: 0, width: 320, height: 420 }, &tree)?;
     window.set_options(WindowOptions::FRAME | WindowOptions::NO_RESIZE | WindowOptions::NO_TITLE)?;
-    let events = EventSession::new(State {
+    let state = State {
         window,
         display,
         calculator: Calculator::new(),
-    });
+    };
+    let mut events = Events::new();
     for (index, (label, action)) in [
         ("AC", Action::ClearAll),
         ("CE", Action::ClearEntry),
@@ -399,13 +408,9 @@ fn run() -> Result<(), HostError> {
         let mut button = host.ui.widgets().button(label)?;
         button.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
         grid.insert(index as u32, &button, GridExtent { columns: 1, rows: 1 })?.finish()?;
-        events.subscribe(button.activated(), move |state: &mut State, _: &events::Activation| {
-            // Each button captures its command while the session owns arithmetic state.
-            state.calculator.apply(action);
-            state.display.set_text(state.calculator.display_text())
-        })?;
+        events.map(button.activated(), move |_| action)?;
     }
-    host.run(events)
+    host.run(state, events)
 }
 
 /// Reports startup and frame failures through formatting retained by the min-size profile.

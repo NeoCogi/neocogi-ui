@@ -45,7 +45,11 @@ impl ComponentEventDriver {
 
     /// Delivers one bounded sweep, or skips a component already removed from its mount.
     pub(crate) fn dispatch(&self, limit: u32) -> Result<u32, NcStatus> {
-        if self.active.get() { self.dispatcher.dispatch(limit) } else { Ok(0) }
+        if self.active.get() {
+            self.dispatcher.as_com_ref().dispatch(limit)
+        } else {
+            Ok(0)
+        }
     }
 
     /// Invalidates a detached snapshot before any child or widget teardown call.

@@ -190,6 +190,8 @@ pub struct WidgetUpdateCtx<'a> {
     mouse_buttons: MouseButton,
     /// Modifier state committed by the latest logical keyboard transition.
     modifiers: Modifiers,
+    /// First synchronous receiver failure, returned by the enclosing COM update.
+    event_error: Option<NcStatus>,
 }
 
 impl<'a> WidgetUpdateCtx<'a> {
@@ -244,7 +246,19 @@ impl<'a> WidgetUpdateCtx<'a> {
             in_hover_root,
             mouse_buttons,
             modifiers,
+            event_error: None,
         }
+    }
+
+    /// Records a port-posting failure while the native algorithm completes its state transition.
+    pub fn posted(&mut self, result: Result<(), NcStatus>) {
+        if self.event_error.is_none() {
+            self.event_error = result.err();
+        }
+    }
+    /// Ends the copied input transaction and reports its first receiver failure.
+    pub fn finish(self) -> Result<(), NcStatus> {
+        self.event_error.map_or(Ok(()), Err)
     }
 
     /// Returns the derived content rectangle in widget-local coordinates.

@@ -119,15 +119,15 @@ The runtime synchronizes pending geometry, then handles each queued input event 
 order. It routes the event, updates eligible widgets, releases traversal state,
 dispatches concrete application handlers, and commits their geometry changes before
 routing the next event. An empty input queue still performs an eventless update.
-Runtime tests and deployed plugins share one retained context and one event-session boundary.
+Runtime tests and deployed plugins share one retained context and one consumer dispatch boundary.
 
 ```rust,no_run
-use neocogi_ui::{EventSession, IRendererAbi, Size, Ui};
+use neocogi_ui::{Events, IRendererAbi, Size, Ui};
 use neocogi_com::{ComRef, NcStatus};
-fn frame<State: 'static>(ui: &Ui, events: &EventSession<State>, size: Size,
-    renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus>
+fn frame<Message>(ui: &Ui, events: &mut Events<Message>, size: Size,
+    renderer: ComRef<'_, IRendererAbi>, consume: impl FnMut(Message) -> Result<(), NcStatus>) -> Result<(), NcStatus>
 {
-    ui.update_with_events(size, events)?;
+    ui.update_with_events(size, events, consume)?;
     ui.render(size, renderer)
 }
 ```
@@ -374,7 +374,7 @@ Focused semantic tests use `test_support::algorithm::Algorithm<W>` to keep a rea
 host alive beside the ordinary concrete widget. It does not mount a replacement
 tree or coordinate frames. Pure arithmetic tests remain beside their production
 functions. Event-source observations may drain a concrete queue directly; event
-ordering, failure, reentry and lifecycle tests use the public `EventSession`.
+ordering, failure, reentry and lifecycle tests use the public `Events`.
 
 See [TESTING.md](TESTING.md) for fixture ownership, coverage and validation commands.
 

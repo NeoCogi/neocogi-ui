@@ -210,6 +210,8 @@ pub enum LayerBinding {
 
 /// Backend- and application-state-independent retained window manager.
 pub(crate) struct WindowManager {
+    /// First receiver failure from infallible native routing, surfaced at the COM phase boundary.
+    event_error: Option<neocogi_com::NcStatus>,
     /// Reusable operation storage for window-manager frame and chrome drawing.
     display_list: DisplayList,
     /// Atomic resolved skin and atlas shared by every retained surface and chrome part.
@@ -251,6 +253,17 @@ pub(crate) struct WindowManager {
 }
 
 impl WindowManager {
+    /// Completes the native transition before exposing a failed synchronous port post.
+    fn posted(&mut self, result: Result<(), neocogi_com::NcStatus>) {
+        if self.event_error.is_none() {
+            self.event_error = result.err();
+        }
+    }
+    /// Returns and clears the first event transport failure for this runtime operation.
+    pub(crate) fn event_result(&mut self) -> Result<(), neocogi_com::NcStatus> {
+        self.event_error.take().map_or(Ok(()), Err)
+    }
+
     /// Queues an ordered host cancellation and requires a new UI commit before paint.
     pub(crate) fn cancel_input(&mut self) {
         self.input.cancel();
@@ -262,6 +275,7 @@ impl WindowManager {
         // Retained identities come from the process-wide allocator, so manager construction needs
         // no local namespace or counter that could collide with another Context.
         Self {
+            event_error: None,
             display_list: DisplayList::new(),
             bundle,
             surfaces: SurfaceForest::new(),

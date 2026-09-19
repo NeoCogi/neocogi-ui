@@ -18,16 +18,12 @@ selection-menu popup after receiving the popup's owning window.
 ## Construction and ownership
 
 ```rust,no_run
-use neocogi_ui::{CrossSize, EventSession, FlowDirection, IWindowAbi,
+use neocogi_ui::{CrossSize, Events, FlowDirection, IWindowAbi,
     LayoutTrack, LinearEdge, Rect, Ui};
-use neocogi_ui::events::CheckboxChanged;
 use neocogi_com::{ComPtr, NcStatus};
-fn install(ui: &Ui, events: &EventSession<bool>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+fn install(ui: &Ui, events: &mut Events<bool>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
     let checkbox = ui.widgets().checkbox("Enable preview", false)?;
-    events.subscribe(checkbox.changed(), |enabled: &mut bool, event: &CheckboxChanged| {
-        *enabled = event.checked;
-        Ok(())
-    })?;
+    events.map(checkbox.changed(), |event| event.checked)?;
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     column.insert(0, &checkbox, LinearEdge::new(LayoutTrack::Content))?.finish()?;
     ui.window("Settings", Rect { x: 40, y: 40, width: 260, height: 120 }, &column)
@@ -41,7 +37,7 @@ pointers. Final COM release frees the allocation separately.
 
 ## Controls and standard events
 
-| Client | Purpose | EventSession method |
+| Client | Purpose | Port accessor |
 | --- | --- | --- |
 | `Button` | Text/image action | `activated()` |
 | `Checkbox` | Boolean choice | `changed()` |
@@ -135,7 +131,7 @@ Custom drawing uses the painter's solid geometry/image methods or an owned
 
 External controls may also implement standard event capabilities such as
 `IActivationEvents` or `ITextEvents`. The application queries that typed capability
-once while wiring its `EventSession`; dispatch then calls the cached event interface
+once while wiring its `Events`; dispatch then calls the cached event interface
 and never consults the class registry during update, layout, or paint.
 
 ## Native text input and cancellation

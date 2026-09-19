@@ -139,7 +139,7 @@ impl Widget for ListBox {
         }
         // Pointer and keyboard activation publish the same application-facing submission.
         if self.submitted_event.connected() {
-            self.submitted_event.emit(ListBoxSubmitted { label: self.com_label().to_owned() });
+            ctx.posted(self.submitted_event.emit(ListBoxSubmitted { label: self.com_label().to_owned() }));
         }
 
         // The submitted event does not change this header's intrinsic inputs.

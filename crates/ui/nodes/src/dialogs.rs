@@ -2,22 +2,21 @@
 use crate::factory::NodeServices;
 use neocogi_ui_core_contracts::*;
 use neocogi_ui_nodes_contracts::{ContentIcon, CrossSize, FlowDirection, LayoutTrack, LinearEdge};
-use neocogi_ui::{EventSession, LinearWidget, ListItemWidget, ScrollAreaWidget, TextBlockWidget, TextboxWidget};
-use neocogi_ui::events::{Activation, TextChanged, TextSubmitted};
+use neocogi_ui::{Events, LinearWidget, ListItemWidget, ScrollAreaWidget, TextBlockWidget, TextboxWidget};
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_object};
 use std::{
-    cell::Cell,
+    cell::{Cell, RefCell},
     path::{Path, PathBuf},
-    rc::{Rc, Weak},
+    rc::Rc,
 };
 use crate::boundary::text;
 
 /// Shared request lifetime contains no control pointers, handlers or runtime ownership.
 struct Request {
     /// One shared phase is necessary because COM's shared receivers, model
-    /// callbacks, and runtime teardown all observe the same request lifetime.
+    /// messages, and runtime teardown all observe the same request lifetime.
     phase: Cell<RequestPhase>,
-    /// Real native semantic queue; only external subscriptions retain application callbacks.
+    /// Queue-free completion source; external consumers own their committed outcomes.
     completed: crate::EventSource<FileDialogCompletionMessage>,
 }
 
@@ -55,31 +54,29 @@ impl Request {
     }
 
     /// Emits one committed outcome after the modal has become idle.
-    fn finish(&self, status: FileDialogCompletionMessage) {
+    fn finish(&self, status: FileDialogCompletionMessage) -> Result<(), NcStatus> {
         match self.phase.get() {
             RequestPhase::Active => {
                 self.phase.set(RequestPhase::Idle);
-                self.completed.emit(status);
+                self.completed.emit(status)?;
             }
             RequestPhase::Idle | RequestPhase::Closed => {}
         }
+        Ok(())
     }
-    /// Runtime teardown cannot borrow an active handler model, so retirement uses this independent concrete state.
-    fn retire(&self) {
-        match self.phase.replace(RequestPhase::Closed) {
-            RequestPhase::Active => self.completed.emit(FileDialogCompletionMessage::Cancelled),
-            RequestPhase::Idle | RequestPhase::Closed => {}
-        }
-        // Every payload on this source completes one request, so closure must
-        // preserve earlier outcomes as well as an active request's cancellation.
-        self.completed.finish_pending();
+    /// Retirement settles an active request and disconnects future posts.
+    fn retire(&self) -> Result<(), NcStatus> {
+        self.close()
     }
 
-    /// Permanently closes the controller while retaining one active terminal cancellation.
-    fn close(&self) {
+    /// Closes future completion delivery; already posted outcomes remain in the consumer inbox.
+    fn close(&self) -> Result<(), NcStatus> {
         match self.phase.replace(RequestPhase::Closed) {
             RequestPhase::Active => self.completed.close(FileDialogCompletionMessage::Cancelled),
-            RequestPhase::Idle | RequestPhase::Closed => {}
+            RequestPhase::Idle | RequestPhase::Closed => {
+                self.completed.close_ordinary();
+                Ok(())
+            }
         }
     }
 }
@@ -116,7 +113,7 @@ impl DialogRoot {
 }
 
 impl IComponentEventProvider for DialogRoot {
-    /// Returns the component session's distinct dispatcher for runtime boundary dispatch.
+    /// Returns the component's distinct framework dispatcher for runtime boundary dispatch.
     fn private_dispatcher(&self) -> Result<ComPtr<IEventDispatcherAbi>, NcStatus> {
         Ok(self.dispatcher.clone())
     }
@@ -136,8 +133,8 @@ impl IWidget for DialogRoot {
     /// Closes the concrete shell and its complete child topology.
     fn close(&mut self) -> Result<(), NcStatus> {
         let result = self.widget.close();
-        self.request.close();
-        result
+        let completion = self.request.close();
+        result.and(completion)
     }
 
     /// Returns the shell's routing and frame policy without a shadow copy.
@@ -188,19 +185,14 @@ impl IContainerLayout for DialogRoot {
     }
 }
 
-/// Node-plugin controller owns typed handlers and ordinary public COM capabilities.
+/// Node-plugin controller owns one private inbox and ordinary public COM capabilities.
 struct Dialog {
-    /// Private typed handlers reuse the static session instead of adding a second callback transport.
-    session: EventSession<Model>,
+    /// Ordinary mutable model shared only by the controller and its separate mounted driver.
+    model: RefCell<Model>,
+    /// Private consumer queue combines all child protocols in actual emission order.
+    events: RefCell<Events<Message>>,
     /// Shared independently of an active mutable model borrow during runtime retirement.
     request: Rc<Request>,
-}
-
-#[com_object(interfaces(IEventDispatcher))]
-/// Separate mounted-component driver that dispatches handlers and then applies deferred navigation.
-struct DialogDriver {
-    /// Non-owning controller link prevents the mounted root from prolonging a released picker.
-    dialog: Weak<Dialog>,
 }
 
 /// Node construction data retained by the picker without retaining the core runtime identity.
@@ -209,13 +201,6 @@ struct DialogNodes {
     host: ComPtr<IWidgetHostAbi>,
     /// Provider-shared imported resources used by dynamically rebuilt directory rows.
     resources: crate::widget_object::SharedAssets,
-}
-
-impl IEventDispatcher for DialogDriver {
-    /// Runs the same bounded private session and post-handler reconciliation as any application session.
-    fn dispatch(&self, limit: u32) -> Result<u32, NcStatus> {
-        self.dialog.upgrade().ok_or(UI_E_CLOSED)?.dispatch(limit)
-    }
 }
 
 /// One authoritative picker model; live control values are read through their actual COM interfaces.
@@ -242,7 +227,7 @@ struct Model {
     folders: ScrollAreaWidget,
     /// Separate file column keeps its own retained scroll request and clamping behavior.
     files: ScrollAreaWidget,
-    /// Navigation is installed after the private session finishes its current registration transaction.
+    /// Navigation is installed after the private inbox finishes its current registration transaction.
     navigate: Option<PathBuf>,
     /// Complete most recent directory-read diagnostic, also available through the component interface.
     diagnostic: String,
@@ -273,13 +258,13 @@ impl Model {
             self.directory.clone()
         })
     }
-    /// Hides before emitting the outcome so later callbacks observe an idle reusable component.
+    /// Hides before emitting the outcome so later messages observe an idle reusable component.
     fn finish(&mut self, outcome: FileDialogCompletionMessage) -> Result<(), NcStatus> {
         if self.request.active() {
             if self.window().is_ok_and(|window| window.snapshot().is_ok()) {
                 self.window()?.set_visibility(Visibility::Hidden)?;
             }
-            self.request.finish(outcome);
+            self.request.finish(outcome)?;
         }
         Ok(())
     }
@@ -304,7 +289,8 @@ impl Model {
 
 /// Private component messages. Only synchronous delivery borrows captured text
 /// or lifecycle data; configured row messages own their exact native path.
-enum Message<'event> {
+#[derive(Clone)]
+enum Message {
     /// Navigate to the committed directory's parent.
     Up,
     /// Navigate to the platform's native home setting.
@@ -324,15 +310,15 @@ enum Message<'event> {
     /// Clear a native selection after a user edits the filename.
     FilenameEdited,
     /// Submit the captured path text without reading a later editor value.
-    Navigate(&'event str),
+    Navigate(String),
     /// Observe the existing modal's committed lifecycle fact.
-    Lifecycle(&'event WindowEvent),
+    Lifecycle(WindowEvent),
 }
 
 impl Model {
     /// Handles every private message under one exclusive component-state borrow.
-    /// This is a synchronous translation of typed deliveries, not another queue.
-    fn update(&mut self, message: &Message<'_>) -> Result<(), NcStatus> {
+    /// Only this method interprets the private inbox's owned messages.
+    fn update(&mut self, message: &Message) -> Result<(), NcStatus> {
         match message {
             Message::PathEdited => self.path_dirty = true,
             Message::FilenameEdited => self.selected = None,
@@ -346,7 +332,7 @@ impl Model {
                     // A stale Hidden after cancel/reopen cannot cancel the new visible request.
                     self.finish(FileDialogCompletionMessage::Cancelled)?;
                 }
-                WindowEvent::Destroyed => self.request.close(),
+                WindowEvent::Destroyed => self.request.close()?,
                 _ => {}
             },
             _ if !self.request.active() => {}
@@ -371,7 +357,7 @@ struct Column {
     /// Actual COM content root to install into the stable scroll controller.
     root: LinearWidget,
     /// Concrete exact-path actions registered only after the complete directory candidate succeeds.
-    rows: Vec<(ListItemWidget, Message<'static>)>,
+    rows: Vec<(ListItemWidget, Message)>,
 }
 /// Complete directory candidate; neither column becomes live if any native read fails.
 struct Listing {
@@ -542,7 +528,7 @@ impl Dialog {
             phase: Cell::new(RequestPhase::Idle),
             completed: crate::EventSource::new(),
         });
-        let session = EventSession::new(Model {
+        let model = RefCell::new(Model {
             nodes,
             window: None,
             request: request.clone(),
@@ -557,15 +543,17 @@ impl Dialog {
             navigate: None,
             diagnostic: String::new(),
         });
-        let dialog = Rc::new(Self { session, request });
-        let driver: ComPtr<IEventDispatcherAbi> = DialogDriver::from_value(DialogDriver { dialog: Rc::downgrade(&dialog) })
-            .query()
-            .expect("DialogDriver declares IEventDispatcher");
+        let dialog = Rc::new(Self {
+            model,
+            events: RefCell::new(Events::new()),
+            request,
+        });
+        let driver = dialog.events.borrow().component_dispatcher(&dialog, Dialog::update)?;
         let root = DialogRoot::create(&shell, driver, dialog.request.clone())?;
         let windows = services.windows.clone();
         let window = windows.create_dialog(parent, NcCopyFromBufferOffset::new(0, b"Open File"), FILE_DIALOG_RECT, root.as_com_ref())?;
         window.set_options(WindowOptions::FRAME)?;
-        dialog.session.state_mut()?.window = Some(window.clone());
+        dialog.model.try_borrow_mut().map_err(|_| UI_E_BUSY)?.window = Some(window.clone());
         let connected = dialog.connect(
             &path,
             &filename,
@@ -592,23 +580,16 @@ impl Dialog {
         path: &TextboxWidget,
         filename: &TextboxWidget,
         window: &ComPtr<IWindowAbi>,
-        buttons: [(neocogi_ui::ButtonWidget, Message<'static>); 5],
+        buttons: [(neocogi_ui::ButtonWidget, Message); 5],
     ) -> Result<(), NcStatus> {
-        self.session
-            .subscribe(path.changed(), |model: &mut Model, _: &TextChanged| model.update(&Message::PathEdited))?;
-        self.session.subscribe(path.submitted(), |model: &mut Model, event: &TextSubmitted| {
-            model.update(&Message::Navigate(&event.text))
-        })?;
-        self.session
-            .subscribe(filename.changed(), |model: &mut Model, _: &TextChanged| model.update(&Message::FilenameEdited))?;
+        let mut events = self.events.borrow_mut();
+        events.map(path.changed(), |_| Message::PathEdited)?;
+        events.map(path.submitted(), |event| Message::Navigate(event.text))?;
+        events.map(filename.changed(), |_| Message::FilenameEdited)?;
         for (button, action) in buttons {
-            self.session
-                .subscribe(button.activated(), move |model: &mut Model, _: &Activation| model.update(&action))?;
+            events.map(button.activated(), move |_| action.clone())?;
         }
-        self.session.subscribe(
-            neocogi_ui::events::window_events(window.as_com_ref())?,
-            |model: &mut Model, event: &neocogi_ui::events::WindowChanged| model.update(&Message::Lifecycle(&event.event)),
-        )?;
+        events.map(neocogi_ui::events::window_events(window.as_com_ref())?, |event| Message::Lifecycle(event.event))?;
         Ok(())
     }
 
@@ -625,11 +606,10 @@ impl Dialog {
         Listing::new(&model.nodes, directory, entries)
     }
 
-    /// Registers complete candidates while the private session is idle, then replaces only dynamic content roles.
+    /// Registers complete candidates while the private inbox is idle, then replaces only dynamic content roles.
     fn install(&self, model: &mut Model, directory: PathBuf, listing: Listing, reset_scroll: bool) -> Result<(), NcStatus> {
         for (row, action) in listing.folders.rows.into_iter().chain(listing.files.rows) {
-            self.session
-                .subscribe(row.activated(), move |model: &mut Model, _: &Activation| model.update(&action))?;
+            self.events.borrow_mut().map(row.activated(), move |_| action.clone())?;
         }
         // These are private built-in roles: their controller validates the live
         // modal before replacement and no caller can substitute a foreign child.
@@ -652,7 +632,7 @@ impl Dialog {
 
     /// Opens only after the complete native request and directory listing validate successfully.
     fn open(&self, title: &str, rect: Rect, directory: PathBuf) -> Result<(), NcStatus> {
-        let mut model = self.session.state_mut()?;
+        let mut model = self.model.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
         model.owner()?;
         if self.request.active() {
             return Err(UI_E_BUSY);
@@ -674,10 +654,10 @@ impl Dialog {
         Ok(())
     }
 
-    /// Runs private control callbacks, then installs deferred navigation outside their registration transaction.
-    pub(super) fn dispatch(&self, limit: u32) -> Result<u32, NcStatus> {
-        let count = self.session.dispatch_bounded(limit)?;
-        let mut model = self.session.state_mut()?;
+    /// Consumes one private message and installs navigation before the next message is considered.
+    fn update(&self, message: Message) -> Result<(), NcStatus> {
+        let mut model = self.model.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
+        model.update(&message)?;
         if let Some(directory) = model.navigate.take().filter(|_| self.request.active()) {
             match self.candidate(&mut model, &directory) {
                 Ok(listing) => self.install(&mut model, directory, listing, false)?,
@@ -693,18 +673,18 @@ impl Dialog {
                 Err(error) => return Err(error),
             }
         }
-        Ok(count)
+        Ok(())
     }
 }
 impl Drop for Dialog {
     /// Final controller destruction closes its mounted modal and preserves one terminal cancellation.
     fn drop(&mut self) {
-        if let Ok(model) = self.session.state()
+        if let Ok(model) = self.model.try_borrow()
             && let Some(window) = &model.window
         {
             let _ = window.close();
         }
-        self.request.retire();
+        let _ = self.request.retire();
     }
 }
 
@@ -717,7 +697,7 @@ struct FileDialog {
 impl IFileDialog for FileDialog {
     /// Returns the actual modal capability; application code cannot replace its private structural roles.
     fn window(&self) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-        Ok(self.dialog.session.state()?.window()?.clone())
+        Ok(self.dialog.model.try_borrow().map_err(|_| UI_E_BUSY)?.window()?.clone())
     }
     /// Decodes native units before request mutation and preserves the prior request/listing on a read failure.
     fn open(&self, title: NcCopyFromBufferOffset<'_, u8>, rect: Rect, directory: ComRef<'_, INativePathAbi>) -> Result<(), NcStatus> {
@@ -732,7 +712,7 @@ impl IFileDialog for FileDialog {
     }
     /// Explicit cancellation is idempotent and keeps the modal available for a later open.
     fn cancel(&self) -> Result<bool, NcStatus> {
-        let mut model = self.dialog.session.state_mut()?;
+        let mut model = self.dialog.model.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
         model.owner()?;
         let active = self.dialog.request.active();
         model.finish(FileDialogCompletionMessage::Cancelled)?;
@@ -743,17 +723,17 @@ impl IFileDialog for FileDialog {
         if self.dialog.request.closed() {
             return Ok(());
         }
-        self.dialog.session.state()?.window()?.close()?;
-        self.dialog.request.close();
+        self.dialog.model.try_borrow().map_err(|_| UI_E_BUSY)?.window()?.close()?;
+        self.dialog.request.close()?;
         Ok(())
     }
     /// Diagnostics remain available after failure or closure to explain a rejected directory candidate.
     fn diagnostic(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
-        Ok(NcString::from_utf8_str(&self.dialog.session.state()?.diagnostic))
+        Ok(NcString::from_utf8_str(&self.dialog.model.try_borrow().map_err(|_| UI_E_BUSY)?.diagnostic))
     }
     /// Returns the same completion source for every request without letting producers retain application state.
     fn subscribe_completed(&self, sink: ComRef<'_, FileDialogCompletionPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.dialog.session.state()?.owner()?;
+        self.dialog.model.try_borrow().map_err(|_| UI_E_BUSY)?.owner()?;
         self.dialog.request.completed.event().subscribe(sink)
     }
 }

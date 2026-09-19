@@ -129,6 +129,9 @@ struct State {
     angle: Rc<Cell<f32>>,
 }
 impl AppState for State {
+    /// This example has no application messages.
+    type Message = ();
+
     /// Time-based motion stays consistent across native and browser refresh rates.
     fn frame(&mut self, _host: &Host, _size: Size, seconds: f64) -> Result<bool, NcStatus> {
         self.angle.set((seconds * 1.08 % f64::from(std::f32::consts::TAU)) as f32);
@@ -143,7 +146,7 @@ fn run() -> Result<(), HostError> {
     let angle = Rc::new(Cell::new(0.0));
     let cube = host.ui.widgets().leaf(Cube { angle: angle.clone() }, WidgetOptions::NO_INTERACT)?;
     host.ui.window("Solid painter cube", Rect { x: 40, y: 40, width: 360, height: 360 }, &cube)?;
-    host.run(EventSession::new(State { angle }))
+    host.run(State { angle }, Events::new())
 }
 
 /// Reports startup and frame failures through formatting retained by the min-size profile.

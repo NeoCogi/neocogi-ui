@@ -56,7 +56,10 @@ use neocogi_demo_host::{AppState, Host, HostError, report_exit};
 
 /// This example has no mutable application state; the tree and button belong to the UI plugin.
 struct State;
-impl AppState for State {}
+impl AppState for State {
+    /// This example has no application messages.
+    type Message = ();
+}
 
 /// Builds the same small tree on native SDL and browser WebGL through the typed facade.
 fn run() -> Result<(), HostError> {
@@ -67,7 +70,7 @@ fn run() -> Result<(), HostError> {
     let mut tree = host.ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Stretch)?;
     tree.insert(0, &hello, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))?.finish()?;
     host.ui.window("Hello Window", Rect { x: 40, y: 40, width: 300, height: 400 }, &tree)?;
-    host.run(EventSession::new(State))
+    host.run(State, Events::new())
 }
 
 /// Reports startup and frame failures through formatting retained by the min-size profile.

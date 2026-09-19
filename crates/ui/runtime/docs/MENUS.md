@@ -15,10 +15,9 @@ the declaration available for correction. Item capabilities resolve the same rec
 before and after mounting; they never keep a removed menu surface logically open.
 
 ```rust,no_run
-use neocogi_ui::{EventSession, IWindowAbi, Rect, Ui};
-use neocogi_ui::events::Activation;
+use neocogi_ui::{Events, IWindowAbi, Rect, Ui};
 use neocogi_com::{ComPtr, NcStatus};
-fn install(ui: &Ui, events: &EventSession<Vec<String>>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+fn install(ui: &Ui, events: &mut Events<String>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
     let body = ui.widgets().button("Document")?;
     let window = ui.window("Editor", Rect { x: 20, y: 20, width: 640, height: 480 }, &body)?;
     let menus = ui.menus()?;
@@ -26,10 +25,7 @@ fn install(ui: &Ui, events: &EventSession<Vec<String>>) -> Result<ComPtr<IWindow
     let file = bar.submenu("File")?;
     let open = file.item("Open")?;
     open.set_shortcut_hint("Ctrl+O")?;
-    events.subscribe(open.activated()?, |opened: &mut Vec<String>, event: &Activation| {
-        opened.push(event.label.clone());
-        Ok(())
-    })?;
+    events.map(open.activated()?, |event| event.label)?;
     let save = file.item("Save")?;
     save.set_enabled(false)?;
     file.separator()?;

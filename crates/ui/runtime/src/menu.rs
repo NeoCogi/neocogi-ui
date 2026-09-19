@@ -390,7 +390,7 @@ pub(crate) enum MenuAction {
     /// Close the open child branch after hovering a direct non-branch sibling.
     HoverCloseChild,
     /// Close the complete active path after an enabled item queued its typed event.
-    SubmitAndClose,
+    SubmitAndClose(Result<(), neocogi_com::NcStatus>),
 }
 
 /// Shared output of menu measurement, hit testing, anchoring, and paint geometry.
@@ -667,15 +667,13 @@ impl MenuSurface {
             MenuSlot::Choice { id, enabled: true, .. } => {
                 let MenuMode::Choices { submitted, .. } = &mut self.mode else { return None };
                 *submitted = Some(*id);
-                Some(MenuAction::SubmitAndClose)
+                Some(MenuAction::SubmitAndClose(Ok(())))
             }
             MenuSlot::Item(item) if item.parameters.enabled => {
                 // Queue only the semantic event; WindowManager closes the complete path after this
                 // mutable surface borrow ends and before application dispatch begins.
-                if item.submitted_event.connected() {
-                    item.submitted_event.emit(MenuItemSubmitted { label: item.parameters.label.clone() });
-                }
-                Some(MenuAction::SubmitAndClose)
+                let posted = item.submitted_event.emit(MenuItemSubmitted { label: item.parameters.label.clone() });
+                Some(MenuAction::SubmitAndClose(posted))
             }
             MenuSlot::Choice { enabled: false, .. } | MenuSlot::Item(_) | MenuSlot::Separator => None,
         }
@@ -744,15 +742,13 @@ impl MenuSurface {
                 MenuSlot::Choice { id, enabled: true, .. } => {
                     let MenuMode::Choices { submitted, .. } = &mut self.mode else { return None };
                     *submitted = Some(*id);
-                    Some(MenuAction::SubmitAndClose)
+                    Some(MenuAction::SubmitAndClose(Ok(())))
                 }
                 MenuSlot::Item(item) if item.parameters.enabled => {
                     // Emission only queues a typed value. Application code cannot run until the
                     // manager has consumed `SubmitAndClose` and released every surface borrow.
-                    if item.submitted_event.connected() {
-                        item.submitted_event.emit(MenuItemSubmitted { label: item.parameters.label.clone() });
-                    }
-                    Some(MenuAction::SubmitAndClose)
+                    let posted = item.submitted_event.emit(MenuItemSubmitted { label: item.parameters.label.clone() });
+                    Some(MenuAction::SubmitAndClose(posted))
                 }
                 MenuSlot::Choice { enabled: false, .. } | MenuSlot::Item(_) | MenuSlot::Separator => None,
             });

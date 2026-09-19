@@ -1,6 +1,5 @@
 //! Standard picker acceptance exercises public methods, routed input, and exact native filesystem values.
 use super::*;
-use neocogi_ui::EventHandler;
 use neocogi_ui::events::completed_file_path;
 
 /// Deterministic drawable keeps the full modal visible while testing its real flex layout.
@@ -64,22 +63,13 @@ impl Fixture {
     }
     /// Returns the actual current dynamic file root to verify transactional replacement and handle preservation.
     fn file_root(&self) -> ComPtr<IWidgetAbi> {
-        self.controller.session.state().unwrap().files.content().unwrap().node_interface().unwrap()
+        self.controller.model.borrow().files.content().unwrap().node_interface().unwrap()
     }
 }
-/// Concrete completion consumer owns exact native outcomes independently of dialog/UI lifetime.
-struct Record;
-impl EventHandler<Vec<Option<PathBuf>>, FileDialogCompletionMessage> for Record {
-    /// Clones only the immutable completed native path or cancellation value.
-    fn handle(&mut self, completed: &mut Vec<Option<PathBuf>>, event: &FileDialogCompletionMessage) -> Result<(), NcStatus> {
-        completed.push(completed_file_path(event)?);
-        Ok(())
-    }
-}
-/// Attaches a normal application-owned completion lease to the real picker source.
-fn session(fixture: &Fixture) -> EventSession<Vec<Option<PathBuf>>> {
-    let events = EventSession::new(Vec::new());
-    events.subscribe(fixture.handle.completed(), Record).unwrap();
+/// Connects the real picker completion protocol to a consumer-owned inbox.
+fn session(fixture: &Fixture) -> Events<FileDialogCompletionMessage> {
+    let mut events = Events::new();
+    events.map(fixture.handle.completed(), |event| event).unwrap();
     events
 }
 
@@ -102,7 +92,7 @@ fn failed_open_and_overlapping_requests_preserve_previous_state_and_expose_nativ
     assert_eq!(fixture.handle.open(&neocogi_ui::FileDialogRequest::new(&missing)), Err(UI_E_BUSY));
     assert_eq!(fixture.file_root().as_ptr(), live.as_ptr());
     assert!(fixture.handle.diagnostic().unwrap().is_empty());
-    assert_eq!(fixture.controller.session.state().unwrap().directory, directory.path());
+    assert_eq!(fixture.controller.model.borrow().directory, directory.path());
     fixture.handle.close().unwrap();
     assert_eq!(fixture.handle.active(), Err(UI_E_CLOSED));
 }
@@ -126,26 +116,45 @@ fn broken_entry_rejects_the_complete_directory_candidate() {
 fn empty_acceptance_and_independent_picker_requests_use_actual_controls() {
     let fixture = Fixture::new();
     let directory = tempfile::tempdir().unwrap();
-    let events = session(&fixture);
+    let mut events = session(&fixture);
+    let mut outcomes = Vec::new();
     fixture.open(directory.path());
     // Up, Home, Path, Go, Parent, Filename, Cancel, Open: activate Open with an empty filename.
     fixture.tabs(8);
     fixture.key(KeyCode::Space, 0);
-    fixture.ui.update_with_events(SIZE, &events).unwrap();
+    fixture
+        .ui
+        .update_with_events(SIZE, &mut events, |message| {
+            outcomes.push(completed_file_path(&message)?);
+            Ok(())
+        })
+        .unwrap();
     assert_eq!(fixture.handle.active(), Ok(true));
-    assert!(events.state().unwrap().is_empty());
+    assert!(outcomes.is_empty());
     assert_eq!(fixture.handle.cancel(), Ok(true));
     assert_eq!(fixture.handle.cancel(), Ok(false));
 
     let second = fixture.ui.file_dialog(fixture.owner.as_com_ref()).unwrap();
-    let second_events = EventSession::new(Vec::new());
-    second_events.subscribe(second.completed(), Record).unwrap();
+    let mut second_events = Events::new();
+    let mut second_outcomes = Vec::new();
+    second_events.map(second.completed(), |event| event).unwrap();
     second.open(&neocogi_ui::FileDialogRequest::new(directory.path())).unwrap();
     second.cancel().unwrap();
-    fixture.ui.update_with_events(SIZE, &events).unwrap();
-    second_events.dispatch().unwrap();
-    assert_eq!(&*events.state().unwrap(), &[None]);
-    assert_eq!(&*second_events.state().unwrap(), &[None]);
+    fixture
+        .ui
+        .update_with_events(SIZE, &mut events, |message| {
+            outcomes.push(completed_file_path(&message)?);
+            Ok(())
+        })
+        .unwrap();
+    second_events
+        .dispatch(100, |message| {
+            second_outcomes.push(completed_file_path(&message)?);
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(&outcomes, &[None]);
+    assert_eq!(&*second_outcomes, &[None]);
     second.close().unwrap();
 }
 
@@ -155,17 +164,24 @@ fn typed_filename_acceptance_uses_real_controls_and_completes_before_update_retu
     let fixture = Fixture::new();
     let directory = tempfile::tempdir().unwrap();
     // Only the parent folder row is focusable: Up, Home, Path, Go, Parent, Filename, Cancel, Open.
-    let events = session(&fixture);
+    let mut events = session(&fixture);
+    let mut outcomes = Vec::new();
     fixture.open(directory.path());
     fixture.tabs(6);
     fixture.ui.input(UiInput::Text, " file name ").unwrap();
     fixture.tabs(2);
     fixture.key(KeyCode::Space, 0);
-    fixture.ui.update_with_events(SIZE, &events).unwrap();
-    assert_eq!(&*events.state().unwrap(), &[Some(directory.path().join(" file name "))]);
+    fixture
+        .ui
+        .update_with_events(SIZE, &mut events, |message| {
+            outcomes.push(completed_file_path(&message)?);
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(&outcomes, &[Some(directory.path().join(" file name "))]);
     assert_eq!(fixture.handle.active(), Ok(false));
     assert_eq!(fixture.handle.window().unwrap().snapshot().unwrap().visibility, Visibility::Hidden);
-    assert_eq!(fixture.controller.session.state().unwrap().filename.text().unwrap(), " file name ");
+    assert_eq!(fixture.controller.model.borrow().filename.text().unwrap(), " file name ");
     assert_eq!(fixture.handle.cancel(), Ok(false));
     fixture.handle.close().unwrap();
 }
@@ -182,18 +198,31 @@ fn selected_non_utf8_file_preserves_exact_native_identity_across_display_collisi
     std::fs::write(&first, "first").unwrap();
     std::fs::write(&second, "second").unwrap();
     assert_eq!(first.to_string_lossy(), second.to_string_lossy());
-    let events = session(&fixture);
+    let mut events = session(&fixture);
+    let mut outcomes = Vec::new();
     fixture.open(directory.path());
     // Four toolbar stops, parent folder, then the first exact native file row.
     fixture.tabs(6);
     fixture.key(KeyCode::Space, 0);
-    fixture.ui.update_with_events(SIZE, &events).unwrap();
-    assert_eq!(fixture.controller.session.state().unwrap().selected.as_ref(), Some(&first));
+    fixture
+        .ui
+        .update_with_events(SIZE, &mut events, |message| {
+            outcomes.push(completed_file_path(&message)?);
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(fixture.controller.model.borrow().selected.as_ref(), Some(&first));
     // Second file, filename, Cancel, Open.
     fixture.tabs(4);
     fixture.key(KeyCode::Space, 0);
-    fixture.ui.update_with_events(SIZE, &events).unwrap();
-    assert_eq!(&*events.state().unwrap(), &[Some(first)]);
+    fixture
+        .ui
+        .update_with_events(SIZE, &mut events, |message| {
+            outcomes.push(completed_file_path(&message)?);
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(&outcomes, &[Some(first)]);
     fixture.handle.close().unwrap();
 }
 
@@ -210,14 +239,14 @@ fn unreadable_navigation_preserves_selection_directory_and_dynamic_widget_identi
     fixture.tabs(7); // Four toolbar stops, parent folder, child folder, file.
     fixture.key(KeyCode::Space, 0);
     fixture.ui.update(SIZE).unwrap();
-    assert_eq!(fixture.controller.session.state().unwrap().selected.as_ref(), Some(&file));
+    assert_eq!(fixture.controller.model.borrow().selected.as_ref(), Some(&file));
     let root = fixture.file_root();
     std::fs::remove_dir(&folder).unwrap();
     fixture.key(KeyCode::Tab, 4); // Shift+Tab returns to the now-unreadable retained folder row.
     fixture.key(KeyCode::Space, 0);
     fixture.ui.update(SIZE).unwrap();
     assert_eq!(fixture.file_root().as_ptr(), root.as_ptr());
-    let model = fixture.controller.session.state().unwrap();
+    let model = fixture.controller.model.borrow();
     assert_eq!(model.selected.as_ref(), Some(&file));
     assert_eq!(model.directory, directory.path());
     assert!(model.error.text().unwrap().contains("Cannot read"));
@@ -230,25 +259,50 @@ fn unreadable_navigation_preserves_selection_directory_and_dynamic_widget_identi
 fn lifecycle_cancellation_is_once_per_request_and_stale_hide_does_not_cancel_reopening() {
     let fixture = Fixture::new();
     let directory = tempfile::tempdir().unwrap();
-    let events = session(&fixture);
+    let mut events = session(&fixture);
+    let mut outcomes = Vec::new();
     fixture.open(directory.path());
     assert_eq!(fixture.handle.cancel(), Ok(true));
     fixture.open(directory.path());
-    fixture.ui.update_with_events(SIZE, &events).unwrap();
-    assert_eq!(&*events.state().unwrap(), &[None]);
+    fixture
+        .ui
+        .update_with_events(SIZE, &mut events, |message| {
+            outcomes.push(completed_file_path(&message)?);
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(&outcomes, &[None]);
     assert_eq!(fixture.handle.active(), Ok(true));
     fixture.owner.set_visibility(Visibility::Hidden).unwrap();
-    fixture.ui.update_with_events(SIZE, &events).unwrap();
-    assert_eq!(events.state().unwrap().len(), 2);
+    fixture
+        .ui
+        .update_with_events(SIZE, &mut events, |message| {
+            outcomes.push(completed_file_path(&message)?);
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(outcomes.len(), 2);
     assert_eq!(fixture.handle.active(), Ok(false));
     fixture.owner.set_visibility(Visibility::Visible).unwrap();
     fixture.open(directory.path());
     fixture.owner.close().unwrap();
-    fixture.ui.update_with_events(SIZE, &events).unwrap();
-    assert_eq!(events.state().unwrap().len(), 3);
+    fixture
+        .ui
+        .update_with_events(SIZE, &mut events, |message| {
+            outcomes.push(completed_file_path(&message)?);
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(outcomes.len(), 3);
     assert_eq!(fixture.handle.active(), Err(UI_E_CLOSED));
-    fixture.ui.update_with_events(SIZE, &events).unwrap();
-    assert_eq!(events.state().unwrap().len(), 3);
+    fixture
+        .ui
+        .update_with_events(SIZE, &mut events, |message| {
+            outcomes.push(completed_file_path(&message)?);
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(outcomes.len(), 3);
 }
 
 /// Final runtime release queues cancellation without invoking application code or retaining the runtime through its internal handlers.
@@ -256,17 +310,30 @@ fn lifecycle_cancellation_is_once_per_request_and_stale_hide_does_not_cancel_reo
 fn runtime_release_preserves_active_request_terminal_cancellation_without_a_controller_cycle() {
     let fixture = Fixture::new();
     let directory = tempfile::tempdir().unwrap();
-    let events = session(&fixture);
+    let mut events = session(&fixture);
+    let mut outcomes = Vec::new();
     fixture.open(directory.path());
     let host = fixture.runtime.construction_host().unwrap().host().unwrap();
     let handle = fixture.handle.clone();
     drop(fixture);
     assert_eq!(host.check_open(), Err(UI_E_CLOSED));
-    assert!(events.state().unwrap().is_empty());
+    assert!(outcomes.is_empty());
     assert_eq!(handle.active(), Err(UI_E_CLOSED));
-    assert_eq!(events.dispatch(), Ok(1));
-    assert_eq!(&*events.state().unwrap(), &[None]);
-    assert_eq!(events.dispatch(), Ok(0));
+    assert_eq!(
+        events.dispatch(100, |message| {
+            outcomes.push(completed_file_path(&message)?);
+            Ok(())
+        }),
+        Ok(1)
+    );
+    assert_eq!(&outcomes, &[None]);
+    assert_eq!(
+        events.dispatch(100, |message| {
+            outcomes.push(completed_file_path(&message)?);
+            Ok(())
+        }),
+        Ok(0)
+    );
 }
 
 /// Successful folder navigation replaces only dynamic rows, keeps controls/scroll models and clamps against new content.
@@ -282,8 +349,8 @@ fn successful_navigation_reuses_fixed_controls_and_replaces_the_complete_dynamic
     }
     fixture.open(directory.path());
     let old_root = fixture.file_root();
-    let path = fixture.controller.session.state().unwrap().path.clone();
-    let mut scroll = fixture.controller.session.state().unwrap().files.clone();
+    let path = fixture.controller.model.borrow().path.clone();
+    let mut scroll = fixture.controller.model.borrow().files.clone();
     scroll.set_offset(Point { x: 0, y: i32::MAX }).unwrap();
     fixture.ui.update(SIZE).unwrap();
     assert!(scroll.info().unwrap().requested.y > 0);
@@ -291,25 +358,11 @@ fn successful_navigation_reuses_fixed_controls_and_replaces_the_complete_dynamic
     fixture.key(KeyCode::Space, 0);
     fixture.ui.update(SIZE).unwrap();
     assert_ne!(fixture.file_root().as_ptr(), old_root.as_ptr());
-    assert_eq!(fixture.controller.session.state().unwrap().directory, child);
+    assert_eq!(fixture.controller.model.borrow().directory, child);
     assert_eq!(path.text().unwrap(), child.to_string_lossy());
     assert_eq!(scroll.info().unwrap().requested.y, 0);
-    assert!(fixture.controller.session.state().unwrap().selected.is_none());
+    assert!(fixture.controller.model.borrow().selected.is_none());
     fixture.handle.close().unwrap();
-}
-
-/// Application handler data explicitly identifies the reusable picker and its exact native directory.
-struct OpenPicker {
-    /// Existing component is fully subscribed before the application begins dispatch.
-    picker: neocogi_ui::FileDialog,
-    /// Exact native directory included in the request without display conversion.
-    directory: PathBuf,
-}
-impl EventHandler<Vec<Option<PathBuf>>, Activation> for OpenPicker {
-    /// Opens through the ordinary COM method while the runtime context is available between input phases.
-    fn handle(&mut self, _state: &mut Vec<Option<PathBuf>>, _event: &Activation) -> Result<(), NcStatus> {
-        self.picker.open(&neocogi_ui::FileDialogRequest::new(&self.directory))
-    }
 }
 
 /// A popup-opening app callback exposes the new modal to later already-queued native input in the same update.
@@ -320,45 +373,37 @@ fn application_callback_opens_picker_and_later_input_reaches_its_new_modal_scope
     // A separate activator lets the picker retain its original ordinary owner and tests cross-window modal routing.
     let button = fixture.ui.widgets().button("open picker").unwrap();
     let activator = fixture.ui.window("activator", OWNER_RECT, &button).unwrap();
-    let events = session(&fixture);
-    events
-        .subscribe(
-            button.activated(),
-            OpenPicker {
-                picker: fixture.handle.clone(),
-                directory: directory.path().to_owned(),
-            },
-        )
-        .unwrap();
+    /// Both request activation and completion share the application's FIFO.
+    enum AppMessage {
+        /// Requests that the reusable dialog become visible.
+        Open,
+        /// Captured native completion.
+        Completed(FileDialogCompletionMessage),
+    }
+    let mut events = Events::new();
+    let mut outcomes = Vec::new();
+    events.map(fixture.handle.completed(), AppMessage::Completed).unwrap();
+    events.map(button.activated(), |_| AppMessage::Open).unwrap();
     fixture.tabs(1);
     fixture.key(KeyCode::Space, 0);
     fixture.tabs(6);
     fixture.ui.input(UiInput::Text, "after callback").unwrap();
     fixture.tabs(2);
     fixture.key(KeyCode::Space, 0);
-    fixture.ui.update_with_events(SIZE, &events).unwrap();
-    assert_eq!(&*events.state().unwrap(), &[Some(directory.path().join("after callback"))]);
+    fixture
+        .ui
+        .update_with_events(SIZE, &mut events, |message| match message {
+            AppMessage::Open => fixture.handle.open(&neocogi_ui::FileDialogRequest::new(directory.path())),
+            AppMessage::Completed(event) => {
+                outcomes.push(completed_file_path(&event)?);
+                Ok(())
+            }
+        })
+        .unwrap();
+    assert_eq!(&outcomes, &[Some(directory.path().join("after callback"))]);
     assert_eq!(fixture.handle.active(), Ok(false));
     fixture.handle.close().unwrap();
     activator.close().unwrap();
-}
-
-/// Explicit application state owns the ordinary runtime client used during manual completion delivery.
-struct ReentryState {
-    /// Manual EventSession dispatch does not own an outer runtime update transaction.
-    ui: neocogi_ui::Ui,
-    /// Every already committed request must survive component retirement during its first callback.
-    completions: usize,
-}
-/// Concrete callback deliberately updates the runtime while the completion lease owns a bounded multi-event delivery window.
-struct Reenter;
-impl EventHandler<ReentryState, FileDialogCompletionMessage> for Reenter {
-    /// Updates ordinary UI state without reentering this event session; delivery must retain all committed outcomes.
-    fn handle(&mut self, state: &mut ReentryState, event: &FileDialogCompletionMessage) -> Result<(), NcStatus> {
-        assert!(matches!(event, FileDialogCompletionMessage::Cancelled));
-        state.completions += 1;
-        state.ui.update(SIZE)
-    }
 }
 
 /// Request completion is a committed fact even after the closed controller is retired during an active delivery window.
@@ -366,17 +411,30 @@ impl EventHandler<ReentryState, FileDialogCompletionMessage> for Reenter {
 fn closed_picker_preserves_all_completed_requests_during_manual_handler_runtime_reentry() {
     let fixture = Fixture::new();
     let directory = tempfile::tempdir().unwrap();
-    let events = EventSession::new(ReentryState {
-        ui: crate::bind_builtin_nodes(fixture.runtime.clone()).unwrap(),
-        completions: 0,
-    });
-    events.subscribe(fixture.handle.completed(), Reenter).unwrap();
+    let ui = crate::bind_builtin_nodes(fixture.runtime.clone()).unwrap();
+    let mut events = Events::new();
+    events.map(fixture.handle.completed(), |event| event).unwrap();
+    let mut completions = 0;
     for _ in 0..2 {
         fixture.open(directory.path());
         fixture.handle.cancel().unwrap();
     }
     fixture.handle.close().unwrap();
-    assert_eq!(events.dispatch(), Ok(2));
-    assert_eq!(events.state().unwrap().completions, 2);
-    assert_eq!(events.dispatch(), Ok(0));
+    assert_eq!(
+        events.dispatch(100, |message| {
+            assert!(matches!(message, FileDialogCompletionMessage::Cancelled));
+            completions += 1;
+            ui.update(SIZE)
+        }),
+        Ok(2)
+    );
+    assert_eq!(completions, 2);
+    assert_eq!(
+        events.dispatch(100, |message| {
+            assert!(matches!(message, FileDialogCompletionMessage::Cancelled));
+            completions += 1;
+            ui.update(SIZE)
+        }),
+        Ok(0)
+    );
 }

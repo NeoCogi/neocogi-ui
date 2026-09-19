@@ -74,7 +74,7 @@
 //!
 //! Applications use `neocogi-ui`, whose concrete COM clients link no UI implementation.
 //! Each retained COM node owns the widget capabilities used for routing, layout and painting.
-//! The engine returns its traversal state before the application's `EventSession` dispatches
+//! The engine returns its traversal state before the application's `Events` consumer runs
 //! concrete handlers, then commits their geometry edits before processing the next input event.
 //!
 //! Measurement caches are invalidated by truthful update results, changed setters, constraints,

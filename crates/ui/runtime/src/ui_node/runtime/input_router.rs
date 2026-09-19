@@ -38,7 +38,7 @@ use super::*;
 /// every decision inside that root: hit testing, ancestor bubbling, focus, hover, pointer capture,
 /// and staging the sole [`UiInputEvent`] consumed by the subsequent widget update traversal. It
 /// never invokes application subscribers or handles semantic [`crate::WidgetEvent`] payloads;
-/// those belong to the application-owned `neocogi_ui::EventSession`.
+/// those belong to the consumer-owned `neocogi_ui::Events` inbox.
 ///
 /// The router stores node identities rather than widget borrows. This lets routing finish before
 /// `UiRuntime` begins its full mutable update traversal and lets layout or topology changes validate

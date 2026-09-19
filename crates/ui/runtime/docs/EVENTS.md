@@ -1,97 +1,105 @@
-# Typed events
+# Typed consumer inboxes
 
-Application dispatch lives in `neocogi_ui::EventSession<State>`. A session owns
-concrete handlers and COM subscriptions; a producer owns only its event snapshots.
-The UI runtime borrows the session's dispatcher between traversal phases and
-commits callback edits before routing the next input event.
+`Events<Message>` owns one FIFO and its source connections. Application state stays
+in an ordinary Rust value. Map each port into an application message, then provide
+one mutable consumer to the UI update:
 
 ```rust,no_run
-use neocogi_ui::{ButtonWidget, EventSession, Size, Ui};
-use neocogi_ui::events::Activation;
+use neocogi_ui::{ButtonWidget, Events, Size, Ui};
 use neocogi_com::NcStatus;
 
+/// Application commands are local Rust data, never a plugin ABI.
+enum Message { Activated(String) }
+
 fn update(ui: &Ui, button: &ButtonWidget, size: Size) -> Result<(), NcStatus> {
-    let events = EventSession::new(0u32);
-    events.subscribe(button.activated(), |count: &mut u32, _: &Activation| {
-        *count += 1;
+    let mut events = Events::new();
+    events.map(button.activated(), |event| Message::Activated(event.label))?;
+    let mut count = 0;
+    ui.update_with_events(size, &mut events, |message| {
+        match message {
+            Message::Activated(label) => { count += 1; println!("{label}: {count}"); }
+        }
         Ok(())
-    })?;
-    ui.update_with_events(size, &events)
+    })
 }
 ```
 
-Independent producers reuse `neocogi_com_events::EventSource<E>` (also reexported
-from `neocogi_ui::events`). The generated `neocogi.com.events` module owns the
-lease and dispatcher ABI; the support crate owns typed queues and application
-sessions. Standard snapshots are generated from UI NCIDL `port` declarations
-and already implement `EventPayload`, which names their concrete COM sink.
-Each `name: Protocol;` generates a `.name()` accessor returning an `EventPort`
-with a concrete associated event and an optional domain validator. Import the
-source's generated `Ports` trait to use it on owned or borrowed COM handles.
-Accessors do not query or connect; the session calls the generated shared-receiver
-subscription operation. Applications call `session.subscribe(port, handler)`;
-UI getters install their domain checks before exposing the port. The generic COM
-session claims registration before constructing the sink or calling the source,
-restores order on failure, and retains only the successful lease. The port's owned
-source projection is released after setup. The file dialog declares
-`completed: FileDialogCompletionPort;` directly on `IFileDialog`, so
-`session.subscribe(picker.completed(), handler)` needs no extra capability query
-or fallible getter. The UI wrapper still validates native-path completions.
+Keep the inbox and mappings alive across frames. The example groups construction
+and one update only to show their types. A normal application implements the match
+in `AppState::update(&mut self, message)` and passes `|message| app.update(message)`.
+It needs no handler types, borrowed-state session, or update-cycle protocol.
 
-Generated sinks use `&mut self`, so their handlers are ordinary concrete fields.
-State methods, functions, and closures implement `EventHandler` automatically
-when they accept `(&mut State, &Message)` and return `Result<(), NcStatus>`.
-Pass a method such as `AppState::file_selected` directly, or annotate both
-closure parameters with their concrete reference types. Use `move` for owned
-captures; ordinary captured variables may be mutated without adding a `Cell`.
-Explicit handler structs remain optional. Each callable must satisfy `'static`
-because its subscription can outlive the stack frame that registered it. UI
-reexports the same session. Callable adaptation preserves the COM signatures,
-Rust binding protocol 3, and plugin descriptor/runtime table ABIs v1.
+## Posting and ownership
 
-`emit` never invokes application code. `subscribe` returns the application-owned
-`IEventSubscription`; the source does not retain the sink or keep the widget alive.
+A generated NCIDL `port` defines a concrete protocol and owned message type.
+A named binding such as `completed: FileDialogCompletionPort;` generates the
+`.completed()` accessor and its typed connection operation. UI convenience getters
+also install domain validation, including native-path and numeric checks.
 
-Custom composites can publish port protocols and named bindings in their
-NCIDL contract. If a mounted component has private child-event handlers, it
-implements `IComponentEventProvider` and returns a separately allocated
-`IEventDispatcher`. The runtime rejects a provider that returns its own widget
-identity, then caches the driver at the mounted node. Drivers are copied in
-descendant-first order after traversal, invoked before the application session,
-and skipped if an earlier callback removed their owning mount. Both kinds of
-callback share the same finite dispatch budget. `Ui::update_with_events`
-accepts the same generic `EventSession<State>` for applications and components.
-Ordinary `Ui::update` also drives mounted private sessions automatically. Nesting
-has no special depth limit: child outputs can reach parent handlers and then the
-application in one update. A callback-mounted child joins the next sweep, while
-ancestor removal retires all descendant tickets before subsequent delivery.
+`events.map(port, mapper)` creates a generated receiver and retains the successful
+`IEventSubscription` lease. The temporary port releases its source after setup.
+There is one subscriber per source. Producers use `EventSource<E>` with no queue:
 
-A composite may use one private message enum and an `&mut self` update method;
-the file picker does so without adding a second event queue. Only declared public
-outputs cross component boundaries. Internal child events do not implicitly bubble
-through every ancestor; raw input routing remains a separate concern.
+```text
+producer commits state → protocol receiver copies/validates arguments
+                       → mapper translates the owned protocol message
+                       → message enters the consumer's FIFO
+```
 
-There is one subscriber per source. Delivery preserves FIFO within a source and
-registration order across a session. A dispatch window fixes the eligible prefix length; each callback pops one
-snapshot, leaving unattempted events in place on failure. Newly emitted events
-wait for a later source visit, so callback recursion cannot extend the current window.
-Cancellation releases callback ownership even if another caller retains the lease.
-Source closure discards ordinary interaction work; explicit terminal events and
-finished request outcomes follow their documented distinct lifetime rules.
+The mapper runs synchronously at emission. It should only translate data or attach
+routing IDs; it must not perform UI work or consume application state. Rust cannot
+prove closure purity. Captures must be owned or otherwise `'static`. The generated
+mutable receiver protects ordinary `FnMut` captures without extra cells. Application
+behavior runs later, after traversal releases its borrows.
 
-Handlers may prepare immutable asset candidates, but `Ui::install_assets` requires
-exclusive runtime access and therefore runs only after `update_with_events` returns.
-The full demo publishes its latest prepared candidate in the host frame boundary before
-the following synchronization pass.
+A source retains a weak connection; its lease owns the receiver, and the receiver
+has weak posting access. Neither prolongs the consumer. `emit` returns receiver
+errors. Built-in controls preserve committed state and return posting failures
+through the enclosing UI operation. No event is retained without a subscriber.
 
-Programmatic setters remain silent unless their concrete contract says otherwise.
-Applications must synchronize UI changes before rendering, and explicitly arrange
-future updates for timers, animation or external data. Event delivery does not
-schedule frames or make hidden widgets update automatically.
+Every port mapped into one inbox shares **emission order**. There is no global
+ordering across different consumers. Cancelling a lease or closing a producer
+prevents future posts and releases its mapper. Already posted facts remain in the
+surviving consumer's FIFO. Dropping an inbox cancels its connections and drops its
+pending messages. Request completions need no separate finished/terminal queue.
 
-The full ownership, reentry, cascade-budget, error, terminal-delivery and author
-obligations are in [COM_AUTHORS.md](../../../../docs/COM_AUTHORS.md#typed-events-and-application-state).
-The [independent extension](../../../../examples/ui-extension) demonstrates a real
-derived COM widget using this shared producer. Native algorithm callback fixtures
-live under `src/test_support`; there is no production `Context::subscribe` or
-application-state parameter on the retained engine.
+## Nested components and timing
+
+A behavioral composite has a private message enum, mappings from child ports, and
+an ordinary mutable update method. It emits only its declared public results.
+Internal messages do not automatically bubble through ancestors. Structural
+containers such as `ScrollArea` need no inbox just because they have children.
+
+`Events::component_dispatcher` creates a separate framework driver for a component.
+The mounted root exposes it through `IComponentEventProvider`; the runtime discovers
+and drives it automatically, including during ordinary `Ui::update`. The driver
+holds weak ownership and no copied widget tree. Returning the root's own COM
+identity is rejected. Component authors do not write queue-draining loops.
+
+The runtime owns the complete schedule:
+
+1. Synchronize layout and settle pending messages before routing input.
+2. Process one raw input, then release traversal borrows.
+3. Visit private inboxes descendant-first in stable tree order. Each visit consumes
+   the FIFO prefix present at its start; newly posted work waits for another visit.
+4. Repeat component/layout work until quiet, then consume one application message.
+   Settle any resulting private work before consuming the next application message.
+5. Route the next raw input. Publish a renderable frame only after successful completion.
+
+A newly mounted component joins the next pass. Removed mounts retire their driver
+tickets before later visits. An empty input queue still receives an eventless update.
+One finite budget spans the whole update, including component and application work;
+exhaustion leaves unattempted messages queued and the frame uncommitted. Consumer
+errors consume only the attempted message, retain successors, and do not roll back
+state. Recursive runtime update/render and recursive mutable dispatcher calls reject.
+
+`Ui::update_with_events` borrows the application consumer only for that call. Its
+internal scoped COM adapter revokes every retained dispatcher projection on return
+or unwind. Application messages and state never cross the plugin boundary.
+
+Programmatic setters remain silent unless specified otherwise. Immutable asset
+candidates may be prepared during consumption, but installation requires the frame
+boundary after update returns. Posting does not schedule a future frame; timers and
+external data still need host scheduling. Dynamic plugins and static monoliths use
+the same transport. Plugin descriptor and runtime table ABIs remain v1; generated
+Rust event bindings require support API 4.

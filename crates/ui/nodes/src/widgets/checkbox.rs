@@ -156,7 +156,7 @@ impl Widget for Checkbox {
         // Windows-style checkboxes toggle with Space; Enter remains available to a default button.
         self.checked = !self.checked;
         let checked = self.checked;
-        self.changed_event.emit(CheckboxChanged { checked });
+        ctx.posted(self.changed_event.emit(CheckboxChanged { checked }));
 
         // The check mark changes paint only; both states reserve the same icon space.
         crate::Change::NoChange

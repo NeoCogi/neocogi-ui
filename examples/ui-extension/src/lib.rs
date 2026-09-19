@@ -67,7 +67,7 @@ macro_rules! widget {
                 state.validate()?;
                 decode_widget_event(event, text)?;
                 self.common.calls.updates += 1;
-                let change = self.update_content(state);
+                let change = self.update_content(state)?;
                 self.common.state.record_change(change);
                 Ok(change)
             }
@@ -118,14 +118,14 @@ impl CounterObject {
     }
 
     /// User activation commits before emission, capturing the matching label for deferred delivery.
-    fn update_content(&mut self, state: WidgetUpdate) -> GeometryChange {
+    fn update_content(&mut self, state: WidgetUpdate) -> Result<GeometryChange, NcStatus> {
         if state.clicked || state.action == WidgetAction::Activate {
             self.count = self.count.saturating_add(1);
-            self.submitted.emit(Activation { label: self.count.to_string() });
-            self.changed.emit(CounterChangesMessage { value: self.count });
-            GeometryChange::Changed
+            self.submitted.emit(Activation { label: self.count.to_string() })?;
+            self.changed.emit(CounterChangesMessage { value: self.count })?;
+            Ok(GeometryChange::Changed)
         } else {
-            GeometryChange::NoChange
+            Ok(GeometryChange::NoChange)
         }
     }
     /// Standard body text requires no knowledge of native fonts, atlas packing or GPU types.
@@ -193,8 +193,8 @@ struct Inset {
 }
 impl Inset {
     /// This layout-only container has no input-dependent semantic state.
-    fn update_content(&mut self, _state: WidgetUpdate) -> GeometryChange {
-        GeometryChange::NoChange
+    fn update_content(&mut self, _state: WidgetUpdate) -> Result<GeometryChange, NcStatus> {
+        Ok(GeometryChange::NoChange)
     }
     /// Children paint through ordinary retained traversal, without a second recursive paint path.
     fn paint_content(&self, _state: WidgetPaint, _painter: &mut Painter<'_>) -> Result<(), NcStatus> {

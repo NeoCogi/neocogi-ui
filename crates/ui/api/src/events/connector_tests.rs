@@ -1,78 +1,50 @@
-//! End-to-end subscription regressions through generated ports and COM source calls.
-
+//! Generated foreign connections exercise immediate mapping and deferred consumer behavior.
 use super::*;
-use neocogi_com::{com_object, ComPtr};
+use neocogi_com::{com_object, ComPtr, NcCopyFromBufferOffset};
 use std::{cell::Cell, rc::Rc};
 
-/// Foreign producer observations shared with the test, not with application state.
+/// Observable source state belongs to the producer, independently of its consumers.
 struct SourceProbe {
-    /// Actual production queue; this fixture does not replace event transport.
-    queue: EventSource<Activation>,
-    /// Counts foreign calls so failure and retry cannot be hidden by adapter behavior.
-    attempts: Cell<usize>,
-    /// The shared COM method consumes one injected subscription failure.
+    /// Production connection point; it has no pending-message storage.
+    source: EventSource<Activation>,
+    /// One rejected connection proves unsuccessful setup releases mapper captures.
     fail_once: Cell<bool>,
 }
-
 #[com_object(interfaces(IActivationEvents))]
-/// Foreign source exposing the real generated activation port and producer queue.
+/// Foreign source delegates to the same native connection used by widgets.
 struct ForeignActivation {
-    /// Producer-side ownership and observable shared-method state.
+    /// Fixture access observes source lifecycle without retaining any consumer state.
     probe: Rc<SourceProbe>,
-    /// Retained projection checks the production registration gate during the call.
-    dispatcher: ComPtr<IEventDispatcherAbi>,
 }
-
 impl IActivationEvents for ForeignActivation {
-    /// Rejects dispatch reentry before failure injection or real queue subscription.
+    /// Failure does not install a connection; successful setup owns exactly one receiver lease.
     fn subscribe_activated(&self, sink: ComRef<'_, ActivationPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        assert_eq!(self.dispatcher.dispatch(10), Err(neocogi_com_events::EVENT_E_BUSY));
-        self.probe.attempts.set(self.probe.attempts.get() + 1);
         match self.probe.fail_once.replace(false) {
             true => Err(NC_E_INVALID_ARG),
-            false => self.probe.queue.subscribe(sink),
+            false => self.probe.source.subscribe(sink),
         }
     }
 }
-
-/// Concrete application handler with explicit lifetime observations.
-struct Record {
-    /// External counter proves failed setup and session destruction release handlers.
-    drops: Rc<Cell<usize>>,
-}
-
-impl EventHandler<Vec<String>, Activation> for Record {
-    /// Stores the immutable captured label in application registration order.
-    fn handle(&mut self, labels: &mut Vec<String>, event: &Activation) -> Result<(), NcStatus> {
-        labels.push(event.label.clone());
-        Ok(())
-    }
-}
-
-impl Drop for Record {
-    /// Observes actual handler release independently of retained source and lease pointers.
+/// Records release of a concrete mapping capture, including failed connection attempts.
+struct Lifetime(Rc<Cell<u32>>);
+impl Drop for Lifetime {
+    /// Destruction remains observable even while a foreign lease is separately retained.
     fn drop(&mut self) {
-        self.drops.set(self.drops.get() + 1);
+        self.0.set(self.0.get() + 1);
     }
 }
-
-/// Creates a foreign producer without borrowing or retaining application state.
-fn source<State: 'static>(session: &EventSession<State>, fail_once: bool) -> (ComPtr<IActivationEventsAbi>, Rc<SourceProbe>) {
+/// Creates a real foreign source whose port can outlive a temporary borrowed projection.
+fn source(fail_once: bool) -> (ComPtr<IActivationEventsAbi>, Rc<SourceProbe>) {
     let probe = Rc::new(SourceProbe {
-        queue: EventSource::new(),
-        attempts: Cell::new(0),
+        source: EventSource::new(),
         fail_once: Cell::new(fail_once),
     });
-    let source = ForeignActivation::from_value(ForeignActivation {
-        probe: probe.clone(),
-        dispatcher: session.as_dispatcher().add_ref(),
-    })
-    .query()
-    .unwrap();
-    (source, probe)
+    (
+        ForeignActivation::from_value(ForeignActivation { probe: probe.clone() }).query().unwrap(),
+        probe,
+    )
 }
-
-/// Existing validator-function policy remains installed by the checked port.
+/// Domain validation runs before translation can post an invalid fact.
 fn valid_label(event: &Activation) -> Result<(), NcStatus> {
     match event.label.is_empty() {
         true => Err(NC_E_INVALID_ARG),
@@ -80,117 +52,104 @@ fn valid_label(event: &Activation) -> Result<(), NcStatus> {
     }
 }
 
-/// Plain and checked ports preserve failed-call cleanup, retry, order, and cancellation.
+/// All protocols mapped to one inbox preserve actual emission order, not registration order.
 #[test]
-fn generated_ports_preserve_foreign_failure_and_checked_delivery() {
-    let session = neocogi_com_events::EventSession::new(Vec::<String>::new());
+fn foreign_mapping_failure_validation_fifo_and_lifetime() {
+    let mut events = Events::new();
     let drops = Rc::new(Cell::new(0));
-    let (first_source, first) = source(&session, false);
-    let (second_source, second) = source(&session, true);
-    // Constructing a port is infallible and must not attempt a subscription.
-    // The borrowed-handle accessor owns its projection after this block ends.
-    let first_port = { first_source.as_com_ref().activated() };
-    assert_eq!(first.attempts.get(), 0);
-    drop(first_source);
-    let first_lease = session.subscribe(first_port, Record { drops: drops.clone() }).unwrap();
-
-    // A foreign failure drops the uncommitted sink/handler and preserves old registrations.
-    let mut rejected = Record { drops: drops.clone() };
-    let failure = session.subscribe(
-        second_source.activated().checked(valid_label),
-        move |labels: &mut Vec<String>, event: &Activation| rejected.handle(labels, event),
-    );
-    assert_eq!(failure.unwrap_err(), NC_E_INVALID_ARG);
+    let (first, a) = source(false);
+    let (second, b) = source(true);
+    let lifetime = Lifetime(drops.clone());
+    let rejected = events.map(second.activated(), move |event| {
+        let _ = &lifetime;
+        event.label
+    });
+    assert_eq!(rejected.unwrap_err(), NC_E_INVALID_ARG);
     assert_eq!(drops.get(), 1);
-    assert_eq!(second.attempts.get(), 1);
-    assert!(!second.queue.connected());
-    assert_eq!(first_lease.active(), Ok(true));
-
-    let second_lease = session
-        .subscribe(second_source.activated().checked(valid_label), Record { drops: drops.clone() })
-        .unwrap();
-    assert_eq!(first.attempts.get(), 1);
-    assert_eq!(second.attempts.get(), 2);
-
-    // The port must install validation before delivery can borrow local state.
-    second.queue.emit(Activation { label: String::new() });
-    let held = session.state_mut().unwrap();
-    assert_eq!(second_lease.dispatch(10), Err(NC_E_INVALID_ARG));
-    drop(held);
-    assert!(session.state().unwrap().is_empty());
-
-    // Reverse emission order does not change registration-ordered dispatch.
-    second.queue.emit(Activation { label: "second".to_owned() });
-    first.queue.emit(Activation { label: "first".to_owned() });
-    assert_eq!(session.dispatch(), Ok(2));
-    assert_eq!(&*session.state().unwrap(), &["first", "second"]);
-
-    // Retained foreign capabilities and leases cannot keep cancelled handlers alive.
-    drop(session);
-    assert_eq!(drops.get(), 3);
-    assert_eq!(first_lease.active(), Ok(false));
-    assert_eq!(second_lease.active(), Ok(false));
-}
-
-/// Independent application destinations updated by different subscriptions.
-#[derive(Default)]
-struct Selections {
-    /// Values routed by a directly registered application method.
-    input: Vec<String>,
-    /// Values routed by a closure with its own mutable delivery counter.
-    output: Vec<String>,
-}
-
-impl Selections {
-    /// A normal state method doubles as a typed callback without a handler type.
-    fn input_selected(&mut self, event: &Activation) -> Result<(), NcStatus> {
-        self.input.push(event.label.clone());
-        Ok(())
-    }
-}
-
-/// Methods and mutable closures share state while preserving FIFO errors and capture lifetime.
-#[test]
-fn callable_subscriptions_route_state_and_release_captures_on_cancellation() {
-    let session = EventSession::new(Selections::default());
-    let (input_source, input) = source(&session, false);
-    let (output_source, output) = source(&session, false);
-    session.subscribe(input_source.activated(), Selections::input_selected).unwrap();
-
-    let drops = Rc::new(Cell::new(0));
-    let lifetime = Record { drops: drops.clone() };
-    let mut attempt = 0;
-    let lease = session
-        .subscribe(output_source.activated(), move |state: &mut Selections, event: &Activation| {
-            // Retain the whole observed value and mutate a plain capture, without a Cell.
-            let _retained = &lifetime;
-            attempt += 1;
-            match attempt {
-                2 => Err(NC_E_INVALID_ARG),
-                _ => {
-                    state.output.push(format!("{attempt}:{}", event.label));
-                    Ok(())
-                }
-            }
+    assert!(!b.source.connected());
+    let lifetime = Lifetime(drops.clone());
+    let lease_a = events
+        .map(first.as_com_ref().activated(), move |event| {
+            let _ = &lifetime;
+            event.label
         })
         .unwrap();
+    let lease_b = events.map(second.activated().checked(valid_label), |event| event.label).unwrap();
+    assert_eq!(b.source.emit(Activation { label: String::new() }), Err(NC_E_INVALID_ARG));
+    assert!(events.is_empty());
+    b.source.emit(Activation { label: "second".into() }).unwrap();
+    a.source.emit(Activation { label: "first".into() }).unwrap();
+    lease_b.cancel().unwrap();
+    a.source.close_ordinary();
+    assert_eq!(drops.get(), 2);
+    // Cancellation and producer closure cannot retract already committed consumer facts.
+    assert_eq!(events.pop().as_deref(), Some("second"));
+    assert_eq!(events.pop().as_deref(), Some("first"));
+    assert_eq!(lease_a.active(), Ok(false));
+    drop(events);
+    assert_eq!(lease_b.active(), Ok(false));
+}
 
-    input.queue.emit(Activation { label: "input".to_owned() });
-    for label in ["first", "rejected", "third"] {
-        output.queue.emit(Activation { label: label.to_owned() });
-    }
-    assert!(session.state().unwrap().input.is_empty(), "emission must remain deferred");
-    assert_eq!(session.dispatch(), Err(NC_E_INVALID_ARG));
-    assert_eq!(session.state().unwrap().input, ["input"]);
-    assert_eq!(session.state().unwrap().output, ["1:first"]);
-    // The failed attempt advances its capture once and leaves the successor queued.
-    assert_eq!(session.dispatch(), Ok(1));
-    assert_eq!(session.state().unwrap().output, ["1:first", "3:third"]);
-    assert_eq!(drops.get(), 0);
+/// Concrete routing IDs allow one protocol to serve multiple application destinations.
+#[test]
+fn direct_mapping_is_immediate_and_consumption_is_deferred() {
+    let mut events = Events::new();
+    let (first, a) = source(false);
+    let (second, b) = source(false);
+    let mut sequence = 0;
+    events
+        .map(first.activated(), move |event| {
+            sequence += 1;
+            (0, sequence, event.label)
+        })
+        .unwrap();
+    events.map(second.activated(), |event| (1, 0, event.label)).unwrap();
+    a.source.emit(Activation { label: "a".into() }).unwrap();
+    b.source.emit(Activation { label: "b".into() }).unwrap();
+    a.source.emit(Activation { label: "c".into() }).unwrap();
+    let mut consumed = Vec::new();
+    assert_eq!(events.len(), 3);
+    assert_eq!(
+        events.dispatch(2, |message| {
+            consumed.push(message);
+            Ok(())
+        }),
+        Ok(2)
+    );
+    assert_eq!(consumed, [(0, 1, "a".into()), (1, 0, "b".into())]);
+    assert_eq!(events.pop(), Some((0, 2, "c".into())));
+}
 
-    // Session and lease remain alive; cancellation alone releases closure captures.
-    lease.cancel().unwrap();
-    assert_eq!(drops.get(), 1);
-    output.queue.emit(Activation { label: "discarded".to_owned() });
-    assert_eq!(session.dispatch(), Ok(0));
+/// A cancelled old lease cannot disconnect a replacement, and source drop preserves posted messages.
+#[test]
+fn reconnect_and_source_drop_do_not_change_inbox_ownership() {
+    let mut first = Events::new();
+    let mut second = Events::new();
+    let source = EventSource::<Activation>::new();
+    let old = first.map(source.event(), |event| event.label).unwrap();
+    assert_eq!(second.map(source.event(), |event| event.label).unwrap_err(), crate::UI_E_BUSY);
+    old.cancel().unwrap();
+    let current = second.map(source.event(), |event| event.label).unwrap();
+    old.cancel().unwrap();
+    source.emit(Activation { label: "survives".into() }).unwrap();
+    drop(source);
+    assert_eq!(current.active(), Ok(false));
+    assert_eq!(second.pop().as_deref(), Some("survives"));
+    assert!(first.is_empty());
+}
+
+/// ABI decoding and domain validation occur before mapping, without application-state borrow gates.
+#[test]
+fn generated_receivers_validate_before_posting_owned_snapshots() {
+    let mut numeric = Events::new();
+    let mut sink = create_numeric_changes_port_sink(numeric.sender(), |event| event.value, Some(valid_numeric)).unwrap();
+    assert_eq!(sink.changed(f32::NAN), Err(NC_E_INVALID_ARG));
+    sink.changed(1.0).unwrap();
+    assert_eq!(numeric.pop(), Some(1.0));
+    let mut text = Events::new();
+    let mut sink = neocogi_ui_core_contracts::create_text_changes_port_sink(text.sender(), |event| event.text, Some(valid_text_cursor)).unwrap();
+    assert_eq!(sink.changed(NcCopyFromBufferOffset::new(1, "é".as_bytes()), 2), Err(NC_E_INVALID_ARG));
+    assert_eq!(sink.changed(NcCopyFromBufferOffset::new(0, "é".as_bytes()), 1), Err(NC_E_INVALID_ARG));
+    sink.changed(NcCopyFromBufferOffset::new(0, "é".as_bytes()), 2).unwrap();
+    assert_eq!(text.pop().as_deref(), Some("é"));
 }

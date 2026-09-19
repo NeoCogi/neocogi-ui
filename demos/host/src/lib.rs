@@ -76,11 +76,17 @@ pub fn report_exit(result: Result<(), HostError>) -> std::process::ExitCode {
     }
 }
 
-/// Application-owned state participates through one explicit method, never a stored closure.
+/// Ordinary application state consumes one typed message enum and participates in frame updates.
 pub trait AppState: 'static {
+    /// Application-defined messages never cross the plugin ABI.
+    type Message: 'static;
+    /// Handles one message after the runtime releases its tree borrows.
+    fn update(&mut self, _message: Self::Message) -> Result<(), NcStatus> {
+        Ok(())
+    }
+
     /// Runs after input handlers and before the final update/render. Return false to stop the loop.
-    /// Keep UI changes here or in typed event handlers; this call must not dispatch its own session
-    /// while that session's state is mutably borrowed. The host releases that borrow before update.
+    /// The host serializes this call with message consumption through ordinary mutable borrows.
     fn frame(&mut self, _host: &Host, _size: Size, _seconds: f64) -> Result<bool, NcStatus> {
         Ok(true)
     }
@@ -118,11 +124,12 @@ impl Host {
         Ok(Self { ui, renderer, window, input })
     }
 
-    /// Owns the session until native close, an application stop request or a frame error.
+    /// Owns state and its inbox until native close, an application stop request or a frame error.
     /// Browser startup schedules animation and returns; the loop releases its state on stop/error.
-    pub fn run<State: AppState>(self, events: EventSession<State>) -> Result<(), HostError> {
+    pub fn run<State: AppState>(self, state: State, events: Events<State::Message>) -> Result<(), HostError> {
         let driver = Driver {
             host: self,
+            state,
             events,
             remaining: frame_limit()?,
         };
@@ -169,8 +176,10 @@ impl Drop for Host {
 struct Driver<State: AppState> {
     /// Owns exactly one UI/renderer pair for this application.
     host: Host,
-    /// Session owns typed handlers and app state, and no producer retains either.
-    events: EventSession<State>,
+    /// Native state is an ordinary owned value, exclusively borrowed during consumption.
+    state: State,
+    /// One typed FIFO owns connections and messages independently of state.
+    events: Events<State::Message>,
     /// Optional finite run counts successfully rendered frames, including the final frame.
     remaining: Option<u32>,
 }
@@ -190,12 +199,12 @@ impl<State: AppState> Driver<State> {
         if size.width <= 0 || size.height <= 0 {
             return Ok(true);
         }
-        host.ui.update_with_events(size, &self.events)?;
-        // End the state borrow before callbacks can run in the next synchronization phase.
-        if !self.events.state_mut()?.frame(host, size, seconds)? {
+        host.ui.update_with_events(size, &mut self.events, |message| self.state.update(message))?;
+        // Apply frame edits before the next runtime synchronization and message boundary.
+        if !self.state.frame(host, size, seconds)? {
             return Ok(false);
         }
-        host.ui.update_with_events(size, &self.events)?;
+        host.ui.update_with_events(size, &mut self.events, |message| self.state.update(message))?;
         host.window.text_input(host.ui.text_input_area()?)?;
         host.ui.render(size, host.renderer.as_com_ref()).map_err(|status| {
             let detail = host

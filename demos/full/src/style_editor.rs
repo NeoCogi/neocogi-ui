@@ -51,10 +51,18 @@
 // IN THE SOFTWARE.
 //
 //! Concrete palette/metric controls compile immutable style revisions only after an edit.
-use super::app::{append, column, label, row, slider, rgba, State};
-use neocogi_ui::{events::NumericChanged, *};
+use super::app::{append, column, label, row, slider, rgba};
+use neocogi_ui::*;
 use neocogi_demo_assets::themes::Theme;
 use neocogi_com::{ComPtr, ComRef, NcStatus};
+
+/// Palette and metric edits promoted into the application's single message inbox.
+pub(super) enum Message {
+    /// Exact palette role and channel with the committed byte value.
+    Color(ColorRole, Channel, u8),
+    /// Exact layout metric with the committed integer value.
+    Metric(Metric, i32),
+}
 
 /// One exhaustive declaration shares color names, field access and editor presentation.
 macro_rules! color_roles {
@@ -235,34 +243,35 @@ impl StyleEditor {
             root,
         ))
     }
-    /// Registers typed handlers after State has been completely constructed.
-    pub(super) fn subscribe(&self, events: &EventSession<State>) -> Result<(), NcStatus> {
+    /// Maps editor controls into explicit commands without borrowing application state.
+    pub(super) fn map(&self, events: &mut Events<super::app::Message>) -> Result<(), NcStatus> {
         for row in &self.colors {
             for (channel, control) in Channel::ALL.into_iter().zip(&row.channels) {
                 let role = row.role;
-                events.subscribe(control.changed(), move |state: &mut State, event: &NumericChanged| {
-                    // Only the flat theme accepts color edits; restore other previews silently.
-                    let editor = &mut state.style;
-                    match editor.selected {
-                        Theme::Default => *channel.value(role.value(&mut editor.palette)) = event.value as u8,
-                        _ => return editor.refresh(),
-                    }
-                    editor.prepare(&state.ui)?;
-                    editor.refresh()
+                events.map(control.changed(), move |event| {
+                    super::app::Message::Style(Message::Color(role, channel, event.value as u8))
                 })?;
             }
         }
         for (metric, control) in &self.values {
             let metric = *metric;
-            events.subscribe(control.changed(), move |state: &mut State, event: &NumericChanged| {
-                // Each control captures its concrete field selector, never a borrowed row.
-                let editor = &mut state.style;
-                *metric.value(&mut editor.metrics) = event.value as i32;
-                editor.prepare(&state.ui)?;
-                editor.refresh()
+            events.map(control.changed(), move |event| {
+                super::app::Message::Style(Message::Metric(metric, event.value as i32))
             })?;
         }
         Ok(())
+    }
+    /// Applies one editor command through ordinary mutable fields and silent control setters.
+    pub(super) fn update(&mut self, ui: &Ui, message: Message) -> Result<(), NcStatus> {
+        match message {
+            Message::Color(role, channel, value) => match self.selected {
+                Theme::Default => *channel.value(role.value(&mut self.palette)) = value,
+                _ => return self.refresh(),
+            },
+            Message::Metric(metric, value) => *metric.value(&mut self.metrics) = value,
+        }
+        self.prepare(ui)?;
+        self.refresh()
     }
     /// Prepares a pristine theme in the original catalog and resets the editor's controls.
     pub(super) fn select(&mut self, selected: Theme) -> Result<(), NcStatus> {

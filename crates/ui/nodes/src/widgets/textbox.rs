@@ -212,10 +212,10 @@ impl Textbox {
         });
         let submitted = outcome.submitted.then(|| TextboxSubmitted { text: self.buf.clone() });
         if let Some(event) = changed {
-            self.changed_event.emit(event);
+            ctx.posted(self.changed_event.emit(event));
         }
         if let Some(event) = submitted {
-            self.submitted_event.emit(event);
+            ctx.posted(self.submitted_event.emit(event));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(outcome.changed)
@@ -442,10 +442,10 @@ mod tests {
         events.push(RecordedEvent::Submitted(event.text.clone()));
     }
 
-    /// Reads complete production queue snapshots; runtime dispatch is tested through EventSession.
+    /// Reads complete production queue snapshots; runtime dispatch is tested through Events.
     fn text_dispatcher(textbox: &Textbox) -> impl FnMut(&mut Vec<RecordedEvent>) -> bool + use<> {
-        let changed = neocogi_ui::events::test_support::EventLease::connect(textbox.changed()).unwrap();
-        let submitted = neocogi_ui::events::test_support::EventLease::connect(textbox.submitted()).unwrap();
+        let changed = neocogi_ui::events::test_support::Capture::connect(textbox.changed()).unwrap();
+        let submitted = neocogi_ui::events::test_support::Capture::connect(textbox.submitted()).unwrap();
         move |values| {
             let changed = changed.drain(1024).unwrap();
             let submitted = submitted.drain(1024).unwrap();

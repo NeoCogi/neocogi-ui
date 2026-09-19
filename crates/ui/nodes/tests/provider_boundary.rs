@@ -1,21 +1,9 @@
 //! Independent provider roots bind and deliver real node events through the production engine.
 
-use neocogi_com::{ComInterface, ComPtr, NcStatus, Runtime, guid_from_qualified_name, NC_E_NOINTERFACE};
-use neocogi_ui::{EventHandler, EventSession, KeyCode, KeyStroke, Rect, Size, Ui, UiInput, UI_E_OWNER};
-use neocogi_ui::events::Activation;
+use neocogi_com::{ComInterface, ComPtr, Runtime, guid_from_qualified_name, NC_E_NOINTERFACE};
+use neocogi_ui::{Events, KeyCode, KeyStroke, Rect, Size, Ui, UiInput, UI_E_OWNER};
 use neocogi_ui_core_contracts::UiPluginFactoryAbi;
 use neocogi_ui_nodes_contracts::{NodesPluginFactoryAbi, UiFactoryAbi};
-
-/// Application-owned handler captures a generated event snapshot without reading producer state.
-struct RecordActivation;
-
-impl EventHandler<Vec<String>, Activation> for RecordActivation {
-    /// Records the node provider's immutable label after core releases its traversal state.
-    fn handle(&mut self, state: &mut Vec<String>, event: &Activation) -> Result<(), NcStatus> {
-        state.push(event.label.clone());
-        Ok(())
-    }
-}
 
 /// Sends real copied key input rather than manufacturing a semantic event or replacing routing.
 fn key(ui: &Ui, key: KeyCode) {
@@ -66,10 +54,15 @@ fn independently_activated_nodes_bind_only_to_their_core_host_and_deliver_events
     let ui = Ui::from_interfaces(runtime, factory).unwrap();
     let button = ui.widgets().button("nodes-owned activation").unwrap();
     ui.window("provider boundary", Rect { x: 10, y: 10, width: 300, height: 150 }, &button).unwrap();
-    let events = EventSession::new(Vec::<String>::new());
-    events.subscribe(button.activated(), RecordActivation).unwrap();
+    let mut events = Events::new();
+    let mut labels = Vec::new();
+    events.map(button.activated(), |event| event.label).unwrap();
     key(&ui, KeyCode::Tab);
     key(&ui, KeyCode::Space);
-    ui.update_with_events(Size { width: 640, height: 400 }, &events).unwrap();
-    assert_eq!(&*events.state().unwrap(), &["nodes-owned activation"]);
+    ui.update_with_events(Size { width: 640, height: 400 }, &mut events, |message| {
+        labels.push(message);
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(&labels, &["nodes-owned activation"]);
 }

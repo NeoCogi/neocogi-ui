@@ -1,30 +1,23 @@
-//! Static file-picker requests retain exact native paths and delegate controls and request state to the UI plugin.
-//!
-//! Create and subscribe reusable components before dispatch begins. An application
-//! handler can then open the picker through its ordinary interface. Keep the
-//! session alive through the application's update loop.
+//! Reusable native file requests publish completions into the application's typed inbox.
 //!
 //! ```no_run
-//! use neocogi_ui::{Ui, FileDialog, FileDialogRequest, EventSession, IWindowAbi};
-//! use neocogi_ui::events::completed_file_path;
-//! use neocogi_ui::FileDialogCompletionMessage;
+//! use neocogi_ui::{Ui, FileDialog, FileDialogRequest, Events, IWindowAbi, FileDialogCompletionMessage};
 //! use neocogi_com::{ComRef, NcStatus};
-//! use std::path::{Path, PathBuf};
+//! use std::path::Path;
 //!
 //! fn create(ui: &Ui, owner: ComRef<'_, IWindowAbi>, directory: &Path)
-//!     -> Result<(FileDialog, EventSession<Option<PathBuf>>), NcStatus>
+//!     -> Result<(FileDialog, Events<FileDialogCompletionMessage>), NcStatus>
 //! {
 //!     let picker = ui.file_dialog(owner)?;
-//!     let events = EventSession::new(None);
-//!     events.subscribe(picker.completed(), |selected: &mut Option<PathBuf>, message: &FileDialogCompletionMessage| {
-//!         // Update the path owned by this session; cancellation clears it.
-//!         *selected = completed_file_path(message)?;
-//!         Ok(())
-//!     })?;
+//!     let mut events = Events::new();
+//!     events.map(picker.completed(), |message| message)?;
 //!     picker.open(&FileDialogRequest::new(directory))?;
-//!     Ok((picker, events)) // Later: ui.update_with_events(size, &events)?;
+//!     Ok((picker, events))
 //! }
 //! ```
+//!
+//! Pass the inbox and an ordinary mutable consumer to `ui.update_with_events`.
+//! Decode native paths with `events::completed_file_path` when handling a completion.
 //!
 //! Native reads validate the complete candidate before installing rows. Selection
 //! is lexical: applications decide whether an accepted path must exist or have a

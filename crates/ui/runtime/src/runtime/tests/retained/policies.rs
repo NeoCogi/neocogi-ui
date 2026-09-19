@@ -296,35 +296,31 @@ fn deep_window_family_preserves_inherited_policy_through_mutation_and_teardown()
     assert_eq!(deepest.snapshot().unwrap_err(), UI_E_CLOSED);
 }
 
-/// Captures the production window event stream in the application-owned session.
-struct WindowEvents;
-impl EventHandler<Vec<WindowEvent>, neocogi_ui::events::WindowChanged> for WindowEvents {
-    /// Preserves immutable event order rather than inspecting a mutable window later.
-    fn handle(&mut self, values: &mut Vec<WindowEvent>, event: &neocogi_ui::events::WindowChanged) -> Result<(), NcStatus> {
-        let event = &event.event;
-        values.push(*event);
-        Ok(())
-    }
-}
-
 /// Title dragging produces copied geometry events; the close affordance hides the retained window.
 #[test]
 fn title_drag_and_close_deliver_window_events_through_the_production_session() {
     let mut fixture = Headless::standard();
     let body = fixture.ui.widgets().button("body").unwrap();
     let owner = fixture.ui.window("chrome", Rect { x: 30, y: 30, width: 180, height: 120 }, &body).unwrap();
-    let events = EventSession::new(Vec::new());
+    let mut events = neocogi_ui::Events::new();
+    let mut observations = Vec::new();
     events
-        .subscribe(neocogi_ui::events::window_events(owner.as_com_ref()).unwrap(), WindowEvents)
+        .map(neocogi_ui::events::window_events(owner.as_com_ref()).unwrap(), |event| event.event)
         .unwrap();
     fixture.frame(VIEW).unwrap();
     pointer(&fixture.ui, Point { x: 70, y: 40 }, true);
     fixture.ui.input(UiInput::Pointer(Point { x: 80, y: 48 }), "").unwrap();
     pointer(&fixture.ui, Point { x: 80, y: 48 }, false);
-    fixture.ui.update_with_events(VIEW, &events).unwrap();
+    fixture
+        .ui
+        .update_with_events(VIEW, &mut events, |message| {
+            observations.push(message);
+            Ok(())
+        })
+        .unwrap();
     let moved = owner.snapshot().unwrap().rect;
     assert_eq!((moved.x, moved.y, moved.width, moved.height), (40, 38, 180, 120));
-    assert!(matches!(events.state().unwrap().as_slice(), [WindowEvent::GeometryChanged { rect }] if *rect == moved));
+    assert!(matches!(observations.as_slice(), [WindowEvent::GeometryChanged { rect }] if *rect == moved));
     // The default recipe puts its sole caption control at the trailing edge of the title.
     pointer(
         &fixture.ui,
@@ -342,10 +338,16 @@ fn title_drag_and_close_deliver_window_events_through_the_production_session() {
         },
         false,
     );
-    fixture.ui.update_with_events(VIEW, &events).unwrap();
+    fixture
+        .ui
+        .update_with_events(VIEW, &mut events, |message| {
+            observations.push(message);
+            Ok(())
+        })
+        .unwrap();
     assert_eq!(owner.snapshot().unwrap().visibility, Visibility::Hidden);
     assert!(matches!(
-        events.state().unwrap().as_slice(),
+        observations.as_slice(),
         [WindowEvent::GeometryChanged { .. }, WindowEvent::Hidden, WindowEvent::CloseRequested]
     ));
     assert!(body.label().is_ok());

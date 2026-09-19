@@ -697,16 +697,17 @@ impl SurfaceNode {
     }
 
     /// Shows or hides a root without dropping its application state.
-    fn set_root_visible(&mut self, visible: bool) {
+    fn set_root_visible(&mut self, visible: bool) -> Result<(), neocogi_com::NcStatus> {
         let root = self.root_mut().expect("visibility is defined only for root nodes");
-        if root.visible && !visible {
-            // One policy transition produces one notification, including owner-driven dismissal.
-            root.events
-                .emit(neocogi_ui_core_contracts::WindowLifecycleMessage { event: WindowEvent::Hidden });
-        }
+        let hidden = root.visible && !visible;
         root.visible = visible;
         if !visible {
             self.clear_transient_targets();
+        }
+        // Commit visibility before even the mapper can observe the captured transition.
+        match hidden {
+            true => self.emit_window_event(WindowEvent::Hidden),
+            false => Ok(()),
         }
     }
 
@@ -789,23 +790,24 @@ impl SurfaceNode {
     }
 
     /// Emits one concrete window event at the next safe application dispatch boundary.
-    fn emit_window_event(&mut self, event: WindowEvent) {
+    fn emit_window_event(&mut self, event: WindowEvent) -> Result<(), neocogi_com::NcStatus> {
         // The strong port shares the window node's exact lifetime, while subscribers carry only a
         // weak capability and cannot emit into this queue themselves.
         self.root()
             .expect("window events are emitted only by roots")
             .events
-            .emit(neocogi_ui_core_contracts::WindowLifecycleMessage { event });
+            .emit(neocogi_ui_core_contracts::WindowLifecycleMessage { event })
     }
 
     /// Dismisses an active popup and emits exactly one policy event.
-    fn dismiss_popup(&mut self) {
+    fn dismiss_popup(&mut self) -> Result<(), neocogi_com::NcStatus> {
         // The caller walks the active leaf upward, so descendants are always notified first.
         self.surface.body.clear_transient_targets();
         if let Some(PopupState::Application { events, .. }) = self.popup() {
             // Menu popups have no unobservable lifecycle port; their visibility is wholly internal.
-            events.emit(PopupEvent);
+            events.emit(PopupEvent)?;
         }
+        Ok(())
     }
 
     /// Consumes the application-popup request to focus its first target after layout.
@@ -1879,7 +1881,8 @@ impl WindowManager {
                     self.dismiss_active_popups();
                 }
             }
-            self.root_node_mut(root)?.set_root_visible(true);
+            let result = self.root_node_mut(root)?.set_root_visible(true);
+            self.posted(result);
             self.surfaces.move_root_to_front(root);
             if mode == RootMode::Modal {
                 // A newly visible dialog is the concrete keyboard surface for its modal group.
@@ -1895,11 +1898,13 @@ impl WindowManager {
             if self.active_popup_owner().is_some_and(|owner| affected.contains(&owner)) {
                 self.dismiss_active_popups();
             }
-            self.root_node_mut(root)?.set_root_visible(false);
+            let result = self.root_node_mut(root)?.set_root_visible(false);
+            self.posted(result);
             for affected_root in affected.iter().copied().filter(|affected| *affected != root) {
                 let node = self.root_node_mut(affected_root).expect("collected root must remain retained");
                 if node.root().is_some_and(|state| state.mode == RootMode::Modal) {
-                    node.set_root_visible(false);
+                    let result = node.set_root_visible(false);
+                    self.posted(result);
                 } else {
                     // Hidden structural descendants are absent from traversal, so revoke their
                     // transient identities without overwriting the visibility they should recover.
@@ -2055,11 +2060,13 @@ impl WindowManager {
         for &id in &removed {
             // The source closes before its root disappears. Its existing subscription retains
             // only this terminal fact, so components can settle requests without retaining UI.
-            self.root_node(id)?
+            let result = self
+                .root_node(id)?
                 .root()
                 .expect("collected roots have root policy")
                 .events
                 .close(neocogi_ui_core_contracts::WindowLifecycleMessage { event: WindowEvent::Destroyed });
+            self.posted(result);
         }
         self.surfaces.remove_roots(&removed);
         self.reconcile_active_surface();
@@ -2178,7 +2185,8 @@ impl WindowManager {
             // Once the popup leaves the active ancestry only the manager can consume the remainder
             // of an application capture gesture, so remember capture before clearing the runtime.
             revoked_capture |= popup.surface.body.owns_pointer_gesture();
-            popup.dismiss_popup();
+            let result = popup.dismiss_popup();
+            self.posted(result);
             retained_leaf = parent;
             let Some(parent) = parent else { break };
             current = parent;
@@ -2600,7 +2608,8 @@ impl WindowManager {
                 match action {
                     Some(MenuAction::OpenSlot(slot)) => self.open_menu_slot(surface, slot, false),
                     Some(MenuAction::HoverOpenSlot(_) | MenuAction::HoverCloseChild) => true,
-                    Some(MenuAction::SubmitAndClose) => {
+                    Some(MenuAction::SubmitAndClose(result)) => {
+                        self.posted(result);
                         self.finish_keyboard_menu(true);
                         true
                     }
@@ -2772,7 +2781,8 @@ impl WindowManager {
                     self.truncate_active_popup_path(depth.saturating_add(1));
                 }
             }
-            MenuAction::SubmitAndClose => {
+            MenuAction::SubmitAndClose(result) => {
+                self.posted(result);
                 // The surface already queued the typed event. Arm tail suppression before removing
                 // its popup so the physical release cannot fall through to newly exposed content.
                 self.discard_pointer_capture_tail = true;
@@ -2840,7 +2850,8 @@ impl WindowManager {
                 {
                     // Snapshot after geometry mutation so subscribers receive the committed value.
                     let rect = node.surface.rect;
-                    node.emit_window_event(WindowEvent::GeometryChanged { rect: crate::boundary::copied_rect(rect) });
+                    let result = node.emit_window_event(WindowEvent::GeometryChanged { rect: crate::boundary::copied_rect(rect) });
+                    self.posted(result);
                     self.invalidate_ui_commit();
                 }
                 true
@@ -2881,9 +2892,11 @@ impl WindowManager {
             RootCaptionButton::Close => {
                 // Apply visibility before queuing Close so subscribers observe final policy.
                 self.set_window_visible_id(root, false).expect("caption target must remain registered");
-                self.root_node_mut(root)
+                let result = self
+                    .root_node_mut(root)
                     .expect("closing a root must not destroy it")
                     .emit_window_event(WindowEvent::CloseRequested);
+                self.posted(result);
             }
             RootCaptionButton::Minimize => {
                 let node = self.root_node_mut(root).expect("caption target must remain registered");
@@ -2909,7 +2922,8 @@ impl WindowManager {
                         rect: crate::boundary::copied_rect(node.surface.rect),
                     }
                 };
-                node.emit_window_event(event);
+                let result = node.emit_window_event(event);
+                self.posted(result);
                 self.invalidate_ui_commit();
             }
             RootCaptionButton::Maximize => {
@@ -2934,7 +2948,8 @@ impl WindowManager {
                     node.surface.rect = rect;
                     WindowEvent::Maximized { rect: crate::boundary::copied_rect(rect) }
                 };
-                node.emit_window_event(event);
+                let result = node.emit_window_event(event);
+                self.posted(result);
                 self.invalidate_ui_commit();
             }
         }

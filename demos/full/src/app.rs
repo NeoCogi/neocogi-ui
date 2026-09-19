@@ -106,10 +106,10 @@ pub(super) fn slider(ui: &Ui, value: f32, high: f32) -> Result<SliderWidget, NcS
     Ok(control)
 }
 /// Creates and immediately subscribes a concrete button; only its parent needs to retain it afterward.
-fn button(ui: &Ui, events: &EventSession<State>, text: &str, action: Action) -> Result<ButtonWidget, NcStatus> {
+fn button(ui: &Ui, events: &mut Events<Message>, text: &str, action: Action) -> Result<ButtonWidget, NcStatus> {
     let mut control = ui.widgets().button(text)?;
     control.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
-    events.subscribe(control.activated(), move |state: &mut State, event: &Activation| state.activate(action, event))?;
+    events.map(control.activated(), move |event| Message::Activate(action, event))?;
     Ok(control)
 }
 /// A disclosure body is its actual editable Linear COM object, with no placeholder replacement tree.
@@ -123,6 +123,24 @@ fn floating<I: ComInterface>(ui: &Ui, desktop: ComRef<'_, IWindowAbi>, title: &s
     let window = ui.child_window(desktop, title, area, content)?;
     window.set_options(WindowOptions::FRAME)?;
     Ok(window)
+}
+
+/// One application protocol combines native snapshots with explicit routing data.
+pub(super) enum Message {
+    /// A configured command and its captured display label.
+    Activate(Action, Activation),
+    /// Captured text submitted by the log entry control.
+    Text(TextSubmitted),
+    /// Selection committed by the combo control.
+    Choice(ChoiceChanged),
+    /// Native file-dialog result, including cancellation.
+    File(FileDialogCompletionMessage),
+    /// Committed main-window lifecycle transition.
+    Window(WindowChanged),
+    /// Background channel selector and its new numeric value.
+    Background(u32, NumericChanged),
+    /// Palette editor's explicit local command.
+    Style(super::style_editor::Message),
 }
 
 /// Application state owns only models and editing/event capabilities needed by its actions.
@@ -220,6 +238,21 @@ impl State {
     }
 }
 impl AppState for State {
+    /// Every source maps into this application's one owned protocol.
+    type Message = Message;
+    /// Interprets one message using ordinary exclusive application state.
+    fn update(&mut self, message: Message) -> Result<(), NcStatus> {
+        match message {
+            Message::Activate(action, event) => self.activate(action, &event),
+            Message::Text(event) => self.text_submitted(&event),
+            Message::Choice(event) => self.choice_changed(&event),
+            Message::File(event) => self.file_selected(&event),
+            Message::Window(event) => self.window_changed(&event),
+            Message::Background(shift, event) => self.background_changed(shift, &event),
+            Message::Style(message) => self.style.update(&self.ui, message),
+        }
+    }
+
     /// Publishes prepared assets after dispatch; geometry then follows the platform drawable.
     fn frame(&mut self, host: &Host, size: Size, seconds: f64) -> Result<bool, NcStatus> {
         self.style.install(&mut self.ui, host.renderer.as_com_ref())?;
@@ -242,7 +275,7 @@ impl AppState for State {
 
 #[derive(Clone, Copy)]
 /// Each stored action exposes exactly the data needed to interpret a captured activation.
-enum Action {
+pub(super) enum Action {
     /// Append the captured producer label.
     Log,
     /// Append input and clear the textbox.
@@ -427,7 +460,7 @@ fn menu_item(menu: &MenuBuilder, pending: &mut Vec<(MenuItem, Action)>, text: &s
 }
 
 /// Creates the complete demo with the same structural desktop and floating examples on every backend.
-fn create() -> Result<(Host, EventSession<State>), HostError> {
+fn create() -> Result<(Host, State, Events<Message>), HostError> {
     neocogi_demo_host::initialize()?;
     let host = Host::new("neocogi-ui COM Demo", Size { width: 1200, height: 800 }, neocogi_demo_assets::load_bundle()?)?;
     let ui = &host.ui;
@@ -497,7 +530,7 @@ fn create() -> Result<(Host, EventSession<State>), HostError> {
     #[cfg(target_arch = "wasm32")]
     let file_dialog = None;
     open_item.set_enabled(file_dialog.is_some())?;
-    let events = EventSession::new(State {
+    let state = State {
         ui: ui.clone(),
         style,
         grid,
@@ -522,34 +555,33 @@ fn create() -> Result<(Host, EventSession<State>), HostError> {
         last_seconds: 0.,
         fps: 0.,
         next_fps: 0.,
-    });
+    };
+    let mut events = Events::new();
     for (item, action) in pending {
-        events.subscribe(item.activated()?, move |state: &mut State, event: &Activation| state.activate(action, event))?;
+        events.map(item.activated()?, move |event| Message::Activate(action, event))?;
     }
     {
-        let state = events.state()?;
-        state.style.subscribe(&events)?;
-        events.subscribe(neocogi_ui::events::window_events(state.demo.as_com_ref())?, State::window_changed)?;
-        events.subscribe(state.entry.submitted(), State::text_submitted)?;
-        events.subscribe(state.combo.changed(), State::choice_changed)?;
+        state.style.map(&mut events)?;
+        events.map(neocogi_ui::events::window_events(state.demo.as_com_ref())?, Message::Window)?;
+        events.map(state.entry.submitted(), Message::Text)?;
+        events.map(state.combo.changed(), Message::Choice)?;
         if let Some(dialog) = &state.file_dialog {
-            events.subscribe(dialog.completed(), State::file_selected)?;
+            events.map(dialog.completed(), Message::File)?;
         }
     }
-    build_controls(&host, &events, &mut main_body)?;
-    build_examples(&host, &events)?;
-    Ok((host, events))
+    build_controls(&host, &state, &mut events, &mut main_body)?;
+    build_examples(&host, &state, &mut events)?;
+    Ok((host, state, events))
 }
 
 /// The normal entry point owns the completed tree and session through the concrete demo host.
 pub(super) fn run() -> Result<(), HostError> {
-    let (host, events) = create()?;
-    host.run(events)
+    let (host, state, events) = create()?;
+    host.run(state, events)
 }
 
 /// Builds the main scrolling control sampler without duplicating widget state or storing authoring closures.
-fn build_controls(host: &Host, events: &EventSession<State>, content: &mut LinearWidget) -> Result<(), HostError> {
-    let state = events.state()?;
+fn build_controls(host: &Host, state: &State, events: &mut Events<Message>, content: &mut LinearWidget) -> Result<(), HostError> {
     let ui = &state.ui;
     let mut info = section(ui, content, "Window Info", DisclosureStyle::Header, false)?;
     for (name, value) in ["Position", "Size", "FPS"].into_iter().zip(&state.info) {
@@ -615,9 +647,7 @@ fn build_controls(host: &Host, events: &EventSession<State>, content: &mut Linea
     for (name, shift) in [("Red", 0), ("Green", 8), ("Blue", 16)] {
         let mut line = row(ui)?;
         let control = slider(ui, ((state.grid.borrow().background >> shift) & 255) as f32, 255.)?;
-        events.subscribe(control.changed(), move |state: &mut State, event: &NumericChanged| {
-            state.background_changed(shift, event)
-        })?;
+        events.map(control.changed(), move |event| Message::Background(shift, event))?;
         append(&mut line, &label(ui, name)?, LayoutTrack::Fixed { extent: 46 })?;
         append(&mut line, &control, FLEX)?;
         append(&mut controls, &line, LayoutTrack::Content)?;
@@ -659,8 +689,7 @@ fn build_controls(host: &Host, events: &EventSession<State>, content: &mut Linea
 }
 
 /// Mounts the log, typography, layout and custom drawing examples as ordinary structural children.
-fn build_examples(host: &Host, events: &EventSession<State>) -> Result<(), HostError> {
-    let state = events.state()?;
+fn build_examples(host: &Host, state: &State, events: &mut Events<Message>) -> Result<(), HostError> {
     let ui = &state.ui;
     let desktop = state.desktop.as_com_ref();
     let mut log = column(ui)?;

@@ -237,7 +237,7 @@ impl LogicalWindow {
         }
         .map_err(status)?;
         runtime.pending.set(true);
-        Ok(())
+        context.window_manager.event_result()
     }
 }
 
@@ -315,7 +315,9 @@ impl IWindow for LogicalWindow {
         self.closed.set(true);
         runtime.pending.set(true);
         runtime.prune_mounts(&context.window_manager);
-        runtime.factory.state.error.take().map_or(Ok(()), Err)
+        let posted = context.window_manager.event_result();
+        let phase = runtime.factory.state.error.take().map_or(Ok(()), Err);
+        posted.and(phase)
     }
 }
 
@@ -376,7 +378,7 @@ impl LogicalPopup {
         }
         .map_err(status)?;
         runtime.pending.set(true);
-        Ok(())
+        context.window_manager.event_result()
     }
 }
 
@@ -429,7 +431,9 @@ impl IPopup for LogicalPopup {
         self.closed = true;
         runtime.pending.set(true);
         runtime.prune_mounts(&context.window_manager);
-        runtime.factory.state.error.take().map_or(Ok(()), Err)
+        let posted = context.window_manager.event_result();
+        let phase = runtime.factory.state.error.take().map_or(Ok(()), Err);
+        posted.and(phase)
     }
 }
 
@@ -450,19 +454,7 @@ impl IPopupEvents for LogicalPopup {
 
 #[cfg(test)]
 mod tests {
-    use neocogi_ui::{EventHandler, EventSession, Point, Rect, Size, UiInput, Visibility, events::Activation};
-    use neocogi_com::NcStatus;
-
-    /// Records one compact-menu activation through the public event adapter.
-    struct RecordActivation;
-
-    impl EventHandler<Vec<String>, Activation> for RecordActivation {
-        /// Copies the captured label so the test can prove pointer routing reached the popup row.
-        fn handle(&mut self, labels: &mut Vec<String>, event: &Activation) -> Result<(), NcStatus> {
-            labels.push(event.label.clone());
-            Ok(())
-        }
-    }
+    use neocogi_ui::{Events, Point, Rect, Size, UiInput, Visibility};
 
     /// Pointer-relative public popup activation uses the latest input position consumed by the runtime.
     #[test]
@@ -477,24 +469,37 @@ mod tests {
         let builder = menus.create("Pointer actions").unwrap();
         let item = builder.item("Run at pointer").unwrap();
         let mut popup = menus.popup(owner.as_com_ref(), &builder).unwrap();
-        let events = EventSession::new(Vec::new());
-        events.subscribe(item.activated().unwrap(), RecordActivation).unwrap();
+        let mut events = Events::new();
+        let mut labels = Vec::new();
+        events.map(item.activated().unwrap(), |event| event.label).unwrap();
         let size = Size { width: 640, height: 400 };
 
         // Consume a pointer transition before opening. The popup request must use this committed
         // screen position rather than the popup definition's default rectangle or its owner origin.
         let pointer = Point { x: 300, y: 250 };
         ui.input(UiInput::Pointer(pointer), "").unwrap();
-        ui.update_with_events(size, &events).unwrap();
+        ui.update_with_events(size, &mut events, |message| {
+            labels.push(message);
+            Ok(())
+        })
+        .unwrap();
         popup.show().unwrap();
-        ui.update_with_events(size, &events).unwrap();
+        ui.update_with_events(size, &mut events, |message| {
+            labels.push(message);
+            Ok(())
+        })
+        .unwrap();
 
         // Press just inside the expected popup frame. Reaching the first row proves the coordinates
         // crossed IPopup and were used by the manager's subsequent hit testing.
         let first_row = Point { x: pointer.x + 2, y: pointer.y + 2 };
         ui.input(UiInput::Down { position: first_row, buttons: 1 }, "").unwrap();
-        ui.update_with_events(size, &events).unwrap();
-        assert_eq!(&*events.state().unwrap(), &["Run at pointer"]);
+        ui.update_with_events(size, &mut events, |message| {
+            labels.push(message);
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(&labels, &["Run at pointer"]);
         assert_eq!(popup.visibility(), Ok(Visibility::Hidden));
 
         // Explicit closure verifies the newly exercised operation did not alter retained lifetime

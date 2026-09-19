@@ -162,7 +162,7 @@ fn choice_submission_and_model_replacement_are_distinct() {
     let mut surface = MenuSurface::choices(rows, Some(11));
     assert!(surface.move_keyboard_focus(true));
     assert_eq!(surface.keyboard_slot(), Some(1));
-    assert!(matches!(surface.activate_keyboard_slot(), Some(MenuAction::SubmitAndClose)));
+    assert!(matches!(surface.activate_keyboard_slot(), Some(MenuAction::SubmitAndClose(Ok(())))));
     assert_eq!(surface.take_choice_submission(), Some(22));
     assert_eq!(surface.take_choice_submission(), None);
 

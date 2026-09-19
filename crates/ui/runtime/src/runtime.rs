@@ -353,19 +353,20 @@ impl Runtime {
             storage.pending.set(true);
             storage.collect_changes(&mut context)?;
             context.window_manager.begin_update_cycle(dimensions);
+            context.window_manager.event_result()?;
             storage.phase_result()?;
         }
         // All retained traversal ownership is back in storage before entering the
         // application. A handler can remove/create windows or edit ordinary topology.
-        if self.dispatch_boundary(dispatcher)? {
-            storage.layout_boundary(dimensions)?;
-        }
+        let mut remaining = EVENT_DISPATCH_LIMIT;
+        self.dispatch_boundary(dispatcher, dimensions, &mut remaining)?;
         let mut first = true;
         loop {
             let updated = {
                 storage.open()?;
                 let mut context = storage.context()?;
                 let updated = context.window_manager.update_cycle_step(first);
+                context.window_manager.event_result()?;
                 storage.phase_result()?;
                 updated
             };
@@ -373,8 +374,7 @@ impl Runtime {
             if !updated {
                 break;
             }
-            self.dispatch_boundary(dispatcher)?;
-            storage.layout_boundary(dimensions)?;
+            self.dispatch_boundary(dispatcher, dimensions, &mut remaining)?;
         }
         storage.context()?.window_manager.finish_update_cycle(dimensions);
         storage.dimensions.set(size);
@@ -382,46 +382,46 @@ impl Runtime {
         Ok(())
     }
 
-    /// Runs one finite application sweep without retaining its borrowed capability or any context transaction.
-    fn dispatch_boundary(&self, dispatcher: Option<ComRef<'_, IEventDispatcherAbi>>) -> Result<bool, NcStatus> {
-        let mut delivered = 0;
-        let mut structural_change = false;
+    /// Settles descendants and layout before consuming one application message.
+    /// Every visit rediscovers mounted drivers; removed tickets are retired immediately.
+    fn dispatch_boundary(&self, dispatcher: Option<ComRef<'_, IEventDispatcherAbi>>, dimensions: Dimensioni, remaining: &mut u32) -> Result<(), NcStatus> {
         loop {
-            let before = delivered;
+            // Layout itself may post messages, so it precedes the next queue visit.
+            // No context transaction survives any component or application callback.
+            self.storage.layout_boundary(dimensions)?;
             let (reconciled, component_drivers) = {
                 let mut context = self.storage.context()?;
-                let reconciled = context.reconcile_choice_menus()?;
-                let drivers = context.window_manager.component_event_drivers()?;
-                (reconciled, drivers)
+                (context.reconcile_choice_menus()?, context.window_manager.component_event_drivers()?)
             };
-            structural_change |= reconciled;
-            // Private component callbacks run child-first before application
-            // callbacks. The detached driver tickets own no retained-tree borrow;
-            // removal by an earlier callback retires a later snapshot ticket.
+            let before = *remaining;
+            if reconciled {
+                *remaining = remaining.checked_sub(1).ok_or(neocogi_com_events::EVENT_E_LIMIT)?;
+            }
             for component in component_drivers {
-                let remaining = EVENT_DISPATCH_LIMIT - delivered;
-                let count = component.dispatch(remaining)?;
-                if count > remaining {
-                    return Err(NC_E_INVALID_ARG);
-                }
-                delivered += count;
+                let count = component.dispatch(*remaining)?;
+                *remaining = remaining.checked_sub(count).ok_or(NC_E_INVALID_ARG)?;
                 self.storage.open()?;
             }
-            if let Some(dispatcher) = dispatcher {
-                let remaining = EVENT_DISPATCH_LIMIT - delivered;
-                let count = dispatcher.dispatch(remaining)?;
-                if count > remaining {
-                    return Err(NC_E_INVALID_ARG);
-                }
-                delivered += count;
+            self.storage.phase_result()?;
+            if before != *remaining {
+                continue;
             }
+            // One app message may create child work. Settle that work before the
+            // next app message, preserving FIFO without exposing a public pump.
+            let count = match dispatcher {
+                Some(mut dispatcher) => dispatcher.dispatch((*remaining).min(1))?,
+                None => 0,
+            };
+            if count > 1 {
+                return Err(NC_E_INVALID_ARG);
+            }
+            *remaining = remaining.checked_sub(count).ok_or(NC_E_INVALID_ARG)?;
             self.storage.open()?;
             self.storage.phase_result()?;
-            if before == delivered && !reconciled {
-                break;
+            if count == 0 {
+                return Ok(());
             }
         }
-        Ok(delivered != 0 || structural_change)
     }
 }
 impl RuntimeStorage {
@@ -435,6 +435,7 @@ impl RuntimeStorage {
         let mut context = self.context()?;
         self.collect_changes(&mut context)?;
         context.window_manager.layout_update_cycle(dimensions);
+        context.window_manager.event_result()?;
         self.phase_result()
     }
 }

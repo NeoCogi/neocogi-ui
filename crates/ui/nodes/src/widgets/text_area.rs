@@ -331,13 +331,13 @@ impl TextEditor {
 
         // Emit complete immutable snapshots after the semantic update has committed cursor and text.
         if outcome.changed {
-            self.changed_event.emit(TextAreaChanged {
+            ctx.posted(self.changed_event.emit(TextAreaChanged {
                 text: self.buf.clone(),
                 cursor: self.cursor as u64,
-            });
+            }));
         }
         if outcome.submitted {
-            self.submitted_event.emit(TextAreaSubmitted { text: self.buf.clone() });
+            ctx.posted(self.submitted_event.emit(TextAreaSubmitted { text: self.buf.clone() }));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(outcome.changed)
@@ -929,10 +929,10 @@ mod tests {
     }
 
     /// Creates a dispatcher subscribed to both native TextEditor event ports.
-    /// Reads complete production queue snapshots; runtime dispatch is tested through EventSession.
+    /// Reads complete production queue snapshots; runtime dispatch is tested through Events.
     fn text_dispatcher(text_area: &TextEditor) -> impl FnMut(&mut Vec<RecordedEvent>) -> bool + use<> {
-        let changed = neocogi_ui::events::test_support::EventLease::connect(text_area.changed()).unwrap();
-        let submitted = neocogi_ui::events::test_support::EventLease::connect(text_area.submitted()).unwrap();
+        let changed = neocogi_ui::events::test_support::Capture::connect(text_area.changed()).unwrap();
+        let submitted = neocogi_ui::events::test_support::Capture::connect(text_area.submitted()).unwrap();
         move |values| {
             let changed = changed.drain(1024).unwrap();
             let submitted = submitted.drain(1024).unwrap();

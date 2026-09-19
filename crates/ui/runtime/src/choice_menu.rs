@@ -292,10 +292,10 @@ impl IChoiceMenuState for ChoiceMenuState {
     /// Commits a checked item and closes the popup even when the value was already selected.
     fn submit(&mut self, id: u64) -> Result<u64, NcStatus> {
         validate_selection(Some(id), &self.menu_text, &self.entries)?;
-        if self.selection != Some(id) {
+        let changed = self.selection != Some(id);
+        if changed {
             self.selection = Some(id);
             self.advance_revision();
-            self.changed_event.emit(ChoiceChangedPayload { selection: ChoiceSelection::Selected(id) });
         }
         self.popup = match self.popup {
             ChoicePopupLifecycle::Open | ChoicePopupLifecycle::OpenRequested => ChoicePopupLifecycle::CloseRequested,
@@ -303,6 +303,10 @@ impl IChoiceMenuState for ChoiceMenuState {
             ChoicePopupLifecycle::RemoveRequested => ChoicePopupLifecycle::RemoveRequested,
             ChoicePopupLifecycle::Detached => ChoicePopupLifecycle::Detached,
         };
+        // Commit the complete popup transition before entering even a pure mapper.
+        if changed {
+            self.changed_event.emit(ChoiceChangedPayload { selection: ChoiceSelection::Selected(id) })?;
+        }
         Ok(self.revision)
     }
 

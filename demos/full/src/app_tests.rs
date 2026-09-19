@@ -2,12 +2,12 @@
 use super::*;
 
 /// Selects Win 3.11 through the real nested menu and event session, rather than calling its handler directly.
-fn select_win311_from_menu(host: &Host, events: &EventSession<State>) -> Result<(), HostError> {
+fn select_win311_from_menu(host: &Host, state: &mut State, events: &mut Events<Message>) -> Result<(), HostError> {
     let size = host.window.size()?;
     let base = host.ui.assets()?;
-    let demo = events.state()?.demo.clone();
+    let demo = state.demo.clone();
     demo.raise()?;
-    host.ui.update_with_events(size, events)?;
+    host.ui.update_with_events(size, events, |message| state.update(message))?;
     let area = demo.snapshot()?.rect;
     let position = Point { x: area.x + 100, y: area.y + 10 };
     for event in [
@@ -40,12 +40,11 @@ fn select_win311_from_menu(host: &Host, events: &EventSession<State>) -> Result<
             "",
         )?;
     }
-    host.ui.update_with_events(size, events)?;
+    host.ui.update_with_events(size, events, |message| state.update(message))?;
     // The application installs prepared theme assets in its frame phase after event dispatch.
     // Reproduce that production ordering before the synchronization update and render assertions.
-    events.state_mut()?.frame(host, size, 0.)?;
-    host.ui.update_with_events(size, events)?;
-    let state = events.state()?;
+    state.frame(host, size, 0.)?;
+    host.ui.update_with_events(size, events, |message| state.update(message))?;
     assert_eq!(state.themes[1].1.mark()?, MenuMark::Radio { selected: true });
     assert_eq!(state.ui.assets()?.metrics()?, Theme::ALL[1].load(base.as_com_ref())?.metrics()?);
     host.ui.render(size, host.renderer.as_com_ref())?;
@@ -53,28 +52,26 @@ fn select_win311_from_menu(host: &Host, events: &EventSession<State>) -> Result<
 }
 
 /// Exercises application-level composition against real runtime, platform and decoder objects.
-fn exercise() -> Result<(Host, EventSession<State>), HostError> {
-    let (host, events) = create()?;
+fn exercise() -> Result<(Host, State, Events<Message>), HostError> {
+    let (host, mut state, mut events) = create()?;
     let size = host.window.size()?;
     let base = host.ui.assets()?;
-    select_win311_from_menu(&host, &events)?;
+    select_win311_from_menu(&host, &mut state, &mut events)?;
     for theme in Theme::ALL {
-        events.state_mut()?.select_theme(theme)?;
+        state.select_theme(theme)?;
         // Drive the same deferred asset installation that Host performs between its two updates.
-        events.state_mut()?.frame(&host, size, 0.)?;
+        state.frame(&host, size, 0.)?;
         // The photograph is below the initial viewport. Requesting the measured end guarantees
         // every theme crosses real image forwarding, clipping, validation and native GPU upload.
-        events.state_mut()?.sample_scroll.scroll_to_end()?;
-        host.ui.update_with_events(size, &events)?;
+        state.sample_scroll.scroll_to_end()?;
+        host.ui.update_with_events(size, &mut events, |message| state.update(message))?;
         host.ui.render(size, host.renderer.as_com_ref())?;
-        let state = events.state()?;
         assert_eq!(state.ui.assets()?.metrics()?, theme.load(base.as_com_ref())?.metrics()?);
         for (choice, item) in &state.themes {
             assert_eq!(item.mark()?, MenuMark::Radio { selected: *choice == theme });
         }
     }
     {
-        let mut state = events.state_mut()?;
         state.select_theme(Theme::Default)?;
         state.activate(Action::Spacing(false), &Activation { label: String::new() })?;
         state.combo.set_selection(ChoiceSelection::Selected(2))?;
@@ -89,11 +86,11 @@ fn exercise() -> Result<(Host, EventSession<State>), HostError> {
         assert_eq!(state.demo.snapshot()?.visibility, Visibility::Visible);
     }
     // Commit the final style edit before observing the installed immutable revision.
-    events.state_mut()?.frame(&host, size, 0.)?;
-    assert_eq!(events.state()?.ui.assets()?.metrics()?.spacing, 2);
-    host.ui.update_with_events(size, &events)?;
+    state.frame(&host, size, 0.)?;
+    assert_eq!(state.ui.assets()?.metrics()?.spacing, 2);
+    host.ui.update_with_events(size, &mut events, |message| state.update(message))?;
     host.ui.render(size, host.renderer.as_com_ref())?;
-    Ok((host, events))
+    Ok((host, state, events))
 }
 
 /// Packaging supplies the actual adjacent libraries; ordinary unit runs explicitly report this as ignored.
@@ -101,8 +98,8 @@ fn exercise() -> Result<(Host, EventSession<State>), HostError> {
 #[test]
 #[ignore = "run scripts/test-demo.sh to stage the independently built native plugins"]
 fn packaged_full_application_themes_images_actions_and_close() {
-    let (host, events) = exercise().unwrap();
-    let retained = events.state().unwrap().combo.clone();
+    let (host, state, events) = exercise().unwrap();
+    let retained = state.combo.clone();
     drop(host);
     assert_eq!(retained.selection(), Err(UI_E_CLOSED));
     drop(events);
@@ -128,6 +125,8 @@ mod browser {
         released: Rc<Cell<bool>>,
     }
     impl AppState for Stop {
+        /// The teardown fixture has no semantic messages.
+        type Message = ();
         /// The successful run renders two frames; the failing run rejects its first callback.
         fn frame(&mut self, _: &Host, _: Size, _: f64) -> Result<bool, NcStatus> {
             self.frames += 1;
@@ -143,15 +142,19 @@ mod browser {
     /// Browser harness starts the real full demo checks followed by both asynchronous teardown paths.
     #[wasm_bindgen]
     pub fn full_demo_checks() -> Result<(), JsValue> {
-        let (host, events) = exercise().map_err(|error| JsValue::from_str(&error.to_string()))?;
+        let (host, state, events) = exercise().map_err(|error| JsValue::from_str(&error.to_string()))?;
         drop(events);
+        drop(state);
         let released = [Rc::new(Cell::new(false)), Rc::new(Cell::new(false))];
         RELEASED.with_borrow_mut(|stored| *stored = Some(released.clone()));
-        host.run(EventSession::new(Stop {
-            frames: 0,
-            fail: false,
-            released: released[0].clone(),
-        }))
+        host.run(
+            Stop {
+                frames: 0,
+                fail: false,
+                released: released[0].clone(),
+            },
+            Events::new(),
+        )
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
         let host = Host::new(
             "Error teardown",
@@ -159,11 +162,14 @@ mod browser {
             neocogi_demo_assets::load_bundle().map_err(|error| JsValue::from_str(&error.to_string()))?,
         )
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-        host.run(EventSession::new(Stop {
-            frames: 0,
-            fail: true,
-            released: released[1].clone(),
-        }))
+        host.run(
+            Stop {
+                frames: 0,
+                fail: true,
+                released: released[1].clone(),
+            },
+            Events::new(),
+        )
         .map_err(|error| JsValue::from_str(&error.to_string()))
     }
     /// Exercises the real binary reporting boundary with a deliberately failed startup result.
