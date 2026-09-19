@@ -43,11 +43,13 @@ once and shares the same event transport as built-ins. Its NCIDL contract binds
 `changed: CounterChanged;` to the concrete message
 `#[message] struct CounterChanged { value: u32 }`.
 
-The producer stores `Port<CounterChanged>`, binds it in `com_object`'s `ports(...)`
-attribute, then calls `self.changed.emit(CounterChanged { value: self.count })?`
-after committing the count. The activation output independently carries `Activation`.
-Host-mutation checks live in the binding blocks; no subscription methods are
-implemented by the counter.
+The producer stores `Option<ComPtr<__CounterChangedReceiverAbi>>`. Its ordinary
+`Counter::__map_changed` implementation checks widget access and assigns the
+receiver. After committing the count it calls
+`CounterChanged { value: self.count }.post_to(&mut self.changed)?`.
+Activation independently stores its optional concrete receiver. Widget closure
+clears those fields. No output projection, subscription token, generation counter
+or producer queue is allocated.
 
 The [acceptance host](../../demos/smoke/src/extension.rs) defines its own ordinary
 Rust enum and maps the output with `events.map(counter.changed(), Message::Changed)`.

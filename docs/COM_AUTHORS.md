@@ -10,7 +10,7 @@ objects.
 
 Native applications always link the Rust facade. A dynamic assembly links one shared COM runtime and loads the UI, GFX compositor, selected renderer, and optional Skin plugin. A monolith instead links one runtime implementation plus those component rlibs and registers their descriptors directly. Browser builds use the same static registration model. Never link a separate runtime implementation into each dynamic plugin. Loaded or statically registered plugins remain active for the process lifetime; this design does not support hot unloading.
 
-A `ComPtr` keeps an allocation alive. It does not keep a widget attached, a logical window open, or a subscription connected. Closing a window/subtree ends its input, layout, editing, and painting eligibility even when the application retains typed pointers. Further operations report the documented closed status. Final Release frees allocation storage and must not submit GPU work, invoke application callbacks, or substitute for a fallible close/finish operation.
+A `ComPtr` keeps an allocation alive. It does not keep a widget attached or a logical window open. Closing a window/subtree ends its input, layout, editing, and painting eligibility even when the application retains typed pointers. Further operations report the documented closed status. Final Release frees allocation storage and must not submit GPU work, invoke application callbacks, or substitute for a fallible close/finish operation.
 
 Initially each widget mounts once, under one parent in one runtime. Attachment checks duplicate membership, cycles, and owner compatibility before publishing an edit. Container track/span settings belong to the parent-child relationship. Do not place them in a generic widget property map. Foreign-runtime widgets and foreign-renderer resources are errors, even if their numerical IDs happen to match.
 
@@ -69,9 +69,9 @@ field comment must name that constraint.
 
 ## Typed events and application state
 
-`Events<Message>` owns one consumer FIFO and its connection leases. State remains
+`Events<Message>` owns one consumer FIFO. State remains
 an ordinary application value, independent of the transport. Map each generated
-port into the application's own enum, then use one mutable consumer:
+output into the application's own enum, then use one mutable consumer:
 
 ```rust
 /// Application-specific intent combines a configured destination with its captured fact.
@@ -93,16 +93,18 @@ borrow stack data for the duration of an update. No handler type, state-owning e
 session, manual queue traversal, or update-cycle object is required. Separate dialog
 instances can map their same protocol to different destinations. When reusing one
 dialog across requests, request identity remains application/domain policy; mapping
-a port does not manufacture an invocation ID absent from the protocol.
+an output does not manufacture an invocation ID absent from the protocol.
 
 Declare published cross-COM outputs as concrete `#[message]` structs/enums in
 NCIDL: `completed: FileDialogCompletion;`. Application and component-private enums
-stay in Rust. `Port<T>` owns emission storage; the generated `PortRef<T>` getter
-grants connection access to that same port without retaining its producer.
-`com_object(..., ports(...))` binds storage or forwards a child's output, replacing
-handwritten subscription methods. See [IDL syntax](IDL_MODULES.md#concrete-messages-and-outputs).
+stay in Rust. Producers store one optional concrete receiver and implement an
+ordinary mutable setter. The generated accessor supplies its installation closure
+to `events.map`, which returns `Result<()>`; another map replaces future delivery.
+Structural wrappers forward installation to their child. There are no subscription
+objects, cancellation leases or per-output queues. See
+[IDL syntax](IDL_MODULES.md#concrete-messages-and-outputs).
 
-| Port | Producers | Concrete message |
+| Output | Producers | Concrete message |
 | --- | --- | --- |
 | `activated()` | Buttons, list rows, menu items | `Activation` |
 | `changed()` | Checkbox | `CheckboxChanged` |
@@ -117,13 +119,14 @@ must only translate data or attach routing IDs; UI behavior belongs in the later
 consumer. Rust cannot prove closure purity. Captures must be owned or `'static`,
 while the consumer may borrow ordinary state for the update. Generated receivers
 validate/copy/retain a concrete C message before mapping; Rust values and closures
-never cross COM. Keep domain validation in the UI facade with `.checked(validate)`.
+never cross COM. UI accessors validate domain values before mapping.
 
-One port admits one live connection. Each consumer owns one FIFO, ordered by
-actual emission. Cancellation and closure stop future posts without retracting
-committed facts. Dropping the inbox cancels its connections. A retained port view
-cannot retain the producer, and the generated receiver cannot retain the inbox.
-Getter, decoding and posting failures propagate; committed state does not roll back.
+Each output has one destination. Mapping replaces it for future posts; already
+queued facts retain their original values and routing IDs. Dropping the inbox
+drops its messages. Later valid posts are ignored without running its mapper;
+the producer releases that inert adapter on closure, destruction or replacement.
+The installation closure temporarily retains the producer only during setup.
+Setup, decoding and posting failures propagate; committed state does not roll back.
 
 Behavioral composites own a private Rust enum and inbox, map child outputs into it,
 and expose a framework component driver through `IComponentEventProvider`. That
@@ -136,13 +139,13 @@ The runtime discovers nested drivers automatically, including in `Ui::update`.
 It settles child messages and layout before dispatching an application message,
 then settles any resulting private work before continuing. Authors need no private
 dispatch loop, child registry or update-cycle object. The [events guide](../crates/ui/runtime/docs/EVENTS.md)
-defines the full descendant-first schedule, cancellation ownership, work budget,
+defines the full descendant-first schedule, destination ownership, work budget,
 reentrancy and failure rules. Posting does not itself request a platform frame.
 Layout/paint remain observational, and asset installation belongs after update.
 
 The same transport serves ordinary-Cargo plugins and static monoliths. Plugin
-descriptor and runtime table ABIs remain v1; generated Rust bindings require support
-API 5 and must be regenerated with the transport.
+descriptor and runtime table ABIs remain v1. Generated bindings depend on COM
+alone; regenerate contracts and rebuild consumers together after wire changes.
 
 Layout settlement does not repeat a widget's ordinary behavior for the same input.
 Requests such as caret reveal, made after an editor's ordinary update, remain pending
@@ -521,8 +524,8 @@ A composed control owns ordinary COM children. It shares explicit scalar data
 only where two of those children need the same state. ScrollArea's viewport and
 its real scrollbars share offset/range data; Disclosure's header and layout share
 expansion data. TextArea's actual editor requests caret reveal through that same
-scroll model. These models hold no parent widget, runtime, application, or COM
-subscription reference. A child must not need to upgrade a weak parent handle to
+scroll model. These models hold no parent widget, runtime, application, or installed COM
+receiver reference. A child must not need to upgrade a weak parent handle to
 perform an ordinary edit.
 
 Composition does not reinstate the removed wrapper design. The registered outer
@@ -775,8 +778,9 @@ application consumption. Navigation rebuilds rows inside the same mutable update
 that handles the navigation message. Application
 callbacks may open an already prepared picker through its ordinary interface;
 the following layout establishes its modal scope before later queued input.
-The picker owns its window's exclusive lifecycle subscription, so use its
-completion capability for application outcomes. Its returned window remains
+The picker maps its window's lifecycle output into its private queue. Use its
+completion output for application outcomes; remapping that private lifecycle
+output would replace the picker's destination. Its returned window remains
 available for ordinary geometry, visibility and destruction operations.
 
 Cancellation hides the reusable modal and completes one active request. Reopening
@@ -786,10 +790,10 @@ once. Explicit picker close and runtime teardown also cancel an active request
 without invoking application callbacks during destruction.
 
 Each completion is already a committed request outcome in the consumer's inbox.
-Controller/runtime destruction or lease cancellation cannot erase those outcomes.
+Controller/runtime destruction or remapping cannot erase those outcomes.
 An active request is cancelled during retirement; an already completed request is
 not completed again. Failed consumers consume the attempted outcome and preserve
-unattempted successors. This is the same ownership rule as every other port;
+unattempted successors. This is the same ownership rule as every other output;
 there is no separate finished/terminal queue. No producer retains application state.
 
 ## Complete frames, images and application GPU work
