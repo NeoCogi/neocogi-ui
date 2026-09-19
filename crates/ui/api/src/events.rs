@@ -8,20 +8,16 @@
 //! foreign subscription call. The source-specific operation is not a delivery callback.
 //!
 //! ```no_run
-//! use neocogi_ui::{ButtonWidget, EventHandler, EventSession, Size, Ui};
+//! use neocogi_ui::{ButtonWidget, EventSession, Size, Ui};
 //! use neocogi_com::NcStatus;
 //! use neocogi_ui::events::Activation;
 //!
-//! struct Count;
-//! impl EventHandler<u32, Activation> for Count {
-//!     fn handle(&mut self, count: &mut u32, _event: &Activation) -> Result<(), NcStatus> {
-//!         *count += 1;
-//!         Ok(())
-//!     }
-//! }
 //! fn update(ui: &Ui, button: &ButtonWidget, size: Size) -> Result<u32, NcStatus> {
 //!     let events = EventSession::new(0u32);
-//!     events.subscribe(button.activated(), Count)?;
+//!     events.subscribe(button.activated(), |count: &mut u32, _: &Activation| {
+//!         *count += 1;
+//!         Ok(())
+//!     })?;
 //!     ui.update_with_events(size, &events)?;
 //!     let count = *events.state()?;
 //!     Ok(count) // Dropping events cancels its leases, even when separately retained.

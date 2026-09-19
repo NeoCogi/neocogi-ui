@@ -2,6 +2,11 @@
 
 ## 0.9.0-alpha.0 (unreleased)
 
+- Accept typed state methods, functions, and mutable closures directly in
+  `EventSession::subscribe`. Remove per-handler adapter types from demos and the
+  file picker; retain optional explicit handlers, checked delivery, cancellation,
+  and automatic nested dispatch. Captures stay concrete and need no extra cells.
+
 - Declare `port` protocols and expose named `name: Protocol;` bindings. Generate
   `.name()` accessors and owned `Message` payloads; remove the `event` declaration
   keyword, unnamed bindings, and public subscription helper functions. File-dialog

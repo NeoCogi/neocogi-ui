@@ -80,40 +80,39 @@ typed port getters. `neocogi_ui::EventSession<State>` reexports the same
 `neocogi_com_events::EventSession<State>` used by non-UI components.
 `Ui::update_with_events` borrows its dispatcher; only the native facade sees the
 state parameter, and the runtime receives a concrete COM capability.
-Each handler is an owned
-`EventHandler<State, Event>` implementation stored inline in a local generic COM
-sink. Application handlers implement that trait on concrete structs or enums
-whose dependencies are explicitly named fields; closures and function pointers
-are not implicitly adapted into handlers. Handlers and Rust state never cross the ABI. Generic
-Rust list data also stays in the application; cross-plugin domain data needs a
-concrete domain interface and owner-scoped keys.
+Each subscription owns a concrete callable stored inline in its generated COM
+receiver. Pass an ordinary state method, function, or closure with the signature
+`FnMut(&mut State, &Message) -> Result<(), NcStatus>`; these automatically implement
+`EventHandler<State, Message>`. Explicit trait implementations are optional.
+Neither the callable nor Rust state crosses the ABI. Generic Rust list data also
+stays in the application; cross-plugin domain data needs a concrete domain
+interface and owner-scoped keys.
 
 ```rust
-use neocogi_ui::{ButtonWidget, EventHandler, EventSession};
-use neocogi_com::NcStatus;
+use neocogi_ui::EventSession;
 use neocogi_ui::events::Activation;
 
-/// Submission behavior with an explicitly named widget dependency.
-struct Submitted {
-    /// Owned button capability updated after each delivered activation.
-    button: ButtonWidget,
-}
-impl EventHandler<u32, Activation> for Submitted {
-    /// Updates local state and the concrete control from the captured label.
-    fn handle(&mut self, count: &mut u32, event: &Activation) -> Result<(), NcStatus> {
-        *count += 1;
-        // The event owns the label captured at activation, even after this setter.
-        self.button.set_label(&format!("{}: {}", event.label, count))
-    }
-}
-
 let events = EventSession::new(0u32);
-let lease = events.subscribe(button.activated(), Submitted { button: button.clone() })?;
+// Move an owned editing capability into this subscription's concrete closure.
+let mut callback_button = button.clone();
+let lease = events.subscribe(button.activated(), move |count: &mut u32, event: &Activation| {
+    *count += 1;
+    // The event retains the label captured before this programmatic edit.
+    callback_button.set_label(&format!("{}: {}", event.label, count))
+})?;
 ui.update_with_events(drawable_size, &events)?;
 println!("{} submissions", *events.state()?);
 ui.render(drawable_size, renderer.as_com_ref())?;
 lease.cancel()?; // Explicit cancellation; dropping the session also cancels its leases.
 ```
+
+Closures need explicit state/event reference types at the trait-based subscription
+boundary. State methods already declare those types and can be passed directly,
+for example `events.subscribe(picker.completed(), AppState::file_selected)?`.
+Captures must be owned or otherwise valid for `'static`; use `move` when capturing
+local owned values. A mutable capture is protected by the receiver's exclusive
+borrow and does not require an extra `Cell` or `RefCell`. Failed setup and
+cancellation release captured ownership just as they release explicit handlers.
 
 Ports normally belong directly to their owning interface alongside editing
 methods. A separate source interface is useful for an optional or shared

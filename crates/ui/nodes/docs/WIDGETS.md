@@ -18,20 +18,16 @@ selection-menu popup after receiving the popup's owning window.
 ## Construction and ownership
 
 ```rust,no_run
-use neocogi_ui::{CrossSize, EventHandler, EventSession, FlowDirection, IWindowAbi,
+use neocogi_ui::{CrossSize, EventSession, FlowDirection, IWindowAbi,
     LayoutTrack, LinearEdge, Rect, Ui};
 use neocogi_ui::events::CheckboxChanged;
 use neocogi_com::{ComPtr, NcStatus};
-struct Preview;
-impl EventHandler<bool, CheckboxChanged> for Preview {
-    fn handle(&mut self, enabled: &mut bool, event: &CheckboxChanged) -> Result<(), NcStatus> {
-        *enabled = event.checked;
-        Ok(())
-    }
-}
 fn install(ui: &Ui, events: &EventSession<bool>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
     let checkbox = ui.widgets().checkbox("Enable preview", false)?;
-    events.subscribe(checkbox.changed(), Preview)?;
+    events.subscribe(checkbox.changed(), |enabled: &mut bool, event: &CheckboxChanged| {
+        *enabled = event.checked;
+        Ok(())
+    })?;
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     column.insert(0, &checkbox, LinearEdge::new(LayoutTrack::Content))?.finish()?;
     ui.window("Settings", Rect { x: 40, y: 40, width: 260, height: 120 }, &column)

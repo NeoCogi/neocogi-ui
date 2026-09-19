@@ -5,25 +5,22 @@
 //! session alive through the application's update loop.
 //!
 //! ```no_run
-//! use neocogi_ui::{Ui, FileDialog, FileDialogRequest, EventHandler, EventSession, IWindowAbi};
+//! use neocogi_ui::{Ui, FileDialog, FileDialogRequest, EventSession, IWindowAbi};
 //! use neocogi_ui::events::completed_file_path;
 //! use neocogi_ui::FileDialogCompletionMessage;
 //! use neocogi_com::{ComRef, NcStatus};
 //! use std::path::{Path, PathBuf};
 //!
-//! struct Selected;
-//! impl EventHandler<Option<PathBuf>, FileDialogCompletionMessage> for Selected {
-//!     fn handle(&mut self, state: &mut Option<PathBuf>, event: &FileDialogCompletionMessage) -> Result<(), NcStatus> {
-//!         *state = completed_file_path(event)?;
-//!         Ok(())
-//!     }
-//! }
 //! fn create(ui: &Ui, owner: ComRef<'_, IWindowAbi>, directory: &Path)
 //!     -> Result<(FileDialog, EventSession<Option<PathBuf>>), NcStatus>
 //! {
 //!     let picker = ui.file_dialog(owner)?;
 //!     let events = EventSession::new(None);
-//!     events.subscribe(picker.completed(), Selected)?;
+//!     events.subscribe(picker.completed(), |selected: &mut Option<PathBuf>, message: &FileDialogCompletionMessage| {
+//!         // Update the path owned by this session; cancellation clears it.
+//!         *selected = completed_file_path(message)?;
+//!         Ok(())
+//!     })?;
 //!     picker.open(&FileDialogRequest::new(directory))?;
 //!     Ok((picker, events)) // Later: ui.update_with_events(size, &events)?;
 //! }

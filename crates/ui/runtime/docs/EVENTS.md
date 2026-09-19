@@ -6,20 +6,16 @@ The UI runtime borrows the session's dispatcher between traversal phases and
 commits callback edits before routing the next input event.
 
 ```rust,no_run
-use neocogi_ui::{ButtonWidget, EventHandler, EventSession, Size, Ui};
+use neocogi_ui::{ButtonWidget, EventSession, Size, Ui};
 use neocogi_ui::events::Activation;
 use neocogi_com::NcStatus;
 
-struct Count;
-impl EventHandler<u32, Activation> for Count {
-    fn handle(&mut self, count: &mut u32, _event: &Activation) -> Result<(), NcStatus> {
-        *count += 1;
-        Ok(())
-    }
-}
 fn update(ui: &Ui, button: &ButtonWidget, size: Size) -> Result<(), NcStatus> {
     let events = EventSession::new(0u32);
-    events.subscribe(button.activated(), Count)?;
+    events.subscribe(button.activated(), |count: &mut u32, _: &Activation| {
+        *count += 1;
+        Ok(())
+    })?;
     ui.update_with_events(size, &events)
 }
 ```
@@ -43,10 +39,15 @@ source projection is released after setup. The file dialog declares
 or fallible getter. The UI wrapper still validates native-path completions.
 
 Generated sinks use `&mut self`, so their handlers are ordinary concrete fields.
-Named structs and enums implement `EventHandler`; closures are not implicitly
-adapted. The one session implementation is reexported by UI. Rust binding protocol
-3 enforces compiler/support agreement; rebuild plugins for the changed sink
-signatures. Plugin descriptor and runtime table ABIs remain v1.
+State methods, functions, and closures implement `EventHandler` automatically
+when they accept `(&mut State, &Message)` and return `Result<(), NcStatus>`.
+Pass a method such as `AppState::file_selected` directly, or annotate both
+closure parameters with their concrete reference types. Use `move` for owned
+captures; ordinary captured variables may be mutated without adding a `Cell`.
+Explicit handler structs remain optional. Each callable must satisfy `'static`
+because its subscription can outlive the stack frame that registered it. UI
+reexports the same session. Callable adaptation preserves the COM signatures,
+Rust binding protocol 3, and plugin descriptor/runtime table ABIs v1.
 
 `emit` never invokes application code. `subscribe` returns the application-owned
 `IEventSubscription`; the source does not retain the sink or keep the widget alive.

@@ -50,8 +50,9 @@ self.changed.subscribe(sink)
 Emission queues an owned snapshot. The producer does not retain the application's
 handler. The [acceptance host](../../demos/smoke/src/extension.rs) constructs the
 port through generated `counter.changed()` and passes it to
-`events.subscribe(port, RecordCount)`. The same typed session owns its lease, and also uses an activation handler to edit the counter during
-delivery. The value callback still observes the originally committed value;
+`events.subscribe(port, |history: &mut Vec<String>, event: &CounterChangesMessage| { ... })`.
+The same typed session owns its lease and uses a capturing activation callback
+to edit the counter during delivery. The value callback still observes the originally committed value;
 the UI commits the later edit's measurement before returning from the same update.
 
 The inset retains one `IChildrenEditor` and exposes its read-only view. It reads
