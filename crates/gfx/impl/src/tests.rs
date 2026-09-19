@@ -474,6 +474,71 @@ fn compositor_clips_triangles_without_changing_visible_attributes() {
     assert_eq!(area, 100.);
 }
 
+/// A shared text clip preserves line placement and validation even when a run emits no geometry.
+#[test]
+fn compositor_text_preserves_empty_run_validation_and_line_placement() {
+    let bundle = test_bundle();
+    let tables = data(&bundle).tables;
+    let font = tables.fonts.iter().position(|font| tables.name(font.name) == Ok("body")).unwrap() as u32;
+    let metrics = tables.fonts[font as usize];
+    let space = tables.glyphs[metrics.glyphs.first as usize..(metrics.glyphs.first + metrics.glyphs.count) as usize]
+        .iter()
+        .find(|glyph| glyph.scalar == u32::from(' '))
+        .unwrap();
+    assert!(space.rect.width == 0 || space.rect.height == 0, "fixture space contributes no drawable area");
+    let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
+    let origin = DrawPoint { x: 40, y: 40 };
+    let full_clip = Rect {
+        x: -100,
+        y: -100,
+        width: 500,
+        height: 500,
+    };
+    let empty_clip = Rect { x: 0, y: 0, width: 0, height: 0 };
+    let invalid_clip = Rect { x: 0, y: 0, width: -1, height: 10 };
+    compositor.begin(Size { width: 256, height: 256 }, 0xff000000).unwrap();
+    // Offscreen text still authenticates its protocol; visibility must not hide malformed input.
+    assert_eq!(
+        compositor.text(empty_clip, font, origin, 0xffffffff, NcCopyFromBufferOffset::new(0, &[0xff])),
+        Err(NC_E_INVALID_ARG)
+    );
+    assert_eq!(
+        compositor.text(empty_clip, u32::MAX, origin, 0xffffffff, NcCopyFromBufferOffset::new(0, b"")),
+        Err(NC_E_OUT_OF_RANGE)
+    );
+    assert_eq!(
+        compositor.text(empty_clip, font, origin, 0xffffffff, NcCopyFromBufferOffset::new(1, b"A")),
+        Err(NC_E_INVALID_ARG)
+    );
+    // Clip errors are observed only for drawable glyphs, matching the previous per-glyph path.
+    for text in [b"".as_slice(), b" \r\n".as_slice()] {
+        compositor
+            .text(invalid_clip, font, origin, 0xffffffff, NcCopyFromBufferOffset::new(0, text))
+            .unwrap();
+    }
+    assert_eq!(
+        compositor.text(invalid_clip, font, origin, 0xffffffff, NcCopyFromBufferOffset::new(0, b"A")),
+        Err(NC_E_INVALID_ARG)
+    );
+    compositor
+        .text(empty_clip, font, origin, 0xffffffff, NcCopyFromBufferOffset::new(0, b"A"))
+        .unwrap();
+    compositor
+        .text(full_clip, font, origin, 0xff123456, NcCopyFromBufferOffset::new(0, b"A\r\nA"))
+        .unwrap();
+    let capture = std::rc::Rc::new(RenderCapture::default());
+    let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { capture: capture.clone() }).query().unwrap();
+    compositor.submit(renderer.as_com_ref()).unwrap();
+    let vertices = capture.vertices.borrow();
+    assert_eq!(vertices.len(), 12, "only the two visible glyphs emit geometry");
+    // CRLF advances exactly one line; source coordinates and tint are shared by both glyphs.
+    for (first, second) in vertices[..6].iter().zip(&vertices[6..]) {
+        assert_eq!((first.x, first.u, first.v, first.rgba), (second.x, second.u, second.v, second.rgba));
+        assert_eq!(first.rgba, 0xff123456);
+        assert_eq!(second.y - first.y, metrics.line_size as f32);
+    }
+}
+
 /// Coarse operations expand inside GFX, use one renderer call, and expire the retained stream.
 #[test]
 fn compositor_owns_final_geometry_batching_and_stream_scope() {

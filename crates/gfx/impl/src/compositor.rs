@@ -26,7 +26,7 @@ struct Resources {
     catalog: ComPtr<IAssetCatalogAbi>,
     /// Validated metadata used for font, icon, and UV lookup.
     tables: AssetTables,
-    /// Cached authenticated white tile used as the source for flat patch cells.
+    /// Cached authenticated white tile used by solid triangles and flat patch cells.
     white: Rect,
     /// Narrow image projection supplied to the renderer for its already prepared atlas.
     image: ComPtr<IRgbaImageAbi>,
@@ -48,7 +48,7 @@ impl Resources {
                 .sort_unstable_by_key(|glyph| glyph.scalar);
         }
         // Validation already proved this named tile exists and is opaque. Cache its rectangle once
-        // per installed immutable revision instead of scanning icon names for every flat patch.
+        // per installed immutable revision instead of scanning icon names for every solid shape.
         let white = tables.white_rect();
         Ok(Self {
             catalog: source.catalog()?,
@@ -464,11 +464,8 @@ impl GfxCompositorObject {
         Ok(Some([vertices[0], vertices[1], vertices[2], vertices[0], vertices[2], vertices[3]]))
     }
 
-    /// Clips and appends one private atlas rectangle used by text and icon expansion.
+    /// Appends one text/icon rectangle within the caller's already resolved viewport intersection.
     fn append_atlas_rect(&mut self, clip: Rect, destination: Rect, source: Rect, rgba: u32) -> Result<(), NcStatus> {
-        let Some(clip) = self.effective_clip(clip)? else {
-            return Ok(());
-        };
         let Some(vertices) = self.atlas_rect_triangles(destination, source, rgba, clip)? else {
             return Ok(());
         };
@@ -551,7 +548,8 @@ impl GfxCompositor for GfxCompositorObject {
             return Err(NC_E_INVALID_ARG);
         }
         self.active_frame()?;
-        let white = self.resources.tables.white_rect();
+        // The immutable resource revision already authenticated and cached this named tile.
+        let white = self.resources.white;
         let u = (white.x as f32 + white.width as f32 * 0.5) / self.resources.tables.size.width as f32;
         let v = (white.y as f32 + white.height as f32 * 0.5) / self.resources.tables.size.height as f32;
         let mut converted = std::mem::take(&mut self.solid_input);
@@ -607,6 +605,9 @@ impl GfxCompositor for GfxCompositorObject {
         }
         let text = std::str::from_utf8(text.as_slice()).map_err(|_| NC_E_INVALID_ARG)?;
         let font = *self.resources.tables.fonts.get(font as usize).ok_or(NC_E_OUT_OF_RANGE)?;
+        // Every glyph shares one frame/operation intersection. Retain its Result until the first
+        // drawable glyph so empty and zero-area text keep their existing clip-validation behavior.
+        let clip = self.effective_clip(clip);
         let mut pen_x = 0_i128;
         let mut baseline_y = i128::from(font.baseline);
         let mut characters = text.chars().peekable();
@@ -628,7 +629,10 @@ impl GfxCompositor for GfxCompositorObject {
             };
             // Valid font tables may represent whitespace with a zero-area source. It advances the
             // pen but contributes no geometry and therefore never enters positive-rect validation.
-            if glyph.rect.width > 0 && glyph.rect.height > 0 {
+            if glyph.rect.width > 0
+                && glyph.rect.height > 0
+                && let Some(clip) = clip?
+            {
                 self.append_atlas_rect(clip, destination, glyph.rect, rgba)?;
             }
             pen_x += i128::from(glyph.advance_x);
@@ -649,7 +653,11 @@ impl GfxCompositor for GfxCompositorObject {
             width: source.width,
             height: source.height,
         };
-        self.append_atlas_rect(clip, centered, source, rgba)
+        // Icons resolve the same viewport intersection once before entering the private helper.
+        match self.effective_clip(clip)? {
+            Some(clip) => self.append_atlas_rect(clip, centered, source, rgba),
+            None => Ok(()),
+        }
     }
 
     /// Retains one renderer-owned texture and appends its final clipped quad.

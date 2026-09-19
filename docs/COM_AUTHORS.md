@@ -815,6 +815,11 @@ Fully visible atlas/image rectangles keep their original UV endpoints; only part
 intersections interpolate them. These are private CPU paths with the same ordered
 renderer stream and COM contracts.
 
+Text resolves its operation/viewport intersection once for the whole run. UTF-8,
+font and buffer validation still applies to invisible text; empty or zero-area
+runs keep their existing no-geometry behavior. Solid geometry reuses the white
+tile cached when the current immutable resource revision was installed.
+
 A stream contains a bulk vertex buffer and ordered `RenderBatch` records. Atlas
 ranges contain positive multiples of three vertices; image ranges contain four
 vertices. Ranges must partition the buffer without gaps, overlap or unused trailing
