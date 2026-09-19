@@ -385,6 +385,95 @@ fn compositor_expands_typed_image_patch_and_rejects_invalid_payloads() {
     compositor.cancel().unwrap();
 }
 
+/// Triangle visibility shortcuts preserve attributes, boundary coverage and foreign-input checks.
+#[test]
+fn compositor_clips_triangles_without_changing_visible_attributes() {
+    let bundle = test_bundle();
+    let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
+    let capture = std::rc::Rc::new(RenderCapture::default());
+    let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { capture: capture.clone() }).query().unwrap();
+    let clip = Rect { x: 0, y: 0, width: 10, height: 10 };
+    let inside = [
+        RenderVertex {
+            x: 0.,
+            y: 0.,
+            u: 0.,
+            v: 0.,
+            rgba: 0xff000000,
+        },
+        RenderVertex {
+            x: 10.,
+            y: 0.,
+            u: 1.,
+            v: 0.,
+            rgba: 0xff000040,
+        },
+        RenderVertex {
+            x: 0.,
+            y: 10.,
+            u: 0.,
+            v: 1.,
+            rgba: 0xff000080,
+        },
+    ];
+    compositor.begin(Size { width: 10, height: 10 }, 0xff000000).unwrap();
+    compositor.atlas_triangles(clip, NcCopyFromBufferOffset::new(0, &inside)).unwrap();
+    // Each displaced triangle is wholly outside one different edge and emits no vertices.
+    for (x, y) in [(-20., 0.), (20., 0.), (0., -20.), (0., 20.)] {
+        let outside = inside.map(|vertex| RenderVertex {
+            x: vertex.x + x,
+            y: vertex.y + y,
+            ..vertex
+        });
+        compositor.atlas_triangles(clip, NcCopyFromBufferOffset::new(0, &outside)).unwrap();
+    }
+    // Clipping the left vertex produces a quadrilateral with two half-way UV/color intersections.
+    let crossing = [
+        RenderVertex { x: -4., y: 2., ..inside[0] },
+        RenderVertex { x: 4., y: 2., ..inside[1] },
+        RenderVertex { x: 4., y: 6., u: 1., ..inside[2] },
+    ];
+    compositor.atlas_triangles(clip, NcCopyFromBufferOffset::new(0, &crossing)).unwrap();
+    // Visibility never bypasses ABI validation, even for otherwise invisible input.
+    for invalid in [RenderVertex { x: f32::NAN, ..inside[0] }, RenderVertex { x: -20., u: 2., ..inside[0] }] {
+        assert_eq!(
+            compositor.atlas_triangles(clip, NcCopyFromBufferOffset::new(0, &[invalid; 3])),
+            Err(NC_E_INVALID_ARG)
+        );
+    }
+    compositor.submit(renderer.as_com_ref()).unwrap();
+    let actual: Vec<_> = capture.vertices.borrow().iter().map(|v| (v.x, v.y, v.u, v.v, v.rgba)).collect();
+    assert_eq!(&actual[..3], &inside.map(|v| (v.x, v.y, v.u, v.v, v.rgba)));
+    assert_eq!(
+        &actual[3..],
+        &[
+            (0., 4., 0.5, 0.5, 0xff000040),
+            (0., 2., 0.5, 0., 0xff000020),
+            (4., 2., 1., 0., 0xff000040),
+            (0., 4., 0.5, 0.5, 0xff000040),
+            (4., 2., 1., 0., 0xff000040),
+            (4., 6., 1., 1., 0xff000080),
+        ]
+    );
+    assert_eq!(capture.batches.borrow().len(), 1, "visible operations retain one adjacent atlas batch");
+
+    // All vertices may lie outside while the triangle still covers the entire clip rectangle.
+    // Area verifies full coverage independently of the clipper's triangulation starting corner.
+    compositor.begin(Size { width: 10, height: 10 }, 0xff000000).unwrap();
+    let enclosing = [(-10., -10.), (40., -10.), (-10., 40.)].map(|(x, y)| RenderVertex { x, y, ..inside[0] });
+    compositor.atlas_triangles(clip, NcCopyFromBufferOffset::new(0, &enclosing)).unwrap();
+    compositor.submit(renderer.as_com_ref()).unwrap();
+    let vertices = capture.vertices.borrow();
+    assert!(vertices.iter().all(|v| (0. ..=10.).contains(&v.x) && (0. ..=10.).contains(&v.y)));
+    let area: f32 = vertices
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .map(|[a, b, c]| ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) * 0.5)
+        .sum();
+    assert_eq!(area, 100.);
+}
+
 /// Coarse operations expand inside GFX, use one renderer call, and expire the retained stream.
 #[test]
 fn compositor_owns_final_geometry_batching_and_stream_scope() {

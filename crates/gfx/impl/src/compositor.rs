@@ -399,6 +399,25 @@ impl GfxCompositorObject {
             },
         ];
         for triangle in vertices.as_chunks::<3>().0 {
+            // Public entry points have already rejected nonfinite coordinates. Four outside bits
+            // use the same closed edges as the polygon clipper, including vertices on a boundary.
+            let [a, b, c] = triangle.map(|vertex| {
+                u8::from(vertex.x < edges[0].boundary)
+                    | (u8::from(vertex.x > edges[1].boundary) << 1)
+                    | (u8::from(vertex.y < edges[2].boundary) << 2)
+                    | (u8::from(vertex.y > edges[3].boundary) << 3)
+            });
+            match (a | b | c, a & b & c) {
+                // All attributes and winding survive unchanged without visiting scratch buffers.
+                (0, _) => {
+                    self.append_atlas(triangle)?;
+                    continue;
+                }
+                // No common outside edge: the triangle can intersect or even enclose the clip.
+                (_, 0) => {}
+                // A common outside half-plane proves the entire triangle is invisible.
+                _ => continue,
+            }
             self.clip_input.clear();
             self.clip_input.extend_from_slice(triangle);
             for edge in edges {
@@ -797,16 +816,26 @@ fn intersection(left: Rect, right: Rect) -> Option<Rect> {
 /// Clips one destination rectangle and interpolates its normalized source edges.
 fn clipped_quad(destination: Rect, u0: f32, v0: f32, u1: f32, v1: f32, rgba: u32, clip: Rect) -> Option<[RenderVertex; 4]> {
     let visible = intersection(destination, clip)?;
-    let x_offset0 = (i64::from(visible.x) - i64::from(destination.x)) as f32;
-    let y_offset0 = (i64::from(visible.y) - i64::from(destination.y)) as f32;
-    let x_offset1 = (i64::from(visible.x) + i64::from(visible.width) - i64::from(destination.x)) as f32;
-    let y_offset1 = (i64::from(visible.y) + i64::from(visible.height) - i64::from(destination.y)) as f32;
-    let x_extent = destination.width as f32;
-    let y_extent = destination.height as f32;
-    let clipped_u0 = u0 + (x_offset0 / x_extent) * (u1 - u0);
-    let clipped_v0 = v0 + (y_offset0 / y_extent) * (v1 - v0);
-    let clipped_u1 = u0 + (x_offset1 / x_extent) * (u1 - u0);
-    let clipped_v1 = v0 + (y_offset1 / y_extent) * (v1 - v0);
+    let (clipped_u0, clipped_v0, clipped_u1, clipped_v1) =
+        if visible.x == destination.x && visible.y == destination.y && visible.width == destination.width && visible.height == destination.height {
+            // Fully visible cells keep their original UV endpoints without four redundant divisions.
+            (u0, v0, u1, v1)
+        } else {
+            // Only a genuinely clipped cell needs interpolation. Wide differences preserve the
+            // existing behavior for rectangles whose far edges exceed the signed coordinate range.
+            let x_offset0 = (i64::from(visible.x) - i64::from(destination.x)) as f32;
+            let y_offset0 = (i64::from(visible.y) - i64::from(destination.y)) as f32;
+            let x_offset1 = (i64::from(visible.x) + i64::from(visible.width) - i64::from(destination.x)) as f32;
+            let y_offset1 = (i64::from(visible.y) + i64::from(visible.height) - i64::from(destination.y)) as f32;
+            let x_extent = destination.width as f32;
+            let y_extent = destination.height as f32;
+            (
+                u0 + (x_offset0 / x_extent) * (u1 - u0),
+                v0 + (y_offset0 / y_extent) * (v1 - v0),
+                u0 + (x_offset1 / x_extent) * (u1 - u0),
+                v0 + (y_offset1 / y_extent) * (v1 - v0),
+            )
+        };
     let x0 = visible.x as f32;
     let y0 = visible.y as f32;
     let x1 = (i64::from(visible.x) + i64::from(visible.width)) as f32;
@@ -851,4 +880,39 @@ fn clamp_i128(value: i128) -> i32 {
 /// Saturates wide rectangle arithmetic only at the renderer-facing coordinate boundary.
 fn clamp_i64(value: i64) -> i32 {
     value.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Full, exact, partial and empty intersections retain consistent positions and texture edges.
+    #[test]
+    fn rectangle_clipping_preserves_uvs_and_interpolates_only_visible_edges() {
+        let destination = Rect { x: -8, y: -4, width: 16, height: 8 };
+        // Binary fractions make these independently specified UV expectations exact in f32.
+        for (clip, bounds, uv) in [
+            (Rect { x: -16, y: -8, width: 32, height: 16 }, [-8., -4., 8., 4.], [0.25, 0.375, 0.75, 0.625]),
+            (destination, [-8., -4., 8., 4.], [0.25, 0.375, 0.75, 0.625]),
+            (Rect { x: 0, y: -4, width: 8, height: 8 }, [0., -4., 8., 4.], [0.5, 0.375, 0.75, 0.625]),
+            (Rect { x: -4, y: -2, width: 8, height: 4 }, [-4., -2., 4., 2.], [0.375, 0.4375, 0.625, 0.5625]),
+        ] {
+            let actual = clipped_quad(destination, 0.25, 0.375, 0.75, 0.625, 0xff123456, clip).unwrap();
+            let [x0, y0, x1, y1] = bounds;
+            let [u0, v0, u1, v1] = uv;
+            assert_eq!(
+                actual.map(|vertex| (vertex.x, vertex.y, vertex.u, vertex.v, vertex.rgba)),
+                [
+                    (x0, y0, u0, v0, 0xff123456),
+                    (x1, y0, u1, v0, 0xff123456),
+                    (x1, y1, u1, v1, 0xff123456),
+                    (x0, y1, u0, v1, 0xff123456)
+                ]
+            );
+        }
+        // Touching an edge contributes no area; neither does a fully disjoint rectangle.
+        for x in [8, 20] {
+            assert!(clipped_quad(destination, 0.25, 0.375, 0.75, 0.625, 0xff123456, Rect { x, y: 0, width: 4, height: 4 }).is_none());
+        }
+    }
 }

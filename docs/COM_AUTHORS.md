@@ -807,6 +807,14 @@ final clipping, and atlas batching alongside text and icon expansion. It then pu
 `IRenderStream`. A retained stream/token expires
 on success and failure, including zero-length reads and indexed resource queries.
 
+GFX validates foreign geometry before classifying its visibility. Triangles fully
+inside the effective clip retain their vertices directly; triangles wholly outside
+one clip edge are discarded. Other triangles use attribute-preserving polygon
+clipping, including triangles whose vertices are all outside but enclose the clip.
+Fully visible atlas/image rectangles keep their original UV endpoints; only partial
+intersections interpolate them. These are private CPU paths with the same ordered
+renderer stream and COM contracts.
+
 A stream contains a bulk vertex buffer and ordered `RenderBatch` records. Atlas
 ranges contain positive multiples of three vertices; image ranges contain four
 vertices. Ranges must partition the buffer without gaps, overlap or unused trailing
