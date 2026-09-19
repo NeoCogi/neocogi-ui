@@ -15,18 +15,14 @@
 //! }
 //! ```
 /// Shared typed transport for applications and nested components.
-pub use neocogi_com_events::{Events, EventSender, EVENT_DISPATCH_LIMIT};
-
-/// Isolated native algorithm collectors using the production inbox transport.
-#[cfg(feature = "test-support")]
-pub use neocogi_com_events::test_support;
+pub use neocogi_com_events::{Events, EventSender};
 
 use crate::com::*;
 use neocogi_com::{ComRef, NC_E_INVALID_ARG, NcStatus};
 use neocogi_ui_nodes_contracts::*;
 
 /// Core output values are the contract data itself; no facade message wrappers are introduced.
-pub use neocogi_ui_core_contracts::{Activation, TextChanged, TextSubmitted, WindowEvent, PopupDismissed, ChoiceSelection};
+pub use neocogi_ui_core_contracts::{Activation, TextChanged, TextSubmitted, WindowEvent, PopupDismissed, ChoiceSelection, EVENT_DISPATCH_LIMIT};
 /// Node-specific outputs preserve their concrete contract types and field documentation.
 pub use neocogi_ui_nodes_contracts::{CheckboxChanged, NumericChanged, ScrollbarChanged};
 

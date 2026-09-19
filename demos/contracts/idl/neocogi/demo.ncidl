@@ -1,5 +1,4 @@
 extern neocogi.ui.core;
-extern neocogi.com.events;
 use neocogi.ui.core::{IWidget, ILeafLayout, IActivationEvents, IWidgetHost, IContainer, ChildEditResult};
 
 #[version(1)]

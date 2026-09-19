@@ -492,15 +492,15 @@ mod tests {
         }
     }
 
-    /// Collects the shared numeric message from either control through its production port.
+    /// Collects the shared numeric message from either control through its generated concrete receiver.
     fn numeric_dispatcher(
         install: impl FnOnce(Box<dyn FnMut(neocogi_ui_nodes_contracts::NumericChanged) -> Result<(), NcStatus>>) -> Result<(), NcStatus>,
     ) -> Box<dyn FnMut(&mut Vec<Real>) -> bool> {
-        let mut capture = neocogi_ui::events::test_support::Capture::connect(install).unwrap();
+        let mut events = neocogi_com_events::Events::new();
+        events.map(install, |event| event.value).unwrap();
         Box::new(move |values| {
-            let batch = capture.drain(1024).unwrap();
-            let delivered = !batch.is_empty();
-            values.extend(batch.into_iter().map(|event| event.value));
+            let delivered = !events.is_empty();
+            values.extend(std::iter::from_fn(|| events.pop()));
             delivered
         })
     }

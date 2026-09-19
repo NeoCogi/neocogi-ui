@@ -1,7 +1,6 @@
 extern neocogi.ui.core;
 extern neocogi.renderer;
 extern neocogi.gfx;
-extern neocogi.com.events;
 
 use neocogi.ui.core::{
     ChildEditResult, ChoiceMenuEntry, ChoiceSelection, Activation, IChildren,

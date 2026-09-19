@@ -133,7 +133,7 @@ impl IWidget for DialogRoot {
     /// Closes the concrete shell and its complete child topology.
     fn close(&mut self) -> Result<(), NcStatus> {
         let result = self.widget.close();
-        let completion = self.request.borrow_mut().close();
+        let completion = self.request.try_borrow_mut().map_err(|_| UI_E_BUSY)?.close();
         result.and(completion)
     }
 
@@ -238,7 +238,7 @@ impl Model {
 
     /// Rejects closed components and validates public runtime mutation authority.
     fn owner(&self) -> Result<(), NcStatus> {
-        if self.request.borrow().closed() {
+        if self.request.try_borrow().map_err(|_| UI_E_BUSY)?.closed() {
             return Err(UI_E_CLOSED);
         }
         self.nodes.host.check_mutation()?;
@@ -258,11 +258,11 @@ impl Model {
     }
     /// Hides before emitting the outcome so later messages observe an idle reusable component.
     fn finish(&mut self, outcome: FileDialogCompletion) -> Result<(), NcStatus> {
-        if self.request.borrow().active() {
+        if self.request.try_borrow().map_err(|_| UI_E_BUSY)?.active() {
             if self.window().is_ok_and(|window| window.snapshot().is_ok()) {
                 self.window()?.set_visibility(Visibility::Hidden)?;
             }
-            self.request.borrow_mut().finish(outcome)?;
+            self.request.try_borrow_mut().map_err(|_| UI_E_BUSY)?.finish(outcome)?;
         }
         Ok(())
     }
@@ -591,7 +591,7 @@ impl Model {
     /// Opens only after the complete native request and directory listing validate successfully.
     fn open(&mut self, title: &str, rect: Rect, directory: PathBuf) -> Result<(), NcStatus> {
         self.owner()?;
-        if self.request.borrow().active() {
+        if self.request.try_borrow().map_err(|_| UI_E_BUSY)?.active() {
             return Err(UI_E_BUSY);
         }
         if rect.width < 0 || rect.height < 0 {
@@ -607,7 +607,7 @@ impl Model {
         self.install(directory, listing, true)?;
         self.window()?.set_title(NcCopyFromBufferOffset::new(0, title.as_bytes()))?;
         self.window()?.set_rect(rect)?;
-        self.request.borrow_mut().begin()?;
+        self.request.try_borrow_mut().map_err(|_| UI_E_BUSY)?.begin()?;
         Ok(())
     }
 
@@ -617,7 +617,7 @@ impl Model {
             Message::Lifecycle(event) => {
                 match event {
                     WindowEvent::Hidden | WindowEvent::CloseRequested
-                        if self.request.borrow().active()
+                        if self.request.try_borrow().map_err(|_| UI_E_BUSY)?.active()
                             && self
                                 .window()
                                 .is_ok_and(|window| window.snapshot().is_ok_and(|snapshot| snapshot.visibility == Visibility::Hidden)) =>
@@ -625,12 +625,12 @@ impl Model {
                         // An older hide fact must not cancel a newly visible request.
                         self.finish(FileDialogCompletion::Cancelled)?;
                     }
-                    WindowEvent::Destroyed => self.request.borrow_mut().close()?,
+                    WindowEvent::Destroyed => self.request.try_borrow_mut().map_err(|_| UI_E_BUSY)?.close()?,
                     _ => {}
                 }
                 None
             }
-            _ if !self.request.borrow().active() => None,
+            _ if !self.request.try_borrow().map_err(|_| UI_E_BUSY)?.active() => None,
             Message::PathEdited => {
                 self.path_dirty = true;
                 None
@@ -681,7 +681,9 @@ impl Drop for Dialog {
         {
             let _ = window.close();
         }
-        let _ = self.request.borrow_mut().retire();
+        if let Ok(mut request) = self.request.try_borrow_mut() {
+            let _ = request.retire();
+        }
     }
 }
 
@@ -713,10 +715,12 @@ impl IFileDialog for FileDialog {
     }
     /// Reports request state independently of hidden versus visible window allocation.
     fn active(&self) -> Result<bool, NcStatus> {
-        if self.dialog.request.try_borrow().map_err(|_| UI_E_BUSY)?.closed() {
-            return Err(UI_E_CLOSED);
+        let request = self.dialog.request.try_borrow().map_err(|_| UI_E_BUSY)?;
+        match request.phase {
+            RequestPhase::Closed => Err(UI_E_CLOSED),
+            RequestPhase::Active => Ok(true),
+            RequestPhase::Idle => Ok(false),
         }
-        Ok(self.dialog.request.try_borrow().map_err(|_| UI_E_BUSY)?.active())
     }
     /// Explicit cancellation is idempotent and keeps the modal available for a later open.
     fn cancel(&self) -> Result<bool, NcStatus> {

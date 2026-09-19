@@ -419,36 +419,30 @@ mod tests {
         Submitted(String),
     }
 
-    fn record_changed(events: &mut Vec<RecordedEvent>, event: &crate::TextChanged) {
-        events.push(RecordedEvent::Changed(event.text.clone(), event.cursor));
-    }
-
-    fn record_submitted(events: &mut Vec<RecordedEvent>, event: &crate::TextSubmitted) {
-        events.push(RecordedEvent::Submitted(event.text.clone()));
-    }
-
-    /// Reads complete production queue snapshots; runtime dispatch is tested through Events.
+    /// Maps both outputs into one ordinary consumer FIFO, preserving their actual post order.
     fn text_dispatcher(textbox: &mut Textbox) -> impl FnMut(&mut Vec<RecordedEvent>) -> bool + use<> {
-        let mut changed = neocogi_ui::events::test_support::Capture::connect(|consume| {
-            textbox.changed_event = Some(crate::TextChanged::__receiver(consume)?);
-            Ok(())
-        })
-        .unwrap();
-        let mut submitted = neocogi_ui::events::test_support::Capture::connect(|consume| {
-            textbox.submitted_event = Some(crate::TextSubmitted::__receiver(consume)?);
-            Ok(())
-        })
-        .unwrap();
+        let mut events = neocogi_com_events::Events::new();
+        events
+            .map(
+                |consume| {
+                    textbox.changed_event = Some(crate::TextChanged::__receiver(consume)?);
+                    Ok(())
+                },
+                |event| RecordedEvent::Changed(event.text, event.cursor),
+            )
+            .unwrap();
+        events
+            .map(
+                |consume| {
+                    textbox.submitted_event = Some(crate::TextSubmitted::__receiver(consume)?);
+                    Ok(())
+                },
+                |event| RecordedEvent::Submitted(event.text),
+            )
+            .unwrap();
         move |values| {
-            let changed = changed.drain(1024).unwrap();
-            let submitted = submitted.drain(1024).unwrap();
-            let delivered = !changed.is_empty() || !submitted.is_empty();
-            for event in changed {
-                record_changed(values, &event);
-            }
-            for event in submitted {
-                record_submitted(values, &event);
-            }
+            let delivered = !events.is_empty();
+            values.extend(std::iter::from_fn(|| events.pop()));
             delivered
         }
     }
@@ -469,7 +463,7 @@ mod tests {
     }
 
     #[test]
-    fn text_events_preserve_complete_snapshots_and_per_port_fifo() {
+    fn text_events_preserve_complete_snapshots_and_consumer_fifo() {
         let mut textbox = crate::test_support::algorithm::Algorithm::<Textbox>::from(TextboxParameters::new(""));
         let mut dispatcher = text_dispatcher(&mut textbox);
 
@@ -494,8 +488,8 @@ mod tests {
             [
                 RecordedEvent::Changed("ab".to_owned(), 2),
                 RecordedEvent::Changed("abcd".to_owned(), 4),
-                RecordedEvent::Changed("abcde".to_owned(), 5),
                 RecordedEvent::Submitted("abcd".to_owned()),
+                RecordedEvent::Changed("abcde".to_owned(), 5),
             ]
         );
     }

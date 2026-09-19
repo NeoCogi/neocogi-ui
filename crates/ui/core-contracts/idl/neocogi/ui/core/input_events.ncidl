@@ -101,7 +101,7 @@ struct Activation {
 }
 
 #[version(1)]
-/// Shared connection access for labelled activation from the actual control.
+/// Labelled activation output from the actual control.
 interface IActivationEvents {
     /// Connection access for captured Activation values.
     activated: Activation;
@@ -126,7 +126,7 @@ struct TextSubmitted {
 }
 
 #[version(1)]
-/// Shared editor event family; changed and submitted are independent exclusive ports.
+/// Editor outputs; each named output has one replaceable concrete destination.
 interface ITextEvents {
     /// Connection access for captured TextChanged values.
     changed: TextChanged;

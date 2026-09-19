@@ -12,8 +12,6 @@ source = "idl/neocogi/demo.ncidl"
 
 [dependencies]
 neocogi-ui-core-contracts.workspace = true
-neocogi-com-events-contracts.workspace = true
-neocogi-com-events.workspace = true
 neocogi-com = { workspace = true, features = ["macros"] }
 
 [build-dependencies]

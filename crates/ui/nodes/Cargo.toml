@@ -32,7 +32,7 @@ neocogi-com = { workspace = true, default-features = false, features = ["macros"
 # Tests construct the real core runtime through its public entrypoint, never private storage.
 neocogi-ui-runtime.workspace = true
 neocogi-ui-support = { workspace = true, features = ["test-support"] }
-neocogi-ui = { workspace = true, features = ["test-support"] }
+neocogi-ui.workspace = true
 neocogi-gfx-impl.workspace = true
 neocogi-com = { workspace = true, features = ["static-runtime"] }
 tempfile.workspace = true

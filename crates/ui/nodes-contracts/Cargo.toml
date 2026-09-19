@@ -15,8 +15,6 @@ source = "idl/neocogi/ui/nodes"
 [dependencies]
 neocogi-com = { workspace = true, features = ["macros"] }
 neocogi-ui-core-contracts.workspace = true
-neocogi-com-events-contracts.workspace = true
-neocogi-com-events.workspace = true
 neocogi-renderer-contracts.workspace = true
 neocogi-gfx-contracts.workspace = true
 

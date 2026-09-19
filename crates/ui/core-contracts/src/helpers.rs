@@ -71,7 +71,7 @@ pub const UI_E_RENDER: NcStatus = NcStatus::from_code(-1005);
 pub const UI_E_POLICY: NcStatus = NcStatus::from_code(-1006);
 
 /// Shared COM event-budget status, exposed through the UI convenience namespace.
-pub use neocogi_com_events::EVENT_E_LIMIT as UI_E_EVENT_LIMIT;
+pub use neocogi_com_events_contracts::EVENT_E_LIMIT as UI_E_EVENT_LIMIT;
 
 /// A native file/directory operation failed; the component's diagnostic preserves the concrete OS error.
 pub const UI_E_IO: NcStatus = NcStatus::from_code(-1008);
@@ -165,7 +165,7 @@ impl WidgetUpdate {
 }
 
 /// Shared COM callback budget for one runtime dispatch boundary and cascade sweep.
-pub use neocogi_com_events::EVENT_DISPATCH_LIMIT;
+pub const EVENT_DISPATCH_LIMIT: u32 = 1_000_000;
 
 /// Initial native-picker geometry shared by static request defaults and hidden plugin construction.
 pub const FILE_DIALOG_RECT: crate::Rect = crate::Rect { x: 40, y: 40, width: 600, height: 400 };

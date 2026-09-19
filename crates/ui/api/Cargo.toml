@@ -22,8 +22,6 @@ neocogi-com = { workspace = true, features = ["macros", "std"] }
 default = []
 # Optional authoring clients keep unrelated plugin contracts out of UI/runtime binaries.
 skin = ["dep:neocogi-skin-contracts"]
-# Internal behavior fixtures; ordinary plugin and application builds do not expose test collectors.
-test-support = ["neocogi-com-events/test-support"]
 # Deployment policy belongs to the final application, not implementation plugins.
 runtime = ["neocogi-com/runtime"]
 static-runtime = ["neocogi-com/static-runtime"]

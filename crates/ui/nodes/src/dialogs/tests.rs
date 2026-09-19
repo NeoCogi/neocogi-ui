@@ -438,3 +438,23 @@ fn closed_picker_preserves_all_completed_requests_during_manual_handler_runtime_
         Ok(0)
     );
 }
+
+/// A foreign mapper's reentrant observation reports a checked borrow conflict, never panics.
+#[test]
+fn completion_mapping_reentry_uses_the_request_borrow_boundary() {
+    let fixture = Fixture::new();
+    let directory = tempfile::tempdir().unwrap();
+    let controller = fixture.handle.as_interface().add_ref();
+    let mut events = Events::new();
+    events
+        .map(fixture.handle.completed(), move |message| {
+            assert_eq!(controller.active(), Err(UI_E_BUSY));
+            message
+        })
+        .unwrap();
+    fixture.open(directory.path());
+    assert_eq!(fixture.handle.cancel(), Ok(true));
+    assert!(matches!(events.pop(), Some(FileDialogCompletion::Cancelled)));
+    // Release the intentionally self-capturing test mapper through normal replacement.
+    events.map(fixture.handle.completed(), |message| message).unwrap();
+}

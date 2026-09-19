@@ -902,41 +902,30 @@ mod tests {
         Submitted(String),
     }
 
-    /// Records one changed snapshot in dispatcher order.
-    fn record_changed(events: &mut Vec<RecordedEvent>, event: &crate::TextChanged) {
-        // Clone the event payload because the test log outlives this dispatch callback.
-        events.push(RecordedEvent::Changed(event.text.clone(), event.cursor));
-    }
-
-    /// Records one submitted snapshot in dispatcher order.
-    fn record_submitted(events: &mut Vec<RecordedEvent>, event: &crate::TextSubmitted) {
-        // Clone the event payload because the test log outlives this dispatch callback.
-        events.push(RecordedEvent::Submitted(event.text.clone()));
-    }
-
-    /// Creates a dispatcher subscribed to both native TextEditor event ports.
-    /// Reads complete production queue snapshots; runtime dispatch is tested through Events.
+    /// Maps both outputs into one ordinary consumer FIFO, preserving their actual post order.
     fn text_dispatcher(text_area: &mut TextEditor) -> impl FnMut(&mut Vec<RecordedEvent>) -> bool + use<> {
-        let mut changed = neocogi_ui::events::test_support::Capture::connect(|consume| {
-            text_area.changed_event = Some(crate::TextChanged::__receiver(consume)?);
-            Ok(())
-        })
-        .unwrap();
-        let mut submitted = neocogi_ui::events::test_support::Capture::connect(|consume| {
-            text_area.submitted_event = Some(crate::TextSubmitted::__receiver(consume)?);
-            Ok(())
-        })
-        .unwrap();
+        let mut events = neocogi_com_events::Events::new();
+        events
+            .map(
+                |consume| {
+                    text_area.changed_event = Some(crate::TextChanged::__receiver(consume)?);
+                    Ok(())
+                },
+                |event| RecordedEvent::Changed(event.text, event.cursor),
+            )
+            .unwrap();
+        events
+            .map(
+                |consume| {
+                    text_area.submitted_event = Some(crate::TextSubmitted::__receiver(consume)?);
+                    Ok(())
+                },
+                |event| RecordedEvent::Submitted(event.text),
+            )
+            .unwrap();
         move |values| {
-            let changed = changed.drain(1024).unwrap();
-            let submitted = submitted.drain(1024).unwrap();
-            let delivered = !changed.is_empty() || !submitted.is_empty();
-            for event in changed {
-                record_changed(values, &event);
-            }
-            for event in submitted {
-                record_submitted(values, &event);
-            }
+            let delivered = !events.is_empty();
+            values.extend(std::iter::from_fn(|| events.pop()));
             delivered
         }
     }

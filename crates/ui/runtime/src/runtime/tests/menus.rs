@@ -55,6 +55,9 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
     ui.input(UiInput::Text, "focus restored").unwrap();
     ui.update(SIZE).unwrap();
     item.set_label("Later").unwrap();
+    // Installation now resolves the moved forest record. The queued old mapping's
+    // value remains unchanged, while the next activation uses the replacement.
+    session.map(item.activated().unwrap(), |event| format!("mapped:{}", event.label)).unwrap();
     assert_eq!(
         session.dispatch(100, |message| {
             labels.push(message);
@@ -64,11 +67,15 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
     );
     assert_eq!(&labels, &["Captured"]);
     assert_eq!(editor.text().unwrap(), "focus restored");
+    for code in [KeyCode::Function, KeyCode::ArrowDown, KeyCode::ArrowRight, KeyCode::Enter] {
+        key(&ui, code, if code == KeyCode::Function { 10 } else { 0 });
+    }
     ui.update_with_events(SIZE, &mut session, |message| {
         labels.push(message);
         Ok(())
     })
     .unwrap();
+    assert_eq!(&labels, &["Captured", "mapped:Later"]);
     let (renderer, _) = renderer();
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
     item.set_shortcut_hint("A longer accelerator").unwrap();
