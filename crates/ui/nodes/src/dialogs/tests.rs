@@ -1,5 +1,6 @@
 //! Standard picker acceptance exercises public methods, routed input, and exact native filesystem values.
 use super::*;
+use neocogi_ui::EventHandler;
 use neocogi_ui::events::completed_file_path;
 
 /// Deterministic drawable keeps the full modal visible while testing its real flex layout.

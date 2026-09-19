@@ -40,20 +40,6 @@ impl Options {
     }
 }
 
-/// Concrete application handler owns only the button capability whose label it updates.
-struct Submitted {
-    /// A producer never owns this handler, so retaining its editing capability cannot create a cycle.
-    button: ButtonWidget,
-}
-impl EventHandler<u32, events::Activation> for Submitted {
-    /// Edits the actual button during the safe event boundary; the same input transaction commits its new layout.
-    fn handle(&mut self, count: &mut u32, event: &events::Activation) -> Result<(), NcStatus> {
-        *count += 1;
-        println!("button submitted: {}", event.label);
-        self.button.set_label(&format!("Clicked {} times", *count))
-    }
-}
-
 /// Loads the dependency-ordered dynamic plugin manifest from the assembly.
 #[cfg(not(feature = "monolith"))]
 fn register_plugins(runtime: &neocogi_com::Runtime, directory: &std::path::Path) -> Result<(), Box<dyn Error>> {
@@ -155,7 +141,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut button = ui.widgets().button("Hello across COM")?;
     let window = ui.window("Dynamic UI", Rect { x: 40, y: 40, width: 500, height: 200 }, &button)?;
     let session = EventSession::new(0u32);
-    let subscription = session.subscribe(button.activated(), Submitted { button: button.clone() })?;
+    // The callback owns only its editing capability; the producer never retains it.
+    let mut callback_button = button.clone();
+    let subscription = session.subscribe(button.activated(), move |count: &mut u32, event: &events::Activation| {
+        *count += 1;
+        println!("button submitted: {}", event.label);
+        callback_button.set_label(&format!("Clicked {} times", *count))
+    })?;
     let size = native.size()?;
     ui.update_with_events(size, &session)?;
     ui.render(size, renderer.as_com_ref())?;
@@ -295,26 +287,6 @@ impl Drop for SmokeDirectory {
         let _ = std::fs::remove_dir(&self.0);
     }
 }
-/// Concrete native smoke consumer verifies the compact row's captured label.
-struct MenuSubmission;
-impl EventHandler<u32, events::Activation> for MenuSubmission {
-    /// Actual native keyboard routing produces this snapshot across the UI library boundary.
-    fn handle(&mut self, count: &mut u32, event: &events::Activation) -> Result<(), NcStatus> {
-        assert_eq!(event.label, "Menu command");
-        *count += 1;
-        Ok(())
-    }
-}
-/// Concrete native completion handler carries the exact expected path as explicit owned data.
-struct FileSelection(std::path::PathBuf);
-impl EventHandler<u32, FileDialogCompletionMessage> for FileSelection {
-    /// The generated event retains native identity until this application requests a native copy.
-    fn handle(&mut self, count: &mut u32, event: &FileDialogCompletionMessage) -> Result<(), NcStatus> {
-        assert_eq!(events::completed_file_path(event)?, Some(self.0.clone()));
-        *count += 1;
-        Ok(())
-    }
-}
 /// Queues one concrete key used by the independently compiled menu and standard-dialog implementations.
 fn smoke_key(ui: &Ui, key: KeyCode, value: u32) -> Result<(), NcStatus> {
     ui.input(
@@ -340,7 +312,12 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let item = bar.submenu("File")?.item("Menu command")?;
     menus.attach_bar(window.as_com_ref(), &bar)?;
     let events = EventSession::new(0u32);
-    events.subscribe(item.activated()?, MenuSubmission)?;
+    events.subscribe(item.activated()?, |count: &mut u32, event: &events::Activation| {
+        // Native keyboard routing must preserve the compact row's captured label.
+        assert_eq!(event.label, "Menu command");
+        *count += 1;
+        Ok(())
+    })?;
     ui.update_with_events(size, &events)?;
     ui.render(size, renderer)?;
     for (key, value) in [(KeyCode::Function, 10), (KeyCode::ArrowDown, 0), (KeyCode::Enter, 0)] {
@@ -349,7 +326,13 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     ui.update_with_events(size, &events)?;
     assert_eq!(*events.state()?, 1);
     let picker = ui.file_dialog(window.as_com_ref())?;
-    events.subscribe(picker.completed(), FileSelection(directory.0.join(" native file ")))?;
+    let expected_path = directory.0.join(" native file ");
+    events.subscribe(picker.completed(), move |count: &mut u32, event: &FileDialogCompletionMessage| {
+        // Retain the exact native expectation independently of its display label.
+        assert_eq!(events::completed_file_path(event)?, Some(expected_path.clone()));
+        *count += 1;
+        Ok(())
+    })?;
     let mut request = FileDialogRequest::new(&directory.0);
     request.rect = Rect { x: 10, y: 10, width: 620, height: 370 };
     picker.open(&request)?;

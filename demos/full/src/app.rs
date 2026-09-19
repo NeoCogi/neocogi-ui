@@ -109,7 +109,7 @@ pub(super) fn slider(ui: &Ui, value: f32, high: f32) -> Result<SliderWidget, NcS
 fn button(ui: &Ui, events: &EventSession<State>, text: &str, action: Action) -> Result<ButtonWidget, NcStatus> {
     let mut control = ui.widgets().button(text)?;
     control.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
-    events.subscribe(control.activated(), action)?;
+    events.subscribe(control.activated(), move |state: &mut State, event: &Activation| state.activate(action, event))?;
     Ok(control)
 }
 /// A disclosure body is its actual editable Linear COM object, with no placeholder replacement tree.
@@ -272,132 +272,118 @@ enum Action {
     /// Describe the active demo in its log.
     About,
 }
-impl EventHandler<State, Activation> for Action {
+impl State {
     /// Runs after the UI releases its context, permitting ordinary concrete edits and menu coordination.
-    fn handle(&mut self, state: &mut State, event: &Activation) -> Result<(), NcStatus> {
-        match *self {
-            Self::Log => state.write_log(&format!("Pressed {}", event.label)),
-            Self::Submit => state.submit(),
+    fn activate(&mut self, action: Action, event: &Activation) -> Result<(), NcStatus> {
+        match action {
+            Action::Log => self.write_log(&format!("Pressed {}", event.label)),
+            Action::Submit => self.submit(),
             // The popup capability resolves the pointer captured by the triggering input boundary,
             // so moving the Demo Window does not require application-authored coordinate offsets.
-            Self::Popup => state.test_popup.show(),
-            Self::Open => state.open_file(),
-            Self::New => {
-                state.log.clear()?;
-                state.entry.clear()?;
-                state.write_log("New demo session")
+            Action::Popup => self.test_popup.show(),
+            Action::Open => self.open_file(),
+            Action::New => {
+                self.log.clear()?;
+                self.entry.clear()?;
+                self.write_log("New demo session")
             }
-            Self::Clear => state.log.clear(),
-            Self::AutoScroll => {
-                state.auto_scroll = !state.auto_scroll;
-                state.auto_item.set_mark(MenuMark::Checked { checked: state.auto_scroll })?;
-                if state.auto_scroll {
-                    state.log_scroll.scroll_to_end()?;
+            Action::Clear => self.log.clear(),
+            Action::AutoScroll => {
+                self.auto_scroll = !self.auto_scroll;
+                self.auto_item.set_mark(MenuMark::Checked { checked: self.auto_scroll })?;
+                if self.auto_scroll {
+                    self.log_scroll.scroll_to_end()?;
                 }
                 Ok(())
             }
-            Self::Theme(theme) => state.select_theme(theme),
-            Self::Spacing(comfortable) => {
-                state.style.spacing(if comfortable { 8 } else { 2 }, &state.ui)?;
-                state.spacing[0].set_mark(MenuMark::Radio { selected: comfortable })?;
-                state.spacing[1].set_mark(MenuMark::Radio { selected: !comfortable })
+            Action::Theme(theme) => self.select_theme(theme),
+            Action::Spacing(comfortable) => {
+                self.style.spacing(if comfortable { 8 } else { 2 }, &self.ui)?;
+                self.spacing[0].set_mark(MenuMark::Radio { selected: comfortable })?;
+                self.spacing[1].set_mark(MenuMark::Radio { selected: !comfortable })
             }
-            Self::ResetGrid => {
-                state.grid.borrow_mut().view = super::grid::create_grid_view_3d();
+            Action::ResetGrid => {
+                self.grid.borrow_mut().view = super::grid::create_grid_view_3d();
                 Ok(())
             }
-            Self::MinorLines => {
+            Action::MinorLines => {
                 let checked = {
-                    let mut grid = state.grid.borrow_mut();
+                    let mut grid = self.grid.borrow_mut();
                     grid.minor_lines = !grid.minor_lines;
                     grid.minor_lines
                 };
-                state.minor_item.set_mark(MenuMark::Checked { checked })
+                self.minor_item.set_mark(MenuMark::Checked { checked })
             }
-            Self::ShowDemo => {
-                state.demo.set_visibility(Visibility::Visible)?;
-                state.demo.raise()
+            Action::ShowDemo => {
+                self.demo.set_visibility(Visibility::Visible)?;
+                self.demo.raise()
             }
-            Self::ShowTextures => state.sample_scroll.scroll_to_end(),
-            Self::About => state.write_log("neocogi-ui COM demo: concrete widgets, typed events, shared layout, PNG images and renderer-owned 3D scenes."),
+            Action::ShowTextures => self.sample_scroll.scroll_to_end(),
+            Action::About => self.write_log("neocogi-ui COM demo: concrete widgets, typed events, shared layout, PNG images and renderer-owned 3D scenes."),
         }
     }
-}
 
-/// Stateless concrete observer coordinates typed component events through the application's owned capabilities.
-struct Observe;
-impl EventHandler<State, TextSubmitted> for Observe {
     /// Enter uses the captured submitted text, which may differ from a later silent edit.
-    fn handle(&mut self, state: &mut State, event: &TextSubmitted) -> Result<(), NcStatus> {
-        state.write_log(&event.text)?;
-        state.entry.clear()
+    fn text_submitted(&mut self, event: &TextSubmitted) -> Result<(), NcStatus> {
+        self.write_log(&event.text)?;
+        self.entry.clear()
     }
-}
-impl EventHandler<State, neocogi_ui::events::ChoiceChanged> for Observe {
+
     /// Resolves display text separately from the generated selection event.
-    fn handle(&mut self, state: &mut State, event: &neocogi_ui::events::ChoiceChanged) -> Result<(), NcStatus> {
+    fn choice_changed(&mut self, event: &neocogi_ui::events::ChoiceChanged) -> Result<(), NcStatus> {
         let event = &event.selection;
         match *event {
-            ChoiceSelection::None => state.write_log("Selection cleared"),
+            ChoiceSelection::None => self.write_log("Selection cleared"),
             ChoiceSelection::Selected(index) => {
                 let index = usize::try_from(index).map_err(|_| NC_E_INVALID_ARG)?;
-                let label = state.combo.choice_label(index)?;
-                state.write_log(&format!("Selected {label}"))
+                let label = self.combo.choice_label(index)?;
+                self.write_log(&format!("Selected {label}"))
             }
         }
     }
-}
-impl EventHandler<State, FileDialogCompletionMessage> for Observe {
+
     /// Accepted paths remain native values until explicitly formatted for this human-readable log.
-    fn handle(&mut self, state: &mut State, event: &FileDialogCompletionMessage) -> Result<(), NcStatus> {
-        state.open_item.set_enabled(true)?;
+    fn file_selected(&mut self, event: &FileDialogCompletionMessage) -> Result<(), NcStatus> {
+        self.open_item.set_enabled(true)?;
         match completed_file_path(event)? {
-            Some(path) => state.write_log(&format!("Selected file: {}", path.display())),
-            None => state.write_log("File dialog cancelled"),
+            Some(path) => self.write_log(&format!("Selected file: {}", path.display())),
+            None => self.write_log("File dialog cancelled"),
         }
     }
-}
-impl EventHandler<State, neocogi_ui::events::WindowChanged> for Observe {
+
     /// Preserves manager-owned minimize/maximize/restore rectangles and clamps only ordinary geometry.
-    fn handle(&mut self, state: &mut State, event: &neocogi_ui::events::WindowChanged) -> Result<(), NcStatus> {
+    fn window_changed(&mut self, event: &neocogi_ui::events::WindowChanged) -> Result<(), NcStatus> {
         let event = &event.event;
         let (mut area, clamp) = match *event {
-            WindowEvent::GeometryChanged { rect } => (rect, !state.minimized),
+            WindowEvent::GeometryChanged { rect } => (rect, !self.minimized),
             WindowEvent::Minimized { .. } => {
-                state.minimized = true;
-                return state.write_log("Minimized Demo Window");
+                self.minimized = true;
+                return self.write_log("Minimized Demo Window");
             }
             WindowEvent::Maximized { rect } | WindowEvent::Restored { rect } => {
-                state.minimized = false;
+                self.minimized = false;
                 (rect, false)
             }
-            WindowEvent::CloseRequested => return state.write_log("Closed Demo Window; use Grid > Show Demo Window to restore it"),
+            WindowEvent::CloseRequested => return self.write_log("Closed Demo Window; use Grid > Show Demo Window to restore it"),
             WindowEvent::Hidden | WindowEvent::Destroyed => return Ok(()),
         };
         if clamp && (area.width < 240 || area.height < 300) {
             area.width = area.width.max(240);
             area.height = area.height.max(300);
-            state.demo.set_rect(area)?;
+            self.demo.set_rect(area)?;
         }
-        state.info[0].set_text(&format!("{}, {}", area.x, area.y))?;
-        state.info[1].set_text(&format!("{}, {}", area.width, area.height))
+        self.info[0].set_text(&format!("{}, {}", area.x, area.y))?;
+        self.info[1].set_text(&format!("{}, {}", area.width, area.height))
     }
-}
-
-/// One explicit RGB channel edits the same model consumed by the grid's observational paint.
-struct Background {
-    /// Channel offset in the documented packed-RGBA value, limited by construction to 0, 8 or 16.
-    shift: u32,
-}
-impl EventHandler<State, NumericChanged> for Background {
     /// Paint-only external state reports NoChange; its intrinsic dimensions do not depend on color.
-    fn handle(&mut self, state: &mut State, event: &NumericChanged) -> Result<(), NcStatus> {
+    /// The captured channel shift selects byte 0, 8, or 16 in the packed RGBA value.
+    fn background_changed(&mut self, shift: u32, event: &NumericChanged) -> Result<(), NcStatus> {
         let value = {
-            let mut grid = state.grid.borrow_mut();
-            grid.background = (grid.background & !(255 << self.shift)) | ((event.value as u32) << self.shift);
+            let mut grid = self.grid.borrow_mut();
+            grid.background = (grid.background & !(255 << shift)) | ((event.value as u32) << shift);
             grid.background
         };
-        state.background.set_fill(value)
+        self.background.set_fill(value)
     }
 }
 
@@ -538,16 +524,16 @@ fn create() -> Result<(Host, EventSession<State>), HostError> {
         next_fps: 0.,
     });
     for (item, action) in pending {
-        events.subscribe(item.activated()?, action)?;
+        events.subscribe(item.activated()?, move |state: &mut State, event: &Activation| state.activate(action, event))?;
     }
     {
         let state = events.state()?;
         state.style.subscribe(&events)?;
-        events.subscribe(neocogi_ui::events::window_events(state.demo.as_com_ref())?, Observe)?;
-        events.subscribe(state.entry.submitted(), Observe)?;
-        events.subscribe(state.combo.changed(), Observe)?;
+        events.subscribe(neocogi_ui::events::window_events(state.demo.as_com_ref())?, State::window_changed)?;
+        events.subscribe(state.entry.submitted(), State::text_submitted)?;
+        events.subscribe(state.combo.changed(), State::choice_changed)?;
         if let Some(dialog) = &state.file_dialog {
-            events.subscribe(dialog.completed(), Observe)?;
+            events.subscribe(dialog.completed(), State::file_selected)?;
         }
     }
     build_controls(&host, &events, &mut main_body)?;
@@ -629,7 +615,9 @@ fn build_controls(host: &Host, events: &EventSession<State>, content: &mut Linea
     for (name, shift) in [("Red", 0), ("Green", 8), ("Blue", 16)] {
         let mut line = row(ui)?;
         let control = slider(ui, ((state.grid.borrow().background >> shift) & 255) as f32, 255.)?;
-        events.subscribe(control.changed(), Background { shift })?;
+        events.subscribe(control.changed(), move |state: &mut State, event: &NumericChanged| {
+            state.background_changed(shift, event)
+        })?;
         append(&mut line, &label(ui, name)?, LayoutTrack::Fixed { extent: 46 })?;
         append(&mut line, &control, FLEX)?;
         append(&mut controls, &line, LayoutTrack::Content)?;

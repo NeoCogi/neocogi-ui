@@ -348,14 +348,6 @@ impl AppState for State {
         Ok(true)
     }
 }
-impl EventHandler<State, events::Activation> for Action {
-    /// Each button stores its concrete action inline and edits the display in the same input transaction.
-    fn handle(&mut self, state: &mut State, _event: &events::Activation) -> Result<(), NcStatus> {
-        state.calculator.apply(*self);
-        state.display.set_text(state.calculator.display_text())
-    }
-}
-
 /// Builds one COM grid of buttons; no separate CalcButton, event port or shadow node list is needed.
 fn run() -> Result<(), HostError> {
     neocogi_demo_host::initialize()?;
@@ -407,7 +399,11 @@ fn run() -> Result<(), HostError> {
         let mut button = host.ui.widgets().button(label)?;
         button.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
         grid.insert(index as u32, &button, GridExtent { columns: 1, rows: 1 })?.finish()?;
-        events.subscribe(button.activated(), action)?;
+        events.subscribe(button.activated(), move |state: &mut State, _: &events::Activation| {
+            // Each button captures its command while the session owns arithmetic state.
+            state.calculator.apply(action);
+            state.display.set_text(state.calculator.display_text())
+        })?;
     }
     host.run(events)
 }

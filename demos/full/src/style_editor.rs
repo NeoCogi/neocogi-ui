@@ -239,11 +239,28 @@ impl StyleEditor {
     pub(super) fn subscribe(&self, events: &EventSession<State>) -> Result<(), NcStatus> {
         for row in &self.colors {
             for (channel, control) in Channel::ALL.into_iter().zip(&row.channels) {
-                events.subscribe(control.changed(), Edit::Color(row.role, channel))?;
+                let role = row.role;
+                events.subscribe(control.changed(), move |state: &mut State, event: &NumericChanged| {
+                    // Only the flat theme accepts color edits; restore other previews silently.
+                    let editor = &mut state.style;
+                    match editor.selected {
+                        Theme::Default => *channel.value(role.value(&mut editor.palette)) = event.value as u8,
+                        _ => return editor.refresh(),
+                    }
+                    editor.prepare(&state.ui)?;
+                    editor.refresh()
+                })?;
             }
         }
         for (metric, control) in &self.values {
-            events.subscribe(control.changed(), Edit::Metric(*metric))?;
+            let metric = *metric;
+            events.subscribe(control.changed(), move |state: &mut State, event: &NumericChanged| {
+                // Each control captures its concrete field selector, never a borrowed row.
+                let editor = &mut state.style;
+                *metric.value(&mut editor.metrics) = event.value as i32;
+                editor.prepare(&state.ui)?;
+                editor.refresh()
+            })?;
         }
         Ok(())
     }
@@ -312,28 +329,5 @@ impl StyleEditor {
             control.set_value(*metric.value(&mut self.metrics) as f32)?;
         }
         Ok(())
-    }
-}
-
-/// Every numeric event identifies its actual named authoring target.
-enum Edit {
-    /// One color channel; image themes reject flat edits and restore their slider display.
-    Color(ColorRole, Channel),
-    /// One complete scalar geometry field.
-    Metric(Metric),
-}
-impl EventHandler<State, NumericChanged> for Edit {
-    /// Prepares the newest candidate and refreshes previews before returning to input routing.
-    fn handle(&mut self, state: &mut State, event: &NumericChanged) -> Result<(), NcStatus> {
-        let editor = &mut state.style;
-        match *self {
-            Self::Color(role, channel) if editor.selected == Theme::Default => {
-                *channel.value(role.value(&mut editor.palette)) = event.value as u8;
-            }
-            Self::Color(..) => return editor.refresh(),
-            Self::Metric(metric) => *metric.value(&mut editor.metrics) = event.value as i32,
-        }
-        editor.prepare(&state.ui)?;
-        editor.refresh()
     }
 }

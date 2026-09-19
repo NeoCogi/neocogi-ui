@@ -2,29 +2,6 @@
 use super::*;
 use neocogi_demo_contracts::*;
 
-/// Concrete application callback retains the real editing capability and the captured event history.
-struct Advance {
-    /// The producer owns no reference to this handler, so this direction creates no cycle.
-    counter: ComPtr<CounterAbi>,
-}
-impl EventHandler<Vec<String>, events::Activation> for Advance {
-    /// A callback edit must participate in the same update's layout commit without reentering the producer.
-    fn handle(&mut self, labels: &mut Vec<String>, event: &events::Activation) -> Result<(), NcStatus> {
-        labels.push(event.label.clone());
-        self.counter.set_count(100)
-    }
-}
-
-/// Application handler for the independently generated counter-value event.
-struct RecordCount;
-impl EventHandler<Vec<String>, CounterChangesMessage> for RecordCount {
-    /// Records the committed value, not the later programmatic callback edit.
-    fn handle(&mut self, history: &mut Vec<String>, event: &CounterChangesMessage) -> Result<(), NcStatus> {
-        history.push(format!("count={}", event.value));
-        Ok(())
-    }
-}
-
 /// Runs real routing, layout, GPU recording and lifecycle through three independently built assemblies.
 pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
     let provider = neocogi_com::Runtime::global()
@@ -48,8 +25,17 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let activation: ComPtr<IActivationEventsAbi> = counter.query()?;
     let window = ui.window("Independent extension", Rect { x: 10, y: 10, width: 400, height: 200 }, &root)?;
     let events = EventSession::new(Vec::new());
-    events.subscribe(activation.activated(), Advance { counter: counter.clone() })?;
-    events.subscribe(counter.changed(), RecordCount)?;
+    let mut callback_counter = counter.clone();
+    events.subscribe(activation.activated(), move |labels: &mut Vec<String>, event: &events::Activation| {
+        // Callback edits participate in this update's layout commit across the plugin ABI.
+        labels.push(event.label.clone());
+        callback_counter.set_count(100)
+    })?;
+    events.subscribe(counter.changed(), |history: &mut Vec<String>, event: &CounterChangesMessage| {
+        // Record the committed snapshot independently of the later silent callback edit.
+        history.push(format!("count={}", event.value));
+        Ok(())
+    })?;
 
     ui.update_with_events(size, &events)?;
     ui.render(size, renderer)?;

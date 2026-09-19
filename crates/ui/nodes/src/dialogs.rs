@@ -2,7 +2,7 @@
 use crate::factory::NodeServices;
 use neocogi_ui_core_contracts::*;
 use neocogi_ui_nodes_contracts::{ContentIcon, CrossSize, FlowDirection, LayoutTrack, LinearEdge};
-use neocogi_ui::{EventHandler, EventSession, LinearWidget, ListItemWidget, ScrollAreaWidget, TextBlockWidget, TextboxWidget};
+use neocogi_ui::{EventSession, LinearWidget, ListItemWidget, ScrollAreaWidget, TextBlockWidget, TextboxWidget};
 use neocogi_ui::events::{Activation, TextChanged, TextSubmitted};
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_object};
 use std::{
@@ -366,38 +366,7 @@ impl Model {
     }
 }
 
-impl EventHandler<Model, Activation> for Message<'static> {
-    /// The configured command owns its dependencies; activation only triggers it.
-    fn handle(&mut self, model: &mut Model, _event: &Activation) -> Result<(), NcStatus> {
-        model.update(self)
-    }
-}
-impl EventHandler<Model, TextChanged> for Message<'static> {
-    /// Field-specific wiring selects the corresponding explicit dirty-marker message.
-    fn handle(&mut self, model: &mut Model, _event: &TextChanged) -> Result<(), NcStatus> {
-        model.update(self)
-    }
-}
-
-/// Typed submission adapter borrows captured text only for the local update call.
-struct Navigate;
-impl EventHandler<Model, TextSubmitted> for Navigate {
-    /// Navigation reconstruction remains deferred until registration is idle.
-    fn handle(&mut self, model: &mut Model, event: &TextSubmitted) -> Result<(), NcStatus> {
-        model.update(&Message::Navigate(&event.text))
-    }
-}
-
-/// Typed lifecycle adapter keeps public window facts distinct from private messages.
-struct Lifecycle;
-impl EventHandler<Model, neocogi_ui::events::WindowChanged> for Lifecycle {
-    /// Observes the captured lifecycle value without allocating a second snapshot.
-    fn handle(&mut self, model: &mut Model, event: &neocogi_ui::events::WindowChanged) -> Result<(), NcStatus> {
-        model.update(&Message::Lifecycle(&event.event))
-    }
-}
-
-/// One completely built column and its concrete row handlers, still unpublished to the modal.
+/// One completely built column and its owned row commands, still unpublished to the modal.
 struct Column {
     /// Actual COM content root to install into the stable scroll controller.
     root: LinearWidget,
@@ -617,7 +586,7 @@ impl Dialog {
         Ok(dialog)
     }
 
-    /// Connects fixed controls exactly once; dynamic rows use the same typed activation helper when refreshed.
+    /// Connects fixed controls exactly once; each callback translates its typed event into the private update protocol.
     fn connect(
         &self,
         path: &TextboxWidget,
@@ -625,13 +594,21 @@ impl Dialog {
         window: &ComPtr<IWindowAbi>,
         buttons: [(neocogi_ui::ButtonWidget, Message<'static>); 5],
     ) -> Result<(), NcStatus> {
-        self.session.subscribe(path.changed(), Message::PathEdited)?;
-        self.session.subscribe(path.submitted(), Navigate)?;
-        self.session.subscribe(filename.changed(), Message::FilenameEdited)?;
+        self.session
+            .subscribe(path.changed(), |model: &mut Model, _: &TextChanged| model.update(&Message::PathEdited))?;
+        self.session.subscribe(path.submitted(), |model: &mut Model, event: &TextSubmitted| {
+            model.update(&Message::Navigate(&event.text))
+        })?;
+        self.session
+            .subscribe(filename.changed(), |model: &mut Model, _: &TextChanged| model.update(&Message::FilenameEdited))?;
         for (button, action) in buttons {
-            self.session.subscribe(button.activated(), action)?;
+            self.session
+                .subscribe(button.activated(), move |model: &mut Model, _: &Activation| model.update(&action))?;
         }
-        self.session.subscribe(neocogi_ui::events::window_events(window.as_com_ref())?, Lifecycle)?;
+        self.session.subscribe(
+            neocogi_ui::events::window_events(window.as_com_ref())?,
+            |model: &mut Model, event: &neocogi_ui::events::WindowChanged| model.update(&Message::Lifecycle(&event.event)),
+        )?;
         Ok(())
     }
 
@@ -651,7 +628,8 @@ impl Dialog {
     /// Registers complete candidates while the private session is idle, then replaces only dynamic content roles.
     fn install(&self, model: &mut Model, directory: PathBuf, listing: Listing, reset_scroll: bool) -> Result<(), NcStatus> {
         for (row, action) in listing.folders.rows.into_iter().chain(listing.files.rows) {
-            self.session.subscribe(row.activated(), action)?;
+            self.session
+                .subscribe(row.activated(), move |model: &mut Model, _: &Activation| model.update(&action))?;
         }
         // These are private built-in roles: their controller validates the live
         // modal before replacement and no caller can substitute a foreign child.
