@@ -44,6 +44,7 @@ enum ChoiceMenuEntry: u8 {
 }
 
 #[version(1)]
+#[message]
 /// Optional committed selection for a choice menu, with no reserved in-band identity.
 enum ChoiceSelection: u8 {
     /// No leaf is committed.
@@ -52,19 +53,14 @@ enum ChoiceSelection: u8 {
     Selected(u64),
 }
 
-#[version(1)]
-/// Captured choice committed by pointer or keyboard interaction.
-port ChoiceChangesPort {
-    /// Receives the complete optional selection after retained traversal releases its borrows.
-    fn changed(&mut self, selection: ChoiceSelection) -> Result<()>;
-}
+
 
 #[version(1)]
 /// Live selection-oriented menu owned by the core popup manager.
 ///
 /// The menu owns hierarchy, navigation, placement and committed selection. A header control such
 /// as Combo owns only its presentation and delegates these menu responsibilities through this
-/// interface. Mutations are silent; only user submission publishes `ChoiceChangesPort`.
+/// interface. Mutations are silent; only user submission publishes `ChoiceSelection`.
 interface IChoiceMenu {
     /// Returns the exact committed stable identity, including explicit absence.
     fn selection(&self) -> Result<ChoiceSelection>;
@@ -85,7 +81,7 @@ interface IChoiceMenu {
     /// Requests activation or dismissal according to the menu's current reconciled intent.
     fn toggle_at(&mut self, anchor: Rect) -> Result<()>;
     /// Connects the exclusive user-commit subscriber without retaining application state.
-    changed: ChoiceChangesPort;
+    changed: ChoiceSelection;
     /// Permanently retires the private popup and ends event delivery.
     fn close(&mut self) -> Result<()>;
 }

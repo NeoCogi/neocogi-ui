@@ -98,9 +98,12 @@ impl ButtonParameters {
 }
 
 /// Canonical generated activation snapshot owned by the NCIDL event family.
-pub use neocogi_ui_core_contracts::ActivationMessage as ButtonSubmitted;
+pub use neocogi_ui_core_contracts::Activation as ButtonSubmitted;
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Button)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Button, ports(neocogi_ui_nodes_contracts::Button::activated = {
+        self.runtime().state.writable()?;
+        Ok(self.submitted_event.as_ref())
+    }))]
 /// Concrete retained button and dynamically constructible COM object.
 ///
 /// The allocation owns its semantic fields directly. `runtime` contains only common host,
@@ -116,7 +119,7 @@ pub struct Button {
     /// Initialization-only fill behavior.
     fill: WidgetFillOption,
     /// Runtime-owned source for user submissions.
-    submitted_event: crate::EventSource<ButtonSubmitted>,
+    submitted_event: crate::Port<ButtonSubmitted>,
 }
 
 impl Button {
@@ -127,7 +130,7 @@ impl Button {
             content: parameters.content,
             font: parameters.font,
             fill: parameters.fill,
-            submitted_event: crate::EventSource::new(),
+            submitted_event: crate::Port::new(),
         }
     }
 
@@ -374,13 +377,6 @@ impl neocogi_ui_nodes_contracts::Button for Button {
     fn label(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;
         Ok(NcString::from_utf8_str(self.com_label()))
-    }
-
-    /// Returns an application-owned lease over the Button's concrete activation source.
-    fn subscribe_activated(&self, sink: ComRef<'_, ActivationPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.runtime().state.writable()?;
-        let endpoint = self.submitted_event.event();
-        endpoint.subscribe(sink)
     }
 
     /// Validates a semantic role before changing the Button's font selection.

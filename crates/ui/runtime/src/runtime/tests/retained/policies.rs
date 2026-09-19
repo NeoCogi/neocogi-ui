@@ -305,7 +305,7 @@ fn title_drag_and_close_deliver_window_events_through_the_production_session() {
     let mut events = neocogi_ui::Events::new();
     let mut observations = Vec::new();
     events
-        .map(neocogi_ui::events::window_events(owner.as_com_ref()).unwrap(), |event| event.event)
+        .map(neocogi_ui::events::window_events(owner.as_com_ref()).unwrap(), |event| event)
         .unwrap();
     fixture.frame(VIEW).unwrap();
     pointer(&fixture.ui, Point { x: 70, y: 40 }, true);

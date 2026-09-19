@@ -329,7 +329,7 @@ enum ComponentMessage {
     /// Captured menu activation label.
     Menu(events::Activation),
     /// Exact native file completion.
-    File(FileDialogCompletionMessage),
+    File(FileDialogCompletion),
 }
 impl ComponentMessage {
     /// Checks the captured fact during consumption and updates ordinary application state.

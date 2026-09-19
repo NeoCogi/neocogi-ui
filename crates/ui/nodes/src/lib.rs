@@ -63,9 +63,9 @@ pub(crate) use widgets::{
     ButtonParameters, CheckboxParameters, ColorSwatchParameters, ComboParameters, DecimalPrecision, ListBoxParameters, ListItemParameters, NumberParameters,
     SliderParameters, Real, ScrollbarAxis, ScrollbarParameters, TextBlockParameters, TextboxParameters,
 };
-pub(crate) use neocogi_com_events::EventSource;
+pub(crate) use neocogi_com_events::Port;
 #[cfg(test)]
-pub(crate) use neocogi_com_events::EventEndpoint as WidgetEventPortHandle;
+pub(crate) use neocogi_com_events::PortRef;
 #[cfg(test)]
 pub(crate) use neocogi_ui_support::widget_context;
 

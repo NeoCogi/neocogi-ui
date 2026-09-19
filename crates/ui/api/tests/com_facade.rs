@@ -5,7 +5,10 @@ mod tests {
     use neocogi_com::{ComRef, NcCopyFromBufferOffset, NcStatus};
     use neocogi_com::{ComPtr, IUnknown, NcString, NC_E_INVALID_ARG, com_object};
 
-    #[com_object(Button)]
+    #[com_object(Button, ports(neocogi_ui_nodes_contracts::Button::activated = {
+        // Editing-only fixture deliberately has no producer.
+        Err(neocogi_com::NC_E_NOINTERFACE)
+    }))]
     /// Concrete stand-in for a plugin button, using the same COM macro and ownership path.
     struct TestButton {
         /// Plugin-local UTF-8 storage; its Rust layout never crosses the boundary.
@@ -31,11 +34,6 @@ mod tests {
         /// Copies a label snapshot into a standard COM string object.
         fn label(&self) -> Result<ComPtr<neocogi_com::INcStringAbi>, NcStatus> {
             Ok(NcString::from_utf8_str(&self.label))
-        }
-
-        /// This editing-only fixture has no event producer.
-        fn subscribe_activated(&self, _sink: ComRef<'_, ActivationPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-            Err(neocogi_com::NC_E_NOINTERFACE)
         }
 
         /// Font editing is outside this facade fixture's observable state.

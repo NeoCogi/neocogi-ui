@@ -8,7 +8,7 @@ use neocogi_ui_core_contracts::*;
 use neocogi_demo_contracts::*;
 use neocogi_ui::{
     Painter,
-    events::{Activation, EventSource},
+    events::{Activation, Port},
 };
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, com_factory, com_object};
 
@@ -92,7 +92,13 @@ macro_rules! widget {
     };
 }
 
-#[com_object(neocogi_demo_contracts::Counter)]
+#[com_object(neocogi_demo_contracts::Counter, ports(neocogi_demo_contracts::Counter::changed = {
+        self.common.state.writable()?;
+        Ok(self.changed.as_ref())
+    }, neocogi_ui_core_contracts::IActivationEvents::activated = {
+        self.common.state.writable()?;
+        Ok(self.submitted.as_ref())
+    }))]
 /// Private implementation of the externally declared counter class.
 struct CounterObject {
     /// Common options are authoritative here, without a duplicate presentation copy.
@@ -100,9 +106,9 @@ struct CounterObject {
     /// The one semantic counter value; labels are short-lived snapshots of it.
     count: u32,
     /// The shared static producer retains queued snapshots, never the application's callback.
-    submitted: EventSource<Activation>,
+    submitted: Port<Activation>,
     /// Independent generated domain-event port, with no application handler ownership.
-    changed: EventSource<CounterChangesMessage>,
+    changed: Port<CounterChanged>,
 }
 impl CounterObject {
     /// Validates runtime authority and publishes one fully initialized counter identity.
@@ -111,8 +117,8 @@ impl CounterObject {
         Self::from_value(Self {
             common: Common::new(host, WidgetOptions::FRAME),
             count: 0,
-            submitted: EventSource::new(),
-            changed: EventSource::new(),
+            submitted: Port::new(),
+            changed: Port::new(),
         })
         .query()
     }
@@ -124,7 +130,7 @@ impl CounterObject {
             // A rejected foreign post cannot erase this already committed change.
             self.common.state.record_change(GeometryChange::Changed);
             self.submitted.emit(Activation { label: self.count.to_string() })?;
-            self.changed.emit(CounterChangesMessage { value: self.count })?;
+            self.changed.emit(CounterChanged { value: self.count })?;
             Ok(GeometryChange::Changed)
         } else {
             Ok(GeometryChange::NoChange)
@@ -158,20 +164,8 @@ impl Counter for CounterObject {
         }
         Ok(())
     }
-
-    /// Connects one generated value sink without claiming the labelled activation port.
-    fn subscribe_changed(&self, sink: ComRef<'_, CounterChangesPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.common.state.writable()?;
-        self.changed.subscribe(sink)
-    }
 }
-impl IActivationEvents for CounterObject {
-    /// Subscription uses the exact same producer/lease implementation as built-in controls.
-    fn subscribe_activated(&self, sink: ComRef<'_, ActivationPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.common.state.writable()?;
-        self.submitted.subscribe(sink)
-    }
-}
+impl IActivationEvents for CounterObject {}
 impl ILeafLayout for CounterObject {
     /// The host's current metrics supply button text geometry; constraints are checked before call-out.
     fn measure(&mut self, bounds: LayoutLimits, metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {

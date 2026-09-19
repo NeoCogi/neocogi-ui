@@ -78,9 +78,12 @@ impl ListItemParameters {
 }
 
 /// Canonical generated activation snapshot owned by the NCIDL event family.
-pub use neocogi_ui_core_contracts::ActivationMessage as ListItemSubmitted;
+pub use neocogi_ui_core_contracts::Activation as ListItemSubmitted;
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::ListItem)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::ListItem, ports(neocogi_ui_nodes_contracts::ListItem::activated = {
+        self.runtime().state.writable()?;
+        Ok(self.submitted_event.as_ref())
+    }))]
 /// Concrete retained list item and dynamically constructible COM object.
 pub struct ListItem {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -93,7 +96,7 @@ pub struct ListItem {
     /// Mutable label displayed for the item.
     label: String,
     /// Runtime-owned source for user submissions.
-    submitted_event: crate::EventSource<ListItemSubmitted>,
+    submitted_event: crate::Port<ListItemSubmitted>,
 }
 
 impl ListItem {
@@ -104,7 +107,7 @@ impl ListItem {
             icon: parameters.icon,
             font: parameters.font,
             label: parameters.label,
-            submitted_event: crate::EventSource::new(),
+            submitted_event: crate::Port::new(),
         }
     }
 
@@ -120,8 +123,8 @@ impl ListItem {
 
     /// Returns the native event endpoint emitted once for every user submission.
     #[cfg(test)]
-    pub fn submitted(&self) -> crate::WidgetEventPortHandle<ListItemSubmitted> {
-        self.submitted_event.event()
+    pub fn submitted(&self) -> crate::PortRef<ListItemSubmitted> {
+        self.submitted_event.as_ref()
     }
 
     /// Measures the row label and optional icon.
@@ -288,7 +291,7 @@ mod tests {
 use crate::widget_object::{
     HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_icon_role, set_direct_named_font, set_direct_named_icon,
 };
-use neocogi_ui_core_contracts::{GeometryChange, ActivationPortAbi, IEventSubscriptionAbi, IWidgetHostAbi, FontRole};
+use neocogi_ui_core_contracts::{GeometryChange, IWidgetHostAbi, FontRole};
 use neocogi_ui_nodes_contracts::{ContentIcon, ListItemAbi};
 use neocogi_com::*;
 
@@ -349,11 +352,5 @@ impl neocogi_ui_nodes_contracts::ListItem for ListItem {
     /// Resolves one exact named icon before replacing the row's existing selection.
     fn set_named_icon(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         set_direct_named_icon(self, name)
-    }
-    /// Connects the row's existing semantic event source directly through the class contract.
-    fn subscribe_activated(&self, sink: ComRef<'_, ActivationPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.runtime().state.writable()?;
-        let endpoint = self.submitted_event.event();
-        endpoint.subscribe(sink)
     }
 }

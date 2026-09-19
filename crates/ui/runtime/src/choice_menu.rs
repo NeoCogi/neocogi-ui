@@ -6,19 +6,15 @@
 use crate::menu::{Menu, MenuEntry};
 use crate::window_manager::{PopupHandle, SurfaceMutationError, WindowManager};
 use neocogi_com::{
-    ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_int_enum,
-    com_interface, com_object,
+    ComPtr, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_int_enum, com_interface,
+    com_object,
 };
 use neocogi_ui_core_contracts::{
-    ChoiceMenuEntry, ChoiceMenuEntryAbi, ChoiceSelection, ChoiceSelectionAbi, ChoiceChangesPortAbi, IChoiceMenu, IChoiceMenuAbi, IChoiceMenuInterfacesFor,
-    IEventSubscriptionAbi, MenuTextRange, Rect,
+    ChoiceMenuEntry, ChoiceMenuEntryAbi, ChoiceSelection, ChoiceSelectionAbi, IChoiceMenu, IChoiceMenuAbi, IChoiceMenuInterfacesFor, MenuTextRange, Rect,
 };
 
 /// Maximum accepted branch nesting, keeping foreign preorder input bounded on the native stack.
 const MAX_CHOICE_MENU_DEPTH: usize = 32;
-
-/// Canonical generated selection snapshot stored in this producer's event queue.
-use neocogi_ui_core_contracts::ChoiceChangesMessage as ChoiceChangedPayload;
 
 com_int_enum! {
     /// Header intent understood only by the private choice menu state machine.
@@ -98,13 +94,13 @@ pub(crate) trait IChoiceMenuState {
     fn popup_anchor(&self) -> Result<Rect, NcStatus>;
     /// Commits one user choice, publishes a changed snapshot, and requests popup closure.
     fn submit(&mut self, id: u64) -> Result<u64, NcStatus>;
-    /// Connects the public changed sink to this model's sole event source.
-    fn subscribe_changed(&self, sink: ComRef<'_, ChoiceChangesPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus>;
     /// Ends event delivery and requests permanent private-popup removal.
     fn retire(&mut self) -> Result<(), NcStatus>;
 }
 
-#[com_object(interfaces(IChoiceMenuState, IChoiceMenu))]
+#[com_object(interfaces(IChoiceMenuState, IChoiceMenu), ports(neocogi_ui_core_contracts::IChoiceMenu::changed = {
+        Ok(self.changed_event.as_ref())
+    }))]
 /// Plain authoritative choice menu state mutated exclusively through `IChoiceMenuState`'s mutable receiver.
 pub(crate) struct ChoiceMenuState {
     /// Shared UTF-8 storage referenced by every checked preorder entry.
@@ -120,7 +116,7 @@ pub(crate) struct ChoiceMenuState {
     /// Explicit popup lifecycle reconciled by the runtime composition owner.
     popup: ChoicePopupLifecycle,
     /// Runtime-owned source for actual user commits only.
-    changed_event: crate::EventSource<ChoiceChangedPayload>,
+    changed_event: crate::Port<ChoiceSelection>,
 }
 
 impl ChoiceMenuState {
@@ -134,7 +130,7 @@ impl ChoiceMenuState {
             revision: 0,
             popup_anchor: Rect::default(),
             popup: ChoicePopupLifecycle::Closed,
-            changed_event: crate::EventSource::new(),
+            changed_event: crate::Port::new(),
         };
         Self::from_value(state).query()
     }
@@ -305,14 +301,9 @@ impl IChoiceMenuState for ChoiceMenuState {
         };
         // Commit the complete popup transition before entering even a pure mapper.
         if changed {
-            self.changed_event.emit(ChoiceChangedPayload { selection: ChoiceSelection::Selected(id) })?;
+            self.changed_event.emit(ChoiceSelection::Selected(id))?;
         }
         Ok(self.revision)
-    }
-
-    /// Uses the existing typed event bridge while keeping its source in this sole model.
-    fn subscribe_changed(&self, sink: ComRef<'_, ChoiceChangesPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.changed_event.event().subscribe(sink)
     }
 
     /// Makes retirement idempotent for both logical widget closure and final unmounted release.
@@ -383,11 +374,6 @@ impl IChoiceMenu for ChoiceMenuState {
     /// Selects the next requested lifecycle state using the existing reconciled transition table.
     fn toggle_at(&mut self, anchor: Rect) -> Result<(), NcStatus> {
         <Self as IChoiceMenuState>::request_popup(self, ChoicePopupIntent::Toggle, anchor)
-    }
-
-    /// Connects the generated core choice event directly to the sole native source.
-    fn subscribe_changed(&self, sink: ComRef<'_, ChoiceChangesPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        <Self as IChoiceMenuState>::subscribe_changed(self, sink)
     }
 
     /// Permanently ends event delivery and asks the reconciler to remove the popup forest branch.
@@ -697,7 +683,7 @@ mod tests {
             revision: 0,
             popup_anchor: Rect::default(),
             popup: ChoicePopupLifecycle::Closed,
-            changed_event: crate::EventSource::new(),
+            changed_event: crate::Port::new(),
         }
     }
 

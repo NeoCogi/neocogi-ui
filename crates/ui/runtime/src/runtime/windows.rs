@@ -199,7 +199,10 @@ enum WindowEdit {
     ChildClip(ChildWindowClip),
 }
 
-#[com_object(interfaces(IWindow, IWindowEvents))]
+#[com_object(interfaces(IWindow, IWindowEvents), ports(neocogi_ui_core_contracts::IWindowEvents::changed = {
+        self.owner()?.factory.host.check_mutation()?;
+        Ok(self.window.events().as_ref())
+    }))]
 /// One retained COM window capability; all semantic state remains in the manager's forest.
 struct LogicalWindow {
     /// Weak owner access avoids a manager/window reference cycle.
@@ -321,7 +324,10 @@ impl IWindow for LogicalWindow {
     }
 }
 
-#[com_object(interfaces(IPopup, IPopupEvents))]
+#[com_object(interfaces(IPopup, IPopupEvents), ports(neocogi_ui_core_contracts::IPopupEvents::dismissed = {
+        self.owner()?.factory.host.check_mutation()?;
+        Ok(self.popup.events().as_ref())
+    }))]
 /// Popup projection has its own placement/lifetime methods and cannot impersonate a window.
 pub(super) struct LogicalPopup {
     /// Retaining the popup never retains the runtime through a strong cycle.
@@ -437,20 +443,8 @@ impl IPopup for LogicalPopup {
     }
 }
 
-impl IWindowEvents for LogicalWindow {
-    /// Uses the manager's actual native source, releasing owner checks before foreign sink retention.
-    fn subscribe_changed(&self, sink: ComRef<'_, WindowLifecyclePortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.owner()?.factory.host.check_mutation()?;
-        self.window.events().subscribe(sink)
-    }
-}
-impl IPopupEvents for LogicalPopup {
-    /// Uses the popup's existing dismissal source without creating a second lifecycle record or queue.
-    fn subscribe_dismissed(&self, sink: ComRef<'_, PopupDismissalPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.owner()?.factory.host.check_mutation()?;
-        self.popup.events().subscribe(sink)
-    }
-}
+impl IWindowEvents for LogicalWindow {}
+impl IPopupEvents for LogicalPopup {}
 
 #[cfg(test)]
 mod tests {

@@ -65,9 +65,12 @@ impl ListBoxParameters {
 }
 
 /// Canonical generated activation snapshot owned by the NCIDL event family.
-pub use neocogi_ui_core_contracts::ActivationMessage as ListBoxSubmitted;
+pub use neocogi_ui_core_contracts::Activation as ListBoxSubmitted;
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::ListBox)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::ListBox, ports(neocogi_ui_nodes_contracts::ListBox::activated = {
+        self.runtime().state.writable()?;
+        Ok(self.submitted_event.as_ref())
+    }))]
 /// Concrete retained list box and dynamically constructible COM object.
 pub struct ListBox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -82,7 +85,7 @@ pub struct ListBox {
     font: FontRef,
     /// Base widget options.
     /// Runtime-owned source for user submissions.
-    submitted_event: crate::EventSource<ListBoxSubmitted>,
+    submitted_event: crate::Port<ListBoxSubmitted>,
 }
 
 impl ListBox {
@@ -94,7 +97,7 @@ impl ListBox {
             image: parameters.image,
             fit_width: false,
             font: parameters.font,
-            submitted_event: crate::EventSource::new(),
+            submitted_event: crate::Port::new(),
         }
     }
 
@@ -210,7 +213,7 @@ impl crate::widget_object::ImageState for ListBox {
 }
 
 use crate::widget_object::{HostedWidget, ImageState, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_core_contracts::{GeometryChange, ActivationPortAbi, IEventSubscriptionAbi, ITextureAbi, IWidgetHostAbi, FontRole};
+use neocogi_ui_core_contracts::{GeometryChange, ITextureAbi, IWidgetHostAbi, FontRole};
 use neocogi_ui_nodes_contracts::{ListBoxAbi};
 use neocogi_com::*;
 
@@ -283,11 +286,5 @@ impl neocogi_ui_nodes_contracts::ListBox for ListBox {
             self.runtime_mut().state.record_change(GeometryChange::Changed);
         }
         Ok(())
-    }
-    /// Connects the entry's existing semantic event source directly through the class contract.
-    fn subscribe_activated(&self, sink: ComRef<'_, ActivationPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.runtime().state.writable()?;
-        let endpoint = self.submitted_event.event();
-        endpoint.subscribe(sink)
     }
 }

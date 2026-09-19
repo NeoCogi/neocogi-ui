@@ -93,43 +93,49 @@ struct WidgetUpdate {
     }
 
 #[version(1)]
-/// Concrete labelled activation consumer shared by Button, ListItem and ListBox.
-port ActivationPort {
-    /// Receives an immutable submission snapshot after widget traversal releases its borrows.
-    fn submitted(&mut self, label: &str) -> Result<()>;
+#[message]
+/// Labelled activation shared by buttons and list items.
+struct Activation {
+    /// Label captured when the command is activated.
+    label: String,
 }
 
 #[version(1)]
 /// Shared labelled activation source; the producer never owns the returned lease or its sink.
 interface IActivationEvents {
     /// Connects the exclusive subscriber and returns its ownership lease.
-    activated: ActivationPort;
+    activated: Activation;
 }
 
 #[version(1)]
-/// Complete normalized text and scalar-aligned UTF-8 byte cursor at the moment of a user edit.
-port TextChangesPort {
-    /// Receives an owned immutable text capability borrowed only for this synchronous delivery.
-    fn changed(&mut self, text: &str, cursor: u64) -> Result<()>;
+#[message]
+/// Complete text and cursor captured when a user edit commits.
+struct TextChanged {
+    /// Complete normalized text at the edit.
+    text: String,
+    /// Scalar-aligned UTF-8 byte cursor within this text.
+    cursor: u64,
 }
 
 #[version(1)]
-/// Complete normalized text at submission, independent of later edits.
-port TextSubmissionPort {
-    /// Receives the already captured submission value after traversal.
-    fn submitted(&mut self, text: &str) -> Result<()>;
+#[message]
+/// Complete text captured when the user submits.
+struct TextSubmitted {
+    /// Complete submitted text, independent of later edits.
+    text: String,
 }
 
 #[version(1)]
 /// Shared editor event family; changed and submitted are independent exclusive ports.
 interface ITextEvents {
     /// Connects one changed consumer without claiming the separate submitted port.
-    changed: TextChangesPort;
+    changed: TextChanged;
     /// Connects one submitted consumer without claiming the separate changed port.
-    submitted: TextSubmissionPort;
+    submitted: TextSubmitted;
 }
 
 #[version(1)]
+#[message]
 /// Captured window lifecycle or user chrome interaction; Destroyed is the one terminal fact.
 enum WindowEvent: u8 {
     /// A user move or resize committed this complete outer rectangle.
@@ -160,41 +166,41 @@ enum WindowEvent: u8 {
     },
 }
 
-#[version(1)]
-/// Concrete consumer of copied window events, including the terminal Destroyed fact.
-port WindowLifecyclePort {
-    /// Receives the exact committed lifecycle/chrome snapshot after the manager releases traversal ownership.
-    fn event(&mut self, event: WindowEvent) -> Result<()>;
-}
+
 
 #[version(1)]
 /// Subscription capability on the actual logical window object; the manager owns its existing native source.
 interface IWindowEvents {
     /// Connects the current source without making a retained window reference prolong native tree ownership.
-    changed: WindowLifecyclePort;
+    changed: WindowEvent;
 }
 
 #[version(1)]
-/// Concrete consumer of ordinary popup dismissal; destruction does not fabricate replay history.
-port PopupDismissalPort {
-    /// Reports removal from the active popup branch, independently of later activation.
-    fn dismissed(&mut self) -> Result<()>;
+#[message]
+/// Captured popup dismissal fact.
+enum PopupDismissed: u8 {
+    /// The popup left the active branch without fabricating destruction history.
+    Dismissed,
 }
 
 #[version(1)]
 /// Subscription capability on the actual popup object and its existing manager-owned source.
 interface IPopupEvents {
     /// Returns an exclusive application-owned dismissal lease without retaining application state on the producer.
-    dismissed: PopupDismissalPort;
+    dismissed: PopupDismissed;
 }
 
 #[version(1)]
-/// Concrete terminal outcome of one request; there is no impossible Pending event variant.
-port FileDialogCompletionPort {
-    /// Accepts an exact native path independently of its potentially lossy filename label.
-    fn accepted(&mut self, path: &INativePath) -> Result<()>;
-    /// Reports explicit cancellation, hiding, close affordance or destruction of an active request.
-    fn cancelled(&mut self) -> Result<()>;
+#[message]
+/// Terminal outcome of one request; Pending is not a deliverable event.
+enum FileDialogCompletion: u8 {
+    /// The request accepted this exact native path.
+    Accepted {
+        /// Owned path capability retained independently of the producer.
+        path: INativePath,
+    },
+    /// The request was cancelled or its active owner closed.
+    Cancelled,
 }
 
 #[version(1)]
@@ -223,7 +229,7 @@ interface IFileDialog {
     /// Copies the latest failed directory-read diagnostic without replacing the previous valid listing.
     fn diagnostic(&self) -> Result<String>;
     /// Reports acceptance or cancellation of a request through the dialog's own capability.
-    completed: FileDialogCompletionPort;
+    completed: FileDialogCompletion;
 }
 
 #[version(1)]

@@ -92,7 +92,13 @@ impl TextboxParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Textbox)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Textbox, ports(neocogi_ui_nodes_contracts::Textbox::changed = {
+        self.runtime().state.writable()?;
+        Ok(self.changed_event.as_ref())
+    }, neocogi_ui_nodes_contracts::Textbox::submitted = {
+        self.runtime().state.writable()?;
+        Ok(self.submitted_event.as_ref())
+    }))]
 /// Concrete retained textbox and dynamically constructible COM object.
 pub struct Textbox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -105,9 +111,9 @@ pub struct Textbox {
     font: FontRef,
     /// Base widget options.
     /// Runtime-owned source for user-originated text changes.
-    changed_event: crate::EventSource<TextboxChanged>,
+    changed_event: crate::Port<TextboxChanged>,
     /// Runtime-owned source for user submissions.
-    submitted_event: crate::EventSource<TextboxSubmitted>,
+    submitted_event: crate::Port<TextboxSubmitted>,
 }
 
 impl Textbox {
@@ -121,8 +127,8 @@ impl Textbox {
             buf,
             cursor,
             font: parameters.font,
-            changed_event: crate::EventSource::new(),
-            submitted_event: crate::EventSource::new(),
+            changed_event: crate::Port::new(),
+            submitted_event: crate::Port::new(),
         }
     }
 
@@ -164,21 +170,21 @@ impl Textbox {
 }
 
 /// Canonical generated text-and-cursor payload from a user textbox edit.
-pub use neocogi_ui_core_contracts::TextChangesMessage as TextboxChanged;
+pub use neocogi_ui_core_contracts::TextChanged as TextboxChanged;
 /// Canonical generated text submission payload from a user textbox command.
-pub use neocogi_ui_core_contracts::TextSubmissionMessage as TextboxSubmitted;
+pub use neocogi_ui_core_contracts::TextSubmitted as TextboxSubmitted;
 
 impl Textbox {
     /// Returns the native event endpoint emitted after every user-originated text change.
     #[cfg(test)]
-    pub fn changed(&self) -> crate::WidgetEventPortHandle<TextboxChanged> {
-        self.changed_event.event()
+    pub fn changed(&self) -> crate::PortRef<TextboxChanged> {
+        self.changed_event.as_ref()
     }
 
     /// Returns the native event endpoint emitted whenever the user submits the current text.
     #[cfg(test)]
-    pub fn submitted(&self) -> crate::WidgetEventPortHandle<TextboxSubmitted> {
-        self.submitted_event.event()
+    pub fn submitted(&self) -> crate::PortRef<TextboxSubmitted> {
+        self.submitted_event.as_ref()
     }
 
     /// Measures a single-line editor, bounded by available width when supplied.
@@ -561,7 +567,7 @@ mod tests {
 }
 
 use crate::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_core_contracts::{GeometryChange, IEventSubscriptionAbi, TextChangesPortAbi, TextSubmissionPortAbi, IWidgetHostAbi, FontRole};
+use neocogi_ui_core_contracts::{GeometryChange, IWidgetHostAbi, FontRole};
 use neocogi_ui_nodes_contracts::{TextboxAbi};
 use neocogi_com::*;
 
@@ -626,17 +632,5 @@ impl neocogi_ui_nodes_contracts::Textbox for Textbox {
     /// Resolves one exact named font before replacing the Textbox's selection.
     fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         set_direct_named_font(self, name)
-    }
-    /// Connects the existing changed-text source directly through the class contract.
-    fn subscribe_changed(&self, sink: ComRef<'_, TextChangesPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.runtime().state.writable()?;
-        let endpoint = self.changed_event.event();
-        endpoint.subscribe(sink)
-    }
-    /// Connects the independent submitted-text source directly through the class contract.
-    fn subscribe_submitted(&self, sink: ComRef<'_, TextSubmissionPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.runtime().state.writable()?;
-        let endpoint = self.submitted_event.event();
-        endpoint.subscribe(sink)
     }
 }

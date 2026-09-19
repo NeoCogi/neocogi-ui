@@ -29,7 +29,7 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
     root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let mut session = Events::new();
     let mut changes = Vec::new();
-    session.map(combo.changed(), |event| event.selection).unwrap();
+    session.map(combo.changed(), |event| event).unwrap();
 
     ui.update_with_events(SIZE, &mut session, |message| {
         changes.push(message);
@@ -133,7 +133,7 @@ fn combo_choice_menu_uses_shared_submenu_navigation() {
     root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let mut session = Events::new();
     let mut changes = Vec::new();
-    session.map(combo.changed(), |event| event.selection).unwrap();
+    session.map(combo.changed(), |event| event).unwrap();
     ui.update_with_events(SIZE, &mut session, |message| {
         changes.push(message);
         Ok(())

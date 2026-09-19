@@ -92,7 +92,7 @@ fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
     let activation = events.map(button.activated(), |_| Mutation::Replace).unwrap();
     let lifecycle = events
         .map(neocogi_ui::events::window_events(previous.as_com_ref()).unwrap(), |event| {
-            Mutation::Window(event.event)
+            Mutation::Window(event)
         })
         .unwrap();
     let mut next = None;
@@ -411,7 +411,7 @@ fn real_lifecycle_cascade_is_deferred_until_each_consumer_returns() {
     let window = ui.window("cascade", RECT, &button).unwrap();
     let mut events = Events::new();
     events
-        .map(neocogi_ui::events::window_events(window.as_com_ref()).unwrap(), |event| event.event)
+        .map(neocogi_ui::events::window_events(window.as_com_ref()).unwrap(), |event| event)
         .unwrap();
     window.set_visibility(Visibility::Hidden).unwrap();
     assert_eq!(events.dispatch(0, |_| Ok(())), Err(UI_E_EVENT_LIMIT));
@@ -518,7 +518,7 @@ fn failed_post_preserves_committed_widget_state_and_requires_a_new_frame() {
 #[test]
 fn failed_lifecycle_post_preserves_visibility_and_returns_its_receiver_error() {
     /// Foreign consumer rejects this committed lifecycle fact without enqueueing it.
-    fn reject(_: &WindowLifecycleMessage) -> Result<(), NcStatus> {
+    fn reject(_: &WindowEvent) -> Result<(), NcStatus> {
         Err(NC_E_INVALID_ARG)
     }
     let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
@@ -526,7 +526,7 @@ fn failed_lifecycle_post_preserves_visibility_and_returns_its_receiver_error() {
     let window = ui.window("post failure", RECT, &button).unwrap();
     let source = window.query::<IWindowEventsAbi>().unwrap();
     let mut events = Events::new();
-    let lease = events.map(source.changed().checked(reject), |event| event.event).unwrap();
+    let lease = events.map(source.changed().checked(reject), |event| event).unwrap();
     assert_eq!(window.set_visibility(Visibility::Hidden), Err(NC_E_INVALID_ARG));
     assert_eq!(window.snapshot().unwrap().visibility, Visibility::Hidden);
     assert!(events.is_empty());

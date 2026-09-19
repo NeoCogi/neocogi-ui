@@ -71,9 +71,12 @@ impl CheckboxParameters {
 }
 
 /// Canonical generated checkbox snapshot owned by the NCIDL event family.
-pub use neocogi_ui_nodes_contracts::CheckboxChangesMessage as CheckboxChanged;
+pub use neocogi_ui_nodes_contracts::CheckboxChanged;
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Checkbox)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Checkbox, ports(neocogi_ui_nodes_contracts::Checkbox::changed = {
+        self.runtime().state.writable()?;
+        Ok(self.changed_event.as_ref())
+    }))]
 /// Concrete retained checkbox and dynamically constructible COM object.
 pub struct Checkbox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -86,7 +89,7 @@ pub struct Checkbox {
     /// Current checked value.
     checked: bool,
     /// Runtime-owned source for user-originated value changes.
-    changed_event: crate::EventSource<CheckboxChanged>,
+    changed_event: crate::Port<CheckboxChanged>,
 }
 
 impl Checkbox {
@@ -97,7 +100,7 @@ impl Checkbox {
             label: parameters.label,
             font: parameters.font,
             checked: parameters.checked,
-            changed_event: crate::EventSource::new(),
+            changed_event: crate::Port::new(),
         }
     }
 
@@ -214,8 +217,8 @@ impl crate::widget_object::FontState for Checkbox {
 }
 
 use crate::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_core_contracts::{GeometryChange, IEventSubscriptionAbi, IWidgetHostAbi, FontRole};
-use neocogi_ui_nodes_contracts::{CheckboxAbi, CheckboxChangesPortAbi};
+use neocogi_ui_core_contracts::{GeometryChange, IWidgetHostAbi, FontRole};
+use neocogi_ui_nodes_contracts::{CheckboxAbi};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Checkbox);
@@ -280,11 +283,5 @@ impl neocogi_ui_nodes_contracts::Checkbox for Checkbox {
     /// Resolves one exact named font before replacing the Checkbox's selection.
     fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         set_direct_named_font(self, name)
-    }
-    /// Connects the Checkbox's existing semantic event source directly through its class contract.
-    fn subscribe_changed(&self, sink: ComRef<'_, CheckboxChangesPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.runtime().state.writable()?;
-        let endpoint = self.changed_event.event();
-        endpoint.subscribe(sink)
     }
 }

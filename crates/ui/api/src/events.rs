@@ -15,7 +15,7 @@
 //! }
 //! ```
 /// Shared typed transport for applications and nested components.
-pub use neocogi_com_events::{Events, EventSender, EventEndpoint, EventPayload, EventPort, EventSource, EVENT_DISPATCH_LIMIT};
+pub use neocogi_com_events::{Events, EventSender, PortRef, Port, EVENT_DISPATCH_LIMIT};
 
 /// Isolated native algorithm collectors using the production inbox transport.
 #[cfg(feature = "test-support")]
@@ -26,23 +26,23 @@ use neocogi_com::{ComRef, NC_E_INVALID_ARG, NcStatus};
 use neocogi_ui_nodes_contracts::*;
 
 /// Canonical generated activation snapshot shared by built-ins and external controls.
-pub use neocogi_ui_core_contracts::ActivationMessage as Activation;
+pub use neocogi_ui_core_contracts::Activation;
 /// Canonical generated text-and-cursor snapshot.
-pub use neocogi_ui_core_contracts::TextChangesMessage as TextChanged;
+pub use neocogi_ui_core_contracts::TextChanged;
 /// Canonical generated complete text submission.
-pub use neocogi_ui_core_contracts::TextSubmissionMessage as TextSubmitted;
+pub use neocogi_ui_core_contracts::TextSubmitted;
 /// Canonical generated lifecycle snapshot containing its WindowEvent value.
-pub use neocogi_ui_core_contracts::WindowLifecycleMessage as WindowChanged;
+pub use neocogi_ui_core_contracts::WindowEvent;
 /// Canonical generated popup dismissal fact.
-pub use neocogi_ui_core_contracts::PopupDismissalMessage as PopupDismissed;
+pub use neocogi_ui_core_contracts::PopupDismissed;
 /// Canonical generated choice snapshot containing its ChoiceSelection value.
-pub use neocogi_ui_core_contracts::ChoiceChangesMessage as ChoiceChanged;
+pub use neocogi_ui_core_contracts::ChoiceSelection;
 /// Canonical generated checkbox state captured on user activation.
-pub use neocogi_ui_nodes_contracts::CheckboxChangesMessage as CheckboxChanged;
+pub use neocogi_ui_nodes_contracts::CheckboxChanged;
 /// Canonical generated finite numeric value.
-pub use neocogi_ui_nodes_contracts::NumericChangesMessage as NumericChanged;
+pub use neocogi_ui_nodes_contracts::NumericChanged;
 /// Canonical generated nonnegative scrollbar offset.
-pub use neocogi_ui_nodes_contracts::ScrollbarChangesMessage as ScrollbarChanged;
+pub use neocogi_ui_nodes_contracts::ScrollbarChanged;
 
 /// Defines a source-side convenience getter while leaving all consumer ownership in COM.
 /// Each expansion selects an exact generated port and, where needed, its domain check.
@@ -51,7 +51,7 @@ macro_rules! widget_port {
         impl $widget {
             /// Returns the typed event port for subscription by an application or component.
             /// Taking this capability never mounts the control or invokes its handler.
-            pub fn $method(&self) -> impl EventPort<Event = $event> {
+            pub fn $method(&self) -> PortRef<$event> {
                 self.as_interface().$method()$(.checked($check))?
             }
         }
@@ -69,28 +69,28 @@ widget_port!(crate::TextboxWidget, changed, TextChanged, valid_text_cursor);
 widget_port!(crate::TextboxWidget, submitted, TextSubmitted);
 widget_port!(crate::TextAreaWidget, changed, TextChanged, valid_text_cursor);
 widget_port!(crate::TextAreaWidget, submitted, TextSubmitted);
-widget_port!(crate::ComboWidget, changed, ChoiceChanged);
+widget_port!(crate::ComboWidget, changed, ChoiceSelection);
 
 /// Queries the actual window's lifecycle source without retaining it after subscription.
-pub fn window_events(window: ComRef<'_, IWindowAbi>) -> Result<impl EventPort<Event = WindowChanged>, NcStatus> {
+pub fn window_events(window: ComRef<'_, IWindowAbi>) -> Result<PortRef<WindowEvent>, NcStatus> {
     Ok(window.add_ref().query::<IWindowEventsAbi>()?.changed().checked(valid_window_event))
 }
 
 /// Queries the popup's independent dismissal source; delivery describes a captured fact.
-pub fn popup_events(popup: ComRef<'_, IPopupAbi>) -> Result<impl EventPort<Event = PopupDismissed>, NcStatus> {
+pub fn popup_events(popup: ComRef<'_, IPopupAbi>) -> Result<PortRef<PopupDismissed>, NcStatus> {
     Ok(popup.add_ref().query::<IPopupEventsAbi>()?.dismissed())
 }
 
 impl crate::MenuItem {
     /// Queries this row's actual activation port, shared by native and plugin clients.
-    pub fn activated(&self) -> Result<impl EventPort<Event = Activation>, NcStatus> {
+    pub fn activated(&self) -> Result<PortRef<Activation>, NcStatus> {
         Ok(self.as_interface().add_ref().query::<IActivationEventsAbi>()?.activated())
     }
 }
 
 impl crate::FileDialog {
     /// Returns checked native-path completions, including outcomes already posted before closure.
-    pub fn completed(&self) -> impl EventPort<Event = FileDialogCompletionMessage> {
+    pub fn completed(&self) -> PortRef<FileDialogCompletion> {
         self.as_interface().completed().checked(valid_file_dialog_path)
     }
 }
@@ -116,8 +116,8 @@ fn valid_text_cursor(event: &TextChanged) -> Result<(), NcStatus> {
 }
 
 /// Checks copied window geometry before message translation.
-fn valid_window_event(event: &WindowLifecycleMessage) -> Result<(), NcStatus> {
-    match event.event {
+fn valid_window_event(event: &WindowEvent) -> Result<(), NcStatus> {
+    match event {
         WindowEvent::GeometryChanged { rect } | WindowEvent::Minimized { rect } | WindowEvent::Maximized { rect } | WindowEvent::Restored { rect }
             if rect.width < 0 || rect.height < 0 =>
         {
@@ -128,15 +128,15 @@ fn valid_window_event(event: &WindowLifecycleMessage) -> Result<(), NcStatus> {
 }
 
 /// Cancellation yields `None`; lossy display text is never used as path identity.
-pub fn completed_file_path(event: &FileDialogCompletionMessage) -> Result<Option<std::path::PathBuf>, NcStatus> {
+pub fn completed_file_path(event: &FileDialogCompletion) -> Result<Option<std::path::PathBuf>, NcStatus> {
     match event {
-        FileDialogCompletionMessage::Accepted { path } => crate::path::decode(path.as_com_ref()).map(Some),
-        FileDialogCompletionMessage::Cancelled => Ok(None),
+        FileDialogCompletion::Accepted { path } => crate::path::decode(path.as_com_ref()).map(Some),
+        FileDialogCompletion::Cancelled => Ok(None),
     }
 }
 
 /// Rejects a foreign native-path capability before message translation.
-fn valid_file_dialog_path(event: &FileDialogCompletionMessage) -> Result<(), NcStatus> {
+fn valid_file_dialog_path(event: &FileDialogCompletion) -> Result<(), NcStatus> {
     completed_file_path(event).map(|_| ())
 }
 

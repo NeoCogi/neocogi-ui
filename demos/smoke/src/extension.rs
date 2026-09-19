@@ -7,7 +7,7 @@ enum Message {
     /// Counter's activation snapshot.
     Activated(events::Activation),
     /// Independently declared counter protocol.
-    Changed(CounterChangesMessage),
+    Changed(CounterChanged),
 }
 impl Message {
     /// Applies one host-local fact after the plugin's update has returned.

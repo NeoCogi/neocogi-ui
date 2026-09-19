@@ -71,7 +71,10 @@ impl Default for ComboParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Combo)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Combo, ports(neocogi_ui_nodes_contracts::Combo::changed = {
+        self.runtime().state.writable()?;
+        Ok(self.menu.changed())
+    }))]
 /// Concrete retained combo and dynamically constructible COM object.
 pub struct Combo {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -261,11 +264,10 @@ impl crate::widget_object::FontState for Combo {
 }
 use crate::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
 use neocogi_ui_core_contracts::{
-    ChoiceMenuEntryAbi, ChoiceSelection, ChoiceSelectionAbi, FontRole, GeometryChange, ChoiceChangesPortAbi, IChoiceMenuAbi, IEventSubscriptionAbi,
-    IWidgetHostAbi,
+    ChoiceMenuEntryAbi, ChoiceSelection, ChoiceSelectionAbi, FontRole, GeometryChange, IChoiceMenuAbi, IChoiceMenuPorts, IWidgetHostAbi,
 };
 use neocogi_ui_nodes_contracts::ComboAbi;
-use neocogi_com::{ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus, NcString};
+use neocogi_com::{ComPtr, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus, NcString};
 
 direct_widget_phase_impl!(Combo);
 direct_leaf_layout_impl!(Combo);
@@ -371,11 +373,5 @@ impl neocogi_ui_nodes_contracts::Combo for Combo {
     /// Resolves one exact named font before replacing the Combo's selection.
     fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         set_direct_named_font(self, name)
-    }
-
-    /// Connects the Combo's captured-selection source directly through its class contract.
-    fn subscribe_changed(&self, sink: ComRef<'_, ChoiceChangesPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.runtime().state.writable()?;
-        self.menu.subscribe_changed(sink)
     }
 }

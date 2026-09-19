@@ -40,7 +40,7 @@ use std::fmt;
 use neocogi_ui_support::text_layout::content_height;
 use crate::math::RectExt;
 use crate::{
-    AtlasHandle, Color, Dimensioni, FontRef, FontRole, MenuRole, MenuState, MouseButton, Recti, Skin, UiInputEvent, Vec2i, WidgetEventPortHandle, WidgetOption,
+    AtlasHandle, Color, Dimensioni, FontRef, FontRole, MenuRole, MenuState, MouseButton, Recti, Skin, UiInputEvent, Vec2i, PortRef, WidgetOption,
     WidgetPaintCtx,
 };
 
@@ -116,7 +116,7 @@ impl MenuItemParameters {
 }
 
 /// Canonical generated activation snapshot from an enabled menu item.
-pub use neocogi_ui_core_contracts::ActivationMessage as MenuItemSubmitted;
+pub use neocogi_ui_core_contracts::Activation as MenuItemSubmitted;
 
 /// Failure reported when a [`Ui`](crate::Ui) cannot resolve one menu-item capability.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -204,7 +204,7 @@ pub(crate) struct MenuItemRecord {
     /// Mutable presentation and interaction values stored without a second mirror type.
     pub(crate) parameters: MenuItemParameters,
     /// Strong source of this item's independently subscribable typed event.
-    submitted_event: crate::EventSource<MenuItemSubmitted>,
+    submitted_event: crate::Port<MenuItemSubmitted>,
 }
 
 /// Uniquely owned declaration value for one actionable menu row.
@@ -222,8 +222,8 @@ impl MenuItem {
         // Stable identity is a plain value; only the event queue is shared because subscriptions
         // are weak capabilities. The semantic record itself remains uniquely owned throughout.
         let id = MenuItemId::allocate();
-        let submitted_event = crate::EventSource::new();
-        let handle = MenuItemHandle::new(id, submitted_event.event());
+        let submitted_event = crate::Port::new();
+        let handle = MenuItemHandle::new(id, submitted_event.as_ref());
         let item = Self {
             record: MenuItemRecord { id, parameters, submitted_event },
         };
@@ -240,12 +240,12 @@ pub struct MenuItemHandle {
     /// Process-unique concrete identity used only by the owning menu surface manager.
     id: MenuItemId,
     /// Weak endpoint for enabled user submissions from this same item.
-    submitted: WidgetEventPortHandle<MenuItemSubmitted>,
+    submitted: PortRef<MenuItemSubmitted>,
 }
 
 impl MenuItemHandle {
     /// Creates an application capability from an independently allocated identity and endpoint.
-    fn new(id: MenuItemId, submitted: WidgetEventPortHandle<MenuItemSubmitted>) -> Self {
+    fn new(id: MenuItemId, submitted: PortRef<MenuItemSubmitted>) -> Self {
         // MenuItem construction establishes this pair before moving the record into any declaration
         // hierarchy, so public code can never manufacture a mismatched handle.
         Self { id, submitted }
@@ -258,7 +258,7 @@ impl MenuItemHandle {
     }
 
     /// Returns this item's weak typed submission endpoint.
-    pub fn submitted(&self) -> WidgetEventPortHandle<MenuItemSubmitted> {
+    pub fn submitted(&self) -> PortRef<MenuItemSubmitted> {
         // Clone only the weak endpoint so subscribing cannot retain the declaration or mounted menu
         // record and does not participate in identity lookup.
         self.submitted.clone()

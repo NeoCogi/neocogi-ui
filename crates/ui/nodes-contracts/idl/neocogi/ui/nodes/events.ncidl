@@ -1,20 +1,23 @@
 #[version(1)]
-/// Committed user checkbox state; programmatic setters do not publish it.
-port CheckboxChangesPort {
-    /// Receives the captured value after retained traversal releases its owned state.
-    fn changed(&mut self, checked: bool) -> Result<()>;
+#[message]
+/// User checkbox state; programmatic setters do not publish it.
+struct CheckboxChanged {
+    /// Committed checked state.
+    checked: bool,
 }
 
 #[version(1)]
-/// Committed finite user value shared by Slider and Number; programmatic setters do not publish it.
-port NumericChangesPort {
-    /// Receives the captured value after retained traversal releases its owned state.
-    fn changed(&mut self, value: f32) -> Result<()>;
+#[message]
+/// Finite user value shared by Slider and Number.
+struct NumericChanged {
+    /// Committed finite numeric value.
+    value: f32,
 }
 
 #[version(1)]
-/// Committed clamped scrollbar offset from pointer input; programmatic setters do not publish it.
-port ScrollbarChangesPort {
-    /// Receives the captured value after retained traversal releases its owned state.
-    fn changed(&mut self, offset: i32) -> Result<()>;
+#[message]
+/// Clamped scrollbar offset committed by pointer input.
+struct ScrollbarChanged {
+    /// Committed nonnegative offset.
+    offset: i32,
 }

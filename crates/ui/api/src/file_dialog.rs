@@ -1,12 +1,12 @@
 //! Reusable native file requests publish completions into the application's typed inbox.
 //!
 //! ```no_run
-//! use neocogi_ui::{Ui, FileDialog, FileDialogRequest, Events, IWindowAbi, FileDialogCompletionMessage};
+//! use neocogi_ui::{Ui, FileDialog, FileDialogRequest, Events, IWindowAbi, FileDialogCompletion};
 //! use neocogi_com::{ComRef, NcStatus};
 //! use std::path::Path;
 //!
 //! fn create(ui: &Ui, owner: ComRef<'_, IWindowAbi>, directory: &Path)
-//!     -> Result<(FileDialog, Events<FileDialogCompletionMessage>), NcStatus>
+//!     -> Result<(FileDialog, Events<FileDialogCompletion>), NcStatus>
 //! {
 //!     let picker = ui.file_dialog(owner)?;
 //!     let mut events = Events::new();

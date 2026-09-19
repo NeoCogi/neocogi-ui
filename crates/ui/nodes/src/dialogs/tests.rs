@@ -67,7 +67,7 @@ impl Fixture {
     }
 }
 /// Connects the real picker completion protocol to a consumer-owned inbox.
-fn session(fixture: &Fixture) -> Events<FileDialogCompletionMessage> {
+fn session(fixture: &Fixture) -> Events<FileDialogCompletion> {
     let mut events = Events::new();
     events.map(fixture.handle.completed(), |event| event).unwrap();
     events
@@ -378,7 +378,7 @@ fn application_callback_opens_picker_and_later_input_reaches_its_new_modal_scope
         /// Requests that the reusable dialog become visible.
         Open,
         /// Captured native completion.
-        Completed(FileDialogCompletionMessage),
+        Completed(FileDialogCompletion),
     }
     let mut events = Events::new();
     let mut outcomes = Vec::new();
@@ -422,7 +422,7 @@ fn closed_picker_preserves_all_completed_requests_during_manual_handler_runtime_
     fixture.handle.close().unwrap();
     assert_eq!(
         events.dispatch(100, |message| {
-            assert!(matches!(message, FileDialogCompletionMessage::Cancelled));
+            assert!(matches!(message, FileDialogCompletion::Cancelled));
             completions += 1;
             ui.update(SIZE)
         }),
@@ -431,7 +431,7 @@ fn closed_picker_preserves_all_completed_requests_during_manual_handler_runtime_
     assert_eq!(completions, 2);
     assert_eq!(
         events.dispatch(100, |message| {
-            assert!(matches!(message, FileDialogCompletionMessage::Cancelled));
+            assert!(matches!(message, FileDialogCompletion::Cancelled));
             completions += 1;
             ui.update(SIZE)
         }),

@@ -112,7 +112,10 @@ fn item_at<'a>(menu: &'a mut Menu, path: &[usize], slot: usize) -> Result<&'a mu
     }
 }
 
-#[com_object(interfaces(IMenuItem, IActivationEvents, IFontStyle))]
+#[com_object(interfaces(IMenuItem, IActivationEvents, IFontStyle), ports(neocogi_ui_core_contracts::IActivationEvents::activated = {
+        self.owner()?.factory.host.check_mutation()?;
+        Ok(self.handle.submitted().as_ref())
+    }))]
 /// Menu rows expose direct live editing without synthesizing independent widget or container subtrees.
 struct Item {
     /// Live manager resolution never retains the runtime through a row capability.
@@ -242,13 +245,7 @@ impl IFontStyle for Item {
         self.edit(Edit::Font(crate::FontRef::Named(font)))
     }
 }
-impl IActivationEvents for Item {
-    /// Subscription uses the actual native record's source before or after mounting; no callback is retained by the row.
-    fn subscribe_activated(&self, sink: ComRef<'_, ActivationPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.owner()?.factory.host.check_mutation()?;
-        self.handle.submitted().subscribe(sink)
-    }
-}
+impl IActivationEvents for Item {}
 
 impl RuntimeStorage {
     /// Authenticates a root builder by canonical COM identity and live weak registration before taking native data.

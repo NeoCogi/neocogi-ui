@@ -120,9 +120,12 @@ impl SliderParameters {
 }
 
 /// Canonical generated numeric snapshot owned by the NCIDL event family.
-pub use neocogi_ui_nodes_contracts::NumericChangesMessage as SliderChanged;
+pub use neocogi_ui_nodes_contracts::NumericChanged as SliderChanged;
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Slider)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Slider, ports(neocogi_ui_nodes_contracts::Slider::changed = {
+        self.runtime().state.writable()?;
+        Ok(self.changed_event.as_ref())
+    }))]
 /// Concrete retained slider and dynamically constructible COM object.
 pub struct Slider {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -143,7 +146,7 @@ pub struct Slider {
     /// Inline numeric editing state.
     edit: NumberEditState,
     /// Runtime-owned source for user-originated value changes.
-    changed_event: crate::EventSource<SliderChanged>,
+    changed_event: crate::Port<SliderChanged>,
 }
 
 impl Slider {
@@ -159,7 +162,7 @@ impl Slider {
             low: parameters.low,
             high: parameters.high,
             edit: NumberEditState::default(),
-            changed_event: crate::EventSource::new(),
+            changed_event: crate::Port::new(),
         }
     }
 
@@ -186,8 +189,8 @@ impl Slider {
 
     /// Returns the native event endpoint emitted after every user-originated value change.
     #[cfg(test)]
-    pub fn changed(&self) -> crate::WidgetEventPortHandle<SliderChanged> {
-        self.changed_event.event()
+    pub fn changed(&self) -> crate::PortRef<SliderChanged> {
+        self.changed_event.as_ref()
     }
 
     /// Measures the slider track plus formatted value label.
@@ -1027,8 +1030,8 @@ mod tests {
 }
 
 use crate::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_core_contracts::{GeometryChange, IEventSubscriptionAbi, IWidgetHostAbi, FontRole};
-use neocogi_ui_nodes_contracts::{NumericChangesPortAbi, SliderAbi, SliderOptions};
+use neocogi_ui_core_contracts::{GeometryChange, IWidgetHostAbi, FontRole};
+use neocogi_ui_nodes_contracts::{SliderAbi, SliderOptions};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Slider);
@@ -1092,11 +1095,5 @@ impl neocogi_ui_nodes_contracts::Slider for Slider {
     /// Resolves one exact named font before replacing the slider's selection.
     fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         set_direct_named_font(self, name)
-    }
-    /// Connects the slider's existing semantic event source directly through the class contract.
-    fn subscribe_changed(&self, sink: ComRef<'_, NumericChangesPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.runtime().state.writable()?;
-        let endpoint = self.changed_event.event();
-        endpoint.subscribe(sink)
     }
 }

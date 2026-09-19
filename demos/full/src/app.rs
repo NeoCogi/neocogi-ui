@@ -132,11 +132,11 @@ pub(super) enum Message {
     /// Captured text submitted by the log entry control.
     Text(TextSubmitted),
     /// Selection committed by the combo control.
-    Choice(ChoiceChanged),
+    Choice(ChoiceSelection),
     /// Native file-dialog result, including cancellation.
-    File(FileDialogCompletionMessage),
+    File(FileDialogCompletion),
     /// Committed main-window lifecycle transition.
-    Window(WindowChanged),
+    Window(WindowEvent),
     /// Background channel selector and its new numeric value.
     Background(u32, NumericChanged),
     /// Palette editor's explicit local command.
@@ -363,8 +363,7 @@ impl State {
     }
 
     /// Resolves display text separately from the generated selection event.
-    fn choice_changed(&mut self, event: &neocogi_ui::events::ChoiceChanged) -> Result<(), NcStatus> {
-        let event = &event.selection;
+    fn choice_changed(&mut self, event: &neocogi_ui::events::ChoiceSelection) -> Result<(), NcStatus> {
         match *event {
             ChoiceSelection::None => self.write_log("Selection cleared"),
             ChoiceSelection::Selected(index) => {
@@ -376,7 +375,7 @@ impl State {
     }
 
     /// Accepted paths remain native values until explicitly formatted for this human-readable log.
-    fn file_selected(&mut self, event: &FileDialogCompletionMessage) -> Result<(), NcStatus> {
+    fn file_selected(&mut self, event: &FileDialogCompletion) -> Result<(), NcStatus> {
         self.open_item.set_enabled(true)?;
         match completed_file_path(event)? {
             Some(path) => self.write_log(&format!("Selected file: {}", path.display())),
@@ -385,8 +384,7 @@ impl State {
     }
 
     /// Preserves manager-owned minimize/maximize/restore rectangles and clamps only ordinary geometry.
-    fn window_changed(&mut self, event: &neocogi_ui::events::WindowChanged) -> Result<(), NcStatus> {
-        let event = &event.event;
+    fn window_changed(&mut self, event: &neocogi_ui::events::WindowEvent) -> Result<(), NcStatus> {
         let (mut area, clamp) = match *event {
             WindowEvent::GeometryChanged { rect } => (rect, !self.minimized),
             WindowEvent::Minimized { .. } => {

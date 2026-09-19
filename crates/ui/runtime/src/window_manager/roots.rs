@@ -137,7 +137,7 @@ impl<T> std::error::Error for SurfaceCreationError<T> {
 }
 
 /// Canonical generated popup dismissal fact emitted on active-branch removal.
-pub use neocogi_ui_core_contracts::PopupDismissalMessage as PopupEvent;
+pub use neocogi_ui_core_contracts::PopupDismissed as PopupEvent;
 
 /// Process-unique identifier for one popup definition inside its owning window.
 ///
@@ -169,12 +169,12 @@ pub struct PopupHandle {
     /// Process-unique concrete identity used only by the owning window manager.
     id: PopupId,
     /// Weak endpoint for policy-driven dismissal observations from this same popup.
-    events: crate::WidgetEventPortHandle<PopupEvent>,
+    events: crate::PortRef<PopupEvent>,
 }
 
 impl PopupHandle {
     /// Creates an application capability from an independently allocated identity and endpoint.
-    fn new(id: PopupId, events: crate::WidgetEventPortHandle<PopupEvent>) -> Self {
+    fn new(id: PopupId, events: crate::PortRef<PopupEvent>) -> Self {
         // Registration establishes this pairing once while it owns both concrete values.
         Self { id, events }
     }
@@ -186,7 +186,7 @@ impl PopupHandle {
     }
 
     /// Returns this popup's weak typed dismissal endpoint.
-    pub fn events(&self) -> crate::WidgetEventPortHandle<PopupEvent> {
+    pub fn events(&self) -> crate::PortRef<PopupEvent> {
         // Subscription receives only the weak endpoint; object selection remains a separate ID
         // operation performed by checked Ui methods.
         self.events.clone()
@@ -564,7 +564,7 @@ struct RootState {
     /// Expanded outer height retained while the minimize button shows a compact window.
     unminimized_height: Option<i32>,
     /// Strong owner of the unified window geometry/lifecycle event stream.
-    events: crate::EventSource<neocogi_ui_core_contracts::WindowLifecycleMessage>,
+    events: crate::Port<neocogi_ui_core_contracts::WindowEvent>,
     /// Optional concrete menu bar laid out above the application widget body.
     menu_bar: Option<MenuSurface>,
     /// Descendant viewport policy applied when layout enters direct structural child windows.
@@ -591,7 +591,7 @@ enum PopupState {
         /// Exact screen rectangle supplied by the public popup API.
         anchor: Recti,
         /// Strong owner of policy-driven popup lifecycle events.
-        events: crate::EventSource<PopupEvent>,
+        events: crate::Port<PopupEvent>,
         /// Whether the next committed layout must select this popup's first keyboard target.
         focus_on_layout: bool,
     },
@@ -793,10 +793,7 @@ impl SurfaceNode {
     fn emit_window_event(&mut self, event: WindowEvent) -> Result<(), neocogi_com::NcStatus> {
         // The strong port shares the window node's exact lifetime, while subscribers carry only a
         // weak capability and cannot emit into this queue themselves.
-        self.root()
-            .expect("window events are emitted only by roots")
-            .events
-            .emit(neocogi_ui_core_contracts::WindowLifecycleMessage { event })
+        self.root().expect("window events are emitted only by roots").events.emit(event)
     }
 
     /// Dismisses an active popup and emits exactly one policy event.
@@ -805,7 +802,7 @@ impl SurfaceNode {
         self.surface.body.clear_transient_targets();
         if let Some(PopupState::Application { events, .. }) = self.popup() {
             // Menu popups have no unobservable lifecycle port; their visibility is wholly internal.
-            events.emit(PopupEvent)?;
+            events.emit(PopupEvent::Dismissed)?;
         }
         Ok(())
     }
@@ -1415,8 +1412,8 @@ impl WindowManager {
         // Identity and event delivery are allocated separately, then paired once in the returned
         // application handle. The forest owns the same ID and the only strong event endpoint.
         let id = RootId::allocate();
-        let events = crate::EventSource::new();
-        let event_handle = events.event();
+        let events = crate::Port::new();
+        let event_handle = events.as_ref();
         self.surfaces.insert_root(SurfaceNode {
             key: SurfaceKey::Root(id),
             parent: parent.map(SurfaceKey::Root),
@@ -1653,8 +1650,8 @@ impl WindowManager {
         let id = PopupId::allocate();
         // The forest node retains the strong lifecycle port while the application handle combines
         // an independent stable ID with a weak endpoint for the same registered popup.
-        let events = crate::EventSource::new();
-        let event_handle = events.event();
+        let events = crate::Port::new();
+        let event_handle = events.as_ref();
         self.surfaces.insert_popup(SurfaceNode {
             key: SurfaceKey::Popup(id),
             parent: Some(parent),
@@ -2065,7 +2062,7 @@ impl WindowManager {
                 .root()
                 .expect("collected roots have root policy")
                 .events
-                .close(neocogi_ui_core_contracts::WindowLifecycleMessage { event: WindowEvent::Destroyed });
+                .close(WindowEvent::Destroyed);
             self.posted(result);
         }
         self.surfaces.remove_roots(&removed);

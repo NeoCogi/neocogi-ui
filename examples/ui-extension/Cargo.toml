@@ -16,6 +16,7 @@ default = []
 dynamic-plugin = []
 
 [dependencies]
+neocogi-com-events.workspace = true
 neocogi-ui-core-contracts.workspace = true
 neocogi-demo-contracts.workspace = true
 neocogi-ui.workspace = true

@@ -88,9 +88,12 @@ impl NumberParameters {
 }
 
 /// Canonical generated numeric snapshot owned by the NCIDL event family.
-pub use neocogi_ui_nodes_contracts::NumericChangesMessage as NumberChanged;
+pub use neocogi_ui_nodes_contracts::NumericChanged as NumberChanged;
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Number)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Number, ports(neocogi_ui_nodes_contracts::Number::changed = {
+        self.runtime().state.writable()?;
+        Ok(self.changed_event.as_ref())
+    }))]
 /// Concrete retained number input and dynamically constructible COM object.
 pub struct Number {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -107,7 +110,7 @@ pub struct Number {
     /// Text editing state for shift-click numeric entry.
     edit: NumberEditState,
     /// Runtime-owned source for user-originated value changes.
-    changed_event: crate::EventSource<NumberChanged>,
+    changed_event: crate::Port<NumberChanged>,
 }
 
 impl Number {
@@ -121,7 +124,7 @@ impl Number {
             font: parameters.font,
             value: parameters.value,
             edit: NumberEditState::default(),
-            changed_event: crate::EventSource::new(),
+            changed_event: crate::Port::new(),
         }
     }
 
@@ -147,8 +150,8 @@ impl Number {
 
     /// Returns the native event endpoint emitted after every user-originated value change.
     #[cfg(test)]
-    pub fn changed(&self) -> crate::WidgetEventPortHandle<NumberChanged> {
-        self.changed_event.event()
+    pub fn changed(&self) -> crate::PortRef<NumberChanged> {
+        self.changed_event.as_ref()
     }
 
     /// Measures the formatted number label.
@@ -280,8 +283,8 @@ impl crate::widget_object::FontState for Number {
 }
 
 use crate::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_core_contracts::{GeometryChange, IEventSubscriptionAbi, IWidgetHostAbi, FontRole};
-use neocogi_ui_nodes_contracts::{NumericChangesPortAbi, NumberAbi, NumberOptions};
+use neocogi_ui_core_contracts::{GeometryChange, IWidgetHostAbi, FontRole};
+use neocogi_ui_nodes_contracts::{NumberAbi, NumberOptions};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Number);
@@ -342,11 +345,5 @@ impl neocogi_ui_nodes_contracts::Number for Number {
     /// Resolves one exact named font before replacing the number editor's selection.
     fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         set_direct_named_font(self, name)
-    }
-    /// Connects the number editor's existing semantic event source directly through the class contract.
-    fn subscribe_changed(&self, sink: ComRef<'_, NumericChangesPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.runtime().state.writable()?;
-        let endpoint = self.changed_event.event();
-        endpoint.subscribe(sink)
     }
 }

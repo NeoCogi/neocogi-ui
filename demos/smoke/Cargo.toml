@@ -33,7 +33,7 @@ neocogi-demo-assets.workspace = true
 neocogi-com-runtime.workspace = true
 neocogi-ui-runtime = { path = "../../crates/ui/runtime" }
 neocogi-ui-nodes.workspace = true
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "2f6914931a35fc4ded7fac076acd66b31f0fe096", default-features = false }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "7129258b19b84823e2f323df03c6614ff383d22a", default-features = false }
 neocogi-gfx = { workspace = true, features = ["builder"] }
 neocogi-skin = { workspace = true, features = ["theme-json"] }
 neocogi-example-ui-extension = { path = "../../examples/ui-extension", optional = true }

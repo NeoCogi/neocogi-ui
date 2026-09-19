@@ -4,10 +4,11 @@ use neocogi.com.events::IEventSubscription;
 use neocogi.ui.core::{IWidget, ILeafLayout, IActivationEvents, IWidgetHost, IContainer, ChildEditResult};
 
 #[version(1)]
-/// Exact committed counter value published only after user activation.
-port CounterChangesPort {
-    /// Receives one immutable value captured before later callback edits.
-    fn changed(&mut self, value: u32) -> Result<()>;
+#[message]
+/// Committed value from the example counter.
+struct CounterChanged {
+    /// Committed counter value.
+    value: u32,
 }
 
 #[version(1)]
@@ -43,7 +44,7 @@ interface Counter: IWidget + ILeafLayout + IActivationEvents + IWidgetProbe {
     fn set_count(&mut self, value: u32) -> Result<()>;
 
     /// Claims the counter's independent typed value port and returns its lease.
-    changed: CounterChangesPort;
+    changed: CounterChanged;
 }
 
 #[version(1)]

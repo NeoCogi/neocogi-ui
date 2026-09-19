@@ -17,7 +17,7 @@ struct Request {
     /// messages, and runtime teardown all observe the same request lifetime.
     phase: Cell<RequestPhase>,
     /// Queue-free completion source; external consumers own their committed outcomes.
-    completed: crate::EventSource<FileDialogCompletionMessage>,
+    completed: crate::Port<FileDialogCompletion>,
 }
 
 /// Mutually exclusive picker-request lifecycle; no two booleans can disagree.
@@ -54,7 +54,7 @@ impl Request {
     }
 
     /// Emits one committed outcome after the modal has become idle.
-    fn finish(&self, status: FileDialogCompletionMessage) -> Result<(), NcStatus> {
+    fn finish(&self, status: FileDialogCompletion) -> Result<(), NcStatus> {
         match self.phase.get() {
             RequestPhase::Active => {
                 self.phase.set(RequestPhase::Idle);
@@ -72,7 +72,7 @@ impl Request {
     /// Closes future completion delivery; already posted outcomes remain in the consumer inbox.
     fn close(&self) -> Result<(), NcStatus> {
         match self.phase.replace(RequestPhase::Closed) {
-            RequestPhase::Active => self.completed.close(FileDialogCompletionMessage::Cancelled),
+            RequestPhase::Active => self.completed.close(FileDialogCompletion::Cancelled),
             RequestPhase::Idle | RequestPhase::Closed => {
                 self.completed.close_ordinary();
                 Ok(())
@@ -257,7 +257,7 @@ impl Model {
         })
     }
     /// Hides before emitting the outcome so later messages observe an idle reusable component.
-    fn finish(&mut self, outcome: FileDialogCompletionMessage) -> Result<(), NcStatus> {
+    fn finish(&mut self, outcome: FileDialogCompletion) -> Result<(), NcStatus> {
         if self.request.active() {
             if self.window().is_ok_and(|window| window.snapshot().is_ok()) {
                 self.window()?.set_visibility(Visibility::Hidden)?;
@@ -279,7 +279,7 @@ impl Model {
         };
         // Capture the exact native identity once at commit, not through a lossy
         // display label or a dispatcher-time reconstruction of this model.
-        self.finish(FileDialogCompletionMessage::Accepted {
+        self.finish(FileDialogCompletion::Accepted {
             path: neocogi_ui::NativePath::new(&path).as_interface().add_ref(),
         })
     }
@@ -487,7 +487,7 @@ impl Dialog {
         )?;
         let request = Rc::new(Request {
             phase: Cell::new(RequestPhase::Idle),
-            completed: crate::EventSource::new(),
+            completed: crate::Port::new(),
         });
         let model = Rc::new(RefCell::new(Model {
             events: Events::new(),
@@ -548,7 +548,7 @@ impl Model {
         for (button, action) in buttons {
             events.map(button.activated(), move |_| action.clone())?;
         }
-        events.map(neocogi_ui::events::window_events(window.as_com_ref())?, |event| Message::Lifecycle(event.event))?;
+        events.map(neocogi_ui::events::window_events(window.as_com_ref())?, |event| Message::Lifecycle(event))?;
         Ok(())
     }
 
@@ -623,7 +623,7 @@ impl Model {
                                 .is_ok_and(|window| window.snapshot().is_ok_and(|snapshot| snapshot.visibility == Visibility::Hidden)) =>
                     {
                         // An older hide fact must not cancel a newly visible request.
-                        self.finish(FileDialogCompletionMessage::Cancelled)?;
+                        self.finish(FileDialogCompletion::Cancelled)?;
                     }
                     WindowEvent::Destroyed => self.request.close()?,
                     _ => {}
@@ -647,7 +647,7 @@ impl Model {
                 None
             }
             Message::Cancel => {
-                self.finish(FileDialogCompletionMessage::Cancelled)?;
+                self.finish(FileDialogCompletion::Cancelled)?;
                 None
             }
             Message::Folder(path) => Some(path),
@@ -685,7 +685,10 @@ impl Drop for Dialog {
     }
 }
 
-#[com_object(interfaces(IFileDialog))]
+#[com_object(interfaces(IFileDialog), ports(neocogi_ui_core_contracts::IFileDialog::completed = {
+        self.dialog.model.try_borrow().map_err(|_| UI_E_BUSY)?.owner()?;
+        Ok(self.dialog.request.completed.as_ref())
+    }))]
 /// One public controller identity owns no application callback, generic state pointer or native filesystem borrow.
 struct FileDialog {
     /// Runtime ownership keeps an active picker functional even if its caller releases the editing pointer.
@@ -716,7 +719,7 @@ impl IFileDialog for FileDialog {
         let mut model = self.dialog.model.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
         model.owner()?;
         let active = self.dialog.request.active();
-        model.finish(FileDialogCompletionMessage::Cancelled)?;
+        model.finish(FileDialogCompletion::Cancelled)?;
         Ok(active)
     }
     /// Actual window destruction produces the same lifecycle cancellation as destroying its owner.
@@ -731,11 +734,6 @@ impl IFileDialog for FileDialog {
     /// Diagnostics remain available after failure or closure to explain a rejected directory candidate.
     fn diagnostic(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         Ok(NcString::from_utf8_str(&self.dialog.model.try_borrow().map_err(|_| UI_E_BUSY)?.diagnostic))
-    }
-    /// Returns the same completion source for every request without letting producers retain application state.
-    fn subscribe_completed(&self, sink: ComRef<'_, FileDialogCompletionPortAbi>) -> Result<ComPtr<IEventSubscriptionAbi>, NcStatus> {
-        self.dialog.model.try_borrow().map_err(|_| UI_E_BUSY)?.owner()?;
-        self.dialog.request.completed.event().subscribe(sink)
     }
 }
 /// Creates one nodes-owned picker whose mounted root drives all private component events.
