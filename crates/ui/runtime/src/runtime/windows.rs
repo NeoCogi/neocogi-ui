@@ -201,7 +201,7 @@ enum WindowEdit {
 
 #[com_object(interfaces(IWindow, IWindowEvents), ports(neocogi_ui_core_contracts::IWindowEvents::changed = {
         self.owner()?.factory.host.check_mutation()?;
-        Ok(self.window.events().as_ref())
+        Ok(self.window.events())
     }))]
 /// One retained COM window capability; all semantic state remains in the manager's forest.
 struct LogicalWindow {
@@ -326,7 +326,7 @@ impl IWindow for LogicalWindow {
 
 #[com_object(interfaces(IPopup, IPopupEvents), ports(neocogi_ui_core_contracts::IPopupEvents::dismissed = {
         self.owner()?.factory.host.check_mutation()?;
-        Ok(self.popup.events().as_ref())
+        Ok(self.popup.events())
     }))]
 /// Popup projection has its own placement/lifetime methods and cannot impersonate a window.
 pub(super) struct LogicalPopup {

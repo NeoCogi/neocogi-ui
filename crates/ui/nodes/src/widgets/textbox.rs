@@ -175,18 +175,6 @@ pub use neocogi_ui_core_contracts::TextChanged as TextboxChanged;
 pub use neocogi_ui_core_contracts::TextSubmitted as TextboxSubmitted;
 
 impl Textbox {
-    /// Returns the native event endpoint emitted after every user-originated text change.
-    #[cfg(test)]
-    pub fn changed(&self) -> crate::PortRef<TextboxChanged> {
-        self.changed_event.as_ref()
-    }
-
-    /// Returns the native event endpoint emitted whenever the user submits the current text.
-    #[cfg(test)]
-    pub fn submitted(&self) -> crate::PortRef<TextboxSubmitted> {
-        self.submitted_event.as_ref()
-    }
-
     /// Measures a single-line editor, bounded by available width when supplied.
     fn preferred_size_widget(&self, style: &Skin, atlas: &AtlasHandle, constraints: Constraints) -> Dimensioni {
         let padding = style.metrics().padding.max(0);
@@ -450,8 +438,8 @@ mod tests {
 
     /// Reads complete production queue snapshots; runtime dispatch is tested through Events.
     fn text_dispatcher(textbox: &Textbox) -> impl FnMut(&mut Vec<RecordedEvent>) -> bool + use<> {
-        let changed = neocogi_ui::events::test_support::Capture::connect(textbox.changed()).unwrap();
-        let submitted = neocogi_ui::events::test_support::Capture::connect(textbox.submitted()).unwrap();
+        let mut changed = neocogi_ui::events::test_support::Capture::connect(textbox.changed_event.as_ref()).unwrap();
+        let mut submitted = neocogi_ui::events::test_support::Capture::connect(textbox.submitted_event.as_ref()).unwrap();
         move |values| {
             let changed = changed.drain(1024).unwrap();
             let submitted = submitted.drain(1024).unwrap();

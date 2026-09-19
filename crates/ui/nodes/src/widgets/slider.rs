@@ -187,12 +187,6 @@ impl Slider {
         self.edit.editing
     }
 
-    /// Returns the native event endpoint emitted after every user-originated value change.
-    #[cfg(test)]
-    pub fn changed(&self) -> crate::PortRef<SliderChanged> {
-        self.changed_event.as_ref()
-    }
-
     /// Measures the slider track plus formatted value label.
     fn preferred_size_widget(&self, style: &Skin, atlas: &AtlasHandle, _constraints: Constraints) -> Dimensioni {
         let thumb_size = style.metrics().thumb_size.max(0);
@@ -513,7 +507,7 @@ mod tests {
 
     /// Observes snapshots from the production event source without scheduling UI work.
     fn slider_dispatcher(slider: &Slider) -> impl FnMut(&mut Vec<Real>) -> bool + use<> {
-        let lease = neocogi_ui::events::test_support::Capture::connect(slider.changed()).unwrap();
+        let mut lease = neocogi_ui::events::test_support::Capture::connect(slider.changed_event.as_ref()).unwrap();
         move |values| {
             let batch = lease.drain(1024).unwrap();
             let delivered = !batch.is_empty();
@@ -526,7 +520,7 @@ mod tests {
 
     /// Observes snapshots from the production event source without scheduling UI work.
     fn number_dispatcher(number: &Number) -> impl FnMut(&mut Vec<Real>) -> bool + use<> {
-        let lease = neocogi_ui::events::test_support::Capture::connect(number.changed()).unwrap();
+        let mut lease = neocogi_ui::events::test_support::Capture::connect(number.changed()).unwrap();
         move |values| {
             let batch = lease.drain(1024).unwrap();
             let delivered = !batch.is_empty();

@@ -291,20 +291,6 @@ impl TextEditor {
         self.reveal_caret = true;
     }
 
-    /// Returns the native event endpoint emitted after every user-originated text change.
-    #[cfg(test)]
-    pub fn changed(&self) -> crate::PortRef<TextAreaChanged> {
-        // Delegate to the typed-event implementation so widget and handle APIs share one endpoint.
-        self.changed_event.as_ref()
-    }
-
-    /// Returns the native event endpoint emitted whenever the user submits the current text.
-    #[cfg(test)]
-    pub fn submitted(&self) -> crate::PortRef<TextAreaSubmitted> {
-        // Delegate to the typed-event implementation so widget and handle APIs share one endpoint.
-        self.submitted_event.as_ref()
-    }
-
     /// Measures intrinsic editable text using the wrapping width supplied by ScrollArea.
     fn preferred_size_widget(&self, style: &Skin, atlas: &AtlasHandle, constraints: Constraints) -> Dimensioni {
         // Resolve word wrapping against a bounded viewport width while leaving unwrapped content
@@ -917,8 +903,8 @@ mod tests {
     /// Creates a dispatcher subscribed to both native TextEditor event ports.
     /// Reads complete production queue snapshots; runtime dispatch is tested through Events.
     fn text_dispatcher(text_area: &TextEditor) -> impl FnMut(&mut Vec<RecordedEvent>) -> bool + use<> {
-        let changed = neocogi_ui::events::test_support::Capture::connect(text_area.changed()).unwrap();
-        let submitted = neocogi_ui::events::test_support::Capture::connect(text_area.submitted()).unwrap();
+        let mut changed = neocogi_ui::events::test_support::Capture::connect(text_area.changed_event.as_ref()).unwrap();
+        let mut submitted = neocogi_ui::events::test_support::Capture::connect(text_area.submitted_event.as_ref()).unwrap();
         move |values| {
             let changed = changed.drain(1024).unwrap();
             let submitted = submitted.drain(1024).unwrap();

@@ -114,7 +114,7 @@ fn item_at<'a>(menu: &'a mut Menu, path: &[usize], slot: usize) -> Result<&'a mu
 
 #[com_object(interfaces(IMenuItem, IActivationEvents, IFontStyle), ports(neocogi_ui_core_contracts::IActivationEvents::activated = {
         self.owner()?.factory.host.check_mutation()?;
-        Ok(self.handle.submitted().as_ref())
+        Ok(self.handle.submitted())
     }))]
 /// Menu rows expose direct live editing without synthesizing independent widget or container subtrees.
 struct Item {

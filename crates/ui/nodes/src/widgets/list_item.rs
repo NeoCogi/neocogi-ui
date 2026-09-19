@@ -121,12 +121,6 @@ impl ListItem {
         self.label = label.into();
     }
 
-    /// Returns the native event endpoint emitted once for every user submission.
-    #[cfg(test)]
-    pub fn submitted(&self) -> crate::PortRef<ListItemSubmitted> {
-        self.submitted_event.as_ref()
-    }
-
     /// Measures the row label and optional icon.
     fn preferred_size_widget(&self, style: &Skin, atlas: &AtlasHandle, _constraints: Constraints) -> Dimensioni {
         let padding = style.metrics().padding.max(0);
