@@ -131,8 +131,8 @@ Custom drawing uses the painter's solid geometry/image methods or an owned
 
 External controls may also implement standard event capabilities such as
 `IActivationEvents` or `ITextEvents`. The application queries that typed capability
-once while wiring its `Events`; dispatch then calls the cached event interface
-and never consults the class registry during update, layout, or paint.
+once while mapping its `Events` inbox; producers post through the cached typed
+receiver. Dispatch consumes local messages and never consults the class registry.
 
 ## Native text input and cancellation
 

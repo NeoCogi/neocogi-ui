@@ -69,244 +69,136 @@ field comment must name that constraint.
 
 ## Typed events and application state
 
-The COM compiler treats the generated `neocogi.com.events` NCIDL module as its
-canonical event-lease ABI: a foreign same-named lease cannot satisfy a named
-port binding. That module owns `IEventSubscription` and `IEventDispatcher`;
-`neocogi-com-events` owns the producer queue, weak endpoint, application session,
-and local delivery adapter. Generated event bindings check the support API
-version at compile time. This support crate does not depend on UI or on the
-process-global `neocogi-com-runtime`. UI adds only domain validation and
-typed port getters. `neocogi_ui::EventSession<State>` reexports the same
-`neocogi_com_events::EventSession<State>` used by non-UI components.
-`Ui::update_with_events` borrows its dispatcher; only the native facade sees the
-state parameter, and the runtime receives a concrete COM capability.
-Each subscription owns a concrete callable stored inline in its generated COM
-receiver. Pass an ordinary state method, function, or closure with the signature
-`FnMut(&mut State, &Message) -> Result<(), NcStatus>`; these automatically implement
-`EventHandler<State, Message>`. Explicit trait implementations are optional.
-Neither the callable nor Rust state crosses the ABI. Generic Rust list data also
-stays in the application; cross-plugin domain data needs a concrete domain
-interface and owner-scoped keys.
+`Events<Message>` owns one consumer FIFO and its connection leases. State remains
+an ordinary application value, independent of the transport. Map each generated
+port into the application's own enum, then use one mutable consumer:
 
 ```rust
-use neocogi_ui::EventSession;
-use neocogi_ui::events::Activation;
-
-let events = EventSession::new(0u32);
-// Move an owned editing capability into this subscription's concrete closure.
-let mut callback_button = button.clone();
-let lease = events.subscribe(button.activated(), move |count: &mut u32, event: &Activation| {
-    *count += 1;
-    // The event retains the label captured before this programmatic edit.
-    callback_button.set_label(&format!("{}: {}", event.label, count))
-})?;
-ui.update_with_events(drawable_size, &events)?;
-println!("{} submissions", *events.state()?);
-ui.render(drawable_size, renderer.as_com_ref())?;
-lease.cancel()?; // Explicit cancellation; dropping the session also cancels its leases.
-```
-
-Closures need explicit state/event reference types at the trait-based subscription
-boundary. State methods already declare those types and can be passed directly,
-for example `events.subscribe(picker.completed(), AppState::file_selected)?`.
-Captures must be owned or otherwise valid for `'static`; use `move` when capturing
-local owned values. A mutable capture is protected by the receiver's exclusive
-borrow and does not require an extra `Cell` or `RefCell`. Failed setup and
-cancellation release captured ownership just as they release explicit handlers.
-
-Ports normally belong directly to their owning interface alongside editing
-methods. A separate source interface is useful for an optional or shared
-capability, such as generic activation, and can be queried when subscribing.
-Pass all ports to the same session API:
-
-| Port | Producers | Captured payload |
-| --- | --- | --- |
-| `activated()` | Button, ListItem, ListBox | Submitted label |
-| `changed()` | Checkbox | Checked boolean |
-| `changed()` | Slider, Number | Finite committed value |
-| `changed()` | Scrollbar | Nonnegative clamped offset |
-| `changed()` | Textbox, TextArea | Normalized text and matching UTF-8 byte cursor |
-| `submitted()` | Textbox, TextArea | Submitted normalized text |
-| `window_events(window)?` | Logical window | Typed lifecycle/chrome event with copied geometry where relevant |
-| `popup_events(popup)?` | Popup | Dismissal fact |
-| `changed()` | Combo | NCIDL-generated committed selection |
-| `activated()` | Compact menu row | Submitted label |
-| `completed()` | Standard file picker | Exact accepted native path or cancellation |
-
-Independent producers share `neocogi_com_events::EventSource<E>` with built-ins;
-the UI facade reexports this type for UI authors.
-Standard UI snapshots are generated from `port` NCIDL declarations, and their
-source subscription methods and typed port accessors are generated from named protocol
-bindings. Use one `session.subscribe(port, handler)` operation for built-in and
-independently loaded controls. UI getters such as `button.activated()` and
-`editor.changed()` select the exact generated port and any required domain check.
-Generated accessors work on both owned and borrowed COM handles. Import the
-source's generated `Ports` extension trait to call `object.port_name()`; no free
-constructor function or extra subscription interface is required. The accessor
-cannot fail, and `.checked(validate)` installs a predicate before state borrowing.
-The port releases its source after setup; only the returned lease is retained.
-
-`EventPort` associates each source with its concrete owned `Event` type.
-Subscription claims the registration transaction before the port creates its
-sink or calls the foreign subscription method. Failure restores registration
-order and releases uncommitted ownership. Native sources may implement the same
-trait; declared NCIDL ports need no handwritten setup adapter.
-
-Event sinks use `&mut self`, letting the generated COM call gate protect a plain
-handler field. The shared state still needs one `RefCell` because independent
-sinks borrow the same owner. Rust binding protocol 3 checks compiler/support
-agreement. Event delivery signatures change accordingly; plugin descriptor and
-runtime table ABIs remain v1. Rebuild contracts and plugins together.
-
-Commit semantic state, then
-call `emit` with its owned snapshot. Implement the event capability by returning
-`source.subscribe(sink)`, and close ordinary sources when the widget logically closes.
-The [extension example](../examples/ui-extension) demonstrates the full object,
-its inherited editing interface, and an application callback across separate binaries.
-Raw queue leases are available only through the COM support crate's `test-support`
-feature for algorithm fixtures; ordinary applications use COM subscriptions.
-
-A source permits one subscriber per port. Editor changed/submitted ports are
-independent. Subscribing to an occupied port returns `UI_E_BUSY`; subscribing to
-a closed producer returns `UI_E_CLOSED`. A failed registration does not replace
-the current subscriber. TextArea forwards both capabilities to its actual editor;
-there is one queue for each event, without an outer duplicate.
-
-Producer queues contain immutable snapshots and never own application callbacks,
-sinks, leases or sessions. A subscription owns its queue connection and typed
-sink; the session owns subscriptions. The runtime **borrows** `IEventDispatcher`
-synchronously during `update_with_events` and must not retain it. State and
-handlers may therefore own runtime/widget capabilities. Application-created
-ownership cycles still require explicit cancellation. `EventSession` destruction
-cancels every registered lease, including leases retained by other app code, and
-releases their sinks. A retained dispatcher subsequently reports `UI_E_CLOSED`.
-Final subscription release disconnects; final producer release closes its queue.
-Neither invokes application handlers.
-
-A composite widget with private child handlers exposes the optional
-`IComponentEventProvider` UI capability. Its `private_dispatcher` returns a
-separate COM allocation—not the widget's own `IUnknown` identity—so callback
-edits cannot collide with a held widget call gate. The runtime validates that
-identity before the one-way mount, caches the driver on the mounted node, and
-copies child-first driver tickets after traversal. Private component sessions
-run before the application session at every finite callback boundary. A ticket
-is retired when its node is removed, so a callback that closes another
-component prevents that removed component's snapshot from firing later in the
-same sweep. No composite-specific branch or private widget type enters the
-window-root policy layer.
-
-```rust
-// In the composite's NCIDL contract module:
-// port ChoicePort { fn chosen(&mut self, item: u64) -> Result<()>; }
-// interface ChoicePanel: IWidget + IContainerLayout + IComponentEventProvider {
-//     choice: ChoicePort;
-// }
-
-// In the producer plugin binary, after committing a choice:
-source.emit(ChoiceMessage { item });
-// Its IComponentEventProvider implementation returns an owned reference from
-// a component-owned private EventSession, not the ChoicePanel COM identity:
-fn private_dispatcher(&self) -> Result<ComPtr<IEventDispatcherAbi>, NcStatus> {
-    Ok(self.private_session.as_dispatcher().add_ref())
+/// Application-specific intent combines a configured destination with its captured fact.
+enum AppMessage {
+    /// The button's immutable activation label.
+    Activated(String),
+    /// One reusable dialog's native completion, routed by the application.
+    Completed { destination: usize, result: FileDialogCompletionMessage },
 }
-
-// In an application or another plugin's State:
-let session = neocogi_com_events::EventSession::new(state);
-session.subscribe(panel.choice(), ChoiceHandler)?;
-ui.update_with_events(size, &session)?;
+let mut events = Events::new();
+events.map(button.activated(), |event| AppMessage::Activated(event.label))?;
+events.map(picker.completed(), |result| AppMessage::Completed { destination: 0, result })?;
+ui.update_with_events(drawable_size, &mut events, |message| app.update(message))?;
+ui.render(drawable_size, renderer.as_com_ref())?;
 ```
 
-Private composite logic can translate these deliveries into one local message enum
-and `Model::update(&mut self, message)`. The file picker demonstrates this for row
-commands, text changes/submission, and window lifecycle. Translation runs directly
-inside the existing delivery; it adds no inbox or second queue. Private events reach
-parents only through the composite's explicitly declared public outputs.
+`app.update(&mut self, message)` matches that enum and edits ordinary state. It may
+borrow stack data for the duration of an update. No handler type, state-owning event
+session, manual queue traversal, or update-cycle object is required. Separate dialog
+instances can map their same protocol to different destinations. When reusing one
+dialog across requests, request identity remains application/domain policy; mapping
+a port does not manufacture an invocation ID absent from the protocol.
 
-Nested components are scheduled at arbitrary tree depth. A child mounted during a
-callback joins the next sweep at that same boundary. Removing an ancestor retires
-its descendant tickets before teardown, including tickets already collected for
-later delivery. Runtime tests exercise three nested component levels, automatic
-private dispatch without an application session, insertion during a callback, and
-ancestor removal from a descendant handler.
+The compiler treats `neocogi.com.events.IEventSubscription` as the canonical lease
+for named ports. The contract owns `active` and `cancel`; dispatch is a separate
+consumer capability. The generic `neocogi-com-events` crate supplies connections,
+inboxes, generated receiver support, and scoped consumer dispatch without depending
+on UI or the process-global runtime. UI adds domain checks and convenient getters.
+Both plugin descriptor and runtime table ABIs remain v1. Generated Rust event
+bindings require support API 4 and must be regenerated together with this transport.
 
-The example uses one generated domain payload and sink on both sides of the
-ABI. Private handlers and application handlers remain native, typed values in
-their respective binaries. A component without private handlers needs only
-its declared port binding and does not implement `IComponentEventProvider`.
+| Port | Producers | Owned protocol message |
+| --- | --- | --- |
+| `activated()` | Buttons, list rows, menu items | Captured label |
+| `changed()` | Checkbox | Checked boolean |
+| `changed()` | Slider, Number | Finite numeric value |
+| `changed()` | Scrollbar | Nonnegative offset |
+| `changed()`, `submitted()` | Textbox, TextArea | UTF-8 text and, for changes, cursor |
+| `changed()` | Combo | Committed `ChoiceSelection` |
+| `completed()` | FileDialog | Native path capability or cancellation |
 
-Dispatch sweeps sources in registration order, with FIFO inside each source.
-Each source captures a bounded delivery window, then pops one event before each
-callback. Unattempted events stay queued; no producer, retained tree, registry
-or sink-slot borrow crosses the callback. Cross-source order is
-registration order, not a global timestamp order. For example, if B was
-registered before A, A produced `a1, a2`, and B produced `b1`, a sweep delivers
-`b1, a1, a2`. Callback emissions participate in subsequent source visits or
-sweeps until the queues are empty. Registration, session cancellation, and
-recursive dispatch during a session transaction return `UI_E_BUSY`; cancelling
-an individual lease from its own handler is supported and stops the remainder
-of its batch. A cancelled old lease cannot disconnect a later replacement.
+`name: Protocol;` generates an accessor on `ComPtr` and `ComRef`. The temporary
+port retains that exact source only until connection finishes; it neither queries
+another capability nor subscribes merely by being constructed. A separate source
+interface remains useful for optional shared behavior such as activation. The file
+dialog's completion binding belongs directly to `IFileDialog`.
 
-`EVENT_DISPATCH_LIMIT` is 1,000,000 callbacks per runtime dispatch boundary,
-including mounted private components, runtime-owned dialog services, application
-sources, and cascade sweeps. `dispatch_bounded(limit)` selects an
-explicit smaller budget for manual delivery. Exhaustion reports
-`UI_E_EVENT_LIMIT` (-1007) and preserves unattempted events. Delivering exactly
-the limit succeeds when nothing remains; limit zero succeeds only for empty
-queues. A handler error consumes the attempted event, stops delivery, and
-leaves unattempted events queued ahead of events emitted by that callback.
-Retry never replays the failed attempt. Changes already made by a handler are
-not rolled back. Panics follow the COM abort policy and are not recoverable
-handler errors. A custom dispatcher must report its actual successful callback
-count and honor the supplied bound.
+A producer stores `EventSource<GeneratedMessage>`, returns `source.subscribe(sink)`
+from the generated connection method, and uses `source.emit(message)?` only after
+committing the state described by the fact. Generated delivery copies strings and
+slices, retains concrete object references, checks domain invariants, invokes the
+mapper, and posts the result directly into the consumer inbox. There is no source
+queue followed by a second application queue.
 
-Ordinary widget setters are silent; changing a value does not manufacture a
-user submission. Window visibility transitions and popup dismissal explicitly
-publish lifecycle facts even when initiated by application code. Logical source
-closure discards ordinary queued work, including the remainder of an active
-delivery window. Window destruction preserves exactly one terminal `Destroyed` fact for
-its existing subscriber; it can be delivered after the window is closed. A new
-subscriber cannot replay historical events. Cancellation discards terminal facts
-too. Terminal delivery is attempted once, even if its handler returns an error.
+Mappers run synchronously during emission and should only translate data or attach
+routing IDs. They must not do UI work or consume application state; the producer
+may still hold traversal or semantic borrows. Rust does not prove closure purity.
+Mapper captures must be owned or otherwise `'static`. The generated mutable receiver
+stores the concrete `FnMut` directly and protects ordinary captures through the COM
+call gate. Consumer behavior is deferred and needs no `'static` borrow. A private
+scoped adapter revokes every retained foreign dispatcher on return or unwind, so
+borrowing an ordinary application consumer does not extend its lifetime across COM.
 
-`Ui::update_with_events` initially synchronizes geometry, dispatches already
-queued events, then processes each native input followed by semantic dispatch
-and layout before routing the next input. With no native input, eligible widgets
-receive one ordinary update. At handler boundaries the context is available for
-ordinary setters, window creation/removal, topology edits, and input enqueueing.
-Recursive update/render reports `UI_E_BUSY`. Callback failure leaves the frame
-uncommitted, so render reports `UI_E_UPDATE_REQUIRED`; another update can finish
-remaining queued input. If a handler closes the runtime, the outer update
-reports `UI_E_CLOSED`.
+One source supports one live connection. The lease owns its receiver; the source
+holds a weak link and the receiver has weak posting access. Connecting a second
+consumer reports BUSY. Cancelling an old lease cannot disconnect its replacement.
+Failed setup releases uncommitted receiver ownership. Applications must still avoid
+cycles they explicitly create in their own captured data.
 
-`Ui::update` drives mounted private components automatically, without supplying
-an application dispatcher. `EventSession::dispatch`
-only delivers semantic events: it neither processes native input nor commits
-layout. After manual callbacks mutate geometry, call update before rendering.
-Directly dispatching a raw lease bypasses session ordering and its global budget;
-applications using this lower-level API own those obligations themselves.
+Every port mapped into one inbox shares **emission order**, regardless of connection
+order. An emitted fact belongs to that consumer once posted. Cancelling the lease,
+closing the source, or dropping the producer prevents future posting and releases
+the mapper without retracting committed messages. Dropping the inbox cancels its
+leases, invalidates separately retained leases, and drops all pending messages.
+No subscriber means no replay history. Closing a source may post one final fact;
+request outcomes need no special finished queue or terminal-delivery state machine.
 
-Finish `state()`/`state_mut()` borrows before dispatch or an eventful update. A
-handler needs mutable access to the same state; incompatible borrows produce
-`UI_E_BUSY`. As with any handler error, an event attempted while that state is
-unavailable is consumed. Do not hide borrowed stack state inside a retainable
-COM object to work around this rule.
+A behavioral composite owns a private enum and inbox and maps its children into
+that enum. Its ordinary mutable `update` method consumes one message and may emit
+public results. Internal messages do not implicitly bubble to all ancestors.
+`ScrollArea` needs no inbox merely because its structural children share scroll
+state. When separate COM controller and mounted-driver identities need access to
+a behavioral model, one `Rc<RefCell<Model>>` provides the necessary checked boundary;
+the model's fields, inbox registration, and update method use normal mutable access.
 
-### Geometry synchronization does not repeat ordinary widget behavior
+The framework constructs a component driver with
+`model.borrow().events.component_dispatcher(&model, Model::update)?`. The mounted
+root exposes it through `IComponentEventProvider::private_dispatcher`. That driver
+has a separate COM identity and weak ownership; neither a private dispatch loop nor
+an application-side child registry is needed. The runtime discovers arbitrary
+nested providers during mount and drives them even in ordinary `Ui::update`.
 
-A setter invoked by a handler can run after that widget's ordinary update for
-the current input. The following layout sees its dirty geometry, but the runtime
-does not automatically rerun already visited widgets. Requests implemented by
-ordinary update, such as TextArea caret reveal and preferred-column reset, wait
-for that widget's next eligible update. If immediate caret visibility is required
-after a handler changes cursor, text, font or wrapping, perform another update
-after the outer update returns (or allow a later queued input to supply that
-update). Hidden/ineligible editors retain requests until eligible again.
+The runtime synchronizes layout and settles pending messages before routing input.
+It then routes one raw input, releases traversal borrows, and visits private inboxes
+descendant-first in stable tree order. Each component
+gets at most one message per pass. Passes repeat until private work and layout
+settle, then one application message runs. Its resulting private work settles before
+the next application message or raw input. Newly mounted children join the next
+pass; removed mounts retire their tickets before further visits, including a second
+message for the component that removed itself. There is no total ordering across
+independent inboxes beyond this explicit schedule. An empty input queue still gets
+an eventless update. The renderer receives a committed frame only after settlement.
 
-This is an author obligation: retain such requests explicitly and distinguish
-geometry invalidation from behavior that needs another update. A geometry commit
-alone cannot certify completion of arbitrary pending model work. External/shared
-state still requires explicit synchronization, as described above; neither a
-handler return nor `Changed | NoChange` observes undocumented dependencies.
+One finite work budget spans the whole update, including component messages,
+application messages and choice-menu reconciliation. Exhaustion reports LIMIT,
+leaves unattempted messages queued and keeps the frame uncommitted. Consumer errors
+consume the attempted message and preserve successors; state edits do not roll back.
+An error claiming a component's mutable model leaves its message unattempted.
+Receiver decoding/mapping errors return at emission; built-ins surface them through
+the enclosing widget/window operation while preserving committed state and geometry
+invalidation. Drop paths release ownership but cannot return a failure to callers.
+
+Recursive runtime update/render and recursive mutable dispatcher invocation reject.
+Layout/paint remain observational. Consumers may prepare immutable asset candidates,
+but asset installation belongs after update returns. Posting does not request a
+future platform frame; timers, animation and external data still need host scheduling.
+`Events::pop` is available for non-UI consumers that explicitly own their own loop.
+
+Layout settlement does not repeat a widget's ordinary behavior for the same input.
+Requests such as caret reveal, made after an editor's ordinary update, remain pending
+until its next eligible update; hidden editors retain those requests. Authors must
+distinguish geometry invalidation from behavior that needs another update and retain
+such requests explicitly. Shared external state still requires explicit synchronization.
+
+The [events guide](../crates/ui/runtime/docs/EVENTS.md) gives a complete small example;
+the [independent extension](../examples/ui-extension) exercises the same generated
+protocol through both ordinary-Cargo plugins and static monoliths.
 
 ## Paths, buffers, resources, and errors
 
@@ -839,7 +731,7 @@ file.submenu("Recent")?.item("Document")?;
 menus.attach_bar(window.as_com_ref(), &bar)?;
 // The actual compact rows now belong exclusively to the manager's forest.
 open.set_label("Open file")?;
-events.subscribe(open.activated()?, ConcreteOpenHandler)?;
+events.map(open.activated()?, |event| AppMessage::Open(event.label))?;
 ```
 
 A bar's direct entries must be submenus. `attach_bar` installs one intrinsic bar
@@ -864,7 +756,7 @@ submenus, skipping disabled rows and separators. Enter/Space submits the selecte
 row and closes the active path, restoring ordinary application focus. A shown
 standalone menu starts with no row selected: Down selects its first actionable
 row before Enter. Submission captures the actual label at activation and uses
-the shared `Activation` payload. Cross-source registration order still applies.
+the shared `Activation` payload. All mapped ports share their consumer's emission-order FIFO.
 
 ## Native paths and standard file pickers
 
@@ -878,10 +770,10 @@ replacement-character labels and must remain distinct selections.
 
 The native picker is a UI-owned COM component containing actual COM buttons,
 textboxes, list rows, Linear containers and scrolling composites. Its internal
-concrete handlers reuse the static `EventSession` implementation with weak
-runtime ownership. The runtime keeps active modal controllers functional even if
-the application releases a picker editing pointer. Close the picker or its owner
-to end that logical component. Retaining a picker cannot keep a closed runtime
+private inbox owns child messages and its ordinary mutable model consumes them
+through a framework-created mounted driver. Retain the picker while requests are
+active; final controller release closes its modal and settles an active request.
+Explicit close or owner destruction also ends the logical component. Retaining a picker cannot keep a closed runtime
 alive. The static facade still depends only on contracts and COM support; the UI
 plugin uses its ordinary owned adapters internally without passing Rust model
 state across the ABI.
@@ -891,14 +783,14 @@ application handler:
 
 ```rust
 let picker = ui.file_dialog(window.as_com_ref())?;
-events.subscribe(picker.completed(), ConcreteSelectionHandler)?;
+events.map(picker.completed(), AppMessage::Completed)?;
 let mut request = FileDialogRequest::new(native_directory);
 request.title = "Choose a document".to_owned();
 picker.open(&request)?;
-ui.update_with_events(drawable_size, &events)?;
+ui.update_with_events(drawable_size, &mut events, |message| app.update(message))?;
 ```
 
-The handler receives the generated `FileDialogCompletionMessage::Accepted { path }`
+The mapper receives the generated `FileDialogCompletionMessage::Accepted { path }`
 or `Cancelled`. `neocogi_ui::events::completed_file_path` copies the exact
 host-native `PathBuf` when the application needs it; display text is never
 reconstructed as a lookup key.
@@ -923,9 +815,10 @@ Browser targets have no native filesystem access; native directory operations
 there report the platform's unsupported-operation error rather than presenting
 a fabricated filesystem picker.
 
-Internal control events are swept in component creation order before application
-sources, and both share the runtime's finite callback budget. Navigation rebuilds
-rows after the component's current registration transaction ends. Application
+The private inbox preserves emission order across its child controls and participates
+in descendant-first runtime passes. It shares the update's finite work budget with
+application consumption. Navigation rebuilds rows inside the same mutable update
+that handles the navigation message. Application
 callbacks may open an already prepared picker through its ordinary interface;
 the following layout establishes its modal scope before later queued input.
 The picker owns its window's exclusive lifecycle subscription, so use its
@@ -938,16 +831,12 @@ new visible request. Hiding/destroying an active modal or its owner cancels it
 once. Explicit picker close and runtime teardown also cancel an active request
 without invoking application callbacks during destruction.
 
-Each payload on the completion source is already a terminal outcome of a request.
-This source therefore finishes by preserving **all committed request outcomes**,
-including the unattempted remainder of an active dispatch window. It rejects further emission and
-new subscriptions after finishing; its existing lease can drain outcomes after
-the controller/runtime has been destroyed. Failed handlers consume the attempted
-outcome and preserve unattempted outcomes for retry. Cancellation of the lease
-still discards pending outcomes. Ordinary widget/window sources retain their
-separate rule: discard obsolete ordinary work and preserve only their explicitly
-specified terminal fact. No producer stores callbacks or retains the application.
-
+Each completion is already a committed request outcome in the consumer's inbox.
+Controller/runtime destruction or lease cancellation cannot erase those outcomes.
+An active request is cancelled during retirement; an already completed request is
+not completed again. Failed consumers consume the attempted outcome and preserve
+unattempted successors. This is the same ownership rule as every other port;
+there is no separate finished/terminal queue. No producer retains application state.
 
 ## Complete frames, images and application GPU work
 

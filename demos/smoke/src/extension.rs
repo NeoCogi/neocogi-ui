@@ -1,4 +1,4 @@
-//! Native acceptance for the independently built extension. This host never links its implementation.
+//! Native acceptance uses the same extension protocol in dynamic assemblies and static monoliths.
 use super::*;
 use neocogi_demo_contracts::*;
 

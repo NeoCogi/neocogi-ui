@@ -373,7 +373,7 @@ containers always receive the expiring `ScopedLayout` service.
 Focused semantic tests use `test_support::algorithm::Algorithm<W>` to keep a real
 host alive beside the ordinary concrete widget. It does not mount a replacement
 tree or coordinate frames. Pure arithmetic tests remain beside their production
-functions. Event-source observations may drain a concrete queue directly; event
+functions. Event observations use generated receivers and consumer inboxes; event
 ordering, failure, reentry and lifecycle tests use the public `Events`.
 
 See [TESTING.md](TESTING.md) for fixture ownership, coverage and validation commands.

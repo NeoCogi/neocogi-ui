@@ -19,7 +19,8 @@ scope validation, and frame submission. `src/layout_client.rs` is only a borrowe
 its copied scope and first-error value are ordinary fields, with mutation through `&mut self`.
 Concrete controls communicate through cached `IWidget`, `ILeafLayout`, and `IContainerLayout`,
 exactly like independent extensions. Their events use generated sink contracts and COM-owned
-transport; application state and handlers remain in `EventSession` outside the producer graph.
+transport. Producers post directly into `Events<Message>` inboxes; ordinary application
+state is borrowed only by its deferred consumer, outside the producer graph.
 
 `neocogi-ui-support` supplies binary-local canonical resource imports and pure presentation
 helpers. It contains no concrete widget or runtime. The only shared mutable resource cache in

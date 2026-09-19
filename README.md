@@ -149,14 +149,14 @@ host-bound factory. `Ui::from_interfaces(runtime, factory)` verifies that both s
 same canonical `IWidgetHost` identity before the facade permits construction. No class ID,
 untyped argument object, private runtime pointer, or root identifier crosses that boundary.
 
-`EventSession<State>` owns application state and typed callbacks. Subscribe an
-ordinary state method or closure; no per-handler type is required. Producers do
-not retain that state. The host polls copied input,
-calls `ui.update_with_events(size, &events)`, synchronizes the platform's text-input
-area, then calls `ui.render(size, renderer)`. Updates automatically measure changed
-geometry before subsequent input. Setters retain invalidation; custom widget updates
-report `GeometryChange::CHANGED` only when measurement or placement inputs change.
-Resize invalidation is independent of that return value.
+`Events<Message>` owns a consumer FIFO and its port connections; application state
+stays in an ordinary Rust value. Wire `events.map(port, mapper)` once, then call
+`ui.update_with_events(size, &mut events, |message| app.update(message))`. Producers
+post directly into that inbox after typed decoding and mapping. The runtime pumps
+nested composite inboxes automatically and settles their changes between application
+messages and raw inputs. The host then synchronizes text-input geometry and renders.
+Setters retain invalidation; custom widget updates report `GeometryChange::CHANGED`
+when measurement or placement inputs change. Resize invalidation is independent.
 
 External shared state, hidden/skipped updates and observational painting remain
 explicit widget/app responsibilities. Read [COM_AUTHORS.md](docs/COM_AUTHORS.md)

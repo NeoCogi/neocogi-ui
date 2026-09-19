@@ -8,7 +8,15 @@ loaded separately from the host, UI, and renderer; ordinary demo packages omit i
 cargo neocogi run --assembly smoke --variant glow --variant extension -- --smoke
 ```
 
-The same event path runs in a plain-Cargo monolith with embedded resources:
+The extension itself also builds with ordinary Cargo:
+
+```sh
+cargo rustc -p neocogi-example-ui-extension --lib --crate-type cdylib --features dynamic-plugin
+cargo rustc -p neocogi-example-ui-extension --lib --crate-type staticlib
+```
+
+Rust monoliths link its `rlib`; the second command additionally produces a native
+static archive. The same event path runs in a monolith with embedded resources:
 
 ```sh
 cargo run -p neocogi-demo-smoke --bin neocogi-demo-smoke --features monolith,extension,embed-assets -- --smoke
@@ -40,20 +48,24 @@ submitted: EventSource<Activation>,
 changed: EventSource<CounterChangesMessage>,
 
 // After committing the count:
-self.submitted.emit(Activation { label: self.count.to_string() });
-self.changed.emit(CounterChangesMessage { value: self.count });
+self.submitted.emit(Activation { label: self.count.to_string() })?;
+self.changed.emit(CounterChangesMessage { value: self.count })?;
 
 // Counter::subscribe_changed is generated from the named protocol binding:
 self.changed.subscribe(sink)
 ```
 
-Emission queues an owned snapshot. The producer does not retain the application's
-handler. The [acceptance host](../../demos/smoke/src/extension.rs) constructs the
-port through generated `counter.changed()` and passes it to
-`events.subscribe(port, |history: &mut Vec<String>, event: &CounterChangesMessage| { ... })`.
-The same typed session owns its lease and uses a capturing activation callback
-to edit the counter during delivery. The value callback still observes the originally committed value;
-the UI commits the later edit's measurement before returning from the same update.
+Emission maps and posts an owned snapshot directly into the consumer's inbox. The
+producer holds only a weak connection to its typed receiver. The
+[acceptance host](../../demos/smoke/src/extension.rs) maps the generated port with
+`events.map(counter.changed(), Message::Changed)`. Its one consumer matches the
+ordinary enum through `ui.update_with_events(size, &mut events, |message|
+message.consume(&mut labels, &mut counter))`.
+The mapper runs at emission and only translates data; behavior runs after traversal.
+The inbox owns both leases. Its single consumer matches activation and count facts,
+then edits the counter through its ordinary capability. The captured count remains
+the originally committed value; the UI incorporates the later edit's measurement
+before the same update returns.
 
 The inset retains one `IChildrenEditor` and exposes its read-only view. It reads
 the authoritative child count instead of maintaining a second topology flag. Its

@@ -61,11 +61,11 @@ conflicting/reentrant access as `NC_E_BUSY`. Its internal `UnsafeCell` is the
 single audited bridge from ABI pointers to a guarded Rust borrow; ordinary
 implementation fields do not need `Cell` or `RefCell` for this purpose.
 
-Event roles retain copied payload snapshots, exact typed sinks, subscription
-leases, application-owned sessions, and generated port connectors. They use the
-same interface ABI and signature checks. Mutable application handlers run under
-the session's ownership policy; no `Any`, erased event payload, or Rust trait
-object crosses the ABI.
+Event ports use exact typed protocols and connection leases. A generated receiver
+copies and maps each emitted fact directly into one consumer-owned `Events<Message>`
+FIFO. Application state remains an ordinary value borrowed during runtime dispatch.
+Nested components use private inboxes and framework-created drivers discovered at
+mount. No `Any`, erased event payload, or Rust trait object crosses the ABI.
 
 ## Compatibility at the call boundary
 
