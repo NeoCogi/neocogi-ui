@@ -121,6 +121,8 @@ impl CounterObject {
     fn update_content(&mut self, state: WidgetUpdate) -> Result<GeometryChange, NcStatus> {
         if state.clicked || state.action == WidgetAction::Activate {
             self.count = self.count.saturating_add(1);
+            // A rejected foreign post cannot erase this already committed change.
+            self.common.state.record_change(GeometryChange::Changed);
             self.submitted.emit(Activation { label: self.count.to_string() })?;
             self.changed.emit(CounterChangesMessage { value: self.count })?;
             Ok(GeometryChange::Changed)

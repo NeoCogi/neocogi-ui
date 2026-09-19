@@ -153,3 +153,21 @@ fn generated_receivers_validate_before_posting_owned_snapshots() {
     sink.changed(NcCopyFromBufferOffset::new(0, "é".as_bytes()), 2).unwrap();
     assert_eq!(text.pop().as_deref(), Some("é"));
 }
+
+/// Immediate mappers cannot recursively post through the same source; cancellation during posting is safe.
+#[test]
+fn recursive_post_rejects_and_closure_during_post_keeps_the_committed_message() {
+    let source = Rc::new(EventSource::<Activation>::new());
+    let captured = source.clone();
+    let mut events = Events::new();
+    let lease = events
+        .map(source.event(), move |event| {
+            assert_eq!(captured.emit(Activation { label: "recursive".into() }), Err(neocogi_com_events::EVENT_E_BUSY));
+            captured.close_ordinary();
+            event.label
+        })
+        .unwrap();
+    source.emit(Activation { label: "committed".into() }).unwrap();
+    assert_eq!(lease.active(), Ok(false));
+    assert_eq!(events.pop().as_deref(), Some("committed"));
+}

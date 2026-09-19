@@ -54,12 +54,12 @@ struct Consumer {
     /// Shared assertion history is outside every component's COM allocation.
     trace: Trace,
     /// Shared component access requires one checked mutable boundary.
-    record: RefCell<PrivateRecord>,
+    record: PrivateRecord,
 }
 impl Consumer {
     /// Handles one message; framework code owns all queue traversal and timing.
-    fn update(&self, _: ActivationMessage) -> Result<(), NcStatus> {
-        self.record.try_borrow_mut().map_err(|_| UI_E_BUSY)?.handle(&self.trace)
+    fn update(&mut self, _: ActivationMessage) -> Result<(), NcStatus> {
+        self.record.handle(&self.trace)
     }
 }
 
@@ -76,7 +76,7 @@ struct EventfulComposite {
     /// Component-owned typed handler/inbox, entirely inside this binary.
     private_events: Events<ActivationMessage>,
     /// Component ownership outlives its weak framework driver.
-    _consumer: Rc<Consumer>,
+    _consumer: Rc<RefCell<Consumer>>,
     /// Separate allocation supplied by the framework, never a handwritten dispatcher.
     dispatcher: ComPtr<IEventDispatcherAbi>,
 }
@@ -92,7 +92,7 @@ impl EventfulComposite {
         let shell = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
         let mut private_events = Events::new();
         private_events.map(source.event(), |event| event).unwrap();
-        let consumer = Rc::new(Consumer { trace, record: RefCell::new(handler) });
+        let consumer = Rc::new(RefCell::new(Consumer { trace, record: handler }));
         let dispatcher = private_events.component_dispatcher(&consumer, Consumer::update).unwrap();
         let widget = Self::from_value(Self {
             lifetime: shell.node_interface().unwrap(),
@@ -306,4 +306,48 @@ fn mounted_component_events_dispatch_before_application_and_skip_removed_snapsho
     assert_eq!(&*trace.borrow(), &["newer", "application"]);
     assert_eq!(older_window.snapshot(), Err(UI_E_CLOSED));
     newer_window.close().unwrap();
+}
+
+/// Private work posted by one application message settles before its already queued successor.
+#[test]
+fn application_messages_interleave_with_automatic_private_settlement() {
+    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let trace: Trace = Rc::new(RefCell::new(Vec::new()));
+    let source = Rc::new(EventSource::new());
+    let (child, _) = component(&ui, &trace, "child", &source, None, Edit::None);
+    let window = ui.window("interleaving", RECT, &child).unwrap();
+    let mut events = Events::new();
+    events.sender().post("first").unwrap();
+    events.sender().post("second").unwrap();
+    ui.update_with_events(SIZE, &mut events, |message| {
+        trace.borrow_mut().push(message);
+        if message == "first" {
+            emit(&source);
+        }
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(&*trace.borrow(), &["first", "child", "second"]);
+    window.close().unwrap();
+}
+
+/// A component that removes its own mount cannot receive another message from the same batch.
+#[test]
+fn self_removal_stops_private_delivery_before_the_next_message() {
+    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let trace: Trace = Rc::new(RefCell::new(Vec::new()));
+    let parent = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
+    let window = ui.window("self removal", RECT, &parent).unwrap();
+    let source = Rc::new(EventSource::new());
+    let (child, _) = component(&ui, &trace, "remover", &source, None, Edit::Close(window.clone()));
+    parent
+        .as_interface()
+        .insert(0, child.node_interface().unwrap().as_com_ref(), LinearEdge::new(LayoutTrack::Content))
+        .unwrap()
+        .finish()
+        .unwrap();
+    emit(&source);
+    emit(&source);
+    ui.update(SIZE).unwrap();
+    assert_eq!(&*trace.borrow(), &["remover"]);
 }

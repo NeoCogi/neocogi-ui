@@ -457,3 +457,79 @@ fn runtime_rejects_dispatch_count_larger_than_its_requested_bound() {
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
     window.close().unwrap();
 }
+
+/// One shared budget bounds successive application posts without discarding the next fact.
+#[test]
+fn boundary_budget_stops_a_cascade_and_preserves_the_unattempted_message() {
+    let source = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
+    let compositor = neocogi_gfx_impl::GfxCompositorObject::create(source.as_com_ref()).unwrap();
+    let assets = crate::assets::ImportedAssets::read(source.as_com_ref(), None).unwrap();
+    let runtime = Runtime {
+        storage: create_storage(assets, compositor),
+    };
+    let mut events = Events::new();
+    let sender = events.sender();
+    sender.post(()).unwrap();
+    let mut delivered = 0;
+    let mut remaining = 2;
+    let result = neocogi_com_events::with_dispatcher(
+        &mut |limit| {
+            events.dispatch(limit, |_| {
+                delivered += 1;
+                sender.post(())
+            })
+        },
+        |dispatcher| runtime.dispatch_boundary(Some(dispatcher), Dimensioni::new(SIZE.width, SIZE.height), &mut remaining),
+    );
+    assert_eq!(result, Err(UI_E_EVENT_LIMIT));
+    assert_eq!(remaining, 0);
+    assert_eq!(delivered, 2);
+    assert_eq!(events.len(), 1);
+    assert_eq!(events.pop(), Some(()));
+}
+
+/// A generated receiver's domain failure must propagate out of native widget routing.
+#[test]
+fn failed_post_preserves_committed_widget_state_and_requires_a_new_frame() {
+    /// Deliberately rejects an otherwise valid numeric fact at the foreign receiver boundary.
+    fn reject(_: &neocogi_ui::events::NumericChanged) -> Result<(), NcStatus> {
+        Err(NC_E_INVALID_ARG)
+    }
+    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let number = ui.widgets().number(NumberOptions { value: 9.0, step: 1.0, precision: 0 }).unwrap();
+    let window = ui.window("post failure", RECT, &number).unwrap();
+    let mut events = Events::new();
+    let lease = events.map(number.as_interface().changed().checked(reject), |event| event.value).unwrap();
+    let (renderer, _) = renderer();
+    ui.update(SIZE).unwrap();
+    key(&ui, KeyCode::Tab);
+    key(&ui, KeyCode::ArrowUp);
+    assert_eq!(ui.update(SIZE), Err(NC_E_INVALID_ARG));
+    assert_eq!(number.value(), Ok(10.0));
+    assert!(events.is_empty());
+    assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+    lease.cancel().unwrap();
+    ui.update(SIZE).unwrap();
+    ui.render(SIZE, renderer.as_com_ref()).unwrap();
+    window.close().unwrap();
+}
+
+/// Window mutations report posting errors after committing their complete lifecycle transition.
+#[test]
+fn failed_lifecycle_post_preserves_visibility_and_returns_its_receiver_error() {
+    /// Foreign consumer rejects this committed lifecycle fact without enqueueing it.
+    fn reject(_: &WindowLifecycleMessage) -> Result<(), NcStatus> {
+        Err(NC_E_INVALID_ARG)
+    }
+    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let button = ui.widgets().button("lifecycle").unwrap();
+    let window = ui.window("post failure", RECT, &button).unwrap();
+    let source = window.query::<IWindowEventsAbi>().unwrap();
+    let mut events = Events::new();
+    let lease = events.map(source.changed().checked(reject), |event| event.event).unwrap();
+    assert_eq!(window.set_visibility(Visibility::Hidden), Err(NC_E_INVALID_ARG));
+    assert_eq!(window.snapshot().unwrap().visibility, Visibility::Hidden);
+    assert!(events.is_empty());
+    lease.cancel().unwrap();
+    window.close().unwrap();
+}

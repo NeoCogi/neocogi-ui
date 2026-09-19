@@ -188,9 +188,7 @@ impl IContainerLayout for DialogRoot {
 /// Node-plugin controller owns one private inbox and ordinary public COM capabilities.
 struct Dialog {
     /// Ordinary mutable model shared only by the controller and its separate mounted driver.
-    model: RefCell<Model>,
-    /// Private consumer queue combines all child protocols in actual emission order.
-    events: RefCell<Events<Message>>,
+    model: Rc<RefCell<Model>>,
     /// Shared independently of an active mutable model borrow during runtime retirement.
     request: Rc<Request>,
 }
@@ -205,6 +203,8 @@ struct DialogNodes {
 
 /// One authoritative picker model; live control values are read through their actual COM interfaces.
 struct Model {
+    /// Private inbox combines child protocols in actual emission order; state is borrowed only by its consumer.
+    events: Events<Message>,
     /// Concrete-node construction data with no runtime or window-manager projection.
     nodes: Rc<DialogNodes>,
     /// Stable hidden/reusable modal installed after the eventful root is mounted.
@@ -227,8 +227,6 @@ struct Model {
     folders: ScrollAreaWidget,
     /// Separate file column keeps its own retained scroll request and clamping behavior.
     files: ScrollAreaWidget,
-    /// Navigation is installed after the private inbox finishes its current registration transaction.
-    navigate: Option<PathBuf>,
     /// Complete most recent directory-read diagnostic, also available through the component interface.
     diagnostic: String,
 }
@@ -313,43 +311,6 @@ enum Message {
     Navigate(String),
     /// Observe the existing modal's committed lifecycle fact.
     Lifecycle(WindowEvent),
-}
-
-impl Model {
-    /// Handles every private message under one exclusive component-state borrow.
-    /// Only this method interprets the private inbox's owned messages.
-    fn update(&mut self, message: &Message) -> Result<(), NcStatus> {
-        match message {
-            Message::PathEdited => self.path_dirty = true,
-            Message::FilenameEdited => self.selected = None,
-            Message::Lifecycle(event) => match event {
-                WindowEvent::Hidden | WindowEvent::CloseRequested
-                    if self.request.active()
-                        && self
-                            .window()
-                            .is_ok_and(|window| window.snapshot().is_ok_and(|snapshot| snapshot.visibility == Visibility::Hidden)) =>
-                {
-                    // A stale Hidden after cancel/reopen cannot cancel the new visible request.
-                    self.finish(FileDialogCompletionMessage::Cancelled)?;
-                }
-                WindowEvent::Destroyed => self.request.close()?,
-                _ => {}
-            },
-            _ if !self.request.active() => {}
-            Message::Up => self.navigate = self.directory.parent().map(Path::to_owned),
-            Message::Home => self.navigate = home_dir(),
-            Message::Go => self.navigate = self.resolve_path(&self.path.text()?),
-            Message::Accept => self.accept()?,
-            Message::Cancel => self.finish(FileDialogCompletionMessage::Cancelled)?,
-            Message::Folder(path) => self.navigate = Some(path.clone()),
-            Message::File(path) => {
-                self.filename.set_text(&path.file_name().unwrap_or(path.as_os_str()).to_string_lossy())?;
-                self.selected = Some(path.clone());
-            }
-            Message::Navigate(text) => self.navigate = self.resolve_path(text),
-        }
-        Ok(())
-    }
 }
 
 /// One completely built column and its owned row commands, still unpublished to the modal.
@@ -528,7 +489,8 @@ impl Dialog {
             phase: Cell::new(RequestPhase::Idle),
             completed: crate::EventSource::new(),
         });
-        let model = RefCell::new(Model {
+        let model = Rc::new(RefCell::new(Model {
+            events: Events::new(),
             nodes,
             window: None,
             request: request.clone(),
@@ -540,21 +502,16 @@ impl Dialog {
             error,
             folders,
             files,
-            navigate: None,
             diagnostic: String::new(),
-        });
-        let dialog = Rc::new(Self {
-            model,
-            events: RefCell::new(Events::new()),
-            request,
-        });
-        let driver = dialog.events.borrow().component_dispatcher(&dialog, Dialog::update)?;
+        }));
+        let dialog = Rc::new(Self { model, request });
+        let driver = dialog.model.borrow().events.component_dispatcher(&dialog.model, Model::update)?;
         let root = DialogRoot::create(&shell, driver, dialog.request.clone())?;
         let windows = services.windows.clone();
         let window = windows.create_dialog(parent, NcCopyFromBufferOffset::new(0, b"Open File"), FILE_DIALOG_RECT, root.as_com_ref())?;
         window.set_options(WindowOptions::FRAME)?;
         dialog.model.try_borrow_mut().map_err(|_| UI_E_BUSY)?.window = Some(window.clone());
-        let connected = dialog.connect(
+        let connected = dialog.model.try_borrow_mut().map_err(|_| UI_E_BUSY)?.connect(
             &path,
             &filename,
             &window,
@@ -573,16 +530,18 @@ impl Dialog {
         }
         Ok(dialog)
     }
+}
 
+impl Model {
     /// Connects fixed controls exactly once; each callback translates its typed event into the private update protocol.
     fn connect(
-        &self,
+        &mut self,
         path: &TextboxWidget,
         filename: &TextboxWidget,
         window: &ComPtr<IWindowAbi>,
         buttons: [(neocogi_ui::ButtonWidget, Message); 5],
     ) -> Result<(), NcStatus> {
-        let mut events = self.events.borrow_mut();
+        let events = &mut self.events;
         events.map(path.changed(), |_| Message::PathEdited)?;
         events.map(path.submitted(), |event| Message::Navigate(event.text))?;
         events.map(filename.changed(), |_| Message::FilenameEdited)?;
@@ -594,46 +553,44 @@ impl Dialog {
     }
 
     /// Prepares both complete columns without publishing a partial listing when any directory entry fails.
-    fn candidate(&self, model: &mut Model, directory: &Path) -> Result<Listing, NcStatus> {
-        model.owner()?;
+    fn candidate(&mut self, directory: &Path) -> Result<Listing, NcStatus> {
+        self.owner()?;
         let entries = match read_directory(directory) {
             Ok(entries) => entries,
             Err(error) => {
-                model.diagnostic = format!("Cannot read {}: {error}", directory.display());
+                self.diagnostic = format!("Cannot read {}: {error}", directory.display());
                 return Err(UI_E_IO);
             }
         };
-        Listing::new(&model.nodes, directory, entries)
+        Listing::new(&self.nodes, directory, entries)
     }
 
     /// Registers complete candidates while the private inbox is idle, then replaces only dynamic content roles.
-    fn install(&self, model: &mut Model, directory: PathBuf, listing: Listing, reset_scroll: bool) -> Result<(), NcStatus> {
+    fn install(&mut self, directory: PathBuf, listing: Listing, reset_scroll: bool) -> Result<(), NcStatus> {
         for (row, action) in listing.folders.rows.into_iter().chain(listing.files.rows) {
-            self.events.borrow_mut().map(row.activated(), move |_| action.clone())?;
+            self.events.map(row.activated(), move |_| action.clone())?;
         }
         // These are private built-in roles: their controller validates the live
         // modal before replacement and no caller can substitute a foreign child.
-        model.folders.replace_content(&listing.folders.root)?.finish()?;
-        model.files.replace_content(&listing.files.root)?.finish()?;
-        model.directory = directory;
-        model.selected = None;
-        model.path_dirty = false;
-        model.navigate = None;
-        model.diagnostic.clear();
-        model.path.set_text(&model.directory.to_string_lossy())?;
-        model.filename.clear()?;
-        model.error.clear()?;
+        self.folders.replace_content(&listing.folders.root)?.finish()?;
+        self.files.replace_content(&listing.files.root)?.finish()?;
+        self.directory = directory;
+        self.selected = None;
+        self.path_dirty = false;
+        self.diagnostic.clear();
+        self.path.set_text(&self.directory.to_string_lossy())?;
+        self.filename.clear()?;
+        self.error.clear()?;
         if reset_scroll {
-            model.folders.set_offset(Point::default())?;
-            model.files.set_offset(Point::default())?;
+            self.folders.set_offset(Point::default())?;
+            self.files.set_offset(Point::default())?;
         }
         Ok(())
     }
 
     /// Opens only after the complete native request and directory listing validate successfully.
-    fn open(&self, title: &str, rect: Rect, directory: PathBuf) -> Result<(), NcStatus> {
-        let mut model = self.model.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
-        model.owner()?;
+    fn open(&mut self, title: &str, rect: Rect, directory: PathBuf) -> Result<(), NcStatus> {
+        self.owner()?;
         if self.request.active() {
             return Err(UI_E_BUSY);
         }
@@ -641,34 +598,74 @@ impl Dialog {
             return Err(NC_E_INVALID_ARG);
         }
         let directory = std::path::absolute(directory).map_err(|error| {
-            model.diagnostic = error.to_string();
+            self.diagnostic = error.to_string();
             UI_E_IO
         })?;
-        let listing = self.candidate(&mut model, &directory)?;
+        let listing = self.candidate(&directory)?;
         // Modal eligibility is checked before replacing existing request data.
-        model.window()?.set_visibility(Visibility::Visible)?;
-        self.install(&mut model, directory, listing, true)?;
-        model.window()?.set_title(NcCopyFromBufferOffset::new(0, title.as_bytes()))?;
-        model.window()?.set_rect(rect)?;
+        self.window()?.set_visibility(Visibility::Visible)?;
+        self.install(directory, listing, true)?;
+        self.window()?.set_title(NcCopyFromBufferOffset::new(0, title.as_bytes()))?;
+        self.window()?.set_rect(rect)?;
         self.request.begin()?;
         Ok(())
     }
 
-    /// Consumes one private message and installs navigation before the next message is considered.
-    fn update(&self, message: Message) -> Result<(), NcStatus> {
-        let mut model = self.model.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
-        model.update(&message)?;
-        if let Some(directory) = model.navigate.take().filter(|_| self.request.active()) {
-            match self.candidate(&mut model, &directory) {
-                Ok(listing) => self.install(&mut model, directory, listing, false)?,
+    /// Handles one child message and completes any navigation before the next message.
+    fn update(&mut self, message: Message) -> Result<(), NcStatus> {
+        let directory = match message {
+            Message::Lifecycle(event) => {
+                match event {
+                    WindowEvent::Hidden | WindowEvent::CloseRequested
+                        if self.request.active()
+                            && self
+                                .window()
+                                .is_ok_and(|window| window.snapshot().is_ok_and(|snapshot| snapshot.visibility == Visibility::Hidden)) =>
+                    {
+                        // An older hide fact must not cancel a newly visible request.
+                        self.finish(FileDialogCompletionMessage::Cancelled)?;
+                    }
+                    WindowEvent::Destroyed => self.request.close()?,
+                    _ => {}
+                }
+                None
+            }
+            _ if !self.request.active() => None,
+            Message::PathEdited => {
+                self.path_dirty = true;
+                None
+            }
+            Message::FilenameEdited => {
+                self.selected = None;
+                None
+            }
+            Message::Up => self.directory.parent().map(Path::to_owned),
+            Message::Home => home_dir(),
+            Message::Go => self.resolve_path(&self.path.text()?),
+            Message::Accept => {
+                self.accept()?;
+                None
+            }
+            Message::Cancel => {
+                self.finish(FileDialogCompletionMessage::Cancelled)?;
+                None
+            }
+            Message::Folder(path) => Some(path),
+            Message::File(path) => {
+                self.filename.set_text(&path.file_name().unwrap_or(path.as_os_str()).to_string_lossy())?;
+                self.selected = Some(path);
+                None
+            }
+            Message::Navigate(text) => self.resolve_path(&text),
+        };
+        if let Some(directory) = directory {
+            match self.candidate(&directory) {
+                Ok(listing) => self.install(directory, listing, false)?,
                 Err(UI_E_IO) => {
-                    // A failed read changes only diagnostics, preserving prior native
-                    // directory, rows, selection and their actual COM capabilities.
-                    let diagnostic = model.diagnostic.clone();
-                    model.error.set_text(&diagnostic)?;
-                    model.path_dirty = false;
-                    let directory = model.directory.to_string_lossy().into_owned();
-                    model.path.set_text(&directory)?;
+                    // A failed candidate leaves the directory, rows and selection intact.
+                    self.error.set_text(&self.diagnostic)?;
+                    self.path_dirty = false;
+                    self.path.set_text(&self.directory.to_string_lossy())?;
                 }
                 Err(error) => return Err(error),
             }
@@ -701,7 +698,11 @@ impl IFileDialog for FileDialog {
     }
     /// Decodes native units before request mutation and preserves the prior request/listing on a read failure.
     fn open(&self, title: NcCopyFromBufferOffset<'_, u8>, rect: Rect, directory: ComRef<'_, INativePathAbi>) -> Result<(), NcStatus> {
-        self.dialog.open(text(title)?, rect, neocogi_ui::path::decode(directory)?)
+        self.dialog
+            .model
+            .try_borrow_mut()
+            .map_err(|_| UI_E_BUSY)?
+            .open(text(title)?, rect, neocogi_ui::path::decode(directory)?)
     }
     /// Reports request state independently of hidden versus visible window allocation.
     fn active(&self) -> Result<bool, NcStatus> {

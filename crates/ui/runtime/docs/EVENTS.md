@@ -71,6 +71,10 @@ Internal messages do not automatically bubble through ancestors. Structural
 containers such as `ScrollArea` need no inbox just because they have children.
 
 `Events::component_dispatcher` creates a separate framework driver for a component.
+It accepts a weakly held `Rc<RefCell<Model>>` and an ordinary
+`fn(&mut Model, Message) -> Result<(), NcStatus>` entry point. That single shared
+borrow boundary is needed when separate COM controller and mounted-driver identities
+both access the component; the model's fields and methods use ordinary mutable access.
 The mounted root exposes it through `IComponentEventProvider`; the runtime discovers
 and drives it automatically, including during ordinary `Ui::update`. The driver
 holds weak ownership and no copied widget tree. Returning the root's own COM
@@ -80,8 +84,9 @@ The runtime owns the complete schedule:
 
 1. Synchronize layout and settle pending messages before routing input.
 2. Process one raw input, then release traversal borrows.
-3. Visit private inboxes descendant-first in stable tree order. Each visit consumes
-   the FIFO prefix present at its start; newly posted work waits for another visit.
+3. Visit private inboxes descendant-first in stable tree order, consuming at most
+   one message per component per pass. A removed mount is skipped before another
+   message can be delivered, including a second message for the same component.
 4. Repeat component/layout work until quiet, then consume one application message.
    Settle any resulting private work before consuming the next application message.
 5. Route the next raw input. Publish a renderable frame only after successful completion.

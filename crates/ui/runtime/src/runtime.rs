@@ -398,7 +398,12 @@ impl Runtime {
                 *remaining = remaining.checked_sub(1).ok_or(neocogi_com_events::EVENT_E_LIMIT)?;
             }
             for component in component_drivers {
-                let count = component.dispatch(*remaining)?;
+                // One message per visit lets retirement take effect before this
+                // same component receives a successor from its private inbox.
+                let count = component.dispatch((*remaining).min(1))?;
+                if count > 1 {
+                    return Err(NC_E_INVALID_ARG);
+                }
                 *remaining = remaining.checked_sub(count).ok_or(NC_E_INVALID_ARG)?;
                 self.storage.open()?;
             }
