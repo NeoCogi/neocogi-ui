@@ -59,7 +59,7 @@ Paint/layout services own their storage and issue invocation tokens. The static 
 
 Scoped layout permits a container to measure/place its indexed children. It does not permit topology edits during layout or unrestricted access to the runtime tree. Recursive child calls restore the enclosing scope correctly before continuing the parent. Applications and plugins must not fabricate authority or treat an invocation token as a durable resource identifier.
 
-Use `&mut self` for methods that change object state and store that state in ordinary fields. The generated object-wide call gate permits overlapping shared calls and returns `NC_E_BUSY` for conflicting mutable or recursive entry before it creates a Rust reference. Interior mutability is reserved for genuinely shared infrastructure such as event queues and runtime registries; release those short borrows before calling an external widget, container, painter, or application handler. Panics are implementation faults and follow the COM abort policy; they are not converted into recoverable statuses.
+Use `&mut self` for methods that change object state and store that state in ordinary fields. The generated object-wide call gate permits overlapping shared calls and returns `NC_E_BUSY` for conflicting mutable or recursive entry before it creates a Rust reference. Interior mutability is reserved for genuinely shared infrastructure such as shared component models and runtime registries; release those short borrows before calling an external widget, container, painter, or application handler. Panics are implementation faults and follow the COM abort policy; they are not converted into recoverable statuses.
 
 The same rule applies outside COM objects. Event-loop drivers and other values
 with one clear owner use `&mut self` and ordinary fields. `Cell` or `RefCell` is
@@ -69,7 +69,7 @@ field comment must name that constraint.
 
 ## Typed events and application state
 
-`Events<Message>` owns one consumer FIFO. State remains
+A standard `std::sync::mpsc::Receiver<Message>` receives application messages. State remains
 an ordinary application value, independent of the transport. Map each generated
 output into the application's own enum, then use one mutable consumer:
 
@@ -81,10 +81,10 @@ enum AppMessage {
     /// One reusable dialog's native completion, routed by the application.
     Completed { destination: usize, result: FileDialogCompletion },
 }
-let mut events = Events::new();
-events.map(button.activated(), |event| AppMessage::Activated(event.label))?;
-events.map(picker.completed(), |result| AppMessage::Completed { destination: 0, result })?;
-ui.update_with_events(drawable_size, &mut events, |message| app.update(message))?;
+let (send, messages) = std::sync::mpsc::channel();
+neocogi_ui::events::map(button.activated(), send.clone(), |event| AppMessage::Activated(event.label))?;
+neocogi_ui::events::map(picker.completed(), send, |result| AppMessage::Completed { destination: 0, result })?;
+ui.update_with_events(drawable_size, &messages, |message| app.update(message))?;
 ui.render(drawable_size, renderer.as_com_ref())?;
 ```
 
@@ -99,7 +99,7 @@ Declare published cross-COM outputs as concrete `#[message]` structs/enums in
 NCIDL: `completed: FileDialogCompletion;`. Application and component-private enums
 stay in Rust. Producers store one optional concrete receiver and implement an
 ordinary mutable setter. The generated accessor supplies its installation closure
-to `events.map`, which returns `Result<()>`; another map replaces future delivery.
+to `events::map(output, sender, mapper)`, which returns `Result<()>`; another map replaces future delivery.
 Structural wrappers forward installation to their child. There are no subscription
 objects, cancellation leases or per-output queues. See
 [IDL syntax](IDL_MODULES.md#concrete-messages-and-outputs).
@@ -114,7 +114,7 @@ objects, cancellation leases or per-output queues. See
 | `changed()` | Combo | `ChoiceSelection` |
 | `completed()` | FileDialog | `FileDialogCompletion` |
 
-Commit state before calling `port.emit(message)?`. Mapping runs synchronously and
+Commit state before calling `message.post_to(&mut destination)?`. Mapping runs synchronously and
 must only translate data or attach routing IDs; UI behavior belongs in the later
 consumer. Rust cannot prove closure purity. Captures must be owned or `'static`,
 while the consumer may borrow ordinary state for the update. Generated receivers
@@ -122,13 +122,14 @@ validate/copy/retain a concrete C message before mapping; Rust values and closur
 never cross COM. UI accessors validate domain values before mapping.
 
 Each output has one destination. Mapping replaces it for future posts; already
-queued facts retain their original values and routing IDs. Dropping the inbox
-drops its messages. Later valid posts are ignored without running its mapper;
-the producer releases that inert adapter on closure, destruction or replacement.
+queued facts retain their original values and routing IDs. Dropping the receiver
+discards its messages. Later valid posts still run the mapper, then discard the
+translated value when sending reports disconnection. The producer releases the
+adapter and its captures on closure, destruction or replacement.
 The installation closure temporarily retains the producer only during setup.
 Setup, decoding and posting failures propagate; committed state does not roll back.
 
-Behavioral composites own a private Rust enum and inbox, map child outputs into it,
+Behavioral composites own a private Rust enum and standard receiver, map child outputs into its channel,
 and expose a framework component driver through `IComponentEventProvider`. That
 driver uses weak ownership and a distinct COM identity. A shared `Rc<RefCell<Model>>`
 is needed only when controller and mounted-driver identities access the same model;
@@ -688,7 +689,7 @@ file.submenu("Recent")?.item("Document")?;
 menus.attach_bar(window.as_com_ref(), &bar)?;
 // The actual compact rows now belong exclusively to the manager's forest.
 open.set_label("Open file")?;
-events.map(open.activated()?, |event| AppMessage::Open(event.label))?;
+neocogi_ui::events::map(open.activated()?, sender.clone(), |event| AppMessage::Open(event.label))?;
 ```
 
 A bar's direct entries must be submenus. `attach_bar` installs one intrinsic bar
@@ -740,11 +741,11 @@ application handler:
 
 ```rust
 let picker = ui.file_dialog(window.as_com_ref())?;
-events.map(picker.completed(), AppMessage::Completed)?;
+neocogi_ui::events::map(picker.completed(), send, AppMessage::Completed)?;
 let mut request = FileDialogRequest::new(native_directory);
 request.title = "Choose a document".to_owned();
 picker.open(&request)?;
-ui.update_with_events(drawable_size, &mut events, |message| app.update(message))?;
+ui.update_with_events(drawable_size, &messages, |message| app.update(message))?;
 ```
 
 The mapper receives the generated `FileDialogCompletion::Accepted { path }`
@@ -904,6 +905,13 @@ measurement through the ordinary update contract. Skip rendering zero-sized
 or minimized drawables. Pointer positions and IME rectangles use physical
 pixels, including captured positions outside the drawable; the platform converts
 logical SDL or CSS coordinates at its own boundary.
+
+The demo host runs its application `frame()` callback after platform polling and
+before one `update_with_events()` call. Frame edits, input handlers, nested
+component messages and their resulting layout changes settle before rendering.
+Work that a handler defers to `frame()`, such as installing a prepared theme,
+runs on the following frame. Nested event delivery itself completes within the
+current update; nesting does not add a frame of delay per level.
 
 `text_input_area()` reports only committed editable focus. Pending input,
 geometry edits and removed focus must not expose stale rectangles. It is a

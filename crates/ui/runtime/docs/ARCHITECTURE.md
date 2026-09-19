@@ -122,9 +122,9 @@ routing the next event. An empty input queue still performs an eventless update.
 Runtime tests and deployed plugins share one retained context and one consumer dispatch boundary.
 
 ```rust,no_run
-use neocogi_ui::{Events, IRendererAbi, Size, Ui};
+use neocogi_ui::{IRendererAbi, Size, Ui};
 use neocogi_com::{ComRef, NcStatus};
-fn frame<Message>(ui: &Ui, events: &mut Events<Message>, size: Size,
+fn frame<Message>(ui: &Ui, events: &std::sync::mpsc::Receiver<Message>, size: Size,
     renderer: ComRef<'_, IRendererAbi>, consume: impl FnMut(Message) -> Result<(), NcStatus>) -> Result<(), NcStatus>
 {
     ui.update_with_events(size, events, consume)?;
@@ -374,7 +374,7 @@ Focused semantic tests use `test_support::algorithm::Algorithm<W>` to keep a rea
 host alive beside the ordinary concrete widget. It does not mount a replacement
 tree or coordinate frames. Pure arithmetic tests remain beside their production
 functions. Event observations use generated receivers and consumer inboxes; event
-ordering, failure, reentry and lifecycle tests use the public `Events`.
+ordering, failure, reentry and lifecycle tests use standard channels and the public update operation.
 
 See [TESTING.md](TESTING.md) for fixture ownership, coverage and validation commands.
 

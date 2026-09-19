@@ -85,8 +85,9 @@ pub trait AppState: 'static {
         Ok(())
     }
 
-    /// Runs after input handlers and before the final update/render. Return false to stop the loop.
-    /// The host serializes this call with message consumption through ordinary mutable borrows.
+    /// Runs after platform polling and before this frame's single UI update. Return false to stop.
+    /// Input handlers run afterward; work they defer here is applied on the next frame. The host
+    /// serializes frame edits and message consumption through ordinary mutable borrows.
     fn frame(&mut self, _host: &Host, _size: Size, _seconds: f64) -> Result<bool, NcStatus> {
         Ok(true)
     }
@@ -184,7 +185,7 @@ struct Driver<State: AppState> {
     remaining: Option<u32>,
 }
 impl<State: AppState> Driver<State> {
-    /// Applies every queued host transition before delivering app work and committing the final frame.
+    /// Polls input, applies frame edits, then settles events and layout in one update before rendering.
     fn frame(&mut self, seconds: f64) -> Result<bool, HostError> {
         let host = &self.host;
         loop {
@@ -199,8 +200,8 @@ impl<State: AppState> Driver<State> {
         if size.width <= 0 || size.height <= 0 {
             return Ok(true);
         }
-        host.ui.update_with_events(size, &self.events, |message| self.state.update(message))?;
-        // Apply frame edits before the next runtime synchronization and message boundary.
+        // Apply frame edits before consuming the input just polled. Handlers can prepare work for
+        // the next frame callback; this frame's direct edits and nested events settle in one update.
         if !self.state.frame(host, size, seconds)? {
             return Ok(false);
         }

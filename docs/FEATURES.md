@@ -43,7 +43,7 @@ separate registry implementation.
 
 The UI implementation has no optional asset features. Applications, plugins and
 native event tests install concrete receivers directly and use the same
-consumer-owned `Events<Message>` FIFOs. The facade has no separate event-test feature.
+standard `std::sync::mpsc` channels. The facade has no separate event-test feature.
 
 Build native applications through the package driver so each plugin gets its own
 feature selection and the executable receives its adjacent runtime/manifest:

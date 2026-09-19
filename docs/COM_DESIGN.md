@@ -61,10 +61,10 @@ conflicting/reentrant access as `NC_E_BUSY`. Its internal `UnsafeCell` is the
 single audited bridge from ABI pointers to a guarded Rust borrow; ordinary
 implementation fields do not need `Cell` or `RefCell` for this purpose.
 
-Event ports carry concrete `#[message]` data through generated COM posting. A receiver
-copies and maps each emitted fact directly into one consumer-owned `Events<Message>`
-FIFO. Application state remains an ordinary value borrowed during runtime dispatch.
-Nested components use private inboxes and framework-created drivers discovered at
+Named outputs carry concrete `#[message]` data through generated COM posting. A receiver
+copies and maps each emitted fact into an application message and sends it through
+`std::sync::mpsc`. The consumer owns the standard channel receiver. Application state remains an ordinary value borrowed during runtime dispatch.
+Nested components use private channels and framework-created drivers discovered at
 mount. No `Any`, erased event payload, or Rust trait object crosses the ABI.
 
 ## Compatibility at the call boundary

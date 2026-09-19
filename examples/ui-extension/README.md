@@ -52,7 +52,7 @@ clears those fields. No output projection, subscription token, generation counte
 or producer queue is allocated.
 
 The [acceptance host](../../demos/smoke/src/extension.rs) defines its own ordinary
-Rust enum and maps the output with `events.map(counter.changed(), Message::Changed)`.
+Rust enum and maps the output with `events::map(counter.changed(), sender, Message::Changed)`.
 Mapping immediately translates the concrete value and posts it into that consumer's
 FIFO. The later mutable consumer runs through `ui.update_with_events`, after
 traversal borrows are released, and may edit the counter. Captured values remain

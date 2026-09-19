@@ -253,7 +253,8 @@ impl AppState for State {
         }
     }
 
-    /// Publishes prepared assets after dispatch; geometry then follows the platform drawable.
+    /// Publishes assets prepared by the previous frame's handlers before this frame's UI update.
+    /// Geometry and FPS text join that same update, so rendering sees their committed layout.
     fn frame(&mut self, host: &Host, size: Size, seconds: f64) -> Result<bool, NcStatus> {
         self.style.install(&mut self.ui, host.renderer.as_com_ref())?;
         let area = rect(0, 0, size.width, size.height);

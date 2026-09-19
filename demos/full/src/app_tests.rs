@@ -1,13 +1,15 @@
 //! Full application checks use the actual plugin graph, including GPU images and all theme choices.
 use super::*;
 
-/// Selects Win 3.11 through the real nested menu and event session, rather than calling its handler directly.
+/// Selects Win 3.11 through the real nested menu and verifies publication on the following frame.
 fn select_win311_from_menu(host: &Host, state: &mut State, events: &std::sync::mpsc::Receiver<Message>) -> Result<(), HostError> {
     let size = host.window.size()?;
     let base = host.ui.assets()?;
     let demo = state.demo.clone();
     demo.raise()?;
+    state.frame(host, size, 0.)?;
     host.ui.update_with_events(size, events, |message| state.update(message))?;
+    let installed = host.ui.assets()?;
     let area = demo.snapshot()?.rect;
     let position = Point { x: area.x + 100, y: area.y + 10 };
     for event in [
@@ -40,12 +42,16 @@ fn select_win311_from_menu(host: &Host, state: &mut State, events: &std::sync::m
             "",
         )?;
     }
-    host.ui.update_with_events(size, events, |message| state.update(message))?;
-    // The application installs prepared theme assets in its frame phase after event dispatch.
-    // Reproduce that production ordering before the synchronization update and render assertions.
+    // This frame's callback precedes the input handlers. Selecting the theme prepares its assets,
+    // but the current revision remains renderable after the single event/layout update completes.
     state.frame(host, size, 0.)?;
     host.ui.update_with_events(size, events, |message| state.update(message))?;
     assert_eq!(state.themes[1].1.mark()?, MenuMark::Radio { selected: true });
+    assert_eq!(state.ui.assets()?.metrics()?, installed.metrics()?);
+    host.ui.render(size, host.renderer.as_com_ref())?;
+    // The following frame publishes the candidate and settles its geometry with one update too.
+    state.frame(host, size, 0.)?;
+    host.ui.update_with_events(size, events, |message| state.update(message))?;
     assert_eq!(state.ui.assets()?.metrics()?, Theme::ALL[1].load(base.as_com_ref())?.metrics()?);
     host.ui.render(size, host.renderer.as_com_ref())?;
     Ok(())
@@ -59,7 +65,7 @@ fn exercise() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostE
     select_win311_from_menu(&host, &mut state, &events)?;
     for theme in Theme::ALL {
         state.select_theme(theme)?;
-        // Drive the same deferred asset installation that Host performs between its two updates.
+        // Publish the prepared assets before the host's single update for this frame.
         state.frame(&host, size, 0.)?;
         // The photograph is below the initial viewport. Requesting the measured end guarantees
         // every theme crosses real image forwarding, clipping, validation and native GPU upload.
