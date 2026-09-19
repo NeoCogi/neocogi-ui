@@ -146,7 +146,7 @@ fn run() -> Result<(), HostError> {
     let angle = Rc::new(Cell::new(0.0));
     let cube = host.ui.widgets().leaf(Cube { angle: angle.clone() }, WidgetOptions::NO_INTERACT)?;
     host.ui.window("Solid painter cube", Rect { x: 40, y: 40, width: 360, height: 360 }, &cube)?;
-    host.run(State { angle }, Events::new())
+    host.run(State { angle }, std::sync::mpsc::channel().1)
 }
 
 /// Reports startup and frame failures through formatting retained by the min-size profile.

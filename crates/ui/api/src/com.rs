@@ -544,14 +544,21 @@ impl Ui {
     pub fn update_with_events<Message>(
         &self,
         size: Size,
-        events: &mut crate::Events<Message>,
+        events: &std::sync::mpsc::Receiver<Message>,
         mut consume: impl FnMut(Message) -> Result<(), NcStatus>,
     ) -> Result<(), NcStatus> {
         // The callback may borrow stack state. Every retained foreign dispatcher is
         // revoked before this call returns, including error and unwinding paths.
-        neocogi_com_events::with_dispatcher(&mut || events.dispatch(1, &mut consume).map(|count| count != 0), |dispatcher| {
-            self.runtime.update_with_events(size, dispatcher)
-        })
+        neocogi_com_events::with_dispatcher(
+            &mut || match events.try_recv() {
+                Ok(message) => {
+                    consume(message)?;
+                    Ok(true)
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty | std::sync::mpsc::TryRecvError::Disconnected) => Ok(false),
+            },
+            |dispatcher| self.runtime.update_with_events(size, dispatcher),
+        )
     }
     /// Submits a synchronized UI frame to a native window's renderer capability.
     pub fn render(&self, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {

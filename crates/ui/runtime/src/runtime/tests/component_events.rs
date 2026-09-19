@@ -1,7 +1,6 @@
 //! Production runtime regressions for plugin-style private composite events.
 
 use super::*;
-use neocogi_com_events::Events;
 use neocogi_ui_core_contracts::{
     Activation, IActivationEvents, IActivationEventsAbi, IActivationEventsInterfacesFor, IActivationEventsOutputs, __ActivationReceiverAbi,
 };
@@ -9,7 +8,7 @@ use neocogi_ui_core_contracts::{
 #[com_object(interfaces(neocogi_ui_core_contracts::__ActivationReceiver, IActivationEvents))]
 /// Minimal producer; there is no event-specific shared slot or lifetime state.
 struct Emitter {
-    /// The one installed receiver owns mapping and weak consumer access.
+    /// The installed COM receiver owns the mapping and a standard channel sender.
     destination: Option<ComPtr<__ActivationReceiverAbi>>,
 }
 impl Emitter {
@@ -79,6 +78,8 @@ enum Edit {
 
 /// Fixture consumer owns ordinary command state, independently of the runtime's tree.
 struct Consumer {
+    /// The component owns its receiving endpoint alongside the mutable model.
+    messages: std::sync::mpsc::Receiver<Activation>,
     /// Shared assertion history is outside every component's COM allocation.
     trace: Trace,
     /// Shared component access requires one checked mutable boundary.
@@ -99,10 +100,8 @@ struct EventfulComposite {
     lifetime: ComPtr<IWidgetAbi>,
     /// Actual container policy and authoritative child collection permit arbitrary nesting.
     layout: ComPtr<IContainerLayoutAbi>,
-    /// Component-owned typed handler/inbox, entirely inside this binary.
-    private_events: Events<Activation>,
-    /// Component ownership outlives its weak framework driver.
-    _consumer: Rc<RefCell<Consumer>>,
+    /// Strong model ownership is released on closure; an active dispatch may finish.
+    consumer: Option<Rc<RefCell<Consumer>>>,
     /// Separate allocation supplied by the framework, never a handwritten dispatcher.
     dispatcher: ComPtr<IEventDispatcherAbi>,
 }
@@ -116,17 +115,23 @@ impl EventfulComposite {
         handler: PrivateRecord,
     ) -> (neocogi_ui::Widget<IWidgetAbi>, neocogi_ui::LinearWidget) {
         let shell = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
-        let mut private_events = Events::new();
-        private_events
-            .map(source.query::<IActivationEventsAbi>().unwrap().activated(), |event| event)
-            .unwrap();
-        let consumer = Rc::new(RefCell::new(Consumer { trace, record: handler }));
-        let dispatcher = private_events.component_dispatcher(&consumer, Consumer::update).unwrap();
+        let (private_events_tx, private_events) = std::sync::mpsc::channel();
+        neocogi_ui::events::map(
+            source.query::<IActivationEventsAbi>().unwrap().activated(),
+            private_events_tx.clone(),
+            |event| event,
+        )
+        .unwrap();
+        let consumer = Rc::new(RefCell::new(Consumer {
+            messages: private_events,
+            trace,
+            record: handler,
+        }));
+        let dispatcher = neocogi_com_events::component_dispatcher(&consumer, |model| &model.messages, Consumer::update).unwrap();
         let widget = Self::from_value(Self {
             lifetime: shell.node_interface().unwrap(),
             layout: shell.as_interface().add_ref().query().unwrap(),
-            private_events,
-            _consumer: consumer,
+            consumer: Some(consumer),
             dispatcher,
         })
         .query()
@@ -172,7 +177,9 @@ impl IWidget for EventfulComposite {
     }
     /// Ordinary widget closure retires its private queue and destination.
     fn close(&mut self) -> Result<(), NcStatus> {
-        self.private_events = Events::new();
+        // An in-flight driver temporarily retains the model. Release our ownership
+        // without reborrowing it; the retired mount cannot deliver its next message.
+        self.consumer.take();
         self.lifetime.close()
     }
     /// Uses the same real common routing policy as its factory-created lifetime.
@@ -229,13 +236,13 @@ fn nested_components_dispatch_child_first_and_promote_only_explicit_outputs() {
     parent_shell.insert(0, &child, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     root_shell.insert(0, &parent, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let window = ui.window("nested", RECT, &root).unwrap();
-    let mut app = Events::new();
-    app.map(sources[3].query::<IActivationEventsAbi>().unwrap().activated(), |_| ()).unwrap();
+    let (app_tx, app) = std::sync::mpsc::channel();
+    neocogi_ui::events::map(sources[3].query::<IActivationEventsAbi>().unwrap().activated(), app_tx.clone(), |_| ()).unwrap();
 
     emit(&sources[0]);
     ui.update(SIZE).unwrap(); // No application dispatcher is needed to drive every private level.
     assert_eq!(&*trace.borrow(), &["child", "parent", "root"]);
-    ui.update_with_events(SIZE, &mut app, |_| {
+    ui.update_with_events(SIZE, &app, |_| {
         trace.borrow_mut().push("application");
         Ok(())
     })
@@ -243,7 +250,7 @@ fn nested_components_dispatch_child_first_and_promote_only_explicit_outputs() {
     assert_eq!(&*trace.borrow(), &["child", "parent", "root", "application"]);
     trace.borrow_mut().clear();
     emit(&sources[0]);
-    ui.update_with_events(SIZE, &mut app, |_| {
+    ui.update_with_events(SIZE, &app, |_| {
         trace.borrow_mut().push("application");
         Ok(())
     })
@@ -251,7 +258,7 @@ fn nested_components_dispatch_child_first_and_promote_only_explicit_outputs() {
     assert_eq!(&*trace.borrow(), &["child", "parent", "root", "application"]);
     window.close().unwrap();
     emit(&sources[0]);
-    ui.update_with_events(SIZE, &mut app, |_| {
+    ui.update_with_events(SIZE, &app, |_| {
         trace.borrow_mut().push("application");
         Ok(())
     })
@@ -271,15 +278,15 @@ fn callback_mounted_descendant_is_discovered_without_application_registration() 
     let (parent, shell) = component(&ui, &trace, "parent", &parent_source, None, Edit::None);
     let window = ui.window("dynamic", RECT, &parent).unwrap();
     let trigger = Emitter::create();
-    let mut app = Events::new();
-    app.map(trigger.query::<IActivationEventsAbi>().unwrap().activated(), |_| ()).unwrap();
+    let (app_tx, app) = std::sync::mpsc::channel();
+    neocogi_ui::events::map(trigger.query::<IActivationEventsAbi>().unwrap().activated(), app_tx.clone(), |_| ()).unwrap();
     let mut action = PrivateRecord {
         name: "application",
         forward: None,
         edit: Edit::Insert { parent: shell, child },
     };
     emit(&trigger);
-    ui.update_with_events(SIZE, &mut app, |_| action.handle(&trace)).unwrap();
+    ui.update_with_events(SIZE, &app, |_| action.handle(&trace)).unwrap();
     assert_eq!(&*trace.borrow(), &["application", "inserted"]);
     window.close().unwrap();
 }
@@ -318,12 +325,12 @@ fn mounted_component_events_dispatch_before_application_and_skip_removed_snapsho
     let (newer, _) = component(&ui, &trace, "newer", &newer_source, None, Edit::Close(older_window.clone()));
     let newer_window = ui.window("newer", RECT, &newer).unwrap();
     let app_source = Emitter::create();
-    let mut app = Events::new();
-    app.map(app_source.query::<IActivationEventsAbi>().unwrap().activated(), |_| ()).unwrap();
+    let (app_tx, app) = std::sync::mpsc::channel();
+    neocogi_ui::events::map(app_source.query::<IActivationEventsAbi>().unwrap().activated(), app_tx.clone(), |_| ()).unwrap();
     for source in [&older_source, &newer_source, &app_source] {
         emit(source);
     }
-    ui.update_with_events(SIZE, &mut app, |_| {
+    ui.update_with_events(SIZE, &app, |_| {
         trace.borrow_mut().push("application");
         Ok(())
     })
@@ -341,10 +348,10 @@ fn application_messages_interleave_with_automatic_private_settlement() {
     let source = Emitter::create();
     let (child, _) = component(&ui, &trace, "child", &source, None, Edit::None);
     let window = ui.window("interleaving", RECT, &child).unwrap();
-    let mut events = Events::new();
-    events.sender().post("first").unwrap();
-    events.sender().post("second").unwrap();
-    ui.update_with_events(SIZE, &mut events, |message| {
+    let (events_tx, events) = std::sync::mpsc::channel();
+    events_tx.send("first").unwrap();
+    events_tx.send("second").unwrap();
+    ui.update_with_events(SIZE, &events, |message| {
         trace.borrow_mut().push(message);
         if message == "first" {
             emit(&source);

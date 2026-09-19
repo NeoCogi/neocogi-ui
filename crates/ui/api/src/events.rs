@@ -1,21 +1,21 @@
-//! Typed protocol mappings into application-owned message inboxes.
+//! Typed COM output mappings into standard Rust channels.
 //! Mappers translate owned snapshots immediately. The UI invokes the application's
 //! ordinary mutable consumer later, after releasing traversal borrows.
 //!
 //! ```no_run
-//! use neocogi_ui::{ButtonWidget, Events, Size, Ui};
+//! use neocogi_ui::{ButtonWidget, Size, Ui};
 //! use neocogi_com::NcStatus;
 //!
 //! fn update(ui: &Ui, button: &ButtonWidget, size: Size) -> Result<u32, NcStatus> {
-//!     let mut events = Events::new();
-//!     events.map(button.activated(), |_| ())?;
+//!     let (events_tx, events) = std::sync::mpsc::channel();
+//!     neocogi_ui::events::map(button.activated(), events_tx.clone(), |_| ())?;
 //!     let mut count = 0;
-//!     ui.update_with_events(size, &mut events, |_| { count += 1; Ok(()) })?;
+//!     ui.update_with_events(size, &events, |_| { count += 1; Ok(()) })?;
 //!     Ok(count)
 //! }
 //! ```
-/// Shared typed transport for applications and nested components.
-pub use neocogi_com_events::{Events, EventSender};
+/// Installs a typed COM mapping into a standard application or component channel.
+pub use neocogi_com_events::map;
 
 use crate::com::*;
 use neocogi_com::{ComRef, NC_E_INVALID_ARG, NcStatus};
@@ -30,7 +30,7 @@ pub use neocogi_ui_nodes_contracts::{CheckboxChanged, NumericChanged, ScrollbarC
 macro_rules! widget_output {
     ($widget:ty, $method:ident, $event:ty) => {
         impl $widget {
-            /// Installs one destination when passed to `Events::map`.
+            /// Installs one destination when passed to `events::map`.
             pub fn $method(&self) -> impl FnOnce(Box<dyn FnMut($event) -> Result<(), NcStatus>>) -> Result<(), NcStatus> + use<> {
                 self.as_interface().add_ref().$method()
             }

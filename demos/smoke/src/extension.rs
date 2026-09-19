@@ -45,17 +45,17 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     // Capability discovery happens once while wiring the application, never during UI phases.
     let activation: ComPtr<IActivationEventsAbi> = counter.query()?;
     let window = ui.window("Independent extension", Rect { x: 10, y: 10, width: 400, height: 200 }, &root)?;
-    let mut events = Events::new();
-    events.map(activation.activated(), Message::Activated)?;
-    events.map(counter.changed(), Message::Changed)?;
+    let (events_tx, events) = std::sync::mpsc::channel();
+    neocogi_ui::events::map(activation.activated(), events_tx.clone(), Message::Activated)?;
+    neocogi_ui::events::map(counter.changed(), events_tx.clone(), Message::Changed)?;
     let mut labels = Vec::new();
 
-    ui.update_with_events(size, &mut events, |message| message.consume(&mut labels, &mut counter))?;
+    ui.update_with_events(size, &events, |message| message.consume(&mut labels, &mut counter))?;
     ui.render(size, renderer)?;
     let first = probe.calls()?;
     assert!(first.measures > 0 && first.updates > 0 && first.paints > 0);
     assert!(parent_probe.calls()?.placements > 0);
-    ui.update_with_events(size, &mut events, |message| message.consume(&mut labels, &mut counter))?;
+    ui.update_with_events(size, &events, |message| message.consume(&mut labels, &mut counter))?;
     assert_eq!(
         probe.calls()?.measures,
         first.measures,
@@ -66,7 +66,7 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
 
     key(ui, KeyCode::Tab)?;
     key(ui, KeyCode::Space)?;
-    ui.update_with_events(size, &mut events, |message| message.consume(&mut labels, &mut counter))?;
+    ui.update_with_events(size, &events, |message| message.consume(&mut labels, &mut counter))?;
     assert_eq!(&labels, &["1".to_owned(), "count=1".to_owned()]);
     assert_eq!(counter.count()?, 100);
     ui.render(size, renderer)?;
@@ -75,18 +75,18 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
 
     counter.set_count(1_000_000)?;
     assert_eq!(ui.render(size, renderer), Err(UI_E_UPDATE_REQUIRED));
-    ui.update_with_events(size, &mut events, |message| message.consume(&mut labels, &mut counter))?;
+    ui.update_with_events(size, &events, |message| message.consume(&mut labels, &mut counter))?;
     let edited = probe.calls()?;
     assert!(edited.measures > activated.measures);
     counter.set_count(1_000_000)?;
     ui.render(size, renderer)?; // An identical setter retains the commit.
     inset.set_padding(20)?;
     assert_eq!(ui.render(size, renderer), Err(UI_E_UPDATE_REQUIRED));
-    ui.update_with_events(size, &mut events, |message| message.consume(&mut labels, &mut counter))?;
+    ui.update_with_events(size, &events, |message| message.consume(&mut labels, &mut counter))?;
     let padded = probe.calls()?;
     assert!(padded.measures > edited.measures, "container constraints invalidate descendants");
     window.set_rect(Rect { x: 10, y: 10, width: 450, height: 220 })?;
-    ui.update_with_events(size, &mut events, |message| message.consume(&mut labels, &mut counter))?;
+    ui.update_with_events(size, &events, |message| message.consume(&mut labels, &mut counter))?;
     assert!(probe.calls()?.measures > padded.measures, "resizing remeasures under the new bounds");
     ui.render(size, renderer)?;
 
@@ -94,13 +94,13 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     assert_eq!(counter.count(), Err(UI_E_CLOSED));
     assert_eq!(probe.calls()?.closes, 1);
     assert_eq!(inset.children()?.child_count()?, 0);
-    ui.update_with_events(size, &mut events, |message| message.consume(&mut labels, &mut counter))?;
+    ui.update_with_events(size, &events, |message| message.consume(&mut labels, &mut counter))?;
     ui.render(size, renderer)?;
     let replacement = provider.counter(host.as_com_ref())?;
     let replacement_widget: ComPtr<IWidgetAbi> = replacement.query()?;
     let replacement_probe: ComPtr<IWidgetProbeAbi> = replacement.query()?;
     inset.set_child(replacement_widget.as_com_ref())?.finish()?;
-    ui.update_with_events(size, &mut events, |message| message.consume(&mut labels, &mut counter))?;
+    ui.update_with_events(size, &events, |message| message.consume(&mut labels, &mut counter))?;
     window.close()?;
     assert_eq!(replacement.count(), Err(UI_E_CLOSED));
     assert_eq!(replacement_probe.calls()?.closes, 1);

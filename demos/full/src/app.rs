@@ -105,11 +105,11 @@ pub(super) fn slider(ui: &Ui, value: f32, high: f32) -> Result<SliderWidget, NcS
     control.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
     Ok(control)
 }
-/// Creates and immediately subscribes a concrete button; only its parent needs to retain it afterward.
-fn button(ui: &Ui, events: &mut Events<Message>, text: &str, action: Action) -> Result<ButtonWidget, NcStatus> {
+/// Creates a concrete button and maps its activation output; only its parent needs to retain it afterward.
+fn button(ui: &Ui, events_tx: &std::sync::mpsc::Sender<Message>, text: &str, action: Action) -> Result<ButtonWidget, NcStatus> {
     let mut control = ui.widgets().button(text)?;
     control.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
-    events.map(control.activated(), move |event| Message::Activate(action, event))?;
+    neocogi_ui::events::map(control.activated(), events_tx.clone(), move |event| Message::Activate(action, event))?;
     Ok(control)
 }
 /// A disclosure body is its actual editable Linear COM object, with no placeholder replacement tree.
@@ -450,7 +450,7 @@ impl LeafContent for Triangle {
     }
 }
 
-/// Collects concrete menu actions only during construction, then transfers their subscriptions to the session.
+/// Collects concrete menu actions only during construction, then maps their outputs into the application channel.
 fn menu_item(menu: &MenuBuilder, pending: &mut Vec<(MenuItem, Action)>, text: &str, action: Action) -> Result<MenuItem, NcStatus> {
     let item = menu.item(text)?;
     pending.push((item.clone(), action));
@@ -458,7 +458,7 @@ fn menu_item(menu: &MenuBuilder, pending: &mut Vec<(MenuItem, Action)>, text: &s
 }
 
 /// Creates the complete demo with the same structural desktop and floating examples on every backend.
-fn create() -> Result<(Host, State, Events<Message>), HostError> {
+fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostError> {
     neocogi_demo_host::initialize()?;
     let host = Host::new("neocogi-ui COM Demo", Size { width: 1200, height: 800 }, neocogi_demo_assets::load_bundle()?)?;
     let ui = &host.ui;
@@ -554,32 +554,32 @@ fn create() -> Result<(Host, State, Events<Message>), HostError> {
         fps: 0.,
         next_fps: 0.,
     };
-    let mut events = Events::new();
+    let (events_tx, events) = std::sync::mpsc::channel();
     for (item, action) in pending {
-        events.map(item.activated()?, move |event| Message::Activate(action, event))?;
+        neocogi_ui::events::map(item.activated()?, events_tx.clone(), move |event| Message::Activate(action, event))?;
     }
     {
-        state.style.map(&mut events)?;
-        events.map(neocogi_ui::events::window_events(state.demo.as_com_ref())?, Message::Window)?;
-        events.map(state.entry.submitted(), Message::Text)?;
-        events.map(state.combo.changed(), Message::Choice)?;
+        state.style.map(&events_tx)?;
+        neocogi_ui::events::map(neocogi_ui::events::window_events(state.demo.as_com_ref())?, events_tx.clone(), Message::Window)?;
+        neocogi_ui::events::map(state.entry.submitted(), events_tx.clone(), Message::Text)?;
+        neocogi_ui::events::map(state.combo.changed(), events_tx.clone(), Message::Choice)?;
         if let Some(dialog) = &state.file_dialog {
-            events.map(dialog.completed(), Message::File)?;
+            neocogi_ui::events::map(dialog.completed(), events_tx.clone(), Message::File)?;
         }
     }
-    build_controls(&host, &state, &mut events, &mut main_body)?;
-    build_examples(&host, &state, &mut events)?;
+    build_controls(&host, &state, &events_tx, &mut main_body)?;
+    build_examples(&host, &state, &events_tx)?;
     Ok((host, state, events))
 }
 
-/// The normal entry point owns the completed tree and session through the concrete demo host.
+/// The normal entry point owns the completed tree and receiver through the concrete demo host.
 pub(super) fn run() -> Result<(), HostError> {
     let (host, state, events) = create()?;
     host.run(state, events)
 }
 
 /// Builds the main scrolling control sampler without duplicating widget state or storing authoring closures.
-fn build_controls(host: &Host, state: &State, events: &mut Events<Message>, content: &mut LinearWidget) -> Result<(), HostError> {
+fn build_controls(host: &Host, state: &State, events_tx: &std::sync::mpsc::Sender<Message>, content: &mut LinearWidget) -> Result<(), HostError> {
     let ui = &state.ui;
     let mut info = section(ui, content, "Window Info", DisclosureStyle::Header, false)?;
     for (name, value) in ["Position", "Size", "FPS"].into_iter().zip(&state.info) {
@@ -596,8 +596,8 @@ fn build_controls(host: &Host, state: &State, events: &mut Events<Message>, cont
     ] {
         let mut line = row(ui)?;
         append(&mut line, &label(ui, name)?, LayoutTrack::Fixed { extent: 60 })?;
-        append(&mut line, &button(ui, events, a, Action::Log)?, FLEX)?;
-        let mut right = button(ui, events, b, action)?;
+        append(&mut line, &button(ui, events_tx, a, Action::Log)?, FLEX)?;
+        let mut right = button(ui, events_tx, b, action)?;
         if matches!(action, Action::Open) && state.file_dialog.is_none() {
             right.set_options(WidgetOptions::FRAME | WidgetOptions::NO_INTERACT)?;
         }
@@ -615,13 +615,13 @@ fn build_controls(host: &Host, state: &State, events: &mut Events<Message>, cont
     append(&mut nested, &label(ui, "World")?, LayoutTrack::Content)?;
     let mut nested = section(ui, &mut test, "Test 1b", DisclosureStyle::Tree, false)?;
     for text in ["Button 1", "Button 2"] {
-        append(&mut nested, &button(ui, events, text, Action::Log)?, LayoutTrack::Content)?;
+        append(&mut nested, &button(ui, events_tx, text, Action::Log)?, LayoutTrack::Content)?;
     }
     let mut test = section(ui, &mut left, "Test 2", DisclosureStyle::Tree, false)?;
     for pair in [["Button 3", "Button 4"], ["Button 5", "Button 6"]] {
         let mut line = row(ui)?;
         for text in pair {
-            append(&mut line, &button(ui, events, text, Action::Log)?, FLEX)?;
+            append(&mut line, &button(ui, events_tx, text, Action::Log)?, FLEX)?;
         }
         append(&mut test, &line, LayoutTrack::Content)?;
     }
@@ -645,7 +645,7 @@ fn build_controls(host: &Host, state: &State, events: &mut Events<Message>, cont
     for (name, shift) in [("Red", 0), ("Green", 8), ("Blue", 16)] {
         let mut line = row(ui)?;
         let control = slider(ui, ((state.grid.borrow().background >> shift) & 255) as f32, 255.)?;
-        events.map(control.changed(), move |event| Message::Background(shift, event))?;
+        neocogi_ui::events::map(control.changed(), events_tx.clone(), move |event| Message::Background(shift, event))?;
         append(&mut line, &label(ui, name)?, LayoutTrack::Fixed { extent: 46 })?;
         append(&mut line, &control, FLEX)?;
         append(&mut controls, &line, LayoutTrack::Content)?;
@@ -662,12 +662,12 @@ fn build_controls(host: &Host, state: &State, events: &mut Events<Message>, cont
     ] {
         let pixels = color.repeat(size.width as usize * size.height as usize);
         let image = factory.create_texture(size, NcCopyFromBufferOffset::new(0, &pixels))?;
-        let mut control = button(ui, events, name, Action::Log)?;
+        let mut control = button(ui, events_tx, name, Action::Log)?;
         control.set_image(image.as_com_ref(), false)?;
         append(&mut textures, &control, LayoutTrack::Content)?;
     }
     let image = host.png_texture(&neocogi_demo_assets::photo_png()?)?;
-    let mut control = button(ui, events, "External Image", Action::Log)?;
+    let mut control = button(ui, events_tx, "External Image", Action::Log)?;
     control.set_image(image.as_com_ref(), true)?;
     append(&mut textures, &control, LayoutTrack::Content)?;
     // A deterministic xorshift sample has no random-library or native renderer dependency.
@@ -680,21 +680,21 @@ fn build_controls(host: &Host, state: &State, events: &mut Events<Message>, cont
         pixels.extend_from_slice(&[noise as u8, (noise >> 8) as u8, (noise >> 16) as u8, 255]);
     }
     let image = factory.create_texture(Size { width: 24, height: 32 }, NcCopyFromBufferOffset::new(0, &pixels))?;
-    let mut control = button(ui, events, "Texture 4 - Noise", Action::Log)?;
+    let mut control = button(ui, events_tx, "Texture 4 - Noise", Action::Log)?;
     control.set_image(image.as_com_ref(), false)?;
     append(&mut textures, &control, LayoutTrack::Content)?;
     Ok(())
 }
 
 /// Mounts the log, typography, layout and custom drawing examples as ordinary structural children.
-fn build_examples(host: &Host, state: &State, events: &mut Events<Message>) -> Result<(), HostError> {
+fn build_examples(host: &Host, state: &State, events_tx: &std::sync::mpsc::Sender<Message>) -> Result<(), HostError> {
     let ui = &state.ui;
     let desktop = state.desktop.as_com_ref();
     let mut log = column(ui)?;
     append(&mut log, &state.log_scroll, FLEX)?;
     let mut line = row(ui)?;
     append(&mut line, &state.entry, FLEX)?;
-    append(&mut line, &button(ui, events, "Submit", Action::Submit)?, LayoutTrack::Fixed { extent: 69 })?;
+    append(&mut line, &button(ui, events_tx, "Submit", Action::Submit)?, LayoutTrack::Fixed { extent: 69 })?;
     append(&mut log, &line, LayoutTrack::Content)?;
     floating(ui, desktop, "Log Window", rect(350, 40, 300, 200), &log)?;
     let mut typography = column(ui)?;
@@ -709,7 +709,7 @@ fn build_examples(host: &Host, state: &State, events: &mut Events<Message>) -> R
         )?,
         LayoutTrack::Content,
     )?;
-    append(&mut typography, &button(ui, events, "Control Preview", Action::Log)?, LayoutTrack::Content)?;
+    append(&mut typography, &button(ui, events_tx, "Control Preview", Action::Log)?, LayoutTrack::Content)?;
     floating(ui, desktop, "Typography Demo", rect(40, 500, 300, 170), &typography)?;
     floating(
         ui,
@@ -745,7 +745,7 @@ fn build_examples(host: &Host, state: &State, events: &mut Events<Message>) -> R
         append(&mut column, &label(ui, name)?, LayoutTrack::Content)?;
         let mut stack = ui.widgets().linear(direction, CrossSize::Stretch)?;
         for text in ["First", "Second", "Third"] {
-            append(&mut stack, &button(ui, events, text, Action::Log)?, LayoutTrack::Fixed { extent: 28 })?;
+            append(&mut stack, &button(ui, events_tx, text, Action::Log)?, LayoutTrack::Fixed { extent: 28 })?;
         }
         append(&mut column, &stack, LayoutTrack::Fixed { extent: 120 })?;
         append(&mut stacks, &column, FLEX)?;
@@ -755,13 +755,13 @@ fn build_examples(host: &Host, state: &State, events: &mut Events<Message>) -> R
     append(&mut weights, &label(ui, "Row weights: 1 : 2 : 3")?, LayoutTrack::Content)?;
     let mut line = row(ui)?;
     for (text, weight) in [("1x", 1.), ("2x", 2.), ("3x", 3.)] {
-        append(&mut line, &button(ui, events, text, Action::Log)?, LayoutTrack::Flex { weight })?;
+        append(&mut line, &button(ui, events_tx, text, Action::Log)?, LayoutTrack::Flex { weight })?;
     }
     append(&mut weights, &line, LayoutTrack::Fixed { extent: 28 })?;
     append(&mut weights, &label(ui, "Grid row weights: 1 : 2")?, LayoutTrack::Content)?;
     let mut grid = ui.widgets().grid(&[FLEX; 3], &[FLEX, LayoutTrack::Flex { weight: 2. }])?;
     for index in 0..6 {
-        let control = button(ui, events, &format!("Cell {}", index + 1), Action::Log)?;
+        let control = button(ui, events_tx, &format!("Cell {}", index + 1), Action::Log)?;
         grid.insert(index, &control, GridExtent { columns: 1, rows: 1 })?.finish()?;
     }
     append(&mut weights, &grid, FLEX)?;

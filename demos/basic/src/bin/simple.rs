@@ -70,7 +70,7 @@ fn run() -> Result<(), HostError> {
     let mut tree = host.ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Stretch)?;
     tree.insert(0, &hello, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))?.finish()?;
     host.ui.window("Hello Window", Rect { x: 40, y: 40, width: 300, height: 400 }, &tree)?;
-    host.run(State, Events::new())
+    host.run(State, std::sync::mpsc::channel().1)
 }
 
 /// Reports startup and frame failures through formatting retained by the min-size profile.

@@ -1,7 +1,7 @@
 //! Independent provider roots bind and deliver real node events through the production engine.
 
 use neocogi_com::{ComInterface, ComPtr, Runtime, guid_from_qualified_name, NC_E_NOINTERFACE};
-use neocogi_ui::{Events, KeyCode, KeyStroke, Rect, Size, Ui, UiInput, UI_E_OWNER};
+use neocogi_ui::{KeyCode, KeyStroke, Rect, Size, Ui, UiInput, UI_E_OWNER};
 use neocogi_ui_core_contracts::UiPluginFactoryAbi;
 use neocogi_ui_nodes_contracts::{NodesPluginFactoryAbi, UiFactoryAbi};
 
@@ -54,12 +54,12 @@ fn independently_activated_nodes_bind_only_to_their_core_host_and_deliver_events
     let ui = Ui::from_interfaces(runtime, factory).unwrap();
     let button = ui.widgets().button("nodes-owned activation").unwrap();
     ui.window("provider boundary", Rect { x: 10, y: 10, width: 300, height: 150 }, &button).unwrap();
-    let mut events = Events::new();
+    let (events_tx, events) = std::sync::mpsc::channel();
     let mut labels = Vec::new();
-    events.map(button.activated(), |event| event.label).unwrap();
+    neocogi_ui::events::map(button.activated(), events_tx.clone(), |event| event.label).unwrap();
     key(&ui, KeyCode::Tab);
     key(&ui, KeyCode::Space);
-    ui.update_with_events(Size { width: 640, height: 400 }, &mut events, |message| {
+    ui.update_with_events(Size { width: 640, height: 400 }, &events, |message| {
         labels.push(message);
         Ok(())
     })

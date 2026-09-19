@@ -2,7 +2,7 @@
 use super::*;
 
 /// Selects Win 3.11 through the real nested menu and event session, rather than calling its handler directly.
-fn select_win311_from_menu(host: &Host, state: &mut State, events: &mut Events<Message>) -> Result<(), HostError> {
+fn select_win311_from_menu(host: &Host, state: &mut State, events: &std::sync::mpsc::Receiver<Message>) -> Result<(), HostError> {
     let size = host.window.size()?;
     let base = host.ui.assets()?;
     let demo = state.demo.clone();
@@ -52,11 +52,11 @@ fn select_win311_from_menu(host: &Host, state: &mut State, events: &mut Events<M
 }
 
 /// Exercises application-level composition against real runtime, platform and decoder objects.
-fn exercise() -> Result<(Host, State, Events<Message>), HostError> {
-    let (host, mut state, mut events) = create()?;
+fn exercise() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostError> {
+    let (host, mut state, events) = create()?;
     let size = host.window.size()?;
     let base = host.ui.assets()?;
-    select_win311_from_menu(&host, &mut state, &mut events)?;
+    select_win311_from_menu(&host, &mut state, &events)?;
     for theme in Theme::ALL {
         state.select_theme(theme)?;
         // Drive the same deferred asset installation that Host performs between its two updates.
@@ -64,7 +64,7 @@ fn exercise() -> Result<(Host, State, Events<Message>), HostError> {
         // The photograph is below the initial viewport. Requesting the measured end guarantees
         // every theme crosses real image forwarding, clipping, validation and native GPU upload.
         state.sample_scroll.scroll_to_end()?;
-        host.ui.update_with_events(size, &mut events, |message| state.update(message))?;
+        host.ui.update_with_events(size, &events, |message| state.update(message))?;
         host.ui.render(size, host.renderer.as_com_ref())?;
         assert_eq!(state.ui.assets()?.metrics()?, theme.load(base.as_com_ref())?.metrics()?);
         for (choice, item) in &state.themes {
@@ -88,7 +88,7 @@ fn exercise() -> Result<(Host, State, Events<Message>), HostError> {
     // Commit the final style edit before observing the installed immutable revision.
     state.frame(&host, size, 0.)?;
     assert_eq!(state.ui.assets()?.metrics()?.spacing, 2);
-    host.ui.update_with_events(size, &mut events, |message| state.update(message))?;
+    host.ui.update_with_events(size, &events, |message| state.update(message))?;
     host.ui.render(size, host.renderer.as_com_ref())?;
     Ok((host, state, events))
 }
@@ -153,7 +153,7 @@ mod browser {
                 fail: false,
                 released: released[0].clone(),
             },
-            Events::new(),
+            std::sync::mpsc::channel().1,
         )
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
         let host = Host::new(
@@ -168,7 +168,7 @@ mod browser {
                 fail: true,
                 released: released[1].clone(),
             },
-            Events::new(),
+            std::sync::mpsc::channel().1,
         )
         .map_err(|error| JsValue::from_str(&error.to_string()))
     }

@@ -1,7 +1,6 @@
 //! End-to-end regressions for the runtime-owned combo-box composite.
 
 use super::*;
-use neocogi_ui::{Events};
 
 /// Queues one non-repeated key press for the next production update cycle.
 fn press(ui: &neocogi_ui::Ui, key: KeyCode) {
@@ -27,11 +26,11 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
     let mut combo = ui.combo_box(window.as_com_ref(), &["first", "second"], ChoiceSelection::Selected(1)).unwrap();
     combo.set_placeholder("Choose a value").unwrap();
     root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
-    let mut session = Events::new();
+    let (session_tx, session) = std::sync::mpsc::channel();
     let mut changes = Vec::new();
-    session.map(combo.changed(), |event| event).unwrap();
+    neocogi_ui::events::map(combo.changed(), session_tx.clone(), |event| event).unwrap();
 
-    ui.update_with_events(SIZE, &mut session, |message| {
+    ui.update_with_events(SIZE, &session, |message| {
         changes.push(message);
         Ok(())
     })
@@ -43,7 +42,7 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
     for key in [KeyCode::Tab, KeyCode::Enter, KeyCode::Escape] {
         press(&ui, key);
     }
-    ui.update_with_events(SIZE, &mut session, |message| {
+    ui.update_with_events(SIZE, &session, |message| {
         changes.push(message);
         Ok(())
     })
@@ -56,7 +55,7 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
     for key in [KeyCode::Enter, KeyCode::ArrowDown, KeyCode::Enter] {
         press(&ui, key);
     }
-    ui.update_with_events(SIZE, &mut session, |message| {
+    ui.update_with_events(SIZE, &session, |message| {
         changes.push(message);
         Ok(())
     })
@@ -74,16 +73,10 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
     combo.replace_items::<&str>(&[], ChoiceSelection::None).unwrap();
     assert_eq!(combo.selection(), Ok(ChoiceSelection::None));
     assert_eq!(combo.display_text().unwrap(), "Choose a value");
-    assert_eq!(
-        session.dispatch(100, |message| {
-            changes.push(message);
-            Ok(())
-        }),
-        Ok(0)
-    );
+    assert!(session.try_recv().is_err());
     let (renderer, _) = renderer();
     assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
-    ui.update_with_events(SIZE, &mut session, |message| {
+    ui.update_with_events(SIZE, &session, |message| {
         changes.push(message);
         Ok(())
     })
@@ -131,10 +124,10 @@ fn combo_choice_menu_uses_shared_submenu_navigation() {
     ];
     let mut combo = ui.combo_menu(window.as_com_ref(), menu_text, &menu, ChoiceSelection::Selected(10)).unwrap();
     root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
-    let mut session = Events::new();
+    let (session_tx, session) = std::sync::mpsc::channel();
     let mut changes = Vec::new();
-    session.map(combo.changed(), |event| event).unwrap();
-    ui.update_with_events(SIZE, &mut session, |message| {
+    neocogi_ui::events::map(combo.changed(), session_tx.clone(), |event| event).unwrap();
+    ui.update_with_events(SIZE, &session, |message| {
         changes.push(message);
         Ok(())
     })
@@ -145,7 +138,7 @@ fn combo_choice_menu_uses_shared_submenu_navigation() {
     for key in [KeyCode::Tab, KeyCode::Enter, KeyCode::ArrowDown, KeyCode::Enter] {
         press(&ui, key);
     }
-    ui.update_with_events(SIZE, &mut session, |message| {
+    ui.update_with_events(SIZE, &session, |message| {
         changes.push(message);
         Ok(())
     })
@@ -158,13 +151,13 @@ fn combo_choice_menu_uses_shared_submenu_navigation() {
     // A silent selection edit while the hierarchy is open rebuilds and restores the selected
     // branch instead of closing the popup. Down therefore moves from Apple back to Banana.
     press(&ui, KeyCode::Enter);
-    ui.update_with_events(SIZE, &mut session, |message| {
+    ui.update_with_events(SIZE, &session, |message| {
         changes.push(message);
         Ok(())
     })
     .unwrap();
     combo.set_selection(ChoiceSelection::Selected(10)).unwrap();
-    ui.update_with_events(SIZE, &mut session, |message| {
+    ui.update_with_events(SIZE, &session, |message| {
         changes.push(message);
         Ok(())
     })
@@ -173,7 +166,7 @@ fn combo_choice_menu_uses_shared_submenu_navigation() {
     for key in [KeyCode::ArrowDown, KeyCode::Enter] {
         press(&ui, key);
     }
-    ui.update_with_events(SIZE, &mut session, |message| {
+    ui.update_with_events(SIZE, &session, |message| {
         changes.push(message);
         Ok(())
     })

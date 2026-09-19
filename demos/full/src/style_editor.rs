@@ -244,18 +244,18 @@ impl StyleEditor {
         ))
     }
     /// Maps editor controls into explicit commands without borrowing application state.
-    pub(super) fn map(&self, events: &mut Events<super::app::Message>) -> Result<(), NcStatus> {
+    pub(super) fn map(&self, events_tx: &std::sync::mpsc::Sender<super::app::Message>) -> Result<(), NcStatus> {
         for row in &self.colors {
             for (channel, control) in Channel::ALL.into_iter().zip(&row.channels) {
                 let role = row.role;
-                events.map(control.changed(), move |event| {
+                neocogi_ui::events::map(control.changed(), events_tx.clone(), move |event| {
                     super::app::Message::Style(Message::Color(role, channel, event.value as u8))
                 })?;
             }
         }
         for (metric, control) in &self.values {
             let metric = *metric;
-            events.map(control.changed(), move |event| {
+            neocogi_ui::events::map(control.changed(), events_tx.clone(), move |event| {
                 super::app::Message::Style(Message::Metric(metric, event.value as i32))
             })?;
         }

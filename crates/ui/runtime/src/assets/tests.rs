@@ -273,8 +273,8 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
         renderer: renderer.clone(),
         installed: 0,
     };
-    let mut session = neocogi_ui::Events::new();
-    session.map(button.activated(), |event| event).unwrap();
+    let (session_tx, session) = std::sync::mpsc::channel();
+    neocogi_ui::events::map(button.activated(), session_tx.clone(), |event| event).unwrap();
     for key in [KeyCode::Tab, KeyCode::Space] {
         ui.input(
             UiInput::Key(KeyStroke {
@@ -289,7 +289,7 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
         .unwrap();
     }
     assert_eq!(
-        ui.update_with_events(SIZE, &mut session, |message| InstallTheme.handle(&mut state, &message)),
+        ui.update_with_events(SIZE, &session, |message| InstallTheme.handle(&mut state, &message)),
         Err(NC_E_BUSY)
     );
     assert_eq!(ui.assets().unwrap().as_ptr(), source.as_ptr());
@@ -318,7 +318,7 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
     assert_eq!(state.installed, 1);
     assert_eq!(ui.assets().unwrap().as_ptr(), candidate.as_ptr());
     // Installation occurred outside update, so one explicit synchronization commits the revision.
-    ui.update_with_events(SIZE, &mut session, |message| InstallTheme.handle(&mut state, &message))
+    ui.update_with_events(SIZE, &session, |message| InstallTheme.handle(&mut state, &message))
         .unwrap();
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
 }

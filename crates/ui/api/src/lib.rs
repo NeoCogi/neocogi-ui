@@ -17,7 +17,6 @@ pub use com::*;
 
 /// Application-owned typed semantic events and deterministic COM delivery.
 pub mod events;
-pub use events::{Events, EventSender};
 
 /// Exact native-path snapshots and static platform conversion.
 pub mod path;

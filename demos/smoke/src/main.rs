@@ -140,12 +140,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let mut button = ui.widgets().button("Hello across COM")?;
     let window = ui.window("Dynamic UI", Rect { x: 40, y: 40, width: 500, height: 200 }, &button)?;
-    let mut session = Events::new();
-    session.map(button.activated(), |event| event.label)?;
+    let (session_tx, session) = std::sync::mpsc::channel();
+    neocogi_ui::events::map(button.activated(), session_tx.clone(), |event| event.label)?;
     let mut count = 0u32;
     let mut callback_button = button.clone();
     let size = native.size()?;
-    ui.update_with_events(size, &mut session, |label| {
+    ui.update_with_events(size, &session, |label| {
         count += 1;
         println!("button submitted: {label}");
         callback_button.set_label(&format!("Clicked {count} times"))
@@ -154,13 +154,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     if options.smoke {
         // Keyboard routing must cross the real UI plugin, enqueue, then reach the host sink.
         key(&ui, KeyCode::Tab)?;
-        ui.update_with_events(size, &mut session, |label| {
+        ui.update_with_events(size, &session, |label| {
             count += 1;
             println!("button submitted: {label}");
             callback_button.set_label(&format!("Clicked {count} times"))
         })?;
         key(&ui, KeyCode::Enter)?;
-        ui.update_with_events(size, &mut session, |label| {
+        ui.update_with_events(size, &session, |label| {
             count += 1;
             println!("button submitted: {label}");
             callback_button.set_label(&format!("Clicked {count} times"))
@@ -168,7 +168,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         assert_eq!(count, 1);
         button.set_label("A longer label changes preferred measurement across the plugin boundary")?;
         assert_eq!(ui.render(size, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
-        ui.update_with_events(size, &mut session, |label| {
+        ui.update_with_events(size, &session, |label| {
             count += 1;
             println!("button submitted: {label}");
             callback_button.set_label(&format!("Clicked {count} times"))
@@ -176,7 +176,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         ui.render(size, renderer.as_com_ref())?;
         window.set_rect(Rect { x: 20, y: 20, width: 560, height: 280 })?;
         assert_eq!(ui.render(size, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
-        ui.update_with_events(size, &mut session, |label| {
+        ui.update_with_events(size, &session, |label| {
             count += 1;
             println!("button submitted: {label}");
             callback_button.set_label(&format!("Clicked {count} times"))
@@ -184,7 +184,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         ui.render(size, renderer.as_com_ref())?;
         // Restoring the compiled bundle exercises a second real upload and shared UI revision.
         ui.install_assets(assets.as_com_ref(), renderer.as_com_ref())?;
-        ui.update_with_events(size, &mut session, |label| {
+        ui.update_with_events(size, &session, |label| {
             count += 1;
             println!("button submitted: {label}");
             callback_button.set_label(&format!("Clicked {count} times"))
@@ -215,7 +215,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         let size = native.size()?;
         if size.width > 0 && size.height > 0 {
-            ui.update_with_events(size, &mut session, |label| {
+            ui.update_with_events(size, &session, |label| {
                 count += 1;
                 println!("button submitted: {label}");
                 callback_button.set_label(&format!("Clicked {count} times"))
@@ -352,23 +352,23 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let bar = menus.create("")?;
     let item = bar.submenu("File")?.item("Menu command")?;
     menus.attach_bar(window.as_com_ref(), &bar)?;
-    let mut events = Events::new();
-    events.map(item.activated()?, ComponentMessage::Menu)?;
+    let (events_tx, events) = std::sync::mpsc::channel();
+    neocogi_ui::events::map(item.activated()?, events_tx.clone(), ComponentMessage::Menu)?;
     let mut count = 0u32;
     let expected_path = directory.0.join(" native file ");
-    ui.update_with_events(size, &mut events, |message| message.consume(&mut count, &expected_path))?;
+    ui.update_with_events(size, &events, |message| message.consume(&mut count, &expected_path))?;
     ui.render(size, renderer)?;
     for (key, value) in [(KeyCode::Function, 10), (KeyCode::ArrowDown, 0), (KeyCode::Enter, 0)] {
         smoke_key(ui, key, value)?;
     }
-    ui.update_with_events(size, &mut events, |message| message.consume(&mut count, &expected_path))?;
+    ui.update_with_events(size, &events, |message| message.consume(&mut count, &expected_path))?;
     assert_eq!(count, 1);
     let picker = ui.file_dialog(window.as_com_ref())?;
-    events.map(picker.completed(), ComponentMessage::File)?;
+    neocogi_ui::events::map(picker.completed(), events_tx.clone(), ComponentMessage::File)?;
     let mut request = FileDialogRequest::new(&directory.0);
     request.rect = Rect { x: 10, y: 10, width: 620, height: 370 };
     picker.open(&request)?;
-    ui.update_with_events(size, &mut events, |message| message.consume(&mut count, &expected_path))?;
+    ui.update_with_events(size, &events, |message| message.consume(&mut count, &expected_path))?;
     ui.render(size, renderer)?;
     for _ in 0..6 {
         smoke_key(ui, KeyCode::Tab, 0)?;
@@ -378,13 +378,13 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
         smoke_key(ui, KeyCode::Tab, 0)?;
     }
     smoke_key(ui, KeyCode::Space, 0)?;
-    ui.update_with_events(size, &mut events, |message| message.consume(&mut count, &expected_path))?;
+    ui.update_with_events(size, &events, |message| message.consume(&mut count, &expected_path))?;
     assert_eq!(count, 2);
     assert_eq!(picker.active(), Ok(false));
     ui.render(size, renderer)?;
     picker.close()?;
     window.close()?;
-    ui.update_with_events(size, &mut events, |message| message.consume(&mut count, &expected_path))?;
+    ui.update_with_events(size, &events, |message| message.consume(&mut count, &expected_path))?;
     assert_eq!(combo.selection(), Err(UI_E_CLOSED));
     assert_eq!(item.label(), Err(UI_E_CLOSED));
     Ok(())

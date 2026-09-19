@@ -496,12 +496,12 @@ mod tests {
     fn numeric_dispatcher(
         install: impl FnOnce(Box<dyn FnMut(neocogi_ui_nodes_contracts::NumericChanged) -> Result<(), NcStatus>>) -> Result<(), NcStatus>,
     ) -> Box<dyn FnMut(&mut Vec<Real>) -> bool> {
-        let mut events = neocogi_com_events::Events::new();
-        events.map(install, |event| event.value).unwrap();
+        let (events_tx, events) = std::sync::mpsc::channel();
+        neocogi_ui::events::map(install, events_tx.clone(), |event| event.value).unwrap();
         Box::new(move |values| {
-            let delivered = !events.is_empty();
-            values.extend(std::iter::from_fn(|| events.pop()));
-            delivered
+            let before = values.len();
+            values.extend(events.try_iter());
+            values.len() != before
         })
     }
 

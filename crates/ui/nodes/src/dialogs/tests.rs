@@ -67,9 +67,9 @@ impl Fixture {
     }
 }
 /// Connects the real picker completion protocol to a consumer-owned inbox.
-fn session(fixture: &Fixture) -> Events<FileDialogCompletion> {
-    let mut events = Events::new();
-    events.map(fixture.handle.completed(), |event| event).unwrap();
+fn session(fixture: &Fixture) -> std::sync::mpsc::Receiver<FileDialogCompletion> {
+    let (events_tx, events) = std::sync::mpsc::channel();
+    neocogi_ui::events::map(fixture.handle.completed(), events_tx.clone(), |event| event).unwrap();
     events
 }
 
@@ -116,7 +116,7 @@ fn broken_entry_rejects_the_complete_directory_candidate() {
 fn empty_acceptance_and_independent_picker_requests_use_actual_controls() {
     let fixture = Fixture::new();
     let directory = tempfile::tempdir().unwrap();
-    let mut events = session(&fixture);
+    let events = session(&fixture);
     let mut outcomes = Vec::new();
     fixture.open(directory.path());
     // Up, Home, Path, Go, Parent, Filename, Cancel, Open: activate Open with an empty filename.
@@ -124,7 +124,7 @@ fn empty_acceptance_and_independent_picker_requests_use_actual_controls() {
     fixture.key(KeyCode::Space, 0);
     fixture
         .ui
-        .update_with_events(SIZE, &mut events, |message| {
+        .update_with_events(SIZE, &events, |message| {
             outcomes.push(completed_file_path(&message)?);
             Ok(())
         })
@@ -135,24 +135,21 @@ fn empty_acceptance_and_independent_picker_requests_use_actual_controls() {
     assert_eq!(fixture.handle.cancel(), Ok(false));
 
     let second = fixture.ui.file_dialog(fixture.owner.as_com_ref()).unwrap();
-    let mut second_events = Events::new();
+    let (second_events_tx, second_events) = std::sync::mpsc::channel();
     let mut second_outcomes = Vec::new();
-    second_events.map(second.completed(), |event| event).unwrap();
+    neocogi_ui::events::map(second.completed(), second_events_tx.clone(), |event| event).unwrap();
     second.open(&neocogi_ui::FileDialogRequest::new(directory.path())).unwrap();
     second.cancel().unwrap();
     fixture
         .ui
-        .update_with_events(SIZE, &mut events, |message| {
+        .update_with_events(SIZE, &events, |message| {
             outcomes.push(completed_file_path(&message)?);
             Ok(())
         })
         .unwrap();
-    second_events
-        .dispatch(100, |message| {
-            second_outcomes.push(completed_file_path(&message)?);
-            Ok(())
-        })
-        .unwrap();
+    for message in second_events.try_iter() {
+        second_outcomes.push(completed_file_path(&message).unwrap());
+    }
     assert_eq!(&outcomes, &[None]);
     assert_eq!(&*second_outcomes, &[None]);
     second.close().unwrap();
@@ -164,7 +161,7 @@ fn typed_filename_acceptance_uses_real_controls_and_completes_before_update_retu
     let fixture = Fixture::new();
     let directory = tempfile::tempdir().unwrap();
     // Only the parent folder row is focusable: Up, Home, Path, Go, Parent, Filename, Cancel, Open.
-    let mut events = session(&fixture);
+    let events = session(&fixture);
     let mut outcomes = Vec::new();
     fixture.open(directory.path());
     fixture.tabs(6);
@@ -173,7 +170,7 @@ fn typed_filename_acceptance_uses_real_controls_and_completes_before_update_retu
     fixture.key(KeyCode::Space, 0);
     fixture
         .ui
-        .update_with_events(SIZE, &mut events, |message| {
+        .update_with_events(SIZE, &events, |message| {
             outcomes.push(completed_file_path(&message)?);
             Ok(())
         })
@@ -198,7 +195,7 @@ fn selected_non_utf8_file_preserves_exact_native_identity_across_display_collisi
     std::fs::write(&first, "first").unwrap();
     std::fs::write(&second, "second").unwrap();
     assert_eq!(first.to_string_lossy(), second.to_string_lossy());
-    let mut events = session(&fixture);
+    let events = session(&fixture);
     let mut outcomes = Vec::new();
     fixture.open(directory.path());
     // Four toolbar stops, parent folder, then the first exact native file row.
@@ -206,7 +203,7 @@ fn selected_non_utf8_file_preserves_exact_native_identity_across_display_collisi
     fixture.key(KeyCode::Space, 0);
     fixture
         .ui
-        .update_with_events(SIZE, &mut events, |message| {
+        .update_with_events(SIZE, &events, |message| {
             outcomes.push(completed_file_path(&message)?);
             Ok(())
         })
@@ -217,7 +214,7 @@ fn selected_non_utf8_file_preserves_exact_native_identity_across_display_collisi
     fixture.key(KeyCode::Space, 0);
     fixture
         .ui
-        .update_with_events(SIZE, &mut events, |message| {
+        .update_with_events(SIZE, &events, |message| {
             outcomes.push(completed_file_path(&message)?);
             Ok(())
         })
@@ -259,14 +256,14 @@ fn unreadable_navigation_preserves_selection_directory_and_dynamic_widget_identi
 fn lifecycle_cancellation_is_once_per_request_and_stale_hide_does_not_cancel_reopening() {
     let fixture = Fixture::new();
     let directory = tempfile::tempdir().unwrap();
-    let mut events = session(&fixture);
+    let events = session(&fixture);
     let mut outcomes = Vec::new();
     fixture.open(directory.path());
     assert_eq!(fixture.handle.cancel(), Ok(true));
     fixture.open(directory.path());
     fixture
         .ui
-        .update_with_events(SIZE, &mut events, |message| {
+        .update_with_events(SIZE, &events, |message| {
             outcomes.push(completed_file_path(&message)?);
             Ok(())
         })
@@ -276,7 +273,7 @@ fn lifecycle_cancellation_is_once_per_request_and_stale_hide_does_not_cancel_reo
     fixture.owner.set_visibility(Visibility::Hidden).unwrap();
     fixture
         .ui
-        .update_with_events(SIZE, &mut events, |message| {
+        .update_with_events(SIZE, &events, |message| {
             outcomes.push(completed_file_path(&message)?);
             Ok(())
         })
@@ -288,7 +285,7 @@ fn lifecycle_cancellation_is_once_per_request_and_stale_hide_does_not_cancel_reo
     fixture.owner.close().unwrap();
     fixture
         .ui
-        .update_with_events(SIZE, &mut events, |message| {
+        .update_with_events(SIZE, &events, |message| {
             outcomes.push(completed_file_path(&message)?);
             Ok(())
         })
@@ -297,7 +294,7 @@ fn lifecycle_cancellation_is_once_per_request_and_stale_hide_does_not_cancel_reo
     assert_eq!(fixture.handle.active(), Err(UI_E_CLOSED));
     fixture
         .ui
-        .update_with_events(SIZE, &mut events, |message| {
+        .update_with_events(SIZE, &events, |message| {
             outcomes.push(completed_file_path(&message)?);
             Ok(())
         })
@@ -310,7 +307,7 @@ fn lifecycle_cancellation_is_once_per_request_and_stale_hide_does_not_cancel_reo
 fn runtime_release_preserves_active_request_terminal_cancellation_without_a_controller_cycle() {
     let fixture = Fixture::new();
     let directory = tempfile::tempdir().unwrap();
-    let mut events = session(&fixture);
+    let events = session(&fixture);
     let mut outcomes = Vec::new();
     fixture.open(directory.path());
     let host = fixture.runtime.construction_host().unwrap().host().unwrap();
@@ -319,21 +316,11 @@ fn runtime_release_preserves_active_request_terminal_cancellation_without_a_cont
     assert_eq!(host.check_open(), Err(UI_E_CLOSED));
     assert!(outcomes.is_empty());
     assert_eq!(handle.active(), Err(UI_E_CLOSED));
-    assert_eq!(
-        events.dispatch(100, |message| {
-            outcomes.push(completed_file_path(&message)?);
-            Ok(())
-        }),
-        Ok(1)
-    );
+    for message in events.try_iter() {
+        outcomes.push(completed_file_path(&message).unwrap());
+    }
     assert_eq!(&outcomes, &[None]);
-    assert_eq!(
-        events.dispatch(100, |message| {
-            outcomes.push(completed_file_path(&message)?);
-            Ok(())
-        }),
-        Ok(0)
-    );
+    assert!(events.try_recv().is_err());
 }
 
 /// Successful folder navigation replaces only dynamic rows, keeps controls/scroll models and clamps against new content.
@@ -380,10 +367,10 @@ fn application_callback_opens_picker_and_later_input_reaches_its_new_modal_scope
         /// Captured native completion.
         Completed(FileDialogCompletion),
     }
-    let mut events = Events::new();
+    let (events_tx, events) = std::sync::mpsc::channel();
     let mut outcomes = Vec::new();
-    events.map(fixture.handle.completed(), AppMessage::Completed).unwrap();
-    events.map(button.activated(), |_| AppMessage::Open).unwrap();
+    neocogi_ui::events::map(fixture.handle.completed(), events_tx.clone(), AppMessage::Completed).unwrap();
+    neocogi_ui::events::map(button.activated(), events_tx.clone(), |_| AppMessage::Open).unwrap();
     fixture.tabs(1);
     fixture.key(KeyCode::Space, 0);
     fixture.tabs(6);
@@ -392,7 +379,7 @@ fn application_callback_opens_picker_and_later_input_reaches_its_new_modal_scope
     fixture.key(KeyCode::Space, 0);
     fixture
         .ui
-        .update_with_events(SIZE, &mut events, |message| match message {
+        .update_with_events(SIZE, &events, |message| match message {
             AppMessage::Open => fixture.handle.open(&neocogi_ui::FileDialogRequest::new(directory.path())),
             AppMessage::Completed(event) => {
                 outcomes.push(completed_file_path(&event)?);
@@ -412,31 +399,21 @@ fn closed_picker_preserves_all_completed_requests_during_manual_handler_runtime_
     let fixture = Fixture::new();
     let directory = tempfile::tempdir().unwrap();
     let ui = crate::bind_builtin_nodes(fixture.runtime.clone()).unwrap();
-    let mut events = Events::new();
-    events.map(fixture.handle.completed(), |event| event).unwrap();
+    let (events_tx, events) = std::sync::mpsc::channel();
+    neocogi_ui::events::map(fixture.handle.completed(), events_tx.clone(), |event| event).unwrap();
     let mut completions = 0;
     for _ in 0..2 {
         fixture.open(directory.path());
         fixture.handle.cancel().unwrap();
     }
     fixture.handle.close().unwrap();
-    assert_eq!(
-        events.dispatch(100, |message| {
-            assert!(matches!(message, FileDialogCompletion::Cancelled));
-            completions += 1;
-            ui.update(SIZE)
-        }),
-        Ok(2)
-    );
+    for message in events.try_iter() {
+        assert!(matches!(message, FileDialogCompletion::Cancelled));
+        completions += 1;
+        ui.update(SIZE).unwrap();
+    }
     assert_eq!(completions, 2);
-    assert_eq!(
-        events.dispatch(100, |message| {
-            assert!(matches!(message, FileDialogCompletion::Cancelled));
-            completions += 1;
-            ui.update(SIZE)
-        }),
-        Ok(0)
-    );
+    assert!(events.try_recv().is_err());
 }
 
 /// A foreign mapper's reentrant observation reports a checked borrow conflict, never panics.
@@ -445,16 +422,15 @@ fn completion_mapping_reentry_uses_the_request_borrow_boundary() {
     let fixture = Fixture::new();
     let directory = tempfile::tempdir().unwrap();
     let controller = fixture.handle.as_interface().add_ref();
-    let mut events = Events::new();
-    events
-        .map(fixture.handle.completed(), move |message| {
-            assert_eq!(controller.active(), Err(UI_E_BUSY));
-            message
-        })
-        .unwrap();
+    let (events_tx, events) = std::sync::mpsc::channel();
+    neocogi_ui::events::map(fixture.handle.completed(), events_tx.clone(), move |message| {
+        assert_eq!(controller.active(), Err(UI_E_BUSY));
+        message
+    })
+    .unwrap();
     fixture.open(directory.path());
     assert_eq!(fixture.handle.cancel(), Ok(true));
-    assert!(matches!(events.pop(), Some(FileDialogCompletion::Cancelled)));
+    assert!(matches!(events.try_recv().ok(), Some(FileDialogCompletion::Cancelled)));
     // Release the intentionally self-capturing test mapper through normal replacement.
-    events.map(fixture.handle.completed(), |message| message).unwrap();
+    neocogi_ui::events::map(fixture.handle.completed(), events_tx.clone(), |message| message).unwrap();
 }

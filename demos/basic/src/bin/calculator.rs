@@ -379,7 +379,7 @@ fn run() -> Result<(), HostError> {
         display,
         calculator: Calculator::new(),
     };
-    let mut events = Events::new();
+    let (events_tx, events) = std::sync::mpsc::channel();
     for (index, (label, action)) in [
         ("AC", Action::ClearAll),
         ("CE", Action::ClearEntry),
@@ -408,7 +408,7 @@ fn run() -> Result<(), HostError> {
         let mut button = host.ui.widgets().button(label)?;
         button.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
         grid.insert(index as u32, &button, GridExtent { columns: 1, rows: 1 })?.finish()?;
-        events.map(button.activated(), move |_| action)?;
+        neocogi_ui::events::map(button.activated(), events_tx.clone(), move |_| action)?;
     }
     host.run(state, events)
 }

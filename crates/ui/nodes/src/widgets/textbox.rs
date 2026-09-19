@@ -421,29 +421,29 @@ mod tests {
 
     /// Maps both outputs into one ordinary consumer FIFO, preserving their actual post order.
     fn text_dispatcher(textbox: &mut Textbox) -> impl FnMut(&mut Vec<RecordedEvent>) -> bool + use<> {
-        let mut events = neocogi_com_events::Events::new();
-        events
-            .map(
-                |consume| {
-                    textbox.changed_event = Some(crate::TextChanged::__receiver(consume)?);
-                    Ok(())
-                },
-                |event| RecordedEvent::Changed(event.text, event.cursor),
-            )
-            .unwrap();
-        events
-            .map(
-                |consume| {
-                    textbox.submitted_event = Some(crate::TextSubmitted::__receiver(consume)?);
-                    Ok(())
-                },
-                |event| RecordedEvent::Submitted(event.text),
-            )
-            .unwrap();
+        let (events_tx, events) = std::sync::mpsc::channel();
+        neocogi_ui::events::map(
+            |consume| {
+                textbox.changed_event = Some(crate::TextChanged::__receiver(consume)?);
+                Ok(())
+            },
+            events_tx.clone(),
+            |event| RecordedEvent::Changed(event.text, event.cursor),
+        )
+        .unwrap();
+        neocogi_ui::events::map(
+            |consume| {
+                textbox.submitted_event = Some(crate::TextSubmitted::__receiver(consume)?);
+                Ok(())
+            },
+            events_tx.clone(),
+            |event| RecordedEvent::Submitted(event.text),
+        )
+        .unwrap();
         move |values| {
-            let delivered = !events.is_empty();
-            values.extend(std::iter::from_fn(|| events.pop()));
-            delivered
+            let before = values.len();
+            values.extend(events.try_iter());
+            values.len() != before
         }
     }
 

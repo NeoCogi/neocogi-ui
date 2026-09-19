@@ -464,7 +464,7 @@ impl IPopupEvents for LogicalPopup {
 
 #[cfg(test)]
 mod tests {
-    use neocogi_ui::{Events, Point, Rect, Size, UiInput, Visibility};
+    use neocogi_ui::{Point, Rect, Size, UiInput, Visibility};
 
     /// Pointer-relative public popup activation uses the latest input position consumed by the runtime.
     #[test]
@@ -479,22 +479,22 @@ mod tests {
         let builder = menus.create("Pointer actions").unwrap();
         let item = builder.item("Run at pointer").unwrap();
         let mut popup = menus.popup(owner.as_com_ref(), &builder).unwrap();
-        let mut events = Events::new();
+        let (events_tx, events) = std::sync::mpsc::channel();
         let mut labels = Vec::new();
-        events.map(item.activated().unwrap(), |event| event.label).unwrap();
+        neocogi_ui::events::map(item.activated().unwrap(), events_tx.clone(), |event| event.label).unwrap();
         let size = Size { width: 640, height: 400 };
 
         // Consume a pointer transition before opening. The popup request must use this committed
         // screen position rather than the popup definition's default rectangle or its owner origin.
         let pointer = Point { x: 300, y: 250 };
         ui.input(UiInput::Pointer(pointer), "").unwrap();
-        ui.update_with_events(size, &mut events, |message| {
+        ui.update_with_events(size, &events, |message| {
             labels.push(message);
             Ok(())
         })
         .unwrap();
         popup.show().unwrap();
-        ui.update_with_events(size, &mut events, |message| {
+        ui.update_with_events(size, &events, |message| {
             labels.push(message);
             Ok(())
         })
@@ -504,7 +504,7 @@ mod tests {
         // crossed IPopup and were used by the manager's subsequent hit testing.
         let first_row = Point { x: pointer.x + 2, y: pointer.y + 2 };
         ui.input(UiInput::Down { position: first_row, buttons: 1 }, "").unwrap();
-        ui.update_with_events(size, &mut events, |message| {
+        ui.update_with_events(size, &events, |message| {
             labels.push(message);
             Ok(())
         })

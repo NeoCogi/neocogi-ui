@@ -2,7 +2,7 @@
 use crate::factory::NodeServices;
 use neocogi_ui_core_contracts::*;
 use neocogi_ui_nodes_contracts::{ContentIcon, CrossSize, FlowDirection, LayoutTrack, LinearEdge};
-use neocogi_ui::{Events, LinearWidget, ListItemWidget, ScrollAreaWidget, TextBlockWidget, TextboxWidget};
+use neocogi_ui::{LinearWidget, ListItemWidget, ScrollAreaWidget, TextBlockWidget, TextboxWidget};
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_object};
 use std::{
     cell::RefCell,
@@ -203,8 +203,10 @@ struct DialogNodes {
 
 /// One authoritative picker model; live control values are read through their actual COM interfaces.
 struct Model {
-    /// Private inbox combines child protocols in actual emission order; state is borrowed only by its consumer.
-    events: Events<Message>,
+    /// Private child messages remain owned by this model and are consumed one at a time.
+    events: std::sync::mpsc::Receiver<Message>,
+    /// Dynamic directory rows clone posting access when their outputs are connected.
+    events_tx: std::sync::mpsc::Sender<Message>,
     /// Concrete-node construction data with no runtime or window-manager projection.
     nodes: Rc<DialogNodes>,
     /// Stable hidden/reusable modal installed after the eventful root is mounted.
@@ -489,8 +491,10 @@ impl Dialog {
             phase: RequestPhase::Idle,
             completed: None,
         }));
+        let (events_tx, events) = std::sync::mpsc::channel();
         let model = Rc::new(RefCell::new(Model {
-            events: Events::new(),
+            events,
+            events_tx,
             nodes,
             window: None,
             request: request.clone(),
@@ -505,7 +509,7 @@ impl Dialog {
             diagnostic: String::new(),
         }));
         let dialog = Rc::new(Self { model, request });
-        let driver = dialog.model.borrow().events.component_dispatcher(&dialog.model, Model::update)?;
+        let driver = neocogi_com_events::component_dispatcher(&dialog.model, |model| &model.events, Model::update)?;
         let root = DialogRoot::create(&shell, driver, dialog.request.clone())?;
         let windows = services.windows.clone();
         let window = windows.create_dialog(parent, NcCopyFromBufferOffset::new(0, b"Open File"), FILE_DIALOG_RECT, root.as_com_ref())?;
@@ -541,14 +545,14 @@ impl Model {
         window: &ComPtr<IWindowAbi>,
         buttons: [(neocogi_ui::ButtonWidget, Message); 5],
     ) -> Result<(), NcStatus> {
-        let events = &mut self.events;
-        events.map(path.changed(), |_| Message::PathEdited)?;
-        events.map(path.submitted(), |event| Message::Navigate(event.text))?;
-        events.map(filename.changed(), |_| Message::FilenameEdited)?;
+        let sender = &self.events_tx;
+        neocogi_ui::events::map(path.changed(), sender.clone(), |_| Message::PathEdited)?;
+        neocogi_ui::events::map(path.submitted(), sender.clone(), |event| Message::Navigate(event.text))?;
+        neocogi_ui::events::map(filename.changed(), sender.clone(), |_| Message::FilenameEdited)?;
         for (button, action) in buttons {
-            events.map(button.activated(), move |_| action.clone())?;
+            neocogi_ui::events::map(button.activated(), sender.clone(), move |_| action.clone())?;
         }
-        events.map(neocogi_ui::events::window_events(window.as_com_ref())?, |event| Message::Lifecycle(event))?;
+        neocogi_ui::events::map(neocogi_ui::events::window_events(window.as_com_ref())?, sender.clone(), Message::Lifecycle)?;
         Ok(())
     }
 
@@ -568,7 +572,7 @@ impl Model {
     /// Registers complete candidates while the private inbox is idle, then replaces only dynamic content roles.
     fn install(&mut self, directory: PathBuf, listing: Listing, reset_scroll: bool) -> Result<(), NcStatus> {
         for (row, action) in listing.folders.rows.into_iter().chain(listing.files.rows) {
-            self.events.map(row.activated(), move |_| action.clone())?;
+            neocogi_ui::events::map(row.activated(), self.events_tx.clone(), move |_| action.clone())?;
         }
         // These are private built-in roles: their controller validates the live
         // modal before replacement and no caller can substitute a foreign child.
