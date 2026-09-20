@@ -4,6 +4,9 @@ use super::*;
 use neocogi_com::{NcCopyToBufferOffset, INcStringComPtrExt};
 use rs_math3d::{Mat4f, Vec2f, Vec3f};
 
+#[cfg(feature = "glow")]
+mod surfaces;
+
 /// Shared ordered stream fixture can inject native reentry and release a resource during bulk copying.
 struct Input {
     /// Immutable atlas passed explicitly to every native render, including reentry probes.

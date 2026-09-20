@@ -25,6 +25,20 @@ the completed preview texture. GPU allocations retire through the existing
 device ownership path after all public images and active submissions release
 them. Stream reads and resource authentication finish before GPU execution.
 
-Backend hooks explicitly fail until implemented; unsupported offscreen work
-must never fall back to rendering into the window. Backend completion and
-runtime validation are tracked in the theme-editor implementation plan.
+Glow and WebGL implement the capability through framebuffer-backed textures.
+They upload each session's atlas independently and use a fresh output allocation
+for each frame, so published snapshots cannot be overwritten. Vulkan and WGPU
+currently reject surface creation explicitly while preserving their ordinary
+window rendering. They remain required follow-up work for editor backend parity.
+
+Native acceptance can be run with:
+
+```sh
+SDL_VIDEODRIVER=offscreen cargo test -p neocogi-render-plugin --features neocogi-com/static-runtime --lib -- --ignored --test-threads=1
+```
+
+The surface test checks asymmetric source orientation, old snapshot pixels after
+later frames, unchanged window atlas identity, native allocation failure,
+suspended/resized output, surface release, and final device retirement. WebGL
+compilation is checked separately; compilation does not establish browser runtime
+coverage.
