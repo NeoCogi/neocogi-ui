@@ -34,8 +34,16 @@ window passes retain their own format and application depth attachment. Error
 scopes complete before output publication or native presentation. WGPU retains
 in-flight native resources through its command submission lifetime.
 
-Vulkan still rejects surface creation explicitly while preserving ordinary
-window rendering; its offscreen implementation remains required for backend parity.
+Vulkan uses a private RGBA8 render pass, framebuffer, pipeline, command pool,
+vertex upload, and completion fence. It shares the device's authenticated images
+and sampled descriptors. The render pass transitions completed pixels to
+shader-readable layout; the completion fence signals before publication.
+This first implementation waits for that one submission on the CPU. It makes
+ownership and failure recovery explicit, with a measurable synchronization cost.
+No native acquisition/presentation semaphores or frame slots participate.
+A submission/wait failure prevents unsafe command-storage reuse. A frame dropped
+before submission is recoverable. Descriptors follow the existing pool-generation
+rebinding when the native swapchain is rebuilt.
 
 Native acceptance can be run with:
 
@@ -76,3 +84,16 @@ and retained-output immutability across different-size frames and allocation
 failure, then submits an ordinary native frame. Unsupported SDL dummy/offscreen
 video drivers return a construction diagnostic instead of reaching SDL's
 panicking raw-window-handle adapter.
+
+Vulkan checks exercise actual readback and recovery with a native display:
+
+```sh
+VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation cargo test -p neocogi-render-vulkan -- --include-ignored --test-threads=1
+cargo run -p neocogi-theme-editor --no-default-features --features monolith,embed-assets,vulkan
+```
+
+The Khronos validation layer is optional and must be installed to enable it.
+The tests cover private-atlas orientation, immutable retained outputs, changed
+output extents, rejected allocation, pre-submission abandonment, and subsequent
+ordinary window rendering. All three native backends now expose surfaces;
+WebGL execution is validated separately from native Glow.
