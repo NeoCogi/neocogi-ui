@@ -76,3 +76,50 @@ fn embedded_scope_receives_tab_and_menu_keys_until_explicit_exit() {
     ui.update(SIZE).unwrap();
     assert!(events.try_iter().any(|(focused, _)| focused));
 }
+
+/// A manager-owned window-cycle press may activate a remembered embedded focus;
+/// its delegated release must not leave the outer cycle latch set forever.
+#[test]
+fn window_cycle_can_resume_after_focus_moves_through_an_embedded_scope() {
+    let runtime = runtime();
+    let factory = neocogi_ui_nodes::UiFactory::bind(runtime.as_com_ref()).unwrap();
+    let ui = neocogi_ui::Ui::from_interfaces(runtime, factory).unwrap();
+    let (send, events) = std::sync::mpsc::channel();
+    let scope = ui.widgets().leaf(Scope { events: send }, WidgetOptions::NONE).unwrap();
+    let next = ui.widgets().button("outside scope").unwrap();
+    let mut body = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
+    body.insert(0, &scope, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
+    body.insert(1, &next, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
+    ui.window("scope", RECT, &body).unwrap();
+    ui.update(SIZE).unwrap();
+    ui.input(key(KeyCode::Tab, 0, 0, true), "").unwrap();
+    ui.update(SIZE).unwrap();
+    assert!(events.try_iter().any(|(focused, _)| focused));
+
+    let text = ui.widgets().textbox("other window").unwrap();
+    let other = ui.window("other", Rect { x: 430, y: 20, width: 180, height: 110 }, &text).unwrap();
+    other.set_options(WindowOptions::NO_TITLE | WindowOptions::NO_CLOSE | WindowOptions::NO_RESIZE).unwrap();
+    other.raise().unwrap();
+    ui.update(SIZE).unwrap();
+    for input in [
+        UiInput::Down { position: Point { x: 460, y: 55 }, buttons: 1 },
+        UiInput::Up { position: Point { x: 460, y: 55 }, buttons: 1 },
+    ] {
+        ui.input(input, "").unwrap();
+        ui.update(SIZE).unwrap();
+    }
+    assert!(matches!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::Area(_)));
+    for pressed in [true, false] {
+        ui.input(key(KeyCode::Function, 6, 2, pressed), "").unwrap();
+        ui.update(SIZE).unwrap();
+    }
+    assert_eq!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::None);
+    for pressed in [true, false] {
+        ui.input(key(KeyCode::Tab, 0, 2, pressed), "").unwrap();
+        ui.update(SIZE).unwrap();
+    }
+    ui.input(key(KeyCode::Function, 6, 2, true), "").unwrap();
+    ui.update(SIZE).unwrap();
+    assert!(matches!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::Area(_)),
+        "the first new Ctrl+F6 press after leaving the scope must cycle to the textbox window");
+}

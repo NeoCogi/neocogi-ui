@@ -3108,9 +3108,23 @@ impl WindowManager {
         // outside press may change the visible forest and must do so before hit testing below.
         let style = self.bundle.skin().clone();
         let delegated_keyboard = self.delegates_keyboard();
-        let popup_keyboard_handled = !delegated_keyboard && self.route_application_popup_keyboard(event);
-        let menu_keyboard_handled = !delegated_keyboard && !popup_keyboard_handled && self.route_menu_keyboard(event);
-        let window_keyboard_handled = !delegated_keyboard && !popup_keyboard_handled && !menu_keyboard_handled && self.route_window_keyboard(event);
+        let (popup_keyboard_handled, menu_keyboard_handled, window_keyboard_handled) = match delegated_keyboard {
+            true => {
+                // Focus can enter a nested scope between a manager-owned press and
+                // its release (for example Ctrl+F6 activates a remembered pane).
+                // The inner owner receives later keys, so revoke outer chord tails
+                // now rather than swallowing the first command after focus returns.
+                self.pending_menu_alt = false;
+                self.window_cycle_key_down = false;
+                (false, false, false)
+            }
+            false => {
+                let popup = self.route_application_popup_keyboard(event);
+                let menu = !popup && self.route_menu_keyboard(event);
+                let window = !popup && !menu && self.route_window_keyboard(event);
+                (popup, menu, window)
+            }
+        };
         let discard_pointer = self.discard_revoked_capture_event(event);
         let menu_press = matches!(event, UiInputEvent::MouseDown { button, .. } if button.intersects(MouseButton::LEFT));
         let previous_top = menu_press.then(|| self.surfaces.active_top_popup()).flatten();
