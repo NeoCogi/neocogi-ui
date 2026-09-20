@@ -21,7 +21,7 @@ reads the assembly definitions in `[workspace.metadata.neocogi]` in the root
 prerequisites is a separate release operation.
 
 `--assembly` selects `full` (the default), `simple`, `calculator`,
-`backend-frame-cube`, or `smoke`. Glow is the default backend. Renderer variants
+`backend-frame-cube`, `smoke`, or `theme-editor`. Glow is the default backend. Renderer variants
 select matching application and platform features explicitly:
 
 ```sh
@@ -43,6 +43,21 @@ review the selected typed configuration without compiling or inspecting plugins.
 The [tool reference](../tools/cargo-neocogi/README.md) describes package metadata,
 standalone `--config` files, per-component features, registry version requirements,
 resource paths, and lockfile behavior.
+
+The theme editor stages UI core, built-in nodes, the selected renderer, GFX with
+its authoring builder, one shared COM runtime, and adjacent assets/themes. Its
+`monolith` variant links and registers those same providers directly; `embedded`
+selects compiled default assets. It shares document/preview code with WebAssembly:
+
+```sh
+cargo neocogi run --assembly theme-editor --variant vulkan
+cargo neocogi run --assembly theme-editor --variant vulkan --variant monolith
+NEOCOGI_WEB_APP=theme-editor ./scripts/web-demo.sh serve
+```
+
+[`scripts/test-theme-editor.sh`](../scripts/test-theme-editor.sh) exercises either
+native linkage mode from relocated staging with exact staged resources. See the
+[editor guide](../tools/theme-editor/README.md) for project I/O and browser imports.
 
 ## Profiles and output
 

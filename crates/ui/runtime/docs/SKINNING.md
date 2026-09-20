@@ -12,7 +12,9 @@ The UI runtime, retained GFX compositor, and renderer install one immutable
 `IAssetBundle` together. UI imports its canonical catalog identity and retains the validated
 table collection without translating its generated records to native resource records. GFX imports the tables it
 needs for final composition, while the renderer
-uploads the matching pixels before publication. Failed validation or upload preserves
+prepares the matching image before publication. `IAssetBundle::image()` has
+independent immutable identity, so an appearance-only revision reuses its atlas
+without another full pixel copy or upload. Failed validation or upload preserves
 the current revision. All windows, widgets and scoped services use that same committed
 resource identity.
 
@@ -112,3 +114,12 @@ The optional `theme-json` feature adds a strict authoring format documented in
 
 The runtime never retains the source document, palette, or string appearance keys. Those are
 compiler inputs only.
+
+## Live authoring tool
+
+The [theme editor](../../../../tools/theme-editor/README.md) keeps its normal UI
+and edits a `ThemeDocument` for a separate preview runtime/private compositor.
+Typed commands address concrete fields, roles, and valid states. Resource changes
+compile from one stable application base; geometry and color edits reuse the
+resource build. A failed candidate preserves the last valid preview. The gallery
+retains widget values and arrangement across successful installations.

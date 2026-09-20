@@ -6,7 +6,7 @@ feature or file-loading API. Native applications construct `ThemeLoader` with an
 explicit GFX `AssetLoader` and `AssetPublisher`, then pass an explicit original
 base bundle. Skin reads and validates the document while GFX alone bakes referenced fonts and PNGs, copies
 the base resource bundle, validates references, and publishes the revision. Build
-tools call `neocogi_skin_impl::theme::load` or `load_bytes`; the latter reads referenced
+tools call `neocogi_skin_authoring::theme::load` or `load_bytes`; the latter reads referenced
 assets through an explicit `AssetSource` implementation. Their offline `LoadedTheme`
 contains a display name and validated `AssetData`, with no native UI skin or resource IDs.
 Both forms resolve the document into one private typed `ThemeRecipe` and execute it through
@@ -375,3 +375,17 @@ cached UVs for that artwork must change with its owning revision. Installation
 protects the original catalog and does not inspect arbitrary application fields
 to discover private dependencies. See [COM assets](../../../../docs/COM_ASSETS.md) for
 the complete validation and publication contract.
+
+## Editing and saving
+
+The [theme editor](../../../../tools/theme-editor/README.md) exposes the complete
+current schema through concrete controls. Its source canvas shows the original
+PNG over a checkerboard with four red slicing boundaries and synchronized sliders
+and numeric fields. These overlays are never written into the PNG or theme data.
+Role/state destination insets remain independent of source slices and layout padding.
+
+Native Save As rebases relative resources, including undo/redo history, only after
+a successful temporary-file replacement. Browser import uses exact bounded
+project-relative keys; Save downloads the same version-2 JSON beside the separately
+retained resources. Neither path serializes atlas coordinates, UI objects, or GPU
+textures. Invalid input stays editable and cannot overwrite the last valid file.

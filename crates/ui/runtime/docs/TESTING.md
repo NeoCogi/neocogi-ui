@@ -99,3 +99,31 @@ The two plugin checks independently compile both loader roots. These commands
 require no window system or GPU. Broader workspace validation
 uses `cargo test --workspace --offline`; actual native device and presentation
 checks still use the platform-specific scripts described in `BACKENDS.md`.
+
+## Theme editor deployment acceptance
+
+The editor's native acceptance tests use the same host, state, UI routers,
+compiler, renderer surfaces, history, and file operations as the application.
+The staged runner builds an assembly, relocates it with its required runtime,
+plugins and resources, launches the packaged application for three frames, then
+runs the tests from `/tmp`. `NEOCOGI_TEST_ASSET_ROOT` forbids source-tree fixture
+fallback. Shared and monolithic modes are exercised separately on each backend:
+
+```sh
+SDL_VIDEODRIVER=offscreen ./scripts/test-theme-editor.sh glow shared
+SDL_VIDEODRIVER=offscreen ./scripts/test-theme-editor.sh glow monolith
+./scripts/test-theme-editor.sh vulkan shared
+./scripts/test-theme-editor.sh vulkan monolith
+./scripts/test-theme-editor.sh wgpu shared
+./scripts/test-theme-editor.sh wgpu monolith
+./scripts/test-browser-input.sh theme-editor
+NEOCOGI_BROWSER_SCALE=2 ./scripts/test-browser-input.sh theme-editor
+```
+
+Vulkan/WGPU require a native display; Vulkan validation layers may be enabled
+through `VK_INSTANCE_LAYERS`. Browser tests execute WebGL, real DOM file/IME
+listeners, exact imported bytes and downloaded JSON, resizing, readback and teardown.
+Synthetic pointer tests stub only the browser's trusted capture-token handshake;
+native tests verify capture/outside-release, modal exclusion, and cancellation
+through both real UI routers. The performance report
+distinguishes measured command-to-render-return latency from display scanout.

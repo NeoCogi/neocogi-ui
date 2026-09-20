@@ -400,3 +400,22 @@ that tail from reaching a newly inserted child at the same location.
 Explicit cancellation, visibility resets and cross-surface preemption finish the
 old tree's gesture ownership. Showing that surface again cannot intercept a new
 gesture in another layer.
+
+## Theme editor composition
+
+The [theme editor](../../../../tools/theme-editor/README.md) owns an ordinary
+mutable document/compiler/history state separate from both UI runtimes. The
+normal editor has fixed resources; its preview has its own private compositor
+and independently bound renderer surface. The preview pane sends copied input
+and committed geometry through a typed channel. After outer dispatch returns,
+the application publishes at most one candidate and renders the preview into an
+immutable texture, then performs an eventless outer update before final painting.
+No widget callback recursively updates another runtime. A missing eligible pane
+update cancels inner interaction and pauses rendering, including modal obstruction.
+
+`neocogi-skin-authoring` owns shared parsing, serialization, path resolution,
+validation policy and live resource-build reuse. GFX owns construction and immutable
+publication. `IAssetBundle::image()` separates atlas lifetime from appearance
+metadata, allowing unchanged pixels to remain resident across color/inset edits.
+The state sheet uses canonical GFX drawing; `demos/ui-samples` shares only concrete
+layout builders with the full demo, without another application or inspector framework.

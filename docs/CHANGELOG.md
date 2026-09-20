@@ -2,6 +2,31 @@
 
 ## 0.9.0-alpha.0 (unreleased)
 
+- Add the normal-theme UI theme editor with an independent live preview, complete
+  typed parameter inspector, original-texture nine-slice canvas with four red
+  guides/sliders, interactive control/layout/typography gallery, and canonical
+  state sheet. Support inheritance, visual/whole-role copy, bounded gesture-based
+  undo/redo, recoverable invalid drafts, atomic native JSON saves, relative-path
+  rebasing, browser file/folder import and JSON downloads. Ship shared native,
+  monolithic native, and WebAssembly through the same application implementation.
+- Extract `neocogi-skin-authoring` so editor, runtime loader, and offline builds
+  share one document/compiler. Read theme schema versions 1 and 2 and write version
+  2, retaining authored absence and resource paths, per-state insets, center
+  visibility, nine flat colors, and independent image slicing/tint.
+- Add renderer-owned immutable offscreen surfaces to Glow/WebGL, Vulkan, and WGPU.
+  Keep independent atlas bindings and publish output only after successful frames.
+  Embedded keyboard scopes retain Tab/menu navigation with Ctrl+Tab exit; preview
+  routing cancels on outer modal exclusion, hiding, and native focus loss, and
+  translates one native IME area through committed pane geometry.
+- Version `IAssetBundle` to 4 with an explicit independent `image()` capability.
+  Appearance-only revisions retain pixel identity and avoid full-image copying and
+  atlas uploads. Resource rebuilds publish new images; metadata revisions retain
+  no older bundle chain. Rebuild native hosts/plugins together for this contract.
+- Replace Debug-derived editor labels with explicit UI names so native `min-size`
+  builds retain section/palette/state/geometry/role labels with `-Zfmt-debug=none`.
+  Add staged native, real browser, image-lifetime, routing, persistence, and
+  documented software-rendering performance regressions.
+
 - Give each UI runtime a private compositor created through the shareable GFX
   factory. Creating a second UI or installing its resources no longer replaces
   the first UI's renderer atlas while leaving its retained resource snapshot

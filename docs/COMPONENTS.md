@@ -128,7 +128,8 @@ Plugin separation does not add a second per-widget dispatch layer or any per-dra
   referenced resource, once for atlas finalization, and once for bulk appearance
   publication; those authoring services are absent from ordinary update, layout, and paint.
 - The UI imports font/icon/appearance tables once per installed revision and
-  caches the narrow `IRgbaImage` projection used by rendering.
+  caches the independent `IRgbaImage` returned by `IAssetBundle::image()`.
+  Appearance-only revisions retain its identity; rebuilt pixels have a new identity.
 - The renderer compares image identity before upload and retains GPU textures;
   it never asks the skin plugin to resolve a draw.
 - Platform polling transfers normalized copied events. No SDL event, DOM object,
@@ -158,3 +159,10 @@ Their application feature graphs omit the Skin contract descriptor and their
 packages omit the corresponding authored theme directories as well.
 Embedded applications keep the compact GFX compositor but can omit its builder and the
 Skin plugin when their generated bundle is sufficient.
+
+The theme editor is a concrete tool over these same boundaries. Its normal UI,
+interactive preview, and cached state sheet use separate compositors/sessions on
+one renderer device. `neocogi-skin-authoring` provides its document/compiler;
+there is no editor-specific runtime schema or reflected property framework.
+See [the guide](../tools/theme-editor/README.md), [coverage](THEME_EDITOR_COVERAGE.md),
+and measured live-edit costs.

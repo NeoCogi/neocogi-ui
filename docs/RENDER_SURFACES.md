@@ -103,3 +103,11 @@ Each rendering session therefore keeps its own atlas allocation through color,
 metric, tint, and slicing edits. A resource rebuild supplies a new image and causes
 one upload per affected session. The surface regression counts actual source reads
 through repeated preparation, rendering, failed frames, and resizing.
+
+The theme-editor bridge consumes observations after both outer updates. Missing
+observations in the next dispatch mean the pane is hidden or excluded by modal
+routing: the bridge cancels the inner runtime once and pauses rendering while
+retaining its last image. This relies on the runtime's existing eligible-tree
+updates, not application hit testing. Native integration tests exercise outside
+release, native cancellation, modal obstruction, hide/show, and IME translation;
+the browser test also verifies composition and physical/CSS mapping at 2x DPI.
