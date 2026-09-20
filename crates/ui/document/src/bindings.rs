@@ -38,7 +38,9 @@ pub(crate) fn inputs(document: &Document, nodes: &BTreeMap<String, Widget<IWidge
     let mut table = BTreeMap::new();
     for input in &document.inputs {
         let mut source = nodes.get(&input.node).ok_or(NC_E_INVALID_ARG)?.as_interface().add_ref();
-        let kind = &document.root.find(&input.node).ok_or(NC_E_INVALID_ARG)?.widget;
+        let authored = document.root.find(&input.node).ok_or(NC_E_INVALID_ARG)?;
+        let kind = &authored.widget;
+        let authored_options = authored.style.options.map(WidgetOptions::from_raw).unwrap_or_else(|| kind.default_options());
         let receiver = match input.kind {
             InputKind::Text => text_receiver(source, kind)?,
             InputKind::Checked => {
@@ -57,7 +59,7 @@ pub(crate) fn inputs(document: &Document, nodes: &BTreeMap<String, Widget<IWidge
                 _ => return Err(NC_E_INVALID_ARG),
             },
             InputKind::Enabled => SetEnabled::__receiver(Box::new(move |value| {
-                let old = source.properties()?.options;
+                let old = authored_options;
                 let options = if value.enabled {
                     WidgetOptions::from_raw(old.raw() & !WidgetOptions::NO_INTERACT.raw())
                 } else {

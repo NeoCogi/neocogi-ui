@@ -254,3 +254,37 @@ fn typed_inputs_validate_payloads_and_do_not_emit_user_events() {
         assert_eq!(Document::from_binary(&component.save().unwrap()).unwrap(), document);
     }
 }
+
+/// Programmatic enablement must not freeze effective wheel eligibility into authored option bits.
+#[test]
+fn typed_enablement_preserves_authored_options_without_capturing_dynamic_routing() {
+    let fixture = Headless::standard();
+    let mut slot = slot(&fixture.ui);
+    let mut root = Node::new("scroll", WidgetSpec::Scroll { enabled: true });
+    root.children.push(Child {
+        edge: Edge::Pane,
+        node: Node::new("content", WidgetSpec::Button { text: "content".into() }),
+    });
+    let document = Document {
+        version: VERSION,
+        name: "routing".into(),
+        root,
+        outputs: vec![],
+        inputs: vec![Input {
+            name: "enabled".into(),
+            node: "scroll".into(),
+            kind: InputKind::Enabled,
+        }],
+    };
+    slot.reload(&document, Resources::new(), |_, _| Ok(())).unwrap();
+    let component = slot.component().unwrap();
+    let root = component.root().unwrap();
+    assert!(root.as_interface().properties().unwrap().options.contains(WidgetOptions::GRAB_SCROLL));
+    component
+        .input::<contracts::SetEnabled>("enabled")
+        .unwrap()
+        .send(contracts::SetEnabled { enabled: true })
+        .unwrap();
+    root.as_interface().add_ref().query::<IScrollingAbi>().unwrap().set_enabled(false).unwrap();
+    assert!(!root.as_interface().properties().unwrap().options.contains(WidgetOptions::GRAB_SCROLL));
+}

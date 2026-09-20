@@ -632,3 +632,25 @@ fn validate_node<'a>(node: &'a Node, depth: usize, nodes: &mut BTreeMap<&'a str,
     }
     Ok(())
 }
+
+impl WidgetSpec {
+    /// Authored constructor option defaults for this document revision.
+    /// Dynamic routing bits (scroll eligibility or an empty split) are deliberately
+    /// excluded: reading effective runtime properties back as authoring would
+    /// freeze transient behavior into a later setter or saved document.
+    pub fn default_options(&self) -> neocogi_ui::WidgetOptions {
+        use neocogi_ui::WidgetOptions as Options;
+        match self {
+            Self::Button { .. }
+            | Self::Textbox { .. }
+            | Self::TextArea { .. }
+            | Self::Slider { .. }
+            | Self::Number { .. }
+            | Self::Combo { .. }
+            | Self::Scroll { .. } => Options::FRAME,
+            Self::ColorSwatch { .. } => Options::FRAME | Options::ALIGN_CENTER | Options::NO_INTERACT,
+            Self::TextBlock { .. } | Self::Linear { .. } | Self::Grid { .. } | Self::Disclosure { .. } => Options::NO_INTERACT,
+            Self::Checkbox { .. } | Self::ListItem { .. } | Self::ListBox { .. } | Self::Scrollbar { .. } | Self::Split { .. } => Options::NONE,
+        }
+    }
+}

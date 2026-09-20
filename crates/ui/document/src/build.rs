@@ -157,9 +157,7 @@ impl Construction<'_> {
                 _ => return Err(NC_E_INVALID_ARG),
             }
         }
-        if let Some(options) = node.style.options {
-            widget.set_options(WidgetOptions::from_raw(options))?;
-        }
+        widget.set_options(node.style.options.map(WidgetOptions::from_raw).unwrap_or_else(|| node.widget.default_options()))?;
         apply_style(&widget, node, self.resources)?;
         Ok(widget)
     }

@@ -80,3 +80,8 @@ to revision one; incompatible changes require a revision and an explicit
 migration. Limits bound document bytes, traversal depth, node count, and decoded
 values. Validation rejects unknown fields in JSON, unknown revisions, malformed
 endpoints, unsupported resources, and invalid numeric/layout policies.
+
+Constructor option defaults belong to the authored schema revision and are shared
+with the designer. They exclude effective routing bits added by scrolling or
+container participation. `SetEnabled` changes the exported surface's interaction
+bit against that authored baseline; it is not recursive subtree disablement.
