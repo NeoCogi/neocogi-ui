@@ -3,13 +3,18 @@ set -euo pipefail
 
 workspace_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 target="wasm32-unknown-unknown"
-artifact_name="neocogi-demo-full"
+# Both authoring and demo use one binding/staging implementation with explicit package choices.
+case "${NEOCOGI_WEB_APP:-full}" in
+  full) artifact_name="neocogi-demo-full"; template="demos/full/web/index.html"; site_name="web-demo" ;;
+  theme-editor) artifact_name="neocogi-theme-editor"; template="tools/theme-editor/web/index.html"; site_name="web-theme-editor" ;;
+  *) echo "NEOCOGI_WEB_APP must be full or theme-editor" >&2; exit 2 ;;
+esac
 target_dir="${CARGO_TARGET_DIR:-$workspace_root/target}"
 if [[ "$target_dir" != /* ]]; then target_dir="$workspace_root/$target_dir"; fi
 profile="${NEOCOGI_WEB_PROFILE:-release}"
 artifact_dir="$target_dir/$target/$profile"
-site_dir="$target_dir/web-demo"
-staging_dir="$target_dir/web-demo-staging"
+site_dir="$target_dir/$site_name"
+staging_dir="$target_dir/$site_name-staging"
 web_tools_dir="$target_dir/web-tools"
 wasm_bindgen="${NEOCOGI_WASM_BINDGEN:-$web_tools_dir/bin/wasm-bindgen}"
 wasm_bindgen_version="0.2.127"
@@ -35,7 +40,7 @@ build() {
   fi
   cargo build \
     --manifest-path "$workspace_root/Cargo.toml" \
-    -p neocogi-demo-full \
+    -p "$artifact_name" \
     --bin "$artifact_name" \
     --target "$target" \
     "${profile_args[@]}" \
@@ -50,12 +55,12 @@ build() {
     --out-dir "$staging_dir" \
     --out-name "$artifact_name" \
     "$artifact_dir/$artifact_name.wasm"
-  install -m 0644 "$workspace_root/demos/full/web/index.html" "$staging_dir/index.html"
+  install -m 0644 "$workspace_root/$template" "$staging_dir/index.html"
   touch "$staging_dir/.nojekyll"
   rm -rf "$site_dir"
   mv "$staging_dir" "$site_dir"
 
-  echo "Web demo built in $site_dir"
+  echo "$artifact_name web application built in $site_dir"
 }
 
 case "$command" in

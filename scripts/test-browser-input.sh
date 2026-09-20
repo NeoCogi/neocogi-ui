@@ -6,8 +6,9 @@ cd "$workspace_root"
 suite="${1:-input}"
 case "$suite" in
   input) package="neocogi-render-plugin"; fixture="crates/render/plugin/tests/browser-input.html" ;;
+  theme-editor) package="neocogi-theme-editor"; fixture="tools/theme-editor/tests/browser-editor.html" ;;
   full) package="neocogi-demo-full"; fixture="demos/full/tests/browser-full.html" ;;
-  *) echo "usage: $0 [input|full]" >&2; exit 2 ;;
+  *) echo "usage: $0 [input|full|theme-editor]" >&2; exit 2 ;;
 esac
 site_dir="${CARGO_TARGET_DIR:-$workspace_root/target}/browser-$suite-tests"
 build_log="$(mktemp)"
@@ -41,6 +42,10 @@ PY
 mkdir -p "$site_dir"
 "$wasm_bindgen" --target web --out-dir "$site_dir" --out-name input-test "$artifact"
 cp "$fixture" "$site_dir/index.html"
+if [[ "$suite" == theme-editor ]]; then
+  cp themes/windows-95/raised.png "$site_dir/raised.png"
+  cp assets/NORMAL.ttf "$site_dir/normal.ttf"
+fi
 python3 -m http.server "$port" --bind 127.0.0.1 --directory "$site_dir" > "$site_dir/server.log" 2>&1 &
 server_pid=$!
 curl --retry-connrefused --retry 10 --retry-delay 1 --fail --silent "http://127.0.0.1:$port" > /dev/null
@@ -49,7 +54,7 @@ kill -0 "$server_pid" # Fail if another process already owned the requested port
 # container CI runners; the browser process exits after dumping the completed DOM. Piping stdout
 # also supports Snap Chromium, whose launcher does not preserve a regular-file output descriptor.
 "$browser" --headless --no-sandbox --enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader --virtual-time-budget=15000 \
-  --dump-dom "http://127.0.0.1:$port" | cat > "$site_dir/result.html"
+  --force-device-scale-factor="${NEOCOGI_BROWSER_SCALE:-1}" --dump-dom "http://127.0.0.1:$port" | cat > "$site_dir/result.html"
 # Like the package builder, the browser runner depends only on standard shell text utilities.
 if ! grep -Fq '<pre id="result">PASS</pre>' "$site_dir/result.html"; then
   cat "$site_dir/result.html" >&2
