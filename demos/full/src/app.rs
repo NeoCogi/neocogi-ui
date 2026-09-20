@@ -740,33 +740,16 @@ fn build_examples(host: &Host, state: &State, events_tx: &std::sync::mpsc::Sende
         rect(220, 220, 300, 300),
         &ui.widgets().leaf(Suzanne::new(host.renderer.as_com_ref())?, WidgetOptions::NONE)?,
     )?;
-    let mut stacks = row(ui)?;
-    for (name, direction) in [("Top to bottom", FlowDirection::TopToBottom), ("Bottom to top", FlowDirection::BottomToTop)] {
-        let mut column = column(ui)?;
-        append(&mut column, &label(ui, name)?, LayoutTrack::Content)?;
-        let mut stack = ui.widgets().linear(direction, CrossSize::Stretch)?;
-        for text in ["First", "Second", "Third"] {
-            append(&mut stack, &button(ui, events_tx, text, Action::Log)?, LayoutTrack::Fixed { extent: 28 })?;
+    // Concrete shared builders return typed endpoints; this application keeps its existing log action.
+    for (sample, title, area) in [
+        (neocogi_ui_samples::directions(ui)?, "Stack Direction Demo", rect(530, 40, 280, 220)),
+        (neocogi_ui_samples::weights(ui)?, "Weight Demo", rect(530, 270, 280, 260)),
+    ] {
+        for control in sample.buttons {
+            neocogi_ui::events::map(control.activated(), events_tx.clone(), |event| Message::Activate(Action::Log, event))?;
         }
-        append(&mut column, &stack, LayoutTrack::Fixed { extent: 120 })?;
-        append(&mut stacks, &column, FLEX)?;
+        floating(ui, desktop, title, area, &sample.content)?;
     }
-    floating(ui, desktop, "Stack Direction Demo", rect(530, 40, 280, 220), &stacks)?;
-    let mut weights = column(ui)?;
-    append(&mut weights, &label(ui, "Row weights: 1 : 2 : 3")?, LayoutTrack::Content)?;
-    let mut line = row(ui)?;
-    for (text, weight) in [("1x", 1.), ("2x", 2.), ("3x", 3.)] {
-        append(&mut line, &button(ui, events_tx, text, Action::Log)?, LayoutTrack::Flex { weight })?;
-    }
-    append(&mut weights, &line, LayoutTrack::Fixed { extent: 28 })?;
-    append(&mut weights, &label(ui, "Grid row weights: 1 : 2")?, LayoutTrack::Content)?;
-    let mut grid = ui.widgets().grid(&[FLEX; 3], &[FLEX, LayoutTrack::Flex { weight: 2. }])?;
-    for index in 0..6 {
-        let control = button(ui, events_tx, &format!("Cell {}", index + 1), Action::Log)?;
-        grid.insert(index, &control, GridExtent { columns: 1, rows: 1 })?.finish()?;
-    }
-    append(&mut weights, &grid, FLEX)?;
-    floating(ui, desktop, "Weight Demo", rect(530, 270, 280, 260), &weights)?;
     Ok(())
 }
 

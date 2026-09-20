@@ -21,6 +21,7 @@ members = [
     "demos/host",
     "demos/contracts",
     "demos/full",
+    "demos/ui-samples",
     "demos/basic",
     "demos/smoke",
     "tools/assets",
@@ -35,6 +36,7 @@ readme = "README.md"
 repository = "https://github.com/NeoCogi/neocogi-platform"
 
 [workspace.dependencies]
+neocogi-ui-samples = { path = "demos/ui-samples" }
 neocogi-ui-core-contracts = { path = "crates/ui/core-contracts" }
 neocogi-ui-nodes-contracts = { path = "crates/ui/nodes-contracts" }
 neocogi-renderer-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "3d26189da2152cddb91f1b95593297d6086288cb" }

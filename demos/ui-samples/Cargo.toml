@@ -1,0 +1,11 @@
+[package]
+name = "neocogi-ui-samples"
+version = "0.0.0"
+publish = false
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+neocogi-ui.workspace = true
+neocogi-com.workspace = true

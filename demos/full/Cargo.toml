@@ -20,6 +20,7 @@ vulkan = ["neocogi-demo-host/vulkan", "neocogi-render-plugin/vulkan"]
 wgpu = ["neocogi-demo-host/wgpu", "neocogi-render-plugin/wgpu"]
 
 [dependencies]
+neocogi-ui-samples.workspace = true
 neocogi-ui = { workspace = true, features = ["skin"] }
 neocogi-com = { workspace = true, default-features = false, features = ["std", "macros"] }
 neocogi-demo-contracts.workspace = true
