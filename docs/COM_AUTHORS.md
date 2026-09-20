@@ -879,6 +879,14 @@ the prior scene intact. The native renderer snapshots shared immutable mesh buff
 before preparing actual depth-tested GPU work; it does not substitute CPU UI
 triangles for application rendering.
 
+The demo's Vulkan renderer uploads each immutable mesh once and shares its native
+vertex/index buffers across draws and frame slots. Camera updates, draw reordering,
+temporary hiding and swapchain resizing do not replace the geometry. A replacement
+mesh receives its own upload; each submitted slot retains the previous upload until
+that slot's fence completes. Unreferenced CPU meshes leave the upload cache during
+the next preparation, and outstanding slots keep their GPU buffers alive. These
+owners remain private to the renderer and do not retain the COM scene or window.
+
 Use `Painter::texture(rect, rgba, image)` and `Painter::item(rect, scene)` at the
 intended source position. The full example is `demos/smoke/src/gpu.rs`. Scene edits
 normally change paint only: render again; a UI update is needed if widget geometry or
