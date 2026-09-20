@@ -2,6 +2,12 @@
 
 ## 0.9.0-alpha.0 (unreleased)
 
+- Add the concrete nodes `SplitView` container and typed facade for two panes,
+  draggable/keyboard-adjustable dividers, minimum sizes, and user change events.
+  Use it between the theme editor inspector and live preview. Core's existing
+  layout and input protocols own routing; no editor drag state is required.
+  `UiFactory` is now version 2; rebuild shared callers and providers together.
+
 - Add the normal-theme UI theme editor with an independent live preview, complete
   typed parameter inspector, original-texture nine-slice canvas with four red
   guides/sliders, interactive control/layout/typography gallery, and canonical
