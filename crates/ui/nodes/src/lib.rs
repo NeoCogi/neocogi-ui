@@ -47,7 +47,7 @@ mod widget_object;
 pub mod widgets;
 
 pub use factory::UiFactory;
-pub use containers::{Disclosure, Grid, Linear, ScrollArea};
+pub use containers::{Disclosure, Grid, Linear, ScrollArea, SplitView};
 pub use widgets::{Button, Checkbox, ColorSwatch, Combo, ListBox, ListItem, Number, Scrollbar, Slider, TextArea, TextBlock, Textbox};
 #[allow(unused_imports)]
 pub(crate) use neocogi_ui_support::prelude::*;

@@ -9,6 +9,30 @@ pub type GridWidget = Widget<GridAbi>;
 /// Static convenience wrapper around the dynamically constructed ScrollArea class projection.
 pub type ScrollAreaWidget = Widget<ScrollAreaAbi>;
 
+/// Static client for the node-owned two-pane layout and interactive divider.
+pub type SplitViewWidget = Widget<SplitViewAbi>;
+
+impl Widget<SplitViewAbi> {
+    /// Observes pane identities without exposing the container's topology writer.
+    pub fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> { self.interface.children() }
+    /// Inserts a first or second pane; a third pane is rejected before attachment.
+    pub fn insert<I: ComInterface>(&mut self, index: u32, pane: &Widget<I>) -> Result<ChildEditResult, NcStatus> {
+        self.interface.insert(index, pane.node_interface()?.as_com_ref())
+    }
+    /// Replaces and closes one pane while preserving the split container.
+    pub fn replace<I: ComInterface>(&mut self, index: u32, pane: &Widget<I>) -> Result<ChildEditResult, NcStatus> {
+        self.interface.replace(index, pane.node_interface()?.as_com_ref())
+    }
+    /// Removes one pane; the surviving pane fills the allocation after layout.
+    pub fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus> { self.interface.remove(index) }
+    /// Retires both panes without retiring the split itself.
+    pub fn clear(&mut self) -> Result<ChildEditResult, NcStatus> { self.interface.clear() }
+    /// Returns the requested split settings, unaffected by temporary narrow allocations.
+    pub fn settings(&self) -> Result<SplitOptions, NcStatus> { self.interface.settings() }
+    /// Replaces validated sizing and cancels a gesture without publishing a user event.
+    pub fn set_settings(&mut self, settings: SplitOptions) -> Result<(), NcStatus> { self.interface.set_settings(settings) }
+}
+
 /// Static convenience wrapper around the dynamically constructed Disclosure class projection.
 pub type DisclosureWidget = Widget<DisclosureAbi>;
 
@@ -199,6 +223,10 @@ fn encoded_tracks(tracks: &[LayoutTrack]) -> Vec<LayoutTrackAbi> {
 }
 
 impl WidgetFactory {
+    /// Creates an empty split; insert panes in first/second ownership order.
+    pub fn split_view(&self, settings: SplitOptions) -> Result<SplitViewWidget, NcStatus> {
+        Ok(SplitViewWidget::from_interface(self.interface.create_split_view(settings)?))
+    }
     /// Creates a disclosure whose body starts empty and whose header owns the supplied label.
     pub fn disclosure(&self, label: &str, style: DisclosureStyle, expanded: bool) -> Result<DisclosureWidget, NcStatus> {
         Ok(DisclosureWidget::from_interface(self.interface.create_disclosure(

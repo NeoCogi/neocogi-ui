@@ -127,6 +127,52 @@ interface Grid: IWidget + IContainerLayout {
 }
 
 #[version(1)]
+/// Axis along which the divider and pane extents move.
+enum SplitAxis: u8 {
+    /// First pane on the left, second on the right, with a vertical divider.
+    Horizontal = 0,
+    /// First pane above the second, with a horizontal divider.
+    Vertical = 1,
+}
+
+#[version(1)]
+/// Complete pixel-based sizing policy for a two-pane split view.
+struct SplitOptions {
+    /// Movement axis; child ownership order always stays first, then second.
+    axis: SplitAxis,
+    /// Requested first-pane extent, preserved when temporary bounds force clamping.
+    position: i32,
+    /// Nonnegative minimum first-pane extent when the allocation permits it.
+    minimum_first: i32,
+    /// Nonnegative minimum second-pane extent when the allocation permits it.
+    minimum_second: i32,
+    /// Positive divider thickness used by both painting and hit testing.
+    handle_width: i32,
+}
+
+#[version(1)]
+/// Two-pane layout with a draggable divider owned by this same concrete container.
+/// Zero children is empty; one fills the allocation; two enable the divider.
+interface SplitView: IWidget + IContainerLayout {
+    /// Returns immutable topology; indices zero and one identify first and second panes.
+    fn children(&self) -> Result<IChildren>;
+    /// Inserts one unmounted pane at index, rejecting a third child before attachment.
+    fn insert(&mut self, index: u32, child: &IWidget) -> Result<ChildEditResult>;
+    /// Replaces one pane after validation, permanently closing its previous subtree.
+    fn replace(&mut self, index: u32, child: &IWidget) -> Result<ChildEditResult>;
+    /// Closes one pane; the remaining pane fills the allocation.
+    fn remove(&mut self, index: u32) -> Result<ChildEditResult>;
+    /// Closes both panes while keeping this container available for new content.
+    fn clear(&mut self) -> Result<ChildEditResult>;
+    /// Returns requested sizing, independent of temporary allocation clamping.
+    fn settings(&self) -> Result<SplitOptions>;
+    /// Validates all settings before mutation and ends any active divider gesture.
+    fn set_settings(&mut self, settings: SplitOptions) -> Result<()>;
+    /// User drag/keyboard changes only; layout clamping and programmatic edits are silent.
+    changed: SplitChanged;
+}
+
+#[version(1)]
 /// Constructible scroll composite with one replaceable content root and private structural roles.
 interface ScrollArea: IWidget + IContainerLayout + IScrolling {
     /// Returns the actual application content widget, without its surrounding transform surface.

@@ -162,9 +162,11 @@ mod disclosure;
 mod grid;
 mod linear;
 mod scroll_area;
+mod split_view;
 pub(crate) use scroll_area::{ScrollComposition, ScrollModel, ScrollParts};
 
 pub use disclosure::{Disclosure};
 pub use grid::Grid;
 pub use linear::Linear;
 pub use scroll_area::ScrollArea;
+pub use split_view::SplitView;

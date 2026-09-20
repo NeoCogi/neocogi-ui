@@ -5,6 +5,8 @@ use neocogi_ui::*;
 use crate::test_support::headless::Headless;
 use std::{cell::RefCell, rc::Rc};
 
+mod split_view;
+
 /// Stable drawable bounds allow independent windows and child-family overlap tests.
 const VIEW: Size = Size { width: 640, height: 400 };
 /// Chromeless windows make root content coincide with explicitly authored geometry.

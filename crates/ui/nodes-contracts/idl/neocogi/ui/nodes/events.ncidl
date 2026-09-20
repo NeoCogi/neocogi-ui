@@ -21,3 +21,11 @@ struct ScrollbarChanged {
     /// Committed nonnegative offset.
     offset: i32,
 }
+
+#[version(1)]
+#[message]
+/// First-pane extent committed by direct divider interaction.
+struct SplitChanged {
+    /// Nonnegative pixel position after clamping against the current pane limits.
+    position: i32,
+}

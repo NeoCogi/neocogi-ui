@@ -75,6 +75,7 @@ independently of lossy UTF-8 display labels.
 | --- | --- |
 | `Linear` | Row/column direction with content, fixed or weighted tracks |
 | `Grid` | Explicit rows, columns and spans |
+| `SplitView` | Two panes separated by a draggable, keyboard-adjustable divider |
 | `Disclosure` | Actual header/body widgets with expansion-controlled participation |
 | `ScrollArea` | A single replaceable content root with composed scrollbars |
 | `TextArea` | An actual editor with scrolling; its editor role cannot be replaced |
@@ -84,6 +85,36 @@ with its layout policy. A topology operation returns `ChildEditResult`: topology
 commit even if closing a removed child fails. Call `finish()` when no additional
 metadata must be reconciled, and do not retry an already committed insertion or
 replacement as if it had rolled back.
+
+`SplitView` owns both panes and the divider's geometry and gesture state in one
+concrete container. Its implementation belongs to nodes; core supplies the existing
+`IWidget`/`IContainerLayout`, child ownership, capture, focus, and clipping protocols.
+There is no split-specific core routing or editor-side drag callback.
+
+```rust,no_run
+use neocogi_ui::{SplitAxis, SplitOptions, SplitViewWidget, Ui};
+use neocogi_com::NcStatus;
+fn split(ui: &Ui) -> Result<SplitViewWidget, NcStatus> {
+    let mut split = ui.widgets().split_view(SplitOptions {
+        axis: SplitAxis::Horizontal, // Left/right panes and a vertical handle.
+        position: 320, minimum_first: 200, minimum_second: 240, handle_width: 8,
+    })?;
+    split.insert(0, &ui.widgets().textbox("Inspector")?)?.finish()?;
+    split.insert(1, &ui.widgets().textbox("Preview")?)?.finish()?;
+    Ok(split)
+}
+```
+
+Zero panes leave an empty container; one pane fills it; two enable the divider.
+Inserting a third pane fails before consuming its attachment claim. Replace/remove
+close the affected subtree through the ordinary topology transaction.
+`SplitAxis::Vertical` places the first pane above the second. Positions and minima
+are pixels along the movement axis. The requested position survives temporary
+allocation clamping; when both minima cannot fit, they compress proportionally.
+The handle uses normal button appearance with a small grip, and `handle_width`
+controls its visible and interactive thickness. Tab focuses it; the corresponding
+arrow keys move it by eight pixels. Capture loss cancels dragging. `changed()`
+reports user changes only; `set_settings()` and window resizing are silent.
 
 The structural children of a composed control are real, distinct COM objects, not
 second representations of the parent. For example, `TextArea` is the scrolling

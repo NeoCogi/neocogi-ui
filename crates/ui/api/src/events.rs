@@ -24,7 +24,7 @@ use neocogi_ui_nodes_contracts::*;
 /// Core output values are the contract data itself; no facade message wrappers are introduced.
 pub use neocogi_ui_core_contracts::{Activation, TextChanged, TextSubmitted, WindowEvent, PopupDismissed, ChoiceSelection, EVENT_DISPATCH_LIMIT};
 /// Node-specific outputs preserve their concrete contract types and field documentation.
-pub use neocogi_ui_nodes_contracts::{CheckboxChanged, NumericChanged, ScrollbarChanged};
+pub use neocogi_ui_nodes_contracts::{CheckboxChanged, NumericChanged, ScrollbarChanged, SplitChanged};
 
 /// Delegates setup directly to the generated producer operation.
 macro_rules! widget_output {
@@ -66,6 +66,7 @@ widget_output!(CheckboxWidget, changed, CheckboxChanged);
 widget_output!(crate::SliderWidget, changed, NumericChanged, valid_numeric);
 widget_output!(crate::NumberWidget, changed, NumericChanged, valid_numeric);
 widget_output!(crate::ScrollbarWidget, changed, ScrollbarChanged, valid_scrollbar);
+widget_output!(crate::SplitViewWidget, changed, SplitChanged, valid_split);
 widget_output!(crate::TextboxWidget, changed, TextChanged, valid_text_cursor);
 widget_output!(crate::TextboxWidget, submitted, TextSubmitted);
 widget_output!(crate::TextAreaWidget, changed, TextChanged, valid_text_cursor);
@@ -108,6 +109,11 @@ fn valid_numeric(event: &NumericChanged) -> Result<(), NcStatus> {
 /// Rejects a negative offset before message translation.
 fn valid_scrollbar(event: &ScrollbarChanged) -> Result<(), NcStatus> {
     if event.offset >= 0 { Ok(()) } else { Err(NC_E_INVALID_ARG) }
+}
+
+/// Rejects impossible external divider positions before application event mapping.
+fn valid_split(event: &SplitChanged) -> Result<(), NcStatus> {
+    if event.position >= 0 { Ok(()) } else { Err(NC_E_INVALID_ARG) }
 }
 
 /// Checks the captured cursor against the complete generated UTF-8 text snapshot.

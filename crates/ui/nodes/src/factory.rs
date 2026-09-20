@@ -87,6 +87,12 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
         crate::Linear::create_com(self.services.host.clone(), self.services.resources.clone(), direction, cross)
     }
 
+    /// Validates sizing before allocating the split container and its sole child editor.
+    fn create_split_view(&self, settings: SplitOptions) -> Result<ComPtr<SplitViewAbi>, NcStatus> {
+        self.services.host.check_mutation()?;
+        crate::SplitView::create_com(self.services.host.clone(), self.services.resources.clone(), settings)
+    }
+
     /// Validates complete typed track sequences before allocating Grid state.
     fn create_grid(
         &self,
