@@ -976,3 +976,43 @@ fn negative_state_insets_are_rejected_before_publication() {
         Err(ThemeLoadError::InvalidInsets { field: "state.insets", .. })
     ));
 }
+
+/// Live appearance edits reuse resources; repeated rebuilds keep the stable application catalog.
+#[test]
+fn live_compiler_reuses_resources_and_never_accumulates_generated_images() {
+    /// Counts actual I/O while preserving the real PNG/font compilation path.
+    struct Source {
+        reads: usize,
+    }
+    impl AssetSource for Source {
+        /// Counts only resource requests, excluding the separately supplied document bytes.
+        fn read(&mut self, path: &Path) -> io::Result<Vec<u8>> {
+            self.reads += 1;
+            FileAssets.read(path)
+        }
+    }
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../themes/windows-95/theme.json");
+    let mut document = ThemeDocument::from_bytes(&path, &fs::read(&path).unwrap()).unwrap();
+    let base = test_atlas().into_bundle().unwrap();
+    let loader = AssetLoaderObject::from_value(AssetLoaderObject::default()).query().unwrap();
+    let publisher = AssetPublisherObject::from_value(AssetPublisherObject::default()).query().unwrap();
+    let mut compiler = ThemeCompiler::new(base, loader, publisher);
+    let mut source = Source { reads: 0 };
+    let initial = compiler.compile(&document, &path, &mut source).unwrap();
+    let reads = source.reads;
+    assert!(reads > 0);
+    document.skin.metrics.padding += 1;
+    let appearance = compiler.compile(&document, &path, &mut source).unwrap();
+    assert_eq!(source.reads, reads, "appearance edits must not reread PNGs/fonts");
+    assert_eq!(appearance.metrics().unwrap().padding, document.skin.metrics.padding);
+    let icon_count = initial.info().unwrap().icons;
+    for size in [11, 12, 11] {
+        document.fonts.as_mut().unwrap().body.size = size;
+        let rebuilt = compiler.compile(&document, &path, &mut source).unwrap();
+        assert_eq!(rebuilt.info().unwrap().icons, icon_count);
+    }
+    let previous = source.reads;
+    compiler.invalidate_resources();
+    compiler.compile(&document, &path, &mut source).unwrap();
+    assert!(source.reads > previous, "explicit source replacement invalidates the resource build");
+}

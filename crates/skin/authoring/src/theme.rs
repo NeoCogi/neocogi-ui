@@ -40,6 +40,9 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
+mod live;
+pub use live::ThemeCompiler;
+
 use neocogi_com::{ComPtr, ComRef, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
 #[cfg(feature = "builder")]
 use neocogi_gfx_impl::{AssetLoaderObject, AssetPublisherObject};
@@ -250,6 +253,7 @@ struct ThemeRecipe {
 }
 
 /// Closed resource-construction alternatives for one theme.
+#[derive(Clone, Debug, PartialEq)]
 enum ResourceRecipe {
     /// A resource-free theme applies appearance policy directly to the supplied base bundle.
     ReuseBase,
@@ -258,6 +262,7 @@ enum ResourceRecipe {
 }
 
 /// Complete inputs for one derived GFX atlas transaction.
+#[derive(Clone, Debug, PartialEq)]
 struct DerivedResourceRecipe {
     /// Requested output dimensions after falling back to the base bundle when fonts omit sizing.
     size: Size,
@@ -270,6 +275,7 @@ struct DerivedResourceRecipe {
 }
 
 /// One semantic font insertion owned by the resolved recipe.
+#[derive(Clone, Debug, PartialEq)]
 struct FontResourceRecipe {
     /// Canonical NCIDL role name used as the atlas resource key.
     name: &'static str,
@@ -280,6 +286,7 @@ struct FontResourceRecipe {
 }
 
 /// One image insertion and its Skin-side placement purpose.
+#[derive(Clone, Debug, PartialEq)]
 struct ImageResourceRecipe {
     /// Canonical semantic name or deterministic private appearance name.
     name: String,
@@ -290,6 +297,7 @@ struct ImageResourceRecipe {
 }
 
 /// Typed disposition of the placement returned for one image insertion.
+#[derive(Clone, Debug, PartialEq)]
 enum ImagePurpose {
     /// Semantic icons are resolved later by their canonical resource names.
     Semantic,

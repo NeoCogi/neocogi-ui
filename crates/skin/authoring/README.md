@@ -18,6 +18,12 @@ per-state insets, center visibility, and all nine independent flat cell colors.
 Normal mutable field access keeps editor commands typed; invalid role values
 and geometry are rejected before publication.
 
+Live tools retain `ThemeCompiler`, which owns one stable application base and
+one successful resource build. Colors, geometry, tint, and slicing reuse those
+placements; changing resource recipes rebuilds from the original base instead
+of accumulating generated images. Replacing bytes at an unchanged path requires
+`invalidate_resources`. No implicit file polling or renderer state is retained.
+
 Run `cargo test -p neocogi-skin-authoring --features builder` for schema,
 resource, bundled-theme, and offline/plugin equivalence checks. Skin's own
 integration test additionally exercises the deployed loader boundary.
