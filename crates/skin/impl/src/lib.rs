@@ -14,15 +14,13 @@ pub use style::StyleCompilerObject;
 #[cfg(feature = "theme-json")]
 mod path;
 #[cfg(feature = "theme-json")]
-mod serde_com;
-#[cfg(feature = "theme-json")]
 mod theme_loader;
 #[cfg(feature = "theme-json")]
 pub use theme_loader::ThemeLoaderObject;
 
 /// Optional JSON authoring compiler producing ordinary portable resource tables.
 #[cfg(feature = "theme-json")]
-pub mod theme;
+pub use neocogi_skin_authoring::theme;
 
 /// Owned Skin diagnostics contain no parser borrow or downstream GFX object.
 #[derive(Default)]

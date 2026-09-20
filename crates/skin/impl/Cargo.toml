@@ -14,20 +14,18 @@ crate-type = ["rlib"]
 
 [features]
 default = []
-theme-json = ["dep:serde", "dep:serde_json"]
+theme-json = ["dep:neocogi-skin-authoring"]
 # Offline theme generation statically instantiates the same GFX services used by deployed Skin.
-builder = ["dep:neocogi-gfx-impl"]
+builder = ["neocogi-skin-authoring?/builder"]
 
 [dependencies]
-neocogi-gfx-impl = { workspace = true, optional = true, features = ["builder", "publisher"] }
+neocogi-skin-authoring = { workspace = true, optional = true }
 neocogi-gfx-contracts.workspace = true
 neocogi-gfx-support.workspace = true
 neocogi-skin-contracts.workspace = true
 neocogi-appearance.workspace = true
 neocogi-platform-contracts.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
-serde = { workspace = true, optional = true }
-serde_json = { workspace = true, optional = true }
 
 [dev-dependencies]
 neocogi-gfx-impl = { workspace = true, features = ["builder", "publisher"] }

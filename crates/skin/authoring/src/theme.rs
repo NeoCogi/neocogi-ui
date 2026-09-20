@@ -329,7 +329,15 @@ impl CompiledTheme {
     fn publish(self, publisher: ComRef<'_, AssetPublisherAbi>, base: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IAssetBundleAbi>, ThemeLoadError> {
         let Self { metrics, chrome, appearance } = self;
         let diagnostics = publisher.add_ref().query::<IGfxDiagnosticsAbi>().ok();
-        crate::style::publish_appearance(&appearance, publisher, base, metrics, chrome)
+        publisher
+            .revise_appearance(
+                base,
+                AssetAppearanceRevision { metrics, chrome },
+                NcCopyFromBufferOffset::new(0, &appearance.surfaces),
+                NcCopyFromBufferOffset::new(0, &appearance.controls),
+                NcCopyFromBufferOffset::new(0, &appearance.menus),
+                NcCopyFromBufferOffset::new(0, &appearance.window_chrome),
+            )
             .map_err(|status| gfx_failure("appearance revision publication", None, status, diagnostics.as_ref()))
     }
 }

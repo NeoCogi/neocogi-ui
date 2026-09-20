@@ -9,6 +9,7 @@ members = [
     "crates/gfx/plugin",
     "crates/skin/contracts",
     "crates/appearance",
+    "crates/skin/authoring",
     "crates/skin/impl",
     "crates/skin/plugin",
     "examples/ui-extension",
@@ -44,6 +45,7 @@ neocogi-gfx-impl = { path = "crates/gfx/impl", version = "0.9.0-alpha.0", defaul
 neocogi-gfx = { path = "crates/gfx/plugin", default-features = false }
 neocogi-skin-contracts = { path = "crates/skin/contracts" }
 neocogi-appearance = { path = "crates/appearance", version = "0.9.0-alpha.0" }
+neocogi-skin-authoring = { path = "crates/skin/authoring", default-features = false }
 neocogi-skin-impl = { path = "crates/skin/impl", version = "0.9.0-alpha.0", default-features = false }
 neocogi-skin = { path = "crates/skin/plugin", default-features = false }
 neocogi-com-core = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "0a091f9bfeb639a301898d923c8fa67cf34e68fd", version = "0.1.0", default-features = false }
