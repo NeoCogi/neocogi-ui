@@ -4,7 +4,7 @@
 //! are reached only through their checked COM interfaces. Native packages are executable-relative.
 #![deny(missing_docs)]
 use neocogi_ui::*;
-use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcStatus};
+use neocogi_com::{com_object, ComPtr, NcCopyFromBufferOffset, NcStatus};
 use std::fmt;
 
 #[cfg(target_arch = "wasm32")]
@@ -85,6 +85,17 @@ pub trait AppState: 'static {
         Ok(())
     }
 
+    /// Observes one ordered native event before UI dispatch, outside the platform call.
+    /// Concrete editors use pointer boundaries to group live edits into one undo operation.
+    fn input(&mut self, _event: UiInput, _text: &str) -> Result<(), NcStatus> {
+        Ok(())
+    }
+
+    /// Handles native close intent. False keeps the window alive for an application prompt.
+    fn close_requested(&mut self) -> Result<bool, NcStatus> {
+        Ok(true)
+    }
+
     /// Runs after platform polling and before this frame's single UI update. Return false to stop.
     /// Input handlers run afterward; work they defer here is applied on the next frame. The host
     /// serializes frame edits and message consumption through ordinary mutable borrows.
@@ -113,7 +124,9 @@ pub struct Host {
     pub renderer: ComPtr<IRendererAbi>,
     /// OS/canvas polling and native composition share the renderer's COM identity.
     pub window: ComPtr<IPlatformWindowAbi>,
-    /// Input projection is queried once, then borrowed by every platform poll.
+    /// Pending native observations owned independently of any mutable application borrow.
+    observations: std::sync::mpsc::Receiver<InputObservation>,
+    /// Platform calls only this typed channel bridge; application callbacks run after polling.
     input: ComPtr<IInputSinkAbi>,
 }
 impl Host {
@@ -132,8 +145,15 @@ impl Host {
             runtime.activate_plugin_factory::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
         let factory = node_provider.bind(ui_runtime.as_com_ref())?;
         let ui = Ui::from_interfaces(ui_runtime, factory)?;
-        let input = ui.input_sink()?;
-        Ok(Self { ui, renderer, window, input })
+        let (send, observations) = std::sync::mpsc::channel();
+        let input = PollInput::from_value(PollInput { send }).query()?;
+        Ok(Self {
+            ui,
+            renderer,
+            window,
+            input,
+            observations,
+        })
     }
 
     /// Owns state and its channel receiver until native close, an application stop request or a frame error.
@@ -184,6 +204,32 @@ impl Drop for Host {
     }
 }
 
+/// Owned native input fact copied before the borrowed platform callback returns.
+struct InputObservation {
+    /// Complete logical input in its original ordering.
+    event: UiInput,
+    /// Complete UTF-8 commit, empty for nontext observations.
+    text: String,
+}
+
+#[com_object(interfaces(IInputSink))]
+/// A concrete sender bridges foreign polling without Cell/RefCell or borrowed application state.
+struct PollInput {
+    /// The host exclusively owns the receiver and drains after each platform call.
+    send: std::sync::mpsc::Sender<InputObservation>,
+}
+impl IInputSink for PollInput {
+    /// Validates UTF-8 and offset before retaining an owned copy of the native input.
+    fn input(&self, event: UiInputAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        if text.offset() != 0 {
+            return Err(neocogi_com::NC_E_INVALID_ARG);
+        }
+        let event = UiInput::try_from(event).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
+        let text = std::str::from_utf8(text.as_slice()).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?.to_owned();
+        self.send.send(InputObservation { event, text }).map_err(|_| UI_E_CLOSED)
+    }
+}
+
 /// Concrete loop ownership is shared by the native iteration and browser scheduling adapter.
 struct Driver<State: AppState> {
     /// Owns exactly one UI/renderer pair for this application.
@@ -200,10 +246,20 @@ impl<State: AppState> Driver<State> {
     fn frame(&mut self, seconds: f64) -> Result<bool, HostError> {
         let host = &self.host;
         loop {
-            match host.window.poll(host.input.as_com_ref())? {
+            let status = host.window.poll(host.input.as_com_ref())?;
+            for observation in host.observations.try_iter() {
+                self.state.input(observation.event, &observation.text)?;
+                host.ui.input(observation.event, &observation.text)?;
+            }
+            match status {
                 PollStatus::Event => continue,
                 PollStatus::Idle => break,
-                PollStatus::Close => return Ok(false),
+                PollStatus::Close => {
+                    if self.state.close_requested()? {
+                        return Ok(false);
+                    }
+                    break;
+                }
                 _ => return Err(HostError::Message("unknown platform polling result".to_owned())),
             }
         }

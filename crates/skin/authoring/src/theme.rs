@@ -495,6 +495,64 @@ impl ThemeDocument {
         }
     }
 
+    /// Visits every authored external resource reference, preserving optional record absence.
+    /// Project Save As and browser transport use this concrete schema traversal rather than
+    /// reconstructing paths from compiled atlas slots or maintaining another schema copy.
+    pub fn visit_resource_paths_mut(&mut self, mut visit: impl FnMut(&mut PathBuf)) {
+        if let Some(fonts) = &mut self.fonts {
+            for font in [&mut fonts.body, &mut fonts.small, &mut fonts.title, &mut fonts.heading, &mut fonts.mono] {
+                visit(&mut font.path);
+            }
+        }
+        if let Some(icons) = &mut self.icons {
+            for icon in [
+                &mut icons.close,
+                &mut icons.expand,
+                &mut icons.collapse,
+                &mut icons.check,
+                &mut icons.expand_down,
+                &mut icons.open_folder,
+                &mut icons.closed_folder,
+                &mut icons.file,
+            ] {
+                visit(&mut icon.path);
+            }
+        }
+        let appearances = &mut self.appearances;
+        // All state slots stay optional. This walk never creates a role or a visual.
+        let surfaces = appearances.surface.values_mut().flat_map(|role| [&mut role.normal, &mut role.disabled]);
+        let controls = appearances.control.values_mut().flat_map(|role| {
+            [
+                &mut role.disabled,
+                &mut role.enabled.normal,
+                &mut role.enabled.hovered,
+                &mut role.enabled.pressed,
+                &mut role.focused.normal,
+                &mut role.focused.hovered,
+                &mut role.focused.pressed,
+            ]
+        });
+        let menus = appearances.menu.values_mut().flat_map(|role| {
+            [
+                &mut role.normal,
+                &mut role.hovered,
+                &mut role.pressed,
+                &mut role.focused,
+                &mut role.open,
+                &mut role.disabled,
+            ]
+        });
+        let chrome = appearances
+            .chrome
+            .values_mut()
+            .flat_map(|role| [&mut role.base, &mut role.active, &mut role.disabled]);
+        for visual in surfaces.chain(controls).chain(menus).chain(chrome).filter_map(Option::as_mut) {
+            if let Some(PatchDocument::Image { path, .. }) = &mut visual.patch {
+                visit(path);
+            }
+        }
+    }
+
     /// Parses a document without rewriting its authored resource paths.
     pub fn from_bytes(path: &Path, bytes: &[u8]) -> Result<Self, ThemeLoadError> {
         // Both supported versions normalize to the current document. Version one
