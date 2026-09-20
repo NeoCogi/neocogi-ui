@@ -27,9 +27,15 @@ them. Stream reads and resource authentication finish before GPU execution.
 
 Glow and WebGL implement the capability through framebuffer-backed textures.
 They upload each session's atlas independently and use a fresh output allocation
-for each frame, so published snapshots cannot be overwritten. Vulkan and WGPU
-currently reject surface creation explicitly while preserving their ordinary
-window rendering. They remain required follow-up work for editor backend parity.
+for each frame, so published snapshots cannot be overwritten. WGPU uses the same
+independent-session ownership with RGBA8 render attachments and a UI-only pipeline
+without depth. WGPU texture passes never acquire/reconfigure a native surface;
+window passes retain their own format and application depth attachment. Error
+scopes complete before output publication or native presentation. WGPU retains
+in-flight native resources through its command submission lifetime.
+
+Vulkan still rejects surface creation explicitly while preserving ordinary
+window rendering; its offscreen implementation remains required for backend parity.
 
 Native acceptance can be run with:
 
@@ -56,3 +62,17 @@ installation, input delivery, and offscreen rendering belong at that boundary.
 `AppState::text_input_area` selects the single native IME placement after both
 UIs have updated; an embedded host translates preview coordinates into its
 pane's committed screen rectangle. Neither operation belongs inside painting.
+
+WGPU GPU checks require a native adapter (software Vulkan is sufficient) and a
+working SDL native display for the surface test:
+
+```sh
+cargo test -p neocogi-render-wgpu -- --ignored --test-threads=1
+cargo run -p neocogi-theme-editor --no-default-features --features monolith,embed-assets,wgpu
+```
+
+The WGPU test reads actual rendered pixels, verifies top-left source orientation
+and retained-output immutability across different-size frames and allocation
+failure, then submits an ordinary native frame. Unsupported SDL dummy/offscreen
+video drivers return a construction diagnostic instead of reaching SDL's
+panicking raw-window-handle adapter.
