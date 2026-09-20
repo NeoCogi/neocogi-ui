@@ -311,3 +311,5 @@ fn disabled_parent_disables_child_windows_but_not_its_modal_dialog() {
 mod policies;
 
 mod resources;
+
+mod reload;
