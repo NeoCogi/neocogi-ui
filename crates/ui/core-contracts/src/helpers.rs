@@ -181,7 +181,7 @@ impl WidgetProperties {
     /// Rejects unsupported routing/appearance values at the component boundary.
     pub fn validate(self) -> Result<(), NcStatus> {
         self.options.validate()?;
-        if self.keyboard & !511 != 0 || self.frame.raw() > 16 {
+        if self.keyboard & !1023 != 0 || self.frame.raw() > 16 {
             return Err(NC_E_INVALID_ARG);
         }
         Ok(())

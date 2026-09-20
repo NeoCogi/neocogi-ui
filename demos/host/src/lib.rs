@@ -91,6 +91,18 @@ pub trait AppState: 'static {
     fn frame(&mut self, _host: &Host, _size: Size, _seconds: f64) -> Result<bool, NcStatus> {
         Ok(true)
     }
+
+    /// Runs after input dispatch returns and before painting. Embedded renderers may
+    /// safely install resources, render previews, and synchronize paint-only content here.
+    fn after_update(&mut self, _host: &Host, _size: Size) -> Result<(), NcStatus> {
+        Ok(())
+    }
+
+    /// Selects the one native IME session after all UI updates. Embedded UI hosts
+    /// may translate their preview's committed rectangle into window coordinates.
+    fn text_input_area(&self, host: &Host) -> Result<TextInputAreaAbi, NcStatus> {
+        host.ui.text_input_area()
+    }
 }
 
 /// One demo UI and platform window; these fields are concrete capabilities, with no native handles.
@@ -205,7 +217,8 @@ impl<State: AppState> Driver<State> {
             return Ok(false);
         }
         host.ui.update_with_events(size, &self.events, |message| self.state.update(message))?;
-        host.window.text_input(host.ui.text_input_area()?)?;
+        self.state.after_update(host, size)?;
+        host.window.text_input(self.state.text_input_area(host)?)?;
         host.ui.render(size, host.renderer.as_com_ref()).map_err(|status| {
             let detail = host
                 .renderer

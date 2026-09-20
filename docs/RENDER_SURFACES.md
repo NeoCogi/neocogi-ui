@@ -42,3 +42,17 @@ later frames, unchanged window atlas identity, native allocation failure,
 suspended/resized output, surface release, and final device retirement. WebGL
 compilation is checked separately; compilation does not establish browser runtime
 coverage.
+
+An embedded preview leaf declares keyboard bits `focus | Tab stop | embedded
+scope` (`1 | 2 | 512`). While focused, ordinary Tab and menu/window navigation
+keys reach the leaf instead of the outer manager. Ctrl+Tab, with optional Shift,
+leaves the scope through the editor's normal focus traversal. Outer menus and
+modal eligibility still take priority. `WidgetProperties` is now version 2;
+hosts and UI plugins must be rebuilt together.
+
+The shared application host supplies `AppState::after_update` after all editor
+event callbacks return and before rendering. Preview compilation, resource
+installation, input delivery, and offscreen rendering belong at that boundary.
+`AppState::text_input_area` selects the single native IME placement after both
+UIs have updated; an embedded host translates preview coordinates into its
+pane's committed screen rectangle. Neither operation belongs inside painting.

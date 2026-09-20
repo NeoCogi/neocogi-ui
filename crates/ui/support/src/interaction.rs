@@ -106,6 +106,9 @@ bitflags! {
         /// Editors with a separate adjustment mode return this flag only while editing. Hosts
         /// query `UiRuntime::text_input_area` after update to activate and position native input.
         const TEXT_INPUT = 256;
+        /// Focused embedded UI owns Tab, menu, and window-navigation keys.
+        /// Ctrl+Tab (optionally Shift) leaves this scope through outer traversal.
+        const KEYBOARD_SCOPE = 512;
         /// No keyboard focus or traversal behavior.
         const NONE = 0;
     }

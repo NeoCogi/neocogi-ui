@@ -54,14 +54,15 @@ bitenum WidgetOptions: u16 {
         Panel = 16,
     }
 
-#[version(1)]
+#[version(2)]
 /// Current common widget policy, cached only within a synchronized runtime transaction.
 struct WidgetProperties {
     /// Current frame and pointer-routing options.
     options: WidgetOptions,
     /// Keyboard capability bits matching the runtime's shared mapping: focus=1,
     /// Tab=2, Enter=4, Space=8, horizontal=16, vertical=32, hierarchy=64,
-    /// popup=128, committed text=256.
+    /// popup=128, committed text=256, embedded keyboard scope=512.
+    /// A focused embedded scope receives Tab/menu/window keys; Ctrl+Tab leaves it.
     keyboard: u16,
     /// Semantic role used when FRAME is enabled.
     frame: WidgetFrame,

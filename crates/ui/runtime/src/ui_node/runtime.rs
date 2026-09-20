@@ -74,6 +74,13 @@ impl Default for UiRuntime {
 }
 
 impl UiRuntime {
+    /// Reports whether the current eligible focus owns a nested keyboard scope.
+    pub(crate) fn delegates_keyboard(&self, root: &Node) -> bool {
+        self.input_router
+            .focus_target()
+            .is_some_and(|target| focused_keyboard_scope(root, target, self.root_transform))
+    }
+
     /// Projects editable focus through the same transforms and eligibility gates as routing.
     pub(crate) fn text_input_area(&self, root: &Node, style: &Skin) -> Option<Recti> {
         let target = self.input_router.focus_target()?;
@@ -216,6 +223,22 @@ fn contains_active_node_in(roots: &[Node], id: RuntimeNodeId, root_transform: Tr
 /// Returns whether one identity remains an eligible persistent keyboard-focus owner.
 fn contains_focusable_node_in(roots: &[Node], id: RuntimeNodeId, root_transform: Transform) -> bool {
     roots.iter().any(|root| contains_focusable_node(root, id, root_transform))
+}
+
+/// Searches committed geometry without retaining another focus tree or widget cache.
+fn focused_keyboard_scope(node: &Node, target: RuntimeNodeId, parent: Transform) -> bool {
+    if !node_accepts_input(node) || !node.intersects_clip(parent) {
+        return false;
+    }
+    if node.id() == target {
+        let (options, keyboard) = node_interaction_config(node);
+        return !options.intersects(WidgetOption::NO_INTERACT) && keyboard.contains(KeyboardBehavior::KEYBOARD_SCOPE);
+    }
+    if !node_children_visible(node) {
+        return false;
+    }
+    let child_parent = parent.push(node.state.layout);
+    node.with_children(|children| children.iter().any(|child| focused_keyboard_scope(child, target, child_parent)))
 }
 
 /// Searches one active branch for a focusable identity without retaining widget borrows.

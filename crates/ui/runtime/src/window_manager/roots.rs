@@ -3107,9 +3107,10 @@ impl WindowManager {
         // Resolve event-wide dismissal and menu-toggle context before selecting a recipient. An
         // outside press may change the visible forest and must do so before hit testing below.
         let style = self.bundle.skin().clone();
-        let popup_keyboard_handled = self.route_application_popup_keyboard(event);
-        let menu_keyboard_handled = !popup_keyboard_handled && self.route_menu_keyboard(event);
-        let window_keyboard_handled = !popup_keyboard_handled && !menu_keyboard_handled && self.route_window_keyboard(event);
+        let delegated_keyboard = self.delegates_keyboard();
+        let popup_keyboard_handled = !delegated_keyboard && self.route_application_popup_keyboard(event);
+        let menu_keyboard_handled = !delegated_keyboard && !popup_keyboard_handled && self.route_menu_keyboard(event);
+        let window_keyboard_handled = !delegated_keyboard && !popup_keyboard_handled && !menu_keyboard_handled && self.route_window_keyboard(event);
         let discard_pointer = self.discard_revoked_capture_event(event);
         let menu_press = matches!(event, UiInputEvent::MouseDown { button, .. } if button.intersects(MouseButton::LEFT));
         let previous_top = menu_press.then(|| self.surfaces.active_top_popup()).flatten();
@@ -3172,9 +3173,11 @@ impl WindowManager {
             event,
             UiInputEvent::Key { event }
                 if event.key == crate::Key::Tab
-                    && !event
-                        .modifiers
-                        .intersects(crate::Modifiers::ALT | crate::Modifiers::CTRL | crate::Modifiers::SUPER)
+                    && match delegated_keyboard {
+                        false => !event.modifiers.intersects(crate::Modifiers::ALT | crate::Modifiers::CTRL | crate::Modifiers::SUPER),
+                        true => event.modifiers.intersects(crate::Modifiers::CTRL)
+                            && !event.modifiers.intersects(crate::Modifiers::ALT | crate::Modifiers::SUPER),
+                    }
         );
         let focus_traversal = tab_navigation
             .then(|| match event {
@@ -3658,6 +3661,20 @@ impl WindowManager {
         match &surface.body {
             SurfaceBody::Widgets { root, runtime } => runtime.text_input_area(root, self.bundle.skin()),
             SurfaceBody::Menu(_) => None,
+        }
+    }
+
+    /// Delegates scope commands only when no outer menu or modal owns the focused surface.
+    fn delegates_keyboard(&self) -> bool {
+        if self.active_menu_root().is_some() {
+            return false;
+        }
+        let Some(surface) = self.keyboard_input_surface().and_then(|key| self.surfaces.surface(key)) else {
+            return false;
+        };
+        match &surface.body {
+            SurfaceBody::Widgets { root, runtime } => runtime.delegates_keyboard(root),
+            SurfaceBody::Menu(_) => false,
         }
     }
 

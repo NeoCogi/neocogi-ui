@@ -3,6 +3,7 @@ use super::*;
 use neocogi_ui_nodes_contracts::*;
 use neocogi_com::{INcStringComPtrExt, NC_E_BUSY, NcCopyToBufferOffset};
 mod containers;
+mod embedded_input;
 
 /// Positive drawable size shared by the deterministic headless fixtures.
 const SIZE: Size = Size { width: 640, height: 400 };
