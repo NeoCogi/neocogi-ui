@@ -6,9 +6,14 @@
   typed parameter inspector, original-texture nine-slice canvas with four red
   guides/sliders, interactive control/layout/typography gallery, and canonical
   state sheet. Support inheritance, visual/whole-role copy, bounded gesture-based
-  undo/redo, recoverable invalid drafts, atomic native JSON saves, relative-path
-  rebasing, browser file/folder import and JSON downloads. Ship shared native,
+  undo/redo, recoverable invalid drafts, per-resource pickers, remembered native
+  folders, Open/Save/Save As dialogs, and portable asset collection. Commit native
+  JSON after immutable resource copies; browser import/export supports complete
+  project ZIPs as well as file/folder import. Ship shared native,
   monolithic native, and WebAssembly through the same application implementation.
+- Version `IFileDialog` to 2 with Open/Save presentation and exact native filename
+  suggestions. Filename Enter accepts a selection; applications own overwrite
+  confirmation. Rebuild shared hosts and nodes providers together.
 - Extract `neocogi-skin-authoring` so editor, runtime loader, and offline builds
   share one document/compiler. Read theme schema versions 1 and 2 and write version
   2, retaining authored absence and resource paths, per-state insets, center

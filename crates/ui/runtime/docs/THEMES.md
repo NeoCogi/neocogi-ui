@@ -384,8 +384,16 @@ PNG over a checkerboard with four red slicing boundaries and synchronized slider
 and numeric fields. These overlays are never written into the PNG or theme data.
 Role/state destination insets remain independent of source slices and layout padding.
 
-Native Save As rebases relative resources, including undo/redo history, only after
-a successful temporary-file replacement. Browser import uses exact bounded
-project-relative keys; Save downloads the same version-2 JSON beside the separately
-retained resources. Neither path serializes atlas coordinates, UI objects, or GPU
-textures. Invalid input stays editable and cannot overwrite the last valid file.
+Open, Save, and Save As use dialogs, and each external texture/font/icon field
+has a picker. Native pickers remember accepted folders per resource category.
+Saving copies all authored sources into `<theme-name>.assets/` beside the JSON
+and writes relative references. Content-derived asset names prevent collisions
+and preserve old saved resources; the JSON is replaced only after the complete
+candidate validates and every copy succeeds. Save As makes an independent copy
+and relocates matching undo/redo references.
+
+Browser import accepts bounded project files, folders, or an exported ZIP. Save
+asks for a filename and downloads the same version-2 JSON with its asset folder
+in one ZIP. The browser controls download destination prompting and recent picker
+folders. Neither format serializes atlas coordinates, UI objects, or GPU textures.
+Invalid input stays editable and cannot overwrite the last valid file.
