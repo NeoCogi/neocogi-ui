@@ -153,13 +153,14 @@ pub use runtime::{Runtime, create_runtime_from_assets};
 struct UiPluginFactoryObject;
 
 impl neocogi_ui_core_contracts::UiPluginFactory for UiPluginFactoryObject {
-    /// Imports the complete asset revision before publishing any runtime capability.
+    /// Imports the complete revision and privately creates a compositor before publishing a UI.
     fn create_runtime(
         &self,
         assets: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IAssetBundleAbi>,
-        compositor: neocogi_com::ComRef<'_, neocogi_gfx_contracts::GfxCompositorAbi>,
+        gfx: neocogi_com::ComRef<'_, neocogi_gfx_contracts::GfxPluginFactoryAbi>,
     ) -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::UiRuntimeAbi>, neocogi_com::NcStatus> {
-        create_runtime_from_assets(assets, compositor)
+        // The same constructor enforces ownership for direct Rust and deployed COM callers.
+        create_runtime_from_assets(assets, gfx)
     }
 }
 

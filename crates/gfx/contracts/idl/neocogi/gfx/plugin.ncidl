@@ -8,5 +8,8 @@ factory GfxPluginFactory {
     /// Creates the resource-preserving revision publisher available in every GFX deployment.
     fn asset_publisher(&self) -> Result<AssetPublisher>;
     /// Imports one immutable resource revision into an independent renderer-neutral compositor.
+    /// Every successful call returns a fresh mutable object, even for the same asset bundle.
+    /// Resource installation, frame state, diagnostics, and stream storage are local to that
+    /// object. The factory must not retain or distribute aliases that can mutate the result.
     fn create_compositor(&self, assets: &IAssetBundle) -> Result<GfxCompositor>;
 }

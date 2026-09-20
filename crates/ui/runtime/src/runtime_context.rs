@@ -16,7 +16,8 @@ use neocogi_renderer_contracts::{IRendererAbi, Size};
 pub(crate) struct RuntimeContext {
     /// Immutable application identities against which derived revisions are authenticated.
     resource_catalog: ResourceCatalog,
-    /// GFX-owned coarse-operation executor retained for this runtime's complete lifetime.
+    /// Private GFX executor created for this runtime; never exposed or shared with another UI.
+    /// Only this context changes its resources and frame state through exclusive calls.
     compositor: ComPtr<GfxCompositorAbi>,
     /// Authoritative retained windows, nodes, input, layout, and semantic display list.
     pub(crate) window_manager: WindowManager,
@@ -27,7 +28,8 @@ pub(crate) struct RuntimeContext {
 }
 
 impl RuntimeContext {
-    /// Creates retained UI state from the exact resource revision installed in the compositor.
+    /// Adopts a fresh compositor and the exact resource revision used to construct it.
+    /// Callers must move an independent session here, never clone another runtime's executor.
     pub(crate) fn new(compositor: ComPtr<GfxCompositorAbi>, bundle: SkinBundle) -> Self {
         Self {
             resource_catalog: ResourceCatalog::new(bundle.atlas().clone()),

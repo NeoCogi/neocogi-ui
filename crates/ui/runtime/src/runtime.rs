@@ -15,21 +15,30 @@ mod menus;
 mod windows;
 use windows::NativeSurface;
 
-/// Imports matching resources and a GFX-owned compositor before publishing a live UI runtime.
+/// Imports immutable resources and creates a private GFX compositor before publishing a UI.
+///
+/// The factory can be shared across runtimes, but each successful call must return a fresh
+/// compositor initialized from `source`. Keeping that mutable capability inside the runtime
+/// prevents another UI or caller from replacing its resources or interfering with a frame.
+/// The UI depends only on the GFX contract in shared, monolithic, and WebAssembly deployments.
 pub fn create_runtime_from_assets(
     source: ComRef<'_, IAssetBundleAbi>,
-    mut compositor: ComRef<'_, neocogi_gfx_contracts::GfxCompositorAbi>,
+    gfx: ComRef<'_, neocogi_gfx_contracts::GfxPluginFactoryAbi>,
 ) -> Result<ComPtr<UiRuntimeAbi>, NcStatus> {
+    // Reject invalid UI metadata before asking GFX to allocate any mutable frame state.
     let assets = crate::assets::ImportedAssets::read(source, None)?;
-    // Reinstalling the source authenticates that the compositor and UI use the same catalog.
-    compositor.install_assets(source)?;
+    // GFX imports the same immutable source during construction. Do not reinstall it into
+    // a caller-provided compositor: that object could already belong to another runtime.
+    // A factory error drops the local import without publishing a partially initialized UI.
+    let compositor = gfx.create_compositor(source)?;
     let runtime = Runtime {
-        storage: create_storage(assets, compositor.add_ref()),
+        storage: create_storage(assets, compositor),
     };
     Ok(Runtime::from_value(runtime).query().expect("runtime interface"))
 }
 
-/// Creates shared runtime storage while GFX retains exclusive ownership of graphics execution.
+/// Moves the runtime's private compositor into shared UI storage without exposing its capability.
+/// GFX owns graphics execution; only this runtime selects its resource revisions and frames.
 pub(crate) fn create_storage(assets: crate::assets::ImportedAssets, compositor: ComPtr<neocogi_gfx_contracts::GfxCompositorAbi>) -> Rc<RuntimeStorage> {
     let bundle = assets.bundle().clone();
     let state = Rc::new(HostState::default());

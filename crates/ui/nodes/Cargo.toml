@@ -33,6 +33,5 @@ neocogi-com = { workspace = true, default-features = false, features = ["macros"
 neocogi-ui-runtime.workspace = true
 neocogi-ui-support = { workspace = true, features = ["test-support"] }
 neocogi-ui.workspace = true
-neocogi-gfx-impl.workspace = true
 neocogi-com = { workspace = true, features = ["static-runtime"] }
 tempfile.workspace = true

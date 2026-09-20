@@ -136,15 +136,15 @@ impl Drop for AllocationMeasurement {
 
 pub(crate) use neocogi_ui_support::test_support::*;
 
-/// Constructs an actual GFX compositor and then uses the production runtime entrypoint.
+/// Activates the production GFX factory and lets the runtime create its private compositor.
 ///
 /// Keeping this composition in fixtures leaves the UI implementation dependent only on GFX
 /// contracts. Each fixture receives its own compositor and immutable source revision.
 pub(crate) fn runtime_from_assets(
     source: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IAssetBundleAbi>,
 ) -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::UiRuntimeAbi>, neocogi_com::NcStatus> {
-    let compositor = neocogi_gfx_impl::GfxCompositorObject::create(source)?;
-    crate::create_runtime_from_assets(source, compositor.as_com_ref())
+    let gfx = neocogi_ui_support::test_support::gfx_factory();
+    crate::create_runtime_from_assets(source, gfx.as_com_ref())
 }
 
 /// Exports an algorithm fixture once before constructing the production runtime and compositor.

@@ -25,8 +25,8 @@ impl Fixture {
     fn new() -> Self {
         let bundle = crate::SkinBundle::from_atlas(crate::test_support::test_atlas());
         let source = crate::test_support::assets::export_bundle(&bundle).unwrap();
-        let compositor = neocogi_gfx_impl::GfxCompositorObject::create(source.as_com_ref()).unwrap();
-        let runtime = neocogi_ui_runtime::create_runtime_from_assets(source.as_com_ref(), compositor.as_com_ref()).unwrap();
+        let gfx = neocogi_ui_support::test_support::gfx_factory();
+        let runtime = neocogi_ui_runtime::create_runtime_from_assets(source.as_com_ref(), gfx.as_com_ref()).unwrap();
         let ui = crate::bind_builtin_nodes(runtime.clone()).unwrap();
         let body = ui.widgets().button("background").unwrap();
         let owner = ui.window("owner", OWNER_RECT, &body).unwrap();

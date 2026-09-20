@@ -43,6 +43,10 @@ struct NinePatchDraw {
 /// atlas lookup, glyph expansion, rectangular clipping, final vertex batching,
 /// and the single synchronous renderer submission. No backend-native handle or
 /// Rust implementation type crosses this boundary.
+///
+/// One compositor is one mutable resource and frame session. Cloning its COM reference
+/// aliases that session; it does not create independent state. Share GfxPluginFactory
+/// to create separate sessions. UI runtimes keep their compositor capability private.
 factory GfxCompositor: IGfxDiagnostics {
     /// Imports a complete compatible resource revision before the UI publishes matching style state.
     fn install_assets(&mut self, assets: &IAssetBundle) -> Result<()>;

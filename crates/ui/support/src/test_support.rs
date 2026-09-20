@@ -2,6 +2,22 @@
 use crate::{AtlasHandle, ChromeRole, ChromeState, ControlRole, ControlState, NinePatch, Skin, SurfaceRole, SurfaceState, Visual};
 use neocogi_ui::assets::{AssetData, AssetTables};
 use neocogi_ui_core_contracts::{AssetFont, AssetGlyph, AssetIcon, AssetRange, Insets, Rect, Size};
+
+/// Activates the production GFX service for fixtures that construct independent UI runtimes.
+///
+/// Only the opt-in test-support feature links the implementation. Repeated registration of
+/// this same static description is idempotent, so each test can own an ordinary typed factory
+/// reference without an extra singleton, mock compositor, or mutable fixture registry.
+#[cfg(feature = "test-support")]
+pub fn gfx_factory() -> neocogi_com::ComPtr<neocogi_ui::GfxPluginFactoryAbi> {
+    let registry = neocogi_com::Runtime::global();
+    // SAFETY: The description and all referenced code/data remain in the test executable.
+    unsafe { registry.register_factory_plugin_description(neocogi_gfx::factory_plugin_description()) }.expect("linked GFX plugin must register");
+    registry
+        .activate_plugin_factory(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
+        .expect("linked GFX factory must activate")
+}
+
 /// Required semantic icon names make the small fixture a valid complete asset catalog.
 const ICON_NAMES: [&str; 9] = [
     "white",

@@ -179,8 +179,7 @@ fn static_com_editing_and_webgl() {
     let gfx = runtime
         .activate_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
         .unwrap();
-    let compositor = gfx.create_compositor(assets.as_com_ref()).unwrap();
-    let core = factory.create_runtime(assets.as_com_ref(), compositor.as_com_ref()).unwrap();
+    let core = factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref()).unwrap();
     let nodes = runtime
         .activate_plugin_factory::<NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))
         .unwrap();

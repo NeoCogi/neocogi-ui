@@ -43,13 +43,12 @@ fn independently_activated_nodes_bind_only_to_their_core_host_and_deliver_events
     let source =
         neocogi_ui_support::test_support::assets::export_bundle(&neocogi_ui_support::SkinBundle::from_atlas(neocogi_ui_support::test_support::test_atlas()))
             .unwrap();
-    let compositor = neocogi_gfx_impl::GfxCompositorObject::create(source.as_com_ref()).unwrap();
-    let runtime = core.create_runtime(source.as_com_ref(), compositor.as_com_ref()).unwrap();
+    let gfx = neocogi_ui_support::test_support::gfx_factory();
+    let runtime = core.create_runtime(source.as_com_ref(), gfx.as_com_ref()).unwrap();
     // The core object never grows concrete node factory capabilities as a side effect of binding.
     assert_eq!(runtime.query::<UiFactoryAbi>().unwrap_err(), NC_E_NOINTERFACE);
     let factory: ComPtr<UiFactoryAbi> = nodes.bind(runtime.as_com_ref()).unwrap();
-    let other_compositor = neocogi_gfx_impl::GfxCompositorObject::create(source.as_com_ref()).unwrap();
-    let other_runtime = core.create_runtime(source.as_com_ref(), other_compositor.as_com_ref()).unwrap();
+    let other_runtime = core.create_runtime(source.as_com_ref(), gfx.as_com_ref()).unwrap();
     assert!(matches!(Ui::from_interfaces(other_runtime, factory.clone()), Err(UI_E_OWNER)));
     let ui = Ui::from_interfaces(runtime, factory).unwrap();
     let button = ui.widgets().button("nodes-owned activation").unwrap();
