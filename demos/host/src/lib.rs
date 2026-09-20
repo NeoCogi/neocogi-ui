@@ -135,7 +135,7 @@ impl Host {
         initialize()?;
         let runtime = neocogi_com::Runtime::global();
         let platform = runtime.activate_plugin_factory::<PlatformAbi>(neocogi_com::guid_from_qualified_name(renderer_plugin_name()))?;
-        let atlas = assets.query::<IRgbaImageAbi>()?;
+        let atlas = assets.image()?;
         let window = platform.create_window(NcCopyFromBufferOffset::new(0, title.as_bytes()), size, atlas.as_com_ref())?;
         let renderer = window.query()?;
         let gfx = runtime.activate_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;

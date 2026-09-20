@@ -54,7 +54,7 @@ impl Resources {
             catalog: source.catalog()?,
             tables,
             white,
-            image: source.add_ref().query()?,
+            image: source.image()?,
         })
     }
 }

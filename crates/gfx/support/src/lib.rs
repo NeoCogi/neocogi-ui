@@ -6,7 +6,7 @@
 #![deny(missing_docs)]
 
 use neocogi_gfx_contracts::*;
-use neocogi_renderer_contracts::IRgbaImageAbi;
+use neocogi_renderer_contracts::{IRgbaImageAbi, IRgbaImageInterfacesFor};
 use neocogi_com::{ComPtr, ComRef, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
 use std::borrow::Cow;
 
@@ -84,13 +84,38 @@ impl AssetData {
     /// Publishes exact table storage; receiving consumers validate record semantics.
     fn publish(self, catalog: ComPtr<IAssetCatalogAbi>) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         let info = self.info()?;
-        Ok(Bundle::from_value(Bundle { catalog, info, data: self })
+        // Metadata and pixels have independent COM identities. A later appearance
+        // revision can retain this image without retaining any previous bundle.
+        let image = Image::from_value(Image { size: info.size, pixels: self.pixels })
             .query()
-            .expect("Bundle declares IAssetBundle"))
+            .expect("Image declares IRgbaImage");
+        self.tables.publish(catalog, image)
     }
 }
 
 impl AssetTables {
+    /// Publishes metadata over the base revision's unchanged immutable atlas storage.
+    /// Resource rebuilds use `AssetData::into_revision` instead, since their pixels
+    /// and packed coordinates must acquire a new image identity together.
+    pub fn into_revision(self, base: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
+        let image = base.image()?;
+        self.validate()?;
+        self.validate_white_source(image.as_com_ref())?;
+        self.publish(base.catalog()?, image)
+    }
+
+    /// Pairs checked dimensions with an owned image; foreign consumers still validate
+    /// all record semantics before installation, as for newly constructed bundles.
+    fn publish(self, catalog: ComPtr<IAssetCatalogAbi>, image: ComPtr<IRgbaImageAbi>) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
+        let info = self.info()?;
+        if image.size()? != info.size {
+            return Err(NC_E_INVALID_ARG);
+        }
+        Ok(Bundle::from_value(Bundle { catalog, info, tables: self, image })
+            .query()
+            .expect("Bundle declares IAssetBundle"))
+    }
+
     /// Derives bounded counts and verifies one structured appearance per declared role.
     pub fn info(&self) -> Result<AssetInfo, NcStatus> {
         let info = AssetInfo {
@@ -125,11 +150,17 @@ struct Bundle {
     catalog: ComPtr<IAssetCatalogAbi>,
     /// Counts were derived from checked owned/static storage before publication.
     info: AssetInfo,
-    /// Immutable data is never borrowed directly by foreign code.
-    data: AssetData,
+    /// Immutable metadata is never borrowed directly by foreign code.
+    tables: AssetTables,
+    /// Independent immutable pixels may be shared by appearance-only revisions.
+    image: ComPtr<IRgbaImageAbi>,
 }
 
 impl IAssetBundle for Bundle {
+    /// Retains exactly the image capability paired with this immutable revision.
+    fn image(&self) -> Result<ComPtr<IRgbaImageAbi>, NcStatus> {
+        Ok(self.image.clone())
+    }
     /// Retains the namespace used to authenticate compatible UI replacements.
     fn catalog(&self) -> Result<ComPtr<IAssetCatalogAbi>, NcStatus> {
         Ok(self.catalog.clone())
@@ -140,55 +171,64 @@ impl IAssetBundle for Bundle {
     }
     /// Copies font metrics without exposing a borrowed Rust slice.
     fn fonts(&self, output: NcCopyToBufferOffset<'_, AssetFont>) -> Result<(), NcStatus> {
-        copy(&self.data.tables.fonts, output)
+        copy(&self.tables.fonts, output)
     }
     /// Copies exact Unicode records in the producer's immutable order.
     fn glyphs(&self, output: NcCopyToBufferOffset<'_, AssetGlyph>) -> Result<(), NcStatus> {
-        copy(&self.data.tables.glyphs, output)
+        copy(&self.tables.glyphs, output)
     }
     /// Copies named image rectangles in bundle-local table order.
     fn icons(&self, output: NcCopyToBufferOffset<'_, AssetIcon>) -> Result<(), NcStatus> {
-        copy(&self.data.tables.icons, output)
+        copy(&self.tables.icons, output)
     }
     /// Copies UTF-8 bytes, with byte offsets and no implicit terminator.
     fn names(&self, output: NcCopyToBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        copy(&self.data.tables.names, output)
+        copy(&self.tables.names, output)
     }
     /// Returns complete geometry without parser-specific defaults.
     fn metrics(&self) -> Result<AssetMetrics, NcStatus> {
-        Ok(self.data.tables.metrics)
+        Ok(self.tables.metrics)
     }
     /// Returns the complete concrete caption recipe.
     fn chrome(&self) -> Result<AssetChrome, NcStatus> {
-        Ok(self.data.tables.chrome)
+        Ok(self.tables.chrome)
     }
     /// Copies complete named surface states without a family tag or flattened state axis.
     fn surface_visuals(&self, output: NcCopyToBufferOffset<'_, AssetSurfaceVisuals>) -> Result<(), NcStatus> {
-        copy(&self.data.tables.surfaces, output)
+        copy(&self.tables.surfaces, output)
     }
     /// Copies complete named control states, preserving enabled and focused pointer branches.
     fn control_visuals(&self, output: NcCopyToBufferOffset<'_, AssetControlVisuals>) -> Result<(), NcStatus> {
-        copy(&self.data.tables.controls, output)
+        copy(&self.tables.controls, output)
     }
     /// Copies complete named menu states without relying on numeric state offsets.
     fn menu_visuals(&self, output: NcCopyToBufferOffset<'_, AssetMenuVisuals>) -> Result<(), NcStatus> {
-        copy(&self.data.tables.menus, output)
+        copy(&self.tables.menus, output)
     }
     /// Copies complete named chrome states without relying on numeric state offsets.
     fn chrome_visuals(&self, output: NcCopyToBufferOffset<'_, AssetChromeVisuals>) -> Result<(), NcStatus> {
-        copy(&self.data.tables.window_chrome, output)
+        copy(&self.tables.window_chrome, output)
     }
 }
 
-impl IRgbaImage for Bundle {
+#[com_object(interfaces(IRgbaImage))]
+/// Pixel storage has no back-reference to bundle metadata or to a publication service.
+struct Image {
+    /// Positive dimensions validated against the tightly packed byte count at construction.
+    size: Size,
+    /// One owned or process-static allocation retained until the last image reference retires.
+    pixels: Cow<'static, [u8]>,
+}
+
+impl IRgbaImage for Image {
     /// Returns the dimensions paired with the immutable tightly packed pixel storage.
     fn size(&self) -> Result<Size, NcStatus> {
-        Ok(self.info.size)
+        Ok(self.size)
     }
 
     /// Copies tightly packed RGBA bytes after validating the complete requested range.
     fn pixels(&self, output: NcCopyToBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        copy(&self.data.pixels, output)
+        copy(&self.pixels, output)
     }
 }
 

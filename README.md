@@ -85,7 +85,7 @@ Rust crates and shared helpers remain separate source concerns within that artif
 `crates/render/contracts` owns the independent `neocogi.renderer` ABI: geometry,
 raw RGBA images, GPU texture capabilities, and one bounded bulk frame stream. It
 contains no UI asset or skin declarations; `IAssetBundle` merely exposes an
-`IRgbaImage` projection from the GFX contract to the renderer.
+`IRgbaImage` capability returned by `IAssetBundle::image()` to the renderer.
 `crates/render/core` is their small, statically linked backend SPI; it is not another
 plugin and does not depend on the UI runtime implementation.
 

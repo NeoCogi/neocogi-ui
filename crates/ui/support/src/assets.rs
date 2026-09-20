@@ -27,7 +27,7 @@ impl ImportedAssets {
     pub fn read(source: ComRef<'_, IAssetBundleAbi>, previous: Option<&Self>) -> Result<Self, NcStatus> {
         let catalog = source.catalog()?;
         let identity = catalog.query::<IUnknown>()?;
-        let image = source.add_ref().query::<IRgbaImageAbi>()?;
+        let image = source.image()?;
         if previous.is_some_and(|previous| previous.identity.as_ptr() != identity.as_ptr()) {
             return Err(UI_E_OWNER);
         }

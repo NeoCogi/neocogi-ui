@@ -281,6 +281,10 @@ fn appearance_revision_is_a_validated_resource_preserving_transaction() {
     let changed = data(&candidate);
     assert_eq!(candidate.catalog().unwrap().as_ptr(), base.catalog().unwrap().as_ptr());
     assert_eq!(changed.pixels, original.pixels);
+    assert_ne!(candidate.as_ptr(), base.as_ptr());
+    let image = candidate.image().unwrap();
+    assert_eq!(image.as_ptr(), base.image().unwrap().as_ptr(), "appearance edits retain immutable pixels");
+    assert_eq!(image.as_ptr(), candidate.image().unwrap().as_ptr(), "accessor identity is stable");
     assert_eq!(changed.tables.fonts, original.tables.fonts);
     assert_eq!(changed.tables.icons, original.tables.icons);
     assert_eq!(changed.tables.metrics, metrics);
@@ -300,6 +304,23 @@ fn appearance_revision_is_a_validated_resource_preserving_transaction() {
             .unwrap_err(),
         NC_E_INVALID_ARG
     );
+
+    // A resource rebuild receives a fresh identity, even when its resulting bytes
+    // happen to match. Consumers need no pointer/hash cache to infer pixel ownership.
+    let rebuilt = original.clone().into_revision(base.as_com_ref()).unwrap();
+    assert_ne!(rebuilt.image().unwrap().as_ptr(), image.as_ptr());
+    let mut mismatched = original.tables.clone();
+    mismatched.size.width += 1;
+    assert!(mismatched.into_revision(base.as_com_ref()).is_err());
+
+    // Pixels remain readable after both bundle revisions and the publisher retire.
+    drop(candidate);
+    drop(rebuilt);
+    drop(base);
+    drop(publisher);
+    let mut bytes = vec![0; original.pixels.len()];
+    image.pixels(NcCopyToBufferOffset::new(0, &mut bytes)).unwrap();
+    assert_eq!(bytes, original.pixels.as_ref());
 }
 
 /// GFX expands one typed image patch atomically and rejects malformed semantic payloads.

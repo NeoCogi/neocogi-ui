@@ -50,6 +50,11 @@ impl CountingAssets {
 }
 
 impl IAssetBundle for CountingAssets {
+    /// Delegates the immutable image capability after recording the lookup.
+    fn image(&self) -> Result<ComPtr<IRgbaImageAbi>, NcStatus> {
+        self.called();
+        self.source.image()
+    }
     /// Delegates catalog identity after recording the lookup.
     fn catalog(&self) -> Result<ComPtr<IAssetCatalogAbi>, NcStatus> {
         self.called();
@@ -109,20 +114,6 @@ impl IAssetBundle for CountingAssets {
     fn chrome_visuals(&self, output: NcCopyToBufferOffset<'_, AssetChromeVisuals>) -> Result<(), NcStatus> {
         self.called();
         self.source.chrome_visuals(output)
-    }
-}
-
-impl IRgbaImage for CountingAssets {
-    /// Delegates image dimensions through the narrow renderer-owned projection.
-    fn size(&self) -> Result<Size, NcStatus> {
-        self.called();
-        self.source.query::<IRgbaImageAbi>()?.size()
-    }
-
-    /// Delegates pixel copying through the narrow renderer-owned projection.
-    fn pixels(&self, output: NcCopyToBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        self.called();
-        self.source.query::<IRgbaImageAbi>()?.pixels(output)
     }
 }
 

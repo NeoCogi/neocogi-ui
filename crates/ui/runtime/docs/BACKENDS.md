@@ -108,7 +108,7 @@ packed RGBA bytes. Backends validate it, upload a complete candidate texture and
 publish that texture only on success. They retain no native atlas, font/icon IDs
 or skin. `RendererBackend::replace_atlas` uses this raw input inside the selected backend;
 the GFX compositor owns final atlas geometry in both production and tests. The host queries
-`IRgbaImage` once from its initial bundle and gives that projection to the platform.
+`IRgbaImage` once through its initial bundle's `image()` accessor and gives that capability to the platform.
 Subsequent renderer preparation and frame
 submission accept only that projection, whose `size` and `pixels` methods cannot
 leak UI metadata into a renderer implementation.

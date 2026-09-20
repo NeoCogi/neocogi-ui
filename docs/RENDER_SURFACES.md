@@ -97,3 +97,9 @@ The tests cover private-atlas orientation, immutable retained outputs, changed
 output extents, rejected allocation, pre-submission abandonment, and subsequent
 ordinary window rendering. All three native backends now expose surfaces;
 WebGL execution is validated separately from native Glow.
+
+Appearance publication retains the immutable `IAssetBundle::image()` identity.
+Each rendering session therefore keeps its own atlas allocation through color,
+metric, tint, and slicing edits. A resource rebuild supplies a new image and causes
+one upload per affected session. The surface regression counts actual source reads
+through repeated preparation, rendering, failed frames, and resizing.

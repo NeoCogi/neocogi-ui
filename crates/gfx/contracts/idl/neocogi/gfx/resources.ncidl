@@ -379,12 +379,17 @@ struct AssetChromeVisuals {
 /// Independently created catalogs remain unrelated even when their names match.
 interface IAssetCatalog {}
 
-#[version(3)]
+#[version(4)]
 /// Immutable, self-contained resource revision. Every copy writes the exact requested range.
 /// Names partition their byte table in font-then-icon order. Fonts require an underscore
 /// fallback; body and the standard semantic icon names are mandatory. Consumers import
 /// once, validating all records and pixels before publication. No per-glyph COM calls occur.
-interface IAssetBundle: IRgbaImage {
+interface IAssetBundle {
+    /// Retains immutable atlas storage independently of this revision's metadata.
+    /// Repeated calls return the same image identity. Appearance-only revisions retain
+    /// that identity and its bytes; resource rebuilds publish a new image. The image
+    /// size agrees with info().size and its lifetime does not depend on the bundle.
+    fn image(&self) -> Result<IRgbaImage>;
     /// Retains the logical namespace shared by compatible derived revisions.
     fn catalog(&self) -> Result<IAssetCatalog>;
     /// Returns bounded allocation counts and dimensions.

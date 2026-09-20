@@ -6,6 +6,9 @@ use super::*;
 struct Pixels {
     /// Two-by-two tightly packed RGBA pixels.
     bytes: [u8; 16],
+    /// Shared observation crosses the immutable COM `&self` boundary only in this test.
+    /// It measures actual pixel reads rather than inferring uploads from frame counts.
+    reads: Rc<std::cell::Cell<u32>>,
 }
 impl IRgbaImage for Pixels {
     /// Returns the exact extent represented by the fixed source buffer.
@@ -14,6 +17,7 @@ impl IRgbaImage for Pixels {
     }
     /// Supplies only the requested bounded byte range.
     fn pixels(&self, mut output: NcCopyToBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.reads.set(self.reads.get() + 1);
         let start = output.offset() as usize;
         let end = start + output.as_mut_slice().len();
         output.as_mut_slice().copy_from_slice(self.bytes.get(start..end).ok_or(NC_E_INVALID_ARG)?);
@@ -76,13 +80,15 @@ fn pixel(pixels: &[u8], x: usize, y: usize) -> &[u8] {
 fn independent_surface_snapshots_keep_orientation_and_device_lifetime() {
     let platform = PlatformObject::default();
     let assets = neocogi_demo_assets::load_bundle().unwrap();
-    let atlas = assets.query::<IRgbaImageAbi>().unwrap();
+    let atlas = assets.image().unwrap();
     let native = platform.window("surface acceptance", SIZE, atlas.as_com_ref()).unwrap();
     let weak = Rc::downgrade(&native.device);
     let window = WindowObject::from_value(native);
     let renderer: ComPtr<IRendererAbi> = window.query().unwrap();
     let factory: ComPtr<IRenderSurfaceFactoryAbi> = window.query().unwrap();
+    let reads = Rc::new(std::cell::Cell::new(0));
     let preview_atlas: ComPtr<IRgbaImageAbi> = Pixels::from_value(Pixels {
+        reads: reads.clone(),
         bytes: [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255],
     })
     .query()
@@ -90,6 +96,9 @@ fn independent_surface_snapshots_keep_orientation_and_device_lifetime() {
     let extent = Size { width: 32, height: 32 };
     let surface = factory.create_surface(extent, preview_atlas.as_com_ref()).unwrap();
     let preview: ComPtr<IRendererAbi> = surface.query().unwrap();
+    assert_eq!(reads.get(), 1, "surface creation performs one initial atlas upload");
+    preview.prepare_atlas(preview_atlas.as_com_ref()).unwrap();
+    assert_eq!(reads.get(), 1, "a metadata-only install retaining the image performs no upload");
     assert_eq!(surface.completed_image().unwrap_err(), neocogi_com::NC_E_NOT_FOUND);
     let vertices = quad(Rect { x: 0, y: 0, width: 32, height: 32 });
     let (first_info, first_stream) = SurfaceStream {
@@ -141,6 +150,7 @@ fn independent_surface_snapshots_keep_orientation_and_device_lifetime() {
         .unwrap();
     assert_eq!(old.size().unwrap(), extent);
     assert_eq!(new.size().unwrap(), extent);
+    assert_eq!(reads.get(), 1, "rendering, failures, and resizing never re-read an unchanged atlas");
     // The two old outputs remain valid after destroying their rendering session.
     drop(preview);
     drop(surface);

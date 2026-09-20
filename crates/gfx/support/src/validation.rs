@@ -10,7 +10,11 @@ impl AssetData {
         let info = source.info()?;
         let tables = AssetTables::read_from(source, info)?;
         let mut pixels = filled(info.rgba_bytes()?, 0)?;
-        source.add_ref().query::<IRgbaImageAbi>()?.pixels(NcCopyToBufferOffset::new(0, &mut pixels))?;
+        let image = source.image()?;
+        if image.size()? != info.size {
+            return Err(NC_E_INVALID_ARG);
+        }
+        image.pixels(NcCopyToBufferOffset::new(0, &mut pixels))?;
         let data = Self { pixels: pixels.into(), tables };
         data.validate()?;
         Ok(data)
@@ -38,7 +42,7 @@ impl AssetTables {
         let info = source.info()?;
         let tables = Self::read_from(source, info)?;
         tables.validate()?;
-        tables.validate_white_source(source)?;
+        tables.validate_white_source(source.image()?.as_com_ref())?;
         Ok(tables)
     }
 
@@ -256,8 +260,10 @@ impl AssetTables {
     }
 
     /// Reads only the white tile rows required to authenticate solid-color rendering.
-    fn validate_white_source(&self, source: ComRef<'_, IAssetBundleAbi>) -> Result<(), NcStatus> {
-        let image = source.add_ref().query::<IRgbaImageAbi>()?;
+    pub(super) fn validate_white_source(&self, image: ComRef<'_, IRgbaImageAbi>) -> Result<(), NcStatus> {
+        if image.size()? != self.size {
+            return Err(NC_E_INVALID_ARG);
+        }
         let rect = self.white_rect();
         let row_bytes = rect.width as usize * 4;
         let mut row = filled(row_bytes, 0)?;

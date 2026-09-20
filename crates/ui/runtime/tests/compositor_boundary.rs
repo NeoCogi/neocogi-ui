@@ -77,7 +77,7 @@ fn create_ui(assets: ComRef<'_, IAssetBundleAbi>, gfx: ComRef<'_, GfxPluginFacto
 
 /// Checks both the public resource snapshot and the exact image delivered in a nonempty frame.
 fn assert_frame(ui: &Ui, assets: ComRef<'_, IAssetBundleAbi>, renderer: ComRef<'_, IRendererAbi>, observation: &Observation) {
-    let image = assets.add_ref().query::<IRgbaImageAbi>().unwrap();
+    let image = assets.image().unwrap();
     let calls = observation.calls.get();
     // The original bug kept Ui::assets correct while silently substituting another image.
     assert_eq!(ui.assets().unwrap().as_ptr(), assets.as_ptr());
@@ -112,9 +112,15 @@ fn appearance_revision(base: ComRef<'_, IAssetBundleAbi>) -> ComPtr<IAssetBundle
 #[test]
 fn shared_graphics_service_keeps_runtime_resources_independent() {
     let base = neocogi_demo_assets::load_bundle().unwrap();
-    let revision = appearance_revision(base.as_com_ref());
-    let base_image = base.query::<IRgbaImageAbi>().unwrap();
-    let revision_image = revision.query::<IRgbaImageAbi>().unwrap();
+    // Rebuild one image deliberately: this isolation regression must still distinguish
+    // two atlas identities now that ordinary appearance edits preserve the same image.
+    let styled = appearance_revision(base.as_com_ref());
+    let revision = neocogi_ui::assets::AssetData::read(styled.as_com_ref())
+        .unwrap()
+        .into_revision(base.as_com_ref())
+        .unwrap();
+    let base_image = base.image().unwrap();
+    let revision_image = revision.image().unwrap();
     assert_ne!(base_image.as_ptr(), revision_image.as_ptr());
     let gfx = neocogi_ui_support::test_support::gfx_factory();
     let first = create_ui(base.as_com_ref(), gfx.as_com_ref());

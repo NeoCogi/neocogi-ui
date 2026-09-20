@@ -161,7 +161,7 @@ fn static_com_editing_and_webgl() {
         .activate_plugin_factory::<PlatformAbi>(neocogi_com::guid_from_qualified_name("neocogi.render.webgl"))
         .unwrap();
     let assets = neocogi_demo_assets::load_bundle().unwrap();
-    let atlas = assets.query::<IRgbaImageAbi>().unwrap();
+    let atlas = assets.image().unwrap();
     let native = platform
         .create_window(
             NcCopyFromBufferOffset::new(0, b"Browser COM regression"),

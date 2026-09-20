@@ -55,9 +55,11 @@ writes through reflected field offsets, or consults the COM class registry.
 Unknown and duplicate fields and role keys are rejected during typed decoding.
 
 Applications supply one `IAssetBundle` through the typed `UiRuntime` factory and
-pass its `IRgbaImage` projection to `Platform::create_window`. Neither implementation
-embeds demo assets. An asset bundle derives from that narrow renderer-owned capability, so one
-object can publish both views without duplicating its pixel storage. The UI copies and validates
+pass `bundle.image()` to `Platform::create_window`. Neither implementation
+embeds demo assets. Version 4 of `IAssetBundle` returns a separate immutable
+`IRgbaImage` capability instead of inheriting the pixel interface. Appearance-only
+revisions retain exactly that image identity; resource rebuilds publish a new image.
+The image owns its bytes independently and retains no bundle or publication chain. The UI copies and validates
 `AssetTables` once, retains that exact generated snapshot, and samples only the required white-tile
 rows during validation. It never copies or retains the complete image. The platform
 receives `IRgbaImage`, reads only its dimensions and packed RGBA bytes, then uploads
@@ -97,7 +99,7 @@ compilation uses the bounded `FileAssets` source.
 
 ```rust,ignore
 let assets = neocogi_demo_assets::load_bundle()?;
-let atlas = assets.query::<IRgbaImageAbi>()?;
+let atlas = assets.image()?;
 let native = platform.create_window(
     NcCopyFromBufferOffset::new(0, b"Application"),
     Size { width: 800, height: 600 },
@@ -139,8 +141,8 @@ WebAssembly all use this same factory contract; core UI links only GFX contracts
 
 `ui.install_assets(candidate, renderer)` requires mutable access to the `Ui` because it
 replaces the resource value shared by that runtime's nodes and services. The call owns one
-transaction: it validates and imports bounded metadata, asks the renderer to copy
-and upload that complete image,
+transaction: it validates and imports bounded metadata, asks the renderer to prepare
+the image (copying/uploading only if its identity changed),
 installs the same catalog-compatible revision in its private GFX compositor,
 then publishes the retained canonical tables and their local lookup indices. Only success
 publishes the new revision to `IWidgetHost`, the window manager, text metrics, and
@@ -335,7 +337,10 @@ finish. Renderer upload details use `IRenderDiagnostics`.
 Construct `StyleCompilerAbi` through `skin_factory.style_compiler(asset_publisher)`.
 Its `derive_style` method takes an explicit base bundle, complete metrics and a
 closed `PaletteEdit` value. The retained GFX capability performs the final generic
-bundle copy, validation, and publication; the compiler retains no resource storage.
+metadata copy, validation, and publication; the compiler retains no resource storage.
+The publisher reads only metadata and the required white tile, then retains the
+base image. Repeated color/inset/metric edits neither copy the full pixel buffer nor
+make independent renderer sessions upload their unchanged atlases again.
 `Preserve` retains existing appearance tables; `Flat` compiles all role/state
 values using the base frame geometry and updates an enabled title backdrop.
 The result retains the base catalog and does not install itself. Applications
@@ -386,7 +391,7 @@ with `--smoke` from another cwd.
 Compiled pixels use zlib, while the COM asset contract still copies ordinary RGBA.
 The generated loader validates the exact output length and shared 64 MiB limit,
 checksum and stream completion before constructing a bundle. It rejects truncation,
-trailing bytes and shorter/longer output. Pixel storage is freed with the bundle;
+trailing bytes and shorter/longer output. Pixel storage is freed with its last image reference;
 there is no process-global decoded cache. Each fresh load or theme candidate performs
 its own expansion, so applications should retain their installed bundle rather than
 reloading it per frame. The complete publication/upload path remains transactional.

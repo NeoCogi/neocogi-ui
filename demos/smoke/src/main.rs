@@ -83,7 +83,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     register_plugins(runtime, directory)?;
     let platform = runtime.activate_plugin_factory::<PlatformAbi>(neocogi_com::guid_from_qualified_name(renderer_plugin_name()))?;
     let assets = neocogi_demo_assets::load_bundle()?;
-    let atlas = assets.query::<IRgbaImageAbi>()?;
+    let atlas = assets.image()?;
     let native = platform.create_window(
         NcCopyFromBufferOffset::new(0, b"NeoCogi Platform"),
         Size { width: 640, height: 400 },

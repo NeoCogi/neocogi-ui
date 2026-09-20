@@ -3,7 +3,7 @@
 use super::Diagnostic;
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, NC_E_INVALID_ARG, NC_E_OUT_OF_MEMORY, NcCopyFromBufferOffset, NcStatus, com_factory};
 use neocogi_gfx_contracts::*;
-use neocogi_gfx_support::AssetData;
+use neocogi_gfx_support::AssetTables;
 
 /// GFX publication root with diagnostic state owned independently of returned revisions.
 #[com_factory(neocogi_gfx_contracts::AssetPublisher)]
@@ -26,18 +26,17 @@ impl AssetPublisher for AssetPublisherObject {
     ) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         // GFX owns bundle transfer, validation, and publication. The caller supplies only closed
         // appearance records, so neither its schema nor its authoring model leaks into this layer.
-        let mut data = AssetData::read(base).inspect_err(|status| {
+        // Read only metadata and the required white tile. The immutable image is
+        // retained by the new bundle, eliminating full pixel copies and GPU uploads.
+        let mut data = AssetTables::read(base).inspect_err(|status| {
             self.diagnostic.failure(status);
         })?;
-        data.tables.metrics = revision.metrics;
-        data.tables.chrome = revision.chrome;
-        data.tables.surfaces = copied_records(surfaces, SurfaceRole::COUNT)?.into();
-        data.tables.controls = copied_records(controls, ControlRole::COUNT)?.into();
-        data.tables.menus = copied_records(menus, MenuRole::COUNT)?.into();
-        data.tables.window_chrome = copied_records(window_chrome, ChromeRole::COUNT)?.into();
-        data.validate().inspect_err(|status| {
-            self.diagnostic.failure(status);
-        })?;
+        data.metrics = revision.metrics;
+        data.chrome = revision.chrome;
+        data.surfaces = copied_records(surfaces, SurfaceRole::COUNT)?.into();
+        data.controls = copied_records(controls, ControlRole::COUNT)?.into();
+        data.menus = copied_records(menus, MenuRole::COUNT)?.into();
+        data.window_chrome = copied_records(window_chrome, ChromeRole::COUNT)?.into();
         data.into_revision(base).inspect_err(|status| {
             self.diagnostic.failure(status);
         })

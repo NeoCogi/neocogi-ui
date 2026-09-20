@@ -99,7 +99,7 @@ fn round_trip_preserves_complete_resources_and_image_patches() {
     let count = source.info().unwrap().rgba_bytes().unwrap();
     assert_eq!(
         source
-            .query::<IRgbaImageAbi>()
+            .image()
             .unwrap()
             .pixels(NcCopyToBufferOffset::new(count as u64 - 1, &mut output)),
         Err(NC_E_INVALID_ARG)
@@ -193,7 +193,7 @@ impl IRenderer for UploadRenderer {
     fn prepare_atlas(&self, source: ComRef<'_, IRgbaImageAbi>) -> Result<(), NcStatus> {
         self.0.uploads.set(self.0.uploads.get() + 1);
         // The independently allocated host still exposes the old, fully installed UI revision.
-        let installed = self.0.button.host()?.assets()?.query::<IRgbaImageAbi>()?;
+        let installed = self.0.button.host()?.assets()?.image()?;
         assert_eq!(installed.as_ptr(), self.0.current.borrow().as_ptr());
         // The mutable runtime call excludes every overlapping call on that same COM allocation.
         assert_eq!(self.0.runtime.update(SIZE), Err(NC_E_BUSY));
@@ -258,7 +258,7 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
     let probe = Rc::new(Probe {
         runtime,
         button: button.as_interface().add_ref(),
-        current: RefCell::new(source.query::<IRgbaImageAbi>().unwrap()),
+        current: RefCell::new(source.image().unwrap()),
         fail: Cell::new(true),
         uploads: Cell::new(0),
     });
@@ -334,7 +334,7 @@ fn runtime_install_is_atomic_and_updates_shared_widget_measurement() {
     let probe = Rc::new(Probe {
         runtime: runtime.clone(),
         button: button_interface.clone(),
-        current: RefCell::new(source.query::<IRgbaImageAbi>().unwrap()),
+        current: RefCell::new(source.image().unwrap()),
         fail: Cell::new(false),
         uploads: Cell::new(0),
     });
