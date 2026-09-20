@@ -38,7 +38,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use neocogi_com::{ComPtr, ComRef, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
 #[cfg(feature = "builder")]
@@ -81,7 +81,7 @@ fn read_asset_file(path: &Path) -> io::Result<Vec<u8>> {
 }
 
 /// Theme-file schema version understood by this crate release.
-pub const THEME_SCHEMA_VERSION: u32 = 1;
+pub const THEME_SCHEMA_VERSION: u32 = 2;
 
 /// Named, fully resolved resource tables produced by a theme definition.
 #[cfg(feature = "builder")]
@@ -131,9 +131,18 @@ pub enum ThemeLoadError {
         /// Structured serde JSON diagnostic.
         source: serde_json::Error,
     },
+    /// Authoring data could not be encoded as a JSON document.
+    DefinitionWrite(serde_json::Error),
+    /// A programmatic edit introduced a value outside the closed authoring domain.
+    InvalidValue {
+        /// Concrete document field or category containing the rejected value.
+        location: &'static str,
+        /// Human-readable explanation suitable for an inspector diagnostic.
+        message: String,
+    },
     /// The document targets a different schema version.
     UnsupportedSchema {
-        /// Only schema version accepted by this crate release.
+        /// Current schema version emitted by this crate; version one remains readable.
         expected: u32,
         /// Version declared by the document.
         actual: u32,
@@ -181,6 +190,8 @@ impl fmt::Display for ThemeLoadError {
             Self::UnsupportedSchema { expected, actual } => {
                 write!(formatter, "unsupported theme schema {actual}; expected {expected}")
             }
+            Self::DefinitionWrite(source) => write!(formatter, "failed to serialize theme: {source}"),
+            Self::InvalidValue { location, message } => write!(formatter, "invalid {location}: {message}"),
             Self::EmptyName => formatter.write_str("theme name must not be empty"),
             Self::InvalidInsets { appearance, field, insets, image_size } => {
                 write!(
@@ -215,9 +226,9 @@ impl Error for ThemeLoadError {
         // Schema and inset errors are fully represented by their own fields and have no lower cause.
         match self {
             Self::DefinitionRead { source, .. } => Some(source),
-            Self::DefinitionJson { source, .. } => Some(source),
+            Self::DefinitionJson { source, .. } | Self::DefinitionWrite(source) => Some(source),
             Self::ResourceRead { source, .. } => Some(source),
-            Self::UnsupportedSchema { .. } | Self::EmptyName | Self::InvalidInsets { .. } | Self::GfxBuild { .. } => None,
+            Self::UnsupportedSchema { .. } | Self::EmptyName | Self::InvalidInsets { .. } | Self::GfxBuild { .. } | Self::InvalidValue { .. } => None,
         }
     }
 }
@@ -342,28 +353,28 @@ impl CompiledTheme {
     }
 }
 
-/// Strict syntax tree and compiler input for exactly one self-contained JSON theme file.
+/// Editable syntax tree and compiler input for one self-contained JSON theme file.
 ///
 /// The document deliberately has no parent link or overlay semantics. Optional fields mean
 /// "retain the built-in fallback" rather than "search another document," so every authored value
 /// has one source directory and one unambiguous effect.
-#[derive(Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct ThemeDefinition {
-    /// Version selecting the exact schema contract.
+pub struct ThemeDocument {
+    /// Current schema version; parsing migrates older supported input before editing.
     schema_version: u32,
     /// Human-readable selector label for the loaded theme.
-    name: String,
+    pub name: String,
     /// Optional complete semantic font recipe replacing the base atlas's semantic fonts.
-    fonts: Option<FontCatalogDocument>,
+    pub fonts: Option<FontCatalogDocument>,
     /// Optional complete semantic icon recipe replacing the base atlas's semantic icons.
-    icons: Option<IconCatalogDocument>,
+    pub icons: Option<IconCatalogDocument>,
     /// Sparse scalar and flat-color overrides applied to the built-in skin.
     #[serde(default)]
-    skin: ThemeSkinDocument,
+    pub skin: ThemeSkinDocument,
     /// Sparse appearance overrides applied after flat fallback construction.
     #[serde(default)]
-    appearances: AppearanceCatalogDocument,
+    pub appearances: AppearanceCatalogDocument,
 }
 
 /// Strict categorized appearance syntax for one source document.
@@ -371,21 +382,21 @@ struct ThemeDefinition {
 /// Each JSON object key is deserialized directly into its family's concrete role enum. The loader
 /// therefore never receives an unvalidated role string and cannot acquire knowledge of the widget
 /// or manager implementation that eventually consumes the visual.
-#[derive(Default, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
-struct AppearanceCatalogDocument {
+pub struct AppearanceCatalogDocument {
     /// Structural surface appearances keyed by their category-local names.
-    #[serde(deserialize_with = "crate::serde_com::deserialize_map")]
-    surface: BTreeMap<SurfaceRole, SurfaceAppearanceDocument>,
+    #[serde(deserialize_with = "crate::serde_com::deserialize_map", serialize_with = "crate::encoding::role_map")]
+    pub surface: BTreeMap<SurfaceRole, SurfaceAppearanceDocument>,
     /// Interactive control appearances keyed by their category-local names.
-    #[serde(deserialize_with = "crate::serde_com::deserialize_map")]
-    control: BTreeMap<ControlRole, ControlAppearanceDocument>,
+    #[serde(deserialize_with = "crate::serde_com::deserialize_map", serialize_with = "crate::encoding::role_map")]
+    pub control: BTreeMap<ControlRole, ControlAppearanceDocument>,
     /// Compact menu appearances keyed by their category-local names.
-    #[serde(deserialize_with = "crate::serde_com::deserialize_map")]
-    menu: BTreeMap<MenuRole, MenuAppearanceDocument>,
+    #[serde(deserialize_with = "crate::serde_com::deserialize_map", serialize_with = "crate::encoding::role_map")]
+    pub menu: BTreeMap<MenuRole, MenuAppearanceDocument>,
     /// Manager-owned window chrome appearances keyed by their category-local names.
-    #[serde(deserialize_with = "crate::serde_com::deserialize_map")]
-    chrome: BTreeMap<ChromeRole, ChromeAppearanceDocument>,
+    #[serde(deserialize_with = "crate::serde_com::deserialize_map", serialize_with = "crate::encoding::role_map")]
+    pub chrome: BTreeMap<ChromeRole, ChromeAppearanceDocument>,
 }
 
 /// Defines the JSON spelling owned by this asset format for one IDL role enum.
@@ -393,6 +404,12 @@ macro_rules! document_role {
     ($name:ty) => {
         impl crate::serde_com::DocumentKey for $name {
             const NAMES: &'static [&'static str] = &<$name>::NAMES;
+
+            /// Uses the generated name vocabulary for serialization as well as parsing.
+            fn name(&self) -> Option<&'static str> {
+                // Generated canonical spellings are the only accepted document map keys.
+                self.canonical_name()
+            }
 
             /// Converts the decoder's checked name index without accepting raw integers.
             fn from_index(index: u32) -> Option<Self> {
@@ -456,7 +473,57 @@ impl AppearanceCatalogDocument {
     }
 }
 
-impl ThemeDefinition {
+impl ThemeDocument {
+    /// Starts an editable theme with the built-in geometry, palette, and resource fallbacks.
+    pub fn new(name: impl Into<String>) -> Self {
+        // Resource catalogs remain absent until the author explicitly replaces them.
+        Self {
+            schema_version: THEME_SCHEMA_VERSION,
+            name: name.into(),
+            fonts: None,
+            icons: None,
+            skin: ThemeSkinDocument::default(),
+            appearances: AppearanceCatalogDocument::default(),
+        }
+    }
+
+    /// Parses a document without rewriting its authored resource paths.
+    pub fn from_bytes(path: &Path, bytes: &[u8]) -> Result<Self, ThemeLoadError> {
+        // Both supported versions normalize to the current document. Version one
+        // retains its previous fallback semantics because new overrides are absent.
+        let mut document: Self = serde_json::from_slice(bytes).map_err(|source| ThemeLoadError::DefinitionJson { path: path.to_path_buf(), source })?;
+        document.validate_header()?;
+        document.schema_version = THEME_SCHEMA_VERSION;
+        Ok(document)
+    }
+
+    /// Writes the current schema while retaining relative paths and optional overrides.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, ThemeLoadError> {
+        // Compilation is the caller's validation boundary for resource-dependent
+        // fields; serialization itself never reads files or constructs an atlas.
+        self.validate_header()?;
+        let mut current = self.clone();
+        current.schema_version = THEME_SCHEMA_VERSION;
+        serde_json::to_vec_pretty(&current).map_err(ThemeLoadError::DefinitionWrite)
+    }
+
+    /// Compiles a snapshot through the supplied services, leaving authoring data unchanged.
+    pub fn compile(
+        &self,
+        path: &Path,
+        base: ComRef<'_, IAssetBundleAbi>,
+        loader: ComRef<'_, AssetLoaderAbi>,
+        publisher: ComRef<'_, AssetPublisherAbi>,
+        source: &mut impl AssetSource,
+    ) -> Result<ComPtr<IAssetBundleAbi>, ThemeLoadError> {
+        // Only this disposable execution snapshot contains anchored paths.
+        self.validate_header()?;
+        let mut resolved = self.clone();
+        resolved.resolve_paths(path.parent().unwrap_or_else(|| Path::new(".")));
+        let (_, bundle) = execute_definition(resolved, base, loader, publisher, source)?.into_parts();
+        Ok(bundle)
+    }
+
     /// Reads, validates, and anchors every asset in one JSON theme definition.
     fn read(path: &Path) -> Result<Self, ThemeLoadError> {
         // The file path is retained verbatim in diagnostics. Its lexical parent is sufficient to
@@ -467,8 +534,7 @@ impl ThemeDefinition {
 
     /// Parses one definition supplied by an embedding host and anchors its assets to `path`.
     fn read_bytes(path: &Path, bytes: &[u8]) -> Result<Self, ThemeLoadError> {
-        let mut definition: Self = serde_json::from_slice(bytes).map_err(|source| ThemeLoadError::DefinitionJson { path: path.to_path_buf(), source })?;
-        definition.validate_header()?;
+        let mut definition = Self::from_bytes(path, bytes)?;
 
         let directory = path.parent().unwrap_or_else(|| Path::new("."));
         definition.resolve_paths(directory);
@@ -479,7 +545,7 @@ impl ThemeDefinition {
     fn validate_header(&self) -> Result<(), ThemeLoadError> {
         // Keep schema and name validation next to decoding while giving filesystem and unit-test
         // entry points one identical contract.
-        if self.schema_version != THEME_SCHEMA_VERSION {
+        if !matches!(self.schema_version, 1 | THEME_SCHEMA_VERSION) {
             return Err(ThemeLoadError::UnsupportedSchema {
                 expected: THEME_SCHEMA_VERSION,
                 actual: self.schema_version,
@@ -487,6 +553,27 @@ impl ThemeDefinition {
         }
         if self.name.trim().is_empty() {
             return Err(ThemeLoadError::EmptyName);
+        }
+        // Public fields support ordinary mutable editing, so validate raw ABI
+        // role values before the compiler uses them to index dense tables.
+        for (location, valid) in [
+            (
+                "appearances.surface",
+                self.appearances.surface.keys().all(|role| role.canonical_name().is_some()),
+            ),
+            (
+                "appearances.control",
+                self.appearances.control.keys().all(|role| role.canonical_name().is_some()),
+            ),
+            ("appearances.menu", self.appearances.menu.keys().all(|role| role.canonical_name().is_some())),
+            ("appearances.chrome", self.appearances.chrome.keys().all(|role| role.canonical_name().is_some())),
+        ] {
+            if !valid {
+                return Err(ThemeLoadError::InvalidValue {
+                    location,
+                    message: "unknown appearance role".to_owned(),
+                });
+            }
         }
         Ok(())
     }
@@ -744,7 +831,7 @@ impl DerivedResourceRecipe {
 pub fn load(path: &Path, base: &AssetData) -> Result<LoadedTheme, ThemeLoadError> {
     // Offline construction instantiates the same concrete GFX services used by the plugin path;
     // no dynamic plugin load is needed and no second native builder algorithm exists in Skin.
-    let definition = ThemeDefinition::read(path)?;
+    let definition = ThemeDocument::read(path)?;
     load_offline(definition, base, &mut FileAssets)
 }
 
@@ -752,13 +839,13 @@ pub fn load(path: &Path, base: &AssetData) -> Result<LoadedTheme, ThemeLoadError
 #[cfg(feature = "builder")]
 pub fn load_bytes(path: &Path, bytes: &[u8], base: &AssetData, source: &mut impl AssetSource) -> Result<LoadedTheme, ThemeLoadError> {
     // Supplied bytes change only document and resource I/O; execution remains the common recipe.
-    let definition = ThemeDefinition::read_bytes(path, bytes)?;
+    let definition = ThemeDocument::read_bytes(path, bytes)?;
     load_offline(definition, base, source)
 }
 
 /// Executes one validated definition through statically linked instances of the GFX services.
 #[cfg(feature = "builder")]
-fn load_offline(definition: ThemeDefinition, base: &AssetData, source: &mut impl AssetSource) -> Result<LoadedTheme, ThemeLoadError> {
+fn load_offline(definition: ThemeDocument, base: &AssetData, source: &mut impl AssetSource) -> Result<LoadedTheme, ThemeLoadError> {
     // Publishing a temporary base gives the shared executor the identical capability shape used
     // at runtime. Reading the result back is confined to offline export, where complete pixels are
     // the requested output rather than duplicated live runtime state.
@@ -789,14 +876,14 @@ pub fn load_with_gfx(
     loader: ComRef<'_, AssetLoaderAbi>,
     publisher: ComRef<'_, AssetPublisherAbi>,
 ) -> Result<ComPtr<IAssetBundleAbi>, ThemeLoadError> {
-    let definition = ThemeDefinition::read(path)?;
+    let definition = ThemeDocument::read(path)?;
     let (_, bundle) = execute_definition(definition, base, loader, publisher, &mut FileAssets)?.into_parts();
     Ok(bundle)
 }
 
 /// Converts one validated definition to a recipe and runs the sole construction executor.
 fn execute_definition(
-    definition: ThemeDefinition,
+    definition: ThemeDocument,
     base: ComRef<'_, IAssetBundleAbi>,
     loader: ComRef<'_, AssetLoaderAbi>,
     publisher: ComRef<'_, AssetPublisherAbi>,
@@ -938,12 +1025,21 @@ fn compile_visual(
     // fallback cells. Authored fields then replace only the explicitly selected visual channels.
     visual.insets = destination_insets;
     if let Some(authored) = authored {
+        // State-specific geometry takes precedence over the role, independently
+        // from image source slices and content color.
+        if let Some(insets) = authored.insets {
+            validate_non_negative(name, "state.insets", insets)?;
+            visual.insets = insets;
+        }
+        if let Some(visible) = authored.center_visible {
+            visual.center_visible = u8::from(visible);
+        }
         if let Some(content_color) = authored.content_color {
             // The patch and semantic content color remain one complete runtime value at the mutation boundary.
             visual.content_color = rgba(content_color);
         }
         if let Some(patch) = &authored.patch {
-            visual.patch = patch.compile(images, name, destination_insets)?.into();
+            visual.patch = patch.compile(images, name, visual.insets)?.into();
         }
     }
     Ok(visual)
@@ -963,23 +1059,23 @@ fn collect_image_path(visual: Option<&VisualOverrideDocument>, paths: &mut BTree
 }
 
 /// Complete semantic font recipe for one rebuilt theme atlas.
-#[derive(Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct FontCatalogDocument {
+pub struct FontCatalogDocument {
     /// Width in pixels of the rebuilt atlas texture.
-    texture_width: i32,
+    pub texture_width: i32,
     /// Height in pixels of the rebuilt atlas texture.
-    texture_height: i32,
+    pub texture_height: i32,
     /// Default font used by controls and ordinary text.
-    body: FontDocument,
+    pub body: FontDocument,
     /// Compact font used by supporting text.
-    small: FontDocument,
+    pub small: FontDocument,
     /// Font used by window titles and chrome.
-    title: FontDocument,
+    pub title: FontDocument,
     /// Larger font used by headings and typography demonstrations.
-    heading: FontDocument,
+    pub heading: FontDocument,
     /// Fixed-width font used by console-oriented text.
-    mono: FontDocument,
+    pub mono: FontDocument,
 }
 
 impl FontCatalogDocument {
@@ -1009,13 +1105,13 @@ impl FontCatalogDocument {
 }
 
 /// One font file and raster size declared by a theme.
-#[derive(Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct FontDocument {
+pub struct FontDocument {
     /// Font file path resolved relative to the theme JSON directory.
-    path: PathBuf,
+    pub path: PathBuf,
     /// Pixel size rasterized into printable-ASCII atlas glyphs.
-    size: u32,
+    pub size: u32,
 }
 
 /// Complete semantic icon recipe for one rebuilt theme atlas.
@@ -1023,25 +1119,25 @@ struct FontDocument {
 /// The object is deliberately all-or-nothing, just like [`FontCatalogDocument`]. A theme that
 /// takes ownership of semantic iconography cannot accidentally leave one widget using pixels from
 /// an unrelated base atlas, and every accepted key maps directly to one closed [`IconRole`].
-#[derive(Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct IconCatalogDocument {
+pub struct IconCatalogDocument {
     /// Window and dialog close glyph.
-    close: IconDocument,
+    pub close: IconDocument,
     /// Collapsed disclosure glyph.
-    expand: IconDocument,
+    pub expand: IconDocument,
     /// Expanded disclosure glyph.
-    collapse: IconDocument,
+    pub collapse: IconDocument,
     /// Checked checkbox and checked menu-item glyph.
-    check: IconDocument,
+    pub check: IconDocument,
     /// Combo-box dropdown glyph.
-    expand_down: IconDocument,
+    pub expand_down: IconDocument,
     /// Open folder glyph used by file dialogs.
-    open_folder: IconDocument,
+    pub open_folder: IconDocument,
     /// Closed folder glyph used by file dialogs.
-    closed_folder: IconDocument,
+    pub closed_folder: IconDocument,
     /// Regular file glyph used by file dialogs.
-    file: IconDocument,
+    pub file: IconDocument,
 }
 
 impl IconCatalogDocument {
@@ -1077,11 +1173,11 @@ impl IconCatalogDocument {
 }
 
 /// One PNG file declared for a semantic icon role.
-#[derive(Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct IconDocument {
+pub struct IconDocument {
     /// Icon path resolved relative to the theme JSON directory.
-    path: PathBuf,
+    pub path: PathBuf,
 }
 
 impl IconDocument {
@@ -1102,9 +1198,10 @@ impl FontDocument {
 }
 
 /// JSON title-alignment spelling translated directly to the portable record.
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, neocogi_com::ComDeserialize)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, neocogi_com::ComDeserialize)]
 #[com_deserialize(rename_all = "snake_case")]
-enum WindowTitleAlignmentDocument {
+#[serde(rename_all = "snake_case")]
+pub enum WindowTitleAlignmentDocument {
     /// Uses the title span from its leading edge.
     #[default]
     Leading,
@@ -1113,9 +1210,10 @@ enum WindowTitleAlignmentDocument {
 }
 
 /// JSON caption-edge spelling translated directly to the portable record.
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, neocogi_com::ComDeserialize)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, neocogi_com::ComDeserialize)]
 #[com_deserialize(rename_all = "snake_case")]
-enum CaptionButtonSideDocument {
+#[serde(rename_all = "snake_case")]
+pub enum CaptionButtonSideDocument {
     /// Allocates the button from the leading edge.
     Leading,
     /// Allocates the button from the trailing edge.
@@ -1124,23 +1222,23 @@ enum CaptionButtonSideDocument {
 }
 
 /// Asset-document fields controlling caption-button geometry and visibility.
-#[derive(Copy, Clone, neocogi_com::ComDeserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, neocogi_com::ComDeserialize)]
 #[com_deserialize(default)]
-struct CaptionButtonsDocument {
+pub struct CaptionButtonsDocument {
     /// Edge used by the close button.
-    close_side: CaptionButtonSideDocument,
+    pub close_side: CaptionButtonSideDocument,
     /// Edge used by the minimize button.
-    minimize_side: CaptionButtonSideDocument,
+    pub minimize_side: CaptionButtonSideDocument,
     /// Edge used by the maximize or restore button.
-    maximize_side: CaptionButtonSideDocument,
+    pub maximize_side: CaptionButtonSideDocument,
     /// Title pixels retained above and below each square caption button.
-    vertical_spacing: i32,
+    pub vertical_spacing: i32,
     /// Minimum square caption extent after applying the inset.
-    minimum_extent: i32,
+    pub minimum_extent: i32,
     /// Unstriped pixels between a caption bank and the title field.
-    inner_spacing: i32,
+    pub inner_spacing: i32,
     /// Whether caption controls remain visible without window activation.
-    show_without_activation: bool,
+    pub show_without_activation: bool,
 }
 
 impl Default for CaptionButtonsDocument {
@@ -1159,26 +1257,27 @@ impl Default for CaptionButtonsDocument {
 }
 
 /// Optional flat title field in the asset document.
-#[derive(Copy, Clone, neocogi_com::ComDeserialize)]
-struct TitleBackdropDocument {
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, neocogi_com::ComDeserialize)]
+pub struct TitleBackdropDocument {
     /// Flat background color painted behind measured title text.
-    color: Color,
+    #[serde(serialize_with = "crate::encoding::color")]
+    pub color: Color,
     /// Horizontal pixels added on each side of the measured text.
-    horizontal_padding: i32,
+    pub horizontal_padding: i32,
 }
 
 /// Asset-owned title and caption syntax compiled to [`AssetChrome`].
-#[derive(Copy, Clone, neocogi_com::ComDeserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, neocogi_com::ComDeserialize)]
 #[com_deserialize(default)]
-struct WindowChromeDocument {
+pub struct WindowChromeDocument {
     /// Title alignment and caption-bank reservation policy.
-    title_alignment: WindowTitleAlignmentDocument,
+    pub title_alignment: WindowTitleAlignmentDocument,
     /// Independent caption placement, extent, and visibility policy.
-    captions: CaptionButtonsDocument,
+    pub captions: CaptionButtonsDocument,
     /// Application-content height retained while minimized.
-    minimized_content_height: i32,
+    pub minimized_content_height: i32,
     /// Optional active-title field painted behind measured text.
-    active_title_backdrop: Option<TitleBackdropDocument>,
+    pub active_title_backdrop: Option<TitleBackdropDocument>,
 }
 
 impl WindowChromeDocument {
@@ -1230,21 +1329,24 @@ fn compile_caption_side(side: CaptionButtonSideDocument) -> CaptionSide {
 ///
 /// The wrapper exists only to group independent runtime values in JSON. It does not mirror their
 /// fields, translate names, or provide another customization API.
-#[derive(Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
-struct ThemeSkinDocument {
+pub struct ThemeSkinDocument {
     /// Layout values consumed directly by the runtime skin.
     #[serde(deserialize_with = "crate::serde_com::deserialize")]
-    metrics: AssetMetrics,
+    #[serde(serialize_with = "crate::encoding::metrics")]
+    pub metrics: AssetMetrics,
     /// Shared destination geometry used while compiling flat fallback patches.
     #[serde(deserialize_with = "crate::serde_com::deserialize")]
-    fallback_frame_insets: SliceInsets,
+    #[serde(serialize_with = "crate::encoding::insets")]
+    pub fallback_frame_insets: SliceInsets,
     /// Concrete semantic colors compiled into the complete fallback appearance catalog.
     #[serde(deserialize_with = "crate::serde_com::deserialize")]
-    palette: FlatPalette,
+    #[serde(serialize_with = "crate::encoding::palette")]
+    pub palette: FlatPalette,
     /// Exact manager-owned title and caption-button policy.
     #[serde(deserialize_with = "crate::serde_com::deserialize")]
-    window_chrome: WindowChromeDocument,
+    pub window_chrome: WindowChromeDocument,
 }
 
 impl Default for ThemeSkinDocument {
@@ -1262,16 +1364,17 @@ impl Default for ThemeSkinDocument {
 }
 
 /// One structural surface role's destination insets and availability states.
-#[derive(Default, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
-struct SurfaceAppearanceDocument {
+pub struct SurfaceAppearanceDocument {
     /// Destination-space outer row and column sizes shared by both states.
     #[serde(default, deserialize_with = "crate::serde_com::deserialize")]
-    insets: Option<SliceInsets>,
+    #[serde(serialize_with = "crate::encoding::optional_insets")]
+    pub insets: Option<SliceInsets>,
     /// Enabled structural appearance.
-    normal: Option<VisualOverrideDocument>,
+    pub normal: Option<VisualOverrideDocument>,
     /// Disabled structural appearance.
-    disabled: Option<VisualOverrideDocument>,
+    pub disabled: Option<VisualOverrideDocument>,
 }
 
 impl SurfaceAppearanceDocument {
@@ -1289,15 +1392,15 @@ impl SurfaceAppearanceDocument {
 }
 
 /// Pointer-state fields shared by the enabled and focused branches of a control.
-#[derive(Default, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
-struct PointerAppearanceDocument {
+pub struct PointerAppearanceDocument {
     /// Pointer-neutral branch appearance.
-    normal: Option<VisualOverrideDocument>,
+    pub normal: Option<VisualOverrideDocument>,
     /// Pointer-hover branch appearance.
-    hovered: Option<VisualOverrideDocument>,
+    pub hovered: Option<VisualOverrideDocument>,
     /// Visible pointer-press branch appearance.
-    pressed: Option<VisualOverrideDocument>,
+    pub pressed: Option<VisualOverrideDocument>,
 }
 
 impl PointerAppearanceDocument {
@@ -1309,18 +1412,19 @@ impl PointerAppearanceDocument {
 }
 
 /// One interactive control role's destination insets and nested control states.
-#[derive(Default, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
-struct ControlAppearanceDocument {
+pub struct ControlAppearanceDocument {
     /// Destination-space outer row and column sizes shared by every control state.
     #[serde(default, deserialize_with = "crate::serde_com::deserialize")]
-    insets: Option<SliceInsets>,
+    #[serde(serialize_with = "crate::encoding::optional_insets")]
+    pub insets: Option<SliceInsets>,
     /// Disabled appearance, with no contradictory pointer or focus substate.
-    disabled: Option<VisualOverrideDocument>,
+    pub disabled: Option<VisualOverrideDocument>,
     /// Pointer appearances while the control is enabled without keyboard focus.
-    enabled: PointerAppearanceDocument,
+    pub enabled: PointerAppearanceDocument,
     /// Pointer appearances while the control owns visible keyboard focus.
-    focused: PointerAppearanceDocument,
+    pub focused: PointerAppearanceDocument,
 }
 
 impl ControlAppearanceDocument {
@@ -1348,24 +1452,25 @@ impl ControlAppearanceDocument {
 }
 
 /// One menu role's destination insets and menu-specific selection states.
-#[derive(Default, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
-struct MenuAppearanceDocument {
+pub struct MenuAppearanceDocument {
     /// Destination-space outer row and column sizes shared by every menu state.
     #[serde(default, deserialize_with = "crate::serde_com::deserialize")]
-    insets: Option<SliceInsets>,
+    #[serde(serialize_with = "crate::encoding::optional_insets")]
+    pub insets: Option<SliceInsets>,
     /// Enabled menu appearance without transient selection.
-    normal: Option<VisualOverrideDocument>,
+    pub normal: Option<VisualOverrideDocument>,
     /// Pointer-hover selection appearance.
-    hovered: Option<VisualOverrideDocument>,
+    pub hovered: Option<VisualOverrideDocument>,
     /// Visible pointer-press selection appearance.
-    pressed: Option<VisualOverrideDocument>,
+    pub pressed: Option<VisualOverrideDocument>,
     /// Keyboard-navigation selection appearance.
-    focused: Option<VisualOverrideDocument>,
+    pub focused: Option<VisualOverrideDocument>,
     /// Appearance of an entry that owns an open popup.
-    open: Option<VisualOverrideDocument>,
+    pub open: Option<VisualOverrideDocument>,
     /// Disabled menu appearance.
-    disabled: Option<VisualOverrideDocument>,
+    pub disabled: Option<VisualOverrideDocument>,
 }
 
 impl MenuAppearanceDocument {
@@ -1400,18 +1505,19 @@ impl MenuAppearanceDocument {
 }
 
 /// One window chrome role's destination insets and activation states.
-#[derive(Default, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
-struct ChromeAppearanceDocument {
+pub struct ChromeAppearanceDocument {
     /// Destination-space outer row and column sizes shared by every chrome state.
     #[serde(default, deserialize_with = "crate::serde_com::deserialize")]
-    insets: Option<SliceInsets>,
+    #[serde(serialize_with = "crate::encoding::optional_insets")]
+    pub insets: Option<SliceInsets>,
     /// Enabled chrome appearance without window activation.
-    base: Option<VisualOverrideDocument>,
+    pub base: Option<VisualOverrideDocument>,
     /// Enabled chrome appearance with window activation.
-    active: Option<VisualOverrideDocument>,
+    pub active: Option<VisualOverrideDocument>,
     /// Disabled chrome appearance.
-    disabled: Option<VisualOverrideDocument>,
+    pub disabled: Option<VisualOverrideDocument>,
 }
 
 impl ChromeAppearanceDocument {
@@ -1433,14 +1539,20 @@ impl ChromeAppearanceDocument {
 }
 
 /// Sparse overrides for one exact family role and state.
-#[derive(Default, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
-struct VisualOverrideDocument {
+pub struct VisualOverrideDocument {
     /// Optional text and semantic-glyph color for this exact role and state.
     #[serde(default, deserialize_with = "crate::serde_com::deserialize")]
-    content_color: Option<Color>,
+    #[serde(serialize_with = "crate::encoding::optional_color")]
+    pub content_color: Option<Color>,
+    /// Optional destination geometry overriding the role-wide insets for this state.
+    #[serde(default, deserialize_with = "crate::serde_com::deserialize", serialize_with = "crate::encoding::optional_insets")]
+    pub insets: Option<SliceInsets>,
+    /// Optional stretchable-center visibility; omission keeps this state's fallback.
+    pub center_visible: Option<bool>,
     /// Optional concrete patch source replacing the exact state's flat fallback.
-    patch: Option<PatchDocument>,
+    pub patch: Option<PatchDocument>,
 }
 
 impl VisualOverrideDocument {
@@ -1459,23 +1571,32 @@ impl VisualOverrideDocument {
 /// Tagging the alternatives makes image-only fields structurally unavailable to flat patches.
 /// A state that omits `patch` retains its exact family/state fallback instead of manufacturing an
 /// empty image recipe.
-#[derive(Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
-enum PatchDocument {
+pub enum PatchDocument {
     /// A flat color painted across all nine destination cells.
     Solid {
         /// RGBA color covering the complete patch while role insets retain layout geometry.
         #[serde(deserialize_with = "crate::serde_com::deserialize")]
+        #[serde(serialize_with = "crate::encoding::color")]
         color: Color,
     },
     /// A resource-free three-by-three patch with one border and one center color.
     Framed {
         /// RGBA color painted into every fixed edge and corner cell.
         #[serde(deserialize_with = "crate::serde_com::deserialize")]
+        #[serde(serialize_with = "crate::encoding::color")]
         border: Color,
         /// RGBA color painted into the stretchable center cell.
         #[serde(deserialize_with = "crate::serde_com::deserialize")]
+        #[serde(serialize_with = "crate::encoding::color")]
         center: Color,
+    },
+    /// Nine independently authored colors in row-major order, including the center.
+    Flat {
+        /// Top-left, top, top-right, left, center, right, bottom-left, bottom, bottom-right.
+        #[serde(deserialize_with = "crate::serde_com::deserialize", serialize_with = "crate::encoding::cells")]
+        cells: [Color; 9],
     },
     /// One PNG divided into a typed three-by-three image patch.
     Image {
@@ -1483,9 +1604,11 @@ enum PatchDocument {
         path: PathBuf,
         /// Optional source-space slices; omission reuses the role's destination insets.
         #[serde(default, deserialize_with = "crate::serde_com::deserialize")]
+        #[serde(serialize_with = "crate::encoding::optional_insets")]
         source_insets: Option<SliceInsets>,
         /// Optional RGBA image modulation; omission preserves the source pixels.
         #[serde(default, deserialize_with = "crate::serde_com::deserialize")]
+        #[serde(serialize_with = "crate::encoding::optional_color")]
         tint: Option<Color>,
     },
 }
@@ -1512,6 +1635,22 @@ impl PatchDocument {
         match self {
             Self::Solid { color } => Ok(flat_patch(*color, *color)),
             Self::Framed { border, center } => Ok(flat_patch(*border, *center)),
+            Self::Flat { cells } => {
+                // Keep the same transparent-cell canonicalization as solid/framed patches.
+                let [top_left, top, top_right, left, center, right, bottom_left, bottom, bottom_right] =
+                    cells.map(|color| if color.a == 0 { 0 } else { rgba(color) });
+                Ok(AssetPatch::Flat {
+                    top_left,
+                    top,
+                    top_right,
+                    left,
+                    center,
+                    right,
+                    bottom_left,
+                    bottom,
+                    bottom_right,
+                })
+            }
             Self::Image { path, source_insets, tint } => {
                 let source_insets = source_insets.unwrap_or(destination_insets);
                 let placement = *images.get(path).expect("every declared theme image must have one baked atlas capability");

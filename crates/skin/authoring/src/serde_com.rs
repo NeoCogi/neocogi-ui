@@ -69,6 +69,9 @@ pub(super) trait DocumentKey: Sized {
     /// Accepted JSON names in the same order used by `from_index`.
     const NAMES: &'static [&'static str];
 
+    /// Returns the canonical spelling, rejecting unknown raw enum values.
+    fn name(&self) -> Option<&'static str>;
+
     /// Converts one checked name-table index into its concrete IDL role.
     fn from_index(index: u32) -> Option<Self>;
 }

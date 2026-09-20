@@ -207,9 +207,28 @@ shared by compiler and runtime; there is no runtime-only chrome record to synchr
 `vertical_spacing` is the exact title-field clearance applied equally above and below every square
 caption button.
 
-Each theme is one self-contained document. Schema version 1 has no parent links, overlays, or merge
-rules; an `extends` field is rejected like any other unknown field. Optional values select the
+Each theme is one self-contained document. The authoring library reads schema versions 1 and 2
+and writes version 2. Neither version has parent links, overlays, or merge rules;
+an `extends` field is rejected like any other unknown field. Optional values select the
 built-in flat or atlas-derived fallback described above rather than consulting another document.
+
+Version 2 adds optional `insets` and `center_visible` to each exact state visual,
+alongside `content_color` and `patch`. State insets override role-wide insets;
+an omitted state value retains the role geometry. Image `source_insets` remain
+independent and, when absent, use the resolved destination insets. This does
+not change existing version-1 theme output.
+
+A `{"type": "flat", "cells": [...]}` patch represents nine independent RGBA
+arrays in row-major order: top-left, top, top-right, left, center, right,
+bottom-left, bottom, bottom-right. Existing `solid`, `framed`, and `image`
+patches retain their meaning. `center_visible: false` suppresses the rendered
+center without discarding its authored color or image pixels.
+
+`neocogi_skin_authoring::theme::ThemeDocument` provides typed mutable document
+fields, `from_bytes`, `to_bytes`, and compilation through supplied GFX services.
+Parsing retains relative resource paths; only a disposable compilation snapshot
+anchors them to the document location. Tools must compile/validate edits before
+installing or saving them. Serialization itself performs no resource I/O.
 
 The loader rejects unknown document fields, unknown skin/palette fields, unknown appearance
 categories or role keys, unknown state fields, unsupported schema versions, and invalid names

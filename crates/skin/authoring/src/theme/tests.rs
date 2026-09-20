@@ -148,7 +148,7 @@ fn install_bundled_theme(relative_path: &str) -> (TestTheme, usize) {
 }
 
 /// Executes a parsed test document through the same statically linked GFX services as `load`.
-fn install_definition(document: ThemeDefinition, base: &AssetData) -> LoadedTheme {
+fn install_definition(document: ThemeDocument, base: &AssetData) -> LoadedTheme {
     // Schema-focused tests construct definitions from inline JSON, but they must not regain a
     // private native builder path merely for convenience.
     load_offline(document, base, &mut FileAssets).expect("test theme recipe must execute")
@@ -250,7 +250,7 @@ fn invalid_recipe_image_reports_the_shared_executor_diagnostic() {
 /// Verifies missing state patches remain state-specific flat fallbacks after palette replacement.
 #[test]
 fn omitted_patch_states_use_theme_flat_colors() {
-    let document = ThemeDefinition::parse_for_test(
+    let document = ThemeDocument::parse_for_test(
         r#"{
                 "schema_version": 1,
                 "name": "Flat only",
@@ -304,7 +304,7 @@ fn omitted_patch_states_use_theme_flat_colors() {
 /// Verifies one state can replace text and glyph color without supplying background artwork.
 #[test]
 fn state_content_color_override_does_not_require_a_patch() {
-    let document = ThemeDefinition::parse_for_test(
+    let document = ThemeDocument::parse_for_test(
         r#"{
                 "schema_version": 1,
                 "name": "Content-color states",
@@ -334,7 +334,7 @@ fn state_content_color_override_does_not_require_a_patch() {
 /// Verifies a solid patch is resource-free and covers every cell while retaining role geometry.
 #[test]
 fn solid_patch_compiles_without_rebuilding_the_atlas() {
-    let document = ThemeDefinition::parse_for_test(
+    let document = ThemeDocument::parse_for_test(
         r#"{
                 "schema_version": 1,
                 "name": "Solid panel",
@@ -382,7 +382,7 @@ fn patch_variants_reject_meaningless_field_combinations() {
                     "appearances": {{ "surface": {{ "panel": {{ "normal": {state} }} }} }}
                 }}"#
         );
-        let error = match ThemeDefinition::parse_for_test(&json) {
+        let error = match ThemeDocument::parse_for_test(&json) {
             Ok(_) => panic!("meaningless `{rejected_field}` combination must be rejected"),
             Err(error) => error,
         };
@@ -396,7 +396,7 @@ fn patch_variants_reject_meaningless_field_combinations() {
 /// Verifies the strict schema rejects misspelled fields instead of silently ignoring them.
 #[test]
 fn unknown_json_fields_are_rejected() {
-    let error = match ThemeDefinition::parse_for_test(r#"{ "schema_version": 1, "name": "Broken", "appearences": {} }"#) {
+    let error = match ThemeDocument::parse_for_test(r#"{ "schema_version": 1, "name": "Broken", "appearences": {} }"#) {
         Ok(_) => panic!("misspelled root field must be rejected"),
         Err(error) => error,
     };
@@ -406,7 +406,7 @@ fn unknown_json_fields_are_rejected() {
 /// Verifies the loader accepts exactly schema v1 without maintaining compatibility branches.
 #[test]
 fn a_different_theme_schema_is_not_accepted_as_a_compatibility_format() {
-    let error = match ThemeDefinition::parse_for_test(r#"{ "schema_version": 2, "name": "Future" }"#) {
+    let error = match ThemeDocument::parse_for_test(r#"{ "schema_version": 99, "name": "Future" }"#) {
         Ok(_) => panic!("schema version two must not enter the version-one compiler"),
         Err(error) => error,
     };
@@ -416,7 +416,7 @@ fn a_different_theme_schema_is_not_accepted_as_a_compatibility_format() {
         error,
         ThemeLoadError::UnsupportedSchema {
             expected: THEME_SCHEMA_VERSION,
-            actual: 2,
+            actual: 99,
         }
     ));
 }
@@ -424,7 +424,7 @@ fn a_different_theme_schema_is_not_accepted_as_a_compatibility_format() {
 /// Verifies the removed composition feature cannot silently return through a permissive root.
 #[test]
 fn extends_is_rejected_as_an_unknown_schema_field() {
-    let error = match ThemeDefinition::parse_for_test(r#"{ "schema_version": 1, "name": "Child", "extends": "parent.json" }"#) {
+    let error = match ThemeDocument::parse_for_test(r#"{ "schema_version": 1, "name": "Child", "extends": "parent.json" }"#) {
         Ok(_) => panic!("a parent link must not be accepted by the single-file schema"),
         Err(error) => error,
     };
@@ -436,7 +436,7 @@ fn extends_is_rejected_as_an_unknown_schema_field() {
 /// Verifies misspelled appearance keys are rejected directly by the concrete role enum.
 #[test]
 fn unknown_appearance_role_key_is_rejected_during_decode() {
-    let error = match ThemeDefinition::parse_for_test(
+    let error = match ThemeDocument::parse_for_test(
         r#"{
                 "schema_version": 1,
                 "name": "Broken role",
@@ -454,7 +454,7 @@ fn unknown_appearance_role_key_is_rejected_during_decode() {
 /// from whichever atlas happened to be active while the theme was loaded.
 #[test]
 fn font_catalog_requires_every_semantic_role() {
-    let error = match ThemeDefinition::parse_for_test(
+    let error = match ThemeDocument::parse_for_test(
         r#"{
                 "schema_version": 1,
                 "name": "Incomplete fonts",
@@ -478,7 +478,7 @@ fn font_catalog_requires_every_semantic_role() {
 /// artwork into whichever roles the document forgot to declare.
 #[test]
 fn icon_catalog_requires_every_semantic_role() {
-    let error = match ThemeDefinition::parse_for_test(
+    let error = match ThemeDocument::parse_for_test(
         r#"{
                 "schema_version": 1,
                 "name": "Incomplete icons",
@@ -878,4 +878,101 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
         let content_color = loaded.bundle().skin().control(ControlRole::Item, state).content_color;
         assert_eq!((content_color.r, content_color.g, content_color.b, content_color.a), (255, 255, 255, 255));
     }
+}
+
+/// Migration and serialization must preserve every shipped resource reference and compiled pixel.
+#[test]
+fn shipped_documents_round_trip_without_anchoring_authored_paths() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../themes");
+    let base = test_atlas().into_bundle().unwrap();
+    let loader: ComPtr<AssetLoaderAbi> = AssetLoaderObject::from_value(AssetLoaderObject::default()).query().unwrap();
+    let publisher: ComPtr<AssetPublisherAbi> = AssetPublisherObject::from_value(AssetPublisherObject::default()).query().unwrap();
+    for name in ["windows-3.11", "windows-95", "mac-os-9"] {
+        let path = root.join(name).join("theme.json");
+        let document = ThemeDocument::from_bytes(&path, &fs::read(&path).unwrap()).unwrap();
+        assert_eq!(document.schema_version, THEME_SCHEMA_VERSION);
+        assert!(document.fonts.as_ref().unwrap().body.path.is_relative());
+        let before = document.clone();
+        let bytes = document.to_bytes().unwrap();
+        let reopened = ThemeDocument::from_bytes(&path, &bytes).unwrap();
+        assert_eq!(document, reopened);
+        let original = document
+            .compile(&path, base.as_com_ref(), loader.as_com_ref(), publisher.as_com_ref(), &mut FileAssets)
+            .unwrap();
+        let restored = reopened
+            .compile(&path, base.as_com_ref(), loader.as_com_ref(), publisher.as_com_ref(), &mut FileAssets)
+            .unwrap();
+        assert_data_equivalent(
+            &AssetData::read(original.as_com_ref()).unwrap(),
+            &AssetData::read(restored.as_com_ref()).unwrap(),
+        );
+        assert_eq!(document, before, "compilation must not resolve paths in the editable document");
+    }
+}
+
+/// Per-state overrides and independent flat cells survive serialization and reach real GFX records.
+#[test]
+fn complete_visual_fields_round_trip_and_override_only_the_selected_state() {
+    let mut document = ThemeDocument::new("All visual channels");
+    let cells = core::array::from_fn(|index| Color { r: index as u8 + 1, g: 20, b: 30, a: 255 });
+    document.appearances.control.insert(
+        ControlRole::Button,
+        ControlAppearanceDocument {
+            insets: Some(Insets::uniform(2)),
+            enabled: PointerAppearanceDocument {
+                normal: Some(VisualOverrideDocument {
+                    insets: Some(Insets::uniform(3)),
+                    center_visible: Some(false),
+                    content_color: Some(Color { r: 90, g: 80, b: 70, a: 255 }),
+                    patch: Some(PatchDocument::Flat { cells }),
+                }),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    );
+    let bytes = document.to_bytes().unwrap();
+    let restored = ThemeDocument::from_bytes(Path::new("theme.json"), &bytes).unwrap();
+    assert_eq!(document, restored);
+    let compiled = install_definition(restored, &test_atlas());
+    let control = compiled.data.tables.controls[ControlRole::Button.raw() as usize];
+    assert_eq!(control.enabled.normal.insets, Insets::uniform(3));
+    assert_eq!(control.enabled.hovered.insets, Insets::uniform(2));
+    assert_eq!(control.enabled.normal.center_visible, 0);
+    assert_eq!(control.enabled.hovered.center_visible, 1);
+    assert_eq!(control.enabled.normal.content_color, rgba(Color { r: 90, g: 80, b: 70, a: 255 }));
+    assert_eq!(
+        AssetPatch::try_from(control.enabled.normal.patch).unwrap(),
+        AssetPatch::Flat {
+            top_left: rgba(cells[0]),
+            top: rgba(cells[1]),
+            top_right: rgba(cells[2]),
+            left: rgba(cells[3]),
+            center: rgba(cells[4]),
+            right: rgba(cells[5]),
+            bottom_left: rgba(cells[6]),
+            bottom: rgba(cells[7]),
+            bottom_right: rgba(cells[8]),
+        }
+    );
+    assert!(document.appearances.control[&ControlRole::Button].enabled.hovered.is_none());
+}
+
+/// An invalid editable draft returns a field diagnostic rather than publishing a broken visual.
+#[test]
+fn negative_state_insets_are_rejected_before_publication() {
+    let document = ThemeDocument::from_bytes(
+        Path::new("theme.json"),
+        br#"{
+        "schema_version": 2, "name": "Invalid geometry",
+        "appearances": { "surface": { "panel": { "normal": {
+            "insets": { "left": -1, "top": 0, "right": 0, "bottom": 0 }
+        } } } }
+    }"#,
+    )
+    .unwrap();
+    assert!(matches!(
+        ThemeRecipe::compile(&document.skin, &document.appearances, &BTreeMap::new()),
+        Err(ThemeLoadError::InvalidInsets { field: "state.insets", .. })
+    ));
 }
