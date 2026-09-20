@@ -1,0 +1,159 @@
+//! Name resolution is setup-only; concrete receivers own subsequent typed calls.
+use crate::{model::*, contracts::*};
+use neocogi_com::{ComPtr, IUnknown, ComInterface, NcMessage, NcStatus, NcCopyFromBufferOffset, NC_E_INVALID_ARG};
+use neocogi_com_events::NamedOutputs;
+use neocogi_ui::*;
+use std::collections::BTreeMap;
+
+/// Builds an output table from validated authored declarations and actual nodes.
+pub(crate) fn outputs(document: &Document, nodes: &BTreeMap<String, Widget<IWidgetAbi>>) -> Result<NamedOutputs, NcStatus> {
+    let mut table = NamedOutputs::new();
+    for export in &document.outputs {
+        let source = nodes.get(&export.node).ok_or(NC_E_INVALID_ARG)?.as_interface().add_ref();
+        macro_rules! export {
+            ($ty:ty) => {
+                table.export(&export.name, source.query::<$ty>()?, &export.port)?
+            };
+        }
+        match &document.root.find(&export.node).ok_or(NC_E_INVALID_ARG)?.widget {
+            WidgetSpec::Button { .. } => export!(ButtonAbi),
+            WidgetSpec::Checkbox { .. } => export!(CheckboxAbi),
+            WidgetSpec::Textbox { .. } => export!(TextboxAbi),
+            WidgetSpec::TextArea { .. } => export!(TextAreaAbi),
+            WidgetSpec::Slider { .. } => export!(SliderAbi),
+            WidgetSpec::Number { .. } => export!(NumberAbi),
+            WidgetSpec::ListItem { .. } => export!(ListItemAbi),
+            WidgetSpec::ListBox { .. } => export!(ListBoxAbi),
+            WidgetSpec::Scrollbar { .. } => export!(ScrollbarAbi),
+            WidgetSpec::Combo { .. } => export!(ComboAbi),
+            WidgetSpec::Split { .. } => export!(SplitViewAbi),
+            _ => return Err(NC_E_INVALID_ARG),
+        }
+    }
+    Ok(table)
+}
+
+/// Builds concrete command receivers; retained receivers observe closure after reload.
+pub(crate) fn inputs(document: &Document, nodes: &BTreeMap<String, Widget<IWidgetAbi>>) -> Result<BTreeMap<String, ComPtr<IUnknown>>, NcStatus> {
+    let mut table = BTreeMap::new();
+    for input in &document.inputs {
+        let mut source = nodes.get(&input.node).ok_or(NC_E_INVALID_ARG)?.as_interface().add_ref();
+        let kind = &document.root.find(&input.node).ok_or(NC_E_INVALID_ARG)?.widget;
+        let receiver = match input.kind {
+            InputKind::Text => text_receiver(source, kind)?,
+            InputKind::Checked => {
+                let mut source = source.query::<CheckboxAbi>()?;
+                SetChecked::__receiver(Box::new(move |value| source.set_checked(value.checked)))?.query()?
+            }
+            InputKind::Value => match kind {
+                WidgetSpec::Slider { .. } => {
+                    let mut source = source.query::<SliderAbi>()?;
+                    SetValue::__receiver(Box::new(move |value| source.set_value(value.value)))?.query()?
+                }
+                WidgetSpec::Number { .. } => {
+                    let mut source = source.query::<NumberAbi>()?;
+                    SetValue::__receiver(Box::new(move |value| source.set_value(value.value)))?.query()?
+                }
+                _ => return Err(NC_E_INVALID_ARG),
+            },
+            InputKind::Enabled => SetEnabled::__receiver(Box::new(move |value| {
+                let old = source.properties()?.options;
+                let options = if value.enabled {
+                    WidgetOptions::from_raw(old.raw() & !WidgetOptions::NO_INTERACT.raw())
+                } else {
+                    old | WidgetOptions::NO_INTERACT
+                };
+                source.set_options(options)
+            }))?
+            .query()?,
+            InputKind::Expanded => {
+                let mut source = source.query::<DisclosureAbi>()?;
+                SetExpanded::__receiver(Box::new(move |value| source.set_expanded(value.expanded)))?.query()?
+            }
+            InputKind::Choices => {
+                let mut source = Widget::from_interface(source.query::<ComboAbi>()?);
+                SetChoices::__receiver(Box::new(move |value| {
+                    let mut previous = 0;
+                    let mut labels = Vec::new();
+                    for end in value.ends {
+                        let end = end as usize;
+                        labels.push(value.text.get(previous..end).ok_or(NC_E_INVALID_ARG)?);
+                        previous = end;
+                    }
+                    if previous != value.text.len() || value.selected < -1 || value.selected >= labels.len() as i32 {
+                        return Err(NC_E_INVALID_ARG);
+                    }
+                    source.replace_items(
+                        &labels,
+                        crate::build::selection(if value.selected < 0 { None } else { Some(value.selected as u32) }),
+                    )
+                }))?
+                .query()?
+            }
+        };
+        table.insert(input.name.clone(), receiver);
+    }
+    Ok(table)
+}
+
+/// Selects each text destination at bind time; delivery never matches widget kinds.
+fn text_receiver(source: ComPtr<IWidgetAbi>, kind: &WidgetSpec) -> Result<ComPtr<IUnknown>, NcStatus> {
+    macro_rules! text {
+        ($ty:ty, $setter:ident) => {{
+            let mut source = source.query::<$ty>()?;
+            SetText::__receiver(Box::new(move |value| source.$setter(NcCopyFromBufferOffset::new(0, value.text.as_bytes()))))?.query()
+        }};
+    }
+    match kind {
+        WidgetSpec::Button { .. } => text!(ButtonAbi, set_label),
+        WidgetSpec::Checkbox { .. } => text!(CheckboxAbi, set_label),
+        WidgetSpec::Textbox { .. } => text!(TextboxAbi, set_text),
+        WidgetSpec::TextArea { .. } => text!(TextAreaAbi, set_text),
+        WidgetSpec::TextBlock { .. } => text!(TextBlockAbi, set_text),
+        WidgetSpec::ColorSwatch { .. } => text!(ColorSwatchAbi, set_text),
+        WidgetSpec::ListItem { .. } => text!(ListItemAbi, set_text),
+        WidgetSpec::ListBox { .. } => text!(ListBoxAbi, set_text),
+        WidgetSpec::Disclosure { .. } => {
+            let mut source = source.query::<DisclosureAbi>()?.header()?;
+            SetText::__receiver(Box::new(move |value| source.set_text(NcCopyFromBufferOffset::new(0, value.text.as_bytes()))))?.query()
+        }
+        _ => Err(NC_E_INVALID_ARG),
+    }
+}
+
+/// A command's concrete receiver contract, selected statically by application code.
+pub trait Command: Sized {
+    /// Exact generated COM projection accepted by this command.
+    type Receiver: ComInterface;
+    /// Posts through that projection without serialization, name lookup, or payload erasure.
+    fn post(&self, receiver: &mut ComPtr<Self::Receiver>) -> Result<(), NcStatus>;
+}
+/// Generates only repetitive statically typed receiver calls, never a generic wire envelope.
+macro_rules! command {
+    ($message:ty, $receiver:ty) => {
+        impl Command for $message {
+            type Receiver = $receiver;
+            fn post(&self, receiver: &mut ComPtr<Self::Receiver>) -> Result<(), NcStatus> {
+                receiver.post(NcMessage::new(self))
+            }
+        }
+    };
+}
+command!(SetText, __SetTextReceiverAbi);
+command!(SetChecked, __SetCheckedReceiverAbi);
+command!(SetValue, __SetValueReceiverAbi);
+command!(SetEnabled, __SetEnabledReceiverAbi);
+command!(SetExpanded, __SetExpandedReceiverAbi);
+command!(SetChoices, __SetChoicesReceiverAbi);
+
+/// A resolved typed application input; reconnect after replacing its component.
+pub struct InputHandle<C: Command> {
+    /// Concrete receiver resolved once from the opaque component.
+    pub(crate) receiver: ComPtr<C::Receiver>,
+}
+impl<C: Command> InputHandle<C> {
+    /// Applies one command at an ordinary application update boundary.
+    pub fn send(&mut self, command: C) -> Result<(), NcStatus> {
+        command.post(&mut self.receiver)
+    }
+}

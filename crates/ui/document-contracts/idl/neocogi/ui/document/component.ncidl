@@ -1,0 +1,58 @@
+extern neocogi.ui.core;
+use neocogi.ui.core::IWidget;
+
+#[version(1)]
+/// A loaded component exposes its mountable root and explicitly exported inputs.
+interface IUiComponent {
+    /// Returns the component's real root; private child handles remain private.
+    fn root(&self) -> Result<IWidget>;
+    /// Resolves an input once; the consumer queries its concrete message receiver.
+    fn input(&self, name: &[u8]) -> Result<IUnknown>;
+}
+
+#[version(1)]
+#[message]
+/// Replaces one exported text or label value without emitting a user event.
+struct SetText {
+    /// Complete UTF-8 text owned by this command.
+    text: String,
+}
+#[version(1)]
+#[message]
+/// Replaces an exported boolean value.
+struct SetChecked {
+    /// New checkbox value.
+    checked: bool,
+}
+#[version(1)]
+#[message]
+/// Replaces a finite numeric value; the destination applies its normal range policy.
+struct SetValue {
+    /// Requested finite value.
+    value: f32,
+}
+#[version(1)]
+#[message]
+/// Changes whether an exported control can receive ordinary input.
+struct SetEnabled {
+    /// True enables the control; other presentation bits are preserved.
+    enabled: bool,
+}
+#[version(1)]
+#[message]
+/// Sets an exported disclosure's expansion state.
+struct SetExpanded {
+    /// Requested expansion.
+    expanded: bool,
+}
+#[version(1)]
+#[message]
+/// Replaces a flat combo model and its selection in one validated operation.
+struct SetChoices {
+    /// Concatenated UTF-8 labels; ends contains their exclusive byte boundaries.
+    text: String,
+    /// Nondecreasing UTF-8 boundaries, ending at text length.
+    ends: &[u32],
+    /// Selected ordinal, or -1 for no selection.
+    selected: i32,
+}

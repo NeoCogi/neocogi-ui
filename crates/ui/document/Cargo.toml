@@ -1,0 +1,17 @@
+[package]
+name = "neocogi-ui-document"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+neocogi-ui.workspace = true
+neocogi-ui-document-contracts.workspace = true
+neocogi-com = { workspace = true, features = ["std", "macros"] }
+neocogi-com-persistence.workspace = true
+neocogi-com-events.workspace = true
+neocogi-com-events-contracts.workspace = true
+serde.workspace = true
+serde_json.workspace = true

@@ -1,0 +1,23 @@
+[package]
+name = "neocogi-runtime-ui-example"
+version = "0.0.0"
+publish = false
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["glow"]
+glow = ["neocogi-demo-host/glow"]
+vulkan = ["neocogi-demo-host/vulkan"]
+wgpu = ["neocogi-demo-host/wgpu"]
+webgl = ["neocogi-demo-host/webgl", "embed-assets"]
+monolith = ["neocogi-demo-host/monolith-gfx"]
+embed-assets = ["neocogi-demo-assets/embed-assets"]
+
+[dependencies]
+neocogi-ui.workspace = true
+neocogi-ui-document.workspace = true
+neocogi-com = { workspace = true, features = ["std"] }
+neocogi-com-events.workspace = true
+neocogi-demo-host.workspace = true
+neocogi-demo-assets.workspace = true
