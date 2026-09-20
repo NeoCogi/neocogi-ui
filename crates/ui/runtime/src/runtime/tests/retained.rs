@@ -6,6 +6,7 @@ use crate::test_support::headless::Headless;
 use std::{cell::RefCell, rc::Rc};
 
 mod split_view;
+mod persistence;
 
 /// Stable drawable bounds allow independent windows and child-family overlap tests.
 const VIEW: Size = Size { width: 640, height: 400 };
