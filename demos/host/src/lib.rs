@@ -130,6 +130,26 @@ pub struct Host {
     input: ComPtr<IInputSinkAbi>,
 }
 impl Host {
+    /// Preserves backend detail for failures from either an embedded surface or final composition.
+    /// All renderer projections from this window share its device diagnostic. Other statuses
+    /// retain their original error instead of acquiring a potentially stale renderer message.
+    fn render_error(&self, phase: &str, status: NcStatus) -> HostError {
+        if status != UI_E_RENDER {
+            return HostError::Status(status);
+        }
+        let detail = self
+            .renderer
+            .query::<IRenderDiagnosticsAbi>()
+            .and_then(|diagnostics| diagnostics.diagnostic())
+            .and_then(|text| neocogi_com::INcStringComPtrExt::to_string(&text))
+            .unwrap_or_default();
+        HostError::Message(if detail.is_empty() {
+            format!("{phase} failed: {status}")
+        } else {
+            format!("{phase} failed: {status}: {detail}")
+        })
+    }
+
     /// Loads/registers trusted assemblies once and creates one complete demo host from immutable assets.
     pub fn new(title: &str, size: Size, assets: ComPtr<IAssetBundleAbi>) -> Result<Self, HostError> {
         initialize()?;
@@ -273,17 +293,13 @@ impl<State: AppState> Driver<State> {
             return Ok(false);
         }
         host.ui.update_with_events(size, &self.events, |message| self.state.update(message))?;
-        self.state.after_update(host, size)?;
+        self.state
+            .after_update(host, size)
+            .map_err(|status| host.render_error("application frame update", status))?;
         host.window.text_input(self.state.text_input_area(host)?)?;
-        host.ui.render(size, host.renderer.as_com_ref()).map_err(|status| {
-            let detail = host
-                .renderer
-                .query::<IRenderDiagnosticsAbi>()
-                .and_then(|diagnostics| diagnostics.diagnostic())
-                .and_then(|text| neocogi_com::INcStringComPtrExt::to_string(&text))
-                .unwrap_or_default();
-            HostError::Message(format!("frame failed: {status}: {detail}"))
-        })?;
+        host.ui
+            .render(size, host.renderer.as_com_ref())
+            .map_err(|status| host.render_error("frame", status))?;
         if let Some(remaining) = self.remaining {
             self.remaining = Some(remaining - 1);
             return Ok(remaining > 1);
