@@ -2,6 +2,15 @@
 
 ## 0.9.0-alpha.0 (unreleased)
 
+- Give each UI runtime a private compositor created through the shareable GFX
+  factory. Creating a second UI or installing its resources no longer replaces
+  the first UI's renderer atlas while leaving its retained resource snapshot
+  unchanged. `UiPluginFactory` version 3 takes `(assets, gfx)`; callers no longer
+  allocate and pass a mutable compositor. Preserve the same contract in shared
+  libraries, native monoliths, and WebAssembly, with no new production interior
+  mutability or implementation dependency. Add production-path regressions for
+  independent revisions, catalogs, failed uploads, closure, and frame state.
+
 - Replace custom event queues and posting wrappers with `std::sync::mpsc`.
   Applications and composites own ordinary receivers; typed COM mappings hold
   senders and translate each concrete event into a local Rust message. Receiver

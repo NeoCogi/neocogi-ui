@@ -380,7 +380,14 @@ See [TESTING.md](TESTING.md) for fixture ownership, coverage and validation comm
 
 ## Checked frame submission
 
-`create_runtime_from_assets(assets, compositor)` is the single construction path.
+`create_runtime_from_assets(assets, gfx)` is the single construction path. It validates
+UI resources, asks the supplied `GfxPluginFactory` for a fresh compositor initialized
+from the same immutable bundle, and moves that capability into private runtime storage.
+Construction failure publishes no runtime. The factory may be reused across tools and
+preview UIs, but resource installation, frame state, and compositor lifetime belong to
+each runtime independently. No caller-provided mutable compositor is retained or
+reinitialized, and core UI has no production dependency on the GFX implementation.
+
 The retained context records painting before the runtime checks the first foreign
 widget error. Rejected painting clears owned commands and returns that error
 before GFX or the renderer can observe a partial frame. Successful painting enters

@@ -108,11 +108,10 @@ let runtime = neocogi_com::Runtime::global();
 let gfx = runtime.activate_plugin_factory::<GfxPluginFactoryAbi>(
     neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"),
 )?;
-let compositor = gfx.create_compositor(assets.as_com_ref())?;
 let runtime_factory = runtime.activate_plugin_factory::<UiPluginFactoryAbi>(
     neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"),
 )?;
-let ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), compositor.as_com_ref())?;
+let ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
 let node_provider = runtime.activate_plugin_factory::<NodesPluginFactoryAbi>(
     neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"),
 )?;
@@ -122,10 +121,27 @@ let mut ui = Ui::from_interfaces(ui_runtime, factory)?;
 
 ## Installation and ownership
 
+UI construction takes a shareable `GfxPluginFactory`. After validating the supplied
+bundle, the runtime asks that factory for a fresh compositor and keeps its mutable
+capability private. Each runtime owns its resource selection, frame state, and GFX
+stream storage. Applications can reuse the factory and immutable bundles across a
+tools UI and multiple preview UIs; creating, editing, or closing a preview cannot
+change another runtime's compositor resources. Different runtimes may also start
+with unrelated asset catalogs.
+
+Standalone GFX clients can still call `gfx.create_compositor(assets)` directly.
+Cloning a compositor reference aliases one mutable session; it does not copy the
+session. A compositor can no longer be supplied to UI construction. Migrate former
+`create_runtime(assets, compositor)` calls to `create_runtime(assets, gfx)` and remove
+the caller's compositor allocation. `UiPluginFactory` is now version 3, so rebuild
+the application and plugins together. Shared libraries, native monoliths, and
+WebAssembly all use this same factory contract; core UI links only GFX contracts.
+
 `ui.install_assets(candidate, renderer)` requires mutable access to the `Ui` because it
-replaces that runtime's one shared resource value. The call owns one transaction: it validates
-and imports bounded metadata, asks the renderer to copy and upload that complete image,
-installs the same catalog-compatible revision in its retained GFX compositor,
+replaces the resource value shared by that runtime's nodes and services. The call owns one
+transaction: it validates and imports bounded metadata, asks the renderer to copy
+and upload that complete image,
+installs the same catalog-compatible revision in its private GFX compositor,
 then publishes the retained canonical tables and their local lookup indices. Only success
 publishes the new revision to `IWidgetHost`, the window manager, text metrics, and
 scoped layout services together. Failed validation or upload leaves the previous UI

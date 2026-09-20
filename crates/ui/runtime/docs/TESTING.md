@@ -9,7 +9,8 @@ alternate runtime, renderer executor or object model.
 
 | Fixture | Responsibility | Ownership |
 | --- | --- | --- |
-| `test_support::runtime_from_assets` | Create an independent real GFX compositor and call the production two-argument UI constructor | Each runtime gets its own compositor |
+| `test_support::runtime_from_assets` | Activate the real GFX factory and call the production UI constructor | The runtime creates and privately owns its compositor |
+| Support `test_support::gfx_factory` | Register and activate the statically linked production GFX plugin | Fixtures share a stateless service; each construction returns independent mutable state |
 | `test_support::headless::Headless` | Drive public `Ui` input, update and render; copy final renderer streams | One shared observation cell is required by `IRenderer`'s shared receiver |
 | Nodes `test_support::algorithm::Algorithm<W>` | Keep a real host alive for focused tests of a concrete built-in algorithm | The host lives beside `W`; `W` retains its production representation and uses ordinary mutable borrows |
 | Support `test_support/assets.rs` | Publish deterministic canonical input tables and expected revisions | Explicit pixel transfers happen here, outside deployed resource import |
@@ -53,6 +54,7 @@ The replacement coverage is organized by observable behavior:
 | Image ownership, failed edits, texture dimensions, stream ordering and clipping | `src/runtime/tests/images.rs`, `src/render/compositor/tests.rs` and `tests/image_api.rs` |
 | Text fallback/newlines, nine-patches, triangle attributes and both windings, hidden draws and extreme integer rectangles | `src/render/compositor/tests.rs` |
 | Atomic asset installation, catalog identity, measurement revision and failed upload | `src/assets/tests.rs` |
+| Shared factory with distinct resource revisions or unrelated catalogs, failed/successful installation, independent closure, and overlapping standalone frames | `tests/compositor_boundary.rs` |
 | File-picker lifecycle and callback transactions | Nodes `src/dialogs/tests.rs` |
 
 Tests specific to deleted weak native handles, legacy texture IDs, native callback
@@ -91,7 +93,7 @@ cargo check -p neocogi-ui-runtime -p neocogi-ui-nodes --offline --no-default-fea
 compositor integration, public API compile fixtures and guide doctests. Concrete node and picker
 tests live in nodes; pure-helper tests live beside the production algorithms in support. Nodes
 fixtures construct the production runtime through public interfaces and never observe private
-core storage. The provider-boundary integration test activates both actual plugin roots,
+core storage. The provider-boundary integration test activates both UI plugin roots and the GFX factory,
 rejects cross-runtime factory binding, and delivers real node events through core routing.
 The two plugin checks independently compile both loader roots. These commands
 require no window system or GPU. Broader workspace validation

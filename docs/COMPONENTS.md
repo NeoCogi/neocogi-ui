@@ -25,8 +25,13 @@ The GFX plugin deliberately groups bounded PNG decoding, font rasterization,
 icon loading, atlas packing, and renderer-neutral frame composition. Resource
 construction operations share one CPU pixel pipeline and produce immutable resource
 bundles or renderer-owned textures; the compositor consumes those same validated
-tables without exposing them to UI or a backend. The skin
-plugin groups typed palette/metric derivation and optional external JSON theme
+tables without exposing them to UI or a backend. A UI receives the shareable
+`GfxPluginFactory` and creates a private compositor for its lifetime. Immutable
+bundles may be shared across runtimes; each runtime independently selects its
+revision and owns its mutable frame session. GFX factories return fresh sessions,
+and the core UI implementation depends only on their generated contracts.
+
+The skin plugin groups typed palette/metric derivation and optional external JSON theme
 compilation. Its theme loader receives explicit typed `AssetLoader` and
 `AssetPublisher` capabilities from GFX and submits each bounded font or PNG
 buffer to one transactional build session. Live style compilation requires only

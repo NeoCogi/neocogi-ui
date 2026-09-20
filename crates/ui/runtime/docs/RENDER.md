@@ -25,9 +25,15 @@ Inputs are validated before entering the list and the completed frame is validat
 before GPU work, including buffer bounds, finite values, resource provenance and
 supported batch kinds.
 
-The runtime, its dynamically linked widget factory, and its retained GFX compositor share one imported asset
-value with every built-in product. Frame, icon, and font slots therefore resolve
-against that existing value without reconstructing an atlas or skin per widget. The
+The runtime creates a private compositor through the shareable `GfxPluginFactory`.
+Each successful factory call returns independent resource selection, frame state,
+diagnostics, and stream storage, even when the immutable asset bundle is shared.
+The factory is borrowed only during construction; the compositor stays inside its UI.
+Standalone GFX clients may create their own sessions through the same factory.
+
+The runtime, its dynamically linked widget factory, and its private GFX compositor
+use the same immutable asset revision as every built-in product. Frame, icon, and
+font slots therefore resolve against that revision without reconstructing an atlas or skin per widget. The
 import stores a separate `IRgbaImage` projection beside the UI bundle. Only that narrow
 projection crosses into `IRenderer::prepare_atlas` and `GfxCompositor::submit`; GFX passes
 it to `IRenderer::render`, and no renderer
