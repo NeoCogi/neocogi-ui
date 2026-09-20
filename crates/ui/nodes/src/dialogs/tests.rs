@@ -73,6 +73,35 @@ fn session(fixture: &Fixture) -> std::sync::mpsc::Receiver<FileDialogCompletion>
     events
 }
 
+/// Save suggestions retain exact paths, accept new names with Enter, and do not leak into later Open requests.
+#[test]
+fn save_request_preserves_suggested_filename_and_rejects_directory_components() {
+    let fixture = Fixture::new();
+    let directory = tempfile::tempdir().unwrap();
+    let events = session(&fixture);
+    let mut request = neocogi_ui::FileDialogRequest::new(directory.path());
+    request.mode = FileDialogMode::Save;
+    request.title = "Save theme".into();
+    request.filename = "../outside.json".into();
+    assert_eq!(fixture.handle.open(&request), Err(NC_E_INVALID_ARG));
+    assert!(!fixture.handle.active().unwrap());
+    request.filename = "new theme.json".into();
+    fixture.handle.open(&request).unwrap();
+    assert_eq!(fixture.controller.model.borrow().accept.label().unwrap(), "Save");
+    assert_eq!(fixture.controller.model.borrow().filename.text().unwrap(), "new theme.json");
+    // Traverse the real modal and submit its suggested filename, without requiring
+    // an existing file or manufacturing a completion in the test.
+    fixture.tabs(6);
+    fixture.key(KeyCode::Enter, 0);
+    fixture.ui.update(SIZE).unwrap();
+    assert_eq!(completed_file_path(&events.try_recv().unwrap()).unwrap(), Some(directory.path().join("new theme.json")));
+    assert!(!fixture.handle.active().unwrap());
+    fixture.open(directory.path());
+    assert_eq!(fixture.controller.model.borrow().accept.label().unwrap(), "Open");
+    assert_eq!(fixture.controller.model.borrow().filename.text().unwrap(), "");
+    assert!(fixture.controller.model.borrow().selected.is_none());
+}
+
 /// Failed initial reads and overlapping requests leave activity, native directory and actual dynamic roots unchanged.
 #[test]
 fn failed_open_and_overlapping_requests_preserve_previous_state_and_expose_native_diagnostics() {

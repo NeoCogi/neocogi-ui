@@ -214,12 +214,21 @@ interface IComponentEventProvider {
 }
 
 #[version(1)]
+/// Presentation of a lexical file selection; the application validates existence and replacement policy.
+enum FileDialogMode: u8 {
+    /// Select an existing input file, displaying an Open action.
+    Open,
+    /// Select a destination, displaying a Save action.
+    Save,
+}
+
+#[version(2)]
 /// Nodes-provider file picker controller and real COM controls; retaining it does not keep its runtime open.
 interface IFileDialog {
     /// Returns the actual stable modal window capability for ordinary lifecycle and geometry operations.
     fn window(&self) -> Result<IWindow>;
     /// Reads and validates a complete native directory before changing request state or showing the modal.
-    fn open(&self, title: &[u8], rect: Rect, directory: &INativePath) -> Result<()>;
+    fn open(&self, title: &[u8], rect: Rect, directory: &INativePath, mode: FileDialogMode, filename: &INativePath) -> Result<()>;
     /// Reports whether a request is active; hidden/idle is distinct from permanently closed.
     fn active(&self) -> Result<bool>;
     /// Cancels one active request and hides its reusable modal; idle cancellation returns false.

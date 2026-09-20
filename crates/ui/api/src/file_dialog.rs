@@ -22,6 +22,11 @@
 //! Native reads validate the complete candidate before installing rows. Selection
 //! is lexical: applications decide whether an accepted path must exist or have a
 //! particular file type. Unicode display labels are never path lookup keys.
+//!
+//! Set `request.mode = FileDialogMode::Save` and `request.filename` to suggest a
+//! destination. The action is labeled Save, and Enter in the filename field
+//! accepts it. Suggestions must be single filenames. The caller confirms any
+//! overwrite before writing; the picker itself never creates or replaces files.
 use crate::*;
 use neocogi_com::{ComPtr, ComRef, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
 use std::path::{Path, PathBuf};
@@ -33,6 +38,11 @@ pub struct FileDialogRequest {
     pub title: String,
     /// Exact native directory read before the request becomes active.
     pub directory: PathBuf,
+    /// Open or Save presentation; callers retain responsibility for file validation and overwrite confirmation.
+    pub mode: FileDialogMode,
+    /// Suggested single filename, kept in exact native units until the user edits it.
+    /// Empty starts without a selection; directory components are rejected.
+    pub filename: PathBuf,
     /// Initial outer rectangle in screen coordinates.
     pub rect: Rect,
 }
@@ -42,6 +52,8 @@ impl FileDialogRequest {
         Self {
             title: "Open File".to_owned(),
             directory: directory.to_owned(),
+            mode: FileDialogMode::Open,
+            filename: PathBuf::new(),
             rect: FILE_DIALOG_RECT,
         }
     }
@@ -69,8 +81,9 @@ impl FileDialog {
     /// Copies exact native path units for the request and preserves the previous state on directory-read failure.
     pub fn open(&self, request: &FileDialogRequest) -> Result<(), NcStatus> {
         let path = NativePath::new(&request.directory);
+        let filename = NativePath::new(&request.filename);
         self.interface
-            .open(NcCopyFromBufferOffset::new(0, request.title.as_bytes()), request.rect, path.as_interface())
+            .open(NcCopyFromBufferOffset::new(0, request.title.as_bytes()), request.rect, path.as_interface(), request.mode, filename.as_interface())
     }
     /// Reports whether a request awaits acceptance or cancellation.
     pub fn active(&self) -> Result<bool, NcStatus> {

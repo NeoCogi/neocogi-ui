@@ -223,6 +223,8 @@ struct Model {
     path: TextboxWidget,
     /// Persistent filename field, reused without reconstructing selection from its display label.
     filename: TextboxWidget,
+    /// Stable acceptance control receives the request's Open or Save label.
+    accept: neocogi_ui::ButtonWidget,
     /// Persistent visible error display; read failures preserve the prior listing and selection.
     error: TextBlockWidget,
     /// Persistent scrolling controllers; refreshing replaces only their application content roots.
@@ -503,6 +505,7 @@ impl Dialog {
             selected: None,
             path: path.clone(),
             filename: filename.clone(),
+            accept: accept.clone(),
             error,
             folders,
             files,
@@ -549,6 +552,7 @@ impl Model {
         neocogi_ui::events::map(path.changed(), sender.clone(), |_| Message::PathEdited)?;
         neocogi_ui::events::map(path.submitted(), sender.clone(), |event| Message::Navigate(event.text))?;
         neocogi_ui::events::map(filename.changed(), sender.clone(), |_| Message::FilenameEdited)?;
+        neocogi_ui::events::map(filename.submitted(), sender.clone(), |_| Message::Accept)?;
         for (button, action) in buttons {
             neocogi_ui::events::map(button.activated(), sender.clone(), move |_| action.clone())?;
         }
@@ -593,12 +597,24 @@ impl Model {
     }
 
     /// Opens only after the complete native request and directory listing validate successfully.
-    fn open(&mut self, title: &str, rect: Rect, directory: PathBuf) -> Result<(), NcStatus> {
+    fn open(&mut self, title: &str, rect: Rect, directory: PathBuf, mode: FileDialogMode, filename: PathBuf) -> Result<(), NcStatus> {
         self.owner()?;
         if self.request.try_borrow().map_err(|_| UI_E_BUSY)?.active() {
             return Err(UI_E_BUSY);
         }
         if rect.width < 0 || rect.height < 0 {
+            return Err(NC_E_INVALID_ARG);
+        }
+        let action = match mode {
+            FileDialogMode::Open => "Open",
+            FileDialogMode::Save => "Save",
+            _ => return Err(NC_E_INVALID_ARG),
+        };
+        // A suggestion is one native filename, never another route out of the
+        // requested directory. Validation precedes every visible request change.
+        if !filename.as_os_str().is_empty()
+            && !matches!(filename.components().collect::<Vec<_>>().as_slice(), [std::path::Component::Normal(_)])
+        {
             return Err(NC_E_INVALID_ARG);
         }
         let directory = std::path::absolute(directory).map_err(|error| {
@@ -609,6 +625,12 @@ impl Model {
         // Modal eligibility is checked before replacing existing request data.
         self.window()?.set_visibility(Visibility::Visible)?;
         self.install(directory, listing, true)?;
+        self.accept.set_label(action)?;
+        if !filename.as_os_str().is_empty() {
+            self.filename.set_text(&filename.to_string_lossy())?;
+            // Preserve native path identity even when its display is lossy.
+            self.selected = Some(self.directory.join(filename));
+        }
         self.window()?.set_title(NcCopyFromBufferOffset::new(0, title.as_bytes()))?;
         self.window()?.set_rect(rect)?;
         self.request.try_borrow_mut().map_err(|_| UI_E_BUSY)?.begin()?;
@@ -710,12 +732,12 @@ impl IFileDialog for FileDialog {
         Ok(self.dialog.model.try_borrow().map_err(|_| UI_E_BUSY)?.window()?.clone())
     }
     /// Decodes native units before request mutation and preserves the prior request/listing on a read failure.
-    fn open(&self, title: NcCopyFromBufferOffset<'_, u8>, rect: Rect, directory: ComRef<'_, INativePathAbi>) -> Result<(), NcStatus> {
+    fn open(&self, title: NcCopyFromBufferOffset<'_, u8>, rect: Rect, directory: ComRef<'_, INativePathAbi>, mode: FileDialogMode, filename: ComRef<'_, INativePathAbi>) -> Result<(), NcStatus> {
         self.dialog
             .model
             .try_borrow_mut()
             .map_err(|_| UI_E_BUSY)?
-            .open(text(title)?, rect, neocogi_ui::path::decode(directory)?)
+            .open(text(title)?, rect, neocogi_ui::path::decode(directory)?, mode, neocogi_ui::path::decode(filename)?)
     }
     /// Reports request state independently of hidden versus visible window allocation.
     fn active(&self) -> Result<bool, NcStatus> {
