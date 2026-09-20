@@ -281,14 +281,13 @@ impl TextEditor {
         // Resolve word wrapping against a bounded viewport width while leaving unwrapped content
         // intrinsically wide enough to create horizontal overflow.
         let font = style.resolve_font(atlas, &self.font);
-        let max_width = if self.wrap == TextWrap::Word {
-            constraints.width.bound().unwrap_or(i32::MAX / 4).max(1)
-        } else {
-            i32::MAX / 4
+        let max_width = match self.wrap {
+            TextWrap::None => i32::MAX / 4,
+            TextWrap::Word | TextWrap::WordOrCharacter => constraints.width.bound().unwrap_or(i32::MAX / 4).max(1),
         };
         let lines = build_text_lines(self.buf.as_str(), self.wrap, max_width, font, atlas);
         // Editable text retains the final blank row after a trailing newline so the caret always has
-        // a measurable line. Long indivisible words may exceed a bounded wrapping width by design.
+        // a measurable line. Word-only wrapping may exceed a bounded width by design.
         text_block_size(&lines, atlas.get_font_height(font) as i32)
     }
 
@@ -359,7 +358,10 @@ struct TextAreaLayout {
 fn textarea_layout(bounds: Recti, atlas: &AtlasHandle, state: &TextEditor, font: FontId) -> TextAreaLayout {
     // Word wrapping uses the allocated content width selected by ScrollArea convergence. Unwrapped
     // content retains intrinsic line widths and is translated horizontally by the parent viewport.
-    let max_width = if state.wrap == TextWrap::Word { bounds.width.max(1) } else { i32::MAX / 4 };
+    let max_width = match state.wrap {
+        TextWrap::None => i32::MAX / 4,
+        TextWrap::Word | TextWrap::WordOrCharacter => bounds.width.max(1),
+    };
     let lines = build_text_lines(state.buf.as_str(), state.wrap, max_width, font, atlas);
     TextAreaLayout {
         bounds,
@@ -748,6 +750,7 @@ impl IMultilineEditor for TextEditor {
         Ok(match self.com_wrap() {
             crate::TextWrap::None => TextWrapping::None,
             crate::TextWrap::Word => TextWrapping::Word,
+            crate::TextWrap::WordOrCharacter => TextWrapping::WordOrCharacter,
         })
     }
 

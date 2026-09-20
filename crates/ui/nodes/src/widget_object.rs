@@ -164,6 +164,7 @@ pub(crate) fn local_wrap(wrap: TextWrapping) -> Result<crate::TextWrap, NcStatus
     match wrap {
         TextWrapping::None => Ok(crate::TextWrap::None),
         TextWrapping::Word => Ok(crate::TextWrap::Word),
+        TextWrapping::WordOrCharacter => Ok(crate::TextWrap::WordOrCharacter),
         _ => Err(neocogi_com::NC_E_INVALID_ARG),
     }
 }

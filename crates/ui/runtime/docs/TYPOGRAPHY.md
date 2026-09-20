@@ -41,6 +41,11 @@ glyph-range option in `neocogi_gfx_impl::atlas::Config`.
 The text pipeline does not perform grapheme segmentation, script shaping, bidirectional
 reordering, kerning, or fallback-font selection. `TextWrap::Word` wraps only at ASCII space
 boundaries; an individual word is not split when it exceeds the available width.
+`TextWrapping::WordOrCharacter` (internally `TextWrap::WordOrCharacter`) also
+prefers ASCII spaces, but splits oversized words at UTF-8 character boundaries.
+Use it for constrained messages containing long paths or identifiers. Measurement,
+paint, and editable caret ranges share the same breaks, and the source text stays
+unchanged. A single glyph wider than the line remains indivisible.
 
 A compiled UI atlas must have a `body` font and the standard semantic icon names
 `close`, `expand`, `collapse`, `check`, `expand_down`, `open_folder`, `closed_folder`, and `file`.

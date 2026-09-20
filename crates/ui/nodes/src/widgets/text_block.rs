@@ -141,10 +141,9 @@ impl TextBlock {
 
         let font = style.resolve_font(atlas, &self.font);
         let line_height = atlas.get_font_height(font) as i32;
-        let max_width = if self.wrap == TextWrap::Word {
-            constraints.width.bound().unwrap_or(i32::MAX / 4).max(1)
-        } else {
-            i32::MAX / 4
+        let max_width = match self.wrap {
+            TextWrap::None => i32::MAX / 4,
+            TextWrap::Word | TextWrap::WordOrCharacter => constraints.width.bound().unwrap_or(i32::MAX / 4).max(1),
         };
         let lines = build_display_text_lines(self.text.as_str(), self.wrap, max_width, font, atlas);
         text_block_size(&lines, line_height)
@@ -164,7 +163,10 @@ impl TextBlock {
             .content_color;
         let line_height = ctx.atlas().get_font_height(font) as i32;
         let baseline = ctx.atlas().get_font_baseline(font);
-        let max_width = if self.wrap == TextWrap::Word { bounds.width.max(1) } else { i32::MAX / 4 };
+        let max_width = match self.wrap {
+            TextWrap::None => i32::MAX / 4,
+            TextWrap::Word | TextWrap::WordOrCharacter => bounds.width.max(1),
+        };
         let lines = build_display_text_lines(self.text.as_str(), self.wrap, max_width, font, ctx.atlas());
 
         ctx.with_clip(bounds, |ctx| {
@@ -312,6 +314,7 @@ impl neocogi_ui_nodes_contracts::TextBlock for TextBlock {
         Ok(match self.com_wrap() {
             crate::TextWrap::None => TextWrapping::None,
             crate::TextWrap::Word => TextWrapping::Word,
+            crate::TextWrap::WordOrCharacter => TextWrapping::WordOrCharacter,
         })
     }
     /// Rejects unknown policies before mutating semantic state or its geometry marker.

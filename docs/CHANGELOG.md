@@ -14,6 +14,10 @@
 - Version `IFileDialog` to 2 with Open/Save presentation and exact native filename
   suggestions. Filename Enter accepts a selection; applications own overwrite
   confirmation. Rebuild shared hosts and nodes providers together.
+- Size editor confirmation/export prompts to content and align their action
+  buttons with the file picker. Add `TextWrapping::WordOrCharacter` in version 2
+  of the wrapping vocabulary so long overwrite paths remain visible without
+  changing word-only behavior. Rebuild shared hosts and UI providers together.
 - Extract `neocogi-skin-authoring` so editor, runtime loader, and offline builds
   share one document/compiler. Read theme schema versions 1 and 2 and write version
   2, retaining authored absence and resource paths, per-state insets, center

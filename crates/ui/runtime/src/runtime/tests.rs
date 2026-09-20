@@ -896,6 +896,10 @@ fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validati
     block.set_wrapping(TextWrapping::Word).unwrap();
     assert_eq!(block.wrapping().unwrap(), TextWrapping::Word);
     assert_eq!(common.take_change().unwrap(), GeometryChange::Changed);
+    // The additive policy must cross the callable boundary and invalidate layout.
+    block.set_wrapping(TextWrapping::WordOrCharacter).unwrap();
+    assert_eq!(block.wrapping().unwrap(), TextWrapping::WordOrCharacter);
+    assert_eq!(common.take_change().unwrap(), GeometryChange::Changed);
     assert_eq!(block.set_wrapping(TextWrapping::from_raw(99)), Err(NC_E_INVALID_ARG));
     assert_eq!(common.take_change().unwrap(), GeometryChange::NoChange);
     runtime.close().unwrap();

@@ -706,6 +706,10 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
     area.set_font_role(FontRole::Mono).unwrap();
     runtime.update(SIZE).unwrap();
     assert_eq!(editor.wrapping().unwrap(), TextWrapping::Word);
+    // The composed text area forwards the same policy to its editable child.
+    area.set_wrapping(TextWrapping::WordOrCharacter).unwrap();
+    assert_eq!(editor.wrapping().unwrap(), TextWrapping::WordOrCharacter);
+    runtime.update(SIZE).unwrap();
     assert_eq!(area.set_wrapping(TextWrapping::from_raw(255)), Err(NC_E_INVALID_ARG));
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     scroll.set_enabled(false).unwrap();
