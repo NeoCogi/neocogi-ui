@@ -1,0 +1,132 @@
+//! Fixed-coordinate placement for authored forms, independent of editor interaction.
+use crate::{
+    Change, Constraints, ContainerLayoutCtx, ContainerWidget, Dimensioni, MeasureCtx, Recti, UiInputEvent, Widget, WidgetOption, WidgetPaintCtx,
+    WidgetUpdateCtx,
+};
+use crate::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
+use neocogi_com::{ComPtr, NcStatus, NC_E_INVALID_ARG};
+use neocogi_ui_core_contracts::{GeometryChange, IChildrenEditorAbi, IWidgetHostAbi, Rect, Size};
+use neocogi_ui_nodes_contracts::FormAbi;
+
+/// Validates coordinates and their sums before any topology or metadata mutation.
+fn rectangle(edge: Rect) -> Result<Rect, NcStatus> {
+    if edge.x < 0 || edge.y < 0 || edge.width <= 0 || edge.height <= 0 || edge.x.checked_add(edge.width).is_none() || edge.y.checked_add(edge.height).is_none()
+    {
+        return Err(NC_E_INVALID_ARG);
+    }
+    Ok(edge)
+}
+/// Copies the retained ABI value; the form has no second geometry representation.
+fn encoded(edge: Rect) -> Rect {
+    edge
+}
+/// Rejects empty or negative preferred form sizes before construction or mutation.
+fn dimensions(size: Size) -> Result<Size, NcStatus> {
+    if size.width <= 0 || size.height <= 0 {
+        return Err(NC_E_INVALID_ARG);
+    }
+    Ok(size)
+}
+
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Form)]
+/// Owns fixed child rectangles; core still owns clipping, traversal, capture and focus.
+pub struct Form {
+    /// Common lifecycle, resource access and layout invalidation.
+    runtime: WidgetRuntime,
+    /// Exclusive child topology writer; external callers receive its immutable view.
+    editor: ComPtr<IChildrenEditorAbi>,
+    /// Preferred content extent; allocation may be smaller and clip the form.
+    size: Size,
+    /// Validated content-relative rectangles in exact child ownership order.
+    edges: Vec<Rect>,
+}
+impl Form {
+    /// Creates a host-bound form after validating its preferred dimensions.
+    pub(crate) fn create_com(host: ComPtr<IWidgetHostAbi>, resources: crate::widget_object::SharedAssets, size: Size) -> Result<ComPtr<FormAbi>, NcStatus> {
+        let size = dimensions(size)?;
+        let editor = host.create_children()?;
+        let runtime = WidgetRuntime::for_resources(host, WidgetOption::NO_INTERACT, Some(&resources))?;
+        Ok(Self::from_value(Self { runtime, editor, size, edges: Vec::new() })
+            .query()
+            .expect("Form declares its class contract"))
+    }
+}
+impl HostedWidget for Form {
+    /// Borrows lifetime state without a shared mutable geometry model.
+    fn runtime(&self) -> &WidgetRuntime {
+        &self.runtime
+    }
+    /// Mutates lifetime state exclusively beside authored geometry.
+    fn runtime_mut(&mut self) -> &mut WidgetRuntime {
+        &mut self.runtime
+    }
+    /// Permanently closes all owned children on form retirement.
+    fn close_contents(&mut self) -> Result<(), NcStatus> {
+        self.editor.close()?.finish()
+    }
+}
+impl crate::widget_object::WidgetAlgorithm for Form {}
+impl super::ContainerAlgorithm for Form {
+    type Edge = Rect;
+    /// Copies one parent-owned rectangle.
+    fn edge(&self, index: usize) -> Option<Rect> {
+        self.edges.get(index).copied()
+    }
+    /// Publishes metadata only after the matching topology operation has committed.
+    fn edit_edges(&mut self, edit: super::EdgeEdit<Rect>) {
+        match edit {
+            super::EdgeEdit::Insert { index, edge } => self.edges.insert(index, edge),
+            super::EdgeEdit::Replace { index, edge } => self.edges[index] = edge,
+            super::EdgeEdit::Remove { index } => {
+                self.edges.remove(index);
+            }
+            super::EdgeEdit::Clear => self.edges.clear(),
+        }
+    }
+}
+direct_widget_phase_impl!(Form);
+direct_container_layout_impl!(Form);
+impl neocogi_ui_nodes_contracts::Form for Form {
+    container_methods!();
+    container_edges!(Rect, rectangle, encoded);
+    /// Returns preferred dimensions rather than allocation-dependent bounds.
+    fn size(&self) -> Result<Size, NcStatus> {
+        self.runtime.state.readable()?;
+        Ok(self.size)
+    }
+    /// Invalidates layout when the validated preferred size changes.
+    fn set_size(&mut self, size: Size) -> Result<(), NcStatus> {
+        self.runtime.state.writable()?;
+        let size = dimensions(size)?;
+        if self.size != size {
+            self.size = size;
+            self.runtime.state.record_change(GeometryChange::Changed);
+        }
+        Ok(())
+    }
+}
+impl ContainerWidget for Form {
+    /// Child positions are authored pixels, independent of intrinsic measurement.
+    fn measure(&self, _: &mut MeasureCtx<'_>, _: Constraints) -> Dimensioni {
+        Dimensioni::new(self.size.width, self.size.height)
+    }
+    /// Places children exactly once using the same rectangles exposed by the typed API.
+    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) {
+        for (index, edge) in self.edges.iter().enumerate() {
+            ctx.layout_child(
+                index,
+                Recti::new(rect.x.saturating_add(edge.x), rect.y.saturating_add(edge.y), edge.width, edge.height),
+            );
+        }
+        ctx.set_content_size(Dimensioni::new(self.size.width, self.size.height));
+        ctx.set_child_overflow_propagation(false);
+    }
+}
+impl Widget for Form {
+    /// Interaction belongs to descendants; visual authoring is a tool concern.
+    fn update(&mut self, _: &mut WidgetUpdateCtx<'_>, _: Option<&UiInputEvent>) -> Change {
+        Change::NoChange
+    }
+    /// The normal optional frame and descendants are painted by the existing runtime.
+    fn paint(&self, _: &mut WidgetPaintCtx<'_>) {}
+}

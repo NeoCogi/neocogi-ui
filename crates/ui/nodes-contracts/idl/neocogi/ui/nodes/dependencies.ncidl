@@ -8,5 +8,5 @@ use neocogi.ui.core::{
     TextChanged, TextSubmitted, ITextContent, IWidget, IWidgetHost, IWindow, ScrollInfo,
     TextWrapping, UiRuntime, WidgetOptions,
 };
-use neocogi.renderer::{ITexture, Rect};
+use neocogi.renderer::{ITexture, Rect, Size};
 use neocogi.gfx::FontRole;

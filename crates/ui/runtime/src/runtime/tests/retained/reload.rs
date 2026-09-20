@@ -288,3 +288,37 @@ fn typed_enablement_preserves_authored_options_without_capturing_dynamic_routing
     root.as_interface().add_ref().query::<IScrollingAbi>().unwrap().set_enabled(false).unwrap();
     assert!(!root.as_interface().properties().unwrap().options.contains(WidgetOptions::GRAB_SCROLL));
 }
+
+/// A fixed-coordinate form uses the same geometry for rendering and pointer routing.
+#[test]
+fn authored_form_rectangles_survive_binary_reload_and_route_real_clicks() {
+    let mut fixture = Headless::standard();
+    let mut slot = slot(&fixture.ui);
+    let mut document = Document::new("fixed form");
+    document.root = Node::new("form", WidgetSpec::Form { width: 360, height: 300 });
+    document.root.children.push(Child {
+        edge: Edge::Position { x: 120, y: 80, width: 100, height: 32 },
+        node: Node::new("save", WidgetSpec::Button { text: "Save".into() }),
+    });
+    document.inputs.clear();
+    let bytes = document.to_binary().unwrap();
+    assert_eq!(Document::from_binary(&bytes).unwrap(), document);
+    let (sender, events) = std::sync::mpsc::channel();
+    slot.reload(&document, Resources::new(), |component, generation| {
+        bind_output(component.outputs()?.as_com_ref(), "save_requested", sender, move |_: Activation| generation)
+    }).unwrap();
+    fixture.frame(VIEW).unwrap();
+    // The first point is inside the form but outside its authored button.
+    pointer(&fixture.ui, Point { x: 30, y: 30 }, true);
+    pointer(&fixture.ui, Point { x: 30, y: 30 }, false);
+    fixture.frame(VIEW).unwrap();
+    assert!(events.try_recv().is_err());
+    pointer(&fixture.ui, Point { x: 160, y: 120 }, true);
+    pointer(&fixture.ui, Point { x: 160, y: 120 }, false);
+    fixture.frame(VIEW).unwrap();
+    assert!(slot.accepts(events.try_recv().unwrap()));
+    // Bad arithmetic must be rejected before it can replace the live component.
+    document.root.children[0].edge = Edge::Position { x: i32::MAX, y: 0, width: 2, height: 20 };
+    assert!(slot.reload(&document, Resources::new(), |_, _| Ok(())).is_err());
+    assert_eq!(slot.component().unwrap().save().unwrap(), bytes);
+}

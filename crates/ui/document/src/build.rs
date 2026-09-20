@@ -86,6 +86,7 @@ impl Construction<'_> {
                 combo.set_placeholder(placeholder)?;
                 widget
             }
+            WidgetSpec::Form { width, height } => root(factory.form(Size { width: *width, height: *height })?)?,
             WidgetSpec::Linear { direction, cross } => {
                 let direction = match direction {
                     Direction::Right => FlowDirection::LeftToRight,
@@ -147,6 +148,9 @@ impl Construction<'_> {
                     .query::<GridAbi>()?
                     .insert(index, child.as_interface(), GridExtent { columns: *columns, rows: *rows })?
                     .finish()?,
+                (WidgetSpec::Form { .. }, Edge::Position { x, y, width, height }) => widget
+                    .as_interface().add_ref().query::<FormAbi>()?
+                    .insert(index, child.as_interface(), Rect { x: *x, y: *y, width: *width, height: *height })?.finish()?,
                 (WidgetSpec::Split { .. }, Edge::Pane) => widget
                     .as_interface()
                     .add_ref()

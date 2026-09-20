@@ -85,3 +85,15 @@ Constructor option defaults belong to the authored schema revision and are share
 with the designer. They exclude effective routing bits added by scrolling or
 container participation. `SetEnabled` changes the exported surface's interaction
 bit against that authored baseline; it is not recursive subtree disablement.
+
+`Form { width, height }` provides fixed-coordinate layout for visually authored
+forms. Its children use `Position { x, y, width, height }` edges, expressed in
+parent content pixels. Coordinates are nonnegative, sizes positive, and sums
+must fit in `i32`. A smaller allocation clips children; it does not scale them.
+Sibling order determines painting and hit priority. Linear/Grid/Split policies
+remain available inside a positioned control or as an application's root.
+
+These variants append to the experimental revision-one enum tables. Existing
+revision-one documents retain their binary encoding and load in the new reader;
+older readers reject the new variants instead of misinterpreting them. Applications
+using forms must deploy matching updated node contracts and runtime providers.

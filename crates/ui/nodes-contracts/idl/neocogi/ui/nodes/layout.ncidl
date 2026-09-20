@@ -202,3 +202,27 @@ interface Disclosure: IWidget + IContainerLayout {
     /// Returns the real body container; its child editor keeps topology and edge metadata consistent.
     fn body(&self) -> Result<Linear>;
 }
+
+#[version(1)]
+/// Fixed-coordinate form; rectangles belong to the parent, in content pixels.
+/// Children paint in insertion order, so later siblings appear above earlier ones.
+interface Form: IWidget + IContainerLayout {
+    /// Returns read-only topology; edits cannot bypass rectangle validation.
+    fn children(&self) -> Result<IChildren>;
+    /// Removes and closes one subtree together with its rectangle.
+    fn remove(&mut self, index: u32) -> Result<ChildEditResult>;
+    /// Closes all children and clears their rectangles.
+    fn clear(&mut self) -> Result<ChildEditResult>;
+    /// Returns the authored preferred content size, independent of allocation.
+    fn size(&self) -> Result<Size>;
+    /// Changes the preferred form size without scaling child rectangles.
+    fn set_size(&mut self, size: Size) -> Result<()>;
+    /// Returns a child's parent-relative rectangle.
+    fn edge(&self, index: u32) -> Result<Rect>;
+    /// Moves or resizes a child without replacing its identity.
+    fn set_edge(&mut self, index: u32, edge: Rect) -> Result<()>;
+    /// Validates a rectangle before attaching an unmounted child.
+    fn insert(&mut self, index: u32, child: &IWidget, edge: Rect) -> Result<ChildEditResult>;
+    /// Commits a new child and rectangle before reporting old-child teardown.
+    fn replace(&mut self, index: u32, child: &IWidget, edge: Rect) -> Result<ChildEditResult>;
+}

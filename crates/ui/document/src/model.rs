@@ -147,6 +147,17 @@ pub enum Edge {
     },
     /// Split pane or scroll content; no independent sizing metadata.
     Pane,
+    /// Exact child rectangle within a Form, in content pixels.
+    Position {
+        /// Distance from the left content edge.
+        x: i32,
+        /// Distance from the top content edge.
+        y: i32,
+        /// Positive outer control width.
+        width: i32,
+        /// Positive outer control height.
+        height: i32,
+    },
 }
 
 /// Closed built-in constructor schemas; each variant has an explicit factory mapping.
@@ -286,6 +297,13 @@ pub enum WidgetSpec {
         /// Initial expansion state.
         expanded: bool,
     },
+    /// Fixed-coordinate form with a preferred content size.
+    Form {
+        /// Positive preferred content width.
+        width: i32,
+        /// Positive preferred content height.
+        height: i32,
+    },
 }
 
 /// One stable public output mapped to a private concrete event port.
@@ -388,13 +406,14 @@ impl WidgetSpec {
             Self::Split { .. } => "Split",
             Self::Scroll { .. } => "Scroll",
             Self::Disclosure { .. } => "Disclosure",
+            Self::Form { .. } => "Form",
         }
     }
     /// Whether this authored kind owns user-editable children.
     pub fn container(&self) -> bool {
         matches!(
             self,
-            Self::Linear { .. } | Self::Grid { .. } | Self::Split { .. } | Self::Scroll { .. } | Self::Disclosure { .. }
+            Self::Linear { .. } | Self::Grid { .. } | Self::Split { .. } | Self::Scroll { .. } | Self::Disclosure { .. } | Self::Form { .. }
         )
     }
 }
@@ -580,6 +599,7 @@ fn validate_node<'a>(node: &'a Node, depth: usize, nodes: &mut BTreeMap<&'a str,
             handle,
             ..
         } => *position >= 0 && *minimum_first >= 0 && *minimum_second >= 0 && *handle > 0 && node.children.len() <= 2,
+        Form { width, height } => *width > 0 && *height > 0,
         Scroll { .. } => node.children.len() == 1,
         Linear { cross: Cross::Fixed { pixels }, .. } => *pixels >= 0,
         _ => true,
@@ -623,6 +643,8 @@ fn validate_node<'a>(node: &'a Node, depth: usize, nodes: &mut BTreeMap<&'a str,
             (Linear { .. } | Disclosure { .. }, Edge::Linear { main, cross }) => main.valid() && cross.is_none_or(|pixels| pixels >= 0),
             (Grid { .. }, Edge::Grid { columns, rows }) => *columns > 0 && *rows > 0,
             (Split { .. } | Scroll { .. }, Edge::Pane) => true,
+            (Form { .. }, Edge::Position { x, y, width, height }) => *x >= 0 && *y >= 0 && *width > 0 && *height > 0
+                && x.checked_add(*width).is_some() && y.checked_add(*height).is_some(),
             _ => false,
         };
         if !valid {
@@ -649,7 +671,7 @@ impl WidgetSpec {
             | Self::Combo { .. }
             | Self::Scroll { .. } => Options::FRAME,
             Self::ColorSwatch { .. } => Options::FRAME | Options::ALIGN_CENTER | Options::NO_INTERACT,
-            Self::TextBlock { .. } | Self::Linear { .. } | Self::Grid { .. } | Self::Disclosure { .. } => Options::NO_INTERACT,
+            Self::Form { .. } | Self::TextBlock { .. } | Self::Linear { .. } | Self::Grid { .. } | Self::Disclosure { .. } => Options::NO_INTERACT,
             Self::Checkbox { .. } | Self::ListItem { .. } | Self::ListBox { .. } | Self::Scrollbar { .. } | Self::Split { .. } => Options::NONE,
         }
     }

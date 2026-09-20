@@ -93,6 +93,12 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
         crate::SplitView::create_com(self.services.host.clone(), self.services.resources.clone(), settings)
     }
 
+    /// Creates the fixed-coordinate container through the same host as other nodes.
+    fn create_form(&self, size: Size) -> Result<ComPtr<FormAbi>, NcStatus> {
+        self.services.host.check_mutation()?;
+        crate::Form::create_com(self.services.host.clone(), self.services.resources.clone(), size)
+    }
+
     /// Validates complete typed track sequences before allocating Grid state.
     fn create_grid(
         &self,

@@ -255,3 +255,36 @@ impl WidgetFactory {
         )?))
     }
 }
+
+/// Typed client for runtime-owned fixed-coordinate child geometry.
+pub type FormWidget = Widget<FormAbi>;
+impl Widget<FormAbi> {
+    /// Reads the topology without exposing its writer.
+    pub fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> { self.interface.children() }
+    /// Returns the authored preferred content dimensions.
+    pub fn size(&self) -> Result<Size, NcStatus> { self.interface.size() }
+    /// Changes the preferred dimensions without scaling children.
+    pub fn set_size(&mut self, size: Size) -> Result<(), NcStatus> { self.interface.set_size(size) }
+    /// Reads one exact child rectangle.
+    pub fn edge(&self, index: u32) -> Result<Rect, NcStatus> { self.interface.edge(index) }
+    /// Moves/resizes an existing child without replacing it.
+    pub fn set_edge(&mut self, index: u32, edge: Rect) -> Result<(), NcStatus> { self.interface.set_edge(index, edge) }
+    /// Attaches one child after validating its complete rectangle.
+    pub fn insert<I: ComInterface>(&mut self, index: u32, child: &Widget<I>, edge: Rect) -> Result<ChildEditResult, NcStatus> {
+        self.interface.insert(index, child.node_interface()?.as_com_ref(), edge)
+    }
+    /// Replaces a child with the supplied geometry.
+    pub fn replace<I: ComInterface>(&mut self, index: u32, child: &Widget<I>, edge: Rect) -> Result<ChildEditResult, NcStatus> {
+        self.interface.replace(index, child.node_interface()?.as_com_ref(), edge)
+    }
+    /// Closes one owned subtree.
+    pub fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus> { self.interface.remove(index) }
+    /// Closes all children while retaining this form.
+    pub fn clear(&mut self) -> Result<ChildEditResult, NcStatus> { self.interface.clear() }
+}
+impl WidgetFactory {
+    /// Creates a form whose child rectangles are interpreted by the runtime node.
+    pub fn form(&self, size: Size) -> Result<FormWidget, NcStatus> {
+        Ok(FormWidget::from_interface(self.interface.create_form(size)?))
+    }
+}
