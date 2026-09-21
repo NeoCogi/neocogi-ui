@@ -19,7 +19,7 @@ fn key(ui: &neocogi_ui::Ui, key: KeyCode, value: u32) {
 /// A declared nested menu transfers once, remains compact, and edits/submits its same native records after builder destruction.
 #[test]
 fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_forest() {
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let editor = ui.widgets().textbox("").unwrap();
     let window = ui.window("menus", RECT, &editor).unwrap();
     let menus = ui.menus().unwrap();
@@ -80,8 +80,8 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
 /// Wrong owner, invalid bar shape and duplicate bar attachment reject before consuming a candidate declaration.
 #[test]
 fn failed_menu_attachment_preserves_unique_declaration_and_scoped_builder_authority() {
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
-    let foreign = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let foreign = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let first = ui.widgets().button("first").unwrap();
     let window = ui.window("first", RECT, &first).unwrap();
     let second = foreign.widgets().button("second").unwrap();
@@ -119,7 +119,7 @@ fn failed_menu_attachment_preserves_unique_declaration_and_scoped_builder_author
 /// Standalone menus remain ordinary popup capabilities with the same nested keyboard, dismissal and source lifetime policy.
 #[test]
 fn standalone_menu_popup_submits_then_hides_without_destroying_its_live_rows() {
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let body = ui.widgets().button("body").unwrap();
     let window = ui.window("popup menu", RECT, &body).unwrap();
     let menus = ui.menus().unwrap();

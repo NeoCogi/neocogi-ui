@@ -8,5 +8,5 @@ pub(crate) mod algorithm;
 pub(crate) fn create_runtime(atlas: crate::AtlasHandle) -> neocogi_com::ComPtr<neocogi_ui_core_contracts::UiRuntimeAbi> {
     let source = assets::export_bundle(&crate::SkinBundle::from_atlas(atlas)).expect("valid fixture resources");
     let gfx = neocogi_ui_support::test_support::gfx_factory();
-    neocogi_ui_runtime::create_runtime_from_assets(source.as_com_ref(), gfx.as_com_ref()).expect("production core runtime")
+    nc_ui::create_runtime_from_assets(source.as_com_ref(), gfx.as_com_ref()).expect("production core runtime")
 }

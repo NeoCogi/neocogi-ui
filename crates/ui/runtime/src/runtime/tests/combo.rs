@@ -20,7 +20,7 @@ fn press(ui: &neocogi_ui::Ui, key: KeyCode) {
 /// Explicit absence, strict replacement, popup fallback, and keyboard commit share one model.
 #[test]
 fn combo_owns_optional_selection_and_popup_state_end_to_end() {
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let mut root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let window = ui.window("combo", RECT, &root).unwrap();
     let mut combo = ui.combo_box(window.as_com_ref(), &["first", "second"], ChoiceSelection::Selected(1)).unwrap();
@@ -90,7 +90,7 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
 /// Construction rejects an invalid initial selection without altering the owner window.
 #[test]
 fn combo_construction_is_atomic_for_invalid_selection() {
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let root = ui.widgets().text_block("owner", TextWrapping::None).unwrap();
     let window = ui.window("combo owner", RECT, &root).unwrap();
     let defaulted = ui.combo_box(window.as_com_ref(), &["only"], ChoiceSelection::None).unwrap();
@@ -104,7 +104,7 @@ fn combo_construction_is_atomic_for_invalid_selection() {
 /// Nested combo choices traverse the shared submenu forest and commit stable leaf identities.
 #[test]
 fn combo_choice_menu_uses_shared_submenu_navigation() {
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let mut root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let window = ui.window("nested combo", RECT, &root).unwrap();
     let menu_text = "FruitAppleBanana";

@@ -322,7 +322,7 @@ fn layout_service_rejects_direct_reentry_without_holding_an_interior_borrow() {
 #[test]
 fn builtin_linear_reuses_track_resolution_and_validates_edges_before_mounting() {
     let runtime = runtime();
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let mut row = ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Stretch).unwrap();
     let (first, a) = recorded_leaf(&runtime);
     let (second, b) = recorded_leaf(&runtime);
@@ -381,7 +381,7 @@ fn builtin_linear_reuses_track_resolution_and_validates_edges_before_mounting() 
 #[test]
 fn builtin_grid_reuses_span_placement_and_bulk_track_validation() {
     let runtime = runtime();
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let columns = [LayoutTrack::Fixed { extent: 40 }, LayoutTrack::Fixed { extent: 60 }];
     let rows = [LayoutTrack::Fixed { extent: 20 }, LayoutTrack::Fixed { extent: 30 }];
     let mut grid = ui.widgets().grid(&columns, &rows).unwrap();
@@ -425,7 +425,7 @@ fn builtin_grid_reuses_span_placement_and_bulk_track_validation() {
 #[test]
 fn builtin_container_commits_replacement_metadata_before_reporting_failed_teardown() {
     let runtime = runtime();
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let mut row = ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Stretch).unwrap();
     let (first, previous) = recorded_leaf(&runtime);
     previous.fail_close.set(true);
@@ -453,7 +453,7 @@ fn builtin_container_commits_replacement_metadata_before_reporting_failed_teardo
 #[test]
 fn builtin_scroll_area_uses_real_children_and_shared_sticky_invalidation() {
     let runtime = runtime();
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let text = format!("{}\n{}", "wide".repeat(80), "another line\n".repeat(50));
     let mut content = ui.widgets().text_block(&text, TextWrapping::None).unwrap();
     let mut scroll = ui.widgets().scroll_area(&content, true).unwrap();
@@ -516,7 +516,7 @@ fn builtin_scroll_area_uses_real_children_and_shared_sticky_invalidation() {
 #[test]
 fn nested_com_scroll_areas_preserve_boundary_bubbling() {
     let runtime = runtime();
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let text = ui.widgets().text_block(&"nested content\n".repeat(60), TextWrapping::None).unwrap();
     let mut inner = ui.widgets().scroll_area(&text, true).unwrap();
     let tail = ui.widgets().text_block(&"outer content\n".repeat(60), TextWrapping::None).unwrap();
@@ -559,7 +559,7 @@ fn nested_com_scroll_areas_preserve_boundary_bubbling() {
 #[test]
 fn disclosure_com_header_controls_the_actual_body_without_a_parent_backpointer() {
     let runtime = runtime();
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let mut disclosure = ui.widgets().disclosure("Tree", DisclosureStyle::Tree, false).unwrap();
     let mut header = disclosure.header().unwrap();
     let mut body = disclosure.body().unwrap();
@@ -627,7 +627,7 @@ fn disclosure_com_header_controls_the_actual_body_without_a_parent_backpointer()
 #[test]
 fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_identity() {
     let runtime = runtime();
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let mut area = ui.widgets().text_area("a☃\r\nb\r", TextWrapping::None, true).unwrap();
     assert_eq!(area.text().unwrap(), "a☃\nb\n");
     let root = area.node_interface().unwrap();
@@ -729,7 +729,7 @@ fn disclosure_headers_use_the_common_frame_policy_for_both_variants() {
         (DisclosureStyle::Tree, WidgetFrame::Item, WidgetOptions::NONE),
     ] {
         let runtime = runtime();
-        let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
+        let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
         let disclosure = ui.widgets().disclosure("Header", style, false).unwrap();
         let mut header = disclosure.header().unwrap().node_interface().unwrap();
         assert_eq!(header.properties().unwrap().frame, frame);

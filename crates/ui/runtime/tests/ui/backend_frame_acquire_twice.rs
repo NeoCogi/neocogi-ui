@@ -1,6 +1,6 @@
 //! An active backend frame must retain the backend's exclusive mutable borrow.
 
-use neocogi_ui_runtime::render::{FrameInfo, RendererBackend};
+use nc_ui::render::{FrameInfo, RendererBackend};
 
 fn acquire_twice<B: RendererBackend>(backend: &mut B, info: FrameInfo) {
     let first = backend.frame(info).unwrap();

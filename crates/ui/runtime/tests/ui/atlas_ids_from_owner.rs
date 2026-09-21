@@ -1,6 +1,6 @@
 //! Font and icon IDs are obtained from validated runtime atlas resources.
 
-use neocogi_ui_runtime::{AtlasHandle, FontId, IconId};
+use nc_ui::{AtlasHandle, FontId, IconId};
 
 #[allow(dead_code)]
 fn resolve_owned_ids(atlas: &AtlasHandle) -> Option<(FontId, IconId)> {

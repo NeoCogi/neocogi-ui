@@ -61,6 +61,34 @@ native linkage mode from relocated staging with exact staged resources. See the
 
 ## Profiles and output
 
+Cargo package names remain descriptive; each deployable component declares a
+short `[lib] name`. The assembly tool preserves that target name, including for
+third-party plugins. Direct `cargo rustc --lib --crate-type cdylib` builds use
+the same filenames. Rust code that directly imports an implementation uses its
+library target name; application facades retain their `neocogi_*` names.
+
+| Cargo package | Rust library target | Linux shared library |
+| --- | --- | --- |
+| `neocogi-com-runtime` | `nc_com` | `libnc_com.so` |
+| `neocogi-ui-runtime` | `nc_ui` | `libnc_ui.so` |
+| `neocogi-ui-nodes` | `nc_ui_nodes` | `libnc_ui_nodes.so` |
+| `neocogi-render-plugin` | `nc_render` | `libnc_render.so` |
+| `neocogi-gfx` | `nc_gfx` | `libnc_gfx.so` |
+| `neocogi-skin` | `nc_skin` | `libnc_skin.so` |
+| `neocogi-example-ui-extension` | `nc_ui_extension` | `libnc_ui_extension.so` |
+| `neocogi-example-com-plugin` | `nc_example_com` | `libnc_example_com.so` |
+
+On macOS these become `libnc_*.dylib`; on Windows they become `nc_*.dll`
+with their generated import libraries. MSVC runtime linkage also receives the
+`nc_com.lib` alias when rustc produces `nc_com.dll.lib`.
+Each assembly selects one renderer, so Glow, Vulkan, and WGPU variants all
+deploy `libnc_render.so` in separate variant directories. Persistence lives in
+`libnc_com.so`. Contracts and support crates do not produce deployed libraries.
+
+Rebuild and restage existing assemblies after the naming change. Native hosts
+now link `nc_com`, and generated `plugins.txt` files name the new artifacts.
+Monoliths and browser modules still link the implementations statically.
+
 ```sh
 cargo neocogi build --assembly full                       # Debug
 cargo neocogi build --assembly full --release
@@ -99,8 +127,8 @@ compilation platform. `dev` outputs use the `debug` directory name. Keep every
 staged runtime/plugin library and resource with the executable. `run` launches
 the staged binary and forwards arguments after `--`, preserving its exit code.
 
-UI assemblies contain two adjacent provider libraries: `libnc_com_shared_neocogi_ui_runtime`
-publishes the core retained runtime and `libnc_com_shared_neocogi_ui_nodes` publishes concrete
+UI assemblies contain two adjacent provider libraries: `libnc_ui`
+publishes the core retained runtime and `libnc_ui_nodes` publishes concrete
 built-in nodes. The manifest orders core before nodes because `neocogi.ui.nodes.runtime` declares a
 hard provider dependency on `neocogi.ui.runtime`. Each library exports exactly one plugin getter;
 their roots and implementations live in `crates/ui/runtime` and `crates/ui/nodes` respectively.

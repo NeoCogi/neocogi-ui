@@ -1,6 +1,6 @@
 //! One backend frame may be acquired, used, and dropped before another borrow begins.
 
-use neocogi_ui_runtime::render::{FrameInfo, RendererBackend, RendererFrame};
+use nc_ui::render::{FrameInfo, RendererBackend, RendererFrame};
 
 #[allow(dead_code)]
 fn acquire_once<B: RendererBackend>(backend: &mut B, info: FrameInfo) {

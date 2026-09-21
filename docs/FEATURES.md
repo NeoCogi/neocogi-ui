@@ -38,7 +38,7 @@ the simple demo does not need it.
 
 Shared native builds intentionally allow Cargo to unify the dynamic `runtime`
 feature. The facade contains no registry state: every dependent calls the same
-loaded `libnc_com_shared_runtime`. In contrast, `static-runtime` must not be
+loaded `libnc_com`. In contrast, `static-runtime` must not be
 enabled independently in plugin DSOs because each image would then contain a
 separate registry implementation.
 

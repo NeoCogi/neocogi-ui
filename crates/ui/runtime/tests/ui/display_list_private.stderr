@@ -1,8 +1,8 @@
 error[E0603]: struct `DisplayList` is private
- --> tests/ui/display_list_private.rs:3:33
+ --> tests/ui/display_list_private.rs:3:20
   |
-3 | use neocogi_ui_runtime::render::DisplayList;
-  |                                 ^^^^^^^^^^^ private struct
+3 | use nc_ui::render::DisplayList;
+  |                    ^^^^^^^^^^^ private struct
   |
 note: the struct `DisplayList` is defined here
  --> src/render.rs
@@ -11,6 +11,6 @@ note: the struct `DisplayList` is defined here
   |                ^^^^^^^^^^^^^^^^^^^^^^^^^
 help: import `DisplayList` directly
   |
-3 - use neocogi_ui_runtime::render::DisplayList;
+3 - use nc_ui::render::DisplayList;
 3 + use neocogi_ui_support::render::display_list::DisplayList;
   |

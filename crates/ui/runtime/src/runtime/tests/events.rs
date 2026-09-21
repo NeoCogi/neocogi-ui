@@ -19,7 +19,7 @@ fn key(ui: &neocogi_ui::Ui, key: KeyCode) {
 #[test]
 fn consumer_preserves_emission_order_snapshot_values_and_bounded_progress() {
     let runtime = runtime();
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let mut a = ui.widgets().button("a").unwrap();
     let mut b = ui.widgets().button("b").unwrap();
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
@@ -71,7 +71,7 @@ enum Mutation {
 /// Borrowed stack state may edit the UI after traversal releases its context.
 #[test]
 fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let button = ui.widgets().button("replace window").unwrap();
     let previous = ui.window("first", RECT, &button).unwrap();
     let (renderer, probe) = renderer();
@@ -116,7 +116,7 @@ fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
 /// Dropping the consumer leaves application state independent and cannot retain the runtime.
 #[test]
 fn dropping_inbox_and_application_releases_runtime_without_a_source_sink_cycle() {
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let button = ui.widgets().button("owned runtime").unwrap();
     let window = ui.window("owner", RECT, &button).unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
@@ -131,7 +131,7 @@ fn dropping_inbox_and_application_releases_runtime_without_a_source_sink_cycle()
 /// Every scalar and labelled-action source publishes only actual user interaction through the shared transport.
 #[test]
 fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters_silent() {
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let (session_tx, session) = std::sync::mpsc::channel();
     let mut labels = Vec::new();
     let mut checkbox = ui.widgets().checkbox("check", false).unwrap();
@@ -256,7 +256,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
 /// Both editor roots expose independent typed ports, and popup dismissal uses the manager's real lifecycle source.
 #[test]
 fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_sources() {
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let (session_tx, session) = std::sync::mpsc::channel();
     let mut labels = Vec::new();
     let mut textbox = ui.widgets().textbox("").unwrap();
@@ -342,7 +342,7 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
 /// A failed consumer invalidates the frame without replaying the attempt or losing later raw input.
 #[test]
 fn failed_consumer_recovers_on_next_update_and_preserves_remaining_native_input() {
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let button = ui.widgets().button("fail once").unwrap();
     let editor = ui.widgets().textbox("").unwrap();
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
@@ -389,7 +389,7 @@ fn failed_consumer_recovers_on_next_update_and_preserves_remaining_native_input(
 /// Newly posted lifecycle messages remain FIFO and settle in the same runtime update.
 #[test]
 fn real_lifecycle_cascade_is_deferred_until_each_consumer_returns() {
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let button = ui.widgets().button("cascade").unwrap();
     let window = ui.window("cascade", RECT, &button).unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
@@ -429,7 +429,7 @@ impl IEventDispatcher for FailingDispatcher {
 #[test]
 fn runtime_preserves_uncommitted_frame_on_foreign_consumer_failure() {
     let runtime = runtime();
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let button = ui.widgets().button("count").unwrap();
     let window = ui.window("count", RECT, &button).unwrap();
     let dispatcher: ComPtr<IEventDispatcherAbi> = FailingDispatcher::from_value(FailingDispatcher).query().unwrap();
@@ -486,7 +486,7 @@ fn failed_post_preserves_committed_widget_state_and_requires_a_new_frame() {
     fn reject(_: neocogi_ui::events::NumericChanged) -> Result<(), NcStatus> {
         Err(NC_E_INVALID_ARG)
     }
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let number = ui.widgets().number(NumberOptions { value: 9.0, step: 1.0, precision: 0 }).unwrap();
     let window = ui.window("post failure", RECT, &number).unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
@@ -512,7 +512,7 @@ fn failed_lifecycle_post_preserves_visibility_and_returns_its_receiver_error() {
     fn reject(_: WindowEvent) -> Result<(), NcStatus> {
         Err(NC_E_INVALID_ARG)
     }
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let button = ui.widgets().button("lifecycle").unwrap();
     let window = ui.window("post failure", RECT, &button).unwrap();
     let source = window.query::<IWindowEventsAbi>().unwrap();

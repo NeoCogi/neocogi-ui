@@ -10,9 +10,10 @@ repository.workspace = true
 categories = ["gui", "rendering"]
 
 [lib]
+# Keep direct Cargo builds and packaged shared libraries under the same short name.
 # cargo-neocogi wraps this implementation rlib in the assembly's deployable
 # cdylib root, avoiding an additional shared-library link for the same code.
-name = "neocogi_ui_runtime"
+name = "nc_ui"
 crate-type = ["rlib"]
 
 [dependencies]
@@ -28,7 +29,7 @@ rs-math3d.workspace = true
 [dev-dependencies]
 neocogi-ui-document.workspace = true
 neocogi-com-events-contracts.workspace = true
-neocogi-idl-example-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "9efb4385cbe3dc931f784b9733efd4876e281a03" }
+neocogi-idl-example-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "6c3df75f448141ac22c87e08ac7fbb6d3265fb47" }
 neocogi-ui-nodes.workspace = true
 neocogi-ui-nodes-contracts.workspace = true
 neocogi-ui-support = { workspace = true, features = ["test-support"] }

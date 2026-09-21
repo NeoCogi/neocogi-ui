@@ -9,6 +9,8 @@ description = "NeoCogi appearance and external-theme plugin"
 publish = false
 
 [lib]
+# The Rust target also defines the deployed shared-library name on each platform.
+name = "nc_skin"
 crate-type = ["rlib"]
 
 [features]

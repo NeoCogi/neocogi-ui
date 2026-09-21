@@ -149,12 +149,12 @@ fn static_com_editing_and_webgl() {
     // SAFETY: All descriptions and referenced code/data live in this statically linked wasm.
     unsafe {
         runtime
-            .register_factory_plugin_description(neocogi_ui_runtime::factory_plugin_description())
+            .register_factory_plugin_description(nc_ui::factory_plugin_description())
             .unwrap();
         runtime
-            .register_factory_plugin_description(neocogi_ui_nodes::factory_plugin_description())
+            .register_factory_plugin_description(nc_ui_nodes::factory_plugin_description())
             .unwrap();
-        runtime.register_factory_plugin_description(neocogi_gfx::factory_plugin_description()).unwrap();
+        runtime.register_factory_plugin_description(nc_gfx::factory_plugin_description()).unwrap();
         runtime.register_factory_plugin_description(crate::factory_plugin_description()).unwrap();
     }
     let platform = runtime

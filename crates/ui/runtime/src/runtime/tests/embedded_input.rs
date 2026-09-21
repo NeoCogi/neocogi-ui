@@ -44,7 +44,7 @@ fn key(code: KeyCode, value: u32, modifiers: u8, pressed: bool) -> UiInput {
 #[test]
 fn embedded_scope_receives_tab_and_menu_keys_until_explicit_exit() {
     let runtime = runtime();
-    let factory = neocogi_ui_nodes::UiFactory::bind(runtime.as_com_ref()).unwrap();
+    let factory = nc_ui_nodes::UiFactory::bind(runtime.as_com_ref()).unwrap();
     let ui = neocogi_ui::Ui::from_interfaces(runtime, factory).unwrap();
     let (send, events) = std::sync::mpsc::channel();
     let scope = ui.widgets().leaf(Scope { events: send }, WidgetOptions::NONE).unwrap();
@@ -82,7 +82,7 @@ fn embedded_scope_receives_tab_and_menu_keys_until_explicit_exit() {
 #[test]
 fn window_cycle_can_resume_after_focus_moves_through_an_embedded_scope() {
     let runtime = runtime();
-    let factory = neocogi_ui_nodes::UiFactory::bind(runtime.as_com_ref()).unwrap();
+    let factory = nc_ui_nodes::UiFactory::bind(runtime.as_com_ref()).unwrap();
     let ui = neocogi_ui::Ui::from_interfaces(runtime, factory).unwrap();
     let (send, events) = std::sync::mpsc::channel();
     let scope = ui.widgets().leaf(Scope { events: send }, WidgetOptions::NONE).unwrap();

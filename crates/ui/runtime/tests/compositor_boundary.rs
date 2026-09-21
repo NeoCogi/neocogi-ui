@@ -67,8 +67,8 @@ impl IRenderer for RejectingRenderer {
 
 /// Constructs and mounts an ordinary UI through the public production entrypoint.
 fn create_ui(assets: ComRef<'_, IAssetBundleAbi>, gfx: ComRef<'_, GfxPluginFactoryAbi>) -> Ui {
-    let runtime = neocogi_ui_runtime::create_runtime_from_assets(assets, gfx).unwrap();
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime).unwrap();
+    let runtime = nc_ui::create_runtime_from_assets(assets, gfx).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
     let text = ui.widgets().text_block("Independent UI", TextWrapping::None).unwrap();
     ui.window("Independent UI", Rect { x: 4, y: 4, width: 160, height: 80 }, &text).unwrap();
     ui.update(SIZE).unwrap();
@@ -200,8 +200,8 @@ fn production_runtime_uses_the_gfx_compositor() {
     let assets = neocogi_demo_assets::load_bundle().expect("embedded test assets must load");
     let gfx = neocogi_ui_support::test_support::gfx_factory();
     let runtime =
-        neocogi_ui_runtime::create_runtime_from_assets(assets.as_com_ref(), gfx.as_com_ref()).expect("matching UI and GFX resources must create a runtime");
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime).expect("the object must expose every UI capability");
+        nc_ui::create_runtime_from_assets(assets.as_com_ref(), gfx.as_com_ref()).expect("matching UI and GFX resources must create a runtime");
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime).expect("the object must expose every UI capability");
     let text = ui
         .widgets()
         .text_block("GFX boundary", TextWrapping::None)

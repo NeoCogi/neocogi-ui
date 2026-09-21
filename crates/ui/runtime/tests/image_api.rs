@@ -29,7 +29,7 @@
 
 //! Public-contract tests for typed image-loading failures.
 
-use neocogi_ui_runtime::{ImageError, ImageSource, ImageStorageError, load_image_bytes};
+use nc_ui::{ImageError, ImageSource, ImageStorageError, load_image_bytes};
 
 /// Verifies the root exports expose a concrete error and its nested storage classification.
 #[test]

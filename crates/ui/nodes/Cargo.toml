@@ -8,9 +8,10 @@ repository.workspace = true
 description = "Deployable built-in NeoCogi UI node implementations and standard compositions"
 
 [lib]
+# Keep direct Cargo builds and packaged shared libraries under the same short name.
 # cargo-neocogi wraps this implementation rlib in the assembly's deployable
 # cdylib root so the plugin owns one native shared object per deployment.
-name = "neocogi_ui_nodes"
+name = "nc_ui_nodes"
 crate-type = ["rlib"]
 
 [features]

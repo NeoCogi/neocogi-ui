@@ -24,8 +24,8 @@ fn key(ui: &Ui, key: KeyCode) {
 #[test]
 fn independently_activated_nodes_bind_only_to_their_core_host_and_deliver_events() {
     let registry = Runtime::global();
-    let core_description = neocogi_ui_runtime::factory_plugin_description();
-    let nodes_description = neocogi_ui_nodes::factory_plugin_description();
+    let core_description = nc_ui::factory_plugin_description();
+    let nodes_description = nc_ui_nodes::factory_plugin_description();
     assert_eq!(core_description.root_factory, UiPluginFactoryAbi::INTERFACE_ID);
     assert_eq!(nodes_description.root_factory, NodesPluginFactoryAbi::INTERFACE_ID);
     assert_eq!(nodes_description.dependency_count, 1);

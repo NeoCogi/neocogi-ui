@@ -1,7 +1,7 @@
 //! Applications record retained drawing through Painter rather than owning a display list.
 
-use neocogi_ui_runtime::prelude::{color, rect};
-use neocogi_ui_runtime::render::Painter;
+use nc_ui::prelude::{color, rect};
+use nc_ui::render::Painter;
 
 #[allow(dead_code)]
 fn record_supported_drawing(painter: &mut Painter<'_>) {

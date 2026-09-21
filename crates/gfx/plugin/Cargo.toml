@@ -9,6 +9,8 @@ description = "NeoCogi CPU image decoding and portable resource-baking plugin"
 publish = false
 
 [lib]
+# The Rust target also defines the deployed shared-library name on each platform.
+name = "nc_gfx"
 crate-type = ["rlib"]
 
 [features]

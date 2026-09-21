@@ -247,8 +247,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     unsafe {
         runtime.load_plugin_library(std::path::PathBuf::from(library));
     }
-    runtime.register_factory_plugin_description(neocogi_gfx::factory_plugin_description())?;
-    runtime.register_factory_plugin_description(neocogi_ui_nodes::factory_plugin_description())?;
+    runtime.register_factory_plugin_description(nc_gfx::factory_plugin_description())?;
+    runtime.register_factory_plugin_description(nc_ui_nodes::factory_plugin_description())?;
     let loaded = start.elapsed();
     let start = Instant::now();
     let assets = neocogi_demo_assets::load_bundle()?;

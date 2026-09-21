@@ -1,6 +1,6 @@
 //! A FontId cannot be fabricated without the atlas owner that validates its slot.
 
-use neocogi_ui_runtime::FontId;
+use nc_ui::FontId;
 
 fn main() {
     let _font = FontId::default();

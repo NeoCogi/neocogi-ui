@@ -227,7 +227,7 @@ fn emit(source: &ComPtr<__ActivationReceiverAbi>) {
 /// Three actual component levels forward upward before the application, with no manual child pumping.
 #[test]
 fn nested_components_dispatch_child_first_and_promote_only_explicit_outputs() {
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let trace: Trace = Rc::new(RefCell::new(Vec::new()));
     let sources = (0..4).map(|_| Emitter::create()).collect::<Vec<_>>();
     let (child, _) = component(&ui, &trace, "child", &sources[0], Some(sources[1].clone()), Edit::None);
@@ -269,7 +269,7 @@ fn nested_components_dispatch_child_first_and_promote_only_explicit_outputs() {
 /// A component mounted by a handler joins the next sweep of the same safe boundary.
 #[test]
 fn callback_mounted_descendant_is_discovered_without_application_registration() {
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let trace: Trace = Rc::new(RefCell::new(Vec::new()));
     let child_source = Emitter::create();
     let (child, _) = component(&ui, &trace, "inserted", &child_source, None, Edit::None);
@@ -294,7 +294,7 @@ fn callback_mounted_descendant_is_discovered_without_application_registration() 
 /// Removing an ancestor inside its descendant handler retires the remaining parent ticket safely.
 #[test]
 fn descendant_removal_retires_ancestor_and_sibling_dispatch_snapshots() {
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let trace: Trace = Rc::new(RefCell::new(Vec::new()));
     let root_source = Emitter::create();
     let (root, mut shell) = component(&ui, &trace, "root", &root_source, None, Edit::None);
@@ -316,7 +316,7 @@ fn descendant_removal_retires_ancestor_and_sibling_dispatch_snapshots() {
 /// Child-surface ordering still precedes application delivery and skips a removed later surface.
 #[test]
 fn mounted_component_events_dispatch_before_application_and_skip_removed_snapshots() {
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let trace: Trace = Rc::new(RefCell::new(Vec::new()));
     let older_source = Emitter::create();
     let (older, _) = component(&ui, &trace, "older", &older_source, None, Edit::None);
@@ -343,7 +343,7 @@ fn mounted_component_events_dispatch_before_application_and_skip_removed_snapsho
 /// Private work posted by one application message settles before its already queued successor.
 #[test]
 fn application_messages_interleave_with_automatic_private_settlement() {
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let trace: Trace = Rc::new(RefCell::new(Vec::new()));
     let source = Emitter::create();
     let (child, _) = component(&ui, &trace, "child", &source, None, Edit::None);
@@ -366,7 +366,7 @@ fn application_messages_interleave_with_automatic_private_settlement() {
 /// A component that removes its own mount cannot receive another message from the same batch.
 #[test]
 fn self_removal_stops_private_delivery_before_the_next_message() {
-    let ui = neocogi_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let trace: Trace = Rc::new(RefCell::new(Vec::new()));
     let parent = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let window = ui.window("self removal", RECT, &parent).unwrap();

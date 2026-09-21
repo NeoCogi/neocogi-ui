@@ -349,13 +349,13 @@ fn register() -> Result<(), HostError> {
     // SAFETY: The complete generated descriptions, linked contracts, and
     // implementation code remain static for this module's process lifetime.
     unsafe {
-        runtime.register_factory_plugin_description(neocogi_ui_runtime::factory_plugin_description())?;
-        runtime.register_factory_plugin_description(neocogi_ui_nodes::factory_plugin_description())?;
-        runtime.register_factory_plugin_description(neocogi_render_plugin::factory_plugin_description())?;
+        runtime.register_factory_plugin_description(nc_ui::factory_plugin_description())?;
+        runtime.register_factory_plugin_description(nc_ui_nodes::factory_plugin_description())?;
+        runtime.register_factory_plugin_description(nc_render::factory_plugin_description())?;
         #[cfg(any(target_arch = "wasm32", feature = "monolith-gfx"))]
-        runtime.register_factory_plugin_description(neocogi_gfx::factory_plugin_description())?;
+        runtime.register_factory_plugin_description(nc_gfx::factory_plugin_description())?;
         #[cfg(feature = "skin")]
-        runtime.register_factory_plugin_description(neocogi_skin::factory_plugin_description())?;
+        runtime.register_factory_plugin_description(nc_skin::factory_plugin_description())?;
     }
     Ok(())
 }
