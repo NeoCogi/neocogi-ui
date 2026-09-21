@@ -4,7 +4,7 @@
 fn main() {
     // The normalized source directory defines the stable
     // `neocogi.ui.core` module name independently of its part filenames.
-    neocogi_idl_build::Module::directory("idl", "neocogi/ui/core")
+    neocogi_idl::cargo::Module::directory("idl", "neocogi/ui/core")
         .build()
         .expect("failed to build neocogi.ui.core");
 }

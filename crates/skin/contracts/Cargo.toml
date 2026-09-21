@@ -18,4 +18,4 @@ neocogi-gfx-contracts.workspace = true
 neocogi-platform-contracts.workspace = true
 
 [build-dependencies]
-neocogi-idl-build.workspace = true
+neocogi-idl.workspace = true

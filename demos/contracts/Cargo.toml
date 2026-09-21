@@ -15,4 +15,4 @@ neocogi-ui-core-contracts.workspace = true
 neocogi-com = { workspace = true, features = ["macros"] }
 
 [build-dependencies]
-neocogi-idl-build.workspace = true
+neocogi-idl.workspace = true

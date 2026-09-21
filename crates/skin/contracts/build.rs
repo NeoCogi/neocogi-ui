@@ -4,7 +4,7 @@
 fn main() {
     // The module owns appearance authoring and theme selection without importing
     // decoder, renderer, or UI-tree implementation details.
-    neocogi_idl_build::Module::directory("idl", "neocogi/skin")
+    neocogi_idl::cargo::Module::directory("idl", "neocogi/skin")
         .build()
         .expect("failed to build neocogi.skin");
 }
