@@ -1,4 +1,6 @@
 [package]
+# Installed executable names are declared explicitly below.
+autobins = false
 name = "neocogi-runtime-ui-example"
 version = "0.0.0"
 publish = false
@@ -21,3 +23,7 @@ neocogi-com = { workspace = true, features = ["std"] }
 neocogi-com-events.workspace = true
 neocogi-demo-host.workspace = true
 neocogi-demo-assets.workspace = true
+
+[[bin]]
+name = "neocogi-example-ui"
+path = "src/main.rs"

@@ -228,7 +228,7 @@ fn memory() -> Result<(), Box<dyn Error>> {
 /// Loads one trusted UI plugin and emits machine-readable timing samples for one selected shape.
 fn main() -> Result<(), Box<dyn Error>> {
     let mut arguments = std::env::args_os().skip(1);
-    let library = arguments.next().ok_or("usage: com-bench <UI-library> <single|deep|wide> [--counts]")?;
+    let library = arguments.next().ok_or("usage: neocogi-com-bench <UI-library> <single|deep|wide> [--counts]")?;
     let shape = arguments.next().ok_or("missing shape")?.into_string().map_err(|_| "invalid shape")?;
     if !matches!(shape.as_str(), "single" | "deep" | "wide") {
         return Err("invalid shape".into());
@@ -247,8 +247,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     unsafe {
         runtime.load_plugin_library(std::path::PathBuf::from(library));
     }
-    runtime.register_factory_plugin_description(nc_gfx::factory_plugin_description())?;
-    runtime.register_factory_plugin_description(nc_ui_nodes::factory_plugin_description())?;
+    // SAFETY: These linked descriptors and their code/data remain in this
+    // executable for the entire registry lifetime, including benchmark teardown.
+    unsafe {
+        runtime.register_factory_plugin_description(nc_gfx::factory_plugin_description())?;
+        runtime.register_factory_plugin_description(nc_ui_nodes::factory_plugin_description())?;
+    }
     let loaded = start.elapsed();
     let start = Instant::now();
     let assets = neocogi_demo_assets::load_bundle()?;

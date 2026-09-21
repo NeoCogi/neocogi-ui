@@ -1,4 +1,6 @@
 [package]
+# Installed executable names are declared explicitly below.
+autobins = false
 name = "neocogi-demo-smoke"
 version = "0.9.0-alpha.0"
 authors.workspace = true
@@ -33,12 +35,16 @@ neocogi-demo-assets.workspace = true
 neocogi-com-runtime.workspace = true
 neocogi-ui-runtime = { path = "../../crates/ui/runtime" }
 neocogi-ui-nodes.workspace = true
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "e508d74273260586bd9d768b0a4a21bef282d055", default-features = false }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9e6b06e66c1844179e88f84c734c82dd9b60b02f", default-features = false }
 neocogi-gfx = { workspace = true, features = ["builder"] }
 neocogi-skin = { workspace = true, features = ["theme-json"] }
 neocogi-example-ui-extension = { path = "../../examples/ui-extension", optional = true }
 
 [[bin]]
-name = "com-bench"
+name = "neocogi-com-bench"
 path = "src/bin/com-bench.rs"
 required-features = ["benchmark"]
+
+[[bin]]
+name = "neocogi-demo-smoke"
+path = "src/main.rs"

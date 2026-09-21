@@ -38,7 +38,7 @@ Every PNG in this directory is original BSD-3-Clause project artwork generated b
 `tools/assets/src/bin/mac-os-9-theme-export.rs`. Regenerate the complete source set from the repository root with:
 
 ```sh
-cargo run -p neocogi-asset-tools --bin mac-os-9-theme-export -- --output-dir themes/mac-os-9
+cargo run -p neocogi-asset-tools --bin neocogi-mac-os-9-theme-export -- --output-dir themes/mac-os-9
 ```
 
 The deterministic generator draws only integer-aligned primitive pixels. Semantic icons are

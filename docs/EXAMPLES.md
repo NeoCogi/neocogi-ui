@@ -21,6 +21,32 @@ its required adjacent plugins. The [package guide](COM_NATIVE.md) is the canonic
 reference for release/min-size builds, system dependencies, optional assets,
 finite runs, independent test packaging and browser workflows.
 
+Assembly selectors stay concise; deployed executables use explicit NeoCogi
+names. Cargo's `-p` selects the package, while `--bin` selects the executable:
+
+| Cargo package | Executable | Assembly selector |
+| --- | --- | --- |
+| `neocogi-demo-full` | `neocogi-demo-full` | `full` |
+| `neocogi-demo-basic` | `neocogi-demo-simple` | `simple` |
+| `neocogi-demo-basic` | `neocogi-demo-calculator` | `calculator` |
+| `neocogi-demo-basic` | `neocogi-demo-cube` | `backend-frame-cube` |
+| `neocogi-demo-smoke` | `neocogi-demo-smoke` | `smoke` |
+| `neocogi-demo-smoke` | `neocogi-com-bench` | Direct Cargo; requires `benchmark` |
+| `neocogi-runtime-ui-example` | `neocogi-example-ui` | `runtime-ui` |
+| `neocogi-example-com-plugin` | `neocogi-example-com` | [Direct Cargo](../examples/com-plugin/README.md); requires `host` or `monolith` |
+| `neocogi-theme-editor` | `neocogi-theme-editor` | `theme-editor` |
+| `neocogi-ui-designer` | `neocogi-ui-designer` | `ui-designer` |
+| `neocogi-asset-tools` | `neocogi-atlas-export` | Direct Cargo |
+| `neocogi-asset-tools` | `neocogi-mac-os-9-theme-export` | Direct Cargo; requires `png_source` |
+| `neocogi-inspect` | `neocogi-inspect` | Direct Cargo |
+| `cargo-neocogi` | `cargo-neocogi` | Invoked as `cargo neocogi` |
+
+Windows adds `.exe`. Browser binary targets use the same base names with `.wasm`.
+For example, `cargo neocogi build --assembly calculator` stages
+`neocogi-demo-calculator`; direct Cargo selection is
+`cargo build -p neocogi-demo-basic --bin neocogi-demo-calculator`.
+The native assembly includes the [short component libraries](COM_NATIVE.md#profiles-and-output).
+
 The full demo preserves the fullscreen layer-zero X-Y grid beneath content-clipped
 floating children. Left-drag the grid to orbit, use its wheel to zoom, or choose
 Grid > Reset View. Grid > Minor Lines controls density. Closing the main Demo

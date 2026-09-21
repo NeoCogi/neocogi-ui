@@ -1,4 +1,6 @@
 [package]
+# Installed executable names are declared explicitly below.
+autobins = false
 name = "neocogi-demo-basic"
 version = "0.0.0"
 publish = false
@@ -29,8 +31,16 @@ rs-math3d.workspace = true
 # Dynamic assembly roots add `dynamic-plugin`; monoliths call descriptors directly.
 neocogi-com-runtime.workspace = true
 neocogi-ui-runtime = { path = "../../crates/ui/runtime" }
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "e508d74273260586bd9d768b0a4a21bef282d055", default-features = false }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9e6b06e66c1844179e88f84c734c82dd9b60b02f", default-features = false }
 
 [[bin]]
-name = "backend-frame-cube"
+name = "neocogi-demo-cube"
 path = "src/bin/backend-frame-cube.rs"
+
+[[bin]]
+name = "neocogi-demo-simple"
+path = "src/bin/simple.rs"
+
+[[bin]]
+name = "neocogi-demo-calculator"
+path = "src/bin/calculator.rs"

@@ -361,7 +361,7 @@ pixels into one owned allocation, and owns the resolved visual arrays. No genera
 file exposes `AtlasHandle`, native IDs, UI implementation storage or parser APIs.
 
 ```sh
-cargo run -p neocogi-asset-tools --bin atlas-export -- --output bundle.rs
+cargo run -p neocogi-asset-tools --bin neocogi-atlas-export -- --output bundle.rs
 cargo neocogi build --assembly full --variant glow
 cargo neocogi build --assembly full --variant glow --variant embedded
 ```

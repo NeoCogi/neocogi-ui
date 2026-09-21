@@ -1,4 +1,6 @@
 [package]
+# Installed executable names are declared explicitly below.
+autobins = false
 name = "neocogi-asset-tools"
 version = "0.0.0"
 publish = false
@@ -16,10 +18,10 @@ neocogi-gfx-impl = { workspace = true, features = ["builder", "save-to-rust"] }
 png = { workspace = true, optional = true }
 
 [[bin]]
-name = "atlas-export"
+name = "neocogi-atlas-export"
 path = "src/bin/atlas-export.rs"
 
 [[bin]]
-name = "mac-os-9-theme-export"
+name = "neocogi-mac-os-9-theme-export"
 path = "src/bin/mac-os-9-theme-export.rs"
 required-features = ["png_source"]

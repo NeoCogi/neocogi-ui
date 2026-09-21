@@ -94,7 +94,7 @@ immutable catalog; `bundle_data()?` provides tables for a compatible revision.
 The exporter is also available as a workspace command:
 
 ```sh
-cargo run -p neocogi-asset-tools --bin atlas-export -- --output bundle.rs
+cargo run -p neocogi-asset-tools --bin neocogi-atlas-export -- --output bundle.rs
 cargo test -p neocogi-demo-assets --features 'full-demo embed-assets'
 ```
 

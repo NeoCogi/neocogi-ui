@@ -6,6 +6,10 @@ private controls. Clicking Save sends an application event; the application
 updates the title through its named input. File → Reload replaces the UI only
 after loading and connecting a complete candidate.
 
+The `runtime-ui` assembly stages `neocogi-example-ui`. Its Cargo package remains
+`neocogi-runtime-ui-example`; use `--bin neocogi-example-ui` when selecting the
+binary explicitly with ordinary Cargo.
+
 ```sh
 cargo neocogi build --assembly runtime-ui
 cargo neocogi run --assembly runtime-ui
