@@ -9,7 +9,9 @@ retained UI imports resources and submits composed frames. Applications opt into
 | Crate | Feature | Effect |
 | --- | --- | --- |
 | Native demos | `monolith` | Link the runtime plus only the UI, renderer, GFX, and Skin implementations selected by that assembly. |
-| `neocogi-com` | `runtime` | Link runtime services, including caller-scoped persistence. |
+| `neocogi-com` | defaults: `std`, `macros` | Local object/data helpers without linking a runtime. |
+| `neocogi-com` | `runtime` | Link shared `nc_com` runtime services, including caller-scoped persistence; implies `std`. |
+| `neocogi-com` | `static-runtime` | Implies `runtime`; link its implementation inside one executable or browser module. |
 | `neocogi-ui` | `runtime` | Link the shared neocogi-com runtime used by native hosts. |
 | `neocogi-ui` | `static-runtime` | Link one ordinary runtime implementation, including browser deployments. |
 | `neocogi-gfx-support` | `compiled-assets` | Expand bounded zlib pixels from generated asset tables. |
