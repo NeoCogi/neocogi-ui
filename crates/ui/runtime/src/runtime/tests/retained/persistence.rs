@@ -7,8 +7,8 @@ use neocogi_com::{
     binary, com_object, guid_from_qualified_name, ComDeserialize, ComSerialize, ComRef, INcBytesAbi, IUnknown, NcBytes, NcCopyFromBufferOffset, NcGuid,
     NC_E_ABI_VERSION, NC_E_INVALID_ARG, NC_E_OUT_OF_RANGE,
 };
-use neocogi_com_events::{bind_output, NamedOutputs};
-use neocogi_com_events::{INamedOutputs, INamedOutputsAbi};
+use neocogi_com::events::{bind_output, NamedOutputs};
+use neocogi_com::events::{INamedOutputs, INamedOutputsAbi};
 use neocogi_com::persistence::{snapshot, FactoryRegistry, ObjectRecord};
 use neocogi_idl_example_contracts::{ICompositionRoot, ICompositionRootAbi};
 
@@ -33,7 +33,7 @@ struct Settings {
 /// Private control handles never cross the application's integration boundary.
 #[com_object(interfaces(
     neocogi_com::persistence::IPersistable,
-    neocogi_com_events_contracts::INamedOutputs,
+    neocogi_com::events::INamedOutputs,
     neocogi_idl_example_contracts::ICompositionRoot
 ))]
 struct SettingsView {

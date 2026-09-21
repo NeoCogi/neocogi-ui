@@ -550,7 +550,7 @@ impl Ui {
     ) -> Result<(), NcStatus> {
         // The callback may borrow stack state. Every retained foreign dispatcher is
         // revoked before this call returns, including error and unwinding paths.
-        neocogi_com_events::with_dispatcher(
+        neocogi_com::events::with_dispatcher(
             &mut || match events.try_recv() {
                 Ok(message) => {
                     consume(message)?;

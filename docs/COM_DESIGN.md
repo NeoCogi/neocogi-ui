@@ -135,3 +135,20 @@ The implementation history explains the guarantees retained here:
 The revert of `2498bb71` records no detailed rationale. This change does not
 infer one: it removes the runtime inventory that both storage alternatives
 were trying to own.
+
+## COM crate and linkage boundaries
+
+Five production crates own COM: `core` supplies portable ABI/data support, `api`
+supplies object helpers, built-in event contracts/adapters, and runtime clients,
+`runtime` owns loading/registries/persistence execution, `macros` expands Rust
+objects, and `idl` owns parsing through Cargo integration. Runtime declarations
+are internal facade code, and event contracts are published from the facade's
+IDL source graph with the Rust path `neocogi_com::events`.
+
+Only the process runtime has a deployed COM shared-library form (`libnc_com.so`
+on Linux). The facade, contracts, and event adapters compile into their consumers.
+Shared runtime callers import its six C discovery functions; static/native and
+browser consumers link the `nc_com` rlib. Procedural macros and IDL generation run
+on the build machine and do not become target runtime dependencies. An rlib used
+as an intermediate when building a shared library does not imply static linkage
+of the runtime into the final host.

@@ -459,7 +459,7 @@ fn boundary_budget_stops_a_cascade_and_preserves_the_unattempted_message() {
         sender.send(()).unwrap();
         let mut delivered = 0;
         let mut remaining = 2;
-        let result = neocogi_com_events::with_dispatcher(
+        let result = neocogi_com::events::with_dispatcher(
             &mut || match events.try_recv() {
                 Ok(()) => {
                     delivered += 1;

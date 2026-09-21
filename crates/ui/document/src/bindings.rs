@@ -1,7 +1,7 @@
 //! Name resolution is setup-only; concrete receivers own subsequent typed calls.
 use crate::{model::*, contracts::*};
 use neocogi_com::{ComPtr, IUnknown, ComInterface, NcMessage, NcStatus, NcCopyFromBufferOffset, NC_E_INVALID_ARG};
-use neocogi_com_events::NamedOutputs;
+use neocogi_com::events::NamedOutputs;
 use neocogi_ui::*;
 use std::collections::BTreeMap;
 

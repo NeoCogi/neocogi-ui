@@ -1,6 +1,6 @@
 //! Loads a UI document without linking its concrete widgets into application code.
 use neocogi_com::NcStatus;
-use neocogi_com_events::bind_output;
+use neocogi_com::events::bind_output;
 use neocogi_demo_host::{AppState, Host, HostError};
 use neocogi_ui::*;
 use neocogi_ui_document::{contracts::SetText, Document, Generation, ReloadSlot, Resources};

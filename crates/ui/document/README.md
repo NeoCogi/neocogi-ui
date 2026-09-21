@@ -28,7 +28,7 @@ file contents.
 Create `Loader::new(ui, parent_window, resources)` and call `load(binary)` or
 `prepare(&document)`. It returns an opaque `Component`; the application sees
 only `root()`, `outputs()`, typed `input::<SetText>("title")`, and `save()`.
-Use `neocogi_com_events::bind_output` with the concrete event type declared by
+Use `neocogi_com::events::bind_output` with the concrete event type declared by
 the component's public contract. Wrong types fail at connection time. Inputs
 include text, checked, numeric value, interaction enablement, expansion, and
 combo-model replacement. `SetChoices` uses UTF-8 text plus checked exclusive

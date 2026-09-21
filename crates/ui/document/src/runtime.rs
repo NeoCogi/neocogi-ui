@@ -5,8 +5,8 @@ use neocogi_com::{
     NC_E_OUT_OF_RANGE,
 };
 use neocogi_com::persistence::{FactoryRegistry, ObjectRecord, IPersistable, IPersistenceFactory, IObjectChildrenAbi};
-use neocogi_com_events::{NamedOutputs, INamedOutputsAbi};
-use neocogi_com_events_contracts::INamedOutputs;
+use neocogi_com::events::{NamedOutputs, INamedOutputsAbi};
+use neocogi_com::events::INamedOutputs;
 use neocogi_ui::{Ui, Widget, IWidgetAbi, IWindowAbi, ITextureAbi};
 use std::collections::BTreeMap;
 
@@ -126,7 +126,7 @@ impl Component {
 }
 
 /// One persistent composition owns its initialization and the concrete binding capabilities.
-#[neocogi_com::com_object(interfaces(contracts::IUiComponent, neocogi_com_events_contracts::INamedOutputs, neocogi_com::persistence::IPersistable))]
+#[neocogi_com::com_object(interfaces(contracts::IUiComponent, neocogi_com::events::INamedOutputs, neocogi_com::persistence::IPersistable))]
 struct Loaded {
     /// Exact authored values; intentionally independent of live interactive state.
     document: Document,

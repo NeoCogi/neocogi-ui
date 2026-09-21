@@ -86,7 +86,7 @@ retains a sender. It emits only its declared public results; private messages do
 not automatically bubble through ancestors. Structural containers such as
 `ScrollArea` need no channel merely because they contain children.
 
-`neocogi_com_events::component_dispatcher(&model, |model| &model.messages, Model::update)`
+`neocogi_com::events::component_dispatcher(&model, |model| &model.messages, Model::update)`
 creates the separate COM driver exposed by the mounted root through
 `IComponentEventProvider`. The driver keeps a weak model reference. It claims the
 model's `Rc<RefCell<Model>>` borrow before receiving, so a busy model loses no

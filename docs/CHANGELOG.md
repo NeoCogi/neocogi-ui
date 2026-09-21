@@ -2,6 +2,17 @@
 
 ## 0.9.0-alpha.0 (unreleased)
 
+- Consolidate nine COM production crates into five: move runtime link declarations
+  into the facade, combine IDL parsing/generation/Cargo integration in
+  `neocogi-idl`, and expose built-in event contracts and channel adapters through
+  `neocogi_com::events`. Remove the runtime-sys, events, events-contracts, and
+  idl-build packages. Runtime/shared-library ownership and C ABI signatures remain
+  unchanged; `nc_com` remains the sole deployed COM runtime library.
+- Add explicit crate-rooted Rust contract paths to source graph schema 5 so a
+  logical IDL module can live inside a facade without changing its identity or
+  fingerprints. Build scripts use `neocogi_idl::cargo::Module`; event consumers
+  depend directly on `neocogi-com` with `macros` (plus `std` for channel adapters).
+
 - Name the workspace **NeoCogi UI** (`neocogi-ui`), retaining
   descriptive `neocogi-*` Cargo packages and the `cargo neocogi` command.
   Deploy short library names (`libnc_com.so`, `libnc_ui.so`, `libnc_ui_nodes.so`,

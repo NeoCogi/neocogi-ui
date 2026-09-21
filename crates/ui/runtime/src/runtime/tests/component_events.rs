@@ -127,7 +127,7 @@ impl EventfulComposite {
             trace,
             record: handler,
         }));
-        let dispatcher = neocogi_com_events::component_dispatcher(&consumer, |model| &model.messages, Consumer::update).unwrap();
+        let dispatcher = neocogi_com::events::component_dispatcher(&consumer, |model| &model.messages, Consumer::update).unwrap();
         let widget = Self::from_value(Self {
             lifetime: shell.node_interface().unwrap(),
             layout: shell.as_interface().add_ref().query().unwrap(),

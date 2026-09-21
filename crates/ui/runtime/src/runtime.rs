@@ -398,7 +398,7 @@ impl Runtime {
             // Exhaustion stops before another dequeue. Reaching the exact ceiling also
             // returns LIMIT: proving quiescence would require inspecting foreign queues.
             if *remaining == 0 {
-                return Err(neocogi_com_events::EVENT_E_LIMIT);
+                return Err(neocogi_com::events::EVENT_E_LIMIT);
             }
             self.storage.layout_boundary(dimensions)?;
             let (reconciled, component_drivers) = {
@@ -443,7 +443,7 @@ impl Runtime {
 fn spend_dispatch_budget(remaining: &mut u32) -> Result<(), NcStatus> {
     *remaining -= 1;
     match *remaining {
-        0 => Err(neocogi_com_events::EVENT_E_LIMIT),
+        0 => Err(neocogi_com::events::EVENT_E_LIMIT),
         _ => Ok(()),
     }
 }

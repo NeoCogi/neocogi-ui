@@ -15,7 +15,7 @@
 //! }
 //! ```
 /// Installs a typed COM mapping into a standard application or component channel.
-pub use neocogi_com_events::map;
+pub use neocogi_com::events::map;
 
 use crate::com::*;
 use neocogi_com::{ComRef, NC_E_INVALID_ARG, NcStatus};

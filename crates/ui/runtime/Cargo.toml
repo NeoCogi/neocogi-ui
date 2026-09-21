@@ -19,7 +19,6 @@ crate-type = ["rlib"]
 [dependencies]
 neocogi-ui-support.workspace = true
 neocogi-ui-core-contracts.workspace = true
-neocogi-com-events.workspace = true
 neocogi-gfx-contracts.workspace = true
 neocogi-renderer-contracts.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
@@ -28,8 +27,7 @@ rs-math3d.workspace = true
 
 [dev-dependencies]
 neocogi-ui-document.workspace = true
-neocogi-com-events-contracts.workspace = true
-neocogi-idl-example-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "9c282a419a8728127198a11ad997529da16cc154" }
+neocogi-idl-example-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "d417bc56734aa71df03522113eaf8c6696b25b36" }
 neocogi-ui-nodes.workspace = true
 neocogi-ui-nodes-contracts.workspace = true
 neocogi-ui-support = { workspace = true, features = ["test-support"] }

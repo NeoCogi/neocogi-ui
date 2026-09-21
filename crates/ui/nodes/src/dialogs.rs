@@ -512,7 +512,7 @@ impl Dialog {
             diagnostic: String::new(),
         }));
         let dialog = Rc::new(Self { model, request });
-        let driver = neocogi_com_events::component_dispatcher(&dialog.model, |model| &model.events, Model::update)?;
+        let driver = neocogi_com::events::component_dispatcher(&dialog.model, |model| &model.events, Model::update)?;
         let root = DialogRoot::create(&shell, driver, dialog.request.clone())?;
         let windows = services.windows.clone();
         let window = windows.create_dialog(parent, NcCopyFromBufferOffset::new(0, b"Open File"), FILE_DIALOG_RECT, root.as_com_ref())?;

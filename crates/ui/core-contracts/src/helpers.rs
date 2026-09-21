@@ -71,7 +71,7 @@ pub const UI_E_RENDER: NcStatus = NcStatus::from_code(-1005);
 pub const UI_E_POLICY: NcStatus = NcStatus::from_code(-1006);
 
 /// Shared COM event-budget status, exposed through the UI convenience namespace.
-pub use neocogi_com_events_contracts::EVENT_E_LIMIT as UI_E_EVENT_LIMIT;
+pub use neocogi_com::events::EVENT_E_LIMIT as UI_E_EVENT_LIMIT;
 
 /// A native file/directory operation failed; the component's diagnostic preserves the concrete OS error.
 pub const UI_E_IO: NcStatus = NcStatus::from_code(-1008);

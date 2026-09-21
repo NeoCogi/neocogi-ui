@@ -22,7 +22,6 @@ dynamic-plugin = []
 [dependencies]
 neocogi-ui-support.workspace = true
 neocogi-ui.workspace = true
-neocogi-com-events.workspace = true
 rs-math3d.workspace = true
 bitflags.workspace = true
 neocogi-ui-core-contracts.workspace = true

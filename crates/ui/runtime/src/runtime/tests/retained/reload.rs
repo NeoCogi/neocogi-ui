@@ -1,7 +1,7 @@
 //! Real loaded controls exercise publication, binding, authored defaults, and stale handles.
 use super::*;
 use neocogi_ui_document::{*, contracts::SetText};
-use neocogi_com_events::bind_output;
+use neocogi_com::events::bind_output;
 
 /// Mounts a document slot in an ordinary window using the production runtime.
 fn slot(ui: &Ui) -> ReloadSlot {

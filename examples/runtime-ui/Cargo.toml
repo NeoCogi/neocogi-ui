@@ -19,8 +19,7 @@ embed-assets = ["neocogi-demo-assets/embed-assets"]
 [dependencies]
 neocogi-ui.workspace = true
 neocogi-ui-document.workspace = true
-neocogi-com = { workspace = true, features = ["std"] }
-neocogi-com-events.workspace = true
+neocogi-com = { workspace = true, features = ["std", "macros"] }
 neocogi-demo-host.workspace = true
 neocogi-demo-assets.workspace = true
 
