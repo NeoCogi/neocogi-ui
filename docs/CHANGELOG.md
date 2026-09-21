@@ -2,6 +2,14 @@
 
 ## 0.9.0-alpha.0 (unreleased)
 
+- Consolidate COM object persistence into core contracts, the shared runtime, and
+  `neocogi_com::persistence`; remove the separate persistence implementation and
+  contract crates. Keep recipe registries caller-owned, with mutable registration,
+  shared restoration, and deterministic factory cleanup. `FactoryRegistry::new()`
+  is now fallible. Preserve interface identities and NCB-v1 bytes, and use the
+  same versioned persistence table in shared, monolithic, and browser builds.
+  Rebuild hosts and runtime together for the added pre-alpha table getter.
+
 - Add the concrete nodes `SplitView` container and typed facade for two panes,
   draggable/keyboard-adjustable dividers, minimum sizes, and user change events.
   Use it between the theme editor inspector and live preview. Core's existing

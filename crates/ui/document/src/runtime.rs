@@ -4,7 +4,7 @@ use neocogi_com::{
     binary, ComPtr, ComRef, IUnknown, NcStatus, NcGuid, NcBytes, INcBytesAbi, NcCopyFromBufferOffset, NC_E_INVALID_ARG, NC_E_NOT_FOUND, NC_E_ABI_VERSION,
     NC_E_OUT_OF_RANGE,
 };
-use neocogi_com_persistence::{FactoryRegistry, ObjectRecord, IPersistable, IPersistenceFactory, IObjectChildrenAbi};
+use neocogi_com::persistence::{FactoryRegistry, ObjectRecord, IPersistable, IPersistenceFactory, IObjectChildrenAbi};
 use neocogi_com_events::{NamedOutputs, INamedOutputsAbi};
 use neocogi_com_events_contracts::INamedOutputs;
 use neocogi_ui::{Ui, Widget, IWidgetAbi, IWindowAbi, ITextureAbi};
@@ -35,8 +35,8 @@ impl Resources {
     }
 }
 /// Binary limits permit a complete typed document inside one COM initialization record.
-fn limits() -> neocogi_com_persistence::Limits {
-    neocogi_com_persistence::Limits {
+fn limits() -> neocogi_com::persistence::Limits {
+    neocogi_com::persistence::Limits {
         binary: binary::Limits {
             bytes: MAX_BYTES,
             elements: MAX_BYTES,
@@ -83,7 +83,7 @@ pub struct Loader {
 impl Loader {
     /// Binds services; parent is needed only for controls that own popups.
     pub fn new(ui: Ui, parent: Option<ComPtr<IWindowAbi>>, resources: Resources) -> Result<Self, NcStatus> {
-        let mut registry = FactoryRegistry::new();
+        let mut registry = FactoryRegistry::new()?;
         registry.register(DOCUMENT_TYPE, Factory::from_value(Factory { ui, parent, resources }).query()?)?;
         Ok(Self { registry })
     }
@@ -121,12 +121,12 @@ impl Component {
     }
     /// Saves authored defaults; preview interaction and application commands never rewrite them.
     pub fn save(&self) -> Result<Vec<u8>, NcStatus> {
-        neocogi_com_persistence::snapshot_with_limits(self.object.as_com_ref(), limits())
+        neocogi_com::persistence::snapshot_with_limits(self.object.as_com_ref(), limits())
     }
 }
 
 /// One persistent composition owns its initialization and the concrete binding capabilities.
-#[neocogi_com::com_object(interfaces(contracts::IUiComponent, neocogi_com_events_contracts::INamedOutputs, neocogi_com_persistence::IPersistable))]
+#[neocogi_com::com_object(interfaces(contracts::IUiComponent, neocogi_com_events_contracts::INamedOutputs, neocogi_com::persistence::IPersistable))]
 struct Loaded {
     /// Exact authored values; intentionally independent of live interactive state.
     document: Document,
@@ -191,7 +191,7 @@ impl IPersistable for Loaded {
 }
 
 /// Factory services are supplied by the application and never decoded from a file.
-#[neocogi_com::com_object(interfaces(neocogi_com_persistence::IPersistenceFactory))]
+#[neocogi_com::com_object(interfaces(neocogi_com::persistence::IPersistenceFactory))]
 struct Factory {
     /// Runtime-bound widget construction authority.
     ui: Ui,

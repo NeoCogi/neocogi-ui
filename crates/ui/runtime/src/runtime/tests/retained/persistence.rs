@@ -9,7 +9,7 @@ use neocogi_com::{
 };
 use neocogi_com_events::{bind_output, NamedOutputs};
 use neocogi_com_events::{INamedOutputs, INamedOutputsAbi};
-use neocogi_com_persistence::{snapshot, FactoryRegistry, ObjectRecord};
+use neocogi_com::persistence::{snapshot, FactoryRegistry, ObjectRecord};
 use neocogi_idl_example_contracts::{ICompositionRoot, ICompositionRootAbi};
 
 /// Persistent recipe identity remains independent from runtime/widget identities.
@@ -32,7 +32,7 @@ struct Settings {
 
 /// Private control handles never cross the application's integration boundary.
 #[com_object(interfaces(
-    neocogi_com_persistence::IPersistable,
+    neocogi_com::persistence::IPersistable,
     neocogi_com_events_contracts::INamedOutputs,
     neocogi_idl_example_contracts::ICompositionRoot
 ))]
@@ -60,7 +60,7 @@ impl INamedOutputs for SettingsView {
         self.outputs.bind_com(name, receiver)
     }
 }
-impl neocogi_com_persistence::IPersistable for SettingsView {
+impl neocogi_com::persistence::IPersistable for SettingsView {
     /// Selects the provider explicitly registered by the application.
     fn type_id(&self) -> Result<NcGuid, NcStatus> {
         Ok(VIEW_KIND)
@@ -91,7 +91,7 @@ impl neocogi_com_persistence::IPersistable for SettingsView {
 }
 
 /// Context-bound construction reuses ordinary UI factory methods.
-#[com_object(interfaces(neocogi_com_persistence::IPersistenceFactory))]
+#[com_object(interfaces(neocogi_com::persistence::IPersistenceFactory))]
 struct SettingsFactory {
     /// Runtime authority and resources are supplied by the host, never the file.
     widgets: WidgetFactory,
@@ -110,7 +110,7 @@ fn settings(version: u32, bytes: NcCopyFromBufferOffset<'_, u8>, children: u32) 
     }
     Ok(value)
 }
-impl neocogi_com_persistence::IPersistenceFactory for SettingsFactory {
+impl neocogi_com::persistence::IPersistenceFactory for SettingsFactory {
     /// Preflight validates the exact initialization and export-name contract.
     fn validate(&self, version: u32, state: NcCopyFromBufferOffset<'_, u8>, children: u32) -> Result<(), NcStatus> {
         settings(version, state, children).map(|_| ())
@@ -120,7 +120,7 @@ impl neocogi_com_persistence::IPersistenceFactory for SettingsFactory {
         &self,
         version: u32,
         state: NcCopyFromBufferOffset<'_, u8>,
-        children: ComRef<'_, neocogi_com_persistence::IObjectChildrenAbi>,
+        children: ComRef<'_, neocogi_com::persistence::IObjectChildrenAbi>,
     ) -> Result<ComPtr<IUnknown>, NcStatus> {
         let state = settings(version, state, children.count()?)?;
         let button = self.widgets.button(&state.save_label)?;
@@ -190,7 +190,7 @@ fn persisted_component_builds_real_ui_and_binds_without_child_handles() {
         state: binary::to_vec(&state).unwrap(),
         children: vec![],
     };
-    let mut registry = FactoryRegistry::new();
+    let mut registry = FactoryRegistry::new().unwrap();
     registry
         .register(
             VIEW_KIND,
