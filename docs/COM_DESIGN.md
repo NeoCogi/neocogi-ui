@@ -16,7 +16,8 @@ connections carry it across COM into a consumer-owned inbox.
        -> compiled into each host/plugin that uses them
 
 plugin: private Rust implementations + one factory descriptor
-runtime: plugin registry + loaded-library lifetime + checked root activation
+COM runtime: plugin registry + loaded-library lifetime + checked root activation
+             + caller-owned persistence contexts
 host: supplies paths/dependency order and calls typed factory methods
 ```
 
@@ -64,7 +65,8 @@ implementation fields do not need `Cell` or `RefCell` for this purpose.
 Named outputs carry concrete `#[message]` data through generated COM posting. A receiver
 copies and maps each emitted fact into an application message and sends it through
 `std::sync::mpsc`. The consumer owns the standard channel receiver. Application state remains an ordinary value borrowed during runtime dispatch.
-Nested components use private channels and framework-created drivers discovered at
+The retained UI runtime schedules dispatch; the COM process runtime owns no
+event loop. Nested components use private channels and framework-created drivers discovered at
 mount. No `Any`, erased event payload, or Rust trait object crosses the ABI.
 
 ## Compatibility at the call boundary
