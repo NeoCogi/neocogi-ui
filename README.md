@@ -54,7 +54,7 @@ package does not assemble those files.
 
 COM infrastructure lives under `crates/com`: `core` defines the
 ABI vocabulary, `macros` generates typed projections, `api` is the safe client
-surface, and `runtime` plus `runtime-sys` own process-wide loading and linkage.
+surface, and `runtime` owns process-wide loading; the facade selects shared or static linkage.
 Build-time IDL tooling lives under `crates/com/idl`: `core` owns parsing, resolution,
 and fingerprints, while `build` is the reusable contract-crate `build.rs`
 integration. Contract examples live under `tools/idl`. The reusable tooling remains
