@@ -1,10 +1,12 @@
-# NeoCogi Platform
+# NeoCogi UI
 
 [![Crate](https://img.shields.io/crates/v/neocogi-ui.svg)](https://crates.io/crates/neocogi-ui)
 
-NeoCogi Platform is a retained Rust GUI toolkit inspired by
-[rxi/microui](https://github.com/rxi/microui). Applications use a thin, statically
-linked typed facade. Concrete COM objects own widgets, containers, the UI runtime,
+NeoCogi UI provides components, runtime services, UI, rendering, and
+tools for building modular Rust applications across native platforms and the
+browser. Its retained UI grew from [rxi/microui](https://github.com/rxi/microui).
+Applications use a thin, statically linked typed facade. Concrete COM objects
+own widgets, containers, the UI runtime,
 windows and renderer resources. Native deployments load a few independently built
 plugins; browsers register the same interfaces with one static runtime.
 
@@ -13,6 +15,12 @@ without compatibility layers. The imported neocogi-com implementation is maintai
 this workspace. Concrete controls such as `Button` are callable COM class contracts;
 shared protocols such as `IWidget` and `ILeafLayout` remain interfaces on the same
 object and state.
+
+The workspace/repository name is `neocogi-ui`. Cargo packages keep
+descriptive `neocogi-*` names, while deployed libraries use the short `nc_*`
+targets (`nc` means NeoCogi). See the [shared-library mapping](docs/COM_NATIVE.md#profiles-and-output)
+and [executable mapping](docs/EXAMPLES.md) for exact outputs. The assembly command
+remains `cargo neocogi`.
 
 | Windows 3.11 | Mac OS 9 |
 | :--: | :--: |
@@ -44,13 +52,14 @@ package does not assemble those files.
 
 ## Workspace layout
 
-Platform-owned COM infrastructure lives under `crates/com`: `core` defines the
+COM infrastructure lives under `crates/com`: `core` defines the
 ABI vocabulary, `macros` generates typed projections, `api` is the safe client
 surface, and `runtime` plus `runtime-sys` own process-wide loading and linkage.
-Build-time IDL tooling lives under `tools/idl`: `core` owns parsing, resolution,
+Build-time IDL tooling lives under `crates/com/idl`: `core` owns parsing, resolution,
 and fingerprints, while `build` is the reusable contract-crate `build.rs`
-integration. It remains separate from `tools/cargo-neocogi` so ordinary Cargo
-builds can regenerate contracts without invoking the assembly CLI.
+integration. Contract examples live under `tools/idl`. The reusable tooling remains
+separate from `tools/cargo-neocogi` so ordinary Cargo builds can regenerate
+contracts without invoking the assembly CLI.
 UI code follows the same role-based layout under `crates/ui`: `core-contracts` contains
 shared node, layout, popup, menu, and window protocols; `nodes-contracts` owns the concrete
 built-in widget/container classes and their typed factory; and `api` is the application facade.
@@ -124,8 +133,8 @@ Depend on the local facade while using this pre-alpha checkout:
 
 ```toml
 [dependencies]
-neocogi-ui = { path = "../neocogi-platform/crates/ui/api" }
-neocogi-com = { path = "../neocogi-platform/crates/com/api" }
+neocogi-ui = { path = "../neocogi-ui/crates/ui/api" }
+neocogi-com = { path = "../neocogi-ui/crates/com/api" }
 ```
 
 Once the host has activated `UiRuntimeAbi`, the facade creates and edits the actual objects:

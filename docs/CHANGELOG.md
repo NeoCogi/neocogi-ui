@@ -2,6 +2,18 @@
 
 ## 0.9.0-alpha.0 (unreleased)
 
+- Name the workspace **NeoCogi UI** (`neocogi-ui`), retaining
+  descriptive `neocogi-*` Cargo packages and the `cargo neocogi` command.
+  Deploy short library names (`libnc_com.so`, `libnc_ui.so`, `libnc_ui_nodes.so`,
+  `libnc_render.so`, `libnc_gfx.so`, and `libnc_skin.so` on Linux). Generated
+  component roots preserve authored Cargo library target names for both local
+  and registry plugins. Direct Rust implementation imports use those short
+  targets; public facades and ABI identities remain unchanged. Standardize
+  demo, example, benchmark, and asset-tool executables under `neocogi-*` names.
+  See the [library mapping](COM_NATIVE.md#profiles-and-output) and
+  [executable mapping](EXAMPLES.md). Rebuild and restage native assemblies;
+  old runtime filenames and plugin manifests belong to the previous build.
+
 - Consolidate COM object persistence into core contracts, the shared runtime, and
   `neocogi_com::persistence`; remove the separate persistence implementation and
   contract crates. Keep recipe registries caller-owned, with mutable registration,

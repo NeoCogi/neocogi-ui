@@ -63,7 +63,8 @@ native linkage mode from relocated staging with exact staged resources. See the
 
 Cargo package names remain descriptive; each deployable component declares a
 short `[lib] name`. The assembly tool preserves that target name, including for
-third-party plugins. Direct `cargo rustc --lib --crate-type cdylib` builds use
+third-party plugins. Components staged together must use distinct library target
+names. Direct `cargo rustc --lib --crate-type cdylib` builds use
 the same filenames. Rust code that directly imports an implementation uses its
 library target name; application facades retain their `neocogi_*` names.
 
@@ -87,6 +88,8 @@ deploy `libnc_render.so` in separate variant directories. Persistence lives in
 
 Rebuild and restage existing assemblies after the naming change. Native hosts
 now link `nc_com`, and generated `plugins.txt` files name the new artifacts.
+If using an installed command, update it from this checkout with
+`cargo install --path tools/cargo-neocogi --force` before rebuilding.
 Monoliths and browser modules still link the implementations statically.
 
 ```sh

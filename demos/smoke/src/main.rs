@@ -85,7 +85,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let assets = neocogi_demo_assets::load_bundle()?;
     let atlas = assets.image()?;
     let native = platform.create_window(
-        NcCopyFromBufferOffset::new(0, b"NeoCogi Platform"),
+        NcCopyFromBufferOffset::new(0, b"NeoCogi UI"),
         Size { width: 640, height: 400 },
         atlas.as_com_ref(),
     )?;
