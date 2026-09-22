@@ -30,19 +30,29 @@ impl HostState {
     /// Finishes removed owners without holding tree or queue borrows across COM calls.
     pub(crate) fn finish_owner_retirement(&self) -> Result<(), neocogi_com::NcStatus> {
         let mut failure = None;
+        // A caller may still hold a typed local guard. Keep those unentered
+        // retirements for the next boundary without retrying them in this loop.
+        let mut busy = Vec::new();
         loop {
             let retired = std::mem::take(&mut *self.retired_owners.borrow_mut());
             if retired.is_empty() {
                 break;
             }
             for mut owner in retired {
-                if let Err(error) = owner.retire() {
-                    // Continue releasing other removed owners even after one
-                    // terminal notification fails; report the first failure.
-                    failure.get_or_insert(error);
+                match owner.retire() {
+                    Ok(()) => {}
+                    Err(error) => {
+                        if error == neocogi_com::NC_E_BUSY {
+                            busy.push(owner);
+                        }
+                        // Continue independent cleanup after any failure. A
+                        // terminal model error is consumed; gate contention can retry.
+                        failure.get_or_insert(error);
+                    }
                 }
             }
         }
+        self.retired_owners.borrow_mut().extend(busy);
         failure.map_or(Ok(()), Err)
     }
 

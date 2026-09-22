@@ -1,14 +1,18 @@
 //! Full application checks use the actual plugin graph, including GPU images and all theme choices.
 use super::*;
+use neocogi_ui::events::testing::TestApp;
 
 /// Selects Win 3.11 through the real nested menu and verifies publication on the following frame.
-fn select_win311_from_menu(host: &Host, state: &mut State, events: &std::sync::mpsc::Receiver<Message>) -> Result<(), HostError> {
+fn select_win311_from_menu(host: &Host, app: &TestApp<State, Message>) -> Result<(), HostError> {
+    let mut state = app.state();
     let size = host.window.size()?;
     let base = host.ui.assets()?;
     let demo = state.demo.clone();
     demo.raise()?;
     state.frame(host, size, 0.)?;
-    host.ui.update_with_events(size, events, |message| state.update(message))?;
+    drop(state);
+    app.update(&host.ui, size)?;
+    state = app.state();
     let installed = host.ui.assets()?;
     let area = demo.snapshot()?.rect;
     let position = Point { x: area.x + 100, y: area.y + 10 };
@@ -45,24 +49,30 @@ fn select_win311_from_menu(host: &Host, state: &mut State, events: &std::sync::m
     // This frame's callback precedes the input handlers. Selecting the theme prepares its assets,
     // but the current revision remains renderable after the single event/layout update completes.
     state.frame(host, size, 0.)?;
-    host.ui.update_with_events(size, events, |message| state.update(message))?;
+    drop(state);
+    app.update(&host.ui, size)?;
+    state = app.state();
     assert_eq!(state.themes[1].1.mark()?, MenuMark::Radio { selected: true });
     assert_eq!(state.ui.assets()?.metrics()?, installed.metrics()?);
     host.ui.render(size, host.renderer.as_com_ref())?;
     // The following frame publishes the candidate and settles its geometry with one update too.
     state.frame(host, size, 0.)?;
-    host.ui.update_with_events(size, events, |message| state.update(message))?;
+    drop(state);
+    app.update(&host.ui, size)?;
+    state = app.state();
     assert_eq!(state.ui.assets()?.metrics()?, Theme::ALL[1].load(base.as_com_ref())?.metrics()?);
     host.ui.render(size, host.renderer.as_com_ref())?;
     Ok(())
 }
 
 /// Exercises application-level composition against real runtime, platform and decoder objects.
-fn exercise() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostError> {
-    let (host, mut state, events) = create()?;
+fn exercise() -> Result<(Host, TestApp<State, Message>), HostError> {
+    let (host, state, events) = create()?;
+    let app = TestApp::new(state, events, State::update);
     let size = host.window.size()?;
     let base = host.ui.assets()?;
-    select_win311_from_menu(&host, &mut state, &events)?;
+    select_win311_from_menu(&host, &app)?;
+    let mut state = app.state();
     for theme in Theme::ALL {
         state.select_theme(theme)?;
         // Publish the prepared assets before the host's single update for this frame.
@@ -70,7 +80,9 @@ fn exercise() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostE
         // The photograph is below the initial viewport. Requesting the measured end guarantees
         // every theme crosses real image forwarding, clipping, validation and native GPU upload.
         state.sample_scroll.scroll_to_end()?;
-        host.ui.update_with_events(size, &events, |message| state.update(message))?;
+        drop(state);
+        app.update(&host.ui, size)?;
+        state = app.state();
         host.ui.render(size, host.renderer.as_com_ref())?;
         assert_eq!(state.ui.assets()?.metrics()?, theme.load(base.as_com_ref())?.metrics()?);
         for (choice, item) in &state.themes {
@@ -94,9 +106,12 @@ fn exercise() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostE
     // Commit the final style edit before observing the installed immutable revision.
     state.frame(&host, size, 0.)?;
     assert_eq!(state.ui.assets()?.metrics()?.spacing, 2);
-    host.ui.update_with_events(size, &events, |message| state.update(message))?;
+    drop(state);
+    app.update(&host.ui, size)?;
+    state = app.state();
     host.ui.render(size, host.renderer.as_com_ref())?;
-    Ok((host, state, events))
+    drop(state);
+    Ok((host, app))
 }
 
 /// Packaging supplies the actual adjacent libraries; ordinary unit runs explicitly report this as ignored.
@@ -104,11 +119,11 @@ fn exercise() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostE
 #[test]
 #[ignore = "run scripts/test-demo.sh to stage the independently built native plugins"]
 fn packaged_full_application_themes_images_actions_and_close() {
-    let (host, state, events) = exercise().unwrap();
-    let retained = state.combo.clone();
+    let (host, app) = exercise().unwrap();
+    let retained = app.state().combo.clone();
     drop(host);
     assert_eq!(retained.selection(), Err(UI_E_CLOSED));
-    drop(events);
+    drop(app);
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -148,9 +163,8 @@ mod browser {
     /// Browser harness starts the real full demo checks followed by both asynchronous teardown paths.
     #[wasm_bindgen]
     pub fn full_demo_checks() -> Result<(), JsValue> {
-        let (host, state, events) = exercise().map_err(|error| JsValue::from_str(&error.to_string()))?;
-        drop(events);
-        drop(state);
+        let (host, app) = exercise().map_err(|error| JsValue::from_str(&error.to_string()))?;
+        drop(app);
         let released = [Rc::new(Cell::new(false)), Rc::new(Cell::new(false))];
         RELEASED.with_borrow_mut(|stored| *stored = Some(released.clone()));
         host.run(

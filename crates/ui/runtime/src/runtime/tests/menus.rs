@@ -1,5 +1,6 @@
 //! Compact menu declarations, live row edits, and manager keyboard policy cross only concrete capabilities.
 use super::*;
+use neocogi_ui_support::test_support::events::TestApp;
 
 /// Queues a concrete key including the function-key number carried by FUNCTION.
 fn key(ui: &neocogi_ui::Ui, key: KeyCode, value: u32) {
@@ -63,12 +64,12 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
     for code in [KeyCode::Function, KeyCode::ArrowDown, KeyCode::ArrowRight, KeyCode::Enter] {
         key(&ui, code, if code == KeyCode::Function { 10 } else { 0 });
     }
-    ui.update_with_events(SIZE, &session, |message| {
-        labels.push(message);
+    let app = TestApp::new(labels, session, |state, message| {
+        state.push(message);
         Ok(())
-    })
-    .unwrap();
-    assert_eq!(&labels, &["Captured", "mapped:Later"]);
+    });
+    ui.update_with_events(SIZE, app.as_interface()).unwrap();
+    assert_eq!(&*app.state(), &["Captured", "mapped:Later"]);
     let (renderer, _) = renderer();
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
     item.set_shortcut_hint("A longer accelerator").unwrap();
@@ -127,18 +128,18 @@ fn standalone_menu_popup_submits_then_hides_without_destroying_its_live_rows() {
     let item = builder.item("Run").unwrap();
     let mut popup = menus.popup(window.as_com_ref(), &builder).unwrap();
     let (session_tx, session) = std::sync::mpsc::channel();
-    let mut labels = Vec::new();
+    let labels = Vec::new();
     neocogi_ui::events::bind(item.activated().unwrap(), session_tx.clone(), |event| event.label).unwrap();
     popup.show_at(Rect { x: 60, y: 60, width: 20, height: 20 }).unwrap();
     // Standalone menus begin without row selection; Down selects their first actionable row.
     key(&ui, KeyCode::ArrowDown, 0);
     key(&ui, KeyCode::Enter, 0);
-    ui.update_with_events(SIZE, &session, |message| {
-        labels.push(message);
+    let app = TestApp::new(labels, session, |state, message| {
+        state.push(message);
         Ok(())
-    })
-    .unwrap();
-    assert_eq!(&labels, &["Run"]);
+    });
+    ui.update_with_events(SIZE, app.as_interface()).unwrap();
+    assert_eq!(&*app.state(), &["Run"]);
     assert_eq!(popup.visibility(), Ok(Visibility::Hidden));
     assert_eq!(item.label().unwrap(), "Run");
     popup.close().unwrap();

@@ -176,3 +176,7 @@ pub fn test_image(width: i32, height: i32) -> neocogi_ui::Image {
 
 /// Canonical source writers are compiled only for explicit fixture consumers.
 pub use crate::assets::fixtures as assets;
+
+/// Persistent typed applications used by runtime integration fixtures.
+#[cfg(feature = "test-support")]
+pub mod events;

@@ -10,7 +10,7 @@ description = "Non-deployable resource and presentation helpers shared by UI pro
 [features]
 default = []
 # Fixtures supply canonical assets and phase snapshots without replacing runtime behavior.
-test-support = ["dep:neocogi-appearance", "dep:neocogi-gfx"]
+test-support = ["neocogi-ui/test-support", "dep:neocogi-appearance", "dep:neocogi-gfx"]
 
 [dependencies]
 neocogi-appearance = { workspace = true, optional = true }

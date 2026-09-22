@@ -248,7 +248,7 @@ interface IConstructionHost {
     fn host(&self) -> Result<IWidgetHost>;
 }
 
-#[version(2)]
+#[version(3)]
 /// One constructible retained UI with input, rendering, and resource ownership.
 interface UiRuntime: IInputSink + IWindowManager + IMenus + IChoiceMenus {
 
@@ -263,11 +263,12 @@ interface UiRuntime: IInputSink + IWindowManager + IMenus + IChoiceMenus {
     /// Callers install only after update or event dispatch returns; overlapping runtime calls reject
     /// the exclusive receiver with BUSY. The renderer is borrowed only for this call.
     fn install_assets(&mut self, assets: &IAssetBundle, renderer: &IRenderer) -> Result<()>;
-    /// Drains queued input, or one eventless update, and synchronizes setters/resize without an application dispatcher.
+    /// Drains queued input, or one eventless update, and synchronizes setters/resize without an application event owner.
     fn update(&self, size: Size) -> Result<()>;
-    /// Borrows application dispatch at each safe boundary; handlers may mutate windows/topology before the next input is routed.
-    /// The runtime never retains dispatcher; update/render reentry returns BUSY even while the context is available to handlers.
-    fn update_with_events(&self, size: Size, dispatcher: &IEventDispatcher) -> Result<()>;
+    /// Borrows the persistent application owner at safe boundaries; handlers may edit topology before later input.
+    /// The runtime never retains this root owner, so it may own the UI without a reference cycle.
+    /// Update/render reentry returns BUSY even while the context is available to handlers.
+    fn update_with_events(&self, size: Size, owner: &IEventOwner) -> Result<()>;
     /// Returns the committed editable focus rectangle in drawable coordinates, or None while
     /// geometry/input is pending. Hosts synchronize native IME after each successful update.
     fn text_input_area(&self) -> Result<TextInputArea>;

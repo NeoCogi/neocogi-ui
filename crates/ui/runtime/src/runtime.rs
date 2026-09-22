@@ -272,7 +272,7 @@ impl UiRuntime for Runtime {
         self.update_cycle(size, None)
     }
     /// Lends the dispatcher only after returning owned UI context storage to its idle slot.
-    fn update_with_events(&self, size: Size, dispatcher: ComRef<'_, IEventDispatcherAbi>) -> Result<(), NcStatus> {
+    fn update_with_events(&self, size: Size, dispatcher: ComRef<'_, IEventOwnerAbi>) -> Result<(), NcStatus> {
         self.update_cycle(size, Some(dispatcher))
     }
     /// Keeps the renderer reference and stream authority within one synchronous submission.
@@ -305,7 +305,12 @@ impl UiRuntime for Runtime {
     fn close(&self) -> Result<(), NcStatus> {
         let storage = &self.storage;
         if storage.factory.state.closed.get() {
-            return Ok(());
+            // Closing again may finish a retirement previously blocked by a
+            // caller's local model guard. Never reenter an active handler.
+            return match storage.updating.get() {
+                true => Ok(()),
+                false => storage.factory.state.finish_owner_retirement(),
+            };
         }
         let mut context = storage.context()?;
         let surfaces: Vec<_> = storage.mounts.borrow().iter().map(|m| m.surface.clone()).collect();
@@ -369,7 +374,7 @@ impl Drop for UpdateGuard<'_> {
 }
 impl Runtime {
     /// Executes owned phases so callback edits use ordinary COM window/topology APIs with no borrowed runtime wrapper.
-    fn update_cycle(&self, size: Size, dispatcher: Option<ComRef<'_, IEventDispatcherAbi>>) -> Result<(), NcStatus> {
+    fn update_cycle(&self, size: Size, dispatcher: Option<ComRef<'_, IEventOwnerAbi>>) -> Result<(), NcStatus> {
         let storage = &self.storage;
         storage.open()?;
         if size.width <= 0 || size.height <= 0 {
@@ -396,7 +401,7 @@ impl Runtime {
     }
 
     /// Performs one guarded update; the outer operation always drains terminal cleanup.
-    fn run_update_cycle(&self, size: Size, dispatcher: Option<ComRef<'_, IEventDispatcherAbi>>) -> Result<(), NcStatus> {
+    fn run_update_cycle(&self, size: Size, dispatcher: Option<ComRef<'_, IEventOwnerAbi>>) -> Result<(), NcStatus> {
         let storage = &self.storage;
         let dimensions = Dimensioni::new(size.width, size.height);
         {
@@ -437,12 +442,12 @@ impl Runtime {
 
     /// Settles descendants and layout before consuming one application message.
     /// Topology changes refresh cached order; removed tickets become ineligible immediately.
-    fn dispatch_boundary(&self, dispatcher: Option<ComRef<'_, IEventDispatcherAbi>>, dimensions: Dimensioni, remaining: &mut u32) -> Result<(), NcStatus> {
+    fn dispatch_boundary(&self, dispatcher: Option<ComRef<'_, IEventOwnerAbi>>, dimensions: Dimensioni, remaining: &mut u32) -> Result<(), NcStatus> {
         loop {
             // Exhaustion stops before another dequeue. Reaching the exact ceiling also
             // returns LIMIT: proving quiescence would require inspecting foreign queues.
             if *remaining == 0 {
-                return Err(neocogi_com::events::EVENT_E_LIMIT);
+                return Err(UI_E_EVENT_LIMIT);
             }
             self.storage.layout_boundary(dimensions)?;
             self.storage.factory.state.finish_owner_retirement()?;
@@ -484,7 +489,7 @@ impl Runtime {
             // One app message may create child work. Settle it before the next
             // application visit; callbacks never retain a traversal borrow.
             let delivered = match dispatcher {
-                Some(mut dispatcher) => dispatcher.dispatch(),
+                Some(mut dispatcher) => dispatcher.dispatch_next(),
                 None => Ok(false),
             };
             let retired = self.storage.factory.state.finish_owner_retirement();
@@ -505,7 +510,7 @@ impl Runtime {
 fn spend_dispatch_budget(remaining: &mut u32) -> Result<(), NcStatus> {
     *remaining -= 1;
     match *remaining {
-        0 => Err(neocogi_com::events::EVENT_E_LIMIT),
+        0 => Err(UI_E_EVENT_LIMIT),
         _ => Ok(()),
     }
 }

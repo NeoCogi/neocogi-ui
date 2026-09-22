@@ -1,6 +1,7 @@
 //! Production runtime regressions for plugin-style private composite events.
 
 use super::*;
+use neocogi_ui_support::test_support::events::TestApp;
 use neocogi_ui_core_contracts::{
     Activation, IActivationEvents, IActivationEventsAbi, IActivationEventsInterfacesFor, IActivationEventsOutputs, __ActivationReceiverAbi,
 };
@@ -141,27 +142,19 @@ fn nested_components_dispatch_child_first_and_promote_only_explicit_outputs() {
     emit(&sources[0]);
     ui.update(SIZE).unwrap(); // No application dispatcher is needed to drive every private level.
     assert_eq!(&*trace.borrow(), &["child", "parent", "root"]);
-    ui.update_with_events(SIZE, &app, |_| {
+    let app = TestApp::new(trace.clone(), app, |trace, ()| {
         trace.borrow_mut().push("application");
         Ok(())
-    })
-    .unwrap();
+    });
+    app.update(&ui, SIZE).unwrap();
     assert_eq!(&*trace.borrow(), &["child", "parent", "root", "application"]);
     trace.borrow_mut().clear();
     emit(&sources[0]);
-    ui.update_with_events(SIZE, &app, |_| {
-        trace.borrow_mut().push("application");
-        Ok(())
-    })
-    .unwrap();
+    app.update(&ui, SIZE).unwrap();
     assert_eq!(&*trace.borrow(), &["child", "parent", "root", "application"]);
     window.close().unwrap();
     emit(&sources[0]);
-    ui.update_with_events(SIZE, &app, |_| {
-        trace.borrow_mut().push("application");
-        Ok(())
-    })
-    .unwrap();
+    app.update(&ui, SIZE).unwrap();
     assert_eq!(trace.borrow().len(), 4, "removed descendants never run again");
 }
 
@@ -179,13 +172,14 @@ fn callback_mounted_descendant_is_discovered_without_application_registration() 
     let trigger = Emitter::create();
     let (app_tx, app) = std::sync::mpsc::channel();
     neocogi_ui::events::bind(trigger.query::<IActivationEventsAbi>().unwrap().activated(), app_tx.clone(), |_| ()).unwrap();
-    let mut action = PrivateRecord {
+    let action = PrivateRecord {
         name: "application",
         forward: None,
         edit: Edit::Insert { parent: shell, child },
     };
     emit(&trigger);
-    ui.update_with_events(SIZE, &app, |_| action.handle(&trace)).unwrap();
+    let app = TestApp::new((action, trace.clone()), app, |(action, trace), ()| action.handle(trace));
+    app.update(&ui, SIZE).unwrap();
     assert_eq!(&*trace.borrow(), &["application", "inserted"]);
     window.close().unwrap();
 }
@@ -229,11 +223,11 @@ fn mounted_component_events_dispatch_before_application_and_skip_removed_snapsho
     for source in [&older_source, &newer_source, &app_source] {
         emit(source);
     }
-    ui.update_with_events(SIZE, &app, |_| {
+    let app = TestApp::new(trace.clone(), app, |trace, ()| {
         trace.borrow_mut().push("application");
         Ok(())
-    })
-    .unwrap();
+    });
+    app.update(&ui, SIZE).unwrap();
     assert_eq!(&*trace.borrow(), &["newer", "application"]);
     assert_eq!(older_window.snapshot(), Err(UI_E_CLOSED));
     newer_window.close().unwrap();
@@ -250,14 +244,14 @@ fn application_messages_interleave_with_automatic_private_settlement() {
     let (events_tx, events) = std::sync::mpsc::channel();
     events_tx.send("first").unwrap();
     events_tx.send("second").unwrap();
-    ui.update_with_events(SIZE, &events, |message| {
+    let app = TestApp::new((trace.clone(), source), events, |(trace, source), message| {
         trace.borrow_mut().push(message);
         if message == "first" {
-            emit(&source);
+            emit(source);
         }
         Ok(())
-    })
-    .unwrap();
+    });
+    app.update(&ui, SIZE).unwrap();
     assert_eq!(&*trace.borrow(), &["first", "child", "second"]);
     window.close().unwrap();
 }

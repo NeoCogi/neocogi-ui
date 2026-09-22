@@ -7,6 +7,23 @@ use std::{error::Error, time::Duration};
 mod extension;
 mod gpu;
 
+/// Host-owned behavior persists across every frame and owns its concrete editing capability.
+struct ClickModel {
+    /// Number of activations delivered so far.
+    count: u32,
+    /// Ordinary view capability; no stack callback is lent through COM.
+    button: ButtonWidget,
+}
+impl events::EventModel for ClickModel {
+    type Message = String;
+    /// Uses the captured label and commits the next presentation before later input.
+    fn handle(&mut self, label: String) -> Result<(), NcStatus> {
+        self.count += 1;
+        println!("button submitted: {label}");
+        self.button.set_label(&format!("Clicked {} times", self.count))
+    }
+}
+
 /// Explicit startup choices; native path arguments retain their OS encoding.
 struct Options {
     /// Runs deterministic acceptance and exits after teardown.
@@ -141,53 +158,29 @@ fn main() -> Result<(), Box<dyn Error>> {
     let window = ui.window("Dynamic UI", Rect { x: 40, y: 40, width: 500, height: 200 }, &button)?;
     let (session_tx, session) = std::sync::mpsc::channel();
     neocogi_ui::events::bind(button.activated(), session_tx.clone(), |event| event.label)?;
-    let mut count = 0u32;
-    let mut callback_button = button.clone();
+    let app = events::Controller::into_local(events::Controller::root(ClickModel { count: 0, button: button.clone() }, session));
+    let owner = app.query::<IEventOwnerAbi>()?;
     let size = native.size()?;
-    ui.update_with_events(size, &session, |label| {
-        count += 1;
-        println!("button submitted: {label}");
-        callback_button.set_label(&format!("Clicked {count} times"))
-    })?;
+    ui.update_with_events(size, owner.as_com_ref())?;
     ui.render(size, renderer.as_com_ref())?;
     if options.smoke {
         // Keyboard routing must cross the real UI plugin, enqueue, then reach the host sink.
         key(&ui, KeyCode::Tab)?;
-        ui.update_with_events(size, &session, |label| {
-            count += 1;
-            println!("button submitted: {label}");
-            callback_button.set_label(&format!("Clicked {count} times"))
-        })?;
+        ui.update_with_events(size, owner.as_com_ref())?;
         key(&ui, KeyCode::Enter)?;
-        ui.update_with_events(size, &session, |label| {
-            count += 1;
-            println!("button submitted: {label}");
-            callback_button.set_label(&format!("Clicked {count} times"))
-        })?;
-        assert_eq!(count, 1);
+        ui.update_with_events(size, owner.as_com_ref())?;
+        assert_eq!(app.try_borrow()?.model.count, 1);
         button.set_label("A longer label changes preferred measurement across the plugin boundary")?;
         assert_eq!(ui.render(size, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
-        ui.update_with_events(size, &session, |label| {
-            count += 1;
-            println!("button submitted: {label}");
-            callback_button.set_label(&format!("Clicked {count} times"))
-        })?;
+        ui.update_with_events(size, owner.as_com_ref())?;
         ui.render(size, renderer.as_com_ref())?;
         window.set_rect(Rect { x: 20, y: 20, width: 560, height: 280 })?;
         assert_eq!(ui.render(size, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
-        ui.update_with_events(size, &session, |label| {
-            count += 1;
-            println!("button submitted: {label}");
-            callback_button.set_label(&format!("Clicked {count} times"))
-        })?;
+        ui.update_with_events(size, owner.as_com_ref())?;
         ui.render(size, renderer.as_com_ref())?;
         // Restoring the compiled bundle exercises a second real upload and shared UI revision.
         ui.install_assets(assets.as_com_ref(), renderer.as_com_ref())?;
-        ui.update_with_events(size, &session, |label| {
-            count += 1;
-            println!("button submitted: {label}");
-            callback_button.set_label(&format!("Clicked {count} times"))
-        })?;
+        ui.update_with_events(size, owner.as_com_ref())?;
         ui.render(size, renderer.as_com_ref())?;
         window.close()?;
         assert_eq!(button.set_label("closed"), Err(UI_E_CLOSED));
@@ -214,11 +207,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         let size = native.size()?;
         if size.width > 0 && size.height > 0 {
-            ui.update_with_events(size, &session, |label| {
-                count += 1;
-                println!("button submitted: {label}");
-                callback_button.set_label(&format!("Clicked {count} times"))
-            })?;
+            ui.update_with_events(size, owner.as_com_ref())?;
             native.text_input(ui.text_input_area()?)?;
             ui.render(size, renderer.as_com_ref())?;
         }
@@ -328,14 +317,22 @@ enum ComponentMessage {
     /// Exact native file completion.
     File(FileDialogCompletion),
 }
-impl ComponentMessage {
-    /// Checks the captured fact during consumption and updates ordinary application state.
-    fn consume(self, count: &mut u32, expected_path: &std::path::Path) -> Result<(), NcStatus> {
-        match self {
-            Self::Menu(event) => assert_eq!(event.label, "Menu command"),
-            Self::File(event) => assert_eq!(events::completed_file_path(&event)?.as_deref(), Some(expected_path)),
+/// Owned assertion model combines independent public component protocols.
+struct ComponentModel {
+    /// Completed semantic messages across menu and file-dialog sources.
+    count: u32,
+    /// Expected exact native identity, retained independently of display text.
+    expected_path: std::path::PathBuf,
+}
+impl events::EventModel for ComponentModel {
+    type Message = ComponentMessage;
+    /// Checks the captured fact and mutates ordinary host state after traversal.
+    fn handle(&mut self, message: ComponentMessage) -> Result<(), NcStatus> {
+        match message {
+            ComponentMessage::Menu(event) => assert_eq!(event.label, "Menu command"),
+            ComponentMessage::File(event) => assert_eq!(events::completed_file_path(&event)?.as_deref(), Some(self.expected_path.as_path())),
         }
-        *count += 1;
+        self.count += 1;
         Ok(())
     }
 }
@@ -353,21 +350,27 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     menus.attach_bar(window.as_com_ref(), &bar)?;
     let (events_tx, events) = std::sync::mpsc::channel();
     neocogi_ui::events::bind(item.activated()?, events_tx.clone(), ComponentMessage::Menu)?;
-    let mut count = 0u32;
-    let expected_path = directory.0.join(" native file ");
-    ui.update_with_events(size, &events, |message| message.consume(&mut count, &expected_path))?;
+    let app = events::Controller::into_local(events::Controller::root(
+        ComponentModel {
+            count: 0,
+            expected_path: directory.0.join(" native file "),
+        },
+        events,
+    ));
+    let owner = app.query::<IEventOwnerAbi>()?;
+    ui.update_with_events(size, owner.as_com_ref())?;
     ui.render(size, renderer)?;
     for (key, value) in [(KeyCode::Function, 10), (KeyCode::ArrowDown, 0), (KeyCode::Enter, 0)] {
         smoke_key(ui, key, value)?;
     }
-    ui.update_with_events(size, &events, |message| message.consume(&mut count, &expected_path))?;
-    assert_eq!(count, 1);
+    ui.update_with_events(size, owner.as_com_ref())?;
+    assert_eq!(app.try_borrow()?.model.count, 1);
     let mut picker = ui.file_dialog(window.as_com_ref())?;
     neocogi_ui::events::bind(picker.completed(), events_tx.clone(), ComponentMessage::File)?;
     let mut request = FileDialogRequest::new(&directory.0);
     request.rect = Rect { x: 10, y: 10, width: 620, height: 370 };
     picker.open(&request)?;
-    ui.update_with_events(size, &events, |message| message.consume(&mut count, &expected_path))?;
+    ui.update_with_events(size, owner.as_com_ref())?;
     ui.render(size, renderer)?;
     for _ in 0..6 {
         smoke_key(ui, KeyCode::Tab, 0)?;
@@ -377,13 +380,13 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
         smoke_key(ui, KeyCode::Tab, 0)?;
     }
     smoke_key(ui, KeyCode::Space, 0)?;
-    ui.update_with_events(size, &events, |message| message.consume(&mut count, &expected_path))?;
-    assert_eq!(count, 2);
+    ui.update_with_events(size, owner.as_com_ref())?;
+    assert_eq!(app.try_borrow()?.model.count, 2);
     assert_eq!(picker.active(), Ok(false));
     ui.render(size, renderer)?;
     picker.close()?;
     window.close()?;
-    ui.update_with_events(size, &events, |message| message.consume(&mut count, &expected_path))?;
+    ui.update_with_events(size, owner.as_com_ref())?;
     assert_eq!(combo.selection(), Err(UI_E_CLOSED));
     assert_eq!(item.label(), Err(UI_E_CLOSED));
     Ok(())

@@ -19,6 +19,8 @@ neocogi-com = { workspace = true, features = ["macros", "std"] }
 
 [features]
 default = []
+# Owned application fixtures; no implementation or process-runtime linkage is added.
+test-support = []
 # Optional authoring clients keep unrelated plugin contracts out of UI/runtime binaries.
 skin = ["dep:neocogi-skin-contracts"]
 # Deployment policy belongs to the final application, not implementation plugins.

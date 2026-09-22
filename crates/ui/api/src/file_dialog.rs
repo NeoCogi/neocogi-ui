@@ -16,7 +16,8 @@
 //! }
 //! ```
 //!
-//! Pass the inbox and an ordinary mutable consumer to `ui.update_with_events`.
+//! Move the inbox and application model into `events::Controller::root` once.
+//! Pass its cached `IEventOwner` projection to `ui.update_with_events` each frame.
 //! Decode native paths with `events::completed_file_path` when handling a completion.
 //!
 //! Native reads validate the complete candidate before installing rows. Selection

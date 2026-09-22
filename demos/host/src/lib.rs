@@ -179,10 +179,14 @@ impl Host {
     /// Owns state and its channel receiver until native close, an application stop request or a frame error.
     /// Browser startup schedules animation and returns; the loop releases its state on stop/error.
     pub fn run<State: AppState>(self, state: State, events: std::sync::mpsc::Receiver<State::Message>) -> Result<(), HostError> {
+        // Both local frame hooks and foreign dispatch use this allocation's
+        // existing COM borrow gate. Resolve its owner projection only once.
+        let state = neocogi_ui::events::Controller::into_local(neocogi_ui::events::Controller::root(Application { state }, events));
+        let owner = state.query()?;
         let driver = Driver {
             host: self,
             state,
-            events,
+            owner,
             remaining: frame_limit()?,
         };
         #[cfg(target_arch = "wasm32")]
@@ -250,14 +254,27 @@ impl IInputSink for PollInput {
     }
 }
 
+/// Adapts the host's frame-capable application to the same model used by composites.
+struct Application<State: AppState> {
+    /// Ordinary authoritative application fields, owned by the persistent controller.
+    state: State,
+}
+impl<State: AppState> neocogi_ui::events::EventModel for Application<State> {
+    type Message = State::Message;
+    /// Runtime delivery holds exclusive controller access before receiving a message.
+    fn handle(&mut self, message: Self::Message) -> Result<(), NcStatus> {
+        self.state.update(message)
+    }
+}
+
 /// Concrete loop ownership is shared by the native iteration and browser scheduling adapter.
 struct Driver<State: AppState> {
     /// Owns exactly one UI/renderer pair for this application.
     host: Host,
-    /// Native state is an ordinary owned value, exclusively borrowed during consumption.
-    state: State,
-    /// The sole standard receiver retains pending messages independently of application state.
-    events: std::sync::mpsc::Receiver<State::Message>,
+    /// Persistent owned state; short local guards end before entering UI dispatch.
+    state: neocogi_com::LocalCom<neocogi_ui::events::Controller<Application<State>>>,
+    /// Checked once at construction and borrowed for every frame without querying.
+    owner: ComPtr<neocogi_ui::IEventOwnerAbi>,
     /// Optional finite run counts successfully rendered frames, including the final frame.
     remaining: Option<u32>,
 }
@@ -268,14 +285,14 @@ impl<State: AppState> Driver<State> {
         loop {
             let status = host.window.poll(host.input.as_com_ref())?;
             for observation in host.observations.try_iter() {
-                self.state.input(observation.event, &observation.text)?;
+                self.state.try_borrow_mut()?.model.state.input(observation.event, &observation.text)?;
                 host.ui.input(observation.event, &observation.text)?;
             }
             match status {
                 PollStatus::Event => continue,
                 PollStatus::Idle => break,
                 PollStatus::Close => {
-                    if self.state.close_requested()? {
+                    if self.state.try_borrow_mut()?.model.state.close_requested()? {
                         return Ok(false);
                     }
                     break;
@@ -289,14 +306,17 @@ impl<State: AppState> Driver<State> {
         }
         // Apply frame edits before consuming the input just polled. Handlers can prepare work for
         // the next frame callback; this frame's direct edits and nested events settle in one update.
-        if !self.state.frame(host, size, seconds)? {
+        if !self.state.try_borrow_mut()?.model.state.frame(host, size, seconds)? {
             return Ok(false);
         }
-        host.ui.update_with_events(size, &self.events, |message| self.state.update(message))?;
+        host.ui.update_with_events(size, self.owner.as_com_ref())?;
         self.state
+            .try_borrow_mut()?
+            .model
+            .state
             .after_update(host, size)
             .map_err(|status| host.render_error("application frame update", status))?;
-        host.window.text_input(self.state.text_input_area(host)?)?;
+        host.window.text_input(self.state.try_borrow()?.model.state.text_input_area(host)?)?;
         host.ui
             .render(size, host.renderer.as_com_ref())
             .map_err(|status| host.render_error("frame", status))?;

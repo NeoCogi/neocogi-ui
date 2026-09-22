@@ -469,6 +469,7 @@ impl IPopupEvents for LogicalPopup {
 
 #[cfg(test)]
 mod tests {
+    use neocogi_ui_support::test_support::events::TestApp;
     use neocogi_ui::{Point, Rect, Size, UiInput, Visibility};
 
     /// Pointer-relative public popup activation uses the latest input position consumed by the runtime.
@@ -485,7 +486,7 @@ mod tests {
         let item = builder.item("Run at pointer").unwrap();
         let mut popup = menus.popup(owner.as_com_ref(), &builder).unwrap();
         let (events_tx, events) = std::sync::mpsc::channel();
-        let mut labels = Vec::new();
+        let labels = Vec::new();
         neocogi_ui::events::bind(item.activated().unwrap(), events_tx.clone(), |event| event.label).unwrap();
         let size = Size { width: 640, height: 400 };
 
@@ -493,28 +494,20 @@ mod tests {
         // screen position rather than the popup definition's default rectangle or its owner origin.
         let pointer = Point { x: 300, y: 250 };
         ui.input(UiInput::Pointer(pointer), "").unwrap();
-        ui.update_with_events(size, &events, |message| {
-            labels.push(message);
+        let app = TestApp::new(labels, events, |state, message| {
+            state.push(message);
             Ok(())
-        })
-        .unwrap();
+        });
+        ui.update_with_events(size, app.as_interface()).unwrap();
         popup.show().unwrap();
-        ui.update_with_events(size, &events, |message| {
-            labels.push(message);
-            Ok(())
-        })
-        .unwrap();
+        ui.update_with_events(size, app.as_interface()).unwrap();
 
         // Press just inside the expected popup frame. Reaching the first row proves the coordinates
         // crossed IPopup and were used by the manager's subsequent hit testing.
         let first_row = Point { x: pointer.x + 2, y: pointer.y + 2 };
         ui.input(UiInput::Down { position: first_row, buttons: 1 }, "").unwrap();
-        ui.update_with_events(size, &events, |message| {
-            labels.push(message);
-            Ok(())
-        })
-        .unwrap();
-        assert_eq!(&labels, &["Run at pointer"]);
+        ui.update_with_events(size, app.as_interface()).unwrap();
+        assert_eq!(&*app.state(), &["Run at pointer"]);
         assert_eq!(popup.visibility(), Ok(Visibility::Hidden));
 
         // Explicit closure verifies the newly exercised operation did not alter retained lifetime

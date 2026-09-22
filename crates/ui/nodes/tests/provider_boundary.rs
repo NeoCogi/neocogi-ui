@@ -54,14 +54,13 @@ fn independently_activated_nodes_bind_only_to_their_core_host_and_deliver_events
     let button = ui.widgets().button("nodes-owned activation").unwrap();
     ui.window("provider boundary", Rect { x: 10, y: 10, width: 300, height: 150 }, &button).unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
-    let mut labels = Vec::new();
+    let app = neocogi_ui_support::test_support::events::TestApp::new(Vec::new(), events, |labels, message| {
+        labels.push(message);
+        Ok(())
+    });
     neocogi_ui::events::bind(button.activated(), events_tx.clone(), |event| event.label).unwrap();
     key(&ui, KeyCode::Tab);
     key(&ui, KeyCode::Space);
-    ui.update_with_events(Size { width: 640, height: 400 }, &events, |message| {
-        labels.push(message);
-        Ok(())
-    })
-    .unwrap();
-    assert_eq!(&labels, &["nodes-owned activation"]);
+    app.update(&ui, Size { width: 640, height: 400 }).unwrap();
+    assert_eq!(&*app.state(), &["nodes-owned activation"]);
 }

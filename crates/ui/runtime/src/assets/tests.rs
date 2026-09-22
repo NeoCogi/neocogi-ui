@@ -98,10 +98,7 @@ fn round_trip_preserves_complete_resources_and_image_patches() {
     let mut output = [77; 2];
     let count = source.info().unwrap().rgba_bytes().unwrap();
     assert_eq!(
-        source
-            .image()
-            .unwrap()
-            .pixels(NcCopyToBufferOffset::new(count as u64 - 1, &mut output)),
+        source.image().unwrap().pixels(NcCopyToBufferOffset::new(count as u64 - 1, &mut output)),
         Err(NC_E_INVALID_ARG)
     );
     assert_eq!(output, [77; 2]);
@@ -267,7 +264,7 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
     let mut data = export_bundle_data(&bundle()).unwrap();
     data.tables.metrics.padding += 10;
     let candidate = data.into_revision(source.as_com_ref()).unwrap();
-    let mut state = ThemeState {
+    let state = ThemeState {
         ui: ui.clone(),
         candidate: candidate.clone(),
         renderer: renderer.clone(),
@@ -288,18 +285,16 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
         )
         .unwrap();
     }
-    assert_eq!(
-        ui.update_with_events(SIZE, &session, |message| InstallTheme.handle(&mut state, &message)),
-        Err(NC_E_BUSY)
-    );
+    let app = neocogi_ui_support::test_support::events::TestApp::new(state, session, |state, message| InstallTheme.handle(state, &message));
+    assert_eq!(app.update(&ui, SIZE), Err(NC_E_BUSY));
     assert_eq!(ui.assets().unwrap().as_ptr(), source.as_ptr());
-    assert_eq!(state.installed, 0);
+    assert_eq!(app.state().installed, 0);
     assert_eq!(probe.uploads.get(), 0);
 
     // Once dispatch has returned, the state owns ordinary exclusive access and upload failures
     // retain both the installed UI value and the renderer's current atlas.
     {
-        let state = &mut state;
+        let state = &mut *app.state();
         let candidate = state.candidate.clone();
         let renderer = state.renderer.clone();
         assert_eq!(state.ui.install_assets(candidate.as_com_ref(), renderer.as_com_ref()), Err(UI_E_RENDER));
@@ -308,18 +303,17 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
     assert_eq!(probe.uploads.get(), 1);
     probe.fail.set(false);
     {
-        let state = &mut state;
+        let state = &mut *app.state();
         let candidate = state.candidate.clone();
         let renderer = state.renderer.clone();
         state.ui.install_assets(candidate.as_com_ref(), renderer.as_com_ref()).unwrap();
         state.installed += 1;
     }
     assert_eq!(probe.uploads.get(), 2);
-    assert_eq!(state.installed, 1);
+    assert_eq!(app.state().installed, 1);
     assert_eq!(ui.assets().unwrap().as_ptr(), candidate.as_ptr());
     // Installation occurred outside update, so one explicit synchronization commits the revision.
-    ui.update_with_events(SIZE, &session, |message| InstallTheme.handle(&mut state, &message))
-        .unwrap();
+    app.update(&ui, SIZE).unwrap();
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
 }
 

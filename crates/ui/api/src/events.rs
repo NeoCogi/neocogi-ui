@@ -3,19 +3,36 @@
 //! ordinary mutable consumer later, after releasing traversal borrows.
 //!
 //! ```no_run
-//! use neocogi_ui::{ButtonWidget, Size, Ui};
+//! use neocogi_ui::{ButtonWidget, IEventOwnerAbi, Size, Ui, events::{self, Controller, EventModel}};
 //! use neocogi_com::NcStatus;
 //!
-//! fn update(ui: &Ui, button: &ButtonWidget, size: Size) -> Result<u32, NcStatus> {
-//!     let (events_tx, events) = std::sync::mpsc::channel();
-//!     neocogi_ui::events::bind(button.activated(), events_tx.clone(), |_| ())?;
-//!     let mut count = 0;
-//!     ui.update_with_events(size, &events, |_| { count += 1; Ok(()) })?;
+//! /// Ordinary application state is owned by one persistent controller.
+//! struct Counter { count: u32 }
+//! impl EventModel for Counter {
+//!     type Message = ();
+//!     fn handle(&mut self, (): ()) -> Result<(), NcStatus> {
+//!         self.count += 1;
+//!         Ok(())
+//!     }
+//! }
+//! fn example(ui: &Ui, button: &ButtonWidget, size: Size) -> Result<u32, NcStatus> {
+//!     let (send, messages) = std::sync::mpsc::channel();
+//!     events::bind(button.activated(), send, |_| ())?;
+//!     let app = Controller::into_local(Controller::root(Counter { count: 0 }, messages));
+//!     let owner = app.query::<IEventOwnerAbi>()?;
+//!     // Keep both handles across frames; neither update creates an adapter.
+//!     ui.update_with_events(size, owner.as_com_ref())?;
+//!     ui.update_with_events(size, owner.as_com_ref())?;
+//!     let count = app.try_borrow()?.model.count;
 //!     Ok(count)
 //! }
 //! ```
 /// Installs a typed COM mapping into a standard application or component channel.
 pub use neocogi_com::events::bind;
+
+/// Owned application fixtures for integration tests, without borrowed callback adapters.
+#[cfg(feature = "test-support")]
+pub mod testing;
 
 mod controller;
 pub use controller::{Controller, EventModel};

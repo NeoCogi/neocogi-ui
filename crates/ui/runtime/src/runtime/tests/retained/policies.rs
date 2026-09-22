@@ -1,5 +1,6 @@
 //! Window, focus, capture and retained-layout policies observed through the public runtime.
 use super::*;
+use neocogi_ui_support::test_support::events::TestApp;
 
 /// Places leaves in a production Linear whose allocations are fixed and easy to target.
 fn column(ui: &Ui, children: &[Widget<IWidgetAbi>]) -> LinearWidget {
@@ -303,22 +304,20 @@ fn title_drag_and_close_deliver_window_events_through_the_production_session() {
     let body = fixture.ui.widgets().button("body").unwrap();
     let owner = fixture.ui.window("chrome", Rect { x: 30, y: 30, width: 180, height: 120 }, &body).unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
-    let mut observations = Vec::new();
+    let observations = Vec::new();
     neocogi_ui::events::bind(neocogi_ui::events::window_events(owner.as_com_ref()).unwrap(), events_tx.clone(), |event| event).unwrap();
     fixture.frame(VIEW).unwrap();
     pointer(&fixture.ui, Point { x: 70, y: 40 }, true);
     fixture.ui.input(UiInput::Pointer(Point { x: 80, y: 48 }), "").unwrap();
     pointer(&fixture.ui, Point { x: 80, y: 48 }, false);
-    fixture
-        .ui
-        .update_with_events(VIEW, &events, |message| {
-            observations.push(message);
-            Ok(())
-        })
-        .unwrap();
+    let app = TestApp::new(observations, events, |state, message| {
+        state.push(message);
+        Ok(())
+    });
+    fixture.ui.update_with_events(VIEW, app.as_interface()).unwrap();
     let moved = owner.snapshot().unwrap().rect;
     assert_eq!((moved.x, moved.y, moved.width, moved.height), (40, 38, 180, 120));
-    assert!(matches!(observations.as_slice(), [WindowEvent::GeometryChanged { rect }] if *rect == moved));
+    assert!(matches!(app.state().as_slice(), [WindowEvent::GeometryChanged { rect }] if *rect == moved));
     // The default recipe puts its sole caption control at the trailing edge of the title.
     pointer(
         &fixture.ui,
@@ -336,16 +335,10 @@ fn title_drag_and_close_deliver_window_events_through_the_production_session() {
         },
         false,
     );
-    fixture
-        .ui
-        .update_with_events(VIEW, &events, |message| {
-            observations.push(message);
-            Ok(())
-        })
-        .unwrap();
+    fixture.ui.update_with_events(VIEW, app.as_interface()).unwrap();
     assert_eq!(owner.snapshot().unwrap().visibility, Visibility::Hidden);
     assert!(matches!(
-        observations.as_slice(),
+        app.state().as_slice(),
         [WindowEvent::GeometryChanged { .. }, WindowEvent::Hidden, WindowEvent::CloseRequested]
     ));
     assert!(body.label().is_ok());

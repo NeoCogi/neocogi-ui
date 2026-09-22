@@ -543,25 +543,11 @@ impl Ui {
     pub fn update(&self, size: Size) -> Result<(), NcStatus> {
         self.runtime.update(size)
     }
-    /// Dispatches typed application events between input phases and commits handler edits before routing subsequent input.
-    pub fn update_with_events<Message>(
-        &self,
-        size: Size,
-        events: &std::sync::mpsc::Receiver<Message>,
-        mut consume: impl FnMut(Message) -> Result<(), NcStatus>,
-    ) -> Result<(), NcStatus> {
-        // The callback may borrow stack state. Every retained foreign dispatcher is
-        // revoked before this call returns, including error and unwinding paths.
-        neocogi_com::events::with_dispatcher(
-            &mut || match events.try_recv() {
-                Ok(message) => {
-                    consume(message)?;
-                    Ok(true)
-                }
-                Err(std::sync::mpsc::TryRecvError::Empty | std::sync::mpsc::TryRecvError::Disconnected) => Ok(false),
-            },
-            |dispatcher| self.runtime.update_with_events(size, dispatcher),
-        )
+    /// Settles owned application messages between input phases and commits handler edits.
+    /// Construct the owner once and retain its checked IEventOwner projection across frames.
+    /// This call only borrows that projection; it allocates no callback or revocation state.
+    pub fn update_with_events(&self, size: Size, owner: ComRef<'_, IEventOwnerAbi>) -> Result<(), NcStatus> {
+        self.runtime.update_with_events(size, owner)
     }
     /// Submits a synchronized UI frame to a native window's renderer capability.
     pub fn render(&self, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {

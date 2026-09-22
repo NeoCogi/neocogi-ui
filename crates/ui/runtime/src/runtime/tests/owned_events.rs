@@ -83,3 +83,64 @@ fn component_attachment_claims_each_view_and_owner_only_once() {
     third.close().unwrap();
     ui.update(SIZE).unwrap();
 }
+
+/// Idle application dispatch adds no allocation to an otherwise identical warmed update.
+#[test]
+fn persistent_empty_owner_adds_no_per_update_allocations() {
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let view = ui.widgets().button("idle").unwrap();
+    let _window = ui.window("allocation comparison", RECT, &view).unwrap();
+    let (_send, messages) = std::sync::mpsc::channel::<()>();
+    let app = neocogi_ui_support::test_support::events::TestApp::new((), messages, |(), ()| Ok(()));
+    // Warm both paths before comparing the UI's own retained-layout allocations.
+    ui.update(SIZE).unwrap();
+    app.update(&ui, SIZE).unwrap();
+    let plain = crate::test_support::AllocationMeasurement::begin();
+    for _ in 0..64 {
+        ui.update(SIZE).unwrap();
+    }
+    let plain = plain.finish();
+    let owned = crate::test_support::AllocationMeasurement::begin();
+    for _ in 0..64 {
+        app.update(&ui, SIZE).unwrap();
+    }
+    let owned = owned.finish();
+    assert_eq!(owned, plain, "the persistent owner must not allocate a per-frame adapter");
+}
+
+/// A locally borrowed controller must retain pending retirement until its guard ends.
+#[test]
+fn busy_retirement_retries_without_resuming_private_delivery() {
+    for close_runtime in [false, true] {
+        let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+        let trace = Rc::new(RefCell::new(Vec::new()));
+        let (send, messages) = std::sync::mpsc::channel();
+        let owner = Controller::into_local(Controller::new(
+            Removal {
+                window: None,
+                trace: trace.clone(),
+                fail: false,
+            },
+            messages,
+        ));
+        let events = owner.query::<IEventOwnerAbi>().unwrap();
+        let component = neocogi_ui::Component::new(ui.widgets().button("guarded").unwrap(), events);
+        let window = ui.window("guarded owner", RECT, &component).unwrap();
+        let held = owner.try_borrow_mut().unwrap();
+        match close_runtime {
+            true => assert_eq!(ui.close(), Err(neocogi_com::NC_E_BUSY)),
+            false => {
+                window.close().unwrap();
+                assert_eq!(ui.update(SIZE), Err(neocogi_com::NC_E_BUSY));
+            }
+        }
+        assert!(trace.borrow().is_empty());
+        drop(held);
+        match close_runtime {
+            true => ui.close().unwrap(),
+            false => ui.update(SIZE).unwrap(),
+        }
+        assert_eq!(&*trace.borrow(), &["retired"]);
+        assert!(send.send(()).is_err());
+    }
+}
