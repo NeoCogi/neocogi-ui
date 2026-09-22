@@ -2,6 +2,12 @@
 
 ## 0.9.0-alpha.0 (unreleased)
 
+- Emit readable `.rs.map` provenance beside Cargo-generated IDL bindings, and add
+  IDL source annotations to generated declarations/members. Map formatted ranges,
+  message helpers and observers to their authored origins without changing ABI
+  identity. Expose typed lookup APIs and report the map through `module generate`.
+  See [IDL source maps](IDL_SOURCE_MAPS.md) for scope and coordinate conventions.
+
 - Generate one concrete observer and local event enum from an NCIDL `#[observer]`
   producer. Built-in controls, choice menus and file dialogs retain that observer
   during construction. Rust factory shims accept an mpsc sender and typed mapper;
