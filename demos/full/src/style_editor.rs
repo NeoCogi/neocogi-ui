@@ -51,7 +51,7 @@
 // IN THE SOFTWARE.
 //
 //! Concrete palette/metric controls compile immutable style revisions only after an edit.
-use super::app::{append, column, label, row, slider, rgba};
+use super::app::{append, column, label, row, slider, rgba, NumericTarget};
 use neocogi_ui::*;
 use neocogi_demo_assets::themes::Theme;
 use neocogi_com::{ComPtr, ComRef, NcStatus};
@@ -204,11 +204,7 @@ impl StyleEditor {
             let mut line = row(ui)?;
             append(&mut line, &label(ui, role.label())?, LayoutTrack::Fixed { extent: 80 })?;
             let color = role.value(&mut palette);
-            let channel_slider = |channel: Channel, value: u8| {
-                slider(ui, value as f32, 255., events_tx.clone(), move |event| {
-                    super::app::Message::Style(Message::Color(role, channel, event.value as u8))
-                })
-            };
+            let channel_slider = |channel: Channel, value: u8| slider(ui, value as f32, 255., events_tx.clone(), NumericTarget::Color(role, channel));
             let channels = [
                 channel_slider(Channel::Red, color.r)?,
                 channel_slider(Channel::Green, color.g)?,
@@ -227,9 +223,7 @@ impl StyleEditor {
         for metric in Metric::ALL {
             let (name, high) = metric.presentation();
             let mut line = row(ui)?;
-            let control = slider(ui, *metric.value(&mut metrics) as f32, high, events_tx.clone(), move |event| {
-                super::app::Message::Style(Message::Metric(metric, event.value as i32))
-            })?;
+            let control = slider(ui, *metric.value(&mut metrics) as f32, high, events_tx.clone(), NumericTarget::Metric(metric))?;
             append(&mut line, &label(ui, name)?, LayoutTrack::Fixed { extent: 80 })?;
             append(&mut line, &control, LayoutTrack::Flex { weight: 1. })?;
             append(&mut content, &line, LayoutTrack::Content)?;

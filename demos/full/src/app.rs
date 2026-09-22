@@ -93,14 +93,31 @@ pub(super) fn append<I: ComInterface>(parent: &mut LinearWidget, child: &Widget<
 pub(super) fn label(ui: &Ui, text: &str) -> Result<TextBlockWidget, NcStatus> {
     ui.widgets().text_block(text, TextWrapping::None)
 }
+/// Routing captured by every numeric observer in this application.
+/// One explicit sum lets the generic COM adapter share its implementation across
+/// palette, metric and background controls while retaining each control's target.
+#[derive(Clone, Copy)]
+pub(super) enum NumericTarget {
+    /// Packed background color channel selected by its bit shift.
+    Background(u32),
+    /// Named palette field and RGBA component, independent of memory layout.
+    Color(super::style_editor::ColorRole, super::style_editor::Channel),
+    /// Named layout metric whose value is represented by an integer.
+    Metric(super::style_editor::Metric),
+}
+impl NumericTarget {
+    /// Promotes a committed numeric snapshot into the owning model's protocol.
+    fn message(self, event: NumericChanged) -> Message {
+        match self {
+            Self::Background(shift) => Message::Background(shift, event),
+            Self::Color(role, channel) => Message::Style(super::style_editor::Message::Color(role, channel, event.value as u8)),
+            Self::Metric(metric) => Message::Style(super::style_editor::Message::Metric(metric, event.value as i32)),
+        }
+    }
+}
+
 /// Shared framed, centered numeric control used by the palette and background editors.
-pub(super) fn slider(
-    ui: &Ui,
-    value: f32,
-    high: f32,
-    sender: std::sync::mpsc::Sender<Message>,
-    mut map: impl FnMut(NumericChanged) -> Message + 'static,
-) -> Result<SliderWidget, NcStatus> {
+pub(super) fn slider(ui: &Ui, value: f32, high: f32, sender: std::sync::mpsc::Sender<Message>, target: NumericTarget) -> Result<SliderWidget, NcStatus> {
     let mut control = ui.widgets().slider(
         SliderOptions {
             value,
@@ -110,18 +127,20 @@ pub(super) fn slider(
             precision: 0,
         },
         sender,
-        move |neocogi_ui::slider::Event::Changed(event)| map(event),
+        move |neocogi_ui::slider::Event::Changed(event)| target.message(event),
     )?;
     control.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
     Ok(control)
 }
-/// Creates a concrete button and maps its activation output; only its parent needs to retain it afterward.
+/// Owns the same typed activation mapper for individual buttons and shared samples.
+/// The action is captured as data, so each helper does not emit different COM glue.
+fn activation_observer(sender: std::sync::mpsc::Sender<Message>, action: Action) -> Result<ComPtr<ButtonObserverAbi>, NcStatus> {
+    neocogi_ui::button::observer(sender, move |neocogi_ui::button::Event::Activated(event)| Message::Activate(action, event))
+}
+/// Creates a concrete button with its action observer already supplied to the factory.
 fn button(ui: &Ui, events_tx: &std::sync::mpsc::Sender<Message>, text: &str, action: Action) -> Result<ButtonWidget, NcStatus> {
-    let mut control = ui
-        .widgets()
-        .button(text, events_tx.clone(), move |neocogi_ui::button::Event::Activated(event)| {
-            Message::Activate(action, event)
-        })?;
+    let observer = activation_observer(events_tx.clone(), action)?;
+    let mut control = ui.widgets().button_with_observer(text, Some(observer.as_com_ref()))?;
     control.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
     Ok(control)
 }
@@ -672,7 +691,7 @@ fn build_controls(host: &Host, state: &State, events_tx: &std::sync::mpsc::Sende
             ((state.grid.borrow().background >> shift) & 255) as f32,
             255.,
             events_tx.clone(),
-            move |event| Message::Background(shift, event),
+            NumericTarget::Background(shift),
         )?;
         append(&mut line, &label(ui, name)?, LayoutTrack::Fixed { extent: 46 })?;
         append(&mut line, &control, FLEX)?;
@@ -768,9 +787,7 @@ fn build_examples(host: &Host, state: &State, events_tx: &std::sync::mpsc::Sende
         &ui.widgets().leaf(Suzanne::new(host.renderer.as_com_ref())?, WidgetOptions::NONE)?,
     )?;
     // All sample buttons share this parent destination; each widget retains it at creation.
-    let sample_observer = neocogi_ui::button::observer(events_tx.clone(), |neocogi_ui::button::Event::Activated(event)| {
-        Message::Activate(Action::Log, event)
-    })?;
+    let sample_observer = activation_observer(events_tx.clone(), Action::Log)?;
     for (sample, title, area) in [
         (
             neocogi_ui_samples::directions(ui, Some(sample_observer.as_com_ref()))?,
