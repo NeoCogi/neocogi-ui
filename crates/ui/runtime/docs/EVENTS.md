@@ -1,9 +1,9 @@
-# Owned event controllers and typed bindings
+# Constructor observers and owned event controllers
 
 Widgets post typed facts into their owner's standard Rust channel. A nested
 component consumes its children's messages and emits its own public results
-upward. The application consumes the final public messages. All levels use
-`events::bind`, `Controller<Model>`, and the same `IEventOwner` contract.
+upward. The application consumes the final public messages. Built-in widget constructors accept the owner's sender and a typed mapper. Behavioral owners use `Controller<Model>` and the
+same `IEventOwner` contract at every level.
 
 ## Application construction and frames
 
@@ -12,7 +12,7 @@ host resolves its COM projection once and borrows it on each update:
 
 ```rust,no_run
 use neocogi_com::NcStatus;
-use neocogi_ui::{events::{self, Controller, EventModel}, ButtonWidget, IEventOwnerAbi, Size, Ui};
+use neocogi_ui::{events::{self, Controller, EventModel}, IEventOwnerAbi, Size, Ui};
 
 /// Application commands stay in the host binary.
 enum Message { Activated(String) }
@@ -31,9 +31,11 @@ impl EventModel for App {
     }
 }
 
-fn example(ui: &Ui, button: &ButtonWidget, size: Size) -> Result<(), NcStatus> {
+fn example(ui: &Ui, size: Size) -> Result<(), NcStatus> {
     let (send, messages) = std::sync::mpsc::channel();
-    events::bind(button.activated(), send, |event| Message::Activated(event.label))?;
+    let button = ui.widgets().button("Count", send,
+        |neocogi_ui::button::Event::Activated(event)| Message::Activated(event.label))?;
+    // Insert button into the application's ordinary widget tree before updating.
     let app = Controller::into_local(Controller::root(App { count: 0 }, messages));
     let owner = app.query::<IEventOwnerAbi>()?;
 
@@ -66,47 +68,87 @@ method and polls the receiver. Channel blocks and owned message payloads may
 allocate. An allocation regression compares 64 warmed ordinary updates with
 64 updates using an empty persistent root and checks for zero extra allocations.
 
-## Binding and posting
+## Construction and posting
 
-Declare cross-COM facts as concrete NCIDL `#[message]` structs/enums and outputs
-such as `completed: FileDialogCompletion;`. The generated `.completed()` returns
-an installation closure; `events::bind(picker.completed(), send, mapper)` calls
-it once. The producer retains one concrete receiver for that output. A second
-binding replaces its future destination. There is no subscription object.
+Declare cross-COM facts as concrete NCIDL `#[message]` structs/enums and mark the
+producing interface `#[observer]`. The compiler generates one typed observer
+interface with a method for each output, plus a local aggregate event enum.
+For example, `TextboxEvent` has `Changed(TextChanged)` and
+`Submitted(TextSubmitted)` variants. No output setter is generated for that
+producer. Its factory explicitly accepts `Option<&TextboxObserver>`.
+
+The Rust facade supplies the standard channel adapter:
+
+```rust,no_run
+use neocogi_ui::{textbox, Ui};
+use neocogi_com::NcStatus;
+enum Message { Name(String), Submit(String) }
+fn example(ui: &Ui) -> Result<(), NcStatus> {
+    let (send, messages) = std::sync::mpsc::channel();
+    let name = ui.widgets().textbox("", send, |event| match event {
+        textbox::Event::Changed(value) => Message::Name(value.text),
+        textbox::Event::Submitted(value) => Message::Submit(value.text),
+    })?;
+    // Retain messages in the owner's normal controller and mount name in its view.
+    Ok(())
+}
+```
+
+`textbox::observer(sender, mapper)` creates the same observer separately, for
+passing through `textbox_with_observer(text, Some(observer.as_com_ref()))`.
+`textbox::filter_observer` permits dropping selected variants before enqueueing.
+`textbox_unobserved(text)` passes `None` and allocates no observer.
+
+An observed constructor allocates one COM observer with the sender and mapper
+stored inline. Both textbox outputs share it. The widget retains it before the
+factory returns; a factory failure releases temporary captures. Separate calls
+normally create separate observers, but callers may explicitly share an observer
+when their mapping is identical. There is no additional event queue per widget.
 
 ```text
 widget commits state
-  → generated receiver validates/copies/retains the concrete message
-  → binding mapper constructs the owner's private Rust message
-  → Sender::send queues that owned value
+  → calls the corresponding method on its one concrete observer
+  → generated codec validates/copies/retains the concrete message
+  → UI domain validation precedes the owner's typed mapper
+  → Sender::send queues the owned private message
   → runtime invokes the owner's dispatch_next at a safe boundary
   → Controller receives one value and calls model.handle(&mut self, value)
 ```
 
 Mappers execute synchronously inside the producer's call. They translate values
 and attach routing information; UI behavior belongs in the later model handler.
-Mapper captures must be owned or otherwise `'static`. No `Any`, erased event
-payload, application Rust layout, or borrowed stack callback crosses the ABI.
-The generated C message contract is the only payload crossing that boundary.
+Captures must be owned or otherwise `'static`. The ordinary channel adapter adds
+no `Any`, local pointer cast, or handwritten unsafe callback machinery. COM object
+allocation, vtables and wire codecs still use the shared checked ABI machinery.
+The existing `LocalCom` controller access separately contains unsafe pointer
+reconstruction under its borrow gate; this constructor change does not remove it.
 
-Use `std::sync::mpsc::channel()`. Clone its sender for each child binding. Neither
-threads nor `Message: Send` are needed when the endpoints stay on the UI thread.
-A blocking bounded sender could prevent that thread from reaching its receiver.
-Posting does not wake or schedule the host; timers and external work still need
-host scheduling.
+Use `std::sync::mpsc::channel()`. Clone its sender for each observed child.
+Neither threads nor `Message: Send` are needed while endpoints stay on the UI
+thread. A blocking bounded sender could prevent that thread from reaching its
+receiver. Posting does not wake the host; external work still needs scheduling.
 
 An owner receives its channel's sequential UI-thread send order. Separate channels
-have no global FIFO. Already queued facts retain their values and routing after
-rebinding or producer closure. Dropping a receiver discards private pending work.
-Subsequent valid posts still run the mapper and discard the translated message
-when sending reports disconnection; this is a successful producer no-op.
-Captures remain until the producer releases or replaces its receiver. Capture
-routing data rather than the producer itself to avoid a reference cycle.
+have no global FIFO. Already queued facts keep their values and routing after
+producer closure. Dropping the receiver discards pending work. Subsequent valid
+posts still run the mapper and discard the translated message on disconnection;
+this is a successful producer no-op. Logical widget closure releases its observer,
+including when editing handles remain alive. Explicitly retained observer handles
+keep their own captures alive. Capture routing data rather than the producer or
+owning UI to avoid reference cycles.
+
+The constructor policy covers built-in node controls, choice menus and file
+dialogs. Window, popup and application-menu event capabilities still use
+`events::bind(output, sender, mapper)`. Unannotated IDL producers also retain their
+ordinary per-output setters. Named document exports use a generated observer
+provided at construction, then allow downstream destinations to be configured
+through `INamedOutputs`; they do not replace the widget's observer. See
+[construction observers](../../../../docs/CONSTRUCTION_OBSERVERS.md).
 
 ## Composites and attachment
 
 A behavioral composite uses `Controller::new(model, receiver)` before mounting.
-Bind its children into that receiver. Its model emits declared public outputs
+Construct its children with observers targeting that receiver. Its model emits declared public outputs
 into its enclosing owner's channel. Exposing a particular child output directly
 to the application is an explicit binding choice; private messages do not bubble
 automatically through unrelated containers. A structural `ScrollArea`, layout,
@@ -183,8 +225,9 @@ Install immutable asset candidates after update returns.
 ## Static and dynamic linkage
 
 Typed mappings, channels and concrete controllers compile into their owner's
-binary. `IEventOwner` and `Mount` belong to UI core contracts; `bind` and named
-output support belong to the COM facade. The COM process runtime has no event
+binary. `IEventOwner` and `Mount` belong to UI core contracts. Generated observer
+contracts live alongside each producer; channel shims belong to the static UI
+facade. Generic `bind` and named output support belong to the COM facade. The COM process runtime has no event
 loop or UI dispatch adapter. No additional event shared library is introduced.
 Dynamic plugins and monoliths use the same contracts. Rebuild hosts and plugins
 together after these signature changes; no legacy dispatcher bridge remains.

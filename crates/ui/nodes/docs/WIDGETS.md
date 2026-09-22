@@ -22,8 +22,8 @@ use neocogi_ui::{CrossSize, FlowDirection, IWindowAbi,
     LayoutTrack, LinearEdge, Rect, Ui};
 use neocogi_com::{ComPtr, NcStatus};
 fn install(ui: &Ui, sender: &std::sync::mpsc::Sender<bool>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-    let checkbox = ui.widgets().checkbox("Enable preview", false)?;
-    neocogi_ui::events::bind(checkbox.changed(), sender.clone(), |event| event.checked)?;
+    let checkbox = ui.widgets().checkbox("Enable preview", false, sender.clone(),
+        |neocogi_ui::checkbox::Event::Changed(event)| event.checked)?;
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     column.insert(0, &checkbox, LinearEdge::new(LayoutTrack::Content))?.finish()?;
     ui.window("Settings", Rect { x: 40, y: 40, width: 260, height: 120 }, &column)
@@ -37,26 +37,29 @@ pointers. Final COM release frees the allocation separately.
 
 ## Controls and standard events
 
-| Client | Purpose | Output accessor |
+| Client | Purpose | Observer event |
 | --- | --- | --- |
-| `Button` | Text/image action | `activated()` |
-| `Checkbox` | Boolean choice | `changed()` |
-| `Combo` | Optional selection and runtime-owned choice popup | `changed()` |
-| `ListBox` | Activatable label/image | `activated()` |
-| `ListItem` | Activatable text/icon row | `activated()` |
-| `Slider`, `Number` | Numeric controls | `changed()` |
-| `Textbox`, `TextArea` | UTF-8 editors | `changed()`, `submitted()` |
-| `Scrollbar` | Horizontal/vertical range | `changed()` |
+| `Button` | Text/image action | `Event::Activated` |
+| `Checkbox` | Boolean choice | `Event::Changed` |
+| `Combo` | Optional selection and runtime-owned choice popup | `Event::Changed` |
+| `ListBox` | Activatable label/image | `Event::Activated` |
+| `ListItem` | Activatable text/icon row | `Event::Activated` |
+| `Slider`, `Number` | Numeric controls | `Event::Changed` |
+| `Textbox`, `TextArea` | UTF-8 editors | `Event::Changed`, `Event::Submitted` |
+| `Scrollbar` | Horizontal/vertical range | `Event::Changed` |
 | `TextBlock` | Read-only text with explicit wrapping | None |
 | `ColorSwatch` | Color preview and optional label | None |
 
+Each observed widget retains one observer, supplied to its actual COM constructor.
+The local `neocogi_ui::textbox::Event` enum, for example, covers both text outputs.
+Use `*_unobserved` constructors when no events are needed.
 Events own the value captured at the interaction. Ordinary programmatic setters
-remain silent. The [events guide](EVENTS.md) describes delivery; exact interfaces and
+remain silent. The [events guide](../../runtime/docs/EVENTS.md) describes delivery; exact interfaces and
 shared capabilities are documented in `neocogi-ui-core-contracts`, concrete
 classes in `neocogi-ui-nodes-contracts`, and clients in the facade's API reference.
 
 Combo boxes retain a selection-menu hierarchy but no generic application payload.
-`Ui::combo_box(parent, items, ChoiceSelection::None)` is the flat convenience: it
+`Ui::combo_box(parent, items, ChoiceSelection::None, sender, mapper)` is the flat convenience: it
 assigns each label an ID equal to its ordinal, displays the `Select…` fallback, and
 allows `set_placeholder` to replace that fallback. `Ui::combo_menu` instead consumes
 the NCIDL-generated core `ChoiceMenuEntry` preorder sequence and `MenuTextRange` values,
@@ -95,12 +98,12 @@ There is no split-specific core routing or editor-side drag callback.
 use neocogi_ui::{SplitAxis, SplitOptions, SplitViewWidget, Ui};
 use neocogi_com::NcStatus;
 fn split(ui: &Ui) -> Result<SplitViewWidget, NcStatus> {
-    let mut split = ui.widgets().split_view(SplitOptions {
+    let mut split = ui.widgets().split_view_unobserved(SplitOptions {
         axis: SplitAxis::Horizontal, // Left/right panes and a vertical handle.
         position: 320, minimum_first: 200, minimum_second: 240, handle_width: 8,
     })?;
-    split.insert(0, &ui.widgets().textbox("Inspector")?)?.finish()?;
-    split.insert(1, &ui.widgets().textbox("Preview")?)?.finish()?;
+    split.insert(0, &ui.widgets().textbox_unobserved("Inspector")?)?.finish()?;
+    split.insert(1, &ui.widgets().textbox_unobserved("Preview")?)?.finish()?;
     Ok(split)
 }
 ```
@@ -113,7 +116,7 @@ are pixels along the movement axis. The requested position survives temporary
 allocation clamping; when both minima cannot fit, they compress proportionally.
 The handle uses normal button appearance with a small grip, and `handle_width`
 controls its visible and interactive thickness. Tab focuses it; the corresponding
-arrow keys move it by eight pixels. Capture loss cancels dragging. `changed()`
+arrow keys move it by eight pixels. Capture loss cancels dragging. `Event::Changed`
 reports user changes only; `set_settings()` and window resizing are silent.
 
 The structural children of a composed control are real, distinct COM objects, not

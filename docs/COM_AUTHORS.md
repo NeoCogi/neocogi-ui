@@ -70,15 +70,17 @@ field comment must name that constraint.
 ## Typed events and application state
 
 A persistent `events::Controller<Model>` owns ordinary application state and a
-standard `std::sync::mpsc::Receiver<Model::Message>`. Bind generated outputs into
-that private protocol once. Implement `EventModel::handle(&mut self, message)`
+standard `std::sync::mpsc::Receiver<Model::Message>`. Pass a sender and mapper when constructing observed widgets, targeting
+that private protocol. Implement `EventModel::handle(&mut self, message)`
 with ordinary matching and retain the controller's checked `IEventOwner`
 projection across frames:
 
 ```rust
 let (send, messages) = std::sync::mpsc::channel();
-neocogi_ui::events::bind(button.activated(), send.clone(), |event| AppMessage::Activated(event.label))?;
-neocogi_ui::events::bind(picker.completed(), send, |result| AppMessage::Completed { destination: 0, result })?;
+let button = ui.widgets().button("Open", send.clone(),
+    |neocogi_ui::button::Event::Activated(event)| AppMessage::Activated(event.label))?;
+let picker = ui.file_dialog(window.as_com_ref(), send,
+    |neocogi_ui::file_dialog::Event::Completed(result)| AppMessage::Completed { destination: 0, result })?;
 let app = neocogi_ui::events::Controller::into_local(
     neocogi_ui::events::Controller::root(model, messages),
 );
@@ -100,40 +102,48 @@ When reusing one dialog across requests, request identity remains application/do
 policy; binding does not manufacture an invocation ID absent from the protocol.
 
 Declare published cross-COM outputs as concrete `#[message]` structs/enums in
-NCIDL: `completed: FileDialogCompletion;`. Application and component-private enums
-stay in Rust. Producers store one optional concrete receiver and implement an
-ordinary mutable setter. The generated accessor supplies its installation closure
-to `events::bind(output, sender, mapper)`, which returns `Result<()>`; another binding replaces future delivery.
-Structural wrappers forward installation to their child. There are no subscription
-objects, cancellation leases or per-output queues. See
+NCIDL, such as `completed: FileDialogCompletion;`. Application and
+component-private enums stay in Rust. `#[observer]` producers receive a generated
+observer interface with one method per declared output, and a local aggregate
+`Event` enum. Their explicit COM factory argument accepts an optional borrowed
+observer, which the implementation retains before publishing the new widget.
+There are no generated output setters on these producers. See
 [IDL syntax](IDL_MODULES.md#concrete-messages-and-outputs).
 
-| Output | Producers | Concrete message |
+| Local variant | Producers | Concrete message |
 | --- | --- | --- |
-| `activated()` | Buttons, list rows, menu items | `Activation` |
-| `changed()` | Checkbox | `CheckboxChanged` |
-| `changed()` | Slider, Number | `NumericChanged` |
-| `changed()` | Scrollbar | `ScrollbarChanged` |
-| `changed()`, `submitted()` | Textbox, TextArea | `TextChanged`, `TextSubmitted` |
-| `changed()` | Combo | `ChoiceSelection` |
-| `completed()` | FileDialog | `FileDialogCompletion` |
+| `Event::Activated` | Buttons, list rows | `Activation` |
+| `Event::Changed` | Checkbox | `CheckboxChanged` |
+| `Event::Changed` | Slider, Number | `NumericChanged` |
+| `Event::Changed` | Scrollbar | `ScrollbarChanged` |
+| `Event::Changed`, `Event::Submitted` | Textbox, TextArea | `TextChanged`, `TextSubmitted` |
+| `Event::Changed` | Combo | `ChoiceSelection` |
+| `Event::Completed` | FileDialog | `FileDialogCompletion` |
 
-Commit state before calling `message.post_to(&mut destination)?`. Mapping runs synchronously and
-must only translate data or attach routing IDs; UI behavior belongs in the later
-consumer. Rust cannot prove closure purity. Captures must be owned or `'static`,
-and the later controller owns its ordinary mutable model. Generated receivers
-validate/copy/retain a concrete C message before mapping; Rust values and closures
-never cross COM. UI accessors validate domain values before mapping.
+Commit state before calling `ProducerEvent::Variant(message).post_to(&mut observer)?`.
+Mapping runs synchronously and should only translate data or attach routing IDs;
+UI behavior belongs in the later consumer. Rust cannot prove closure purity.
+Generated methods validate/copy/retain the concrete wire message, and the UI shim
+validates domain values before calling the mapper. Captures must be owned or
+`'static`; the later controller owns its ordinary mutable model.
 
-Each output has one destination. Mapping replaces it for future posts; already
-queued facts retain their original values and routing IDs. Dropping the receiver
-discards its messages. Later valid posts still run the mapper, then discard the
-translated value when sending reports disconnection. The producer releases the
-adapter and its captures on closure, destruction or replacement.
-The installation closure temporarily retains the producer only during setup.
-Setup, decoding and posting failures propagate; committed state does not roll back.
+Each widget has one fixed observer covering all outputs. `textbox::observer`
+creates that adapter separately; `textbox::filter_observer` can ignore selected
+variants. `*_with_observer` constructors borrow it, and `*_unobserved` constructors
+pass no observer. Separate factory convenience calls allocate separate observers.
+Already queued facts retain their captured values. A disconnected channel still
+runs the mapper and discards the translated value successfully. Logical closure
+releases the widget's observer reference, while explicit observer handles retain
+their own captures. Setup, decoding and posting failures propagate; committed
+state does not roll back.
 
-Behavioral composites bind child outputs into a private typed channel and own
+Window, popup and application-menu capabilities still use `events::bind`, as do
+unannotated IDL producers. Named component exports configure downstream targets
+on a generated observer installed during construction; the widget itself cannot
+be rebound. These distinctions are documented in the
+[constructor observer guide](CONSTRUCTION_OBSERVERS.md).
+
+Behavioral composites construct children with observers targeting a private typed channel and own
 that receiver with their ordinary model in `events::Controller<Model>`. Public
 editing methods may share the controller's COM allocation and borrow gate.
 Mount the distinct view and `IEventOwner` explicitly using `Component` or
@@ -329,7 +339,7 @@ independently of the theme's label foreground. For example:
 ```rust,ignore
 let images = host.renderer.query::<ITextureFactoryAbi>()?;
 let image = images.create_texture(size, NcCopyFromBufferOffset::new(0, &rgba))?;
-let mut button = host.ui.widgets().button("Preview")?;
+let mut button = host.ui.widgets().button_unobserved("Preview")?;
 button.set_image(image.as_com_ref(), true)?;
 // The button owns a reference; this local image reference may now be dropped.
 ```
@@ -563,7 +573,7 @@ plugin state:
 ```rust
 let section = ui.widgets().disclosure("Details", DisclosureStyle::Tree, false)?;
 let body = section.body()?;
-let editor = ui.widgets().text_area("first line\nsecond line", TextWrapping::Word, true)?;
+let editor = ui.widgets().text_area_unobserved("first line\nsecond line", TextWrapping::Word, true)?;
 body.insert(0, &editor, LinearEdge::new(LayoutTrack::Content))?.finish()?;
 section.header()?.set_text("Editable details")?;
 section.set_expanded(true)?;
@@ -643,14 +653,15 @@ let entries = [
     },
 ];
 let combo = ui.combo_menu(window.as_com_ref(), text, &entries,
-    ChoiceSelection::Selected(100))?;
+    ChoiceSelection::Selected(100), send,
+    |neocogi_ui::combo::Event::Changed(selection)| AppMessage::Selection(selection))?;
 ```
 
 Every submenu is followed immediately by its declared number of direct children;
 nested descendants follow their owning child branch. Construction and replacement
 atomically reject malformed counts, empty branches, invalid UTF-8 ranges, duplicate
 leaf IDs, nesting beyond 32 branches, or an unknown selected ID. Programmatic edits
-remain silent; `combo.changed()` yields immutable `ChoiceSelection` values
+remain silent; `combo::Event::Changed` carries immutable `ChoiceSelection` values
 only after a pointer or keyboard choice commits. Display labels remain independently
 available through `choice_label` and `display_text`; generic application data is
 mapped from the committed stable ID.
@@ -743,20 +754,20 @@ Retaining a picker cannot keep its runtime alive. The static facade still depend
 plugin uses its ordinary owned adapters internally without passing Rust model
 state across the ABI.
 
-Create the component and subscribe before dispatch, then open it from an ordinary
+Construct the component with its completion observer, then open it from an ordinary
 application handler:
 
 ```rust
-let mut picker = ui.file_dialog(window.as_com_ref())?;
-neocogi_ui::events::bind(picker.completed(), send, AppMessage::Completed)?;
+let mut picker = ui.file_dialog(window.as_com_ref(), send,
+    |neocogi_ui::file_dialog::Event::Completed(result)| AppMessage::Completed(result))?;
 let mut request = FileDialogRequest::new(native_directory);
 request.title = "Choose a document".to_owned();
 picker.open(&request)?;
 ui.update_with_events(drawable_size, owner.as_com_ref())?;
 ```
 
-The mapper receives the generated `FileDialogCompletion::Accepted { path }`
-or `Cancelled`. `neocogi_ui::events::completed_file_path` copies the exact
+The mapper receives `file_dialog::Event::Completed`, containing the generated
+`FileDialogCompletion::Accepted { path }` or `Cancelled`. `neocogi_ui::events::completed_file_path` copies the exact
 host-native `PathBuf` when the application needs it; display text is never
 reconstructed as a lookup key.
 Acceptance is lexical: application code decides whether the path must exist or

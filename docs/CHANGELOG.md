@@ -2,6 +2,15 @@
 
 ## 0.9.0-alpha.0 (unreleased)
 
+- Generate one concrete observer and local event enum from an NCIDL `#[observer]`
+  producer. Built-in controls, choice menus and file dialogs retain that observer
+  during construction. Rust factory shims accept an mpsc sender and typed mapper;
+  text changes and submissions share one allocation. Add explicit unobserved and
+  prebuilt-observer constructors, checked nullable COM inputs, and generated named
+  export forwarding for documents. Migrate demos, editors and composite children.
+  Existing controller scheduling/`LocalCom` and window/menu/popup binding remain.
+  See [constructor observers](CONSTRUCTION_OBSERVERS.md) for the design and measurements.
+
 - Rename typed output wiring to `events::bind`. Use one persistent owned
   `Controller<Model>` and `IEventOwner` contract for application and composite
   behavior. Mount components with an explicit typed `Mount` view/owner pair;

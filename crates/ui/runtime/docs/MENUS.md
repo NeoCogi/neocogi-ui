@@ -18,7 +18,7 @@ before and after mounting; they never keep a removed menu surface logically open
 use neocogi_ui::{ IWindowAbi, Rect, Ui};
 use neocogi_com::{ComPtr, NcStatus};
 fn install(ui: &Ui, sender: &std::sync::mpsc::Sender<String>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-    let body = ui.widgets().button("Document")?;
+    let body = ui.widgets().button_unobserved("Document")?;
     let window = ui.window("Editor", Rect { x: 20, y: 20, width: 640, height: 480 }, &body)?;
     let menus = ui.menus()?;
     let bar = menus.create("Editor menu")?;

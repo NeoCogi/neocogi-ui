@@ -28,6 +28,15 @@ file contents.
 Create `Loader::new(ui, parent_window, resources)` and call `load(binary)` or
 `prepare(&document)`. It returns an opaque `Component`; the application sees
 only `root()`, `outputs()`, typed `input::<SetText>("title")`, and `save()`.
+When loading a node with exported outputs, construction supplies its generated
+`exported_observer()` before the node factory returns. That one observer also
+implements `INamedOutputs`; the component export table retains this capability
+and maps public names to concrete observer ports. Nodes without exports receive
+no observer. Installing a named target checks its exact receiver interface and
+updates only the downstream destination; the widget's observer remains fixed.
+An exported post uses one additional concrete COM forwarding call, with no
+per-post name lookup and no intermediate owned message copy.
+
 Use `neocogi_com::events::bind_output` with the concrete event type declared by
 the component's public contract. Wrong types fail at connection time. Inputs
 include text, checked, numeric value, interaction enablement, expansion, and

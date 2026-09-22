@@ -144,7 +144,7 @@ use neocogi_ui::*;
 use neocogi_com::{ComPtr, NcStatus};
 
 fn install(ui: &Ui) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-    let hello = ui.widgets().button("Hello, world!")?;
+    let hello = ui.widgets().button_unobserved("Hello, world!")?;
     let mut content = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     content.insert(0, &hello, LinearEdge::new(LayoutTrack::Content))?.finish()?;
     ui.window("Hello", Rect { x: 40, y: 40, width: 300, height: 120 }, &content)
@@ -158,7 +158,9 @@ host-bound factory. `Ui::from_interfaces(runtime, factory)` verifies that both s
 same canonical `IWidgetHost` identity before the facade permits construction. No class ID,
 untyped argument object, private runtime pointer, or root identifier crosses that boundary.
 
-Bind typed outputs once with `events::bind(output, sender, mapper)`. A persistent
+Supply a sender and typed mapper when constructing observed widgets, for example
+`ui.widgets().textbox("", sender, mapper)`. One generated observer covers all of
+the widget's outputs; `textbox_unobserved` omits it. A persistent
 `events::Controller<Model>` owns ordinary model state and its standard channel
 receiver. Resolve `IEventOwner` once, then call
 `ui.update_with_events(size, owner.as_com_ref())` each frame. Nested components
