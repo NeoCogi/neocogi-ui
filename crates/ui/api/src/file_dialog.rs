@@ -8,7 +8,7 @@
 //! fn create(ui: &Ui, owner: ComRef<'_, IWindowAbi>, directory: &Path)
 //!     -> Result<(FileDialog, std::sync::mpsc::Receiver<FileDialogCompletion>), NcStatus>
 //! {
-//!     let picker = ui.file_dialog(owner)?;
+//!     let mut picker = ui.file_dialog(owner)?;
 //!     let (events_tx, events) = std::sync::mpsc::channel();
 //!     neocogi_ui::events::bind(picker.completed(), events_tx.clone(), |message| message)?;
 //!     picker.open(&FileDialogRequest::new(directory))?;
@@ -79,22 +79,27 @@ impl FileDialog {
         self.interface.window()
     }
     /// Copies exact native path units for the request and preserves the previous state on directory-read failure.
-    pub fn open(&self, request: &FileDialogRequest) -> Result<(), NcStatus> {
+    pub fn open(&mut self, request: &FileDialogRequest) -> Result<(), NcStatus> {
         let path = NativePath::new(&request.directory);
         let filename = NativePath::new(&request.filename);
-        self.interface
-            .open(NcCopyFromBufferOffset::new(0, request.title.as_bytes()), request.rect, path.as_interface(), request.mode, filename.as_interface())
+        self.interface.open(
+            NcCopyFromBufferOffset::new(0, request.title.as_bytes()),
+            request.rect,
+            path.as_interface(),
+            request.mode,
+            filename.as_interface(),
+        )
     }
     /// Reports whether a request awaits acceptance or cancellation.
     pub fn active(&self) -> Result<bool, NcStatus> {
         self.interface.active()
     }
     /// Cancels once while retaining the modal definition for another request.
-    pub fn cancel(&self) -> Result<bool, NcStatus> {
+    pub fn cancel(&mut self) -> Result<bool, NcStatus> {
         self.interface.cancel()
     }
     /// Permanently destroys the component's modal and closes its actual widget subtree.
-    pub fn close(&self) -> Result<(), NcStatus> {
+    pub fn close(&mut self) -> Result<(), NcStatus> {
         self.interface.close()
     }
     /// Copies the latest directory-read diagnostic, including native-path display and the concrete OS error.

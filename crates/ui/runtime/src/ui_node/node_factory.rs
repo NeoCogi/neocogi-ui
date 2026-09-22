@@ -73,8 +73,8 @@ impl NodeFactory {
         };
         let properties = widget.properties()?;
         properties.validate()?;
-        // The optional provider is queried before the one-way mount. A failed
-        // provider or a same-object driver leaves the widget unattached.
+        // Explicit ownership is validated before the irreversible attachment.
+        // Ordinary widgets require no optional event-capability discovery.
         let event_driver = match event_owner {
             Some(mut event_owner) => {
                 if event_owner.query::<IUnknown>()?.as_ptr() == widget.query::<IUnknown>()?.as_ptr() {
@@ -86,21 +86,8 @@ impl NodeFactory {
                 Some(Rc::new(super::mounted_node::ComponentEventDriver::owned(event_owner)))
             }
             None => {
-                let driver = match widget.query::<IComponentEventProviderAbi>() {
-                    Ok(provider) => {
-                        let driver = provider.private_dispatcher()?;
-                        let driver_identity = driver.query::<IUnknown>()?;
-                        let widget_identity = widget.query::<IUnknown>()?;
-                        if driver_identity.as_ptr() == widget_identity.as_ptr() {
-                            return Err(NC_E_INVALID_ARG);
-                        }
-                        Some(Rc::new(super::mounted_node::ComponentEventDriver::new(driver)))
-                    }
-                    Err(neocogi_com::NC_E_NOINTERFACE) => None,
-                    Err(error) => return Err(error),
-                };
                 widget.mount()?;
-                driver
+                None
             }
         };
         if let NodeLayoutKind::Branch { children, .. } = &layout {

@@ -215,7 +215,7 @@ impl State {
     }
     /// Native read failures remain visible in the log and do not stop the whole demo.
     fn open_file(&mut self) -> Result<(), NcStatus> {
-        let Some(dialog) = &self.file_dialog else {
+        let Some(dialog) = &mut self.file_dialog else {
             return self.write_log("File browsing requires a native filesystem.");
         };
         #[cfg(not(target_arch = "wasm32"))]

@@ -34,41 +34,19 @@ pub(crate) struct ComponentEventDriver {
     /// Only this shared lifecycle bit can change while a detached snapshot exists.
     active: Cell<bool>,
     /// Separate COM allocation, validated against the widget identity at mount.
-    dispatcher: ComponentDispatch,
-}
-
-/// Transitional representation while mounted providers migrate to owned controllers.
-enum ComponentDispatch {
-    /// Existing providers are removed after their model migration lands.
-    Legacy(ComPtr<IEventDispatcherAbi>),
-    /// One owned controller shares the view's attachment and retirement lifetime.
-    Owned(ComPtr<IEventOwnerAbi>),
+    owner: ComPtr<IEventOwnerAbi>,
 }
 
 impl ComponentEventDriver {
-    /// Constructs one active private driver after all provider checks succeed.
-    pub(crate) fn new(dispatcher: ComPtr<IEventDispatcherAbi>) -> Self {
-        Self {
-            active: Cell::new(true),
-            dispatcher: ComponentDispatch::Legacy(dispatcher),
-        }
-    }
-
     /// Retains the controller only after its joint view/controller mount succeeds.
     pub(crate) fn owned(owner: ComPtr<IEventOwnerAbi>) -> Self {
-        Self {
-            active: Cell::new(true),
-            dispatcher: ComponentDispatch::Owned(owner),
-        }
+        Self { active: Cell::new(true), owner }
     }
 
     /// Delivers one message, or skips a component already removed from its mount.
     pub(crate) fn dispatch(&self) -> Result<bool, NcStatus> {
         if self.active.get() {
-            match &self.dispatcher {
-                ComponentDispatch::Legacy(dispatcher) => dispatcher.as_com_ref().dispatch(),
-                ComponentDispatch::Owned(owner) => owner.as_com_ref().dispatch_next(),
-            }
+            self.owner.as_com_ref().dispatch_next()
         } else {
             Ok(false)
         }
@@ -81,10 +59,7 @@ impl ComponentEventDriver {
 
     /// Retains cleanup work after removal without entering an active model recursively.
     fn queue_retirement(&self, host: &HostState) {
-        match &self.dispatcher {
-            ComponentDispatch::Legacy(_) => {}
-            ComponentDispatch::Owned(owner) => host.retired_owners.borrow_mut().push(owner.clone()),
-        }
+        host.retired_owners.borrow_mut().push(self.owner.clone());
     }
 }
 
@@ -92,7 +67,7 @@ impl ComponentEventDriver {
 pub(crate) struct ComNode {
     /// Actual common widget capability, also retained by the application proxy.
     pub(super) widget: ComPtr<IWidgetAbi>,
-    /// Optional separately allocated private dispatcher queried once at mount.
+    /// Optional distinct event owner supplied explicitly at mount.
     /// It is invoked only after traversal releases this node and its descendants.
     pub(super) event_driver: Option<Rc<ComponentEventDriver>>,
     /// Runtime-returned changes persist until ancestor invalidation consumes them.

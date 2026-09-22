@@ -3,18 +3,17 @@ use crate::factory::NodeServices;
 use neocogi_ui_core_contracts::*;
 use neocogi_ui_nodes_contracts::{ContentIcon, CrossSize, FlowDirection, LayoutTrack, LinearEdge};
 use neocogi_ui::{LinearWidget, ListItemWidget, ScrollAreaWidget, TextBlockWidget, TextboxWidget};
-use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_object};
+use neocogi_com::{ComPtr, ComRef, LocalCom, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_object};
 use std::{
-    cell::RefCell,
     path::{Path, PathBuf},
     rc::Rc,
 };
 use crate::boundary::text;
+use neocogi_ui::events::{Controller, EventModel};
 
-/// Shared request lifetime contains no control pointers, handlers or runtime ownership.
+/// Request state is an ordinary field of the exclusively borrowed picker model.
 struct Request {
-    /// One request phase is shared by the controller, private model and teardown.
-    /// The enclosing RefCell provides their single checked mutation boundary.
+    /// One authoritative phase covers public calls, child delivery and retirement.
     phase: RequestPhase,
     /// Installed concrete completion receiver; consumers own their committed outcomes.
     completed: Option<ComPtr<__FileDialogCompletionReceiverAbi>>,
@@ -81,118 +80,6 @@ impl Request {
     }
 }
 
-#[com_object(interfaces(IWidget, IContainerLayout, IComponentEventProvider))]
-/// Transparent dialog root that adds a private dispatcher to one concrete Linear allocation.
-///
-/// Layout, routing, paint and lifetime remain owned by the wrapped concrete container. The only
-/// added capability is the separate dispatcher identity discovered by the production runtime when
-/// this root is mounted, so the nodes plugin requires no private runtime controller registry.
-struct DialogRoot {
-    /// Common widget projection of the exact concrete shell allocation.
-    widget: ComPtr<IWidgetAbi>,
-    /// Container projection of that same shell allocation.
-    layout: ComPtr<IContainerLayoutAbi>,
-    /// Separate component-owned dispatcher allocation, never the root's IUnknown identity.
-    dispatcher: ComPtr<IEventDispatcherAbi>,
-    /// Terminal component closure settles an active request even after this driver leaves the forest.
-    request: Rc<RefCell<Request>>,
-}
-
-impl DialogRoot {
-    /// Captures every required shell capability before publishing the wrapper object.
-    fn create(shell: &LinearWidget, dispatcher: ComPtr<IEventDispatcherAbi>, request: Rc<RefCell<Request>>) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
-        let shell = shell.as_interface().add_ref();
-        let value = Self {
-            widget: shell.query()?,
-            layout: shell.query()?,
-            dispatcher,
-            request,
-        };
-        Ok(Self::from_value(value).query().expect("DialogRoot declares IWidget"))
-    }
-}
-
-impl IComponentEventProvider for DialogRoot {
-    /// Returns the component's distinct framework dispatcher for runtime boundary dispatch.
-    fn private_dispatcher(&self) -> Result<ComPtr<IEventDispatcherAbi>, NcStatus> {
-        Ok(self.dispatcher.clone())
-    }
-}
-
-impl IWidget for DialogRoot {
-    /// Delegates runtime ownership to the concrete shell.
-    fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
-        self.widget.host()
-    }
-
-    /// Claims the concrete shell's one-way attachment exactly once.
-    fn mount(&mut self) -> Result<(), NcStatus> {
-        self.widget.mount()
-    }
-
-    /// Closes the concrete shell and its complete child topology.
-    fn close(&mut self) -> Result<(), NcStatus> {
-        let result = self.widget.close();
-        let completion = self.request.try_borrow_mut().map_err(|_| UI_E_BUSY)?.close();
-        result.and(completion)
-    }
-
-    /// Returns the shell's routing and frame policy without a shadow copy.
-    fn properties(&self) -> Result<WidgetProperties, NcStatus> {
-        self.widget.properties()
-    }
-
-    /// Applies common presentation options to the concrete shell.
-    fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus> {
-        self.widget.set_options(options)
-    }
-
-    /// Forwards one routed transaction to the concrete shell allocation.
-    fn update(&mut self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
-        self.widget.update(state, event, text)
-    }
-
-    /// Drains the shell's single sticky geometry-change source.
-    fn take_change(&mut self) -> Result<GeometryChange, NcStatus> {
-        self.widget.take_change()
-    }
-
-    /// Forwards scoped paint directly to the concrete shell.
-    fn paint(&mut self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
-        self.widget.paint(scope, state, painter)
-    }
-}
-
-impl IContainerLayout for DialogRoot {
-    /// Returns the concrete shell's stable child collection identity.
-    fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
-        self.layout.children()
-    }
-
-    /// Delegates intrinsic measurement without translating layout scopes.
-    fn measure(&mut self, scope: LayoutScope, bounds: LayoutLimits, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<Size, NcStatus> {
-        self.layout.measure(scope, bounds, layout)
-    }
-
-    /// Delegates child placement and returns the shell's exact copied geometry.
-    fn place(&mut self, scope: LayoutScope, rect: Rect, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<ContainerGeometry, NcStatus> {
-        self.layout.place(scope, rect, layout)
-    }
-
-    /// Preserves the concrete shell's ancestor-bubbling filter.
-    fn accepts_event(&self, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<bool, NcStatus> {
-        self.layout.accepts_event(event, text)
-    }
-}
-
-/// Node-plugin controller owns one private inbox and ordinary public COM capabilities.
-struct Dialog {
-    /// Ordinary mutable model shared only by the controller and its separate mounted driver.
-    model: Rc<RefCell<Model>>,
-    /// Shared independently of an active mutable model borrow during runtime retirement.
-    request: Rc<RefCell<Request>>,
-}
-
 /// Node construction data retained by the picker without retaining the core runtime identity.
 struct DialogNodes {
     /// Non-owning host authority reports logical closure after the owning UI is released.
@@ -203,16 +90,16 @@ struct DialogNodes {
 
 /// One authoritative picker model; live control values are read through their actual COM interfaces.
 struct Model {
-    /// Private child messages remain owned by this model and are consumed one at a time.
-    events: std::sync::mpsc::Receiver<Message>,
     /// Dynamic directory rows clone posting access when their outputs are connected.
     events_tx: std::sync::mpsc::Sender<Message>,
     /// Concrete-node construction data with no runtime or window-manager projection.
     nodes: Rc<DialogNodes>,
     /// Stable hidden/reusable modal installed after the eventful root is mounted.
     window: Option<ComPtr<IWindowAbi>>,
-    /// Request source and activity shared with the controller's lifetime operations.
-    request: Rc<RefCell<Request>>,
+    /// Plain request state protected by the controller's existing COM borrow gate.
+    request: Request,
+    /// The actual shell detects logical closure before deferred model retirement.
+    view: ComPtr<IWidgetAbi>,
     /// Exact committed native directory; lossy path-field display never replaces its identity.
     directory: PathBuf,
     /// User-edited path display becomes authoritative only after a real changed event.
@@ -242,11 +129,11 @@ impl Model {
 
     /// Rejects closed components and validates public runtime mutation authority.
     fn owner(&self) -> Result<(), NcStatus> {
-        if self.request.try_borrow().map_err(|_| UI_E_BUSY)?.closed() {
+        if self.request.closed() {
             return Err(UI_E_CLOSED);
         }
         self.nodes.host.check_mutation()?;
-        self.window()?.snapshot()?;
+        self.view.properties()?;
         Ok(())
     }
     /// Resolves untrimmed user text, preserving the exact native directory when its display was not edited.
@@ -262,11 +149,11 @@ impl Model {
     }
     /// Hides before emitting the outcome so later messages observe an idle reusable component.
     fn finish(&mut self, outcome: FileDialogCompletion) -> Result<(), NcStatus> {
-        if self.request.try_borrow().map_err(|_| UI_E_BUSY)?.active() {
+        if self.request.active() {
             if self.window().is_ok_and(|window| window.snapshot().is_ok()) {
                 self.window()?.set_visibility(Visibility::Hidden)?;
             }
-            self.request.try_borrow_mut().map_err(|_| UI_E_BUSY)?.finish(outcome)?;
+            self.request.finish(outcome)?;
         }
         Ok(())
     }
@@ -289,8 +176,7 @@ impl Model {
     }
 }
 
-/// Private component messages. Only synchronous delivery borrows captured text
-/// or lifecycle data; configured row messages own their exact native path.
+/// Private component messages own every captured value, including exact native paths.
 #[derive(Clone)]
 enum Message {
     /// Navigate to the committed directory's parent.
@@ -406,9 +292,9 @@ impl Listing {
     }
 }
 
-impl Dialog {
+impl FileDialog {
     /// Constructs one hidden modal from actual COM controls; no native widget handle or generic application state enters its ABI.
-    fn new(services: Rc<NodeServices>, parent: ComRef<'_, IWindowAbi>) -> Result<Rc<Self>, NcStatus> {
+    fn new(services: Rc<NodeServices>, parent: ComRef<'_, IWindowAbi>) -> Result<LocalCom<Self>, NcStatus> {
         services.host.check_mutation()?;
         let nodes = Rc::new(DialogNodes {
             host: services.host.clone(),
@@ -495,17 +381,17 @@ impl Dialog {
                 (actions.node_interface()?, LayoutTrack::Content),
             ],
         )?;
-        let request = Rc::new(RefCell::new(Request {
+        let request = Request {
             phase: RequestPhase::Idle,
             completed: None,
-        }));
+        };
         let (events_tx, events) = std::sync::mpsc::channel();
-        let model = Rc::new(RefCell::new(Model {
-            events,
+        let model = Model {
             events_tx,
             nodes,
             window: None,
-            request: request.clone(),
+            request,
+            view: shell.node_interface()?,
             directory: PathBuf::new(),
             path_dirty: false,
             selected: None,
@@ -516,34 +402,39 @@ impl Dialog {
             folders,
             files,
             diagnostic: String::new(),
-        }));
-        let dialog = Rc::new(Self { model, request });
-        let driver = neocogi_com::events::component_dispatcher(&dialog.model, |model| &model.events, Model::update)?;
-        let root = DialogRoot::create(&shell, driver, dialog.request.clone())?;
+        };
+        let dialog = Self::into_local(Self {
+            controller: Controller::new(model, events),
+        });
+        // The root owns this controller once attachment commits. The controller
+        // owns ordinary view capabilities, whose host link does not retain the runtime.
+        let mount = Mount::Component {
+            view: shell.node_interface()?,
+            owner: dialog.query()?,
+        };
         let windows = services.windows.clone();
-        let window = windows.create_dialog(
-            parent,
-            NcCopyFromBufferOffset::new(0, b"Open File"),
-            FILE_DIALOG_RECT,
-            neocogi_ui_core_contracts::Mount::widget(root.as_com_ref()).as_message(),
-        )?;
-        window.set_options(WindowOptions::FRAME)?;
-        dialog.model.try_borrow_mut().map_err(|_| UI_E_BUSY)?.window = Some(window.clone());
-        let connected = dialog.model.try_borrow_mut().map_err(|_| UI_E_BUSY)?.connect(
-            &path,
-            &filename,
-            &window,
-            [
-                (up, Message::Up),
-                (home, Message::Home),
-                (go, Message::Go),
-                (accept, Message::Accept),
-                (cancel, Message::Cancel),
-            ],
-        );
+        let window = windows.create_dialog(parent, NcCopyFromBufferOffset::new(0, b"Open File"), FILE_DIALOG_RECT, mount.as_message())?;
+        let connected = (|| {
+            window.set_options(WindowOptions::FRAME)?;
+            let mut local = dialog.try_borrow_mut()?;
+            local.controller.model.window = Some(window.clone());
+            local.controller.model.connect(
+                &path,
+                &filename,
+                &window,
+                [
+                    (up, Message::Up),
+                    (home, Message::Home),
+                    (go, Message::Go),
+                    (accept, Message::Accept),
+                    (cancel, Message::Cancel),
+                ],
+            )
+        })();
         if let Err(error) = connected {
             // A failed construction must not leave an unreachable modal definition in the forest.
             let _ = window.close();
+            let _ = dialog.try_borrow_mut()?.controller.retire();
             return Err(error);
         }
         Ok(dialog)
@@ -610,7 +501,7 @@ impl Model {
     /// Opens only after the complete native request and directory listing validate successfully.
     fn open(&mut self, title: &str, rect: Rect, directory: PathBuf, mode: FileDialogMode, filename: PathBuf) -> Result<(), NcStatus> {
         self.owner()?;
-        if self.request.try_borrow().map_err(|_| UI_E_BUSY)?.active() {
+        if self.request.active() {
             return Err(UI_E_BUSY);
         }
         if rect.width < 0 || rect.height < 0 {
@@ -642,7 +533,7 @@ impl Model {
         }
         self.window()?.set_title(NcCopyFromBufferOffset::new(0, title.as_bytes()))?;
         self.window()?.set_rect(rect)?;
-        self.request.try_borrow_mut().map_err(|_| UI_E_BUSY)?.begin()?;
+        self.request.begin()?;
         Ok(())
     }
 
@@ -652,7 +543,7 @@ impl Model {
             Message::Lifecycle(event) => {
                 match event {
                     WindowEvent::Hidden | WindowEvent::CloseRequested
-                        if self.request.try_borrow().map_err(|_| UI_E_BUSY)?.active()
+                        if self.request.active()
                             && self
                                 .window()
                                 .is_ok_and(|window| window.snapshot().is_ok_and(|snapshot| snapshot.visibility == Visibility::Hidden)) =>
@@ -660,12 +551,12 @@ impl Model {
                         // An older hide fact must not cancel a newly visible request.
                         self.finish(FileDialogCompletion::Cancelled)?;
                     }
-                    WindowEvent::Destroyed => self.request.try_borrow_mut().map_err(|_| UI_E_BUSY)?.close()?,
+                    WindowEvent::Destroyed => self.request.close()?,
                     _ => {}
                 }
                 None
             }
-            _ if !self.request.try_borrow().map_err(|_| UI_E_BUSY)?.active() => None,
+            _ if !self.request.active() => None,
             Message::PathEdited => {
                 self.path_dirty = true;
                 None
@@ -708,48 +599,62 @@ impl Model {
         Ok(())
     }
 }
-impl Drop for Dialog {
-    /// Final controller destruction closes its mounted modal and preserves one terminal cancellation.
-    fn drop(&mut self) {
-        if let Ok(model) = self.model.try_borrow()
-            && let Some(window) = &model.window
-        {
-            let _ = window.close();
-        }
-        if let Ok(mut request) = self.request.try_borrow_mut() {
-            let _ = request.retire();
-        }
+impl EventModel for Model {
+    type Message = Message;
+
+    /// Child events enter the same mutable model used by the public picker capability.
+    fn handle(&mut self, message: Message) -> Result<(), NcStatus> {
+        self.update(message)
+    }
+
+    /// View removal cancels one outstanding request after any active handler returns.
+    fn retire(&mut self) -> Result<(), NcStatus> {
+        self.request.retire()
     }
 }
 
-#[com_object(interfaces(IFileDialog))]
-/// One public controller identity owns no application callback, generic state pointer or native filesystem borrow.
+#[com_object(interfaces(IFileDialog, IEventOwner))]
+/// One allocation owns the picker model, its inbox and its public capabilities.
 struct FileDialog {
-    /// Runtime ownership keeps an active picker functional even if its caller releases the editing pointer.
-    dialog: Rc<Dialog>,
+    /// Ordinary owned state, exclusively accessed through this allocation's COM gate.
+    controller: Controller<Model>,
+}
+impl IEventOwner for FileDialog {
+    /// Commits the controller and its distinct concrete shell to one owning mount.
+    fn mount(&mut self, view: ComRef<'_, IWidgetAbi>) -> Result<(), NcStatus> {
+        self.controller.mount(view)
+    }
+    /// Handles one private child message without another COM allocation or shared model.
+    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
+        self.controller.dispatch_next()
+    }
+    /// Ends private delivery and settles the request exactly once after view removal.
+    fn retire(&mut self) -> Result<(), NcStatus> {
+        self.controller.retire()
+    }
 }
 impl IFileDialog for FileDialog {
-    /// Installs one concrete destination in the shared request's actual state.
+    /// Installs the typed upward destination directly in the model's request state.
     fn __map_completed(&mut self, destination: ComRef<'_, __FileDialogCompletionReceiverAbi>) -> Result<(), NcStatus> {
-        self.dialog.model.try_borrow().map_err(|_| UI_E_BUSY)?.owner()?;
-        self.dialog.request.try_borrow_mut().map_err(|_| UI_E_BUSY)?.completed = Some(destination.add_ref());
+        self.controller.model.owner()?;
+        self.controller.model.request.completed = Some(destination.add_ref());
         Ok(())
     }
 
-    /// Returns the actual modal capability; application code cannot replace its private structural roles.
+    /// Returns the actual modal capability without exposing private structural roles.
     fn window(&self) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-        Ok(self.dialog.model.try_borrow().map_err(|_| UI_E_BUSY)?.window()?.clone())
+        Ok(self.controller.model.window()?.clone())
     }
-    /// Decodes native units before request mutation and preserves the prior request/listing on a read failure.
+    /// Decodes native values before mutating the request or replacing directory rows.
     fn open(
-        &self,
+        &mut self,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
         directory: ComRef<'_, INativePathAbi>,
         mode: FileDialogMode,
         filename: ComRef<'_, INativePathAbi>,
     ) -> Result<(), NcStatus> {
-        self.dialog.model.try_borrow_mut().map_err(|_| UI_E_BUSY)?.open(
+        self.controller.model.open(
             text(title)?,
             rect,
             neocogi_ui::path::decode(directory)?,
@@ -757,41 +662,41 @@ impl IFileDialog for FileDialog {
             neocogi_ui::path::decode(filename)?,
         )
     }
-    /// Reports request state independently of hidden versus visible window allocation.
+    /// Rejects a closed view immediately, even before its deferred retirement runs.
     fn active(&self) -> Result<bool, NcStatus> {
-        let request = self.dialog.request.try_borrow().map_err(|_| UI_E_BUSY)?;
-        match request.phase {
+        self.controller.model.view.properties()?;
+        match self.controller.model.request.phase {
             RequestPhase::Closed => Err(UI_E_CLOSED),
             RequestPhase::Active => Ok(true),
             RequestPhase::Idle => Ok(false),
         }
     }
-    /// Explicit cancellation is idempotent and keeps the modal available for a later open.
-    fn cancel(&self) -> Result<bool, NcStatus> {
-        let mut model = self.dialog.model.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
+    /// Explicit cancellation is idempotent and leaves the modal available for reuse.
+    fn cancel(&mut self) -> Result<bool, NcStatus> {
+        let model = &mut self.controller.model;
         model.owner()?;
-        let active = self.dialog.request.try_borrow().map_err(|_| UI_E_BUSY)?.active();
+        let active = model.request.active();
         model.finish(FileDialogCompletion::Cancelled)?;
         Ok(active)
     }
-    /// Actual window destruction produces the same lifecycle cancellation as destroying its owner.
-    fn close(&self) -> Result<(), NcStatus> {
-        if self.dialog.request.try_borrow().map_err(|_| UI_E_BUSY)?.closed() {
+    /// Removes the view and settles the request with the current exclusive model access.
+    fn close(&mut self) -> Result<(), NcStatus> {
+        if self.controller.model.request.closed() {
             return Ok(());
         }
-        self.dialog.model.try_borrow().map_err(|_| UI_E_BUSY)?.window()?.close()?;
-        self.dialog.request.try_borrow_mut().map_err(|_| UI_E_BUSY)?.close()?;
-        Ok(())
+        self.controller.model.window()?.close()?;
+        // Runtime retirement may also be queued; Controller makes that later
+        // call idempotent without recursively entering this public call.
+        self.controller.retire()
     }
-    /// Diagnostics remain available after failure or closure to explain a rejected directory candidate.
+    /// Diagnostics remain readable after the component's terminal closure.
     fn diagnostic(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
-        Ok(NcString::from_utf8_str(&self.dialog.model.try_borrow().map_err(|_| UI_E_BUSY)?.diagnostic))
+        Ok(NcString::from_utf8_str(&self.controller.model.diagnostic))
     }
 }
-/// Creates one nodes-owned picker whose mounted root drives all private component events.
+/// Creates the one nodes-owned controller and returns its public editing capability.
 pub(crate) fn create(services: Rc<NodeServices>, parent: ComRef<'_, IWindowAbi>) -> Result<ComPtr<IFileDialogAbi>, NcStatus> {
-    let dialog = Dialog::new(services, parent)?;
-    Ok(FileDialog::from_value(FileDialog { dialog }).query().expect("file picker declares IFileDialog"))
+    FileDialog::new(services, parent)?.query()
 }
 
 /// Reads the platform home setting without converting its native encoding to Unicode.

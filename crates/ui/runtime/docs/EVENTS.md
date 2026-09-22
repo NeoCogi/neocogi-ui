@@ -113,17 +113,18 @@ retains a sender. It emits only its declared public results; private messages do
 not automatically bubble through ancestors. Structural containers such as
 `ScrollArea` need no channel merely because they contain children.
 
-`neocogi_com::events::component_dispatcher(&model, |model| &model.messages, Model::update)`
-creates the separate COM driver exposed by the mounted root through
-`IComponentEventProvider`. The driver keeps a weak model reference. It claims the
-model's `Rc<RefCell<Model>>` borrow before receiving, so a busy model loses no
-message. Shared model access is needed when separate controller and mounted-driver
-identities access it; its methods otherwise use ordinary `&mut self`. The channel
-requires no additional `Rc`, `RefCell`, weak pointer or queue wrapper.
+`Controller<Model>` owns the model and its receiver directly. A component may
+expose its public editing interfaces and `IEventOwner` on that same allocation;
+the file dialog does this. Its concrete root stays a separate widget. Supply both
+through `Mount::Component` (or the static `Component` facade) when attaching it.
+The COM borrow gate serializes public edits and event delivery before dequeuing.
+No shared mutable model, weak driver, or forwarding widget is required.
 
-The runtime discovers and schedules these drivers automatically, including during
-ordinary `Ui::update`. Component authors supply a receiver and mutable update
-method; they do not write queue-draining loops. The schedule is:
+The runtime caches explicit owners in descendant-first order and drives them
+also during ordinary `Ui::update`. Removing their views stops private delivery
+immediately; cleanup waits until any active handler has returned. A mounted
+owner survives dropping its client handles. Structural containers need no event
+owner merely because they have children. The schedule is:
 
 1. Synchronize layout and settle pending messages before routing input.
 2. Process one raw input, then release traversal borrows.

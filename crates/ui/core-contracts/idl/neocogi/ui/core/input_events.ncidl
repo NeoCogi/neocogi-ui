@@ -204,16 +204,6 @@ enum FileDialogCompletion: u8 {
 }
 
 #[version(1)]
-/// Optional event-driving capability on any mounted UI component.
-/// It yields a separate COM allocation, so callback edits never reenter the
-/// mounted widget's object-wide call gate through the driver itself.
-interface IComponentEventProvider {
-    /// Returns the component-owned private dispatcher used before application dispatch.
-    /// The dispatcher must have a distinct IUnknown identity from this widget.
-    fn private_dispatcher(&self) -> Result<IEventDispatcher>;
-}
-
-#[version(1)]
 /// Presentation of a lexical file selection; the application validates existence and replacement policy.
 enum FileDialogMode: u8 {
     /// Select an existing input file, displaying an Open action.
@@ -222,19 +212,19 @@ enum FileDialogMode: u8 {
     Save,
 }
 
-#[version(2)]
+#[version(3)]
 /// Nodes-provider file picker controller and real COM controls; retaining it does not keep its runtime open.
 interface IFileDialog {
     /// Returns the actual stable modal window capability for ordinary lifecycle and geometry operations.
     fn window(&self) -> Result<IWindow>;
     /// Reads and validates a complete native directory before changing request state or showing the modal.
-    fn open(&self, title: &[u8], rect: Rect, directory: &INativePath, mode: FileDialogMode, filename: &INativePath) -> Result<()>;
+    fn open(&mut self, title: &[u8], rect: Rect, directory: &INativePath, mode: FileDialogMode, filename: &INativePath) -> Result<()>;
     /// Reports whether a request is active; hidden/idle is distinct from permanently closed.
     fn active(&self) -> Result<bool>;
     /// Cancels one active request and hides its reusable modal; idle cancellation returns false.
-    fn cancel(&self) -> Result<bool>;
+    fn cancel(&mut self) -> Result<bool>;
     /// Permanently destroys the modal and ends its active request, while retained handles remain safe.
-    fn close(&self) -> Result<()>;
+    fn close(&mut self) -> Result<()>;
     /// Copies the latest failed directory-read diagnostic without replacing the previous valid listing.
     fn diagnostic(&self) -> Result<String>;
     /// Reports acceptance or cancellation of a request through the dialog's own capability.

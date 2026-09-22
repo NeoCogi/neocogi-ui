@@ -362,7 +362,7 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     }
     ui.update_with_events(size, &events, |message| message.consume(&mut count, &expected_path))?;
     assert_eq!(count, 1);
-    let picker = ui.file_dialog(window.as_com_ref())?;
+    let mut picker = ui.file_dialog(window.as_com_ref())?;
     neocogi_ui::events::bind(picker.completed(), events_tx.clone(), ComponentMessage::File)?;
     let mut request = FileDialogRequest::new(&directory.0);
     request.rect = Rect { x: 10, y: 10, width: 620, height: 370 };

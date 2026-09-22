@@ -129,14 +129,16 @@ adapter and its captures on closure, destruction or replacement.
 The installation closure temporarily retains the producer only during setup.
 Setup, decoding and posting failures propagate; committed state does not roll back.
 
-Behavioral composites own a private Rust enum and standard receiver, map child outputs into its channel,
-and expose a framework component driver through `IComponentEventProvider`. That
-driver uses weak ownership and a distinct COM identity. A shared `Rc<RefCell<Model>>`
-is needed only when controller and mounted-driver identities access the same model;
-its fields and behavior use ordinary `&mut self`. Structural containers such as
-`ScrollArea` need no inbox merely because they have children.
+Behavioral composites bind child outputs into a private typed channel and own
+that receiver with their ordinary model in `events::Controller<Model>`. Public
+editing methods may share the controller's COM allocation and borrow gate.
+Mount the distinct view and `IEventOwner` explicitly using `Component` or
+`Mount::Component`; no optional provider query or forwarding view is needed.
+Structural containers such as `ScrollArea` need no inbox merely because they
+have children. Removing a mounted view stops delivery immediately and retires
+its model after the current handler returns.
 
-The runtime discovers nested drivers automatically, including in `Ui::update`.
+The runtime schedules explicit nested owners automatically, including in `Ui::update`.
 It settles child messages and layout before dispatching an application message,
 then settles any resulting private work before continuing. Authors need no private
 dispatch loop, child registry or update-cycle object. The [events guide](../crates/ui/runtime/docs/EVENTS.md)
