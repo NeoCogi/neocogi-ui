@@ -518,8 +518,18 @@ fn prepare_children(
         super::Linear::from_value(value).query().expect("Linear declares its callable class contract")
     };
     let editor = host.create_children()?;
-    editor.insert(0, header.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
-    editor.insert(1, body.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
+    editor
+        .insert(
+            0,
+            neocogi_ui_core_contracts::Mount::widget(header.query::<IWidgetAbi>()?.as_com_ref()).as_message(),
+        )?
+        .finish()?;
+    editor
+        .insert(
+            1,
+            neocogi_ui_core_contracts::Mount::widget(body.query::<IWidgetAbi>()?.as_com_ref()).as_message(),
+        )?
+        .finish()?;
     Ok(DisclosureChildren { editor, header, body })
 }
 

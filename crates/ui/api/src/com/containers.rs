@@ -14,23 +14,33 @@ pub type SplitViewWidget = Widget<SplitViewAbi>;
 
 impl Widget<SplitViewAbi> {
     /// Observes pane identities without exposing the container's topology writer.
-    pub fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> { self.interface.children() }
+    pub fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
+        self.interface.children()
+    }
     /// Inserts a first or second pane; a third pane is rejected before attachment.
-    pub fn insert<I: ComInterface>(&mut self, index: u32, pane: &Widget<I>) -> Result<ChildEditResult, NcStatus> {
-        self.interface.insert(index, pane.node_interface()?.as_com_ref())
+    pub fn insert(&mut self, index: u32, pane: &impl Mountable) -> Result<ChildEditResult, NcStatus> {
+        self.interface.insert(index, neocogi_com::NcMessage::new(&pane.mount_description()?))
     }
     /// Replaces and closes one pane while preserving the split container.
-    pub fn replace<I: ComInterface>(&mut self, index: u32, pane: &Widget<I>) -> Result<ChildEditResult, NcStatus> {
-        self.interface.replace(index, pane.node_interface()?.as_com_ref())
+    pub fn replace(&mut self, index: u32, pane: &impl Mountable) -> Result<ChildEditResult, NcStatus> {
+        self.interface.replace(index, neocogi_com::NcMessage::new(&pane.mount_description()?))
     }
     /// Removes one pane; the surviving pane fills the allocation after layout.
-    pub fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus> { self.interface.remove(index) }
+    pub fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus> {
+        self.interface.remove(index)
+    }
     /// Retires both panes without retiring the split itself.
-    pub fn clear(&mut self) -> Result<ChildEditResult, NcStatus> { self.interface.clear() }
+    pub fn clear(&mut self) -> Result<ChildEditResult, NcStatus> {
+        self.interface.clear()
+    }
     /// Returns the requested split settings, unaffected by temporary narrow allocations.
-    pub fn settings(&self) -> Result<SplitOptions, NcStatus> { self.interface.settings() }
+    pub fn settings(&self) -> Result<SplitOptions, NcStatus> {
+        self.interface.settings()
+    }
     /// Replaces validated sizing and cancels a gesture without publishing a user event.
-    pub fn set_settings(&mut self, settings: SplitOptions) -> Result<(), NcStatus> { self.interface.set_settings(settings) }
+    pub fn set_settings(&mut self, settings: SplitOptions) -> Result<(), NcStatus> {
+        self.interface.set_settings(settings)
+    }
 }
 
 /// Static convenience wrapper around the dynamically constructed Disclosure class projection.
@@ -110,8 +120,8 @@ impl Widget<ScrollAreaAbi> {
         Ok(Widget::from_interface(self.interface.content()?))
     }
     /// Replaces and closes application content while retaining the same outer scroll object and model.
-    pub fn replace_content<I: ComInterface>(&mut self, content: &Widget<I>) -> Result<ChildEditResult, NcStatus> {
-        self.interface.replace_content(content.node_interface()?.as_com_ref())
+    pub fn replace_content(&mut self, content: &impl Mountable) -> Result<ChildEditResult, NcStatus> {
+        self.interface.replace_content(neocogi_com::NcMessage::new(&content.mount_description()?))
     }
 }
 
@@ -133,12 +143,14 @@ macro_rules! container_proxy {
             }
             /// Inserts the actual child object after validating the complete relationship.
             /// Err leaves topology unchanged; Ok requires inspecting its separate teardown status when relevant.
-            pub fn insert<I: ComInterface>(&mut self, index: u32, child: &Widget<I>, edge: $edge) -> Result<ChildEditResult, NcStatus> {
-                self.interface.insert(index, child.node_interface()?.as_com_ref(), edge)
+            pub fn insert(&mut self, index: u32, child: &impl Mountable, edge: $edge) -> Result<ChildEditResult, NcStatus> {
+                self.interface
+                    .insert(index, neocogi_com::NcMessage::new(&child.mount_description()?), edge)
             }
             /// Replaces one subtree and relationship together. Ok reports committed replacement even if old-child teardown failed.
-            pub fn replace<I: ComInterface>(&mut self, index: u32, child: &Widget<I>, edge: $edge) -> Result<ChildEditResult, NcStatus> {
-                self.interface.replace(index, child.node_interface()?.as_com_ref(), edge)
+            pub fn replace(&mut self, index: u32, child: &impl Mountable, edge: $edge) -> Result<ChildEditResult, NcStatus> {
+                self.interface
+                    .replace(index, neocogi_com::NcMessage::new(&child.mount_description()?), edge)
             }
             /// Removes and closes one subtree; call the returned outcome's finish after observing the committed edit.
             pub fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus> {
@@ -236,9 +248,10 @@ impl WidgetFactory {
         )?))
     }
     /// Constructs a framed scroll composite around one unmounted application widget.
-    pub fn scroll_area<I: ComInterface>(&self, content: &Widget<I>, enabled: bool) -> Result<ScrollAreaWidget, NcStatus> {
+    pub fn scroll_area(&self, content: &impl Mountable, enabled: bool) -> Result<ScrollAreaWidget, NcStatus> {
         Ok(ScrollAreaWidget::from_interface(
-            self.interface.create_scroll_area(content.node_interface()?.as_com_ref(), enabled)?,
+            self.interface
+                .create_scroll_area(neocogi_com::NcMessage::new(&content.mount_description()?), enabled)?,
         ))
     }
     /// Creates an empty directional container with one complete axis/cross configuration.
@@ -260,27 +273,41 @@ impl WidgetFactory {
 pub type FormWidget = Widget<FormAbi>;
 impl Widget<FormAbi> {
     /// Reads the topology without exposing its writer.
-    pub fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> { self.interface.children() }
+    pub fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
+        self.interface.children()
+    }
     /// Returns the authored preferred content dimensions.
-    pub fn size(&self) -> Result<Size, NcStatus> { self.interface.size() }
+    pub fn size(&self) -> Result<Size, NcStatus> {
+        self.interface.size()
+    }
     /// Changes the preferred dimensions without scaling children.
-    pub fn set_size(&mut self, size: Size) -> Result<(), NcStatus> { self.interface.set_size(size) }
+    pub fn set_size(&mut self, size: Size) -> Result<(), NcStatus> {
+        self.interface.set_size(size)
+    }
     /// Reads one exact child rectangle.
-    pub fn edge(&self, index: u32) -> Result<Rect, NcStatus> { self.interface.edge(index) }
+    pub fn edge(&self, index: u32) -> Result<Rect, NcStatus> {
+        self.interface.edge(index)
+    }
     /// Moves/resizes an existing child without replacing it.
-    pub fn set_edge(&mut self, index: u32, edge: Rect) -> Result<(), NcStatus> { self.interface.set_edge(index, edge) }
+    pub fn set_edge(&mut self, index: u32, edge: Rect) -> Result<(), NcStatus> {
+        self.interface.set_edge(index, edge)
+    }
     /// Attaches one child after validating its complete rectangle.
-    pub fn insert<I: ComInterface>(&mut self, index: u32, child: &Widget<I>, edge: Rect) -> Result<ChildEditResult, NcStatus> {
-        self.interface.insert(index, child.node_interface()?.as_com_ref(), edge)
+    pub fn insert(&mut self, index: u32, child: &impl Mountable, edge: Rect) -> Result<ChildEditResult, NcStatus> {
+        self.interface.insert(index, neocogi_com::NcMessage::new(&child.mount_description()?), edge)
     }
     /// Replaces a child with the supplied geometry.
-    pub fn replace<I: ComInterface>(&mut self, index: u32, child: &Widget<I>, edge: Rect) -> Result<ChildEditResult, NcStatus> {
-        self.interface.replace(index, child.node_interface()?.as_com_ref(), edge)
+    pub fn replace(&mut self, index: u32, child: &impl Mountable, edge: Rect) -> Result<ChildEditResult, NcStatus> {
+        self.interface.replace(index, neocogi_com::NcMessage::new(&child.mount_description()?), edge)
     }
     /// Closes one owned subtree.
-    pub fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus> { self.interface.remove(index) }
+    pub fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus> {
+        self.interface.remove(index)
+    }
     /// Closes all children while retaining this form.
-    pub fn clear(&mut self) -> Result<ChildEditResult, NcStatus> { self.interface.clear() }
+    pub fn clear(&mut self) -> Result<ChildEditResult, NcStatus> {
+        self.interface.clear()
+    }
 }
 impl WidgetFactory {
     /// Creates a form whose child rectangles are interpreted by the runtime node.

@@ -198,11 +198,18 @@ fn nested_container_layout_scopes_expire_and_teardown_closes_descendants() {
     let (child, child_editor, child_probe) = container(&runtime, Rc::clone(&history));
     let mut leaf = button(&runtime);
     child_editor
-        .insert(0, leaf.query::<IWidgetAbi>().unwrap().as_com_ref())
+        .insert(
+            0,
+            neocogi_ui_core_contracts::Mount::widget(leaf.query::<IWidgetAbi>().unwrap().as_com_ref()).as_message(),
+        )
         .unwrap()
         .finish()
         .unwrap();
-    parent_editor.insert(0, child.as_com_ref()).unwrap().finish().unwrap();
+    parent_editor
+        .insert(0, neocogi_ui_core_contracts::Mount::widget(child.as_com_ref()).as_message())
+        .unwrap()
+        .finish()
+        .unwrap();
     let child_view = child_editor.view().unwrap();
     let window = mount(&runtime, &parent).unwrap();
     runtime.update(SIZE).unwrap();
@@ -229,8 +236,15 @@ fn container_topology_rejects_cycles_shared_collections_and_reentrant_edits() {
     let runtime = runtime();
     let (a, a_editor, a_probe) = container(&runtime, Rc::default());
     let (b, b_editor, _) = container(&runtime, Rc::default());
-    a_editor.insert(0, b.as_com_ref()).unwrap().finish().unwrap();
-    assert_eq!(b_editor.insert(0, a.as_com_ref()), Err(UI_E_OWNER));
+    a_editor
+        .insert(0, neocogi_ui_core_contracts::Mount::widget(b.as_com_ref()).as_message())
+        .unwrap()
+        .finish()
+        .unwrap();
+    assert_eq!(
+        b_editor.insert(0, neocogi_ui_core_contracts::Mount::widget(a.as_com_ref()).as_message()),
+        Err(UI_E_OWNER)
+    );
     assert_eq!(a_editor.view().unwrap().child_count().unwrap(), 1);
     assert_eq!(b_editor.view().unwrap().child_count().unwrap(), 0);
     *a_probe.mount_edit.borrow_mut() = Some(b_editor.clone());
@@ -253,7 +267,14 @@ fn failed_container_layout_retries_without_caching_failed_parent_geometry() {
     let runtime = runtime();
     let (root, editor, probe) = container(&runtime, Rc::default());
     let leaf = button(&runtime);
-    editor.insert(0, leaf.query::<IWidgetAbi>().unwrap().as_com_ref()).unwrap().finish().unwrap();
+    editor
+        .insert(
+            0,
+            neocogi_ui_core_contracts::Mount::widget(leaf.query::<IWidgetAbi>().unwrap().as_com_ref()).as_message(),
+        )
+        .unwrap()
+        .finish()
+        .unwrap();
     let _window = mount(&runtime, &root).unwrap();
     probe.fail_measure.set(true);
     assert_eq!(runtime.update(SIZE), Err(NC_E_INVALID_ARG));
@@ -276,7 +297,14 @@ fn final_child_writer_release_during_layout_closes_retained_descendants() {
     let runtime = runtime();
     let (root, editor, probe) = container(&runtime, Rc::default());
     let leaf = button(&runtime);
-    editor.insert(0, leaf.query::<IWidgetAbi>().unwrap().as_com_ref()).unwrap().finish().unwrap();
+    editor
+        .insert(
+            0,
+            neocogi_ui_core_contracts::Mount::widget(leaf.query::<IWidgetAbi>().unwrap().as_com_ref()).as_message(),
+        )
+        .unwrap()
+        .finish()
+        .unwrap();
     let view = editor.view().unwrap();
     drop(editor);
     let window = mount(&runtime, &root).unwrap();
@@ -309,7 +337,11 @@ fn layout_service_rejects_direct_reentry_without_holding_an_interior_borrow() {
     let (root, editor, probe) = container(&runtime, Rc::default());
     let (leaf, leaf_probe) = recorded_leaf(&runtime);
     *probe.leaf_probe.borrow_mut() = Some(leaf_probe.clone());
-    editor.insert(0, leaf.as_interface()).unwrap().finish().unwrap();
+    editor
+        .insert(0, neocogi_ui_core_contracts::Mount::widget(leaf.as_interface()).as_message())
+        .unwrap()
+        .finish()
+        .unwrap();
     let window = mount(&runtime, &root).unwrap();
     runtime.update(SIZE).unwrap();
     assert!(leaf_probe.measures.get() > 0);

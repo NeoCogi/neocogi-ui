@@ -341,7 +341,13 @@ fn line(
 ) -> Result<LinearWidget, NcStatus> {
     let line = LinearWidget::from_interface(crate::Linear::create_com(nodes.host.clone(), nodes.resources.clone(), direction, cross.into())?);
     for (index, (child, track)) in children.into_iter().enumerate() {
-        line.as_interface().insert(index as u32, child.as_com_ref(), LinearEdge::new(track))?.finish()?;
+        line.as_interface()
+            .insert(
+                index as u32,
+                neocogi_ui_core_contracts::Mount::widget(child.as_com_ref()).as_message(),
+                LinearEdge::new(track),
+            )?
+            .finish()?;
     }
     Ok(line)
 }
@@ -428,13 +434,13 @@ impl Dialog {
         let folders = ScrollAreaWidget::from_interface(crate::ScrollArea::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
-            folder_content.root.node_interface()?.as_com_ref(),
+            neocogi_ui_core_contracts::Mount::widget(folder_content.root.node_interface()?.as_com_ref()).as_message(),
             true,
         )?);
         let files = ScrollAreaWidget::from_interface(crate::ScrollArea::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
-            file_content.root.node_interface()?.as_com_ref(),
+            neocogi_ui_core_contracts::Mount::widget(file_content.root.node_interface()?.as_com_ref()).as_message(),
             true,
         )?);
         let error = label(&nodes, "")?;
@@ -515,7 +521,12 @@ impl Dialog {
         let driver = neocogi_com::events::component_dispatcher(&dialog.model, |model| &model.events, Model::update)?;
         let root = DialogRoot::create(&shell, driver, dialog.request.clone())?;
         let windows = services.windows.clone();
-        let window = windows.create_dialog(parent, NcCopyFromBufferOffset::new(0, b"Open File"), FILE_DIALOG_RECT, root.as_com_ref())?;
+        let window = windows.create_dialog(
+            parent,
+            NcCopyFromBufferOffset::new(0, b"Open File"),
+            FILE_DIALOG_RECT,
+            neocogi_ui_core_contracts::Mount::widget(root.as_com_ref()).as_message(),
+        )?;
         window.set_options(WindowOptions::FRAME)?;
         dialog.model.try_borrow_mut().map_err(|_| UI_E_BUSY)?.window = Some(window.clone());
         let connected = dialog.model.try_borrow_mut().map_err(|_| UI_E_BUSY)?.connect(
@@ -612,9 +623,7 @@ impl Model {
         };
         // A suggestion is one native filename, never another route out of the
         // requested directory. Validation precedes every visible request change.
-        if !filename.as_os_str().is_empty()
-            && !matches!(filename.components().collect::<Vec<_>>().as_slice(), [std::path::Component::Normal(_)])
-        {
+        if !filename.as_os_str().is_empty() && !matches!(filename.components().collect::<Vec<_>>().as_slice(), [std::path::Component::Normal(_)]) {
             return Err(NC_E_INVALID_ARG);
         }
         let directory = std::path::absolute(directory).map_err(|error| {
@@ -732,12 +741,21 @@ impl IFileDialog for FileDialog {
         Ok(self.dialog.model.try_borrow().map_err(|_| UI_E_BUSY)?.window()?.clone())
     }
     /// Decodes native units before request mutation and preserves the prior request/listing on a read failure.
-    fn open(&self, title: NcCopyFromBufferOffset<'_, u8>, rect: Rect, directory: ComRef<'_, INativePathAbi>, mode: FileDialogMode, filename: ComRef<'_, INativePathAbi>) -> Result<(), NcStatus> {
-        self.dialog
-            .model
-            .try_borrow_mut()
-            .map_err(|_| UI_E_BUSY)?
-            .open(text(title)?, rect, neocogi_ui::path::decode(directory)?, mode, neocogi_ui::path::decode(filename)?)
+    fn open(
+        &self,
+        title: NcCopyFromBufferOffset<'_, u8>,
+        rect: Rect,
+        directory: ComRef<'_, INativePathAbi>,
+        mode: FileDialogMode,
+        filename: ComRef<'_, INativePathAbi>,
+    ) -> Result<(), NcStatus> {
+        self.dialog.model.try_borrow_mut().map_err(|_| UI_E_BUSY)?.open(
+            text(title)?,
+            rect,
+            neocogi_ui::path::decode(directory)?,
+            mode,
+            neocogi_ui::path::decode(filename)?,
+        )
     }
     /// Reports request state independently of hidden versus visible window allocation.
     fn active(&self) -> Result<bool, NcStatus> {

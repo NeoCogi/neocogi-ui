@@ -211,7 +211,7 @@ interface IWindow {
     fn close(&self) -> Result<()>;
 }
 
-#[version(1)]
+#[version(2)]
 /// Window policy and topology are owned by the UI runtime object.
 interface IWindowManager {
     /// Creates a visible structural child; a modal parent is rejected before claiming the widget.
@@ -220,7 +220,7 @@ interface IWindowManager {
         parent: &IWindow,
         title: &[u8],
         rect: Rect,
-        root: &IWidget,
+        root: &Mount,
     ) -> Result<IWindow>;
     /// Creates a hidden modal dialog owned by an ordinary window.
     fn create_dialog(
@@ -228,17 +228,17 @@ interface IWindowManager {
         parent: &IWindow,
         title: &[u8],
         rect: Rect,
-        root: &IWidget,
+        root: &Mount,
     ) -> Result<IWindow>;
     /// Creates a hidden auto-sized popup owned by a live window or dialog.
     fn create_popup(
         &self,
         parent: &IWindow,
         title: &[u8],
-        root: &IWidget,
+        root: &Mount,
     ) -> Result<IPopup>;
     /// Mounts one previously unmounted root and creates its logical window.
-    fn create_window(&self, title: &[u8], rect: Rect, root: &IWidget) -> Result<IWindow>;
+    fn create_window(&self, title: &[u8], rect: Rect, root: &Mount) -> Result<IWindow>;
 }
 
 #[version(1)]

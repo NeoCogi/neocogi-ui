@@ -54,7 +54,7 @@ fn outputs_rebind_and_queued_old_events_have_distinct_generations() {
     document.root = Node::new("save", WidgetSpec::Button { text: "Save".into() });
     document.inputs.clear();
     let (sender, events) = std::sync::mpsc::channel();
-    let bind = |component: &Component, generation| {
+    let bind = |component: &neocogi_ui_document::Component, generation| {
         bind_output(component.outputs()?.as_com_ref(), "save_requested", sender.clone(), move |_: Activation| {
             generation
         })
@@ -306,7 +306,8 @@ fn authored_form_rectangles_survive_binary_reload_and_route_real_clicks() {
     let (sender, events) = std::sync::mpsc::channel();
     slot.reload(&document, Resources::new(), |component, generation| {
         bind_output(component.outputs()?.as_com_ref(), "save_requested", sender, move |_: Activation| generation)
-    }).unwrap();
+    })
+    .unwrap();
     fixture.frame(VIEW).unwrap();
     // The first point is inside the form but outside its authored button.
     pointer(&fixture.ui, Point { x: 30, y: 30 }, true);

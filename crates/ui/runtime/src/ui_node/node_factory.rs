@@ -1,7 +1,7 @@
 //! Shared construction authority, independent of any root forest or runtime transaction.
 use super::HostState;
 use neocogi_ui_core_contracts::*;
-use neocogi_com::{ComPtr, ComRef, IUnknown, NcStatus, NC_E_INVALID_ARG};
+use neocogi_com::{ComPtr, IUnknown, NcStatus, NC_E_INVALID_ARG};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -36,11 +36,14 @@ pub(crate) struct NodeFactory {
 
 impl NodeFactory {
     /// Validates every fallible capability query before claiming the sole attachment.
-    pub(crate) fn mount_node(&self, root: ComRef<'_, IWidgetAbi>, parent: Option<&Rc<ChildStore>>) -> Result<crate::Node, NcStatus> {
+    pub(crate) fn mount_node(&self, mount: neocogi_com::NcMessage<'_, Mount>, parent: Option<&Rc<ChildStore>>) -> Result<crate::Node, NcStatus> {
         self.check_edit()?;
         self.attaching.set(true);
         let _attachment = Attachment(&self.attaching);
-        let mut widget = root.add_ref();
+        let (mut widget, event_owner) = match mount.to_owned()? {
+            Mount::Widget { view } => (view, None),
+            Mount::Component { view, owner } => (view, Some(owner)),
+        };
         let owner: ComPtr<IUnknown> = widget.host()?.query()?;
         if owner.as_ptr() != self.host.query::<IUnknown>()?.as_ptr() {
             return Err(UI_E_OWNER);
@@ -72,25 +75,40 @@ impl NodeFactory {
         properties.validate()?;
         // The optional provider is queried before the one-way mount. A failed
         // provider or a same-object driver leaves the widget unattached.
-        let event_driver = match widget.query::<IComponentEventProviderAbi>() {
-            Ok(provider) => {
-                let driver = provider.private_dispatcher()?;
-                let driver_identity = driver.query::<IUnknown>()?;
-                let widget_identity = widget.query::<IUnknown>()?;
-                if driver_identity.as_ptr() == widget_identity.as_ptr() {
+        let event_driver = match event_owner {
+            Some(mut event_owner) => {
+                if event_owner.query::<IUnknown>()?.as_ptr() == widget.query::<IUnknown>()?.as_ptr() {
                     return Err(NC_E_INVALID_ARG);
                 }
-                Some(Rc::new(super::mounted_node::ComponentEventDriver::new(driver)))
+                // All view/layout validation succeeded. The owner claims both
+                // lifetimes in one final operation, leaving both unchanged on rejection.
+                event_owner.mount(widget.as_com_ref())?;
+                Some(Rc::new(super::mounted_node::ComponentEventDriver::owned(event_owner)))
             }
-            Err(neocogi_com::NC_E_NOINTERFACE) => None,
-            Err(error) => return Err(error),
+            None => {
+                let driver = match widget.query::<IComponentEventProviderAbi>() {
+                    Ok(provider) => {
+                        let driver = provider.private_dispatcher()?;
+                        let driver_identity = driver.query::<IUnknown>()?;
+                        let widget_identity = widget.query::<IUnknown>()?;
+                        if driver_identity.as_ptr() == widget_identity.as_ptr() {
+                            return Err(NC_E_INVALID_ARG);
+                        }
+                        Some(Rc::new(super::mounted_node::ComponentEventDriver::new(driver)))
+                    }
+                    Err(neocogi_com::NC_E_NOINTERFACE) => None,
+                    Err(error) => return Err(error),
+                };
+                widget.mount()?;
+                driver
+            }
         };
-        widget.mount()?;
         if let NodeLayoutKind::Branch { children, .. } = &layout {
             // The host-wide attachment guard prevents another edit between the
             // capability/cycle validation and this one-way collection claim.
             children.claimed.set(true);
         }
+        self.state.owners_changed.set(true);
         Ok(crate::Node::com_widget(ComNode {
             widget,
             event_driver,

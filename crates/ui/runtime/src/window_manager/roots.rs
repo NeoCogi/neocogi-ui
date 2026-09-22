@@ -1317,15 +1317,17 @@ impl WindowManager {
     /// traversal and before callback delivery. The forest's parent edges always
     /// point to earlier nodes, so reverse order visits child surfaces first;
     /// each widget tree contributes its own drivers in descendant-first order.
-    pub(crate) fn component_event_drivers(&self) -> Result<Vec<std::rc::Rc<crate::ui_node::mounted_node::ComponentEventDriver>>, neocogi_com::NcStatus> {
-        let mut drivers = Vec::new();
+    pub(crate) fn collect_component_event_drivers(
+        &self,
+        drivers: &mut Vec<std::rc::Rc<crate::ui_node::mounted_node::ComponentEventDriver>>,
+    ) -> Result<(), neocogi_com::NcStatus> {
         for surface in self.surfaces.nodes.iter().rev() {
             match &surface.surface.body {
-                SurfaceBody::Widgets { root, .. } => root.collect_private_event_drivers(&mut drivers)?,
+                SurfaceBody::Widgets { root, .. } => root.collect_private_event_drivers(drivers)?,
                 SurfaceBody::Menu(_) => {}
             }
         }
-        Ok(drivers)
+        Ok(())
     }
 
     /// Borrows one mounted menu item's concrete public state through its stable typed capability.

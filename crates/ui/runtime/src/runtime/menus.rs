@@ -343,7 +343,7 @@ impl IMenus for Runtime {
             popup: popup.clone(),
             closed: false,
         });
-        self.storage.mounts.borrow_mut().push(Mount {
+        self.storage.mounts.borrow_mut().push(SurfaceMount {
             surface: NativeSurface::Popup(popup),
             identity: identity.clone(),
         });

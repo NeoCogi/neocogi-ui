@@ -825,7 +825,13 @@ impl TextArea {
         let text = TextEditor::create_com(host.clone(), text_value, wrap, parts.model.clone(), resources)?;
         let font = text.query()?;
         let events = text.query()?;
-        parts.content.insert(0, text.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
+        parts
+            .content
+            .insert(
+                0,
+                neocogi_ui_core_contracts::Mount::widget(text.query::<IWidgetAbi>()?.as_com_ref()).as_message(),
+            )?
+            .finish()?;
         let runtime = crate::widget_object::WidgetRuntime::for_resources(host, crate::WidgetOption::FRAME, resources)?;
         Ok(Self::from_runtime(runtime, parts.editor, text, font, events, parts.model))
     }

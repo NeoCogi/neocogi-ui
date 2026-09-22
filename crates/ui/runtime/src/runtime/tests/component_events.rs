@@ -72,135 +72,22 @@ enum Edit {
         /// Existing parent accepts the new child through its ordinary COM editing interface.
         parent: neocogi_ui::LinearWidget,
         /// Child carries its own private inbox; the application never registers that inbox.
-        child: neocogi_ui::Widget<IWidgetAbi>,
+        child: neocogi_ui::Component<IWidgetAbi>,
     },
 }
 
 /// Fixture consumer owns ordinary command state, independently of the runtime's tree.
 struct Consumer {
-    /// The component owns its receiving endpoint alongside the mutable model.
-    messages: std::sync::mpsc::Receiver<Activation>,
     /// Shared assertion history is outside every component's COM allocation.
     trace: Trace,
     /// Shared component access requires one checked mutable boundary.
     record: PrivateRecord,
 }
-impl Consumer {
+impl neocogi_ui::events::EventModel for Consumer {
+    type Message = Activation;
     /// Handles one message; framework code owns all queue traversal and timing.
-    fn update(&mut self, _: Activation) -> Result<(), NcStatus> {
+    fn handle(&mut self, _: Activation) -> Result<(), NcStatus> {
         self.record.handle(&self.trace)
-    }
-}
-
-#[com_object(interfaces(IWidget, IContainerLayout, IComponentEventProvider))]
-/// Plugin-style composite allocation with its own event source and private inbox.
-/// Its dispatcher is the inbox's separate COM allocation, never this widget.
-struct EventfulComposite {
-    /// Real host-bound widget lifetime delegated without storing any runtime root.
-    lifetime: ComPtr<IWidgetAbi>,
-    /// Actual container policy and authoritative child collection permit arbitrary nesting.
-    layout: ComPtr<IContainerLayoutAbi>,
-    /// Strong model ownership is released on closure; an active dispatch may finish.
-    consumer: Option<Rc<RefCell<Consumer>>>,
-    /// Separate allocation supplied by the framework, never a handwritten dispatcher.
-    dispatcher: ComPtr<IEventDispatcherAbi>,
-}
-
-impl EventfulComposite {
-    /// Builds an ordinary container with one private inbox and returns its editing capability.
-    fn create(
-        ui: &neocogi_ui::Ui,
-        trace: Trace,
-        source: ComPtr<__ActivationReceiverAbi>,
-        handler: PrivateRecord,
-    ) -> (neocogi_ui::Widget<IWidgetAbi>, neocogi_ui::LinearWidget) {
-        let shell = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
-        let (private_events_tx, private_events) = std::sync::mpsc::channel();
-        neocogi_ui::events::bind(
-            source.query::<IActivationEventsAbi>().unwrap().activated(),
-            private_events_tx.clone(),
-            |event| event,
-        )
-        .unwrap();
-        let consumer = Rc::new(RefCell::new(Consumer {
-            messages: private_events,
-            trace,
-            record: handler,
-        }));
-        let dispatcher = neocogi_com::events::component_dispatcher(&consumer, |model| &model.messages, Consumer::update).unwrap();
-        let widget = Self::from_value(Self {
-            lifetime: shell.node_interface().unwrap(),
-            layout: shell.as_interface().add_ref().query().unwrap(),
-            consumer: Some(consumer),
-            dispatcher,
-        })
-        .query()
-        .unwrap();
-        (neocogi_ui::Widget::from_interface(widget), shell)
-    }
-}
-
-impl IContainerLayout for EventfulComposite {
-    /// Exposes the real host-issued collection, never a copied child list.
-    fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
-        self.layout.children()
-    }
-    /// Delegates measurement to the same concrete shell that owns the children.
-    fn measure(&mut self, scope: LayoutScope, bounds: LayoutLimits, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<Size, NcStatus> {
-        self.layout.measure(scope, bounds, layout)
-    }
-    /// Preserves ordinary descendant placement and viewport handling.
-    fn place(&mut self, scope: LayoutScope, rect: Rect, layout: ComRef<'_, ILayoutServiceAbi>) -> Result<ContainerGeometry, NcStatus> {
-        self.layout.place(scope, rect, layout)
-    }
-    /// Uses the shell's input policy independently of semantic event delivery.
-    fn accepts_event(&self, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<bool, NcStatus> {
-        self.layout.accepts_event(event, text)
-    }
-}
-
-impl IComponentEventProvider for EventfulComposite {
-    /// Yields the separate, typed inbox dispatcher as an owned COM reference.
-    fn private_dispatcher(&self) -> Result<ComPtr<IEventDispatcherAbi>, NcStatus> {
-        Ok(self.dispatcher.clone())
-    }
-}
-
-impl IWidget for EventfulComposite {
-    /// Delegates host authentication to a factory-created widget lifetime.
-    fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
-        self.lifetime.host()
-    }
-    /// Claims the underlying one-way mount only after the runtime validates the driver.
-    fn mount(&mut self) -> Result<(), NcStatus> {
-        self.lifetime.mount()
-    }
-    /// Ordinary widget closure retires its private queue and destination.
-    fn close(&mut self) -> Result<(), NcStatus> {
-        // An in-flight driver temporarily retains the model. Release our ownership
-        // without reborrowing it; the retired mount cannot deliver its next message.
-        self.consumer.take();
-        self.lifetime.close()
-    }
-    /// Uses the same real common routing policy as its factory-created lifetime.
-    fn properties(&self) -> Result<WidgetProperties, NcStatus> {
-        self.lifetime.properties()
-    }
-    /// Delegates ordinary option mutation without shadow state.
-    fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus> {
-        self.lifetime.set_options(options)
-    }
-    /// All test events were committed before mount; eventless updates are inert.
-    fn update(&mut self, _state: WidgetUpdate, _event: WidgetEventAbi, _text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
-        Ok(GeometryChange::NoChange)
-    }
-    /// No programmatic geometry edits exist on this fixture.
-    fn take_change(&mut self) -> Result<GeometryChange, NcStatus> {
-        Ok(GeometryChange::NoChange)
-    }
-    /// Paints no fixture geometry; runtime scheduling is the test subject.
-    fn paint(&mut self, _scope: PaintScope, _state: WidgetPaint, _painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
-        Ok(())
     }
 }
 
@@ -212,8 +99,20 @@ fn component(
     source: &ComPtr<__ActivationReceiverAbi>,
     forward: Option<ComPtr<__ActivationReceiverAbi>>,
     edit: Edit,
-) -> (neocogi_ui::Widget<IWidgetAbi>, neocogi_ui::LinearWidget) {
-    EventfulComposite::create(ui, trace.clone(), source.clone(), PrivateRecord { name, forward, edit })
+) -> (neocogi_ui::Component<IWidgetAbi>, neocogi_ui::LinearWidget) {
+    let shell = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
+    let (send, messages) = std::sync::mpsc::channel();
+    neocogi_ui::events::bind(source.query::<IActivationEventsAbi>().unwrap().activated(), send, |event| event).unwrap();
+    let controller = neocogi_ui::events::Controller::new(
+        Consumer {
+            trace: trace.clone(),
+            record: PrivateRecord { name, forward, edit },
+        },
+        messages,
+    );
+    let owner = neocogi_ui::events::Controller::from_value(controller).query::<IEventOwnerAbi>().unwrap();
+    let view = neocogi_ui::Widget::from_interface(shell.node_interface().unwrap());
+    (neocogi_ui::Component::new(view, owner), shell)
 }
 
 /// Emits a captured fixture fact without entering any application callback.
@@ -368,16 +267,11 @@ fn application_messages_interleave_with_automatic_private_settlement() {
 fn self_removal_stops_private_delivery_before_the_next_message() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let trace: Trace = Rc::new(RefCell::new(Vec::new()));
-    let parent = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
+    let mut parent = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let window = ui.window("self removal", RECT, &parent).unwrap();
     let source = Emitter::create();
     let (child, _) = component(&ui, &trace, "remover", &source, None, Edit::Close(window.clone()));
-    parent
-        .as_interface()
-        .insert(0, child.node_interface().unwrap().as_com_ref(), LinearEdge::new(LayoutTrack::Content))
-        .unwrap()
-        .finish()
-        .unwrap();
+    parent.insert(0, &child, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     emit(&source);
     emit(&source);
     ui.update(SIZE).unwrap();

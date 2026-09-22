@@ -84,7 +84,7 @@ impl RuntimeStorage {
         placement: Placement,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: ComRef<'_, IWidgetAbi>,
+        root: neocogi_com::NcMessage<'_, Mount>,
     ) -> Result<ComPtr<IUnknown>, NcStatus> {
         self.factory.host.check_mutation()?;
         if rect.width < 0 || rect.height < 0 {
@@ -137,7 +137,7 @@ impl RuntimeStorage {
                 closed: false,
             }),
         };
-        self.mounts.borrow_mut().push(Mount { surface, identity: identity.clone() });
+        self.mounts.borrow_mut().push(SurfaceMount { surface, identity: identity.clone() });
         self.pending.set(true);
         Ok(identity)
     }
@@ -145,7 +145,12 @@ impl RuntimeStorage {
 
 impl IWindowManager for Runtime {
     /// Creates an independent root through the shared transactional attachment path.
-    fn create_window(&self, title: NcCopyFromBufferOffset<'_, u8>, rect: Rect, root: ComRef<'_, IWidgetAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+    fn create_window(
+        &self,
+        title: NcCopyFromBufferOffset<'_, u8>,
+        rect: Rect,
+        root: neocogi_com::NcMessage<'_, Mount>,
+    ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.storage.create(Placement::Root, title, rect, root)?.query()
     }
     /// Authenticates the parent's COM identity before validating ordinary-child policy.
@@ -154,7 +159,7 @@ impl IWindowManager for Runtime {
         parent: ComRef<'_, IWindowAbi>,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: ComRef<'_, IWidgetAbi>,
+        root: neocogi_com::NcMessage<'_, Mount>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.storage.create(Placement::Child(self.storage.parent(parent)?), title, rect, root)?.query()
     }
@@ -164,7 +169,7 @@ impl IWindowManager for Runtime {
         parent: ComRef<'_, IWindowAbi>,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: ComRef<'_, IWidgetAbi>,
+        root: neocogi_com::NcMessage<'_, Mount>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.storage.create(Placement::Dialog(self.storage.parent(parent)?), title, rect, root)?.query()
     }
@@ -173,7 +178,7 @@ impl IWindowManager for Runtime {
         &self,
         parent: ComRef<'_, IWindowAbi>,
         title: NcCopyFromBufferOffset<'_, u8>,
-        root: ComRef<'_, IWidgetAbi>,
+        root: neocogi_com::NcMessage<'_, Mount>,
     ) -> Result<ComPtr<IPopupAbi>, NcStatus> {
         self.storage
             .create(Placement::Popup(self.storage.parent(parent)?), title, Rect::default(), root)?

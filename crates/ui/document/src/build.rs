@@ -140,22 +140,40 @@ impl Construction<'_> {
                         }
                         .into(),
                     };
-                    parent.insert(index, child.as_interface(), edge)?.finish()?;
+                    parent
+                        .insert(index, neocogi_ui::Mount::widget(child.as_interface()).as_message(), edge)?
+                        .finish()?;
                 }
                 (WidgetSpec::Grid { .. }, Edge::Grid { columns, rows }) => widget
                     .as_interface()
                     .add_ref()
                     .query::<GridAbi>()?
-                    .insert(index, child.as_interface(), GridExtent { columns: *columns, rows: *rows })?
+                    .insert(
+                        index,
+                        neocogi_ui::Mount::widget(child.as_interface()).as_message(),
+                        GridExtent { columns: *columns, rows: *rows },
+                    )?
                     .finish()?,
                 (WidgetSpec::Form { .. }, Edge::Position { x, y, width, height }) => widget
-                    .as_interface().add_ref().query::<FormAbi>()?
-                    .insert(index, child.as_interface(), Rect { x: *x, y: *y, width: *width, height: *height })?.finish()?,
+                    .as_interface()
+                    .add_ref()
+                    .query::<FormAbi>()?
+                    .insert(
+                        index,
+                        neocogi_ui::Mount::widget(child.as_interface()).as_message(),
+                        Rect {
+                            x: *x,
+                            y: *y,
+                            width: *width,
+                            height: *height,
+                        },
+                    )?
+                    .finish()?,
                 (WidgetSpec::Split { .. }, Edge::Pane) => widget
                     .as_interface()
                     .add_ref()
                     .query::<SplitViewAbi>()?
-                    .insert(index, child.as_interface())?
+                    .insert(index, neocogi_ui::Mount::widget(child.as_interface()).as_message())?
                     .finish()?,
                 (WidgetSpec::Scroll { .. }, Edge::Pane) => {} // The constructor already adopted its sole child.
                 _ => return Err(NC_E_INVALID_ARG),

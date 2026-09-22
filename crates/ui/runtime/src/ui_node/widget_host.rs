@@ -10,6 +10,10 @@ use std::{
 /// Phase state contains no tree or application references, so widget retention cannot cycle.
 #[derive(Default)]
 pub(crate) struct HostState {
+    /// Controllers awaiting cleanup after their views have become ineligible for delivery.
+    pub(crate) retired_owners: RefCell<Vec<ComPtr<IEventOwnerAbi>>>,
+    /// Topology edits invalidate the runtime's reusable descendant-first owner list.
+    pub(crate) owners_changed: Cell<bool>,
     /// Final writer release can retire a checked-out subtree during observation. Ownership waits here only until that phase ends.
     pub(crate) retired: RefCell<Vec<crate::Children>>,
     /// Construction is reached weakly so widgets cannot keep the owning runtime alive.
@@ -23,6 +27,25 @@ pub(crate) struct HostState {
 }
 
 impl HostState {
+    /// Finishes removed owners without holding tree or queue borrows across COM calls.
+    pub(crate) fn finish_owner_retirement(&self) -> Result<(), neocogi_com::NcStatus> {
+        let mut failure = None;
+        loop {
+            let retired = std::mem::take(&mut *self.retired_owners.borrow_mut());
+            if retired.is_empty() {
+                break;
+            }
+            for mut owner in retired {
+                if let Err(error) = owner.retire() {
+                    // Continue releasing other removed owners even after one
+                    // terminal notification fails; report the first failure.
+                    failure.get_or_insert(error);
+                }
+            }
+        }
+        failure.map_or(Ok(()), Err)
+    }
+
     /// Defers destruction only while setters or close are observationally forbidden.
     pub(crate) fn retire(&self, children: crate::Children) {
         if self.observing.get() && !self.closed.get() {

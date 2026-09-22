@@ -72,7 +72,7 @@ struct GridExtent {
     rows: u32,
 }
 
-#[version(1)]
+#[version(2)]
 /// Constructible directional container whose concrete editing API is one class contract.
 interface Linear: IWidget + IContainerLayout {
     /// Returns the stable read-only topology view for this container's lifetime.
@@ -94,12 +94,12 @@ interface Linear: IWidget + IContainerLayout {
     /// Replaces sizing metadata without replacing the child's identity.
     fn set_edge(&mut self, index: u32, edge: LinearEdge) -> Result<()>;
     /// Validates child and relationship before committing insertion at index, including count.
-    fn insert(&mut self, index: u32, child: &IWidget, edge: LinearEdge) -> Result<ChildEditResult>;
+    fn insert(&mut self, index: u32, child: &Mount, edge: LinearEdge) -> Result<ChildEditResult>;
     /// Validates replacement before permanently closing the previous indexed subtree.
-    fn replace(&mut self, index: u32, child: &IWidget, edge: LinearEdge) -> Result<ChildEditResult>;
+    fn replace(&mut self, index: u32, child: &Mount, edge: LinearEdge) -> Result<ChildEditResult>;
 }
 
-#[version(1)]
+#[version(2)]
 /// Constructible Grid whose topology, spans, and both track axes share one class contract.
 interface Grid: IWidget + IContainerLayout {
     /// Returns the stable read-only topology view for this container's lifetime.
@@ -121,9 +121,9 @@ interface Grid: IWidget + IContainerLayout {
     /// Changes span without replacing the child's identity.
     fn set_edge(&mut self, index: u32, edge: GridExtent) -> Result<()>;
     /// Validates a positive span and unmounted child before committing insertion.
-    fn insert(&mut self, index: u32, child: &IWidget, edge: GridExtent) -> Result<ChildEditResult>;
+    fn insert(&mut self, index: u32, child: &Mount, edge: GridExtent) -> Result<ChildEditResult>;
     /// Validates replacement before permanently closing the previous indexed subtree.
-    fn replace(&mut self, index: u32, child: &IWidget, edge: GridExtent) -> Result<ChildEditResult>;
+    fn replace(&mut self, index: u32, child: &Mount, edge: GridExtent) -> Result<ChildEditResult>;
 }
 
 #[version(1)]
@@ -150,16 +150,16 @@ struct SplitOptions {
     handle_width: i32,
 }
 
-#[version(1)]
+#[version(2)]
 /// Two-pane layout with a draggable divider owned by this same concrete container.
 /// Zero children is empty; one fills the allocation; two enable the divider.
 interface SplitView: IWidget + IContainerLayout {
     /// Returns immutable topology; indices zero and one identify first and second panes.
     fn children(&self) -> Result<IChildren>;
     /// Inserts one unmounted pane at index, rejecting a third child before attachment.
-    fn insert(&mut self, index: u32, child: &IWidget) -> Result<ChildEditResult>;
+    fn insert(&mut self, index: u32, child: &Mount) -> Result<ChildEditResult>;
     /// Replaces one pane after validation, permanently closing its previous subtree.
-    fn replace(&mut self, index: u32, child: &IWidget) -> Result<ChildEditResult>;
+    fn replace(&mut self, index: u32, child: &Mount) -> Result<ChildEditResult>;
     /// Closes one pane; the remaining pane fills the allocation.
     fn remove(&mut self, index: u32) -> Result<ChildEditResult>;
     /// Closes both panes while keeping this container available for new content.
@@ -172,13 +172,13 @@ interface SplitView: IWidget + IContainerLayout {
     changed: SplitChanged;
 }
 
-#[version(1)]
+#[version(2)]
 /// Constructible scroll composite with one replaceable content root and private structural roles.
 interface ScrollArea: IWidget + IContainerLayout + IScrolling {
     /// Returns the actual application content widget, without its surrounding transform surface.
     fn content(&self) -> Result<IWidget>;
     /// Validates replacement before closing old content; structural roles and model identity stay fixed.
-    fn replace_content(&mut self, content: &IWidget) -> Result<ChildEditResult>;
+    fn replace_content(&mut self, content: &Mount) -> Result<ChildEditResult>;
 }
 
 #[version(1)]
@@ -203,7 +203,7 @@ interface Disclosure: IWidget + IContainerLayout {
     fn body(&self) -> Result<Linear>;
 }
 
-#[version(1)]
+#[version(2)]
 /// Fixed-coordinate form; rectangles belong to the parent, in content pixels.
 /// Children paint in insertion order, so later siblings appear above earlier ones.
 interface Form: IWidget + IContainerLayout {
@@ -222,7 +222,7 @@ interface Form: IWidget + IContainerLayout {
     /// Moves or resizes a child without replacing its identity.
     fn set_edge(&mut self, index: u32, edge: Rect) -> Result<()>;
     /// Validates a rectangle before attaching an unmounted child.
-    fn insert(&mut self, index: u32, child: &IWidget, edge: Rect) -> Result<ChildEditResult>;
+    fn insert(&mut self, index: u32, child: &Mount, edge: Rect) -> Result<ChildEditResult>;
     /// Commits a new child and rectangle before reporting old-child teardown.
-    fn replace(&mut self, index: u32, child: &IWidget, edge: Rect) -> Result<ChildEditResult>;
+    fn replace(&mut self, index: u32, child: &Mount, edge: Rect) -> Result<ChildEditResult>;
 }

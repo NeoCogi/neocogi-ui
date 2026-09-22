@@ -36,7 +36,7 @@ interface Button: IWidget + ILeafLayout {
     fn clear_image(&mut self) -> Result<()>;
 }
 
-#[version(3)]
+#[version(4)]
 /// Runtime-bound construction shorthand over concrete built-in node contracts and compositions.
 factory UiFactory: IConstructionHost + IFileDialogs {
 
@@ -45,7 +45,7 @@ factory UiFactory: IConstructionHost + IFileDialogs {
     /// Creates an empty disclosure with a real text header and editable vertical Linear body.
     fn create_disclosure(&self, label: &[u8], style: DisclosureStyle, expanded: bool) -> Result<Disclosure>;
     /// Creates a framed scroll composite around one unmounted content object; generic options can subsequently change its frame.
-    fn create_scroll_area(&self, content: &IWidget, enabled: bool) -> Result<ScrollArea>;
+    fn create_scroll_area(&self, content: &Mount, enabled: bool) -> Result<ScrollArea>;
     /// Creates an empty directional container after validating its complete initial policy.
     fn create_linear(&self, direction: FlowDirection, cross: CrossSize) -> Result<Linear>;
     /// Creates an empty split view; panes attach through its validated two-child editor.

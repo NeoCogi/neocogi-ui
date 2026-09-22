@@ -17,6 +17,9 @@
 /// Installs a typed COM mapping into a standard application or component channel.
 pub use neocogi_com::events::bind;
 
+mod controller;
+pub use controller::{Controller, EventModel};
+
 use crate::com::*;
 use neocogi_com::{ComRef, NC_E_INVALID_ARG, NcStatus};
 use neocogi_ui_nodes_contracts::*;

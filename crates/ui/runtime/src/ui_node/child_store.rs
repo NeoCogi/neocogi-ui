@@ -1,7 +1,7 @@
 //! One authoritative owned child collection with separate read/edit COM capabilities.
 use super::HostState;
 use neocogi_ui_core_contracts::*;
-use neocogi_com::{ComPtr, ComRef, IUnknown, NcStatus, com_object};
+use neocogi_com::{ComPtr, IUnknown, NcStatus, com_object};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -202,7 +202,7 @@ impl IChildrenEditor for ChildEditor {
         Ok(self.view.clone())
     }
     /// Validates the slot and candidate before consuming the child's mount-once claim.
-    fn insert(&self, index: u32, widget: ComRef<'_, IWidgetAbi>) -> Result<ChildEditResult, NcStatus> {
+    fn insert(&self, index: u32, widget: neocogi_com::NcMessage<'_, Mount>) -> Result<ChildEditResult, NcStatus> {
         self.store.factory.host.check_mutation()?;
         self.store.factory.check_edit()?;
         let mut nodes = self.store.take()?;
@@ -217,7 +217,7 @@ impl IChildrenEditor for ChildEditor {
         Ok(ChildEditResult { teardown: neocogi_com::NC_OK })
     }
     /// Validates the entire replacement before committing removal of the old subtree.
-    fn replace(&self, index: u32, widget: ComRef<'_, IWidgetAbi>) -> Result<ChildEditResult, NcStatus> {
+    fn replace(&self, index: u32, widget: neocogi_com::NcMessage<'_, Mount>) -> Result<ChildEditResult, NcStatus> {
         self.store.factory.host.check_mutation()?;
         self.store.factory.check_edit()?;
         let mut nodes = self.store.take()?;

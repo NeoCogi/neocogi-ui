@@ -34,19 +34,41 @@ pub(crate) struct ComponentEventDriver {
     /// Only this shared lifecycle bit can change while a detached snapshot exists.
     active: Cell<bool>,
     /// Separate COM allocation, validated against the widget identity at mount.
-    dispatcher: ComPtr<IEventDispatcherAbi>,
+    dispatcher: ComponentDispatch,
+}
+
+/// Transitional representation while mounted providers migrate to owned controllers.
+enum ComponentDispatch {
+    /// Existing providers are removed after their model migration lands.
+    Legacy(ComPtr<IEventDispatcherAbi>),
+    /// One owned controller shares the view's attachment and retirement lifetime.
+    Owned(ComPtr<IEventOwnerAbi>),
 }
 
 impl ComponentEventDriver {
     /// Constructs one active private driver after all provider checks succeed.
     pub(crate) fn new(dispatcher: ComPtr<IEventDispatcherAbi>) -> Self {
-        Self { active: Cell::new(true), dispatcher }
+        Self {
+            active: Cell::new(true),
+            dispatcher: ComponentDispatch::Legacy(dispatcher),
+        }
+    }
+
+    /// Retains the controller only after its joint view/controller mount succeeds.
+    pub(crate) fn owned(owner: ComPtr<IEventOwnerAbi>) -> Self {
+        Self {
+            active: Cell::new(true),
+            dispatcher: ComponentDispatch::Owned(owner),
+        }
     }
 
     /// Delivers one message, or skips a component already removed from its mount.
     pub(crate) fn dispatch(&self) -> Result<bool, NcStatus> {
         if self.active.get() {
-            self.dispatcher.as_com_ref().dispatch()
+            match &self.dispatcher {
+                ComponentDispatch::Legacy(dispatcher) => dispatcher.as_com_ref().dispatch(),
+                ComponentDispatch::Owned(owner) => owner.as_com_ref().dispatch_next(),
+            }
         } else {
             Ok(false)
         }
@@ -55,6 +77,14 @@ impl ComponentEventDriver {
     /// Invalidates a detached snapshot before any child or widget teardown call.
     fn retire(&self) {
         self.active.set(false);
+    }
+
+    /// Retains cleanup work after removal without entering an active model recursively.
+    fn queue_retirement(&self, host: &HostState) {
+        match &self.dispatcher {
+            ComponentDispatch::Legacy(_) => {}
+            ComponentDispatch::Owned(owner) => host.retired_owners.borrow_mut().push(owner.clone()),
+        }
     }
 }
 
@@ -302,6 +332,12 @@ impl Drop for ComNode {
         if let Err(error) = self.widget.close() {
             self.host.fail(error);
         }
+        // Descendants queued their cleanup while closing above. Model cleanup
+        // runs only after traversal and the currently active handler have ended.
+        if let Some(driver) = &self.event_driver {
+            driver.queue_retirement(&self.host);
+        }
+        self.host.owners_changed.set(true);
     }
 }
 

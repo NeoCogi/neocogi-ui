@@ -112,7 +112,7 @@ macro_rules! container_edges {
         fn insert(
             &mut self,
             index: u32,
-            child: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>,
+            child: neocogi_com::NcMessage<'_, neocogi_ui_core_contracts::Mount>,
             edge: $edge,
         ) -> Result<neocogi_ui_core_contracts::ChildEditResult, neocogi_com::NcStatus> {
             <Self as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
@@ -126,7 +126,7 @@ macro_rules! container_edges {
         fn replace(
             &mut self,
             index: u32,
-            child: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>,
+            child: neocogi_com::NcMessage<'_, neocogi_ui_core_contracts::Mount>,
             edge: $edge,
         ) -> Result<neocogi_ui_core_contracts::ChildEditResult, neocogi_com::NcStatus> {
             <Self as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;

@@ -23,8 +23,8 @@ pub use neocogi_ui_nodes_contracts::{
     Button, ButtonAbi, Checkbox, CheckboxAbi, ChildCrossSize, ColorSwatch, ColorSwatchAbi, Combo, ComboAbi, ContentIcon, CrossSize, CrossSizeAbi, Disclosure,
     DisclosureAbi, DisclosureStyle, FillStates, FlowDirection, Grid, GridAbi, GridExtent, LayoutTrack, LayoutTrackAbi, Linear, LinearAbi, LinearEdge, ListBox,
     ListBoxAbi, ListItem, ListItemAbi, Number, NumberAbi, NumberOptions, ScrollArea, ScrollAreaAbi, ScrollAxis, ScrollRange, Scrollbar, ScrollbarAbi, Slider,
-    FormAbi, SliderAbi, SliderOptions, SplitAxis, SplitChanged, SplitOptions, SplitView, SplitViewAbi,
-    TextArea, TextAreaAbi, TextBlock, TextBlockAbi, Textbox, TextboxAbi, UiFactory, UiFactoryAbi,
+    FormAbi, SliderAbi, SliderOptions, SplitAxis, SplitChanged, SplitOptions, SplitView, SplitViewAbi, TextArea, TextAreaAbi, TextBlock, TextBlockAbi, Textbox,
+    TextboxAbi, UiFactory, UiFactoryAbi,
 };
 pub use neocogi_gfx_contracts::{
     AssetLoader, AssetLoaderAbi, DrawPoint, GfxPluginFactory, GfxPluginFactoryAbi, IAssetBuilder, IAssetBuilderAbi, IGfxDiagnostics, IGfxDiagnosticsAbi,
@@ -38,6 +38,8 @@ pub use neocogi_skin_contracts::{
 use neocogi_com::{ComInterface, ComPtr, ComRef, INcStringComPtrExt, IUnknown, NcCopyFromBufferOffset, NcStatus};
 mod containers;
 pub use containers::{DisclosureWidget, FormWidget, GridWidget, LinearWidget, ScrollAreaWidget, SplitViewWidget};
+mod mount;
+pub use mount::{Component, Mountable};
 
 /// Reusable state composed into concrete Rust widget implementations.
 pub mod widget;
@@ -492,38 +494,38 @@ impl Ui {
         &self.factory
     }
     /// Mounts the actual widget object in a new logical window.
-    pub fn window<I: ComInterface>(&self, title: &str, rect: Rect, root: &Widget<I>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-        self.windows
-            .create_window(NcCopyFromBufferOffset::new(0, title.as_bytes()), rect, root.node_interface()?.as_com_ref())
+    pub fn window(&self, title: &str, rect: Rect, root: &impl Mountable) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+        self.windows.create_window(
+            NcCopyFromBufferOffset::new(0, title.as_bytes()),
+            rect,
+            neocogi_com::NcMessage::new(&root.mount_description()?),
+        )
     }
     /// Mounts a structural child under a live window from this UI.
-    pub fn child_window<I: ComInterface>(
-        &self,
-        parent: ComRef<'_, IWindowAbi>,
-        title: &str,
-        rect: Rect,
-        root: &Widget<I>,
-    ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+    pub fn child_window(&self, parent: ComRef<'_, IWindowAbi>, title: &str, rect: Rect, root: &impl Mountable) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.windows.create_child(
             parent,
             NcCopyFromBufferOffset::new(0, title.as_bytes()),
             rect,
-            root.node_interface()?.as_com_ref(),
+            neocogi_com::NcMessage::new(&root.mount_description()?),
         )
     }
     /// Mounts a hidden modal dialog; show it after initialization with set_visibility.
-    pub fn dialog<I: ComInterface>(&self, parent: ComRef<'_, IWindowAbi>, title: &str, rect: Rect, root: &Widget<I>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+    pub fn dialog(&self, parent: ComRef<'_, IWindowAbi>, title: &str, rect: Rect, root: &impl Mountable) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.windows.create_dialog(
             parent,
             NcCopyFromBufferOffset::new(0, title.as_bytes()),
             rect,
-            root.node_interface()?.as_com_ref(),
+            neocogi_com::NcMessage::new(&root.mount_description()?),
         )
     }
     /// Mounts a hidden auto-sized popup with a distinct popup capability.
-    pub fn popup<I: ComInterface>(&self, parent: ComRef<'_, IWindowAbi>, title: &str, root: &Widget<I>) -> Result<ComPtr<IPopupAbi>, NcStatus> {
-        self.windows
-            .create_popup(parent, NcCopyFromBufferOffset::new(0, title.as_bytes()), root.node_interface()?.as_com_ref())
+    pub fn popup(&self, parent: ComRef<'_, IWindowAbi>, title: &str, root: &impl Mountable) -> Result<ComPtr<IPopupAbi>, NcStatus> {
+        self.windows.create_popup(
+            parent,
+            NcCopyFromBufferOffset::new(0, title.as_bytes()),
+            neocogi_com::NcMessage::new(&root.mount_description()?),
+        )
     }
     /// Queues a typed host event while keeping its text buffer local to this call.
     pub fn input(&self, event: UiInput, text: &str) -> Result<(), NcStatus> {

@@ -1,5 +1,32 @@
 # Typed messages through standard channels
 
+## Owned controller attachment
+
+`events::Controller<Model>` owns an `EventModel` and its standard receiver in one
+value. It exposes `IEventOwner` when allocated directly, or can be embedded in a
+composite that implements its own public editing interfaces alongside that
+capability. The model handles messages through `&mut self`; it needs no shared
+model `RefCell`. `Controller::root` constructs an already-claimed application
+root. `Controller::new` prepares a composite whose attachment is still pending.
+
+`Component::new(view, owner)` supplies explicit view/controller capabilities to
+the same `Ui::window`, container insertion, or replacement operation used by
+ordinary widgets. The ABI receives a borrowed `Mount` descriptor. The runtime
+validates the complete relationship, then `owner.mount(view)` claims the view
+and controller together. Rejecting either claim preserves the unclaimed side.
+Views and behavior have distinct identities; no forwarding widget is allocated.
+
+Mounted controllers run after traversal releases its borrows. Removal immediately
+stops delivery, closes the view, and queues controller retirement. Retirement
+runs after the active handler returns, including on handler errors, drops the
+private inbox, and settles terminal outcomes once. Already posted parent
+messages survive. The runtime caches descendant-first owner order and refreshes
+it after topology changes rather than rebuilding a vector for every message.
+Empty standard inboxes still require polling; posting does not wake the host.
+
+The existing scoped application adapter and provider-discovered components below
+are being migrated to this ownership model in subsequent commits.
+
 The application owns a `std::sync::mpsc::Receiver<Message>`. Each installed COM
 mapping owns a cloned `Sender<Message>`. The standard channel stores pending
 messages; there is no framework queue type, sender wrapper or subscription object.

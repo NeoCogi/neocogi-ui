@@ -70,6 +70,7 @@ pub(crate) fn create_storage(assets: crate::assets::ImportedAssets, compositor: 
         pending: Cell::new(true),
         updating: Cell::new(false),
         menus: RefCell::new(Vec::new()),
+        event_drivers: RefCell::new(Vec::new()),
     })
 }
 
@@ -100,7 +101,7 @@ pub(crate) struct RuntimeStorage {
     /// Idle engine slot; transactions take ownership so no RefCell borrow spans a COM call.
     context: RefCell<Option<RuntimeContext>>,
     /// Surface capabilities authenticate parents; the forest alone owns widget nodes.
-    mounts: RefCell<Vec<Mount>>,
+    mounts: RefCell<Vec<SurfaceMount>>,
     /// Shared construction services retain no root forest or owning runtime.
     factory: Rc<crate::ui_node::node_factory::NodeFactory>,
     /// Core-only construction endpoint queried by independent node provider plugins.
@@ -113,10 +114,12 @@ pub(crate) struct RuntimeStorage {
     updating: Cell<bool>,
     /// Weak declaration authentication retains no unused menu tree or application state.
     menus: RefCell<Vec<(usize, std::rc::Weak<menus::Declaration>)>>,
+    /// Reusable descendant-first controller order; only topology edits rebuild this vector.
+    event_drivers: RefCell<Vec<Rc<crate::ui_node::mounted_node::ComponentEventDriver>>>,
 }
 
 /// Temporary association between an actual COM widget and an existing retained root.
-struct Mount {
+struct SurfaceMount {
     /// Native identity remains in the manager; this record carries no duplicate parent edges.
     surface: NativeSurface,
     /// Manager-owned COM surface identity authenticates parent capabilities without exposing IDs.
@@ -124,6 +127,18 @@ struct Mount {
 }
 
 impl RuntimeStorage {
+    /// Rebuilds delivery order only after topology changes, reusing allocated capacity.
+    fn refresh_event_drivers(&self) -> Result<(), NcStatus> {
+        if self.factory.state.owners_changed.get() {
+            let context = self.context()?;
+            let mut drivers = self.event_drivers.borrow_mut();
+            drivers.clear();
+            context.window_manager.collect_component_event_drivers(&mut drivers)?;
+            self.factory.state.owners_changed.set(false);
+        }
+        Ok(())
+    }
+
     /// Rejects all operations after logical closure.
     fn open(&self) -> Result<(), NcStatus> {
         if self.factory.state.closed.get() { Err(UI_E_CLOSED) } else { Ok(()) }
@@ -159,7 +174,11 @@ impl Drop for RuntimeStorage {
     /// Final release closes retained handles even without an explicit application close.
     fn drop(&mut self) {
         self.factory.state.closed.set(true);
-        // Dropping the owned Context then closes every node in its authoritative forest.
+        // Close views first so controller finalization observes terminal widget
+        // lifetimes. No RefCell guard or traversal remains across retirement.
+        drop(self.context.get_mut().take());
+        let _ = self.factory.state.finish_owner_retirement();
+        self.event_drivers.get_mut().clear();
     }
 }
 
@@ -297,7 +316,13 @@ impl UiRuntime for Runtime {
         }
         storage.mounts.borrow_mut().clear();
         context.clear_choice_menus();
-        storage.factory.state.error.take().map_or(Ok(()), Err)
+        drop(context);
+        let views = storage.factory.state.error.take().map_or(Ok(()), Err);
+        let owners = match storage.updating.get() {
+            true => Ok(()), // The active event handler must return before its own cleanup.
+            false => storage.factory.state.finish_owner_retirement(),
+        };
+        views.and(owners)
     }
 }
 
@@ -354,6 +379,25 @@ impl Runtime {
             return Err(UI_E_BUSY);
         }
         let _guard = UpdateGuard(&storage.updating);
+        let result = self.run_update_cycle(size, dispatcher);
+        // Every recoverable exit finalizes already removed owners, including
+        // input/layout failures before the next ordinary dispatch boundary.
+        let context_available = storage.context.borrow().is_some();
+        let retired = match context_available {
+            true => storage.factory.state.finish_owner_retirement(),
+            false => Ok(()), // A rejected reentry must not run cleanup inside its caller's traversal.
+        };
+        // The body marks pending only after acquiring the context. A rejected
+        // reentrant call during paint must not invalidate its caller's commit.
+        if retired.is_err() {
+            storage.pending.set(true);
+        }
+        result.and(retired)
+    }
+
+    /// Performs one guarded update; the outer operation always drains terminal cleanup.
+    fn run_update_cycle(&self, size: Size, dispatcher: Option<ComRef<'_, IEventDispatcherAbi>>) -> Result<(), NcStatus> {
+        let storage = &self.storage;
         let dimensions = Dimensioni::new(size.width, size.height);
         {
             let mut context = storage.context()?;
@@ -392,7 +436,7 @@ impl Runtime {
     }
 
     /// Settles descendants and layout before consuming one application message.
-    /// Every visit rediscovers mounted drivers; removed tickets are retired immediately.
+    /// Topology changes refresh cached order; removed tickets become ineligible immediately.
     fn dispatch_boundary(&self, dispatcher: Option<ComRef<'_, IEventDispatcherAbi>>, dimensions: Dimensioni, remaining: &mut u32) -> Result<(), NcStatus> {
         loop {
             // Exhaustion stops before another dequeue. Reaching the exact ceiling also
@@ -401,22 +445,37 @@ impl Runtime {
                 return Err(neocogi_com::events::EVENT_E_LIMIT);
             }
             self.storage.layout_boundary(dimensions)?;
-            let (reconciled, component_drivers) = {
+            self.storage.factory.state.finish_owner_retirement()?;
+            let reconciled = {
                 let mut context = self.storage.context()?;
-                (context.reconcile_choice_menus()?, context.window_manager.component_event_drivers()?)
+                context.reconcile_choice_menus()?
             };
+            self.storage.refresh_event_drivers()?;
             let mut progressed = reconciled;
             if reconciled {
                 spend_dispatch_budget(remaining)?;
             }
-            for component in component_drivers {
+            let mut index = 0;
+            loop {
+                // Retain just the selected ticket; release cache access before
+                // behavior can remove or create mounted owners.
+                let component = self.storage.event_drivers.borrow().get(index).cloned();
+                let Some(component) = component else { break };
                 // One message per visit lets retirement take effect before this
                 // same component receives a successor from its private channel.
-                if component.dispatch()? {
+                let handled = component.dispatch();
+                let retired = self.storage.factory.state.finish_owner_retirement();
+                let handled = handled?;
+                retired?;
+                if handled {
                     progressed = true;
                     spend_dispatch_budget(remaining)?;
+                    // Reconsider descendants after every delivered message.
+                    // No later cached owner may run against outdated topology.
+                    break;
                 }
                 self.storage.open()?;
+                index += 1;
             }
             self.storage.phase_result()?;
             if progressed {
@@ -425,9 +484,12 @@ impl Runtime {
             // One app message may create child work. Settle it before the next
             // application visit; callbacks never retain a traversal borrow.
             let delivered = match dispatcher {
-                Some(mut dispatcher) => dispatcher.dispatch()?,
-                None => false,
+                Some(mut dispatcher) => dispatcher.dispatch(),
+                None => Ok(false),
             };
+            let retired = self.storage.factory.state.finish_owner_retirement();
+            let delivered = delivered?;
+            retired?;
             self.storage.open()?;
             self.storage.phase_result()?;
             match delivered {

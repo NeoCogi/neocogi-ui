@@ -1,5 +1,5 @@
 extern neocogi.ui.core;
-use neocogi.ui.core::{IWidget, ILeafLayout, IActivationEvents, IWidgetHost, IContainer, ChildEditResult};
+use neocogi.ui.core::{Mount, IWidget, ILeafLayout, IActivationEvents, IWidgetHost, IContainer, ChildEditResult};
 
 #[version(1)]
 #[message]
@@ -45,11 +45,11 @@ interface Counter: IWidget + ILeafLayout + IActivationEvents + IWidgetProbe {
     changed: CounterChanged;
 }
 
-#[version(1)]
+#[version(2)]
 /// A one-child container demonstrates a domain-specific layout policy over the shared child editor.
 interface IInset: IContainer {
     /// Installs or replaces its one child; removed-child teardown uses the ordinary committed outcome.
-    fn set_child(&mut self, child: &IWidget) -> Result<ChildEditResult>;
+    fn set_child(&mut self, child: &Mount) -> Result<ChildEditResult>;
     /// Sets a nonnegative inset, bounded to avoid arithmetic overflow in doubled extents.
     fn set_padding(&mut self, padding: i32) -> Result<()>;
 }
