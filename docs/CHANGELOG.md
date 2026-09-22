@@ -1,6 +1,12 @@
 # Changelog
 
-## 0.9.0-alpha.0 (unreleased)
+## 0.0.0 (unreleased)
+
+- Reset all workspace packages and plugin release metadata to **0.0.0** for
+  NeoCogi UI. The project was formerly **microui-redux** and has grown
+  to include COM components and IDL tooling, shared libraries and plugins, a
+  theme editor, and an experimental UI designer. Package versions remain
+  independent of ABI, contract, and file-format version numbers.
 
 - Make Go to Definition reach generated IDL Rust through `.include.rs` module
   entries, and preserve COM macro spans for derived types. Migrate contract
@@ -46,7 +52,8 @@
   fingerprints. Build scripts use `neocogi_idl::cargo::Module`; event consumers
   depend directly on `neocogi-com` with `macros` (plus `std` for channel adapters).
 
-- Name the workspace **NeoCogi UI** (`neocogi-ui`), retaining
+- Name the workspace **NeoCogi UI**, hosted at
+  [`NeoCogi/ui`](https://github.com/NeoCogi/neocogi-ui), retaining
   descriptive `neocogi-*` Cargo packages and the `cargo neocogi` command.
   Deploy short library names (`libnc_com.so`, `libnc_ui.so`, `libnc_ui_nodes.so`,
   `libnc_render.so`, `libnc_gfx.so`, and `libnc_skin.so` on Linux). Generated

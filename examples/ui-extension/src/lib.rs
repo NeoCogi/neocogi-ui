@@ -338,7 +338,7 @@ impl ExtensionProvider for ExtensionProviderObject {
 }
 neocogi_com::factory_plugin! {
     name = "neocogi.example.ui-extension",
-    version = "0.9.0-alpha.0",
+    version = "0.0.0",
     factory = ExtensionProviderObject,
 }
 #[cfg(feature = "dynamic-plugin")]

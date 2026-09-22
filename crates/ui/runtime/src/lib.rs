@@ -166,7 +166,7 @@ impl neocogi_ui_core_contracts::UiPluginFactory for UiPluginFactoryObject {
 
 neocogi_com::factory_plugin! {
     name = "neocogi.ui.runtime",
-    version = "0.9.0-alpha.0",
+    version = "0.0.0",
     factory = UiPluginFactoryObject,
 }
 

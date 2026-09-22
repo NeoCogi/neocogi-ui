@@ -1,7 +1,13 @@
-# Documentation
+# NeoCogi UI documentation
 
-The root [README](../README.md) gives a short project overview and quick start. The guides here
-cover the retained UI model, integration details, and repository workflows.
+NeoCogi UI was formerly **microui-redux**. Version **0.0.0** is a
+pre-alpha workspace covering COM components and IDL tooling, shared-library and
+plugin deployment, retained UI and rendering, the
+[theme editor](../tools/theme-editor/README.md), and the experimental
+[UI designer](../tools/ui-designer/README.md).
+
+The root [README](../README.md) gives the project history and quick start. These
+guides cover architecture, authoring tools, integration, and repository workflows.
 
 ## COM authors and deployment
 

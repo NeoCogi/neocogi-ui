@@ -1,6 +1,6 @@
 [package]
 name = "neocogi-ui-runtime"
-version = "0.9.0-alpha.0"
+version = "0.0.0"
 authors.workspace = true
 edition.workspace = true
 readme.workspace = true
@@ -27,7 +27,7 @@ rs-math3d.workspace = true
 
 [dev-dependencies]
 neocogi-ui-document.workspace = true
-neocogi-idl-example-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "f7dabf8ce8db951d3aa19749488473f9dd8eaa97" }
+neocogi-idl-example-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "405bef8b8f6defdc0d5aceade2599385d9b4c4d1" }
 neocogi-ui-nodes.workspace = true
 neocogi-ui-nodes-contracts.workspace = true
 neocogi-ui-support = { workspace = true, features = ["test-support"] }

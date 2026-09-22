@@ -1,8 +1,9 @@
 # Support and compatibility
 
-`neocogi-ui` is pre-alpha and currently intended for experimentation and early integration. This
-page records what downstream users can rely on without implying guarantees the project does not yet
-make.
+NeoCogi UI uses version **0.0.0** across its workspace packages and is
+pre-alpha, intended for experimentation and early integration. This page records
+what downstream users can rely on without implying guarantees the project does
+not yet make.
 
 ## Rust toolchain
 
@@ -51,6 +52,6 @@ modules stay loaded for the process lifetime; hot reload/unload is unsupported.
 
 ## Reporting a problem
 
-Use the [GitHub issue tracker](https://github.com/NeoCogi/neocogi-ui/issues). Include the crate
+Use the [NeoCogi UI issue tracker](https://github.com/NeoCogi/neocogi-ui/issues). Include the crate
 version or commit, enabled Cargo features, Rust version, operating system, rendering backend, and a
 minimal reproduction when possible.

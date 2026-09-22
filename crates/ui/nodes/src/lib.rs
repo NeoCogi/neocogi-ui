@@ -100,7 +100,7 @@ impl NodesPluginFactory for NodesPluginFactoryObject {
 
 neocogi_com::factory_plugin! {
     name = "neocogi.ui.nodes.runtime",
-    version = "0.9.0-alpha.0",
+    version = "0.0.0",
     dependencies = [UI_RUNTIME_PLUGIN_ID],
     factory = NodesPluginFactoryObject,
 }
