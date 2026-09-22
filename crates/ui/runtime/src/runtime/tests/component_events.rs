@@ -116,7 +116,7 @@ impl EventfulComposite {
     ) -> (neocogi_ui::Widget<IWidgetAbi>, neocogi_ui::LinearWidget) {
         let shell = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
         let (private_events_tx, private_events) = std::sync::mpsc::channel();
-        neocogi_ui::events::map(
+        neocogi_ui::events::bind(
             source.query::<IActivationEventsAbi>().unwrap().activated(),
             private_events_tx.clone(),
             |event| event,
@@ -237,7 +237,7 @@ fn nested_components_dispatch_child_first_and_promote_only_explicit_outputs() {
     root_shell.insert(0, &parent, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let window = ui.window("nested", RECT, &root).unwrap();
     let (app_tx, app) = std::sync::mpsc::channel();
-    neocogi_ui::events::map(sources[3].query::<IActivationEventsAbi>().unwrap().activated(), app_tx.clone(), |_| ()).unwrap();
+    neocogi_ui::events::bind(sources[3].query::<IActivationEventsAbi>().unwrap().activated(), app_tx.clone(), |_| ()).unwrap();
 
     emit(&sources[0]);
     ui.update(SIZE).unwrap(); // No application dispatcher is needed to drive every private level.
@@ -279,7 +279,7 @@ fn callback_mounted_descendant_is_discovered_without_application_registration() 
     let window = ui.window("dynamic", RECT, &parent).unwrap();
     let trigger = Emitter::create();
     let (app_tx, app) = std::sync::mpsc::channel();
-    neocogi_ui::events::map(trigger.query::<IActivationEventsAbi>().unwrap().activated(), app_tx.clone(), |_| ()).unwrap();
+    neocogi_ui::events::bind(trigger.query::<IActivationEventsAbi>().unwrap().activated(), app_tx.clone(), |_| ()).unwrap();
     let mut action = PrivateRecord {
         name: "application",
         forward: None,
@@ -326,7 +326,7 @@ fn mounted_component_events_dispatch_before_application_and_skip_removed_snapsho
     let newer_window = ui.window("newer", RECT, &newer).unwrap();
     let app_source = Emitter::create();
     let (app_tx, app) = std::sync::mpsc::channel();
-    neocogi_ui::events::map(app_source.query::<IActivationEventsAbi>().unwrap().activated(), app_tx.clone(), |_| ()).unwrap();
+    neocogi_ui::events::bind(app_source.query::<IActivationEventsAbi>().unwrap().activated(), app_tx.clone(), |_| ()).unwrap();
     for source in [&older_source, &newer_source, &app_source] {
         emit(source);
     }

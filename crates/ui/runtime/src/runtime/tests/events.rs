@@ -28,8 +28,8 @@ fn consumer_preserves_emission_order_snapshot_values_and_bounded_progress() {
     let window = ui.window("order", RECT, &column).unwrap();
     let (session_tx, session) = std::sync::mpsc::channel();
     let mut labels = Vec::new();
-    neocogi_ui::events::map(b.activated(), session_tx.clone(), |event| event.label).unwrap();
-    neocogi_ui::events::map(a.activated(), session_tx.clone(), |event| event.label).unwrap();
+    neocogi_ui::events::bind(b.activated(), session_tx.clone(), |event| event.label).unwrap();
+    neocogi_ui::events::bind(a.activated(), session_tx.clone(), |event| event.label).unwrap();
     key(&ui, KeyCode::Tab);
     key(&ui, KeyCode::Space);
     ui.update(SIZE).unwrap();
@@ -76,8 +76,8 @@ fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
     let previous = ui.window("first", RECT, &button).unwrap();
     let (renderer, probe) = renderer();
     let (events_tx, events) = std::sync::mpsc::channel();
-    neocogi_ui::events::map(button.activated(), events_tx.clone(), |_| Mutation::Replace).unwrap();
-    neocogi_ui::events::map(neocogi_ui::events::window_events(previous.as_com_ref()).unwrap(), events_tx.clone(), |event| {
+    neocogi_ui::events::bind(button.activated(), events_tx.clone(), |_| Mutation::Replace).unwrap();
+    neocogi_ui::events::bind(neocogi_ui::events::window_events(previous.as_com_ref()).unwrap(), events_tx.clone(), |event| {
         Mutation::Window(event)
     })
     .unwrap();
@@ -120,7 +120,7 @@ fn dropping_inbox_and_application_releases_runtime_without_a_source_sink_cycle()
     let button = ui.widgets().button("owned runtime").unwrap();
     let window = ui.window("owner", RECT, &button).unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
-    neocogi_ui::events::map(button.activated(), events_tx.clone(), |event| event.label).unwrap();
+    neocogi_ui::events::bind(button.activated(), events_tx.clone(), |event| event.label).unwrap();
     drop(events);
     assert!(button.label().is_ok());
     drop(ui);
@@ -136,7 +136,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
     let mut labels = Vec::new();
     let mut checkbox = ui.widgets().checkbox("check", false).unwrap();
     let window = ui.window("checkbox", RECT, &checkbox).unwrap();
-    neocogi_ui::events::map(checkbox.changed(), session_tx.clone(), |event| format!("checked:{}", event.checked)).unwrap();
+    neocogi_ui::events::bind(checkbox.changed(), session_tx.clone(), |event| format!("checked:{}", event.checked)).unwrap();
     checkbox.set_checked(true).unwrap();
     ui.update_with_events(SIZE, &session, |message| {
         labels.push(message);
@@ -165,7 +165,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
         })
         .unwrap();
     let window = ui.window("slider", RECT, &slider).unwrap();
-    neocogi_ui::events::map(slider.changed(), session_tx.clone(), |event| format!("numeric:{}", event.value)).unwrap();
+    neocogi_ui::events::bind(slider.changed(), session_tx.clone(), |event| format!("numeric:{}", event.value)).unwrap();
     slider.set_value(5.0).unwrap();
     ui.update_with_events(SIZE, &session, |message| {
         labels.push(message);
@@ -185,7 +185,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
 
     let number = ui.widgets().number(NumberOptions { value: 3.0, step: 1.0, precision: 0 }).unwrap();
     let window = ui.window("number", RECT, &number).unwrap();
-    neocogi_ui::events::map(number.changed(), session_tx.clone(), |event| format!("numeric:{}", event.value)).unwrap();
+    neocogi_ui::events::bind(number.changed(), session_tx.clone(), |event| format!("numeric:{}", event.value)).unwrap();
     key(&ui, KeyCode::Tab);
     // Numeric text controls use Up/Down; horizontal sliders use Left/Right.
     key(&ui, KeyCode::ArrowUp);
@@ -203,8 +203,8 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
     column.insert(0, &item, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     column.insert(1, &list_box, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let window = ui.window("lists", RECT, &column).unwrap();
-    neocogi_ui::events::map(item.activated(), session_tx.clone(), |event| event.label).unwrap();
-    neocogi_ui::events::map(list_box.activated(), session_tx.clone(), |event| event.label).unwrap();
+    neocogi_ui::events::bind(item.activated(), session_tx.clone(), |event| event.label).unwrap();
+    neocogi_ui::events::bind(list_box.activated(), session_tx.clone(), |event| event.label).unwrap();
     for input in [KeyCode::Tab, KeyCode::Space, KeyCode::Tab, KeyCode::Space] {
         key(&ui, input);
     }
@@ -226,7 +226,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
         })
         .unwrap();
     let window = ui.window("bar", RECT, &bar).unwrap();
-    neocogi_ui::events::map(bar.changed(), session_tx.clone(), |event| format!("scroll:{}", event.offset)).unwrap();
+    neocogi_ui::events::bind(bar.changed(), session_tx.clone(), |event| format!("scroll:{}", event.offset)).unwrap();
     let previous = labels.len();
     bar.set_offset(0).unwrap();
     ui.update_with_events(SIZE, &session, |message| {
@@ -261,16 +261,16 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     let mut labels = Vec::new();
     let mut textbox = ui.widgets().textbox("").unwrap();
     let window = ui.window("textbox", RECT, &textbox).unwrap();
-    neocogi_ui::events::map(textbox.changed(), session_tx.clone(), |event| {
+    neocogi_ui::events::bind(textbox.changed(), session_tx.clone(), |event| {
         format!("changed:{}:{}", event.text, event.cursor)
     })
     .unwrap();
     // Replacing the destination succeeds; only this mapper receives later edits.
-    neocogi_ui::events::map(textbox.changed(), session_tx.clone(), |event| {
+    neocogi_ui::events::bind(textbox.changed(), session_tx.clone(), |event| {
         format!("changed:{}:{}", event.text, event.cursor)
     })
     .unwrap();
-    neocogi_ui::events::map(textbox.submitted(), session_tx.clone(), |event| format!("submitted:{}", event.text)).unwrap();
+    neocogi_ui::events::bind(textbox.submitted(), session_tx.clone(), |event| format!("submitted:{}", event.text)).unwrap();
     textbox.set_text("a").unwrap();
     ui.update_with_events(SIZE, &session, |message| {
         labels.push(message);
@@ -291,8 +291,8 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
 
     let area = ui.widgets().text_area("", TextWrapping::Word, true).unwrap();
     let window = ui.window("textarea", RECT, &area).unwrap();
-    neocogi_ui::events::map(area.changed(), session_tx.clone(), |event| format!("changed:{}:{}", event.text, event.cursor)).unwrap();
-    neocogi_ui::events::map(area.submitted(), session_tx.clone(), |event| format!("submitted:{}", event.text)).unwrap();
+    neocogi_ui::events::bind(area.changed(), session_tx.clone(), |event| format!("changed:{}:{}", event.text, event.cursor)).unwrap();
+    neocogi_ui::events::bind(area.submitted(), session_tx.clone(), |event| format!("submitted:{}", event.text)).unwrap();
     key(&ui, KeyCode::Tab);
     ui.input(UiInput::Text, "☃").unwrap();
     ui.input(
@@ -314,7 +314,7 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     assert!(labels.ends_with(&["changed:☃:3".to_owned(), "submitted:☃".to_owned()]));
     let popup_content = ui.widgets().text_block("popup", TextWrapping::None).unwrap();
     let mut popup = ui.popup(window.as_com_ref(), "popup", &popup_content).unwrap();
-    neocogi_ui::events::map(neocogi_ui::events::popup_events(popup.as_com_ref()).unwrap(), session_tx.clone(), |_| {
+    neocogi_ui::events::bind(neocogi_ui::events::popup_events(popup.as_com_ref()).unwrap(), session_tx.clone(), |_| {
         "dismissed".to_owned()
     })
     .unwrap();
@@ -350,7 +350,7 @@ fn failed_consumer_recovers_on_next_update_and_preserves_remaining_native_input(
     column.insert(1, &editor, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let window = ui.window("recovery", RECT, &column).unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
-    neocogi_ui::events::map(button.activated(), events_tx.clone(), |_| ()).unwrap();
+    neocogi_ui::events::bind(button.activated(), events_tx.clone(), |_| ()).unwrap();
     let mut attempts = 0;
     for input in [KeyCode::Tab, KeyCode::Space, KeyCode::Tab] {
         key(&ui, input);
@@ -393,7 +393,7 @@ fn real_lifecycle_cascade_is_deferred_until_each_consumer_returns() {
     let button = ui.widgets().button("cascade").unwrap();
     let window = ui.window("cascade", RECT, &button).unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
-    neocogi_ui::events::map(neocogi_ui::events::window_events(window.as_com_ref()).unwrap(), events_tx.clone(), |event| {
+    neocogi_ui::events::bind(neocogi_ui::events::window_events(window.as_com_ref()).unwrap(), events_tx.clone(), |event| {
         event
     })
     .unwrap();
@@ -499,7 +499,7 @@ fn failed_post_preserves_committed_widget_state_and_requires_a_new_frame() {
     assert_eq!(number.value(), Ok(10.0));
     assert!(events.try_recv().is_err());
     assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
-    neocogi_ui::events::map(number.changed(), events_tx.clone(), |event| event.value).unwrap();
+    neocogi_ui::events::bind(number.changed(), events_tx.clone(), |event| event.value).unwrap();
     ui.update(SIZE).unwrap();
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
     window.close().unwrap();
@@ -521,6 +521,6 @@ fn failed_lifecycle_post_preserves_visibility_and_returns_its_receiver_error() {
     assert_eq!(window.set_visibility(Visibility::Hidden), Err(NC_E_INVALID_ARG));
     assert_eq!(window.snapshot().unwrap().visibility, Visibility::Hidden);
     assert!(events.try_recv().is_err());
-    neocogi_ui::events::map(source.changed(), events_tx.clone(), |event| event).unwrap();
+    neocogi_ui::events::bind(source.changed(), events_tx.clone(), |event| event).unwrap();
     window.close().unwrap();
 }

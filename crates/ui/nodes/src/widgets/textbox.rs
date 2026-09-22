@@ -422,7 +422,7 @@ mod tests {
     /// Maps both outputs into one ordinary consumer FIFO, preserving their actual post order.
     fn text_dispatcher(textbox: &mut Textbox) -> impl FnMut(&mut Vec<RecordedEvent>) -> bool + use<> {
         let (events_tx, events) = std::sync::mpsc::channel();
-        neocogi_ui::events::map(
+        neocogi_ui::events::bind(
             |consume| {
                 textbox.changed_event = Some(crate::TextChanged::__receiver(consume)?);
                 Ok(())
@@ -431,7 +431,7 @@ mod tests {
             |event| RecordedEvent::Changed(event.text, event.cursor),
         )
         .unwrap();
-        neocogi_ui::events::map(
+        neocogi_ui::events::bind(
             |consume| {
                 textbox.submitted_event = Some(crate::TextSubmitted::__receiver(consume)?);
                 Ok(())

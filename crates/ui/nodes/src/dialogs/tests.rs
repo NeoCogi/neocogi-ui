@@ -69,7 +69,7 @@ impl Fixture {
 /// Connects the real picker completion protocol to a consumer-owned inbox.
 fn session(fixture: &Fixture) -> std::sync::mpsc::Receiver<FileDialogCompletion> {
     let (events_tx, events) = std::sync::mpsc::channel();
-    neocogi_ui::events::map(fixture.handle.completed(), events_tx.clone(), |event| event).unwrap();
+    neocogi_ui::events::bind(fixture.handle.completed(), events_tx.clone(), |event| event).unwrap();
     events
 }
 
@@ -166,7 +166,7 @@ fn empty_acceptance_and_independent_picker_requests_use_actual_controls() {
     let second = fixture.ui.file_dialog(fixture.owner.as_com_ref()).unwrap();
     let (second_events_tx, second_events) = std::sync::mpsc::channel();
     let mut second_outcomes = Vec::new();
-    neocogi_ui::events::map(second.completed(), second_events_tx.clone(), |event| event).unwrap();
+    neocogi_ui::events::bind(second.completed(), second_events_tx.clone(), |event| event).unwrap();
     second.open(&neocogi_ui::FileDialogRequest::new(directory.path())).unwrap();
     second.cancel().unwrap();
     fixture
@@ -398,8 +398,8 @@ fn application_callback_opens_picker_and_later_input_reaches_its_new_modal_scope
     }
     let (events_tx, events) = std::sync::mpsc::channel();
     let mut outcomes = Vec::new();
-    neocogi_ui::events::map(fixture.handle.completed(), events_tx.clone(), AppMessage::Completed).unwrap();
-    neocogi_ui::events::map(button.activated(), events_tx.clone(), |_| AppMessage::Open).unwrap();
+    neocogi_ui::events::bind(fixture.handle.completed(), events_tx.clone(), AppMessage::Completed).unwrap();
+    neocogi_ui::events::bind(button.activated(), events_tx.clone(), |_| AppMessage::Open).unwrap();
     fixture.tabs(1);
     fixture.key(KeyCode::Space, 0);
     fixture.tabs(6);
@@ -429,7 +429,7 @@ fn closed_picker_preserves_all_completed_requests_during_manual_handler_runtime_
     let directory = tempfile::tempdir().unwrap();
     let ui = crate::bind_builtin_nodes(fixture.runtime.clone()).unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
-    neocogi_ui::events::map(fixture.handle.completed(), events_tx.clone(), |event| event).unwrap();
+    neocogi_ui::events::bind(fixture.handle.completed(), events_tx.clone(), |event| event).unwrap();
     let mut completions = 0;
     for _ in 0..2 {
         fixture.open(directory.path());
@@ -452,7 +452,7 @@ fn completion_mapping_reentry_uses_the_request_borrow_boundary() {
     let directory = tempfile::tempdir().unwrap();
     let controller = fixture.handle.as_interface().add_ref();
     let (events_tx, events) = std::sync::mpsc::channel();
-    neocogi_ui::events::map(fixture.handle.completed(), events_tx.clone(), move |message| {
+    neocogi_ui::events::bind(fixture.handle.completed(), events_tx.clone(), move |message| {
         assert_eq!(controller.active(), Err(UI_E_BUSY));
         message
     })
@@ -461,5 +461,5 @@ fn completion_mapping_reentry_uses_the_request_borrow_boundary() {
     assert_eq!(fixture.handle.cancel(), Ok(true));
     assert!(matches!(events.try_recv().ok(), Some(FileDialogCompletion::Cancelled)));
     // Release the intentionally self-capturing test mapper through normal replacement.
-    neocogi_ui::events::map(fixture.handle.completed(), events_tx.clone(), |message| message).unwrap();
+    neocogi_ui::events::bind(fixture.handle.completed(), events_tx.clone(), |message| message).unwrap();
 }

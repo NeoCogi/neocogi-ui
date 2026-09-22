@@ -28,7 +28,7 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
     root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let (session_tx, session) = std::sync::mpsc::channel();
     let mut changes = Vec::new();
-    neocogi_ui::events::map(combo.changed(), session_tx.clone(), |event| event).unwrap();
+    neocogi_ui::events::bind(combo.changed(), session_tx.clone(), |event| event).unwrap();
 
     ui.update_with_events(SIZE, &session, |message| {
         changes.push(message);
@@ -126,7 +126,7 @@ fn combo_choice_menu_uses_shared_submenu_navigation() {
     root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let (session_tx, session) = std::sync::mpsc::channel();
     let mut changes = Vec::new();
-    neocogi_ui::events::map(combo.changed(), session_tx.clone(), |event| event).unwrap();
+    neocogi_ui::events::bind(combo.changed(), session_tx.clone(), |event| event).unwrap();
     ui.update_with_events(SIZE, &session, |message| {
         changes.push(message);
         Ok(())

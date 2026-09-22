@@ -497,7 +497,7 @@ mod tests {
         install: impl FnOnce(Box<dyn FnMut(neocogi_ui_nodes_contracts::NumericChanged) -> Result<(), NcStatus>>) -> Result<(), NcStatus>,
     ) -> Box<dyn FnMut(&mut Vec<Real>) -> bool> {
         let (events_tx, events) = std::sync::mpsc::channel();
-        neocogi_ui::events::map(install, events_tx.clone(), |event| event.value).unwrap();
+        neocogi_ui::events::bind(install, events_tx.clone(), |event| event.value).unwrap();
         Box::new(move |values| {
             let before = values.len();
             values.extend(events.try_iter());

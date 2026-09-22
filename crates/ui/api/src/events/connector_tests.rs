@@ -68,7 +68,7 @@ fn failure_validation_fifo_and_producer_lifetime() {
     let b = source(true);
     let lifetime = Lifetime(drops.clone());
     assert_eq!(
-        neocogi_com::events::map(output(&b), events_tx.clone(), move |event| {
+        neocogi_com::events::bind(output(&b), events_tx.clone(), move |event| {
             let _ = &lifetime;
             event.label
         }),
@@ -76,12 +76,12 @@ fn failure_validation_fifo_and_producer_lifetime() {
     );
     assert_eq!(drops.get(), 1);
     let lifetime = Lifetime(drops.clone());
-    neocogi_com::events::map(output(&a), events_tx.clone(), move |event| {
+    neocogi_com::events::bind(output(&a), events_tx.clone(), move |event| {
         let _ = &lifetime;
         event.label
     })
     .unwrap();
-    neocogi_com::events::map(checked(output(&b), valid_label), events_tx.clone(), |event| event.label).unwrap();
+    neocogi_com::events::bind(checked(output(&b), valid_label), events_tx.clone(), |event| event.label).unwrap();
     assert_eq!(emit(&b, ""), Err(NC_E_INVALID_ARG));
     assert!(events.try_recv().is_err());
     emit(&b, "second").unwrap();
@@ -98,9 +98,9 @@ fn replacement_preserves_queued_values_and_routing_ids() {
     let producer = source(false);
     let (first_tx, first) = std::sync::mpsc::channel();
     let (second_tx, second) = std::sync::mpsc::channel();
-    neocogi_com::events::map(output(&producer), first_tx.clone(), |event| (10, event.label)).unwrap();
+    neocogi_com::events::bind(output(&producer), first_tx.clone(), |event| (10, event.label)).unwrap();
     emit(&producer, "old").unwrap();
-    neocogi_com::events::map(output(&producer), second_tx.clone(), |event| event.label.len()).unwrap();
+    neocogi_com::events::bind(output(&producer), second_tx.clone(), |event| event.label.len()).unwrap();
     emit(&producer, "replacement").unwrap();
     drop(producer);
     assert_eq!(first.try_recv().ok(), Some((10, "old".into())));
@@ -117,7 +117,7 @@ fn abandoned_consumer_discards_delivery_and_mapper_lives_until_replacement() {
     let observed = calls.clone();
     let drops = Rc::new(Cell::new(0));
     let lifetime = Lifetime(drops.clone());
-    neocogi_com::events::map(output(&producer), events_tx.clone(), move |_| {
+    neocogi_com::events::bind(output(&producer), events_tx.clone(), move |_| {
         let _ = &lifetime;
         observed.set(observed.get() + 1);
     })
@@ -129,7 +129,7 @@ fn abandoned_consumer_discards_delivery_and_mapper_lives_until_replacement() {
     assert_eq!(calls.get(), 2, "standard send discovers disconnection after translation");
     assert_eq!(drops.get(), 0, "producer owns the adapter until replacement or destruction");
     let (replacement_tx, _replacement) = std::sync::mpsc::channel();
-    neocogi_com::events::map(output(&producer), replacement_tx.clone(), |_| ()).unwrap();
+    neocogi_com::events::bind(output(&producer), replacement_tx.clone(), |_| ()).unwrap();
     assert_eq!(drops.get(), 1);
 }
 
@@ -140,7 +140,7 @@ fn translation_is_immediate_and_behavior_is_deferred() {
     let (events_tx, events) = std::sync::mpsc::channel();
     let mapped = Rc::new(Cell::new(0));
     let observed = mapped.clone();
-    neocogi_com::events::map(output(&producer), events_tx.clone(), move |event| {
+    neocogi_com::events::bind(output(&producer), events_tx.clone(), move |event| {
         observed.set(observed.get() + 1);
         event.label
     })
@@ -158,7 +158,7 @@ fn translation_is_immediate_and_behavior_is_deferred() {
 fn generated_receiver_checks_domain_values_before_mapping() {
     let (numeric_tx, numeric) = std::sync::mpsc::channel();
     let mut receiver = None;
-    neocogi_com::events::map(
+    neocogi_com::events::bind(
         checked(
             |consume| {
                 receiver = Some(NumericChanged::__receiver(consume)?);
@@ -176,7 +176,7 @@ fn generated_receiver_checks_domain_values_before_mapping() {
     assert_eq!(numeric.try_recv().ok(), Some(1.0));
     let (text_tx, text) = std::sync::mpsc::channel();
     let mut receiver = None;
-    neocogi_com::events::map(
+    neocogi_com::events::bind(
         checked(
             |consume| {
                 receiver = Some(TextChanged::__receiver(consume)?);
@@ -203,7 +203,7 @@ fn ordinary_com_gate_rejects_recursive_emission() {
     let producer = source(false);
     let captured = producer.clone();
     let (events_tx, events) = std::sync::mpsc::channel();
-    neocogi_com::events::map(output(&producer), events_tx.clone(), move |event| {
+    neocogi_com::events::bind(output(&producer), events_tx.clone(), move |event| {
         assert_eq!(emit(&captured, "recursive"), Err(neocogi_com::NC_E_BUSY));
         event.label
     })
@@ -211,5 +211,5 @@ fn ordinary_com_gate_rejects_recursive_emission() {
     emit(&producer, "outer").unwrap();
     assert_eq!(events.try_recv().ok().as_deref(), Some("outer"));
     // Release the deliberately self-capturing test mapper by replacing it.
-    neocogi_com::events::map(output(&producer), events_tx.clone(), |event| event.label).unwrap();
+    neocogi_com::events::bind(output(&producer), events_tx.clone(), |event| event.label).unwrap();
 }

@@ -549,14 +549,14 @@ impl Model {
         buttons: [(neocogi_ui::ButtonWidget, Message); 5],
     ) -> Result<(), NcStatus> {
         let sender = &self.events_tx;
-        neocogi_ui::events::map(path.changed(), sender.clone(), |_| Message::PathEdited)?;
-        neocogi_ui::events::map(path.submitted(), sender.clone(), |event| Message::Navigate(event.text))?;
-        neocogi_ui::events::map(filename.changed(), sender.clone(), |_| Message::FilenameEdited)?;
-        neocogi_ui::events::map(filename.submitted(), sender.clone(), |_| Message::Accept)?;
+        neocogi_ui::events::bind(path.changed(), sender.clone(), |_| Message::PathEdited)?;
+        neocogi_ui::events::bind(path.submitted(), sender.clone(), |event| Message::Navigate(event.text))?;
+        neocogi_ui::events::bind(filename.changed(), sender.clone(), |_| Message::FilenameEdited)?;
+        neocogi_ui::events::bind(filename.submitted(), sender.clone(), |_| Message::Accept)?;
         for (button, action) in buttons {
-            neocogi_ui::events::map(button.activated(), sender.clone(), move |_| action.clone())?;
+            neocogi_ui::events::bind(button.activated(), sender.clone(), move |_| action.clone())?;
         }
-        neocogi_ui::events::map(neocogi_ui::events::window_events(window.as_com_ref())?, sender.clone(), Message::Lifecycle)?;
+        neocogi_ui::events::bind(neocogi_ui::events::window_events(window.as_com_ref())?, sender.clone(), Message::Lifecycle)?;
         Ok(())
     }
 
@@ -576,7 +576,7 @@ impl Model {
     /// Registers complete candidates while the private inbox is idle, then replaces only dynamic content roles.
     fn install(&mut self, directory: PathBuf, listing: Listing, reset_scroll: bool) -> Result<(), NcStatus> {
         for (row, action) in listing.folders.rows.into_iter().chain(listing.files.rows) {
-            neocogi_ui::events::map(row.activated(), self.events_tx.clone(), move |_| action.clone())?;
+            neocogi_ui::events::bind(row.activated(), self.events_tx.clone(), move |_| action.clone())?;
         }
         // These are private built-in roles: their controller validates the live
         // modal before replacement and no caller can substitute a foreign child.

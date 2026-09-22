@@ -8,14 +8,14 @@
 //!
 //! fn update(ui: &Ui, button: &ButtonWidget, size: Size) -> Result<u32, NcStatus> {
 //!     let (events_tx, events) = std::sync::mpsc::channel();
-//!     neocogi_ui::events::map(button.activated(), events_tx.clone(), |_| ())?;
+//!     neocogi_ui::events::bind(button.activated(), events_tx.clone(), |_| ())?;
 //!     let mut count = 0;
 //!     ui.update_with_events(size, &events, |_| { count += 1; Ok(()) })?;
 //!     Ok(count)
 //! }
 //! ```
 /// Installs a typed COM mapping into a standard application or component channel.
-pub use neocogi_com::events::map;
+pub use neocogi_com::events::bind;
 
 use crate::com::*;
 use neocogi_com::{ComRef, NC_E_INVALID_ARG, NcStatus};
@@ -30,7 +30,7 @@ pub use neocogi_ui_nodes_contracts::{CheckboxChanged, NumericChanged, ScrollbarC
 macro_rules! widget_output {
     ($widget:ty, $method:ident, $event:ty) => {
         impl $widget {
-            /// Installs one destination when passed to `events::map`.
+            /// Installs one destination when passed to `events::bind`.
             pub fn $method(&self) -> impl FnOnce(Box<dyn FnMut($event) -> Result<(), NcStatus>>) -> Result<(), NcStatus> + use<> {
                 self.as_interface().add_ref().$method()
             }

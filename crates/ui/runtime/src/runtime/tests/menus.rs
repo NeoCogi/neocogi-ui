@@ -38,8 +38,8 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
     assert_eq!(item.shortcut_hint().unwrap(), "Ctrl+O");
     let (session_tx, session) = std::sync::mpsc::channel();
     let mut labels = Vec::new();
-    neocogi_ui::events::map(item.activated().unwrap(), session_tx.clone(), |event| event.label).unwrap();
-    neocogi_ui::events::map(disabled.activated().unwrap(), session_tx.clone(), |event| event.label).unwrap();
+    neocogi_ui::events::bind(item.activated().unwrap(), session_tx.clone(), |event| event.label).unwrap();
+    neocogi_ui::events::bind(disabled.activated().unwrap(), session_tx.clone(), |event| event.label).unwrap();
     menus.attach_bar(window.as_com_ref(), &bar).unwrap();
     assert_eq!(bar.separator(), Err(UI_E_CLOSED));
     drop(bar);
@@ -56,7 +56,7 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
     item.set_label("Later").unwrap();
     // Installation now resolves the moved forest record. The queued old mapping's
     // value remains unchanged, while the next activation uses the replacement.
-    neocogi_ui::events::map(item.activated().unwrap(), session_tx.clone(), |event| format!("mapped:{}", event.label)).unwrap();
+    neocogi_ui::events::bind(item.activated().unwrap(), session_tx.clone(), |event| format!("mapped:{}", event.label)).unwrap();
     labels.extend(session.try_iter());
     assert_eq!(&labels, &["Captured"]);
     assert_eq!(editor.text().unwrap(), "focus restored");
@@ -128,7 +128,7 @@ fn standalone_menu_popup_submits_then_hides_without_destroying_its_live_rows() {
     let mut popup = menus.popup(window.as_com_ref(), &builder).unwrap();
     let (session_tx, session) = std::sync::mpsc::channel();
     let mut labels = Vec::new();
-    neocogi_ui::events::map(item.activated().unwrap(), session_tx.clone(), |event| event.label).unwrap();
+    neocogi_ui::events::bind(item.activated().unwrap(), session_tx.clone(), |event| event.label).unwrap();
     popup.show_at(Rect { x: 60, y: 60, width: 20, height: 20 }).unwrap();
     // Standalone menus begin without row selection; Down selects their first actionable row.
     key(&ui, KeyCode::ArrowDown, 0);

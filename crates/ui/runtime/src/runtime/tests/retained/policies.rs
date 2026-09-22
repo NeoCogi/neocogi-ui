@@ -304,7 +304,7 @@ fn title_drag_and_close_deliver_window_events_through_the_production_session() {
     let owner = fixture.ui.window("chrome", Rect { x: 30, y: 30, width: 180, height: 120 }, &body).unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
     let mut observations = Vec::new();
-    neocogi_ui::events::map(neocogi_ui::events::window_events(owner.as_com_ref()).unwrap(), events_tx.clone(), |event| event).unwrap();
+    neocogi_ui::events::bind(neocogi_ui::events::window_events(owner.as_com_ref()).unwrap(), events_tx.clone(), |event| event).unwrap();
     fixture.frame(VIEW).unwrap();
     pointer(&fixture.ui, Point { x: 70, y: 40 }, true);
     fixture.ui.input(UiInput::Pointer(Point { x: 80, y: 48 }), "").unwrap();

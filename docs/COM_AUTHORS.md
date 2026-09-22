@@ -82,8 +82,8 @@ enum AppMessage {
     Completed { destination: usize, result: FileDialogCompletion },
 }
 let (send, messages) = std::sync::mpsc::channel();
-neocogi_ui::events::map(button.activated(), send.clone(), |event| AppMessage::Activated(event.label))?;
-neocogi_ui::events::map(picker.completed(), send, |result| AppMessage::Completed { destination: 0, result })?;
+neocogi_ui::events::bind(button.activated(), send.clone(), |event| AppMessage::Activated(event.label))?;
+neocogi_ui::events::bind(picker.completed(), send, |result| AppMessage::Completed { destination: 0, result })?;
 ui.update_with_events(drawable_size, &messages, |message| app.update(message))?;
 ui.render(drawable_size, renderer.as_com_ref())?;
 ```
@@ -99,7 +99,7 @@ Declare published cross-COM outputs as concrete `#[message]` structs/enums in
 NCIDL: `completed: FileDialogCompletion;`. Application and component-private enums
 stay in Rust. Producers store one optional concrete receiver and implement an
 ordinary mutable setter. The generated accessor supplies its installation closure
-to `events::map(output, sender, mapper)`, which returns `Result<()>`; another map replaces future delivery.
+to `events::bind(output, sender, mapper)`, which returns `Result<()>`; another binding replaces future delivery.
 Structural wrappers forward installation to their child. There are no subscription
 objects, cancellation leases or per-output queues. See
 [IDL syntax](IDL_MODULES.md#concrete-messages-and-outputs).
@@ -689,7 +689,7 @@ file.submenu("Recent")?.item("Document")?;
 menus.attach_bar(window.as_com_ref(), &bar)?;
 // The actual compact rows now belong exclusively to the manager's forest.
 open.set_label("Open file")?;
-neocogi_ui::events::map(open.activated()?, sender.clone(), |event| AppMessage::Open(event.label))?;
+neocogi_ui::events::bind(open.activated()?, sender.clone(), |event| AppMessage::Open(event.label))?;
 ```
 
 A bar's direct entries must be submenus. `attach_bar` installs one intrinsic bar
@@ -741,7 +741,7 @@ application handler:
 
 ```rust
 let picker = ui.file_dialog(window.as_com_ref())?;
-neocogi_ui::events::map(picker.completed(), send, AppMessage::Completed)?;
+neocogi_ui::events::bind(picker.completed(), send, AppMessage::Completed)?;
 let mut request = FileDialogRequest::new(native_directory);
 request.title = "Choose a document".to_owned();
 picker.open(&request)?;

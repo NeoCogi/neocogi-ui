@@ -274,7 +274,7 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
         installed: 0,
     };
     let (session_tx, session) = std::sync::mpsc::channel();
-    neocogi_ui::events::map(button.activated(), session_tx.clone(), |event| event).unwrap();
+    neocogi_ui::events::bind(button.activated(), session_tx.clone(), |event| event).unwrap();
     for key in [KeyCode::Tab, KeyCode::Space] {
         ui.input(
             UiInput::Key(KeyStroke {

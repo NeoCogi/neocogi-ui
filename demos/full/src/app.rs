@@ -109,7 +109,7 @@ pub(super) fn slider(ui: &Ui, value: f32, high: f32) -> Result<SliderWidget, NcS
 fn button(ui: &Ui, events_tx: &std::sync::mpsc::Sender<Message>, text: &str, action: Action) -> Result<ButtonWidget, NcStatus> {
     let mut control = ui.widgets().button(text)?;
     control.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
-    neocogi_ui::events::map(control.activated(), events_tx.clone(), move |event| Message::Activate(action, event))?;
+    neocogi_ui::events::bind(control.activated(), events_tx.clone(), move |event| Message::Activate(action, event))?;
     Ok(control)
 }
 /// A disclosure body is its actual editable Linear COM object, with no placeholder replacement tree.
@@ -557,15 +557,15 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
     };
     let (events_tx, events) = std::sync::mpsc::channel();
     for (item, action) in pending {
-        neocogi_ui::events::map(item.activated()?, events_tx.clone(), move |event| Message::Activate(action, event))?;
+        neocogi_ui::events::bind(item.activated()?, events_tx.clone(), move |event| Message::Activate(action, event))?;
     }
     {
         state.style.map(&events_tx)?;
-        neocogi_ui::events::map(neocogi_ui::events::window_events(state.demo.as_com_ref())?, events_tx.clone(), Message::Window)?;
-        neocogi_ui::events::map(state.entry.submitted(), events_tx.clone(), Message::Text)?;
-        neocogi_ui::events::map(state.combo.changed(), events_tx.clone(), Message::Choice)?;
+        neocogi_ui::events::bind(neocogi_ui::events::window_events(state.demo.as_com_ref())?, events_tx.clone(), Message::Window)?;
+        neocogi_ui::events::bind(state.entry.submitted(), events_tx.clone(), Message::Text)?;
+        neocogi_ui::events::bind(state.combo.changed(), events_tx.clone(), Message::Choice)?;
         if let Some(dialog) = &state.file_dialog {
-            neocogi_ui::events::map(dialog.completed(), events_tx.clone(), Message::File)?;
+            neocogi_ui::events::bind(dialog.completed(), events_tx.clone(), Message::File)?;
         }
     }
     build_controls(&host, &state, &events_tx, &mut main_body)?;
@@ -646,7 +646,7 @@ fn build_controls(host: &Host, state: &State, events_tx: &std::sync::mpsc::Sende
     for (name, shift) in [("Red", 0), ("Green", 8), ("Blue", 16)] {
         let mut line = row(ui)?;
         let control = slider(ui, ((state.grid.borrow().background >> shift) & 255) as f32, 255.)?;
-        neocogi_ui::events::map(control.changed(), events_tx.clone(), move |event| Message::Background(shift, event))?;
+        neocogi_ui::events::bind(control.changed(), events_tx.clone(), move |event| Message::Background(shift, event))?;
         append(&mut line, &label(ui, name)?, LayoutTrack::Fixed { extent: 46 })?;
         append(&mut line, &control, FLEX)?;
         append(&mut controls, &line, LayoutTrack::Content)?;
@@ -746,7 +746,7 @@ fn build_examples(host: &Host, state: &State, events_tx: &std::sync::mpsc::Sende
         (neocogi_ui_samples::weights(ui)?, "Weight Demo", rect(530, 270, 280, 260)),
     ] {
         for control in sample.buttons {
-            neocogi_ui::events::map(control.activated(), events_tx.clone(), |event| Message::Activate(Action::Log, event))?;
+            neocogi_ui::events::bind(control.activated(), events_tx.clone(), |event| Message::Activate(Action::Log, event))?;
         }
         floating(ui, desktop, title, area, &sample.content)?;
     }

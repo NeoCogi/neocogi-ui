@@ -481,7 +481,7 @@ mod tests {
         let mut popup = menus.popup(owner.as_com_ref(), &builder).unwrap();
         let (events_tx, events) = std::sync::mpsc::channel();
         let mut labels = Vec::new();
-        neocogi_ui::events::map(item.activated().unwrap(), events_tx.clone(), |event| event.label).unwrap();
+        neocogi_ui::events::bind(item.activated().unwrap(), events_tx.clone(), |event| event.label).unwrap();
         let size = Size { width: 640, height: 400 };
 
         // Consume a pointer transition before opening. The popup request must use this committed

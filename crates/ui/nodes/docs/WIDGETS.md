@@ -23,7 +23,7 @@ use neocogi_ui::{CrossSize, FlowDirection, IWindowAbi,
 use neocogi_com::{ComPtr, NcStatus};
 fn install(ui: &Ui, sender: &std::sync::mpsc::Sender<bool>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
     let checkbox = ui.widgets().checkbox("Enable preview", false)?;
-    neocogi_ui::events::map(checkbox.changed(), sender.clone(), |event| event.checked)?;
+    neocogi_ui::events::bind(checkbox.changed(), sender.clone(), |event| event.checked)?;
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     column.insert(0, &checkbox, LinearEdge::new(LayoutTrack::Content))?.finish()?;
     ui.window("Settings", Rect { x: 40, y: 40, width: 260, height: 120 }, &column)

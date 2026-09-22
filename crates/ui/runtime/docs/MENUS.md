@@ -25,7 +25,7 @@ fn install(ui: &Ui, sender: &std::sync::mpsc::Sender<String>) -> Result<ComPtr<I
     let file = bar.submenu("File")?;
     let open = file.item("Open")?;
     open.set_shortcut_hint("Ctrl+O")?;
-    neocogi_ui::events::map(open.activated()?, sender.clone(), |event| event.label)?;
+    neocogi_ui::events::bind(open.activated()?, sender.clone(), |event| event.label)?;
     let save = file.item("Save")?;
     save.set_enabled(false)?;
     file.separator()?;

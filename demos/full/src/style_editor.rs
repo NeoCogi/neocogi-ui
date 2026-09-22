@@ -248,14 +248,14 @@ impl StyleEditor {
         for row in &self.colors {
             for (channel, control) in Channel::ALL.into_iter().zip(&row.channels) {
                 let role = row.role;
-                neocogi_ui::events::map(control.changed(), events_tx.clone(), move |event| {
+                neocogi_ui::events::bind(control.changed(), events_tx.clone(), move |event| {
                     super::app::Message::Style(Message::Color(role, channel, event.value as u8))
                 })?;
             }
         }
         for (metric, control) in &self.values {
             let metric = *metric;
-            neocogi_ui::events::map(control.changed(), events_tx.clone(), move |event| {
+            neocogi_ui::events::bind(control.changed(), events_tx.clone(), move |event| {
                 super::app::Message::Style(Message::Metric(metric, event.value as i32))
             })?;
         }

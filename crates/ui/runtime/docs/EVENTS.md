@@ -15,7 +15,7 @@ enum Message { Activated(String) }
 
 fn update(ui: &Ui, button: &ButtonWidget, size: Size) -> Result<(), NcStatus> {
     let (send, messages) = mpsc::channel();
-    events::map(button.activated(), send, |event| Message::Activated(event.label))?;
+    events::bind(button.activated(), send, |event| Message::Activated(event.label))?;
     let mut count = 0;
     ui.update_with_events(size, &messages, |message| {
         match message {
@@ -38,7 +38,7 @@ prevent the same UI thread from reaching its later receive operation.
 
 NCIDL declares concrete `#[message]` structs/enums and named outputs such as
 `completed: FileDialogCompletion;`. The generated `.completed()` returns a
-one-shot installation closure. `events::map(picker.completed(), send, mapper)`
+one-shot installation closure. `events::bind(picker.completed(), send, mapper)`
 calls it and returns `Result<()>`. UI accessors add domain checks such as native-path
 and finite-number validation.
 

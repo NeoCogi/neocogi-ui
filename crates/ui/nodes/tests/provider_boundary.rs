@@ -55,7 +55,7 @@ fn independently_activated_nodes_bind_only_to_their_core_host_and_deliver_events
     ui.window("provider boundary", Rect { x: 10, y: 10, width: 300, height: 150 }, &button).unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
     let mut labels = Vec::new();
-    neocogi_ui::events::map(button.activated(), events_tx.clone(), |event| event.label).unwrap();
+    neocogi_ui::events::bind(button.activated(), events_tx.clone(), |event| event.label).unwrap();
     key(&ui, KeyCode::Tab);
     key(&ui, KeyCode::Space);
     ui.update_with_events(Size { width: 640, height: 400 }, &events, |message| {

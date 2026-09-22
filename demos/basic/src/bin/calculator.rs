@@ -408,7 +408,7 @@ fn run() -> Result<(), HostError> {
         let mut button = host.ui.widgets().button(label)?;
         button.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
         grid.insert(index as u32, &button, GridExtent { columns: 1, rows: 1 })?.finish()?;
-        neocogi_ui::events::map(button.activated(), events_tx.clone(), move |_| action)?;
+        neocogi_ui::events::bind(button.activated(), events_tx.clone(), move |_| action)?;
     }
     host.run(state, events)
 }

@@ -46,8 +46,8 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let activation: ComPtr<IActivationEventsAbi> = counter.query()?;
     let window = ui.window("Independent extension", Rect { x: 10, y: 10, width: 400, height: 200 }, &root)?;
     let (events_tx, events) = std::sync::mpsc::channel();
-    neocogi_ui::events::map(activation.activated(), events_tx.clone(), Message::Activated)?;
-    neocogi_ui::events::map(counter.changed(), events_tx.clone(), Message::Changed)?;
+    neocogi_ui::events::bind(activation.activated(), events_tx.clone(), Message::Activated)?;
+    neocogi_ui::events::bind(counter.changed(), events_tx.clone(), Message::Changed)?;
     let mut labels = Vec::new();
 
     ui.update_with_events(size, &events, |message| message.consume(&mut labels, &mut counter))?;

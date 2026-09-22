@@ -22,7 +22,7 @@ fn split_drag_clamps_panes_and_preserves_requested_width_on_resize() {
     split.insert(0, &first).unwrap().finish().unwrap();
     split.insert(1, &second).unwrap().finish().unwrap();
     let (send, events) = std::sync::mpsc::channel();
-    events::map(split.changed(), send, |event| event.position).unwrap();
+    events::bind(split.changed(), send, |event| event.position).unwrap();
     let owner = window(&fixture.ui, "split", Rect { x: 10, y: 10, width: 400, height: 120 }, &split);
     fixture.frame(VIEW).unwrap();
     assert_eq!(first_state.borrow().paints.last().unwrap().rect.width, 120);

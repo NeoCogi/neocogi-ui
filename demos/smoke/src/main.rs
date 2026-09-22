@@ -140,7 +140,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut button = ui.widgets().button("Hello across COM")?;
     let window = ui.window("Dynamic UI", Rect { x: 40, y: 40, width: 500, height: 200 }, &button)?;
     let (session_tx, session) = std::sync::mpsc::channel();
-    neocogi_ui::events::map(button.activated(), session_tx.clone(), |event| event.label)?;
+    neocogi_ui::events::bind(button.activated(), session_tx.clone(), |event| event.label)?;
     let mut count = 0u32;
     let mut callback_button = button.clone();
     let size = native.size()?;
@@ -352,7 +352,7 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let item = bar.submenu("File")?.item("Menu command")?;
     menus.attach_bar(window.as_com_ref(), &bar)?;
     let (events_tx, events) = std::sync::mpsc::channel();
-    neocogi_ui::events::map(item.activated()?, events_tx.clone(), ComponentMessage::Menu)?;
+    neocogi_ui::events::bind(item.activated()?, events_tx.clone(), ComponentMessage::Menu)?;
     let mut count = 0u32;
     let expected_path = directory.0.join(" native file ");
     ui.update_with_events(size, &events, |message| message.consume(&mut count, &expected_path))?;
@@ -363,7 +363,7 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     ui.update_with_events(size, &events, |message| message.consume(&mut count, &expected_path))?;
     assert_eq!(count, 1);
     let picker = ui.file_dialog(window.as_com_ref())?;
-    neocogi_ui::events::map(picker.completed(), events_tx.clone(), ComponentMessage::File)?;
+    neocogi_ui::events::bind(picker.completed(), events_tx.clone(), ComponentMessage::File)?;
     let mut request = FileDialogRequest::new(&directory.0);
     request.rect = Rect { x: 10, y: 10, width: 620, height: 370 };
     picker.open(&request)?;

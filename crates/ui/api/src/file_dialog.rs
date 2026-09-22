@@ -10,7 +10,7 @@
 //! {
 //!     let picker = ui.file_dialog(owner)?;
 //!     let (events_tx, events) = std::sync::mpsc::channel();
-//!     neocogi_ui::events::map(picker.completed(), events_tx.clone(), |message| message)?;
+//!     neocogi_ui::events::bind(picker.completed(), events_tx.clone(), |message| message)?;
 //!     picker.open(&FileDialogRequest::new(directory))?;
 //!     Ok((picker, events))
 //! }

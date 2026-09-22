@@ -87,7 +87,7 @@ fn run() -> Result<(), HostError> {
     let (sender, receiver) = mpsc::channel();
     let menus = host.ui.menus()?;
     let bar = menus.create("Runtime UI")?;
-    neocogi_ui::events::map(bar.submenu("File")?.item("Reload")?.activated()?, sender.clone(), |_| Message::Reload)?;
+    neocogi_ui::events::bind(bar.submenu("File")?.item("Reload")?.activated()?, sender.clone(), |_| Message::Reload)?;
     menus.attach_bar(window.as_com_ref(), &bar)?;
     #[cfg(not(target_arch = "wasm32"))]
     let path = std::env::args_os().nth(1).map(std::path::PathBuf::from);
