@@ -11,7 +11,8 @@ cover the retained UI model, integration details, and repository workflows.
 - [Assets](COM_ASSETS.md) — immutable catalogs, generated resources and transactional installation.
 - Measured deployment and performance — complete package sizes, memory, startup, tree costs and external counters.
 - Assembly build performance — compiler reuse, shared-library LTO, and measured build times.
-- [IDL contract modules](IDL_MODULES.md) — Rust-like contract syntax, one-crate-per-module generation, exact native linking, and factory-only activation.
+- COM crate consolidation measurements — five-crate ownership, verified linkage, and before/after Vulkan min-size sizes.
+- [IDL contract modules](IDL_MODULES.md) — Rust-like contract syntax, Cargo generation, explicit Rust locations, exact native linking, and factory-only activation.
 - [Local COM implementation](../crates/com/README.md) and [ABI specification](../crates/com/docs/abi-v7.md).
 - [Accepted design](COM_DESIGN.md), [feature ownership](FEATURES.md), and [unreleased changes](CHANGELOG.md).
 
