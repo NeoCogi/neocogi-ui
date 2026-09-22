@@ -19,8 +19,12 @@ scope validation, and frame submission. `src/layout_client.rs` is only a borrowe
 its copied scope and first-error value are ordinary fields, with mutation through `&mut self`.
 Concrete controls communicate through cached `IWidget`, `ILeafLayout`, and `IContainerLayout`,
 exactly like independent extensions. Their outputs use concrete message contracts and COM-owned
-transport. Producers post directly into standard application message channels; ordinary application
-state is borrowed only by its deferred consumer, outside the producer graph.
+transport. Producers bind into standard owner channels. `Controller<Model>` owns
+plain model state and receives messages after traversal ends. The file dialog
+implements `IFileDialog` and `IEventOwner` on one allocation and mounts its normal
+Linear view explicitly. View removal retires the controller; dropping client
+handles leaves a mounted dialog alive. No forwarding root or shared mutable
+request/model wrapper is needed.
 
 `neocogi-ui-support` supplies binary-local canonical resource imports and pure presentation
 helpers. It contains no concrete widget or runtime. The only shared mutable resource cache in

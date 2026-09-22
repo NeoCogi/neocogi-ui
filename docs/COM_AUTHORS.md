@@ -59,7 +59,7 @@ Paint/layout services own their storage and issue invocation tokens. The static 
 
 Scoped layout permits a container to measure/place its indexed children. It does not permit topology edits during layout or unrestricted access to the runtime tree. Recursive child calls restore the enclosing scope correctly before continuing the parent. Applications and plugins must not fabricate authority or treat an invocation token as a durable resource identifier.
 
-Use `&mut self` for methods that change object state and store that state in ordinary fields. The generated object-wide call gate permits overlapping shared calls and returns `NC_E_BUSY` for conflicting mutable or recursive entry before it creates a Rust reference. Interior mutability is reserved for genuinely shared infrastructure such as shared component models and runtime registries; release those short borrows before calling an external widget, container, painter, or application handler. Panics are implementation faults and follow the COM abort policy; they are not converted into recoverable statuses.
+Use `&mut self` for methods that change object state and store that state in ordinary fields. The generated object-wide call gate permits overlapping shared calls and returns `NC_E_BUSY` for conflicting mutable or recursive entry before it creates a Rust reference. Interior mutability is reserved for genuinely shared infrastructure such as runtime registries and shared lifecycle tickets; release those short borrows before calling an external widget, container, painter, or application handler. Panics are implementation faults and follow the COM abort policy; they are not converted into recoverable statuses.
 
 The same rule applies outside COM objects. Event-loop drivers and other values
 with one clear owner use `&mut self` and ordinary fields. `Cell` or `RefCell` is
@@ -69,31 +69,35 @@ field comment must name that constraint.
 
 ## Typed events and application state
 
-A standard `std::sync::mpsc::Receiver<Message>` receives application messages. State remains
-an ordinary application value, independent of the transport. Map each generated
-output into the application's own enum, then use one mutable consumer:
+A persistent `events::Controller<Model>` owns ordinary application state and a
+standard `std::sync::mpsc::Receiver<Model::Message>`. Bind generated outputs into
+that private protocol once. Implement `EventModel::handle(&mut self, message)`
+with ordinary matching and retain the controller's checked `IEventOwner`
+projection across frames:
 
 ```rust
-/// Application-specific intent combines a configured destination with its captured fact.
-enum AppMessage {
-    /// The button's immutable activation label.
-    Activated(String),
-    /// One reusable dialog's native completion, routed by the application.
-    Completed { destination: usize, result: FileDialogCompletion },
-}
 let (send, messages) = std::sync::mpsc::channel();
 neocogi_ui::events::bind(button.activated(), send.clone(), |event| AppMessage::Activated(event.label))?;
 neocogi_ui::events::bind(picker.completed(), send, |result| AppMessage::Completed { destination: 0, result })?;
-ui.update_with_events(drawable_size, &messages, |message| app.update(message))?;
+let app = neocogi_ui::events::Controller::into_local(
+    neocogi_ui::events::Controller::root(model, messages),
+);
+let owner = app.query::<IEventOwnerAbi>()?;
+// Repeat these two calls each frame, retaining app and owner.
+ui.update_with_events(drawable_size, owner.as_com_ref())?;
 ui.render(drawable_size, renderer.as_com_ref())?;
 ```
 
-`app.update(&mut self, message)` matches that enum and edits ordinary state. It may
-borrow stack data for the duration of an update. No handler type, state-owning event
-session, manual queue traversal, or update-cycle object is required. Separate dialog
-instances can map their same protocol to different destinations. When reusing one
-dialog across requests, request identity remains application/domain policy; mapping
-an output does not manufacture an invocation ID absent from the protocol.
+The model owns everything its deferred behavior needs. Use `app.try_borrow()` or
+`try_borrow_mut()` for typed local access between updates; release those guards
+before dispatch. They use the same COM borrow gate as foreign interface calls,
+without an interface query or a second mutable state container. Frame dispatch
+borrows an existing capability and creates no callback/revocation adapter.
+The demo host performs this setup automatically for `Host::run(state, receiver)`.
+
+Separate dialogs can bind their same protocol to different application destinations.
+When reusing one dialog across requests, request identity remains application/domain
+policy; binding does not manufacture an invocation ID absent from the protocol.
 
 Declare published cross-COM outputs as concrete `#[message]` structs/enums in
 NCIDL: `completed: FileDialogCompletion;`. Application and component-private enums
@@ -117,7 +121,7 @@ objects, cancellation leases or per-output queues. See
 Commit state before calling `message.post_to(&mut destination)?`. Mapping runs synchronously and
 must only translate data or attach routing IDs; UI behavior belongs in the later
 consumer. Rust cannot prove closure purity. Captures must be owned or `'static`,
-while the consumer may borrow ordinary state for the update. Generated receivers
+and the later controller owns its ordinary mutable model. Generated receivers
 validate/copy/retain a concrete C message before mapping; Rust values and closures
 never cross COM. UI accessors validate domain values before mapping.
 
@@ -731,10 +735,11 @@ replacement-character labels and must remain distinct selections.
 The native picker is a UI-owned COM component containing actual COM buttons,
 textboxes, list rows, Linear containers and scrolling composites. Its internal
 private inbox owns child messages and its ordinary mutable model consumes them
-through a framework-created mounted driver. Retain the picker while requests are
-active; final controller release closes its modal and settles an active request.
-Explicit close or owner destruction also ends the logical component. Retaining a picker cannot keep a closed runtime
-alive. The static facade still depends only on contracts and COM support; the UI
+through its persistent `IEventOwner`. Its public `IFileDialog` methods and event
+owner share one COM allocation and borrow gate. The ordinary Linear view mounts
+with that owner explicitly. Dropping client handles leaves a mounted picker alive;
+removing the view or closing the runtime retires it and settles an active request.
+Retaining a picker cannot keep its runtime alive. The static facade still depends only on contracts and COM support; the UI
 plugin uses its ordinary owned adapters internally without passing Rust model
 state across the ABI.
 
@@ -742,12 +747,12 @@ Create the component and subscribe before dispatch, then open it from an ordinar
 application handler:
 
 ```rust
-let picker = ui.file_dialog(window.as_com_ref())?;
+let mut picker = ui.file_dialog(window.as_com_ref())?;
 neocogi_ui::events::bind(picker.completed(), send, AppMessage::Completed)?;
 let mut request = FileDialogRequest::new(native_directory);
 request.title = "Choose a document".to_owned();
 picker.open(&request)?;
-ui.update_with_events(drawable_size, &messages, |message| app.update(message))?;
+ui.update_with_events(drawable_size, owner.as_com_ref())?;
 ```
 
 The mapper receives the generated `FileDialogCompletion::Accepted { path }`
@@ -788,8 +793,8 @@ available for ordinary geometry, visibility and destruction operations.
 
 Cancellation hides the reusable modal and completes one active request. Reopening
 before a previously queued Hidden notification is delivered does not cancel the
-new visible request. Hiding/destroying an active modal or its owner cancels it
-once. Explicit picker close and runtime teardown also cancel an active request
+new visible request. Hiding an active modal or its owner queues lifecycle cancellation; destroying
+the view retires the controller at the next safe boundary and cancels once. Explicit picker close and runtime teardown also cancel an active request
 without invoking application callbacks during destruction.
 
 Each completion is already a committed request outcome in the consumer's inbox.

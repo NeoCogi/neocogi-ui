@@ -145,7 +145,7 @@ use neocogi_com::{ComPtr, NcStatus};
 
 fn install(ui: &Ui) -> Result<ComPtr<IWindowAbi>, NcStatus> {
     let hello = ui.widgets().button("Hello, world!")?;
-    let content = ui.widgets().linear(FlowDirection::TOP_TO_BOTTOM, CrossSize::Stretch)?;
+    let mut content = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     content.insert(0, &hello, LinearEdge::new(LayoutTrack::Content))?.finish()?;
     ui.window("Hello", Rect { x: 40, y: 40, width: 300, height: 120 }, &content)
 }
@@ -158,13 +158,14 @@ host-bound factory. `Ui::from_interfaces(runtime, factory)` verifies that both s
 same canonical `IWidgetHost` identity before the facade permits construction. No class ID,
 untyped argument object, private runtime pointer, or root identifier crosses that boundary.
 
-`Events<Message>` owns a consumer FIFO and its port connections; application state
-stays in an ordinary Rust value. Wire `events.map(port, mapper)` once, then call
-`ui.update_with_events(size, &mut events, |message| app.update(message))`. Producers
-post directly into that inbox after typed decoding and mapping. The runtime pumps
-nested composite inboxes automatically and settles their changes between application
-messages and raw inputs. The host then synchronizes text-input geometry and renders.
-Setters retain invalidation; custom widget updates report `GeometryChange::CHANGED`
+Bind typed outputs once with `events::bind(output, sender, mapper)`. A persistent
+`events::Controller<Model>` owns ordinary model state and its standard channel
+receiver. Resolve `IEventOwner` once, then call
+`ui.update_with_events(size, owner.as_com_ref())` each frame. Nested components
+use that same controller contract and attach their view/owner explicitly; the
+runtime settles descendants before application messages and later raw input.
+The host then synchronizes text-input geometry and renders.
+Setters retain invalidation; custom widget updates report `GeometryChange::Changed`
 when measurement or placement inputs change. Resize invalidation is independent.
 
 External shared state, hidden/skipped updates and observational painting remain

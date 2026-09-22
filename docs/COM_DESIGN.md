@@ -64,10 +64,14 @@ implementation fields do not need `Cell` or `RefCell` for this purpose.
 
 Named outputs carry concrete `#[message]` data through generated COM posting. A receiver
 copies and maps each emitted fact into an application message and sends it through
-`std::sync::mpsc`. The consumer owns the standard channel receiver. Application state remains an ordinary value borrowed during runtime dispatch.
-The retained UI runtime schedules dispatch; the COM process runtime owns no
-event loop. Nested components use private channels and framework-created drivers discovered at
-mount. No `Any`, erased event payload, or Rust trait object crosses the ABI.
+`std::sync::mpsc`. A persistent `Controller<Model>` owns the receiver and ordinary
+model state. Application and composite behavior share `IEventOwner`; composite
+attachment supplies an explicit typed view/owner pair. The retained UI runtime
+caches descendant-first delivery order and retires owners after active handlers
+return. The COM process runtime owns no event loop. `LocalCom` grants typed local
+access to an allocation created for that implementation, using the same COM gate.
+No `Any`, erased event payload, borrowed callback or Rust trait object crosses
+the event ABI. See the [event guide](../crates/ui/runtime/docs/EVENTS.md).
 
 ## Compatibility at the call boundary
 

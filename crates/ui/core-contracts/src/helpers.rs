@@ -70,7 +70,7 @@ pub const UI_E_RENDER: NcStatus = NcStatus::from_code(-1005);
 /// A live surface rejects the requested structural, modal or managed-layer operation.
 pub const UI_E_POLICY: NcStatus = NcStatus::from_code(-1006);
 
-/// Shared COM event-budget status, exposed through the UI convenience namespace.
+/// A UI update exhausted its finite work budget before establishing quiescence.
 pub const UI_E_EVENT_LIMIT: NcStatus = NcStatus::from_code(-1007);
 
 /// A native file/directory operation failed; the component's diagnostic preserves the concrete OS error.

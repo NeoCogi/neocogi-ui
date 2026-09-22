@@ -28,6 +28,7 @@ start with [COM_AUTHORS.md](COM_AUTHORS.md) and the working [examples](EXAMPLES.
 - [Built-in widgets](../crates/ui/nodes/docs/WIDGETS.md) — control and container selection, typed events, ownership, and
   retained mutation.
 - [Layout](../crates/ui/runtime/docs/LAYOUT.md) — measurement, tracks, placement, invalidation, and update/paint boundaries.
+- Owned event controllers — persistent model ownership, validation, and dynamic/monolithic min-size comparison.
 - [Application menus](../crates/ui/runtime/docs/MENUS.md) — concrete registered items, retained composition, popup
   coordination, and Windows-style keyboard/submenu navigation.
 - [Typography](../crates/ui/runtime/docs/TYPOGRAPHY.md) — semantic font roles, UTF-8 behavior, glyph coverage, and atlas setup.

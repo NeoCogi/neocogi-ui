@@ -2,6 +2,20 @@
 
 ## 0.9.0-alpha.0 (unreleased)
 
+- Rename typed output wiring to `events::bind`. Use one persistent owned
+  `Controller<Model>` and `IEventOwner` contract for application and composite
+  behavior. Mount components with an explicit typed `Mount` view/owner pair;
+  remove optional provider discovery and the borrowed scoped-dispatch bridge.
+- Add construction-backed `LocalCom<T>` access through the existing COM borrow
+  gate. Models use ordinary fields and `&mut self`; the file dialog no longer
+  needs shared mutable request/model wrappers or a forwarding widget. Retire
+  removed owners after active handlers return and preserve pending cleanup when
+  a local guard temporarily blocks entry. Cache descendant-first delivery order.
+- Accept explicitly borrowed marked messages in ordinary IDL parameters. Rebuild
+  changed UI contracts and their consumers together. See the
+  owned-event measurements for dynamic and monolithic
+  min-size comparisons, lifecycle tests and the idle-allocation regression.
+
 - Consolidate nine COM production crates into five: move runtime link declarations
   into the facade, combine IDL parsing/generation/Cargo integration in
   `neocogi-idl`, and expose built-in event contracts and channel adapters through

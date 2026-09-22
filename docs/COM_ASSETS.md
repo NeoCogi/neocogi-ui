@@ -323,7 +323,7 @@ let theme = theme_loader.load_theme(
     assets.as_com_ref(),
 )?;
 ui.install_assets(theme.as_com_ref(), renderer.as_com_ref())?;
-ui.update_with_events(size, &events)?;
+ui.update_with_events(size, owner.as_com_ref())?;
 ```
 
 Recoverable failures return statuses. `IGfxDiagnostics` retains decoder and

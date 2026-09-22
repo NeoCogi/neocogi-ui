@@ -122,12 +122,12 @@ routing the next event. An empty input queue still performs an eventless update.
 Runtime tests and deployed plugins share one retained context and one consumer dispatch boundary.
 
 ```rust,no_run
-use neocogi_ui::{IRendererAbi, Size, Ui};
+use neocogi_ui::{IEventOwnerAbi, IRendererAbi, Size, Ui};
 use neocogi_com::{ComRef, NcStatus};
-fn frame<Message>(ui: &Ui, events: &std::sync::mpsc::Receiver<Message>, size: Size,
-    renderer: ComRef<'_, IRendererAbi>, consume: impl FnMut(Message) -> Result<(), NcStatus>) -> Result<(), NcStatus>
+fn frame(ui: &Ui, owner: ComRef<'_, IEventOwnerAbi>, size: Size,
+    renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus>
 {
-    ui.update_with_events(size, events, consume)?;
+    ui.update_with_events(size, owner)?;
     ui.render(size, renderer)
 }
 ```

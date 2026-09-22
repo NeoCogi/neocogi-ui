@@ -1,157 +1,194 @@
-# Typed messages through standard channels
+# Owned event controllers and typed bindings
 
-## Owned controller attachment
+Widgets post typed facts into their owner's standard Rust channel. A nested
+component consumes its children's messages and emits its own public results
+upward. The application consumes the final public messages. All levels use
+`events::bind`, `Controller<Model>`, and the same `IEventOwner` contract.
 
-`events::Controller<Model>` owns an `EventModel` and its standard receiver in one
-value. It exposes `IEventOwner` when allocated directly, or can be embedded in a
-composite that implements its own public editing interfaces alongside that
-capability. The model handles messages through `&mut self`; it needs no shared
-model `RefCell`. `Controller::root` constructs an already-claimed application
-root. `Controller::new` prepares a composite whose attachment is still pending.
+## Application construction and frames
 
-`Component::new(view, owner)` supplies explicit view/controller capabilities to
-the same `Ui::window`, container insertion, or replacement operation used by
-ordinary widgets. The ABI receives a borrowed `Mount` descriptor. The runtime
-validates the complete relationship, then `owner.mount(view)` claims the view
-and controller together. Rejecting either claim preserves the unclaimed side.
-Views and behavior have distinct identities; no forwarding widget is allocated.
-
-Mounted controllers run after traversal releases its borrows. Removal immediately
-stops delivery, closes the view, and queues controller retirement. Retirement
-runs after the active handler returns, including on handler errors, drops the
-private inbox, and settles terminal outcomes once. Already posted parent
-messages survive. The runtime caches descendant-first owner order and refreshes
-it after topology changes rather than rebuilding a vector for every message.
-Empty standard inboxes still require polling; posting does not wake the host.
-
-The existing scoped application adapter and provider-discovered components below
-are being migrated to this ownership model in subsequent commits.
-
-The application owns a `std::sync::mpsc::Receiver<Message>`. Each installed COM
-mapping owns a cloned `Sender<Message>`. The standard channel stores pending
-messages; there is no framework queue type, sender wrapper or subscription object.
-Application state stays in its ordinary owner.
+The application owns its model and receiver in one persistent controller. The
+host resolves its COM projection once and borrows it on each update:
 
 ```rust,no_run
-use std::sync::mpsc;
-use neocogi_ui::{events, ButtonWidget, Size, Ui};
 use neocogi_com::NcStatus;
+use neocogi_ui::{events::{self, Controller, EventModel}, ButtonWidget, IEventOwnerAbi, Size, Ui};
 
-/// Application commands are local Rust data, never a plugin ABI.
+/// Application commands stay in the host binary.
 enum Message { Activated(String) }
-
-fn update(ui: &Ui, button: &ButtonWidget, size: Size) -> Result<(), NcStatus> {
-    let (send, messages) = mpsc::channel();
-    events::bind(button.activated(), send, |event| Message::Activated(event.label))?;
-    let mut count = 0;
-    ui.update_with_events(size, &messages, |message| {
+/// Plain fields are mutated under the controller's existing COM gate.
+struct App { count: u32 }
+impl EventModel for App {
+    type Message = Message;
+    fn handle(&mut self, message: Message) -> Result<(), NcStatus> {
         match message {
-            Message::Activated(label) => { count += 1; println!("{label}: {count}"); }
+            Message::Activated(label) => {
+                self.count += 1;
+                println!("{label}: {}", self.count);
+            }
         }
         Ok(())
-    })
+    }
+}
+
+fn example(ui: &Ui, button: &ButtonWidget, size: Size) -> Result<(), NcStatus> {
+    let (send, messages) = std::sync::mpsc::channel();
+    events::bind(button.activated(), send, |event| Message::Activated(event.label))?;
+    let app = Controller::into_local(Controller::root(App { count: 0 }, messages));
+    let owner = app.query::<IEventOwnerAbi>()?;
+
+    // Construction happens once; both handles survive every frame.
+    for _ in 0..2 {
+        ui.update_with_events(size, owner.as_com_ref())?;
+        println!("{} activations", app.try_borrow()?.model.count);
+    }
+    Ok(())
 }
 ```
 
-Keep the receiver alive across frames. This example groups construction and one
-update to show their types. A normal application implements the match in
-`AppState::update(&mut self, message)` and passes `|message| app.update(message)`.
-Clone the sender when installing several mappings into the same channel. Neither
-threads nor `Message: Send` are required when both endpoints stay on the UI thread.
-Use the unbounded `channel()`; a blocking send into a full `sync_channel()` could
-prevent the same UI thread from reaching its later receive operation.
+`EventModel::handle(&mut self, message)` receives exclusive access to ordinary
+owned fields. `LocalCom` allows typed access between COM calls; it remembers the
+implementation type from construction and uses the same allocation-wide borrow
+gate as foreign calls. It does not downcast an interface. End local guards before
+calling an update that will dispatch that controller. A conflicting call returns
+`NC_E_BUSY` before receiving anything.
 
-## Posting and ownership
+`Controller::root` starts claimed by the host and cannot attach to a widget.
+The runtime borrows this root only for the update and never retains it, so the
+application may own a `Ui` without creating a runtime/controller reference cycle.
+The demo host wraps `AppState` with this controller automatically: `Host::run`
+still accepts an owned state and receiver. Frame/input/presentation hooks take
+short local guards; those guards end before event dispatch.
 
-NCIDL declares concrete `#[message]` structs/enums and named outputs such as
-`completed: FileDialogCompletion;`. The generated `.completed()` returns a
-one-shot installation closure. `events::bind(picker.completed(), send, mapper)`
-calls it and returns `Result<()>`. UI accessors add domain checks such as native-path
-and finite-number validation.
+A frame performs no controller allocation, revocation-state allocation, interface
+query, or root reference-count change in this adapter. It still crosses a COM
+method and polls the receiver. Channel blocks and owned message payloads may
+allocate. An allocation regression compares 64 warmed ordinary updates with
+64 updates using an empty persistent root and checks for zero extra allocations.
 
-A producer stores only `Option<ComPtr<__FileDialogCompletionReceiverAbi>>` for
-that output. Its generated interface requires an ordinary mutable
-`__map_completed(destination)` setter. The implementation checks eligibility,
-then assigns `Some(destination.add_ref())`. Structural forwarding calls the
-child's setter directly. The object macro has no event-specific binding syntax.
+## Binding and posting
+
+Declare cross-COM facts as concrete NCIDL `#[message]` structs/enums and outputs
+such as `completed: FileDialogCompletion;`. The generated `.completed()` returns
+an installation closure; `events::bind(picker.completed(), send, mapper)` calls
+it once. The producer retains one concrete receiver for that output. A second
+binding replaces its future destination. There is no subscription object.
 
 ```text
-producer commits state → concrete_message.post_to(&mut destination)
-                       → generated receiver decodes/copies/retains the message
-                       → mapper constructs the consumer's Rust message
-                       → Sender::send appends it to the standard channel
-                       → runtime later calls Receiver::try_recv and the consumer
+widget commits state
+  → generated receiver validates/copies/retains the concrete message
+  → binding mapper constructs the owner's private Rust message
+  → Sender::send queues that owned value
+  → runtime invokes the owner's dispatch_next at a safe boundary
+  → Controller receives one value and calls model.handle(&mut self, value)
 ```
 
-The mapper runs synchronously at emission and must only translate data or attach
-routing IDs. UI operations and application behavior belong in the later mutable
-consumer. Captures must be owned or otherwise `'static`. The concrete event,
-mapper, sender and application message stay in the receiving binary; only checked
-C message data crosses COM. The COM mutable call gate rejects recursive entry.
+Mappers execute synchronously inside the producer's call. They translate values
+and attach routing information; UI behavior belongs in the later model handler.
+Mapper captures must be owned or otherwise `'static`. No `Any`, erased event
+payload, application Rust layout, or borrowed stack callback crosses the ABI.
+The generated C message contract is the only payload crossing that boundary.
 
-The producer owns the adapter and its mapper/sender captures. The application or
-component owns the receiver; the channel implementation owns its buffer. A second
-map replaces future delivery without changing already queued values or routing IDs.
-Producer closure releases the adapter without retracting messages already sent.
-Dropping the receiver discards queued messages. Later valid emissions still run
-the mapper, then discard the translated value when `send` reports disconnection.
-That teardown is a successful producer no-op. Mapper captures remain until the
-producer closes, is destroyed, or replaces the destination. Capture routing data,
-not the producer itself, to avoid a reference cycle.
+Use `std::sync::mpsc::channel()`. Clone its sender for each child binding. Neither
+threads nor `Message: Send` are needed when the endpoints stay on the UI thread.
+A blocking bounded sender could prevent that thread from reaching its receiver.
+Posting does not wake or schedule the host; timers and external work still need
+host scheduling.
 
-Outputs targeting one channel preserve sequential UI-thread send order. There is
-no global FIFO across channels. Decoding, validation and installation failures
-propagate; committed producer state is not rolled back. Request completions use
-the same channel rules. Programmatic setters remain silent unless specified otherwise.
+An owner receives its channel's sequential UI-thread send order. Separate channels
+have no global FIFO. Already queued facts retain their values and routing after
+rebinding or producer closure. Dropping a receiver discards private pending work.
+Subsequent valid posts still run the mapper and discard the translated message
+when sending reports disconnection; this is a successful producer no-op.
+Captures remain until the producer releases or replaces its receiver. Capture
+routing data rather than the producer itself to avoid a reference cycle.
 
-## Nested components and timing
+## Composites and attachment
 
-A behavioral composite owns a private Rust message enum and a standard receiver
-in its model. Child mappings hold senders to that receiver. A model that installs
-new child mappings later, such as a file dialog rebuilding directory rows, also
-retains a sender. It emits only its declared public results; private messages do
-not automatically bubble through ancestors. Structural containers such as
-`ScrollArea` need no channel merely because they contain children.
+A behavioral composite uses `Controller::new(model, receiver)` before mounting.
+Bind its children into that receiver. Its model emits declared public outputs
+into its enclosing owner's channel. Exposing a particular child output directly
+to the application is an explicit binding choice; private messages do not bubble
+automatically through unrelated containers. A structural `ScrollArea`, layout,
+or chrome needs no event owner solely because it contains children.
 
-`Controller<Model>` owns the model and its receiver directly. A component may
-expose its public editing interfaces and `IEventOwner` on that same allocation;
-the file dialog does this. Its concrete root stays a separate widget. Supply both
-through `Mount::Component` (or the static `Component` facade) when attaching it.
-The COM borrow gate serializes public edits and event delivery before dequeuing.
-No shared mutable model, weak driver, or forwarding widget is required.
+The static `Component::new(view, owner)` facade carries a normal widget and the
+controller's `IEventOwner` projection. Pass it to the same window, insertion, or
+replacement APIs used for ordinary widgets. Across COM, these calls borrow a
+typed `Mount` message:
 
-The runtime caches explicit owners in descendant-first order and drives them
-also during ordinary `Ui::update`. Removing their views stops private delivery
-immediately; cleanup waits until any active handler has returned. A mounted
-owner survives dropping its client handles. Structural containers need no event
-owner merely because they have children. The schedule is:
+- `Mount::Widget { view }` attaches an ordinary view whose outputs target an enclosing owner.
+- `Mount::Component { view, owner }` also attaches persistent local behavior.
 
-1. Synchronize layout and settle pending messages before routing input.
-2. Process one raw input, then release traversal borrows.
-3. Visit private receivers descendant-first in stable tree order, consuming at most
-   one message per component per pass. Skip removed mounts before later delivery.
-4. Repeat component/layout work until quiet, then consume one application message.
-   Settle its resulting private work before consuming the next application message.
-5. Route the next raw input. Publish a renderable frame only after successful completion.
+The view and controller must have different COM identities so a handler can edit
+its view without recursively entering its own allocation. The controller may
+implement public editing interfaces on its own identity. The file dialog exposes
+`IFileDialog` and `IEventOwner` on one allocation and delegates owner methods to
+its embedded `Controller<Model>`. Its ordinary Linear view needs no forwarding
+widget or event-provider capability.
 
-`IEventDispatcher::dispatch() -> Result<bool>` reports whether one message was
-consumed. It does no batching, queue-length query or zero-budget probe. The runtime
-owns one finite budget for the entire update, including component and application
-work. Reaching the exact ceiling returns `EVENT_E_LIMIT` immediately, even if the
-last message emptied the channel: proving quiescence requires a later update.
-Unattempted messages stay queued and the frame remains uncommitted. Consumer errors
-consume only the attempted message, preserve successors, and do not roll back state.
-New mounts join the next pass; removed mounts retire their driver tickets. An empty
-input queue still gets an eventless update. Recursive update/render and mutable
-dispatcher calls reject.
+The runtime validates host, layout, child ownership and identity before calling
+`owner.mount(view)` as the final attachment step. The controller checks its own
+phase, calls `view.mount()`, then commits its phase. A rejection preserves the
+unclaimed side. Attachments are single-use; retained handles do not permit
+reparenting. Clone a `Component` only to retain access to the same relationship.
 
-`Ui::update_with_events` borrows the receiver and application consumer for that call.
-Its scoped COM adapter revokes retained dispatcher projections on return or unwind.
-Immutable asset candidates may be prepared during consumption; installation waits
-until update returns. Sending does not schedule a future platform frame; timers
-and external data still need host scheduling. Dynamic plugins and static monoliths
-use the same transport. Both deployment ABIs remain v1; generated message/output
-bindings depend on COM alone and can also be consumed without the channel helper.
+The mounted node retains its owner until retirement. Component models should
+retain widget/window/construction capabilities whose back-references are weak,
+rather than their owning `Ui`; retaining that UI would create a strong cycle.
+The file dialog follows this rule and survives releasing every client handle
+while its view remains mounted.
 
-See the [min-size experiment results](../../../../docs/EVENT_CHANNEL_EXPERIMENT.md)
-for the measured source reduction and deployed binary-size increase.
+## Scheduling, removal and failures
+
+The runtime uses the same dispatch contract for mounted components and the
+application. Mounted owners also run during ordinary `Ui::update`:
+
+1. Synchronize geometry and finish deferred retirement outside traversal borrows.
+2. Visit mounted owners descendant-first. After one delivered message, return to
+   geometry/retirement and reconsider descendants before another owner runs.
+3. Once component work is quiet, deliver one application message. Settle any new
+   private work before delivering the application's successor.
+4. Route one queued raw input and repeat these boundaries before later input.
+5. Publish a renderable frame after successful completion. With no raw input,
+   perform an eventless update and settle its work too.
+
+The owner order is cached until topology changes; its vector capacity is reused.
+The runtime retains one local delivery ticket while calling out and holds no
+traversal or cache borrow across a handler. New mounts join the next boundary.
+An empty inbox still requires a poll; this is not a ready-owner notification system.
+
+Removal first invalidates the mounted delivery ticket, closes descendants and
+the view, and queues model retirement. Retirement runs after the active handler
+returns, including on a recoverable handler error. `Controller::retire` commits
+its terminal phase and drops its inbox before invoking `EventModel::retire` once.
+An active file request posts one cancellation; already completed parent messages
+remain in their original channel. Retained COM handles cannot resume private
+delivery. Explicit retirement and final controller destruction are idempotent.
+
+A local guard that blocks the retirement call yields `NC_E_BUSY`; the runtime
+keeps that retirement pending and retries after the guard ends. A closed runtime
+can finish such pending work on another `close` call. A model's terminal cleanup
+error is reported without repeating its committed cleanup body.
+
+One update-wide budget (`EVENT_DISPATCH_LIMIT`) covers component, application and
+menu reconciliation work. Reaching the ceiling returns `UI_E_EVENT_LIMIT`, even
+if that message emptied the queue: proving quiescence would require another
+foreign call. Unattempted messages remain queued and the frame is uncommitted.
+A handler error consumes its attempted message, preserves successors and later
+raw input, and does not roll back state. Update/render reentry rejects with
+`UI_E_BUSY`; conflicting calls to an active controller reject with `NC_E_BUSY`.
+Install immutable asset candidates after update returns.
+
+## Static and dynamic linkage
+
+Typed mappings, channels and concrete controllers compile into their owner's
+binary. `IEventOwner` and `Mount` belong to UI core contracts; `bind` and named
+output support belong to the COM facade. The COM process runtime has no event
+loop or UI dispatch adapter. No additional event shared library is introduced.
+Dynamic plugins and monoliths use the same contracts. Rebuild hosts and plugins
+together after these signature changes; no legacy dispatcher bridge remains.
+
+See owned-event measurements for
+before/after min-size builds and validation. The older [channel experiment](../../../../docs/EVENT_CHANNEL_EXPERIMENT.md)
+records a different historical change and is not the current controller design.
