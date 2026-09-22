@@ -7,4 +7,4 @@
 #![no_std]
 #![deny(missing_docs)]
 
-include!(concat!(env!("OUT_DIR"), "/neocogi_skin.rs"));
+include!(concat!(env!("OUT_DIR"), "/neocogi_skin.include.rs"));

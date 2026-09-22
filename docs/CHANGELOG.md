@@ -2,6 +2,10 @@
 
 ## 0.9.0-alpha.0 (unreleased)
 
+- Make Go to Definition reach generated IDL Rust through `.include.rs` module
+  entries, and preserve COM macro spans for derived types. Migrate contract
+  includes and new-module templates; retain explicit IDL provenance in `.rs.map`.
+
 - Emit readable `.rs.map` provenance beside Cargo-generated IDL bindings, and add
   IDL source annotations to generated declarations/members. Map formatted ranges,
   message helpers and observers to their authored origins without changing ABI

@@ -5,6 +5,7 @@ Every Cargo IDL build writes a readable JSON source map beside its Rust bindings
 ```text
 neocogi_ui_nodes.rs
 neocogi_ui_nodes.rs.map
+neocogi_ui_nodes.include.rs
 neocogi-idl-graph.json
 ```
 
@@ -14,10 +15,35 @@ Find the actual paths without searching build directories:
 cargo run -p cargo-neocogi --offline -- module generate neocogi.ui.nodes
 ```
 
-The JSON command result includes `bindings`, `source_map`, and `dependency_graph`.
+The JSON command result includes `bindings`, `source_map`, `include`, and `dependency_graph`.
 A direct Cargo build of the contract crate produces the same files through its
 existing `build.rs`. `BuildOutput::source_map` and Cargo's `idl_source_map`
 metadata expose the path to build tooling.
+
+## Navigating to generated Rust
+
+Contract crates include the generated **entry file**:
+
+```rust,ignore
+include!(concat!(env!("OUT_DIR"), "/neocogi_ui_nodes.include.rs"));
+```
+
+The entry loads `neocogi_ui_nodes.rs` through a normal private Rust module and
+re-exports its public definitions. Public contract import paths stay the same.
+`BuildOutput::include` and Cargo's `idl_include` metadata identify this entry.
+The definitions and `.rs.map` remain adjacent, with unchanged map coordinates.
+
+Directly including the definitions made rust-analyzer's attribute-macro navigation
+stop at `include!`, even though the generated file existed. The module entry lets
+Go to Definition reach the generated file. COM macros also preserve the source
+identifier's span for derived ABI, client, vtable, tag and payload names. For
+example, `TextboxAbi` navigates to the `Textbox` declaration in the generated Rust;
+its header is produced by the `com_interface` attribute on that declaration.
+
+Existing external contract crates should change `/<stem>.rs` to
+`/<stem>.include.rs` in their include statement, rebuild, and reload the
+rust-analyzer workspace. New `cargo neocogi module new` crates use the entry
+automatically. Build-script and procedural-macro support must be enabled.
 
 Generated declarations and authored members also carry readable documentation:
 
@@ -126,9 +152,11 @@ updates provenance while preserving the same contract ABI. Cargo writes unchange
 outputs only when their contents differ. These are build/debugging artifacts and
 are not automatically copied into application deployment packages.
 
-This provides provenance for humans and tools. Rustc diagnostics and editor
-Go to Definition are not automatically redirected by the sidecar; either feature
-would require a consumer that reads these mappings.
+The normal module entry enables navigation to generated **Rust** without an
+editor plugin. The `.rs.map` describes the next step, from Rust to **IDL**;
+rustc and rust-analyzer do not read this custom sidecar or automatically redirect
+diagnostics/navigation to IDL. The provenance comments and lookup API expose that
+origin explicitly.
 
 ## Validation
 
@@ -137,3 +165,15 @@ bodies, message fields/cases, derived observers, callback bodies, imports, EOF
 boundaries and JSON round-tripping. A real Cargo module-generation test verifies
 reported map paths, resolution to the authored file, unchanged-output reuse, and
 location-only edits refreshing the map without changing binding behavior.
+
+The real language-server check exercises eight struct/interface/enum companion
+names and verifies each definition lands in the generated `.rs` file with a
+resolvable adjacent IDL mapping:
+
+```sh
+python3 scripts/check-idl-navigation.py --rust-analyzer /path/to/rust-analyzer
+```
+
+It uses cached Cargo dependencies and an installed language server. An optional
+`CARGO_TARGET_DIR` selects a reusable build cache. The fix was verified with
+rust-analyzer `0.3.3057-standalone`; no editor settings were modified.

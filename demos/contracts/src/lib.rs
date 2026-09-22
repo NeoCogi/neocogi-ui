@@ -6,6 +6,6 @@
 #![no_std]
 #![deny(missing_docs)]
 
-include!(concat!(env!("OUT_DIR"), "/neocogi_demo.rs"));
+include!(concat!(env!("OUT_DIR"), "/neocogi_demo.include.rs"));
 
 mod helpers;

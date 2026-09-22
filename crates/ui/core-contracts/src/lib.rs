@@ -7,7 +7,7 @@
 #![no_std]
 #![deny(missing_docs)]
 
-include!(concat!(env!("OUT_DIR"), "/neocogi_ui_core.rs"));
+include!(concat!(env!("OUT_DIR"), "/neocogi_ui_core.include.rs"));
 
 // Preserve the facade's established Rust import surface while declaration
 // ownership and native metadata live exclusively in `neocogi.renderer`.

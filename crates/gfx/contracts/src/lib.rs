@@ -8,7 +8,7 @@
 #![no_std]
 #![deny(missing_docs)]
 
-include!(concat!(env!("OUT_DIR"), "/neocogi_gfx.rs"));
+include!(concat!(env!("OUT_DIR"), "/neocogi_gfx.include.rs"));
 
 mod helpers;
 pub use helpers::*;
