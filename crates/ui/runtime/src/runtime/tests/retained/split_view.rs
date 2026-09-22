@@ -18,11 +18,17 @@ fn split_drag_clamps_panes_and_preserves_requested_width_on_resize() {
     let mut fixture = Headless::standard();
     let (first, first_state) = probe::<0>(&fixture.ui, Size { width: 10, height: 10 }, WidgetOptions::NONE);
     let (second, second_state) = probe::<0>(&fixture.ui, Size { width: 10, height: 10 }, WidgetOptions::NONE);
-    let mut split = fixture.ui.widgets().split_view(settings(SplitAxis::Horizontal)).unwrap();
+    let (send, events) = std::sync::mpsc::channel();
+    let mut split = fixture
+        .ui
+        .widgets()
+        .split_view(settings(SplitAxis::Horizontal), send, move |neocogi_ui::split_view::Event::Changed(event)| {
+            event.position
+        })
+        .unwrap();
     split.insert(0, &first).unwrap().finish().unwrap();
     split.insert(1, &second).unwrap().finish().unwrap();
-    let (send, events) = std::sync::mpsc::channel();
-    events::bind(split.changed(), send, |event| event.position).unwrap();
+
     let owner = window(&fixture.ui, "split", Rect { x: 10, y: 10, width: 400, height: 120 }, &split);
     fixture.frame(VIEW).unwrap();
     assert_eq!(first_state.borrow().paints.last().unwrap().rect.width, 120);
@@ -76,7 +82,7 @@ fn split_drag_clamps_panes_and_preserves_requested_width_on_resize() {
 fn split_keyboard_and_capture_loss_use_core_routing_on_both_axes() {
     for axis in [SplitAxis::Horizontal, SplitAxis::Vertical] {
         let mut fixture = Headless::standard();
-        let mut split = fixture.ui.widgets().split_view(settings(axis)).unwrap();
+        let mut split = fixture.ui.widgets().split_view_unobserved(settings(axis)).unwrap();
         for index in 0..2 {
             split
                 .insert(index, &fixture.ui.widgets().text_block("pane", TextWrapping::None).unwrap())
@@ -91,7 +97,16 @@ fn split_keyboard_and_capture_loss_use_core_routing_on_both_axes() {
         let _owner = window(&fixture.ui, "keyboard", rect, &split);
         fixture.frame(VIEW).unwrap();
         key(&fixture.ui, KeyCode::Tab, 0, 0);
-        key(&fixture.ui, if axis == SplitAxis::Horizontal { KeyCode::ArrowRight } else { KeyCode::ArrowDown }, 0, 0);
+        key(
+            &fixture.ui,
+            if axis == SplitAxis::Horizontal {
+                KeyCode::ArrowRight
+            } else {
+                KeyCode::ArrowDown
+            },
+            0,
+            0,
+        );
         fixture.frame(VIEW).unwrap();
         assert_eq!(split.settings().unwrap().position, 128);
         let grab = match axis {
@@ -131,12 +146,12 @@ fn split_topology_and_settings_are_validated_before_mutation() {
         SplitOptions { minimum_second: -1, ..initial },
         SplitOptions { handle_width: 0, ..initial },
     ] {
-        assert!(matches!(fixture.ui.widgets().split_view(bad), Err(neocogi_com::NC_E_INVALID_ARG)));
+        assert!(matches!(fixture.ui.widgets().split_view_unobserved(bad), Err(neocogi_com::NC_E_INVALID_ARG)));
     }
-    let mut split = fixture.ui.widgets().split_view(initial).unwrap();
+    let mut split = fixture.ui.widgets().split_view_unobserved(initial).unwrap();
     let (first, first_state) = probe::<0>(&fixture.ui, Size { width: 10, height: 10 }, WidgetOptions::NONE);
     let (second, second_state) = probe::<0>(&fixture.ui, Size { width: 10, height: 10 }, WidgetOptions::NONE);
-    let extra = fixture.ui.widgets().button("unattached").unwrap();
+    let extra = fixture.ui.widgets().button_unobserved("unattached").unwrap();
     split.insert(0, &first).unwrap().finish().unwrap();
     split.insert(1, &second).unwrap().finish().unwrap();
     assert!(matches!(split.insert(2, &extra), Err(neocogi_com::NC_E_OUT_OF_RANGE)));

@@ -30,7 +30,7 @@
 
 //! Retained numeric-entry widget.
 
-use neocogi_ui_nodes_contracts::__NumericChangedReceiverAbi;
+use neocogi_ui_nodes_contracts::NumberObserverAbi;
 use crate::{ControlRole};
 
 use crate::*;
@@ -104,8 +104,8 @@ pub struct Number {
     value: Real,
     /// Text editing state for shift-click numeric entry.
     edit: NumberEditState,
-    /// Runtime-owned source for user-originated value changes.
-    changed_event: Option<neocogi_com::ComPtr<__NumericChangedReceiverAbi>>,
+    /// Sole construction-time observer; user changes publish here until logical closure.
+    observer: Option<neocogi_com::ComPtr<NumberObserverAbi>>,
 }
 
 impl Number {
@@ -119,7 +119,7 @@ impl Number {
             font: parameters.font,
             value: parameters.value,
             edit: NumberEditState::default(),
-            changed_event: None,
+            observer: None,
         }
     }
 
@@ -148,8 +148,10 @@ impl Number {
     pub fn changed(
         &mut self,
     ) -> impl FnOnce(Box<dyn FnMut(crate::NumericChanged) -> Result<(), neocogi_com::NcStatus>>) -> Result<(), neocogi_com::NcStatus> + '_ {
-        |consume| {
-            self.changed_event = Some(crate::NumericChanged::__receiver(consume)?);
+        |mut consume| {
+            self.observer = Some(neocogi_ui_nodes_contracts::NumberEvent::observer(
+                move |neocogi_ui_nodes_contracts::NumberEvent::Changed(event)| consume(event),
+            )?);
             Ok(())
         }
     }
@@ -186,7 +188,7 @@ impl Number {
         }
         let changed = (self.value != last).then_some(crate::NumericChanged { value: self.value });
         if let Some(event) = changed {
-            ctx.posted(event.post_to(&mut self.changed_event));
+            ctx.posted(neocogi_ui_nodes_contracts::NumberEvent::Changed(event).post_to(&mut self.observer));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(self.value != last)
@@ -255,7 +257,7 @@ impl From<NumberParameters> for crate::test_support::algorithm::Algorithm<Number
 impl crate::widget_object::WidgetAlgorithm for Number {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
-        self.changed_event = None;
+        self.observer = None;
     }
 }
 
@@ -296,8 +298,11 @@ impl Number {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         options: NumberOptions,
+        observer: Option<neocogi_com::ComRef<'_, NumberObserverAbi>>,
     ) -> Result<ComPtr<NumberAbi>, NcStatus> {
-        let value = Self::build(host, options, Some(&resources))?;
+        let mut value = Self::build(host, options, Some(&resources))?;
+        // Retain the sole destination before publishing the completed widget.
+        value.observer = observer.map(|destination| destination.add_ref());
         Ok(Self::from_value(value).query().expect("Number declares its callable class contract"))
     }
 
@@ -315,13 +320,6 @@ impl Number {
 }
 
 impl neocogi_ui_nodes_contracts::Number for Number {
-    /// Replaces this output's concrete destination after checking widget access.
-    fn __map_changed(&mut self, destination: neocogi_com::ComRef<'_, __NumericChangedReceiverAbi>) -> Result<(), neocogi_com::NcStatus> {
-        self.runtime().state.writable()?;
-        self.changed_event = Some(destination.add_ref());
-        Ok(())
-    }
-
     /// Reads the finite value owned by the number editor's concrete semantic algorithm.
     fn value(&self) -> Result<f32, NcStatus> {
         self.runtime().state.readable()?;

@@ -188,7 +188,7 @@ pub(super) struct StyleEditor {
 }
 impl StyleEditor {
     /// Builds the same 72 color sliders and five metrics inside one ordinary scrolling tree.
-    pub(super) fn new(ui: &Ui) -> Result<(Self, ScrollAreaWidget), NcStatus> {
+    pub(super) fn new(ui: &Ui, events_tx: &std::sync::mpsc::Sender<super::app::Message>) -> Result<(Self, ScrollAreaWidget), NcStatus> {
         let base = ui.assets()?;
         // Activation belongs to this application; the UI runtime has no asset-provider dependency.
         let runtime = neocogi_com::Runtime::global();
@@ -204,11 +204,16 @@ impl StyleEditor {
             let mut line = row(ui)?;
             append(&mut line, &label(ui, role.label())?, LayoutTrack::Fixed { extent: 80 })?;
             let color = role.value(&mut palette);
+            let channel_slider = |channel: Channel, value: u8| {
+                slider(ui, value as f32, 255., events_tx.clone(), move |event| {
+                    super::app::Message::Style(Message::Color(role, channel, event.value as u8))
+                })
+            };
             let channels = [
-                slider(ui, color.r as f32, 255.)?,
-                slider(ui, color.g as f32, 255.)?,
-                slider(ui, color.b as f32, 255.)?,
-                slider(ui, color.a as f32, 255.)?,
+                channel_slider(Channel::Red, color.r)?,
+                channel_slider(Channel::Green, color.g)?,
+                channel_slider(Channel::Blue, color.b)?,
+                channel_slider(Channel::Alpha, color.a)?,
             ];
             for control in &channels {
                 append(&mut line, control, LayoutTrack::Flex { weight: 1. })?;
@@ -222,7 +227,9 @@ impl StyleEditor {
         for metric in Metric::ALL {
             let (name, high) = metric.presentation();
             let mut line = row(ui)?;
-            let control = slider(ui, *metric.value(&mut metrics) as f32, high)?;
+            let control = slider(ui, *metric.value(&mut metrics) as f32, high, events_tx.clone(), move |event| {
+                super::app::Message::Style(Message::Metric(metric, event.value as i32))
+            })?;
             append(&mut line, &label(ui, name)?, LayoutTrack::Fixed { extent: 80 })?;
             append(&mut line, &control, LayoutTrack::Flex { weight: 1. })?;
             append(&mut content, &line, LayoutTrack::Content)?;
@@ -242,24 +249,6 @@ impl StyleEditor {
             },
             root,
         ))
-    }
-    /// Maps editor controls into explicit commands without borrowing application state.
-    pub(super) fn map(&self, events_tx: &std::sync::mpsc::Sender<super::app::Message>) -> Result<(), NcStatus> {
-        for row in &self.colors {
-            for (channel, control) in Channel::ALL.into_iter().zip(&row.channels) {
-                let role = row.role;
-                neocogi_ui::events::bind(control.changed(), events_tx.clone(), move |event| {
-                    super::app::Message::Style(Message::Color(role, channel, event.value as u8))
-                })?;
-            }
-        }
-        for (metric, control) in &self.values {
-            let metric = *metric;
-            neocogi_ui::events::bind(control.changed(), events_tx.clone(), move |event| {
-                super::app::Message::Style(Message::Metric(metric, event.value as i32))
-            })?;
-        }
-        Ok(())
     }
     /// Applies one editor command through ordinary mutable fields and silent control setters.
     pub(super) fn update(&mut self, ui: &Ui, message: Message) -> Result<(), NcStatus> {

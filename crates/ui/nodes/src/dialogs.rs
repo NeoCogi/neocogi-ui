@@ -16,7 +16,7 @@ struct Request {
     /// One authoritative phase covers public calls, child delivery and retirement.
     phase: RequestPhase,
     /// Installed concrete completion receiver; consumers own their committed outcomes.
-    completed: Option<ComPtr<__FileDialogCompletionReceiverAbi>>,
+    completed: Option<ComPtr<IFileDialogObserverAbi>>,
 }
 
 /// Mutually exclusive picker-request lifecycle; no two booleans can disagree.
@@ -57,7 +57,7 @@ impl Request {
         match self.phase {
             RequestPhase::Active => {
                 self.phase = RequestPhase::Idle;
-                status.post_to(&mut self.completed)?;
+                IFileDialogEvent::Completed(status).post_to(&mut self.completed)?;
             }
             RequestPhase::Idle | RequestPhase::Closed => {}
         }
@@ -71,7 +71,7 @@ impl Request {
     /// Closes future completion delivery; already posted outcomes remain in the consumer inbox.
     fn close(&mut self) -> Result<(), NcStatus> {
         match std::mem::replace(&mut self.phase, RequestPhase::Closed) {
-            RequestPhase::Active => FileDialogCompletion::Cancelled.post_to(&mut self.completed.take()),
+            RequestPhase::Active => IFileDialogEvent::Completed(FileDialogCompletion::Cancelled).post_to(&mut self.completed.take()),
             RequestPhase::Idle | RequestPhase::Closed => {
                 self.completed = None;
                 Ok(())
@@ -82,6 +82,8 @@ impl Request {
 
 /// Node construction data retained by the picker without retaining the core runtime identity.
 struct DialogNodes {
+    /// Posting access supplied to each private child during construction.
+    events_tx: std::sync::mpsc::Sender<Message>,
     /// Non-owning host authority reports logical closure after the owning UI is released.
     host: ComPtr<IWidgetHostAbi>,
     /// Provider-shared imported resources used by dynamically rebuilt directory rows.
@@ -207,8 +209,6 @@ enum Message {
 struct Column {
     /// Actual COM content root to install into the stable scroll controller.
     root: LinearWidget,
-    /// Concrete exact-path actions registered only after the complete directory candidate succeeds.
-    rows: Vec<(ListItemWidget, Message)>,
 }
 /// Complete directory candidate; neither column becomes live if any native read fails.
 struct Listing {
@@ -247,39 +247,42 @@ fn label(nodes: &Rc<DialogNodes>, value: &str) -> Result<TextBlockWidget, NcStat
     )?))
 }
 /// Constructs a complete command Button through the dynamically implemented factory shorthand.
-fn button(nodes: &Rc<DialogNodes>, value: &str) -> Result<neocogi_ui::ButtonWidget, NcStatus> {
+fn button(nodes: &Rc<DialogNodes>, value: &str, action: Message) -> Result<neocogi_ui::ButtonWidget, NcStatus> {
+    let observer = neocogi_ui::button::observer(nodes.events_tx.clone(), move |_| action.clone())?;
     Ok(neocogi_ui::ButtonWidget::from_interface(crate::Button::create_com(
         nodes.host.clone(),
         nodes.resources.clone(),
         NcCopyFromBufferOffset::new(0, value.as_bytes()),
         WidgetOptions::FRAME,
+        Some(observer.as_com_ref()),
     )?))
 }
 /// Builds a complete column with exact path actions and fixed ordinary list-row measurements.
 fn column(nodes: &Rc<DialogNodes>, directory: &Path, paths: Vec<PathBuf>, folder: bool) -> Result<Column, NcStatus> {
     let mut children = vec![(label(nodes, if folder { "Folders" } else { "Files" })?.node_interface()?, LayoutTrack::Content)];
-    let mut rows = Vec::with_capacity(paths.len());
+    let empty = paths.is_empty();
     for path in paths {
         let display = if folder && directory.parent() == Some(path.as_path()) {
             "..".into()
         } else {
             path.file_name().unwrap_or(path.as_os_str()).to_string_lossy()
         };
+        let action = if folder { Message::Folder(path.clone()) } else { Message::File(path.clone()) };
+        let observer = neocogi_ui::list_item::observer(nodes.events_tx.clone(), move |_| action.clone())?;
         let mut item = ListItemWidget::from_interface(crate::ListItem::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
             NcCopyFromBufferOffset::new(0, display.as_bytes()),
+            Some(observer.as_com_ref()),
         )?);
         item.set_icon_role(if folder { ContentIcon::ClosedFolder } else { ContentIcon::File })?;
         children.push((item.node_interface()?, LayoutTrack::Content));
-        rows.push((item, if folder { Message::Folder(path) } else { Message::File(path) }));
     }
-    if rows.is_empty() {
+    if empty {
         children.push((label(nodes, "(empty)")?.node_interface()?, LayoutTrack::Content));
     }
     Ok(Column {
         root: line(nodes, FlowDirection::TopToBottom, CrossSize::Stretch, children)?,
-        rows,
     })
 }
 impl Listing {
@@ -294,27 +297,43 @@ impl Listing {
 
 impl FileDialog {
     /// Constructs one hidden modal from actual COM controls; no native widget handle or generic application state enters its ABI.
-    fn new(services: Rc<NodeServices>, parent: ComRef<'_, IWindowAbi>) -> Result<LocalCom<Self>, NcStatus> {
+    fn new(
+        services: Rc<NodeServices>,
+        parent: ComRef<'_, IWindowAbi>,
+        observer: Option<ComRef<'_, IFileDialogObserverAbi>>,
+    ) -> Result<LocalCom<Self>, NcStatus> {
         services.host.check_mutation()?;
+        let (events_tx, events) = std::sync::mpsc::channel();
         let nodes = Rc::new(DialogNodes {
+            events_tx: events_tx.clone(),
             host: services.host.clone(),
             resources: services.resources.clone(),
         });
+        let path_observer = neocogi_ui::textbox::observer(events_tx.clone(), |event| match event {
+            neocogi_ui::textbox::Event::Changed(_) => Message::PathEdited,
+            neocogi_ui::textbox::Event::Submitted(value) => Message::Navigate(value.text),
+        })?;
+        let filename_observer = neocogi_ui::textbox::observer(events_tx.clone(), |event| match event {
+            neocogi_ui::textbox::Event::Changed(_) => Message::FilenameEdited,
+            neocogi_ui::textbox::Event::Submitted(_) => Message::Accept,
+        })?;
         let path = TextboxWidget::from_interface(crate::Textbox::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
             NcCopyFromBufferOffset::new(0, b""),
+            Some(path_observer.as_com_ref()),
         )?);
         let filename = TextboxWidget::from_interface(crate::Textbox::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
             NcCopyFromBufferOffset::new(0, b""),
+            Some(filename_observer.as_com_ref()),
         )?);
-        let up = button(&nodes, "Up")?;
-        let home = button(&nodes, "Home")?;
-        let go = button(&nodes, "Go")?;
-        let accept = button(&nodes, "Open")?;
-        let cancel = button(&nodes, "Cancel")?;
+        let up = button(&nodes, "Up", Message::Up)?;
+        let home = button(&nodes, "Home", Message::Home)?;
+        let go = button(&nodes, "Go", Message::Go)?;
+        let accept = button(&nodes, "Open", Message::Accept)?;
+        let cancel = button(&nodes, "Cancel", Message::Cancel)?;
         let folder_content = column(&nodes, Path::new(""), Vec::new(), true)?;
         let file_content = column(&nodes, Path::new(""), Vec::new(), false)?;
         let folders = ScrollAreaWidget::from_interface(crate::ScrollArea::create_com(
@@ -383,9 +402,8 @@ impl FileDialog {
         )?;
         let request = Request {
             phase: RequestPhase::Idle,
-            completed: None,
+            completed: observer.map(|destination| destination.add_ref()),
         };
-        let (events_tx, events) = std::sync::mpsc::channel();
         let model = Model {
             events_tx,
             nodes,
@@ -418,17 +436,10 @@ impl FileDialog {
             window.set_options(WindowOptions::FRAME)?;
             let mut local = dialog.try_borrow_mut()?;
             local.controller.model.window = Some(window.clone());
-            local.controller.model.connect(
-                &path,
-                &filename,
-                &window,
-                [
-                    (up, Message::Up),
-                    (home, Message::Home),
-                    (go, Message::Go),
-                    (accept, Message::Accept),
-                    (cancel, Message::Cancel),
-                ],
+            neocogi_ui::events::bind(
+                neocogi_ui::events::window_events(window.as_com_ref())?,
+                local.controller.model.events_tx.clone(),
+                Message::Lifecycle,
             )
         })();
         if let Err(error) = connected {
@@ -442,26 +453,6 @@ impl FileDialog {
 }
 
 impl Model {
-    /// Connects fixed controls exactly once; each callback translates its typed event into the private update protocol.
-    fn connect(
-        &mut self,
-        path: &TextboxWidget,
-        filename: &TextboxWidget,
-        window: &ComPtr<IWindowAbi>,
-        buttons: [(neocogi_ui::ButtonWidget, Message); 5],
-    ) -> Result<(), NcStatus> {
-        let sender = &self.events_tx;
-        neocogi_ui::events::bind(path.changed(), sender.clone(), |_| Message::PathEdited)?;
-        neocogi_ui::events::bind(path.submitted(), sender.clone(), |event| Message::Navigate(event.text))?;
-        neocogi_ui::events::bind(filename.changed(), sender.clone(), |_| Message::FilenameEdited)?;
-        neocogi_ui::events::bind(filename.submitted(), sender.clone(), |_| Message::Accept)?;
-        for (button, action) in buttons {
-            neocogi_ui::events::bind(button.activated(), sender.clone(), move |_| action.clone())?;
-        }
-        neocogi_ui::events::bind(neocogi_ui::events::window_events(window.as_com_ref())?, sender.clone(), Message::Lifecycle)?;
-        Ok(())
-    }
-
     /// Prepares both complete columns without publishing a partial listing when any directory entry fails.
     fn candidate(&mut self, directory: &Path) -> Result<Listing, NcStatus> {
         self.owner()?;
@@ -477,9 +468,6 @@ impl Model {
 
     /// Registers complete candidates while the private inbox is idle, then replaces only dynamic content roles.
     fn install(&mut self, directory: PathBuf, listing: Listing, reset_scroll: bool) -> Result<(), NcStatus> {
-        for (row, action) in listing.folders.rows.into_iter().chain(listing.files.rows) {
-            neocogi_ui::events::bind(row.activated(), self.events_tx.clone(), move |_| action.clone())?;
-        }
         // These are private built-in roles: their controller validates the live
         // modal before replacement and no caller can substitute a foreign child.
         self.folders.replace_content(&listing.folders.root)?.finish()?;
@@ -634,13 +622,6 @@ impl IEventOwner for FileDialog {
     }
 }
 impl IFileDialog for FileDialog {
-    /// Installs the typed upward destination directly in the model's request state.
-    fn __map_completed(&mut self, destination: ComRef<'_, __FileDialogCompletionReceiverAbi>) -> Result<(), NcStatus> {
-        self.controller.model.owner()?;
-        self.controller.model.request.completed = Some(destination.add_ref());
-        Ok(())
-    }
-
     /// Returns the actual modal capability without exposing private structural roles.
     fn window(&self) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         Ok(self.controller.model.window()?.clone())
@@ -695,8 +676,12 @@ impl IFileDialog for FileDialog {
     }
 }
 /// Creates the one nodes-owned controller and returns its public editing capability.
-pub(crate) fn create(services: Rc<NodeServices>, parent: ComRef<'_, IWindowAbi>) -> Result<ComPtr<IFileDialogAbi>, NcStatus> {
-    FileDialog::new(services, parent)?.query()
+pub(crate) fn create(
+    services: Rc<NodeServices>,
+    parent: ComRef<'_, IWindowAbi>,
+    observer: Option<ComRef<'_, IFileDialogObserverAbi>>,
+) -> Result<ComPtr<IFileDialogAbi>, NcStatus> {
+    FileDialog::new(services, parent, observer)?.query()
 }
 
 /// Reads the platform home setting without converting its native encoding to Unicode.

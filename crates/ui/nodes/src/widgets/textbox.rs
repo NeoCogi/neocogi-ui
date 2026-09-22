@@ -56,8 +56,7 @@
 //! and deletion on valid Unicode scalar-value boundaries. Construction, programmatic replacement,
 //! and text input remove CR and LF so the stored value always matches the one-line measurement
 //! contract. Other characters absent from the selected atlas render through its fallback.
-use neocogi_ui_core_contracts::__TextChangedReceiverAbi;
-use neocogi_ui_core_contracts::__TextSubmittedReceiverAbi;
+use neocogi_ui_nodes_contracts::TextboxObserverAbi;
 use crate::{ControlRole};
 
 use crate::*;
@@ -105,11 +104,8 @@ pub struct Textbox {
     cursor: usize,
     /// Initialization-only font.
     font: FontRef,
-    /// Base widget options.
-    /// Installed destination for captured user edits.
-    changed_event: Option<neocogi_com::ComPtr<__TextChangedReceiverAbi>>,
-    /// Installed destination for captured text submissions.
-    submitted_event: Option<neocogi_com::ComPtr<__TextSubmittedReceiverAbi>>,
+    /// Sole observer retained at construction; released on logical closure.
+    observer: Option<neocogi_com::ComPtr<TextboxObserverAbi>>,
 }
 
 impl Textbox {
@@ -123,8 +119,7 @@ impl Textbox {
             buf,
             cursor,
             font: parameters.font,
-            changed_event: None,
-            submitted_event: None,
+            observer: None,
         }
     }
 
@@ -197,10 +192,10 @@ impl Textbox {
         });
         let submitted = outcome.submitted.then(|| crate::TextSubmitted { text: self.buf.clone() });
         if let Some(event) = changed {
-            ctx.posted(event.post_to(&mut self.changed_event));
+            ctx.posted(neocogi_ui_nodes_contracts::TextboxEvent::Changed(event).post_to(&mut self.observer));
         }
         if let Some(event) = submitted {
-            ctx.posted(event.post_to(&mut self.submitted_event));
+            ctx.posted(neocogi_ui_nodes_contracts::TextboxEvent::Submitted(event).post_to(&mut self.observer));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(outcome.changed)
@@ -380,8 +375,7 @@ impl From<TextboxParameters> for crate::test_support::algorithm::Algorithm<Textb
 impl crate::widget_object::WidgetAlgorithm for Textbox {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
-        self.changed_event = None;
-        self.submitted_event = None;
+        self.observer = None;
     }
 }
 
@@ -422,24 +416,13 @@ mod tests {
     /// Maps both outputs into one ordinary consumer FIFO, preserving their actual post order.
     fn text_dispatcher(textbox: &mut Textbox) -> impl FnMut(&mut Vec<RecordedEvent>) -> bool + use<> {
         let (events_tx, events) = std::sync::mpsc::channel();
-        neocogi_ui::events::bind(
-            |consume| {
-                textbox.changed_event = Some(crate::TextChanged::__receiver(consume)?);
-                Ok(())
-            },
-            events_tx.clone(),
-            |event| RecordedEvent::Changed(event.text, event.cursor),
-        )
-        .unwrap();
-        neocogi_ui::events::bind(
-            |consume| {
-                textbox.submitted_event = Some(crate::TextSubmitted::__receiver(consume)?);
-                Ok(())
-            },
-            events_tx.clone(),
-            |event| RecordedEvent::Submitted(event.text),
-        )
-        .unwrap();
+        textbox.observer = Some(
+            neocogi_ui::textbox::observer(events_tx, |event| match event {
+                neocogi_ui::textbox::Event::Changed(value) => RecordedEvent::Changed(value.text, value.cursor),
+                neocogi_ui::textbox::Event::Submitted(value) => RecordedEvent::Submitted(value.text),
+            })
+            .unwrap(),
+        );
         move |values| {
             let before = values.len();
             values.extend(events.try_iter());
@@ -561,8 +544,11 @@ impl Textbox {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         text: NcCopyFromBufferOffset<'_, u8>,
+        observer: Option<neocogi_com::ComRef<'_, TextboxObserverAbi>>,
     ) -> Result<ComPtr<TextboxAbi>, NcStatus> {
-        let value = Self::build(host, text, Some(&resources))?;
+        let mut value = Self::build(host, text, Some(&resources))?;
+        // Retain the sole destination before publishing the completed widget.
+        value.observer = observer.map(|destination| destination.add_ref());
         Ok(Self::from_value(value).query().expect("Textbox declares its callable class contract"))
     }
 
@@ -579,20 +565,6 @@ impl Textbox {
 }
 
 impl neocogi_ui_nodes_contracts::Textbox for Textbox {
-    /// Replaces this output's concrete destination after checking widget access.
-    fn __map_submitted(&mut self, destination: neocogi_com::ComRef<'_, __TextSubmittedReceiverAbi>) -> Result<(), neocogi_com::NcStatus> {
-        self.runtime().state.writable()?;
-        self.submitted_event = Some(destination.add_ref());
-        Ok(())
-    }
-
-    /// Replaces this output's concrete destination after checking widget access.
-    fn __map_changed(&mut self, destination: neocogi_com::ComRef<'_, __TextChangedReceiverAbi>) -> Result<(), neocogi_com::NcStatus> {
-        self.runtime().state.writable()?;
-        self.changed_event = Some(destination.add_ref());
-        Ok(())
-    }
-
     /// Returns an immutable snapshot without exposing the semantic String allocation.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;

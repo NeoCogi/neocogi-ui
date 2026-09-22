@@ -5,8 +5,8 @@ use neocogi_ui::*;
 use crate::test_support::headless::Headless;
 use std::{cell::RefCell, rc::Rc};
 
-mod split_view;
 mod persistence;
+mod split_view;
 
 /// Stable drawable bounds allow independent windows and child-family overlap tests.
 const VIEW: Size = Size { width: 640, height: 400 };
@@ -142,7 +142,7 @@ fn eventless_update_and_paint_have_separate_phase_counts() {
 #[test]
 fn invalid_update_dimensions_preserve_pending_input() {
     let mut fixture = Headless::standard();
-    let editor = fixture.ui.widgets().textbox("").unwrap();
+    let editor = fixture.ui.widgets().textbox_unobserved("").unwrap();
     let _window = window(&fixture.ui, "input", Rect { x: 10, y: 10, width: 200, height: 100 }, &editor);
     key(&fixture.ui, KeyCode::Tab, 0, 0);
     fixture.ui.input(UiInput::Text, "kept").unwrap();
@@ -239,12 +239,12 @@ fn hidden_widget_mutation_is_laid_out_when_its_surface_is_shown() {
 #[test]
 fn modal_activation_suspends_underlying_focus_and_restores_it_when_closed() {
     let mut fixture = Headless::standard();
-    let parent_text = fixture.ui.widgets().textbox("").unwrap();
+    let parent_text = fixture.ui.widgets().textbox_unobserved("").unwrap();
     let parent = window(&fixture.ui, "parent", Rect { x: 10, y: 10, width: 200, height: 120 }, &parent_text);
     key(&fixture.ui, KeyCode::Tab, 0, 0);
     fixture.ui.input(UiInput::Text, "before").unwrap();
     fixture.frame(VIEW).unwrap();
-    let dialog_text = fixture.ui.widgets().textbox("").unwrap();
+    let dialog_text = fixture.ui.widgets().textbox_unobserved("").unwrap();
     let dialog = fixture
         .ui
         .dialog(parent.as_com_ref(), "dialog", Rect { x: 30, y: 30, width: 160, height: 90 }, &dialog_text)

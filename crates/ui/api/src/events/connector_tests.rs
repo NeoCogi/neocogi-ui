@@ -213,3 +213,25 @@ fn ordinary_com_gate_rejects_recursive_emission() {
     // Release the deliberately self-capturing test mapper by replacing it.
     neocogi_com::events::bind(output(&producer), events_tx.clone(), |event| event.label).unwrap();
 }
+/// The generated aggregate observer preserves facade domain checks before mapping.
+#[test]
+fn constructor_observers_reject_invalid_payloads_before_the_mapper_runs() {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let mut observer = super::textbox::observer(sender, |event| event).unwrap();
+    let invalid = TextChanged { text: "é".into(), cursor: 1 };
+    assert_eq!(observer.changed(neocogi_com::NcMessage::new(&invalid)), Err(NC_E_INVALID_ARG));
+    assert!(receiver.try_recv().is_err());
+    let valid = TextChanged { text: "é".into(), cursor: 2 };
+    observer.changed(neocogi_com::NcMessage::new(&valid)).unwrap();
+    observer.submitted(neocogi_com::NcMessage::new(&TextSubmitted { text: "é".into() })).unwrap();
+    assert!(matches!(receiver.try_recv().unwrap(), super::textbox::Event::Changed(value) if value.cursor == 2));
+    assert!(matches!(receiver.try_recv().unwrap(), super::textbox::Event::Submitted(value) if value.text == "é"));
+
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let mut observer = super::number::observer(sender, |_| ()).unwrap();
+    assert_eq!(
+        observer.changed(neocogi_com::NcMessage::new(&NumericChanged { value: f32::INFINITY })),
+        Err(NC_E_INVALID_ARG)
+    );
+    assert!(receiver.try_recv().is_err());
+}

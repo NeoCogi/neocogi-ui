@@ -20,11 +20,12 @@ pub mod nodes {
     pub use neocogi_ui_nodes_contracts::*;
 }
 pub use neocogi_ui_nodes_contracts::{
-    Button, ButtonAbi, Checkbox, CheckboxAbi, ChildCrossSize, ColorSwatch, ColorSwatchAbi, Combo, ComboAbi, ContentIcon, CrossSize, CrossSizeAbi, Disclosure,
-    DisclosureAbi, DisclosureStyle, FillStates, FlowDirection, Grid, GridAbi, GridExtent, LayoutTrack, LayoutTrackAbi, Linear, LinearAbi, LinearEdge, ListBox,
-    ListBoxAbi, ListItem, ListItemAbi, Number, NumberAbi, NumberOptions, ScrollArea, ScrollAreaAbi, ScrollAxis, ScrollRange, Scrollbar, ScrollbarAbi, Slider,
-    FormAbi, SliderAbi, SliderOptions, SplitAxis, SplitChanged, SplitOptions, SplitView, SplitViewAbi, TextArea, TextAreaAbi, TextBlock, TextBlockAbi, Textbox,
-    TextboxAbi, UiFactory, UiFactoryAbi,
+    ButtonObserverAbi, CheckboxObserverAbi, TextboxObserverAbi, TextAreaObserverAbi, SliderObserverAbi, NumberObserverAbi, ListItemObserverAbi,
+    ListBoxObserverAbi, ScrollbarObserverAbi, SplitViewObserverAbi, Button, ButtonAbi, Checkbox, CheckboxAbi, ChildCrossSize, ColorSwatch, ColorSwatchAbi,
+    Combo, ComboAbi, ContentIcon, CrossSize, CrossSizeAbi, Disclosure, DisclosureAbi, DisclosureStyle, FillStates, FlowDirection, Grid, GridAbi, GridExtent,
+    LayoutTrack, LayoutTrackAbi, Linear, LinearAbi, LinearEdge, ListBox, ListBoxAbi, ListItem, ListItemAbi, Number, NumberAbi, NumberOptions, ScrollArea,
+    ScrollAreaAbi, ScrollAxis, ScrollRange, Scrollbar, ScrollbarAbi, Slider, FormAbi, SliderAbi, SliderOptions, SplitAxis, SplitChanged, SplitOptions,
+    SplitView, SplitViewAbi, TextArea, TextAreaAbi, TextBlock, TextBlockAbi, Textbox, TextboxAbi, UiFactory, UiFactoryAbi,
 };
 pub use neocogi_gfx_contracts::{
     AssetLoader, AssetLoaderAbi, DrawPoint, GfxPluginFactory, GfxPluginFactoryAbi, IAssetBuilder, IAssetBuilderAbi, IGfxDiagnostics, IGfxDiagnosticsAbi,
@@ -272,23 +273,32 @@ impl WidgetFactory {
     }
 
     /// Creates a fixed multiline editor and its real scroll children with one shared offset model.
-    pub fn text_area(&self, text: &str, wrapping: TextWrapping, scrolling: bool) -> Result<TextAreaWidget, NcStatus> {
+    pub fn text_area_with_observer(
+        &self,
+        text: &str,
+        wrapping: TextWrapping,
+        scrolling: bool,
+        observer: Option<ComRef<'_, TextAreaObserverAbi>>,
+    ) -> Result<TextAreaWidget, NcStatus> {
         Ok(TextAreaWidget::from_interface(self.interface.create_text_area(
             NcCopyFromBufferOffset::new(0, text.as_bytes()),
             wrapping,
             scrolling,
+            observer,
         )?))
     }
     /// Constructs an initialized, unmounted checkbox in this runtime.
-    pub fn checkbox(&self, label: &str, checked: bool) -> Result<CheckboxWidget, NcStatus> {
-        Ok(CheckboxWidget::from_interface(
-            self.interface.create_checkbox(checked, NcCopyFromBufferOffset::new(0, label.as_bytes()))?,
-        ))
+    pub fn checkbox_with_observer(&self, label: &str, checked: bool, observer: Option<ComRef<'_, CheckboxObserverAbi>>) -> Result<CheckboxWidget, NcStatus> {
+        Ok(CheckboxWidget::from_interface(self.interface.create_checkbox(
+            checked,
+            NcCopyFromBufferOffset::new(0, label.as_bytes()),
+            observer,
+        )?))
     }
     /// Constructs an initialized, unmounted textbox in this runtime.
-    pub fn textbox(&self, text: &str) -> Result<TextboxWidget, NcStatus> {
+    pub fn textbox_with_observer(&self, text: &str, observer: Option<ComRef<'_, TextboxObserverAbi>>) -> Result<TextboxWidget, NcStatus> {
         Ok(TextboxWidget::from_interface(
-            self.interface.create_textbox(NcCopyFromBufferOffset::new(0, text.as_bytes()))?,
+            self.interface.create_textbox(NcCopyFromBufferOffset::new(0, text.as_bytes()), observer)?,
         ))
     }
     /// Constructs an initialized, unmounted text block in this runtime.
@@ -298,12 +308,12 @@ impl WidgetFactory {
         ))
     }
     /// Constructs an initialized, unmounted slider in this runtime.
-    pub fn slider(&self, options: SliderOptions) -> Result<SliderWidget, NcStatus> {
-        Ok(SliderWidget::from_interface(self.interface.create_slider(options)?))
+    pub fn slider_with_observer(&self, options: SliderOptions, observer: Option<ComRef<'_, SliderObserverAbi>>) -> Result<SliderWidget, NcStatus> {
+        Ok(SliderWidget::from_interface(self.interface.create_slider(options, observer)?))
     }
     /// Constructs an initialized, unmounted number in this runtime.
-    pub fn number(&self, options: NumberOptions) -> Result<NumberWidget, NcStatus> {
-        Ok(NumberWidget::from_interface(self.interface.create_number(options)?))
+    pub fn number_with_observer(&self, options: NumberOptions, observer: Option<ComRef<'_, NumberObserverAbi>>) -> Result<NumberWidget, NcStatus> {
+        Ok(NumberWidget::from_interface(self.interface.create_number(options, observer)?))
     }
     /// Constructs an initialized, unmounted color swatch in this runtime.
     pub fn color_swatch(&self, rgba: u32, label: &str) -> Result<ColorSwatchWidget, NcStatus> {
@@ -312,20 +322,20 @@ impl WidgetFactory {
         ))
     }
     /// Constructs an initialized, unmounted list item in this runtime.
-    pub fn list_item(&self, label: &str) -> Result<ListItemWidget, NcStatus> {
+    pub fn list_item_with_observer(&self, label: &str, observer: Option<ComRef<'_, ListItemObserverAbi>>) -> Result<ListItemWidget, NcStatus> {
         Ok(ListItemWidget::from_interface(
-            self.interface.create_list_item(NcCopyFromBufferOffset::new(0, label.as_bytes()))?,
+            self.interface.create_list_item(NcCopyFromBufferOffset::new(0, label.as_bytes()), observer)?,
         ))
     }
     /// Constructs an initialized, unmounted list box in this runtime.
-    pub fn list_box(&self, label: &str) -> Result<ListBoxWidget, NcStatus> {
+    pub fn list_box_with_observer(&self, label: &str, observer: Option<ComRef<'_, ListBoxObserverAbi>>) -> Result<ListBoxWidget, NcStatus> {
         Ok(ListBoxWidget::from_interface(
-            self.interface.create_list_box(NcCopyFromBufferOffset::new(0, label.as_bytes()))?,
+            self.interface.create_list_box(NcCopyFromBufferOffset::new(0, label.as_bytes()), observer)?,
         ))
     }
     /// Constructs an initialized, unmounted scrollbar in this runtime.
-    pub fn scrollbar(&self, range: ScrollRange) -> Result<ScrollbarWidget, NcStatus> {
-        Ok(ScrollbarWidget::from_interface(self.interface.create_scrollbar(range)?))
+    pub fn scrollbar_with_observer(&self, range: ScrollRange, observer: Option<ComRef<'_, ScrollbarObserverAbi>>) -> Result<ScrollbarWidget, NcStatus> {
+        Ok(ScrollbarWidget::from_interface(self.interface.create_scrollbar(range, observer)?))
     }
 
     /// Adopts a typed factory obtained from UI runtime activation.
@@ -334,11 +344,12 @@ impl WidgetFactory {
     }
 
     /// Creates and initializes an unmounted button in one concrete API operation.
-    pub fn button(&self, label: &str) -> Result<ButtonWidget, NcStatus> {
-        Ok(ButtonWidget::from_interface(
-            self.interface
-                .create_button(NcCopyFromBufferOffset::new(0, label.as_bytes()), WidgetOptions::FRAME)?,
-        ))
+    pub fn button_with_observer(&self, label: &str, observer: Option<ComRef<'_, ButtonObserverAbi>>) -> Result<ButtonWidget, NcStatus> {
+        Ok(ButtonWidget::from_interface(self.interface.create_button(
+            NcCopyFromBufferOffset::new(0, label.as_bytes()),
+            WidgetOptions::FRAME,
+            observer,
+        )?))
     }
 }
 
@@ -437,24 +448,32 @@ pub struct Ui {
 
 impl Ui {
     /// Creates one complete combo box with the contract-defined fallback and selection state.
-    pub fn combo_box<Item: AsRef<str>>(&self, parent: ComRef<'_, IWindowAbi>, items: &[Item], selection: ChoiceSelection) -> Result<ComboWidget, NcStatus> {
+    pub fn combo_box_with_observer<Item: AsRef<str>>(
+        &self,
+        parent: ComRef<'_, IWindowAbi>,
+        items: &[Item],
+        selection: ChoiceSelection,
+        observer: Option<ComRef<'_, IChoiceMenuObserverAbi>>,
+    ) -> Result<ComboWidget, NcStatus> {
         let (menu_text, entries) = encoded_combo_items(items)?;
         let combo = self.factory.interface.create_combo_box(
             parent,
             NcCopyFromBufferOffset::new(0, &menu_text),
             NcCopyFromBufferOffset::new(0, &entries),
             selection.into(),
+            observer,
         )?;
         Ok(ComboWidget::from_interface(combo))
     }
 
     /// Creates a combo from the generated preorder menu contract and its shared UTF-8 storage.
-    pub fn combo_menu(
+    pub fn combo_menu_with_observer(
         &self,
         parent: ComRef<'_, IWindowAbi>,
         menu_text: &str,
         entries: &[ChoiceMenuEntry],
         selection: ChoiceSelection,
+        observer: Option<ComRef<'_, IChoiceMenuObserverAbi>>,
     ) -> Result<ComboWidget, NcStatus> {
         let entries = combo_menu_abi(entries);
         let combo = self.factory.interface.create_combo_box(
@@ -462,14 +481,19 @@ impl Ui {
             NcCopyFromBufferOffset::new(0, menu_text.as_bytes()),
             NcCopyFromBufferOffset::new(0, &entries),
             selection.into(),
+            observer,
         )?;
         Ok(ComboWidget::from_interface(combo))
     }
 
     /// Creates a hidden standard file picker using the actual runtime's modal and COM controls.
-    pub fn file_dialog(&self, parent: ComRef<'_, IWindowAbi>) -> Result<crate::FileDialog, NcStatus> {
+    pub fn file_dialog_with_observer(
+        &self,
+        parent: ComRef<'_, IWindowAbi>,
+        observer: Option<ComRef<'_, IFileDialogObserverAbi>>,
+    ) -> Result<crate::FileDialog, NcStatus> {
         Ok(crate::FileDialog::from_interface(
-            self.factory.interface.query::<IFileDialogsAbi>()?.create(parent)?,
+            self.factory.interface.query::<IFileDialogsAbi>()?.create(parent, observer)?,
         ))
     }
 
@@ -744,5 +768,235 @@ impl ListBoxWidget {
     /// Returns to label-only content without generating an activation event.
     pub fn clear_image(&mut self) -> Result<(), NcStatus> {
         self.interface.clear_image()
+    }
+}
+
+impl WidgetFactory {
+    /// Creates an unmounted button with one lifetime-bound observer.
+    /// The generated adapter owns the sender and mapper; construction failure releases both.
+    pub fn button<M: 'static>(
+        &self,
+        label: &str,
+        sender: std::sync::mpsc::Sender<M>,
+        map: impl FnMut(crate::button::Event) -> M + 'static,
+    ) -> Result<ButtonWidget, NcStatus> {
+        let observer = crate::button::observer(sender, map)?;
+        self.button_with_observer(label, Some(observer.as_com_ref()))
+    }
+
+    /// Creates an explicitly unobserved button without allocating a destination.
+    pub fn button_unobserved(&self, label: &str) -> Result<ButtonWidget, NcStatus> {
+        self.button_with_observer(label, None)
+    }
+    /// Creates an unmounted checkbox with one lifetime-bound observer.
+    /// The generated adapter owns the sender and mapper; construction failure releases both.
+    pub fn checkbox<M: 'static>(
+        &self,
+        label: &str,
+        checked: bool,
+        sender: std::sync::mpsc::Sender<M>,
+        map: impl FnMut(crate::checkbox::Event) -> M + 'static,
+    ) -> Result<CheckboxWidget, NcStatus> {
+        let observer = crate::checkbox::observer(sender, map)?;
+        self.checkbox_with_observer(label, checked, Some(observer.as_com_ref()))
+    }
+
+    /// Creates an explicitly unobserved checkbox without allocating a destination.
+    pub fn checkbox_unobserved(&self, label: &str, checked: bool) -> Result<CheckboxWidget, NcStatus> {
+        self.checkbox_with_observer(label, checked, None)
+    }
+    /// Creates an unmounted textbox with one lifetime-bound observer.
+    /// The generated adapter owns the sender and mapper; construction failure releases both.
+    pub fn textbox<M: 'static>(
+        &self,
+        text: &str,
+        sender: std::sync::mpsc::Sender<M>,
+        map: impl FnMut(crate::textbox::Event) -> M + 'static,
+    ) -> Result<TextboxWidget, NcStatus> {
+        let observer = crate::textbox::observer(sender, map)?;
+        self.textbox_with_observer(text, Some(observer.as_com_ref()))
+    }
+
+    /// Creates an explicitly unobserved textbox without allocating a destination.
+    pub fn textbox_unobserved(&self, text: &str) -> Result<TextboxWidget, NcStatus> {
+        self.textbox_with_observer(text, None)
+    }
+    /// Creates an unmounted text area with one lifetime-bound observer.
+    /// The generated adapter owns the sender and mapper; construction failure releases both.
+    pub fn text_area<M: 'static>(
+        &self,
+        text: &str,
+        wrapping: TextWrapping,
+        scrolling: bool,
+        sender: std::sync::mpsc::Sender<M>,
+        map: impl FnMut(crate::text_area::Event) -> M + 'static,
+    ) -> Result<TextAreaWidget, NcStatus> {
+        let observer = crate::text_area::observer(sender, map)?;
+        self.text_area_with_observer(text, wrapping, scrolling, Some(observer.as_com_ref()))
+    }
+
+    /// Creates an explicitly unobserved text area without allocating a destination.
+    pub fn text_area_unobserved(&self, text: &str, wrapping: TextWrapping, scrolling: bool) -> Result<TextAreaWidget, NcStatus> {
+        self.text_area_with_observer(text, wrapping, scrolling, None)
+    }
+    /// Creates an unmounted slider with one lifetime-bound observer.
+    /// The generated adapter owns the sender and mapper; construction failure releases both.
+    pub fn slider<M: 'static>(
+        &self,
+        options: SliderOptions,
+        sender: std::sync::mpsc::Sender<M>,
+        map: impl FnMut(crate::slider::Event) -> M + 'static,
+    ) -> Result<SliderWidget, NcStatus> {
+        let observer = crate::slider::observer(sender, map)?;
+        self.slider_with_observer(options, Some(observer.as_com_ref()))
+    }
+
+    /// Creates an explicitly unobserved slider without allocating a destination.
+    pub fn slider_unobserved(&self, options: SliderOptions) -> Result<SliderWidget, NcStatus> {
+        self.slider_with_observer(options, None)
+    }
+    /// Creates an unmounted number with one lifetime-bound observer.
+    /// The generated adapter owns the sender and mapper; construction failure releases both.
+    pub fn number<M: 'static>(
+        &self,
+        options: NumberOptions,
+        sender: std::sync::mpsc::Sender<M>,
+        map: impl FnMut(crate::number::Event) -> M + 'static,
+    ) -> Result<NumberWidget, NcStatus> {
+        let observer = crate::number::observer(sender, map)?;
+        self.number_with_observer(options, Some(observer.as_com_ref()))
+    }
+
+    /// Creates an explicitly unobserved number without allocating a destination.
+    pub fn number_unobserved(&self, options: NumberOptions) -> Result<NumberWidget, NcStatus> {
+        self.number_with_observer(options, None)
+    }
+    /// Creates an unmounted list item with one lifetime-bound observer.
+    /// The generated adapter owns the sender and mapper; construction failure releases both.
+    pub fn list_item<M: 'static>(
+        &self,
+        label: &str,
+        sender: std::sync::mpsc::Sender<M>,
+        map: impl FnMut(crate::list_item::Event) -> M + 'static,
+    ) -> Result<ListItemWidget, NcStatus> {
+        let observer = crate::list_item::observer(sender, map)?;
+        self.list_item_with_observer(label, Some(observer.as_com_ref()))
+    }
+
+    /// Creates an explicitly unobserved list item without allocating a destination.
+    pub fn list_item_unobserved(&self, label: &str) -> Result<ListItemWidget, NcStatus> {
+        self.list_item_with_observer(label, None)
+    }
+    /// Creates an unmounted list box with one lifetime-bound observer.
+    /// The generated adapter owns the sender and mapper; construction failure releases both.
+    pub fn list_box<M: 'static>(
+        &self,
+        label: &str,
+        sender: std::sync::mpsc::Sender<M>,
+        map: impl FnMut(crate::list_box::Event) -> M + 'static,
+    ) -> Result<ListBoxWidget, NcStatus> {
+        let observer = crate::list_box::observer(sender, map)?;
+        self.list_box_with_observer(label, Some(observer.as_com_ref()))
+    }
+
+    /// Creates an explicitly unobserved list box without allocating a destination.
+    pub fn list_box_unobserved(&self, label: &str) -> Result<ListBoxWidget, NcStatus> {
+        self.list_box_with_observer(label, None)
+    }
+    /// Creates an unmounted scrollbar with one lifetime-bound observer.
+    /// The generated adapter owns the sender and mapper; construction failure releases both.
+    pub fn scrollbar<M: 'static>(
+        &self,
+        range: ScrollRange,
+        sender: std::sync::mpsc::Sender<M>,
+        map: impl FnMut(crate::scrollbar::Event) -> M + 'static,
+    ) -> Result<ScrollbarWidget, NcStatus> {
+        let observer = crate::scrollbar::observer(sender, map)?;
+        self.scrollbar_with_observer(range, Some(observer.as_com_ref()))
+    }
+
+    /// Creates an explicitly unobserved scrollbar without allocating a destination.
+    pub fn scrollbar_unobserved(&self, range: ScrollRange) -> Result<ScrollbarWidget, NcStatus> {
+        self.scrollbar_with_observer(range, None)
+    }
+    /// Creates an unmounted split view with one lifetime-bound observer.
+    /// The generated adapter owns the sender and mapper; construction failure releases both.
+    pub fn split_view<M: 'static>(
+        &self,
+        settings: SplitOptions,
+        sender: std::sync::mpsc::Sender<M>,
+        map: impl FnMut(crate::split_view::Event) -> M + 'static,
+    ) -> Result<SplitViewWidget, NcStatus> {
+        let observer = crate::split_view::observer(sender, map)?;
+        self.split_view_with_observer(settings, Some(observer.as_com_ref()))
+    }
+
+    /// Creates an explicitly unobserved split view without allocating a destination.
+    pub fn split_view_unobserved(&self, settings: SplitOptions) -> Result<SplitViewWidget, NcStatus> {
+        self.split_view_with_observer(settings, None)
+    }
+}
+
+impl Ui {
+    /// Constructs a choice header with one observer owned by its core choice model.
+    pub fn combo_box<Item: AsRef<str>, M: 'static>(
+        &self,
+        parent: ComRef<'_, IWindowAbi>,
+        items: &[Item],
+        selection: ChoiceSelection,
+        sender: std::sync::mpsc::Sender<M>,
+        map: impl FnMut(crate::combo::Event) -> M + 'static,
+    ) -> Result<ComboWidget, NcStatus> {
+        let observer = crate::combo::observer(sender, map)?;
+        self.combo_box_with_observer(parent, items, selection, Some(observer.as_com_ref()))
+    }
+    /// Constructs an unobserved choice header without a dummy destination allocation.
+    pub fn combo_box_unobserved<Item: AsRef<str>>(
+        &self,
+        parent: ComRef<'_, IWindowAbi>,
+        items: &[Item],
+        selection: ChoiceSelection,
+    ) -> Result<ComboWidget, NcStatus> {
+        self.combo_box_with_observer(parent, items, selection, None)
+    }
+    /// Constructs a hierarchical choice header with one constructor-bound observer.
+    pub fn combo_menu<M: 'static>(
+        &self,
+        parent: ComRef<'_, IWindowAbi>,
+        text: &str,
+        entries: &[ChoiceMenuEntry],
+        selection: ChoiceSelection,
+        sender: std::sync::mpsc::Sender<M>,
+        map: impl FnMut(crate::combo::Event) -> M + 'static,
+    ) -> Result<ComboWidget, NcStatus> {
+        let observer = crate::combo::observer(sender, map)?;
+        self.combo_menu_with_observer(parent, text, entries, selection, Some(observer.as_com_ref()))
+    }
+    /// Constructs an unobserved hierarchical choice header.
+    pub fn combo_menu_unobserved(
+        &self,
+        parent: ComRef<'_, IWindowAbi>,
+        text: &str,
+        entries: &[ChoiceMenuEntry],
+        selection: ChoiceSelection,
+    ) -> Result<ComboWidget, NcStatus> {
+        self.combo_menu_with_observer(parent, text, entries, selection, None)
+    }
+}
+
+impl Ui {
+    /// Creates the hidden picker with one upward observer retained for its lifetime.
+    pub fn file_dialog<M: 'static>(
+        &self,
+        parent: ComRef<'_, IWindowAbi>,
+        sender: std::sync::mpsc::Sender<M>,
+        map: impl FnMut(crate::file_dialog::Event) -> M + 'static,
+    ) -> Result<crate::FileDialog, NcStatus> {
+        let observer = crate::file_dialog::observer(sender, map)?;
+        self.file_dialog_with_observer(parent, Some(observer.as_com_ref()))
+    }
+    /// Creates an explicitly unobserved picker without allocating a destination.
+    pub fn file_dialog_unobserved(&self, parent: ComRef<'_, IWindowAbi>) -> Result<crate::FileDialog, NcStatus> {
+        self.file_dialog_with_observer(parent, None)
     }
 }

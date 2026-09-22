@@ -94,22 +94,35 @@ pub(super) fn label(ui: &Ui, text: &str) -> Result<TextBlockWidget, NcStatus> {
     ui.widgets().text_block(text, TextWrapping::None)
 }
 /// Shared framed, centered numeric control used by the palette and background editors.
-pub(super) fn slider(ui: &Ui, value: f32, high: f32) -> Result<SliderWidget, NcStatus> {
-    let mut control = ui.widgets().slider(SliderOptions {
-        value,
-        low: 0.,
-        high,
-        step: 1.,
-        precision: 0,
-    })?;
+pub(super) fn slider(
+    ui: &Ui,
+    value: f32,
+    high: f32,
+    sender: std::sync::mpsc::Sender<Message>,
+    mut map: impl FnMut(NumericChanged) -> Message + 'static,
+) -> Result<SliderWidget, NcStatus> {
+    let mut control = ui.widgets().slider(
+        SliderOptions {
+            value,
+            low: 0.,
+            high,
+            step: 1.,
+            precision: 0,
+        },
+        sender,
+        move |neocogi_ui::slider::Event::Changed(event)| map(event),
+    )?;
     control.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
     Ok(control)
 }
 /// Creates a concrete button and maps its activation output; only its parent needs to retain it afterward.
 fn button(ui: &Ui, events_tx: &std::sync::mpsc::Sender<Message>, text: &str, action: Action) -> Result<ButtonWidget, NcStatus> {
-    let mut control = ui.widgets().button(text)?;
+    let mut control = ui
+        .widgets()
+        .button(text, events_tx.clone(), move |neocogi_ui::button::Event::Activated(event)| {
+            Message::Activate(action, event)
+        })?;
     control.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
-    neocogi_ui::events::bind(control.activated(), events_tx.clone(), move |event| Message::Activate(action, event))?;
     Ok(control)
 }
 /// A disclosure body is its actual editable Linear COM object, with no placeholder replacement tree.
@@ -463,6 +476,7 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
     neocogi_demo_host::initialize()?;
     let host = Host::new("neocogi-ui COM Demo", Size { width: 1200, height: 800 }, neocogi_demo_assets::load_bundle()?)?;
     let ui = &host.ui;
+    let (events_tx, events) = std::sync::mpsc::channel();
     let grid = Rc::new(RefCell::new(GridState::default()));
     let grid_widget = ui.widgets().leaf(GridViewWidget::new(grid.clone()), WidgetOptions::NONE)?;
     let desktop = ui.window("X-Y Grid Surface", rect(0, 0, 1200, 800), &grid_widget)?;
@@ -474,7 +488,13 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
     let demo = floating(ui, desktop.as_com_ref(), "Demo Window", rect(40, 40, 300, 450), &main_scroll)?;
     demo.set_options(WindowOptions::FRAME | WindowOptions::MINIMIZE_BUTTON | WindowOptions::MAXIMIZE_BUTTON)?;
     let info = [label(ui, "40, 40")?, label(ui, "300, 450")?, label(ui, "0.0")?];
-    let combo = ui.combo_box(demo.as_com_ref(), &FRUIT, ChoiceSelection::Selected(0))?;
+    let combo = ui.combo_box(
+        demo.as_com_ref(),
+        &FRUIT,
+        ChoiceSelection::Selected(0),
+        events_tx.clone(),
+        |neocogi_ui::combo::Event::Changed(event)| Message::Choice(event),
+    )?;
     let menus = ui.menus()?;
     let mut pending = Vec::new();
     let popup_menu = menus.create("Test Popup")?;
@@ -519,13 +539,22 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
     let mut log = label(ui, "Welcome to neocogi-ui.")?;
     log.set_font_role(FontRole::Mono)?;
     let log_scroll = ui.widgets().scroll_area(&log, true)?;
-    let mut entry = ui.widgets().textbox("")?;
+    // Ignore edit snapshots before queueing; only submissions are app commands.
+    let entry_observer = neocogi_ui::textbox::filter_observer(events_tx.clone(), |event| match event {
+        neocogi_ui::textbox::Event::Changed(_) => None,
+        neocogi_ui::textbox::Event::Submitted(value) => Some(Message::Text(value)),
+    })?;
+    let mut entry = ui.widgets().textbox_with_observer("", Some(entry_observer.as_com_ref()))?;
     entry.set_font_role(FontRole::Mono)?;
-    let (style, style_root) = StyleEditor::new(ui)?;
+    let (style, style_root) = StyleEditor::new(ui, &events_tx)?;
     floating(ui, desktop.as_com_ref(), "Flat Palette / Skin Metrics", rect(350, 250, 300, 240), &style_root)?;
     let background = ui.widgets().color_swatch(grid.borrow().background, "#5A5F64")?;
     #[cfg(not(target_arch = "wasm32"))]
-    let file_dialog = Some(ui.file_dialog(demo.as_com_ref())?);
+    let file_dialog = Some(
+        ui.file_dialog(demo.as_com_ref(), events_tx.clone(), |neocogi_ui::file_dialog::Event::Completed(event)| {
+            Message::File(event)
+        })?,
+    );
     #[cfg(target_arch = "wasm32")]
     let file_dialog = None;
     open_item.set_enabled(file_dialog.is_some())?;
@@ -555,18 +584,11 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
         fps: 0.,
         next_fps: 0.,
     };
-    let (events_tx, events) = std::sync::mpsc::channel();
     for (item, action) in pending {
         neocogi_ui::events::bind(item.activated()?, events_tx.clone(), move |event| Message::Activate(action, event))?;
     }
     {
-        state.style.map(&events_tx)?;
         neocogi_ui::events::bind(neocogi_ui::events::window_events(state.demo.as_com_ref())?, events_tx.clone(), Message::Window)?;
-        neocogi_ui::events::bind(state.entry.submitted(), events_tx.clone(), Message::Text)?;
-        neocogi_ui::events::bind(state.combo.changed(), events_tx.clone(), Message::Choice)?;
-        if let Some(dialog) = &state.file_dialog {
-            neocogi_ui::events::bind(dialog.completed(), events_tx.clone(), Message::File)?;
-        }
     }
     build_controls(&host, &state, &events_tx, &mut main_body)?;
     build_examples(&host, &state, &events_tx)?;
@@ -628,13 +650,13 @@ fn build_controls(host: &Host, state: &State, events_tx: &std::sync::mpsc::Sende
     }
     let mut test = section(ui, &mut left, "Test 3", DisclosureStyle::Tree, false)?;
     for text in ["Checkbox 1", "Checkbox 2", "Checkbox 3"] {
-        append(&mut test, &ui.widgets().checkbox(text, false)?, LayoutTrack::Content)?;
+        append(&mut test, &ui.widgets().checkbox_unobserved(text, false)?, LayoutTrack::Content)?;
     }
     append(&mut line, &left, LayoutTrack::Fixed { extent: 140 })?;
     append(&mut line, &ui.widgets().text_block("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Maecenas lacinia, sem eu lacinia molestie, mi risus faucibus ipsum, eu varius magna felis a nulla.", TextWrapping::Word)?, FLEX)?;
     append(&mut trees, &line, LayoutTrack::Content)?;
     let mut text = section(ui, content, "TextArea", DisclosureStyle::Header, true)?;
-    let editor = ui.widgets().text_area(
+    let editor = ui.widgets().text_area_unobserved(
         "This is a multi-line TextArea.\nYou can type, scroll, and resize the window.\n\nTry adding more lines to see the scrollbars.",
         TextWrapping::Word,
         true,
@@ -645,8 +667,13 @@ fn build_controls(host: &Host, state: &State, events_tx: &std::sync::mpsc::Sende
     let mut controls = column(ui)?;
     for (name, shift) in [("Red", 0), ("Green", 8), ("Blue", 16)] {
         let mut line = row(ui)?;
-        let control = slider(ui, ((state.grid.borrow().background >> shift) & 255) as f32, 255.)?;
-        neocogi_ui::events::bind(control.changed(), events_tx.clone(), move |event| Message::Background(shift, event))?;
+        let control = slider(
+            ui,
+            ((state.grid.borrow().background >> shift) & 255) as f32,
+            255.,
+            events_tx.clone(),
+            move |event| Message::Background(shift, event),
+        )?;
         append(&mut line, &label(ui, name)?, LayoutTrack::Fixed { extent: 46 })?;
         append(&mut line, &control, FLEX)?;
         append(&mut controls, &line, LayoutTrack::Content)?;
@@ -740,14 +767,22 @@ fn build_examples(host: &Host, state: &State, events_tx: &std::sync::mpsc::Sende
         rect(220, 220, 300, 300),
         &ui.widgets().leaf(Suzanne::new(host.renderer.as_com_ref())?, WidgetOptions::NONE)?,
     )?;
-    // Concrete shared builders return typed endpoints; this application keeps its existing log action.
+    // All sample buttons share this parent destination; each widget retains it at creation.
+    let sample_observer = neocogi_ui::button::observer(events_tx.clone(), |neocogi_ui::button::Event::Activated(event)| {
+        Message::Activate(Action::Log, event)
+    })?;
     for (sample, title, area) in [
-        (neocogi_ui_samples::directions(ui)?, "Stack Direction Demo", rect(530, 40, 280, 220)),
-        (neocogi_ui_samples::weights(ui)?, "Weight Demo", rect(530, 270, 280, 260)),
+        (
+            neocogi_ui_samples::directions(ui, Some(sample_observer.as_com_ref()))?,
+            "Stack Direction Demo",
+            rect(530, 40, 280, 220),
+        ),
+        (
+            neocogi_ui_samples::weights(ui, Some(sample_observer.as_com_ref()))?,
+            "Weight Demo",
+            rect(530, 270, 280, 260),
+        ),
     ] {
-        for control in sample.buttons {
-            neocogi_ui::events::bind(control.activated(), events_tx.clone(), |event| Message::Activate(Action::Log, event))?;
-        }
         floating(ui, desktop, title, area, &sample.content)?;
     }
     Ok(())

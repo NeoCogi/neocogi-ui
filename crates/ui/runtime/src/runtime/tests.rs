@@ -19,7 +19,7 @@ fn runtime() -> ComPtr<UiRuntimeAbi> {
 fn button(runtime: &ComPtr<UiRuntimeAbi>) -> ComPtr<ButtonAbi> {
     nc_ui_nodes::UiFactory::bind(runtime.as_com_ref())
         .unwrap()
-        .create_button(NcCopyFromBufferOffset::new(0, b""), WidgetOptions::FRAME)
+        .create_button(NcCopyFromBufferOffset::new(0, b""), WidgetOptions::FRAME, None)
         .unwrap()
 }
 
@@ -129,30 +129,36 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
     assert!(calls.get() > 0, "an independent provider must validate and import its initial revision");
     calls.set(0);
     let label = NcCopyFromBufferOffset::new(0, b"shared");
-    let button = factory.create_button(label, WidgetOptions::FRAME).unwrap();
-    let _checkbox = factory.create_checkbox(false, label).unwrap();
-    let _textbox = factory.create_textbox(label).unwrap();
+    let button = factory.create_button(label, WidgetOptions::FRAME, None).unwrap();
+    let _checkbox = factory.create_checkbox(false, label, None).unwrap();
+    let _textbox = factory.create_textbox(label, None).unwrap();
     let _text_block = factory.create_text_block(label, TextWrapping::Word).unwrap();
     let _slider = factory
-        .create_slider(SliderOptions {
-            value: 0.0,
-            low: 0.0,
-            high: 1.0,
-            step: 0.1,
-            precision: 1,
-        })
+        .create_slider(
+            SliderOptions {
+                value: 0.0,
+                low: 0.0,
+                high: 1.0,
+                step: 0.1,
+                precision: 1,
+            },
+            None,
+        )
         .unwrap();
-    let _number = factory.create_number(NumberOptions { value: 0.0, step: 1.0, precision: 0 }).unwrap();
+    let _number = factory.create_number(NumberOptions { value: 0.0, step: 1.0, precision: 0 }, None).unwrap();
     let _swatch = factory.create_color_swatch(u32::MAX, label).unwrap();
-    let _list_item = factory.create_list_item(label).unwrap();
-    let _list_box = factory.create_list_box(label).unwrap();
+    let _list_item = factory.create_list_item(label, None).unwrap();
+    let _list_box = factory.create_list_box(label, None).unwrap();
     let _scrollbar = factory
-        .create_scrollbar(ScrollRange {
-            axis: ScrollAxis::Vertical,
-            viewport: 1,
-            content: 2,
-            offset: 0,
-        })
+        .create_scrollbar(
+            ScrollRange {
+                axis: ScrollAxis::Vertical,
+                viewport: 1,
+                content: 2,
+                offset: 0,
+            },
+            None,
+        )
         .unwrap();
     let _linear = factory.create_linear(FlowDirection::TopToBottom, CrossSize::Stretch.into()).unwrap();
     let tracks = [LayoutTrack::Content.into()];
@@ -164,7 +170,7 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
     let _scroll = factory
         .create_scroll_area(neocogi_ui_core_contracts::Mount::widget(content.as_com_ref()).as_message(), true)
         .unwrap();
-    let area = factory.create_text_area(label, TextWrapping::Word, true).unwrap();
+    let area = factory.create_text_area(label, TextWrapping::Word, true, None).unwrap();
     let root = area.query::<IWidgetAbi>().unwrap();
     let _window = mount(&runtime, &root).unwrap();
     runtime.update(SIZE).unwrap();
@@ -916,7 +922,7 @@ fn child_edit_reports_committed_topology_separately_from_teardown_failure() {
 fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validation() {
     let runtime = runtime();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
-    let mut checkbox = ui.widgets().checkbox("Check", false).unwrap();
+    let mut checkbox = ui.widgets().checkbox_unobserved("Check", false).unwrap();
     let mut common = checkbox.node_interface().unwrap();
     common.take_change().unwrap();
     checkbox.set_checked(true).unwrap();
@@ -932,7 +938,7 @@ fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validati
     checkbox.set_named_font("body").unwrap();
     assert_eq!(common.take_change().unwrap(), GeometryChange::Changed);
 
-    let mut textbox = ui.widgets().textbox("é\r\n☃").unwrap();
+    let mut textbox = ui.widgets().textbox_unobserved("é\r\n☃").unwrap();
     assert_eq!(textbox.text().unwrap(), "é☃");
     assert_eq!(textbox.cursor().unwrap(), 5);
     textbox.set_cursor(4).unwrap();
@@ -977,7 +983,7 @@ fn builtin_numeric_and_scrollbar_facades_reject_invalid_inputs_without_losing_st
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
     let mut slider = ui
         .widgets()
-        .slider(SliderOptions {
+        .slider_unobserved(SliderOptions {
             value: 5.0,
             low: 0.0,
             high: 10.0,
@@ -995,7 +1001,7 @@ fn builtin_numeric_and_scrollbar_facades_reject_invalid_inputs_without_losing_st
     assert_eq!(common.take_change().unwrap(), GeometryChange::Changed);
     assert!(
         ui.widgets()
-            .slider(SliderOptions {
+            .slider_unobserved(SliderOptions {
                 value: 0.0,
                 low: 2.0,
                 high: 1.0,
@@ -1004,15 +1010,15 @@ fn builtin_numeric_and_scrollbar_facades_reject_invalid_inputs_without_losing_st
             })
             .is_err()
     );
-    assert!(ui.widgets().number(NumberOptions { value: 0.0, step: 1.0, precision: 255 }).is_err());
-    let mut number = ui.widgets().number(NumberOptions { value: 4.0, step: 0.5, precision: 2 }).unwrap();
+    assert!(ui.widgets().number_unobserved(NumberOptions { value: 0.0, step: 1.0, precision: 255 }).is_err());
+    let mut number = ui.widgets().number_unobserved(NumberOptions { value: 4.0, step: 0.5, precision: 2 }).unwrap();
     number.set_value(-100.0).unwrap();
     assert_eq!(number.value().unwrap(), -100.0);
     assert!(!number.is_editing().unwrap());
 
     let mut scrollbar = ui
         .widgets()
-        .scrollbar(ScrollRange {
+        .scrollbar_unobserved(ScrollRange {
             axis: ScrollAxis::Vertical,
             viewport: 50,
             content: 100,
@@ -1046,7 +1052,7 @@ fn builtin_numeric_and_scrollbar_facades_reject_invalid_inputs_without_losing_st
 fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
     let runtime = runtime();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
-    let textbox = ui.widgets().textbox("start").unwrap();
+    let textbox = ui.widgets().textbox_unobserved("start").unwrap();
     let window = ui.window("editor", RECT, &textbox).unwrap();
     ui.input(
         UiInput::Key(KeyStroke {
@@ -1067,7 +1073,7 @@ fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
     window.close().unwrap();
 
-    let checkbox = ui.widgets().checkbox("toggle", false).unwrap();
+    let checkbox = ui.widgets().checkbox_unobserved("toggle", false).unwrap();
     let window = ui.window("checkbox", RECT, &checkbox).unwrap();
     ui.input(UiInput::Cancel, "").unwrap();
     ui.input(
@@ -1098,10 +1104,10 @@ fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
     window.close().unwrap();
 
     let roots = [
-        ui.widgets().button("button").unwrap().node_interface().unwrap(),
+        ui.widgets().button_unobserved("button").unwrap().node_interface().unwrap(),
         ui.widgets().text_block("display\ntext", TextWrapping::Word).unwrap().node_interface().unwrap(),
         ui.widgets()
-            .slider(SliderOptions {
+            .slider_unobserved(SliderOptions {
                 value: 2.0,
                 low: 0.0,
                 high: 10.0,
@@ -1112,15 +1118,15 @@ fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
             .node_interface()
             .unwrap(),
         ui.widgets()
-            .number(NumberOptions { value: 42.0, step: 1.0, precision: 0 })
+            .number_unobserved(NumberOptions { value: 42.0, step: 1.0, precision: 0 })
             .unwrap()
             .node_interface()
             .unwrap(),
         ui.widgets().color_swatch(0xff00ffff, "swatch").unwrap().node_interface().unwrap(),
-        ui.widgets().list_item("item").unwrap().node_interface().unwrap(),
-        ui.widgets().list_box("list box").unwrap().node_interface().unwrap(),
+        ui.widgets().list_item_unobserved("item").unwrap().node_interface().unwrap(),
+        ui.widgets().list_box_unobserved("list box").unwrap().node_interface().unwrap(),
         ui.widgets()
-            .scrollbar(ScrollRange {
+            .scrollbar_unobserved(ScrollRange {
                 axis: ScrollAxis::Vertical,
                 viewport: 40,
                 content: 120,
@@ -1222,7 +1228,7 @@ impl IPainter for BuiltinPainter {
 #[test]
 fn builtin_scoped_paint_preserves_alignment_with_inline_semantic_state() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
-    let mut button = ui.widgets().button("AB").unwrap();
+    let mut button = ui.widgets().button_unobserved("AB").unwrap();
     button.set_options(WidgetOptions::NONE).unwrap();
     button.set_fill_states(FillStates::NONE).unwrap();
     let mut common = button.node_interface().unwrap();
@@ -1291,7 +1297,7 @@ fn platform_input_projection_and_committed_text_area_share_runtime_state() {
     let input = ui.input_sink().unwrap();
     let identity: ComPtr<neocogi_com::IUnknown> = input.query().unwrap();
     assert_eq!(identity.as_ptr(), runtime.query::<neocogi_com::IUnknown>().unwrap().as_ptr());
-    let editor = ui.widgets().textbox("start").unwrap();
+    let editor = ui.widgets().textbox_unobserved("start").unwrap();
     let window = ui.window("IME", RECT, &editor).unwrap();
     assert_eq!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::None);
     input

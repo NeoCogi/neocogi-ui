@@ -15,11 +15,6 @@ mod tests {
     }
 
     impl Button for TestButton {
-        /// This editing-only fixture rejects delivery setup explicitly.
-        fn __map_activated(&mut self, _: ComRef<'_, neocogi_ui_core_contracts::__ActivationReceiverAbi>) -> Result<(), NcStatus> {
-            Err(neocogi_com::NC_E_NOINTERFACE)
-        }
-
         /// Validates the complete replacement before mutating retained text.
         fn set_label(&mut self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
             if label.offset() != 0 {

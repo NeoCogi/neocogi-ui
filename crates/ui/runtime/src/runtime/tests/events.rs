@@ -2,6 +2,43 @@
 use super::*;
 use neocogi_ui_support::test_support::events::TestApp;
 
+/// Both textbox outputs share one callback allocation; construction retains it
+/// without allocating another receiver or validating an output through a query.
+#[test]
+fn constructor_observer_allocates_once_and_drops_with_logical_widget_closure() {
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let measurement = crate::test_support::AllocationMeasurement::begin();
+    let observer = neocogi_ui::textbox::observer(sender, |event| event).unwrap();
+    let allocations = measurement.finish();
+    assert_eq!(allocations.events, 1, "sender and mapper must live inside the one COM observer allocation");
+
+    let measurement = crate::test_support::AllocationMeasurement::begin();
+    let unobserved = ui.widgets().textbox_unobserved("same").unwrap();
+    let absent = measurement.finish();
+    let measurement = crate::test_support::AllocationMeasurement::begin();
+    let observed = ui.widgets().textbox_with_observer("same", Some(observer.as_com_ref())).unwrap();
+    let present = measurement.finish();
+    assert_eq!(present, absent, "the factory only retains a present observer; absence needs no dummy object");
+    drop(observer);
+    assert!(matches!(receiver.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
+    observed.node_interface().unwrap().close().unwrap();
+    assert!(matches!(receiver.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
+    // The closed editing handle can outlive its observer without retaining its captures.
+    assert_eq!(observed.text(), Err(UI_E_CLOSED));
+    drop(unobserved);
+}
+
+/// Failed factory validation releases a callback that was never published to a widget.
+#[test]
+fn failed_constructor_releases_observer_captures() {
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let (sender, receiver) = std::sync::mpsc::channel::<()>();
+    let result = ui.widgets().number(NumberOptions { value: f32::NAN, step: 1.0, precision: 0 }, sender, |_| ());
+    assert!(matches!(result, Err(NC_E_INVALID_ARG)));
+    assert!(matches!(receiver.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
+}
+
 /// Queues a concrete key press without fabricating semantic widget events.
 fn key(ui: &neocogi_ui::Ui, key: KeyCode) {
     ui.input(
@@ -21,16 +58,21 @@ fn key(ui: &neocogi_ui::Ui, key: KeyCode) {
 fn consumer_preserves_emission_order_snapshot_values_and_bounded_progress() {
     let runtime = runtime();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
-    let mut a = ui.widgets().button("a").unwrap();
-    let mut b = ui.widgets().button("b").unwrap();
+    let (session_tx, session) = std::sync::mpsc::channel();
+    let mut a = ui
+        .widgets()
+        .button("a", session_tx.clone(), move |neocogi_ui::button::Event::Activated(event)| event.label)
+        .unwrap();
+    let mut b = ui
+        .widgets()
+        .button("b", session_tx.clone(), move |neocogi_ui::button::Event::Activated(event)| event.label)
+        .unwrap();
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     column.insert(0, &a, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     column.insert(1, &b, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let window = ui.window("order", RECT, &column).unwrap();
-    let (session_tx, session) = std::sync::mpsc::channel();
     let mut labels = Vec::new();
-    neocogi_ui::events::bind(b.activated(), session_tx.clone(), |event| event.label).unwrap();
-    neocogi_ui::events::bind(a.activated(), session_tx.clone(), |event| event.label).unwrap();
+
     key(&ui, KeyCode::Tab);
     key(&ui, KeyCode::Space);
     ui.update(SIZE).unwrap();
@@ -73,11 +115,16 @@ enum Mutation {
 #[test]
 fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
-    let button = ui.widgets().button("replace window").unwrap();
-    let previous = ui.window("first", RECT, &button).unwrap();
     let (renderer, probe) = renderer();
     let (events_tx, events) = std::sync::mpsc::channel();
-    neocogi_ui::events::bind(button.activated(), events_tx.clone(), |_| Mutation::Replace).unwrap();
+    let button = ui
+        .widgets()
+        .button("replace window", events_tx.clone(), move |neocogi_ui::button::Event::Activated(_)| {
+            Mutation::Replace
+        })
+        .unwrap();
+    let previous = ui.window("first", RECT, &button).unwrap();
+
     neocogi_ui::events::bind(neocogi_ui::events::window_events(previous.as_com_ref()).unwrap(), events_tx.clone(), |event| {
         Mutation::Window(event)
     })
@@ -93,7 +140,7 @@ fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
                     assert_eq!(ui.update(SIZE), Err(UI_E_BUSY));
                     assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_BUSY));
                     previous.close()?;
-                    let replacement = ui.widgets().textbox("")?;
+                    let replacement = ui.widgets().textbox_unobserved("")?;
                     *next = Some(ui.window("replacement", RECT, &replacement)?);
                     *editor = Some(replacement);
                     observations.push("activated");
@@ -121,10 +168,15 @@ fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
 #[test]
 fn dropping_inbox_and_application_releases_runtime_without_a_source_sink_cycle() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
-    let button = ui.widgets().button("owned runtime").unwrap();
-    let window = ui.window("owner", RECT, &button).unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
-    neocogi_ui::events::bind(button.activated(), events_tx.clone(), |event| event.label).unwrap();
+    let button = ui
+        .widgets()
+        .button("owned runtime", events_tx.clone(), move |neocogi_ui::button::Event::Activated(event)| {
+            event.label
+        })
+        .unwrap();
+    let window = ui.window("owner", RECT, &button).unwrap();
+
     drop(events);
     assert!(button.label().is_ok());
     drop(ui);
@@ -138,9 +190,15 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let (session_tx, session) = std::sync::mpsc::channel();
     let labels = Vec::new();
-    let mut checkbox = ui.widgets().checkbox("check", false).unwrap();
+
+    let mut checkbox = ui
+        .widgets()
+        .checkbox("check", false, session_tx.clone(), move |neocogi_ui::checkbox::Event::Changed(event)| {
+            format!("checked:{}", event.checked)
+        })
+        .unwrap();
     let window = ui.window("checkbox", RECT, &checkbox).unwrap();
-    neocogi_ui::events::bind(checkbox.changed(), session_tx.clone(), |event| format!("checked:{}", event.checked)).unwrap();
+
     checkbox.set_checked(true).unwrap();
     let app = TestApp::new(labels, session, |state, message| {
         state.push(message);
@@ -156,16 +214,20 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
 
     let mut slider = ui
         .widgets()
-        .slider(SliderOptions {
-            value: 1.0,
-            low: 0.0,
-            high: 10.0,
-            step: 1.0,
-            precision: 0,
-        })
+        .slider(
+            SliderOptions {
+                value: 1.0,
+                low: 0.0,
+                high: 10.0,
+                step: 1.0,
+                precision: 0,
+            },
+            session_tx.clone(),
+            move |neocogi_ui::slider::Event::Changed(event)| format!("numeric:{}", event.value),
+        )
         .unwrap();
     let window = ui.window("slider", RECT, &slider).unwrap();
-    neocogi_ui::events::bind(slider.changed(), session_tx.clone(), |event| format!("numeric:{}", event.value)).unwrap();
+
     slider.set_value(5.0).unwrap();
     ui.update_with_events(SIZE, app.as_interface()).unwrap();
     assert_eq!(app.state().len(), 1);
@@ -175,9 +237,16 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
     assert_eq!(app.state().last().unwrap(), "numeric:6");
     window.close().unwrap();
 
-    let number = ui.widgets().number(NumberOptions { value: 3.0, step: 1.0, precision: 0 }).unwrap();
+    let number = ui
+        .widgets()
+        .number(
+            NumberOptions { value: 3.0, step: 1.0, precision: 0 },
+            session_tx.clone(),
+            move |neocogi_ui::number::Event::Changed(event)| format!("numeric:{}", event.value),
+        )
+        .unwrap();
     let window = ui.window("number", RECT, &number).unwrap();
-    neocogi_ui::events::bind(number.changed(), session_tx.clone(), |event| format!("numeric:{}", event.value)).unwrap();
+
     key(&ui, KeyCode::Tab);
     // Numeric text controls use Up/Down; horizontal sliders use Left/Right.
     key(&ui, KeyCode::ArrowUp);
@@ -185,14 +254,20 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
     assert_eq!(app.state().last().unwrap(), "numeric:4");
     window.close().unwrap();
 
-    let item = ui.widgets().list_item("item").unwrap();
-    let list_box = ui.widgets().list_box("box").unwrap();
+    let item = ui
+        .widgets()
+        .list_item("item", session_tx.clone(), move |neocogi_ui::list_item::Event::Activated(event)| event.label)
+        .unwrap();
+
+    let list_box = ui
+        .widgets()
+        .list_box("box", session_tx.clone(), move |neocogi_ui::list_box::Event::Activated(event)| event.label)
+        .unwrap();
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     column.insert(0, &item, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     column.insert(1, &list_box, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let window = ui.window("lists", RECT, &column).unwrap();
-    neocogi_ui::events::bind(item.activated(), session_tx.clone(), |event| event.label).unwrap();
-    neocogi_ui::events::bind(list_box.activated(), session_tx.clone(), |event| event.label).unwrap();
+
     for input in [KeyCode::Tab, KeyCode::Space, KeyCode::Tab, KeyCode::Space] {
         key(&ui, input);
     }
@@ -202,15 +277,19 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
 
     let mut bar = ui
         .widgets()
-        .scrollbar(ScrollRange {
-            axis: ScrollAxis::Horizontal,
-            viewport: 20,
-            content: 100,
-            offset: 0,
-        })
+        .scrollbar(
+            ScrollRange {
+                axis: ScrollAxis::Horizontal,
+                viewport: 20,
+                content: 100,
+                offset: 0,
+            },
+            session_tx.clone(),
+            move |neocogi_ui::scrollbar::Event::Changed(event)| format!("scroll:{}", event.offset),
+        )
         .unwrap();
     let window = ui.window("bar", RECT, &bar).unwrap();
-    neocogi_ui::events::bind(bar.changed(), session_tx.clone(), |event| format!("scroll:{}", event.offset)).unwrap();
+
     let previous = app.state().len();
     bar.set_offset(0).unwrap();
     ui.update_with_events(SIZE, app.as_interface()).unwrap();
@@ -235,18 +314,14 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let (session_tx, session) = std::sync::mpsc::channel();
     let labels = Vec::new();
-    let mut textbox = ui.widgets().textbox("").unwrap();
+    let mut textbox = ui
+        .widgets()
+        .textbox("", session_tx.clone(), |event| match event {
+            neocogi_ui::textbox::Event::Changed(value) => format!("changed:{}:{}", value.text, value.cursor),
+            neocogi_ui::textbox::Event::Submitted(value) => format!("submitted:{}", value.text),
+        })
+        .unwrap();
     let window = ui.window("textbox", RECT, &textbox).unwrap();
-    neocogi_ui::events::bind(textbox.changed(), session_tx.clone(), |event| {
-        format!("changed:{}:{}", event.text, event.cursor)
-    })
-    .unwrap();
-    // Replacing the destination succeeds; only this mapper receives later edits.
-    neocogi_ui::events::bind(textbox.changed(), session_tx.clone(), |event| {
-        format!("changed:{}:{}", event.text, event.cursor)
-    })
-    .unwrap();
-    neocogi_ui::events::bind(textbox.submitted(), session_tx.clone(), |event| format!("submitted:{}", event.text)).unwrap();
     textbox.set_text("a").unwrap();
     let app = TestApp::new(labels, session, |state, message| {
         state.push(message);
@@ -261,10 +336,14 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     assert_eq!(&*app.state(), &["changed:aé:3", "submitted:aé"]);
     window.close().unwrap();
 
-    let area = ui.widgets().text_area("", TextWrapping::Word, true).unwrap();
+    let area = ui
+        .widgets()
+        .text_area("", TextWrapping::Word, true, session_tx.clone(), |event| match event {
+            neocogi_ui::text_area::Event::Changed(value) => format!("changed:{}:{}", value.text, value.cursor),
+            neocogi_ui::text_area::Event::Submitted(value) => format!("submitted:{}", value.text),
+        })
+        .unwrap();
     let window = ui.window("textarea", RECT, &area).unwrap();
-    neocogi_ui::events::bind(area.changed(), session_tx.clone(), |event| format!("changed:{}:{}", event.text, event.cursor)).unwrap();
-    neocogi_ui::events::bind(area.submitted(), session_tx.clone(), |event| format!("submitted:{}", event.text)).unwrap();
     key(&ui, KeyCode::Tab);
     ui.input(UiInput::Text, "☃").unwrap();
     ui.input(
@@ -299,14 +378,17 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
 #[test]
 fn failed_consumer_recovers_on_next_update_and_preserves_remaining_native_input() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
-    let button = ui.widgets().button("fail once").unwrap();
-    let editor = ui.widgets().textbox("").unwrap();
+    let (events_tx, events) = std::sync::mpsc::channel();
+    let button = ui
+        .widgets()
+        .button("fail once", events_tx.clone(), move |neocogi_ui::button::Event::Activated(_)| ())
+        .unwrap();
+    let editor = ui.widgets().textbox_unobserved("").unwrap();
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     column.insert(0, &button, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     column.insert(1, &editor, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let window = ui.window("recovery", RECT, &column).unwrap();
-    let (events_tx, events) = std::sync::mpsc::channel();
-    neocogi_ui::events::bind(button.activated(), events_tx.clone(), |_| ()).unwrap();
+
     let app = TestApp::new(0, events, |attempts, ()| {
         *attempts += 1;
         match *attempts {
@@ -338,7 +420,7 @@ fn failed_consumer_recovers_on_next_update_and_preserves_remaining_native_input(
 #[test]
 fn real_lifecycle_cascade_is_deferred_until_each_consumer_returns() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
-    let button = ui.widgets().button("cascade").unwrap();
+    let button = ui.widgets().button_unobserved("cascade").unwrap();
     let window = ui.window("cascade", RECT, &button).unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
     neocogi_ui::events::bind(neocogi_ui::events::window_events(window.as_com_ref()).unwrap(), events_tx.clone(), |event| {
@@ -385,7 +467,7 @@ impl IEventOwner for FailingOwner {
 fn runtime_preserves_uncommitted_frame_on_foreign_consumer_failure() {
     let runtime = runtime();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
-    let button = ui.widgets().button("count").unwrap();
+    let button = ui.widgets().button_unobserved("count").unwrap();
     let window = ui.window("count", RECT, &button).unwrap();
     let dispatcher: ComPtr<IEventOwnerAbi> = FailingOwner::from_value(FailingOwner).query().unwrap();
     assert_eq!(runtime.update_with_events(SIZE, dispatcher.as_com_ref()), Err(NC_E_INVALID_ARG));
@@ -436,16 +518,27 @@ fn boundary_budget_stops_a_cascade_and_preserves_the_unattempted_message() {
 /// A generated receiver's domain failure must propagate out of native widget routing.
 #[test]
 fn failed_post_preserves_committed_widget_state_and_requires_a_new_frame() {
-    /// Deliberately rejects an otherwise valid numeric fact at the foreign receiver boundary.
-    fn reject(_: neocogi_ui::events::NumericChanged) -> Result<(), NcStatus> {
-        Err(NC_E_INVALID_ARG)
-    }
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
-    let number = ui.widgets().number(NumberOptions { value: 9.0, step: 1.0, precision: 0 }).unwrap();
-    let window = ui.window("post failure", RECT, &number).unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
-    number.changed()(Box::new(reject)).unwrap();
     let (renderer, _) = renderer();
+    let mut reject_next = true;
+    let observer = neocogi_ui::number::Event::observer(move |neocogi_ui::number::Event::Changed(event)| {
+        // A receiver may reject one post and recover without changing the
+        // widget's construction-time destination or undoing its committed value.
+        match std::mem::replace(&mut reject_next, false) {
+            true => Err(NC_E_INVALID_ARG),
+            false => {
+                events_tx.send(event.value).unwrap();
+                Ok(())
+            }
+        }
+    })
+    .unwrap();
+    let number = ui
+        .widgets()
+        .number_with_observer(NumberOptions { value: 9.0, step: 1.0, precision: 0 }, Some(observer.as_com_ref()))
+        .unwrap();
+    let window = ui.window("post failure", RECT, &number).unwrap();
     ui.update(SIZE).unwrap();
     key(&ui, KeyCode::Tab);
     key(&ui, KeyCode::ArrowUp);
@@ -453,9 +546,12 @@ fn failed_post_preserves_committed_widget_state_and_requires_a_new_frame() {
     assert_eq!(number.value(), Ok(10.0));
     assert!(events.try_recv().is_err());
     assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
-    neocogi_ui::events::bind(number.changed(), events_tx.clone(), |event| event.value).unwrap();
+
     ui.update(SIZE).unwrap();
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
+    key(&ui, KeyCode::ArrowUp);
+    ui.update(SIZE).unwrap();
+    assert_eq!(events.try_recv().unwrap(), 11.0);
     window.close().unwrap();
 }
 
@@ -467,7 +563,7 @@ fn failed_lifecycle_post_preserves_visibility_and_returns_its_receiver_error() {
         Err(NC_E_INVALID_ARG)
     }
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
-    let button = ui.widgets().button("lifecycle").unwrap();
+    let button = ui.widgets().button_unobserved("lifecycle").unwrap();
     let window = ui.window("post failure", RECT, &button).unwrap();
     let source = window.query::<IWindowEventsAbi>().unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();

@@ -221,16 +221,19 @@ impl IPersistenceFactory for Factory {
     fn restore(&self, version: u32, state: NcCopyFromBufferOffset<'_, u8>, children: ComRef<'_, IObjectChildrenAbi>) -> Result<ComPtr<IUnknown>, NcStatus> {
         let document = decode(version, state, children.count()?)?;
         let mut construction = Construction {
+            declarations: &document.outputs,
+            outputs: NamedOutputs::new(),
             ui: &self.ui,
             parent: self.parent.as_ref(),
             resources: &self.resources,
             nodes: BTreeMap::new(),
         };
         let root = construction.build(&document.root)?;
-        let outputs = crate::bindings::outputs(&document, &construction.nodes)?;
+        let outputs = std::mem::take(&mut construction.outputs);
         let inputs = crate::bindings::inputs(&document, &construction.nodes)?;
         // Success transfers tree ownership to Loaded; the construction guard no longer closes it.
         construction.nodes.clear();
+        drop(construction);
         Ok(Loaded::from_value(Loaded { document, root, outputs, inputs }))
     }
 }

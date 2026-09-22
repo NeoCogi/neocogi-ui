@@ -33,7 +33,7 @@
 //! `ListItem` represents one selectable row in a retained list. Application payloads stay in the
 //! statically linked caller and are mapped from the row's typed activation event.
 
-use neocogi_ui_core_contracts::__ActivationReceiverAbi;
+use neocogi_ui_nodes_contracts::ListItemObserverAbi;
 use crate::{ControlRole};
 
 use super::*;
@@ -90,8 +90,8 @@ pub struct ListItem {
     /// Base widget options.
     /// Mutable label displayed for the item.
     label: String,
-    /// Installed destination for captured text submissions.
-    submitted_event: Option<neocogi_com::ComPtr<__ActivationReceiverAbi>>,
+    /// Sole observer retained at construction; released on logical closure.
+    observer: Option<neocogi_com::ComPtr<ListItemObserverAbi>>,
 }
 
 impl ListItem {
@@ -102,7 +102,7 @@ impl ListItem {
             icon: parameters.icon,
             font: parameters.font,
             label: parameters.label,
-            submitted_event: None,
+            observer: None,
         }
     }
 
@@ -175,7 +175,7 @@ impl Widget for ListItem {
         }
         // Clone before emission so observers receive an immutable selection snapshot.
         let label = self.label.clone();
-        ctx.posted(crate::Activation { label }.post_to(&mut self.submitted_event));
+        ctx.posted(neocogi_ui_nodes_contracts::ListItemEvent::Activated(crate::Activation { label }).post_to(&mut self.observer));
 
         // Submitting preserves the label and icon used by intrinsic measurement.
         crate::Change::NoChange
@@ -201,7 +201,7 @@ impl From<ListItemParameters> for crate::test_support::algorithm::Algorithm<List
 impl crate::widget_object::WidgetAlgorithm for ListItem {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
-        self.submitted_event = None;
+        self.observer = None;
     }
 }
 
@@ -293,8 +293,11 @@ impl ListItem {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         label: NcCopyFromBufferOffset<'_, u8>,
+        observer: Option<neocogi_com::ComRef<'_, ListItemObserverAbi>>,
     ) -> Result<ComPtr<ListItemAbi>, NcStatus> {
-        let value = Self::build(host, label, Some(&resources))?;
+        let mut value = Self::build(host, label, Some(&resources))?;
+        // Retain the sole destination before publishing the completed widget.
+        value.observer = observer.map(|destination| destination.add_ref());
         Ok(Self::from_value(value).query().expect("ListItem declares its callable class contract"))
     }
 
@@ -311,13 +314,6 @@ impl ListItem {
 }
 
 impl neocogi_ui_nodes_contracts::ListItem for ListItem {
-    /// Replaces this output's concrete destination after checking widget access.
-    fn __map_activated(&mut self, destination: neocogi_com::ComRef<'_, __ActivationReceiverAbi>) -> Result<(), neocogi_com::NcStatus> {
-        self.runtime().state.writable()?;
-        self.submitted_event = Some(destination.add_ref());
-        Ok(())
-    }
-
     /// Returns an immutable label snapshot from the concrete row.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;

@@ -41,7 +41,7 @@ fn removed_controller_finalizes_after_handler_return_even_on_error() {
         let (send, messages) = std::sync::mpsc::channel();
         let owner = Controller::into_local(Controller::new(Removal { window: None, trace: trace.clone(), fail }, messages));
         let mut events = owner.query::<IEventOwnerAbi>().unwrap();
-        let view = ui.widgets().button("owned view").unwrap();
+        let view = ui.widgets().button_unobserved("owned view").unwrap();
         let component = neocogi_ui::Component::new(view, events.clone());
         let window = ui.window("owned behavior", RECT, &component).unwrap();
         owner.try_borrow_mut().unwrap().model.window = Some(window.clone());
@@ -65,15 +65,15 @@ fn component_attachment_claims_each_view_and_owner_only_once() {
     let (_send, messages) = std::sync::mpsc::channel();
     let owner = Controller::into_local(Controller::new(Removal { window: None, trace, fail: false }, messages));
     let events = owner.query::<IEventOwnerAbi>().unwrap();
-    let used_view = ui.widgets().button("already mounted").unwrap();
+    let used_view = ui.widgets().button_unobserved("already mounted").unwrap();
     let first = ui.window("first", RECT, &used_view).unwrap();
     let rejected = neocogi_ui::Component::new(used_view, events.clone());
     assert!(matches!(ui.window("rejected view", RECT, &rejected), Err(UI_E_OWNER)));
 
     // A rejected view left the controller unclaimed; another fresh view can use it.
-    let live = neocogi_ui::Component::new(ui.widgets().button("fresh view").unwrap(), events.clone());
+    let live = neocogi_ui::Component::new(ui.widgets().button_unobserved("fresh view").unwrap(), events.clone());
     let second = ui.window("second", RECT, &live).unwrap();
-    let untouched = ui.widgets().button("still unclaimed").unwrap();
+    let untouched = ui.widgets().button_unobserved("still unclaimed").unwrap();
     let rejected = neocogi_ui::Component::new(untouched.clone(), events);
     assert!(matches!(ui.window("rejected controller", RECT, &rejected), Err(UI_E_OWNER)));
     // The controller rejected the second attachment before claiming its proposed view.
@@ -88,7 +88,7 @@ fn component_attachment_claims_each_view_and_owner_only_once() {
 #[test]
 fn persistent_empty_owner_adds_no_per_update_allocations() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
-    let view = ui.widgets().button("idle").unwrap();
+    let view = ui.widgets().button_unobserved("idle").unwrap();
     let _window = ui.window("allocation comparison", RECT, &view).unwrap();
     let (_send, messages) = std::sync::mpsc::channel::<()>();
     let app = neocogi_ui_support::test_support::events::TestApp::new((), messages, |(), ()| Ok(()));
@@ -124,7 +124,7 @@ fn busy_retirement_retries_without_resuming_private_delivery() {
             messages,
         ));
         let events = owner.query::<IEventOwnerAbi>().unwrap();
-        let component = neocogi_ui::Component::new(ui.widgets().button("guarded").unwrap(), events);
+        let component = neocogi_ui::Component::new(ui.widgets().button_unobserved("guarded").unwrap(), events);
         let window = ui.window("guarded owner", RECT, &component).unwrap();
         let held = owner.try_borrow_mut().unwrap();
         match close_runtime {

@@ -1,4 +1,5 @@
-#[version(1)]
+#[version(2)]
+#[observer]
 /// Constructible single-line editor whose complete concrete API is the class contract.
 interface Textbox: IWidget + ILeafLayout {
     /// Returns an independently owned immutable UTF-8 snapshot.
@@ -36,7 +37,8 @@ interface TextBlock: IWidget + ILeafLayout {
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
 }
 
-#[version(1)]
+#[version(2)]
+#[observer]
 /// Constructible boolean control with no redundant Checkbox-only interface.
 interface Checkbox: IWidget + ILeafLayout {
 
@@ -82,7 +84,8 @@ struct NumberOptions {
     precision: u8,
 }
 
-#[version(1)]
+#[version(2)]
+#[observer]
 /// Constructible bounded numeric control whose concrete API is one class contract.
 interface Slider: IWidget + ILeafLayout {
     /// Returns the current finite value after range clamping and step snapping.
@@ -99,7 +102,8 @@ interface Slider: IWidget + ILeafLayout {
     changed: NumericChanged;
 }
 
-#[version(1)]
+#[version(2)]
+#[observer]
 /// Constructible unbounded numeric editor whose concrete API is one class contract.
 interface Number: IWidget + ILeafLayout {
     /// Returns the current finite value.
@@ -133,7 +137,8 @@ interface ColorSwatch: IWidget + ILeafLayout {
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
 }
 
-#[version(1)]
+#[version(2)]
+#[observer]
 /// Constructible labelled row; generic application data remains in the static event adapter.
 interface ListItem: IWidget + ILeafLayout {
     /// Returns an independently owned immutable UTF-8 label snapshot.
@@ -152,7 +157,8 @@ interface ListItem: IWidget + ILeafLayout {
     activated: Activation;
 }
 
-#[version(1)]
+#[version(2)]
+#[observer]
 /// Constructible button-like list entry with direct label, image, and activation operations.
 interface ListBox: IWidget + ILeafLayout {
     /// Returns an independently owned immutable UTF-8 label snapshot.
@@ -193,7 +199,8 @@ struct ScrollRange {
     offset: i32,
 }
 
-#[version(1)]
+#[version(2)]
+#[observer]
 /// Constructible scrollbar with its concrete editing and event surface in one class contract.
 interface Scrollbar: IWidget + ILeafLayout {
 
@@ -245,7 +252,8 @@ bitenum FillStates: u8 {
     ALL = 7,
 }
 
-#[version(1)]
+#[version(2)]
+#[observer]
 /// Constructible fixed scrolling editor whose class forwards to one actual internal editor.
 interface TextArea: IWidget + IContainerLayout + IScrolling {
     /// Returns an independently owned immutable UTF-8 snapshot from the actual editor.
@@ -270,7 +278,7 @@ interface TextArea: IWidget + IContainerLayout + IScrolling {
     submitted: TextSubmitted;
 }
 
-#[version(2)]
+#[version(3)]
 /// Runtime-owned combo box whose header, item model, popup, and interaction state form one control.
 interface Combo: IWidget + ILeafLayout {
     /// Returns the committed stable leaf identity, preserving `None` independently of every ID.
@@ -293,6 +301,4 @@ interface Combo: IWidget + ILeafLayout {
     fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
-    /// Connection access for captured ChoiceSelection values.
-    changed: ChoiceSelection;
 }

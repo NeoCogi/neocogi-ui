@@ -7,9 +7,9 @@ use crate::{
 };
 use crate::math::RectExt;
 use crate::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
-use neocogi_com::{ComPtr, ComRef, NcStatus, NC_E_INVALID_ARG, NC_E_OUT_OF_RANGE};
+use neocogi_com::{ComPtr, NcStatus, NC_E_INVALID_ARG, NC_E_OUT_OF_RANGE};
 use neocogi_ui_core_contracts::{ChildEditResult, GeometryChange, IChildrenAbi, IChildrenEditorAbi, IWidgetHostAbi};
-use neocogi_ui_nodes_contracts::{SplitAxis, SplitChanged, SplitOptions, SplitViewAbi, __SplitChangedReceiverAbi};
+use neocogi_ui_nodes_contracts::{SplitAxis, SplitChanged, SplitOptions, SplitViewAbi, SplitViewObserverAbi};
 
 /// Pointer offset within the divider prevents an initial jump when its edge is grabbed.
 #[derive(Clone, Copy, Default)]
@@ -134,7 +134,7 @@ pub struct SplitView {
     /// Last routed local pointer position distinguishes the handle from inert pane backgrounds.
     pointer: Option<Vec2i>,
     /// Optional typed destination for user-originated position changes.
-    changed_event: Option<ComPtr<__SplitChangedReceiverAbi>>,
+    observer: Option<ComPtr<SplitViewObserverAbi>>,
 }
 
 impl SplitView {
@@ -143,6 +143,7 @@ impl SplitView {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         settings: SplitOptions,
+        observer: Option<neocogi_com::ComRef<'_, SplitViewObserverAbi>>,
     ) -> Result<ComPtr<SplitViewAbi>, NcStatus> {
         validate(settings)?;
         let editor = host.create_children()?;
@@ -155,7 +156,7 @@ impl SplitView {
             partition: Partition::default(),
             drag: Drag::Idle,
             pointer: None,
-            changed_event: None,
+            observer: observer.map(|value| value.add_ref()),
         };
         Ok(Self::from_value(value).query().expect("SplitView declares its concrete contract"))
     }
@@ -177,7 +178,7 @@ impl SplitView {
             return Change::NoChange;
         }
         self.settings.position = position;
-        ctx.posted(SplitChanged { position }.post_to(&mut self.changed_event));
+        ctx.posted(neocogi_ui_nodes_contracts::SplitViewEvent::Changed(SplitChanged { position }).post_to(&mut self.observer));
         Change::Changed
     }
 }
@@ -193,7 +194,7 @@ impl HostedWidget for SplitView {
     }
     /// Retires event delivery and every owned pane when the container closes.
     fn close_contents(&mut self) -> Result<(), NcStatus> {
-        self.changed_event = None;
+        self.observer = None;
         self.drag = Drag::Idle;
         self.editor.close()?.finish()
     }
@@ -262,12 +263,6 @@ impl neocogi_ui_nodes_contracts::SplitView for SplitView {
             self.settings = settings;
             self.invalidate();
         }
-        Ok(())
-    }
-    /// Installs a typed event destination without sharing the split's mutable state.
-    fn __map_changed(&mut self, destination: ComRef<'_, __SplitChangedReceiverAbi>) -> Result<(), NcStatus> {
-        self.runtime.state.writable()?;
-        self.changed_event = Some(destination.add_ref());
         Ok(())
     }
 }

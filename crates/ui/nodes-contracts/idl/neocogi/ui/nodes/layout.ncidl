@@ -150,7 +150,8 @@ struct SplitOptions {
     handle_width: i32,
 }
 
-#[version(2)]
+#[version(3)]
+#[observer]
 /// Two-pane layout with a draggable divider owned by this same concrete container.
 /// Zero children is empty; one fills the allocation; two enable the divider.
 interface SplitView: IWidget + IContainerLayout {

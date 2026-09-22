@@ -151,14 +151,14 @@ fn raising_changes_compositor_order_only_within_the_windows_layer() {
 #[test]
 fn managed_surface_layers_follow_family_policy_and_reject_independent_assignment() {
     let mut fixture = Headless::standard();
-    let body = fixture.ui.widgets().button("parent").unwrap();
+    let body = fixture.ui.widgets().button_unobserved("parent").unwrap();
     let owner = window(&fixture.ui, "owner", Rect { x: 10, y: 10, width: 200, height: 150 }, &body);
-    let child_body = fixture.ui.widgets().button("child").unwrap();
+    let child_body = fixture.ui.widgets().button_unobserved("child").unwrap();
     let child = fixture
         .ui
         .child_window(owner.as_com_ref(), "child", Rect { x: 20, y: 20, width: 100, height: 80 }, &child_body)
         .unwrap();
-    let dialog_body = fixture.ui.widgets().button("dialog").unwrap();
+    let dialog_body = fixture.ui.widgets().button_unobserved("dialog").unwrap();
     let dialog = fixture
         .ui
         .dialog(owner.as_com_ref(), "dialog", Rect { x: 30, y: 30, width: 100, height: 80 }, &dialog_body)
@@ -212,10 +212,10 @@ fn outside_popup_press_dismisses_then_routes_once_and_popup_reuses_its_content()
 #[test]
 fn one_popup_branch_is_active_per_runtime_and_owner_visibility_controls_it() {
     let mut fixture = Headless::standard();
-    let body = fixture.ui.widgets().button("body").unwrap();
+    let body = fixture.ui.widgets().button_unobserved("body").unwrap();
     let owner = window(&fixture.ui, "owner", Rect { x: 10, y: 10, width: 250, height: 180 }, &body);
-    let first = fixture.ui.widgets().button("first").unwrap();
-    let second = fixture.ui.widgets().button("second").unwrap();
+    let first = fixture.ui.widgets().button_unobserved("first").unwrap();
+    let second = fixture.ui.widgets().button_unobserved("second").unwrap();
     let mut a = fixture.ui.popup(owner.as_com_ref(), "a", &first).unwrap();
     let mut b = fixture.ui.popup(owner.as_com_ref(), "b", &second).unwrap();
     a.show_at(Rect { x: 40, y: 40, width: 100, height: 80 }).unwrap();
@@ -234,7 +234,7 @@ fn one_popup_branch_is_active_per_runtime_and_owner_visibility_controls_it() {
 fn child_clipping_accumulates_and_can_be_disabled_without_changing_child_geometry() {
     for clipping in [ChildClip::Content, ChildClip::None] {
         let mut fixture = Headless::standard();
-        let body = fixture.ui.widgets().button("body").unwrap();
+        let body = fixture.ui.widgets().button_unobserved("body").unwrap();
         let owner = window(&fixture.ui, "owner", Rect { x: 20, y: 20, width: 100, height: 100 }, &body);
         owner.set_child_clip(clipping).unwrap();
         let (leaf, observed) = probe::<0>(&fixture.ui, Size::default(), WidgetOptions::NONE);
@@ -256,9 +256,9 @@ fn child_clipping_accumulates_and_can_be_disabled_without_changing_child_geometr
 fn foreign_surface_owner_rejection_preserves_content_for_retry() {
     let mut fixture = Headless::standard();
     let other = Headless::standard();
-    let foreign_body = other.ui.widgets().button("foreign").unwrap();
+    let foreign_body = other.ui.widgets().button_unobserved("foreign").unwrap();
     let foreign = window(&other.ui, "foreign", Rect { x: 0, y: 0, width: 100, height: 80 }, &foreign_body);
-    let candidate = fixture.ui.widgets().button("candidate").unwrap();
+    let candidate = fixture.ui.widgets().button_unobserved("candidate").unwrap();
     assert_eq!(
         fixture
             .ui
@@ -276,11 +276,11 @@ fn foreign_surface_owner_rejection_preserves_content_for_retry() {
 #[test]
 fn deep_window_family_preserves_inherited_policy_through_mutation_and_teardown() {
     let mut fixture = Headless::standard();
-    let body = fixture.ui.widgets().button("root").unwrap();
+    let body = fixture.ui.widgets().button_unobserved("root").unwrap();
     let root = window(&fixture.ui, "root", Rect { x: 10, y: 10, width: 120, height: 100 }, &body);
     let mut deepest = root.clone();
     for _ in 0..48 {
-        let body = fixture.ui.widgets().button("child").unwrap();
+        let body = fixture.ui.widgets().button_unobserved("child").unwrap();
         deepest = fixture
             .ui
             .child_window(deepest.as_com_ref(), "child", Rect { x: 10, y: 10, width: 100, height: 80 }, &body)
@@ -301,7 +301,7 @@ fn deep_window_family_preserves_inherited_policy_through_mutation_and_teardown()
 #[test]
 fn title_drag_and_close_deliver_window_events_through_the_production_session() {
     let mut fixture = Headless::standard();
-    let body = fixture.ui.widgets().button("body").unwrap();
+    let body = fixture.ui.widgets().button_unobserved("body").unwrap();
     let owner = fixture.ui.window("chrome", Rect { x: 30, y: 30, width: 180, height: 120 }, &body).unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
     let observations = Vec::new();

@@ -660,7 +660,7 @@ fn disclosure_com_header_controls_the_actual_body_without_a_parent_backpointer()
 fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_identity() {
     let runtime = runtime();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
-    let mut area = ui.widgets().text_area("a☃\r\nb\r", TextWrapping::None, true).unwrap();
+    let mut area = ui.widgets().text_area_unobserved("a☃\r\nb\r", TextWrapping::None, true).unwrap();
     assert_eq!(area.text().unwrap(), "a☃\nb\n");
     let root = area.node_interface().unwrap();
     let identity = root.query::<IUnknown>().unwrap();

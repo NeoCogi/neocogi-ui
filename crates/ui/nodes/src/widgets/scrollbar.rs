@@ -54,7 +54,7 @@
 //!
 //! The widget owns range state, input, events, and paint while its parent remains responsible for
 //! allocating the track. Shared geometry keeps paint, dragging, and track clicks consistent.
-use neocogi_ui_nodes_contracts::__ScrollbarChangedReceiverAbi;
+use neocogi_ui_nodes_contracts::ScrollbarObserverAbi;
 use crate::{ControlRole};
 
 use crate::math::{clamp_i64_to_i32, RectExt};
@@ -270,7 +270,7 @@ pub struct Scrollbar {
     pub(crate) axis_state: std::rc::Rc<ScrollAxisState>,
     /// Caller-authored options; dynamic range policy is resolved from the same shared state.
     /// Typed source for user-originated movement; programmatic requests remain silent.
-    changed_event: Option<neocogi_com::ComPtr<__ScrollbarChangedReceiverAbi>>,
+    observer: Option<neocogi_com::ComPtr<ScrollbarObserverAbi>>,
 }
 
 /// Coherent copied values shared by a real scrollbar and its co-packaged scroll layout.
@@ -344,7 +344,7 @@ impl Scrollbar {
             runtime,
             axis: parameters.axis,
             axis_state,
-            changed_event: None,
+            observer: None,
         }
     }
 }
@@ -430,7 +430,7 @@ impl Widget for Scrollbar {
         if self.offset() != previous {
             // Publish only user-originated movement. Programmatic setters intentionally remain
             // silent so owners can synchronize range and offset without recursive notifications.
-            ctx.posted(crate::ScrollbarChanged { offset: self.offset() }.post_to(&mut self.changed_event));
+            ctx.posted(neocogi_ui_nodes_contracts::ScrollbarEvent::Changed(crate::ScrollbarChanged { offset: self.offset() }).post_to(&mut self.observer));
         }
 
         // A containing ScrollArea reads this offset when placing its content.
@@ -464,7 +464,7 @@ impl crate::LeafWidget for Scrollbar {
 impl crate::widget_object::WidgetAlgorithm for Scrollbar {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
-        self.changed_event = None;
+        self.observer = None;
     }
 
     /// A zero range paints a full thumb but must not establish meaningless pointer capture.
@@ -568,8 +568,11 @@ impl Scrollbar {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         range: ScrollRange,
+        observer: Option<neocogi_com::ComRef<'_, ScrollbarObserverAbi>>,
     ) -> Result<ComPtr<ScrollbarAbi>, NcStatus> {
-        let value = Self::build(host, range, Some(&resources))?;
+        let mut value = Self::build(host, range, Some(&resources))?;
+        // Retain the sole destination before publishing the completed widget.
+        value.observer = observer.map(|destination| destination.add_ref());
         Ok(Self::from_value(value).query().expect("Scrollbar declares its callable class contract"))
     }
 
@@ -590,13 +593,6 @@ impl Scrollbar {
 }
 
 impl neocogi_ui_nodes_contracts::Scrollbar for Scrollbar {
-    /// Replaces this output's concrete destination after checking widget access.
-    fn __map_changed(&mut self, destination: neocogi_com::ComRef<'_, __ScrollbarChangedReceiverAbi>) -> Result<(), neocogi_com::NcStatus> {
-        self.runtime().state.writable()?;
-        self.changed_event = Some(destination.add_ref());
-        Ok(())
-    }
-
     /// Reads all range fields from one consistent semantic snapshot.
     fn range(&self) -> Result<ScrollRange, NcStatus> {
         self.runtime().state.readable()?;

@@ -7,6 +7,10 @@ use std::collections::BTreeMap;
 
 /// Owns all created nodes until construction transfers them to the loaded component.
 pub(crate) struct Construction<'a> {
+    /// Validated public exports select which nodes need an observer at construction.
+    pub declarations: &'a [crate::model::Output],
+    /// Component-owned public bindings, separate from widget lifetimes and topology.
+    pub outputs: neocogi_com::events::NamedOutputs,
     /// Existing runtime and independently deployed built-in factory.
     pub ui: &'a Ui,
     /// Required only by window-owned combo popups.
@@ -50,36 +54,83 @@ impl Construction<'_> {
     pub fn build(&mut self, node: &Node) -> Result<Widget<IWidgetAbi>, NcStatus> {
         let children = node.children.iter().map(|child| self.build(&child.node)).collect::<Result<Vec<_>, _>>()?;
         let factory = self.ui.widgets();
+        // A named document export is the widget's fixed observer. Public names
+        // resolve only during binding; later posts forward through typed fields.
+        macro_rules! create {
+            ($factory:expr, $method:ident, $event:ty, $($argument:expr),* $(,)?) => {{
+                let mut exports = self.declarations.iter().filter(|output| output.node == node.key).peekable();
+                let observer = match exports.peek() {
+                    None => None,
+                    Some(_) => {
+                        let (observer, bindings) = <$event>::exported_observer()?;
+                        for export in exports {
+                            self.outputs.export_component(&export.name, bindings.clone(), &export.port)?;
+                        }
+                        Some(observer)
+                    }
+                };
+                $factory.$method($($argument,)* observer.as_ref().map(|value| value.as_com_ref()))?
+            }};
+        }
         let mut widget = match &node.widget {
-            WidgetSpec::Button { text } => root(factory.button(text)?)?,
-            WidgetSpec::Checkbox { text, checked } => root(factory.checkbox(text, *checked)?)?,
-            WidgetSpec::Textbox { text } => root(factory.textbox(text)?)?,
+            WidgetSpec::Button { text } => root(create!(factory, button_with_observer, nodes::ButtonEvent, text))?,
+            WidgetSpec::Checkbox { text, checked } => root(create!(factory, checkbox_with_observer, nodes::CheckboxEvent, text, *checked))?,
+            WidgetSpec::Textbox { text } => root(create!(factory, textbox_with_observer, nodes::TextboxEvent, text))?,
             WidgetSpec::TextBlock { text, wrapping: policy } => root(factory.text_block(text, wrapping(policy))?)?,
-            WidgetSpec::TextArea { text, wrapping: policy, scrolling } => root(factory.text_area(text, wrapping(policy), *scrolling)?)?,
-            WidgetSpec::Slider { value, low, high, step, precision } => root(factory.slider(SliderOptions {
-                value: *value,
-                low: *low,
-                high: *high,
-                step: *step,
-                precision: *precision,
-            })?)?,
-            WidgetSpec::Number { value, step, precision } => root(factory.number(NumberOptions {
-                value: *value,
-                step: *step,
-                precision: *precision,
-            })?)?,
+            WidgetSpec::TextArea { text, wrapping: policy, scrolling } => root(create!(
+                factory,
+                text_area_with_observer,
+                nodes::TextAreaEvent,
+                text,
+                wrapping(policy),
+                *scrolling
+            ))?,
+            WidgetSpec::Slider { value, low, high, step, precision } => root(create!(
+                factory,
+                slider_with_observer,
+                nodes::SliderEvent,
+                SliderOptions {
+                    value: *value,
+                    low: *low,
+                    high: *high,
+                    step: *step,
+                    precision: *precision,
+                }
+            ))?,
+            WidgetSpec::Number { value, step, precision } => root(create!(
+                factory,
+                number_with_observer,
+                nodes::NumberEvent,
+                NumberOptions {
+                    value: *value,
+                    step: *step,
+                    precision: *precision,
+                }
+            ))?,
             WidgetSpec::ColorSwatch { text, rgba } => root(factory.color_swatch(*rgba, text)?)?,
-            WidgetSpec::ListItem { text } => root(factory.list_item(text)?)?,
-            WidgetSpec::ListBox { text } => root(factory.list_box(text)?)?,
-            WidgetSpec::Scrollbar { vertical, viewport, content, offset } => root(factory.scrollbar(ScrollRange {
-                axis: if *vertical { ScrollAxis::Vertical } else { ScrollAxis::Horizontal },
-                viewport: *viewport,
-                content: *content,
-                offset: *offset,
-            })?)?,
+            WidgetSpec::ListItem { text } => root(create!(factory, list_item_with_observer, nodes::ListItemEvent, text))?,
+            WidgetSpec::ListBox { text } => root(create!(factory, list_box_with_observer, nodes::ListBoxEvent, text))?,
+            WidgetSpec::Scrollbar { vertical, viewport, content, offset } => root(create!(
+                factory,
+                scrollbar_with_observer,
+                nodes::ScrollbarEvent,
+                ScrollRange {
+                    axis: if *vertical { ScrollAxis::Vertical } else { ScrollAxis::Horizontal },
+                    viewport: *viewport,
+                    content: *content,
+                    offset: *offset,
+                }
+            ))?,
             WidgetSpec::Combo { labels, selected, placeholder } => {
                 let parent = self.parent.ok_or(NC_E_INVALID_ARG)?;
-                let mut combo = self.ui.combo_box(parent.as_com_ref(), labels, selection(*selected))?;
+                let mut combo = create!(
+                    self.ui,
+                    combo_box_with_observer,
+                    IChoiceMenuEvent,
+                    parent.as_com_ref(),
+                    labels,
+                    selection(*selected)
+                );
                 // Retain the root before further fallible setters so cleanup also removes its popup.
                 let widget = root(combo.clone())?;
                 self.nodes.insert(node.key.clone(), widget.clone());
@@ -111,13 +162,18 @@ impl Construction<'_> {
                 minimum_first,
                 minimum_second,
                 handle,
-            } => root(factory.split_view(SplitOptions {
-                axis: if *vertical { SplitAxis::Vertical } else { SplitAxis::Horizontal },
-                position: *position,
-                minimum_first: *minimum_first,
-                minimum_second: *minimum_second,
-                handle_width: *handle,
-            })?)?,
+            } => root(create!(
+                factory,
+                split_view_with_observer,
+                nodes::SplitViewEvent,
+                SplitOptions {
+                    axis: if *vertical { SplitAxis::Vertical } else { SplitAxis::Horizontal },
+                    position: *position,
+                    minimum_first: *minimum_first,
+                    minimum_second: *minimum_second,
+                    handle_width: *handle,
+                }
+            ))?,
             WidgetSpec::Scroll { enabled } => root(factory.scroll_area(children.first().ok_or(NC_E_INVALID_ARG)?, *enabled)?)?,
             WidgetSpec::Disclosure { text, tree, expanded } => {
                 root(factory.disclosure(text, if *tree { DisclosureStyle::Tree } else { DisclosureStyle::Header }, *expanded)?)?

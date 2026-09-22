@@ -236,8 +236,8 @@ fn encoded_tracks(tracks: &[LayoutTrack]) -> Vec<LayoutTrackAbi> {
 
 impl WidgetFactory {
     /// Creates an empty split; insert panes in first/second ownership order.
-    pub fn split_view(&self, settings: SplitOptions) -> Result<SplitViewWidget, NcStatus> {
-        Ok(SplitViewWidget::from_interface(self.interface.create_split_view(settings)?))
+    pub fn split_view_with_observer(&self, settings: SplitOptions, observer: Option<ComRef<'_, SplitViewObserverAbi>>) -> Result<SplitViewWidget, NcStatus> {
+        Ok(SplitViewWidget::from_interface(self.interface.create_split_view(settings, observer)?))
     }
     /// Creates a disclosure whose body starts empty and whose header owns the supplied label.
     pub fn disclosure(&self, label: &str, style: DisclosureStyle, expanded: bool) -> Result<DisclosureWidget, NcStatus> {

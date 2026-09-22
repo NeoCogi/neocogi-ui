@@ -121,14 +121,14 @@ impl Workload {
             let tracks = [LayoutTrack::Fixed { extent: 24 }; 32];
             let mut grid = factory.grid(&tracks, &tracks)?;
             for index in 0..1024 {
-                let mut button = factory.button("MMMM")?;
+                let mut button = factory.button_unobserved("MMMM")?;
                 button.set_options(WidgetOptions::NONE)?;
                 grid.insert(index, &button, GridExtent { columns: 1, rows: 1 })?.finish()?;
                 buttons.push(button);
             }
             grid.node_interface()?
         } else {
-            let mut button = factory.button("MMMM")?;
+            let mut button = factory.button_unobserved("MMMM")?;
             button.set_options(WidgetOptions::NONE)?;
             let mut root = button.node_interface()?;
             buttons.push(button);

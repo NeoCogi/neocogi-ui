@@ -154,10 +154,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     if options.smoke {
         assert_eq!(ui.widgets().host()?.as_ptr(), host.as_ptr());
     }
-    let mut button = ui.widgets().button("Hello across COM")?;
-    let window = ui.window("Dynamic UI", Rect { x: 40, y: 40, width: 500, height: 200 }, &button)?;
     let (session_tx, session) = std::sync::mpsc::channel();
-    neocogi_ui::events::bind(button.activated(), session_tx.clone(), |event| event.label)?;
+    let mut button = ui
+        .widgets()
+        .button("Hello across COM", session_tx.clone(), |neocogi_ui::button::Event::Activated(event)| {
+            event.label
+        })?;
+    let window = ui.window("Dynamic UI", Rect { x: 40, y: 40, width: 500, height: 200 }, &button)?;
     let app = events::Controller::into_local(events::Controller::root(ClickModel { count: 0, button: button.clone() }, session));
     let owner = app.query::<IEventOwnerAbi>()?;
     let size = native.size()?;
@@ -248,7 +251,9 @@ fn key(ui: &Ui, key: KeyCode) -> Result<(), NcStatus> {
 /// Exercises every migrated container through independently compiled factory and layout interfaces.
 fn smoke_containers(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
     let mut section = ui.widgets().disclosure("Composed editor", DisclosureStyle::Tree, true)?;
-    let mut text = ui.widgets().text_area(&"Editable native content\n".repeat(60), TextWrapping::Word, true)?;
+    let mut text = ui
+        .widgets()
+        .text_area_unobserved(&"Editable native content\n".repeat(60), TextWrapping::Word, true)?;
     section
         .body()?
         .insert(0, &text, LinearEdge::new(LayoutTrack::Fixed { extent: 100 }))?
@@ -342,7 +347,7 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let directory = SmokeDirectory::new()?;
     let mut root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     let window = ui.window("Dynamic components", Rect { x: 10, y: 10, width: 610, height: 300 }, &root)?;
-    let combo = ui.combo_box(window.as_com_ref(), &["First", "Selected across COM"], ChoiceSelection::Selected(1))?;
+    let combo = ui.combo_box_unobserved(window.as_com_ref(), &["First", "Selected across COM"], ChoiceSelection::Selected(1))?;
     root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content))?.finish()?;
     let menus = ui.menus()?;
     let bar = menus.create("")?;
@@ -365,8 +370,9 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     }
     ui.update_with_events(size, owner.as_com_ref())?;
     assert_eq!(app.try_borrow()?.model.count, 1);
-    let mut picker = ui.file_dialog(window.as_com_ref())?;
-    neocogi_ui::events::bind(picker.completed(), events_tx.clone(), ComponentMessage::File)?;
+    let mut picker = ui.file_dialog(window.as_com_ref(), events_tx.clone(), |neocogi_ui::file_dialog::Event::Completed(event)| {
+        ComponentMessage::File(event)
+    })?;
     let mut request = FileDialogRequest::new(&directory.0);
     request.rect = Rect { x: 10, y: 10, width: 620, height: 370 };
     picker.open(&request)?;

@@ -51,14 +51,21 @@ fn independently_activated_nodes_bind_only_to_their_core_host_and_deliver_events
     let other_runtime = core.create_runtime(source.as_com_ref(), gfx.as_com_ref()).unwrap();
     assert!(matches!(Ui::from_interfaces(other_runtime, factory.clone()), Err(UI_E_OWNER)));
     let ui = Ui::from_interfaces(runtime, factory).unwrap();
-    let button = ui.widgets().button("nodes-owned activation").unwrap();
-    ui.window("provider boundary", Rect { x: 10, y: 10, width: 300, height: 150 }, &button).unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
+    let button = ui
+        .widgets()
+        .button(
+            "nodes-owned activation",
+            events_tx.clone(),
+            move |neocogi_ui::button::Event::Activated(event)| event.label,
+        )
+        .unwrap();
+    ui.window("provider boundary", Rect { x: 10, y: 10, width: 300, height: 150 }, &button).unwrap();
     let app = neocogi_ui_support::test_support::events::TestApp::new(Vec::new(), events, |labels, message| {
         labels.push(message);
         Ok(())
     });
-    neocogi_ui::events::bind(button.activated(), events_tx.clone(), |event| event.label).unwrap();
+
     key(&ui, KeyCode::Tab);
     key(&ui, KeyCode::Space);
     app.update(&ui, Size { width: 640, height: 400 }).unwrap();

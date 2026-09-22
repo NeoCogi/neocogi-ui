@@ -251,7 +251,11 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
     let source = export_bundle(&bundle()).unwrap();
     let runtime = crate::test_support::runtime_from_assets(source.as_com_ref()).unwrap();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
-    let button = ui.widgets().button("switch theme").unwrap();
+    let (session_tx, session) = std::sync::mpsc::channel();
+    let button = ui
+        .widgets()
+        .button("switch theme", session_tx.clone(), move |neocogi_ui::button::Event::Activated(event)| event)
+        .unwrap();
     let probe = Rc::new(Probe {
         runtime,
         button: button.as_interface().add_ref(),
@@ -270,8 +274,7 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
         renderer: renderer.clone(),
         installed: 0,
     };
-    let (session_tx, session) = std::sync::mpsc::channel();
-    neocogi_ui::events::bind(button.activated(), session_tx.clone(), |event| event).unwrap();
+
     for key in [KeyCode::Tab, KeyCode::Space] {
         ui.input(
             UiInput::Key(KeyStroke {
@@ -323,7 +326,7 @@ fn runtime_install_is_atomic_and_updates_shared_widget_measurement() {
     let source = export_bundle(&bundle()).unwrap();
     let runtime = crate::test_support::runtime_from_assets(source.as_com_ref()).unwrap();
     let mut ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
-    let button = ui.widgets().button("resources").unwrap();
+    let button = ui.widgets().button_unobserved("resources").unwrap();
     let button_interface = button.as_interface().add_ref();
     let probe = Rc::new(Probe {
         runtime: runtime.clone(),

@@ -34,7 +34,6 @@
 //! the core-owned `IChoiceMenu` also used by the ordinary widget-backed popup; all mutation crosses
 //! that public typed boundary through an exclusive receiver rather than shared interior mutability.
 
-use neocogi_ui_core_contracts::__ChoiceSelectionReceiverAbi;
 use crate::ControlRole;
 
 use super::*;
@@ -294,12 +293,6 @@ impl Combo {
 }
 
 impl neocogi_ui_nodes_contracts::Combo for Combo {
-    /// Replaces this output's concrete destination after checking widget access.
-    fn __map_changed(&mut self, destination: neocogi_com::ComRef<'_, __ChoiceSelectionReceiverAbi>) -> Result<(), NcStatus> {
-        self.runtime().state.writable()?;
-        self.menu.__map_changed(destination)
-    }
-
     /// Returns an explicit tagged optional position from the authoritative model.
     fn selection(&self) -> Result<ChoiceSelectionAbi, NcStatus> {
         self.runtime().state.readable()?;

@@ -1,37 +1,8 @@
 //! Name resolution is setup-only; concrete receivers own subsequent typed calls.
 use crate::{model::*, contracts::*};
 use neocogi_com::{ComPtr, IUnknown, ComInterface, NcMessage, NcStatus, NcCopyFromBufferOffset, NC_E_INVALID_ARG};
-use neocogi_com::events::NamedOutputs;
 use neocogi_ui::*;
 use std::collections::BTreeMap;
-
-/// Builds an output table from validated authored declarations and actual nodes.
-pub(crate) fn outputs(document: &Document, nodes: &BTreeMap<String, Widget<IWidgetAbi>>) -> Result<NamedOutputs, NcStatus> {
-    let mut table = NamedOutputs::new();
-    for export in &document.outputs {
-        let source = nodes.get(&export.node).ok_or(NC_E_INVALID_ARG)?.as_interface().add_ref();
-        macro_rules! export {
-            ($ty:ty) => {
-                table.export(&export.name, source.query::<$ty>()?, &export.port)?
-            };
-        }
-        match &document.root.find(&export.node).ok_or(NC_E_INVALID_ARG)?.widget {
-            WidgetSpec::Button { .. } => export!(ButtonAbi),
-            WidgetSpec::Checkbox { .. } => export!(CheckboxAbi),
-            WidgetSpec::Textbox { .. } => export!(TextboxAbi),
-            WidgetSpec::TextArea { .. } => export!(TextAreaAbi),
-            WidgetSpec::Slider { .. } => export!(SliderAbi),
-            WidgetSpec::Number { .. } => export!(NumberAbi),
-            WidgetSpec::ListItem { .. } => export!(ListItemAbi),
-            WidgetSpec::ListBox { .. } => export!(ListBoxAbi),
-            WidgetSpec::Scrollbar { .. } => export!(ScrollbarAbi),
-            WidgetSpec::Combo { .. } => export!(ComboAbi),
-            WidgetSpec::Split { .. } => export!(SplitViewAbi),
-            _ => return Err(NC_E_INVALID_ARG),
-        }
-    }
-    Ok(table)
-}
 
 /// Builds concrete command receivers; retained receivers observe closure after reload.
 pub(crate) fn inputs(document: &Document, nodes: &BTreeMap<String, Widget<IWidgetAbi>>) -> Result<BTreeMap<String, ComPtr<IUnknown>>, NcStatus> {

@@ -360,7 +360,7 @@ impl AppState for State {
 fn run() -> Result<(), HostError> {
     neocogi_demo_host::initialize()?;
     let host = Host::new("Calculator", Size { width: 320, height: 420 }, neocogi_demo_assets::load_bundle()?)?;
-    let mut display = host.ui.widgets().textbox("0")?;
+    let mut display = host.ui.widgets().textbox_unobserved("0")?;
     display.set_named_font(DISPLAY_FONT)?;
     display.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_RIGHT | WidgetOptions::NO_INTERACT)?;
     let mut grid = host.ui.widgets().grid(
@@ -405,10 +405,9 @@ fn run() -> Result<(), HostError> {
     .into_iter()
     .enumerate()
     {
-        let mut button = host.ui.widgets().button(label)?;
+        let mut button = host.ui.widgets().button(label, events_tx.clone(), move |_| action)?;
         button.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
         grid.insert(index as u32, &button, GridExtent { columns: 1, rows: 1 })?.finish()?;
-        neocogi_ui::events::bind(button.activated(), events_tx.clone(), move |_| action)?;
     }
     host.run(state, events)
 }

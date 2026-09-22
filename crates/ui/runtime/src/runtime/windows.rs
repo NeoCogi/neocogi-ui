@@ -479,7 +479,7 @@ mod tests {
         // same popup capability boundary used by the full demo.
         let runtime = crate::test_support::create_runtime(crate::test_support::test_atlas());
         let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
-        let body = ui.widgets().button("body").unwrap();
+        let body = ui.widgets().button_unobserved("body").unwrap();
         let owner = ui.window("pointer popup owner", Rect { x: 20, y: 20, width: 400, height: 200 }, &body).unwrap();
         let menus = ui.menus().unwrap();
         let builder = menus.create("Pointer actions").unwrap();

@@ -1,33 +1,24 @@
-//! Reusable native file requests publish completions into the application's typed inbox.
+//! Standard native-path file-picker requests with one construction-time observer.
 //!
 //! ```no_run
-//! use neocogi_ui::{Ui, FileDialog, FileDialogRequest, IWindowAbi, FileDialogCompletion};
+//! use neocogi_ui::{Ui, IWindowAbi, FileDialogRequest};
 //! use neocogi_com::{ComRef, NcStatus};
-//! use std::path::Path;
-//!
-//! fn create(ui: &Ui, owner: ComRef<'_, IWindowAbi>, directory: &Path)
-//!     -> Result<(FileDialog, std::sync::mpsc::Receiver<FileDialogCompletion>), NcStatus>
-//! {
-//!     let mut picker = ui.file_dialog(owner)?;
-//!     let (events_tx, events) = std::sync::mpsc::channel();
-//!     neocogi_ui::events::bind(picker.completed(), events_tx.clone(), |message| message)?;
-//!     picker.open(&FileDialogRequest::new(directory))?;
-//!     Ok((picker, events))
+//! fn example(ui: &Ui, owner: ComRef<'_, IWindowAbi>) -> Result<(), NcStatus> {
+//!     let (sender, messages) = std::sync::mpsc::channel();
+//!     let mut picker = ui.file_dialog(owner, sender, |neocogi_ui::file_dialog::Event::Completed(value)| value)?;
+//!     picker.open(&FileDialogRequest::new(std::path::Path::new(".")))?;
+//!     // Keep the picker and consume messages through the application's normal inbox.
+//!     Ok(())
 //! }
 //! ```
 //!
-//! Move the inbox and application model into `events::Controller::root` once.
-//! Pass its cached `IEventOwner` projection to `ui.update_with_events` each frame.
-//! Decode native paths with `events::completed_file_path` when handling a completion.
+//! Directory reads validate the complete candidate before publishing new rows; failure
+//! preserves the prior request/listing. Paths keep native bytes or UTF-16 units,
+//! independently of display labels. Save filenames must be a single component.
+//! The picker returns a path; the application validates it, confirms overwrites,
+//! and performs any file writes.
 //!
-//! Native reads validate the complete candidate before installing rows. Selection
-//! is lexical: applications decide whether an accepted path must exist or have a
-//! particular file type. Unicode display labels are never path lookup keys.
-//!
-//! Set `request.mode = FileDialogMode::Save` and `request.filename` to suggest a
-//! destination. The action is labeled Save, and Enter in the filename field
-//! accepts it. Suggestions must be single filenames. The caller confirms any
-//! overwrite before writing; the picker itself never creates or replaces files.
+//! Decode exact native paths with `events::completed_file_path` when handling a completion.
 use crate::*;
 use neocogi_com::{ComPtr, ComRef, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
 use std::path::{Path, PathBuf};
@@ -71,7 +62,7 @@ impl FileDialog {
     pub fn from_interface(interface: ComPtr<IFileDialogAbi>) -> Self {
         Self { interface }
     }
-    /// Borrows the concrete component interface for typed event registration or custom static helpers.
+    /// Borrows the concrete component interface for custom static helpers; its observer was already supplied at construction.
     pub fn as_interface(&self) -> ComRef<'_, IFileDialogAbi> {
         self.interface.as_com_ref()
     }
@@ -108,3 +99,6 @@ impl FileDialog {
         self.interface.diagnostic()?.to_string()
     }
 }
+
+/// Constructor-bound completion observer and its generated local event type.
+pub use crate::events::file_dialog::{Event, observer, filter_observer};

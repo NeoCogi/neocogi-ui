@@ -48,7 +48,7 @@ fn embedded_scope_receives_tab_and_menu_keys_until_explicit_exit() {
     let ui = neocogi_ui::Ui::from_interfaces(runtime, factory).unwrap();
     let (send, events) = std::sync::mpsc::channel();
     let scope = ui.widgets().leaf(Scope { events: send }, WidgetOptions::NONE).unwrap();
-    let next = ui.widgets().button("next").unwrap();
+    let next = ui.widgets().button_unobserved("next").unwrap();
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     column.insert(0, &scope, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     column.insert(1, &next, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
@@ -86,7 +86,7 @@ fn window_cycle_can_resume_after_focus_moves_through_an_embedded_scope() {
     let ui = neocogi_ui::Ui::from_interfaces(runtime, factory).unwrap();
     let (send, events) = std::sync::mpsc::channel();
     let scope = ui.widgets().leaf(Scope { events: send }, WidgetOptions::NONE).unwrap();
-    let next = ui.widgets().button("outside scope").unwrap();
+    let next = ui.widgets().button_unobserved("outside scope").unwrap();
     let mut body = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     body.insert(0, &scope, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     body.insert(1, &next, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
@@ -96,19 +96,30 @@ fn window_cycle_can_resume_after_focus_moves_through_an_embedded_scope() {
     ui.update(SIZE).unwrap();
     assert!(events.try_iter().any(|(focused, _)| focused));
 
-    let text = ui.widgets().textbox("other window").unwrap();
+    let text = ui.widgets().textbox_unobserved("other window").unwrap();
     let other = ui.window("other", Rect { x: 430, y: 20, width: 180, height: 110 }, &text).unwrap();
-    other.set_options(WindowOptions::NO_TITLE | WindowOptions::NO_CLOSE | WindowOptions::NO_RESIZE).unwrap();
+    other
+        .set_options(WindowOptions::NO_TITLE | WindowOptions::NO_CLOSE | WindowOptions::NO_RESIZE)
+        .unwrap();
     other.raise().unwrap();
     ui.update(SIZE).unwrap();
     for input in [
-        UiInput::Down { position: Point { x: 460, y: 55 }, buttons: 1 },
-        UiInput::Up { position: Point { x: 460, y: 55 }, buttons: 1 },
+        UiInput::Down {
+            position: Point { x: 460, y: 55 },
+            buttons: 1,
+        },
+        UiInput::Up {
+            position: Point { x: 460, y: 55 },
+            buttons: 1,
+        },
     ] {
         ui.input(input, "").unwrap();
         ui.update(SIZE).unwrap();
     }
-    assert!(matches!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::Area(_)));
+    assert!(matches!(
+        TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(),
+        TextInputArea::Area(_)
+    ));
     for pressed in [true, false] {
         ui.input(key(KeyCode::Function, 6, 2, pressed), "").unwrap();
         ui.update(SIZE).unwrap();
@@ -120,6 +131,8 @@ fn window_cycle_can_resume_after_focus_moves_through_an_embedded_scope() {
     }
     ui.input(key(KeyCode::Function, 6, 2, true), "").unwrap();
     ui.update(SIZE).unwrap();
-    assert!(matches!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::Area(_)),
-        "the first new Ctrl+F6 press after leaving the scope must cycle to the textbox window");
+    assert!(
+        matches!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::Area(_)),
+        "the first new Ctrl+F6 press after leaving the scope must cycle to the textbox window"
+    );
 }

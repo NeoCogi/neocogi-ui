@@ -30,7 +30,7 @@
 
 //! Retained list-box widget.
 
-use neocogi_ui_core_contracts::__ActivationReceiverAbi;
+use neocogi_ui_nodes_contracts::ListBoxObserverAbi;
 use crate::{ControlRole};
 
 use super::*;
@@ -78,9 +78,8 @@ pub struct ListBox {
     fit_width: bool,
     /// Initialization-only font.
     font: FontRef,
-    /// Base widget options.
-    /// Installed destination for captured text submissions.
-    submitted_event: Option<neocogi_com::ComPtr<__ActivationReceiverAbi>>,
+    /// Sole observer retained at construction; released on logical closure.
+    observer: Option<neocogi_com::ComPtr<ListBoxObserverAbi>>,
 }
 
 impl ListBox {
@@ -92,7 +91,7 @@ impl ListBox {
             image: parameters.image,
             fit_width: false,
             font: parameters.font,
-            submitted_event: None,
+            observer: None,
         }
     }
 
@@ -136,8 +135,10 @@ impl Widget for ListBox {
             return crate::Change::NoChange;
         }
         // Pointer and keyboard activation publish the same application-facing submission.
-        if self.submitted_event.is_some() {
-            ctx.posted(crate::Activation { label: self.com_label().to_owned() }.post_to(&mut self.submitted_event));
+        if self.observer.is_some() {
+            ctx.posted(
+                neocogi_ui_nodes_contracts::ListBoxEvent::Activated(crate::Activation { label: self.com_label().to_owned() }).post_to(&mut self.observer),
+            );
         }
 
         // The submitted event does not change this header's intrinsic inputs.
@@ -156,7 +157,7 @@ impl Widget for ListBox {
 impl crate::widget_object::WidgetAlgorithm for ListBox {
     /// Logical COM closure cancels ordinary submissions while retained widget references remain safe.
     fn close_events(&mut self) {
-        self.submitted_event = None;
+        self.observer = None;
     }
 }
 
@@ -221,8 +222,11 @@ impl ListBox {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         label: NcCopyFromBufferOffset<'_, u8>,
+        observer: Option<neocogi_com::ComRef<'_, ListBoxObserverAbi>>,
     ) -> Result<ComPtr<ListBoxAbi>, NcStatus> {
-        let value = Self::build(host, label, Some(&resources))?;
+        let mut value = Self::build(host, label, Some(&resources))?;
+        // Retain the sole destination before publishing the completed widget.
+        value.observer = observer.map(|destination| destination.add_ref());
         Ok(Self::from_value(value).query().expect("ListBox declares its callable class contract"))
     }
 
@@ -239,13 +243,6 @@ impl ListBox {
 }
 
 impl neocogi_ui_nodes_contracts::ListBox for ListBox {
-    /// Replaces this output's concrete destination after checking widget access.
-    fn __map_activated(&mut self, destination: neocogi_com::ComRef<'_, __ActivationReceiverAbi>) -> Result<(), neocogi_com::NcStatus> {
-        self.runtime().state.writable()?;
-        self.submitted_event = Some(destination.add_ref());
-        Ok(())
-    }
-
     /// Returns an immutable label snapshot from the concrete list box.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;

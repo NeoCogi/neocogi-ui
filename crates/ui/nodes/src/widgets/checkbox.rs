@@ -33,7 +33,7 @@
 //! The checkbox toggles persistent boolean state on pointer or keyboard activation and paints the
 //! atlas check icon when selected.
 
-use neocogi_ui_nodes_contracts::__CheckboxChangedReceiverAbi;
+use neocogi_ui_nodes_contracts::CheckboxObserverAbi;
 use crate::{ControlRole};
 
 use super::*;
@@ -83,8 +83,8 @@ pub struct Checkbox {
     /// Base widget options.
     /// Current checked value.
     checked: bool,
-    /// Runtime-owned source for user-originated value changes.
-    changed_event: Option<neocogi_com::ComPtr<__CheckboxChangedReceiverAbi>>,
+    /// Sole construction-time observer; user changes publish here until logical closure.
+    observer: Option<neocogi_com::ComPtr<CheckboxObserverAbi>>,
 }
 
 impl Checkbox {
@@ -95,7 +95,7 @@ impl Checkbox {
             label: parameters.label,
             font: parameters.font,
             checked: parameters.checked,
-            changed_event: None,
+            observer: None,
         }
     }
 
@@ -154,7 +154,7 @@ impl Widget for Checkbox {
         // Windows-style checkboxes toggle with Space; Enter remains available to a default button.
         self.checked = !self.checked;
         let checked = self.checked;
-        ctx.posted(crate::CheckboxChanged { checked }.post_to(&mut self.changed_event));
+        ctx.posted(neocogi_ui_nodes_contracts::CheckboxEvent::Changed(crate::CheckboxChanged { checked }).post_to(&mut self.observer));
 
         // The check mark changes paint only; both states reserve the same icon space.
         crate::Change::NoChange
@@ -172,7 +172,7 @@ impl Widget for Checkbox {
 impl crate::widget_object::WidgetAlgorithm for Checkbox {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
-        self.changed_event = None;
+        self.observer = None;
     }
 }
 
@@ -226,8 +226,11 @@ impl Checkbox {
         resources: crate::widget_object::SharedAssets,
         checked: bool,
         label: NcCopyFromBufferOffset<'_, u8>,
+        observer: Option<neocogi_com::ComRef<'_, CheckboxObserverAbi>>,
     ) -> Result<ComPtr<CheckboxAbi>, NcStatus> {
-        let value = Self::build(host, checked, label, Some(&resources))?;
+        let mut value = Self::build(host, checked, label, Some(&resources))?;
+        // Retain the sole destination before publishing the completed widget.
+        value.observer = observer.map(|destination| destination.add_ref());
         Ok(Self::from_value(value).query().expect("Checkbox declares its callable class contract"))
     }
 
@@ -245,13 +248,6 @@ impl Checkbox {
 }
 
 impl neocogi_ui_nodes_contracts::Checkbox for Checkbox {
-    /// Replaces this output's concrete destination after checking widget access.
-    fn __map_changed(&mut self, destination: neocogi_com::ComRef<'_, __CheckboxChangedReceiverAbi>) -> Result<(), neocogi_com::NcStatus> {
-        self.runtime().state.writable()?;
-        self.changed_event = Some(destination.add_ref());
-        Ok(())
-    }
-
     /// Reads the same boolean state used by pointer/Space updates and paint.
     fn checked(&self) -> Result<bool, NcStatus> {
         self.runtime().state.readable()?;

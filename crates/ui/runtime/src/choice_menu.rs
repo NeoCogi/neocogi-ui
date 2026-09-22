@@ -3,7 +3,7 @@
 //! The root forest stores only generic menu surfaces and popup ownership. This module connects
 //! one public header, one authoritative typed state, and one private choice-popup definition.
 
-use neocogi_ui_core_contracts::__ChoiceSelectionReceiverAbi;
+use neocogi_ui_core_contracts::IChoiceMenuObserverAbi;
 use crate::menu::{Menu, MenuEntry};
 use crate::window_manager::{PopupHandle, SurfaceMutationError, WindowManager};
 use neocogi_com::{
@@ -115,12 +115,17 @@ pub(crate) struct ChoiceMenuState {
     /// Explicit popup lifecycle reconciled by the runtime composition owner.
     popup: ChoicePopupLifecycle,
     /// Runtime-owned source for actual user commits only.
-    changed_event: Option<ComPtr<__ChoiceSelectionReceiverAbi>>,
+    changed_event: Option<ComPtr<IChoiceMenuObserverAbi>>,
 }
 
 impl ChoiceMenuState {
     /// Validates selection before allocating the private COM state identity.
-    pub(crate) fn create(menu_text: String, entries: Vec<ChoiceMenuEntryAbi>, selection: Option<u64>) -> Result<ComPtr<IChoiceMenuStateAbi>, NcStatus> {
+    pub(crate) fn create(
+        menu_text: String,
+        entries: Vec<ChoiceMenuEntryAbi>,
+        selection: Option<u64>,
+        observer: Option<neocogi_com::ComRef<'_, IChoiceMenuObserverAbi>>,
+    ) -> Result<ComPtr<IChoiceMenuStateAbi>, NcStatus> {
         validate_menu(&menu_text, &entries, selection)?;
         let state = Self {
             menu_text,
@@ -129,7 +134,7 @@ impl ChoiceMenuState {
             revision: 0,
             popup_anchor: Rect::default(),
             popup: ChoicePopupLifecycle::Closed,
-            changed_event: None,
+            changed_event: observer.map(|destination| destination.add_ref()),
         };
         Self::from_value(state).query()
     }
@@ -300,7 +305,7 @@ impl IChoiceMenuState for ChoiceMenuState {
         };
         // Commit the complete popup transition before entering even a pure mapper.
         if changed {
-            ChoiceSelection::Selected(id).post_to(&mut self.changed_event)?;
+            neocogi_ui_core_contracts::IChoiceMenuEvent::Changed(ChoiceSelection::Selected(id)).post_to(&mut self.changed_event)?;
         }
         Ok(self.revision)
     }
@@ -321,12 +326,6 @@ impl IChoiceMenuState for ChoiceMenuState {
 }
 
 impl IChoiceMenu for ChoiceMenuState {
-    /// Replaces this output's concrete destination after checking widget access.
-    fn __map_changed(&mut self, destination: neocogi_com::ComRef<'_, __ChoiceSelectionReceiverAbi>) -> Result<(), NcStatus> {
-        self.changed_event = Some(destination.add_ref());
-        Ok(())
-    }
-
     /// Returns the exact optional stable identity from the authoritative menu model.
     fn selection(&self) -> Result<ChoiceSelectionAbi, NcStatus> {
         <Self as IChoiceMenuState>::selection(self)

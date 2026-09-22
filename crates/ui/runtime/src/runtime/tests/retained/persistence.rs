@@ -123,11 +123,15 @@ impl neocogi_com::persistence::IPersistenceFactory for SettingsFactory {
         children: ComRef<'_, neocogi_com::persistence::IObjectChildrenAbi>,
     ) -> Result<ComPtr<IUnknown>, NcStatus> {
         let state = settings(version, state, children.count()?)?;
-        let button = self.widgets.button(&state.save_label)?;
-        let checkbox = self.widgets.checkbox(&state.checkbox_label, state.checked)?;
+        let (button_observer, button_outputs) = neocogi_ui::button::Event::exported_observer()?;
+        let (checkbox_observer, checkbox_outputs) = neocogi_ui::checkbox::Event::exported_observer()?;
+        let button = self.widgets.button_with_observer(&state.save_label, Some(button_observer.as_com_ref()))?;
+        let checkbox = self
+            .widgets
+            .checkbox_with_observer(&state.checkbox_label, state.checked, Some(checkbox_observer.as_com_ref()))?;
         let mut outputs = NamedOutputs::new();
-        outputs.export(&state.save_output, button.as_interface().add_ref(), "activated")?;
-        outputs.export(&state.checked_output, checkbox.as_interface().add_ref(), "changed")?;
+        outputs.export_component(&state.save_output, button_outputs, "activated")?;
+        outputs.export_component(&state.checked_output, checkbox_outputs, "changed")?;
         let mut root = self.widgets.linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
         let result = (|| {
             root.insert(

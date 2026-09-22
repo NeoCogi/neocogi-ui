@@ -55,7 +55,8 @@ enum ChoiceSelection: u8 {
 
 
 
-#[version(1)]
+#[version(2)]
+#[observer]
 /// Live selection-oriented menu owned by the core popup manager.
 ///
 /// The menu owns hierarchy, navigation, placement and committed selection. A header control such
@@ -86,7 +87,7 @@ interface IChoiceMenu {
     fn close(&mut self) -> Result<()>;
 }
 
-#[version(1)]
+#[version(2)]
 /// Construction capability for selection menus managed by the core popup forest.
 interface IChoiceMenus {
     /// Creates one validated hidden choice hierarchy owned by an authenticated ordinary window.
@@ -95,8 +96,7 @@ interface IChoiceMenus {
         parent: &IWindow,
         menu_text: &[u8],
         entries: &[ChoiceMenuEntry],
-        selection: ChoiceSelection,
-    ) -> Result<IChoiceMenu>;
+        selection: ChoiceSelection, observer: Option<&IChoiceMenuObserver>) -> Result<IChoiceMenu>;
 }
 
 #[version(1)]
