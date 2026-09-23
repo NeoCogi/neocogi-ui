@@ -102,6 +102,8 @@ pub struct Textbox {
     buf: String,
     /// Current byte cursor, always positioned at a Unicode scalar-value boundary.
     cursor: usize,
+    /// Exclusive selection endpoints and bounded user-edit history.
+    editing: super::editing::Editing,
     /// Initialization-only font.
     font: FontRef,
     /// Sole observer retained at construction; released on logical closure.
@@ -118,6 +120,7 @@ impl Textbox {
             runtime,
             buf,
             cursor,
+            editing: super::editing::Editing::default(),
             font: parameters.font,
             observer: None,
         }
@@ -132,6 +135,7 @@ impl Textbox {
     pub fn set_text(&mut self, text: impl Into<String>) {
         // Apply the same single-line policy as construction and pasted input. Keeping the stored
         // invariant here prevents measurement, hit testing, and paint from disagreeing about rows.
+        self.editing = super::editing::Editing::default();
         self.buf = normalize_single_line_text(text);
         self.cursor = self.buf.len();
     }
@@ -139,6 +143,7 @@ impl Textbox {
     /// Clears the current text and resets the cursor.
     #[cfg(test)]
     pub fn clear(&mut self) {
+        self.editing = super::editing::Editing::default();
         self.buf.clear();
         self.cursor = 0;
     }
@@ -150,7 +155,7 @@ impl Textbox {
 
     /// Moves the cursor to the nearest preceding Unicode scalar-value boundary in the current text.
     pub fn set_cursor(&mut self, cursor: usize) {
-        self.cursor = clamp_cursor_boundary(&self.buf, cursor);
+        self.editing.move_to(&self.buf, &mut self.cursor, cursor, false);
     }
 
     /// Moves the cursor to the end of the current text.
@@ -185,7 +190,7 @@ impl Textbox {
     /// Applies input and cursor movement for this textbox.
     fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
-        let outcome = textbox_update(ctx, input, &mut self.buf, &mut self.cursor, font);
+        let outcome = textbox_update(ctx, input, &mut self.buf, &mut self.cursor, &mut self.editing, font);
         let changed = outcome.changed.then(|| crate::TextChanged {
             text: self.buf.clone(),
             cursor: self.cursor as u64,
@@ -204,7 +209,7 @@ impl Textbox {
     /// Paints the textbox frame, text, and caret.
     fn paint_widget(&self, ctx: &mut WidgetPaintCtx<'_>) {
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
-        textbox_paint(ctx, self.buf.as_str(), self.cursor, ctx.options(), font);
+        textbox_paint(ctx, self.buf.as_str(), self.cursor, &self.editing, ctx.options(), font);
     }
 }
 
@@ -214,13 +219,14 @@ pub(crate) fn textbox_update(
     input: Option<&UiInputEvent>,
     buf: &mut String,
     cursor: &mut usize,
+    editing: &mut super::editing::Editing,
     font: FontId,
 ) -> TextboxUpdateOutcome {
     let mut outcome = TextboxUpdateOutcome::default();
     let r = ctx.local_rect();
     if !ctx.focused() {
         // Reset to end when blurred so refocusing starts from a predictable position.
-        *cursor = buf.len();
+        editing.move_to(buf, cursor, buf.len(), false);
     }
     let mut cursor_pos = clamp_cursor_boundary(buf, *cursor);
 
@@ -249,7 +255,7 @@ pub(crate) fn textbox_update(
     let home_pressed = key_event.is_some_and(|event| event.is_pressed() && event.key == Key::Home);
     let end_pressed = key_event.is_some_and(|event| event.is_pressed() && event.key == Key::End);
     let edit = if ctx.focused() {
-        apply_text_input(buf, cursor_pos, text_input, key_event, ReturnBehavior::Submit)
+        apply_text_input(buf, cursor_pos, editing, text_input, key_event, ReturnBehavior::Submit)
     } else {
         // Without focus, the textbox ignores key/text input but keeps a consistent outcome.
         super::text_edit::TextEditOutcome {
@@ -269,10 +275,10 @@ pub(crate) fn textbox_update(
         }
         if home_pressed {
             // A single-line editor has one visual start, so Home always selects byte zero.
-            cursor_pos = 0;
+            editing.move_to(buf, &mut cursor_pos, 0, ctx.modifiers().intersects(Modifiers::SHIFT));
         } else if end_pressed {
             // End is the symmetric single-line boundary and selects the complete buffer length.
-            cursor_pos = buf.len();
+            editing.move_to(buf, &mut cursor_pos, buf.len(), ctx.modifiers().intersects(Modifiers::SHIFT));
         }
     }
     // Submission records an event but does not cooperatively mutate focus. The runtime dispatcher
@@ -280,12 +286,15 @@ pub(crate) fn textbox_update(
 
     let text_metrics = ctx.atlas().get_text_size(font, buf.as_str());
     let padding = ctx.skin().metrics().padding;
-    let textx = textbox_text_x(r, padding, text_metrics.width);
+    let caret_width = ctx.atlas().get_text_size(font, &buf[..cursor_pos]).width;
+    let textx = textbox_text_x(r, padding, text_metrics.width, caret_width);
 
-    if ctx.focused() && mouse_pressed.intersects(MouseButton::LEFT) && ctx.mouse_over(r, mouse_pos) {
+    let dragging = matches!(input, Some(UiInputEvent::MouseDrag { buttons, .. }) if buttons.intersects(MouseButton::LEFT));
+    if ctx.focused() && (dragging || mouse_pressed.intersects(MouseButton::LEFT) && ctx.mouse_over(r, mouse_pos)) {
         // Convert local click x into a UTF-8 boundary cursor position.
         let click_x = clamp_i64_to_i32(i64::from(mouse_pos.x) - (i64::from(textx) - i64::from(r.x)));
-        cursor_pos = cursor_from_text_x(buf, click_x, font, ctx.atlas());
+        let target = cursor_from_text_x(buf, click_x, font, ctx.atlas());
+        editing.move_to(buf, &mut cursor_pos, target, dragging || ctx.modifiers().intersects(Modifiers::SHIFT));
     }
 
     cursor_pos = clamp_cursor_boundary(buf, cursor_pos);
@@ -302,16 +311,18 @@ pub(crate) struct TextboxUpdateOutcome {
     pub(crate) submitted: bool,
 }
 
-/// Chooses the shared single-line text origin, scrolling overflowing text toward its trailing edge.
-fn textbox_text_x(bounds: Recti, padding: i32, text_width: i32) -> i32 {
+/// Chooses the same origin for hit testing and painting while keeping the active caret visible.
+fn textbox_text_x(bounds: Recti, padding: i32, text_width: i32, caret_width: i32) -> i32 {
     // Evaluate the complete signed expression in i64. Negative application padding and saturated
     // measured text can then cancel correctly before the retained coordinate is clamped once.
     let trailing_origin = clamp_i64_to_i32(i64::from(bounds.width) - i64::from(padding) - i64::from(text_width) - 1);
-    clamp_i64_to_i32(i64::from(bounds.x) + i64::from(trailing_origin.min(padding)))
+    let caret_origin = clamp_i64_to_i32(i64::from(bounds.width) - i64::from(padding) - i64::from(caret_width) - 1);
+    let origin = caret_origin.min(padding).max(trailing_origin.min(padding));
+    clamp_i64_to_i32(i64::from(bounds.x) + i64::from(origin))
 }
 
 /// Shared single-line textbox painting used by textbox and numeric inline editors.
-pub(crate) fn textbox_paint(ctx: &mut WidgetPaintCtx<'_>, buf: &str, cursor: usize, opt: WidgetOption, font: FontId) {
+pub(crate) fn textbox_paint(ctx: &mut WidgetPaintCtx<'_>, buf: &str, cursor: usize, editing: &super::editing::Editing, opt: WidgetOption, font: FontId) {
     let r = ctx.local_rect();
     if !opt.intersects(WidgetOption::FRAME) {
         // Runtime-owned framed editors already painted the complete input patch below this content.
@@ -324,7 +335,6 @@ pub(crate) fn textbox_paint(ctx: &mut WidgetPaintCtx<'_>, buf: &str, cursor: usi
 
     let text_metrics = ctx.atlas().get_text_size(font, buf);
     let padding = ctx.skin().metrics().padding;
-    let textx = textbox_text_x(r, padding, text_metrics.width);
     let cursor_pos = clamp_cursor_boundary(buf, cursor);
     let caret_offset = if cursor_pos == 0 {
         0
@@ -332,12 +342,16 @@ pub(crate) fn textbox_paint(ctx: &mut WidgetPaintCtx<'_>, buf: &str, cursor: usi
         ctx.atlas().get_text_size(font, &buf[..cursor_pos]).width
     };
 
+    let textx = textbox_text_x(r, padding, text_metrics.width, caret_offset);
     if ctx.focused() {
         // Focused editing path clips text/caret to the textbox bounds.
         let color = ctx.control_content_color(ControlRole::TextInput);
         let caret = caret_rect(clamp_i64_to_i32(i64::from(textx) + i64::from(caret_offset)), baseline_y, metrics, r);
         ctx.with_clip(r, |ctx| {
             ctx.draw_text(font, buf, vec2(textx, texty), color);
+            if let Some(range) = editing.selection(buf, cursor) {
+                super::text_edit::paint_selection(ctx, font, buf, range, vec2(textx, texty), metrics.line_height);
+            }
             ctx.draw_rect(caret, color);
         });
     } else {
@@ -443,6 +457,75 @@ mod tests {
                 WidgetUpdateCtx::new_with_interaction(bounds, bounds, &style, &atlas, true, false, focused, false, false, MouseButton::NONE, modifiers);
             textbox.update(&mut ctx, Some(event));
         }
+    }
+
+    /// Home and intermediate positions remain visible when the text is wider than its control.
+    #[test]
+    fn horizontal_origin_reveals_the_active_caret() {
+        let bounds = rect(10, 0, 100, 20);
+        for caret in [0, 40, 150, 300] {
+            let x = textbox_text_x(bounds, 4, 300, caret) + caret;
+            assert!((14..=105).contains(&x));
+        }
+        assert_eq!(textbox_text_x(bounds, 4, 300, 0), 14);
+    }
+
+    /// Extended line navigation replaces the selection and local undo restores its exact endpoints.
+    #[test]
+    fn selection_replacement_undo_and_programmatic_reset() {
+        let mut textbox = crate::test_support::algorithm::Algorithm::<Textbox>::from(TextboxParameters::new("abcd"));
+        textbox.set_cursor(1);
+        update_textbox(
+            &mut textbox,
+            true,
+            vec![UiInputEvent::Key {
+                event: KeyEvent::pressed(Key::End, Modifiers::SHIFT),
+            }],
+        );
+        assert_eq!(textbox.editing.selection(&textbox.buf, textbox.cursor), Some(1..4));
+        update_textbox(&mut textbox, true, vec![UiInputEvent::Text { text: "X".into() }]);
+        assert_eq!(textbox.text(), "aX");
+        update_textbox(
+            &mut textbox,
+            true,
+            vec![UiInputEvent::Key {
+                event: KeyEvent::pressed(Key::Character('z'), Modifiers::CTRL),
+            }],
+        );
+        assert_eq!(textbox.text(), "abcd");
+        assert_eq!(textbox.editing.selection(&textbox.buf, textbox.cursor), Some(1..4));
+        textbox.set_text("application value");
+        update_textbox(
+            &mut textbox,
+            true,
+            vec![UiInputEvent::Key {
+                event: KeyEvent::pressed(Key::Character('z'), Modifiers::CTRL),
+            }],
+        );
+        assert_eq!(textbox.text(), "application value");
+        assert_eq!(textbox.editing.selection(&textbox.buf, textbox.cursor), None);
+    }
+
+    /// A captured drag extends beyond the control bounds instead of discarding its last segment.
+    #[test]
+    fn pointer_drag_selects_to_the_buffer_edge() {
+        let mut textbox = crate::test_support::algorithm::Algorithm::<Textbox>::from(TextboxParameters::new("abcd"));
+        update_textbox(
+            &mut textbox,
+            true,
+            vec![
+                UiInputEvent::MouseDown {
+                    pos: vec2(0, 10),
+                    button: MouseButton::LEFT,
+                },
+                UiInputEvent::MouseDrag {
+                    pos: vec2(500, 10),
+                    delta: vec2(500, 0),
+                    buttons: MouseButton::LEFT,
+                },
+            ],
+        );
+        assert_eq!(textbox.editing.selection(&textbox.buf, textbox.cursor), Some(0..4));
     }
 
     #[test]

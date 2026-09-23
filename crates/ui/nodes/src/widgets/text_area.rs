@@ -110,6 +110,8 @@ pub struct TextEditor {
     buf: String,
     /// Current byte cursor, always positioned at a Unicode scalar-value boundary.
     cursor: usize,
+    /// Exclusive selection endpoints and bounded user-edit history.
+    editing: super::editing::Editing,
     /// Requests a runtime-only vertical-cursor preference reset.
     reset_preferred_x: bool,
     /// Requests that the next update reveal the current caret through the containing scroll area.
@@ -238,6 +240,7 @@ impl TextEditor {
         // Replace buffer and cursor atomically so no phase can observe a cursor outside the new
         // scalar-aligned byte range. Canonical LF storage also keeps layout and atlas rendering on
         // one line-break convention for programmatic replacements.
+        self.editing = super::editing::Editing::default();
         self.buf = normalize_multiline_text(text);
         self.cursor = self.buf.len();
         self.interaction.caret_affinity = CaretAffinity::Upstream;
@@ -254,7 +257,7 @@ impl TextEditor {
     /// Moves the cursor to the nearest preceding Unicode scalar-value boundary.
     pub fn set_cursor(&mut self, cursor: usize) {
         // Clamp external byte offsets before scheduling navigation-state reset and caret reveal.
-        self.cursor = clamp_cursor_boundary(&self.buf, cursor);
+        self.editing.move_to(&self.buf, &mut self.cursor, cursor, false);
         // A bare byte offset has no visual-side information, so public positioning deterministically
         // selects the preceding wrapped segment when the offset is shared.
         self.interaction.caret_affinity = CaretAffinity::Upstream;
@@ -385,6 +388,7 @@ fn textarea_update(ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>, 
         let edit = apply_text_input(
             &mut state.buf,
             cursor_pos,
+            &mut state.editing,
             text_input,
             key_event,
             ReturnBehavior::Newline { submit_on_ctrl: true },
@@ -423,6 +427,7 @@ fn textarea_update(ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>, 
     let mut cursor_line = line_index_for_cursor(&layout.lines, cursor_pos, caret_affinity);
     let mut caret_x = cursor_x_in_line(&layout.lines[cursor_line], state.buf.as_str(), cursor_pos, font, ctx.atlas());
 
+    let before_navigation = cursor_pos;
     if ctx.focused() {
         if key_event.is_some_and(|event| event.is_pressed() && event.key == Key::Home) {
             // Home targets the current visual line. On a wrapped continuation its start shares a
@@ -468,16 +473,29 @@ fn textarea_update(ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>, 
         }
     }
 
+    if ctx.focused() && key_event.is_some_and(|event| event.is_pressed() && matches!(event.key, Key::Home | Key::End | Key::ArrowUp | Key::ArrowDown)) {
+        let target = cursor_pos;
+        cursor_pos = before_navigation;
+        state
+            .editing
+            .move_to(&state.buf, &mut cursor_pos, target, ctx.modifiers().intersects(Modifiers::SHIFT));
+    }
+    let pointer = match input {
+        Some(UiInputEvent::MouseDown { pos, button }) if button.intersects(MouseButton::LEFT) && ctx.mouse_over(layout.bounds, *pos) => Some((*pos, false)),
+        Some(UiInputEvent::MouseDrag { pos, buttons, .. }) if buttons.intersects(MouseButton::LEFT) => Some((*pos, true)),
+        _ => None,
+    };
     if ctx.focused()
-        && let Some(UiInputEvent::MouseDown { pos, button }) = input
-        && button.intersects(MouseButton::LEFT)
-        && ctx.mouse_over(layout.bounds, *pos)
+        && let Some((pos, dragging)) = pointer
     {
         // Pointer positions already include the parent's scroll translation. Convert directly from
         // content-local pixels into a visual line and nearest scalar boundary.
         let last_line = i32::try_from(layout.lines.len().saturating_sub(1)).unwrap_or(i32::MAX);
         let line_idx = (pos.y / layout.metrics.line_height.max(1)).clamp(0, last_line) as usize;
-        cursor_pos = cursor_from_x(&layout.lines[line_idx], state.buf.as_str(), pos.x, font, ctx.atlas());
+        let target = cursor_from_x(&layout.lines[line_idx], state.buf.as_str(), pos.x, font, ctx.atlas());
+        state
+            .editing
+            .move_to(&state.buf, &mut cursor_pos, target, dragging || ctx.modifiers().intersects(Modifiers::SHIFT));
         caret_affinity = affinity_for_line(&layout.lines, line_idx, cursor_pos);
         ensure_visible = true;
         reset_preferred = true;
@@ -557,8 +575,20 @@ fn textarea_paint(ctx: &mut WidgetPaintCtx<'_>, state: &TextEditor, font: FontId
         // Record only the line interval intersecting the inherited viewport clip.
         for (idx, line) in layout.lines.iter().enumerate().take(last_line).skip(first_line) {
             let text = &state.buf[line.start..line.end];
+            let origin = Vec2i::new(0, text_line_y(idx, line_height));
             if !text.is_empty() {
-                ctx.draw_text(font, text, Vec2i::new(0, text_line_y(idx, line_height)), color);
+                ctx.draw_text(font, text, origin, color);
+            }
+            if ctx.focused()
+                && let Some(range) = state.editing.selection(&state.buf, cursor_pos)
+            {
+                // Wrapped boundaries have no source byte; only an actual newline receives a cell.
+                let newline = usize::from(state.buf.as_bytes().get(line.end) == Some(&b'\n'));
+                let start = range.start.max(line.start);
+                let end = range.end.min(line.end + newline);
+                if start < end {
+                    super::text_edit::paint_selection(ctx, font, text, start - line.start..end - line.start, origin, line_height);
+                }
             }
         }
 
@@ -612,6 +642,7 @@ impl TextEditor {
             runtime,
             buf,
             cursor,
+            editing: super::editing::Editing::default(),
             reset_preferred_x: false,
             reveal_caret: false,
             wrap,
@@ -907,6 +938,45 @@ mod tests {
     /// Runs direct focused editor updates at the ordinary non-wrapping test allocation.
     fn update_text_area(text_area: &mut TextEditor, input: Vec<UiInputEvent>) {
         update_text_area_in_bounds(text_area, Recti::new(0, 0, 160, 80), input);
+    }
+
+    /// Multiline navigation extends one selection across the newline and restores it through undo.
+    #[test]
+    fn shift_vertical_and_home_navigation_share_the_edit_selection() {
+        let mut editor = TextEditor::new_editor(TextAreaParameters::new("abc\ndef"));
+        editor.set_cursor(1);
+        update_text_area(
+            &mut editor,
+            vec![UiInputEvent::Key {
+                event: KeyEvent::pressed(Key::ArrowDown, Modifiers::SHIFT),
+            }],
+        );
+        assert_eq!(editor.editing.selection(&editor.buf, editor.cursor), Some(1..5));
+        update_text_area(
+            &mut editor,
+            vec![UiInputEvent::Key {
+                event: KeyEvent::pressed(Key::Home, Modifiers::SHIFT),
+            }],
+        );
+        assert_eq!(editor.editing.selection(&editor.buf, editor.cursor), Some(1..4));
+        update_text_area(&mut editor, vec![UiInputEvent::Text { text: "X".into() }]);
+        assert_eq!(editor.text(), "aXdef");
+        update_text_area(
+            &mut editor,
+            vec![UiInputEvent::Key {
+                event: KeyEvent::pressed(Key::Character('z'), Modifiers::CTRL),
+            }],
+        );
+        assert_eq!(editor.text(), "abc\ndef");
+        assert_eq!(editor.editing.selection(&editor.buf, editor.cursor), Some(1..4));
+        editor.set_text("new value");
+        update_text_area(
+            &mut editor,
+            vec![UiInputEvent::Key {
+                event: KeyEvent::pressed(Key::Character('z'), Modifiers::CTRL),
+            }],
+        );
+        assert_eq!(editor.text(), "new value");
     }
 
     /// Verifies independent changed and submitted snapshots from the editable content leaf.

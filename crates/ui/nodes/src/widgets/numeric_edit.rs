@@ -245,6 +245,8 @@ pub(super) struct NumberEditState {
     buf: String,
     /// Cursor position within the buffer (byte index).
     cursor: usize,
+    /// Selection and history last only for the current numeric editing session.
+    text_editing: super::editing::Editing,
 }
 
 /// Runs the shared textbox editor for shift-click numeric input.
@@ -262,6 +264,7 @@ pub(super) fn number_textbox_update(
 
     if shift_click {
         edit.editing = true;
+        edit.text_editing = super::editing::Editing::default();
         edit.buf.clear();
         // The same validated precision drives formatted labels and the initial editor contents.
         let _ = write!(edit.buf, "{:.*}", precision.digits(), value);
@@ -269,7 +272,7 @@ pub(super) fn number_textbox_update(
     }
 
     if edit.editing {
-        let res = textbox_update(ctx, input, &mut edit.buf, &mut edit.cursor, font);
+        let res = textbox_update(ctx, input, &mut edit.buf, &mut edit.cursor, &mut edit.text_editing, font);
         if res.submitted || !ctx.focused() {
             commit_finite_number(edit.buf.as_str(), value);
             edit.editing = false;
@@ -295,7 +298,7 @@ fn commit_finite_number(text: &str, value: &mut Real) {
 
 /// Paints the shared textbox editor for a numeric widget.
 pub(super) fn number_textbox_paint(ctx: &mut WidgetPaintCtx<'_>, edit: &NumberEditState, font: FontId) {
-    textbox_paint(ctx, edit.buf.as_str(), edit.cursor, WidgetOption::NONE, font);
+    textbox_paint(ctx, edit.buf.as_str(), edit.cursor, &edit.text_editing, WidgetOption::NONE, font);
 }
 
 impl Error for DecimalPrecisionError {}

@@ -20,6 +20,20 @@ area keep their byte cursor on Unicode scalar-value boundaries. Left/right movem
 operate on one scalar value at a time, not on a user-perceived grapheme cluster. Combining
 sequences and multi-scalar emoji can therefore require more than one cursor or deletion operation.
 
+Textboxes, text areas, and numeric inline editors share ordinary selection and
+local edit history. Shift+arrows and Shift+Home/End extend selection; multiline
+Up/Down preserves the preferred visual column. Pointer dragging and Shift-click
+also extend selection. Ctrl/Command+A selects all; typing or deletion replaces
+the selected range. Plain Left/Right collapses to that selection edge. Selection
+uses the focused-item theme colors and includes visible newline cells.
+
+Ctrl/Command+Z undoes, Shift+Ctrl/Command+Z or Ctrl/Command+Y redoes. Each text
+mutation records one snapshot; history retains at most 64 snapshots and 1 MiB
+of prior text across both directions. Oversized edits close the retained timeline.
+Programmatic text replacement resets selection/history; cursor setters collapse
+selection. Long single-line text scrolls to keep the active caret visible.
+Native/browser clipboard transport is still separate unfinished work.
+
 File-dialog requests and accepted results use native `PathBuf` values. Directory rows carry those
 paths in typed submission events; only their display labels are converted lossily. Selecting a row
 preserves its native identity, including non-UTF-8 bytes or line endings that an editable single-line
