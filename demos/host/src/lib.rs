@@ -7,6 +7,9 @@ use neocogi_ui::*;
 use neocogi_com::{com_object, ComPtr, NcCopyFromBufferOffset, NcStatus};
 use std::fmt;
 
+/// Validates assembly selections against actual statically linked factory descriptors.
+pub mod static_plugins;
+
 #[cfg(target_arch = "wasm32")]
 mod browser;
 
@@ -395,17 +398,21 @@ fn register() -> Result<(), HostError> {
 /// Registers descriptors linked into a browser module or native monolith.
 #[cfg(any(target_arch = "wasm32", feature = "monolith"))]
 fn register() -> Result<(), HostError> {
-    let runtime = neocogi_com::Runtime::global();
-    // SAFETY: The complete generated descriptions, linked contracts, and
-    // implementation code remain static for this module's process lifetime.
-    unsafe {
-        runtime.register_factory_plugin_description(nc_ui::factory_plugin_description())?;
-        runtime.register_factory_plugin_description(nc_ui_nodes::factory_plugin_description())?;
-        runtime.register_factory_plugin_description(nc_render::factory_plugin_description())?;
+    use static_plugins::StaticPlugin;
+    let available = [
+        StaticPlugin { package: "neocogi-ui-runtime", description: nc_ui::factory_plugin_description() },
+        StaticPlugin { package: "neocogi-ui-nodes", description: nc_ui_nodes::factory_plugin_description() },
+        StaticPlugin { package: "neocogi-render-plugin", description: nc_render::factory_plugin_description() },
         #[cfg(any(target_arch = "wasm32", feature = "monolith-gfx"))]
-        runtime.register_factory_plugin_description(nc_gfx::factory_plugin_description())?;
+        StaticPlugin { package: "neocogi-gfx", description: nc_gfx::factory_plugin_description() },
         #[cfg(feature = "skin")]
-        runtime.register_factory_plugin_description(nc_skin::factory_plugin_description())?;
+        StaticPlugin { package: "neocogi-skin", description: nc_skin::factory_plugin_description() },
+    ];
+    let selected = static_plugins::select(&available, option_env!("NEOCOGI_ASSEMBLY_PLUGINS")).map_err(HostError::Message)?;
+    let runtime = neocogi_com::Runtime::global();
+    for plugin in selected {
+        // SAFETY: Generated descriptions, contracts, and code remain linked for the process lifetime.
+        unsafe { runtime.register_factory_plugin_description(plugin.description)?; }
     }
     Ok(())
 }

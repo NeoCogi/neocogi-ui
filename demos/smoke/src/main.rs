@@ -77,16 +77,20 @@ fn register_plugins(runtime: &neocogi_com::Runtime, directory: &std::path::Path)
 /// Registers implementation descriptors retained by the monolithic executable.
 #[cfg(feature = "monolith")]
 fn register_plugins(runtime: &neocogi_com::Runtime, _directory: &std::path::Path) -> Result<(), Box<dyn Error>> {
-    // SAFETY: Every description, linked contract, and implementation remains
-    // retained by this executable for the process lifetime.
-    unsafe {
-        runtime.register_factory_plugin_description(nc_ui::factory_plugin_description())?;
-        runtime.register_factory_plugin_description(nc_ui_nodes::factory_plugin_description())?;
-        runtime.register_factory_plugin_description(nc_render::factory_plugin_description())?;
-        runtime.register_factory_plugin_description(nc_gfx::factory_plugin_description())?;
-        runtime.register_factory_plugin_description(nc_skin::factory_plugin_description())?;
+    use neocogi_demo_host::static_plugins::{self, StaticPlugin};
+    let available = [
+        StaticPlugin { package: "neocogi-ui-runtime", description: nc_ui::factory_plugin_description() },
+        StaticPlugin { package: "neocogi-ui-nodes", description: nc_ui_nodes::factory_plugin_description() },
+        StaticPlugin { package: "neocogi-render-plugin", description: nc_render::factory_plugin_description() },
+        StaticPlugin { package: "neocogi-gfx", description: nc_gfx::factory_plugin_description() },
+        StaticPlugin { package: "neocogi-skin", description: nc_skin::factory_plugin_description() },
         #[cfg(feature = "extension")]
-        runtime.register_factory_plugin_description(nc_ui_extension::factory_plugin_description())?;
+        StaticPlugin { package: "neocogi-example-ui-extension", description: nc_ui_extension::factory_plugin_description() },
+    ];
+    let selected = static_plugins::select(&available, option_env!("NEOCOGI_ASSEMBLY_PLUGINS"))?;
+    for plugin in selected {
+        // SAFETY: Every generated descriptor and implementation remains linked for process lifetime.
+        unsafe { runtime.register_factory_plugin_description(plugin.description)?; }
     }
     Ok(())
 }

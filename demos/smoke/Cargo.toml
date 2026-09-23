@@ -22,6 +22,7 @@ benchmark = ["embed-assets"]
 embed-assets = ["neocogi-demo-assets/embed-assets"]
 
 [dependencies]
+neocogi-demo-host.workspace = true
 neocogi-demo-contracts.workspace = true
 neocogi-render-mesh-contracts.workspace = true
 rs-math3d.workspace = true
