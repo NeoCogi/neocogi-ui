@@ -27,3 +27,12 @@ of accumulating generated images. Replacing bytes at an unchanged path requires
 Run `cargo test -p neocogi-skin-authoring --features builder` for schema,
 resource, bundled-theme, and offline/plugin equivalence checks. Skin's own
 integration test additionally exercises the deployed loader boundary.
+
+Theme JSON uses concrete Serde adapters for generated metrics, palette, colors,
+and insets. Ordinary authored chrome records derive Serde directly. There is no
+generic COM-to-Serde decoding layer. Missing metric/palette fields inherit the
+canonical generated defaults; duplicate and unknown record fields are rejected.
+Colors contain exactly four byte channels and flat patches exactly nine colors.
+The only custom map visitor resolves a closed role-name domain and rejects
+duplicate identities before reading replacement values, bounding entries by the
+actual number of roles. Runtime COM serialization remains independent.

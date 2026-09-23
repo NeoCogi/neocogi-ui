@@ -6,7 +6,7 @@
 #![deny(missing_docs)]
 
 mod encoding;
-mod serde_com;
+mod role_keys;
 
 /// Versioned theme decoding and compilation through supplied GFX capabilities.
 pub mod theme;

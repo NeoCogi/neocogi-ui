@@ -394,23 +394,23 @@ pub struct ThemeDocument {
 #[serde(default, deny_unknown_fields)]
 pub struct AppearanceCatalogDocument {
     /// Structural surface appearances keyed by their category-local names.
-    #[serde(deserialize_with = "crate::serde_com::deserialize_map", serialize_with = "crate::encoding::role_map")]
+    #[serde(deserialize_with = "crate::role_keys::deserialize_map", serialize_with = "crate::encoding::role_map")]
     pub surface: BTreeMap<SurfaceRole, SurfaceAppearanceDocument>,
     /// Interactive control appearances keyed by their category-local names.
-    #[serde(deserialize_with = "crate::serde_com::deserialize_map", serialize_with = "crate::encoding::role_map")]
+    #[serde(deserialize_with = "crate::role_keys::deserialize_map", serialize_with = "crate::encoding::role_map")]
     pub control: BTreeMap<ControlRole, ControlAppearanceDocument>,
     /// Compact menu appearances keyed by their category-local names.
-    #[serde(deserialize_with = "crate::serde_com::deserialize_map", serialize_with = "crate::encoding::role_map")]
+    #[serde(deserialize_with = "crate::role_keys::deserialize_map", serialize_with = "crate::encoding::role_map")]
     pub menu: BTreeMap<MenuRole, MenuAppearanceDocument>,
     /// Manager-owned window chrome appearances keyed by their category-local names.
-    #[serde(deserialize_with = "crate::serde_com::deserialize_map", serialize_with = "crate::encoding::role_map")]
+    #[serde(deserialize_with = "crate::role_keys::deserialize_map", serialize_with = "crate::encoding::role_map")]
     pub chrome: BTreeMap<ChromeRole, ChromeAppearanceDocument>,
 }
 
 /// Defines the JSON spelling owned by this asset format for one IDL role enum.
 macro_rules! document_role {
     ($name:ty) => {
-        impl crate::serde_com::DocumentKey for $name {
+        impl crate::role_keys::DocumentKey for $name {
             const NAMES: &'static [&'static str] = &<$name>::NAMES;
 
             /// Uses the generated name vocabulary for serialization as well as parsing.
@@ -1264,8 +1264,7 @@ impl FontDocument {
 }
 
 /// JSON title-alignment spelling translated directly to the portable record.
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, neocogi_com::ComDeserialize)]
-#[com_deserialize(rename_all = "snake_case")]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WindowTitleAlignmentDocument {
     /// Uses the title span from its leading edge.
@@ -1276,8 +1275,7 @@ pub enum WindowTitleAlignmentDocument {
 }
 
 /// JSON caption-edge spelling translated directly to the portable record.
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, neocogi_com::ComDeserialize)]
-#[com_deserialize(rename_all = "snake_case")]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CaptionButtonSideDocument {
     /// Allocates the button from the leading edge.
@@ -1288,8 +1286,8 @@ pub enum CaptionButtonSideDocument {
 }
 
 /// Asset-document fields controlling caption-button geometry and visibility.
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, neocogi_com::ComDeserialize)]
-#[com_deserialize(default)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
 pub struct CaptionButtonsDocument {
     /// Edge used by the close button.
     pub close_side: CaptionButtonSideDocument,
@@ -1323,18 +1321,19 @@ impl Default for CaptionButtonsDocument {
 }
 
 /// Optional flat title field in the asset document.
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, neocogi_com::ComDeserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TitleBackdropDocument {
     /// Flat background color painted behind measured title text.
-    #[serde(serialize_with = "crate::encoding::color")]
+    #[serde(serialize_with = "crate::encoding::color", deserialize_with = "crate::encoding::read_color")]
     pub color: Color,
     /// Horizontal pixels added on each side of the measured text.
     pub horizontal_padding: i32,
 }
 
 /// Asset-owned title and caption syntax compiled to [`AssetChrome`].
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, neocogi_com::ComDeserialize)]
-#[com_deserialize(default)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
 pub struct WindowChromeDocument {
     /// Title alignment and caption-bank reservation policy.
     pub title_alignment: WindowTitleAlignmentDocument,
@@ -1399,19 +1398,18 @@ fn compile_caption_side(side: CaptionButtonSideDocument) -> CaptionSide {
 #[serde(default, deny_unknown_fields)]
 pub struct ThemeSkinDocument {
     /// Layout values consumed directly by the runtime skin.
-    #[serde(deserialize_with = "crate::serde_com::deserialize")]
+    #[serde(deserialize_with = "crate::encoding::read_metrics")]
     #[serde(serialize_with = "crate::encoding::metrics")]
     pub metrics: AssetMetrics,
     /// Shared destination geometry used while compiling flat fallback patches.
-    #[serde(deserialize_with = "crate::serde_com::deserialize")]
+    #[serde(deserialize_with = "crate::encoding::read_insets")]
     #[serde(serialize_with = "crate::encoding::insets")]
     pub fallback_frame_insets: SliceInsets,
     /// Concrete semantic colors compiled into the complete fallback appearance catalog.
-    #[serde(deserialize_with = "crate::serde_com::deserialize")]
+    #[serde(deserialize_with = "crate::encoding::read_palette")]
     #[serde(serialize_with = "crate::encoding::palette")]
     pub palette: FlatPalette,
     /// Exact manager-owned title and caption-button policy.
-    #[serde(deserialize_with = "crate::serde_com::deserialize")]
     pub window_chrome: WindowChromeDocument,
 }
 
@@ -1434,7 +1432,7 @@ impl Default for ThemeSkinDocument {
 #[serde(default, deny_unknown_fields)]
 pub struct SurfaceAppearanceDocument {
     /// Destination-space outer row and column sizes shared by both states.
-    #[serde(default, deserialize_with = "crate::serde_com::deserialize")]
+    #[serde(default, deserialize_with = "crate::encoding::read_optional_insets")]
     #[serde(serialize_with = "crate::encoding::optional_insets")]
     pub insets: Option<SliceInsets>,
     /// Enabled structural appearance.
@@ -1482,7 +1480,7 @@ impl PointerAppearanceDocument {
 #[serde(default, deny_unknown_fields)]
 pub struct ControlAppearanceDocument {
     /// Destination-space outer row and column sizes shared by every control state.
-    #[serde(default, deserialize_with = "crate::serde_com::deserialize")]
+    #[serde(default, deserialize_with = "crate::encoding::read_optional_insets")]
     #[serde(serialize_with = "crate::encoding::optional_insets")]
     pub insets: Option<SliceInsets>,
     /// Disabled appearance, with no contradictory pointer or focus substate.
@@ -1522,7 +1520,7 @@ impl ControlAppearanceDocument {
 #[serde(default, deny_unknown_fields)]
 pub struct MenuAppearanceDocument {
     /// Destination-space outer row and column sizes shared by every menu state.
-    #[serde(default, deserialize_with = "crate::serde_com::deserialize")]
+    #[serde(default, deserialize_with = "crate::encoding::read_optional_insets")]
     #[serde(serialize_with = "crate::encoding::optional_insets")]
     pub insets: Option<SliceInsets>,
     /// Enabled menu appearance without transient selection.
@@ -1575,7 +1573,7 @@ impl MenuAppearanceDocument {
 #[serde(default, deny_unknown_fields)]
 pub struct ChromeAppearanceDocument {
     /// Destination-space outer row and column sizes shared by every chrome state.
-    #[serde(default, deserialize_with = "crate::serde_com::deserialize")]
+    #[serde(default, deserialize_with = "crate::encoding::read_optional_insets")]
     #[serde(serialize_with = "crate::encoding::optional_insets")]
     pub insets: Option<SliceInsets>,
     /// Enabled chrome appearance without window activation.
@@ -1609,11 +1607,15 @@ impl ChromeAppearanceDocument {
 #[serde(default, deny_unknown_fields)]
 pub struct VisualOverrideDocument {
     /// Optional text and semantic-glyph color for this exact role and state.
-    #[serde(default, deserialize_with = "crate::serde_com::deserialize")]
+    #[serde(default, deserialize_with = "crate::encoding::read_optional_color")]
     #[serde(serialize_with = "crate::encoding::optional_color")]
     pub content_color: Option<Color>,
     /// Optional destination geometry overriding the role-wide insets for this state.
-    #[serde(default, deserialize_with = "crate::serde_com::deserialize", serialize_with = "crate::encoding::optional_insets")]
+    #[serde(
+        default,
+        deserialize_with = "crate::encoding::read_optional_insets",
+        serialize_with = "crate::encoding::optional_insets"
+    )]
     pub insets: Option<SliceInsets>,
     /// Optional stretchable-center visibility; omission keeps this state's fallback.
     pub center_visible: Option<bool>,
@@ -1643,25 +1645,25 @@ pub enum PatchDocument {
     /// A flat color painted across all nine destination cells.
     Solid {
         /// RGBA color covering the complete patch while role insets retain layout geometry.
-        #[serde(deserialize_with = "crate::serde_com::deserialize")]
+        #[serde(deserialize_with = "crate::encoding::read_color")]
         #[serde(serialize_with = "crate::encoding::color")]
         color: Color,
     },
     /// A resource-free three-by-three patch with one border and one center color.
     Framed {
         /// RGBA color painted into every fixed edge and corner cell.
-        #[serde(deserialize_with = "crate::serde_com::deserialize")]
+        #[serde(deserialize_with = "crate::encoding::read_color")]
         #[serde(serialize_with = "crate::encoding::color")]
         border: Color,
         /// RGBA color painted into the stretchable center cell.
-        #[serde(deserialize_with = "crate::serde_com::deserialize")]
+        #[serde(deserialize_with = "crate::encoding::read_color")]
         #[serde(serialize_with = "crate::encoding::color")]
         center: Color,
     },
     /// Nine independently authored colors in row-major order, including the center.
     Flat {
         /// Top-left, top, top-right, left, center, right, bottom-left, bottom, bottom-right.
-        #[serde(deserialize_with = "crate::serde_com::deserialize", serialize_with = "crate::encoding::cells")]
+        #[serde(deserialize_with = "crate::encoding::read_cells", serialize_with = "crate::encoding::cells")]
         cells: [Color; 9],
     },
     /// One PNG divided into a typed three-by-three image patch.
@@ -1669,11 +1671,11 @@ pub enum PatchDocument {
         /// PNG path resolved relative to the containing JSON document.
         path: PathBuf,
         /// Optional source-space slices; omission reuses the role's destination insets.
-        #[serde(default, deserialize_with = "crate::serde_com::deserialize")]
+        #[serde(default, deserialize_with = "crate::encoding::read_optional_insets")]
         #[serde(serialize_with = "crate::encoding::optional_insets")]
         source_insets: Option<SliceInsets>,
         /// Optional RGBA image modulation; omission preserves the source pixels.
-        #[serde(default, deserialize_with = "crate::serde_com::deserialize")]
+        #[serde(default, deserialize_with = "crate::encoding::read_optional_color")]
         #[serde(serialize_with = "crate::encoding::optional_color")]
         tint: Option<Color>,
     },
