@@ -154,12 +154,25 @@ fn all_builtin_document_controls_construct_and_reload() {
             });
         }
         let name = root.widget.name();
-        let outputs = root.widget.outputs().iter().map(|port| Output {
-            name: port.name.into(), node: "root".into(), port: port.name.into(),
-        }).collect();
-        let inputs = InputKind::ALL.into_iter().filter(|kind| root.widget.accepts(kind)).map(|kind| Input {
-            name: kind.label().into(), node: "root".into(), kind,
-        }).collect();
+        let outputs = root
+            .widget
+            .outputs()
+            .iter()
+            .map(|port| Output {
+                name: port.name.into(),
+                node: "root".into(),
+                port: port.name.into(),
+            })
+            .collect();
+        let inputs = InputKind::ALL
+            .into_iter()
+            .filter(|kind| root.widget.accepts(kind))
+            .map(|kind| Input {
+                name: kind.label().into(),
+                node: "root".into(),
+                kind,
+            })
+            .collect();
         let document = Document {
             version: VERSION,
             connections: vec![],
@@ -200,7 +213,8 @@ fn all_builtin_document_controls_construct_and_reload() {
                 }?;
             }
             Ok(())
-        }).unwrap_or_else(|error| panic!("{name}: {error}"));
+        })
+        .unwrap_or_else(|error| panic!("{name}: {error}"));
         fixture.frame(VIEW).unwrap();
         assert_eq!(Document::from_binary(&slot.component().unwrap().save().unwrap()).unwrap(), document);
     }
@@ -528,35 +542,50 @@ fn private_connection_executes_after_real_click_and_retires_with_its_scope() {
     assert!(button.label().is_err());
 }
 
-/// Forwarded boolean facts reach a distinct private target in the same mounted component.
+/// One checkbox event reaches two private targets and its public application observer.
 #[test]
-fn checkbox_connection_forwards_payload_to_private_target() {
+fn checkbox_connection_fans_out_to_private_and_public_destinations() {
     let mut fixture = Headless::standard();
     let mut slot = slot(&fixture.ui);
     let mut document = Document::new("forwarded state");
     document.root = Node::new("form", WidgetSpec::Form { width: 300, height: 200 });
-    for (key, y) in [("source", 0), ("target", 60)] {
+    for (key, y) in [("source", 0), ("target", 60), ("second", 120)] {
         document.root.children.push(Child {
             edge: Edge::Position { x: 0, y, width: 200, height: 40 },
             node: Node::new(key, WidgetSpec::Checkbox { text: key.into(), checked: false }),
         });
     }
-    document.outputs.clear();
+    document.outputs = vec![Output { name: "source_changed".into(), node: "source".into(), port: "changed".into() }];
     document.inputs.clear();
-    document.connections.push(Connection {
-        source: "source".into(),
-        port: "changed".into(),
-        target: "target".into(),
-        action: Action::Forward(InputKind::Checked),
-    });
-    slot.reload(&document, Resources::new(), |_, _| Ok(())).unwrap();
+    for key in ["target", "second"] {
+        document.connections.push(Connection {
+            source: "source".into(),
+            port: "changed".into(),
+            target: key.into(),
+            action: Action::Forward(InputKind::Checked),
+        });
+    }
+    let (sender, events) = std::sync::mpsc::channel();
+    slot.reload(&document, Resources::new(), |component, _| {
+        bind_output(
+            component.outputs()?.as_com_ref(),
+            "source_changed",
+            sender,
+            |event: neocogi_ui_nodes_contracts::CheckboxChanged| event.checked,
+        )
+    })
+    .unwrap();
     fixture.frame(VIEW).unwrap();
     let form = slot.component().unwrap().root().unwrap().as_interface().add_ref().query::<FormAbi>().unwrap();
     let children = form.children().unwrap();
     let target = Widget::from_interface(children.child(1).unwrap().query::<CheckboxAbi>().unwrap());
+    let second = Widget::from_interface(children.child(2).unwrap().query::<CheckboxAbi>().unwrap());
     assert!(!target.checked().unwrap());
+    assert!(!second.checked().unwrap());
     pointer(&fixture.ui, Point { x: 30, y: 30 }, true);
     pointer(&fixture.ui, Point { x: 30, y: 30 }, false);
     fixture.frame(VIEW).unwrap();
     assert!(target.checked().unwrap());
+    assert!(second.checked().unwrap());
+    assert_eq!(events.try_recv(), Ok(true));
 }

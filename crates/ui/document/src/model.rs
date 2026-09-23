@@ -518,10 +518,11 @@ impl Document {
                 return Err(format!("{} has no {} output", output.node, output.port));
             }
         }
+        if self.connections.len() > 4095 {
+            return Err("UI document has too many event connections".into());
+        }
         for connection in &self.connections {
-            if !ports.insert((&connection.source, &connection.port)) {
-                return Err(format!("Port {}.{} already has a destination", connection.source, connection.port));
-            }
+            // One source port may feed several private commands and a public observer.
             let source = nodes.get(connection.source.as_str()).ok_or("Connection source is missing")?;
             let target = nodes.get(connection.target.as_str()).ok_or("Connection target is missing")?;
             let payload = source.widget.output_type(&connection.port).ok_or("Connection source has no such output")?;
@@ -922,7 +923,7 @@ impl Action {
 mod connection_tests {
     use super::*;
 
-    /// Bad graph endpoints, payloads, constants, and competing destinations fail before construction.
+    /// Fan-out is valid while malformed endpoints, payloads, and constants still fail.
     #[test]
     fn invalid_connections_fail_validation() {
         let mut document = Document::new("connections");
@@ -933,11 +934,9 @@ mod connection_tests {
             action: Action::Text("changed".into()),
         };
         document.connections.push(connection.clone());
-        assert!(document.validate().is_err()); // The port already has a public export.
-        document.outputs.clear();
-        document.validate().unwrap();
+        document.validate().unwrap(); // Public and private destinations share the same port.
         document.connections.push(connection);
-        assert!(document.validate().is_err());
+        document.validate().unwrap(); // One source can fan out to several private routes.
         document.connections.pop();
         for action in [Action::Forward(InputKind::Text), Action::Checked(true), Action::Value(f32::NAN)] {
             document.connections[0].action = action;
