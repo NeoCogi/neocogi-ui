@@ -154,6 +154,7 @@ fn all_builtin_document_controls_construct_and_reload() {
         let name = root.widget.name();
         let document = Document {
             version: VERSION,
+            connections: vec![],
             name: name.into(),
             root,
             outputs: vec![],
@@ -204,6 +205,7 @@ fn typed_inputs_validate_payloads_and_do_not_emit_user_events() {
     for (widget, kind) in cases {
         let document = Document {
             version: VERSION,
+            connections: vec![],
             name: "input".into(),
             root: Node::new("root", widget),
             outputs: vec![],
@@ -268,6 +270,7 @@ fn typed_enablement_preserves_authored_options_without_capturing_dynamic_routing
     });
     let document = Document {
         version: VERSION,
+        connections: vec![],
         name: "routing".into(),
         root,
         outputs: vec![],
@@ -335,7 +338,11 @@ fn typed_and_binary_preparation_have_equivalent_authored_state() {
     let binary = loader.load(&document.to_binary().unwrap()).unwrap();
     assert_ne!(typed.root().unwrap().as_interface().as_ptr(), binary.root().unwrap().as_interface().as_ptr());
     for component in [&typed, &binary] {
-        component.input::<SetText>("title").unwrap().send(SetText { text: "runtime override".into() }).unwrap();
+        component
+            .input::<SetText>("title")
+            .unwrap()
+            .send(SetText { text: "runtime override".into() })
+            .unwrap();
         assert_eq!(Document::from_binary(&component.save().unwrap()).unwrap(), document);
     }
 }
@@ -348,17 +355,32 @@ fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
     let mut slot = slot(&fixture.ui);
     let mut document = Document {
         version: VERSION,
+        connections: vec![],
         name: "focused commands".into(),
-        root: Node::new("root", WidgetSpec::Combo {
-            labels: vec!["one".into(), "two".into()], selected: Some(0), placeholder: "empty".into(),
-        }),
-        outputs: vec![Output { name: "changed".into(), node: "root".into(), port: "changed".into() }],
-        inputs: vec![Input { name: "set".into(), node: "root".into(), kind: InputKind::Selection }],
+        root: Node::new(
+            "root",
+            WidgetSpec::Combo {
+                labels: vec!["one".into(), "two".into()],
+                selected: Some(0),
+                placeholder: "empty".into(),
+            },
+        ),
+        outputs: vec![Output {
+            name: "changed".into(),
+            node: "root".into(),
+            port: "changed".into(),
+        }],
+        inputs: vec![Input {
+            name: "set".into(),
+            node: "root".into(),
+            kind: InputKind::Selection,
+        }],
     };
     let (sender, events) = std::sync::mpsc::channel();
     slot.reload(&document, Resources::new(), |component, _| {
         bind_output(component.outputs()?.as_com_ref(), "changed", sender.clone(), |_: ChoiceSelection| ())
-    }).unwrap();
+    })
+    .unwrap();
     let component = slot.component().unwrap();
     let combo = Widget::from_interface(component.root().unwrap().as_interface().add_ref().query::<ComboAbi>().unwrap());
     let mut selection = component.input::<SetSelection>("set").unwrap();
@@ -372,11 +394,17 @@ fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
     assert!(matches!(combo.selection().unwrap(), ChoiceSelection::None));
     assert!(events.try_recv().is_err());
 
-    document.root.widget = WidgetSpec::Scrollbar { vertical: true, viewport: 10, content: 100, offset: 5 };
+    document.root.widget = WidgetSpec::Scrollbar {
+        vertical: true,
+        viewport: 10,
+        content: 100,
+        offset: 5,
+    };
     document.inputs[0].kind = InputKind::Offset;
     slot.reload(&document, Resources::new(), |component, _| {
         bind_output(component.outputs()?.as_com_ref(), "changed", sender.clone(), |_: ScrollbarChanged| ())
-    }).unwrap();
+    })
+    .unwrap();
     assert!(selection.send(SetSelection { selected: 0 }).is_err());
     let component = slot.component().unwrap();
     let scrollbar = component.root().unwrap().as_interface().add_ref().query::<ScrollbarAbi>().unwrap();
@@ -388,11 +416,18 @@ fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
     }
     assert!(events.try_recv().is_err());
 
-    document.root.widget = WidgetSpec::Split { vertical: false, position: 100, minimum_first: 20, minimum_second: 30, handle: 6 };
+    document.root.widget = WidgetSpec::Split {
+        vertical: false,
+        position: 100,
+        minimum_first: 20,
+        minimum_second: 30,
+        handle: 6,
+    };
     document.inputs[0].kind = InputKind::Position;
     slot.reload(&document, Resources::new(), |component, _| {
         bind_output(component.outputs()?.as_com_ref(), "changed", sender.clone(), |_: SplitChanged| ())
-    }).unwrap();
+    })
+    .unwrap();
     assert!(offset.send(SetOffset { offset: 0 }).is_err());
     let component = slot.component().unwrap();
     let mut split = component.root().unwrap().as_interface().add_ref().query::<SplitViewAbi>().unwrap();
@@ -403,11 +438,86 @@ fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
     let mut position = component.input::<SetPosition>("set").unwrap();
     position.send(SetPosition { position: 150 }).unwrap();
     let settings = split.settings().unwrap();
-    assert_eq!((settings.position, settings.minimum_first, settings.minimum_second, settings.handle_width), (150, 40, 30, 6));
+    assert_eq!(
+        (settings.position, settings.minimum_first, settings.minimum_second, settings.handle_width),
+        (150, 40, 30, 6)
+    );
     assert!(position.send(SetPosition { position: -1 }).is_err());
     assert_eq!(split.settings().unwrap().position, 150);
     assert!(events.try_recv().is_err());
     assert_eq!(Document::from_binary(&component.save().unwrap()).unwrap(), document);
     slot.reload(&document, Resources::new(), |_, _| Ok(())).unwrap();
     assert!(position.send(SetPosition { position: 100 }).is_err());
+}
+
+/// A self-targeting activation applies only after input traversal, without a reentrant borrow.
+#[test]
+fn private_connection_executes_after_real_click_and_retires_with_its_scope() {
+    use neocogi_ui::{Mount, Mountable, IEventOwnerAbi};
+    let mut fixture = Headless::standard();
+    let mut slot = slot(&fixture.ui);
+    let mut document = Document::new("private action");
+    document.root = Node::new("button", WidgetSpec::Button { text: "Before".into() });
+    document.inputs.clear();
+    document.outputs.clear();
+    document.connections.push(Connection {
+        source: "button".into(),
+        port: "activated".into(),
+        target: "button".into(),
+        action: Action::Text("After".into()),
+    });
+    let bytes = document.to_binary().unwrap();
+    assert_eq!(Document::from_binary(&bytes).unwrap(), document);
+    slot.reload(&document, Resources::new(), |_, _| Ok(())).unwrap();
+    let component = slot.component().unwrap();
+    let button = Widget::from_interface(component.root().unwrap().as_interface().add_ref().query::<ButtonAbi>().unwrap());
+    let mut owner: neocogi_com::ComPtr<IEventOwnerAbi> = match component.mount_description().unwrap() {
+        Mount::Component { owner, .. } => owner,
+        _ => panic!("document must retain its event owner"),
+    };
+    fixture.frame(VIEW).unwrap();
+    pointer(&fixture.ui, Point { x: 30, y: 30 }, true);
+    pointer(&fixture.ui, Point { x: 30, y: 30 }, false);
+    fixture.frame(VIEW).unwrap();
+    assert_eq!(button.label().unwrap(), "After");
+    assert_eq!(slot.component().unwrap().save().unwrap(), bytes);
+    assert_eq!(owner.dispatch_next(), Ok(false));
+    slot.reload(&document, Resources::new(), |_, _| Ok(())).unwrap();
+    // Container closure queues retirement until the next safe runtime boundary.
+    fixture.frame(VIEW).unwrap();
+    assert_eq!(owner.dispatch_next(), Err(UI_E_CLOSED));
+    assert!(button.label().is_err());
+}
+
+/// Forwarded boolean facts reach a distinct private target in the same mounted component.
+#[test]
+fn checkbox_connection_forwards_payload_to_private_target() {
+    let mut fixture = Headless::standard();
+    let mut slot = slot(&fixture.ui);
+    let mut document = Document::new("forwarded state");
+    document.root = Node::new("form", WidgetSpec::Form { width: 300, height: 200 });
+    for (key, y) in [("source", 0), ("target", 60)] {
+        document.root.children.push(Child {
+            edge: Edge::Position { x: 0, y, width: 200, height: 40 },
+            node: Node::new(key, WidgetSpec::Checkbox { text: key.into(), checked: false }),
+        });
+    }
+    document.outputs.clear();
+    document.inputs.clear();
+    document.connections.push(Connection {
+        source: "source".into(),
+        port: "changed".into(),
+        target: "target".into(),
+        action: Action::Forward(InputKind::Checked),
+    });
+    slot.reload(&document, Resources::new(), |_, _| Ok(())).unwrap();
+    fixture.frame(VIEW).unwrap();
+    let form = slot.component().unwrap().root().unwrap().as_interface().add_ref().query::<FormAbi>().unwrap();
+    let children = form.children().unwrap();
+    let target = Widget::from_interface(children.child(1).unwrap().query::<CheckboxAbi>().unwrap());
+    assert!(!target.checked().unwrap());
+    pointer(&fixture.ui, Point { x: 30, y: 30 }, true);
+    pointer(&fixture.ui, Point { x: 30, y: 30 }, false);
+    fixture.frame(VIEW).unwrap();
+    assert!(target.checked().unwrap());
 }

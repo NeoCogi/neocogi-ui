@@ -9,6 +9,10 @@ use std::collections::BTreeMap;
 pub(crate) struct Construction<'a> {
     /// Validated public exports select which nodes need an observer at construction.
     pub declarations: &'a [crate::model::Output],
+    /// Private executable edges also require construction-time observers.
+    pub connections: &'a [Connection],
+    /// Setup-only node output tables retained until private mappings are installed.
+    pub private_outputs: BTreeMap<String, ComPtr<neocogi_com::events::INamedOutputsAbi>>,
     /// Component-owned public bindings, separate from widget lifetimes and topology.
     pub outputs: neocogi_com::events::NamedOutputs,
     /// Existing runtime and independently deployed built-in factory.
@@ -59,10 +63,14 @@ impl Construction<'_> {
         macro_rules! create {
             ($factory:expr, $method:ident, $event:ty, $($argument:expr),* $(,)?) => {{
                 let mut exports = self.declarations.iter().filter(|output| output.node == node.key).peekable();
-                let observer = match exports.peek() {
-                    None => None,
-                    Some(_) => {
+                let connected = self.connections.iter().any(|connection| connection.source == node.key);
+                let observer = match (exports.peek(), connected) {
+                    (None, false) => None,
+                    _ => {
                         let (observer, bindings) = <$event>::exported_observer()?;
+                        if connected {
+                            self.private_outputs.insert(node.key.clone(), bindings.clone());
+                        }
                         for export in exports {
                             self.outputs.export_component(&export.name, bindings.clone(), &export.port)?;
                         }

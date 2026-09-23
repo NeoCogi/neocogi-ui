@@ -9,6 +9,7 @@ use neocogi_com::events::{NamedOutputs, INamedOutputsAbi};
 use neocogi_com::events::INamedOutputs;
 use neocogi_ui::{Ui, Widget, IWidgetAbi, IWindowAbi, ITextureAbi};
 use std::collections::BTreeMap;
+use neocogi_ui::{IEventOwner, IEventOwnerAbi, IEventOwnerInterfacesFor, Mount, Mountable, events::Controller};
 
 /// Recipe identity describes the authored component schema, never a runtime instance.
 pub const DOCUMENT_TYPE: NcGuid = neocogi_com::guid_from_qualified_name("neocogi.ui.authored-component");
@@ -112,7 +113,7 @@ pub struct Component {
     interface: ComPtr<contracts::IUiComponentAbi>,
 }
 impl Component {
-    /// Mounts the real root without exposing its internal concrete control types.
+    /// Returns the root for inspection. Mount the Component itself to retain its event owner.
     pub fn root(&self) -> Result<Widget<IWidgetAbi>, NcStatus> {
         Ok(Widget::from_interface(self.interface.root()?))
     }
@@ -131,17 +132,43 @@ impl Component {
     }
 }
 
+impl Mountable for Component {
+    /// Attaches view and behavior together so private connections follow subtree lifetime.
+    fn mount_description(&self) -> Result<Mount, NcStatus> {
+        Ok(Mount::Component {
+            view: self.interface.root()?,
+            owner: self.object.query()?,
+        })
+    }
+}
+
 /// One persistent composition owns its initialization and the concrete binding capabilities.
-#[neocogi_com::com_object(interfaces(contracts::IUiComponent, neocogi_com::events::INamedOutputs, neocogi_com::persistence::IPersistable))]
+#[neocogi_com::com_object(interfaces(contracts::IUiComponent, neocogi_com::events::INamedOutputs, neocogi_com::persistence::IPersistable, IEventOwner))]
 struct Loaded {
     /// Exact authored values; intentionally independent of live interactive state.
     document: Document,
+    /// Private command queue uses the same owned-controller lifecycle as application composites.
+    wiring: Controller<crate::wiring::Wiring>,
     /// Real tree root, attached only when the host commits the candidate.
     root: Widget<IWidgetAbi>,
     /// Public output names resolve only during connection.
     outputs: NamedOutputs,
     /// Typed receivers retain only the nodes needed by public commands.
     inputs: BTreeMap<String, ComPtr<IUnknown>>,
+}
+impl IEventOwner for Loaded {
+    /// Claims this controller and root exactly once through ordinary runtime mounting.
+    fn mount(&mut self, view: ComRef<'_, IWidgetAbi>) -> Result<(), NcStatus> {
+        self.wiring.mount(view)
+    }
+    /// Applies one queued connection after traversal releases widget borrows.
+    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
+        self.wiring.dispatch_next()
+    }
+    /// Disconnects queued work permanently when the mounted subtree closes.
+    fn retire(&mut self) -> Result<(), NcStatus> {
+        self.wiring.retire()
+    }
 }
 impl Drop for Loaded {
     /// Retires a rejected unmounted candidate; normal mounted retirement is idempotent.
@@ -190,7 +217,7 @@ impl IPersistable for Loaded {
     fn child_count(&self) -> Result<u32, NcStatus> {
         Ok(0)
     }
-    /// No separately published persistent child components are defined by revision one.
+    /// No separately published persistent child components are defined by this schema.
     fn child(&self, _: u32) -> Result<ComPtr<IUnknown>, NcStatus> {
         Err(NC_E_OUT_OF_RANGE)
     }
@@ -239,6 +266,8 @@ impl Services {
     fn construct(&self, document: Document) -> Result<ComPtr<IUnknown>, NcStatus> {
         let mut construction = Construction {
             declarations: &document.outputs,
+            connections: &document.connections,
+            private_outputs: BTreeMap::new(),
             outputs: NamedOutputs::new(),
             ui: &self.ui,
             parent: self.parent.as_ref(),
@@ -248,9 +277,10 @@ impl Services {
         let root = construction.build(&document.root)?;
         let outputs = std::mem::take(&mut construction.outputs);
         let inputs = crate::bindings::inputs(&document, &construction.nodes)?;
+        let wiring = crate::wiring::prepare(&document, &construction.nodes, &construction.private_outputs)?;
         // Success transfers tree ownership to Loaded; the construction guard no longer closes it.
         construction.nodes.clear();
         drop(construction);
-        Ok(Loaded::from_value(Loaded { document, root, outputs, inputs }))
+        Ok(Loaded::from_value(Loaded { document, root, outputs, inputs, wiring }))
     }
 }

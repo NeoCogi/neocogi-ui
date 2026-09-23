@@ -4,7 +4,7 @@ use serde::{Serialize, Deserialize};
 use std::collections::BTreeMap;
 
 /// Persistent schema revision; changes to field order or enum ordinals require a new revision.
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 /// Maximum authored nodes in one component.
 pub const MAX_NODES: usize = 4096;
 /// Maximum authored ownership depth.
@@ -26,6 +26,8 @@ pub struct Document {
     pub outputs: Vec<Output>,
     /// Public commands mapped to typed internal setters.
     pub inputs: Vec<Input>,
+    /// Executable private output-to-input connections, dispatched by the mounted component.
+    pub connections: Vec<Connection>,
 }
 
 /// One authored node; key is a document-local name preserved when reparenting.
@@ -356,8 +358,15 @@ pub enum InputKind {
 impl InputKind {
     /// Complete command catalog shared by validation and authoring tools.
     pub const ALL: [Self; 9] = [
-        Self::Text, Self::Checked, Self::Value, Self::Enabled, Self::Expanded,
-        Self::Choices, Self::Selection, Self::Offset, Self::Position,
+        Self::Text,
+        Self::Checked,
+        Self::Value,
+        Self::Enabled,
+        Self::Expanded,
+        Self::Choices,
+        Self::Selection,
+        Self::Offset,
+        Self::Position,
     ];
 
     /// Human-readable operation label; field identity always uses the enum itself.
@@ -478,6 +487,7 @@ impl Document {
                 node: "save".into(),
                 port: "activated".into(),
             }],
+            connections: vec![],
             inputs: vec![Input {
                 name: "title".into(),
                 node: "title".into(),
@@ -507,6 +517,15 @@ impl Document {
             if !node.widget.outputs().contains(&output.port.as_str()) {
                 return Err(format!("{} has no {} output", output.node, output.port));
             }
+        }
+        for connection in &self.connections {
+            if !ports.insert((&connection.source, &connection.port)) {
+                return Err(format!("Port {}.{} already has a destination", connection.source, connection.port));
+            }
+            let source = nodes.get(connection.source.as_str()).ok_or("Connection source is missing")?;
+            let target = nodes.get(connection.target.as_str()).ok_or("Connection target is missing")?;
+            let payload = source.widget.output_type(&connection.port).ok_or("Connection source has no such output")?;
+            connection.action.validate(payload, &target.widget)?;
         }
         names.clear();
         let mut inputs = std::collections::BTreeSet::new();
@@ -679,8 +698,9 @@ fn validate_node<'a>(node: &'a Node, depth: usize, nodes: &mut BTreeMap<&'a str,
             (Linear { .. } | Disclosure { .. }, Edge::Linear { main, cross }) => main.valid() && cross.is_none_or(|pixels| pixels >= 0),
             (Grid { .. }, Edge::Grid { columns, rows }) => *columns > 0 && *rows > 0,
             (Split { .. } | Scroll { .. }, Edge::Pane) => true,
-            (Form { .. }, Edge::Position { x, y, width, height }) => *x >= 0 && *y >= 0 && *width > 0 && *height > 0
-                && x.checked_add(*width).is_some() && y.checked_add(*height).is_some(),
+            (Form { .. }, Edge::Position { x, y, width, height }) => {
+                *x >= 0 && *y >= 0 && *width > 0 && *height > 0 && x.checked_add(*width).is_some() && y.checked_add(*height).is_some()
+            }
             _ => false,
         };
         if !valid {
@@ -722,10 +742,168 @@ mod binding_tests {
     #[test]
     fn duplicate_input_endpoints_are_rejected_before_editing() {
         let mut document = Document::new("bindings");
-        document.inputs.push(Input { name: "title_alias".into(), node: "title".into(), kind: InputKind::Text });
+        document.inputs.push(Input {
+            name: "title_alias".into(),
+            node: "title".into(),
+            kind: InputKind::Text,
+        });
         assert!(document.validate().unwrap_err().contains("more than once"));
         // The same command on another node is an independent endpoint, not an alias.
         document.inputs[1].node = "save".into();
         document.validate().unwrap();
+    }
+}
+
+/// A private executable edge; each source port has one public or private destination.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ComSerialize, ComDeserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Connection {
+    /// Stable source node key.
+    pub source: String,
+    /// Concrete output port on the source widget.
+    pub port: String,
+    /// Stable destination node key; no public input alias is required.
+    pub target: String,
+    /// Typed transformation applied at the component's safe event boundary.
+    pub action: Action,
+}
+
+/// Concrete output contracts shared by validation, runtime binding, and authoring.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OutputType {
+    /// Payload-free activation.
+    Activation,
+    /// Checkbox boolean snapshot.
+    Checked,
+    /// Finite numeric snapshot.
+    Number,
+    /// Edited text plus cursor snapshot.
+    TextChanged,
+    /// Submitted text snapshot.
+    TextSubmitted,
+    /// Pixel scroll offset.
+    Offset,
+    /// Pixel divider position.
+    Position,
+    /// Optional combo selection identity.
+    Selection,
+}
+impl WidgetSpec {
+    /// Resolves a real port to its concrete message type; unknown ports remain invalid.
+    pub fn output_type(&self, port: &str) -> Option<OutputType> {
+        match (self, port) {
+            (Self::Button { .. } | Self::ListItem { .. } | Self::ListBox { .. }, "activated") => Some(OutputType::Activation),
+            (Self::Checkbox { .. }, "changed") => Some(OutputType::Checked),
+            (Self::Slider { .. } | Self::Number { .. }, "changed") => Some(OutputType::Number),
+            (Self::Textbox { .. } | Self::TextArea { .. }, "changed") => Some(OutputType::TextChanged),
+            (Self::Textbox { .. } | Self::TextArea { .. }, "submitted") => Some(OutputType::TextSubmitted),
+            (Self::Scrollbar { .. }, "changed") => Some(OutputType::Offset),
+            (Self::Split { .. }, "changed") => Some(OutputType::Position),
+            (Self::Combo { .. }, "changed") => Some(OutputType::Selection),
+            _ => None,
+        }
+    }
+}
+
+/// Explicit payload forwarding or a concrete constant command; no executable code is serialized.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ComSerialize, ComDeserialize)]
+#[serde(deny_unknown_fields)]
+pub enum Action {
+    /// Forward a compatible captured output field to this concrete command.
+    Forward(InputKind),
+    /// Replace destination text on every source event.
+    Text(String),
+    /// Set destination checked state on every source event.
+    Checked(bool),
+    /// Set a finite numeric value on every source event.
+    Value(f32),
+    /// Enable or disable the destination on every source event.
+    Enabled(bool),
+    /// Expand or collapse the destination on every source event.
+    Expanded(bool),
+    /// Select a combo ordinal, or clear selection with -1.
+    Selection(i32),
+    /// Request a pixel scroll offset, clamped by the destination.
+    Offset(i32),
+    /// Request a nonnegative split divider position.
+    Position(i32),
+}
+impl Action {
+    /// Destination command identity, independent of constant-versus-forwarded payload policy.
+    pub fn input(&self) -> InputKind {
+        match self {
+            Self::Forward(kind) => kind.clone(),
+            Self::Text(_) => InputKind::Text,
+            Self::Checked(_) => InputKind::Checked,
+            Self::Value(_) => InputKind::Value,
+            Self::Enabled(_) => InputKind::Enabled,
+            Self::Expanded(_) => InputKind::Expanded,
+            Self::Selection(_) => InputKind::Selection,
+            Self::Offset(_) => InputKind::Offset,
+            Self::Position(_) => InputKind::Position,
+        }
+    }
+
+    /// Checks payload compatibility and constant domain before any widget is constructed.
+    pub fn validate(&self, source: OutputType, target: &WidgetSpec) -> Result<(), String> {
+        if !target.accepts(&self.input()) {
+            return Err("Connection target does not accept this command".into());
+        }
+        let valid = match self {
+            Self::Forward(kind) => matches!(
+                (source, kind),
+                (OutputType::Checked, InputKind::Checked | InputKind::Enabled | InputKind::Expanded)
+                    | (OutputType::Number, InputKind::Value)
+                    | (OutputType::TextChanged | OutputType::TextSubmitted, InputKind::Text)
+                    | (OutputType::Offset | OutputType::Position, InputKind::Offset | InputKind::Position)
+                    | (OutputType::Selection, InputKind::Selection)
+            ),
+            Self::Value(value) => value.is_finite(),
+            Self::Position(value) => *value >= 0,
+            Self::Selection(value) => match target {
+                WidgetSpec::Combo { labels, .. } => *value >= -1 && (*value < 0 || (*value as usize) < labels.len()),
+                _ => false,
+            },
+            _ => true,
+        };
+        if valid {
+            Ok(())
+        } else {
+            Err("Connection payload is incompatible or invalid".into())
+        }
+    }
+}
+
+#[cfg(test)]
+mod connection_tests {
+    use super::*;
+
+    /// Bad graph endpoints, payloads, constants, and competing destinations fail before construction.
+    #[test]
+    fn invalid_connections_fail_validation() {
+        let mut document = Document::new("connections");
+        let connection = Connection {
+            source: "save".into(),
+            port: "activated".into(),
+            target: "title".into(),
+            action: Action::Text("changed".into()),
+        };
+        document.connections.push(connection.clone());
+        assert!(document.validate().is_err()); // The port already has a public export.
+        document.outputs.clear();
+        document.validate().unwrap();
+        document.connections.push(connection);
+        assert!(document.validate().is_err());
+        document.connections.pop();
+        for action in [Action::Forward(InputKind::Text), Action::Checked(true), Action::Value(f32::NAN)] {
+            document.connections[0].action = action;
+            assert!(document.validate().is_err());
+        }
+        document.connections[0].action = Action::Text("ok".into());
+        document.connections[0].target = "missing".into();
+        assert!(document.validate().is_err());
+        document.connections[0].target = "title".into();
+        document.connections[0].port = "missing".into();
+        assert!(document.validate().is_err());
     }
 }

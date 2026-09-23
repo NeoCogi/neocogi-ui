@@ -59,11 +59,10 @@ impl ReloadSlot {
         let loader = Loader::new(self.ui.clone(), Some(self.parent.clone()), resources).map_err(|error| error.to_string())?;
         let candidate = loader.prepare(document)?;
         bind(&candidate, generation).map_err(|error| error.to_string())?;
-        let root = candidate.root().map_err(|error| error.to_string())?;
         let edge = LinearEdge::new(LayoutTrack::Flex { weight: 1.0 });
         let committed = match self.active {
-            None => self.slot.insert(0, &root, edge),
-            Some(_) => self.slot.replace(0, &root, edge),
+            None => self.slot.insert(0, &candidate, edge),
+            Some(_) => self.slot.replace(0, &candidate, edge),
         }
         .map_err(|error| error.to_string())?;
         // The topology operation has committed. Store the matching component even

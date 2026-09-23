@@ -7,12 +7,12 @@ The same document works with shared plugins, a monolith, and WebAssembly.
 
 `Document` is the shared typed authoring schema. It describes the real ownership
 tree, constructor values, common options, logical resources, layout edges, and
-public input/output declarations. JSON is the editable source; NCB binary is the
+public input/output declarations plus executable private connections. JSON is the editable source; NCB binary is the
 COM persistence envelope for deployment. `Document::to_binary` and
 `Document::from_binary` are the export/import boundary. Bytes can come from a
 file, an embedded `include_bytes!`, or a browser fetch; the loader does no I/O.
 
-Revision one supports Button, Checkbox, Textbox, TextBlock, TextArea, Slider,
+Revision two supports Button, Checkbox, Textbox, TextBlock, TextArea, Slider,
 Number, ColorSwatch, ListItem, ListBox, Scrollbar, flat Combo, Linear, Grid,
 SplitView, ScrollArea, and Disclosure. Container edges preserve tracks, spans,
 child order, and exact cross sizes. A component is the unit of persistence:
@@ -31,7 +31,7 @@ only `root()`, `outputs()`, typed `input::<SetText>("title")`, and `save()`.
 When loading a node with exported outputs, construction supplies its generated
 `exported_observer()` before the node factory returns. That one observer also
 implements `INamedOutputs`; the component export table retains this capability
-and maps public names to concrete observer ports. Nodes without exports receive
+and maps public names to concrete observer ports. Nodes without public exports or private connections receive
 no observer. Installing a named target checks its exact receiver interface and
 updates only the downstream destination; the widget's observer remains fixed.
 An exported post uses one additional concrete COM forwarding call, with no
@@ -67,8 +67,10 @@ close; reconnect inputs and outputs for each replacement. The returned
 `Reloaded.teardown` is a post-commit diagnostic: an error closing old content
 must not be reported as a failed publication of the new content.
 
-Retain `Component` for the mounted view's lifetime, or let `ReloadSlot` retain
-it. Releasing its final persistence owner closes its root. Call these APIs at
+Mount `Component` itself, or use `ReloadSlot`, so the runtime retains both its
+view and its event owner. `root()` is an inspection capability, not a replacement
+for mounting the component's behavior. Unpublished candidates close on release;
+mounted owners retire with their subtree at the runtime's safe update boundary. Call these APIs at
 ordinary application mutation boundaries, never during layout or paint.
 
 ## Resources and authored state
@@ -85,8 +87,7 @@ not modify its document. The designer edits `Document` and reloads the preview;
 application session persistence should use an explicit application state model.
 
 The binary format and schema are experimental. Ordinals and field order belong
-to revision one; incompatible changes require a revision and an explicit
-migration. Limits bound document bytes, traversal depth, node count, and decoded
+to revision two; older revisions are rejected rather than migrated. Limits bound document bytes, traversal depth, node count, and decoded
 values. Validation rejects unknown fields in JSON, unknown revisions, malformed
 endpoints, unsupported resources, and invalid numeric/layout policies.
 
@@ -101,11 +102,6 @@ parent content pixels. Coordinates are nonnegative, sizes positive, and sums
 must fit in `i32`. A smaller allocation clips children; it does not scale them.
 Sibling order determines painting and hit priority. Linear/Grid/Split policies
 remain available inside a positioned control or as an application's root.
-
-These variants append to the experimental revision-one enum tables. Existing
-revision-one documents retain their binary encoding and load in the new reader;
-older readers reject the new variants instead of misinterpreting them. Applications
-using forms must deploy matching updated node contracts and runtime providers.
 
 ## Typed preparation and endpoint cardinality
 
@@ -125,3 +121,31 @@ Unknown ordinals and other negative values fail without changing selection.
 axis, pane minima, and divider width. These commands are silent programmatic
 changes; they do not publish user events or rewrite authored defaults. All input
 kinds and their inspector labels come from `InputKind::ALL` and `InputKind::label`.
+
+## Executable connections
+
+Revision two requires a `connections` array. Each edge names `source`, `port`,
+`target`, and a typed `action`, for example:
+
+```json
+{"source":"name","port":"changed","target":"title","action":{"Forward":"Text"}}
+```
+
+`Forward` accepts compatible payload fields: checkbox state to checked/enabled/
+expanded, text edits or submissions to text, numeric values to value, pixel
+positions/offsets to position/offset, and combo selection to selection. Constant
+variants (`Text`, `Checked`, `Value`, `Enabled`, `Expanded`, `Selection`, `Offset`,
+`Position`) work with any source event, including button activation. Model
+replacement remains an application input rather than an event transformation.
+
+Each output port has one destination: either a public export or one private edge.
+Validation rejects conflicts, missing endpoints, incompatible payloads, and invalid
+constants before construction. Target widgets still apply their current range
+policies; a forwarded selection absent from the destination model reports an error.
+
+Observers only capture facts into the mounted component's queue. Its controller
+applies resolved concrete commands after traversal releases widget borrows. Silent
+setters prevent cyclic connections from recursively publishing new user events.
+Closing/replacing the subtree retires its controller and discards pending work at
+the next safe update boundary. No arbitrary code or erased Rust values enter the
+serialized graph.

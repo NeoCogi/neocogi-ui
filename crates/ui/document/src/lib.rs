@@ -8,6 +8,7 @@ pub use model::*;
 /// Generated opaque component and concrete application command contracts.
 pub use neocogi_ui_document_contracts as contracts;
 mod bindings;
+mod wiring;
 mod build;
 pub use bindings::{Command, InputHandle};
 mod runtime;
