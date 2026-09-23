@@ -47,6 +47,11 @@ impl IClipboardCompletion for Completion {
     }
 }
 
+/// Keeps a committed receipt visible when a later shortcut request fails in the same update.
+fn preserve_change(changed: bool, error: NcStatus) -> Result<bool, NcStatus> {
+    if changed { Ok(true) } else { Err(error) }
+}
+
 /// Applies ready receipts and starts one shortcut request without borrowing widget state across COM.
 pub(super) fn advance(
     editing: &mut Editing,
@@ -78,7 +83,7 @@ pub(super) fn advance(
     let clipboard = match host.clipboard() {
         Ok(clipboard) => clipboard,
         Err(neocogi_com::NC_E_NOT_FOUND) => return Ok(changed), // Headless or explicitly clipboard-free hosts.
-        Err(error) => return Err(error),
+        Err(error) => return preserve_change(changed, error),
     };
     let selected = match operation {
         Operation::Paste => "",
@@ -88,19 +93,25 @@ pub(super) fn advance(
         },
     };
     if selected.len() > MAX_CLIPBOARD_BYTES {
-        return Err(neocogi_com::NC_E_OUT_OF_RANGE);
+        return preserve_change(changed, neocogi_com::NC_E_OUT_OF_RANGE);
     }
     let (send, receipts) = mpsc::sync_channel(1);
     let completion: ComPtr<IClipboardCompletionAbi> = Completion::from_value(Completion { send })
         .query()
         .expect("clipboard completion declares its contract");
-    match operation {
-        Operation::Paste => clipboard.read(completion.as_com_ref())?,
-        Operation::Copy | Operation::Cut => clipboard.write(NcCopyFromBufferOffset::new(0, selected.as_bytes()), completion.as_com_ref())?,
+    let request = match operation {
+        Operation::Paste => clipboard.read(completion.as_com_ref()),
+        Operation::Copy | Operation::Cut => clipboard.write(NcCopyFromBufferOffset::new(0, selected.as_bytes()), completion.as_com_ref()),
+    };
+    if let Err(error) = request {
+        return preserve_change(changed, error);
     }
     editing.pending = Some(Pending { operation, receive: receipts });
     // Native providers may already have replied; browser providers complete on a later update.
-    changed |= receive(editing, text, cursor, behavior)?;
+    changed |= match receive(editing, text, cursor, behavior) {
+        Ok(changed) => changed,
+        Err(error) => return preserve_change(changed, error),
+    };
     Ok(changed)
 }
 
@@ -166,6 +177,20 @@ mod tests {
                 .map_err(|_| neocogi_ui_core_contracts::UI_E_CLOSED)
         }
     }
+    #[com_object(interfaces(neocogi_ui_core_contracts::ITextClipboard))]
+    /// A provider that rejects a new request after an older receipt has completed.
+    struct RejectClipboard;
+    impl ITextClipboard for RejectClipboard {
+        /// Simulates a denied or unavailable platform read.
+        fn read(&self, _completion: ComRef<'_, IClipboardCompletionAbi>) -> Result<(), NcStatus> {
+            Err(neocogi_com::NC_E_INVALID_ARG)
+        }
+        /// Simulates a denied or unavailable platform write.
+        fn write(&self, _text: NcCopyFromBufferOffset<'_, u8>, _completion: ComRef<'_, IClipboardCompletionAbi>) -> Result<(), NcStatus> {
+            Err(neocogi_com::NC_E_INVALID_ARG)
+        }
+    }
+
     /// Real core host authority paired with a controllable external clipboard provider.
     struct Harness {
         /// Keeps the actual production construction host open for each operation.
@@ -283,6 +308,22 @@ mod tests {
         assert!(editor.step(None).unwrap());
         assert_eq!(editor.text, "first");
     }
+    /// A completed paste remains observable if a second shortcut request fails in that update.
+    #[test]
+    fn ready_paste_reports_change_even_when_next_read_is_denied() {
+        let mut editor = Harness::new("original");
+        assert!(!editor.step(Some('v')).unwrap());
+        let Request::Read(completion) = editor.requests.recv().unwrap() else {
+            panic!("expected read")
+        };
+        completion.complete(0, NcCopyFromBufferOffset::new(0, b"pasted")).unwrap();
+        let rejecting: ComPtr<ITextClipboardAbi> = RejectClipboard::from_value(RejectClipboard).query().unwrap();
+        editor._runtime.set_clipboard(rejecting.as_com_ref()).unwrap();
+        assert_eq!(editor.step(Some('v')), Ok(true));
+        assert_eq!(editor.text, "pasted");
+        assert!(editor.requests.try_recv().is_err());
+    }
+
     /// Expected browser permission denial must not turn an ordinary widget update into a frame failure.
     #[test]
     fn textbox_clipboard_denial_keeps_the_frame_and_text_valid() {

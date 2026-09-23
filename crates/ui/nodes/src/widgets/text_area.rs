@@ -397,7 +397,7 @@ fn textarea_update(ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>, 
             caret_affinity = CaretAffinity::Upstream;
         }
         Ok(false) => {}
-        // Permission denial or an unavailable OS clipboard preserves the editor and its frame.
+        // A failed request cannot erase a completed receipt's change result or abort the frame.
         Err(_) => {}
     }
     if ctx.focused() {

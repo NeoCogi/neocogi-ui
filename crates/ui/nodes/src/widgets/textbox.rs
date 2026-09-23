@@ -253,7 +253,7 @@ pub(crate) fn textbox_update(
         Some(UiInputEvent::Text { text }) => text.as_str(),
         _ => "",
     };
-    // Permission denial or an unavailable OS clipboard preserves the editor and its frame.
+    // Clipboard failures do not abort the frame; any earlier completed receipt still reports its edit.
     if let Ok(changed) = super::clipboard::advance(editing, host, buf, &mut cursor_pos, key_event, ReturnBehavior::Submit, ctx.focused()) {
         outcome.changed |= changed;
     }
