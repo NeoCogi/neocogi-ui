@@ -28,14 +28,9 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 //
-// TODO: Triangulate inputs
-// TODO: have the polygon points to 2 arrays: vertices and triangles
-//
 //! Simple polygon mesh container used by OBJ loading and 3D demo rendering.
 
 use rs_math3d::*;
-
-use std::iter::*;
 
 #[repr(C)]
 pub struct Vertex {
@@ -65,7 +60,6 @@ pub struct PMVertex {
 
 #[derive(Clone)]
 pub struct PolyMesh {
-    bbox: Box3f,
     v_positions: Vec<PMVertex>,
     v_normals: Vec<Vec3f>,
     v_tex: Vec<Vec2f>,
@@ -76,12 +70,7 @@ pub struct PolyMesh {
 
 impl<'a> PolyMesh {
     pub fn new() -> Self {
-        let mut bbox = Box3f::new(&Vec3f::zero(), &Vec3f::zero());
-        bbox.min = Vec3f::new(f32::MAX, f32::MAX, f32::MAX);
-        bbox.max = Vec3f::new(-f32::MAX, -f32::MAX, -f32::MAX);
         Self {
-            bbox,
-
             v_positions: Vec::new(),
             v_normals: Vec::new(),
             v_tex: Vec::new(),
@@ -102,13 +91,16 @@ impl<'a> PolyMesh {
         }
     }
 
+    /// Bounds only positions referenced by polygons; an empty mesh has a zero-sized origin box.
     pub fn calculate_bounding_box(&self) -> Box3f {
-        self.polys().fold(Box3f::new(&Vec3f::zero(), &Vec3f::zero()), |mut b, p| {
-            for v in p {
-                b.min = Vector3::min(&b.min, &self.v_positions[v.pos].position);
-                b.max = Vector3::max(&b.max, &self.v_positions[v.pos].position);
-            }
-            b
+        let mut vertices = self.polys().flatten();
+        let Some(first) = vertices.next() else {
+            return Box3f::new(&Vec3f::zero(), &Vec3f::zero());
+        };
+        // Seed from real geometry so one-sided meshes do not accidentally include the origin.
+        let point = &self.v_positions[first.pos].position;
+        vertices.fold(Box3f::new(point, point), |bounds, vertex| {
+            bounds.add(&self.v_positions[vertex.pos].position)
         })
     }
 
@@ -122,13 +114,8 @@ impl<'a> PolyMesh {
         let len = verts.len();
         let start = self.vertices.len();
 
-        let mut norm_verts = [Vec3f::zero(); 3];
-        for (i, v) in verts.iter().enumerate() {
-            if i < 3 {
-                norm_verts[i] = self.v_positions[v.pos].position;
-            }
-            self.vertices.push(*v);
-            self.bbox.add(&self.v_positions[v.pos].position);
+        for vertex in verts {
+            self.vertices.push(*vertex);
         }
 
         self.polys.push(Polygon { len, start });
@@ -193,5 +180,48 @@ impl<'a> Iterator for PolyMeshIterator<'a> {
         } else {
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Each polygon vertex refers to the same position ordinal in the test mesh.
+    fn mesh(points: Vec<Vec3f>) -> PolyMesh {
+        let mut mesh = PolyMesh::new();
+        let vertices = (0..points.len()).map(|pos| PolyVertex { pos, normal: 0, tex: 0 }).collect::<Vec<_>>();
+        mesh.set_vertices(points, Vec::new(), Vec::new());
+        mesh.add_poly(&vertices);
+        mesh
+    }
+
+    /// Copies components because the math library intentionally gives vectors no equality trait.
+    fn coordinates(point: Vec3f) -> (f32, f32, f32) {
+        (point.x, point.y, point.z)
+    }
+
+    /// Empty and one-sided geometry produce exact bounds without a phantom origin vertex.
+    #[test]
+    fn polygon_bounds_use_only_referenced_positions() {
+        let empty = PolyMesh::new().calculate_bounding_box();
+        assert_eq!(coordinates(empty.min), (0.0, 0.0, 0.0));
+        assert_eq!(coordinates(empty.max), (0.0, 0.0, 0.0));
+
+        let mut positive = mesh(vec![Vec3f::new(2.0, 3.0, 4.0), Vec3f::new(5.0, 7.0, 9.0)]);
+        // A later unused position must not change bounds computed from polygon references.
+        positive.set_vertices(
+            vec![Vec3f::new(2.0, 3.0, 4.0), Vec3f::new(5.0, 7.0, 9.0), Vec3f::new(-100.0, -100.0, -100.0)],
+            Vec::new(),
+            Vec::new(),
+        );
+        let bounds = positive.calculate_bounding_box();
+        assert_eq!(coordinates(bounds.min), (2.0, 3.0, 4.0));
+        assert_eq!(coordinates(bounds.max), (5.0, 7.0, 9.0));
+
+        let negative = mesh(vec![Vec3f::new(-9.0, -7.0, -5.0), Vec3f::new(-4.0, -3.0, -2.0)]);
+        let bounds = negative.calculate_bounding_box();
+        assert_eq!(coordinates(bounds.min), (-9.0, -7.0, -5.0));
+        assert_eq!(coordinates(bounds.max), (-4.0, -3.0, -2.0));
     }
 }
