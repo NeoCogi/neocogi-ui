@@ -258,9 +258,10 @@ impl Edge {
 
     /// Interpolates the crossing point of one segment and this axis-aligned edge.
     fn intersection(self, from: RenderVertex, to: RenderVertex) -> RenderVertex {
-        let start = self.coordinate(from);
-        let distance = self.coordinate(to) - start;
-        let amount = if distance == 0.0 { 0.0 } else { (self.boundary - start) / distance };
+        // Widen before subtracting; accepted finite input may span the complete f32 range.
+        let start = f64::from(self.coordinate(from));
+        let distance = f64::from(self.coordinate(to)) - start;
+        let amount = if distance == 0.0 { 0.0 } else { (f64::from(self.boundary) - start) / distance };
         let mut vertex = RenderVertex::lerp(from, to, amount);
         match self.axis {
             Axis::X => vertex.x = self.boundary,
@@ -924,3 +925,8 @@ mod tests {
         }
     }
 }
+
+/// Regressions run whenever this production module is available.
+#[cfg(test)]
+#[path = "compositor/tests.rs"]
+mod stream_tests;

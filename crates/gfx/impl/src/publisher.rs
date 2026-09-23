@@ -60,3 +60,7 @@ fn copied_records<T: Copy>(input: NcCopyFromBufferOffset<'_, T>, expected: usize
     records.extend_from_slice(input.as_slice());
     Ok(records)
 }
+
+/// Regressions run whenever this production module is available.
+#[cfg(test)]
+mod tests;

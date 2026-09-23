@@ -35,18 +35,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - run: cargo test -p microui-ui
-      - run: cargo test -p microui-redux -p microui-contracts
+      - run: cargo test -p neocogi-ui-runtime -p neocogi-ui-nodes -p neocogi-ui-support
+      - run: cargo test -p neocogi-ui -p neocogi-ui-core-contracts -p neocogi-ui-nodes-contracts -p neocogi-ui-document --features neocogi-ui/static-runtime
 
   assets:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        features: ["", "builder", "theme-json", "save-to-rust"]
+        features: ["", "gfx", "publisher", "builder", "save-to-rust", "builder,publisher,save-to-rust"]
     steps:
       - uses: actions/checkout@v6
-      - run: cargo test -p neocogi-assets --no-default-features --features '${{ matrix.features }}' --lib
+      - run: cargo test -p neocogi-gfx-impl --no-default-features --features '${{ matrix.features }}' --lib
+
+  # Authoring tests need a real renderer and embedded assets, not just a successful library build.
+  authoring:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install the offscreen software OpenGL host
+        run: sudo apt-get update -qq && sudo apt-get install -y libsdl2-dev libgl1-mesa-dri
+      - name: Exercise the real designer and theme editor
+        env:
+          SDL_VIDEODRIVER: offscreen
+        run: cargo test -p neocogi-ui-designer -p neocogi-theme-editor --lib --features neocogi-ui-designer/monolith,neocogi-ui-designer/embed-assets,neocogi-theme-editor/monolith,neocogi-theme-editor/embed-assets -- --include-ignored --skip benchmark --test-threads=1
 
   com:
     runs-on: ubuntu-latest
@@ -77,11 +89,11 @@ jobs:
       - name: Independently built custom widget and container
         run: xvfb-run -a scripts/test-extension.sh ${{ matrix.backend }}
       - name: Backend-specific frame/resource checks
-        run: xvfb-run -a cargo test -p microui-plugin-platform --lib --no-default-features --features ${{ matrix.backend }} -- --include-ignored
+        run: xvfb-run -a cargo test -p neocogi-render-plugin --lib --no-default-features --features ${{ matrix.backend }} -- --include-ignored
       - name: Check demo and platform warnings for this backend
         env:
           NC_COM_RUNTIME_LINK_DIR: ${{ github.workspace }}/target/debug
-        run: cargo clippy -p microui-redux-demo-full -p microui-redux-basic-demos -p microui-plugin-platform --all-targets --no-default-features --features ${{ matrix.backend }} -- -D warnings
+        run: cargo clippy -p neocogi-demo-full -p neocogi-demo-basic -p neocogi-render-plugin --all-targets --no-default-features --features ${{ matrix.backend }} -- -D warnings
 
   # These jobs validate the native loader/package shape without assuming a hosted runner has a GPU desktop.
   native-platform:
@@ -107,7 +119,7 @@ jobs:
       - name: Package independently compiled Glow application
         run: cargo run -p cargo-neocogi -- build --assembly full
       - name: Platform-neutral contracts and facade behavior
-        run: cargo test -p microui-contracts -p microui-redux
+        run: cargo test -p neocogi-ui-core-contracts -p neocogi-ui --features neocogi-ui/static-runtime
 
   browser:
     runs-on: ubuntu-latest

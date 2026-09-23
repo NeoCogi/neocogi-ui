@@ -58,3 +58,7 @@ mod recipe_data;
 #[cfg(all(test, feature = "builder"))]
 #[path = "../../../../demos/assets/src/recipe.rs"]
 mod test_recipe;
+
+/// Immutable test data does not enable any optional production feature.
+#[cfg(test)]
+mod test_support;
