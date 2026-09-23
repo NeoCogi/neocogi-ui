@@ -411,7 +411,7 @@ impl Runtime {
             // invalidate the caller's already committed frame.
             storage.pending.set(true);
             storage.collect_changes(&mut context)?;
-            context.window_manager.begin_update_cycle(dimensions);
+            context.window_manager.begin_update_cycle(dimensions)?;
             context.window_manager.event_result()?;
             storage.phase_result()?;
         }
@@ -525,7 +525,7 @@ impl RuntimeStorage {
         self.open()?;
         let mut context = self.context()?;
         self.collect_changes(&mut context)?;
-        context.window_manager.layout_update_cycle(dimensions);
+        context.window_manager.layout_update_cycle(dimensions)?;
         context.window_manager.event_result()?;
         self.phase_result()
     }

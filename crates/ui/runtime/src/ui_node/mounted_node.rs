@@ -169,6 +169,8 @@ impl ComNode {
             Ok(size) if size.width >= 0 && size.height >= 0 => Ok(Dimensioni::new(size.width, size.height)),
             result => {
                 let error = result.err().unwrap_or(NC_E_INVALID_ARG);
+                // Foreign container policy may ignore this returned failure; preserve the
+                // boundary guard as well as returning it through ordinary traversal.
                 self.host.fail(error);
                 // Keep the ancestor path dirty until a successful retry. A
                 // failed measurement must never become a cached zero preference.
@@ -186,9 +188,9 @@ impl ComNode {
         _atlas: &AtlasHandle,
         rect: crate::Recti,
         current: &mut crate::ui_node::NodeRuntime,
-    ) -> bool {
+    ) -> Result<(), NcStatus> {
         let NodeLayoutKind::Branch { policy, children, .. } = &self.layout else {
-            return true;
+            return Ok(());
         };
         let _phase = Observation::begin(&self.host);
         match self.layout_service.place(children, policy, traversal, copied_rect(rect)) {
@@ -197,13 +199,14 @@ impl ComNode {
                 current.layout.children.clip = local_rect(output.viewport);
                 current.layout.children.offset = crate::Vec2i::new(output.offset_x, output.offset_y);
                 current.layout.propagate_child_overflow = output.propagate_overflow;
-                true
+                Ok(())
             }
             Err(error) => {
+                // Retain the guard for external policy that discards a child Result.
                 self.host.fail(error);
                 self.dirty.set(true);
                 current.invalidate_measurement();
-                false
+                Err(error)
             }
         }
     }

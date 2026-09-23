@@ -98,7 +98,7 @@ impl ILayoutService for Layout {
         let constraints = constraints(limits)?;
         let node = access.frame().children.get_mut(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
         let resources = self.storage.resources.borrow();
-        let size = node.measure(resources.bundle().skin(), resources.bundle().atlas(), constraints);
+        let size = node.measure(resources.bundle().skin(), resources.bundle().atlas(), constraints)?;
         self.storage.size(size)
     }
     /// Recurses with owned child storage and no runtime or node reference stored in COM.
@@ -115,7 +115,7 @@ impl ILayoutService for Layout {
             resources.bundle().skin(),
             resources.bundle().atlas(),
             local_rect(rect),
-        );
+        )?;
         self.storage.size(size)
     }
     /// Exposes only a copied extent, never the child's runtime layout cache.

@@ -357,6 +357,13 @@ An application desktop is an ordinary window with explicit layer, chrome and chi
 clip policy. Its application updates the rectangle when the platform drawable
 changes. The full demo shows this composition through actual window capabilities.
 
+Layout measurement and placement propagate `Result` through node caches, root
+bodies, and the window manager to the public update operation. A failed pass
+stops before later roots, leaves geometry dirty for retry, and cannot publish a
+renderable update commit. The external container boundary additionally rejects
+a policy that ignores a failed child operation; ordinary geometry recursion does
+not poll that guard to obtain its result.
+
 ## Extension and test boundaries
 
 The [extension example](../../../../examples/ui-extension) is independently built

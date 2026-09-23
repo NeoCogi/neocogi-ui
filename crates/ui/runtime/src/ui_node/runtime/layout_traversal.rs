@@ -31,31 +31,40 @@
 //! Retained-tree measurement, allocation traversal, and child-content bounds.
 
 use super::*;
+use neocogi_com::NcStatus;
 use crate::math::RectExt;
 
 /// Geometry recursion contains no input router, runtime owner or borrowed tree.
-/// Production instances carry no state; test instances share only phase counters.
+/// Errors travel through ordinary results; this traversal owns no shared error state.
 #[derive(Clone)]
 pub(crate) struct LayoutTraversal {}
 
 impl LayoutTraversal {
     /// Measures one already-borrowed node through the authoritative private node path.
-    pub(crate) fn measure_node(&self, node: &mut Node, style: &Skin, atlas: &crate::AtlasHandle, constraints: Constraints) -> Dimensioni {
+    pub(crate) fn measure_node(&self, node: &mut Node, style: &Skin, atlas: &crate::AtlasHandle, constraints: Constraints) -> Result<Dimensioni, NcStatus> {
         // Node::measure is the only place that adds frame geometry; containers receive the same
         // content-only measurement contract whether reached here or through Children.
         node.measure(style, atlas, constraints)
     }
 
-    fn measure_node_for_layout(&self, node: &mut Node, style: &Skin, atlas: &crate::AtlasHandle, constraints: Constraints) -> (Dimensioni, bool) {
+    /// Preserves cache-hit information only for a successful measurement.
+    fn measure_node_for_layout(
+        &self,
+        node: &mut Node,
+        style: &Skin,
+        atlas: &crate::AtlasHandle,
+        constraints: Constraints,
+    ) -> Result<(Dimensioni, bool), NcStatus> {
         node.measure_with_cache_status(style, atlas, constraints)
     }
 
     /// Assigns one exact parent-owned rectangle through direct widget/container dispatch.
-    pub(crate) fn layout_node_ref(&mut self, node: &mut Node, style: &Skin, atlas: &crate::AtlasHandle, rect: Recti) -> Dimensioni {
+    pub(crate) fn layout_node_ref(&mut self, node: &mut Node, style: &Skin, atlas: &crate::AtlasHandle, rect: Recti) -> Result<Dimensioni, NcStatus> {
         let frame_role = node_frame_role(node);
         // Preserve the measure/layout phase contract while keeping the parent's rectangle
         // authoritative. Sizing relationships live in the parent container, never on Node.
-        let (preferred, measurement_cached) = self.measure_node_for_layout(node, style, atlas, Constraints::bounded(Dimensioni::new(rect.width, rect.height)));
+        let (preferred, measurement_cached) =
+            self.measure_node_for_layout(node, style, atlas, Constraints::bounded(Dimensioni::new(rect.width, rect.height)))?;
         let outer = Recti::new(rect.x, rect.y, rect.width.max(0), rect.height.max(0));
         self.layout_node_outer_ref(node, style, atlas, frame_role, outer, preferred, measurement_cached)
     }
@@ -70,11 +79,11 @@ impl LayoutTraversal {
         outer: Recti,
         preferred: Dimensioni,
         measurement_cached: bool,
-    ) -> Dimensioni {
+    ) -> Result<Dimensioni, NcStatus> {
         let previous = node.state.layout.allocation;
         let same_allocation = previous.x == outer.x && previous.y == outer.y && previous.width == outer.width && previous.height == outer.height;
         if measurement_cached && same_allocation && !node.state.layout_is_dirty() {
-            return Dimensioni::new(outer.width, outer.height);
+            return Ok(Dimensioni::new(outer.width, outer.height));
         }
         // Store every rectangle in node-local coordinates except the outer allocation, which stays
         // parent-local. Transform traversal later composes those two coordinate spaces once.
@@ -87,9 +96,7 @@ impl LayoutTraversal {
         // Leaves expose overflow when their preference exceeds allocation. Containers instead
         // author their child viewport and content extent through the scoped layout context.
         if is_branch {
-            if !node.data.place(self, style, atlas, content, &mut node.state) {
-                return Dimensioni::new(outer.width, outer.height);
-            }
+            node.data.place(self, style, atlas, content, &mut node.state)?;
         } else {
             let content_size = Dimensioni::new(outer.width.max(preferred.width).max(0), outer.height.max(preferred.height).max(0));
             node.state.set_layout(node.state.layout.with_content_size(content_size));
@@ -117,7 +124,7 @@ impl LayoutTraversal {
             node.set_layout(node.state.layout.with_content_size(content_size));
         }
         node.state.validate_layout();
-        Dimensioni::new(outer.width, outer.height)
+        Ok(Dimensioni::new(outer.width, outer.height))
     }
 }
 

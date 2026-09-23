@@ -276,17 +276,26 @@ fn failed_container_layout_retries_without_caching_failed_parent_geometry() {
         .finish()
         .unwrap();
     let _window = mount(&runtime, &root).unwrap();
+    // A later root must not receive speculative geometry after an earlier root fails.
+    let (later_root, _later_editor, later_probe) = container(&runtime, Rc::default());
+    let _later_window = mount(&runtime, &later_root).unwrap();
     probe.fail_measure.set(true);
     assert_eq!(runtime.update(SIZE), Err(NC_E_INVALID_ARG));
+    assert_eq!(later_probe.measures.get(), 0);
+    assert_eq!(later_probe.placements.get(), 0);
     let failed_measures = probe.measures.get();
     probe.fail_measure.set(false);
     probe.fail_place.set(true);
     assert_eq!(runtime.update(SIZE), Err(NC_E_INVALID_ARG));
     assert!(probe.measures.get() > failed_measures);
+    assert_eq!(later_probe.measures.get(), 0);
+    assert_eq!(later_probe.placements.get(), 0);
     let failed_placements = probe.placements.get();
     probe.fail_place.set(false);
     runtime.update(SIZE).unwrap();
     assert!(probe.placements.get() > failed_placements);
+    assert!(later_probe.measures.get() > 0);
+    assert!(later_probe.placements.get() > 0);
     let (renderer, _) = renderer();
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
 }

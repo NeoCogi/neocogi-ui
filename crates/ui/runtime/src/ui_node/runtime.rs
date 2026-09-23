@@ -140,21 +140,35 @@ impl UiRuntime {
     /// Measures one persistent root node for auto-size without introducing a parallel projection.
     ///
     /// Root chrome owns the conversion from application constraints to the final outer extent.
-    pub(crate) fn measure_tree_root(&mut self, root: &mut Node, style: &Skin, atlas: &crate::AtlasHandle, constraints: Constraints) -> Dimensioni {
+    pub(crate) fn measure_tree_root(
+        &mut self,
+        root: &mut Node,
+        style: &Skin,
+        atlas: &crate::AtlasHandle,
+        constraints: Constraints,
+    ) -> Result<Dimensioni, neocogi_com::NcStatus> {
         root.synchronize_measurement_invalidation();
         self.geometry.measure_node(root, style, atlas, constraints)
     }
 
     /// Lays out one persistent root node at its authoritative screen-space rectangle.
-    pub(crate) fn layout_tree_root(&mut self, root: &mut Node, style: &Skin, atlas: crate::AtlasHandle, outer: Recti, viewport: Recti) {
+    pub(crate) fn layout_tree_root(
+        &mut self,
+        root: &mut Node,
+        style: &Skin,
+        atlas: crate::AtlasHandle,
+        outer: Recti,
+        viewport: Recti,
+    ) -> Result<(), neocogi_com::NcStatus> {
         root.synchronize_measurement_invalidation();
         // Root layout establishes the transform reused by subsequent routing, update, and paint.
         self.root_transform = Transform::root(viewport);
-        self.geometry.layout_node_ref(root, style, &atlas, outer);
+        self.geometry.layout_node_ref(root, style, &atlas, outer)?;
         // Cache only derived geometry; the persistent Node remains the authoritative tree.
         self.root_content_size = root.state.layout.content_size;
         // Layout may hide or remove the current transient target, so validate identities now.
         self.input_router.sanitize_transient_targets(std::slice::from_mut(root), self.root_transform);
+        Ok(())
     }
 
     /// Updates one persistent root node and its eligible descendants.

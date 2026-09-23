@@ -258,7 +258,7 @@ impl Surface {
         atlas: &crate::AtlasHandle,
         clip: Recti,
         minimized_content_height: Option<i32>,
-    ) {
+    ) -> Result<(), neocogi_com::NcStatus> {
         // Commit the inherited surface boundary before any concrete body sees it. Every later
         // manager-owned hit or paint path reads this same snapshot until the next complete layout.
         self.clip = clip;
@@ -293,7 +293,7 @@ impl Surface {
                     crate::AvailableSpace::bounded(self.rect.height).shrink(vertical_chrome)
                 },
             );
-            let child = self.body.measure(style, atlas, constraints);
+            let child = self.body.measure(style, atlas, constraints)?;
             let intrinsic = root_chrome_geometry(Recti::default(), child, menu_intrinsic, &self.name, self.options, frame_kind, style, atlas).intrinsic_outer;
             if auto_width {
                 self.rect.width = intrinsic.width;
@@ -334,7 +334,7 @@ impl Surface {
             // paint, and hit testing subsequently read the MenuSurface's matching committed rect.
             bar.layout(rect, clip);
         }
-        self.body.layout(style, atlas, self.geometry.body, clip);
+        self.body.layout(style, atlas, self.geometry.body, clip)
     }
 
     /// Returns whether the outer surface contains one screen-space point.
@@ -347,18 +347,21 @@ impl Surface {
 
 impl SurfaceBody {
     /// Measures either concrete body without type erasure.
-    fn measure(&mut self, style: &Skin, atlas: &crate::AtlasHandle, constraints: crate::Constraints) -> Dimensioni {
+    fn measure(&mut self, style: &Skin, atlas: &crate::AtlasHandle, constraints: crate::Constraints) -> Result<Dimensioni, neocogi_com::NcStatus> {
         match self {
             Self::Widgets { root, runtime } => runtime.measure_tree_root(root, style, atlas, constraints),
-            Self::Menu(menu) => menu.measure(style, atlas),
+            Self::Menu(menu) => Ok(menu.measure(style, atlas)),
         }
     }
 
     /// Commits one body allocation through the concrete variant.
-    fn layout(&mut self, style: &Skin, atlas: &crate::AtlasHandle, rect: Recti, viewport: Recti) {
+    fn layout(&mut self, style: &Skin, atlas: &crate::AtlasHandle, rect: Recti, viewport: Recti) -> Result<(), neocogi_com::NcStatus> {
         match self {
             Self::Widgets { root, runtime } => runtime.layout_tree_root(root, style, atlas.clone(), rect, viewport),
-            Self::Menu(menu) => menu.layout(rect, viewport),
+            Self::Menu(menu) => {
+                menu.layout(rect, viewport);
+                Ok(())
+            }
         }
     }
 
@@ -790,7 +793,7 @@ impl SurfaceNode {
     }
 
     /// Lays out this node and its optional root-owned menu bar through concrete bodies.
-    fn layout(&mut self, style: &Skin, atlas: &crate::AtlasHandle, viewport: Recti) {
+    fn layout(&mut self, style: &Skin, atlas: &crate::AtlasHandle, viewport: Recti) -> Result<(), neocogi_com::NcStatus> {
         let (maximized, unminimized_height) = self
             .root()
             .map(|root| (root.restore_rect.is_some(), root.unminimized_height))
@@ -816,11 +819,12 @@ impl SurfaceNode {
             SurfaceKind::Popup(_) => None,
         };
         let minimized_content_height = unminimized_height.map(|_| style.window_chrome().minimized_content_height);
-        self.surface.layout(menu_bar, frame_kind, style, atlas, viewport, minimized_content_height);
+        self.surface.layout(menu_bar, frame_kind, style, atlas, viewport, minimized_content_height)?;
         if maximized || unminimized_height.is_some() {
             // Managed size modes keep caption actions but expose no conflicting resize regions.
             self.surface.geometry = self.surface.geometry.without_resize();
         }
+        Ok(())
     }
 }
 
@@ -2963,13 +2967,13 @@ impl WindowManager {
     }
 
     /// Begins one cycle and lays out every visible tree before either callbacks or input routing.
-    pub(crate) fn begin_update_cycle(&mut self, dimensions: Dimensioni) {
+    pub(crate) fn begin_update_cycle(&mut self, dimensions: Dimensioni) -> Result<(), neocogi_com::NcStatus> {
         self.ui_commit = None;
         for node in &mut self.surfaces.nodes {
             // Hidden surfaces retain coherent staged state without receiving ordinary updates.
             node.surface.body.begin_update();
         }
-        self.layout_update_cycle(dimensions);
+        self.layout_update_cycle(dimensions)
     }
 
     /// Applies one queued input, or exactly one initial eventless update when no raw event is pending.
@@ -2990,9 +2994,9 @@ impl WindowManager {
     }
 
     /// Reuses the current bundle after callbacks, so a resource replacement cannot leave an old atlas paired with new skin.
-    pub(crate) fn layout_update_cycle(&mut self, dimensions: Dimensioni) {
+    pub(crate) fn layout_update_cycle(&mut self, dimensions: Dimensioni) -> Result<(), neocogi_com::NcStatus> {
         let atlas = self.bundle.atlas().clone();
-        self.layout(Recti::new(0, 0, dimensions.width, dimensions.height), &atlas);
+        self.layout(Recti::new(0, 0, dimensions.width, dimensions.height), &atlas)
     }
 
     /// Publishes a renderable commit only after every input/callback/layout boundary has completed successfully.
@@ -3061,7 +3065,7 @@ impl WindowManager {
     }
 
     /// Lays out the reusable parent-first visible traversal and commits inherited surface clips.
-    fn layout(&mut self, viewport: Recti, atlas: &crate::AtlasHandle) {
+    fn layout(&mut self, viewport: Recti, atlas: &crate::AtlasHandle) -> Result<(), neocogi_com::NcStatus> {
         self.sync_menu_presentation();
         let style = self.bundle.skin().clone();
         for index in 0..self.surfaces.nodes.len() {
@@ -3082,13 +3086,14 @@ impl WindowManager {
             }
             let clip = self.resolved_surface_clip(key, viewport);
             let node = self.surfaces.node_mut(key).expect("visible surface must remain retained");
-            node.layout(&style, atlas, clip);
+            node.layout(&style, atlas, clip)?;
             if node.take_popup_focus_request() {
                 // The popup is now mounted with committed geometry, so its first eligible Tab stop
                 // can become the runtime's focused node without a speculative rectangle.
                 let _ = node.surface.body.advance_focus(false);
             }
         }
+        Ok(())
     }
 
     /// Routes and applies one normalized event across every eligible surface.

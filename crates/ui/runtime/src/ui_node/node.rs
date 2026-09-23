@@ -240,15 +240,15 @@ impl Node {
     }
 
     /// Measures this node's desired outer size. Its parent assigns the later exact allocation.
-    pub(crate) fn measure(&mut self, style: &Skin, atlas: &AtlasHandle, constraints: Constraints) -> Dimensioni {
-        self.measure_with_cache_status(style, atlas, constraints).0
+    pub(crate) fn measure(&mut self, style: &Skin, atlas: &AtlasHandle, constraints: Constraints) -> Result<Dimensioni, NcStatus> {
+        self.measure_with_cache_status(style, atlas, constraints).map(|(size, _)| size)
     }
 
     /// Measures and reports whether the retained result satisfied this exact query.
-    pub(crate) fn measure_with_cache_status(&mut self, style: &Skin, atlas: &AtlasHandle, constraints: Constraints) -> (Dimensioni, bool) {
+    pub(crate) fn measure_with_cache_status(&mut self, style: &Skin, atlas: &AtlasHandle, constraints: Constraints) -> Result<(Dimensioni, bool), NcStatus> {
         let revision = style.revision();
         if let Some(cached) = self.state.measurement.lookup(constraints, revision) {
-            return (cached, true);
+            return Ok((cached, true));
         }
 
         // One policy snapshot defines framing for both leaf and container capabilities.
@@ -264,9 +264,9 @@ impl Node {
             .measure(style, atlas, crate::ui_node::frame::content_constraints(constraints, frame_insets))
         {
             Ok(size) => size,
-            Err(_) => {
+            Err(error) => {
                 self.state.invalidate_measurement();
-                return (Dimensioni::default(), false);
+                return Err(error);
             }
         };
         // Widgets cannot return negative geometry. Node placement policy is intentionally absent:
@@ -274,7 +274,7 @@ impl Node {
         let preferred_content = Dimensioni::new(measured_content.width.max(0), measured_content.height.max(0));
         let preferred = crate::ui_node::frame::outer_preferred(preferred_content, frame_insets);
         self.state.measurement.insert(MeasurementEntry { constraints, revision, preferred });
-        (preferred, false)
+        Ok((preferred, false))
     }
 
     /// Consumes widget mutation markers and invalidates each changed node's ancestor path.
