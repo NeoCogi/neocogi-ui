@@ -173,7 +173,7 @@ impl Number {
                 Some(KeyboardAction::Activate | KeyboardAction::Expand | KeyboardAction::Collapse) | None => {}
             }
         }
-        if !number_textbox_update(ctx, input, &mut self.edit, self.precision, font, &mut self.value)
+        if !number_textbox_update(ctx, input, &mut self.edit, self.precision, font, &mut self.value, self.runtime.state.host())
             && ctx.focused()
             && ctx.mouse_buttons().intersects(MouseButton::LEFT)
             && let Some(UiInputEvent::MouseDrag { delta, .. }) = input
@@ -260,6 +260,13 @@ impl crate::widget_object::WidgetAlgorithm for Number {
 }
 
 impl crate::widget_object::HostedWidget for Number {
+    /// Releases observers, revokes outstanding clipboard receipts, and drops local history.
+    fn close_contents(&mut self) -> Result<(), neocogi_com::NcStatus> {
+        crate::widget_object::WidgetAlgorithm::close_events(self);
+        self.edit = NumberEditState::default();
+        Ok(())
+    }
+
     /// Borrows common lifecycle and resource state without a second number representation.
     fn runtime(&self) -> &crate::widget_object::WidgetRuntime {
         &self.runtime

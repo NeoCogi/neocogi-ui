@@ -190,7 +190,7 @@ impl Textbox {
     /// Applies input and cursor movement for this textbox.
     fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
-        let outcome = textbox_update(ctx, input, &mut self.buf, &mut self.cursor, &mut self.editing, font);
+        let outcome = textbox_update(ctx, input, &mut self.buf, &mut self.cursor, &mut self.editing, font, self.runtime.state.host());
         let changed = outcome.changed.then(|| crate::TextChanged {
             text: self.buf.clone(),
             cursor: self.cursor as u64,
@@ -221,6 +221,7 @@ pub(crate) fn textbox_update(
     cursor: &mut usize,
     editing: &mut super::editing::Editing,
     font: FontId,
+    host: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetHostAbi>,
 ) -> TextboxUpdateOutcome {
     let mut outcome = TextboxUpdateOutcome::default();
     let r = ctx.local_rect();
@@ -252,6 +253,10 @@ pub(crate) fn textbox_update(
         Some(UiInputEvent::Text { text }) => text.as_str(),
         _ => "",
     };
+    // Permission denial or an unavailable OS clipboard preserves the editor and its frame.
+    if let Ok(changed) = super::clipboard::advance(editing, host, buf, &mut cursor_pos, key_event, ReturnBehavior::Submit, ctx.focused()) {
+        outcome.changed |= changed;
+    }
     let home_pressed = key_event.is_some_and(|event| event.is_pressed() && event.key == Key::Home);
     let end_pressed = key_event.is_some_and(|event| event.is_pressed() && event.key == Key::End);
     let edit = if ctx.focused() {
@@ -394,6 +399,13 @@ impl crate::widget_object::WidgetAlgorithm for Textbox {
 }
 
 impl crate::widget_object::HostedWidget for Textbox {
+    /// Releases observers, revokes outstanding clipboard receipts, and drops local history.
+    fn close_contents(&mut self) -> Result<(), neocogi_com::NcStatus> {
+        crate::widget_object::WidgetAlgorithm::close_events(self);
+        self.editing = super::editing::Editing::default();
+        Ok(())
+    }
+
     /// Borrows common lifecycle and resource state without a second textbox representation.
     fn runtime(&self) -> &crate::widget_object::WidgetRuntime {
         &self.runtime

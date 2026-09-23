@@ -381,6 +381,25 @@ fn textarea_update(ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>, 
         _ => None,
     };
 
+    match super::clipboard::advance(
+        &mut state.editing,
+        state.runtime.state.host(),
+        &mut state.buf,
+        &mut cursor_pos,
+        key_event,
+        ReturnBehavior::Newline { submit_on_ctrl: true },
+        ctx.focused(),
+    ) {
+        Ok(true) => {
+            outcome.changed = true;
+            ensure_visible = true;
+            reset_preferred = true;
+            caret_affinity = CaretAffinity::Upstream;
+        }
+        Ok(false) => {}
+        // Permission denial or an unavailable OS clipboard preserves the editor and its frame.
+        Err(_) => {}
+    }
     if ctx.focused() {
         // Apply scalar editing and horizontal cursor movement before building layout because inserted
         // text can immediately change wrapping, line indices, and intrinsic content height.
@@ -671,6 +690,13 @@ impl crate::widget_object::WidgetAlgorithm for TextEditor {
 }
 
 impl crate::widget_object::HostedWidget for TextEditor {
+    /// Releases observers, revokes outstanding clipboard receipts, and drops local history.
+    fn close_contents(&mut self) -> Result<(), neocogi_com::NcStatus> {
+        crate::widget_object::WidgetAlgorithm::close_events(self);
+        self.editing = super::editing::Editing::default();
+        Ok(())
+    }
+
     /// Borrows common phase state stored directly beside the editable text fields.
     fn runtime(&self) -> &crate::widget_object::WidgetRuntime {
         &self.runtime

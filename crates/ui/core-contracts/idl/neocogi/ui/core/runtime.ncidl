@@ -248,12 +248,16 @@ interface IConstructionHost {
     fn host(&self) -> Result<IWidgetHost>;
 }
 
-#[version(3)]
+#[version(4)]
 /// One constructible retained UI with input, rendering, and resource ownership.
 interface UiRuntime: IInputSink + IWindowManager + IMenus + IChoiceMenus {
 
     /// Returns the core construction authority without exposing a concrete nodes factory.
     fn construction_host(&self) -> Result<IConstructionHost>;
+
+    /// Installs the host clipboard capability before ordinary editing. Replacement affects new
+    /// requests; in-flight completions retain authority only while their requesting edit remains current.
+    fn set_clipboard(&mut self, clipboard: &ITextClipboard) -> Result<()>;
 
     /// Retains the currently installed immutable revision, suitable for restoration or another consumer.
     fn assets(&self) -> Result<IAssetBundle>;
@@ -278,9 +282,11 @@ interface UiRuntime: IInputSink + IWindowManager + IMenus + IChoiceMenus {
     fn close(&self) -> Result<()>;
 }
 
-#[version(1)]
+#[version(2)]
 /// Runtime identity and mutation authority without a reference back to its tree.
 interface IWidgetHost {
+    /// Returns the installed clipboard during ordinary mutation, or NotFound for headless hosts.
+    fn clipboard(&self) -> Result<ITextClipboard>;
     /// Retains the current immutable resource revision without owning the runtime tree.
     /// Custom widgets cache bulk metadata by this bundle identity and refresh it during the next
     /// measure/paint after replacement; never retain UVs or glyph metrics across a different revision.

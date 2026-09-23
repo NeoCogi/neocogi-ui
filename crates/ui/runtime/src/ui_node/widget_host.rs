@@ -10,6 +10,8 @@ use std::{
 /// Phase state contains no tree or application references, so widget retention cannot cycle.
 #[derive(Default)]
 pub(crate) struct HostState {
+    /// Replaceable host service shared by independent COM widgets; no borrow spans a request.
+    pub(crate) clipboard: RefCell<Option<ComPtr<neocogi_ui_core_contracts::ITextClipboardAbi>>>,
     /// Controllers awaiting cleanup after their views have become ineligible for delivery.
     pub(crate) retired_owners: RefCell<Vec<ComPtr<IEventOwnerAbi>>>,
     /// Topology edits invalidate the runtime's reusable descendant-first owner list.
@@ -81,6 +83,11 @@ pub(crate) struct WidgetHost {
 }
 
 impl IWidgetHost for WidgetHost {
+    /// Clones only the installed platform capability, without exposing retained runtime state.
+    fn clipboard(&self) -> Result<ComPtr<neocogi_ui_core_contracts::ITextClipboardAbi>, NcStatus> {
+        self.check_mutation()?;
+        self.state.clipboard.borrow().clone().ok_or(neocogi_com::NC_E_NOT_FOUND)
+    }
     /// Exposes current metadata to independent widget implementations without granting tree ownership.
     fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         self.check_open()?;

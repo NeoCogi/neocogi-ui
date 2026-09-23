@@ -447,6 +447,10 @@ pub struct Ui {
 }
 
 impl Ui {
+    /// Installs a typed host clipboard; existing asynchronous editor requests retain their own receipts.
+    pub fn set_clipboard(&mut self, clipboard: ComRef<'_, ITextClipboardAbi>) -> Result<(), NcStatus> {
+        self.runtime.set_clipboard(clipboard)
+    }
     /// Creates one complete combo box with the contract-defined fallback and selection state.
     pub fn combo_box_with_observer<Item: AsRef<str>>(
         &self,

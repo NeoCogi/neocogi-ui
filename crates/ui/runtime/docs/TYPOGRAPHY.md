@@ -32,7 +32,21 @@ mutation records one snapshot; history retains at most 64 snapshots and 1 MiB
 of prior text across both directions. Oversized edits close the retained timeline.
 Programmatic text replacement resets selection/history; cursor setters collapse
 selection. Long single-line text scrolls to keep the active caret visible.
-Native/browser clipboard transport is still separate unfinished work.
+Ctrl/Command+C, X, and V copy, cut, and paste through the host-installed
+`ITextClipboard` service. The standard host installs the window provider: SDL on
+native targets and the asynchronous Clipboard API in browsers. Other hosts may
+install their own provider through `Ui::set_clipboard`; without one, these
+shortcuts leave the editor unchanged.
+
+Each editor retains at most one pending request and one receipt, bounded to
+1 MiB of UTF-8 text. Cut deletes only after a successful write acknowledgement.
+Editing, moving the selection, losing focus, or closing the widget cancels the
+pending receipt, so delayed paste/cut results cannot change a different edit.
+Accepted cut/paste mutations participate in ordinary undo history and newline
+normalization. Clipboard denial or an unavailable browser capability preserves
+both text and the current UI frame. Browser access depends on the browser's
+secure-context, permission, and user-activation rules; keyboard shortcuts suppress
+the hidden DOM editor's duplicate handling.
 
 File-dialog requests and accepted results use native `PathBuf` values. Directory rows carry those
 paths in typed submission events; only their display labels are converted lossily. Selecting a row

@@ -160,7 +160,8 @@ impl Host {
         let renderer = window.query()?;
         let gfx = runtime.activate_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
         let runtime_factory = runtime.activate_plugin_factory::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
-        let ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
+        let mut ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
+        ui_runtime.set_clipboard(window.query::<neocogi_ui::com::ITextClipboardAbi>()?.as_com_ref())?;
         let node_provider =
             runtime.activate_plugin_factory::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
         let factory = node_provider.bind(ui_runtime.as_com_ref())?;
@@ -199,7 +200,7 @@ impl Host {
             loop {
                 match driver.frame(monotonic_seconds())? {
                     // Successful presentation applies the backend's own pacing policy.
-                    FrameOutcome::Presented => {},
+                    FrameOutcome::Presented => {}
                     // No presentation takes place while suspended. Bound idle polling while
                     // retaining a short wakeup for resize, input, and close requests.
                     FrameOutcome::Suspended => std::thread::sleep(std::time::Duration::from_millis(16)),
@@ -224,14 +225,16 @@ impl Host {
         let gfx = runtime.activate_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
         let decoder = gfx.png_decoder()?;
         let target = self.renderer.query::<ITextureFactoryAbi>()?;
-        decoder.upload(NcCopyFromBufferOffset::new(0, png), rgba_limit as u64, target.as_com_ref()).map_err(|status| {
-            let detail = decoder
-                .query::<IGfxDiagnosticsAbi>()
-                .and_then(|diagnostics| diagnostics.diagnostic())
-                .and_then(|text| neocogi_com::INcStringComPtrExt::to_string(&text))
-                .unwrap_or_default();
-            HostError::Message(format!("PNG upload failed: {status}: {detail}"))
-        })
+        decoder
+            .upload(NcCopyFromBufferOffset::new(0, png), rgba_limit as u64, target.as_com_ref())
+            .map_err(|status| {
+                let detail = decoder
+                    .query::<IGfxDiagnosticsAbi>()
+                    .and_then(|diagnostics| diagnostics.diagnostic())
+                    .and_then(|text| neocogi_com::INcStringComPtrExt::to_string(&text))
+                    .unwrap_or_default();
+                HostError::Message(format!("PNG upload failed: {status}: {detail}"))
+            })
     }
 }
 impl Drop for Host {

@@ -74,6 +74,7 @@ mod numeric_edit;
 mod scrollbar;
 pub(crate) use scrollbar::ScrollAxisState;
 mod editing;
+mod clipboard;
 mod slider;
 mod text_area;
 mod text_block;

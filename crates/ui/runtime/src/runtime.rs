@@ -209,6 +209,16 @@ impl IChoiceMenus for Runtime {
 }
 
 impl UiRuntime for Runtime {
+    /// Publishes a platform service only through the runtime's exclusive mutation boundary.
+    fn set_clipboard(&mut self, clipboard: ComRef<'_, neocogi_ui_core_contracts::ITextClipboardAbi>) -> Result<(), NcStatus> {
+        self.storage.factory.host.check_mutation()?;
+        let _context = self.storage.context()?;
+        let previous = self.storage.factory.state.clipboard.replace(Some(clipboard.add_ref()));
+        // Foreign destruction cannot run while a shared service slot is borrowed.
+        drop(previous);
+        Ok(())
+    }
+
     /// Returns the cached core authority used to authenticate independently bound node factories.
     fn construction_host(&self) -> Result<ComPtr<IConstructionHostAbi>, NcStatus> {
         self.storage.open()?;
@@ -316,6 +326,8 @@ impl UiRuntime for Runtime {
         let mut context = storage.context()?;
         let surfaces: Vec<_> = storage.mounts.borrow().iter().map(|m| m.surface.clone()).collect();
         storage.factory.state.closed.set(true);
+        let clipboard = storage.factory.state.clipboard.take();
+        drop(clipboard);
         storage.factory.state.error.set(None);
         for surface in surfaces {
             surface.close(&mut context.window_manager)?;

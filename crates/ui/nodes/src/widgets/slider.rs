@@ -213,7 +213,7 @@ impl Slider {
                 Some(KeyboardAction::Activate | KeyboardAction::Expand | KeyboardAction::Collapse) | None => false,
             };
         }
-        if number_textbox_update(ctx, input, &mut self.edit, self.precision, font, &mut value) {
+        if number_textbox_update(ctx, input, &mut self.edit, self.precision, font, &mut value, self.runtime.state.host()) {
             return crate::Change::NoChange;
         }
         if let Some(UiInputEvent::Scroll { delta, .. }) = input {
@@ -396,6 +396,13 @@ impl crate::widget_object::WidgetAlgorithm for Slider {
 }
 
 impl crate::widget_object::HostedWidget for Slider {
+    /// Releases observers, revokes outstanding clipboard receipts, and drops local history.
+    fn close_contents(&mut self) -> Result<(), neocogi_com::NcStatus> {
+        crate::widget_object::WidgetAlgorithm::close_events(self);
+        self.edit = NumberEditState::default();
+        Ok(())
+    }
+
     /// Borrows common lifecycle and resource state without a second slider representation.
     fn runtime(&self) -> &crate::widget_object::WidgetRuntime {
         &self.runtime

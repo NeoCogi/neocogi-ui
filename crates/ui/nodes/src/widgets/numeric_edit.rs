@@ -236,7 +236,7 @@ pub(super) fn number_preferred_size(
     Dimensioni::new(width, height)
 }
 
-#[derive(Clone, Default, PartialEq)]
+#[derive(Default)]
 /// Editing buffer for number-style widgets.
 pub(super) struct NumberEditState {
     /// Whether the widget is currently in edit mode.
@@ -257,6 +257,7 @@ pub(super) fn number_textbox_update(
     precision: DecimalPrecision,
     font: FontId,
     value: &mut Real,
+    host: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetHostAbi>,
 ) -> bool {
     let shift_click = matches!(input, Some(UiInputEvent::MouseDown { button, .. }) if button.intersects(MouseButton::LEFT))
         && ctx.modifiers().intersects(Modifiers::SHIFT)
@@ -272,7 +273,7 @@ pub(super) fn number_textbox_update(
     }
 
     if edit.editing {
-        let res = textbox_update(ctx, input, &mut edit.buf, &mut edit.cursor, &mut edit.text_editing, font);
+        let res = textbox_update(ctx, input, &mut edit.buf, &mut edit.cursor, &mut edit.text_editing, font, host);
         if res.submitted || !ctx.focused() {
             commit_finite_number(edit.buf.as_str(), value);
             edit.editing = false;

@@ -19,8 +19,10 @@ pub(crate) struct Snapshot {
 }
 
 /// Selection and editing history belong to the widget and use ordinary exclusive mutation.
-#[derive(Clone, Default, PartialEq)]
+#[derive(Default)]
 pub(crate) struct Editing {
+    /// Pending platform receipt owns no borrow into this editor.
+    pub(super) pending: Option<super::clipboard::Pending>,
     /// Fixed selection endpoint; absent means the caret is collapsed.
     anchor: Option<usize>,
     /// Prior snapshots in oldest-to-newest order.
@@ -37,6 +39,7 @@ impl Editing {
     }
     /// Moves the active endpoint, either preserving/starting an anchor or collapsing selection.
     pub fn move_to(&mut self, text: &str, cursor: &mut usize, target: usize, extend: bool) {
+        self.cancel_transfer();
         self.anchor = match extend {
             true => Some(self.anchor.unwrap_or_else(|| clamp_cursor_boundary(text, *cursor))),
             false => None,
@@ -45,6 +48,7 @@ impl Editing {
     }
     /// Selects the complete current buffer without changing text or history.
     pub fn select_all(&mut self, text: &str, cursor: &mut usize) {
+        self.cancel_transfer();
         self.anchor = Some(0);
         *cursor = text.len();
     }
@@ -70,6 +74,7 @@ impl Editing {
     }
     /// Accepts one actual mutation and invalidates redo. Oversized edits close the old timeline.
     pub fn record(&mut self, previous: Option<Snapshot>) {
+        self.cancel_transfer();
         self.redo.clear();
         match previous {
             Some(previous) => self.undo.push_back(previous),
@@ -84,6 +89,7 @@ impl Editing {
             false => self.undo.pop_back(),
         };
         let Some(next) = next else { return false };
+        self.cancel_transfer();
         match self.snapshot(text, *cursor) {
             Some(current) => match redo {
                 true => self.undo.push_back(current),
@@ -100,6 +106,10 @@ impl Editing {
         self.anchor = next.anchor;
         self.trim();
         true
+    }
+    /// Revokes in-flight clipboard authority by dropping its sole receipt consumer.
+    fn cancel_transfer(&mut self) {
+        self.pending = None;
     }
     /// Drops the oldest reachable states until both count and byte limits hold.
     fn trim(&mut self) {
