@@ -55,6 +55,8 @@ jobs:
       - uses: actions/checkout@v6
       - name: Install the offscreen software OpenGL host
         run: sudo apt-get update -qq && sudo apt-get install -y libsdl2-dev libgl1-mesa-dri
+      - name: Validate linked static factory selection
+        run: cargo test -p neocogi-demo-host --features monolith-gfx,glow
       - name: Exercise the real designer and theme editor
         env:
           SDL_VIDEODRIVER: offscreen

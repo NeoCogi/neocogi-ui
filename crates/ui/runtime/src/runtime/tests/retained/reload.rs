@@ -76,7 +76,7 @@ fn outputs_rebind_and_queued_old_events_have_distinct_generations() {
     assert!(slot.accepts(events.try_recv().unwrap()));
 }
 
-/// Every declared built-in mapping must construct, render, save, and retire through the real providers.
+/// Every built-in must construct, bind all declared ports/commands, render, save, and retire.
 #[test]
 fn all_builtin_document_controls_construct_and_reload() {
     let mut fixture = Headless::standard();
@@ -132,6 +132,7 @@ fn all_builtin_document_controls_construct_and_reload() {
             handle: 6,
         },
         WidgetSpec::Scroll { enabled: true },
+        WidgetSpec::Form { width: 200, height: 200 },
         WidgetSpec::Disclosure {
             text: "Details".into(),
             tree: false,
@@ -144,6 +145,7 @@ fn all_builtin_document_controls_construct_and_reload() {
             let edge = match root.widget {
                 WidgetSpec::Linear { .. } | WidgetSpec::Disclosure { .. } => Edge::Linear { main: Track::Content, cross: None },
                 WidgetSpec::Grid { .. } => Edge::Grid { columns: 1, rows: 1 },
+                WidgetSpec::Form { .. } => Edge::Position { x: 0, y: 0, width: 100, height: 30 },
                 _ => Edge::Pane,
             };
             root.children.push(Child {
@@ -152,16 +154,53 @@ fn all_builtin_document_controls_construct_and_reload() {
             });
         }
         let name = root.widget.name();
+        let outputs = root.widget.outputs().iter().map(|port| Output {
+            name: port.name.into(), node: "root".into(), port: port.name.into(),
+        }).collect();
+        let inputs = InputKind::ALL.into_iter().filter(|kind| root.widget.accepts(kind)).map(|kind| Input {
+            name: kind.label().into(), node: "root".into(), kind,
+        }).collect();
         let document = Document {
             version: VERSION,
             connections: vec![],
             name: name.into(),
             root,
-            outputs: vec![],
-            inputs: vec![],
+            outputs,
+            inputs,
         };
-        slot.reload(&document, Resources::new(), |_, _| Ok(()))
-            .unwrap_or_else(|error| panic!("{name}: {error}"));
+        slot.reload(&document, Resources::new(), |component, _| {
+            use neocogi_ui_document::contracts::*;
+            // The declared capability list must resolve to actual typed COM receivers, not merely
+            // pass schema validation. Each concrete contract has its own generated signature.
+            for input in &document.inputs {
+                match input.kind {
+                    InputKind::Text => component.input::<SetText>(&input.name).map(drop),
+                    InputKind::Checked => component.input::<SetChecked>(&input.name).map(drop),
+                    InputKind::Value => component.input::<SetValue>(&input.name).map(drop),
+                    InputKind::Enabled => component.input::<SetEnabled>(&input.name).map(drop),
+                    InputKind::Expanded => component.input::<SetExpanded>(&input.name).map(drop),
+                    InputKind::Choices => component.input::<SetChoices>(&input.name).map(drop),
+                    InputKind::Selection => component.input::<SetSelection>(&input.name).map(drop),
+                    InputKind::Offset => component.input::<SetOffset>(&input.name).map(drop),
+                    InputKind::Position => component.input::<SetPosition>(&input.name).map(drop),
+                }?;
+            }
+            let outputs = component.outputs()?;
+            let (sender, _events) = std::sync::mpsc::channel::<()>();
+            for port in document.root.widget.outputs() {
+                match port.payload {
+                    OutputType::Activation => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: Activation| ()),
+                    OutputType::Checked => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: neocogi_ui::events::CheckboxChanged| ()),
+                    OutputType::Number => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: neocogi_ui::events::NumericChanged| ()),
+                    OutputType::TextChanged => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: neocogi_ui::events::TextChanged| ()),
+                    OutputType::TextSubmitted => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: neocogi_ui::events::TextSubmitted| ()),
+                    OutputType::Offset => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: ScrollbarChanged| ()),
+                    OutputType::Position => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: neocogi_ui::events::SplitChanged| ()),
+                    OutputType::Selection => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: neocogi_ui::events::ChoiceSelection| ()),
+                }?;
+            }
+            Ok(())
+        }).unwrap_or_else(|error| panic!("{name}: {error}"));
         fixture.frame(VIEW).unwrap();
         assert_eq!(Document::from_binary(&slot.component().unwrap().save().unwrap()).unwrap(), document);
     }
