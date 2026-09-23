@@ -47,6 +47,17 @@ pub(super) fn status(error: SurfaceMutationError) -> NcStatus {
     }
 }
 
+/// Checks a title before either UTF-8 scanning or copying it into retained chrome state.
+fn checked_title(title: NcCopyFromBufferOffset<'_, u8>) -> Result<String, NcStatus> {
+    if title.offset() != 0 {
+        return Err(NC_E_INVALID_ARG);
+    }
+    if title.as_slice().len() > MAX_WINDOW_TITLE_BYTES {
+        return Err(neocogi_com::NC_E_OUT_OF_RANGE);
+    }
+    Ok(text(title)?.to_owned())
+}
+
 /// Concrete creation policy; the parent capability is authenticated before this value is built.
 enum Placement {
     /// Independent window in an application-selectable fixed layer.
@@ -90,7 +101,7 @@ impl RuntimeStorage {
         if rect.width < 0 || rect.height < 0 {
             return Err(NC_E_INVALID_ARG);
         }
-        let title = text(title)?.to_owned();
+        let title = checked_title(title)?;
         let mut context = self.context()?;
         self.prune_mounts(&context.window_manager);
         match &placement {
@@ -260,7 +271,7 @@ impl IWindow for LogicalWindow {
     }
     /// Validates a complete UTF-8 replacement before entering mutation.
     fn set_title(&self, title: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        self.edit(WindowEdit::Title(text(title)?.to_owned()))
+        self.edit(WindowEdit::Title(checked_title(title)?))
     }
     /// Rejects negative allocation before changing manager geometry.
     fn set_rect(&self, rect: Rect) -> Result<(), NcStatus> {

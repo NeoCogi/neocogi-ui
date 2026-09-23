@@ -49,6 +49,12 @@ impl Default for ColoredVertex {
     }
 }
 
+/// Maximum UTF-8 bytes in a retained window, dialog, child, or popup title.
+///
+/// Chrome measures the complete title during layout and paint, before drawing operations are
+/// recorded. Bounding source text at mutation prevents uncharged glyph walks in those phases.
+pub const MAX_WINDOW_TITLE_BYTES: usize = 4096;
+
 /// An operation requires an object which has already been logically closed.
 pub const UI_E_CLOSED: NcStatus = NcStatus::from_code(-1000);
 

@@ -23,6 +23,33 @@ fn button(runtime: &ComPtr<UiRuntimeAbi>) -> ComPtr<ButtonAbi> {
         .unwrap()
 }
 
+/// Oversized chrome titles fail before a widget is mounted or title text is retained.
+#[test]
+fn oversized_window_title_rejects_creation_without_consuming_the_root() {
+    let runtime = runtime();
+    let manager: ComPtr<IWindowManagerAbi> = runtime.query().unwrap();
+    let root_button = button(&runtime);
+    let widget = root_button.query::<IWidgetAbi>().unwrap();
+    let oversized = vec![b'x'; MAX_WINDOW_TITLE_BYTES + 1];
+    assert_eq!(
+        manager
+            .create_window(
+                NcCopyFromBufferOffset::new(0, &oversized),
+                RECT,
+                neocogi_ui_core_contracts::Mount::widget(widget.as_com_ref()).as_message(),
+            )
+            .unwrap_err(),
+        neocogi_com::NC_E_OUT_OF_RANGE
+    );
+    manager
+        .create_window(
+            NcCopyFromBufferOffset::new(0, b"bounded title"),
+            RECT,
+            neocogi_ui_core_contracts::Mount::widget(widget.as_com_ref()).as_message(),
+        )
+        .unwrap();
+}
+
 /// The facade cannot combine a node provider bound to one retained forest with another runtime.
 #[test]
 fn facade_rejects_a_node_factory_bound_to_another_runtime() {
@@ -570,6 +597,12 @@ fn window_com_capabilities_preserve_hierarchy_layers_visibility_and_subtree_clos
     assert_eq!(root.set_layer(16), Err(NC_E_INVALID_ARG));
     assert_eq!(root.snapshot().unwrap().layer.number, 2);
     root.set_title(NcCopyFromBufferOffset::new(0, b"new title")).unwrap();
+    assert_eq!(root.title().unwrap().to_string().unwrap(), "new title");
+    let oversized_title = vec![b'x'; MAX_WINDOW_TITLE_BYTES + 1];
+    assert_eq!(
+        root.set_title(NcCopyFromBufferOffset::new(0, &oversized_title)),
+        Err(neocogi_com::NC_E_OUT_OF_RANGE)
+    );
     assert_eq!(root.title().unwrap().to_string().unwrap(), "new title");
     runtime.update(SIZE).unwrap();
     root.close().unwrap();
@@ -1476,7 +1509,6 @@ mod images;
 
 mod retained;
 
-
 /// A failed ordinary update stops before later roots and leaves the phase uncommitted for retry.
 #[test]
 fn update_failure_stops_later_roots_without_losing_retry_invalidation() {
@@ -1486,7 +1518,16 @@ fn update_failure_stops_later_roots_without_losing_retry_invalidation() {
         let target = Rc::new(RefCell::new(None));
         let probe = Rc::new(LocalContentProbe::default());
         probe.width.set(80);
-        let widget = ui.widgets().leaf(LocalContent { target: Rc::downgrade(&target), probe: probe.clone() }, WidgetOptions::NO_INTERACT).unwrap();
+        let widget = ui
+            .widgets()
+            .leaf(
+                LocalContent {
+                    target: Rc::downgrade(&target),
+                    probe: probe.clone(),
+                },
+                WidgetOptions::NO_INTERACT,
+            )
+            .unwrap();
         *target.borrow_mut() = Some(widget.node_interface().unwrap());
         let window = ui.window(title, RECT, &widget).unwrap();
         retained.push((target, probe, widget, window));
