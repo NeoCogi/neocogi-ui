@@ -1,0 +1,322 @@
+{
+  "version": 2,
+  "name": "all public contracts",
+  "root": {
+    "key": "root",
+    "widget": {
+      "Linear": {
+        "direction": "Down",
+        "cross": "Stretch"
+      }
+    },
+    "style": {
+      "options": null,
+      "font": null,
+      "icon": null,
+      "image": null,
+      "fit_image": false
+    },
+    "children": [
+      {
+        "edge": {
+          "Linear": {
+            "main": "Content",
+            "cross": null
+          }
+        },
+        "node": {
+          "key": "button",
+          "widget": {
+            "Button": {
+              "text": "button"
+            }
+          },
+          "style": {
+            "options": null,
+            "font": null,
+            "icon": null,
+            "image": null,
+            "fit_image": false
+          },
+          "children": []
+        }
+      },
+      {
+        "edge": {
+          "Linear": {
+            "main": "Content",
+            "cross": null
+          }
+        },
+        "node": {
+          "key": "check",
+          "widget": {
+            "Checkbox": {
+              "text": "check",
+              "checked": false
+            }
+          },
+          "style": {
+            "options": null,
+            "font": null,
+            "icon": null,
+            "image": null,
+            "fit_image": false
+          },
+          "children": []
+        }
+      },
+      {
+        "edge": {
+          "Linear": {
+            "main": "Content",
+            "cross": null
+          }
+        },
+        "node": {
+          "key": "text",
+          "widget": {
+            "Textbox": {
+              "text": ""
+            }
+          },
+          "style": {
+            "options": null,
+            "font": null,
+            "icon": null,
+            "image": null,
+            "fit_image": false
+          },
+          "children": []
+        }
+      },
+      {
+        "edge": {
+          "Linear": {
+            "main": "Content",
+            "cross": null
+          }
+        },
+        "node": {
+          "key": "slider",
+          "widget": {
+            "Slider": {
+              "value": 0.0,
+              "low": 0.0,
+              "high": 1.0,
+              "step": 0.0,
+              "precision": 1
+            }
+          },
+          "style": {
+            "options": null,
+            "font": null,
+            "icon": null,
+            "image": null,
+            "fit_image": false
+          },
+          "children": []
+        }
+      },
+      {
+        "edge": {
+          "Linear": {
+            "main": "Content",
+            "cross": null
+          }
+        },
+        "node": {
+          "key": "scroll",
+          "widget": {
+            "Scrollbar": {
+              "vertical": true,
+              "viewport": 10,
+              "content": 100,
+              "offset": 0
+            }
+          },
+          "style": {
+            "options": null,
+            "font": null,
+            "icon": null,
+            "image": null,
+            "fit_image": false
+          },
+          "children": []
+        }
+      },
+      {
+        "edge": {
+          "Linear": {
+            "main": "Content",
+            "cross": null
+          }
+        },
+        "node": {
+          "key": "split",
+          "widget": {
+            "Split": {
+              "vertical": false,
+              "position": 10,
+              "minimum_first": 0,
+              "minimum_second": 0,
+              "handle": 4
+            }
+          },
+          "style": {
+            "options": null,
+            "font": null,
+            "icon": null,
+            "image": null,
+            "fit_image": false
+          },
+          "children": []
+        }
+      },
+      {
+        "edge": {
+          "Linear": {
+            "main": "Content",
+            "cross": null
+          }
+        },
+        "node": {
+          "key": "combo",
+          "widget": {
+            "Combo": {
+              "labels": [
+                "a"
+              ],
+              "selected": null,
+              "placeholder": ""
+            }
+          },
+          "style": {
+            "options": null,
+            "font": null,
+            "icon": null,
+            "image": null,
+            "fit_image": false
+          },
+          "children": []
+        }
+      },
+      {
+        "edge": {
+          "Linear": {
+            "main": "Content",
+            "cross": null
+          }
+        },
+        "node": {
+          "key": "disclosure",
+          "widget": {
+            "Disclosure": {
+              "text": "details",
+              "tree": false,
+              "expanded": false
+            }
+          },
+          "style": {
+            "options": null,
+            "font": null,
+            "icon": null,
+            "image": null,
+            "fit_image": false
+          },
+          "children": []
+        }
+      }
+    ]
+  },
+  "outputs": [
+    {
+      "name": "save",
+      "node": "button",
+      "port": "activated"
+    },
+    {
+      "name": "type",
+      "node": "check",
+      "port": "changed"
+    },
+    {
+      "name": "quote\"\n// x",
+      "node": "text",
+      "port": "changed"
+    },
+    {
+      "name": "text submitted",
+      "node": "text",
+      "port": "submitted"
+    },
+    {
+      "name": "value",
+      "node": "slider",
+      "port": "changed"
+    },
+    {
+      "name": "pixel-offset",
+      "node": "scroll",
+      "port": "changed"
+    },
+    {
+      "name": "pixel_offset",
+      "node": "split",
+      "port": "changed"
+    },
+    {
+      "name": "selection",
+      "node": "combo",
+      "port": "changed"
+    }
+  ],
+  "inputs": [
+    {
+      "name": "Text",
+      "node": "text",
+      "kind": "Text"
+    },
+    {
+      "name": "Checked",
+      "node": "check",
+      "kind": "Checked"
+    },
+    {
+      "name": "Value",
+      "node": "slider",
+      "kind": "Value"
+    },
+    {
+      "name": "Enabled",
+      "node": "button",
+      "kind": "Enabled"
+    },
+    {
+      "name": "Expanded",
+      "node": "disclosure",
+      "kind": "Expanded"
+    },
+    {
+      "name": "Choices",
+      "node": "combo",
+      "kind": "Choices"
+    },
+    {
+      "name": "Selection",
+      "node": "combo",
+      "kind": "Selection"
+    },
+    {
+      "name": "Offset",
+      "node": "scroll",
+      "kind": "Offset"
+    },
+    {
+      "name": "Position",
+      "node": "split",
+      "kind": "Position"
+    }
+  ],
+  "connections": []
+}

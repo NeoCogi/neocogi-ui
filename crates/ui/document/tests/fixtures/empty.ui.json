@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "name": "all public contracts",
+  "root": {
+    "key": "root",
+    "widget": {
+      "Button": {
+        "text": "empty"
+      }
+    },
+    "style": {
+      "options": null,
+      "font": null,
+      "icon": null,
+      "image": null,
+      "fit_image": false
+    },
+    "children": []
+  },
+  "outputs": [],
+  "inputs": [],
+  "connections": []
+}

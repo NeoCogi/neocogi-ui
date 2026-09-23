@@ -149,3 +149,26 @@ setters prevent cyclic connections from recursively publishing new user events.
 Closing/replacing the subtree retires its controller and discards pending work at
 the next safe update boundary. No arbitrary code or erased Rust values enter the
 serialized graph.
+
+## Generated application bindings
+
+`Document::rust_bindings()` emits a standalone Rust module. The designer exposes
+this as **File → Export Rust bindings…**; the command-line equivalent is:
+
+```sh
+cargo run -p neocogi-ui-document --example export_bindings -- form.ui.json > bindings.rs
+```
+
+The module contains `Event`, generation-tagged `Message`, concrete `Inputs`, a
+required `Handlers` trait, and `bind`. Use `bind` in the `ReloadSlot::reload`
+preparation callback with a channel sender. At the application's normal update
+boundary, check `slot.accepts(message.generation)` and then call
+`message.event.dispatch(&mut handlers)`. Implement `Handlers` in application code
+outside the generated file; missing handlers are compile errors. Reconnect input
+handles after every replacement.
+
+Public names are preserved exactly as escaped Rust string literals. Generated
+method/field identifiers use a role prefix, normalized name, and declaration
+ordinal, so keywords, punctuation, and normalization collisions remain valid.
+Regenerate after changing public declarations. Private visual connections need no
+application handlers and are not exported into the binding module.
