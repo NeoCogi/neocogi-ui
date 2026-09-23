@@ -52,7 +52,7 @@
 //
 //! Suzanne is one local COM widget driving one renderer-owned COM scene.
 use super::{camera::Camera, graphics::*, obj_loader::Obj, polymesh::PolyMesh, view3d::View3D};
-use neocogi_demo_render_contracts::{IDemoScenesAbi, IMeshSceneAbi, MeshVertex, SceneTransforms};
+use neocogi_render_mesh_contracts::{IMeshScenesAbi, IMeshSceneAbi, MeshVertex, SceneTransforms};
 
 /// Concrete camera behavior and cached interface projections share one renderer scene.
 pub(super) struct Suzanne {
@@ -83,7 +83,7 @@ impl Suzanne {
             Dimensioni::new(1, 1),
             bounds,
         );
-        let scenes = renderer.add_ref().query::<IDemoScenesAbi>()?;
+        let scenes = renderer.add_ref().query::<IMeshScenesAbi>()?;
         let scene = scenes.create_scene()?;
         let (vertices, indices) = mesh_buffers(&mesh);
         scene.set_mesh(NcCopyFromBufferOffset::new(0, &vertices), NcCopyFromBufferOffset::new(0, &indices))?;

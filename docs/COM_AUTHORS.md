@@ -888,7 +888,7 @@ GL context, and destructors never submit or present. Idle frame storage retains 
 resource references, so it cannot form a device/resource cycle. Plugins remain loaded
 for the process lifetime; hot unloading is unsupported.
 
-The example platform exposes `IDemoScenes::create_scene` and `IMeshScene: IRenderItem`.
+The renderer platform exposes `IMeshScenes::create_scene` and `IMeshScene: IRenderItem`.
 The scene is one COM object. It accepts complete finite mesh records and triangle
 indices, plus atomically replaced column-major projection/view/model transforms.
 Offsets are zero; limits are 4M vertices and 12M indices, every index must name a
@@ -897,7 +897,7 @@ the prior scene intact. The native renderer snapshots shared immutable mesh buff
 before preparing actual depth-tested GPU work; it does not substitute CPU UI
 triangles for application rendering.
 
-The demo's Vulkan renderer uploads each immutable mesh once and shares its native
+The reusable Vulkan mesh renderer uploads each immutable mesh once and shares its native
 vertex/index buffers across draws and frame slots. Camera updates, draw reordering,
 temporary hiding and swapchain resizing do not replace the geometry. A replacement
 mesh receives its own upload; each submitted slot retains the previous upload until
