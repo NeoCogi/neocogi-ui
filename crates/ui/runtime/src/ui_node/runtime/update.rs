@@ -34,7 +34,7 @@ use super::*;
 
 impl UiRuntime {
     /// Updates one already-borrowed node and descendants.
-    pub(super) fn update_node_ref(&mut self, node: &mut Node, parent_transform: Transform, style: &Skin, atlas: crate::AtlasHandle, input: InputSnapshot) {
+    pub(super) fn update_node_ref(&mut self, node: &mut Node, parent_transform: Transform, style: &Skin, atlas: crate::AtlasHandle, input: InputSnapshot) -> Result<(), neocogi_com::NcStatus> {
         // Reconstruct exactly the frame/content coordinate spaces committed during layout. Widgets
         // see content-local geometry even though allocations and inherited clips use other spaces.
         let frame_role = node_frame_role(node);
@@ -81,7 +81,7 @@ impl UiRuntime {
             input.mouse_buttons,
             input.modifiers,
         );
-        let change = node.data.update(&mut widget_ctx, event.as_ref());
+        let change = node.data.update(&mut widget_ctx, event.as_ref())?;
         if change == crate::Change::Changed {
             // An eventless update can change intrinsic geometry just as a routed event can. Use
             // the widget's result and preserve any marker already recorded by a handle mutation;
@@ -99,9 +99,11 @@ impl UiRuntime {
                     // sees successful earlier changes, while an already-updated child is not rerun.
                     // The mandatory post-event layout observes the final state/topology. Rendering
                     // enters the tree later through the distinct paint traversal below.
-                    self.update_node_ref(child, child_transform, style, atlas.clone(), input);
+                    self.update_node_ref(child, child_transform, style, atlas.clone(), input)?;
                 }
-            });
+                Ok::<(), neocogi_com::NcStatus>(())
+            }).transpose()?;
         }
+        Ok(())
     }
 }

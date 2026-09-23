@@ -278,17 +278,32 @@ impl Node {
     }
 
     /// Consumes widget mutation markers and invalidates each changed node's ancestor path.
-    pub(crate) fn synchronize_measurement_invalidation(&mut self) -> bool {
-        let mut measurement_dirty = self.data.take_measurement_dirty();
-        self.with_children_mut(|children| {
-            for child in children.iter_mut() {
-                measurement_dirty |= child.synchronize_measurement_invalidation();
+    pub(crate) fn synchronize_measurement_invalidation(&mut self) -> Result<bool, neocogi_com::NcStatus> {
+        let collected = (|| {
+            let mut measurement_dirty = self.data.take_measurement_dirty()?;
+            self.with_children_mut(|children| {
+                for child in children.iter_mut() {
+                    measurement_dirty |= child.synchronize_measurement_invalidation()?;
+                }
+                Ok::<(), neocogi_com::NcStatus>(())
+            }).transpose()?;
+            Ok(measurement_dirty)
+        })();
+        match collected {
+            Ok(dirty) => {
+                if dirty {
+                    self.state.invalidate_measurement();
+                }
+                Ok(dirty)
             }
-        });
-        if measurement_dirty {
-            self.state.invalidate_measurement();
+            Err(error) => {
+                // Earlier children may already have consumed their dirty marker. Invalidate this
+                // ancestor on every failed sweep so retry cannot reuse a stale preferred size.
+                self.state.invalidate_measurement();
+                self.data.mark_measurement_dirty();
+                Err(error)
+            }
         }
-        measurement_dirty
     }
 
     /// Reports whether this node or any descendant has uncommitted widget measurement state.

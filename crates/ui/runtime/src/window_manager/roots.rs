@@ -463,10 +463,11 @@ impl SurfaceBody {
     }
 
     /// Updates widget bodies; menu state is committed synchronously by direct pointer routing.
-    fn update(&mut self, style: &Skin, atlas: crate::AtlasHandle, input: crate::input::InputSnapshot) {
+    fn update(&mut self, style: &Skin, atlas: crate::AtlasHandle, input: crate::input::InputSnapshot) -> Result<(), neocogi_com::NcStatus> {
         if let Self::Widgets { root, runtime } = self {
-            runtime.update_tree_root(root, style, atlas, input);
+            runtime.update_tree_root(root, style, atlas, input)?;
         }
+        Ok(())
     }
 
     /// Paints one concrete body into the shared manager display list.
@@ -2978,18 +2979,18 @@ impl WindowManager {
 
     /// Applies one queued input, or exactly one initial eventless update when no raw event is pending.
     /// Returning releases all traversal borrows before the caller dispatches application events.
-    pub(crate) fn update_cycle_step(&mut self, first: bool) -> bool {
+    pub(crate) fn update_cycle_step(&mut self, first: bool) -> Result<bool, neocogi_com::NcStatus> {
         let atlas = self.bundle.atlas().clone();
         if let Some(event) = self.input.pop_event() {
             let input = self.input.snapshot();
-            self.update_for_event(&atlas, &event, input);
-            true
+            self.update_for_event(&atlas, &event, input)?;
+            Ok(true)
         } else if first {
             let input = self.input.snapshot();
-            self.update_eligible_widget_trees(&atlas, input);
-            true
+            self.update_eligible_widget_trees(&atlas, input)?;
+            Ok(true)
         } else {
-            false
+            Ok(false)
         }
     }
 
@@ -3005,7 +3006,7 @@ impl WindowManager {
     }
 
     /// Runs one ordinary update with no routed event across every currently eligible widget tree.
-    fn update_eligible_widget_trees(&mut self, atlas: &crate::AtlasHandle, input: crate::input::InputSnapshot) {
+    fn update_eligible_widget_trees(&mut self, atlas: &crate::AtlasHandle, input: crate::input::InputSnapshot) -> Result<(), neocogi_com::NcStatus> {
         // Copy the resolved skin once, matching event-driven traversal, then use the forest's
         // shared visible order so modal scope and popup ownership have one eligibility policy.
         let style = self.bundle.skin().clone();
@@ -3017,10 +3018,11 @@ impl WindowManager {
                     .surface_mut(key)
                     .expect("visible update surface must remain retained")
                     .body
-                    .update(&style, atlas.clone(), input);
+                    .update(&style, atlas.clone(), input)?;
             }
         }
         self.reconcile_active_surface();
+        Ok(())
     }
 
     /// Resolves the effective screen-space clip for one visible surface during parent-first layout.
@@ -3097,7 +3099,7 @@ impl WindowManager {
     }
 
     /// Routes and applies one normalized event across every eligible surface.
-    fn update_for_event(&mut self, atlas: &crate::AtlasHandle, event: &UiInputEvent, input: crate::input::InputSnapshot) {
+    fn update_for_event(&mut self, atlas: &crate::AtlasHandle, event: &UiInputEvent, input: crate::input::InputSnapshot) -> Result<(), neocogi_com::NcStatus> {
         if matches!(event, UiInputEvent::Cancel) {
             // Cancellation has no recipient and must never become a synthetic mouse release.
             // Editors still receive the ordinary update so they can finish their blur policy.
@@ -3108,8 +3110,8 @@ impl WindowManager {
             for node in &mut self.surfaces.nodes {
                 node.clear_transient_targets();
             }
-            self.update_eligible_widget_trees(atlas, input);
-            return;
+            self.update_eligible_widget_trees(atlas, input)?;
+            return Ok(());
         }
         // Resolve event-wide dismissal and menu-toggle context before selecting a recipient. An
         // outside press may change the visible forest and must do so before hit testing below.
@@ -3326,11 +3328,12 @@ impl WindowManager {
                 self.surfaces.nodes[index].clear_pointer_targets();
             }
         }
-        self.update_eligible_widget_trees(atlas, input);
+        self.update_eligible_widget_trees(atlas, input)?;
         if let Some((surface, action)) = staged_menu_action {
             // Direct routing has ended its concrete surface borrow before forest visibility changes.
             self.apply_menu_action(surface, action, previous_top);
         }
+        Ok(())
     }
 
     /// Records one ordinary root family with each parent's application content below its children.
@@ -3713,15 +3716,15 @@ impl WindowManager {
 
 impl WindowManager {
     /// Collects sticky widget changes even in hidden surfaces before a cache can be reused.
-    /// Every tree is visited; a changed earlier root never short-circuits later roots.
-    pub(crate) fn collect_widget_changes(&mut self) -> bool {
+    /// Changes visit every tree; failures stop immediately and preserve retry invalidation.
+    pub(crate) fn collect_widget_changes(&mut self) -> Result<bool, neocogi_com::NcStatus> {
         let mut changed = false;
         for node in &mut self.surfaces.nodes {
             if let SurfaceBody::Widgets { root, .. } = &mut node.surface.body {
-                changed |= root.synchronize_measurement_invalidation();
+                changed |= root.synchronize_measurement_invalidation()?;
             }
         }
-        changed
+        Ok(changed)
     }
 
     /// Copies current window policy into the canonical COM snapshot without a second state store.

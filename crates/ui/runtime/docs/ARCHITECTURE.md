@@ -395,8 +395,14 @@ preview UIs, but resource installation, frame state, and compositor lifetime bel
 each runtime independently. No caller-provided mutable compositor is retained or
 reinitialized, and core UI has no production dependency on the GFX implementation.
 
-Painting propagates recording and widget failures through explicit results and
-stops before visiting later nodes or roots. The runtime also checks its boundary
+Measurement, placement, change collection, update, and painting propagate ordinary
+failures through explicit results and stop before visiting later nodes or roots.
+A failed update keeps its node dirty because a foreign callback may have changed
+state before returning an error. Failed change collection invalidates the ancestor
+path even when earlier children already consumed their change markers. Property
+query failures retain dirty state so retry refreshes routing policy as well as
+geometry. Lifecycle cleanup and foreign-service guards retain narrowly scoped
+failure collection where a callback can ignore a returned error. The runtime also checks its boundary
 guard for foreign callbacks that ignore an error. Rejected painting clears owned
 commands and returns the error before GFX or the renderer can observe a partial
 frame. Successful painting enters the same GFX replay, clipping, batching and

@@ -147,7 +147,7 @@ impl UiRuntime {
         atlas: &crate::AtlasHandle,
         constraints: Constraints,
     ) -> Result<Dimensioni, neocogi_com::NcStatus> {
-        root.synchronize_measurement_invalidation();
+        root.synchronize_measurement_invalidation()?;
         self.geometry.measure_node(root, style, atlas, constraints)
     }
 
@@ -160,7 +160,7 @@ impl UiRuntime {
         outer: Recti,
         viewport: Recti,
     ) -> Result<(), neocogi_com::NcStatus> {
-        root.synchronize_measurement_invalidation();
+        root.synchronize_measurement_invalidation()?;
         // Root layout establishes the transform reused by subsequent routing, update, and paint.
         self.root_transform = Transform::root(viewport);
         self.geometry.layout_node_ref(root, style, &atlas, outer)?;
@@ -172,12 +172,13 @@ impl UiRuntime {
     }
 
     /// Updates one persistent root node and its eligible descendants.
-    pub(crate) fn update_tree_root(&mut self, root: &mut Node, style: &Skin, atlas: crate::AtlasHandle, input: InputSnapshot) {
+    pub(crate) fn update_tree_root(&mut self, root: &mut Node, style: &Skin, atlas: crate::AtlasHandle, input: InputSnapshot) -> Result<(), neocogi_com::NcStatus> {
         // Update is parent-first and consumes at most one event previously routed to one identity.
-        self.update_node_ref(root, self.root_transform, style, atlas, input);
+        self.update_node_ref(root, self.root_transform, style, atlas, input)?;
         // Topology may change during update; remove identities whose retained path no longer
         // participates before the next event is routed.
         self.input_router.sanitize_transient_targets(std::slice::from_mut(root), self.root_transform);
+        Ok(())
     }
 
     /// Returns whether this runtime accepts pointer hit routing for the current event.

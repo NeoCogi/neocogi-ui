@@ -159,8 +159,13 @@ impl RuntimeStorage {
         self.prune_mounts(&context.window_manager);
         let _phase = Observation::begin(&self.factory.state);
         self.factory.state.error.set(None);
-        if context.window_manager.collect_widget_changes() {
-            self.pending.set(true);
+        match context.window_manager.collect_widget_changes() {
+            Ok(true) => self.pending.set(true),
+            Ok(false) => {},
+            Err(error) => {
+                self.pending.set(true);
+                return Err(error);
+            }
         }
         if let Some(error) = self.factory.state.error.take() {
             self.pending.set(true);
@@ -437,7 +442,7 @@ impl Runtime {
             let updated = {
                 storage.open()?;
                 let mut context = storage.context()?;
-                let updated = context.window_manager.update_cycle_step(first);
+                let updated = context.window_manager.update_cycle_step(first)?;
                 context.window_manager.event_result()?;
                 storage.phase_result()?;
                 updated

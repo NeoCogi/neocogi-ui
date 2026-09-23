@@ -1357,6 +1357,8 @@ struct LocalContentProbe {
     measures: Cell<u32>,
     /// Fails one measurement to prove an error releases the generated shared-call gate.
     fail_measure: Cell<bool>,
+    /// Number of entered updates, including failures, for traversal-order assertions.
+    updates: Cell<u32>,
     /// Fails one update after a committed model change.
     fail_update: Cell<bool>,
     /// Logical closure must reach content exactly once despite retained COM handles.
@@ -1381,6 +1383,7 @@ impl neocogi_ui::LeafContent for LocalContent {
     }
     /// A failed partial update must invalidate the earlier preferred-size cache for recovery.
     fn update(&mut self, state: WidgetUpdate, _: WidgetEvent, _: &str) -> Result<GeometryChange, NcStatus> {
+        self.probe.updates.set(self.probe.updates.get() + 1);
         self.probe.origin.set(Point { x: state.screen.x, y: state.screen.y });
         if self.probe.fail_update.replace(false) {
             self.probe.width.set(120);
@@ -1472,3 +1475,34 @@ fn static_leaf_content_recovers_from_reentry_and_errors_with_one_owned_lifetime(
 mod images;
 
 mod retained;
+
+
+/// A failed ordinary update stops before later roots and leaves the phase uncommitted for retry.
+#[test]
+fn update_failure_stops_later_roots_without_losing_retry_invalidation() {
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let mut retained = Vec::new();
+    for title in ["first", "later"] {
+        let target = Rc::new(RefCell::new(None));
+        let probe = Rc::new(LocalContentProbe::default());
+        probe.width.set(80);
+        let widget = ui.widgets().leaf(LocalContent { target: Rc::downgrade(&target), probe: probe.clone() }, WidgetOptions::NO_INTERACT).unwrap();
+        *target.borrow_mut() = Some(widget.node_interface().unwrap());
+        let window = ui.window(title, RECT, &widget).unwrap();
+        retained.push((target, probe, widget, window));
+    }
+    ui.update(SIZE).unwrap();
+    let first = &retained[0].1;
+    let later = &retained[1].1;
+    let before = (first.updates.get(), later.updates.get(), first.measures.get());
+    first.fail_update.set(true);
+    assert_eq!(ui.update(SIZE), Err(NC_E_INVALID_ARG));
+    assert_eq!(first.updates.get(), before.0 + 1);
+    assert_eq!(later.updates.get(), before.1);
+    let (renderer, _) = renderer();
+    assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+    ui.update(SIZE).unwrap();
+    assert_eq!(first.updates.get(), before.0 + 2);
+    assert_eq!(later.updates.get(), before.1 + 1);
+    assert!(first.measures.get() > before.2);
+}

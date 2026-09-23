@@ -99,7 +99,7 @@ impl ComNode {
     }
 
     /// Refreshes copied routing policy without borrowing semantic widget storage.
-    fn refresh_properties(&mut self) {
+    fn refresh_properties(&mut self) -> Result<(), NcStatus> {
         let refreshed = {
             // Restrict observational authority to the external call. Releasing
             // it before mutation lets the copied slot remain an ordinary field.
@@ -117,32 +117,34 @@ impl ComNode {
                 }
             }
             Err(error) => {
-                self.host.fail(error);
                 self.dirty.set(true);
+                return Err(error);
             }
         }
+        Ok(())
     }
 
     /// Delivers every update, including eventless calls and input beyond primary activation.
-    pub(crate) fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Change {
+    pub(crate) fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Result<Change, NcStatus> {
         let state = super::input_contract::snapshot(ctx, input, self.policy().1);
         let (event, text) = super::input_contract::event(input);
-        let change = match self.widget.update(state, event, NcCopyFromBufferOffset::new(0, text)) {
+        let result = self.widget.update(state, event, NcCopyFromBufferOffset::new(0, text));
+        let change = match result {
             Ok(GeometryChange::Changed) => Change::Changed,
             Ok(GeometryChange::NoChange) => Change::NoChange,
-            Ok(_) => {
-                self.host.fail(NC_E_INVALID_ARG);
-                Change::Changed
-            }
-            Err(error) => {
-                self.host.fail(error);
-                Change::Changed
+            invalid => {
+                // A foreign callback may have mutated before failing. Preserve invalidation for
+                // recovery without allowing later nodes to observe an apparently successful pass.
+                self.dirty.set(true);
+                return Err(match invalid {
+                    Err(error) => error,
+                    Ok(_) => NC_E_INVALID_ARG,
+                });
             }
         };
         // Editing modes can change keyboard policy without changing preferred size.
-        // Refresh after the call so the next routed input sees the committed mode.
-        self.refresh_properties();
-        change
+        self.refresh_properties()?;
+        Ok(change)
     }
     /// Starts an observational scope and gives the widget direct scoped frame recording access.
     pub(crate) fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) -> Result<(), NcStatus> {
@@ -253,37 +255,33 @@ impl ComNode {
     }
 
     /// Drains component and child changes once at the mutable traversal boundary.
-    pub(crate) fn take_measurement_dirty(&mut self) -> bool {
+    pub(crate) fn take_measurement_dirty(&mut self) -> Result<bool, NcStatus> {
         if let NodeLayoutKind::Branch { children, .. } = &self.layout
             && children.dirty.replace(false)
         {
             self.dirty.set(true);
         }
         let change = {
-            // The component call is observational; release that authority
-            // before mutating this node's ordinary copied policy field.
             let _phase = Observation::begin(&self.host);
             self.widget.take_change()
         };
         match change {
-            Ok(GeometryChange::Changed) => {
-                // A setter may have changed options or frame policy. Query that
-                // copied protocol only after a real component change instead of
-                // once per node on every update and render validation pass.
-                self.refresh_properties();
+            Ok(GeometryChange::Changed) => self.dirty.set(true),
+            Ok(GeometryChange::NoChange) => {},
+            invalid => {
                 self.dirty.set(true);
-            }
-            Ok(GeometryChange::NoChange) => {}
-            Ok(_) => {
-                self.host.fail(NC_E_INVALID_ARG);
-                self.dirty.set(true);
-            }
-            Err(error) => {
-                self.host.fail(error);
-                self.dirty.set(true);
+                return Err(match invalid {
+                    Err(error) => error,
+                    Ok(_) => NC_E_INVALID_ARG,
+                });
             }
         }
-        self.dirty.replace(false)
+        if self.dirty.get() {
+            // Retrying a failed property query must not depend on a consumed take_change marker.
+            // Keep dirty set until both copied policy and ancestor invalidation can be committed.
+            self.refresh_properties()?;
+        }
+        Ok(self.dirty.replace(false))
     }
 
     /// Records the geometry result of an update until traversal propagates it.
