@@ -37,8 +37,9 @@ pub(super) fn run<State: AppState>(driver: Driver<State>) -> Result<(), HostErro
     *animation.callback.borrow_mut() = Some(Closure::wrap(Box::new(move |milliseconds: f64| {
         let result = driver.as_mut().expect("active callback owns the application").frame(milliseconds / 1000.0);
         let result = match result {
-            Ok(true) => owner.schedule(),
-            Ok(false) => {
+            // Browser animation callbacks already pace both drawable and suspended windows.
+            Ok(FrameOutcome::Presented | FrameOutcome::Suspended) => owner.schedule(),
+            Ok(FrameOutcome::Stopped) => {
                 driver.take();
                 Ok(())
             }

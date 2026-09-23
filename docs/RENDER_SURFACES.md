@@ -111,3 +111,10 @@ retaining its last image. This relies on the runtime's existing eligible-tree
 updates, not application hit testing. Native integration tests exercise outside
 release, native cancellation, modal obstruction, hide/show, and IME translation;
 the browser test also verifies composition and physical/CSS mapping at 2x DPI.
+
+The demo host polls input even when the drawable size is zero. Its native loop waits
+16 milliseconds between suspended iterations because this path does not present a
+frame and therefore receives no swapchain pacing. Resize and close requests are
+checked on the next iteration. Browser hosts use animation callbacks for both
+active and suspended iterations. `NEOCOGI_DEMO_FRAMES` counts only successfully
+rendered frames; suspension does not consume the limit.

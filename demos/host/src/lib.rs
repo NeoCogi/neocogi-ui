@@ -196,9 +196,16 @@ impl Host {
         #[cfg(not(target_arch = "wasm32"))]
         {
             let mut driver = driver;
-            // Native presentation already applies the backend's pacing policy. An extra sleep
-            // caps throughput even when a mailbox swapchain can accept another frame immediately.
-            while driver.frame(monotonic_seconds())? {}
+            loop {
+                match driver.frame(monotonic_seconds())? {
+                    // Successful presentation applies the backend's own pacing policy.
+                    FrameOutcome::Presented => {},
+                    // No presentation takes place while suspended. Bound idle polling while
+                    // retaining a short wakeup for resize, input, and close requests.
+                    FrameOutcome::Suspended => std::thread::sleep(std::time::Duration::from_millis(16)),
+                    FrameOutcome::Stopped => break,
+                }
+            }
             Ok(())
         }
     }
@@ -273,6 +280,17 @@ impl<State: AppState> neocogi_ui::events::EventModel for Application<State> {
     }
 }
 
+/// Result of one host iteration, separating presentation pacing from idle suspension.
+/// Platform adapters decide how to schedule the next iteration; the driver never sleeps.
+enum FrameOutcome {
+    /// A drawable frame completed and the application remains active.
+    Presented,
+    /// The window has no drawable area; input was polled but no frame budget was consumed.
+    Suspended,
+    /// Close, application state, or the rendered-frame limit ended the run.
+    Stopped,
+}
+
 /// Concrete loop ownership is shared by the native iteration and browser scheduling adapter.
 struct Driver<State: AppState> {
     /// Owns exactly one UI/renderer pair for this application.
@@ -286,7 +304,7 @@ struct Driver<State: AppState> {
 }
 impl<State: AppState> Driver<State> {
     /// Polls input, applies frame edits, then settles events and layout in one update before rendering.
-    fn frame(&mut self, seconds: f64) -> Result<bool, HostError> {
+    fn frame(&mut self, seconds: f64) -> Result<FrameOutcome, HostError> {
         let host = &self.host;
         loop {
             let status = host.window.poll(host.input.as_com_ref())?;
@@ -299,7 +317,7 @@ impl<State: AppState> Driver<State> {
                 PollStatus::Idle => break,
                 PollStatus::Close => {
                     if self.state.try_borrow_mut()?.model.state.close_requested()? {
-                        return Ok(false);
+                        return Ok(FrameOutcome::Stopped);
                     }
                     break;
                 }
@@ -308,12 +326,12 @@ impl<State: AppState> Driver<State> {
         }
         let size = host.window.size()?;
         if size.width <= 0 || size.height <= 0 {
-            return Ok(true);
+            return Ok(FrameOutcome::Suspended);
         }
         // Apply frame edits before consuming the input just polled. Handlers can prepare work for
         // the next frame callback; this frame's direct edits and nested events settle in one update.
         if !self.state.try_borrow_mut()?.model.state.frame(host, size, seconds)? {
-            return Ok(false);
+            return Ok(FrameOutcome::Stopped);
         }
         host.ui.update_with_events(size, self.owner.as_com_ref())?;
         self.state
@@ -328,9 +346,12 @@ impl<State: AppState> Driver<State> {
             .map_err(|status| host.render_error("frame", status))?;
         if let Some(remaining) = self.remaining {
             self.remaining = Some(remaining - 1);
-            return Ok(remaining > 1);
+            return Ok(match remaining {
+                1 => FrameOutcome::Stopped,
+                _ => FrameOutcome::Presented,
+            });
         }
-        Ok(true)
+        Ok(FrameOutcome::Presented)
     }
 }
 
