@@ -43,7 +43,7 @@ impl UiRuntime {
         focus_visible: bool,
         window_active: bool,
         root_enabled: bool,
-    ) {
+    ) -> Result<(), neocogi_com::NcStatus> {
         // Every runtime remembers focus independently, but only the manager-selected keyboard
         // surface may present it. This prevents windows without activation and menu-suspended widgets from
         // showing simultaneous carets, fills, or outlines. Activation remains available to custom
@@ -59,7 +59,8 @@ impl UiRuntime {
             focus_visible,
             window_active,
             root_enabled,
-        );
+        )?;
+        Ok(())
     }
 
     /// Paints one already-borrowed node and descendants.
@@ -73,7 +74,7 @@ impl UiRuntime {
         focus_visible: bool,
         window_active: bool,
         ancestors_enabled: bool,
-    ) {
+    ) -> Result<(), neocogi_com::NcStatus> {
         // Resolve the same outer/content geometry used for input and update before recording paint.
         let frame_role = node_frame_role(node);
         let screen_rect = parent_transform.resolve(node.state.layout.allocation);
@@ -97,7 +98,7 @@ impl UiRuntime {
                 control_state
             };
             let mut painter = crate::render::Painter::screen_space(display_list, screen_clip);
-            crate::ui_node::frame::paint_internal_frame(&mut painter, screen_rect, crate::ui_node::frame::frame_visual(style, role, frame_state).patch);
+            crate::ui_node::frame::paint_internal_frame(&mut painter, screen_rect, crate::ui_node::frame::frame_visual(style, role, frame_state).patch)?;
         }
         let child_transform = parent_transform.push(node.state.layout);
         let local_clip = screen_clip.relative_to(screen_origin);
@@ -122,7 +123,7 @@ impl UiRuntime {
                 window_active,
                 node.data.policy().0,
             );
-            node.data.paint(&mut widget_ctx);
+            node.data.paint(&mut widget_ctx)?;
         }
 
         let traverse_children = node.is_container();
@@ -144,9 +145,11 @@ impl UiRuntime {
                         focus_visible,
                         window_active,
                         enabled,
-                    );
+                    )?;
                 }
-            });
+                Ok::<(), neocogi_com::NcStatus>(())
+            }).transpose()?;
         }
+        Ok(())
     }
 }

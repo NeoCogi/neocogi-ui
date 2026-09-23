@@ -395,10 +395,21 @@ preview UIs, but resource installation, frame state, and compositor lifetime bel
 each runtime independently. No caller-provided mutable compositor is retained or
 reinitialized, and core UI has no production dependency on the GFX implementation.
 
-The retained context records painting before the runtime checks the first foreign
-widget error. Rejected painting clears owned commands and returns that error
-before GFX or the renderer can observe a partial frame. Successful painting enters
-the same GFX replay, clipping, batching and stream-expiry path in every build.
+Painting propagates recording and widget failures through explicit results and
+stops before visiting later nodes or roots. The runtime also checks its boundary
+guard for foreign callbacks that ignore an error. Rejected painting clears owned
+commands and returns the error before GFX or the renderer can observe a partial
+frame. Successful painting enters the same GFX replay, clipping, batching and
+stream-expiry path in every build.
+
+Foreign primitive intake and retained display-list storage have independent
+frame budgets. The retained budget covers every producer, including window
+chrome and compact menus: at most 65,536 recording operations, 64 MiB of charged
+payload/command storage, and 16 Mi units of estimated work. Polygons are limited
+to 4,096 points and charge quadratic tessellation work before allocation. Native
+painters return `Result`; callers propagate failures rather than assuming that
+internal drawing cannot fail. Clearing a frame resets both budgets while retaining
+reusable allocations. GFX independently validates and limits final expansion.
 
 A node removed during pointer capture still leaves a gesture to finish. The router
 keeps its surface selected until it consumes the remaining drag/release, preventing

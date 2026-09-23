@@ -301,8 +301,9 @@ impl UiRuntime for Runtime {
         // The complete submission is observational, including calls into the native renderer.
         let _phase = Observation::begin(&storage.factory.state);
         storage.factory.state.error.set(None);
-        context.paint(size)?;
-        if let Some(error) = storage.factory.state.error.take() {
+        let painted = context.paint(size);
+        let boundary_error = storage.factory.state.error.take();
+        if let Err(error) = painted.and_then(|()| boundary_error.map_or(Ok(()), Err)) {
             // A foreign widget can fail after recording commands. Discard those owned commands
             // before entering GFX so a failed observational phase cannot publish a partial frame.
             context.discard_paint();

@@ -44,21 +44,23 @@ use rs_math3d::{Recti, Vec2f, Vec2i, color4b};
 /// operation, and tessellates custom solid geometry without consulting style, input, atlas, the
 /// context-owned executor, or [`crate::render::RendererBackend`] state.
 ///
+/// Recording returns an error when the retained frame budget would be exceeded. Callers must
+/// propagate that error so traversal can discard the partial frame before submission.
 /// Built-in algorithms receive this recorder through their private phase context. Independent
 /// widgets use the facade painter over IPainter; this Rust reference never crosses a plugin ABI.
 /// A backend-local helper can record ordinary primitives without depending on widget ownership:
 ///
 /// ```
 /// use neocogi_ui_support::{prelude::{color, Recti, Vec2f}, render::Painter};
-/// fn swatch(painter: &mut Painter<'_>) {
+/// fn swatch(painter: &mut Painter<'_>) -> Result<(), neocogi_com::NcStatus> {
 ///     let bounds = painter.local_rect();
-///     painter.fill_rect(bounds, color(42, 48, 60, 255));
+///     painter.fill_rect(bounds, color(42, 48, 60, 255))?;
 ///     let inset = Recti::new(2, 2, bounds.width - 4, bounds.height - 4);
 ///     painter.with_clip(inset, |painter| {
 ///         painter.stroke_line(Vec2f::new(0.0, 0.0),
 ///             Vec2f::new(bounds.width as f32, bounds.height as f32),
-///             2.0, color(110, 190, 255, 255));
-///     });
+///             2.0, color(110, 190, 255, 255))
+///     })
 /// }
 /// ```
 pub struct Painter<'a> {
@@ -107,8 +109,9 @@ impl<'a> Painter<'a> {
     }
 
     /// Records an owned texture without calling foreign code while the display list is borrowed.
-    pub fn com_texture(&mut self, rect: Recti, color: Color, texture: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextureAbi>) {
-        self.com_texture_region(rect, neocogi_ui_core_contracts::TextureRegion::FULL, color, texture);
+    pub fn com_texture(&mut self, rect: Recti, color: Color, texture: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextureAbi>) -> Result<(), neocogi_com::NcStatus> {
+        self.com_texture_region(rect, neocogi_ui_core_contracts::TextureRegion::FULL, color, texture)?;
+        Ok(())
     }
 
     /// Records explicit source UVs without querying immutable texture dimensions during painting.
@@ -118,66 +121,62 @@ impl<'a> Painter<'a> {
         source: neocogi_ui_core_contracts::TextureRegion,
         color: Color,
         texture: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextureAbi>,
-    ) {
-        self.list.push_com_texture(self.clip, self.screen_rect(rect), source, color, texture);
+    ) -> Result<(), neocogi_com::NcStatus> {
+        self.list.push_com_texture(self.clip, self.screen_rect(rect), source, color, texture)?;
+        Ok(())
     }
 
     /// Records application GPU work in the same list as every ordinary widget primitive.
-    pub fn com_item(&mut self, rect: Recti, item: neocogi_com::ComPtr<neocogi_ui_core_contracts::IRenderItemAbi>) {
-        self.list.push_com_item(self.clip, self.screen_rect(rect), item);
+    pub fn com_item(&mut self, rect: Recti, item: neocogi_com::ComPtr<neocogi_ui_core_contracts::IRenderItemAbi>) -> Result<(), neocogi_com::NcStatus> {
+        self.list.push_com_item(self.clip, self.screen_rect(rect), item)?;
+        Ok(())
     }
 
     /// Appends solid COM geometry directly to the reusable arena; the executor supplies the current
     /// atlas material later, so theme replacement cannot invalidate application-side UV caches.
-    pub fn colored_triangles(&mut self, vertices: &[neocogi_ui_core_contracts::ColoredVertex]) {
-        use super::geometry::{SolidTriangle, SolidVertex};
-        for triangle in vertices.as_chunks::<3>().0 {
-            let triangle = SolidTriangle::from(triangle.map(|vertex| {
-                let [r, g, b, a] = vertex.rgba.to_le_bytes();
-                SolidVertex {
-                    position: Vec2f::new(vertex.x + self.origin.x as f32, vertex.y + self.origin.y as f32),
-                    color: color4b(r, g, b, a),
-                }
-            }));
-            self.list.push_solid_triangles(self.clip, &[triangle]);
-        }
+    pub fn colored_triangles(&mut self, vertices: &[neocogi_ui_core_contracts::ColoredVertex]) -> Result<(), neocogi_com::NcStatus> {
+        self.list.push_colored_triangles(self.clip, self.origin, vertices)
     }
 
     /// Copies validated COM atlas geometry and applies this painter's local origin.
-    pub fn atlas_triangles(&mut self, vertices: &[neocogi_ui_core_contracts::RenderVertex]) {
-        self.list.push_atlas_triangles(self.clip, self.origin, vertices);
+    pub fn atlas_triangles(&mut self, vertices: &[neocogi_ui_core_contracts::RenderVertex]) -> Result<(), neocogi_com::NcStatus> {
+        self.list.push_atlas_triangles(self.clip, self.origin, vertices)?;
+        Ok(())
     }
 
     /// Records a semantic filled rectangle.
-    pub fn fill_rect(&mut self, rect: Recti, color: Color) {
+    pub fn fill_rect(&mut self, rect: Recti, color: Color) -> Result<(), neocogi_com::NcStatus> {
         // A filled rectangle is represented as a center-only three-by-three patch. Keeping this
         // familiar convenience method lets custom widgets remain concise without bypassing the
         // unified patch path used by built-in flat and image themes.
-        self.nine_patch(rect, NinePatch::solid(color));
+        self.nine_patch(rect, NinePatch::solid(color))?;
+        Ok(())
     }
 
     /// Records one backend-neutral three-by-three patch.
-    pub fn nine_patch(&mut self, rect: Recti, patch: NinePatch) {
+    pub fn nine_patch(&mut self, rect: Recti, patch: NinePatch) -> Result<(), neocogi_com::NcStatus> {
         // Painter owns only local-to-screen translation and coarse clip rejection. Cell visibility,
         // source slicing, and final geometry are deliberately deferred to the typed GFX operation.
         if !rect.has_positive_area() {
-            return;
+            return Ok(());
         }
         let screen_rect = self.screen_rect(rect);
         if screen_rect.overlaps(self.clip) {
-            self.list.push_nine_patch(self.clip, screen_rect, patch);
+            self.list.push_nine_patch(self.clip, screen_rect, patch)?;
         }
+        Ok(())
     }
 
     /// Records an inside-aligned rectangle outline with the requested integer width.
-    pub fn stroke_rect(&mut self, rect: Recti, width: i32, color: Color) {
+    pub fn stroke_rect(&mut self, rect: Recti, width: i32, color: Color) -> Result<(), neocogi_com::NcStatus> {
         if !rect.has_positive_area() || color.a == 0 || width <= 0 {
-            return;
+            return Ok(());
         }
         // The proportional tiny-destination policy now belongs to NinePatch geometry rather than a
         // second outline implementation. An empty center naturally produces an inside-aligned
         // border and collapses safely when opposing sides consume the complete destination.
-        self.nine_patch(rect, NinePatch::framed(SliceInsets::uniform(width), color, None));
+        self.nine_patch(rect, NinePatch::framed(SliceInsets::uniform(width), color, None))?;
+        Ok(())
     }
 
     /// Records one UTF-8 string at a local position using the selected atlas font's glyph coverage.
@@ -185,69 +184,79 @@ impl<'a> Painter<'a> {
     /// Text measurement remains outside Painter. Context's executor performs final glyph lookup,
     /// clipping, and the same underscore substitution used by
     /// [`crate::AtlasHandle::get_text_size`].
-    pub fn text(&mut self, font: FontId, text: &str, pos: Vec2i, color: Color) {
+    pub fn text(&mut self, font: FontId, text: &str, pos: Vec2i, color: Color) -> Result<(), neocogi_com::NcStatus> {
         if text.is_empty() || color.a == 0 || !self.clip.has_positive_area() {
-            return;
+            return Ok(());
         }
-        self.list.push_text(self.clip, font, self.screen_pos(pos), color, text);
+        self.list.push_text(self.clip, font, self.screen_pos(pos), color, text)?;
+        Ok(())
     }
 
     /// Records one atlas icon in a local rectangle.
-    pub fn icon(&mut self, id: IconId, rect: Recti, color: Color) {
-        self.record_rect(rect, color, |list, clip, screen_rect| list.push_icon(clip, id, screen_rect, color));
+    pub fn icon(&mut self, id: IconId, rect: Recti, color: Color) -> Result<(), neocogi_com::NcStatus> {
+        self.record_rect(rect, color, |list, clip, screen_rect| list.push_icon(clip, id, screen_rect, color))?;
+        Ok(())
     }
 
     /// Tessellates and records one thick local line without clipping its generated triangles.
-    pub fn stroke_line(&mut self, from: Vec2f, to: Vec2f, width: f32, color: Color) {
+    pub fn stroke_line(&mut self, from: Vec2f, to: Vec2f, width: f32, color: Color) -> Result<(), neocogi_com::NcStatus> {
         if color.a == 0 || !self.clip.has_positive_area() {
-            return;
+            return Ok(());
         }
 
         let Some(local_bounds) = Recti::from_thick_line(from, to, width) else {
-            return;
+            return Ok(());
         };
         if !self.screen_rect(local_bounds).overlaps(self.clip) {
-            return;
+            return Ok(());
         }
         let offset = Vec2f::new(self.origin.x as f32, self.origin.y as f32);
         self.list
-            .push_line(self.clip, from, to, width, color4b(color.r, color.g, color.b, color.a), offset);
+            .push_line(self.clip, from, to, width, color4b(color.r, color.g, color.b, color.a), offset)?;
+        Ok(())
     }
 
     /// Tessellates and records one simple local polygon without clipping its generated triangles.
     ///
     /// Convex polygons use a triangle fan; concave polygons use ear clipping. Degenerate,
     /// non-finite, and self-invalidating inputs safely emit no operation.
-    pub fn fill_polygon(&mut self, points: &[Vec2f], color: Color) {
+    pub fn fill_polygon(&mut self, points: &[Vec2f], color: Color) -> Result<(), neocogi_com::NcStatus> {
+        // Reject oversized inputs before even the visibility bounds scan.
+        if points.len() > neocogi_renderer_contracts::MAX_POLYGON_POINTS {
+            return Err(neocogi_com::NC_E_OUT_OF_RANGE);
+        }
+
         if points.len() < 3 || color.a == 0 || !self.clip.has_positive_area() {
-            return;
+            return Ok(());
         }
         let Some(local_bounds) = Recti::from_points(points) else {
-            return;
+            return Ok(());
         };
         if !self.screen_rect(local_bounds).overlaps(self.clip) {
-            return;
+            return Ok(());
         }
 
         let offset = Vec2f::new(self.origin.x as f32, self.origin.y as f32);
-        self.list.push_polygon(self.clip, points, color4b(color.r, color.g, color.b, color.a), offset);
+        self.list.push_polygon(self.clip, points, color4b(color.r, color.g, color.b, color.a), offset)?;
+        Ok(())
     }
 
     /// Tessellates copied COM polygon points directly into this painter's retained frame storage.
-    pub fn fill_contract_polygon(&mut self, points: &[neocogi_ui_core_contracts::PaintPoint], color: Color) {
+    pub fn fill_contract_polygon(&mut self, points: &[neocogi_ui_core_contracts::PaintPoint], color: Color) -> Result<(), neocogi_com::NcStatus> {
         if points.len() < 3 || color.a == 0 || !self.clip.has_positive_area() {
-            return;
+            return Ok(());
         }
         let offset = Vec2f::new(self.origin.x as f32, self.origin.y as f32);
         self.list
-            .push_contract_polygon(self.clip, points, color4b(color.r, color.g, color.b, color.a), offset);
+            .push_contract_polygon(self.clip, points, color4b(color.r, color.g, color.b, color.a), offset)?;
+        Ok(())
     }
 
     /// Executes `paint` with a clip narrowed by a local rectangle.
     ///
     /// The parent Painter is unchanged after the closure returns. There is no mutable clip stack,
     /// public push/pop pair, or Drop-time restoration behavior.
-    pub fn with_clip(&mut self, rect: Recti, paint: impl FnOnce(&mut Painter<'_>)) {
+    pub fn with_clip<T>(&mut self, rect: Recti, paint: impl FnOnce(&mut Painter<'_>) -> T) -> T {
         let screen_clip = self.screen_rect(rect);
         let effective = self.clip.positive_intersection(screen_clip).unwrap_or_else(|| {
             // empty_origin = componentwise_max(parent_clip_origin, requested_clip_origin).
@@ -259,7 +268,7 @@ impl<'a> Painter<'a> {
             local_bounds: self.local_bounds,
             clip: effective,
         };
-        paint(&mut child);
+        paint(&mut child)
     }
 
     /// Converts a local integer position into screen space.
@@ -274,14 +283,15 @@ impl<'a> Painter<'a> {
     }
 
     /// Applies the common rectangle visibility policy and records one semantic rectangle operation.
-    fn record_rect(&mut self, rect: Recti, color: Color, record: impl FnOnce(&mut DisplayList, Recti, Recti)) {
+    fn record_rect(&mut self, rect: Recti, color: Color, record: impl FnOnce(&mut DisplayList, Recti, Recti) -> Result<(), neocogi_com::NcStatus>) -> Result<(), neocogi_com::NcStatus> {
         if !rect.has_positive_area() || color.a == 0 {
-            return;
+            return Ok(());
         }
         let screen_rect = self.screen_rect(rect);
         if screen_rect.overlaps(self.clip) {
-            record(self.list, self.clip, screen_rect);
+            record(self.list, self.clip, screen_rect)?;
         }
+        Ok(())
     }
 }
 
@@ -301,7 +311,7 @@ mod tests {
         let mut list = DisplayList::new();
         {
             let mut painter = Painter::for_widget(&mut list, Recti::new(10, 20, 100, 80), Recti::new(12, 22, 50, 40));
-            painter.fill_rect(Recti::new(1, 2, 10, 12), color(1, 2, 3, 255));
+            painter.fill_rect(Recti::new(1, 2, 10, 12), color(1, 2, 3, 255)).unwrap();
         }
 
         assert_eq!(list.ops.len(), 1);
@@ -330,11 +340,11 @@ mod tests {
                 assert_eq!(rect_tuple(painter.current_clip_rect()), (5, 5, 20, 20));
                 painter.with_clip(Recti::new(10, 0, 20, 20), |painter| {
                     assert_eq!(rect_tuple(painter.current_clip_rect()), (10, 5, 15, 15));
-                    painter.fill_rect(Recti::new(0, 0, 50, 50), color(255, 0, 0, 255));
+                    painter.fill_rect(Recti::new(0, 0, 50, 50), color(255, 0, 0, 255)).unwrap();
                 });
             });
             assert_eq!(rect_tuple(painter.current_clip_rect()), (0, 0, 50, 50));
-            painter.fill_rect(Recti::new(0, 0, 2, 2), color(0, 255, 0, 255));
+            painter.fill_rect(Recti::new(0, 0, 2, 2), color(0, 255, 0, 255)).unwrap();
         }
 
         assert_eq!(list.ops.len(), 2);
@@ -351,7 +361,7 @@ mod tests {
                 assert_eq!(painter.current_clip_rect().width, 0);
                 painter.with_clip(Recti::new(0, 0, 500, 500), |painter| {
                     assert_eq!(painter.current_clip_rect().width, 0);
-                    painter.fill_rect(Recti::new(0, 0, 500, 500), color(255, 0, 0, 255));
+                    painter.fill_rect(Recti::new(0, 0, 500, 500), color(255, 0, 0, 255)).unwrap();
                 });
             });
         }
@@ -363,7 +373,7 @@ mod tests {
         let mut list = DisplayList::new();
         {
             let mut painter = Painter::for_widget(&mut list, Recti::new(0, 0, 20, 20), Recti::new(0, 0, 5, 5));
-            painter.stroke_line(Vec2f::new(-10.0, 2.0), Vec2f::new(20.0, 2.0), 2.0, color(255, 0, 0, 255));
+            painter.stroke_line(Vec2f::new(-10.0, 2.0), Vec2f::new(20.0, 2.0), 2.0, color(255, 0, 0, 255)).unwrap();
         }
 
         assert_eq!(list.ops.len(), 1);
@@ -388,8 +398,8 @@ mod tests {
             painter.fill_polygon(
                 &[Vec2f::new(0.0, 0.0), Vec2f::new(10.0, 0.0), Vec2f::new(10.0, 10.0), Vec2f::new(0.0, 10.0)],
                 color(255, 255, 255, 255),
-            );
-            painter.stroke_line(Vec2f::new(0.0, 20.0), Vec2f::new(10.0, 20.0), 2.0, color(255, 255, 255, 255));
+            ).unwrap();
+            painter.stroke_line(Vec2f::new(0.0, 20.0), Vec2f::new(10.0, 20.0), 2.0, color(255, 255, 255, 255)).unwrap();
         }
 
         assert_eq!(list.ops.len(), 1, "adjacent compatible geometry should merge");
@@ -412,7 +422,7 @@ mod tests {
         let mut list = DisplayList::new();
         {
             let mut painter = Painter::screen_space(&mut list, Recti::new(0, 0, 20, 20));
-            painter.stroke_rect(Recti::new(2, 2, 10, 10), 2, color(255, 255, 255, 255));
+            painter.stroke_rect(Recti::new(2, 2, 10, 10), 2, color(255, 255, 255, 255)).unwrap();
         }
         assert_eq!(list.ops.len(), 1);
         assert!(matches!(list.ops[0].kind, DrawKind::NinePatch { .. }));
@@ -442,13 +452,13 @@ mod tests {
         let mut list = DisplayList::new();
         {
             let mut painter = Painter::for_widget(&mut list, Recti::new(10, 20, 100, 100), Recti::new(10, 20, 20, 20));
-            painter.text(font, "label", Vec2i::new(1, 2), color(255, 255, 255, 255));
-            painter.icon(icon, Recti::new(2, 3, 4, 5), color(255, 255, 255, 255));
+            painter.text(font, "label", Vec2i::new(1, 2), color(255, 255, 255, 255)).unwrap();
+            painter.icon(icon, Recti::new(2, 3, 4, 5), color(255, 255, 255, 255)).unwrap();
             painter.com_texture(
                 Recti::new(100, 100, 10, 10),
                 color(255, 255, 255, 255),
                 crate::test_support::test_image(10, 10).as_interface().add_ref(),
-            );
+            ).unwrap();
         }
 
         // COM textures retain their authoritative clip; GFX decides whether they contribute.
@@ -470,12 +480,12 @@ mod tests {
         {
             let mut painter = Painter::screen_space(&mut list, Recti::new(0, 0, 20, 20));
             assert_eq!(rect_tuple(painter.local_rect()), (0, 0, 20, 20));
-            painter.stroke_line(Vec2f::new(100.0, 100.0), Vec2f::new(120.0, 100.0), 2.0, color(255, 255, 255, 255));
+            painter.stroke_line(Vec2f::new(100.0, 100.0), Vec2f::new(120.0, 100.0), 2.0, color(255, 255, 255, 255)).unwrap();
             painter.fill_polygon(
                 &[Vec2f::new(100.0, 100.0), Vec2f::new(120.0, 100.0), Vec2f::new(110.0, 120.0)],
                 color(255, 255, 255, 255),
-            );
-            painter.fill_polygon(&[Vec2f::new(0.0, 0.0), Vec2f::new(1.0, 1.0), Vec2f::new(2.0, 2.0)], color(255, 255, 255, 255));
+            ).unwrap();
+            painter.fill_polygon(&[Vec2f::new(0.0, 0.0), Vec2f::new(1.0, 1.0), Vec2f::new(2.0, 2.0)], color(255, 255, 255, 255)).unwrap();
         }
         assert!(list.is_empty());
     }

@@ -79,7 +79,7 @@ impl Recorder {
     }
 
     /// Appends one operation directly to the active frame with an authoritative narrowed clip.
-    fn with_painter<T>(&mut self, scope: PaintScope, draw: impl FnOnce(&mut crate::render::Painter<'_>) -> T) -> Result<T, NcStatus> {
+    fn with_painter<T>(&mut self, scope: PaintScope, draw: impl FnOnce(&mut crate::render::Painter<'_>) -> Result<T, NcStatus>) -> Result<T, NcStatus> {
         self.check(scope)?;
         let context = self.context.as_mut().ok_or(UI_E_BUSY)?;
         let requested = local_rect(scope.clip).translated(crate::Vec2i::new(context.content_rect.x, context.content_rect.y));
@@ -88,7 +88,7 @@ impl Recorder {
             .positive_intersection(requested)
             .unwrap_or_else(|| crate::Recti::new(requested.x, requested.y, 0, 0));
         let mut painter = crate::render::Painter::for_widget(&mut context.display_list, context.content_rect, clip);
-        Ok(draw(&mut painter))
+        draw(&mut painter)
     }
 
     /// Installs the runtime's existing frame buffers and opens one unique invocation.
@@ -149,7 +149,7 @@ impl IPainter for Recorder {
                 crate::Vec2f::new(to.x, to.y),
                 width,
                 crate::render::contract_color(rgba),
-            );
+            )
         })
     }
     /// Copies a whole finite boundary; native geometry code owns all triangulation and clipping.
@@ -241,7 +241,7 @@ impl IPainter for Recorder {
             (font, color, position)
         };
         self.with_painter(scope, |painter| {
-            painter.with_clip(rect, |painter| painter.text(font, label, position, color));
+            painter.with_clip(rect, |painter| painter.text(font, label, position, color))
         })
     }
 
@@ -283,7 +283,7 @@ impl IPainter for Recorder {
         let label = text(input)?;
         let font = self.resources.borrow().bundle().atlas().font_at_index(font.index).ok_or(NC_E_INVALID_ARG)?;
         self.with_painter(scope, |painter| {
-            painter.text(font, label, crate::Vec2i::new(position.x, position.y), crate::render::contract_color(rgba));
+            painter.text(font, label, crate::Vec2i::new(position.x, position.y), crate::render::contract_color(rgba))
         })
     }
 }

@@ -46,6 +46,8 @@ use rs_math3d::{Color4b, Recti, Vec2f, Vec2i};
 pub struct DisplayList {
     /// Foreign primitive intake is charged before validation scans and retained geometry copies.
     input_budget: neocogi_renderer_contracts::FrameBudget,
+    /// Bounds retained commands, copied bytes, and tessellation for every producer, including chrome.
+    retained_budget: neocogi_renderer_contracts::FrameBudget,
     /// Operations in final painter order.
     pub ops: Vec<DrawOp>,
     /// Retained solid geometry and its reusable tessellation workspace.
@@ -133,6 +135,7 @@ impl DisplayList {
     pub const fn new() -> Self {
         Self {
             input_budget: neocogi_renderer_contracts::FrameBudget::new(),
+            retained_budget: neocogi_renderer_contracts::FrameBudget::new(),
             ops: Vec::new(),
             solid_geometry: SolidGeometry::new(),
             atlas_vertices: Vec::new(),
@@ -143,6 +146,7 @@ impl DisplayList {
     /// Removes every recorded operation and triangle while retaining allocated storage for reuse.
     pub fn clear(&mut self) {
         self.input_budget = neocogi_renderer_contracts::FrameBudget::new();
+        self.retained_budget = neocogi_renderer_contracts::FrameBudget::new();
         self.ops.clear();
         self.solid_geometry.clear();
         self.atlas_vertices.clear();
@@ -163,8 +167,23 @@ impl DisplayList {
         self.reserve_draw(points * core::mem::size_of::<neocogi_ui_core_contracts::PaintPoint>(), points * points)
     }
 
+    /// Reserves before any retained allocation; foreign intake remains an independent boundary.
+    fn reserve_retained(&mut self, bytes: usize, work: usize) -> Result<(), neocogi_com::NcStatus> {
+        self.retained_budget.charge(bytes.saturating_add(core::mem::size_of::<DrawOp>()), work)
+    }
+
+    /// Bounds polygon scanning, scratch storage, output triangles, and quadratic triangulation work.
+    fn reserve_retained_polygon(&mut self, points: usize) -> Result<(), neocogi_com::NcStatus> {
+        if points > neocogi_renderer_contracts::MAX_POLYGON_POINTS {
+            return Err(neocogi_com::NC_E_OUT_OF_RANGE);
+        }
+        let bytes = points * (core::mem::size_of::<SolidTriangle>() + core::mem::size_of::<Vec2f>() + core::mem::size_of::<usize>());
+        self.reserve_retained(bytes, points * points)
+    }
+
     /// Retains a complete atlas batch in painter order for final viewport clipping.
-    pub fn push_atlas_triangles(&mut self, clip: Recti, origin: Vec2i, vertices: &[neocogi_ui_core_contracts::RenderVertex]) {
+    pub fn push_atlas_triangles(&mut self, clip: Recti, origin: Vec2i, vertices: &[neocogi_ui_core_contracts::RenderVertex]) -> Result<(), neocogi_com::NcStatus> {
+        self.reserve_retained(core::mem::size_of_val(vertices), vertices.len())?;
         let first = self.atlas_vertices.len();
         // Translate directly into retained storage, with no intermediate per-operation vector.
         for vertex in vertices {
@@ -181,6 +200,27 @@ impl DisplayList {
                 vertices: first..self.atlas_vertices.len(),
             },
         );
+        Ok(())
+    }
+
+    /// Charges a complete colored batch before conversion, avoiding partially accepted batches.
+    pub fn push_colored_triangles(&mut self, clip: Recti, origin: Vec2i, vertices: &[neocogi_ui_core_contracts::ColoredVertex]) -> Result<(), neocogi_com::NcStatus> {
+        use super::geometry::SolidVertex;
+        self.reserve_retained(core::mem::size_of_val(vertices), vertices.len())?;
+        let offset = Vec2f::new(origin.x as f32, origin.y as f32);
+        for triangle in vertices.as_chunks::<3>().0 {
+            let triangle = SolidTriangle::from(triangle.map(|vertex| {
+                let [r, g, b, a] = vertex.rgba.to_le_bytes();
+                SolidVertex {
+                    position: Vec2f::new(vertex.x, vertex.y),
+                    color: rs_math3d::color4b(r, g, b, a),
+                }
+            }));
+            if let Some(range) = self.solid_geometry.append_triangles(&[triangle], offset) {
+                self.push_solid_range(clip, range);
+            }
+        }
+        Ok(())
     }
 
     /// Retains an image in source order; final clipping remains centralized in the executor.
@@ -191,25 +231,32 @@ impl DisplayList {
         source: neocogi_ui_core_contracts::TextureRegion,
         color: Color,
         texture: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextureAbi>,
-    ) {
+    ) -> Result<(), neocogi_com::NcStatus> {
+        self.reserve_retained(0, 4)?;
         self.push(clip, DrawKind::ComTexture { texture, rect, source, color });
+        Ok(())
     }
 
     /// Retains application GPU work without creating a callback registry entry.
-    pub fn push_com_item(&mut self, clip: Recti, rect: Recti, item: neocogi_com::ComPtr<neocogi_ui_core_contracts::IRenderItemAbi>) {
+    pub fn push_com_item(&mut self, clip: Recti, rect: Recti, item: neocogi_com::ComPtr<neocogi_ui_core_contracts::IRenderItemAbi>) -> Result<(), neocogi_com::NcStatus> {
+        self.reserve_retained(0, 0)?;
         self.push(clip, DrawKind::ComItem { item, rect });
+        Ok(())
     }
 
     /// Appends one semantic three-by-three patch operation.
-    pub fn push_nine_patch(&mut self, clip: Recti, rect: Recti, patch: NinePatch) {
+    pub fn push_nine_patch(&mut self, clip: Recti, rect: Recti, patch: NinePatch) -> Result<(), neocogi_com::NcStatus> {
+        self.reserve_retained(0, 54)?;
         // Retain the compact patch value instead of expanding up to nine operations while the
         // display list is recorded. Renderer execution remains the sole clipping and tessellation
         // boundary for every concrete patch cell.
         self.push(clip, DrawKind::NinePatch { rect, patch });
+        Ok(())
     }
 
     /// Appends one owned text operation.
-    pub fn push_text(&mut self, clip: Recti, font: FontId, pos: Vec2i, color: Color, text: &str) {
+    pub fn push_text(&mut self, clip: Recti, font: FontId, pos: Vec2i, color: Color, text: &str) -> Result<(), neocogi_com::NcStatus> {
+        self.reserve_retained(text.len(), text.len())?;
         let first = self.text.len();
         self.text.push_str(text);
         self.push(
@@ -221,40 +268,51 @@ impl DisplayList {
                 text: first..self.text.len(),
             },
         );
+        Ok(())
     }
 
     /// Appends one atlas icon operation.
-    pub fn push_icon(&mut self, clip: Recti, id: IconId, rect: Recti, color: Color) {
+    pub fn push_icon(&mut self, clip: Recti, id: IconId, rect: Recti, color: Color) -> Result<(), neocogi_com::NcStatus> {
+        self.reserve_retained(0, 6)?;
         self.push(clip, DrawKind::Icon { id, rect, color });
+        Ok(())
     }
 
     /// Appends strongly typed solid triangles and records their valid contiguous range.
-    pub fn push_solid_triangles(&mut self, clip: Recti, triangles: &[SolidTriangle]) {
+    pub fn push_solid_triangles(&mut self, clip: Recti, triangles: &[SolidTriangle]) -> Result<(), neocogi_com::NcStatus> {
+        self.reserve_retained(core::mem::size_of_val(triangles), triangles.len().saturating_mul(3))?;
         if let Some(range) = self.solid_geometry.append_triangles(triangles, Vec2f::new(0.0, 0.0)) {
             self.push_solid_range(clip, range);
         }
+        Ok(())
     }
 
     /// Tessellates and records one translated thick line.
-    pub fn push_line(&mut self, clip: Recti, from: Vec2f, to: Vec2f, width: f32, color: Color4b, offset: Vec2f) {
+    pub fn push_line(&mut self, clip: Recti, from: Vec2f, to: Vec2f, width: f32, color: Color4b, offset: Vec2f) -> Result<(), neocogi_com::NcStatus> {
+        self.reserve_retained(2 * core::mem::size_of::<SolidTriangle>(), 6)?;
         if let Some(range) = self.solid_geometry.append_line(from, to, width, color, offset) {
             self.push_solid_range(clip, range);
         }
+        Ok(())
     }
 
     /// Tessellates and records one translated simple polygon.
-    pub fn push_polygon(&mut self, clip: Recti, points: &[Vec2f], color: Color4b, offset: Vec2f) {
+    pub fn push_polygon(&mut self, clip: Recti, points: &[Vec2f], color: Color4b, offset: Vec2f) -> Result<(), neocogi_com::NcStatus> {
+        self.reserve_retained_polygon(points.len())?;
         if let Some(range) = self.solid_geometry.append_polygon(points, color, offset) {
             self.push_solid_range(clip, range);
         }
+        Ok(())
     }
 
     /// Converts copied COM polygon points directly into the reusable tessellation workspace.
-    pub fn push_contract_polygon(&mut self, clip: Recti, points: &[neocogi_ui_core_contracts::PaintPoint], color: Color4b, offset: Vec2f) {
+    pub fn push_contract_polygon(&mut self, clip: Recti, points: &[neocogi_ui_core_contracts::PaintPoint], color: Color4b, offset: Vec2f) -> Result<(), neocogi_com::NcStatus> {
+        self.reserve_retained_polygon(points.len())?;
         let points = points.iter().map(|point| Vec2f::new(point.x, point.y));
         if let Some(range) = self.solid_geometry.append_polygon_points(points, color, offset) {
             self.push_solid_range(clip, range);
         }
+        Ok(())
     }
 
     /// Associates one newly appended geometry range with operation ordering and clipping.
@@ -336,16 +394,16 @@ mod tests {
             Recti::new(4, 5, 27, 37),
         ];
 
-        list.push_nine_patch(clips[0], Recti::new(0, 0, 2, 2), NinePatch::solid(color(1, 2, 3, 4)));
-        list.push_text(clips[1], font, Vec2i::new(4, 5), color(5, 6, 7, 8), "text");
-        list.push_icon(clips[2], icon, Recti::new(6, 7, 8, 9), color(9, 10, 11, 12));
+        list.push_nine_patch(clips[0], Recti::new(0, 0, 2, 2), NinePatch::solid(color(1, 2, 3, 4))).unwrap();
+        list.push_text(clips[1], font, Vec2i::new(4, 5), color(5, 6, 7, 8), "text").unwrap();
+        list.push_icon(clips[2], icon, Recti::new(6, 7, 8, 9), color(9, 10, 11, 12)).unwrap();
         list.push_com_texture(
             clips[3],
             Recti::new(10, 11, 12, 13),
             neocogi_ui_core_contracts::TextureRegion { u0: 0., v0: 0., u1: 1., v1: 1. },
             color(13, 14, 15, 16),
             crate::test_support::test_image(12, 13).as_interface().add_ref(),
-        );
+        ).unwrap();
 
         assert_eq!(list.ops.len(), clips.len());
         for (operation, expected) in list.ops.iter().zip(clips) {
@@ -362,9 +420,9 @@ mod tests {
         let mut list = DisplayList::new();
         let clip = Recti::new(0, 0, 100, 100);
         for offset in 0..32 {
-            list.push_nine_patch(clip, Recti::new(offset, offset, 1, 1), NinePatch::solid(color(255, 255, 255, 255)));
+            list.push_nine_patch(clip, Recti::new(offset, offset, 1, 1), NinePatch::solid(color(255, 255, 255, 255))).unwrap();
         }
-        list.push_solid_triangles(clip, &[triangle_at(0.0)]);
+        list.push_solid_triangles(clip, &[triangle_at(0.0)]).unwrap();
         list.solid_geometry.reserve_polygon_capacity(32);
 
         let operation_capacity = list.ops.capacity();
@@ -387,8 +445,8 @@ mod tests {
         let mut list = DisplayList::new();
         let clip = Recti::new(0, 0, 100, 100);
 
-        list.push_solid_triangles(clip, &[triangle_at(0.0)]);
-        list.push_solid_triangles(clip, &[triangle_at(10.0)]);
+        list.push_solid_triangles(clip, &[triangle_at(0.0)]).unwrap();
+        list.push_solid_triangles(clip, &[triangle_at(10.0)]).unwrap();
 
         assert_eq!(list.ops.len(), 1);
         assert_eq!(list.solid_geometry.triangles().len(), 2);
@@ -404,10 +462,10 @@ mod tests {
         let first_clip = Recti::new(0, 0, 100, 100);
         let second_clip = Recti::new(1, 1, 99, 99);
 
-        list.push_solid_triangles(first_clip, &[triangle_at(0.0)]);
-        list.push_solid_triangles(second_clip, &[triangle_at(10.0)]);
-        list.push_nine_patch(first_clip, Recti::new(0, 0, 1, 1), NinePatch::solid(color(255, 255, 255, 255)));
-        list.push_solid_triangles(second_clip, &[triangle_at(20.0)]);
+        list.push_solid_triangles(first_clip, &[triangle_at(0.0)]).unwrap();
+        list.push_solid_triangles(second_clip, &[triangle_at(10.0)]).unwrap();
+        list.push_nine_patch(first_clip, Recti::new(0, 0, 1, 1), NinePatch::solid(color(255, 255, 255, 255))).unwrap();
+        list.push_solid_triangles(second_clip, &[triangle_at(20.0)]).unwrap();
 
         assert_eq!(list.ops.len(), 4);
         assert_eq!(list.solid_geometry.triangles().len(), 3);
@@ -429,7 +487,7 @@ mod tests {
         let clip = Recti::new(0, 0, 100, 100);
         let triangle = triangle_at(0.0);
 
-        list.push_solid_triangles(clip, &[triangle]);
+        list.push_solid_triangles(clip, &[triangle]).unwrap();
 
         assert_eq!(list.solid_geometry.triangles().len(), 1);
         assert_eq!(list.solid_geometry.triangles()[0].vertices().len(), 3);
@@ -438,7 +496,42 @@ mod tests {
     #[test]
     fn empty_solid_geometry_does_not_create_an_operation() {
         let mut list = DisplayList::new();
-        list.push_solid_triangles(Recti::new(0, 0, 100, 100), &[]);
+        list.push_solid_triangles(Recti::new(0, 0, 100, 100), &[]).unwrap();
         assert!(list.is_empty());
     }
+
+    /// Internal producers share command limits even when no visible geometry is retained.
+    #[test]
+    fn internal_commands_are_bounded_and_clear_restores_capacity() {
+        let mut list = DisplayList::new();
+        let clip = Recti::new(0, 0, 20, 20);
+        for _ in 0..neocogi_renderer_contracts::MAX_DRAW_COMMANDS {
+            list.push_solid_triangles(clip, &[]).unwrap();
+        }
+        assert_eq!(list.push_nine_patch(clip, clip, NinePatch::solid(color(1, 2, 3, 255))), Err(neocogi_com::NC_E_OUT_OF_RANGE));
+        assert!(list.is_empty());
+        list.clear();
+        list.push_nine_patch(clip, clip, NinePatch::solid(color(1, 2, 3, 255))).unwrap();
+        assert_eq!(list.ops.len(), 1);
+    }
+
+    /// Oversized native text and polygon input fail before retaining bytes or tessellation scratch.
+    #[test]
+    fn native_inputs_are_rejected_before_allocation_and_smaller_work_can_retry() {
+        let mut list = DisplayList::new();
+        let clip = Recti::new(0, 0, 20, 20);
+        let atlas = test_atlas();
+        let font = atlas.font_id("body").unwrap();
+        let oversized = "x".repeat(neocogi_renderer_contracts::MAX_DRAW_WORK + 1);
+        assert_eq!(list.push_text(clip, font, Vec2i::default(), color(1, 2, 3, 255), &oversized), Err(neocogi_com::NC_E_OUT_OF_RANGE));
+        let points = vec![Vec2f::new(f32::NAN, 0.0); neocogi_renderer_contracts::MAX_POLYGON_POINTS + 1];
+        assert_eq!(list.push_polygon(clip, &points, color4b(1, 2, 3, 255), Vec2f::default()), Err(neocogi_com::NC_E_OUT_OF_RANGE));
+        assert_eq!(list.text.capacity(), 0);
+        assert_eq!(list.solid_geometry.polygon_capacity(), 0);
+        assert_eq!(list.solid_geometry.triangle_capacity(), 0);
+        assert!(list.is_empty());
+        list.push_text(clip, font, Vec2i::default(), color(1, 2, 3, 255), "retry").unwrap();
+        assert_eq!(list.text, "retry");
+    }
+
 }

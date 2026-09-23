@@ -127,11 +127,11 @@ pub fn outer_preferred(preferred: Dimensioni, insets: SliceInsets) -> Dimensioni
 }
 
 /// Paints a checked inside-aligned internal frame and returns its usable interior.
-pub fn paint_internal_frame(painter: &mut Painter<'_>, outer: Recti, patch: NinePatch) -> Option<Recti> {
+pub fn paint_internal_frame(painter: &mut Painter<'_>, outer: Recti, patch: NinePatch) -> Result<Option<Recti>, neocogi_com::NcStatus> {
     // Invalid outer geometry produces neither layout content nor paint. Positive rectangles share
     // the same normalized inset calculation used by node layout before one compact patch record.
     if outer.width <= 0 || outer.height <= 0 {
-        return None;
+        return Ok(None);
     }
     let insets = patch.insets.normalized();
     let content = if insets.horizontal_extent() == 0 && insets.vertical_extent() == 0 {
@@ -142,9 +142,9 @@ pub fn paint_internal_frame(painter: &mut Painter<'_>, outer: Recti, patch: Nine
     painter.with_clip(outer, |painter| {
         // NinePatch itself decides which of its nine cells are visible. Structural insets therefore
         // remain effective even when border artwork or colors are transparent.
-        painter.nine_patch(outer, patch);
-    });
-    content
+        painter.nine_patch(outer, patch)
+    })?;
+    Ok(content)
 }
 
 /// Removes four normalized patch insets from one positive outer rectangle.
@@ -366,7 +366,7 @@ mod tests {
         let mut list = DisplayList::new();
         let mut painter = Painter::screen_space(&mut list, viewport);
 
-        let content = paint_internal_frame(&mut painter, outer, NinePatch::framed(SliceInsets::uniform(1), border, Some(fill)));
+        let content = paint_internal_frame(&mut painter, outer, NinePatch::framed(SliceInsets::uniform(1), border, Some(fill))).unwrap();
         assert_eq!(content.map(rect_tuple), Some((11, 21, 6, 5)));
 
         let recorded = list.debug_nine_patches();
@@ -404,7 +404,7 @@ mod tests {
                 outer,
                 NinePatch::framed(SliceInsets::uniform(1), border, Some(color(10, 11, 12, 255))),
             )
-            .is_none()
+            .unwrap().is_none()
         );
         let recorded = list.debug_nine_patches();
         assert_eq!(recorded.len(), 1);
@@ -426,7 +426,7 @@ mod tests {
         let mut list = DisplayList::new();
         let mut painter = Painter::screen_space(&mut list, viewport);
 
-        let content = paint_internal_frame(&mut painter, outer, NinePatch::framed(SliceInsets::uniform(2), color(0, 0, 0, 0), Some(fill)));
+        let content = paint_internal_frame(&mut painter, outer, NinePatch::framed(SliceInsets::uniform(2), color(0, 0, 0, 0), Some(fill))).unwrap();
         assert_eq!(content.map(rect_tuple), Some((7, 8, 5, 4)));
         let recorded = list.debug_nine_patches();
         assert_eq!(recorded.len(), 1);

@@ -647,12 +647,13 @@ pub(super) fn record_root_background(
     style: &Skin,
     frame_kind: RootFrameKind,
     enabled: bool,
-) {
+) -> Result<(), neocogi_com::NcStatus> {
     // Chrome uses a screen-space painter because it is outside the retained application tree.
     let mut painter = Painter::screen_space(display_list, viewport);
     // Pointer interaction and activation belong to chrome, not the application background.
     // Explicit root disabling is the only transition that selects another surface state.
-    let _ = crate::ui_node::frame::paint_internal_frame(&mut painter, rect, root_background_patch(style, frame_kind, enabled));
+    let _ = crate::ui_node::frame::paint_internal_frame(&mut painter, rect, root_background_patch(style, frame_kind, enabled))?;
+    Ok(())
 }
 
 /// Records the frame border, title, and resize visuals that must appear above child content.
@@ -669,7 +670,7 @@ pub(super) fn record_root_overlay(
     active: bool,
     enabled: bool,
     visual: RootChromeVisualState,
-) {
+) -> Result<(), neocogi_com::NcStatus> {
     // Reuse committed geometry so hit-testing and painting cannot disagree within one UI commit.
     let mut painter = Painter::screen_space(display_list, viewport);
     // Explicit disabling wins over activation. Pointer interaction is reserved for caption and
@@ -680,11 +681,11 @@ pub(super) fn record_root_overlay(
         // The semantic surface already filled the root before application content. Draw only the
         // frame's eight decorative cells here so its image center can never become a hidden second
         // source of window background color.
-        painter.nine_patch(outer, root_frame_patch(style, frame_kind, chrome_active, enabled).without_center());
+        painter.nine_patch(outer, root_frame_patch(style, frame_kind, chrome_active, enabled).without_center())?;
     }
     if let Some(title) = geometry.title {
         let title_visual = style.chrome(ChromeRole::Title, chrome_state);
-        let title_content = crate::ui_node::frame::paint_internal_frame(&mut painter, title, title_visual.patch);
+        let title_content = crate::ui_node::frame::paint_internal_frame(&mut painter, title, title_visual.patch)?;
         let title_backdrop = match (chrome_active, style.window_chrome().has_backdrop) {
             (true, 1) => Some((packed_color(style.window_chrome().backdrop_rgba), style.window_chrome().backdrop_padding)),
             (false, _) | (true, 0) => None,
@@ -697,7 +698,7 @@ pub(super) fn record_root_overlay(
                 .into_iter()
                 .flatten()
             {
-                painter.fill_rect(spacing, backdrop);
+                painter.fill_rect(spacing, backdrop)?;
             }
         }
         let text = root_title_text_rect(title, geometry, style.window_chrome());
@@ -728,10 +729,10 @@ pub(super) fn record_root_overlay(
                     .positive_intersection(text)
                     .and_then(|label| label.positive_intersection(title_content))
                 {
-                    painter.fill_rect(label, backdrop);
+                    painter.fill_rect(label, backdrop)?;
                 }
             }
-            painter.with_clip(text, |painter| painter.text(title_font, name, position, color));
+            painter.with_clip(text, |painter| painter.text(title_font, name, position, color))?;
         }
         let captions_visible = match style.window_chrome().show_without_activation {
             0 => chrome_active,
@@ -743,7 +744,7 @@ pub(super) fn record_root_overlay(
             // testing without overloading the interaction state used to paint the button itself.
             for button in [RootCaptionButton::Minimize, RootCaptionButton::Maximize, RootCaptionButton::Close] {
                 if let Some(rect) = geometry.caption(button) {
-                    paint_caption_button(&mut painter, rect, button, style, atlas, chrome_active, enabled, visual);
+                    paint_caption_button(&mut painter, rect, button, style, atlas, chrome_active, enabled, visual)?;
                 }
             }
         }
@@ -757,8 +758,9 @@ pub(super) fn record_root_overlay(
         // A disabled window exposes no resize action, so omit its grip instead of inventing a
         // disabled rectangle when a classic theme deliberately uses transparent normal artwork.
         let state = ControlState::Enabled(visual.part_pointer_state(RootChromePart::Resize(RootResizeAxis::Both)));
-        let _ = crate::ui_node::frame::paint_internal_frame(&mut painter, grip, style.control(ControlRole::ResizeGrip, state).patch);
+        let _ = crate::ui_node::frame::paint_internal_frame(&mut painter, grip, style.control(ControlRole::ResizeGrip, state).patch)?;
     }
+    Ok(())
 }
 
 /// Records one stateful caption control and its manager-owned semantic symbol.
@@ -771,7 +773,7 @@ fn paint_caption_button(
     window_active: bool,
     window_enabled: bool,
     visual: RootChromeVisualState,
-) {
+) -> Result<(), neocogi_com::NcStatus> {
     let role = match button {
         RootCaptionButton::Minimize => ControlRole::MinimizeButton,
         RootCaptionButton::Maximize if visual.maximized => ControlRole::RestoreButton,
@@ -788,14 +790,14 @@ fn paint_caption_button(
     // Resolve the face and content color together so the caption consumes one ordinary control
     // visual. There is no independently selected glyph role or chrome-layout drawing flag.
     let appearance = style.control(role, state);
-    let Some(content) = crate::ui_node::frame::paint_internal_frame(painter, rect, appearance.patch) else {
-        return;
+    let Some(content) = crate::ui_node::frame::paint_internal_frame(painter, rect, appearance.patch)? else {
+        return Ok(());
     };
     let color = appearance.content_color;
     match button {
         RootCaptionButton::Close => {
             // Close retains the atlas icon already required by every Skin and test atlas.
-            painter.icon(style.resolve_icon_role(atlas, crate::IconRole::Close), content, color);
+            painter.icon(style.resolve_icon_role(atlas, crate::IconRole::Close), content, color)?;
         }
         RootCaptionButton::Minimize => {
             // A centered lower horizontal stroke supplies a deterministic flat fallback over either
@@ -803,7 +805,7 @@ fn paint_caption_button(
             let width = (content.width / 2).max(1);
             let x = content.x.saturating_add(content.width.saturating_sub(width) / 2);
             let y = content.y.saturating_add((content.height.saturating_mul(2) / 3).max(0));
-            painter.fill_rect(Recti::new(x, y, width, 1.min(content.height.max(0))), color);
+            painter.fill_rect(Recti::new(x, y, width, 1.min(content.height.max(0))), color)?;
         }
         RootCaptionButton::Maximize if visual.maximized => {
             // Two offset outlines communicate restoration while staying legible at classic bitmap
@@ -811,17 +813,18 @@ fn paint_caption_button(
             let size = (content.width.min(content.height) / 2).max(1);
             let back = Recti::new(content.x.saturating_add(size / 3), content.y, size, size);
             let front = Recti::new(content.x, content.y.saturating_add(size / 3), size, size);
-            painter.stroke_rect(back, 1, color);
-            painter.stroke_rect(front, 1, color);
+            painter.stroke_rect(back, 1, color)?;
+            painter.stroke_rect(front, 1, color)?;
         }
         RootCaptionButton::Maximize => {
             // One centered outline is the flat maximize glyph; themed PNGs remain the background.
             let size = (content.width.min(content.height) / 2).max(1);
             let x = content.x.saturating_add(content.width.saturating_sub(size) / 2);
             let y = content.y.saturating_add(content.height.saturating_sub(size) / 2);
-            painter.stroke_rect(Recti::new(x, y, size, size), 1, color);
+            painter.stroke_rect(Recti::new(x, y, size, size), 1, color)?;
         }
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -883,7 +886,7 @@ mod tests {
                 true,
                 true,
                 RootChromeVisualState::idle(),
-            );
+            ).unwrap();
             display_list.debug_operation_count()
         };
 
@@ -967,7 +970,7 @@ mod tests {
             true,
             true,
             RootChromeVisualState::idle(),
-        );
+        ).unwrap();
 
         let backdrop_rects = display_list
             .debug_nine_patches()

@@ -70,8 +70,7 @@ impl RuntimeContext {
         if !self.window_manager.can_render(dimensions) {
             return Err(neocogi_ui_core_contracts::UI_E_UPDATE_REQUIRED);
         }
-        self.window_manager.paint(dimensions);
-        Ok(())
+        self.window_manager.paint(dimensions)
     }
 
     /// Releases commands and their resource references after a rejected paint phase.

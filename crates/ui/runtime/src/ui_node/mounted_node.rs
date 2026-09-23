@@ -145,11 +145,9 @@ impl ComNode {
         change
     }
     /// Starts an observational scope and gives the widget direct scoped frame recording access.
-    pub(crate) fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) {
+    pub(crate) fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) -> Result<(), NcStatus> {
         let _phase = Observation::begin(&self.host);
-        if let Err(error) = self.painter.paint(&self.widget, ctx) {
-            self.host.fail(error);
-        }
+        self.painter.paint(&self.widget, ctx)
     }
 }
 

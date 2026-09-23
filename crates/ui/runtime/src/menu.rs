@@ -728,7 +728,7 @@ impl MenuSurface {
     }
 
     /// Paints the complete bar or popup from the geometry shared with measurement and hit testing.
-    pub(crate) fn paint(&mut self, display_list: &mut crate::render::DisplayList, style: &Skin, atlas: &AtlasHandle, window_active: bool, enabled: bool) {
+    pub(crate) fn paint(&mut self, display_list: &mut crate::render::DisplayList, style: &Skin, atlas: &AtlasHandle, window_active: bool, enabled: bool) -> Result<(), neocogi_com::NcStatus> {
         // Reuse the concrete built-in paint services without retaining a `Widget`, node identity, or
         // runtime. This keeps control text and atlas clipping exactly aligned with other controls.
         let mut ctx = WidgetPaintCtx::new_with_content_geometry(
@@ -807,6 +807,7 @@ impl MenuSurface {
                 }
             }
         }
+            ctx.finish()
     }
 
     /// Resolves one local slot into screen coordinates for popup anchoring and diagnostics.

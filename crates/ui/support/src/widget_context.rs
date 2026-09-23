@@ -605,7 +605,8 @@ impl<'a> WidgetPaintCtx<'a> {
             let result = painter.fill(scope, crate::boundary::copied_rect(rect), packed_color(color));
             self.record(result);
         } else {
-            self.painter().fill_rect(rect, color);
+            let result = self.painter().fill_rect(rect, color);
+            self.record(result);
         }
     }
 
@@ -622,7 +623,8 @@ impl<'a> WidgetPaintCtx<'a> {
             );
             self.record(result);
         } else {
-            self.painter().icon(id, rect, color);
+            let result = self.painter().icon(id, rect, color);
+            self.record(result);
         }
     }
 
@@ -638,7 +640,8 @@ impl<'a> WidgetPaintCtx<'a> {
             );
             self.record(result);
         } else {
-            self.painter().com_texture(rect, color, texture);
+            let result = self.painter().com_texture(rect, color, texture);
+            self.record(result);
         }
     }
 
@@ -656,7 +659,8 @@ impl<'a> WidgetPaintCtx<'a> {
             );
             self.record(result);
         } else {
-            self.painter().text(font, text, position, color);
+            let result = self.painter().text(font, text, position, color);
+            self.record(result);
         }
     }
 
@@ -691,7 +695,13 @@ impl<'a> WidgetPaintCtx<'a> {
         }
         let patch = self.common.style.control(role, state).patch;
         let mut painter = self.painter();
-        crate::frame::paint_internal_frame(&mut painter, rect, patch)
+        match crate::frame::paint_internal_frame(&mut painter, rect, patch) {
+            Ok(content) => content,
+            Err(error) => {
+                self.record(Err(error));
+                None
+            }
+        }
     }
 
     /// Draws only the stretchable center of one control over an unframed rectangle.
@@ -719,7 +729,8 @@ impl<'a> WidgetPaintCtx<'a> {
         } else {
             let patch = self.common.style.control(role, state).patch.with_insets(crate::SliceInsets::ZERO);
             let mut painter = self.painter();
-            let _ = crate::frame::paint_internal_frame(&mut painter, rect, patch);
+            let result = crate::frame::paint_internal_frame(&mut painter, rect, patch);
+            self.record(result.map(|_| ()));
         }
     }
 
@@ -744,7 +755,8 @@ impl<'a> WidgetPaintCtx<'a> {
         } else {
             let patch = self.common.style.surface(role, state).patch.with_insets(crate::SliceInsets::ZERO);
             let mut painter = self.painter();
-            let _ = crate::frame::paint_internal_frame(&mut painter, rect, patch);
+            let result = crate::frame::paint_internal_frame(&mut painter, rect, patch);
+            self.record(result.map(|_| ()));
         }
     }
 
@@ -753,7 +765,13 @@ impl<'a> WidgetPaintCtx<'a> {
         // The Open state remains confined to menu rendering.
         let patch = self.common.style.menu(role, state).patch;
         let mut painter = self.painter();
-        crate::frame::paint_internal_frame(&mut painter, rect, patch)
+        match crate::frame::paint_internal_frame(&mut painter, rect, patch) {
+            Ok(content) => content,
+            Err(error) => {
+                self.record(Err(error));
+                None
+            }
+        }
     }
 
     /// Resolves a control content color using this widget's complete interaction state.

@@ -478,7 +478,7 @@ impl SurfaceBody {
         focus_visible: bool,
         window_active: bool,
         enabled: bool,
-    ) {
+    ) -> Result<(), neocogi_com::NcStatus> {
         // Widget and compact-menu bodies share explicit activation and enabled facts so neither
         // infers disabled presentation from focus, hover, or the concrete body variant.
         match self {
@@ -3334,7 +3334,7 @@ impl WindowManager {
     }
 
     /// Records one ordinary root family with each parent's application content below its children.
-    fn paint_root_tree(&mut self, root: RootId, style: &Skin, atlas: &crate::AtlasHandle, focus_surface: Option<SurfaceKey>, active_window: Option<RootId>) {
+    fn paint_root_tree(&mut self, root: RootId, style: &Skin, atlas: &crate::AtlasHandle, focus_surface: Option<SurfaceKey>, active_window: Option<RootId>) -> Result<(), neocogi_com::NcStatus> {
         {
             // A short node borrow records the base before recursion. Releasing it here lets direct
             // child calls borrow arbitrary later forest entries without unsafe aliasing or mirrors.
@@ -3347,7 +3347,7 @@ impl WindowManager {
             } else {
                 RootFrameKind::Window
             };
-            record_root_background(&mut self.display_list, node.surface.clip, node.surface.rect, style, frame_kind, window_enabled);
+            record_root_background(&mut self.display_list, node.surface.clip, node.surface.rect, style, frame_kind, window_enabled)?;
             node.surface.body.paint(
                 &mut self.display_list,
                 style,
@@ -3355,7 +3355,7 @@ impl WindowManager {
                 window_enabled && focus_surface == Some(SurfaceKey::Root(root)),
                 window_active,
                 window_enabled,
-            );
+            )?;
         }
 
         // Derived adjacency retains sibling chronology while visiting only this family's edges.
@@ -3369,7 +3369,7 @@ impl WindowManager {
                     .node(child)
                     .is_some_and(|node| node.root().is_some_and(|state| state.mode == RootMode::Child && state.visible))
             {
-                self.paint_root_tree(child_root, style, atlas, focus_surface, active_window);
+                self.paint_root_tree(child_root, style, atlas, focus_surface, active_window)?;
             }
         }
 
@@ -3388,7 +3388,7 @@ impl WindowManager {
                     atlas,
                     window_enabled && active_window == Some(root),
                     window_enabled,
-                );
+                )?;
             }
             let root_state = node.root().expect("root overlay must retain root policy");
             let frame_kind = if root_state.mode == RootMode::Modal {
@@ -3410,12 +3410,13 @@ impl WindowManager {
                 window_enabled && active_window == Some(root),
                 window_enabled,
                 visual,
-            );
+            )?;
         }
+        Ok(())
     }
 
     /// Records the sole active popup path in parent-to-child order at its inherited transient tier.
-    fn paint_active_popup_path(&mut self, style: &Skin, atlas: &crate::AtlasHandle, focus_surface: Option<SurfaceKey>) {
+    fn paint_active_popup_path(&mut self, style: &Skin, atlas: &crate::AtlasHandle, focus_surface: Option<SurfaceKey>) -> Result<(), neocogi_com::NcStatus> {
         // `visible_order` materializes only the active popup ancestry. Filtering it reuses that
         // allocation and preserves the existing parent-first popup paint contract.
         for index in 0..self.surfaces.visible_order.len() {
@@ -3437,7 +3438,7 @@ impl WindowManager {
                 style,
                 RootFrameKind::Popup,
                 popup_enabled,
-            );
+            )?;
             node.surface.body.paint(
                 &mut self.display_list,
                 style,
@@ -3445,7 +3446,7 @@ impl WindowManager {
                 popup_enabled && focus_surface == Some(key),
                 true,
                 popup_enabled,
-            );
+            )?;
             if widget_popup {
                 // Record border cells last so application content cannot cover the popup's black
                 // outline. Popup options exclude title and resizing, making the shared recorder a
@@ -3463,13 +3464,14 @@ impl WindowManager {
                     false,
                     popup_enabled,
                     RootChromeVisualState::idle(),
-                );
+                )?;
             }
         }
+        Ok(())
     }
 
     /// Paints fixed window families, their transient tier, and then the manager-owned modal tier.
-    pub(crate) fn paint(&mut self, _dimensions: Dimensioni) {
+    pub(crate) fn paint(&mut self, _dimensions: Dimensioni) -> Result<(), neocogi_com::NcStatus> {
         // Frame validation has already matched `_dimensions` to the latest UI commit. Painting uses
         // the committed per-surface clips from that transaction so no traversal can accidentally
         // widen a structurally clipped child back to the full drawable viewport.
@@ -3504,11 +3506,11 @@ impl WindowManager {
                     }
                 };
                 if let Some(root) = root {
-                    self.paint_root_tree(root, &style, &atlas, focus_surface, active_window);
+                    self.paint_root_tree(root, &style, &atlas, focus_surface, active_window)?;
                 }
             }
             if active_mode == Some(RootMode::Normal { layer }) {
-                self.paint_active_popup_path(&style, &atlas, focus_surface);
+                self.paint_active_popup_path(&style, &atlas, focus_surface)?;
             }
         }
 
@@ -3522,12 +3524,13 @@ impl WindowManager {
                 }
             };
             if let Some(modal) = modal {
-                self.paint_root_tree(modal, &style, &atlas, focus_surface, active_window);
+                self.paint_root_tree(modal, &style, &atlas, focus_surface, active_window)?;
             }
         }
         if active_mode == Some(RootMode::Modal) {
-            self.paint_active_popup_path(&style, &atlas, focus_surface);
+            self.paint_active_popup_path(&style, &atlas, focus_surface)?;
         }
+        Ok(())
     }
 
     /// Truncates an active popup branch according to one outside press.
