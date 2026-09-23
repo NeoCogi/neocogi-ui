@@ -43,6 +43,31 @@ pub(crate) fn inputs(document: &Document, nodes: &BTreeMap<String, Widget<IWidge
                 let mut source = source.query::<DisclosureAbi>()?;
                 SetExpanded::__receiver(Box::new(move |value| source.set_expanded(value.expanded)))?.query()?
             }
+            InputKind::Selection => {
+                let mut source = source.query::<ComboAbi>()?;
+                SetSelection::__receiver(Box::new(move |value| {
+                    // Preserve the distinction between clearing selection and malformed ordinals.
+                    let selection = match value.selected {
+                        -1 => ChoiceSelection::None,
+                        ordinal if ordinal >= 0 => ChoiceSelection::Selected(ordinal as u64),
+                        _ => return Err(NC_E_INVALID_ARG),
+                    };
+                    source.set_selection(selection.into())
+                }))?.query()?
+            }
+            InputKind::Offset => {
+                let mut source = source.query::<ScrollbarAbi>()?;
+                SetOffset::__receiver(Box::new(move |value| source.set_offset(value.offset)))?.query()?
+            }
+            InputKind::Position => {
+                let mut source = source.query::<SplitViewAbi>()?;
+                SetPosition::__receiver(Box::new(move |value| {
+                    // Read current settings for each command: callers may edit limits separately.
+                    let mut settings = source.settings()?;
+                    settings.position = value.position;
+                    source.set_settings(settings)
+                }))?.query()?
+            }
             InputKind::Choices => {
                 let mut source = Widget::from_interface(source.query::<ComboAbi>()?);
                 SetChoices::__receiver(Box::new(move |value| {
@@ -118,6 +143,9 @@ command!(SetValue, __SetValueReceiverAbi);
 command!(SetEnabled, __SetEnabledReceiverAbi);
 command!(SetExpanded, __SetExpandedReceiverAbi);
 command!(SetChoices, __SetChoicesReceiverAbi);
+command!(SetSelection, __SetSelectionReceiverAbi);
+command!(SetOffset, __SetOffsetReceiverAbi);
+command!(SetPosition, __SetPositionReceiverAbi);
 
 /// A resolved typed application input; reconnect after replacing its component.
 pub struct InputHandle<C: Command> {

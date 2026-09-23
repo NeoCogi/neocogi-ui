@@ -346,6 +346,34 @@ pub enum InputKind {
     Expanded,
     /// SetChoices replaces a combo model.
     Choices,
+    /// SetSelection selects an existing combo item or clears selection.
+    Selection,
+    /// SetOffset moves a scrollbar within its current range.
+    Offset,
+    /// SetPosition changes only the requested split divider position.
+    Position,
+}
+impl InputKind {
+    /// Complete command catalog shared by validation and authoring tools.
+    pub const ALL: [Self; 9] = [
+        Self::Text, Self::Checked, Self::Value, Self::Enabled, Self::Expanded,
+        Self::Choices, Self::Selection, Self::Offset, Self::Position,
+    ];
+
+    /// Human-readable operation label; field identity always uses the enum itself.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Text => "Set text",
+            Self::Checked => "Set checked",
+            Self::Value => "Set value",
+            Self::Enabled => "Set enabled",
+            Self::Expanded => "Set expanded",
+            Self::Choices => "Set choices",
+            Self::Selection => "Set selection",
+            Self::Offset => "Set offset",
+            Self::Position => "Set position",
+        }
+    }
 }
 
 impl Default for Style {
@@ -569,7 +597,9 @@ impl WidgetSpec {
             InputKind::Checked => matches!(self, Self::Checkbox { .. }),
             InputKind::Value => matches!(self, Self::Slider { .. } | Self::Number { .. }),
             InputKind::Expanded => matches!(self, Self::Disclosure { .. }),
-            InputKind::Choices => matches!(self, Self::Combo { .. }),
+            InputKind::Choices | InputKind::Selection => matches!(self, Self::Combo { .. }),
+            InputKind::Offset => matches!(self, Self::Scrollbar { .. }),
+            InputKind::Position => matches!(self, Self::Split { .. }),
         }
     }
 }

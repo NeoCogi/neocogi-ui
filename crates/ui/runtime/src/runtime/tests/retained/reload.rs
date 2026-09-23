@@ -2,6 +2,7 @@
 use super::*;
 use neocogi_ui_document::{*, contracts::SetText};
 use neocogi_com::events::bind_output;
+use neocogi_ui_nodes_contracts::ScrollbarChanged;
 
 /// Mounts a document slot in an ordinary window using the production runtime.
 fn slot(ui: &Ui) -> ReloadSlot {
@@ -337,4 +338,76 @@ fn typed_and_binary_preparation_have_equivalent_authored_state() {
         component.input::<SetText>("title").unwrap().send(SetText { text: "runtime override".into() }).unwrap();
         assert_eq!(Document::from_binary(&component.save().unwrap()).unwrap(), document);
     }
+}
+
+/// Focused commands preserve unrelated widget configuration, validate before mutation, and retire.
+#[test]
+fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
+    use neocogi_ui_document::contracts::{SetOffset, SetPosition, SetSelection};
+    let fixture = Headless::standard();
+    let mut slot = slot(&fixture.ui);
+    let mut document = Document {
+        version: VERSION,
+        name: "focused commands".into(),
+        root: Node::new("root", WidgetSpec::Combo {
+            labels: vec!["one".into(), "two".into()], selected: Some(0), placeholder: "empty".into(),
+        }),
+        outputs: vec![Output { name: "changed".into(), node: "root".into(), port: "changed".into() }],
+        inputs: vec![Input { name: "set".into(), node: "root".into(), kind: InputKind::Selection }],
+    };
+    let (sender, events) = std::sync::mpsc::channel();
+    slot.reload(&document, Resources::new(), |component, _| {
+        bind_output(component.outputs()?.as_com_ref(), "changed", sender.clone(), |_: ChoiceSelection| ())
+    }).unwrap();
+    let component = slot.component().unwrap();
+    let combo = Widget::from_interface(component.root().unwrap().as_interface().add_ref().query::<ComboAbi>().unwrap());
+    let mut selection = component.input::<SetSelection>("set").unwrap();
+    selection.send(SetSelection { selected: 1 }).unwrap();
+    assert!(matches!(combo.selection().unwrap(), ChoiceSelection::Selected(1)));
+    for selected in [-2, 2, i32::MAX] {
+        assert!(selection.send(SetSelection { selected }).is_err());
+        assert!(matches!(combo.selection().unwrap(), ChoiceSelection::Selected(1)));
+    }
+    selection.send(SetSelection { selected: -1 }).unwrap();
+    assert!(matches!(combo.selection().unwrap(), ChoiceSelection::None));
+    assert!(events.try_recv().is_err());
+
+    document.root.widget = WidgetSpec::Scrollbar { vertical: true, viewport: 10, content: 100, offset: 5 };
+    document.inputs[0].kind = InputKind::Offset;
+    slot.reload(&document, Resources::new(), |component, _| {
+        bind_output(component.outputs()?.as_com_ref(), "changed", sender.clone(), |_: ScrollbarChanged| ())
+    }).unwrap();
+    assert!(selection.send(SetSelection { selected: 0 }).is_err());
+    let component = slot.component().unwrap();
+    let scrollbar = component.root().unwrap().as_interface().add_ref().query::<ScrollbarAbi>().unwrap();
+    let mut offset = component.input::<SetOffset>("set").unwrap();
+    for (requested, expected) in [(50, 50), (i32::MAX, 90), (-1, 0)] {
+        offset.send(SetOffset { offset: requested }).unwrap();
+        let range = scrollbar.range().unwrap();
+        assert_eq!((range.viewport, range.content, range.offset), (10, 100, expected));
+    }
+    assert!(events.try_recv().is_err());
+
+    document.root.widget = WidgetSpec::Split { vertical: false, position: 100, minimum_first: 20, minimum_second: 30, handle: 6 };
+    document.inputs[0].kind = InputKind::Position;
+    slot.reload(&document, Resources::new(), |component, _| {
+        bind_output(component.outputs()?.as_com_ref(), "changed", sender.clone(), |_: SplitChanged| ())
+    }).unwrap();
+    assert!(offset.send(SetOffset { offset: 0 }).is_err());
+    let component = slot.component().unwrap();
+    let mut split = component.root().unwrap().as_interface().add_ref().query::<SplitViewAbi>().unwrap();
+    // Preserve live configuration as well as authored defaults when sending subsequent positions.
+    let mut settings = split.settings().unwrap();
+    settings.minimum_first = 40;
+    split.set_settings(settings).unwrap();
+    let mut position = component.input::<SetPosition>("set").unwrap();
+    position.send(SetPosition { position: 150 }).unwrap();
+    let settings = split.settings().unwrap();
+    assert_eq!((settings.position, settings.minimum_first, settings.minimum_second, settings.handle_width), (150, 40, 30, 6));
+    assert!(position.send(SetPosition { position: -1 }).is_err());
+    assert_eq!(split.settings().unwrap().position, 150);
+    assert!(events.try_recv().is_err());
+    assert_eq!(Document::from_binary(&component.save().unwrap()).unwrap(), document);
+    slot.reload(&document, Resources::new(), |_, _| Ok(())).unwrap();
+    assert!(position.send(SetPosition { position: 100 }).is_err());
 }

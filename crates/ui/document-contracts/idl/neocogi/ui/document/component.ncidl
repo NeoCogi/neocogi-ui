@@ -56,3 +56,25 @@ struct SetChoices {
     /// Selected ordinal, or -1 for no selection.
     selected: i32,
 }
+
+#[version(1)]
+#[message]
+/// Selects one existing combo item without replacing its labels or emitting a user event.
+struct SetSelection {
+    /// Selected ordinal, or -1 to clear selection; other negative values are invalid.
+    selected: i32,
+}
+#[version(1)]
+#[message]
+/// Moves a scrollbar without changing its lengths or emitting a user event.
+struct SetOffset {
+    /// Requested pixel offset, clamped to the current scroll range by the destination.
+    offset: i32,
+}
+#[version(1)]
+#[message]
+/// Moves a split divider while retaining its current axis, limits, and handle width.
+struct SetPosition {
+    /// Requested first-pane extent; temporary allocation clamping does not discard it.
+    position: i32,
+}

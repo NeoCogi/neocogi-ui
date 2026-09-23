@@ -40,7 +40,7 @@ per-post name lookup and no intermediate owned message copy.
 Use `neocogi_com::events::bind_output` with the concrete event type declared by
 the component's public contract. Wrong types fail at connection time. Inputs
 include text, checked, numeric value, interaction enablement, expansion, and
-combo-model replacement. `SetChoices` uses UTF-8 text plus checked exclusive
+combo-model replacement, combo selection, scrollbar offset, and split position. `SetChoices` uses UTF-8 text plus checked exclusive
 label offsets, avoiding a nested untyped payload. Calls are ordinary synchronous
 setters; send them at the application's normal safe update boundary.
 
@@ -117,3 +117,11 @@ persistence decoding for external and embedded binary files.
 Each `(node, input kind)` has exactly one public name, matching the inspector's
 single endpoint field. Duplicate aliases are rejected before construction or
 editing; changing a binding can no longer silently delete another accepted alias.
+
+`SetSelection { selected }` uses a combo ordinal, with `-1` clearing selection.
+Unknown ordinals and other negative values fail without changing selection.
+`SetOffset { offset }` clamps to the scrollbar's current lengths.
+`SetPosition { position }` changes the requested split extent and retains its live
+axis, pane minima, and divider width. These commands are silent programmatic
+changes; they do not publish user events or rewrite authored defaults. All input
+kinds and their inspector labels come from `InputKind::ALL` and `InputKind::label`.
