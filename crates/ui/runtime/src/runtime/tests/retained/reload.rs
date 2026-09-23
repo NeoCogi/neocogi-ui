@@ -323,3 +323,18 @@ fn authored_form_rectangles_survive_binary_reload_and_route_real_clicks() {
     assert!(slot.reload(&document, Resources::new(), |_, _| Ok(())).is_err());
     assert_eq!(slot.component().unwrap().save().unwrap(), bytes);
 }
+
+/// Typed preparation and persistence decoding must construct the same authored component contract.
+#[test]
+fn typed_and_binary_preparation_have_equivalent_authored_state() {
+    let fixture = Headless::standard();
+    let document = Document::new("preparation paths");
+    let loader = Loader::new(fixture.ui.clone(), None, Resources::new()).unwrap();
+    let typed = loader.prepare(&document).unwrap();
+    let binary = loader.load(&document.to_binary().unwrap()).unwrap();
+    assert_ne!(typed.root().unwrap().as_interface().as_ptr(), binary.root().unwrap().as_interface().as_ptr());
+    for component in [&typed, &binary] {
+        component.input::<SetText>("title").unwrap().send(SetText { text: "runtime override".into() }).unwrap();
+        assert_eq!(Document::from_binary(&component.save().unwrap()).unwrap(), document);
+    }
+}

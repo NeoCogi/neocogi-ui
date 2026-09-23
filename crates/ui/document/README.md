@@ -106,3 +106,14 @@ These variants append to the experimental revision-one enum tables. Existing
 revision-one documents retain their binary encoding and load in the new reader;
 older readers reject the new variants instead of misinterpreting them. Applications
 using forms must deploy matching updated node contracts and runtime providers.
+
+## Typed preparation and endpoint cardinality
+
+`Loader::prepare` validates an in-memory document and constructs through the same
+concrete service context as binary restoration. It does not serialize and decode
+an editable document merely to rebuild a preview. `load` retains bounded COM
+persistence decoding for external and embedded binary files.
+
+Each `(node, input kind)` has exactly one public name, matching the inspector's
+single endpoint field. Duplicate aliases are rejected before construction or
+editing; changing a binding can no longer silently delete another accepted alias.

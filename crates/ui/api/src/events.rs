@@ -45,11 +45,15 @@ pub use neocogi_ui_core_contracts::{Activation, TextChanged, TextSubmitted, Wind
 /// Node-specific outputs preserve their concrete contract types and field documentation.
 pub use neocogi_ui_nodes_contracts::{CheckboxChanged, NumericChanged, ScrollbarChanged, SplitChanged};
 
+/// Owned, concrete event consumer installed once at an output boundary.
+/// The event type remains statically known; this alias hides only repeated closure syntax.
+pub type EventConsumer<E> = Box<dyn FnMut(E) -> Result<(), NcStatus>>;
+
 /// Adds one domain check to a setup closure; no output identity or lifecycle is introduced.
 fn checked<E: 'static>(
-    install: impl FnOnce(Box<dyn FnMut(E) -> Result<(), NcStatus>>) -> Result<(), NcStatus>,
+    install: impl FnOnce(EventConsumer<E>) -> Result<(), NcStatus>,
     validate: fn(&E) -> Result<(), NcStatus>,
-) -> impl FnOnce(Box<dyn FnMut(E) -> Result<(), NcStatus>>) -> Result<(), NcStatus> {
+) -> impl FnOnce(EventConsumer<E>) -> Result<(), NcStatus> {
     move |mut consume| {
         install(Box::new(move |event| {
             validate(&event)?;
@@ -61,20 +65,20 @@ fn checked<E: 'static>(
 /// Obtains lifecycle output installation; setup temporarily retains the actual window.
 pub fn window_events(
     window: ComRef<'_, IWindowAbi>,
-) -> Result<impl FnOnce(Box<dyn FnMut(WindowEvent) -> Result<(), NcStatus>>) -> Result<(), NcStatus> + use<>, NcStatus> {
+) -> Result<impl FnOnce(EventConsumer<WindowEvent>) -> Result<(), NcStatus> + use<>, NcStatus> {
     Ok(checked(window.add_ref().query::<IWindowEventsAbi>()?.changed(), valid_window_event))
 }
 
 /// Obtains dismissal output installation; delivery describes a captured fact.
 pub fn popup_events(
     popup: ComRef<'_, IPopupAbi>,
-) -> Result<impl FnOnce(Box<dyn FnMut(PopupDismissed) -> Result<(), NcStatus>>) -> Result<(), NcStatus> + use<>, NcStatus> {
+) -> Result<impl FnOnce(EventConsumer<PopupDismissed>) -> Result<(), NcStatus> + use<>, NcStatus> {
     Ok(popup.add_ref().query::<IPopupEventsAbi>()?.dismissed())
 }
 
 impl crate::MenuItem {
     /// Obtains this row's activation installation operation through its actual COM interface.
-    pub fn activated(&self) -> Result<impl FnOnce(Box<dyn FnMut(Activation) -> Result<(), NcStatus>>) -> Result<(), NcStatus> + use<>, NcStatus> {
+    pub fn activated(&self) -> Result<impl FnOnce(EventConsumer<Activation>) -> Result<(), NcStatus> + use<>, NcStatus> {
         Ok(self.as_interface().add_ref().query::<IActivationEventsAbi>()?.activated())
     }
 }

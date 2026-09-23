@@ -331,7 +331,7 @@ pub struct Input {
 }
 
 /// Supported typed application-to-view operations.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ComSerialize, ComDeserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ComSerialize, ComDeserialize)]
 #[serde(deny_unknown_fields)]
 pub enum InputKind {
     /// SetText changes text or label.
@@ -481,6 +481,7 @@ impl Document {
             }
         }
         names.clear();
+        let mut inputs = std::collections::BTreeSet::new();
         for input in &self.inputs {
             if input.name.is_empty() || !names.insert(&input.name) {
                 return Err(format!("Duplicate or empty input: {}", input.name));
@@ -488,6 +489,11 @@ impl Document {
             let node = nodes
                 .get(input.node.as_str())
                 .ok_or_else(|| format!("Input {} refers to missing node {}", input.name, input.node))?;
+            // The inspector and runtime expose exactly one public name per concrete command.
+            // Reject aliases at the source boundary instead of silently collapsing them on edit.
+            if !inputs.insert((&input.node, &input.kind)) {
+                return Err(format!("Input {} exports a command on {} more than once", input.name, input.node));
+            }
             if !node.widget.accepts(&input.kind) {
                 return Err(format!("{} cannot accept input {}", input.node, input.name));
             }
@@ -674,5 +680,22 @@ impl WidgetSpec {
             Self::Form { .. } | Self::TextBlock { .. } | Self::Linear { .. } | Self::Grid { .. } | Self::Disclosure { .. } => Options::NO_INTERACT,
             Self::Checkbox { .. } | Self::ListItem { .. } | Self::ListBox { .. } | Self::Scrollbar { .. } | Self::Split { .. } => Options::NONE,
         }
+    }
+}
+
+/// Source acceptance must agree with the single-endpoint inspector representation.
+#[cfg(test)]
+mod binding_tests {
+    use super::*;
+
+    /// Different public names cannot conceal duplicate command endpoints during editing.
+    #[test]
+    fn duplicate_input_endpoints_are_rejected_before_editing() {
+        let mut document = Document::new("bindings");
+        document.inputs.push(Input { name: "title_alias".into(), node: "title".into(), kind: InputKind::Text });
+        assert!(document.validate().unwrap_err().contains("more than once"));
+        // The same command on another node is an independent endpoint, not an alias.
+        document.inputs[1].node = "save".into();
+        document.validate().unwrap();
     }
 }

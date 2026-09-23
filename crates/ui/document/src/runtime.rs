@@ -79,19 +79,25 @@ impl Document {
 pub struct Loader {
     /// No globals or dynamic code selection can be driven by document bytes.
     registry: FactoryRegistry,
+    /// Immutable construction capabilities shared with the binary persistence factory.
+    services: std::rc::Rc<Services>,
 }
 impl Loader {
     /// Binds services; parent is needed only for controls that own popups.
     pub fn new(ui: Ui, parent: Option<ComPtr<IWindowAbi>>, resources: Resources) -> Result<Self, NcStatus> {
         let mut registry = FactoryRegistry::new()?;
-        registry.register(DOCUMENT_TYPE, Factory::from_value(Factory { ui, parent, resources }).query()?)?;
-        Ok(Self { registry })
+        let services = std::rc::Rc::new(Services { ui, parent, resources });
+        registry.register(DOCUMENT_TYPE, Factory::from_value(Factory { services: services.clone() }).query()?)?;
+        Ok(Self { registry, services })
     }
-    /// Validates authored values before producing an unmounted component.
+    /// Validates typed source and constructs directly, without a binary persistence round trip.
     pub fn prepare(&self, document: &Document) -> Result<Component, String> {
-        self.load(&document.to_binary()?).map_err(|error| error.to_string())
+        document.validate()?;
+        let object = self.services.construct(document.clone()).map_err(|error| error.to_string())?;
+        let interface = object.query().map_err(|error| error.to_string())?;
+        Ok(Component { object, interface })
     }
-    /// Loads either external-file bytes or include_bytes! data through the exact same path.
+    /// Decodes external or embedded binary data before using the same typed construction routine.
     pub fn load(&self, bytes: &[u8]) -> Result<Component, NcStatus> {
         let object = self.registry.restore_with_limits(bytes, limits())?;
         Ok(Component { interface: object.query()?, object })
@@ -193,6 +199,11 @@ impl IPersistable for Loaded {
 /// Factory services are supplied by the application and never decoded from a file.
 #[neocogi_com::com_object(interfaces(neocogi_com::persistence::IPersistenceFactory))]
 struct Factory {
+    /// Services are immutable; sharing them with typed preparation needs no interior mutation.
+    services: std::rc::Rc<Services>,
+}
+/// One concrete construction context serves in-memory editing and persisted binary loading.
+struct Services {
     /// Runtime-bound widget construction authority.
     ui: Ui,
     /// Window owner for combo popups, absent for detached standalone forms.
@@ -220,6 +231,12 @@ impl IPersistenceFactory for Factory {
     /// Constructs one candidate and transfers ownership only after all bindings exist.
     fn restore(&self, version: u32, state: NcCopyFromBufferOffset<'_, u8>, children: ComRef<'_, IObjectChildrenAbi>) -> Result<ComPtr<IUnknown>, NcStatus> {
         let document = decode(version, state, children.count()?)?;
+        self.services.construct(document)
+    }
+}
+impl Services {
+    /// Builds the checked tree and concrete endpoints with one cleanup guard until ownership transfers.
+    fn construct(&self, document: Document) -> Result<ComPtr<IUnknown>, NcStatus> {
         let mut construction = Construction {
             declarations: &document.outputs,
             outputs: NamedOutputs::new(),

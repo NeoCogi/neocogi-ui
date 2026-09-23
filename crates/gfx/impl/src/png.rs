@@ -18,6 +18,11 @@ pub(crate) struct RgbaImage {
 impl RgbaImage {
     /// Decodes one static PNG, checking its dimensions before allocating pixel storage.
     pub(crate) fn decode(bytes: &[u8]) -> io::Result<Self> {
+        Self::decode_bounded(bytes, MAX_ASSET_PIXELS_BYTES)
+    }
+
+    /// Applies a caller's aggregate resource budget before allocating decoded frame storage.
+    fn decode_bounded(bytes: &[u8], limit: usize) -> io::Result<Self> {
         use ::png::{BitDepth, ColorType, Decoder, Transformations};
 
         // Bound encoded input independently of the decoded image so both callers use
@@ -35,6 +40,9 @@ impl RgbaImage {
             height: i32::try_from(height).map_err(io::Error::other)?,
         };
         let rgba_len = Self::byte_count(size)?;
+        if rgba_len > limit {
+            return Err(io::Error::other("PNG exceeds the remaining decoded-image budget"));
+        }
         if reader.info().animation_control.is_some() {
             return Err(io::Error::other("animated PNG images are not supported"));
         }
@@ -102,11 +110,11 @@ pub struct PngDecoderObject {
 }
 impl PngDecoder for PngDecoderObject {
     /// Decodes fully before invoking the renderer, retaining all temporary buffers for the call only.
-    fn upload(&self, png: NcCopyFromBufferOffset<'_, u8>, target: ComRef<'_, ITextureFactoryAbi>) -> Result<ComPtr<ITextureAbi>, NcStatus> {
+    fn upload(&self, png: NcCopyFromBufferOffset<'_, u8>, rgba_limit: u64, target: ComRef<'_, ITextureFactoryAbi>) -> Result<ComPtr<ITextureAbi>, NcStatus> {
         if png.offset() != 0 {
             return Err(self.diagnostic.failure("PNG input must start at offset zero"));
         }
-        let image = RgbaImage::decode(png.as_slice()).map_err(|error| self.diagnostic.failure(error))?;
+        let image = RgbaImage::decode_bounded(png.as_slice(), rgba_limit.min(MAX_ASSET_PIXELS_BYTES as u64) as usize).map_err(|error| self.diagnostic.failure(error))?;
         // Upload borrows the final CPU allocation only for this synchronous call.
         target
             .create_texture(image.size, NcCopyFromBufferOffset::new(0, &image.pixels))
@@ -236,19 +244,21 @@ mod tests {
             NcCopyFromBufferOffset::new(0, &[]),
             NcCopyFromBufferOffset::new(0, b"invalid PNG"),
         ] {
-            assert_eq!(decoder.upload(input, factory.as_com_ref()).unwrap_err(), NC_E_INVALID_ARG);
+            assert_eq!(decoder.upload(input, MAX_ASSET_PIXELS_BYTES as u64, factory.as_com_ref()).unwrap_err(), NC_E_INVALID_ARG);
         }
+        // Even valid compressed input cannot allocate/upload past the caller's remaining budget.
+        assert!(decoder.upload(NcCopyFromBufferOffset::new(0, png), 0, factory.as_com_ref()).is_err());
         assert_eq!(calls.get(), 0);
         fail.set(true);
         assert_eq!(
-            decoder.upload(NcCopyFromBufferOffset::new(0, png), factory.as_com_ref()).unwrap_err(),
+            decoder.upload(NcCopyFromBufferOffset::new(0, png), MAX_ASSET_PIXELS_BYTES as u64, factory.as_com_ref()).unwrap_err(),
             RENDER_E_BACKEND
         );
         let failure = diagnostics.diagnostic().unwrap();
         let message = failure.to_string().unwrap();
         assert!(!message.is_empty());
         fail.set(false);
-        let texture = decoder.upload(NcCopyFromBufferOffset::new(0, png), factory.as_com_ref()).unwrap();
+        let texture = decoder.upload(NcCopyFromBufferOffset::new(0, png), MAX_ASSET_PIXELS_BYTES as u64, factory.as_com_ref()).unwrap();
         assert!(texture.size().unwrap().width > 0);
         assert_eq!(calls.get(), 2);
         assert_eq!(failure.to_string().unwrap(), message);

@@ -207,11 +207,17 @@ impl Host {
     /// The caller receives the actual immutable renderer image; decoded pixels live only during upload.
     #[cfg(feature = "png-assets")]
     pub fn png_texture(&self, png: &[u8]) -> Result<ComPtr<ITextureAbi>, HostError> {
+        self.png_texture_bounded(png, MAX_ASSET_PIXELS_BYTES)
+    }
+
+    /// Uploads within the caller's remaining aggregate image budget, checked before pixel allocation.
+    #[cfg(feature = "png-assets")]
+    pub fn png_texture_bounded(&self, png: &[u8], rgba_limit: usize) -> Result<ComPtr<ITextureAbi>, HostError> {
         let runtime = neocogi_com::Runtime::global();
         let gfx = runtime.activate_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
         let decoder = gfx.png_decoder()?;
         let target = self.renderer.query::<ITextureFactoryAbi>()?;
-        decoder.upload(NcCopyFromBufferOffset::new(0, png), target.as_com_ref()).map_err(|status| {
+        decoder.upload(NcCopyFromBufferOffset::new(0, png), rgba_limit as u64, target.as_com_ref()).map_err(|status| {
             let detail = decoder
                 .query::<IGfxDiagnosticsAbi>()
                 .and_then(|diagnostics| diagnostics.diagnostic())
