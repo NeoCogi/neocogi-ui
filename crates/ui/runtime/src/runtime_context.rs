@@ -23,8 +23,6 @@ pub(crate) struct RuntimeContext {
     pub(crate) window_manager: WindowManager,
     /// Composition-layer ownership for core choice-menu state and popup handles.
     choice_menus: ChoiceMenuManager,
-    /// Conversion scratch reused while sending solid geometry across the typed boundary.
-    solid_scratch: Vec<neocogi_gfx_contracts::SolidVertex>,
 }
 
 impl RuntimeContext {
@@ -36,7 +34,6 @@ impl RuntimeContext {
             compositor,
             window_manager: WindowManager::new(bundle),
             choice_menus: ChoiceMenuManager::default(),
-            solid_scratch: Vec::new(),
         }
     }
 
@@ -93,7 +90,6 @@ impl RuntimeContext {
             renderer,
             size,
             clear,
-            &mut self.solid_scratch,
         )
     }
 

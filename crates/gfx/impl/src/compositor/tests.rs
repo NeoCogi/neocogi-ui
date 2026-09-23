@@ -385,3 +385,30 @@ fn extreme_finite_crossings_have_finite_interpolated_attributes() {
         assert_eq!(vertex.rgba, 0x80808080);
     }
 }
+
+/// Fully clipped and empty input still consumes the command budget; cancelling begins a fresh frame.
+#[test]
+fn compositor_intake_limits_apply_before_expansion_and_reset_with_frames() {
+    use neocogi_renderer_contracts::{MAX_DRAW_COMMANDS, MAX_DRAW_WORK};
+    let bundle = test_bundle();
+    let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
+    let size = Size { width: 32, height: 32 };
+    let clip = Rect { x: 0, y: 0, width: 0, height: 0 };
+    compositor.begin(size, 0).unwrap();
+    // No valid UTF-8 or glyph lookup is needed to reject a run beyond the work limit.
+    let excessive = vec![255; MAX_DRAW_WORK + 1];
+    assert_eq!(
+        compositor.text(clip, 0, DrawPoint { x: 0, y: 0 }, 0, NcCopyFromBufferOffset::new(0, &excessive)),
+        Err(NC_E_OUT_OF_RANGE)
+    );
+    for _ in 0..MAX_DRAW_COMMANDS {
+        compositor.atlas_triangles(clip, NcCopyFromBufferOffset::new(0, &[])).unwrap();
+    }
+    assert_eq!(compositor.atlas_triangles(clip, NcCopyFromBufferOffset::new(0, &[])), Err(NC_E_OUT_OF_RANGE));
+    compositor.cancel().unwrap();
+    compositor.begin(size, 0).unwrap();
+    compositor.atlas_triangles(clip, NcCopyFromBufferOffset::new(0, &[])).unwrap();
+    // Empty solid buffers retain the same clip validation as nonempty buffers.
+    let invalid = Rect { width: -1, ..clip };
+    assert_eq!(compositor.solid_triangles(invalid, NcCopyFromBufferOffset::new(0, &[])), Err(NC_E_INVALID_ARG));
+}

@@ -18,9 +18,8 @@ pub(crate) fn submit(
     renderer: ComRef<'_, IRendererAbi>,
     size: Size,
     clear: u32,
-    solid_scratch: &mut Vec<SolidVertex>,
 ) -> Result<(), NcStatus> {
-    let result = submit_once(list, atlas, compositor, renderer, size, clear, solid_scratch);
+    let result = submit_once(list, atlas, compositor, renderer, size, clear);
     if result.is_err() {
         // Cancellation is idempotent and releases resources retained by operations preceding the
         // failure. Preserve the operation's original status for the UI caller.
@@ -38,7 +37,6 @@ fn submit_once(
     renderer: ComRef<'_, IRendererAbi>,
     size: Size,
     clear: u32,
-    solid_scratch: &mut Vec<SolidVertex>,
 ) -> Result<(), NcStatus> {
     compositor.begin(size, clear)?;
     let super::display_list::DisplayList {
@@ -46,6 +44,7 @@ fn submit_once(
         solid_geometry,
         atlas_vertices,
         text,
+        ..
     } = list;
     let triangles = solid_geometry.triangles();
     for operation in ops.drain(..) {
@@ -81,18 +80,23 @@ fn submit_once(
             }
             super::display_list::DrawKind::SolidTriangles { triangles: range } => {
                 let triangles = triangles.get(range.as_range()).ok_or(NC_E_INVALID_ARG)?;
-                solid_scratch.clear();
-                solid_scratch.reserve(triangles.len().saturating_mul(3));
-                for triangle in triangles {
-                    for vertex in triangle.vertices() {
-                        solid_scratch.push(SolidVertex {
-                            x: vertex.position.x,
-                            y: vertex.position.y,
-                            rgba: u32::from_le_bytes([vertex.color.x, vertex.color.y, vertex.color.z, vertex.color.w]),
-                        });
+                // A fixed stack chunk bounds staging independently of the recorded range size.
+                // GFX merges contiguous material batches, preserving painter order across chunks.
+                let mut converted = [SolidVertex { x: 0.0, y: 0.0, rgba: 0 }; 768];
+                for chunk in triangles.chunks(256) {
+                    let mut count = 0;
+                    for triangle in chunk {
+                        for vertex in triangle.vertices() {
+                            converted[count] = SolidVertex {
+                                x: vertex.position.x,
+                                y: vertex.position.y,
+                                rgba: u32::from_le_bytes([vertex.color.x, vertex.color.y, vertex.color.z, vertex.color.w]),
+                            };
+                            count += 1;
+                        }
                     }
+                    compositor.solid_triangles(clip, NcCopyFromBufferOffset::new(0, &converted[..count]))?;
                 }
-                compositor.solid_triangles(clip, NcCopyFromBufferOffset::new(0, solid_scratch))?;
             }
         }
     }

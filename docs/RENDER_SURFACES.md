@@ -118,3 +118,16 @@ frame and therefore receives no swapchain pacing. Resize and close requests are
 checked on the next iteration. Browser hosts use animation callbacks for both
 active and suspended iterations. `NEOCOGI_DEMO_FRAMES` counts only successfully
 rendered frames; suspension does not consume the limit.
+
+Foreign UI painting and GFX compositor intake have independent frame budgets: at
+most 65,536 calls, 64 MiB of input bytes, and 16 Mi units of primitive work. Calls
+that clip away still count. Checks precede retained copies and text/vertex scans;
+polygon recording accepts at most 4,096 points and charges the square of its point
+count to bound ear-clipping work. These budgets reset with the frame, not with
+individual widget paint scopes. Exceeding a limit returns `NC_E_OUT_OF_RANGE`.
+Final clipped vertex/batch limits remain separate.
+
+Solid replay stages at most 256 triangles on the UI stack and converts one
+triangle at a time in GFX, replacing full-range retained conversion buffers.
+These intake checks cover the COM drawing boundaries; internal manager chrome
+recording still uses its existing infallible helper API.

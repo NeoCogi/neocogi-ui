@@ -16,7 +16,8 @@ pub(crate) struct RgbaImage {
 }
 
 impl RgbaImage {
-    /// Decodes one static PNG, checking its dimensions before allocating pixel storage.
+    /// Builder/test convenience uses the complete asset budget; uploads supply their remaining limit.
+    #[cfg(any(test, feature = "builder"))]
     pub(crate) fn decode(bytes: &[u8]) -> io::Result<Self> {
         Self::decode_bounded(bytes, MAX_ASSET_PIXELS_BYTES)
     }

@@ -44,6 +44,8 @@ use rs_math3d::{Color4b, Recti, Vec2f, Vec2i};
 /// allocations between submitted frames.
 #[derive(Default)]
 pub struct DisplayList {
+    /// Foreign primitive intake is charged before validation scans and retained geometry copies.
+    input_budget: neocogi_renderer_contracts::FrameBudget,
     /// Operations in final painter order.
     pub ops: Vec<DrawOp>,
     /// Retained solid geometry and its reusable tessellation workspace.
@@ -130,6 +132,7 @@ impl DisplayList {
     /// Creates an empty display list.
     pub const fn new() -> Self {
         Self {
+            input_budget: neocogi_renderer_contracts::FrameBudget::new(),
             ops: Vec::new(),
             solid_geometry: SolidGeometry::new(),
             atlas_vertices: Vec::new(),
@@ -139,10 +142,25 @@ impl DisplayList {
 
     /// Removes every recorded operation and triangle while retaining allocated storage for reuse.
     pub fn clear(&mut self) {
+        self.input_budget = neocogi_renderer_contracts::FrameBudget::new();
         self.ops.clear();
         self.solid_geometry.clear();
         self.atlas_vertices.clear();
         self.text.clear();
+    }
+
+    /// Charges one COM drawing operation before its input is scanned, copied, or expanded.
+    /// The budget belongs to the frame, so moving the list between widget scopes cannot reset it.
+    pub fn reserve_draw(&mut self, bytes: usize, work: usize) -> Result<(), neocogi_com::NcStatus> {
+        self.input_budget.charge(bytes, work)
+    }
+
+    /// Bounds both retained point storage and worst-case ear-clipping work before tessellation.
+    pub fn reserve_polygon(&mut self, points: usize) -> Result<(), neocogi_com::NcStatus> {
+        if points > neocogi_renderer_contracts::MAX_POLYGON_POINTS {
+            return Err(neocogi_com::NC_E_OUT_OF_RANGE);
+        }
+        self.reserve_draw(points * core::mem::size_of::<neocogi_ui_core_contracts::PaintPoint>(), points * points)
     }
 
     /// Retains a complete atlas batch in painter order for final viewport clipping.

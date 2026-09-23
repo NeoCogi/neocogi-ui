@@ -92,8 +92,6 @@ struct Composition {
     capture: Rc<RefCell<Capture>>,
     /// Semantic operations are recorded by the production Painter.
     list: DisplayList,
-    /// Conversion capacity is reused by the production replay function.
-    scratch: Vec<SolidVertex>,
 }
 impl Composition {
     /// Publishes one validated fixture bundle and binds both sides to the same resource tables.
@@ -108,21 +106,12 @@ impl Composition {
             renderer,
             capture,
             list: DisplayList::new(),
-            scratch: Vec::new(),
         }
     }
 
     /// Calls the same replay function as RuntimeContext; no geometry is computed in the fixture.
     fn submit(&mut self, size: Size) -> Result<(), NcStatus> {
-        super::submit(
-            &mut self.list,
-            &self.atlas,
-            &mut self.compositor,
-            self.renderer.as_com_ref(),
-            size,
-            0xff000000,
-            &mut self.scratch,
-        )
+        super::submit(&mut self.list, &self.atlas, &mut self.compositor, self.renderer.as_com_ref(), size, 0xff000000)
     }
 }
 
@@ -476,4 +465,24 @@ fn warmed_painter_recording_reuses_its_geometry_workspaces() {
     }
     let count = measurement.finish();
     assert_eq!(count.events, 0);
+}
+
+/// Stack-sized replay chunks retain every triangle's order and still coalesce into one atlas batch.
+#[test]
+fn solid_replay_preserves_order_across_staging_chunks() {
+    let mut fixture = Composition::new(atlas());
+    let mut vertices = Vec::new();
+    for index in 0..300u32 {
+        for (x, y) in [(1.0, 1.0), (2.0, 1.0), (1.0, 2.0)] {
+            vertices.push(neocogi_ui_core_contracts::ColoredVertex { x, y, rgba: 0xff000000 | index });
+        }
+    }
+    crate::render::Painter::screen_space(&mut fixture.list, Recti::new(0, 0, 32, 32)).colored_triangles(&vertices);
+    fixture.submit(Size { width: 32, height: 32 }).unwrap();
+    let capture = fixture.capture.borrow();
+    assert_eq!(capture.vertices.len(), vertices.len());
+    for (actual, expected) in capture.vertices.iter().zip(vertices) {
+        assert_eq!((actual.x, actual.y, actual.rgba), (expected.x, expected.y, expected.rgba));
+    }
+    assert!(matches!(capture.batches.as_slice(), [RenderBatch::Atlas { count: 900, .. }]));
 }

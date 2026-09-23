@@ -72,6 +72,12 @@ impl Recorder {
             Ok(())
         }
     }
+    /// Validates scope and reserves aggregate intake before any caller-buffer scan or allocation.
+    fn reserve(&mut self, scope: PaintScope, bytes: usize, work: usize) -> Result<(), NcStatus> {
+        self.check(scope)?;
+        self.context.as_mut().ok_or(UI_E_BUSY)?.display_list.reserve_draw(bytes, work)
+    }
+
     /// Appends one operation directly to the active frame with an authoritative narrowed clip.
     fn with_painter<T>(&mut self, scope: PaintScope, draw: impl FnOnce(&mut crate::render::Painter<'_>) -> T) -> Result<T, NcStatus> {
         self.check(scope)?;
@@ -133,6 +139,7 @@ fn local_surface_state(state: WidgetVisualState) -> Result<crate::SurfaceState, 
 impl IPainter for Recorder {
     /// Validates complete scalar geometry before appending anything to the frame.
     fn stroke_line(&mut self, scope: PaintScope, from: PaintPoint, to: PaintPoint, width: f32, rgba: u32) -> Result<(), NcStatus> {
+        self.reserve(scope, 0, 6)?;
         if !from.x.is_finite() || !from.y.is_finite() || !to.x.is_finite() || !to.y.is_finite() || !width.is_finite() || width < 0.0 {
             return Err(NC_E_INVALID_ARG);
         }
@@ -147,6 +154,8 @@ impl IPainter for Recorder {
     }
     /// Copies a whole finite boundary; native geometry code owns all triangulation and clipping.
     fn fill_polygon(&mut self, scope: PaintScope, input: NcCopyFromBufferOffset<'_, PaintPoint>, rgba: u32) -> Result<(), NcStatus> {
+        self.check(scope)?;
+        self.context.as_mut().ok_or(UI_E_BUSY)?.display_list.reserve_polygon(input.len())?;
         if input.offset() != 0 || input.as_slice().iter().any(|p| !p.x.is_finite() || !p.y.is_finite()) {
             return Err(NC_E_INVALID_ARG);
         }
@@ -156,6 +165,7 @@ impl IPainter for Recorder {
 
     /// Validates a complete solid batch before appending; invalid or expired calls publish nothing.
     fn colored_triangles(&mut self, scope: PaintScope, input: NcCopyFromBufferOffset<'_, ColoredVertex>) -> Result<(), NcStatus> {
+        self.reserve(scope, core::mem::size_of_val(input.as_slice()), input.len())?;
         let vertices = input.as_slice();
         if input.offset() != 0 || !vertices.len().is_multiple_of(3) || vertices.iter().any(|v| !v.x.is_finite() || !v.y.is_finite()) {
             return Err(NC_E_INVALID_ARG);
@@ -165,6 +175,7 @@ impl IPainter for Recorder {
 
     /// Retains the resource outside the command borrow; validation at submission authenticates its owner.
     fn texture(&mut self, scope: PaintScope, rect: Rect, source: TextureRegion, rgba: u32, texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
+        self.reserve(scope, 0, 4)?;
         if rect.width < 0 || rect.height < 0 {
             return Err(NC_E_INVALID_ARG);
         }
@@ -178,6 +189,7 @@ impl IPainter for Recorder {
     }
     /// Records a capability rather than a callback lending mutable GPU state across COM.
     fn item(&mut self, scope: PaintScope, rect: Rect, item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
+        self.reserve(scope, 0, 0)?;
         if rect.width < 0 || rect.height < 0 {
             return Err(NC_E_INVALID_ARG);
         }
@@ -188,6 +200,7 @@ impl IPainter for Recorder {
     }
     /// Validates the whole batch before publishing any geometry to this scope.
     fn triangles(&mut self, scope: PaintScope, input: NcCopyFromBufferOffset<'_, RenderVertex>) -> Result<(), NcStatus> {
+        self.reserve(scope, core::mem::size_of_val(input.as_slice()), input.len())?;
         let vertices = input.as_slice();
         if input.offset() != 0
             || !vertices.len().is_multiple_of(3)
@@ -201,6 +214,7 @@ impl IPainter for Recorder {
     }
     /// Appends a checked fill without accessing the caller's stack.
     fn fill(&mut self, scope: PaintScope, rect: Rect, rgba: u32) -> Result<(), NcStatus> {
+        self.reserve(scope, 0, 54)?;
         if rect.width < 0 || rect.height < 0 {
             return Err(NC_E_INVALID_ARG);
         }
@@ -208,6 +222,7 @@ impl IPainter for Recorder {
     }
     /// Appends text while its borrowed UTF-8 input remains valid for this synchronous call.
     fn text(&mut self, scope: PaintScope, rect: Rect, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.reserve(scope, input.len(), input.len())?;
         if rect.width < 0 || rect.height < 0 {
             return Err(NC_E_INVALID_ARG);
         }
@@ -232,6 +247,7 @@ impl IPainter for Recorder {
 
     /// Resolves one compact semantic patch in the runtime and records it without widget-local geometry.
     fn frame(&mut self, scope: PaintScope, rect: Rect, role: WidgetFrame, state: WidgetVisualState, center_only: bool) -> Result<Rect, NcStatus> {
+        self.reserve(scope, 0, 54)?;
         if rect.width < 0 || rect.height < 0 {
             return Err(NC_E_INVALID_ARG);
         }
@@ -253,6 +269,7 @@ impl IPainter for Recorder {
 
     /// Authenticates and records one atlas icon directly in the current frame operation sequence.
     fn icon(&mut self, scope: PaintScope, icon: PaintIcon, rect: Rect, rgba: u32) -> Result<(), NcStatus> {
+        self.reserve(scope, 0, 6)?;
         if rect.width < 0 || rect.height < 0 {
             return Err(NC_E_INVALID_ARG);
         }
@@ -262,6 +279,7 @@ impl IPainter for Recorder {
 
     /// Authenticates and records one exact-font UTF-8 run without an intermediate text command.
     fn text_run(&mut self, scope: PaintScope, font: PaintFont, position: Point, rgba: u32, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.reserve(scope, input.len(), input.len())?;
         let label = text(input)?;
         let font = self.resources.borrow().bundle().atlas().font_at_index(font.index).ok_or(NC_E_INVALID_ARG)?;
         self.with_painter(scope, |painter| {
@@ -319,5 +337,55 @@ impl PaintService {
         let context = self.with_recorder_mut(|recorder| recorder.finish(invocation))??;
         ctx.restore_display_list(context.display_list);
         result
+    }
+}
+
+#[cfg(test)]
+mod intake_tests {
+    use super::*;
+    use neocogi_renderer_contracts::{MAX_DRAW_INPUT_BYTES, MAX_POLYGON_POINTS};
+
+    /// Budget rejection precedes input parsing/tessellation and survives changes of widget scope.
+    #[test]
+    fn oversized_inputs_are_rejected_before_work_and_budget_follows_the_frame() {
+        let bundle = crate::SkinBundle::from_atlas(crate::test_support::test_atlas());
+        let source = crate::test_support::assets::export_bundle(&bundle).unwrap();
+        let resources = crate::assets::ImportedAssets::read(source.as_com_ref(), None).unwrap();
+        let mut recorder = Recorder::new(std::rc::Rc::new(std::cell::RefCell::new(resources)));
+        let context = PaintContext {
+            display_list: crate::render::DisplayList::new(),
+            content_rect: crate::Recti::new(0, 0, 32, 32),
+            screen_clip: crate::Recti::new(0, 0, 32, 32),
+        };
+        let invocation = recorder.begin(context).unwrap();
+        let scope = PaintScope {
+            invocation,
+            clip: Rect { x: 0, y: 0, width: 32, height: 32 },
+        };
+        let points = vec![PaintPoint { x: f32::NAN, y: 0.0 }; MAX_POLYGON_POINTS + 1];
+        assert_eq!(
+            recorder.fill_polygon(scope, NcCopyFromBufferOffset::new(0, &points), 0),
+            Err(neocogi_com::NC_E_OUT_OF_RANGE)
+        );
+        recorder.reserve(scope, MAX_DRAW_INPUT_BYTES, 0).unwrap();
+        // Invalid UTF-8 would normally report INVALID_ARG, but the byte budget rejects it first.
+        assert_eq!(
+            recorder.text(scope, scope.clip, NcCopyFromBufferOffset::new(0, &[255])),
+            Err(neocogi_com::NC_E_OUT_OF_RANGE)
+        );
+        let context = recorder.finish(invocation).unwrap();
+        assert!(context.display_list.is_empty());
+        let invocation = recorder.begin(context).unwrap();
+        let next = PaintScope { invocation, ..scope };
+        assert_eq!(
+            recorder.text(next, next.clip, NcCopyFromBufferOffset::new(0, b"x")),
+            Err(neocogi_com::NC_E_OUT_OF_RANGE)
+        );
+        let mut context = recorder.finish(invocation).unwrap();
+        context.display_list.clear();
+        let invocation = recorder.begin(context).unwrap();
+        let next = PaintScope { invocation, ..scope };
+        recorder.text(next, next.clip, NcCopyFromBufferOffset::new(0, b"x")).unwrap();
+        assert!(!recorder.finish(invocation).unwrap().display_list.is_empty());
     }
 }

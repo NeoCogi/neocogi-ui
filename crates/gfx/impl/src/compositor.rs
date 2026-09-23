@@ -66,6 +66,8 @@ struct FrameState {
     size: Size,
     /// Packed clear color forwarded unchanged to the renderer.
     clear: u32,
+    /// Submitted work is bounded before scanning, converting, or clipping caller buffers.
+    budget: neocogi_renderer_contracts::FrameBudget,
 }
 
 /// Maximum triangle vertices staged by the nine cells of one patch.
@@ -261,7 +263,11 @@ impl Edge {
         // Widen before subtracting; accepted finite input may span the complete f32 range.
         let start = f64::from(self.coordinate(from));
         let distance = f64::from(self.coordinate(to)) - start;
-        let amount = if distance == 0.0 { 0.0 } else { (f64::from(self.boundary) - start) / distance };
+        let amount = if distance == 0.0 {
+            0.0
+        } else {
+            (f64::from(self.boundary) - start) / distance
+        };
         let mut vertex = RenderVertex::lerp(from, to, amount);
         match self.axis {
             Axis::X => vertex.x = self.boundary,
@@ -284,8 +290,6 @@ pub struct GfxCompositorObject {
     frame: Option<FrameState>,
     /// Last issued nonzero invocation, incremented only for actual submissions.
     next_invocation: u64,
-    /// Solid vertices converted to atlas vertices without allocating once per draw operation.
-    solid_input: Vec<RenderVertex>,
     /// First clipping workspace, reused for each input triangle.
     clip_input: Vec<RenderVertex>,
     /// Second clipping workspace, avoiding allocation during edge passes.
@@ -308,12 +312,16 @@ impl GfxCompositorObject {
             stream,
             frame: None,
             next_invocation: 0,
-            solid_input: Vec::new(),
             clip_input: Vec::with_capacity(10),
             clip_output: Vec::with_capacity(10),
             diagnostic: Diagnostic::default(),
         })
         .query()
+    }
+
+    /// Reserves work before reading caller memory or retaining resources, even for clipped draws.
+    fn charge(&mut self, bytes: usize, work: usize) -> Result<(), NcStatus> {
+        self.frame.as_mut().ok_or(NC_E_INVALID_ARG)?.budget.charge(bytes, work)
     }
 
     /// Returns the active frame or records a concrete sequencing failure.
@@ -539,7 +547,11 @@ impl GfxCompositor for GfxCompositorObject {
             return Err(self.diagnostic.failure("drawable dimensions must be positive"));
         }
         self.storage.clear();
-        self.frame = Some(FrameState { size, clear });
+        self.frame = Some(FrameState {
+            size,
+            clear,
+            budget: neocogi_renderer_contracts::FrameBudget::new(),
+        });
         Ok(())
     }
 
@@ -548,36 +560,32 @@ impl GfxCompositor for GfxCompositorObject {
         if vertices.offset() != 0 || !vertices.len().is_multiple_of(3) {
             return Err(NC_E_INVALID_ARG);
         }
-        self.active_frame()?;
-        // The immutable resource revision already authenticated and cached this named tile.
+        self.charge(core::mem::size_of_val(vertices.as_slice()), vertices.len())?;
+        if vertices.as_slice().iter().any(|vertex| !vertex.x.is_finite() || !vertex.y.is_finite()) {
+            return Err(NC_E_INVALID_ARG);
+        }
         let white = self.resources.white;
         let u = (white.x as f32 + white.width as f32 * 0.5) / self.resources.tables.size.width as f32;
         let v = (white.y as f32 + white.height as f32 * 0.5) / self.resources.tables.size.height as f32;
-        let mut converted = std::mem::take(&mut self.solid_input);
-        converted.clear();
-        let result = (|| {
-            converted.try_reserve(vertices.len()).map_err(|_| NC_E_OUT_OF_MEMORY)?;
-            for vertex in vertices.as_slice() {
-                if !vertex.x.is_finite() || !vertex.y.is_finite() {
-                    return Err(NC_E_INVALID_ARG);
-                }
-                converted.push(RenderVertex {
-                    x: vertex.x,
-                    y: vertex.y,
-                    u,
-                    v,
-                    rgba: vertex.rgba,
-                });
-            }
-            self.append_clipped_triangles(clip, &converted)
-        })();
-        converted.clear();
-        self.solid_input = converted;
-        result
+        // Preserve clip validation for empty buffers before entering the per-triangle loop.
+        self.effective_clip(clip)?;
+        // Convert one triangle on the stack: no full-input scratch allocation survives a frame.
+        for triangle in vertices.as_slice().as_chunks::<3>().0 {
+            let converted = triangle.map(|vertex| RenderVertex {
+                x: vertex.x,
+                y: vertex.y,
+                u,
+                v,
+                rgba: vertex.rgba,
+            });
+            self.append_clipped_triangles(clip, &converted)?;
+        }
+        Ok(())
     }
 
     /// Clips caller-normalized atlas triangles and preserves every interpolated attribute.
     fn atlas_triangles(&mut self, clip: Rect, vertices: NcCopyFromBufferOffset<'_, RenderVertex>) -> Result<(), NcStatus> {
+        self.charge(core::mem::size_of_val(vertices.as_slice()), vertices.len())?;
         if vertices.offset() != 0
             || !vertices.len().is_multiple_of(3)
             || vertices.as_slice().iter().any(|vertex| {
@@ -588,19 +596,18 @@ impl GfxCompositor for GfxCompositorObject {
         {
             return Err(NC_E_INVALID_ARG);
         }
-        self.active_frame()?;
         self.append_clipped_triangles(clip, vertices.as_slice())
     }
 
     /// Resolves and appends one complete typed patch through current bundle resources.
     fn nine_patch(&mut self, clip: Rect, destination: Rect, draw: NinePatchDraw) -> Result<(), NcStatus> {
-        self.active_frame()?;
+        self.charge(0, 54)?;
         self.append_nine_patch(clip, destination, draw)
     }
 
     /// Expands UTF-8 with bundle-local metrics, CRLF normalization, and underscore fallback.
     fn text(&mut self, clip: Rect, font: u32, origin: DrawPoint, rgba: u32, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        self.active_frame()?;
+        self.charge(text.len(), text.len())?;
         if text.offset() != 0 {
             return Err(NC_E_INVALID_ARG);
         }
@@ -643,7 +650,7 @@ impl GfxCompositor for GfxCompositorObject {
 
     /// Centers one bundle-local atlas icon using wide coordinate arithmetic before clipping.
     fn icon(&mut self, clip: Rect, icon: u32, destination: Rect, rgba: u32) -> Result<(), NcStatus> {
-        self.active_frame()?;
+        self.charge(0, 6)?;
         if destination.width < 0 || destination.height < 0 {
             return Err(NC_E_INVALID_ARG);
         }
@@ -663,7 +670,7 @@ impl GfxCompositor for GfxCompositorObject {
 
     /// Retains one renderer-owned texture and appends its final clipped quad.
     fn texture(&mut self, clip: Rect, destination: Rect, source: TextureRegion, rgba: u32, texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
-        self.active_frame()?;
+        self.charge(0, 4)?;
         source.validate()?;
         if destination.width < 0 || destination.height < 0 {
             return Err(NC_E_INVALID_ARG);
@@ -693,7 +700,7 @@ impl GfxCompositor for GfxCompositorObject {
 
     /// Retains one renderer-specific item with its final positive visible rectangle.
     fn item(&mut self, clip: Rect, content: Rect, item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
-        self.active_frame()?;
+        self.charge(0, 0)?;
         if content.width <= 0 || content.height <= 0 {
             return if content.width == 0 || content.height == 0 {
                 Ok(())
