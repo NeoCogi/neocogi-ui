@@ -269,10 +269,10 @@ impl neocogi_ui_nodes_contracts::SplitView for SplitView {
 
 impl ContainerWidget for SplitView {
     /// Measures both panes at their proposed allocations so wrapped content responds correctly.
-    fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: Constraints) -> Dimensioni {
-        match ctx.child_count() {
+    fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: Constraints) -> Result<Dimensioni, NcStatus> {
+        Ok(match ctx.child_count() {
             0 => Dimensioni::default(),
-            1 => ctx.measure_child(0, constraints).unwrap_or_default(),
+            1 => ctx.measure_child(0, constraints)?,
             _ => {
                 let axis = self.settings.axis;
                 let bound = match axis {
@@ -294,8 +294,8 @@ impl ContainerWidget for SplitView {
                         AvailableSpace::Unbounded,
                     ),
                 };
-                let first = ctx.measure_child(0, limits(axis, constraints, first_main)).unwrap_or_default();
-                let second = ctx.measure_child(1, limits(axis, constraints, second_main)).unwrap_or_default();
+                let first = ctx.measure_child(0, limits(axis, constraints, first_main))?;
+                let second = ctx.measure_child(1, limits(axis, constraints, second_main))?;
                 let main = extent(axis, first)
                     .max(self.settings.minimum_first)
                     .max(self.settings.position)
@@ -308,24 +308,25 @@ impl ContainerWidget for SplitView {
                 };
                 size(axis, main, cross)
             }
-        }
+        })
     }
     /// Places the two panes around one reserved hit strip, keeping overflow inside the split.
-    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) {
+    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) -> Result<(), NcStatus> {
         self.partition = Partition::default();
         match ctx.child_count() {
             0 => {}
             1 => {
-                ctx.layout_child(0, rect);
+                ctx.layout_child(0, rect)?;
             }
             _ => {
                 self.partition = partition(self.settings, rect);
-                ctx.layout_child(0, self.partition.first);
-                ctx.layout_child(1, self.partition.second);
+                ctx.layout_child(0, self.partition.first)?;
+                ctx.layout_child(1, self.partition.second)?;
             }
         }
         ctx.set_content_size(Dimensioni::new(rect.width.max(0), rect.height.max(0)));
         ctx.set_child_overflow_propagation(false);
+        Ok(())
     }
     /// Only divider presses acquire capture; background motion clears hover and wheel input bubbles.
     fn accepts_event(&self, event: &UiInputEvent) -> bool {

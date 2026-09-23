@@ -117,10 +117,20 @@ pub struct TrackResolver {
 impl TrackResolver {
     /// Summarizes an ordered track axis and computes its complete extent including gaps.
     pub fn new(available: AvailableSpace, gap: i32, count: usize, items: impl IntoIterator<Item = (TrackSize, i32)>) -> Self {
+        // Infallible callers share exactly the same summary arithmetic without an error sentinel.
+        match Self::try_new(available, gap, count, items.into_iter().map(Ok::<_, std::convert::Infallible>)) {
+            Ok(resolver) => resolver,
+            Err(never) => match never {},
+        }
+    }
+
+    /// Summarizes fallible measurements without allocating or consuming items after a failure.
+    pub fn try_new<E>(available: AvailableSpace, gap: i32, count: usize, items: impl IntoIterator<Item = Result<(TrackSize, i32), E>>) -> Result<Self, E> {
         let total_gap = gap.max(0).saturating_mul(count.saturating_sub(1) as i32);
         let mut reserved = 0_i32;
         let mut total_flex = 0.0_f64;
-        for (track, content) in items {
+        for item in items {
+            let (track, content) = item?;
             match track {
                 TrackSize::Content => reserved = reserved.saturating_add(content.max(0)),
                 TrackSize::Fixed(value) => reserved = reserved.saturating_add(value.max(0)),
@@ -144,14 +154,14 @@ impl TrackResolver {
         // The summary is exactly the span produced by replay: reserved pixels, distributed flex
         // pixels, and gaps. Invalid flex tracks cannot claim otherwise unowned bounded remainder.
         let extent = reserved.saturating_add(flexible_space).saturating_add(total_gap);
-        Self {
+        Ok(Self {
             available,
             flexible_space,
             total_flex,
             cumulative_flex: 0.0,
             distributed_flex: 0,
             extent,
-        }
+        })
     }
 
     /// Resolves the next replayed track to one exact non-negative extent.

@@ -362,8 +362,7 @@ macro_rules! direct_container_layout_impl {
                 let assets = <$name as crate::widget_object::HostedWidget>::runtime_mut(self).resources()?;
                 let assets = assets.borrow();
                 let mut ctx = crate::MeasureCtx::scoped(assets.bundle().skin(), assets.bundle().atlas(), layout);
-                let size = crate::ContainerWidget::measure(self, &mut ctx, constraints);
-                ctx.result()?;
+                let size = crate::ContainerWidget::measure(self, &mut ctx, constraints)?;
                 Ok(neocogi_ui_core_contracts::Size {
                     width: size.width.max(0),
                     height: size.height.max(0),
@@ -385,8 +384,8 @@ macro_rules! direct_container_layout_impl {
                 let assets = <$name as crate::widget_object::HostedWidget>::runtime_mut(self).resources()?;
                 let assets = assets.borrow();
                 let mut ctx = crate::ContainerLayoutCtx::scoped(assets.bundle().skin(), assets.bundle().atlas(), crate::boundary::local_rect(rect), layout);
-                crate::ContainerWidget::place(self, &mut ctx, crate::boundary::local_rect(rect));
-                ctx.result()
+                crate::ContainerWidget::place(self, &mut ctx, crate::boundary::local_rect(rect))?;
+                Ok(ctx.geometry())
             }
 
             /// Applies the concrete container's post-target event filtering policy.

@@ -145,9 +145,7 @@ impl Number {
 
     /// Returns the native event endpoint emitted after every user-originated value change.
     #[cfg(test)]
-    pub fn changed(
-        &mut self,
-    ) -> impl FnOnce(Box<dyn FnMut(crate::NumericChanged) -> Result<(), neocogi_com::NcStatus>>) -> Result<(), neocogi_com::NcStatus> + '_ {
+    pub fn changed(&mut self) -> impl FnOnce(neocogi_ui::events::EventConsumer<crate::NumericChanged>) -> Result<(), neocogi_com::NcStatus> + '_ {
         |mut consume| {
             self.observer = Some(neocogi_ui_nodes_contracts::NumberEvent::observer(
                 move |neocogi_ui_nodes_contracts::NumberEvent::Changed(event)| consume(event),

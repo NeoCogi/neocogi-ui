@@ -266,12 +266,13 @@ impl crate::LeafWidget for DisclosureHeader {
 }
 
 impl ContainerWidget for Disclosure {
-    fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: crate::Constraints) -> Dimensioni {
+    /// Measures child preferences, stopping immediately on a failed service call.
+    fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: crate::Constraints) -> Result<Dimensioni, NcStatus> {
         // The header always contributes. Body measurement is conditional so collapsed content does
         // not influence root auto-size while its state and nodes remain retained.
-        let header = ctx.measure_child(Self::HEADER, constraints).unwrap_or_default();
+        let header = ctx.measure_child(Self::HEADER, constraints)?;
         if !self.model.expanded.get() {
-            return header;
+            return Ok(header);
         }
         let indent = self.indent(ctx.skin());
         let spacing = ctx.skin().metrics().spacing.max(0);
@@ -279,21 +280,20 @@ impl ContainerWidget for Disclosure {
             constraints.width.shrink(indent),
             constraints.height.shrink(header.height.saturating_add(spacing)),
         );
-        let body = ctx.measure_child(Self::BODY, body_constraints).unwrap_or_default();
-        Dimensioni::new(
+        let body = ctx.measure_child(Self::BODY, body_constraints)?;
+        Ok(Dimensioni::new(
             header.width.max(body.width.saturating_add(indent)),
             header.height.saturating_add(spacing).saturating_add(body.height),
-        )
+        ))
     }
 
-    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) {
+    /// Places children in policy order and returns the first failed operation.
+    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) -> Result<(), NcStatus> {
         // Header is a fixed structural role and always occupies the first visible row.
-        let preferred = ctx
-            .measure_child(Self::HEADER, crate::Constraints::bounded(Dimensioni::new(rect.width, rect.height)))
-            .unwrap_or_default();
+        let preferred = ctx.measure_child(Self::HEADER, crate::Constraints::bounded(Dimensioni::new(rect.width, rect.height)))?;
         let header_height = preferred.height.min(rect.height.max(0));
-        let _ = ctx.set_child_participation(Self::HEADER, ChildParticipation::Active);
-        let _ = ctx.layout_child(Self::HEADER, Recti::new(rect.x, rect.y, rect.width, header_height));
+        ctx.set_child_participation(Self::HEADER, ChildParticipation::Active)?;
+        ctx.layout_child(Self::HEADER, Recti::new(rect.x, rect.y, rect.width, header_height))?;
 
         // Participation is the single gate consumed by update, paint, hit testing, and target
         // sanitation. No generic visibility bit or topology rewrite is needed for collapse.
@@ -302,7 +302,7 @@ impl ContainerWidget for Disclosure {
         } else {
             ChildParticipation::Hidden
         };
-        let _ = ctx.set_child_participation(Self::BODY, participation);
+        ctx.set_child_participation(Self::BODY, participation)?;
         if self.model.expanded.get() {
             let indent = self.indent(ctx.skin());
             let spacing = ctx.skin().metrics().spacing.max(0);
@@ -313,8 +313,9 @@ impl ContainerWidget for Disclosure {
             let body_width = rect.width.saturating_sub(indent);
             let body_height = rect.height.saturating_sub(header_height).saturating_sub(spacing);
             let body = Recti::new(body_x, body_y, body_width, body_height);
-            let _ = ctx.layout_child(Self::BODY, body);
+            ctx.layout_child(Self::BODY, body)?;
         }
+        Ok(())
     }
 }
 

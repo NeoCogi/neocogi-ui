@@ -37,11 +37,13 @@ use neocogi_com::NcStatus;
 
 /// Private statically dispatched algorithms for built-in COM containers.
 /// Child ownership and traversal remain behind the same scoped service used by external plugins.
+/// Algorithms propagate child failures immediately with `?`; parent geometry is published only
+/// after success. Earlier child placements are derived state and are recomputed on retry.
 pub trait ContainerWidget: Widget {
     /// Computes preferred content from indexed child measurements.
-    fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: Constraints) -> Dimensioni;
+    fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: Constraints) -> Result<Dimensioni, NcStatus>;
     /// Authors child placements and one complete copied parent geometry result.
-    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti);
+    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) -> Result<(), NcStatus>;
     /// Filters an already selected event without changing router ownership.
     fn accepts_event(&self, _event: &UiInputEvent) -> bool {
         true
@@ -62,10 +64,6 @@ impl<'a> MeasureCtx<'a> {
     pub(crate) fn scoped(skin: &'a Skin, atlas: &'a crate::AtlasHandle, layout: ScopedLayout<'a>) -> Self {
         Self { skin, atlas, layout }
     }
-    /// Returns the first failed child operation before the caller publishes a preference.
-    pub(crate) fn result(&self) -> Result<(), NcStatus> {
-        self.layout.result()
-    }
     /// Returns the skin installed for this call.
     pub fn skin(&self) -> &Skin {
         self.skin
@@ -79,7 +77,7 @@ impl<'a> MeasureCtx<'a> {
         self.layout.child_count()
     }
     /// Measures one child under explicit finite or unbounded limits.
-    pub fn measure_child(&mut self, index: usize, constraints: Constraints) -> Option<Dimensioni> {
+    pub fn measure_child(&mut self, index: usize, constraints: Constraints) -> Result<Dimensioni, NcStatus> {
         self.layout.measure(index, constraints)
     }
 }
@@ -108,10 +106,9 @@ impl<'a> ContainerLayoutCtx<'a> {
             geometry: ContainerGeometry::new(crate::boundary::copied_rect(content)),
         }
     }
-    /// Rejects partial output after any failed child service operation.
-    pub(crate) fn result(&self) -> Result<ContainerGeometry, NcStatus> {
-        self.layout.result()?;
-        Ok(self.geometry)
+    /// Copies complete parent geometry after the caller's placement algorithm succeeds.
+    pub(crate) fn geometry(&self) -> ContainerGeometry {
+        self.geometry
     }
     /// Returns the skin used for measurement and placement in this invocation.
     pub fn skin(&self) -> &Skin {
@@ -126,19 +123,19 @@ impl<'a> ContainerLayoutCtx<'a> {
         self.layout.child_count()
     }
     /// Measures without exposing retained geometry caches.
-    pub fn measure_child(&mut self, index: usize, constraints: Constraints) -> Option<Dimensioni> {
+    pub fn measure_child(&mut self, index: usize, constraints: Constraints) -> Result<Dimensioni, NcStatus> {
         self.layout.measure(index, constraints)
     }
     /// Assigns one exact parent-owned child rectangle.
-    pub fn layout_child(&mut self, index: usize, rect: Recti) -> Option<Dimensioni> {
+    pub fn layout_child(&mut self, index: usize, rect: Recti) -> Result<Dimensioni, NcStatus> {
         self.layout.place(index, rect)
     }
     /// Controls participation of the complete indexed child subtree.
-    pub fn set_child_participation(&mut self, index: usize, participation: ChildParticipation) -> bool {
+    pub fn set_child_participation(&mut self, index: usize, participation: ChildParticipation) -> Result<(), NcStatus> {
         self.layout.set_participation(index, participation)
     }
     /// Invalidates a shared placement dependency even when allocation is unchanged.
-    pub fn child_placement_changed(&mut self, index: usize) -> bool {
+    pub fn child_placement_changed(&mut self, index: usize) -> Result<(), NcStatus> {
         self.layout.invalidate_placement(index)
     }
     /// Replaces derived extent without modifying the descendant viewport.

@@ -492,10 +492,13 @@ mod tests {
         }
     }
 
+    /// Drains queued numeric values after the temporary observer installation borrow ends.
+    type NumericDispatcher = Box<dyn FnMut(&mut Vec<Real>) -> bool>;
+
     /// Collects the shared numeric message from either control through its generated concrete receiver.
     fn numeric_dispatcher(
-        install: impl FnOnce(Box<dyn FnMut(neocogi_ui_nodes_contracts::NumericChanged) -> Result<(), NcStatus>>) -> Result<(), NcStatus>,
-    ) -> Box<dyn FnMut(&mut Vec<Real>) -> bool> {
+        install: impl FnOnce(neocogi_ui::events::EventConsumer<neocogi_ui_nodes_contracts::NumericChanged>) -> Result<(), NcStatus>,
+    ) -> NumericDispatcher {
         let (events_tx, events) = std::sync::mpsc::channel();
         neocogi_ui::events::bind(install, events_tx.clone(), |event| event.value).unwrap();
         Box::new(move |values| {

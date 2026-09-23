@@ -176,3 +176,11 @@ cancels active pointer/key interactions; platform integrations own composition a
 clipboard delivery. These responsibilities, physical scaling and browser limitations
 are documented in [COM_AUTHORS.md](../../../../docs/COM_AUTHORS.md) and
 [WEB.md](../../../../docs/WEB.md).
+
+Built-in container algorithms use `Result` for measurement and placement, including
+all indexed child operations. A failed child operation stops the algorithm and
+returns its original status through `IContainerLayout`; it never supplies a zero
+preference as a substitute. Parent geometry is published only on success. Child
+placements completed before a failure are derived state and are recomputed on a
+subsequent layout attempt. Track measurement remains allocation-free, while grid
+and linear placement retain their reusable buffers across attempts.

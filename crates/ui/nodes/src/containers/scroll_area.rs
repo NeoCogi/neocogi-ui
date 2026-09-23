@@ -344,33 +344,31 @@ impl ScrollSurface {
 
 impl ContainerWidget for ScrollSurface {
     /// Measures the ordinary content with bounded width and unbounded height.
-    fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: crate::Constraints) -> Dimensioni {
+    fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: crate::Constraints) -> Result<Dimensioni, NcStatus> {
         // Forward the width contract so wrapping content resolves against its eventual viewport;
         // height remains intrinsic so the owning ScrollArea can detect vertical overflow.
         ctx.measure_child(0, crate::Constraints::new(constraints.width, crate::AvailableSpace::Unbounded))
-            .unwrap_or_default()
     }
 
     /// Places content at least as large as the viewport and applies the scrollbar translation.
-    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) {
+    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) -> Result<(), NcStatus> {
         // Re-measure with the exact viewport width selected after scrollbar convergence so wrapped
         // content and the final allocation use the same horizontal constraint.
-        let preferred = ctx
-            .measure_child(
-                0,
-                crate::Constraints::new(crate::AvailableSpace::bounded(rect.width), crate::AvailableSpace::Unbounded),
-            )
-            .unwrap_or_default();
+        let preferred = ctx.measure_child(
+            0,
+            crate::Constraints::new(crate::AvailableSpace::bounded(rect.width), crate::AvailableSpace::Unbounded),
+        )?;
         // Fill both viewport axes so an interactive child owns blank trailing space. Desired extents
         // still win when larger, preserving overflow and its associated scrollbar range.
         let content_rect = Recti::new(0, 0, rect.width.max(preferred.width).max(0), rect.height.max(preferred.height).max(0));
-        let _ = ctx.layout_child(0, content_rect);
+        ctx.layout_child(0, content_rect)?;
         // Read clamped values only after range configuration and translate descendants without
         // changing their stable content-local allocations.
         let offset = self.model.offset();
         ctx.set_children_viewport(rect, Vec2i::new(-offset.x, -offset.y));
         ctx.set_content_size(Dimensioni::new(content_rect.width, content_rect.height));
         ctx.set_child_overflow_propagation(false);
+        Ok(())
     }
 }
 
@@ -438,7 +436,7 @@ pub(crate) trait ScrollComposition: Widget {
 
 impl<T: ScrollComposition> ContainerWidget for T {
     /// Measures content through the surface and includes Skin-owned viewport padding.
-    fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: crate::Constraints) -> Dimensioni {
+    fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: crate::Constraints) -> Result<Dimensioni, NcStatus> {
         // Scrollbars are responsive affordances and do not inflate intrinsic composite size.
         let padding = ctx.skin().metrics().padding.max(0);
         // inset = leading_padding + trailing_padding = padding * 2.
@@ -447,15 +445,13 @@ impl<T: ScrollComposition> ContainerWidget for T {
             crate::AvailableSpace::Bounded(width) => crate::AvailableSpace::bounded(width.saturating_sub(inset)),
             crate::AvailableSpace::Unbounded => crate::AvailableSpace::Unbounded,
         };
-        let content = ctx
-            .measure_child(Self::SURFACE, crate::Constraints::new(content_width, crate::AvailableSpace::Unbounded))
-            .unwrap_or_default();
+        let content = ctx.measure_child(Self::SURFACE, crate::Constraints::new(content_width, crate::AvailableSpace::Unbounded))?;
         // preferred_extent = content_extent + leading_padding + trailing_padding.
-        Dimensioni::new(content.width.saturating_add(inset), content.height.saturating_add(inset))
+        Ok(Dimensioni::new(content.width.saturating_add(inset), content.height.saturating_add(inset)))
     }
 
     /// Places Skin-padded content and any required scrollbars inside the local surface.
-    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) {
+    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) -> Result<(), NcStatus> {
         let model = self.scroll_model();
         // All committed summary geometry is parent-local; child scrollbar geometry passed to each
         // widget is normalized to that child's own local track by configure_bar.
@@ -489,12 +485,10 @@ impl<T: ScrollComposition> ContainerWidget for T {
             // Inset content by the global Skin padding while keeping scrollbar tracks adjacent to
             // the complete body.
             let view = inset_rect(body, padding);
-            let preferred = ctx
-                .measure_child(
-                    Self::SURFACE,
-                    crate::Constraints::new(crate::AvailableSpace::bounded(view.width), crate::AvailableSpace::Unbounded),
-                )
-                .unwrap_or_default();
+            let preferred = ctx.measure_child(
+                Self::SURFACE,
+                crate::Constraints::new(crate::AvailableSpace::bounded(view.width), crate::AvailableSpace::Unbounded),
+            )?;
             // Fill the viewport on both axes while preserving larger desired extents. Comparing this
             // filled extent with the view still detects overflow exactly when preferred content is
             // larger, and it matches ScrollSurface's final allocation contract.
@@ -533,8 +527,8 @@ impl<T: ScrollComposition> ContainerWidget for T {
         if vertical_visible {
             // The scrollbar remains a real independently targetable child when active.
             model.vertical.install(view.height, extent.height, requested.y);
-            let _ = ctx.set_child_participation(Self::VERTICAL, ChildParticipation::Active);
-            let _ = ctx.layout_child(
+            ctx.set_child_participation(Self::VERTICAL, ChildParticipation::Active)?;
+            ctx.layout_child(
                 Self::VERTICAL,
                 Recti::new(
                     rect.x + vertical_track.x,
@@ -542,17 +536,17 @@ impl<T: ScrollComposition> ContainerWidget for T {
                     vertical_track.width,
                     vertical_track.height,
                 ),
-            );
+            )?;
         } else {
             // Hidden participation removes the retained bar from all ordinary runtime phases.
             model.vertical.deactivate();
-            let _ = ctx.set_child_participation(Self::VERTICAL, ChildParticipation::Hidden);
+            ctx.set_child_participation(Self::VERTICAL, ChildParticipation::Hidden)?;
         }
 
         if horizontal_visible {
             model.horizontal.install(view.width, extent.width, requested.x);
-            let _ = ctx.set_child_participation(Self::HORIZONTAL, ChildParticipation::Active);
-            let _ = ctx.layout_child(
+            ctx.set_child_participation(Self::HORIZONTAL, ChildParticipation::Active)?;
+            ctx.layout_child(
                 Self::HORIZONTAL,
                 Recti::new(
                     rect.x + horizontal_track.x,
@@ -560,10 +554,10 @@ impl<T: ScrollComposition> ContainerWidget for T {
                     horizontal_track.width,
                     horizontal_track.height,
                 ),
-            );
+            )?;
         } else {
             model.horizontal.deactivate();
-            let _ = ctx.set_child_participation(Self::HORIZONTAL, ChildParticipation::Hidden);
+            ctx.set_child_participation(Self::HORIZONTAL, ChildParticipation::Hidden)?;
         }
 
         let offset = model.offset();
@@ -571,10 +565,10 @@ impl<T: ScrollComposition> ContainerWidget for T {
         // changed translation dirty so an unchanged exact allocation may still use the retained
         // layout fast path.
         if offset.x != model.geometry.get().offset.x || offset.y != model.geometry.get().offset.y {
-            ctx.child_placement_changed(Self::SURFACE);
+            ctx.child_placement_changed(Self::SURFACE)?;
         }
         let child_rect = Recti::new(rect.x + view.x, rect.y + view.y, view.width, view.height);
-        let _ = ctx.layout_child(Self::SURFACE, child_rect);
+        ctx.layout_child(Self::SURFACE, child_rect)?;
 
         let corner = (vertical_visible && horizontal_visible)
             .then(|| Recti::new(body.x + body.width, body.y + body.height, vertical_track.width, horizontal_track.height));
@@ -591,6 +585,7 @@ impl<T: ScrollComposition> ContainerWidget for T {
         ctx.set_children_viewport(rect, Vec2i::default());
         ctx.set_content_size(Dimensioni::new(surface.width, surface.height));
         ctx.set_child_overflow_propagation(false);
+        Ok(())
     }
 
     fn accepts_event(&self, event: &UiInputEvent) -> bool {

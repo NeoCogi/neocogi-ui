@@ -504,32 +504,33 @@ impl LinearAxis {
 }
 
 /// Measures the retained direction and cross policy without mutating per-pass geometry.
-fn measure(ctx: &mut MeasureCtx<'_>, state: &Linear, constraints: Constraints) -> Dimensioni {
+fn measure(ctx: &mut MeasureCtx<'_>, state: &Linear, constraints: Constraints) -> Result<Dimensioni, NcStatus> {
     // Direction is retained semantic state, so private callers cannot accidentally pair horizontal
     // geometry with a vertical widget or pass an orientation-specific optional policy.
     let orientation = state.direction.axis();
     let count = ctx.child_count();
     if count == 0 {
-        return Dimensioni::default();
+        return Ok(Dimensioni::default());
     }
     state.debug_assert_synchronized(count);
     let gap = ctx.skin().metrics().spacing.max(0);
     let main_space = orientation.main_space(constraints);
     let cross_space = orientation.cross_space(constraints);
-    let mut resolver = track_resolver_for_measure(ctx, state, orientation, main_space, cross_space, gap);
+    let mut resolver = track_resolver_for_measure(ctx, state, orientation, main_space, cross_space, gap)?;
     let mut cross_content = 0;
     for index in 0..count {
         let placement = state.spec(index);
-        let initial = measure_child(ctx, orientation, index, AvailableSpace::Unbounded, cross_space, placement);
+        let initial = measure_child(ctx, orientation, index, AvailableSpace::Unbounded, cross_space, placement)?;
         let main = resolver.next(placement.main, orientation.main(initial));
-        let child = measure_child(ctx, orientation, index, AvailableSpace::Bounded(main), cross_space, placement);
+        let child = measure_child(ctx, orientation, index, AvailableSpace::Bounded(main), cross_space, placement)?;
         cross_content = cross_content.max(placement.fixed_cross.unwrap_or_else(|| orientation.cross(child)).max(0));
     }
     let cross_content = cross_content.max(minimum_content_cross(state.direction, ctx.skin(), ctx.atlas()));
     let cross = resolve_measured_cross(state.cross_size, cross_content);
-    orientation.size(resolver.extent(), cross)
+    Ok(orientation.size(resolver.extent(), cross))
 }
 
+/// Summarizes child preferences without retaining temporary measurement vectors.
 fn track_resolver_for_measure(
     ctx: &mut MeasureCtx<'_>,
     state: &Linear,
@@ -537,19 +538,20 @@ fn track_resolver_for_measure(
     main_space: AvailableSpace,
     cross_space: AvailableSpace,
     gap: i32,
-) -> TrackResolver {
-    TrackResolver::new(
+) -> Result<TrackResolver, NcStatus> {
+    TrackResolver::try_new(
         main_space,
         gap,
         ctx.child_count(),
         (0..ctx.child_count()).map(|index| {
             let placement = state.spec(index);
-            let child = measure_child(ctx, orientation, index, AvailableSpace::Unbounded, cross_space, placement);
-            (placement.main, orientation.main(child))
+            let child = measure_child(ctx, orientation, index, AvailableSpace::Unbounded, cross_space, placement)?;
+            Ok((placement.main, orientation.main(child)))
         }),
     )
 }
 
+/// Applies the item cross constraint and propagates the child service result.
 fn measure_child(
     ctx: &mut MeasureCtx<'_>,
     orientation: LinearAxis,
@@ -557,20 +559,20 @@ fn measure_child(
     main: AvailableSpace,
     cross: AvailableSpace,
     placement: LinearItemSpec,
-) -> Dimensioni {
+) -> Result<Dimensioni, NcStatus> {
     let cross = placement.fixed_cross.map(AvailableSpace::Bounded).unwrap_or(cross);
-    ctx.measure_child(index, orientation.constraints(main, cross)).unwrap_or_default()
+    ctx.measure_child(index, orientation.constraints(main, cross))
 }
 
 /// Resolves and commits one exact linear allocation.
-fn place(ctx: &mut ContainerLayoutCtx<'_>, state: &mut Linear, rect: Recti) {
+fn place(ctx: &mut ContainerLayoutCtx<'_>, state: &mut Linear, rect: Recti) -> Result<(), NcStatus> {
     // Snapshot axis and policy before mutably borrowing scratch fields below; these copied values
     // also make it explicit that one retained configuration drives the complete placement pass.
     let orientation = state.direction.axis();
     let count = ctx.child_count();
     if count == 0 {
         ctx.set_content_size(Dimensioni::default());
-        return;
+        return Ok(());
     }
     state.debug_assert_synchronized(count);
     let gap = ctx.skin().metrics().spacing.max(0);
@@ -585,7 +587,7 @@ fn place(ctx: &mut ContainerLayoutCtx<'_>, state: &mut Linear, rect: Recti) {
     resolved_main.clear();
     for (index, spec) in specs.iter().copied().enumerate() {
         let content = if matches!(spec.main, TrackSize::Content) {
-            let desired = measure_layout_child(ctx, orientation, index, AvailableSpace::Unbounded, cross_space, spec);
+            let desired = measure_layout_child(ctx, orientation, index, AvailableSpace::Unbounded, cross_space, spec)?;
             orientation.main(desired)
         } else {
             0
@@ -612,7 +614,7 @@ fn place(ctx: &mut ContainerLayoutCtx<'_>, state: &mut Linear, rect: Recti) {
     // by the runtime when each child rectangle is committed below.
     let mut cross_content = 0;
     for (index, (spec, main)) in specs.iter().copied().zip(resolved_main.iter().copied()).enumerate() {
-        let child = measure_layout_child(ctx, orientation, index, AvailableSpace::Bounded(main), cross_space, spec);
+        let child = measure_layout_child(ctx, orientation, index, AvailableSpace::Bounded(main), cross_space, spec)?;
         cross_content = cross_content.max(spec.fixed_cross.unwrap_or_else(|| orientation.cross(child)).max(0));
     }
     let cross_content = cross_content.max(minimum_content_cross(state.direction, ctx.skin(), ctx.atlas()));
@@ -630,7 +632,7 @@ fn place(ctx: &mut ContainerLayoutCtx<'_>, state: &mut Linear, rect: Recti) {
         }
         let cross = spec.fixed_cross.unwrap_or(line_cross);
         let child_rect = orientation.rect(cursor, orientation.cross_origin(rect), main, cross);
-        let _ = ctx.layout_child(index, child_rect);
+        ctx.layout_child(index, child_rect)?;
         if reversed {
             cursor = cursor.saturating_sub(gap);
         } else {
@@ -638,8 +640,10 @@ fn place(ctx: &mut ContainerLayoutCtx<'_>, state: &mut Linear, rect: Recti) {
         }
     }
     ctx.set_content_size(orientation.size(extent, line_cross.max(cross_content)));
+    Ok(())
 }
 
+/// Measures placement content without substituting geometry on failure.
 fn measure_layout_child(
     ctx: &mut ContainerLayoutCtx<'_>,
     orientation: LinearAxis,
@@ -647,22 +651,24 @@ fn measure_layout_child(
     main: AvailableSpace,
     cross: AvailableSpace,
     placement: LinearItemSpec,
-) -> Dimensioni {
+) -> Result<Dimensioni, NcStatus> {
     let cross = placement.fixed_cross.map(AvailableSpace::Bounded).unwrap_or(cross);
-    ctx.measure_child(index, orientation.constraints(main, cross)).unwrap_or_default()
+    ctx.measure_child(index, orientation.constraints(main, cross))
 }
 
 impl ContainerWidget for Linear {
-    fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: Constraints) -> Dimensioni {
+    /// Measures child preferences, stopping immediately on a failed service call.
+    fn measure(&self, ctx: &mut MeasureCtx<'_>, constraints: Constraints) -> Result<Dimensioni, NcStatus> {
         // Route the public widget contract through the scalar immutable pass; placement scratch is
         // intentionally unavailable through this shared reference.
         measure(ctx, self, constraints)
     }
 
-    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) {
+    /// Places children in policy order and returns the first failed operation.
+    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) -> Result<(), NcStatus> {
         // Indexed context access keeps collection ownership private while Linear supplies
         // matching relationship metadata and reusable exact extents.
-        place(ctx, self, rect);
+        place(ctx, self, rect)
     }
 }
 

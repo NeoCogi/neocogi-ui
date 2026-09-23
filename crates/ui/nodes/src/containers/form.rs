@@ -107,19 +107,20 @@ impl neocogi_ui_nodes_contracts::Form for Form {
 }
 impl ContainerWidget for Form {
     /// Child positions are authored pixels, independent of intrinsic measurement.
-    fn measure(&self, _: &mut MeasureCtx<'_>, _: Constraints) -> Dimensioni {
-        Dimensioni::new(self.size.width, self.size.height)
+    fn measure(&self, _: &mut MeasureCtx<'_>, _: Constraints) -> Result<Dimensioni, NcStatus> {
+        Ok(Dimensioni::new(self.size.width, self.size.height))
     }
     /// Places children exactly once using the same rectangles exposed by the typed API.
-    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) {
+    fn place(&mut self, ctx: &mut ContainerLayoutCtx<'_>, rect: Recti) -> Result<(), NcStatus> {
         for (index, edge) in self.edges.iter().enumerate() {
             ctx.layout_child(
                 index,
                 Recti::new(rect.x.saturating_add(edge.x), rect.y.saturating_add(edge.y), edge.width, edge.height),
-            );
+            )?;
         }
         ctx.set_content_size(Dimensioni::new(self.size.width, self.size.height));
         ctx.set_child_overflow_propagation(false);
+        Ok(())
     }
 }
 impl Widget for Form {
