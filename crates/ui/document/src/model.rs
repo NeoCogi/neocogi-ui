@@ -514,7 +514,7 @@ impl Document {
             if !ports.insert((&output.node, &output.port)) {
                 return Err(format!("Port {}.{} is exported twice", output.node, output.port));
             }
-            if !node.widget.outputs().contains(&output.port.as_str()) {
+            if node.widget.output_type(&output.port).is_none() {
                 return Err(format!("{} has no {} output", output.node, output.port));
             }
         }
@@ -586,16 +586,77 @@ impl Track {
     }
 }
 impl WidgetSpec {
-    /// Declared concrete outputs; this also populates the designer's output picker.
-    pub fn outputs(&self) -> &'static [&'static str] {
+    /// Declared concrete ports and payloads shared by validation, binding, and authoring.
+    pub fn outputs(&self) -> &'static [OutputPort] {
         match self {
-            Self::Button { .. } | Self::ListItem { .. } | Self::ListBox { .. } => &["activated"],
-            Self::Checkbox { .. } | Self::Slider { .. } | Self::Number { .. } | Self::Scrollbar { .. } | Self::Split { .. } | Self::Combo { .. } => {
-                &["changed"]
-            }
-            Self::Textbox { .. } | Self::TextArea { .. } => &["changed", "submitted"],
-            _ => &[],
+            Self::Button { .. } | Self::ListItem { .. } | Self::ListBox { .. } => &[OutputPort {
+                name: "activated",
+                payload: OutputType::Activation,
+            }],
+            Self::Checkbox { .. } => &[OutputPort {
+                name: "changed",
+                payload: OutputType::Checked,
+            }],
+            Self::Slider { .. } | Self::Number { .. } => &[OutputPort {
+                name: "changed",
+                payload: OutputType::Number,
+            }],
+            Self::Textbox { .. } | Self::TextArea { .. } => &[
+                OutputPort {
+                    name: "changed",
+                    payload: OutputType::TextChanged,
+                },
+                OutputPort {
+                    name: "submitted",
+                    payload: OutputType::TextSubmitted,
+                },
+            ],
+            Self::Scrollbar { .. } => &[OutputPort {
+                name: "changed",
+                payload: OutputType::Offset,
+            }],
+            Self::Split { .. } => &[OutputPort {
+                name: "changed",
+                payload: OutputType::Position,
+            }],
+            Self::Combo { .. } => &[OutputPort {
+                name: "changed",
+                payload: OutputType::Selection,
+            }],
+            Self::TextBlock { .. }
+            | Self::ColorSwatch { .. }
+            | Self::Linear { .. }
+            | Self::Grid { .. }
+            | Self::Scroll { .. }
+            | Self::Form { .. }
+            | Self::Disclosure { .. } => &[],
         }
+    }
+    /// Whether authored font selection has a concrete setter, including a disclosure's header.
+    pub fn supports_font(&self) -> bool {
+        match self {
+            Self::Button { .. }
+            | Self::Checkbox { .. }
+            | Self::Textbox { .. }
+            | Self::TextArea { .. }
+            | Self::TextBlock { .. }
+            | Self::Slider { .. }
+            | Self::Number { .. }
+            | Self::ColorSwatch { .. }
+            | Self::ListItem { .. }
+            | Self::ListBox { .. }
+            | Self::Combo { .. }
+            | Self::Disclosure { .. } => true,
+            Self::Scrollbar { .. } | Self::Linear { .. } | Self::Grid { .. } | Self::Split { .. } | Self::Scroll { .. } | Self::Form { .. } => false,
+        }
+    }
+    /// Whether a named icon can be applied through the class's concrete visual API.
+    pub fn supports_icon(&self) -> bool {
+        matches!(self, Self::Button { .. } | Self::ListItem { .. })
+    }
+    /// Whether an authored image and fit policy have a concrete visual destination.
+    pub fn supports_image(&self) -> bool {
+        matches!(self, Self::Button { .. } | Self::ListBox { .. })
     }
     /// Checks the concrete setter's payload contract without allocating a receiver.
     pub fn accepts(&self, input: &InputKind) -> bool {
@@ -668,29 +729,13 @@ fn validate_node<'a>(node: &'a Node, depth: usize, nodes: &mut BTreeMap<&'a str,
     if let Some(options) = node.style.options {
         neocogi_ui::WidgetOptions::from_raw(options).validate().map_err(|error| error.to_string())?;
     }
-    if node.style.font.is_some()
-        && !matches!(
-            node.widget,
-            Button { .. }
-                | Checkbox { .. }
-                | Textbox { .. }
-                | TextArea { .. }
-                | TextBlock { .. }
-                | Slider { .. }
-                | Number { .. }
-                | ColorSwatch { .. }
-                | ListItem { .. }
-                | ListBox { .. }
-                | Combo { .. }
-                | Disclosure { .. }
-        )
-    {
+    if node.style.font.is_some() && !node.widget.supports_font() {
         return Err(format!("{} has no font property", node.key));
     }
-    if node.style.icon.is_some() && !matches!(node.widget, Button { .. } | ListItem { .. }) {
+    if node.style.icon.is_some() && !node.widget.supports_icon() {
         return Err(format!("{} has no icon property", node.key));
     }
-    if node.style.image.is_some() && !matches!(node.widget, Button { .. } | ListBox { .. }) {
+    if node.style.image.is_some() && !node.widget.supports_image() {
         return Err(format!("{} has no image property", node.key));
     }
     for child in &node.children {
@@ -768,6 +813,15 @@ pub struct Connection {
     pub action: Action,
 }
 
+/// One statically declared output endpoint; this record contains no runtime receiver.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OutputPort {
+    /// Serialized port identity consumed by exports and private connections.
+    pub name: &'static str,
+    /// Concrete captured message contract for this endpoint.
+    pub payload: OutputType,
+}
+
 /// Concrete output contracts shared by validation, runtime binding, and authoring.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OutputType {
@@ -791,17 +845,7 @@ pub enum OutputType {
 impl WidgetSpec {
     /// Resolves a real port to its concrete message type; unknown ports remain invalid.
     pub fn output_type(&self, port: &str) -> Option<OutputType> {
-        match (self, port) {
-            (Self::Button { .. } | Self::ListItem { .. } | Self::ListBox { .. }, "activated") => Some(OutputType::Activation),
-            (Self::Checkbox { .. }, "changed") => Some(OutputType::Checked),
-            (Self::Slider { .. } | Self::Number { .. }, "changed") => Some(OutputType::Number),
-            (Self::Textbox { .. } | Self::TextArea { .. }, "changed") => Some(OutputType::TextChanged),
-            (Self::Textbox { .. } | Self::TextArea { .. }, "submitted") => Some(OutputType::TextSubmitted),
-            (Self::Scrollbar { .. }, "changed") => Some(OutputType::Offset),
-            (Self::Split { .. }, "changed") => Some(OutputType::Position),
-            (Self::Combo { .. }, "changed") => Some(OutputType::Selection),
-            _ => None,
-        }
+        self.outputs().iter().find(|output| output.name == port).map(|output| output.payload)
     }
 }
 

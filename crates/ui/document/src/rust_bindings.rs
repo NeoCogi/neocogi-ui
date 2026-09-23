@@ -5,15 +5,25 @@ use std::fmt::Write;
 /// Builds a valid, collision-free symbol with a role prefix and declaration ordinal.
 /// Public endpoint names remain exact in string literals, even when punctuation normalizes alike.
 fn symbol(prefix: &str, name: &str, index: usize) -> String {
-    let stem = name
-        .chars()
-        .map(|character| match character {
-            'a'..='z' | '0'..='9' | '_' => character,
-            'A'..='Z' => character.to_ascii_lowercase(),
-            _ => '_',
-        })
-        .collect::<String>();
-    format!("{prefix}_{stem}_{index}")
+    let mut symbol = prefix.to_owned();
+    let mut separator = true;
+    for character in name.chars() {
+        match character {
+            'a'..='z' | 'A'..='Z' | '0'..='9' => {
+                // Collapse punctuation runs and omit leading/trailing empty name segments.
+                // The role prefix keeps even numeric names valid Rust identifiers.
+                if separator {
+                    symbol.push('_');
+                }
+                symbol.push(character.to_ascii_lowercase());
+                separator = false;
+            }
+            _ => separator = true,
+        }
+    }
+    // The ordinal disambiguates distinct public names that normalize to the same stem.
+    write!(symbol, "_{index}").unwrap();
+    symbol
 }
 
 impl OutputType {

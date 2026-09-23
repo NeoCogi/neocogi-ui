@@ -65,3 +65,31 @@ fn arithmetic_versions_and_tree_depth_are_bounded() {
     }
     assert!(document.validate().is_err());
 }
+
+/// Authoring capabilities reject unsupported resources before runtime construction.
+#[test]
+fn style_capabilities_match_document_validation() {
+    for (widget, font, icon, image) in [
+        (WidgetSpec::Button { text: String::new() }, true, true, true),
+        (WidgetSpec::ListItem { text: String::new() }, true, true, false),
+        (WidgetSpec::ListBox { text: String::new() }, true, false, true),
+        (WidgetSpec::Form { width: 100, height: 100 }, false, false, false),
+    ] {
+        let mut document = Document::new("capabilities");
+        document.inputs.clear();
+        document.outputs.clear();
+        document.root.children.clear();
+        document.root.widget = widget;
+        assert_eq!(document.root.widget.supports_font(), font);
+        assert_eq!(document.root.widget.supports_icon(), icon);
+        assert_eq!(document.root.widget.supports_image(), image);
+        document.root.style.font = Some("body".into());
+        assert_eq!(document.validate().is_ok(), font);
+        document.root.style.font = None;
+        document.root.style.icon = Some("accept".into());
+        assert_eq!(document.validate().is_ok(), icon);
+        document.root.style.icon = None;
+        document.root.style.image = Some("image.png".into());
+        assert_eq!(document.validate().is_ok(), image);
+    }
+}

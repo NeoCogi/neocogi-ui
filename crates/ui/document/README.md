@@ -91,6 +91,14 @@ to revision two; older revisions are rejected rather than migrated. Limits bound
 values. Validation rejects unknown fields in JSON, unknown revisions, malformed
 endpoints, unsupported resources, and invalid numeric/layout policies.
 
+`WidgetSpec::outputs()` returns typed `OutputPort` records containing the port
+name and captured payload type. Validation, visual connections, and Rust handler
+generation use that same declaration. Font/icon/image capability queries are
+shared by validation and inspector construction; concrete resource setters remain
+explicit typed dispatch. Generated Rust symbols collapse punctuation runs and
+retain declaration ordinals for collision avoidance. Public endpoint names remain
+exact string literals.
+
 Constructor option defaults belong to the authored schema revision and are shared
 with the designer. They exclude effective routing bits added by scrolling or
 container participation. `SetEnabled` changes the exported surface's interaction

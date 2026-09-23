@@ -32,7 +32,7 @@ pub trait Handlers {
     /// Handles public output "type" at the application's safe update boundary.
     fn on_type_1(&mut self, value: neocogi_ui::events::CheckboxChanged) -> Result<(), neocogi_com::NcStatus>;
     /// Handles public output "quote\"\n// x" at the application's safe update boundary.
-    fn on_quote_____x_2(&mut self, value: neocogi_ui::events::TextChanged) -> Result<(), neocogi_com::NcStatus>;
+    fn on_quote_x_2(&mut self, value: neocogi_ui::events::TextChanged) -> Result<(), neocogi_com::NcStatus>;
     /// Handles public output "text submitted" at the application's safe update boundary.
     fn on_text_submitted_3(&mut self, value: neocogi_ui::events::TextSubmitted) -> Result<(), neocogi_com::NcStatus>;
     /// Handles public output "value" at the application's safe update boundary.
@@ -50,7 +50,7 @@ impl Event {
         match self {
             Self::Output0(value) => _handlers.on_save_0(value),
             Self::Output1(value) => _handlers.on_type_1(value),
-            Self::Output2(value) => _handlers.on_quote_____x_2(value),
+            Self::Output2(value) => _handlers.on_quote_x_2(value),
             Self::Output3(value) => _handlers.on_text_submitted_3(value),
             Self::Output4(value) => _handlers.on_value_4(value),
             Self::Output5(value) => _handlers.on_pixel_offset_5(value),
