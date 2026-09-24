@@ -126,15 +126,6 @@ struct TextSubmitted {
 }
 
 #[version(1)]
-/// Editor outputs; each named output has one replaceable concrete destination.
-interface ITextEvents {
-    /// Connection access for captured TextChanged values.
-    changed: TextChanged;
-    /// Connection access for captured TextSubmitted values.
-    submitted: TextSubmitted;
-}
-
-#[version(1)]
 #[message]
 /// Captured window lifecycle or user chrome interaction; Destroyed is the one terminal fact.
 enum WindowEvent: u8 {

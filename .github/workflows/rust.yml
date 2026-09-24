@@ -75,6 +75,8 @@ jobs:
         run: cargo test -p neocogi-com-core -p neocogi-com-macros -p neocogi-com-runtime -p neocogi-inspect -p neocogi-com --features neocogi-com/runtime
       - name: Independent static runtime selection
         run: cargo test -p neocogi-com --no-default-features --features 'std macros static-runtime'
+      - name: IDL message lowering, malformed input, and nested-message compile cases
+        run: cargo test -p neocogi-idl
 
   native:
     runs-on: ubuntu-latest

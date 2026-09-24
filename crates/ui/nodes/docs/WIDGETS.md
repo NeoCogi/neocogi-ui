@@ -164,9 +164,12 @@ Custom drawing uses the painter's solid geometry/image methods or an owned
 `IRenderItem` implemented by the renderer assembly.
 
 External controls may also implement standard event capabilities such as
-`IActivationEvents` or `ITextEvents`. The application queries that typed capability
-once while mapping to its standard message channel; producers post through the cached typed
-receiver. Dispatch consumes local messages and never consults the class registry.
+`IActivationEvents`. The application queries that typed capability once while
+mapping to its standard message channel; producers post through the cached typed
+receiver. A custom text editor with several event kinds should declare one
+enum-valued observer port, as the built-in Textbox and TextArea do, rather than
+separate changed and submitted ports. Dispatch consumes local messages and never
+consults the class registry.
 
 ## Native text input and cancellation
 
