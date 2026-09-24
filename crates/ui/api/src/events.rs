@@ -160,6 +160,12 @@ macro_rules! widget_observer {
                 filter_observer(sender, move |event| Some(map(event)))
             }
 
+            /// Checks the concrete event domain independently of its consumer or transport.
+            /// Form-owned observers call this same boundary check before queueing events.
+            pub fn validate(event: &Event) -> Result<(), NcStatus> {
+                ($validate)(event)
+            }
+
             /// Creates an observer that can ignore output variants before queueing.
             /// Domain checks run before the mapper, including for ignored variants.
             pub fn filter_observer<M: 'static>(
@@ -167,7 +173,7 @@ macro_rules! widget_observer {
                 mut map: impl FnMut(Event) -> Option<M> + 'static,
             ) -> Result<neocogi_com::ComPtr<$abi>, NcStatus> {
                 Event::observer(move |event| {
-                    ($validate)(&event)?;
+                    validate(&event)?;
                     if let Some(message) = map(event) {
                         let _ = sender.send(message);
                     }

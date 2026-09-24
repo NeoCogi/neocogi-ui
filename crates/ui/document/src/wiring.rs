@@ -49,6 +49,25 @@ pub(crate) enum WidgetEvent {
     Combo(IChoiceMenuEvent),
 }
 impl WidgetEvent {
+    /// Applies the same typed domain checks as the ordinary public widget observers.
+    /// Custom providers can post ABI-valid values, so a form must check them before
+    /// queuing public forwarding or visual actions.
+    pub(crate) fn validate(&self) -> Result<(), NcStatus> {
+        match self {
+            Self::Button(value) => neocogi_ui::button::validate(value),
+            Self::Checkbox(value) => neocogi_ui::checkbox::validate(value),
+            Self::Textbox(value) => neocogi_ui::textbox::validate(value),
+            Self::TextArea(value) => neocogi_ui::text_area::validate(value),
+            Self::Slider(value) => neocogi_ui::slider::validate(value),
+            Self::Number(value) => neocogi_ui::number::validate(value),
+            Self::ListItem(value) => neocogi_ui::list_item::validate(value),
+            Self::ListBox(value) => neocogi_ui::list_box::validate(value),
+            Self::Scrollbar(value) => neocogi_ui::scrollbar::validate(value),
+            Self::Split(value) => neocogi_ui::split_view::validate(value),
+            Self::Combo(value) => neocogi_ui::combo::validate(value),
+        }
+    }
+
     /// Selects one authored visual-event variant and its captured forwarded field.
     fn route_payload(&self) -> (&'static str, Payload) {
         match self {
@@ -299,4 +318,32 @@ pub(crate) fn prepare(
         routes.push(Route { source: connection.source.clone(), variant: connection.event.clone(), operation });
     }
     Ok(Controller::new(Wiring { routes, public }, messages))
+}
+
+#[cfg(test)]
+mod event_validation_tests {
+    use super::*;
+
+    /// A malformed custom-provider event has the same result at both consumer boundaries.
+    #[test]
+    fn form_events_use_public_widget_domain_checks() {
+        let text = nodes::TextboxEvent::Changed(neocogi_ui::TextChanged {
+            text: "é".into(),
+            cursor: 1,
+        });
+        assert_eq!(WidgetEvent::Textbox(text.clone()).validate(), neocogi_ui::textbox::validate(&text));
+
+        let number = nodes::SliderEvent::Changed(nodes::NumericChanged { value: f32::NAN });
+        assert_eq!(WidgetEvent::Slider(number.clone()).validate(), neocogi_ui::slider::validate(&number));
+
+        let scroll = nodes::ScrollbarEvent::Changed(nodes::ScrollbarChanged { offset: -1 });
+        assert_eq!(WidgetEvent::Scrollbar(scroll.clone()).validate(), neocogi_ui::scrollbar::validate(&scroll));
+
+        let split = nodes::SplitViewEvent::Changed(nodes::SplitChanged { position: -1 });
+        assert_eq!(WidgetEvent::Split(split.clone()).validate(), neocogi_ui::split_view::validate(&split));
+        assert!(WidgetEvent::Textbox(text).validate().is_err());
+        assert!(WidgetEvent::Slider(number).validate().is_err());
+        assert!(WidgetEvent::Scrollbar(scroll).validate().is_err());
+        assert!(WidgetEvent::Split(split).validate().is_err());
+    }
 }

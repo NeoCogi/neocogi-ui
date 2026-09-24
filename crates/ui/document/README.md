@@ -36,7 +36,10 @@ public application binding. A public output gets a separate, form-owned
 component export table maps one public name per observed child to the proxy's
 sole physical port. Rebinding replaces its one downstream application receiver,
 while the child's construction-time observer remains the form. Invalid names or
-receiver types preserve the previous application destination. Unobserved children
+receiver types preserve the previous application destination. The form's child
+observer applies the same typed domain checks as a standalone widget observer
+before it queues an event, including cursor boundaries and finite or nonnegative
+numeric fields from independently supplied node providers. Unobserved children
 receive no observer and allocate no event adapter.
 
 Use `neocogi_com::events::bind_output` with the concrete event type declared by

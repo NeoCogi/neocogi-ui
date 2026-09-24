@@ -70,8 +70,10 @@ impl Construction<'_> {
                     let sender = self.sender.clone();
                     let source = node.key.clone();
                     Some(<$event>::observer(move |event| {
+                        let event = WidgetEvent::$kind(event);
+                        event.validate()?;
                         // A retired form may disconnect normally; no child call becomes an error.
-                        let _ = sender.send(Message { source: source.clone(), event: WidgetEvent::$kind(event) });
+                        let _ = sender.send(Message { source: source.clone(), event });
                         Ok(())
                     })?)
                 } else {
