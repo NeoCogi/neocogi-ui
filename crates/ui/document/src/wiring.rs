@@ -59,11 +59,11 @@ impl WidgetEvent {
             Self::Slider(nodes::SliderEvent::Changed(value)) | Self::Number(nodes::NumberEvent::Changed(value)) => {
                 ("changed", Payload::Number(value.value))
             }
-            Self::Textbox(nodes::TextboxEvent::Changed { text, .. }) | Self::TextArea(nodes::TextAreaEvent::Changed { text, .. }) => {
-                ("changed", Payload::Text(text.clone()))
+            Self::Textbox(nodes::TextboxEvent::Changed(value)) | Self::TextArea(nodes::TextAreaEvent::Changed(value)) => {
+                ("changed", Payload::Text(value.text.clone()))
             }
-            Self::Textbox(nodes::TextboxEvent::Submitted { text }) | Self::TextArea(nodes::TextAreaEvent::Submitted { text }) => {
-                ("submitted", Payload::Text(text.clone()))
+            Self::Textbox(nodes::TextboxEvent::Submitted(value)) | Self::TextArea(nodes::TextAreaEvent::Submitted(value)) => {
+                ("submitted", Payload::Text(value.text.clone()))
             }
             Self::Scrollbar(nodes::ScrollbarEvent::Changed(value)) => ("changed", Payload::Integer(value.offset)),
             Self::Split(nodes::SplitViewEvent::Changed(value)) => ("changed", Payload::Integer(value.position)),

@@ -218,14 +218,14 @@ fn ordinary_com_gate_rejects_recursive_emission() {
 fn constructor_observers_reject_invalid_payloads_before_the_mapper_runs() {
     let (sender, receiver) = std::sync::mpsc::channel();
     let mut observer = super::textbox::observer(sender, |event| event).unwrap();
-    let invalid = super::textbox::Event::Changed { text: "é".into(), cursor: 1 };
+    let invalid = super::textbox::Event::Changed(super::TextChanged { text: "é".into(), cursor: 1 });
     assert_eq!(observer.event(neocogi_com::NcMessage::new(&invalid)), Err(NC_E_INVALID_ARG));
     assert!(receiver.try_recv().is_err());
-    let valid = super::textbox::Event::Changed { text: "é".into(), cursor: 2 };
+    let valid = super::textbox::Event::Changed(super::TextChanged { text: "é".into(), cursor: 2 });
     observer.event(neocogi_com::NcMessage::new(&valid)).unwrap();
-    observer.event(neocogi_com::NcMessage::new(&super::textbox::Event::Submitted { text: "é".into() })).unwrap();
-    assert!(matches!(receiver.try_recv().unwrap(), super::textbox::Event::Changed { cursor: 2, .. }));
-    assert!(matches!(receiver.try_recv().unwrap(), super::textbox::Event::Submitted { text } if text == "é"));
+    observer.event(neocogi_com::NcMessage::new(&super::textbox::Event::Submitted(super::TextSubmitted { text: "é".into() }))).unwrap();
+    assert!(matches!(receiver.try_recv().unwrap(), super::textbox::Event::Changed(super::TextChanged { cursor: 2, .. })));
+    assert!(matches!(receiver.try_recv().unwrap(), super::textbox::Event::Submitted(super::TextSubmitted { text }) if text == "é"));
 
     let (sender, receiver) = std::sync::mpsc::channel();
     let mut observer = super::number::observer(sender, |_| ()).unwrap();

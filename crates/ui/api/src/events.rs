@@ -192,8 +192,8 @@ widget_observer!(
     neocogi_ui_nodes_contracts::TextboxEvent,
     TextboxObserverAbi,
     |event: &Event| match event {
-        Event::Changed { text, cursor } => valid_text_cursor(text, *cursor),
-        Event::Submitted { .. } => Ok(()),
+        Event::Changed(value) => valid_text_cursor(&value.text, value.cursor),
+        Event::Submitted(_) => Ok(()),
     }
 );
 widget_observer!(
@@ -201,8 +201,8 @@ widget_observer!(
     neocogi_ui_nodes_contracts::TextAreaEvent,
     TextAreaObserverAbi,
     |event: &Event| match event {
-        Event::Changed { text, cursor } => valid_text_cursor(text, *cursor),
-        Event::Submitted { .. } => Ok(()),
+        Event::Changed(value) => valid_text_cursor(&value.text, value.cursor),
+        Event::Submitted(_) => Ok(()),
     }
 );
 widget_observer!(

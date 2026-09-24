@@ -310,12 +310,12 @@ impl FileDialog {
             resources: services.resources.clone(),
         });
         let path_observer = neocogi_ui::textbox::observer(events_tx.clone(), |event| match event {
-            neocogi_ui::textbox::Event::Changed { .. } => Message::PathEdited,
-            neocogi_ui::textbox::Event::Submitted { text } => Message::Navigate(text),
+            neocogi_ui::textbox::Event::Changed(_) => Message::PathEdited,
+            neocogi_ui::textbox::Event::Submitted(value) => Message::Navigate(value.text),
         })?;
         let filename_observer = neocogi_ui::textbox::observer(events_tx.clone(), |event| match event {
-            neocogi_ui::textbox::Event::Changed { .. } => Message::FilenameEdited,
-            neocogi_ui::textbox::Event::Submitted { .. } => Message::Accept,
+            neocogi_ui::textbox::Event::Changed(_) => Message::FilenameEdited,
+            neocogi_ui::textbox::Event::Submitted(_) => Message::Accept,
         })?;
         let path = TextboxWidget::from_interface(crate::Textbox::create_com(
             nodes.host.clone(),

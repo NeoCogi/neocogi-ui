@@ -628,8 +628,8 @@ fn textbox_enum_stream_drives_form_action_and_public_observer() {
     fixture.ui.input(UiInput::Text, "Ada").unwrap();
     fixture.frame(VIEW).unwrap();
     assert_eq!(preview.text().unwrap(), "Ada");
-    assert!(matches!(events.try_recv(), Ok(neocogi_ui::textbox::Event::Changed { text, cursor }) if text == "Ada" && cursor == 3));
+    assert!(matches!(events.try_recv(), Ok(neocogi_ui::textbox::Event::Changed(value)) if value.text == "Ada" && value.cursor == 3));
     key(&fixture.ui, KeyCode::Enter, 0, 0);
     fixture.frame(VIEW).unwrap();
-    assert!(matches!(events.try_recv(), Ok(neocogi_ui::textbox::Event::Submitted { text }) if text == "Ada"));
+    assert!(matches!(events.try_recv(), Ok(neocogi_ui::textbox::Event::Submitted(value)) if value.text == "Ada"));
 }

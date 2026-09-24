@@ -1,22 +1,14 @@
-#[version(1)]
+#[version(2)]
 #[message]
 /// One typed output stream for every user-visible single-line edit event.
 enum TextboxEvent: u8 {
-    /// The complete text and cursor changed through user interaction.
-    Changed {
-        /// Complete normalized text captured after the edit.
-        text: String,
-        /// Scalar-aligned UTF-8 byte cursor in that text.
-        cursor: u64,
-    },
-    /// The user submitted the complete current text.
-    Submitted {
-        /// Complete submitted text, independent of later edits.
-        text: String,
-    },
+    /// A committed user edit reuses the core text/cursor message contract.
+    Changed(TextChanged),
+    /// A submission reuses the core complete-text message contract.
+    Submitted(TextSubmitted),
 }
 
-#[version(3)]
+#[version(4)]
 #[observer]
 /// Constructible single-line editor whose complete concrete API is the class contract.
 interface Textbox: IWidget + ILeafLayout {
@@ -268,25 +260,17 @@ bitenum FillStates: u8 {
     ALL = 7,
 }
 
-#[version(1)]
+#[version(2)]
 #[message]
 /// One typed output stream for every user-visible multiline edit event.
 enum TextAreaEvent: u8 {
-    /// The complete text and cursor changed through user interaction.
-    Changed {
-        /// Complete normalized text captured after the edit.
-        text: String,
-        /// Scalar-aligned UTF-8 byte cursor in that text.
-        cursor: u64,
-    },
-    /// The user submitted the complete current text.
-    Submitted {
-        /// Complete submitted text, independent of later edits.
-        text: String,
-    },
+    /// A committed user edit reuses the core text/cursor message contract.
+    Changed(TextChanged),
+    /// A submission reuses the core complete-text message contract.
+    Submitted(TextSubmitted),
 }
 
-#[version(3)]
+#[version(4)]
 #[observer]
 /// Constructible fixed scrolling editor whose class forwards to one actual internal editor.
 interface TextArea: IWidget + IContainerLayout + IScrolling {
