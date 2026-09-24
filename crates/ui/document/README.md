@@ -12,7 +12,7 @@ COM persistence envelope for deployment. `Document::to_binary` and
 `Document::from_binary` are the export/import boundary. Bytes can come from a
 file, an embedded `include_bytes!`, or a browser fetch; the loader does no I/O.
 
-Revision two supports Button, Checkbox, Textbox, TextBlock, TextArea, Slider,
+Revision three supports Button, Checkbox, Textbox, TextBlock, TextArea, Slider,
 Number, ColorSwatch, ListItem, ListBox, Scrollbar, flat Combo, Linear, Grid,
 SplitView, ScrollArea, and Disclosure. Container edges preserve tracks, spans,
 child order, and exact cross sizes. A component is the unit of persistence:
@@ -28,14 +28,16 @@ file contents.
 Create `Loader::new(ui, parent_window, resources)` and call `load(binary)` or
 `prepare(&document)`. It returns an opaque `Component`; the application sees
 only `root()`, `outputs()`, typed `input::<SetText>("title")`, and `save()`.
-When loading a node with exported outputs, construction supplies its generated
-`exported_observer()` before the node factory returns. That one observer also
-implements `INamedOutputs`; the component export table retains this capability
-and maps public names to concrete observer ports. Nodes without public exports or private connections receive
-no observer. Installing a named target checks its exact receiver interface and
-updates only the downstream destination; the widget's observer remains fixed.
-An exported post uses one additional concrete COM forwarding call, with no
-per-post name lookup and no intermediate owned message copy.
+For each observed child, construction installs exactly one typed observer
+connected to its containing form. The form owns the child event queue, matches each event
+variant, executes matching visual actions, and may relay the complete event to a
+public application binding. A public output gets a separate, form-owned
+`exported_observer()` proxy; that proxy is never installed on the child. The
+component export table maps one public name per observed child to the proxy's
+sole physical port. Rebinding replaces its one downstream application receiver,
+while the child's construction-time observer remains the form. Invalid names or
+receiver types preserve the previous application destination. Unobserved children
+receive no observer and allocate no event adapter.
 
 Use `neocogi_com::events::bind_output` with the concrete event type declared by
 the component's public contract. Wrong types fail at connection time. Inputs
@@ -48,7 +50,8 @@ Internal node keys are unique names, independent of text and sibling position.
 They identify editor selection and document binding targets. Applications bind
 public names; they do not acquire private widgets or interpret their paths.
 Moving a node preserves its key and therefore its authored connections. Each
-concrete event port has one destination and may be exported only once.
+child event port has exactly one consumer, the form, and may have at most one
+public relay.
 
 ## Reload and ownership
 
@@ -87,14 +90,17 @@ not modify its document. The designer edits `Document` and reloads the preview;
 application session persistence should use an explicit application state model.
 
 The binary format and schema are experimental. Ordinals and field order belong
-to revision two; older revisions are rejected rather than migrated. Limits bound document bytes, traversal depth, node count, and decoded
-values. Validation rejects unknown fields in JSON, unknown revisions, malformed
+to revision three; older revisions are rejected rather than migrated. Limits
+bound document bytes, traversal depth, node count, and decoded values. Validation rejects unknown fields in JSON, unknown revisions, malformed
 endpoints, unsupported resources, and invalid numeric/layout policies.
 
-`WidgetSpec::outputs()` returns typed `OutputPort` records containing the port
-name and captured payload type. Validation, visual connections, and Rust handler
-generation use that same declaration. Font/icon/image capability queries are
-shared by validation and inspector construction; concrete resource setters remain
+`WidgetSpec::outputs()` returns zero or one physical event stream per widget.
+`WidgetSpec::event_variants()` lists the cases the form may match for visual
+actions. Textbox and TextArea expose one physical `event` port carrying a whole
+`TextboxEvent` or `TextAreaEvent` enum, while `changed` and `submitted` are
+logical cases within that enum. Rust handler generation exports the whole enum
+under one public name. Validation and the designer share these declarations.
+Font/icon/image capability queries are shared by validation and inspector construction; concrete resource setters remain
 explicit typed dispatch. Generated Rust symbols collapse punctuation runs and
 retain declaration ordinals for collision avoidance. Public endpoint names remain
 exact string literals.
@@ -132,11 +138,11 @@ kinds and their inspector labels come from `InputKind::ALL` and `InputKind::labe
 
 ## Executable connections
 
-Revision two requires a `connections` array. Each edge names `source`, `port`,
+Revision three requires a `connections` array. Each action names `source`, `event`,
 `target`, and a typed `action`, for example:
 
 ```json
-{"source":"name","port":"changed","target":"title","action":{"Forward":"Text"}}
+{"source":"name","event":"changed","target":"title","action":{"Forward":"Text"}}
 ```
 
 `Forward` accepts compatible payload fields: checkbox state to checked/enabled/
@@ -146,10 +152,12 @@ variants (`Text`, `Checked`, `Value`, `Enabled`, `Expanded`, `Selection`, `Offse
 `Position`) work with any source event, including button activation. Model
 replacement remains an application input rather than an event transformation.
 
-Each output port has one destination: either a public export or one private edge.
-Validation rejects conflicts, missing endpoints, incompatible payloads, and invalid
-constants before construction. Target widgets still apply their current range
-policies; a forwarded selection absent from the destination model reports an error.
+The child event port has one consumer: its form. A form may apply multiple
+actions to one event case and also forward the complete event through one public
+export. These are form effects, not additional child-port consumers. Validation
+rejects multiple public names for one child, missing endpoints, incompatible
+forwarded payloads, and invalid constants before construction. Target widgets
+still apply their current range policies; a forwarded selection absent from the destination model reports an error.
 
 Observers only capture facts into the mounted component's queue. Its controller
 applies resolved concrete commands after traversal releases widget borrows. Silent

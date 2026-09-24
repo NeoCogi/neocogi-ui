@@ -9,8 +9,8 @@ Rust facade supplies mpsc transport. A textbox has one observer covering both
 use neocogi_ui as ui;
 let (sender, messages) = std::sync::mpsc::channel();
 let name = ui.widgets().textbox("", sender.clone(), |event| match event {
-    ui::textbox::Event::Changed(value) => AppMessage::Name(value.text),
-    ui::textbox::Event::Submitted(value) => AppMessage::Submit(value.text),
+    ui::textbox::Event::Changed { text, .. } => AppMessage::Name(text),
+    ui::textbox::Event::Submitted { text } => AppMessage::Submit(text),
 })?;
 ```
 
@@ -20,25 +20,34 @@ does not introduce an update session, dispatch guard or widget-private queue.
 
 ## Generated contract and allocation
 
-An NCIDL producer marked `#[observer]` declares ordinary message outputs. The
-compiler synthesizes a concrete observer interface and local event enum:
+An NCIDL producer marked `#[observer]` declares exactly one message-valued
+output port. A producer with multiple event kinds declares a `#[message]` enum
+named after its interface, such as `TextboxEvent`, and uses that enum as the
+sole port payload. The compiler rejects zero or multiple observer ports and
+generates a concrete observer interface and direct local enum adapter:
 
 ```rust
 // Authored IDL, abbreviated to show the ownership-related declarations.
-#[version(2)]
+#[message]
+enum TextboxEvent {
+    Changed { text: String, cursor: u64 },
+    Submitted { text: String },
+}
+#[version(3)]
 #[observer]
 interface Textbox {
-    changed: TextChanged;
-    submitted: TextSubmitted;
+    event: TextboxEvent;
 }
 // On UiFactory:
 fn create_textbox(&self, text: &[u8], observer: Option<&TextboxObserver>) -> Result<Textbox>;
 ```
 
-The generated `TextboxObserver` methods borrow `NcMessage<TextChanged>` and
-`NcMessage<TextSubmitted>`. Their adapter validates and acquires each concrete
-message before invoking the local callback with `TextboxEvent`. The producer's
-factory retains the optional observer before returning the widget. The compiler
+The generated `TextboxObserver::event` method borrows
+`NcMessage<TextboxEvent>`. Its adapter validates and acquires the complete
+enum before invoking the sole local callback. No second wrapper enum or
+separately subscribed `changed`/`submitted` port is generated. Each widget
+retains at most one observer; that observer is its only event consumer. The
+producer's factory retains the optional observer before returning the widget. The compiler
 does not infer which factories create a producer or enforce their retention
 implementation; built-in factories implement and test that rule explicitly.
 
@@ -56,14 +65,14 @@ sequenceDiagram
     F-->>A: Widget handle
     Note over O,W: No output setter or later widget binding
     W->>W: Commit a user edit
-    W->>O: changed(borrowed concrete wire message)
+    W->>O: event(borrowed TextboxEvent wire message)
     O->>O: Checked decode, domain validation, mapper
     O->>Q: send(owned application message)
     Note over A,Q: Existing runtime dispatch later grants &mut model
 ```
 
-Each observed convenience constructor creates one observer allocation, independent of the
-number of outputs. The mapper is stored inline; there is no separately boxed
+Each observed convenience constructor creates one observer allocation for its
+sole event port. The mapper is stored inline; there is no separately boxed
 callback, `Any`, local raw callback pointer or per-frame observer creation.
 There is still a setup query for the observer projection and a retaining reference
 increment in the factory. Posting crosses one observer COM method and decodes an
@@ -107,15 +116,32 @@ flowchart LR
     AQ -->|existing root dispatch| AM[Application model: &mut self]
 ```
 
-Document output names remain configurable after loading. For a node with exports,
-the loader constructs one generated `exported_observer()` implementing both the
-concrete observer and `INamedOutputs`, and passes the observer to the factory.
-The component registers its named-output projection with
-`NamedOutputs::export_component`. Public binding replaces a downstream concrete
-receiver field on that object, never the widget's observer. Invalid names or
-receiver types preserve the previous destination. Delivery adds one COM forwarding
-call with the borrowed message, without a name lookup or intermediate owned copy.
-Nodes without exported outputs receive no such adapter.
+Document output names remain configurable after loading. The loader gives
+an observed child one callback that sends its complete typed event to the
+containing form. The form is the sole consumer of the child's event port. Its
+`EventModel::handle(&mut self, message)` matches the event enum with `match`,
+executes zero or more visual output-to-input actions, and optionally forwards
+the complete event to a public application binding. These actions and the
+public relay are effects of the form, not extra consumers of the child port.
+
+```mermaid
+flowchart LR
+    T[Textbox event: Changed or Submitted] -->|one observer| Q[Form inbox]
+    Q --> M[Form handle: match event]
+    M -->|Changed| A[SetText on preview]
+    M -->|optional whole enum| P[Form-owned public relay]
+    P --> APP[One application observer]
+```
+
+For a public output, the loader creates a separate generated
+`exported_observer()` owned by the form and registers its `INamedOutputs`
+projection with `NamedOutputs::export_component`. This proxy is never passed
+to the child factory. A successful binding replaces its sole downstream
+application receiver; an invalid name or receiver type preserves the previous
+one. The child-to-form observer remains fixed until child closure. Each child
+may expose at most one public output name because it has only one physical
+stream, even though its form may define several visual actions for different
+enum variants.
 
 ## Scope and linkage
 
@@ -152,7 +178,7 @@ Workspace unit, integration, compile-fail and documentation tests pass. The fina
 workspace run used an isolated `CARGO_TARGET_DIR` after the ordinary cache was
 removed during an earlier run.
 
-Focused regressions cover a single allocation shared by textbox outputs, no
+Focused regressions cover a single allocation for the textbox event enum, no
 additional factory allocation when retaining an observer, logical closure with
 surviving widget handles, failed construction, rejected malformed/domain-invalid
 messages before mapping, and named-export replacement without replacing the

@@ -72,9 +72,9 @@ allocate. An allocation regression compares 64 warmed ordinary updates with
 
 Declare cross-COM facts as concrete NCIDL `#[message]` structs/enums and mark the
 producing interface `#[observer]`. The compiler generates one typed observer
-interface with a method for each output, plus a local aggregate event enum.
-For example, `TextboxEvent` has `Changed(TextChanged)` and
-`Submitted(TextSubmitted)` variants. No output setter is generated for that
+interface for the producer's sole output port. When the widget reports several event kinds, that port carries a
+message enum. For example, `TextboxEvent` has `Changed { text, cursor }` and
+`Submitted { text }` variants. No output setter is generated for that
 producer. Its factory explicitly accepts `Option<&TextboxObserver>`.
 
 The Rust facade supplies the standard channel adapter:
@@ -86,8 +86,8 @@ enum Message { Name(String), Submit(String) }
 fn example(ui: &Ui) -> Result<(), NcStatus> {
     let (send, messages) = std::sync::mpsc::channel();
     let name = ui.widgets().textbox("", send, |event| match event {
-        textbox::Event::Changed(value) => Message::Name(value.text),
-        textbox::Event::Submitted(value) => Message::Submit(value.text),
+        textbox::Event::Changed { text, .. } => Message::Name(text),
+        textbox::Event::Submitted { text } => Message::Submit(text),
     })?;
     // Retain messages in the owner's normal controller and mount name in its view.
     Ok(())
@@ -100,8 +100,8 @@ passing through `textbox_with_observer(text, Some(observer.as_com_ref()))`.
 `textbox_unobserved(text)` passes `None` and allocates no observer.
 
 An observed constructor allocates one COM observer with the sender and mapper
-stored inline. Both textbox outputs share it. The widget retains it before the
-factory returns; a factory failure releases temporary captures. Separate calls
+stored inline. Both textbox variants travel through its one output port. The
+widget retains it before the factory returns; a factory failure releases temporary captures. Separate calls
 normally create separate observers, but callers may explicitly share an observer
 when their mapping is identical. There is no additional event queue per widget.
 
@@ -140,10 +140,12 @@ owning UI to avoid reference cycles.
 The constructor policy covers built-in node controls, choice menus and file
 dialogs. Window, popup and application-menu event capabilities still use
 `events::bind(output, sender, mapper)`. Unannotated IDL producers also retain their
-ordinary per-output setters. Named document exports use a generated observer
-provided at construction, then allow downstream destinations to be configured
-through `INamedOutputs`; they do not replace the widget's observer. See
-[construction observers](../../../../docs/CONSTRUCTION_OBSERVERS.md).
+ordinary per-output setters. A document form supplies each observed child's
+sole observer at construction.
+The form matches the complete typed stream, performs visual actions, and may
+forward it through a separate form-owned generated observer. `INamedOutputs`
+rebinds that proxy's one application destination; it never replaces the child's
+observer. See [construction observers](../../../../docs/CONSTRUCTION_OBSERVERS.md).
 
 ## Composites and attachment
 
