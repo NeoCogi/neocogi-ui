@@ -9,8 +9,8 @@ Rust facade supplies mpsc transport. A textbox has one observer covering both
 use neocogi_ui as ui;
 let (sender, messages) = std::sync::mpsc::channel();
 let name = ui.widgets().textbox("", sender.clone(), |event| match event {
-    ui::textbox::Event::Changed { text, .. } => AppMessage::Name(text),
-    ui::textbox::Event::Submitted { text } => AppMessage::Submit(text),
+    ui::textbox::Event::Changed(value) => AppMessage::Name(value.text),
+    ui::textbox::Event::Submitted(value) => AppMessage::Submit(value.text),
 })?;
 ```
 
@@ -23,17 +23,21 @@ does not introduce an update session, dispatch guard or widget-private queue.
 An NCIDL producer marked `#[observer]` declares exactly one message-valued
 output port. A producer with multiple event kinds declares a `#[message]` enum
 named after its interface, such as `TextboxEvent`, and uses that enum as the
-sole port payload. The compiler rejects zero or multiple observer ports and
-generates a concrete observer interface and direct local enum adapter:
+sole port payload. Marked messages may nest other marked messages by value,
+so the enum can reuse existing `TextChanged` and `TextSubmitted` payloads. The
+compiler rejects zero or multiple observer ports and generates a concrete
+observer interface and direct local enum adapter:
 
 ```rust
 // Authored IDL, abbreviated to show the ownership-related declarations.
+// TextChanged and TextSubmitted are separately declared #[message] structs.
+#[version(2)]
 #[message]
 enum TextboxEvent {
-    Changed { text: String, cursor: u64 },
-    Submitted { text: String },
+    Changed(TextChanged),
+    Submitted(TextSubmitted),
 }
-#[version(3)]
+#[version(4)]
 #[observer]
 interface Textbox {
     event: TextboxEvent;
@@ -43,12 +47,12 @@ fn create_textbox(&self, text: &[u8], observer: Option<&TextboxObserver>) -> Res
 ```
 
 The generated `TextboxObserver::event` method borrows
-`NcMessage<TextboxEvent>`. Its adapter validates and acquires the complete
-enum before invoking the sole local callback. No second wrapper enum or
-separately subscribed `changed`/`submitted` port is generated. Each widget
+`NcMessage<TextboxEvent>`. Its adapter recursively validates and acquires
+the complete enum and its nested text message before invoking the sole
+local callback. No second wrapper enum or separately subscribed `changed`/`submitted` port is generated. Each widget
 retains at most one observer; that observer is its only event consumer. The
-producer's factory retains the optional observer before returning the widget. The compiler
-does not infer which factories create a producer or enforce their retention
+producer's factory retains the optional observer before returning the widget.
+The compiler does not infer which factories create a producer or enforce their retention
 implementation; built-in factories implement and test that rule explicitly.
 
 ```mermaid

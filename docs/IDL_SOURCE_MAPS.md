@@ -80,7 +80,8 @@ methods, functions, fields, variants and helpers.
 | Integer enum or bit flag macro body | Its declaration and each variant/flag |
 | Interface method and associated generated output methods | The method or output identifier |
 | `TextboxObserver` | The `Textbox` declaration that requests an observer |
-| Observer `changed` method and `TextboxEvent::Changed` | The producer's `changed` output |
+| Observer `event` method | The producer's sole `event` output |
+| `TextboxEvent::Changed` | The message enum's `Changed` variant |
 | Message wire record and codec helpers | The originating message declaration |
 | Message case helper and borrowed named fields | The originating variant and field |
 | Imported re-export | The local IDL `use` statement |

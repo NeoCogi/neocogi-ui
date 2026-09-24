@@ -72,10 +72,10 @@ allocate. An allocation regression compares 64 warmed ordinary updates with
 
 Declare cross-COM facts as concrete NCIDL `#[message]` structs/enums and mark the
 producing interface `#[observer]`. The compiler generates one typed observer
-interface for the producer's sole output port. When the widget reports several event kinds, that port carries a
-message enum. For example, `TextboxEvent` has `Changed { text, cursor }` and
-`Submitted { text }` variants. No output setter is generated for that
-producer. Its factory explicitly accepts `Option<&TextboxObserver>`.
+interface for the producer's sole output port. When the widget reports several
+event kinds, that port carries a message enum. For example, `TextboxEvent` has `Changed(TextChanged)` and
+`Submitted(TextSubmitted)` variants that reuse the core message contracts.
+No output setter is generated for that producer. Its factory explicitly accepts `Option<&TextboxObserver>`.
 
 The Rust facade supplies the standard channel adapter:
 
@@ -86,8 +86,8 @@ enum Message { Name(String), Submit(String) }
 fn example(ui: &Ui) -> Result<(), NcStatus> {
     let (send, messages) = std::sync::mpsc::channel();
     let name = ui.widgets().textbox("", send, |event| match event {
-        textbox::Event::Changed { text, .. } => Message::Name(text),
-        textbox::Event::Submitted { text } => Message::Submit(text),
+        textbox::Event::Changed(value) => Message::Name(value.text),
+        textbox::Event::Submitted(value) => Message::Submit(value.text),
     })?;
     // Retain messages in the owner's normal controller and mount name in its view.
     Ok(())
