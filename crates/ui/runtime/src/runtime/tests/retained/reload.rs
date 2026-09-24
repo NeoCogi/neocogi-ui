@@ -161,7 +161,6 @@ fn all_builtin_document_controls_construct_and_reload() {
             .map(|port| Output {
                 name: port.name.into(),
                 node: "root".into(),
-                port: port.name.into(),
             })
             .collect();
         let inputs = InputKind::ALL
@@ -210,6 +209,8 @@ fn all_builtin_document_controls_construct_and_reload() {
                     OutputType::Offset => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: ScrollbarChanged| ()),
                     OutputType::Position => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: neocogi_ui::events::SplitChanged| ()),
                     OutputType::Selection => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: neocogi_ui::events::ChoiceSelection| ()),
+                    OutputType::TextboxEvent => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: neocogi_ui::textbox::Event| ()),
+                    OutputType::TextAreaEvent => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: neocogi_ui::text_area::Event| ()),
                 }?;
             }
             Ok(())
@@ -421,7 +422,6 @@ fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
         outputs: vec![Output {
             name: "changed".into(),
             node: "root".into(),
-            port: "changed".into(),
         }],
         inputs: vec![Input {
             name: "set".into(),
@@ -515,7 +515,7 @@ fn private_connection_executes_after_real_click_and_retires_with_its_scope() {
     document.outputs.clear();
     document.connections.push(Connection {
         source: "button".into(),
-        port: "activated".into(),
+        event: "activated".into(),
         target: "button".into(),
         action: Action::Text("After".into()),
     });
@@ -542,9 +542,9 @@ fn private_connection_executes_after_real_click_and_retires_with_its_scope() {
     assert!(button.label().is_err());
 }
 
-/// One checkbox event reaches two private targets and its public application observer.
+/// The form consumes one checkbox event, applies two actions, and forwards its public value.
 #[test]
-fn checkbox_connection_fans_out_to_private_and_public_destinations() {
+fn form_owns_checkbox_actions_and_public_forwarding() {
     let mut fixture = Headless::standard();
     let mut slot = slot(&fixture.ui);
     let mut document = Document::new("forwarded state");
@@ -555,12 +555,12 @@ fn checkbox_connection_fans_out_to_private_and_public_destinations() {
             node: Node::new(key, WidgetSpec::Checkbox { text: key.into(), checked: false }),
         });
     }
-    document.outputs = vec![Output { name: "source_changed".into(), node: "source".into(), port: "changed".into() }];
+    document.outputs = vec![Output { name: "source_changed".into(), node: "source".into() }];
     document.inputs.clear();
     for key in ["target", "second"] {
         document.connections.push(Connection {
             source: "source".into(),
-            port: "changed".into(),
+            event: "changed".into(),
             target: key.into(),
             action: Action::Forward(InputKind::Checked),
         });
@@ -588,4 +588,48 @@ fn checkbox_connection_fans_out_to_private_and_public_destinations() {
     assert!(target.checked().unwrap());
     assert!(second.checked().unwrap());
     assert_eq!(events.try_recv(), Ok(true));
+}
+
+/// One text event enum reaches the form; its changed variant updates a visual target
+/// while both changed and submitted remain visible through the sole public stream.
+#[test]
+fn textbox_enum_stream_drives_form_action_and_public_observer() {
+    let mut fixture = Headless::standard();
+    let mut slot = slot(&fixture.ui);
+    let mut document = Document::new("text event owner");
+    document.root = Node::new("form", WidgetSpec::Form { width: 300, height: 200 });
+    document.root.children.push(Child {
+        edge: Edge::Position { x: 0, y: 0, width: 200, height: 40 },
+        node: Node::new("name", WidgetSpec::Textbox { text: String::new() }),
+    });
+    document.root.children.push(Child {
+        edge: Edge::Position { x: 0, y: 60, width: 200, height: 40 },
+        node: Node::new("preview", WidgetSpec::TextBlock { text: String::new(), wrapping: Wrapping::None }),
+    });
+    document.outputs = vec![Output { name: "name_event".into(), node: "name".into() }];
+    document.inputs.clear();
+    document.connections.push(Connection {
+        source: "name".into(),
+        event: "changed".into(),
+        target: "preview".into(),
+        action: Action::Forward(InputKind::Text),
+    });
+    let (sender, events) = std::sync::mpsc::channel();
+    slot.reload(&document, Resources::new(), |component, _| {
+        bind_output(component.outputs()?.as_com_ref(), "name_event", sender, |event: neocogi_ui::textbox::Event| event)
+    })
+    .unwrap();
+    fixture.frame(VIEW).unwrap();
+    let form = slot.component().unwrap().root().unwrap().as_interface().add_ref().query::<FormAbi>().unwrap();
+    let children = form.children().unwrap();
+    let preview = Widget::from_interface(children.child(1).unwrap().query::<TextBlockAbi>().unwrap());
+    pointer(&fixture.ui, Point { x: 30, y: 30 }, true);
+    pointer(&fixture.ui, Point { x: 30, y: 30 }, false);
+    fixture.ui.input(UiInput::Text, "Ada").unwrap();
+    fixture.frame(VIEW).unwrap();
+    assert_eq!(preview.text().unwrap(), "Ada");
+    assert!(matches!(events.try_recv(), Ok(neocogi_ui::textbox::Event::Changed { text, cursor }) if text == "Ada" && cursor == 3));
+    key(&fixture.ui, KeyCode::Enter, 0, 0);
+    fixture.frame(VIEW).unwrap();
+    assert!(matches!(events.try_recv(), Ok(neocogi_ui::textbox::Event::Submitted { text }) if text == "Ada"));
 }

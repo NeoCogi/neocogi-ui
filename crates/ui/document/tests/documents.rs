@@ -25,7 +25,7 @@ fn invalid_names_layouts_and_bindings_are_rejected() {
     document.root.children[1].node.key = "title".into();
     assert!(document.validate().is_err());
     let mut document = Document::new("test");
-    document.outputs[0].port = "changed".into();
+    document.outputs[0].node = "title".into();
     assert!(document.validate().is_err());
     let mut document = Document::new("test");
     document.inputs[0].kind = InputKind::Checked;
@@ -38,7 +38,7 @@ fn invalid_names_layouts_and_bindings_are_rejected() {
         name: "other".into(),
         ..document.outputs[0].clone()
     });
-    assert!(document.validate().is_err(), "a one-destination port cannot have competing public aliases");
+    assert!(document.validate().is_err(), "a child may expose only one public event-stream name");
     let mut document = Document::new("test");
     document.root.style.options = Some(u16::MAX);
     assert!(document.validate().is_err());

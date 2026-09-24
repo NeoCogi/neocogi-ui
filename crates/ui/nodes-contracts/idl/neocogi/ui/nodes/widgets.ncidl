@@ -1,4 +1,22 @@
-#[version(2)]
+#[version(1)]
+#[message]
+/// One typed output stream for every user-visible single-line edit event.
+enum TextboxEvent: u8 {
+    /// The complete text and cursor changed through user interaction.
+    Changed {
+        /// Complete normalized text captured after the edit.
+        text: String,
+        /// Scalar-aligned UTF-8 byte cursor in that text.
+        cursor: u64,
+    },
+    /// The user submitted the complete current text.
+    Submitted {
+        /// Complete submitted text, independent of later edits.
+        text: String,
+    },
+}
+
+#[version(3)]
 #[observer]
 /// Constructible single-line editor whose complete concrete API is the class contract.
 interface Textbox: IWidget + ILeafLayout {
@@ -14,10 +32,8 @@ interface Textbox: IWidget + ILeafLayout {
     fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
-    /// Connection access for captured TextChanged values.
-    changed: TextChanged;
-    /// Connection access for captured TextSubmitted values.
-    submitted: TextSubmitted;
+    /// The sole output port carries every typed textbox event to its owner.
+    event: TextboxEvent;
 }
 
 #[version(1)]
@@ -252,7 +268,25 @@ bitenum FillStates: u8 {
     ALL = 7,
 }
 
-#[version(2)]
+#[version(1)]
+#[message]
+/// One typed output stream for every user-visible multiline edit event.
+enum TextAreaEvent: u8 {
+    /// The complete text and cursor changed through user interaction.
+    Changed {
+        /// Complete normalized text captured after the edit.
+        text: String,
+        /// Scalar-aligned UTF-8 byte cursor in that text.
+        cursor: u64,
+    },
+    /// The user submitted the complete current text.
+    Submitted {
+        /// Complete submitted text, independent of later edits.
+        text: String,
+    },
+}
+
+#[version(3)]
 #[observer]
 /// Constructible fixed scrolling editor whose class forwards to one actual internal editor.
 interface TextArea: IWidget + IContainerLayout + IScrolling {
@@ -272,10 +306,8 @@ interface TextArea: IWidget + IContainerLayout + IScrolling {
     fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
-    /// Connection access for captured TextChanged values.
-    changed: TextChanged;
-    /// Connection access for captured TextSubmitted values.
-    submitted: TextSubmitted;
+    /// The sole output port carries every typed text-area event to its owner.
+    event: TextAreaEvent;
 }
 
 #[version(3)]

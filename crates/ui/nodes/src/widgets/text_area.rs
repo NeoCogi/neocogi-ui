@@ -303,15 +303,15 @@ impl TextEditor {
         // Emit complete immutable snapshots after the semantic update has committed cursor and text.
         if outcome.changed {
             ctx.posted(
-                neocogi_ui_nodes_contracts::TextAreaEvent::Changed(crate::TextChanged {
+                neocogi_ui_nodes_contracts::TextAreaEvent::Changed {
                     text: self.buf.clone(),
                     cursor: self.cursor as u64,
-                })
-                .post_to(&mut self.observer),
+                }
+                .post_to_observer(&mut self.observer),
             );
         }
         if outcome.submitted {
-            ctx.posted(neocogi_ui_nodes_contracts::TextAreaEvent::Submitted(crate::TextSubmitted { text: self.buf.clone() }).post_to(&mut self.observer));
+            ctx.posted(neocogi_ui_nodes_contracts::TextAreaEvent::Submitted { text: self.buf.clone() }.post_to_observer(&mut self.observer));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(outcome.changed)
@@ -932,8 +932,8 @@ mod tests {
         let (events_tx, events) = std::sync::mpsc::channel();
         text_area.observer = Some(
             neocogi_ui::text_area::observer(events_tx, |event| match event {
-                neocogi_ui::text_area::Event::Changed(value) => RecordedEvent::Changed(value.text, value.cursor),
-                neocogi_ui::text_area::Event::Submitted(value) => RecordedEvent::Submitted(value.text),
+                neocogi_ui::text_area::Event::Changed { text, cursor } => RecordedEvent::Changed(text, cursor),
+                neocogi_ui::text_area::Event::Submitted { text } => RecordedEvent::Submitted(text),
             })
             .unwrap(),
         );

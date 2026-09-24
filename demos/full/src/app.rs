@@ -560,8 +560,8 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
     let log_scroll = ui.widgets().scroll_area(&log, true)?;
     // Ignore edit snapshots before queueing; only submissions are app commands.
     let entry_observer = neocogi_ui::textbox::filter_observer(events_tx.clone(), |event| match event {
-        neocogi_ui::textbox::Event::Changed(_) => None,
-        neocogi_ui::textbox::Event::Submitted(value) => Some(Message::Text(value)),
+        neocogi_ui::textbox::Event::Changed { .. } => None,
+        neocogi_ui::textbox::Event::Submitted { text } => Some(Message::Text(neocogi_ui::events::TextSubmitted { text })),
     })?;
     let mut entry = ui.widgets().textbox_with_observer("", Some(entry_observer.as_com_ref()))?;
     entry.set_font_role(FontRole::Mono)?;

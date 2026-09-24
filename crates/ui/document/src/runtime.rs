@@ -8,7 +8,7 @@ use neocogi_com::persistence::{FactoryRegistry, ObjectRecord, IPersistable, IPer
 use neocogi_com::events::{NamedOutputs, INamedOutputsAbi};
 use neocogi_com::events::INamedOutputs;
 use neocogi_ui::{Ui, Widget, IWidgetAbi, IWindowAbi, ITextureAbi};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::mpsc};
 use neocogi_ui::{IEventOwner, IEventOwnerAbi, IEventOwnerInterfacesFor, Mount, Mountable, events::Controller};
 
 /// Recipe identity describes the authored component schema, never a runtime instance.
@@ -264,10 +264,12 @@ impl IPersistenceFactory for Factory {
 impl Services {
     /// Builds the checked tree and concrete endpoints with one cleanup guard until ownership transfers.
     fn construct(&self, document: Document) -> Result<ComPtr<IUnknown>, NcStatus> {
+        let (sender, messages) = mpsc::channel();
         let mut construction = Construction {
             declarations: &document.outputs,
             connections: &document.connections,
-            private_outputs: BTreeMap::new(),
+            sender,
+            public: BTreeMap::new(),
             outputs: NamedOutputs::new(),
             ui: &self.ui,
             parent: self.parent.as_ref(),
@@ -276,8 +278,9 @@ impl Services {
         };
         let root = construction.build(&document.root)?;
         let outputs = std::mem::take(&mut construction.outputs);
+        let public = std::mem::take(&mut construction.public);
         let inputs = crate::bindings::inputs(&document, &construction.nodes)?;
-        let wiring = crate::wiring::prepare(&document, &construction.nodes, &construction.private_outputs)?;
+        let wiring = crate::wiring::prepare(&document, &construction.nodes, public, messages)?;
         // Success transfers tree ownership to Loaded; the construction guard no longer closes it.
         construction.nodes.clear();
         drop(construction);

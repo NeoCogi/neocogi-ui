@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "name": "all public contracts",
   "root": {
     "key": "root",
@@ -232,43 +232,31 @@
   "outputs": [
     {
       "name": "save",
-      "node": "button",
-      "port": "activated"
+      "node": "button"
     },
     {
       "name": "type",
-      "node": "check",
-      "port": "changed"
+      "node": "check"
     },
     {
       "name": "quote\"\n// x",
-      "node": "text",
-      "port": "changed"
-    },
-    {
-      "name": "text submitted",
-      "node": "text",
-      "port": "submitted"
+      "node": "text"
     },
     {
       "name": "value",
-      "node": "slider",
-      "port": "changed"
+      "node": "slider"
     },
     {
       "name": "pixel-offset",
-      "node": "scroll",
-      "port": "changed"
+      "node": "scroll"
     },
     {
       "name": "pixel_offset",
-      "node": "split",
-      "port": "changed"
+      "node": "split"
     },
     {
       "name": "selection",
-      "node": "combo",
-      "port": "changed"
+      "node": "combo"
     }
   ],
   "inputs": [

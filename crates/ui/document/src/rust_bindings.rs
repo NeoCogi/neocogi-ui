@@ -38,6 +38,8 @@ impl OutputType {
             Self::Offset => "neocogi_ui::events::ScrollbarChanged",
             Self::Position => "neocogi_ui::events::SplitChanged",
             Self::Selection => "neocogi_ui::events::ChoiceSelection",
+            Self::TextboxEvent => "neocogi_ui::textbox::Event",
+            Self::TextAreaEvent => "neocogi_ui::text_area::Event",
         }
     }
 }
@@ -69,7 +71,7 @@ impl Document {
             let payload = self
                 .root
                 .find(&output.node)
-                .and_then(|node| node.widget.output_type(&output.port))
+                .and_then(|node| node.widget.outputs().first().map(|stream| stream.payload))
                 .ok_or("Missing output contract")?;
             writeln!(source, "    /// Public output {:?}.\n    Output{index}({}),", output.name, payload.rust_type()).unwrap();
         }
@@ -79,7 +81,7 @@ impl Document {
             let payload = self
                 .root
                 .find(&output.node)
-                .and_then(|node| node.widget.output_type(&output.port))
+                .and_then(|node| node.widget.outputs().first().map(|stream| stream.payload))
                 .ok_or("Missing output contract")?;
             writeln!(source, "    /// Handles public output {:?} at the application's safe update boundary.\n    fn {}(&mut self, value: {}) -> Result<(), neocogi_com::NcStatus>;", output.name, symbol("on", &output.name, index), payload.rust_type()).unwrap();
         }
@@ -122,7 +124,7 @@ impl Document {
             let payload = self
                 .root
                 .find(&output.node)
-                .and_then(|node| node.widget.output_type(&output.port))
+                .and_then(|node| node.widget.outputs().first().map(|stream| stream.payload))
                 .ok_or("Missing output contract")?;
             writeln!(source, "    neocogi_com::events::bind_output(outputs.as_com_ref(), {:?}, _send.clone(), move |value: {}| Message {{ generation: _generation, event: Event::Output{index}(value) }})?;", output.name, payload.rust_type()).unwrap();
         }

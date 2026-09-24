@@ -46,6 +46,10 @@ pub use neocogi_ui_core_contracts::{Activation, TextChanged, TextSubmitted, Wind
 pub use neocogi_ui_nodes_contracts::{CheckboxChanged, NumericChanged, ScrollbarChanged, SplitChanged};
 
 /// Owned, concrete event consumer installed once at an output boundary.
+/// An observed widget has one event port and one construction-time consumer;
+/// controls with several event kinds carry a typed enum on that port. A composite
+/// consumes child events with `EventModel::handle(&mut self, message)` and owns
+/// any visual actions or public forwarding derived from them.
 /// The event type remains statically known; this alias hides only repeated closure syntax.
 pub type EventConsumer<E> = Box<dyn FnMut(E) -> Result<(), NcStatus>>;
 
@@ -99,9 +103,9 @@ fn valid_split(event: &SplitChanged) -> Result<(), NcStatus> {
 }
 
 /// Checks the captured cursor against the complete generated UTF-8 text snapshot.
-fn valid_text_cursor(event: &TextChanged) -> Result<(), NcStatus> {
-    let position = usize::try_from(event.cursor).map_err(|_| NC_E_INVALID_ARG)?;
-    if event.text.is_char_boundary(position) {
+fn valid_text_cursor(text: &str, cursor: u64) -> Result<(), NcStatus> {
+    let position = usize::try_from(cursor).map_err(|_| NC_E_INVALID_ARG)?;
+    if text.is_char_boundary(position) {
         Ok(())
     } else {
         Err(NC_E_INVALID_ARG)
@@ -188,8 +192,8 @@ widget_observer!(
     neocogi_ui_nodes_contracts::TextboxEvent,
     TextboxObserverAbi,
     |event: &Event| match event {
-        Event::Changed(value) => valid_text_cursor(value),
-        Event::Submitted(_) => Ok(()),
+        Event::Changed { text, cursor } => valid_text_cursor(text, *cursor),
+        Event::Submitted { .. } => Ok(()),
     }
 );
 widget_observer!(
@@ -197,8 +201,8 @@ widget_observer!(
     neocogi_ui_nodes_contracts::TextAreaEvent,
     TextAreaObserverAbi,
     |event: &Event| match event {
-        Event::Changed(value) => valid_text_cursor(value),
-        Event::Submitted(_) => Ok(()),
+        Event::Changed { text, cursor } => valid_text_cursor(text, *cursor),
+        Event::Submitted { .. } => Ok(()),
     }
 );
 widget_observer!(

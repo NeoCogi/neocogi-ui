@@ -1,9 +1,9 @@
 //! Concrete factory mappings and ownership cleanup for unpublished candidates.
 use crate::model::*;
-use crate::Resources;
+use crate::{Resources, wiring::{Message, PublicEmitter, WidgetEvent}};
 use neocogi_com::{ComPtr, ComInterface, NcStatus, NcCopyFromBufferOffset, NC_E_INVALID_ARG, NC_E_NOT_FOUND};
 use neocogi_ui::*;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::mpsc::Sender};
 
 /// Owns all created nodes until construction transfers them to the loaded component.
 pub(crate) struct Construction<'a> {
@@ -11,9 +11,11 @@ pub(crate) struct Construction<'a> {
     pub declarations: &'a [crate::model::Output],
     /// Private executable edges also require construction-time observers.
     pub connections: &'a [Connection],
-    /// Setup-only node output tables retained until private mappings are installed.
-    pub private_outputs: BTreeMap<String, ComPtr<neocogi_com::events::INamedOutputsAbi>>,
-    /// Component-owned public bindings, separate from widget lifetimes and topology.
+    /// Each observed child sends its complete typed event to the form's one inbox.
+    pub sender: Sender<Message>,
+    /// Form-owned public relays; none is passed to a child widget.
+    pub public: BTreeMap<String, PublicEmitter>,
+    /// Component-owned application bindings, separate from widget lifetimes.
     pub outputs: neocogi_com::events::NamedOutputs,
     /// Existing runtime and independently deployed built-in factory.
     pub ui: &'a Ui,
@@ -58,37 +60,40 @@ impl Construction<'_> {
     pub fn build(&mut self, node: &Node) -> Result<Widget<IWidgetAbi>, NcStatus> {
         let children = node.children.iter().map(|child| self.build(&child.node)).collect::<Result<Vec<_>, _>>()?;
         let factory = self.ui.widgets();
-        // A named document export is the widget's fixed observer. Public names
-        // resolve only during binding; later posts forward through typed fields.
+        // Each child receives only the form's observer at construction. The form
+        // alone selects visual actions and optional application forwarding later.
         macro_rules! create {
-            ($factory:expr, $method:ident, $event:ty, $($argument:expr),* $(,)?) => {{
-                let mut exports = self.declarations.iter().filter(|output| output.node == node.key).peekable();
+            ($factory:expr, $method:ident, $event:ty, $kind:ident, $($argument:expr),* $(,)?) => {{
+                let exported = self.declarations.iter().find(|output| output.node == node.key);
                 let connected = self.connections.iter().any(|connection| connection.source == node.key);
-                let observer = match (exports.peek(), connected) {
-                    (None, false) => None,
-                    _ => {
-                        let (observer, bindings) = <$event>::exported_observer()?;
-                        if connected {
-                            self.private_outputs.insert(node.key.clone(), bindings.clone());
-                        }
-                        for export in exports {
-                            self.outputs.export_component(&export.name, bindings.clone(), &export.port)?;
-                        }
-                        Some(observer)
-                    }
+                let observer = if exported.is_some() || connected {
+                    let sender = self.sender.clone();
+                    let source = node.key.clone();
+                    Some(<$event>::observer(move |event| {
+                        // A retired form may disconnect normally; no child call becomes an error.
+                        let _ = sender.send(Message { source: source.clone(), event: WidgetEvent::$kind(event) });
+                        Ok(())
+                    })?)
+                } else {
+                    None
                 };
+                if let Some(export) = exported {
+                    let (proxy, bindings) = <$event>::exported_observer()?;
+                    self.outputs.export_component(&export.name, bindings, node.widget.outputs()[0].name)?;
+                    self.public.insert(node.key.clone(), PublicEmitter::$kind(Some(proxy)));
+                }
                 $factory.$method($($argument,)* observer.as_ref().map(|value| value.as_com_ref()))?
             }};
         }
         let mut widget = match &node.widget {
-            WidgetSpec::Button { text } => root(create!(factory, button_with_observer, nodes::ButtonEvent, text))?,
-            WidgetSpec::Checkbox { text, checked } => root(create!(factory, checkbox_with_observer, nodes::CheckboxEvent, text, *checked))?,
-            WidgetSpec::Textbox { text } => root(create!(factory, textbox_with_observer, nodes::TextboxEvent, text))?,
+            WidgetSpec::Button { text } => root(create!(factory, button_with_observer, nodes::ButtonEvent, Button, text))?,
+            WidgetSpec::Checkbox { text, checked } => root(create!(factory, checkbox_with_observer, nodes::CheckboxEvent, Checkbox, text, *checked))?,
+            WidgetSpec::Textbox { text } => root(create!(factory, textbox_with_observer, nodes::TextboxEvent, Textbox, text))?,
             WidgetSpec::TextBlock { text, wrapping: policy } => root(factory.text_block(text, wrapping(policy))?)?,
             WidgetSpec::TextArea { text, wrapping: policy, scrolling } => root(create!(
                 factory,
                 text_area_with_observer,
-                nodes::TextAreaEvent,
+                nodes::TextAreaEvent, TextArea,
                 text,
                 wrapping(policy),
                 *scrolling
@@ -96,7 +101,7 @@ impl Construction<'_> {
             WidgetSpec::Slider { value, low, high, step, precision } => root(create!(
                 factory,
                 slider_with_observer,
-                nodes::SliderEvent,
+                nodes::SliderEvent, Slider,
                 SliderOptions {
                     value: *value,
                     low: *low,
@@ -108,7 +113,7 @@ impl Construction<'_> {
             WidgetSpec::Number { value, step, precision } => root(create!(
                 factory,
                 number_with_observer,
-                nodes::NumberEvent,
+                nodes::NumberEvent, Number,
                 NumberOptions {
                     value: *value,
                     step: *step,
@@ -116,12 +121,12 @@ impl Construction<'_> {
                 }
             ))?,
             WidgetSpec::ColorSwatch { text, rgba } => root(factory.color_swatch(*rgba, text)?)?,
-            WidgetSpec::ListItem { text } => root(create!(factory, list_item_with_observer, nodes::ListItemEvent, text))?,
-            WidgetSpec::ListBox { text } => root(create!(factory, list_box_with_observer, nodes::ListBoxEvent, text))?,
+            WidgetSpec::ListItem { text } => root(create!(factory, list_item_with_observer, nodes::ListItemEvent, ListItem, text))?,
+            WidgetSpec::ListBox { text } => root(create!(factory, list_box_with_observer, nodes::ListBoxEvent, ListBox, text))?,
             WidgetSpec::Scrollbar { vertical, viewport, content, offset } => root(create!(
                 factory,
                 scrollbar_with_observer,
-                nodes::ScrollbarEvent,
+                nodes::ScrollbarEvent, Scrollbar,
                 ScrollRange {
                     axis: if *vertical { ScrollAxis::Vertical } else { ScrollAxis::Horizontal },
                     viewport: *viewport,
@@ -134,7 +139,7 @@ impl Construction<'_> {
                 let mut combo = create!(
                     self.ui,
                     combo_box_with_observer,
-                    IChoiceMenuEvent,
+                    IChoiceMenuEvent, Combo,
                     parent.as_com_ref(),
                     labels,
                     selection(*selected)
@@ -173,7 +178,7 @@ impl Construction<'_> {
             } => root(create!(
                 factory,
                 split_view_with_observer,
-                nodes::SplitViewEvent,
+                nodes::SplitViewEvent, Split,
                 SplitOptions {
                     axis: if *vertical { SplitAxis::Vertical } else { SplitAxis::Horizontal },
                     position: *position,

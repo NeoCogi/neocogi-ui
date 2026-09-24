@@ -308,7 +308,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
     window.close().unwrap();
 }
 
-/// Both editor roots expose independent typed ports, and popup dismissal uses the manager's real lifecycle source.
+/// Each editor exposes one typed enum-valued port, and popup dismissal uses its real lifecycle source.
 #[test]
 fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_sources() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
@@ -317,8 +317,8 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     let mut textbox = ui
         .widgets()
         .textbox("", session_tx.clone(), |event| match event {
-            neocogi_ui::textbox::Event::Changed(value) => format!("changed:{}:{}", value.text, value.cursor),
-            neocogi_ui::textbox::Event::Submitted(value) => format!("submitted:{}", value.text),
+            neocogi_ui::textbox::Event::Changed { text, cursor } => format!("changed:{text}:{cursor}"),
+            neocogi_ui::textbox::Event::Submitted { text } => format!("submitted:{text}"),
         })
         .unwrap();
     let window = ui.window("textbox", RECT, &textbox).unwrap();
@@ -339,8 +339,8 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     let area = ui
         .widgets()
         .text_area("", TextWrapping::Word, true, session_tx.clone(), |event| match event {
-            neocogi_ui::text_area::Event::Changed(value) => format!("changed:{}:{}", value.text, value.cursor),
-            neocogi_ui::text_area::Event::Submitted(value) => format!("submitted:{}", value.text),
+            neocogi_ui::text_area::Event::Changed { text, cursor } => format!("changed:{text}:{cursor}"),
+            neocogi_ui::text_area::Event::Submitted { text } => format!("submitted:{text}"),
         })
         .unwrap();
     let window = ui.window("textarea", RECT, &area).unwrap();

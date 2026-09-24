@@ -4,7 +4,7 @@ use serde::{Serialize, Deserialize};
 use std::collections::BTreeMap;
 
 /// Persistent schema revision; changes to field order or enum ordinals require a new revision.
-pub const VERSION: u32 = 2;
+pub const VERSION: u32 = 3;
 /// Maximum authored nodes in one component.
 pub const MAX_NODES: usize = 4096;
 /// Maximum authored ownership depth.
@@ -308,7 +308,7 @@ pub enum WidgetSpec {
     },
 }
 
-/// One stable public output mapped to a private concrete event port.
+/// One public name for a widget's sole typed event stream.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ComSerialize, ComDeserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Output {
@@ -316,8 +316,6 @@ pub struct Output {
     pub name: String,
     /// Internal node key.
     pub node: String,
-    /// Concrete declared event, such as activated or changed.
-    pub port: String,
 }
 
 /// One stable public input mapped to a typed setter.
@@ -485,7 +483,6 @@ impl Document {
             outputs: vec![Output {
                 name: "save_requested".into(),
                 node: "save".into(),
-                port: "activated".into(),
             }],
             connections: vec![],
             inputs: vec![Input {
@@ -503,7 +500,7 @@ impl Document {
         let mut nodes = BTreeMap::new();
         validate_node(&self.root, 0, &mut nodes)?;
         let mut names = std::collections::BTreeSet::new();
-        let mut ports = std::collections::BTreeSet::new();
+        let mut exported_nodes = std::collections::BTreeSet::new();
         for output in &self.outputs {
             if output.name.is_empty() || !names.insert(&output.name) {
                 return Err(format!("Duplicate or empty output: {}", output.name));
@@ -511,21 +508,21 @@ impl Document {
             let node = nodes
                 .get(output.node.as_str())
                 .ok_or_else(|| format!("Output {} refers to missing node {}", output.name, output.node))?;
-            if !ports.insert((&output.node, &output.port)) {
-                return Err(format!("Port {}.{} is exported twice", output.node, output.port));
+            if !exported_nodes.insert(&output.node) {
+                return Err(format!("Widget {} exports its event stream twice", output.node));
             }
-            if node.widget.output_type(&output.port).is_none() {
-                return Err(format!("{} has no {} output", output.node, output.port));
+            if node.widget.outputs().len() != 1 {
+                return Err(format!("{} has no event stream", output.node));
             }
         }
         if self.connections.len() > 4095 {
             return Err("UI document has too many event connections".into());
         }
         for connection in &self.connections {
-            // One source port may feed several private commands and a public observer.
+            // The form receives the source port once, then may perform several actions and public forwarding.
             let source = nodes.get(connection.source.as_str()).ok_or("Connection source is missing")?;
             let target = nodes.get(connection.target.as_str()).ok_or("Connection target is missing")?;
-            let payload = source.widget.output_type(&connection.port).ok_or("Connection source has no such output")?;
+            let payload = source.widget.event_type(&connection.event).ok_or("Connection source has no such event variant")?;
             connection.action.validate(payload, &target.widget)?;
         }
         names.clear();
@@ -587,7 +584,7 @@ impl Track {
     }
 }
 impl WidgetSpec {
-    /// Declared concrete ports and payloads shared by validation, binding, and authoring.
+    /// The widget's zero or one physical event stream and its complete payload type.
     pub fn outputs(&self) -> &'static [OutputPort] {
         match self {
             Self::Button { .. } | Self::ListItem { .. } | Self::ListBox { .. } => &[OutputPort {
@@ -602,16 +599,8 @@ impl WidgetSpec {
                 name: "changed",
                 payload: OutputType::Number,
             }],
-            Self::Textbox { .. } | Self::TextArea { .. } => &[
-                OutputPort {
-                    name: "changed",
-                    payload: OutputType::TextChanged,
-                },
-                OutputPort {
-                    name: "submitted",
-                    payload: OutputType::TextSubmitted,
-                },
-            ],
+            Self::Textbox { .. } => &[OutputPort { name: "event", payload: OutputType::TextboxEvent }],
+            Self::TextArea { .. } => &[OutputPort { name: "event", payload: OutputType::TextAreaEvent }],
             Self::Scrollbar { .. } => &[OutputPort {
                 name: "changed",
                 payload: OutputType::Offset,
@@ -632,6 +621,21 @@ impl WidgetSpec {
             | Self::Form { .. }
             | Self::Disclosure { .. } => &[],
         }
+    }
+    /// Lists the variants available for form-owned visual actions. Text editors
+    /// have one physical event port but two separately matchable enum variants.
+    pub fn event_variants(&self) -> &'static [OutputPort] {
+        match self {
+            Self::Textbox { .. } | Self::TextArea { .. } => &[
+                OutputPort { name: "changed", payload: OutputType::TextChanged },
+                OutputPort { name: "submitted", payload: OutputType::TextSubmitted },
+            ],
+            _ => self.outputs(),
+        }
+    }
+    /// Resolves a logical event variant for a form-owned visual action.
+    pub fn event_type(&self, variant: &str) -> Option<OutputType> {
+        self.event_variants().iter().find(|event| event.name == variant).map(|event| event.payload)
     }
     /// Whether authored font selection has a concrete setter, including a disclosure's header.
     pub fn supports_font(&self) -> bool {
@@ -800,14 +804,15 @@ mod binding_tests {
     }
 }
 
-/// A private executable edge; each source port has one public or private destination.
+/// One form-owned visual action selected by an event variant. The source widget
+/// still has exactly one observer: the form receives its complete event stream.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ComSerialize, ComDeserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Connection {
     /// Stable source node key.
     pub source: String,
-    /// Concrete output port on the source widget.
-    pub port: String,
+    /// Logical enum variant on the source widget, such as changed or submitted.
+    pub event: String,
     /// Stable destination node key; no public input alias is required.
     pub target: String,
     /// Typed transformation applied at the component's safe event boundary.
@@ -817,9 +822,9 @@ pub struct Connection {
 /// One statically declared output endpoint; this record contains no runtime receiver.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct OutputPort {
-    /// Serialized port identity consumed by exports and private connections.
+    /// Physical stream name from `outputs`, or logical variant from `event_variants`.
     pub name: &'static str,
-    /// Concrete captured message contract for this endpoint.
+    /// Complete captured message contract for this stream or logical variant.
     pub payload: OutputType,
 }
 
@@ -842,14 +847,11 @@ pub enum OutputType {
     Position,
     /// Optional combo selection identity.
     Selection,
+    /// Complete single-line editor event sum, exported as one typed stream.
+    TextboxEvent,
+    /// Complete multiline editor event sum, exported as one typed stream.
+    TextAreaEvent,
 }
-impl WidgetSpec {
-    /// Resolves a real port to its concrete message type; unknown ports remain invalid.
-    pub fn output_type(&self, port: &str) -> Option<OutputType> {
-        self.outputs().iter().find(|output| output.name == port).map(|output| output.payload)
-    }
-}
-
 /// Explicit payload forwarding or a concrete constant command; no executable code is serialized.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ComSerialize, ComDeserialize)]
 #[serde(deny_unknown_fields)]
@@ -929,14 +931,14 @@ mod connection_tests {
         let mut document = Document::new("connections");
         let connection = Connection {
             source: "save".into(),
-            port: "activated".into(),
+            event: "activated".into(),
             target: "title".into(),
             action: Action::Text("changed".into()),
         };
         document.connections.push(connection.clone());
-        document.validate().unwrap(); // Public and private destinations share the same port.
+        document.validate().unwrap(); // The form owns both public forwarding and visual actions.
         document.connections.push(connection);
-        document.validate().unwrap(); // One source can fan out to several private routes.
+        document.validate().unwrap(); // One form event can select several authored actions.
         document.connections.pop();
         for action in [Action::Forward(InputKind::Text), Action::Checked(true), Action::Value(f32::NAN)] {
             document.connections[0].action = action;
@@ -946,7 +948,7 @@ mod connection_tests {
         document.connections[0].target = "missing".into();
         assert!(document.validate().is_err());
         document.connections[0].target = "title".into();
-        document.connections[0].port = "missing".into();
+        document.connections[0].event = "missing".into();
         assert!(document.validate().is_err());
     }
 }

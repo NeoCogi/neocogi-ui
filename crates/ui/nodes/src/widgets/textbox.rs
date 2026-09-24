@@ -197,10 +197,10 @@ impl Textbox {
         });
         let submitted = outcome.submitted.then(|| crate::TextSubmitted { text: self.buf.clone() });
         if let Some(event) = changed {
-            ctx.posted(neocogi_ui_nodes_contracts::TextboxEvent::Changed(event).post_to(&mut self.observer));
+            ctx.posted(neocogi_ui_nodes_contracts::TextboxEvent::Changed { text: event.text, cursor: event.cursor }.post_to_observer(&mut self.observer));
         }
         if let Some(event) = submitted {
-            ctx.posted(neocogi_ui_nodes_contracts::TextboxEvent::Submitted(event).post_to(&mut self.observer));
+            ctx.posted(neocogi_ui_nodes_contracts::TextboxEvent::Submitted { text: event.text }.post_to_observer(&mut self.observer));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(outcome.changed)
@@ -444,8 +444,8 @@ mod tests {
         let (events_tx, events) = std::sync::mpsc::channel();
         textbox.observer = Some(
             neocogi_ui::textbox::observer(events_tx, |event| match event {
-                neocogi_ui::textbox::Event::Changed(value) => RecordedEvent::Changed(value.text, value.cursor),
-                neocogi_ui::textbox::Event::Submitted(value) => RecordedEvent::Submitted(value.text),
+                neocogi_ui::textbox::Event::Changed { text, cursor } => RecordedEvent::Changed(text, cursor),
+                neocogi_ui::textbox::Event::Submitted { text } => RecordedEvent::Submitted(text),
             })
             .unwrap(),
         );
