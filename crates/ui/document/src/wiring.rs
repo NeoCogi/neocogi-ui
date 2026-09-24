@@ -9,8 +9,6 @@ use std::{collections::BTreeMap, sync::mpsc::Receiver};
 /// The sum remains typed across form delivery; no arbitrary runtime value is stored.
 #[derive(Clone)]
 pub(crate) enum Payload {
-    /// An activation carries no forwarded value.
-    Activation,
     /// Complete text at the time of a change or submission.
     Text(String),
     /// Captured checkbox state.
@@ -71,9 +69,9 @@ impl WidgetEvent {
     /// Selects one authored visual-event variant and its captured forwarded field.
     fn route_payload(&self) -> (&'static str, Payload) {
         match self {
-            Self::Button(nodes::ButtonEvent::Activated(_))
-            | Self::ListItem(nodes::ListItemEvent::Activated(_))
-            | Self::ListBox(nodes::ListBoxEvent::Activated(_)) => ("activated", Payload::Activation),
+            Self::Button(nodes::ButtonEvent::Activated(value))
+            | Self::ListItem(nodes::ListItemEvent::Activated(value))
+            | Self::ListBox(nodes::ListBoxEvent::Activated(value)) => ("activated", Payload::Text(value.label.clone())),
             Self::Checkbox(nodes::CheckboxEvent::Changed(value)) => ("changed", Payload::Boolean(value.checked)),
             Self::Slider(nodes::SliderEvent::Changed(value)) | Self::Number(nodes::NumberEvent::Changed(value)) => {
                 ("changed", Payload::Number(value.value))

@@ -152,8 +152,10 @@ Revision three requires a `connections` array. Each action names `source`, `even
 expanded, text edits or submissions to text, numeric values to value, pixel
 positions/offsets to position/offset, and combo selection to selection. Constant
 variants (`Text`, `Checked`, `Value`, `Enabled`, `Expanded`, `Selection`, `Offset`,
-`Position`) work with any source event, including button activation. Model
-replacement remains an application input rather than an event transformation.
+`Position`) work with any source event, including button activation. An
+activation also carries the source control's captured label, so an activation
+route can forward that string to a `SetText` destination. Model replacement
+remains an application input rather than an event transformation.
 
 The child event port has one consumer: its form. A form may apply multiple
 actions to one event case and also forward the complete event through one public

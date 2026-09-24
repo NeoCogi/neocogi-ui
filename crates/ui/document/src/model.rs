@@ -831,7 +831,7 @@ pub struct OutputPort {
 /// Concrete output contracts shared by validation, runtime binding, and authoring.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OutputType {
-    /// Payload-free activation.
+    /// Activation with its captured label, available to text commands.
     Activation,
     /// Checkbox boolean snapshot.
     Checked,
@@ -901,7 +901,7 @@ impl Action {
                 (source, kind),
                 (OutputType::Checked, InputKind::Checked | InputKind::Enabled | InputKind::Expanded)
                     | (OutputType::Number, InputKind::Value)
-                    | (OutputType::TextChanged | OutputType::TextSubmitted, InputKind::Text)
+                    | (OutputType::Activation | OutputType::TextChanged | OutputType::TextSubmitted, InputKind::Text)
                     | (OutputType::Offset | OutputType::Position, InputKind::Offset | InputKind::Position)
                     | (OutputType::Selection, InputKind::Selection)
             ),
@@ -940,7 +940,9 @@ mod connection_tests {
         document.connections.push(connection);
         document.validate().unwrap(); // One form event can select several authored actions.
         document.connections.pop();
-        for action in [Action::Forward(InputKind::Text), Action::Checked(true), Action::Value(f32::NAN)] {
+        document.connections[0].action = Action::Forward(InputKind::Text);
+        document.validate().unwrap(); // Activation forwards its captured label.
+        for action in [Action::Forward(InputKind::Checked), Action::Checked(true), Action::Value(f32::NAN)] {
             document.connections[0].action = action;
             assert!(document.validate().is_err());
         }
