@@ -8,10 +8,11 @@ pub use model::*;
 /// Generated opaque component and concrete application command contracts.
 pub use neocogi_ui_document_contracts as contracts;
 mod bindings;
+mod diagnostics;
 mod wiring;
-pub use wiring::{RouteDiagnostic, RouteEffect};
-mod rust_bindings;
+pub use diagnostics::{RouteDiagnostic, RouteEffect, RouteDiagnosticBatch, RouteDiagnosticSender, RouteDiagnosticReceiver, route_diagnostics};
 mod build;
+mod rust_bindings;
 pub use bindings::{Command, InputHandle};
 mod runtime;
 pub use runtime::{Component, DOCUMENT_TYPE, Loader, Resources};

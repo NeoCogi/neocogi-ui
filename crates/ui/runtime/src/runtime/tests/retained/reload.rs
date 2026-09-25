@@ -8,7 +8,7 @@ use neocogi_ui_nodes_contracts::ScrollbarChanged;
 fn slot(ui: &Ui) -> ReloadSlot {
     let mut root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let owner = window(ui, "runtime documents", Rect { x: 10, y: 10, width: 400, height: 400 }, &root);
-    let (diagnostics, _received) = std::sync::mpsc::sync_channel(64);
+    let (diagnostics, _received) = route_diagnostics(64);
     let slot = ReloadSlot::new(ui.clone(), owner, diagnostics).unwrap();
     root.insert(0, slot.widget(), LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
         .unwrap()
@@ -388,7 +388,7 @@ fn authored_form_rectangles_survive_binary_reload_and_route_real_clicks() {
 fn typed_and_binary_preparation_have_equivalent_authored_state() {
     let fixture = Headless::standard();
     let document = Document::new("preparation paths");
-    let (diagnostics, _received) = std::sync::mpsc::sync_channel(64);
+    let (diagnostics, _received) = route_diagnostics(64);
     let loader = Loader::new(fixture.ui.clone(), None, Resources::new(), diagnostics).unwrap();
     let typed = loader.prepare(&document).unwrap();
     let binary = loader.load(&document.to_binary().unwrap()).unwrap();
@@ -557,7 +557,10 @@ fn form_owns_checkbox_actions_and_public_forwarding() {
             node: Node::new(key, WidgetSpec::Checkbox { text: key.into(), checked: false }),
         });
     }
-    document.outputs = vec![Output { name: "source_changed".into(), node: "source".into() }];
+    document.outputs = vec![Output {
+        name: "source_changed".into(),
+        node: "source".into(),
+    }];
     document.inputs.clear();
     for key in ["target", "second"] {
         document.connections.push(Connection {
@@ -606,9 +609,18 @@ fn textbox_enum_stream_drives_form_action_and_public_observer() {
     });
     document.root.children.push(Child {
         edge: Edge::Position { x: 0, y: 60, width: 200, height: 40 },
-        node: Node::new("preview", WidgetSpec::TextBlock { text: String::new(), wrapping: Wrapping::None }),
+        node: Node::new(
+            "preview",
+            WidgetSpec::TextBlock {
+                text: String::new(),
+                wrapping: Wrapping::None,
+            },
+        ),
     });
-    document.outputs = vec![Output { name: "name_event".into(), node: "name".into() }];
+    document.outputs = vec![Output {
+        name: "name_event".into(),
+        node: "name".into(),
+    }];
     document.inputs.clear();
     document.connections.push(Connection {
         source: "name".into(),
@@ -618,7 +630,9 @@ fn textbox_enum_stream_drives_form_action_and_public_observer() {
     });
     let (sender, events) = std::sync::mpsc::channel();
     slot.reload(&document, Resources::new(), |component, _| {
-        bind_output(component.outputs()?.as_com_ref(), "name_event", sender, |event: neocogi_ui::textbox::Event| event)
+        bind_output(component.outputs()?.as_com_ref(), "name_event", sender, |event: neocogi_ui::textbox::Event| {
+            event
+        })
     })
     .unwrap();
     fixture.frame(VIEW).unwrap();

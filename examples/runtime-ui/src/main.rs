@@ -3,8 +3,8 @@ use neocogi_com::NcStatus;
 use neocogi_com::events::bind_output;
 use neocogi_demo_host::{AppState, Host, HostError};
 use neocogi_ui::*;
-use neocogi_ui_document::{contracts::SetText, Document, Generation, ReloadSlot, Resources, RouteDiagnostic};
-use std::sync::mpsc::{self, Receiver, Sender};
+use neocogi_ui_document::{contracts::SetText, Document, Generation, ReloadSlot, Resources, RouteDiagnosticReceiver, route_diagnostics};
+use std::sync::mpsc::{self, Sender};
 
 /// Application messages carry the component generation that emitted them.
 enum Message {
@@ -24,7 +24,7 @@ struct State {
     /// Demonstrates updating the opaque UI through a typed input.
     saves: u64,
     /// Bounded delivery failures reported by the loaded component after each frame.
-    route_diagnostics: Receiver<RouteDiagnostic>,
+    route_diagnostics: RouteDiagnosticReceiver,
 }
 impl State {
     /// Loads authored JSON or deployed binary, then binds before publication.
@@ -78,8 +78,12 @@ impl AppState for State {
     }
     /// Reports nonfatal form effects after the frame finishes dispatching them.
     fn after_update(&mut self, _host: &Host, _size: Size) -> Result<(), NcStatus> {
-        for diagnostic in self.route_diagnostics.try_iter() {
+        let batch = self.route_diagnostics.drain();
+        for diagnostic in batch.reports {
             eprintln!("Route delivery: {diagnostic:?}");
+        }
+        if batch.omitted != 0 {
+            eprintln!("Route delivery: {} intermediate failures omitted", batch.omitted);
         }
         Ok(())
     }
@@ -91,7 +95,7 @@ fn run() -> Result<(), HostError> {
     let host = Host::new("Runtime UI", Size { width: 800, height: 600 }, neocogi_demo_assets::load_bundle()?)?;
     let mut root = host.ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     let window = host.ui.window("Loaded component", Rect { x: 20, y: 20, width: 740, height: 540 }, &root)?;
-    let (route_sender, route_diagnostics) = mpsc::sync_channel(64);
+    let (route_sender, route_diagnostics) = route_diagnostics(64);
     let slot = ReloadSlot::new(host.ui.clone(), window.clone(), route_sender)?;
     root.insert(0, slot.widget(), LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))?.finish()?;
     let (sender, receiver) = mpsc::channel();
@@ -103,7 +107,13 @@ fn run() -> Result<(), HostError> {
     let path = std::env::args_os().nth(1).map(std::path::PathBuf::from);
     #[cfg(target_arch = "wasm32")]
     let path = None;
-    let mut state = State { slot, path, sender, saves: 0, route_diagnostics };
+    let mut state = State {
+        slot,
+        path,
+        sender,
+        saves: 0,
+        route_diagnostics,
+    };
     state.reload().map_err(HostError::Message)?;
     host.run(state, receiver)
 }

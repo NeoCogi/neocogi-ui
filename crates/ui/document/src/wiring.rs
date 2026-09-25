@@ -3,37 +3,7 @@ use crate::{*, contracts::*};
 use neocogi_com::{ComPtr, NcStatus, NC_E_INVALID_ARG};
 use neocogi_ui::{nodes, ChoiceSelection, IChoiceMenuEvent, IChoiceMenuObserverAbi, Widget, IWidgetAbi};
 use neocogi_ui::events::{Controller, EventModel};
-use std::{
-    collections::BTreeMap,
-    sync::mpsc::{Receiver, SyncSender},
-};
-
-/// The failed effect is kept distinct from its source event and destination status.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RouteEffect {
-    /// The optional form-level application relay rejected a captured event.
-    Public,
-    /// One authored visual command was rejected by its current destination.
-    Visual {
-        /// Stable destination node key from the authored route.
-        target: String,
-        /// Concrete command contract selected when the form was constructed.
-        input: InputKind,
-    },
-}
-
-/// A typed, nonfatal delivery failure from one independently applied form effect.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RouteDiagnostic {
-    /// Stable source node key that produced the captured event.
-    pub source: String,
-    /// Logical event variant selected by the form's sole child consumer.
-    pub event: String,
-    /// Public forwarding or the particular visual target that rejected delivery.
-    pub effect: RouteEffect,
-    /// Exact COM status returned by that destination.
-    pub status: NcStatus,
-}
+use std::{collections::BTreeMap, sync::mpsc::Receiver};
 
 /// Captured fields from the finite set of supported event variants.
 /// The sum remains typed across form delivery; no arbitrary runtime value is stored.
@@ -289,7 +259,7 @@ pub(crate) struct Wiring {
     /// Public output relays keyed by the child whose event they forward.
     public: BTreeMap<String, PublicEmitter>,
     /// Bounded nonblocking owner channel for failures of independent effects.
-    diagnostics: SyncSender<RouteDiagnostic>,
+    diagnostics: RouteDiagnosticSender,
 }
 impl EventModel for Wiring {
     type Message = Message;
@@ -300,7 +270,7 @@ impl EventModel for Wiring {
         let (variant, payload) = message.event.route_payload();
         if let Some(public) = self.public.get_mut(&message.source) {
             if let Err(status) = public.post(&message.event) {
-                let _ = self.diagnostics.try_send(RouteDiagnostic {
+                let _ = self.diagnostics.report(RouteDiagnostic {
                     source: message.source.clone(),
                     event: variant.into(),
                     effect: RouteEffect::Public,
@@ -311,8 +281,8 @@ impl EventModel for Wiring {
         if let Some(routes) = self.routes.get_mut(&message.source).and_then(|events| events.get_mut(variant)) {
             for route in routes {
                 if let Err(status) = route.operation.apply(&payload) {
-                    // A full or disconnected diagnostic channel must never block input dispatch.
-                    let _ = self.diagnostics.try_send(RouteDiagnostic {
+                    // The bounded report sink retains the newest overflow without blocking dispatch.
+                    let _ = self.diagnostics.report(RouteDiagnostic {
                         source: message.source.clone(),
                         event: variant.into(),
                         effect: RouteEffect::Visual {
@@ -340,7 +310,7 @@ pub(crate) fn prepare(
     nodes: &BTreeMap<String, Widget<IWidgetAbi>>,
     public: BTreeMap<String, PublicEmitter>,
     messages: Receiver<Message>,
-    diagnostics: SyncSender<RouteDiagnostic>,
+    diagnostics: RouteDiagnosticSender,
 ) -> Result<Controller<Wiring>, NcStatus> {
     let mut routes: BTreeMap<String, BTreeMap<String, Vec<Route>>> = BTreeMap::new();
     for connection in &document.connections {

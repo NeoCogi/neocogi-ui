@@ -87,12 +87,7 @@ impl Loader {
     /// Binds construction services and an application-owned bounded diagnostic channel.
     /// The parent is needed only for controls that own popups; the receiver should
     /// be drained after updates so rejected independent effects remain visible.
-    pub fn new(
-        ui: Ui,
-        parent: Option<ComPtr<IWindowAbi>>,
-        resources: Resources,
-        diagnostics: mpsc::SyncSender<crate::RouteDiagnostic>,
-    ) -> Result<Self, NcStatus> {
+    pub fn new(ui: Ui, parent: Option<ComPtr<IWindowAbi>>, resources: Resources, diagnostics: crate::RouteDiagnosticSender) -> Result<Self, NcStatus> {
         let mut registry = FactoryRegistry::new()?;
         let services = std::rc::Rc::new(Services { ui, parent, resources, diagnostics });
         registry.register(DOCUMENT_TYPE, Factory::from_value(Factory { services: services.clone() }).query()?)?;
@@ -245,7 +240,7 @@ struct Services {
     /// Supplied logical image map.
     resources: Resources,
     /// Nonblocking typed diagnostics owned and drained by the constructing application.
-    diagnostics: mpsc::SyncSender<crate::RouteDiagnostic>,
+    diagnostics: crate::RouteDiagnosticSender,
 }
 /// Parses the exact initialization revision and validates the entire document.
 fn decode(version: u32, state: NcCopyFromBufferOffset<'_, u8>, count: u32) -> Result<Document, NcStatus> {
