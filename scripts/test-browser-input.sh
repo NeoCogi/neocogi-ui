@@ -7,8 +7,9 @@ suite="${1:-input}"
 case "$suite" in
   input) package="neocogi-render-plugin"; fixture="crates/render/plugin/tests/browser-input.html" ;;
   theme-editor) package="neocogi-theme-editor"; fixture="tools/theme-editor/tests/browser-editor.html" ;;
+  designer) package="neocogi-ui-designer"; fixture="tools/ui-designer/tests/browser-files.html" ;;
   full) package="neocogi-demo-full"; fixture="demos/full/tests/browser-full.html" ;;
-  *) echo "usage: $0 [input|full|theme-editor]" >&2; exit 2 ;;
+  *) echo "usage: $0 [input|full|theme-editor|designer]" >&2; exit 2 ;;
 esac
 site_dir="${CARGO_TARGET_DIR:-$workspace_root/target}/browser-$suite-tests"
 build_log="$(mktemp)"

@@ -109,6 +109,9 @@ or organization policy prevents automatic enablement, select **GitHub Actions** 
 The workflow deploys only generated files from `target/web-demo`; generated bindings and binaries do
 not need to be committed.
 
+The Rust CI browser job also compiles the WebGL UI designer and runs its
+JSON/ZIP file picker and ZIP download fixture through real DOM file objects.
+
 ## Theme editor
 
 Set `NEOCOGI_WEB_APP=theme-editor` when running `scripts/web-demo.sh build` or

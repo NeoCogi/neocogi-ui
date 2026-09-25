@@ -136,3 +136,7 @@ jobs:
         run: scripts/test-browser-input.sh input
       - name: All full-demo themes/images/actions and both animation teardown paths
         run: scripts/test-browser-input.sh full
+      - name: Compile the WebGL designer and exercise browser file transport
+        run: |
+          cargo check -p neocogi-ui-designer --target wasm32-unknown-unknown --no-default-features --features webgl
+          scripts/test-browser-input.sh designer
