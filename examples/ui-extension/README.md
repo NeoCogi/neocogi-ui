@@ -51,8 +51,13 @@ port through `events::bind(counter.event(), ...)`. Its application handler
 matches the complete `CounterEvent` enum after UI traversal releases widget
 borrows. The same implementation and generated contracts serve both build
 commands above. `CounterAbi::IDL_INTERFACE` and `CounterEvent::IDL_MESSAGE`
-expose the generated COM interface and source-level event shape to authoring
-tools; a UI document does not restate those types.
+supply the generated source metadata. The root `ExtensionProvider` also
+implements the shared `IDesignWidgetCatalog` COM interface. Its `describe`
+method copies the counter's typed authoring descriptor through COM, and
+`create_widget` constructs the actual counter with the supplied `IWidgetHost`.
+The unlinked native designer can load this library with `--plugin` and discover
+the counter without a Rust registration hook. A UI document stores only its kind
+and typed property values; it does not restate the event enum.
 
 The inset retains one `IChildrenEditor` and exposes its read-only view. It reads
 the authoritative child count instead of maintaining a second topology flag. Its

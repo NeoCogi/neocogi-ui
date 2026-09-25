@@ -118,14 +118,25 @@ Linear, Grid, Split, Scroll, and Disclosure remain ordinary nested containers.
 
 ## Custom COM widgets
 
-A host installs custom widgets through `CustomWidgetRegistry`. Each
-`CustomWidgetFactory` supplies a stable kind, typed constructor defaults, a
-constructor returning `Widget<IWidgetAbi>`, and the generated metadata of its
-concrete COM projection, for example `&CounterAbi::IDL_INTERFACE`. The registry
-checks the descriptor's physical method table and required interface chain: a
-custom widget may expose zero or one event port, and an inherited second port
-is rejected. Multiple logical events belong in one `#[message] enum`, such as
-`CounterEvent::Activated` and `CounterEvent::Changed`.
+A host installs custom widgets through `CustomWidgetRegistry`. A local
+`CustomWidgetFactory` returns an owned `DesignWidgetManifest`, normally made by
+`DesignWidgetManifest::from_idl(kind, defaults, &CounterAbi::IDL_INTERFACE)`,
+and a constructor returning `Widget<IWidgetAbi>`. Static conversion checks the
+generated physical method table and required interface chain. A custom widget
+may expose zero or one event port; multiple logical events belong in one
+`#[message] enum`, such as `CounterEvent::Activated` and
+`CounterEvent::Changed`.
+
+An independently built plugin can expose `IDesignWidgetCatalog` on its root COM
+factory. The registry reads bounded, versioned descriptions through the catalog's
+`describe` method, copies the IDL struct/enum/message shape and typed property
+defaults into owned data, and retains the catalog for `create_widget` calls.
+The shared `neocogi-ui-design` crate contains only this metadata and property
+codec, so plugin implementations do not link the document runtime or designer.
+`register_catalog` validates all kinds transactionally before publishing any.
+The COM catalog accepts one widget index, the runtime's `IWidgetHost`, and the
+validated property values encoded with the shared codec. The returned object's
+exact IID and ABI signature are checked before the document owns it.
 
 The document stores only `Custom { kind, properties }`. It does not store Rust
 paths, event traits, message types, executable code, or a copy of the property
@@ -138,8 +149,8 @@ boolean, integer, and finite floating-point constructor values; providers may
 impose stricter domain bounds in `create`.
 
 `Document::rust_bindings_with(&registry)` generates custom form fields and
-required handler methods using `*Abi::IDL_INTERFACE` and the event message's
-`IDL_MESSAGE` metadata. The generated field uses the concrete COM projection;
+required handler methods using the owned IDL interface and message metadata
+read through the registry. The generated field uses the concrete COM projection;
 the generated handler receives the declared message enum or struct. The custom
 port is bound directly to the application queue after the form has been checked.
 The plain `rust_bindings()` helper and the command-line example use an empty
