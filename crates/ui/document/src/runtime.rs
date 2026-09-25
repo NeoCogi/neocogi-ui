@@ -286,7 +286,6 @@ impl Services {
         let (sender, messages) = mpsc::channel();
         let mut construction = Construction {
             declarations: &document.outputs,
-            connections: &document.connections,
             sender,
             public: BTreeMap::new(),
             outputs: NamedOutputs::new(),

@@ -1,25 +1,30 @@
-// Generated from a validated UI document. Keep application handlers in another module.
-/// Captured public events; private visual connections remain inside the loaded component.
+// Generated from a validated UI document. Implement Handlers in application-owned code.
+/// Complete captured widget events, one variant per event-producing widget.
 pub enum Event {
+    /// Complete event stream from authored widget "root".
+    Widget0(neocogi_ui::events::Activation),
 }
 /// A captured event belongs to exactly one component reload attempt.
 pub struct Message {
     /// Reject stale messages with ReloadSlot::accepts before dispatch.
     pub generation: neocogi_ui_document::Generation,
-    /// Concrete captured event payload.
+    /// Complete typed widget event.
     pub event: Event,
 }
-/// Implement every public handler in application-owned code; no callback bodies are overwritten.
+/// Application-owned behavior; every emitting widget requires an implementation.
 pub trait Handlers {
+    /// Handles the event from widget "root" after traversal releases widget borrows.
+    fn on_root_0(&mut self, event: neocogi_ui::events::Activation) -> Result<(), neocogi_com::NcStatus>;
 }
 impl Event {
-    /// Dispatch only after checking the enclosing message's generation.
-    pub fn dispatch(self, _handlers: &mut impl Handlers) -> Result<(), neocogi_com::NcStatus> {
+    /// Dispatch only after checking the enclosing message generation.
+    pub fn dispatch(self, handlers: &mut impl Handlers) -> Result<(), neocogi_com::NcStatus> {
         match self {
+            Self::Widget0(event) => handlers.on_root_0(event),
         }
     }
 }
-/// Reconnect these concrete input handles after each successful component replacement.
+/// Reconnect concrete command handles after every successful component replacement.
 pub struct Inputs {
 }
 /// Checked concrete handles for every authored widget and the exported commands.
@@ -29,17 +34,19 @@ pub struct Form {
     /// Authored widget "root"; the concrete COM interface is checked when binding.
     pub widget_root_0: neocogi_ui::Widget<neocogi_ui::ButtonAbi>,
 }
-/// Resolves inputs and queues public outputs during candidate preparation.
-/// Use inside ReloadSlot::reload; failed preparation leaves the previous component published.
+/// Checks widget fields and binds each complete event stream to the application queue.
+/// Use inside ReloadSlot::reload; failed preparation preserves the published component.
 pub fn bind(
-    _component: &neocogi_ui_document::Component,
-    _generation: neocogi_ui_document::Generation,
-    _send: std::sync::mpsc::Sender<Message>,
+    component: &neocogi_ui_document::Component,
+    generation: neocogi_ui_document::Generation,
+    send: std::sync::mpsc::Sender<Message>,
 ) -> Result<Form, neocogi_com::NcStatus> {
     let inputs = Inputs {
     };
+    let outputs = component.outputs()?;
+    neocogi_com::events::bind_output(outputs.as_com_ref(), "root", send.clone(), move |event: neocogi_ui::events::Activation| Message { generation, event: Event::Widget0(event) })?;
     Ok(Form {
         inputs,
-        widget_root_0: _component.widget::<neocogi_ui::ButtonAbi>("root")?,
+        widget_root_0: component.widget::<neocogi_ui::ButtonAbi>("root")?,
     })
 }

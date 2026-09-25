@@ -514,6 +514,14 @@ impl Document {
             if node.widget.outputs().len() != 1 {
                 return Err(format!("{} has no event stream", output.node));
             }
+            if nodes.contains_key(output.name.as_str()) && output.name != output.node {
+                return Err(format!("Output {} conflicts with a widget event name", output.name));
+            }
+        }
+        for node in nodes.values() {
+            if !node.widget.outputs().is_empty() && !exported_nodes.contains(&node.key) && names.contains(&node.key) {
+                return Err(format!("Widget event name {} conflicts with an exported alias", node.key));
+            }
         }
         if self.connections.len() > 4095 {
             return Err("UI document has too many event connections".into());

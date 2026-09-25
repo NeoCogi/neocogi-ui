@@ -95,83 +95,55 @@ impl InputKind {
     }
 }
 impl Document {
-    /// Generates a complete Rust module containing typed events, required handlers, and input bindings.
-    /// Call `bind` in a reload preparation callback and generation-filter its messages before dispatch.
-    /// Application implementations of `Handlers` live in separate files and survive regeneration.
+    /// Generates one concrete form field and one required handler for every event-producing widget.
+    /// The application implements `Handlers` outside generated source and dispatches at its update boundary.
     pub fn rust_bindings(&self) -> Result<String, String> {
         self.validate()?;
         let mut nodes = Vec::new();
         collect_nodes(&self.root, &mut nodes);
-        let mut source = String::from("// Generated from a validated UI document. Keep application handlers in another module.\n");
-        source.push_str("/// Captured public events; private visual connections remain inside the loaded component.\npub enum Event {\n");
-        for (index, output) in self.outputs.iter().enumerate() {
-            let payload = self
-                .root
-                .find(&output.node)
-                .and_then(|node| node.widget.outputs().first().map(|stream| stream.payload))
-                .ok_or("Missing output contract")?;
-            writeln!(source, "    /// Public output {:?}.\n    Output{index}({}),", output.name, payload.rust_type()).unwrap();
+        let events = nodes.iter().enumerate().filter_map(|(index, node)| {
+            node.widget.outputs().first().map(|port| {
+                let name = self.outputs.iter().find(|output| output.node == node.key)
+                    .map_or(node.key.as_str(), |output| output.name.as_str());
+                (index, *node, name, port.payload)
+            })
+        }).collect::<Vec<_>>();
+        let mut source = String::from("// Generated from a validated UI document. Implement Handlers in application-owned code.\n");
+        source.push_str("/// Complete captured widget events, one variant per event-producing widget.\npub enum Event {\n");
+        for (index, node, _, payload) in &events {
+            writeln!(source, "    /// Complete event stream from authored widget {:?}.\n    Widget{index}({}),", node.key, payload.rust_type()).unwrap();
         }
-        source.push_str("}\n/// A captured event belongs to exactly one component reload attempt.\npub struct Message {\n    /// Reject stale messages with ReloadSlot::accepts before dispatch.\n    pub generation: neocogi_ui_document::Generation,\n    /// Concrete captured event payload.\n    pub event: Event,\n}\n");
-        source.push_str("/// Implement every public handler in application-owned code; no callback bodies are overwritten.\npub trait Handlers {\n");
-        for (index, output) in self.outputs.iter().enumerate() {
-            let payload = self
-                .root
-                .find(&output.node)
-                .and_then(|node| node.widget.outputs().first().map(|stream| stream.payload))
-                .ok_or("Missing output contract")?;
-            writeln!(source, "    /// Handles public output {:?} at the application's safe update boundary.\n    fn {}(&mut self, value: {}) -> Result<(), neocogi_com::NcStatus>;", output.name, symbol("on", &output.name, index), payload.rust_type()).unwrap();
+        source.push_str("}\n/// A captured event belongs to exactly one component reload attempt.\npub struct Message {\n    /// Reject stale messages with ReloadSlot::accepts before dispatch.\n    pub generation: neocogi_ui_document::Generation,\n    /// Complete typed widget event.\n    pub event: Event,\n}\n");
+        source.push_str("/// Application-owned behavior; every emitting widget requires an implementation.\npub trait Handlers {\n");
+        for (index, node, _, payload) in &events {
+            writeln!(source, "    /// Handles the event from widget {:?} after traversal releases widget borrows.\n    fn {}(&mut self, event: {}) -> Result<(), neocogi_com::NcStatus>;", node.key, symbol("on", &node.key, *index), payload.rust_type()).unwrap();
         }
-        source.push_str("}\nimpl Event {\n    /// Dispatch only after checking the enclosing message's generation.\n    pub fn dispatch(self, _handlers: &mut impl Handlers) -> Result<(), neocogi_com::NcStatus> {\n        match self {\n");
-        for (index, output) in self.outputs.iter().enumerate() {
-            writeln!(
-                source,
-                "            Self::Output{index}(value) => _handlers.{}(value),",
-                symbol("on", &output.name, index)
-            )
-            .unwrap();
+        source.push_str("}\nimpl Event {\n    /// Dispatch only after checking the enclosing message generation.\n    pub fn dispatch(self, handlers: &mut impl Handlers) -> Result<(), neocogi_com::NcStatus> {\n        match self {\n");
+        for (index, node, _, _) in &events {
+            writeln!(source, "            Self::Widget{index}(event) => handlers.{}(event),", symbol("on", &node.key, *index)).unwrap();
         }
-        source.push_str("        }\n    }\n}\n/// Reconnect these concrete input handles after each successful component replacement.\npub struct Inputs {\n");
+        source.push_str("        }\n    }\n}\n/// Reconnect concrete command handles after every successful component replacement.\npub struct Inputs {\n");
         for (index, input) in self.inputs.iter().enumerate() {
-            writeln!(
-                source,
-                "    /// Public input {:?}; send its exact command at an ordinary update boundary.\n    pub {}: neocogi_ui_document::InputHandle<{}>,",
-                input.name,
-                symbol("input", &input.name, index),
-                input.kind.rust_type()
-            )
-            .unwrap();
+            writeln!(source, "    /// Public command {:?}; its receiver is checked when binding.\n    pub {}: neocogi_ui_document::InputHandle<{}>,", input.name, symbol("input", &input.name, index), input.kind.rust_type()).unwrap();
         }
         source.push_str("}\n/// Checked concrete handles for every authored widget and the exported commands.\npub struct Form {\n    /// Public command endpoints retained for message-based integrations.\n    pub inputs: Inputs,\n");
         for (index, node) in nodes.iter().enumerate() {
             writeln!(source, "    /// Authored widget {:?}; the concrete COM interface is checked when binding.\n    pub {}: neocogi_ui::Widget<{}>,", node.key, symbol("widget", &node.key, index), node.widget.rust_interface()).unwrap();
         }
-        source.push_str("}\n/// Resolves inputs and queues public outputs during candidate preparation.\n/// Use inside ReloadSlot::reload; failed preparation leaves the previous component published.\npub fn bind(\n    _component: &neocogi_ui_document::Component,\n    _generation: neocogi_ui_document::Generation,\n    _send: std::sync::mpsc::Sender<Message>,\n) -> Result<Form, neocogi_com::NcStatus> {\n    let inputs = Inputs {\n");
+        source.push_str("}\n/// Checks widget fields and binds each complete event stream to the application queue.\n/// Use inside ReloadSlot::reload; failed preparation preserves the published component.\npub fn bind(\n    component: &neocogi_ui_document::Component,\n    generation: neocogi_ui_document::Generation,\n    send: std::sync::mpsc::Sender<Message>,\n) -> Result<Form, neocogi_com::NcStatus> {\n    let inputs = Inputs {\n");
         for (index, input) in self.inputs.iter().enumerate() {
-            writeln!(
-                source,
-                "        {}: _component.input::<{}>({:?})?,",
-                symbol("input", &input.name, index),
-                input.kind.rust_type(),
-                input.name
-            )
-            .unwrap();
+            writeln!(source, "        {}: component.input::<{}>({:?})?,", symbol("input", &input.name, index), input.kind.rust_type(), input.name).unwrap();
         }
         source.push_str("    };\n");
-        if !self.outputs.is_empty() {
-            source.push_str("    let outputs = _component.outputs()?;\n");
+        if !events.is_empty() {
+            source.push_str("    let outputs = component.outputs()?;\n");
         }
-        for (index, output) in self.outputs.iter().enumerate() {
-            let payload = self
-                .root
-                .find(&output.node)
-                .and_then(|node| node.widget.outputs().first().map(|stream| stream.payload))
-                .ok_or("Missing output contract")?;
-            writeln!(source, "    neocogi_com::events::bind_output(outputs.as_com_ref(), {:?}, _send.clone(), move |value: {}| Message {{ generation: _generation, event: Event::Output{index}(value) }})?;", output.name, payload.rust_type()).unwrap();
+        for (index, _, name, payload) in &events {
+            writeln!(source, "    neocogi_com::events::bind_output(outputs.as_com_ref(), {:?}, send.clone(), move |event: {}| Message {{ generation, event: Event::Widget{index}(event) }})?;", name, payload.rust_type()).unwrap();
         }
         source.push_str("    Ok(Form {\n        inputs,\n");
         for (index, node) in nodes.iter().enumerate() {
-            writeln!(source, "        {}: _component.widget::<{}>({:?})?,", symbol("widget", &node.key, index), node.widget.rust_interface(), node.key).unwrap();
+            writeln!(source, "        {}: component.widget::<{}>({:?})?,", symbol("widget", &node.key, index), node.widget.rust_interface(), node.key).unwrap();
         }
         source.push_str("    })\n}\n");
         if source.len() > MAX_BYTES {

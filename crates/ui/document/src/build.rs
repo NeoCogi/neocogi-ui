@@ -7,10 +7,8 @@ use std::{collections::BTreeMap, sync::mpsc::Sender};
 
 /// Owns all created nodes until construction transfers them to the loaded component.
 pub(crate) struct Construction<'a> {
-    /// Validated public exports select which nodes need an observer at construction.
+    /// Optional authored aliases for a widget event stream.
     pub declarations: &'a [crate::model::Output],
-    /// Private executable edges also require construction-time observers.
-    pub connections: &'a [Connection],
     /// Each observed child sends its complete typed event to the form's one inbox.
     pub sender: Sender<Message>,
     /// Form-owned public relays; none is passed to a child widget.
@@ -60,13 +58,12 @@ impl Construction<'_> {
     pub fn build(&mut self, node: &Node) -> Result<Widget<IWidgetAbi>, NcStatus> {
         let children = node.children.iter().map(|child| self.build(&child.node)).collect::<Result<Vec<_>, _>>()?;
         let factory = self.ui.widgets();
-        // Each child receives only the form's observer at construction. The form
-        // alone selects visual actions and optional application forwarding later.
+        // Each emitting child receives one adapter at construction. Application
+        // handlers run later, after the runtime traversal releases widget borrows.
         macro_rules! create {
             ($factory:expr, $method:ident, $event:ty, $kind:ident, $($argument:expr),* $(,)?) => {{
                 let exported = self.declarations.iter().find(|output| output.node == node.key);
-                let connected = self.connections.iter().any(|connection| connection.source == node.key);
-                let observer = if exported.is_some() || connected {
+                let observer = {
                     let sender = self.sender.clone();
                     let source = node.key.clone();
                     Some(<$event>::observer(move |event| {
@@ -76,14 +73,11 @@ impl Construction<'_> {
                         let _ = sender.send(Message { source: source.clone(), event });
                         Ok(())
                     })?)
-                } else {
-                    None
                 };
-                if let Some(export) = exported {
-                    let (proxy, bindings) = <$event>::exported_observer()?;
-                    self.outputs.export_component(&export.name, bindings, node.widget.outputs()[0].name)?;
-                    self.public.insert(node.key.clone(), PublicEmitter::$kind(Some(proxy)));
-                }
+                let (proxy, bindings) = <$event>::exported_observer()?;
+                let name = exported.map(|output| output.name.as_str()).unwrap_or(node.key.as_str());
+                self.outputs.export_component(name, bindings, node.widget.outputs()[0].name)?;
+                self.public.insert(node.key.clone(), PublicEmitter::$kind(Some(proxy)));
                 $factory.$method($($argument,)* observer.as_ref().map(|value| value.as_com_ref()))?
             }};
         }

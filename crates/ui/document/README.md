@@ -33,8 +33,10 @@ checks the authored key and concrete COM interface before returning an owned
 `Widget<ButtonAbi>` handle. Generated Rust bindings gather these checked handles
 into a `Form` with a typed field for every authored built-in widget. The component
 also exposes `root()`, `outputs()`, typed `input::<SetText>("title")`, and `save()`.
-For each observed child, construction installs exactly one typed observer
-connected to its containing form. The form owns the child event queue, matches each event
+For each event-producing child, construction installs exactly one typed observer
+connected to its containing form. The observer only captures and queues facts;
+application code implements the generated `Handlers` trait and runs each handler
+at its normal update boundary. The form owns the child event queue, matches each event
 variant, executes matching visual actions, and may relay the complete event to a
 public application binding. A public output gets a separate, form-owned
 `exported_observer()` proxy; that proxy is never installed on the child. The
@@ -44,8 +46,7 @@ while the child's construction-time observer remains the form. Invalid names or
 receiver types preserve the previous application destination. The form's child
 observer applies the same typed domain checks as a standalone widget observer
 before it queues an event, including cursor boundaries and finite or nonnegative
-numeric fields from independently supplied node providers. Unobserved children
-receive no observer and allocate no event adapter.
+numeric fields from independently supplied node providers. Widgets without event streams receive no observer or event adapter.
 
 Use `neocogi_com::events::bind_output` with the concrete event type declared by
 the component's public contract. Wrong types fail at connection time. Inputs
@@ -200,7 +201,11 @@ cargo run -p neocogi-ui-document --example export_bindings -- form.ui.json > bin
 ```
 
 The module contains `Event`, generation-tagged `Message`, concrete `Inputs`,
-a `Form` with checked widget fields, a required `Handlers` trait, and `bind`. Use `bind` in the `ReloadSlot::reload`
+a `Form` with checked widget fields, a required `Handlers` trait, and `bind`.
+Each event-producing widget has one trait method carrying its entire event enum,
+including `Changed` and `Submitted` for text editors. Implement `Handlers` for
+the generated `Form` or an application state that owns it; generated source
+never contains application handler bodies. Use `bind` in the `ReloadSlot::reload`
 preparation callback with a channel sender. At the application's normal update
 boundary, check `slot.accepts(message.generation)` and then call
 `message.event.dispatch(&mut handlers)`. Implement `Handlers` in application code
