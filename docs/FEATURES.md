@@ -50,6 +50,14 @@ The UI implementation has no optional asset features. Applications, plugins and
 native event tests install concrete receivers directly and use the same
 standard `std::sync::mpsc` channels. The facade has no separate event-test feature.
 
+The native host observes drawable size after each platform poll. When minimized,
+it sends one cancellation to end held gestures and discards subsequent input
+observations until a drawable size returns; no UI update runs at zero size.
+The runtime also bounds input retained between updates to 4,096 transitions
+and 4 MiB of committed text. On overflow it drops the incomplete backlog,
+queues cancellation, then retains the newest transition. An individual text
+commit above 4 MiB is rejected before copying.
+
 Build native applications through the package driver so each plugin gets its own
 feature selection and the executable receives its adjacent runtime/manifest:
 

@@ -3,6 +3,11 @@ use std::collections::VecDeque;
 use crate::{UiInputEvent, Vec2i};
 pub use neocogi_ui_support::input::*;
 
+/// Maximum raw transitions retained between UI updates.
+const MAX_PENDING_EVENTS: usize = 4096;
+/// Maximum committed UTF-8 bytes retained between UI updates.
+pub(crate) const MAX_PENDING_TEXT_BYTES: usize = 4 * 1024 * 1024;
+
 /// Host transitions retained in call order until the next UI update.
 enum RawInputEvent {
     /// Revoke a gesture without synthesizing a release or activation.
@@ -62,6 +67,8 @@ pub(crate) struct Input {
     modifiers: Modifiers,
     /// Raw events waiting to be applied, in API call order.
     pending: VecDeque<RawInputEvent>,
+    /// Total UTF-8 bytes currently owned by queued text transitions.
+    pending_text_bytes: usize,
 }
 
 impl Default for Input {
@@ -71,46 +78,66 @@ impl Default for Input {
             mouse_down: MouseButton::NONE,
             modifiers: Modifiers::NONE,
             pending: VecDeque::new(),
+            pending_text_bytes: 0,
         }
     }
 }
 
 impl Input {
+    /// Queues one transition while bounding both count and owned text storage.
+    /// Overflow discards incomplete gestures and inserts a cancellation before
+    /// retaining the newest event, so resumed dispatch starts from neutral state.
+    fn push(&mut self, event: RawInputEvent) {
+        let text_bytes = match &event {
+            RawInputEvent::Text { text } => text.len(),
+            _ => 0,
+        };
+        if self.pending.len() >= MAX_PENDING_EVENTS || self.pending_text_bytes.saturating_add(text_bytes) > MAX_PENDING_TEXT_BYTES {
+            self.pending.clear();
+            self.pending_text_bytes = 0;
+            self.pending.push_back(RawInputEvent::Cancel);
+        }
+        if text_bytes <= MAX_PENDING_TEXT_BYTES {
+            self.pending_text_bytes += text_bytes;
+            self.pending.push_back(event);
+        }
+    }
+
     /// Queues loss of host focus or pointer capture alongside ordinary transitions.
     pub(crate) fn cancel(&mut self) {
-        self.pending.push_back(RawInputEvent::Cancel);
+        self.push(RawInputEvent::Cancel);
     }
 
     /// Queues a mouse-pointer position update.
     pub(crate) fn mousemove(&mut self, x: i32, y: i32) {
-        self.pending.push_back(RawInputEvent::MouseMove { pos: Vec2i::new(x, y) });
+        self.push(RawInputEvent::MouseMove { pos: Vec2i::new(x, y) });
     }
 
     /// Queues a mouse-button press at the supplied pointer position.
     pub(crate) fn mousedown(&mut self, x: i32, y: i32, btn: MouseButton) {
-        self.pending.push_back(RawInputEvent::MouseDown { pos: Vec2i::new(x, y), button: btn });
+        self.push(RawInputEvent::MouseDown { pos: Vec2i::new(x, y), button: btn });
     }
 
     /// Queues a mouse-button release at the supplied pointer position.
     pub(crate) fn mouseup(&mut self, x: i32, y: i32, btn: MouseButton) {
-        self.pending.push_back(RawInputEvent::MouseUp { pos: Vec2i::new(x, y), button: btn });
+        self.push(RawInputEvent::MouseUp { pos: Vec2i::new(x, y), button: btn });
     }
 
     /// Queues one scroll-wheel or trackpad transition.
     pub(crate) fn scroll(&mut self, x: i32, y: i32) {
-        self.pending.push_back(RawInputEvent::Scroll { delta: Vec2i::new(x, y) });
+        self.push(RawInputEvent::Scroll { delta: Vec2i::new(x, y) });
     }
 
     /// Queues one complete logical keyboard transition.
     pub(crate) fn key(&mut self, event: KeyEvent) {
         // The event already carries the backend's authoritative modifier snapshot. Retaining one
         // transition rather than parallel modifier/navigation streams preserves exact ordering.
-        self.pending.push_back(RawInputEvent::Key { event });
+        self.push(RawInputEvent::Key { event });
     }
 
     /// Queues one UTF-8 text input transition.
     pub(crate) fn text(&mut self, text: &str) {
-        self.pending.push_back(RawInputEvent::Text { text: text.to_owned() });
+        self.push(RawInputEvent::Text { text: text.to_owned() });
     }
 
     /// Returns whether at least one raw event is waiting for UI update.
@@ -164,7 +191,10 @@ impl Input {
                 self.modifiers = event.modifiers;
                 UiInputEvent::Key { event }
             }
-            RawInputEvent::Text { text } => UiInputEvent::Text { text },
+            RawInputEvent::Text { text } => {
+                self.pending_text_bytes -= text.len();
+                UiInputEvent::Text { text }
+            }
         })
     }
 }
@@ -224,6 +254,27 @@ mod tests {
         assert!(matches!(input.pop_event(), Some(UiInputEvent::Scroll { .. })));
         assert!(matches!(input.pop_event(), Some(UiInputEvent::Text { text }) if text.is_empty()));
         assert!(input.pop_event().is_none());
+    }
+
+    /// A stalled update cannot retain unbounded transitions or owned text.
+    #[test]
+    fn pending_input_overflow_cancels_old_gestures_and_keeps_recent_events() {
+        let mut input = Input::default();
+        input.mousedown(1, 2, MouseButton::LEFT);
+        for _ in 0..MAX_PENDING_EVENTS {
+            input.mousemove(3, 4);
+        }
+        assert!(input.pending.len() <= MAX_PENDING_EVENTS);
+        assert!(matches!(input.pop_event(), Some(UiInputEvent::Cancel)));
+        assert!(matches!(input.pop_event(), Some(UiInputEvent::MouseMove { .. })));
+
+        let mut input = Input::default();
+        input.text(&"x".repeat(MAX_PENDING_TEXT_BYTES / 2));
+        input.text(&"y".repeat(MAX_PENDING_TEXT_BYTES / 2 + 1));
+        assert!(input.pending_text_bytes <= MAX_PENDING_TEXT_BYTES);
+        assert!(matches!(input.pop_event(), Some(UiInputEvent::Cancel)));
+        assert!(matches!(input.pop_event(), Some(UiInputEvent::Text { text }) if text.starts_with('y')));
+        assert_eq!(input.pending_text_bytes, 0);
     }
 
     /// Verifies public mouse input remains total when successive coordinates span the i32 domain.

@@ -192,6 +192,7 @@ impl Host {
             state,
             owner,
             remaining: frame_limit()?,
+            suspended: false,
         };
         #[cfg(target_arch = "wasm32")]
         {
@@ -307,6 +308,8 @@ struct Driver<State: AppState> {
     owner: ComPtr<neocogi_ui::IEventOwnerAbi>,
     /// Optional finite run counts successfully rendered frames, including the final frame.
     remaining: Option<u32>,
+    /// Whether the last observed drawable size was zero; cancellation is sent once per transition.
+    suspended: bool,
 }
 impl<State: AppState> Driver<State> {
     /// Polls input, applies frame edits, then settles events and layout in one update before rendering.
@@ -314,9 +317,23 @@ impl<State: AppState> Driver<State> {
         let host = &self.host;
         loop {
             let status = host.window.poll(host.input.as_com_ref())?;
-            for observation in host.observations.try_iter() {
-                self.state.try_borrow_mut()?.model.state.input(observation.event, &observation.text)?;
-                host.ui.input(observation.event, &observation.text)?;
+            let size = host.window.size()?;
+            if size.width <= 0 || size.height <= 0 {
+                if !self.suspended {
+                    self.suspended = true;
+                    // End host gestures and reset UI held state once. Events
+                    // received while minimized have no drawable target and are
+                    // discarded instead of accumulating behind a skipped update.
+                    self.state.try_borrow_mut()?.model.state.input(UiInput::Cancel, "")?;
+                    host.ui.input(UiInput::Cancel, "")?;
+                }
+                for _ in host.observations.try_iter() {}
+            } else {
+                self.suspended = false;
+                for observation in host.observations.try_iter() {
+                    self.state.try_borrow_mut()?.model.state.input(observation.event, &observation.text)?;
+                    host.ui.input(observation.event, &observation.text)?;
+                }
             }
             match status {
                 PollStatus::Event => continue,
@@ -400,19 +417,36 @@ fn register() -> Result<(), HostError> {
 fn register() -> Result<(), HostError> {
     use static_plugins::StaticPlugin;
     let available = [
-        StaticPlugin { package: "neocogi-ui-runtime", description: nc_ui::factory_plugin_description() },
-        StaticPlugin { package: "neocogi-ui-nodes", description: nc_ui_nodes::factory_plugin_description() },
-        StaticPlugin { package: "neocogi-render-plugin", description: nc_render::factory_plugin_description() },
+        StaticPlugin {
+            package: "neocogi-ui-runtime",
+            description: nc_ui::factory_plugin_description(),
+        },
+        StaticPlugin {
+            package: "neocogi-ui-nodes",
+            description: nc_ui_nodes::factory_plugin_description(),
+        },
+        StaticPlugin {
+            package: "neocogi-render-plugin",
+            description: nc_render::factory_plugin_description(),
+        },
         #[cfg(any(target_arch = "wasm32", feature = "monolith-gfx"))]
-        StaticPlugin { package: "neocogi-gfx", description: nc_gfx::factory_plugin_description() },
+        StaticPlugin {
+            package: "neocogi-gfx",
+            description: nc_gfx::factory_plugin_description(),
+        },
         #[cfg(feature = "skin")]
-        StaticPlugin { package: "neocogi-skin", description: nc_skin::factory_plugin_description() },
+        StaticPlugin {
+            package: "neocogi-skin",
+            description: nc_skin::factory_plugin_description(),
+        },
     ];
     let selected = static_plugins::select(&available, option_env!("NEOCOGI_ASSEMBLY_PLUGINS")).map_err(HostError::Message)?;
     let runtime = neocogi_com::Runtime::global();
     for plugin in selected {
         // SAFETY: Generated descriptions, contracts, and code remain linked for the process lifetime.
-        unsafe { runtime.register_factory_plugin_description(plugin.description)?; }
+        unsafe {
+            runtime.register_factory_plugin_description(plugin.description)?;
+        }
     }
     Ok(())
 }

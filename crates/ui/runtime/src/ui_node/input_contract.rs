@@ -12,6 +12,9 @@ pub(crate) fn enqueue(context: &mut crate::window_manager::WindowManager, event:
     if !matches!(event, UiInput::Text) && !text.is_empty() {
         return Err(NC_E_INVALID_ARG);
     }
+    if text.len() > crate::input::MAX_PENDING_TEXT_BYTES {
+        return Err(NC_E_INVALID_ARG);
+    }
     match event {
         UiInput::Cancel => context.cancel_input(),
         UiInput::Pointer(position) => context.mousemove(position.x, position.y),
