@@ -28,8 +28,11 @@ file contents.
 Create a bounded `route_diagnostics(capacity)` pair for route diagnostics,
 pass its sender to `Loader::new(ui, parent_window, resources, diagnostics)`,
 and call `load(binary)` or `prepare(&document)`. Drain the receiver after
-updates. The loader returns an opaque `Component`; the application sees
-only `root()`, `outputs()`, typed `input::<SetText>("title")`, and `save()`.
+updates. The loader returns a `Component` whose `widget::<ButtonAbi>("save")` lookup
+checks the authored key and concrete COM interface before returning an owned
+`Widget<ButtonAbi>` handle. Generated Rust bindings gather these checked handles
+into a `Form` with a typed field for every authored built-in widget. The component
+also exposes `root()`, `outputs()`, typed `input::<SetText>("title")`, and `save()`.
 For each observed child, construction installs exactly one typed observer
 connected to its containing form. The form owns the child event queue, matches each event
 variant, executes matching visual actions, and may relay the complete event to a
@@ -196,8 +199,8 @@ this as **File → Export Rust bindings…**; the command-line equivalent is:
 cargo run -p neocogi-ui-document --example export_bindings -- form.ui.json > bindings.rs
 ```
 
-The module contains `Event`, generation-tagged `Message`, concrete `Inputs`, a
-required `Handlers` trait, and `bind`. Use `bind` in the `ReloadSlot::reload`
+The module contains `Event`, generation-tagged `Message`, concrete `Inputs`,
+a `Form` with checked widget fields, a required `Handlers` trait, and `bind`. Use `bind` in the `ReloadSlot::reload`
 preparation callback with a channel sender. At the application's normal update
 boundary, check `slot.accepts(message.generation)` and then call
 `message.event.dispatch(&mut handlers)`. Implement `Handlers` in application code

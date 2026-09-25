@@ -2,10 +2,12 @@ extern neocogi.ui.core;
 use neocogi.ui.core::IWidget;
 
 #[version(1)]
-/// A loaded component exposes its mountable root and explicitly exported inputs.
+/// A loaded component exposes its mountable root, named widget identities, and inputs.
 interface IUiComponent {
     /// Returns the component's real root; private child handles remain private.
     fn root(&self) -> Result<IWidget>;
+    /// Resolves one authored widget by its stable node key for a checked concrete interface query.
+    fn widget(&self, name: &[u8]) -> Result<IWidget>;
     /// Resolves an input once; the consumer queries its concrete message receiver.
     fn input(&self, name: &[u8]) -> Result<IUnknown>;
 }

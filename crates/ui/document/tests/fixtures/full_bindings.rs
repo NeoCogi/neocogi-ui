@@ -75,13 +75,36 @@ pub struct Inputs {
     /// Public input "Position"; send its exact command at an ordinary update boundary.
     pub input_position_8: neocogi_ui_document::InputHandle<neocogi_ui_document::contracts::SetPosition>,
 }
+/// Checked concrete handles for every authored widget and the exported commands.
+pub struct Form {
+    /// Public command endpoints retained for message-based integrations.
+    pub inputs: Inputs,
+    /// Authored widget "root"; the concrete COM interface is checked when binding.
+    pub widget_root_0: neocogi_ui::Widget<neocogi_ui::LinearAbi>,
+    /// Authored widget "button"; the concrete COM interface is checked when binding.
+    pub widget_button_1: neocogi_ui::Widget<neocogi_ui::ButtonAbi>,
+    /// Authored widget "check"; the concrete COM interface is checked when binding.
+    pub widget_check_2: neocogi_ui::Widget<neocogi_ui::CheckboxAbi>,
+    /// Authored widget "text"; the concrete COM interface is checked when binding.
+    pub widget_text_3: neocogi_ui::Widget<neocogi_ui::TextboxAbi>,
+    /// Authored widget "slider"; the concrete COM interface is checked when binding.
+    pub widget_slider_4: neocogi_ui::Widget<neocogi_ui::SliderAbi>,
+    /// Authored widget "scroll"; the concrete COM interface is checked when binding.
+    pub widget_scroll_5: neocogi_ui::Widget<neocogi_ui::ScrollbarAbi>,
+    /// Authored widget "split"; the concrete COM interface is checked when binding.
+    pub widget_split_6: neocogi_ui::Widget<neocogi_ui::SplitViewAbi>,
+    /// Authored widget "combo"; the concrete COM interface is checked when binding.
+    pub widget_combo_7: neocogi_ui::Widget<neocogi_ui::ComboAbi>,
+    /// Authored widget "disclosure"; the concrete COM interface is checked when binding.
+    pub widget_disclosure_8: neocogi_ui::Widget<neocogi_ui::DisclosureAbi>,
+}
 /// Resolves inputs and queues public outputs during candidate preparation.
 /// Use inside ReloadSlot::reload; failed preparation leaves the previous component published.
 pub fn bind(
     _component: &neocogi_ui_document::Component,
     _generation: neocogi_ui_document::Generation,
     _send: std::sync::mpsc::Sender<Message>,
-) -> Result<Inputs, neocogi_com::NcStatus> {
+) -> Result<Form, neocogi_com::NcStatus> {
     let inputs = Inputs {
         input_text_0: _component.input::<neocogi_ui_document::contracts::SetText>("Text")?,
         input_checked_1: _component.input::<neocogi_ui_document::contracts::SetChecked>("Checked")?,
@@ -101,5 +124,16 @@ pub fn bind(
     neocogi_com::events::bind_output(outputs.as_com_ref(), "pixel-offset", _send.clone(), move |value: neocogi_ui::events::ScrollbarChanged| Message { generation: _generation, event: Event::Output4(value) })?;
     neocogi_com::events::bind_output(outputs.as_com_ref(), "pixel_offset", _send.clone(), move |value: neocogi_ui::events::SplitChanged| Message { generation: _generation, event: Event::Output5(value) })?;
     neocogi_com::events::bind_output(outputs.as_com_ref(), "selection", _send.clone(), move |value: neocogi_ui::events::ChoiceSelection| Message { generation: _generation, event: Event::Output6(value) })?;
-    Ok(inputs)
+    Ok(Form {
+        inputs,
+        widget_root_0: _component.widget::<neocogi_ui::LinearAbi>("root")?,
+        widget_button_1: _component.widget::<neocogi_ui::ButtonAbi>("button")?,
+        widget_check_2: _component.widget::<neocogi_ui::CheckboxAbi>("check")?,
+        widget_text_3: _component.widget::<neocogi_ui::TextboxAbi>("text")?,
+        widget_slider_4: _component.widget::<neocogi_ui::SliderAbi>("slider")?,
+        widget_scroll_5: _component.widget::<neocogi_ui::ScrollbarAbi>("scroll")?,
+        widget_split_6: _component.widget::<neocogi_ui::SplitViewAbi>("split")?,
+        widget_combo_7: _component.widget::<neocogi_ui::ComboAbi>("combo")?,
+        widget_disclosure_8: _component.widget::<neocogi_ui::DisclosureAbi>("disclosure")?,
+    })
 }

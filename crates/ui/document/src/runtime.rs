@@ -107,7 +107,7 @@ impl Loader {
     }
 }
 
-/// Application-facing opaque component; private child names are not an application API.
+/// Application-facing component that resolves authored widget keys to checked typed handles.
 pub struct Component {
     /// Canonical owner retained for authored snapshots and optional capabilities.
     object: ComPtr<IUnknown>,
@@ -118,6 +118,11 @@ impl Component {
     /// Returns the root for inspection. Mount the Component itself to retain its event owner.
     pub fn root(&self) -> Result<Widget<IWidgetAbi>, NcStatus> {
         Ok(Widget::from_interface(self.interface.root()?))
+    }
+    /// Resolves an authored child and checks its requested concrete COM interface.
+    pub fn widget<I: neocogi_com::ComInterface>(&self, name: &str) -> Result<Widget<I>, NcStatus> {
+        let base = self.interface.widget(NcCopyFromBufferOffset::new(0, name.as_bytes()))?;
+        Ok(Widget::from_interface(base.query()?))
     }
     /// The existing typed named-output binding API accepts this capability.
     pub fn outputs(&self) -> Result<ComPtr<INamedOutputsAbi>, NcStatus> {
@@ -155,6 +160,8 @@ struct Loaded {
     root: Widget<IWidgetAbi>,
     /// Public output names resolve only during connection.
     outputs: NamedOutputs,
+    /// Authored widget keys retain each concrete object for checked application queries.
+    nodes: BTreeMap<String, Widget<IWidgetAbi>>,
     /// Typed receivers retain only the nodes needed by public commands.
     inputs: BTreeMap<String, ComPtr<IUnknown>>,
 }
@@ -184,6 +191,14 @@ impl contracts::IUiComponent for Loaded {
     /// Shares the mountable widget identity without copying its state.
     fn root(&self) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
         self.root.node_interface()
+    }
+    /// Resolves only widgets authored in this component; concrete type checks follow by QueryInterface.
+    fn widget(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
+        if name.offset() != 0 {
+            return Err(NC_E_INVALID_ARG);
+        }
+        let name = std::str::from_utf8(name.as_slice()).map_err(|_| NC_E_INVALID_ARG)?;
+        self.nodes.get(name).ok_or(NC_E_NOT_FOUND)?.node_interface()
     }
     /// Uses checked names only during application connection.
     fn input(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IUnknown>, NcStatus> {
@@ -285,9 +300,9 @@ impl Services {
         let public = std::mem::take(&mut construction.public);
         let inputs = crate::bindings::inputs(&document, &construction.nodes)?;
         let wiring = crate::wiring::prepare(&document, &construction.nodes, public, messages, self.diagnostics.clone())?;
-        // Success transfers tree ownership to Loaded; the construction guard no longer closes it.
-        construction.nodes.clear();
+        // Success transfers the complete typed tree to Loaded; the failed-build guard is disarmed.
+        let nodes = std::mem::take(&mut construction.nodes);
         drop(construction);
-        Ok(Loaded::from_value(Loaded { document, root, outputs, inputs, wiring }))
+        Ok(Loaded::from_value(Loaded { document, root, outputs, inputs, nodes, wiring }))
     }
 }

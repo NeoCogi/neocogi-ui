@@ -44,8 +44,8 @@ neocogi-ui-core-contracts = { path = "crates/ui/core-contracts" }
 neocogi-ui-nodes-contracts = { path = "crates/ui/nodes-contracts" }
 neocogi-ui-document-contracts = { path = "crates/ui/document-contracts" }
 neocogi-ui-document = { path = "crates/ui/document" }
-neocogi-renderer-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "4fe929c17785afcb147009e1a5ab490e00e6407a" }
-neocogi-platform-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "4fe929c17785afcb147009e1a5ab490e00e6407a" }
+neocogi-renderer-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9910606903e62df1e3c288af8f7bd1b5d0ebe06d" }
+neocogi-platform-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9910606903e62df1e3c288af8f7bd1b5d0ebe06d" }
 neocogi-gfx-contracts = { path = "crates/gfx/contracts" }
 neocogi-gfx-support = { path = "crates/gfx/support" }
 neocogi-gfx-impl = { path = "crates/gfx/impl", version = "0.0.0", default-features = false }
@@ -55,11 +55,11 @@ neocogi-appearance = { path = "crates/appearance", version = "0.0.0" }
 neocogi-skin-authoring = { path = "crates/skin/authoring", default-features = false }
 neocogi-skin-impl = { path = "crates/skin/impl", version = "0.0.0", default-features = false }
 neocogi-skin = { path = "crates/skin/plugin", default-features = false }
-neocogi-com-core = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "a66f0b2a2d7dd55d0584a5af1cd0aeef75030359", version = "0.0.0", default-features = false }
-neocogi-com-macros = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "a66f0b2a2d7dd55d0584a5af1cd0aeef75030359", version = "0.0.0", default-features = false }
-neocogi-com = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "a66f0b2a2d7dd55d0584a5af1cd0aeef75030359", version = "0.0.0", default-features = false }
-neocogi-com-runtime = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "a66f0b2a2d7dd55d0584a5af1cd0aeef75030359", version = "0.0.0", default-features = false }
-neocogi-idl = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "a66f0b2a2d7dd55d0584a5af1cd0aeef75030359", version = "0.0.0" }
+neocogi-com-core = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "871b5ebd29624fcde60ff760eec4a06b7919609e", version = "0.0.0", default-features = false }
+neocogi-com-macros = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "871b5ebd29624fcde60ff760eec4a06b7919609e", version = "0.0.0", default-features = false }
+neocogi-com = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "871b5ebd29624fcde60ff760eec4a06b7919609e", version = "0.0.0", default-features = false }
+neocogi-com-runtime = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "871b5ebd29624fcde60ff760eec4a06b7919609e", version = "0.0.0", default-features = false }
+neocogi-idl = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "871b5ebd29624fcde60ff760eec4a06b7919609e", version = "0.0.0" }
 prettyplease = "0.2"
 proc-macro2 = { version = "1", features = ["span-locations"] }
 quote = "1"
@@ -71,14 +71,14 @@ neocogi-ui-nodes = { path = "crates/ui/nodes", version = "0.0.0", default-featur
 neocogi-demo-assets = { path = "demos/assets", default-features = false }
 neocogi-demo-host = { path = "demos/host", default-features = false }
 neocogi-demo-contracts = { path = "demos/contracts" }
-neocogi-render-mesh-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "4fe929c17785afcb147009e1a5ab490e00e6407a" }
-neocogi-render-mesh = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "4fe929c17785afcb147009e1a5ab490e00e6407a", default-features = false }
-neocogi-render-core = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "4fe929c17785afcb147009e1a5ab490e00e6407a" }
-neocogi-render-support = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "4fe929c17785afcb147009e1a5ab490e00e6407a" }
-neocogi-render-glow = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "4fe929c17785afcb147009e1a5ab490e00e6407a" }
-neocogi-render-webgl = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "4fe929c17785afcb147009e1a5ab490e00e6407a" }
-neocogi-render-vulkan = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "4fe929c17785afcb147009e1a5ab490e00e6407a" }
-neocogi-render-wgpu = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "4fe929c17785afcb147009e1a5ab490e00e6407a" }
+neocogi-render-mesh-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9910606903e62df1e3c288af8f7bd1b5d0ebe06d" }
+neocogi-render-mesh = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9910606903e62df1e3c288af8f7bd1b5d0ebe06d", default-features = false }
+neocogi-render-core = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9910606903e62df1e3c288af8f7bd1b5d0ebe06d" }
+neocogi-render-support = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9910606903e62df1e3c288af8f7bd1b5d0ebe06d" }
+neocogi-render-glow = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9910606903e62df1e3c288af8f7bd1b5d0ebe06d" }
+neocogi-render-webgl = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9910606903e62df1e3c288af8f7bd1b5d0ebe06d" }
+neocogi-render-vulkan = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9910606903e62df1e3c288af8f7bd1b5d0ebe06d" }
+neocogi-render-wgpu = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9910606903e62df1e3c288af8f7bd1b5d0ebe06d" }
 
 ash = { version = "0.38", default-features = false, features = ["linked"] }
 ash-window-handle = { package = "ash-window", version = "0.13" }

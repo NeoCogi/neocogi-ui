@@ -22,14 +22,24 @@ impl Event {
 /// Reconnect these concrete input handles after each successful component replacement.
 pub struct Inputs {
 }
+/// Checked concrete handles for every authored widget and the exported commands.
+pub struct Form {
+    /// Public command endpoints retained for message-based integrations.
+    pub inputs: Inputs,
+    /// Authored widget "root"; the concrete COM interface is checked when binding.
+    pub widget_root_0: neocogi_ui::Widget<neocogi_ui::ButtonAbi>,
+}
 /// Resolves inputs and queues public outputs during candidate preparation.
 /// Use inside ReloadSlot::reload; failed preparation leaves the previous component published.
 pub fn bind(
     _component: &neocogi_ui_document::Component,
     _generation: neocogi_ui_document::Generation,
     _send: std::sync::mpsc::Sender<Message>,
-) -> Result<Inputs, neocogi_com::NcStatus> {
+) -> Result<Form, neocogi_com::NcStatus> {
     let inputs = Inputs {
     };
-    Ok(inputs)
+    Ok(Form {
+        inputs,
+        widget_root_0: _component.widget::<neocogi_ui::ButtonAbi>("root")?,
+    })
 }
