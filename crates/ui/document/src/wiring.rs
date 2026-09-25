@@ -3,7 +3,10 @@ use crate::{*, contracts::*};
 use neocogi_com::{ComPtr, NcStatus, NC_E_INVALID_ARG};
 use neocogi_ui::{nodes, ChoiceSelection, IChoiceMenuEvent, IChoiceMenuObserverAbi, Widget, IWidgetAbi};
 use neocogi_ui::events::{Controller, EventModel};
-use std::{collections::BTreeMap, sync::mpsc::{Receiver, SyncSender}};
+use std::{
+    collections::BTreeMap,
+    sync::mpsc::{Receiver, SyncSender},
+};
 
 /// The failed effect is kept distinct from its source event and destination status.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -34,10 +37,9 @@ pub struct RouteDiagnostic {
 
 /// Captured fields from the finite set of supported event variants.
 /// The sum remains typed across form delivery; no arbitrary runtime value is stored.
-#[derive(Clone)]
-pub(crate) enum Payload {
+pub(crate) enum Payload<'a> {
     /// Complete text at the time of a change or submission.
-    Text(String),
+    Text(&'a str),
     /// Captured checkbox state.
     Boolean(bool),
     /// Captured finite numeric value.
@@ -45,7 +47,7 @@ pub(crate) enum Payload {
     /// Captured offset or divider position.
     Integer(i32),
     /// Captured optional combo identity.
-    Selection(ChoiceSelection),
+    Selection(&'a ChoiceSelection),
 }
 
 /// One child's entire typed event stream, captured by the form's construction-time observer.
@@ -94,24 +96,22 @@ impl WidgetEvent {
     }
 
     /// Selects one authored visual-event variant and its captured forwarded field.
-    fn route_payload(&self) -> (&'static str, Payload) {
+    fn route_payload(&self) -> (&'static str, Payload<'_>) {
         match self {
             Self::Button(nodes::ButtonEvent::Activated(value))
             | Self::ListItem(nodes::ListItemEvent::Activated(value))
-            | Self::ListBox(nodes::ListBoxEvent::Activated(value)) => ("activated", Payload::Text(value.label.clone())),
+            | Self::ListBox(nodes::ListBoxEvent::Activated(value)) => ("activated", Payload::Text(&value.label)),
             Self::Checkbox(nodes::CheckboxEvent::Changed(value)) => ("changed", Payload::Boolean(value.checked)),
-            Self::Slider(nodes::SliderEvent::Changed(value)) | Self::Number(nodes::NumberEvent::Changed(value)) => {
-                ("changed", Payload::Number(value.value))
-            }
+            Self::Slider(nodes::SliderEvent::Changed(value)) | Self::Number(nodes::NumberEvent::Changed(value)) => ("changed", Payload::Number(value.value)),
             Self::Textbox(nodes::TextboxEvent::Changed(value)) | Self::TextArea(nodes::TextAreaEvent::Changed(value)) => {
-                ("changed", Payload::Text(value.text.clone()))
+                ("changed", Payload::Text(&value.text))
             }
             Self::Textbox(nodes::TextboxEvent::Submitted(value)) | Self::TextArea(nodes::TextAreaEvent::Submitted(value)) => {
-                ("submitted", Payload::Text(value.text.clone()))
+                ("submitted", Payload::Text(&value.text))
             }
             Self::Scrollbar(nodes::ScrollbarEvent::Changed(value)) => ("changed", Payload::Integer(value.offset)),
             Self::Split(nodes::SplitViewEvent::Changed(value)) => ("changed", Payload::Integer(value.position)),
-            Self::Combo(IChoiceMenuEvent::Changed(value)) => ("changed", Payload::Selection(value.clone())),
+            Self::Combo(IChoiceMenuEvent::Changed(value)) => ("changed", Payload::Selection(value)),
         }
     }
 }
@@ -231,19 +231,28 @@ enum Operation {
 }
 impl Operation {
     /// Executes one visual action after traversal releases all widget borrows.
-    fn apply(&mut self, payload: Payload) -> Result<(), NcStatus> {
+    fn apply(&mut self, payload: &Payload<'_>) -> Result<(), NcStatus> {
         macro_rules! deliver {
             ($receiver:expr, $constant:expr, $variant:ident, $command:ident, $field:ident) => {{
-                let value = match ($constant.clone(), payload) {
-                    (Some(value), _) => value,
-                    (None, Payload::$variant(value)) => value,
+                let value = match ($constant.as_ref(), payload) {
+                    (Some(value), _) => *value,
+                    (None, Payload::$variant(value)) => *value,
                     _ => return Err(NC_E_INVALID_ARG),
                 };
                 $receiver.send($command { $field: value })
             }};
         }
         match self {
-            Self::Text { receiver, constant } => deliver!(receiver, constant, Text, SetText, text),
+            Self::Text { receiver, constant } => {
+                // The event owns its snapshot throughout dispatch. Only a SetText
+                // command needs its own String after that event is consumed.
+                let text = match (constant.as_ref(), payload) {
+                    (Some(value), _) => value.clone(),
+                    (None, Payload::Text(value)) => (*value).to_owned(),
+                    _ => return Err(NC_E_INVALID_ARG),
+                };
+                receiver.send(SetText { text })
+            }
             Self::Checked { receiver, constant } => deliver!(receiver, constant, Boolean, SetChecked, checked),
             Self::Value { receiver, constant } => deliver!(receiver, constant, Number, SetValue, value),
             Self::Enabled { receiver, constant } => deliver!(receiver, constant, Boolean, SetEnabled, enabled),
@@ -252,7 +261,7 @@ impl Operation {
                 let selected = match (*constant, payload) {
                     (Some(value), _) => value,
                     (None, Payload::Selection(ChoiceSelection::None)) => -1,
-                    (None, Payload::Selection(ChoiceSelection::Selected(value))) => i32::try_from(value).map_err(|_| NC_E_INVALID_ARG)?,
+                    (None, Payload::Selection(ChoiceSelection::Selected(value))) => i32::try_from(*value).map_err(|_| NC_E_INVALID_ARG)?,
                     _ => return Err(NC_E_INVALID_ARG),
                 };
                 receiver.send(SetSelection { selected })
@@ -265,10 +274,6 @@ impl Operation {
 
 /// One form-owned action selected by child key and event enum variant.
 struct Route {
-    /// Stable source widget key.
-    source: String,
-    /// Logical event variant, rather than a second widget observer port.
-    variant: String,
     /// Stable target key used in typed delivery diagnostics.
     target: String,
     /// Concrete destination command used in typed delivery diagnostics.
@@ -279,8 +284,8 @@ struct Route {
 
 /// Mounted form behavior owns public forwarding and private visual actions together.
 pub(crate) struct Wiring {
-    /// Ordered authored actions, selected after one child event reaches this form.
-    routes: Vec<Route>,
+    /// Authored actions grouped by source and variant; each group retains document order.
+    routes: BTreeMap<String, BTreeMap<String, Vec<Route>>>,
     /// Public output relays keyed by the child whose event they forward.
     public: BTreeMap<String, PublicEmitter>,
     /// Bounded nonblocking owner channel for failures of independent effects.
@@ -303,15 +308,20 @@ impl EventModel for Wiring {
                 });
             }
         }
-        for route in self.routes.iter_mut().filter(|route| route.source == message.source && route.variant == variant) {
-            if let Err(status) = route.operation.apply(payload.clone()) {
-                // A full or disconnected diagnostic channel must never block input dispatch.
-                let _ = self.diagnostics.try_send(RouteDiagnostic {
-                    source: message.source.clone(),
-                    event: variant.into(),
-                    effect: RouteEffect::Visual { target: route.target.clone(), input: route.input.clone() },
-                    status,
-                });
+        if let Some(routes) = self.routes.get_mut(&message.source).and_then(|events| events.get_mut(variant)) {
+            for route in routes {
+                if let Err(status) = route.operation.apply(&payload) {
+                    // A full or disconnected diagnostic channel must never block input dispatch.
+                    let _ = self.diagnostics.try_send(RouteDiagnostic {
+                        source: message.source.clone(),
+                        event: variant.into(),
+                        effect: RouteEffect::Visual {
+                            target: route.target.clone(),
+                            input: route.input.clone(),
+                        },
+                        status,
+                    });
+                }
             }
         }
         Ok(())
@@ -332,7 +342,7 @@ pub(crate) fn prepare(
     messages: Receiver<Message>,
     diagnostics: SyncSender<RouteDiagnostic>,
 ) -> Result<Controller<Wiring>, NcStatus> {
-    let mut routes = Vec::with_capacity(document.connections.len());
+    let mut routes: BTreeMap<String, BTreeMap<String, Vec<Route>>> = BTreeMap::new();
     for connection in &document.connections {
         let target = document.root.find(&connection.target).ok_or(NC_E_INVALID_ARG)?;
         let view = nodes.get(&connection.target).ok_or(NC_E_INVALID_ARG)?.as_interface().add_ref();
@@ -345,7 +355,10 @@ pub(crate) fn prepare(
                     Action::Forward(_) => None,
                     _ => return Err(NC_E_INVALID_ARG),
                 };
-                Operation::$variant { receiver: InputHandle { receiver: receiver.query()? }, constant }
+                Operation::$variant {
+                    receiver: InputHandle { receiver: receiver.query()? },
+                    constant,
+                }
             }};
         }
         let operation = match kind.clone() {
@@ -359,13 +372,16 @@ pub(crate) fn prepare(
             InputKind::Position => operation!(Position),
             InputKind::Choices => return Err(NC_E_INVALID_ARG),
         };
-        routes.push(Route {
-            source: connection.source.clone(),
-            variant: connection.event.clone(),
-            target: connection.target.clone(),
-            input: kind,
-            operation,
-        });
+        routes
+            .entry(connection.source.clone())
+            .or_default()
+            .entry(connection.event.clone())
+            .or_default()
+            .push(Route {
+                target: connection.target.clone(),
+                input: kind,
+                operation,
+            });
     }
     Ok(Controller::new(Wiring { routes, public, diagnostics }, messages))
 }
@@ -374,13 +390,29 @@ pub(crate) fn prepare(
 mod event_validation_tests {
     use super::*;
 
+    /// Routing observes the original snapshot; only a forwarded SetText owns a copy.
+    #[test]
+    fn text_route_payload_borrows_the_captured_event() {
+        let event = WidgetEvent::Textbox(nodes::TextboxEvent::Changed(neocogi_ui::TextChanged {
+            text: "large event snapshot".repeat(1024),
+            cursor: 0,
+        }));
+        let original = match &event {
+            WidgetEvent::Textbox(nodes::TextboxEvent::Changed(value)) => value.text.as_ptr(),
+            _ => unreachable!(),
+        };
+        let (variant, payload) = event.route_payload();
+        assert_eq!(variant, "changed");
+        match payload {
+            Payload::Text(text) => assert_eq!(text.as_ptr(), original),
+            _ => panic!("textbox change lost its text payload"),
+        }
+    }
+
     /// A malformed custom-provider event has the same result at both consumer boundaries.
     #[test]
     fn form_events_use_public_widget_domain_checks() {
-        let text = nodes::TextboxEvent::Changed(neocogi_ui::TextChanged {
-            text: "é".into(),
-            cursor: 1,
-        });
+        let text = nodes::TextboxEvent::Changed(neocogi_ui::TextChanged { text: "é".into(), cursor: 1 });
         assert_eq!(WidgetEvent::Textbox(text.clone()).validate(), neocogi_ui::textbox::validate(&text));
 
         let number = nodes::SliderEvent::Changed(nodes::NumericChanged { value: f32::NAN });

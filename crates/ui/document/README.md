@@ -159,7 +159,11 @@ activation also carries the source control's captured label, so an activation
 route can forward that string to a `SetText` destination. Model replacement
 remains an application input rather than an event transformation.
 
-The child event port has one consumer: its form. A form may apply multiple
+The child event port has one consumer: its form. A form selects visual routes by
+the source key and event variant, then applies that group's actions in document
+order. It borrows the captured text for the duration of dispatch; a forwarded
+SetText command copies the text once for that command, while constant actions
+do not copy the source snapshot. A form may apply multiple
 actions to one event case and also forward the complete event through one public
 export. These are form effects, not additional child-port consumers. Validation
 rejects multiple public names for one child, missing endpoints, incompatible
