@@ -126,10 +126,18 @@ impl CustomWidgetRegistry {
     pub(crate) fn create(&self, kind: &str, ui: &Ui, properties: &[CustomProperty]) -> Result<Widget<IWidgetAbi>, NcStatus> {
         let factory = self.entries.get(kind).ok_or(NC_E_INVALID_ARG)?;
         let widget = factory.create(ui, properties)?;
-        widget.as_interface().add_ref().supports_interface_id(&neocogi_com::NcInterfaceId::new(
+        let identity = neocogi_com::NcInterfaceId::new(
             factory.interface().abi.interface_id,
             factory.interface().abi.abi_signature,
-        ))?;
+        );
+        if let Err(error) = widget.as_interface().add_ref().supports_interface_id(&identity) {
+            // The candidate has not entered Construction's owned-node set yet.
+            // Close its common widget state here before dropping the last handle.
+            if let Ok(mut node) = widget.node_interface() {
+                let _ = node.close();
+            }
+            return Err(error);
+        }
         Ok(widget)
     }
 }
