@@ -28,7 +28,7 @@ Use `vulkan` or `wgpu` for the other native renderers. The same crate also compi
 for `wasm32-unknown-unknown`; static applications register its descriptor explicitly.
 
 The contracts live in [the demo IDL module](../../demos/contracts/idl/neocogi/demo.ncidl).
-`Counter: IWidget + ILeafLayout + IActivationEvents + IWidgetProbe` and
+`Counter: IWidget + ILeafLayout + IWidgetProbe` and
 `IInset: IContainer` are callable interfaces.
 The registered `ExtensionProvider` factory constructs both with a typed
 `IWidgetHost` argument. Factories are the only parameterless activation roots.
@@ -39,25 +39,20 @@ External controls share the built-in ownership and routing rules.
 
 The [implementation](src/lib.rs) uses `WidgetState` for common options, mount-once
 ownership, logical closure and sticky invalidation. The counter stores its value
-once and shares the same event transport as built-ins. Its NCIDL contract binds
-`changed: CounterChanged;` to the concrete message
-`#[message] struct CounterChanged { value: u32 }`.
+once and exposes one physical `event: CounterEvent` port. `CounterEvent` is an
+IDL message enum with `Activated(Activation)` and `Changed(CounterChanged)`
+cases; `CounterChanged` is a nested message struct carrying the committed count.
+This is the complete event stream, so installing one receiver consumes the
+port exactly once. The producer retains one generated concrete receiver and
+posts each enum case after the corresponding state transition.
 
-The producer stores `Option<ComPtr<__CounterChangedReceiverAbi>>`. Its ordinary
-`Counter::__map_changed` implementation checks widget access and assigns the
-receiver. After committing the count it calls
-`CounterChanged { value: self.count }.post_to(&mut self.changed)?`.
-Activation independently stores its optional concrete receiver. Widget closure
-clears those fields. No output projection, subscription token, generation counter
-or producer queue is allocated.
-
-The [acceptance host](../../demos/smoke/src/extension.rs) defines its own ordinary
-Rust enum and maps the output with `events::bind(counter.changed(), sender, Message::Changed)`.
-Mapping immediately translates the concrete value and posts it into that consumer's
-FIFO. The later mutable consumer runs through `ui.update_with_events`, after
-traversal borrows are released, and may edit the counter. Captured values remain
-the committed facts; resulting geometry is synchronized before update returns.
-The same implementation and generated contracts serve both build commands above.
+The [acceptance host](../../demos/smoke/src/extension.rs) binds the one typed
+port through `events::bind(counter.event(), ...)`. Its application handler
+matches the complete `CounterEvent` enum after UI traversal releases widget
+borrows. The same implementation and generated contracts serve both build
+commands above. `CounterAbi::IDL_INTERFACE` and `CounterEvent::IDL_MESSAGE`
+expose the generated COM interface and source-level event shape to authoring
+tools; a UI document does not restate those types.
 
 The inset retains one `IChildrenEditor` and exposes its read-only view. It reads
 the authoritative child count instead of maintaining a second topology flag. Its

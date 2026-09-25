@@ -3,8 +3,7 @@
 //! The two concrete objects share only lifecycle plumbing. The counter owns its scalar value and
 //! event producer; the inset owns its padding and the host's sole authoritative child editor.
 #![deny(missing_docs)]
-use neocogi_demo_contracts::__CounterChangedReceiverAbi;
-use neocogi_ui_core_contracts::__ActivationReceiverAbi;
+use neocogi_demo_contracts::__CounterEventReceiverAbi;
 use neocogi_ui::com::widget::WidgetState;
 use neocogi_ui_core_contracts::*;
 use neocogi_demo_contracts::*;
@@ -98,10 +97,8 @@ struct CounterObject {
     common: Common,
     /// The one semantic counter value; labels are short-lived snapshots of it.
     count: u32,
-    /// Installed activation receiver maps captured labels into its consumer FIFO.
-    submitted: Option<ComPtr<__ActivationReceiverAbi>>,
-    /// Independent concrete output for committed count changes.
-    changed: Option<ComPtr<__CounterChangedReceiverAbi>>,
+    /// Sole destination for the complete enum-valued event stream.
+    event: Option<ComPtr<__CounterEventReceiverAbi>>,
 }
 impl CounterObject {
     /// Validates runtime authority and publishes one fully initialized counter identity.
@@ -110,8 +107,7 @@ impl CounterObject {
         Self::from_value(Self {
             common: Common::new(host, WidgetOptions::FRAME),
             count: 0,
-            submitted: None,
-            changed: None,
+            event: None,
         })
         .query()
     }
@@ -122,8 +118,8 @@ impl CounterObject {
             self.count = self.count.saturating_add(1);
             // A rejected foreign post cannot erase this already committed change.
             self.common.state.record_change(GeometryChange::Changed);
-            Activation { label: self.count.to_string() }.post_to(&mut self.submitted)?;
-            CounterChanged { value: self.count }.post_to(&mut self.changed)?;
+            CounterEvent::Activated(Activation { label: self.count.to_string() }).post_to(&mut self.event)?;
+            CounterEvent::Changed(CounterChanged { value: self.count }).post_to(&mut self.event)?;
             Ok(GeometryChange::Changed)
         } else {
             Ok(GeometryChange::NoChange)
@@ -135,8 +131,7 @@ impl CounterObject {
     }
     /// Ordinary interaction work expires even if callers retain the closed control.
     fn close_content(&mut self) -> Result<(), NcStatus> {
-        self.submitted = None;
-        self.changed = None;
+        self.event = None;
         Ok(())
     }
 }
@@ -144,9 +139,9 @@ impl CounterObject {
 widget!(CounterObject, 1 | 2 | 4 | 8, WidgetFrame::Button);
 impl Counter for CounterObject {
     /// Replaces this output's concrete destination after checking widget access.
-    fn __map_changed(&mut self, destination: ComRef<'_, __CounterChangedReceiverAbi>) -> Result<(), NcStatus> {
+    fn __map_event(&mut self, destination: ComRef<'_, __CounterEventReceiverAbi>) -> Result<(), NcStatus> {
         self.common.state.writable()?;
-        self.changed = Some(destination.add_ref());
+        self.event = Some(destination.add_ref());
         Ok(())
     }
 
@@ -162,14 +157,6 @@ impl Counter for CounterObject {
             self.count = value;
             self.common.state.record_change(GeometryChange::Changed);
         }
-        Ok(())
-    }
-}
-impl IActivationEvents for CounterObject {
-    /// Replaces this output's concrete destination after checking widget access.
-    fn __map_activated(&mut self, destination: ComRef<'_, __ActivationReceiverAbi>) -> Result<(), NcStatus> {
-        self.common.state.writable()?;
-        self.submitted = Some(destination.add_ref());
         Ok(())
     }
 }

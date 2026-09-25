@@ -4,10 +4,8 @@ use neocogi_demo_contracts::*;
 
 /// Host-local facts prove plugins never need the consumer's message enum.
 enum Message {
-    /// Counter's activation snapshot.
-    Activated(events::Activation),
-    /// Independently declared counter protocol.
-    Changed(CounterChanged),
+    /// Complete event from the counter's one physical port.
+    Counter(CounterEvent),
 }
 /// Host-local controller owns its labels and the extension's editing projection.
 struct Model {
@@ -21,11 +19,11 @@ impl events::EventModel for Model {
     /// Handles the independent plugin's concrete public event protocol.
     fn handle(&mut self, message: Message) -> Result<(), NcStatus> {
         match message {
-            Message::Activated(event) => {
+            Message::Counter(CounterEvent::Activated(event)) => {
                 self.labels.push(event.label);
                 self.counter.set_count(100)?;
             }
-            Message::Changed(event) => self.labels.push(format!("count={}", event.value)),
+            Message::Counter(CounterEvent::Changed(event)) => self.labels.push(format!("count={}", event.value)),
         }
         Ok(())
     }
@@ -51,11 +49,9 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     assert_eq!(another.children()?.child_count()?, 0);
     let root = Widget::from_interface(inset.clone());
     // Capability discovery happens once while wiring the application, never during UI phases.
-    let activation: ComPtr<IActivationEventsAbi> = counter.query()?;
     let window = ui.window("Independent extension", Rect { x: 10, y: 10, width: 400, height: 200 }, &root)?;
     let (events_tx, events) = std::sync::mpsc::channel();
-    neocogi_ui::events::bind(activation.activated(), events_tx.clone(), Message::Activated)?;
-    neocogi_ui::events::bind(counter.changed(), events_tx.clone(), Message::Changed)?;
+    neocogi_ui::events::bind(counter.event(), events_tx.clone(), Message::Counter)?;
     let app = events::Controller::into_local(events::Controller::root(
         Model {
             labels: Vec::new(),
