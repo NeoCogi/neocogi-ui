@@ -11,6 +11,8 @@ mod bindings;
 mod diagnostics;
 mod wiring;
 pub use diagnostics::{EventDeliveryDiagnostic, EventDeliveryBatch, EventDeliverySender, EventDeliveryReceiver, event_delivery_diagnostics};
+mod custom;
+pub use custom::{CustomWidgetFactory, CustomWidgetRegistry};
 mod build;
 mod rust_bindings;
 pub use bindings::{Command, InputHandle};

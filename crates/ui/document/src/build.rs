@@ -15,6 +15,8 @@ pub(crate) struct Construction<'a> {
     pub public: BTreeMap<String, PublicEmitter>,
     /// Component-owned application bindings, separate from widget lifetimes.
     pub outputs: neocogi_com::events::NamedOutputs,
+    /// Explicitly registered custom COM factories.
+    pub custom: &'a crate::CustomWidgetRegistry,
     /// Existing runtime and independently deployed built-in factory.
     pub ui: &'a Ui,
     /// Required only by window-owned combo popups.
@@ -187,6 +189,7 @@ impl Construction<'_> {
             WidgetSpec::Disclosure { text, tree, expanded } => {
                 root(factory.disclosure(text, if *tree { DisclosureStyle::Tree } else { DisclosureStyle::Header }, *expanded)?)?
             }
+            WidgetSpec::Custom { kind, properties, .. } => self.custom.create(kind, self.ui, properties)?,
         };
         self.nodes.insert(node.key.clone(), widget.clone());
         for (index, (child, relationship)) in children.iter().zip(&node.children).enumerate() {

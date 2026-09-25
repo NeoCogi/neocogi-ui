@@ -14,5 +14,6 @@ serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+neocogi-demo-contracts.workspace = true
 # Unit tests exercise document loading through the ordinary static runtime.
 neocogi-com = { workspace = true, features = ["static-runtime"] }

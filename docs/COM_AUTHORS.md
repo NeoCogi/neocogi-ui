@@ -127,7 +127,16 @@ Generated methods validate/copy/retain the concrete wire message, and the UI shi
 validates domain values before calling the mapper. Captures must be owned or
 `'static`; the later controller owns its ordinary mutable model.
 
-Each widget has one fixed observer covering all outputs. `textbox::observer`
+A custom widget intended for authored forms has at most one physical event
+port across its concrete interface and required interface chain. Put distinct
+events in one `#[message] enum` and declare that enum on the concrete widget
+interface. The generated `*Abi::IDL_INTERFACE` and message `IDL_MESSAGE`
+descriptions retain the port and enum shape next to the physical COM method
+descriptor. An authored document names only a registered widget kind and typed
+constructor values; application code owns the event handler and any reaction
+to another widget. Each installed receiver is the port's sole consumer.
+
+Each built-in widget has one fixed observer covering all outputs. `textbox::observer`
 creates that adapter separately; `textbox::filter_observer` can ignore selected
 variants. `*_with_observer` constructors borrow it, and `*_unobserved` constructors
 pass no observer. Separate factory convenience calls allocate separate observers.

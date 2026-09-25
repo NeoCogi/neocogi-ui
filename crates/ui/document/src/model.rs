@@ -4,7 +4,7 @@ use serde::{Serialize, Deserialize};
 use std::collections::BTreeMap;
 
 /// Persistent schema revision; changes to field order or enum ordinals require a new revision.
-pub const VERSION: u32 = 4;
+pub const VERSION: u32 = 5;
 /// Maximum authored nodes in one component.
 pub const MAX_NODES: usize = 4096;
 /// Maximum authored ownership depth.
@@ -304,6 +304,54 @@ pub enum WidgetSpec {
         /// Positive preferred content height.
         height: i32,
     },
+    /// A leaf control selected through a trusted registered COM factory.
+    Custom {
+        /// Stable kind resolved only against the application's installed registry.
+        kind: String,
+        /// Typed constructor values; their schema belongs to the installed factory.
+        properties: Vec<CustomProperty>,
+    },
+}
+
+/// One named custom constructor value; the installed factory validates and applies it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ComSerialize, ComDeserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CustomProperty {
+    /// Stable property identifier from the trusted widget contract.
+    pub name: String,
+    /// Strongly typed authored value.
+    pub value: CustomValue,
+}
+
+/// Closed scalar property kinds supported by the generic designer inspector.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ComSerialize, ComDeserialize)]
+#[serde(deny_unknown_fields)]
+pub enum CustomValue {
+    /// UTF-8 text copied into the custom factory at construction.
+    Text(String),
+    /// Boolean toggle.
+    Boolean(bool),
+    /// Signed integral value.
+    Integer(i32),
+    /// Finite single-precision numeric value.
+    Number(f32),
+}
+impl CustomValue {
+    /// Compares property kinds independently of their authored values.
+    pub fn same_kind(&self, other: &Self) -> bool {
+        matches!((self, other),
+            (Self::Text(_), Self::Text(_)) |
+            (Self::Boolean(_), Self::Boolean(_)) |
+            (Self::Integer(_), Self::Integer(_)) |
+            (Self::Number(_), Self::Number(_)))
+    }
+    /// Rejects nonfinite authored numeric values before calling a plugin factory.
+    pub fn valid(&self) -> bool {
+        match self {
+            Self::Number(value) => value.is_finite(),
+            Self::Text(_) | Self::Boolean(_) | Self::Integer(_) => true,
+        }
+    }
 }
 
 /// One public name for a widget's sole typed event stream.
@@ -440,6 +488,7 @@ impl WidgetSpec {
             Self::Scroll { .. } => "Scroll",
             Self::Disclosure { .. } => "Disclosure",
             Self::Form { .. } => "Form",
+            Self::Custom { .. } => "Custom",
         }
     }
     /// Whether this authored kind owns user-editable children.
@@ -614,7 +663,8 @@ impl WidgetSpec {
             | Self::Grid { .. }
             | Self::Scroll { .. }
             | Self::Form { .. }
-            | Self::Disclosure { .. } => &[],
+            | Self::Disclosure { .. }
+            | Self::Custom { .. } => &[],
         }
     }
     /// Whether authored font selection has a concrete setter, including a disclosure's header.
@@ -632,7 +682,7 @@ impl WidgetSpec {
             | Self::ListBox { .. }
             | Self::Combo { .. }
             | Self::Disclosure { .. } => true,
-            Self::Scrollbar { .. } | Self::Linear { .. } | Self::Grid { .. } | Self::Split { .. } | Self::Scroll { .. } | Self::Form { .. } => false,
+            Self::Scrollbar { .. } | Self::Linear { .. } | Self::Grid { .. } | Self::Split { .. } | Self::Scroll { .. } | Self::Form { .. } | Self::Custom { .. } => false,
         }
     }
     /// Whether a named icon can be applied through the class's concrete visual API.
@@ -701,6 +751,12 @@ fn validate_node<'a>(node: &'a Node, depth: usize, nodes: &mut BTreeMap<&'a str,
             ..
         } => *position >= 0 && *minimum_first >= 0 && *minimum_second >= 0 && *handle > 0 && node.children.len() <= 2,
         Form { width, height } => *width > 0 && *height > 0,
+        Custom { kind, properties } => {
+            let mut names = std::collections::BTreeSet::new();
+            !kind.is_empty() && properties.iter().all(|property| {
+                !property.name.is_empty() && names.insert(&property.name) && property.value.valid()
+            })
+        },
         Scroll { .. } => node.children.len() == 1,
         Linear { cross: Cross::Fixed { pixels }, .. } => *pixels >= 0,
         _ => true,
@@ -758,7 +814,7 @@ impl WidgetSpec {
             | Self::Scroll { .. } => Options::FRAME,
             Self::ColorSwatch { .. } => Options::FRAME | Options::ALIGN_CENTER | Options::NO_INTERACT,
             Self::Form { .. } | Self::TextBlock { .. } | Self::Linear { .. } | Self::Grid { .. } | Self::Disclosure { .. } => Options::NO_INTERACT,
-            Self::Checkbox { .. } | Self::ListItem { .. } | Self::ListBox { .. } | Self::Scrollbar { .. } | Self::Split { .. } => Options::NONE,
+            Self::Checkbox { .. } | Self::ListItem { .. } | Self::ListBox { .. } | Self::Scrollbar { .. } | Self::Split { .. } | Self::Custom { .. } => Options::NONE,
         }
     }
 }

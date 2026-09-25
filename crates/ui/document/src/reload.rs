@@ -29,12 +29,18 @@ pub struct ReloadSlot {
     next: u64,
     /// Bounded application-owned channel shared with each newly loaded form.
     diagnostics: crate::EventDeliverySender,
+    /// Trusted custom widget factories shared across candidate attempts.
+    custom: crate::CustomWidgetRegistry,
 }
 impl ReloadSlot {
     /// Creates an empty unmounted slot with a bounded event-delivery diagnostic sender.
     /// Insert widget() into the application's normal layout and drain the
     /// matching receiver after updates, including across component reloads.
     pub fn new(ui: Ui, parent: ComPtr<IWindowAbi>, diagnostics: crate::EventDeliverySender) -> Result<Self, NcStatus> {
+        Self::new_with_custom(ui, parent, diagnostics, crate::CustomWidgetRegistry::new())
+    }
+    /// Creates a reload slot with application-installed custom COM widget factories.
+    pub fn new_with_custom(ui: Ui, parent: ComPtr<IWindowAbi>, diagnostics: crate::EventDeliverySender, custom: crate::CustomWidgetRegistry) -> Result<Self, NcStatus> {
         let slot = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
         Ok(Self {
             ui,
@@ -43,6 +49,7 @@ impl ReloadSlot {
             active: None,
             next: 0,
             diagnostics,
+            custom,
         })
     }
     /// Returns the stable slot root, whose identity does not change during reload.
@@ -67,7 +74,7 @@ impl ReloadSlot {
     ) -> Result<Reloaded, String> {
         self.next = self.next.checked_add(1).ok_or("Reload generation limit reached")?;
         let generation = Generation(self.next);
-        let loader = Loader::new(self.ui.clone(), Some(self.parent.clone()), resources, self.diagnostics.clone()).map_err(|error| error.to_string())?;
+        let loader = Loader::new_with_custom(self.ui.clone(), Some(self.parent.clone()), resources, self.diagnostics.clone(), self.custom.clone()).map_err(|error| error.to_string())?;
         let candidate = loader.prepare(document)?;
         bind(&candidate, generation).map_err(|error| error.to_string())?;
         let edge = LinearEdge::new(LayoutTrack::Flex { weight: 1.0 });

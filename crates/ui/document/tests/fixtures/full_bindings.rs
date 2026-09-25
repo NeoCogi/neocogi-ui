@@ -116,15 +116,7 @@ pub fn bind(
         input_offset_7: component.input::<neocogi_ui_document::contracts::SetOffset>("Offset")?,
         input_position_8: component.input::<neocogi_ui_document::contracts::SetPosition>("Position")?,
     };
-    let outputs = component.outputs()?;
-    neocogi_com::events::bind_output(outputs.as_com_ref(), "save", send.clone(), move |event: neocogi_ui::events::Activation| Message { generation, event: Event::Widget1(event) })?;
-    neocogi_com::events::bind_output(outputs.as_com_ref(), "type", send.clone(), move |event: neocogi_ui::events::CheckboxChanged| Message { generation, event: Event::Widget2(event) })?;
-    neocogi_com::events::bind_output(outputs.as_com_ref(), "quote\"\n// x", send.clone(), move |event: neocogi_ui::textbox::Event| Message { generation, event: Event::Widget3(event) })?;
-    neocogi_com::events::bind_output(outputs.as_com_ref(), "value", send.clone(), move |event: neocogi_ui::events::NumericChanged| Message { generation, event: Event::Widget4(event) })?;
-    neocogi_com::events::bind_output(outputs.as_com_ref(), "pixel-offset", send.clone(), move |event: neocogi_ui::events::ScrollbarChanged| Message { generation, event: Event::Widget5(event) })?;
-    neocogi_com::events::bind_output(outputs.as_com_ref(), "pixel_offset", send.clone(), move |event: neocogi_ui::events::SplitChanged| Message { generation, event: Event::Widget6(event) })?;
-    neocogi_com::events::bind_output(outputs.as_com_ref(), "selection", send.clone(), move |event: neocogi_ui::events::ChoiceSelection| Message { generation, event: Event::Widget7(event) })?;
-    Ok(Form {
+    let form = Form {
         inputs,
         widget_root_0: component.widget::<neocogi_ui::LinearAbi>("root")?,
         widget_button_1: component.widget::<neocogi_ui::ButtonAbi>("button")?,
@@ -135,5 +127,14 @@ pub fn bind(
         widget_split_6: component.widget::<neocogi_ui::SplitViewAbi>("split")?,
         widget_combo_7: component.widget::<neocogi_ui::ComboAbi>("combo")?,
         widget_disclosure_8: component.widget::<neocogi_ui::DisclosureAbi>("disclosure")?,
-    })
+    };
+    let outputs = component.outputs()?;
+    neocogi_com::events::bind_output(outputs.as_com_ref(), "save", send.clone(), move |event: neocogi_ui::events::Activation| Message { generation, event: Event::Widget1(event) })?;
+    neocogi_com::events::bind_output(outputs.as_com_ref(), "type", send.clone(), move |event: neocogi_ui::events::CheckboxChanged| Message { generation, event: Event::Widget2(event) })?;
+    neocogi_com::events::bind_output(outputs.as_com_ref(), "quote\"\n// x", send.clone(), move |event: neocogi_ui::textbox::Event| Message { generation, event: Event::Widget3(event) })?;
+    neocogi_com::events::bind_output(outputs.as_com_ref(), "value", send.clone(), move |event: neocogi_ui::events::NumericChanged| Message { generation, event: Event::Widget4(event) })?;
+    neocogi_com::events::bind_output(outputs.as_com_ref(), "pixel-offset", send.clone(), move |event: neocogi_ui::events::ScrollbarChanged| Message { generation, event: Event::Widget5(event) })?;
+    neocogi_com::events::bind_output(outputs.as_com_ref(), "pixel_offset", send.clone(), move |event: neocogi_ui::events::SplitChanged| Message { generation, event: Event::Widget6(event) })?;
+    neocogi_com::events::bind_output(outputs.as_com_ref(), "selection", send.clone(), move |event: neocogi_ui::events::ChoiceSelection| Message { generation, event: Event::Widget7(event) })?;
+    Ok(form)
 }

@@ -3,7 +3,7 @@
 `neocogi-ui-document` reconstructs an authored widget tree through the existing
 COM widget factories. JSON is editable source; the NCB persistence envelope is
 suitable for embedding or deployment. The loader performs no file I/O. Both
-representations use schema revision 4, and earlier revisions are rejected.
+representations use schema revision 5, and earlier revisions are rejected.
 
 A `Document` contains a tree of built-in widget constructors, styles, resources,
 and parent-owned layout edges. Each node has a unique stable key. Its physical
@@ -18,7 +18,7 @@ The application owns event behavior. Every event-producing node is represented
 by one required method in the generated `Handlers` trait. The application
 implements that trait in its own source file and dispatches accepted events at
 its normal update boundary. This is where button-to-textbox behavior, validation,
-state transitions, and application-specific commands belong. Revision 4 has no
+state transitions, and application-specific commands belong. Revision 5 has no
 serialized visual output-to-input graph, route expression, or route editor.
 
 ## Loading and typed widget access
@@ -116,8 +116,38 @@ child layout, event aliases, and command endpoints. JSON rejects unknown fields.
 allocations clip rather than scale; sibling order controls paint and hit order.
 Linear, Grid, Split, Scroll, and Disclosure remain ordinary nested containers.
 
-Custom COM widget schemas and factories are not yet part of revision 4. A custom
-provider cannot be inferred safely from an arbitrary COM interface: the designer
-needs explicit constructor, editable-property, and event metadata, and the
-loader needs an application-supplied factory. Until that contract exists, the
-schema rejects unknown widget types rather than loading code from a document.
+## Custom COM widgets
+
+A host installs custom widgets through `CustomWidgetRegistry`. Each
+`CustomWidgetFactory` supplies a stable kind, typed constructor defaults, a
+constructor returning `Widget<IWidgetAbi>`, and the generated metadata of its
+concrete COM projection, for example `&CounterAbi::IDL_INTERFACE`. The registry
+checks the descriptor's physical method table and required interface chain: a
+custom widget may expose zero or one event port, and an inherited second port
+is rejected. Multiple logical events belong in one `#[message] enum`, such as
+`CounterEvent::Activated` and `CounterEvent::Changed`.
+
+The document stores only `Custom { kind, properties }`. It does not store Rust
+paths, event traits, message types, executable code, or a copy of the property
+schema. Loading resolves the kind against the installed registry, validates
+property names and types against its defaults, constructs the widget, and
+checks that the returned COM object implements the exact advertised interface
+identity and ABI signature before publishing it. Unknown kinds and mismatched
+properties fail preparation. The generic designer inspector can edit text,
+boolean, integer, and finite floating-point constructor values; providers may
+impose stricter domain bounds in `create`.
+
+`Document::rust_bindings_with(&registry)` generates custom form fields and
+required handler methods using `*Abi::IDL_INTERFACE` and the event message's
+`IDL_MESSAGE` metadata. The generated field uses the concrete COM projection;
+the generated handler receives the declared message enum or struct. The custom
+port is bound directly to the application queue after the form has been checked.
+The plain `rust_bindings()` helper and the command-line example use an empty
+registry and therefore handle built-in documents only. The designer's Rust
+export uses its active registry.
+
+Custom widgets are currently leaf nodes in authored forms. A custom container
+needs a separate child attachment contract before it can own authored children.
+The Run-mode preview renders custom widgets but does not generically decode
+plugin-defined events for its status trace; the generated application binding
+still receives the complete typed stream.

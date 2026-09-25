@@ -88,14 +88,18 @@ impl Loader {
     /// The parent is needed only for controls that own popups; the receiver should
     /// be drained after updates so rejected independent effects remain visible.
     pub fn new(ui: Ui, parent: Option<ComPtr<IWindowAbi>>, resources: Resources, diagnostics: crate::EventDeliverySender) -> Result<Self, NcStatus> {
+        Self::new_with_custom(ui, parent, resources, diagnostics, crate::CustomWidgetRegistry::new())
+    }
+    /// Binds trusted custom COM factories alongside the ordinary built-in constructors.
+    pub fn new_with_custom(ui: Ui, parent: Option<ComPtr<IWindowAbi>>, resources: Resources, diagnostics: crate::EventDeliverySender, custom: crate::CustomWidgetRegistry) -> Result<Self, NcStatus> {
         let mut registry = FactoryRegistry::new()?;
-        let services = std::rc::Rc::new(Services { ui, parent, resources, diagnostics });
+        let services = std::rc::Rc::new(Services { ui, parent, resources, diagnostics, custom });
         registry.register(DOCUMENT_TYPE, Factory::from_value(Factory { services: services.clone() }).query()?)?;
         Ok(Self { registry, services })
     }
     /// Validates typed source and constructs directly, without a binary persistence round trip.
     pub fn prepare(&self, document: &Document) -> Result<Component, String> {
-        document.validate()?;
+        self.services.custom.validate_document(document)?;
         let object = self.services.construct(document.clone()).map_err(|error| error.to_string())?;
         let interface = object.query().map_err(|error| error.to_string())?;
         Ok(Component { object, interface })
@@ -256,6 +260,8 @@ struct Services {
     resources: Resources,
     /// Nonblocking typed diagnostics owned and drained by the constructing application.
     diagnostics: crate::EventDeliverySender,
+    /// Trusted custom widget construction authority, separate from serialized document data.
+    custom: crate::CustomWidgetRegistry,
 }
 /// Parses the exact initialization revision and validates the entire document.
 fn decode(version: u32, state: NcCopyFromBufferOffset<'_, u8>, count: u32) -> Result<Document, NcStatus> {
@@ -272,11 +278,13 @@ fn decode(version: u32, state: NcCopyFromBufferOffset<'_, u8>, count: u32) -> Re
 impl IPersistenceFactory for Factory {
     /// Pure preflight performs no widget construction or topology changes.
     fn validate(&self, version: u32, state: NcCopyFromBufferOffset<'_, u8>, children: u32) -> Result<(), NcStatus> {
-        decode(version, state, children).map(|_| ())
+        let document = decode(version, state, children)?;
+        self.services.custom.validate_document(&document).map_err(|_| NC_E_INVALID_ARG)
     }
     /// Constructs one candidate and transfers ownership only after all bindings exist.
     fn restore(&self, version: u32, state: NcCopyFromBufferOffset<'_, u8>, children: ComRef<'_, IObjectChildrenAbi>) -> Result<ComPtr<IUnknown>, NcStatus> {
         let document = decode(version, state, children.count()?)?;
+        self.services.custom.validate_document(&document).map_err(|_| NC_E_INVALID_ARG)?;
         self.services.construct(document)
     }
 }
@@ -290,6 +298,7 @@ impl Services {
             public: BTreeMap::new(),
             outputs: NamedOutputs::new(),
             ui: &self.ui,
+            custom: &self.custom,
             parent: self.parent.as_ref(),
             resources: &self.resources,
             nodes: BTreeMap::new(),

@@ -43,10 +43,11 @@ pub fn bind(
 ) -> Result<Form, neocogi_com::NcStatus> {
     let inputs = Inputs {
     };
-    let outputs = component.outputs()?;
-    neocogi_com::events::bind_output(outputs.as_com_ref(), "root", send.clone(), move |event: neocogi_ui::events::Activation| Message { generation, event: Event::Widget0(event) })?;
-    Ok(Form {
+    let form = Form {
         inputs,
         widget_root_0: component.widget::<neocogi_ui::ButtonAbi>("root")?,
-    })
+    };
+    let outputs = component.outputs()?;
+    neocogi_com::events::bind_output(outputs.as_com_ref(), "root", send.clone(), move |event: neocogi_ui::events::Activation| Message { generation, event: Event::Widget0(event) })?;
+    Ok(form)
 }
