@@ -4,7 +4,7 @@ use serde::{Serialize, Deserialize};
 use std::collections::BTreeMap;
 
 /// Persistent schema revision; changes to field order or enum ordinals require a new revision.
-pub const VERSION: u32 = 3;
+pub const VERSION: u32 = 4;
 /// Maximum authored nodes in one component.
 pub const MAX_NODES: usize = 4096;
 /// Maximum authored ownership depth.
@@ -26,8 +26,6 @@ pub struct Document {
     pub outputs: Vec<Output>,
     /// Public commands mapped to typed internal setters.
     pub inputs: Vec<Input>,
-    /// Executable private output-to-input connections, dispatched by the mounted component.
-    pub connections: Vec<Connection>,
 }
 
 /// One authored node; key is a document-local name preserved when reparenting.
@@ -484,7 +482,6 @@ impl Document {
                 name: "save_requested".into(),
                 node: "save".into(),
             }],
-            connections: vec![],
             inputs: vec![Input {
                 name: "title".into(),
                 node: "title".into(),
@@ -522,16 +519,6 @@ impl Document {
             if !node.widget.outputs().is_empty() && !exported_nodes.contains(&node.key) && names.contains(&node.key) {
                 return Err(format!("Widget event name {} conflicts with an exported alias", node.key));
             }
-        }
-        if self.connections.len() > 4095 {
-            return Err("UI document has too many event connections".into());
-        }
-        for connection in &self.connections {
-            // The form receives the source port once, then may perform several actions and public forwarding.
-            let source = nodes.get(connection.source.as_str()).ok_or("Connection source is missing")?;
-            let target = nodes.get(connection.target.as_str()).ok_or("Connection target is missing")?;
-            let payload = source.widget.event_type(&connection.event).ok_or("Connection source has no such event variant")?;
-            connection.action.validate(payload, &target.widget)?;
         }
         names.clear();
         let mut inputs = std::collections::BTreeSet::new();
@@ -629,21 +616,6 @@ impl WidgetSpec {
             | Self::Form { .. }
             | Self::Disclosure { .. } => &[],
         }
-    }
-    /// Lists the variants available for form-owned visual actions. Text editors
-    /// have one physical event port but two separately matchable enum variants.
-    pub fn event_variants(&self) -> &'static [OutputPort] {
-        match self {
-            Self::Textbox { .. } | Self::TextArea { .. } => &[
-                OutputPort { name: "changed", payload: OutputType::TextChanged },
-                OutputPort { name: "submitted", payload: OutputType::TextSubmitted },
-            ],
-            _ => self.outputs(),
-        }
-    }
-    /// Resolves a logical event variant for a form-owned visual action.
-    pub fn event_type(&self, variant: &str) -> Option<OutputType> {
-        self.event_variants().iter().find(|event| event.name == variant).map(|event| event.payload)
     }
     /// Whether authored font selection has a concrete setter, including a disclosure's header.
     pub fn supports_font(&self) -> bool {
@@ -812,25 +784,10 @@ mod binding_tests {
     }
 }
 
-/// One form-owned visual action selected by an event variant. The source widget
-/// still has exactly one observer: the form receives its complete event stream.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ComSerialize, ComDeserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Connection {
-    /// Stable source node key.
-    pub source: String,
-    /// Logical enum variant on the source widget, such as changed or submitted.
-    pub event: String,
-    /// Stable destination node key; no public input alias is required.
-    pub target: String,
-    /// Typed transformation applied at the component's safe event boundary.
-    pub action: Action,
-}
-
 /// One statically declared output endpoint; this record contains no runtime receiver.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct OutputPort {
-    /// Physical stream name from `outputs`, or logical variant from `event_variants`.
+    /// Physical stream name declared by the concrete widget contract.
     pub name: &'static str,
     /// Complete captured message contract for this stream or logical variant.
     pub payload: OutputType,
@@ -845,10 +802,6 @@ pub enum OutputType {
     Checked,
     /// Finite numeric snapshot.
     Number,
-    /// Edited text plus cursor snapshot.
-    TextChanged,
-    /// Submitted text snapshot.
-    TextSubmitted,
     /// Pixel scroll offset.
     Offset,
     /// Pixel divider position.
@@ -859,106 +812,4 @@ pub enum OutputType {
     TextboxEvent,
     /// Complete multiline editor event sum, exported as one typed stream.
     TextAreaEvent,
-}
-/// Explicit payload forwarding or a concrete constant command; no executable code is serialized.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ComSerialize, ComDeserialize)]
-#[serde(deny_unknown_fields)]
-pub enum Action {
-    /// Forward a compatible captured output field to this concrete command.
-    Forward(InputKind),
-    /// Replace destination text on every source event.
-    Text(String),
-    /// Set destination checked state on every source event.
-    Checked(bool),
-    /// Set a finite numeric value on every source event.
-    Value(f32),
-    /// Enable or disable the destination on every source event.
-    Enabled(bool),
-    /// Expand or collapse the destination on every source event.
-    Expanded(bool),
-    /// Select a combo ordinal, or clear selection with -1.
-    Selection(i32),
-    /// Request a pixel scroll offset, clamped by the destination.
-    Offset(i32),
-    /// Request a nonnegative split divider position.
-    Position(i32),
-}
-impl Action {
-    /// Destination command identity, independent of constant-versus-forwarded payload policy.
-    pub fn input(&self) -> InputKind {
-        match self {
-            Self::Forward(kind) => kind.clone(),
-            Self::Text(_) => InputKind::Text,
-            Self::Checked(_) => InputKind::Checked,
-            Self::Value(_) => InputKind::Value,
-            Self::Enabled(_) => InputKind::Enabled,
-            Self::Expanded(_) => InputKind::Expanded,
-            Self::Selection(_) => InputKind::Selection,
-            Self::Offset(_) => InputKind::Offset,
-            Self::Position(_) => InputKind::Position,
-        }
-    }
-
-    /// Checks payload compatibility and constant domain before any widget is constructed.
-    pub fn validate(&self, source: OutputType, target: &WidgetSpec) -> Result<(), String> {
-        if !target.accepts(&self.input()) {
-            return Err("Connection target does not accept this command".into());
-        }
-        let valid = match self {
-            Self::Forward(kind) => matches!(
-                (source, kind),
-                (OutputType::Checked, InputKind::Checked | InputKind::Enabled | InputKind::Expanded)
-                    | (OutputType::Number, InputKind::Value)
-                    | (OutputType::Activation | OutputType::TextChanged | OutputType::TextSubmitted, InputKind::Text)
-                    | (OutputType::Offset | OutputType::Position, InputKind::Offset | InputKind::Position)
-                    | (OutputType::Selection, InputKind::Selection)
-            ),
-            Self::Value(value) => value.is_finite(),
-            Self::Position(value) => *value >= 0,
-            Self::Selection(value) => match target {
-                WidgetSpec::Combo { labels, .. } => *value >= -1 && (*value < 0 || (*value as usize) < labels.len()),
-                _ => false,
-            },
-            _ => true,
-        };
-        if valid {
-            Ok(())
-        } else {
-            Err("Connection payload is incompatible or invalid".into())
-        }
-    }
-}
-
-#[cfg(test)]
-mod connection_tests {
-    use super::*;
-
-    /// Fan-out is valid while malformed endpoints, payloads, and constants still fail.
-    #[test]
-    fn invalid_connections_fail_validation() {
-        let mut document = Document::new("connections");
-        let connection = Connection {
-            source: "save".into(),
-            event: "activated".into(),
-            target: "title".into(),
-            action: Action::Text("changed".into()),
-        };
-        document.connections.push(connection.clone());
-        document.validate().unwrap(); // The form owns both public forwarding and visual actions.
-        document.connections.push(connection);
-        document.validate().unwrap(); // One form event can select several authored actions.
-        document.connections.pop();
-        document.connections[0].action = Action::Forward(InputKind::Text);
-        document.validate().unwrap(); // Activation forwards its captured label.
-        for action in [Action::Forward(InputKind::Checked), Action::Checked(true), Action::Value(f32::NAN)] {
-            document.connections[0].action = action;
-            assert!(document.validate().is_err());
-        }
-        document.connections[0].action = Action::Text("ok".into());
-        document.connections[0].target = "missing".into();
-        assert!(document.validate().is_err());
-        document.connections[0].target = "title".into();
-        document.connections[0].event = "missing".into();
-        assert!(document.validate().is_err());
-    }
 }

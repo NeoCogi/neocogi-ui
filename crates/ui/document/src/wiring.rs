@@ -1,24 +1,9 @@
 //! The form is each child's sole event consumer and handles captured events after traversal.
-use crate::{*, contracts::*};
+use crate::*;
 use neocogi_com::{ComPtr, NcStatus, NC_E_INVALID_ARG};
-use neocogi_ui::{nodes, ChoiceSelection, IChoiceMenuEvent, IChoiceMenuObserverAbi, Widget, IWidgetAbi};
+use neocogi_ui::{nodes, IChoiceMenuEvent, IChoiceMenuObserverAbi};
 use neocogi_ui::events::{Controller, EventModel};
 use std::{collections::BTreeMap, sync::mpsc::Receiver};
-
-/// Captured fields from the finite set of supported event variants.
-/// The sum remains typed across form delivery; no arbitrary runtime value is stored.
-pub(crate) enum Payload<'a> {
-    /// Complete text at the time of a change or submission.
-    Text(&'a str),
-    /// Captured checkbox state.
-    Boolean(bool),
-    /// Captured finite numeric value.
-    Number(f32),
-    /// Captured offset or divider position.
-    Integer(i32),
-    /// Captured optional combo identity.
-    Selection(&'a ChoiceSelection),
-}
 
 /// One child's entire typed event stream, captured by the form's construction-time observer.
 pub(crate) enum WidgetEvent {
@@ -48,7 +33,7 @@ pub(crate) enum WidgetEvent {
 impl WidgetEvent {
     /// Applies the same typed domain checks as the ordinary public widget observers.
     /// Custom providers can post ABI-valid values, so a form must check them before
-    /// queuing public forwarding or visual actions.
+    /// queuing application forwarding.
     pub(crate) fn validate(&self) -> Result<(), NcStatus> {
         match self {
             Self::Button(value) => neocogi_ui::button::validate(value),
@@ -65,25 +50,25 @@ impl WidgetEvent {
         }
     }
 
-    /// Selects one authored visual-event variant and its captured forwarded field.
-    fn route_payload(&self) -> (&'static str, Payload<'_>) {
+    /// Names the captured enum case for nonfatal delivery diagnostics.
+    fn variant(&self) -> &'static str {
         match self {
-            Self::Button(nodes::ButtonEvent::Activated(value))
-            | Self::ListItem(nodes::ListItemEvent::Activated(value))
-            | Self::ListBox(nodes::ListBoxEvent::Activated(value)) => ("activated", Payload::Text(&value.label)),
-            Self::Checkbox(nodes::CheckboxEvent::Changed(value)) => ("changed", Payload::Boolean(value.checked)),
-            Self::Slider(nodes::SliderEvent::Changed(value)) | Self::Number(nodes::NumberEvent::Changed(value)) => ("changed", Payload::Number(value.value)),
-            Self::Textbox(nodes::TextboxEvent::Changed(value)) | Self::TextArea(nodes::TextAreaEvent::Changed(value)) => {
-                ("changed", Payload::Text(&value.text))
-            }
-            Self::Textbox(nodes::TextboxEvent::Submitted(value)) | Self::TextArea(nodes::TextAreaEvent::Submitted(value)) => {
-                ("submitted", Payload::Text(&value.text))
-            }
-            Self::Scrollbar(nodes::ScrollbarEvent::Changed(value)) => ("changed", Payload::Integer(value.offset)),
-            Self::Split(nodes::SplitViewEvent::Changed(value)) => ("changed", Payload::Integer(value.position)),
-            Self::Combo(IChoiceMenuEvent::Changed(value)) => ("changed", Payload::Selection(value)),
+            Self::Button(nodes::ButtonEvent::Activated(_))
+            | Self::ListItem(nodes::ListItemEvent::Activated(_))
+            | Self::ListBox(nodes::ListBoxEvent::Activated(_)) => "activated",
+            Self::Textbox(nodes::TextboxEvent::Submitted(_))
+            | Self::TextArea(nodes::TextAreaEvent::Submitted(_)) => "submitted",
+            Self::Checkbox(nodes::CheckboxEvent::Changed(_))
+            | Self::Textbox(nodes::TextboxEvent::Changed(_))
+            | Self::TextArea(nodes::TextAreaEvent::Changed(_))
+            | Self::Slider(nodes::SliderEvent::Changed(_))
+            | Self::Number(nodes::NumberEvent::Changed(_))
+            | Self::Scrollbar(nodes::ScrollbarEvent::Changed(_))
+            | Self::Split(nodes::SplitViewEvent::Changed(_))
+            | Self::Combo(IChoiceMenuEvent::Changed(_)) => "changed",
         }
     }
+
 }
 
 /// One queued child event belongs to the form that supplied its sole observer.
@@ -94,7 +79,7 @@ pub(crate) struct Message {
     pub event: WidgetEvent,
 }
 
-/// Optional form-level public emitter. Its observer is never passed to a child widget.
+/// Form-level application emitter. Its observer is never passed to a child widget.
 /// Application binding changes only this forwarding capability after construction.
 pub(crate) enum PublicEmitter {
     /// Button output forwarded by the form.
@@ -140,262 +125,56 @@ impl PublicEmitter {
     }
 }
 
-/// A resolved command holds its exact receiver and optional constant override.
-enum Operation {
-    /// Prepared SetText delivery without name lookup or interface discovery.
-    Text {
-        /// Exact destination setter resolved while loading the form.
-        receiver: InputHandle<SetText>,
-        /// Authored literal, or the event text when absent.
-        constant: Option<String>,
-    },
-    /// Prepared SetChecked delivery without name lookup or interface discovery.
-    Checked {
-        /// Exact destination setter resolved while loading the form.
-        receiver: InputHandle<SetChecked>,
-        /// Authored literal, or the event boolean when absent.
-        constant: Option<bool>,
-    },
-    /// Prepared SetValue delivery without name lookup or interface discovery.
-    Value {
-        /// Exact destination setter resolved while loading the form.
-        receiver: InputHandle<SetValue>,
-        /// Authored literal, or the event number when absent.
-        constant: Option<f32>,
-    },
-    /// Prepared SetEnabled delivery without name lookup or interface discovery.
-    Enabled {
-        /// Exact destination setter resolved while loading the form.
-        receiver: InputHandle<SetEnabled>,
-        /// Authored literal, or the event boolean when absent.
-        constant: Option<bool>,
-    },
-    /// Prepared SetExpanded delivery without name lookup or interface discovery.
-    Expanded {
-        /// Exact destination setter resolved while loading the form.
-        receiver: InputHandle<SetExpanded>,
-        /// Authored literal, or the event boolean when absent.
-        constant: Option<bool>,
-    },
-    /// Prepared SetSelection delivery without name lookup or interface discovery.
-    Selection {
-        /// Exact destination setter resolved while loading the form.
-        receiver: InputHandle<SetSelection>,
-        /// Authored ordinal, or the event selection when absent.
-        constant: Option<i32>,
-    },
-    /// Prepared SetOffset delivery without name lookup or interface discovery.
-    Offset {
-        /// Exact destination setter resolved while loading the form.
-        receiver: InputHandle<SetOffset>,
-        /// Authored literal, or the event offset when absent.
-        constant: Option<i32>,
-    },
-    /// Prepared SetPosition delivery without name lookup or interface discovery.
-    Position {
-        /// Exact destination setter resolved while loading the form.
-        receiver: InputHandle<SetPosition>,
-        /// Authored literal, or the event position when absent.
-        constant: Option<i32>,
-    },
-}
-impl Operation {
-    /// Executes one visual action after traversal releases all widget borrows.
-    fn apply(&mut self, payload: &Payload<'_>) -> Result<(), NcStatus> {
-        macro_rules! deliver {
-            ($receiver:expr, $constant:expr, $variant:ident, $command:ident, $field:ident) => {{
-                let value = match ($constant.as_ref(), payload) {
-                    (Some(value), _) => *value,
-                    (None, Payload::$variant(value)) => *value,
-                    _ => return Err(NC_E_INVALID_ARG),
-                };
-                $receiver.send($command { $field: value })
-            }};
-        }
-        match self {
-            Self::Text { receiver, constant } => {
-                // The event owns its snapshot throughout dispatch. Only a SetText
-                // command needs its own String after that event is consumed.
-                let text = match (constant.as_ref(), payload) {
-                    (Some(value), _) => value.clone(),
-                    (None, Payload::Text(value)) => (*value).to_owned(),
-                    _ => return Err(NC_E_INVALID_ARG),
-                };
-                receiver.send(SetText { text })
-            }
-            Self::Checked { receiver, constant } => deliver!(receiver, constant, Boolean, SetChecked, checked),
-            Self::Value { receiver, constant } => deliver!(receiver, constant, Number, SetValue, value),
-            Self::Enabled { receiver, constant } => deliver!(receiver, constant, Boolean, SetEnabled, enabled),
-            Self::Expanded { receiver, constant } => deliver!(receiver, constant, Boolean, SetExpanded, expanded),
-            Self::Selection { receiver, constant } => {
-                let selected = match (*constant, payload) {
-                    (Some(value), _) => value,
-                    (None, Payload::Selection(ChoiceSelection::None)) => -1,
-                    (None, Payload::Selection(ChoiceSelection::Selected(value))) => i32::try_from(*value).map_err(|_| NC_E_INVALID_ARG)?,
-                    _ => return Err(NC_E_INVALID_ARG),
-                };
-                receiver.send(SetSelection { selected })
-            }
-            Self::Offset { receiver, constant } => deliver!(receiver, constant, Integer, SetOffset, offset),
-            Self::Position { receiver, constant } => deliver!(receiver, constant, Integer, SetPosition, position),
-        }
-    }
-}
-
-/// One form-owned action selected by child key and event enum variant.
-struct Route {
-    /// Stable target key used in typed delivery diagnostics.
-    target: String,
-    /// Concrete destination command used in typed delivery diagnostics.
-    input: InputKind,
-    /// Prepared typed target command.
-    operation: Operation,
-}
-
-/// Mounted form behavior owns public forwarding and private visual actions together.
+/// The mounted component owns capture-time relays, while application code owns handlers.
 pub(crate) struct Wiring {
-    /// Authored actions grouped by source and variant; each group retains document order.
-    routes: BTreeMap<String, BTreeMap<String, Vec<Route>>>,
-    /// Public output relays keyed by the child whose event they forward.
+    /// One form-owned relay for each emitting child, keyed by its authored identity.
     public: BTreeMap<String, PublicEmitter>,
-    /// Bounded nonblocking owner channel for failures of independent effects.
-    diagnostics: RouteDiagnosticSender,
+    /// Nonblocking delivery diagnostics for rejected application receivers.
+    diagnostics: EventDeliverySender,
 }
 impl EventModel for Wiring {
     type Message = Message;
-    /// Attempts all independent effects and reports rejection without aborting the frame.
-    /// Other widget mutations and public receivers cannot participate in one rollback,
-    /// so a rejected effect never turns an already consumed event into a frame error.
+    /// Forwards a complete typed event after traversal releases widget borrows.
     fn handle(&mut self, message: Message) -> Result<(), NcStatus> {
-        let (variant, payload) = message.event.route_payload();
         if let Some(public) = self.public.get_mut(&message.source) {
             if let Err(status) = public.post(&message.event) {
-                let _ = self.diagnostics.report(RouteDiagnostic {
-                    source: message.source.clone(),
-                    event: variant.into(),
-                    effect: RouteEffect::Public,
+                self.diagnostics.report(EventDeliveryDiagnostic {
+                    source: message.source,
+                    event: message.event.variant().into(),
                     status,
                 });
             }
         }
-        if let Some(routes) = self.routes.get_mut(&message.source).and_then(|events| events.get_mut(variant)) {
-            for route in routes {
-                if let Err(status) = route.operation.apply(&payload) {
-                    // The bounded report sink retains the newest overflow without blocking dispatch.
-                    let _ = self.diagnostics.report(RouteDiagnostic {
-                        source: message.source.clone(),
-                        event: variant.into(),
-                        effect: RouteEffect::Visual {
-                            target: route.target.clone(),
-                            input: route.input.clone(),
-                        },
-                        status,
-                    });
-                }
-            }
-        }
         Ok(())
     }
-    /// Release public and private command capabilities when the owning form retires.
+    /// Drops relay destinations when the loaded subtree retires.
     fn retire(&mut self) -> Result<(), NcStatus> {
-        self.routes.clear();
         self.public.clear();
         Ok(())
     }
 }
 
-/// Resolves every visual target once; child observers have already been supplied by Construction.
+/// Creates one event queue with no executable widget-to-widget route graph.
 pub(crate) fn prepare(
-    document: &Document,
-    nodes: &BTreeMap<String, Widget<IWidgetAbi>>,
     public: BTreeMap<String, PublicEmitter>,
     messages: Receiver<Message>,
-    diagnostics: RouteDiagnosticSender,
-) -> Result<Controller<Wiring>, NcStatus> {
-    let mut routes: BTreeMap<String, BTreeMap<String, Vec<Route>>> = BTreeMap::new();
-    for connection in &document.connections {
-        let target = document.root.find(&connection.target).ok_or(NC_E_INVALID_ARG)?;
-        let view = nodes.get(&connection.target).ok_or(NC_E_INVALID_ARG)?.as_interface().add_ref();
-        let kind = connection.action.input();
-        let receiver = crate::bindings::receiver(target, view, &kind)?;
-        macro_rules! operation {
-            ($variant:ident) => {{
-                let constant = match &connection.action {
-                    Action::$variant(value) => Some(value.clone()),
-                    Action::Forward(_) => None,
-                    _ => return Err(NC_E_INVALID_ARG),
-                };
-                Operation::$variant {
-                    receiver: InputHandle { receiver: receiver.query()? },
-                    constant,
-                }
-            }};
-        }
-        let operation = match kind.clone() {
-            InputKind::Text => operation!(Text),
-            InputKind::Checked => operation!(Checked),
-            InputKind::Value => operation!(Value),
-            InputKind::Enabled => operation!(Enabled),
-            InputKind::Expanded => operation!(Expanded),
-            InputKind::Selection => operation!(Selection),
-            InputKind::Offset => operation!(Offset),
-            InputKind::Position => operation!(Position),
-            InputKind::Choices => return Err(NC_E_INVALID_ARG),
-        };
-        routes
-            .entry(connection.source.clone())
-            .or_default()
-            .entry(connection.event.clone())
-            .or_default()
-            .push(Route {
-                target: connection.target.clone(),
-                input: kind,
-                operation,
-            });
-    }
-    Ok(Controller::new(Wiring { routes, public, diagnostics }, messages))
+    diagnostics: EventDeliverySender,
+) -> Controller<Wiring> {
+    Controller::new(Wiring { public, diagnostics }, messages)
 }
 
 #[cfg(test)]
 mod event_validation_tests {
     use super::*;
 
-    /// Routing observes the original snapshot; only a forwarded SetText owns a copy.
-    #[test]
-    fn text_route_payload_borrows_the_captured_event() {
-        let event = WidgetEvent::Textbox(nodes::TextboxEvent::Changed(neocogi_ui::TextChanged {
-            text: "large event snapshot".repeat(1024),
-            cursor: 0,
-        }));
-        let original = match &event {
-            WidgetEvent::Textbox(nodes::TextboxEvent::Changed(value)) => value.text.as_ptr(),
-            _ => unreachable!(),
-        };
-        let (variant, payload) = event.route_payload();
-        assert_eq!(variant, "changed");
-        match payload {
-            Payload::Text(text) => assert_eq!(text.as_ptr(), original),
-            _ => panic!("textbox change lost its text payload"),
-        }
-    }
-
-    /// A malformed custom-provider event has the same result at both consumer boundaries.
+    /// Independently provided events receive the same domain checks as direct observers.
     #[test]
     fn form_events_use_public_widget_domain_checks() {
         let text = nodes::TextboxEvent::Changed(neocogi_ui::TextChanged { text: "é".into(), cursor: 1 });
         assert_eq!(WidgetEvent::Textbox(text.clone()).validate(), neocogi_ui::textbox::validate(&text));
-
         let number = nodes::SliderEvent::Changed(nodes::NumericChanged { value: f32::NAN });
         assert_eq!(WidgetEvent::Slider(number.clone()).validate(), neocogi_ui::slider::validate(&number));
-
-        let scroll = nodes::ScrollbarEvent::Changed(nodes::ScrollbarChanged { offset: -1 });
-        assert_eq!(WidgetEvent::Scrollbar(scroll.clone()).validate(), neocogi_ui::scrollbar::validate(&scroll));
-
-        let split = nodes::SplitViewEvent::Changed(nodes::SplitChanged { position: -1 });
-        assert_eq!(WidgetEvent::Split(split.clone()).validate(), neocogi_ui::split_view::validate(&split));
         assert!(WidgetEvent::Textbox(text).validate().is_err());
         assert!(WidgetEvent::Slider(number).validate().is_err());
-        assert!(WidgetEvent::Scrollbar(scroll).validate().is_err());
-        assert!(WidgetEvent::Split(split).validate().is_err());
     }
 }

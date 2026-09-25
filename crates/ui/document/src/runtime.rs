@@ -87,7 +87,7 @@ impl Loader {
     /// Binds construction services and an application-owned bounded diagnostic channel.
     /// The parent is needed only for controls that own popups; the receiver should
     /// be drained after updates so rejected independent effects remain visible.
-    pub fn new(ui: Ui, parent: Option<ComPtr<IWindowAbi>>, resources: Resources, diagnostics: crate::RouteDiagnosticSender) -> Result<Self, NcStatus> {
+    pub fn new(ui: Ui, parent: Option<ComPtr<IWindowAbi>>, resources: Resources, diagnostics: crate::EventDeliverySender) -> Result<Self, NcStatus> {
         let mut registry = FactoryRegistry::new()?;
         let services = std::rc::Rc::new(Services { ui, parent, resources, diagnostics });
         registry.register(DOCUMENT_TYPE, Factory::from_value(Factory { services: services.clone() }).query()?)?;
@@ -140,7 +140,7 @@ impl Component {
 }
 
 impl Mountable for Component {
-    /// Attaches view and behavior together so private connections follow subtree lifetime.
+    /// Attaches view and its one event-capture owner for the subtree lifetime.
     fn mount_description(&self) -> Result<Mount, NcStatus> {
         Ok(Mount::Component {
             view: self.interface.root()?,
@@ -170,7 +170,7 @@ impl IEventOwner for Loaded {
     fn mount(&mut self, view: ComRef<'_, IWidgetAbi>) -> Result<(), NcStatus> {
         self.wiring.mount(view)
     }
-    /// Applies one queued connection after traversal releases widget borrows.
+    /// Forwards one queued widget event after traversal releases widget borrows.
     fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
         self.wiring.dispatch_next()
     }
@@ -255,7 +255,7 @@ struct Services {
     /// Supplied logical image map.
     resources: Resources,
     /// Nonblocking typed diagnostics owned and drained by the constructing application.
-    diagnostics: crate::RouteDiagnosticSender,
+    diagnostics: crate::EventDeliverySender,
 }
 /// Parses the exact initialization revision and validates the entire document.
 fn decode(version: u32, state: NcCopyFromBufferOffset<'_, u8>, count: u32) -> Result<Document, NcStatus> {
@@ -298,7 +298,7 @@ impl Services {
         let outputs = std::mem::take(&mut construction.outputs);
         let public = std::mem::take(&mut construction.public);
         let inputs = crate::bindings::inputs(&document, &construction.nodes)?;
-        let wiring = crate::wiring::prepare(&document, &construction.nodes, public, messages, self.diagnostics.clone())?;
+        let wiring = crate::wiring::prepare(public, messages, self.diagnostics.clone());
         // Success transfers the complete typed tree to Loaded; the failed-build guard is disarmed.
         let nodes = std::mem::take(&mut construction.nodes);
         drop(construction);

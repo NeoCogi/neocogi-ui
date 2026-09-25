@@ -1,219 +1,123 @@
-# Experimental runtime UI documents
+# Authored UI documents and generated forms
 
-`neocogi-ui-document` reconstructs authored UI components through the COM
-persistence factory and the existing runtime-bound widget factories. It depends
-on public contracts and clients, never the concrete UI or nodes implementations.
-The same document works with shared plugins, a monolith, and WebAssembly.
+`neocogi-ui-document` reconstructs an authored widget tree through the existing
+COM widget factories. JSON is editable source; the NCB persistence envelope is
+suitable for embedding or deployment. The loader performs no file I/O. Both
+representations use schema revision 4, and earlier revisions are rejected.
 
-`Document` is the shared typed authoring schema. It describes the real ownership
-tree, constructor values, common options, logical resources, layout edges, and
-public input/output declarations plus executable private connections. JSON is the editable source; NCB binary is the
-COM persistence envelope for deployment. `Document::to_binary` and
-`Document::from_binary` are the export/import boundary. Bytes can come from a
-file, an embedded `include_bytes!`, or a browser fetch; the loader does no I/O.
+A `Document` contains a tree of built-in widget constructors, styles, resources,
+and parent-owned layout edges. Each node has a unique stable key. Its physical
+event port count is zero or one. A text editor's single port carries the whole
+`TextboxEvent` or `TextAreaEvent` enum, including `Changed` and `Submitted`.
+An event port has exactly one consumer: the observer supplied when the widget is
+constructed. The loaded component supplies that observer, captures the complete
+typed event, and queues it until UI traversal releases widget borrows. It does
+not decide what an event means or mutate other widgets in response.
 
-Revision three supports Button, Checkbox, Textbox, TextBlock, TextArea, Slider,
-Number, ColorSwatch, ListItem, ListBox, Scrollbar, flat Combo, Linear, Grid,
-SplitView, ScrollArea, and Disclosure. Container edges preserve tracks, spans,
-child order, and exact cross sizes. A component is the unit of persistence:
-its complete private initialization tree is typed state owned by one
-`IPersistable` provider. Ordinary widget classes do not gain automatic memory
-serialization. Custom widget schemas, nested independently provided components,
-window/menu declarations, and hierarchical combo models need explicit future
-schema additions; arbitrary Rust objects or plugin code cannot be loaded from
-file contents.
+The application owns event behavior. Every event-producing node is represented
+by one required method in the generated `Handlers` trait. The application
+implements that trait in its own source file and dispatches accepted events at
+its normal update boundary. This is where button-to-textbox behavior, validation,
+state transitions, and application-specific commands belong. Revision 4 has no
+serialized visual output-to-input graph, route expression, or route editor.
 
-## Loading and application contracts
+## Loading and typed widget access
 
-Create a bounded `route_diagnostics(capacity)` pair for route diagnostics,
-pass its sender to `Loader::new(ui, parent_window, resources, diagnostics)`,
-and call `load(binary)` or `prepare(&document)`. Drain the receiver after
-updates. The loader returns a `Component` whose `widget::<ButtonAbi>("save")` lookup
-checks the authored key and concrete COM interface before returning an owned
-`Widget<ButtonAbi>` handle. Generated Rust bindings gather these checked handles
-into a `Form` with a typed field for every authored built-in widget. The component
-also exposes `root()`, `outputs()`, typed `input::<SetText>("title")`, and `save()`.
-For each event-producing child, construction installs exactly one typed observer
-connected to its containing form. The observer only captures and queues facts;
-application code implements the generated `Handlers` trait and runs each handler
-at its normal update boundary. The form owns the child event queue, matches each event
-variant, executes matching visual actions, and may relay the complete event to a
-public application binding. A public output gets a separate, form-owned
-`exported_observer()` proxy; that proxy is never installed on the child. The
-component export table maps one public name per observed child to the proxy's
-sole physical port. Rebinding replaces its one downstream application receiver,
-while the child's construction-time observer remains the form. Invalid names or
-receiver types preserve the previous application destination. The form's child
-observer applies the same typed domain checks as a standalone widget observer
-before it queues an event, including cursor boundaries and finite or nonnegative
-numeric fields from independently supplied node providers. Widgets without event streams receive no observer or event adapter.
+Create an `event_delivery_diagnostics(capacity)` sender and receiver, then pass
+the sender to `Loader::new(ui, parent_window, resources, sender)` or
+`ReloadSlot::new(ui, parent_window, sender)`. Drain the receiver after updates.
+Delivery reports are nonfatal; a full channel keeps the newest overflowed
+failure and counts omitted intermediate reports. The loader returns a
+`Component` whose `root()` is mountable through the component owner.
 
-Use `neocogi_com::events::bind_output` with the concrete event type declared by
-the component's public contract. Wrong types fail at connection time. Inputs
-include text, checked, numeric value, interaction enablement, expansion, and
-combo-model replacement, combo selection, scrollbar offset, and split position. `SetChoices` uses UTF-8 text plus checked exclusive
-label offsets, avoiding a nested untyped payload. Calls are ordinary synchronous
-setters; send them at the application's normal safe update boundary.
+`Component::widget::<ButtonAbi>("save")` resolves an authored node key and checks
+its concrete COM interface before returning an owned `Widget<ButtonAbi>` handle.
+Generated forms use this lookup for every field. A wrong key or incompatible
+interface fails during candidate preparation, before replacing a live form.
+Widget methods remain the actual COM class methods, so an application can write
+`form.widget_title_1.set_text("Saved")` rather than route through a serialized
+command graph. Optional named `InputHandle<SetText>` endpoints remain available
+for message-based integrations; they are independent of the generated widget
+fields.
 
-Internal node keys are unique names, independent of text and sibling position.
-They identify editor selection and document binding targets. Applications bind
-public names; they do not acquire private widgets or interpret their paths.
-Moving a node preserves its key and therefore its authored connections. Each
-child event port has exactly one consumer, the form, and may have at most one
-public relay.
+A loaded component owns the complete widget tree and the construction-time
+event adapters. The form-level event relay is separate from the child port: the
+child still has exactly one consumer. A public output declaration may rename a
+relay for external binding; a widget without an explicit alias uses its node key.
+Aliases cannot collide with another widget's event name. Rebinding a relay
+replaces its one downstream receiver. No event adapter is created for widgets
+without an event port.
 
-## Reload and ownership
+## Generated application contract
 
-`ReloadSlot` is a real single-child Linear container. Insert `widget()` into the
-host's layout once. `reload(document, resources, bind)` validates the document,
-constructs an unmounted tree, prepares named endpoints, and runs application
-binding before replacing the old child. A failed preparation preserves the old
-component. Candidate cleanup closes partial trees and their combo popups.
-The stable parent window provides popup ownership during construction; no
-multi-window atomic-publication claim is made.
-
-Each attempt receives a distinct `Generation`. Tag queued application messages
-with that value and check `slot.accepts(generation)` before acting. Failed
-attempts never reuse a generation. Old input handles fail after their widgets
-close; reconnect inputs and outputs for each replacement. The returned
-`Reloaded.teardown` is a post-commit diagnostic: an error closing old content
-must not be reported as a failed publication of the new content.
-
-Mount `Component` itself, or use `ReloadSlot`, so the runtime retains both its
-view and its event owner. `root()` is an inspection capability, not a replacement
-for mounting the component's behavior. Unpublished candidates close on release;
-mounted owners retire with their subtree at the runtime's safe update boundary. Call these APIs at
-ordinary application mutation boundaries, never during layout or paint.
-
-## Resources and authored state
-
-Fonts and icons use names in the supplied UI's immutable asset bundle. Images
-use logical keys resolved by the caller's `Resources` directory to
-renderer-compatible textures. Missing names fail construction. Files, GPU
-handles, bundle indices, and application receivers are not serialized. Resource
-file transport and packaging belong to the application/designer.
-
-`Component::save()` preserves authored defaults. User edits in the running form,
-focus, scroll positions, popup visibility, and application input commands do
-not modify its document. The designer edits `Document` and reloads the preview;
-application session persistence should use an explicit application state model.
-
-The binary format and schema are experimental. Ordinals and field order belong
-to revision three; older revisions are rejected rather than migrated. Limits
-bound document bytes, traversal depth, node count, and decoded values. Validation rejects unknown fields in JSON, unknown revisions, malformed
-endpoints, unsupported resources, and invalid numeric/layout policies.
-
-`WidgetSpec::outputs()` returns zero or one physical event stream per widget.
-`WidgetSpec::event_variants()` lists the cases the form may match for visual
-actions. Textbox and TextArea expose one physical `event` port carrying a whole
-`TextboxEvent` or `TextAreaEvent` enum, while `changed` and `submitted` are
-logical cases within that enum. Rust handler generation exports the whole enum
-under one public name. Validation and the designer share these declarations.
-Font/icon/image capability queries are shared by validation and inspector construction; concrete resource setters remain
-explicit typed dispatch. Generated Rust symbols collapse punctuation runs and
-retain declaration ordinals for collision avoidance. Public endpoint names remain
-exact string literals.
-
-Constructor option defaults belong to the authored schema revision and are shared
-with the designer. They exclude effective routing bits added by scrolling or
-container participation. `SetEnabled` changes the exported surface's interaction
-bit against that authored baseline; it is not recursive subtree disablement.
-
-`Form { width, height }` provides fixed-coordinate layout for visually authored
-forms. Its children use `Position { x, y, width, height }` edges, expressed in
-parent content pixels. Coordinates are nonnegative, sizes positive, and sums
-must fit in `i32`. A smaller allocation clips children; it does not scale them.
-Sibling order determines painting and hit priority. Linear/Grid/Split policies
-remain available inside a positioned control or as an application's root.
-
-## Typed preparation and endpoint cardinality
-
-`Loader::prepare` validates an in-memory document and constructs through the same
-concrete service context as binary restoration. It does not serialize and decode
-an editable document merely to rebuild a preview. `load` retains bounded COM
-persistence decoding for external and embedded binary files.
-
-Each `(node, input kind)` has exactly one public name, matching the inspector's
-single endpoint field. Duplicate aliases are rejected before construction or
-editing; changing a binding can no longer silently delete another accepted alias.
-
-`SetSelection { selected }` uses a combo ordinal, with `-1` clearing selection.
-Unknown ordinals and other negative values fail without changing selection.
-`SetOffset { offset }` clamps to the scrollbar's current lengths.
-`SetPosition { position }` changes the requested split extent and retains its live
-axis, pane minima, and divider width. These commands are silent programmatic
-changes; they do not publish user events or rewrite authored defaults. All input
-kinds and their inspector labels come from `InputKind::ALL` and `InputKind::label`.
-
-## Executable connections
-
-Revision three requires a `connections` array. Each action names `source`, `event`,
-`target`, and a typed `action`, for example:
-
-```json
-{"source":"name","event":"changed","target":"title","action":{"Forward":"Text"}}
-```
-
-`Forward` accepts compatible payload fields: checkbox state to checked/enabled/
-expanded, text edits or submissions to text, numeric values to value, pixel
-positions/offsets to position/offset, and combo selection to selection. Constant
-variants (`Text`, `Checked`, `Value`, `Enabled`, `Expanded`, `Selection`, `Offset`,
-`Position`) work with any source event, including button activation. An
-activation also carries the source control's captured label, so an activation
-route can forward that string to a `SetText` destination. Model replacement
-remains an application input rather than an event transformation.
-
-The child event port has one consumer: its form. A form selects visual routes by
-the source key and event variant, then applies that group's actions in document
-order. It borrows the captured text for the duration of dispatch; a forwarded
-SetText command copies the text once for that command, while constant actions
-do not copy the source snapshot. A form may apply multiple
-actions to one event case and also forward the complete event through one public
-export. These are form effects, not additional child-port consumers. Validation
-rejects multiple public names for one child, missing endpoints, incompatible
-forwarded payloads, and invalid constants before construction. Target widgets
-still apply their current range policies. If a live destination rejects an
-action, the component sends a typed `RouteDiagnostic` with source, event,
-destination command, and exact status. Effects are independent: a rejected
-route does not roll back successful sibling actions or public forwarding, and
-does not abort the frame or retry the consumed event. Diagnostic delivery
-never blocks input. A full channel records the newest overflowed failure in a
-separate bounded slot and counts omitted intermediate failures. Applications
-should call `RouteDiagnosticReceiver::drain` each frame; the batch contains
-queued reports in order, the newest overflowed report, and the number of
-omitted reports. `ReloadSlot::new` likewise requires a diagnostic sender and
-carries it across component replacement.
-
-Observers only capture facts into the mounted component's queue. Its controller
-applies resolved concrete commands after traversal releases widget borrows. Silent
-setters prevent cyclic connections from recursively publishing new user events.
-Closing/replacing the subtree retires its controller and discards pending work at
-the next safe update boundary. No arbitrary code or erased Rust values enter the
-serialized graph.
-
-## Generated application bindings
-
-`Document::rust_bindings()` emits a standalone Rust module. The designer exposes
-this as **File → Export Rust bindings…**; the command-line equivalent is:
+The designer's **File → Export Rust bindings…** command calls
+`Document::rust_bindings()`. The command-line equivalent is:
 
 ```sh
 cargo run -p neocogi-ui-document --example export_bindings -- form.ui.json > bindings.rs
 ```
 
-The module contains `Event`, generation-tagged `Message`, concrete `Inputs`,
-a `Form` with checked widget fields, a required `Handlers` trait, and `bind`.
-Each event-producing widget has one trait method carrying its entire event enum,
-including `Changed` and `Submitted` for text editors. Implement `Handlers` for
-the generated `Form` or an application state that owns it; generated source
-never contains application handler bodies. Use `bind` in the `ReloadSlot::reload`
-preparation callback with a channel sender. At the application's normal update
-boundary, check `slot.accepts(message.generation)` and then call
-`message.event.dispatch(&mut handlers)`. Implement `Handlers` in application code
-outside the generated file; missing handlers are compile errors. Reconnect input
-handles after every replacement.
+The generated module contains `Form` with checked concrete fields for all
+built-in nodes, an `Event` enum with one variant per emitting node, a
+reload-generation-tagged `Message`, and a `Handlers` trait with one required
+method per emitting node. No handler body is generated. Regenerate after
+changing node keys or widget types and keep `impl Handlers` in application-owned
+source. A missing trait method is a Rust compile error when the application
+implements the generated trait. Names are normalized with a role prefix and
+node ordinal to avoid keyword and punctuation collisions; authored keys remain
+exact escaped literals for runtime lookup.
 
-Public names are preserved exactly as escaped Rust string literals. Generated
-method/field identifiers use a role prefix, normalized name, and declaration
-ordinal, so keywords, punctuation, and normalization collisions remain valid.
-Regenerate after changing public declarations. Private visual connections need no
-application handlers and are not exported into the binding module.
+For a form containing a button `save` and text block `title`, an application
+handler can use the generated typed fields directly:
+
+```rust
+impl generated::Handlers for generated::Form {
+    fn on_save_2(
+        &mut self,
+        event: neocogi_ui::events::Activation,
+    ) -> Result<(), neocogi_com::NcStatus> {
+        self.widget_title_1.set_text(&event.label)
+    }
+}
+```
+
+The actual method and field ordinals come from the generated file. Bind the
+candidate inside `ReloadSlot::reload`, retain the returned `Form` for the
+published generation, and queue generated `Message` values. Before dispatch,
+check `slot.accepts(message.generation)`; stale events from replaced candidates
+must not update the current form. Run `message.event.dispatch(&mut form)` only at
+the application's safe update boundary.
+
+## Reload, ownership, and authored state
+
+`ReloadSlot` owns one stable container. `reload(document, resources, bind)`
+validates and constructs an unmounted candidate, runs its binding callback, and
+only then replaces the old child. Failed construction or binding preserves the
+published component. Candidate cleanup closes partial trees and combo popups.
+The returned teardown status reports old-content cleanup after publication; it
+cannot turn a successful replacement into an unpublished one. Each attempt gets
+a distinct generation, even when preparation fails.
+
+Mount `Component` itself or use `ReloadSlot` so the runtime retains both view and
+event owner. `root()` alone is an inspection capability. Closing or replacing a
+subtree retires its controller and discards pending work at the next safe update
+boundary. Application edits belong at ordinary mutation boundaries, outside
+layout and paint. `Component::save()` preserves authored defaults rather than
+user interaction, focus, scrolling, or live application state.
+
+Fonts and icons resolve through the supplied immutable UI asset bundle. Images
+use logical keys resolved by the caller's `Resources` map. Source documents do
+not embed GPU handles, file paths selected by the loader, receivers, or plugin
+code. Validation bounds document bytes, depth, node count, numeric settings,
+child layout, event aliases, and command endpoints. JSON rejects unknown fields.
+
+`Form { width, height }` is a fixed-coordinate container. Its children use
+`Position { x, y, width, height }` edges in parent content pixels. Smaller
+allocations clip rather than scale; sibling order controls paint and hit order.
+Linear, Grid, Split, Scroll, and Disclosure remain ordinary nested containers.
+
+Custom COM widget schemas and factories are not yet part of revision 4. A custom
+provider cannot be inferred safely from an arbitrary COM interface: the designer
+needs explicit constructor, editable-property, and event metadata, and the
+loader needs an application-supplied factory. Until that contract exists, the
+schema rejects unknown widget types rather than loading code from a document.

@@ -1,42 +1,25 @@
-//! Bounded, nonblocking reports for independent form effects.
-use crate::InputKind;
+//! Bounded, nonblocking reports for nonfatal application event delivery.
 use neocogi_com::NcStatus;
 use std::sync::{
     Arc, Mutex,
     mpsc::{self, Receiver, SyncSender, TrySendError},
 };
 
-/// The failed effect is kept distinct from its source event and destination status.
+/// A typed, nonfatal delivery failure from one application event relay.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RouteEffect {
-    /// The optional form-level application relay rejected a captured event.
-    Public,
-    /// One authored visual command was rejected by its current destination.
-    Visual {
-        /// Stable destination node key from the authored route.
-        target: String,
-        /// Concrete command contract selected when the form was constructed.
-        input: InputKind,
-    },
-}
-
-/// A typed, nonfatal delivery failure from one independently applied form effect.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RouteDiagnostic {
+pub struct EventDeliveryDiagnostic {
     /// Stable source node key that produced the captured event.
     pub source: String,
-    /// Logical event variant selected by the form's sole child consumer.
+    /// Logical variant captured by the form's sole child observer.
     pub event: String,
-    /// Public forwarding or the particular visual target that rejected delivery.
-    pub effect: RouteEffect,
     /// Exact COM status returned by that destination.
     pub status: NcStatus,
 }
 
 /// Reports retained after a bounded channel is drained.
-pub struct RouteDiagnosticBatch {
+pub struct EventDeliveryBatch {
     /// Queued failures in order, followed by the newest overflowed failure if any.
-    pub reports: Vec<RouteDiagnostic>,
+    pub reports: Vec<EventDeliveryDiagnostic>,
     /// Intermediate overflowed failures omitted from the report vector.
     pub omitted: usize,
 }
@@ -46,21 +29,21 @@ struct Overflow {
     /// Number of failures redirected to this slot since the previous drain.
     count: usize,
     /// Most recent failure, replacing earlier overflowed failures.
-    latest: RouteDiagnostic,
+    latest: EventDeliveryDiagnostic,
 }
 
 /// Form-owned nonblocking writer; clones share one overflow record.
 #[derive(Clone)]
-pub struct RouteDiagnosticSender {
+pub struct EventDeliverySender {
     /// Ordinary bounded, ordered diagnostic queue.
-    sender: SyncSender<RouteDiagnostic>,
+    sender: SyncSender<EventDeliveryDiagnostic>,
     /// Synchronizes overflow replacement with receiver draining.
     overflow: Arc<Mutex<Option<Overflow>>>,
 }
 
-impl RouteDiagnosticSender {
+impl EventDeliverySender {
     /// Sends a failure without blocking UI dispatch or losing the newest failure.
-    pub(crate) fn report(&self, diagnostic: RouteDiagnostic) {
+    pub(crate) fn report(&self, diagnostic: EventDeliveryDiagnostic) {
         let mut overflow = self.overflow.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         match self.sender.try_send(diagnostic) {
             Ok(()) | Err(TrySendError::Disconnected(_)) => {}
@@ -76,16 +59,16 @@ impl RouteDiagnosticSender {
 }
 
 /// Application-owned reader that drains ordered reports and the newest overflow.
-pub struct RouteDiagnosticReceiver {
+pub struct EventDeliveryReceiver {
     /// Ordinary bounded report queue.
-    receiver: Receiver<RouteDiagnostic>,
+    receiver: Receiver<EventDeliveryDiagnostic>,
     /// Shared overflow slot, synchronized with every writer.
     overflow: Arc<Mutex<Option<Overflow>>>,
 }
 
-impl RouteDiagnosticReceiver {
+impl EventDeliveryReceiver {
     /// Drains one atomic snapshot, preserving the newest failed effect.
-    pub fn drain(&self) -> RouteDiagnosticBatch {
+    pub fn drain(&self) -> EventDeliveryBatch {
         let mut overflow = self.overflow.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let mut reports = self.receiver.try_iter().collect::<Vec<_>>();
         let omitted = match overflow.take() {
@@ -95,17 +78,17 @@ impl RouteDiagnosticReceiver {
             }
             None => 0,
         };
-        RouteDiagnosticBatch { reports, omitted }
+        EventDeliveryBatch { reports, omitted }
     }
 }
 
-/// Constructs bounded route reports with an overflow slot independent of channel capacity.
-pub fn route_diagnostics(capacity: usize) -> (RouteDiagnosticSender, RouteDiagnosticReceiver) {
+/// Constructs bounded event-delivery reports with an overflow slot independent of channel capacity.
+pub fn event_delivery_diagnostics(capacity: usize) -> (EventDeliverySender, EventDeliveryReceiver) {
     let (sender, receiver) = mpsc::sync_channel(capacity);
     let overflow = Arc::new(Mutex::new(None));
     (
-        RouteDiagnosticSender { sender, overflow: overflow.clone() },
-        RouteDiagnosticReceiver { receiver, overflow },
+        EventDeliverySender { sender, overflow: overflow.clone() },
+        EventDeliveryReceiver { receiver, overflow },
     )
 }
 
@@ -117,12 +100,11 @@ mod tests {
     /// A full channel still exposes the final failure and an exact omitted count.
     #[test]
     fn overflow_retains_latest_failure_and_recovers_after_drain() {
-        let (sender, receiver) = route_diagnostics(2);
+        let (sender, receiver) = event_delivery_diagnostics(2);
         for index in 0..5 {
-            sender.report(RouteDiagnostic {
+            sender.report(EventDeliveryDiagnostic {
                 source: format!("source-{index}"),
                 event: "changed".into(),
-                effect: RouteEffect::Public,
                 status: NC_E_INVALID_ARG,
             });
         }
@@ -130,10 +112,9 @@ mod tests {
         assert_eq!(batch.reports.len(), 3);
         assert_eq!(batch.reports.last().unwrap().source, "source-4");
         assert_eq!(batch.omitted, 2);
-        sender.report(RouteDiagnostic {
+        sender.report(EventDeliveryDiagnostic {
             source: "next".into(),
             event: "changed".into(),
-            effect: RouteEffect::Public,
             status: NC_E_INVALID_ARG,
         });
         let batch = receiver.drain();

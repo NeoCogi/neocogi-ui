@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "name": "all public contracts",
   "root": {
     "key": "root",
@@ -18,6 +18,5 @@
     "children": []
   },
   "outputs": [],
-  "inputs": [],
-  "connections": []
+  "inputs": []
 }

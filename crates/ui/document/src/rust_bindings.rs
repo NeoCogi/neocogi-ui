@@ -68,8 +68,6 @@ impl OutputType {
             Self::Activation => "neocogi_ui::events::Activation",
             Self::Checked => "neocogi_ui::events::CheckboxChanged",
             Self::Number => "neocogi_ui::events::NumericChanged",
-            Self::TextChanged => "neocogi_ui::events::TextChanged",
-            Self::TextSubmitted => "neocogi_ui::events::TextSubmitted",
             Self::Offset => "neocogi_ui::events::ScrollbarChanged",
             Self::Position => "neocogi_ui::events::SplitChanged",
             Self::Selection => "neocogi_ui::events::ChoiceSelection",

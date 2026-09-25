@@ -93,3 +93,13 @@ fn style_capabilities_match_document_validation() {
         assert_eq!(document.validate().is_ok(), image);
     }
 }
+
+/// Revision four contains no authored event graph; applications implement event behavior.
+#[test]
+fn visual_connections_are_not_part_of_the_document_schema() {
+    let document = Document::new("application handlers");
+    let mut source: serde_json::Value = serde_json::from_slice(&document.to_json().unwrap()).unwrap();
+    assert!(source.get("connections").is_none());
+    source["connections"] = serde_json::json!([]);
+    assert!(Document::from_json(&serde_json::to_vec(&source).unwrap()).is_err());
+}

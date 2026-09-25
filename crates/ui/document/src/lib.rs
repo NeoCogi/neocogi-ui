@@ -10,7 +10,7 @@ pub use neocogi_ui_document_contracts as contracts;
 mod bindings;
 mod diagnostics;
 mod wiring;
-pub use diagnostics::{RouteDiagnostic, RouteEffect, RouteDiagnosticBatch, RouteDiagnosticSender, RouteDiagnosticReceiver, route_diagnostics};
+pub use diagnostics::{EventDeliveryDiagnostic, EventDeliveryBatch, EventDeliverySender, EventDeliveryReceiver, event_delivery_diagnostics};
 mod build;
 mod rust_bindings;
 pub use bindings::{Command, InputHandle};

@@ -15,7 +15,7 @@ pub(crate) fn inputs(document: &Document, nodes: &BTreeMap<String, Widget<IWidge
     Ok(table)
 }
 
-/// Resolves one concrete command capability for a public input or a private connection.
+/// Resolves one concrete command capability for one declared application command.
 pub(crate) fn receiver(authored: &Node, mut source: ComPtr<IWidgetAbi>, input: &InputKind) -> Result<ComPtr<IUnknown>, NcStatus> {
     let kind = &authored.widget;
     let authored_options = authored.style.options.map(WidgetOptions::from_raw).unwrap_or_else(|| kind.default_options());

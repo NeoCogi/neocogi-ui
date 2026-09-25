@@ -28,13 +28,13 @@ pub struct ReloadSlot {
     /// Every attempt consumes an identity, including rejected binding attempts.
     next: u64,
     /// Bounded application-owned channel shared with each newly loaded form.
-    diagnostics: crate::RouteDiagnosticSender,
+    diagnostics: crate::EventDeliverySender,
 }
 impl ReloadSlot {
-    /// Creates an empty unmounted slot with a bounded route-diagnostic sender.
+    /// Creates an empty unmounted slot with a bounded event-delivery diagnostic sender.
     /// Insert widget() into the application's normal layout and drain the
     /// matching receiver after updates, including across component reloads.
-    pub fn new(ui: Ui, parent: ComPtr<IWindowAbi>, diagnostics: crate::RouteDiagnosticSender) -> Result<Self, NcStatus> {
+    pub fn new(ui: Ui, parent: ComPtr<IWindowAbi>, diagnostics: crate::EventDeliverySender) -> Result<Self, NcStatus> {
         let slot = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
         Ok(Self {
             ui,
