@@ -57,7 +57,7 @@ impl WidgetSpec {
             Self::Split { .. } => "neocogi_ui::SplitViewAbi",
             Self::Scroll { .. } => "neocogi_ui::ScrollAreaAbi",
             Self::Disclosure { .. } => "neocogi_ui::DisclosureAbi",
-            Self::Custom { kind, .. } => custom.interface(kind)?.rust_abi,
+            Self::Custom { kind, .. } => custom.interface(kind)?.rust_abi.as_str(),
         })
     }
 }
@@ -113,7 +113,7 @@ impl Document {
                 WidgetSpec::Custom { kind, .. } => {
                     let interface = custom.interface(kind)?;
                     if let Some(port) = interface.outputs.first() {
-                        let trait_path = interface.rust_outputs.ok_or("Custom output trait is missing")?;
+                        let trait_path = interface.rust_outputs.as_deref().ok_or("Custom output trait is missing")?;
                         events.push((index, *node, node.key.clone(), port.message.rust_type.to_owned(),
                             Some((port.name.to_owned(), trait_path.to_owned()))));
                     }

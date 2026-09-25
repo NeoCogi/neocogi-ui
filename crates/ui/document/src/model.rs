@@ -2,6 +2,7 @@
 use neocogi_com::{ComSerialize, ComDeserialize};
 use serde::{Serialize, Deserialize};
 use std::collections::BTreeMap;
+pub use neocogi_ui_design::{CustomProperty, CustomValue};
 
 /// Persistent schema revision; changes to field order or enum ordinals require a new revision.
 pub const VERSION: u32 = 5;
@@ -311,47 +312,6 @@ pub enum WidgetSpec {
         /// Typed constructor values; their schema belongs to the installed factory.
         properties: Vec<CustomProperty>,
     },
-}
-
-/// One named custom constructor value; the installed factory validates and applies it.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ComSerialize, ComDeserialize)]
-#[serde(deny_unknown_fields)]
-pub struct CustomProperty {
-    /// Stable property identifier from the trusted widget contract.
-    pub name: String,
-    /// Strongly typed authored value.
-    pub value: CustomValue,
-}
-
-/// Closed scalar property kinds supported by the generic designer inspector.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ComSerialize, ComDeserialize)]
-#[serde(deny_unknown_fields)]
-pub enum CustomValue {
-    /// UTF-8 text copied into the custom factory at construction.
-    Text(String),
-    /// Boolean toggle.
-    Boolean(bool),
-    /// Signed integral value.
-    Integer(i32),
-    /// Finite single-precision numeric value.
-    Number(f32),
-}
-impl CustomValue {
-    /// Compares property kinds independently of their authored values.
-    pub fn same_kind(&self, other: &Self) -> bool {
-        matches!((self, other),
-            (Self::Text(_), Self::Text(_)) |
-            (Self::Boolean(_), Self::Boolean(_)) |
-            (Self::Integer(_), Self::Integer(_)) |
-            (Self::Number(_), Self::Number(_)))
-    }
-    /// Rejects nonfinite authored numeric values before calling a plugin factory.
-    pub fn valid(&self) -> bool {
-        match self {
-            Self::Number(value) => value.is_finite(),
-            Self::Text(_) | Self::Boolean(_) | Self::Integer(_) => true,
-        }
-    }
 }
 
 /// One public name for a widget's sole typed event stream.

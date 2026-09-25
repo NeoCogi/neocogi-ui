@@ -8,7 +8,9 @@ use neocogi_ui::com::widget::WidgetState;
 use neocogi_ui_core_contracts::*;
 use neocogi_demo_contracts::*;
 use neocogi_ui::{Painter, events::Activation};
-use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, com_factory, com_object};
+use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG, com_factory, com_object};
+use neocogi_ui_design::{CustomProperty, DesignWidgetManifest};
+use neocogi_ui_document_contracts::IDesignWidgetCatalog;
 
 /// Common state is inline; the example adds no second widget allocation or type-erased data.
 struct Common {
@@ -305,6 +307,35 @@ fn shrink(mut limit: AxisLimit, inset: i32) -> AxisLimit {
 #[com_factory(neocogi_demo_contracts::ExtensionProvider)]
 /// Stateless shorthand factory creates the interface-based inset container.
 pub struct ExtensionProviderObject;
+impl IDesignWidgetCatalog for ExtensionProviderObject {
+    /// The example publishes its leaf counter; its inset is a container and
+    /// cannot be represented by the document's custom leaf schema.
+    fn widget_count(&self) -> Result<u32, NcStatus> { Ok(1) }
+
+    /// Copies generated Counter IDL metadata through the common COM catalog.
+    fn describe(&self, index: u32, mut output: NcCopyToBufferOffset<'_, u8>) -> Result<u32, NcStatus> {
+        if index != 0 { return Err(NC_E_INVALID_ARG); }
+        let manifest = DesignWidgetManifest::from_idl(
+            "example.counter", vec![], &CounterAbi::IDL_INTERFACE,
+        ).map_err(|_| NC_E_INVALID_ARG)?;
+        let bytes = manifest.encode().map_err(|_| NC_E_INVALID_ARG)?;
+        let required = u32::try_from(bytes.len()).map_err(|_| NC_E_INVALID_ARG)?;
+        if output.len() >= bytes.len() {
+            output.as_mut_slice()[..bytes.len()].copy_from_slice(&bytes);
+        }
+        Ok(required)
+    }
+
+    /// Constructs the concrete counter through COM after checking the property payload.
+    fn create_widget(&self, index: u32, host: ComRef<'_, IWidgetHostAbi>, properties: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
+        if index != 0 { return Err(NC_E_INVALID_ARG); }
+        let values: Vec<CustomProperty> = serde_json::from_slice(properties.as_slice())
+            .map_err(|_| NC_E_INVALID_ARG)?;
+        if !values.is_empty() { return Err(NC_E_INVALID_ARG); }
+        CounterObject::create(host)?.query::<IWidgetAbi>()
+    }
+}
+
 impl ExtensionProvider for ExtensionProviderObject {
     /// Creates a counter only after its supplied host accepts mutation.
     fn counter(&self, host: ComRef<'_, IWidgetHostAbi>) -> Result<ComPtr<CounterAbi>, NcStatus> {

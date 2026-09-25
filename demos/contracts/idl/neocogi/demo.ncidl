@@ -1,5 +1,7 @@
 extern neocogi.ui.core;
+extern neocogi.ui.document;
 use neocogi.ui.core::{Mount, IWidget, ILeafLayout, Activation, IWidgetHost, IContainer, ChildEditResult};
+use neocogi.ui.document::IDesignWidgetCatalog;
 
 #[version(1)]
 #[message]
@@ -63,7 +65,7 @@ interface IInset: IContainer {
 
 #[version(1)]
 /// Stateless plugin factory receiving runtime authority explicitly for each custom object.
-factory ExtensionProvider {
+factory ExtensionProvider: IDesignWidgetCatalog {
     /// Creates a counter whose complete state belongs to the returned COM identity.
     fn counter(&self, host: &IWidgetHost) -> Result<Counter>;
     /// Creates an empty custom container; child attachment follows the same rules as built-ins.

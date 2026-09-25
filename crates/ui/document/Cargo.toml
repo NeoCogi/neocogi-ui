@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 neocogi-ui.workspace = true
 neocogi-ui-document-contracts.workspace = true
+neocogi-ui-design.workspace = true
 neocogi-com = { workspace = true, features = ["std", "macros", "runtime"] }
 serde.workspace = true
 serde_json.workspace = true

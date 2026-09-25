@@ -11,7 +11,11 @@ mod bindings;
 mod diagnostics;
 mod wiring;
 pub use diagnostics::{EventDeliveryDiagnostic, EventDeliveryBatch, EventDeliverySender, EventDeliveryReceiver, event_delivery_diagnostics};
+/// Owned COM-transportable authoring metadata for custom widgets.
+pub use neocogi_ui_design as design;
 mod custom;
+mod discovery;
+pub use discovery::MAX_CATALOG_WIDGETS;
 pub use custom::{CustomWidgetFactory, CustomWidgetRegistry};
 mod build;
 mod rust_bindings;

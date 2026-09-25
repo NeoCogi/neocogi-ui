@@ -42,14 +42,12 @@ fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
         defaults: Vec<CustomProperty>,
     }
     impl CustomWidgetFactory for CounterFactory {
-        /// Stable document kind for the test fixture.
-        fn kind(&self) -> &str { "example.button" }
-        /// The same generated projection used by the application's widget field.
-        fn interface(&self) -> &'static neocogi_com::design::IdlInterface {
-            &neocogi_demo_contracts::CounterAbi::IDL_INTERFACE
+        /// Copies the generated projection and typed constructor defaults.
+        fn manifest(&self) -> Result<neocogi_ui_document::design::DesignWidgetManifest, String> {
+            neocogi_ui_document::design::DesignWidgetManifest::from_idl(
+                "example.button", self.defaults.clone(), &neocogi_demo_contracts::CounterAbi::IDL_INTERFACE,
+            )
         }
-        /// Typed defaults accepted by the designer inspector.
-        fn defaults(&self) -> &[CustomProperty] { &self.defaults }
         /// Binding generation never constructs a live widget.
         fn create(&self, _: &Ui, _: &[CustomProperty]) -> Result<Widget<IWidgetAbi>, NcStatus> { Err(NC_E_INVALID_ARG) }
     }
@@ -94,12 +92,10 @@ fn custom_factory_cannot_hide_a_second_event_contract_in_com_metadata() {
     /// A provider whose advertised source metadata disagrees with the COM descriptor.
     struct HiddenFactory;
     impl CustomWidgetFactory for HiddenFactory {
-        /// One nonempty lookup key.
-        fn kind(&self) -> &str { "hidden.counter" }
-        /// The deliberately inconsistent metadata above.
-        fn interface(&self) -> &'static IdlInterface { &HIDDEN }
-        /// No constructor properties are needed for this registration check.
-        fn defaults(&self) -> &[CustomProperty] { &[] }
+        /// The deliberately inconsistent metadata fails during static conversion.
+        fn manifest(&self) -> Result<neocogi_ui_document::design::DesignWidgetManifest, String> {
+            neocogi_ui_document::design::DesignWidgetManifest::from_idl("hidden.counter", vec![], &HIDDEN)
+        }
         /// Registration rejects this provider before construction is possible.
         fn create(&self, _: &Ui, _: &[CustomProperty]) -> Result<Widget<IWidgetAbi>, NcStatus> { Err(NC_E_INVALID_ARG) }
     }

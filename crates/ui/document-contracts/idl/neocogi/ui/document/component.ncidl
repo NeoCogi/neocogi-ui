@@ -1,5 +1,5 @@
 extern neocogi.ui.core;
-use neocogi.ui.core::IWidget;
+use neocogi.ui.core::{IWidget, IWidgetHost};
 
 #[version(1)]
 /// A loaded component exposes its mountable root, named widget identities, and inputs.
@@ -79,4 +79,19 @@ struct SetOffset {
 struct SetPosition {
     /// Requested first-pane extent; temporary allocation clamping does not discard it.
     position: i32,
+}
+
+#[version(1)]
+/// Optional COM capability queried from an activated plugin root factory.
+/// It lets an independent designer enumerate constructible widgets without
+/// linking the plugin's Rust contract or implementation crate.
+interface IDesignWidgetCatalog {
+    /// Number of widget kinds exposed by this one plugin factory.
+    fn widget_count(&self) -> Result<u32>;
+    /// Copies one versioned authoring descriptor into an initialized byte buffer.
+    /// The return value is the required byte count; a short buffer is unchanged.
+    fn describe(&self, index: u32, output: &mut [u8]) -> Result<u32>;
+    /// Constructs one widget through COM using its stable catalog index and
+    /// encoded, previously validated constructor properties.
+    fn create_widget(&self, index: u32, host: &IWidgetHost, properties: &[u8]) -> Result<IWidget>;
 }
