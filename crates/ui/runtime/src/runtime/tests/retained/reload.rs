@@ -8,7 +8,8 @@ use neocogi_ui_nodes_contracts::ScrollbarChanged;
 fn slot(ui: &Ui) -> ReloadSlot {
     let mut root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let owner = window(ui, "runtime documents", Rect { x: 10, y: 10, width: 400, height: 400 }, &root);
-    let slot = ReloadSlot::new(ui.clone(), owner).unwrap();
+    let (diagnostics, _received) = std::sync::mpsc::sync_channel(64);
+    let slot = ReloadSlot::new(ui.clone(), owner, diagnostics).unwrap();
     root.insert(0, slot.widget(), LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
         .unwrap()
         .finish()
@@ -387,7 +388,8 @@ fn authored_form_rectangles_survive_binary_reload_and_route_real_clicks() {
 fn typed_and_binary_preparation_have_equivalent_authored_state() {
     let fixture = Headless::standard();
     let document = Document::new("preparation paths");
-    let loader = Loader::new(fixture.ui.clone(), None, Resources::new()).unwrap();
+    let (diagnostics, _received) = std::sync::mpsc::sync_channel(64);
+    let loader = Loader::new(fixture.ui.clone(), None, Resources::new(), diagnostics).unwrap();
     let typed = loader.prepare(&document).unwrap();
     let binary = loader.load(&document.to_binary().unwrap()).unwrap();
     assert_ne!(typed.root().unwrap().as_interface().as_ptr(), binary.root().unwrap().as_interface().as_ptr());

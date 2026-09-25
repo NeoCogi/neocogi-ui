@@ -3,8 +3,8 @@ use neocogi_com::NcStatus;
 use neocogi_com::events::bind_output;
 use neocogi_demo_host::{AppState, Host, HostError};
 use neocogi_ui::*;
-use neocogi_ui_document::{contracts::SetText, Document, Generation, ReloadSlot, Resources};
-use std::sync::mpsc::{self, Sender};
+use neocogi_ui_document::{contracts::SetText, Document, Generation, ReloadSlot, Resources, RouteDiagnostic};
+use std::sync::mpsc::{self, Receiver, Sender};
 
 /// Application messages carry the component generation that emitted them.
 enum Message {
@@ -23,6 +23,8 @@ struct State {
     sender: Sender<Message>,
     /// Demonstrates updating the opaque UI through a typed input.
     saves: u64,
+    /// Bounded delivery failures reported by the loaded component after each frame.
+    route_diagnostics: Receiver<RouteDiagnostic>,
 }
 impl State {
     /// Loads authored JSON or deployed binary, then binds before publication.
@@ -74,6 +76,13 @@ impl AppState for State {
         }
         Ok(())
     }
+    /// Reports nonfatal form effects after the frame finishes dispatching them.
+    fn after_update(&mut self, _host: &Host, _size: Size) -> Result<(), NcStatus> {
+        for diagnostic in self.route_diagnostics.try_iter() {
+            eprintln!("Route delivery: {diagnostic:?}");
+        }
+        Ok(())
+    }
 }
 /// Uses the same host and loader in shared, monolithic, and browser assemblies.
 fn run() -> Result<(), HostError> {
@@ -82,7 +91,8 @@ fn run() -> Result<(), HostError> {
     let host = Host::new("Runtime UI", Size { width: 800, height: 600 }, neocogi_demo_assets::load_bundle()?)?;
     let mut root = host.ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     let window = host.ui.window("Loaded component", Rect { x: 20, y: 20, width: 740, height: 540 }, &root)?;
-    let slot = ReloadSlot::new(host.ui.clone(), window.clone())?;
+    let (route_sender, route_diagnostics) = mpsc::sync_channel(64);
+    let slot = ReloadSlot::new(host.ui.clone(), window.clone(), route_sender)?;
     root.insert(0, slot.widget(), LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))?.finish()?;
     let (sender, receiver) = mpsc::channel();
     let menus = host.ui.menus()?;
@@ -93,7 +103,7 @@ fn run() -> Result<(), HostError> {
     let path = std::env::args_os().nth(1).map(std::path::PathBuf::from);
     #[cfg(target_arch = "wasm32")]
     let path = None;
-    let mut state = State { slot, path, sender, saves: 0 };
+    let mut state = State { slot, path, sender, saves: 0, route_diagnostics };
     state.reload().map_err(HostError::Message)?;
     host.run(state, receiver)
 }

@@ -9,6 +9,7 @@ pub use model::*;
 pub use neocogi_ui_document_contracts as contracts;
 mod bindings;
 mod wiring;
+pub use wiring::{RouteDiagnostic, RouteEffect};
 mod rust_bindings;
 mod build;
 pub use bindings::{Command, InputHandle};

@@ -3,7 +3,34 @@ use crate::{*, contracts::*};
 use neocogi_com::{ComPtr, NcStatus, NC_E_INVALID_ARG};
 use neocogi_ui::{nodes, ChoiceSelection, IChoiceMenuEvent, IChoiceMenuObserverAbi, Widget, IWidgetAbi};
 use neocogi_ui::events::{Controller, EventModel};
-use std::{collections::BTreeMap, sync::mpsc::Receiver};
+use std::{collections::BTreeMap, sync::mpsc::{Receiver, SyncSender}};
+
+/// The failed effect is kept distinct from its source event and destination status.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RouteEffect {
+    /// The optional form-level application relay rejected a captured event.
+    Public,
+    /// One authored visual command was rejected by its current destination.
+    Visual {
+        /// Stable destination node key from the authored route.
+        target: String,
+        /// Concrete command contract selected when the form was constructed.
+        input: InputKind,
+    },
+}
+
+/// A typed, nonfatal delivery failure from one independently applied form effect.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RouteDiagnostic {
+    /// Stable source node key that produced the captured event.
+    pub source: String,
+    /// Logical event variant selected by the form's sole child consumer.
+    pub event: String,
+    /// Public forwarding or the particular visual target that rejected delivery.
+    pub effect: RouteEffect,
+    /// Exact COM status returned by that destination.
+    pub status: NcStatus,
+}
 
 /// Captured fields from the finite set of supported event variants.
 /// The sum remains typed across form delivery; no arbitrary runtime value is stored.
@@ -242,6 +269,10 @@ struct Route {
     source: String,
     /// Logical event variant, rather than a second widget observer port.
     variant: String,
+    /// Stable target key used in typed delivery diagnostics.
+    target: String,
+    /// Concrete destination command used in typed delivery diagnostics.
+    input: InputKind,
     /// Prepared typed target command.
     operation: Operation,
 }
@@ -252,24 +283,38 @@ pub(crate) struct Wiring {
     routes: Vec<Route>,
     /// Public output relays keyed by the child whose event they forward.
     public: BTreeMap<String, PublicEmitter>,
+    /// Bounded nonblocking owner channel for failures of independent effects.
+    diagnostics: SyncSender<RouteDiagnostic>,
 }
 impl EventModel for Wiring {
     type Message = Message;
-    /// Handles each child event exactly once, then attempts its independent form effects.
+    /// Attempts all independent effects and reports rejection without aborting the frame.
+    /// Other widget mutations and public receivers cannot participate in one rollback,
+    /// so a rejected effect never turns an already consumed event into a frame error.
     fn handle(&mut self, message: Message) -> Result<(), NcStatus> {
-        let mut first_error = None;
-        if let Some(public) = self.public.get_mut(&message.source) {
-            if let Err(error) = public.post(&message.event) {
-                first_error.get_or_insert(error);
-            }
-        }
         let (variant, payload) = message.event.route_payload();
-        for route in self.routes.iter_mut().filter(|route| route.source == message.source && route.variant == variant) {
-            if let Err(error) = route.operation.apply(payload.clone()) {
-                first_error.get_or_insert(error);
+        if let Some(public) = self.public.get_mut(&message.source) {
+            if let Err(status) = public.post(&message.event) {
+                let _ = self.diagnostics.try_send(RouteDiagnostic {
+                    source: message.source.clone(),
+                    event: variant.into(),
+                    effect: RouteEffect::Public,
+                    status,
+                });
             }
         }
-        first_error.map_or(Ok(()), Err)
+        for route in self.routes.iter_mut().filter(|route| route.source == message.source && route.variant == variant) {
+            if let Err(status) = route.operation.apply(payload.clone()) {
+                // A full or disconnected diagnostic channel must never block input dispatch.
+                let _ = self.diagnostics.try_send(RouteDiagnostic {
+                    source: message.source.clone(),
+                    event: variant.into(),
+                    effect: RouteEffect::Visual { target: route.target.clone(), input: route.input.clone() },
+                    status,
+                });
+            }
+        }
+        Ok(())
     }
     /// Release public and private command capabilities when the owning form retires.
     fn retire(&mut self) -> Result<(), NcStatus> {
@@ -285,6 +330,7 @@ pub(crate) fn prepare(
     nodes: &BTreeMap<String, Widget<IWidgetAbi>>,
     public: BTreeMap<String, PublicEmitter>,
     messages: Receiver<Message>,
+    diagnostics: SyncSender<RouteDiagnostic>,
 ) -> Result<Controller<Wiring>, NcStatus> {
     let mut routes = Vec::with_capacity(document.connections.len());
     for connection in &document.connections {
@@ -302,7 +348,7 @@ pub(crate) fn prepare(
                 Operation::$variant { receiver: InputHandle { receiver: receiver.query()? }, constant }
             }};
         }
-        let operation = match kind {
+        let operation = match kind.clone() {
             InputKind::Text => operation!(Text),
             InputKind::Checked => operation!(Checked),
             InputKind::Value => operation!(Value),
@@ -313,9 +359,15 @@ pub(crate) fn prepare(
             InputKind::Position => operation!(Position),
             InputKind::Choices => return Err(NC_E_INVALID_ARG),
         };
-        routes.push(Route { source: connection.source.clone(), variant: connection.event.clone(), operation });
+        routes.push(Route {
+            source: connection.source.clone(),
+            variant: connection.event.clone(),
+            target: connection.target.clone(),
+            input: kind,
+            operation,
+        });
     }
-    Ok(Controller::new(Wiring { routes, public }, messages))
+    Ok(Controller::new(Wiring { routes, public, diagnostics }, messages))
 }
 
 #[cfg(test)]

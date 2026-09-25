@@ -25,8 +25,10 @@ file contents.
 
 ## Loading and application contracts
 
-Create `Loader::new(ui, parent_window, resources)` and call `load(binary)` or
-`prepare(&document)`. It returns an opaque `Component`; the application sees
+Create a bounded `std::sync::mpsc::sync_channel` for route diagnostics,
+pass its sender to `Loader::new(ui, parent_window, resources, diagnostics)`,
+and call `load(binary)` or `prepare(&document)`. Drain the receiver after
+updates. The loader returns an opaque `Component`; the application sees
 only `root()`, `outputs()`, typed `input::<SetText>("title")`, and `save()`.
 For each observed child, construction installs exactly one typed observer
 connected to its containing form. The form owns the child event queue, matches each event
@@ -162,7 +164,15 @@ actions to one event case and also forward the complete event through one public
 export. These are form effects, not additional child-port consumers. Validation
 rejects multiple public names for one child, missing endpoints, incompatible
 forwarded payloads, and invalid constants before construction. Target widgets
-still apply their current range policies; a forwarded selection absent from the destination model reports an error.
+still apply their current range policies. If a live destination rejects an
+action, the component sends a typed `RouteDiagnostic` with source, event,
+destination command, and exact status. Effects are independent: a rejected
+route does not roll back successful sibling actions or public forwarding, and
+does not abort the frame or retry the consumed event. Diagnostic delivery uses
+nonblocking `try_send`; a full or disconnected channel drops the diagnostic
+rather than blocking input. Applications should drain the bounded receiver each
+frame. `ReloadSlot::new` likewise requires a diagnostic sender and carries it
+across component replacement.
 
 Observers only capture facts into the mounted component's queue. Its controller
 applies resolved concrete commands after traversal releases widget borrows. Silent
