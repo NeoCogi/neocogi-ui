@@ -58,6 +58,7 @@ start with [COM_AUTHORS.md](COM_AUTHORS.md) and the working [examples](EXAMPLES.
 
 ## Project information
 
+- [COM/UI adversarial review (2026-09-26)](COM_UI_ADVERSARIAL_REVIEW_2026-09-26.md) — full COM and widget/event findings, reproduced cases, contract decisions, and the persistence-limit fix follow-up.
 - [Whole-repository adversarial review (2026-09-25)](ADVERSARIAL_REVIEW_2026-09-25.md) — 16 source-based findings, diagrams, contract decisions, and acceptance tests.
 - [Changelog](CHANGELOG.md)
 - [Support and compatibility](SUPPORT.md) — Rust toolchain, platform, renderer, and API stability

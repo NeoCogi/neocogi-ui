@@ -5,6 +5,15 @@ COM widget factories. JSON is editable source; the NCB persistence envelope is
 suitable for embedding or deployment. The loader performs no file I/O. Both
 representations use schema revision 5, and earlier revisions are rejected.
 
+Binary save and load apply the same byte, collection, value, and nesting limits.
+`Document::to_binary` and `Component::save` reject over-budget initialization
+instead of returning bytes that their corresponding readers cannot accept under
+the same policy. The 16 MiB byte ceiling does not override the one-million-value
+limit: the persistence envelope stores the encoded document as `Vec<u8>`, so each
+state byte counts as one collection element and one value, alongside the outer
+record's other values. This is intentional collection accounting, not an implicit
+binary-blob representation. See the [binary limit definitions](../../com/core/README.md#binary-resource-limits).
+
 A `Document` contains a tree of built-in widget constructors, styles, resources,
 and parent-owned layout edges. Each node has a unique stable key. Its physical
 event port count is zero or one. A text editor's single port carries the whole

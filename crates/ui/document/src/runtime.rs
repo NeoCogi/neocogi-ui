@@ -321,3 +321,7 @@ impl Services {
         }))
     }
 }
+
+/// Validates binary persistence limits through the public document API.
+#[cfg(test)]
+mod tests;
