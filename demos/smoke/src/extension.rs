@@ -51,7 +51,7 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     // Capability discovery happens once while wiring the application, never during UI phases.
     let window = ui.window("Independent extension", Rect { x: 10, y: 10, width: 400, height: 200 }, &root)?;
     let (events_tx, events) = std::sync::mpsc::channel();
-    neocogi_ui::events::bind(counter.event(), events_tx.clone(), Message::Counter)?;
+    neocogi_com::events::bind_source(counter.as_com_ref(), events_tx.clone(), Message::Counter)?;
     let app = events::Controller::into_local(events::Controller::root(
         Model {
             labels: Vec::new(),

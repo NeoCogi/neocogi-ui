@@ -1,14 +1,12 @@
-//! A saved opaque component builds real controls and binds only named outputs.
+//! A saved component builds real controls and exposes checked children for direct stream binding.
 //! The fixture is an example persistence provider, not a complete UI file schema.
 
 use super::*;
-use neocogi_ui_nodes_contracts::CheckboxChanged;
 use neocogi_com::{
     binary, com_object, guid_from_qualified_name, ComDeserialize, ComSerialize, ComRef, INcBytesAbi, IUnknown, NcBytes, NcCopyFromBufferOffset, NcGuid,
     NC_E_ABI_VERSION, NC_E_INVALID_ARG, NC_E_OUT_OF_RANGE,
 };
-use neocogi_com::events::{bind_output, NamedOutputs};
-use neocogi_com::events::{INamedOutputs, INamedOutputsAbi};
+use neocogi_com::events::bind_source;
 use neocogi_com::persistence::{snapshot, FactoryRegistry, ObjectRecord};
 use neocogi_idl_example_contracts::{ICompositionRoot, ICompositionRootAbi};
 
@@ -31,11 +29,7 @@ struct Settings {
 }
 
 /// Private control handles never cross the application's integration boundary.
-#[com_object(interfaces(
-    neocogi_com::persistence::IPersistable,
-    neocogi_com::events::INamedOutputs,
-    neocogi_idl_example_contracts::ICompositionRoot
-))]
+#[com_object(interfaces(neocogi_com::persistence::IPersistable, neocogi_idl_example_contracts::ICompositionRoot))]
 struct SettingsView {
     /// Mountable composition root.
     root: LinearWidget,
@@ -43,8 +37,6 @@ struct SettingsView {
     button: ButtonWidget,
     /// Retained only by the implementation for reading edited state.
     checkbox: CheckboxWidget,
-    /// Setup-only table; events use direct concrete receiver calls.
-    outputs: NamedOutputs,
     /// Authored public output names.
     names: (String, String),
 }
@@ -53,11 +45,16 @@ impl ICompositionRoot for SettingsView {
     fn root(&self) -> Result<ComPtr<IUnknown>, NcStatus> {
         self.root.node_interface()?.query()
     }
-}
-impl INamedOutputs for SettingsView {
-    /// Delegates named setup through ordinary mutable state.
-    fn bind_output(&mut self, name: NcCopyFromBufferOffset<'_, u8>, receiver: ComRef<'_, IUnknown>) -> Result<(), NcStatus> {
-        self.outputs.bind_com(name, receiver)
+    /// Resolves the actual authored child; event attachment uses its typed stream.
+    fn widget(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IUnknown>, NcStatus> {
+        if name.offset() != 0 {
+            return Err(NC_E_INVALID_ARG);
+        }
+        match std::str::from_utf8(name.as_slice()).map_err(|_| NC_E_INVALID_ARG)? {
+            value if value == self.names.0 => self.button.as_interface().add_ref().query(),
+            value if value == self.names.1 => self.checkbox.as_interface().add_ref().query(),
+            _ => Err(neocogi_com::NC_E_NOT_FOUND),
+        }
     }
 }
 impl neocogi_com::persistence::IPersistable for SettingsView {
@@ -123,15 +120,8 @@ impl neocogi_com::persistence::IPersistenceFactory for SettingsFactory {
         children: ComRef<'_, neocogi_com::persistence::IObjectChildrenAbi>,
     ) -> Result<ComPtr<IUnknown>, NcStatus> {
         let state = settings(version, state, children.count()?)?;
-        let (button_observer, button_outputs) = neocogi_ui::button::Event::exported_observer()?;
-        let (checkbox_observer, checkbox_outputs) = neocogi_ui::checkbox::Event::exported_observer()?;
-        let button = self.widgets.button_with_observer(&state.save_label, Some(button_observer.as_com_ref()))?;
-        let checkbox = self
-            .widgets
-            .checkbox_with_observer(&state.checkbox_label, state.checked, Some(checkbox_observer.as_com_ref()))?;
-        let mut outputs = NamedOutputs::new();
-        outputs.export_component(&state.save_output, button_outputs, "activated")?;
-        outputs.export_component(&state.checked_output, checkbox_outputs, "changed")?;
+        let button = self.widgets.button_unobserved(&state.save_label)?;
+        let checkbox = self.widgets.checkbox_unobserved(&state.checkbox_label, state.checked)?;
         let mut root = self.widgets.linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
         let result = (|| {
             root.insert(
@@ -162,7 +152,6 @@ impl neocogi_com::persistence::IPersistenceFactory for SettingsFactory {
             root,
             button,
             checkbox,
-            outputs,
             names: (state.save_output, state.checked_output),
         }))
     }
@@ -205,14 +194,37 @@ fn persisted_component_builds_real_ui_and_binds_without_child_handles() {
         .unwrap();
     let component = registry.restore(&binary::to_vec(&record).unwrap()).unwrap();
     assert_eq!(snapshot(component.as_com_ref()).unwrap(), binary::to_vec(&record).unwrap());
-    let outputs = component.query::<INamedOutputsAbi>().unwrap();
+    let outputs = component.query::<ICompositionRootAbi>().unwrap();
     let (sender, messages) = std::sync::mpsc::channel();
-    bind_output(outputs.as_com_ref(), "save_requested", sender.clone(), |_: Activation| AppEvent::Save).unwrap();
-    bind_output(outputs.as_com_ref(), "enabled_changed", sender.clone(), |value: CheckboxChanged| {
-        AppEvent::Enabled(value.checked)
-    })
+    bind_source(
+        outputs
+            .widget(NcCopyFromBufferOffset::new(0, b"save_requested"))
+            .unwrap()
+            .query::<ButtonAbi>()
+            .unwrap()
+            .as_com_ref(),
+        sender.clone(),
+        |_| AppEvent::Save,
+    )
     .unwrap();
-    assert!(bind_output(outputs.as_com_ref(), "save_requested", sender.clone(), |_: CheckboxChanged| AppEvent::Save).is_err());
+    bind_source(
+        outputs
+            .widget(NcCopyFromBufferOffset::new(0, b"enabled_changed"))
+            .unwrap()
+            .query::<CheckboxAbi>()
+            .unwrap()
+            .as_com_ref(),
+        sender.clone(),
+        |neocogi_ui::checkbox::Event::Changed(value)| AppEvent::Enabled(value.checked),
+    )
+    .unwrap();
+    assert!(
+        outputs
+            .widget(NcCopyFromBufferOffset::new(0, b"save_requested"))
+            .unwrap()
+            .query::<CheckboxAbi>()
+            .is_err()
+    );
     let mountable = component.query::<ICompositionRootAbi>().unwrap().root().unwrap().query::<IWidgetAbi>().unwrap();
     let owner = window(
         &fixture.ui,
@@ -237,8 +249,18 @@ fn persisted_component_builds_real_ui_and_binds_without_child_handles() {
     drop(component);
     let restored = registry.restore(&saved).unwrap();
     assert_eq!(snapshot(restored.as_com_ref()).unwrap(), saved);
-    let outputs = restored.query::<INamedOutputsAbi>().unwrap();
-    bind_output(outputs.as_com_ref(), "save_requested", sender, |_: Activation| AppEvent::Save).unwrap();
+    let outputs = restored.query::<ICompositionRootAbi>().unwrap();
+    bind_source(
+        outputs
+            .widget(NcCopyFromBufferOffset::new(0, b"save_requested"))
+            .unwrap()
+            .query::<ButtonAbi>()
+            .unwrap()
+            .as_com_ref(),
+        sender,
+        |_| AppEvent::Save,
+    )
+    .unwrap();
     let mountable = restored.query::<ICompositionRootAbi>().unwrap().root().unwrap().query::<IWidgetAbi>().unwrap();
     let _owner = window(
         &fixture.ui,

@@ -453,28 +453,20 @@ impl IPopup for LogicalPopup {
     }
 }
 
-impl IWindowEvents for LogicalWindow {
+impl IWindowEventsStream for LogicalWindow {
     /// Resolves the existing owner and installs delivery directly in its record.
-    fn __map_changed(&mut self, destination: ComRef<'_, __WindowEventReceiverAbi>) -> Result<(), NcStatus> {
+    fn attach(&mut self, destination: ComRef<'_, IWindowEventsSinkAbi>) -> Result<(), NcStatus> {
         let runtime = self.owner()?;
         runtime.factory.host.check_mutation()?;
-        runtime
-            .context()?
-            .window_manager
-            .map_window_events(&self.window, destination.add_ref())
-            .map_err(status)
+        runtime.context()?.window_manager.map_window_events(&self.window, destination.add_ref())
     }
 }
-impl IPopupEvents for LogicalPopup {
+impl IPopupEventsStream for LogicalPopup {
     /// Resolves the existing owner and installs delivery directly in its record.
-    fn __map_dismissed(&mut self, destination: ComRef<'_, __PopupDismissedReceiverAbi>) -> Result<(), NcStatus> {
+    fn attach(&mut self, destination: ComRef<'_, IPopupEventsSinkAbi>) -> Result<(), NcStatus> {
         let runtime = self.owner()?;
         runtime.factory.host.check_mutation()?;
-        runtime
-            .context()?
-            .window_manager
-            .map_popup_events(&self.popup, destination.add_ref())
-            .map_err(status)
+        runtime.context()?.window_manager.map_popup_events(&self.popup, destination.add_ref())
     }
 }
 
@@ -527,3 +519,9 @@ mod tests {
         owner.close().unwrap();
     }
 }
+
+/// Marker projection shares the same generic stream and object identity.
+impl IWindowEvents for LogicalWindow {}
+
+/// Marker projection shares the same generic stream and object identity.
+impl IPopupEvents for LogicalPopup {}

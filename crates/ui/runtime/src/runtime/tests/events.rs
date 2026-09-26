@@ -5,33 +5,33 @@ use neocogi_ui_support::test_support::events::TestApp;
 /// Both textbox outputs share one callback allocation; construction retains it
 /// without allocating another receiver or validating an output through a query.
 #[test]
-fn constructor_observer_allocates_once_and_drops_with_logical_widget_closure() {
+fn constructor_sink_allocates_once_and_drops_with_logical_widget_closure() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let (sender, receiver) = std::sync::mpsc::channel();
     let measurement = crate::test_support::AllocationMeasurement::begin();
-    let observer = neocogi_ui::textbox::observer(sender, |event| event).unwrap();
+    let sink = neocogi_ui::textbox::sink(sender, |event| event).unwrap();
     let allocations = measurement.finish();
-    assert_eq!(allocations.events, 1, "sender and mapper must live inside the one COM observer allocation");
+    assert_eq!(allocations.events, 1, "sender and mapper must live inside the one COM sink allocation");
 
     let measurement = crate::test_support::AllocationMeasurement::begin();
     let unobserved = ui.widgets().textbox_unobserved("same").unwrap();
     let absent = measurement.finish();
     let measurement = crate::test_support::AllocationMeasurement::begin();
-    let observed = ui.widgets().textbox_with_observer("same", Some(observer.as_com_ref())).unwrap();
+    let observed = ui.widgets().textbox_with_sink("same", Some(sink.as_com_ref())).unwrap();
     let present = measurement.finish();
-    assert_eq!(present, absent, "the factory only retains a present observer; absence needs no dummy object");
-    drop(observer);
+    assert_eq!(present, absent, "the factory only retains a present sink; absence needs no dummy object");
+    drop(sink);
     assert!(matches!(receiver.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
     observed.node_interface().unwrap().close().unwrap();
     assert!(matches!(receiver.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
-    // The closed editing handle can outlive its observer without retaining its captures.
+    // The closed editing handle can outlive its sink without retaining its captures.
     assert_eq!(observed.text(), Err(UI_E_CLOSED));
     drop(unobserved);
 }
 
 /// Failed factory validation releases a callback that was never published to a widget.
 #[test]
-fn failed_constructor_releases_observer_captures() {
+fn failed_constructor_releases_sink_captures() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let (sender, receiver) = std::sync::mpsc::channel::<()>();
     let result = ui.widgets().number(NumberOptions { value: f32::NAN, step: 1.0, precision: 0 }, sender, |_| ());
@@ -522,7 +522,7 @@ fn failed_post_preserves_committed_widget_state_and_requires_a_new_frame() {
     let (events_tx, events) = std::sync::mpsc::channel();
     let (renderer, _) = renderer();
     let mut reject_next = true;
-    let observer = neocogi_ui::number::Event::observer(move |neocogi_ui::number::Event::Changed(event)| {
+    let sink = <NumberSinkAbi as neocogi_com::events::MessageSinkInterface>::receiver(move |neocogi_ui::number::Event::Changed(event)| {
         // A receiver may reject one post and recover without changing the
         // widget's construction-time destination or undoing its committed value.
         match std::mem::replace(&mut reject_next, false) {
@@ -536,7 +536,7 @@ fn failed_post_preserves_committed_widget_state_and_requires_a_new_frame() {
     .unwrap();
     let number = ui
         .widgets()
-        .number_with_observer(NumberOptions { value: 9.0, step: 1.0, precision: 0 }, Some(observer.as_com_ref()))
+        .number_with_sink(NumberOptions { value: 9.0, step: 1.0, precision: 0 }, Some(sink.as_com_ref()))
         .unwrap();
     let window = ui.window("post failure", RECT, &number).unwrap();
     ui.update(SIZE).unwrap();
@@ -567,10 +567,14 @@ fn failed_lifecycle_post_preserves_visibility_and_returns_its_receiver_error() {
     let window = ui.window("post failure", RECT, &button).unwrap();
     let source = window.query::<IWindowEventsAbi>().unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
-    source.changed()(Box::new(reject)).unwrap();
+    let sink = <IWindowEventsSinkAbi as neocogi_com::events::MessageSinkInterface>::receiver(reject).unwrap();
+    neocogi_com::events::attach_source(source.as_com_ref(), sink.as_com_ref()).unwrap();
     assert_eq!(window.set_visibility(Visibility::Hidden), Err(NC_E_INVALID_ARG));
     assert_eq!(window.snapshot().unwrap().visibility, Visibility::Hidden);
     assert!(events.try_recv().is_err());
-    neocogi_ui::events::bind(source.changed(), events_tx.clone(), |event| event).unwrap();
-    window.close().unwrap();
+    assert_eq!(
+        neocogi_com::events::bind_source(source.as_com_ref(), events_tx.clone(), |event| event),
+        Err(neocogi_com::NC_E_ALREADY_BOUND)
+    );
+    assert_eq!(window.close(), Err(NC_E_INVALID_ARG));
 }

@@ -20,8 +20,6 @@ struct Fixture {
     handle: neocogi_ui::FileDialog,
     /// Same runtime-owned concrete controller, retained only for test observations of fixed roles.
     controller: LocalCom<FileDialog>,
-    /// Explicit export observer allows tests to vary downstream consumers without rebinding widgets.
-    outputs: ComPtr<neocogi_com::events::INamedOutputsAbi>,
 }
 impl Fixture {
     /// Uses public production runtime and node-provider construction, exactly as plugin clients do.
@@ -34,18 +32,10 @@ impl Fixture {
         let body = ui.widgets().button_unobserved("background").unwrap();
         let owner = ui.window("owner", OWNER_RECT, &body).unwrap();
         let services = crate::factory::NodeServices::bind(runtime.as_com_ref()).unwrap();
-        let (observer, outputs) = IFileDialogEvent::exported_observer().unwrap();
-        let controller = FileDialog::new(services, owner.as_com_ref(), Some(observer.as_com_ref())).unwrap();
+        let controller = FileDialog::new(services, owner.as_com_ref()).unwrap();
         let interface = controller.query().unwrap();
         let handle = neocogi_ui::FileDialog::from_interface(interface);
-        Self {
-            ui,
-            runtime,
-            owner,
-            handle,
-            controller,
-            outputs,
-        }
+        Self { ui, runtime, owner, handle, controller }
     }
     /// Queues one real key press with explicit modifier policy.
     fn key(&self, key: KeyCode, modifiers: u8) {
@@ -89,7 +79,7 @@ impl Fixture {
 /// Connects the real picker completion protocol to a consumer-owned inbox.
 fn session(fixture: &Fixture) -> std::sync::mpsc::Receiver<FileDialogCompletion> {
     let (events_tx, events) = std::sync::mpsc::channel();
-    neocogi_com::events::bind_output(fixture.outputs.as_com_ref(), "completed", events_tx.clone(), |event| event).unwrap();
+    neocogi_com::events::bind_source(fixture.handle.as_interface(), events_tx.clone(), |IFileDialogEvent::Completed(event)| event).unwrap();
     events
 }
 
@@ -398,7 +388,10 @@ fn application_callback_opens_picker_and_later_input_reaches_its_new_modal_scope
         /// Captured native completion.
         Completed(FileDialogCompletion),
     }
-    neocogi_com::events::bind_output(fixture.outputs.as_com_ref(), "completed", events_tx.clone(), AppMessage::Completed).unwrap();
+    neocogi_com::events::bind_source(fixture.handle.as_interface(), events_tx.clone(), |IFileDialogEvent::Completed(event)| {
+        AppMessage::Completed(event)
+    })
+    .unwrap();
 
     let app = TestApp::new(
         (fixture.handle.clone(), directory.path().to_owned(), Vec::new()),
@@ -431,7 +424,7 @@ fn closed_picker_preserves_all_completed_requests_during_manual_handler_runtime_
     let directory = tempfile::tempdir().unwrap();
     let ui = crate::bind_builtin_nodes(fixture.runtime.clone()).unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
-    neocogi_com::events::bind_output(fixture.outputs.as_com_ref(), "completed", events_tx.clone(), |event| event).unwrap();
+    neocogi_com::events::bind_source(fixture.handle.as_interface(), events_tx.clone(), |IFileDialogEvent::Completed(event)| event).unwrap();
     let mut completions = 0;
     for _ in 0..2 {
         fixture.open(directory.path());
@@ -454,7 +447,7 @@ fn completion_mapping_reentry_uses_the_controller_com_gate() {
     let directory = tempfile::tempdir().unwrap();
     let controller = fixture.handle.as_interface().add_ref();
     let (events_tx, events) = std::sync::mpsc::channel();
-    neocogi_com::events::bind_output(fixture.outputs.as_com_ref(), "completed", events_tx.clone(), move |message| {
+    neocogi_com::events::bind_source(fixture.handle.as_interface(), events_tx.clone(), move |IFileDialogEvent::Completed(message)| {
         assert_eq!(controller.active(), Err(neocogi_com::NC_E_BUSY));
         message
     })
@@ -462,8 +455,8 @@ fn completion_mapping_reentry_uses_the_controller_com_gate() {
     fixture.open(directory.path());
     assert_eq!(fixture.handle.cancel(), Ok(true));
     assert!(matches!(events.try_recv().ok(), Some(FileDialogCompletion::Cancelled)));
-    // Release the intentionally self-capturing test mapper by replacing the test export destination; the widget observer is unchanged.
-    neocogi_com::events::bind_output(fixture.outputs.as_com_ref(), "completed", events_tx.clone(), |message| message).unwrap();
+    // Closing releases the deliberately self-capturing mapper; replacement is forbidden.
+    fixture.handle.close().unwrap();
 }
 
 /// Dropping client projections leaves a mounted owner alive until its view is removed.

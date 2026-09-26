@@ -1,5 +1,8 @@
 //! Trusted construction authority for authored custom COM leaf widgets.
-use crate::{CustomProperty, Document, Node, WidgetSpec, design::{DesignInterface, DesignWidgetManifest}};
+use crate::{
+    CustomProperty, Document, Node, WidgetSpec,
+    design::{DesignInterface, DesignWidgetManifest},
+};
 use neocogi_com::{NcGuid, NcStatus, NC_E_INVALID_ARG};
 use neocogi_ui::{IWidgetAbi, Ui, Widget};
 use std::{collections::BTreeMap, rc::Rc};
@@ -32,7 +35,9 @@ pub struct CustomWidgetRegistry {
 }
 impl CustomWidgetRegistry {
     /// Starts an empty registry; built-in widgets need no entries.
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     /// Registers one provider after validating its complete IDL-derived description.
     pub fn register(&mut self, factory: Rc<dyn CustomWidgetFactory>) -> Result<(), String> {
@@ -48,7 +53,10 @@ impl CustomWidgetRegistry {
     /// Builds a palette-ready constructor from the installed provider's defaults.
     pub fn default_spec(&self, kind: &str) -> Option<WidgetSpec> {
         let entry = self.entries.get(kind)?;
-        Some(WidgetSpec::Custom { kind: kind.to_owned(), properties: entry.manifest.defaults.clone() })
+        Some(WidgetSpec::Custom {
+            kind: kind.to_owned(),
+            properties: entry.manifest.defaults.clone(),
+        })
     }
 
     /// Returns registered kinds in deterministic palette order.
@@ -58,7 +66,9 @@ impl CustomWidgetRegistry {
 
     /// Returns owned COM and IDL metadata for a registered custom kind.
     pub fn interface(&self, kind: &str) -> Result<&DesignInterface, String> {
-        self.entries.get(kind).map(|entry| &entry.manifest.interface)
+        self.entries
+            .get(kind)
+            .map(|entry| &entry.manifest.interface)
             .ok_or_else(|| format!("Custom widget kind {kind} is not registered"))
     }
 
@@ -73,9 +83,12 @@ impl CustomWidgetRegistry {
         if let WidgetSpec::Custom { kind, properties } = &node.widget {
             let entry = self.entries.get(kind).ok_or_else(|| format!("Custom widget kind {kind} is not registered"))?;
             let defaults = &entry.manifest.defaults;
-            if properties.len() != defaults.len() || !properties.iter().zip(defaults).all(|(value, expected)| {
-                value.name == expected.name && value.value.same_kind(&expected.value) && value.value.valid()
-            }) {
+            if properties.len() != defaults.len()
+                || !properties
+                    .iter()
+                    .zip(defaults)
+                    .all(|(value, expected)| value.name == expected.name && value.value.same_kind(&expected.value) && value.value.valid())
+            {
                 return Err(format!("Custom widget property schema mismatch on {}", node.key));
             }
         }
@@ -91,7 +104,18 @@ impl CustomWidgetRegistry {
         let widget = entry.factory.create(ui, properties)?;
         let interface = &entry.manifest.interface;
         let iid = NcGuid::from_uuid_bytes(interface.iid);
-        if let Err(error) = widget.as_interface().add_ref().supports_interface_bytes(iid, &interface.signature) {
+        let validation = widget
+            .as_interface()
+            .add_ref()
+            .supports_interface_bytes(iid, &interface.signature)
+            .and_then(|_| match &interface.stream {
+                Some(stream) => widget
+                    .as_interface()
+                    .add_ref()
+                    .supports_interface_bytes(NcGuid::from_uuid_bytes(stream.iid), &stream.signature),
+                None => Ok(()),
+            });
+        if let Err(error) = validation {
             // The candidate has not entered Construction's owned-node set yet.
             // Close its common widget state before dropping the last handle.
             if let Ok(mut node) = widget.node_interface() {

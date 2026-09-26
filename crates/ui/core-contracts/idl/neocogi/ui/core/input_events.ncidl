@@ -102,9 +102,8 @@ struct Activation {
 
 #[version(1)]
 /// Labelled activation output from the actual control.
-interface IActivationEvents {
-    /// Connection access for captured Activation values.
-    activated: Activation;
+interface IActivationEvents: IEventStream<Activation> {
+
 }
 
 #[version(1)]
@@ -161,9 +160,8 @@ enum WindowEvent: u8 {
 
 #[version(1)]
 /// Connection access on the actual window; the manager owns its emission storage.
-interface IWindowEvents {
-    /// Connection access for captured WindowEvent values.
-    changed: WindowEvent;
+interface IWindowEvents: IEventStream<WindowEvent> {
+
 }
 
 #[version(1)]
@@ -176,9 +174,8 @@ enum PopupDismissed: u8 {
 
 #[version(1)]
 /// Connection access on the actual popup and its manager-owned emission storage.
-interface IPopupEvents {
-    /// Connection access for this popup's captured dismissal facts.
-    dismissed: PopupDismissed;
+interface IPopupEvents: IEventStream<PopupDismissed> {
+
 }
 
 #[version(1)]
@@ -204,9 +201,8 @@ enum FileDialogMode: u8 {
 }
 
 #[version(4)]
-#[observer]
 /// Nodes-provider file picker controller and real COM controls; retaining it does not keep its runtime open.
-interface IFileDialog {
+class IFileDialog: IEventStream<IFileDialogEvent> {
     /// Returns the actual stable modal window capability for ordinary lifecycle and geometry operations.
     fn window(&self) -> Result<IWindow>;
     /// Reads and validates a complete native directory before changing request state or showing the modal.
@@ -219,13 +215,20 @@ interface IFileDialog {
     fn close(&mut self) -> Result<()>;
     /// Copies the latest failed directory-read diagnostic without replacing the previous valid listing.
     fn diagnostic(&self) -> Result<String>;
-    /// Reports acceptance or cancellation of a request through the dialog's own capability.
-    completed: FileDialogCompletion;
+
 }
 
 #[version(2)]
 /// Standard picker construction capability exposed by a nodes factory bound to window management.
 interface IFileDialogs {
     /// Creates one hidden reusable modal owned by the authenticated ordinary window.
-    fn create(&self, parent: &IWindow, observer: Option<&IFileDialogObserver>) -> Result<IFileDialog>;
+    fn create(&self, parent: &IWindow) -> Result<IFileDialog>;
+}
+
+#[version(1)]
+#[message]
+/// Complete typed event stream of IFileDialog; consumed by its behavioral parent.
+enum IFileDialogEvent {
+    /// Captured completed fact, acquired before the producer call returns.
+    Completed(FileDialogCompletion),
 }

@@ -2,7 +2,7 @@
 /// Complete captured widget events, one variant per event-producing widget.
 pub enum Event {
     /// Complete event stream from authored widget "root".
-    Widget0(neocogi_ui::events::Activation),
+    Widget0(neocogi_ui::button::Event),
 }
 /// A captured event belongs to exactly one component reload attempt.
 pub struct Message {
@@ -14,7 +14,7 @@ pub struct Message {
 /// Application-owned behavior; every emitting widget requires an implementation.
 pub trait Handlers {
     /// Handles the event from widget "root" after traversal releases widget borrows.
-    fn on_root_0(&mut self, event: neocogi_ui::events::Activation) -> Result<(), neocogi_com::NcStatus>;
+    fn on_root_0(&mut self, event: neocogi_ui::button::Event) -> Result<(), neocogi_com::NcStatus>;
 }
 impl Event {
     /// Dispatch only after checking the enclosing message generation.
@@ -47,7 +47,6 @@ pub fn bind(
         inputs,
         widget_root_0: component.widget::<neocogi_ui::ButtonAbi>("root")?,
     };
-    let outputs = component.outputs()?;
-    neocogi_com::events::bind_output(outputs.as_com_ref(), "root", send.clone(), move |event: neocogi_ui::events::Activation| Message { generation, event: Event::Widget0(event) })?;
+    neocogi_com::events::bind_source(form.widget_root_0.as_interface(), send.clone(), move |event: neocogi_ui::button::Event| Message { generation, event: Event::Widget0(event) })?;
     Ok(form)
 }

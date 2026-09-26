@@ -1,3 +1,5 @@
+use neocogi.com.events::IEventStream;
+extern neocogi.com.events;
 extern neocogi.ui.core;
 extern neocogi.ui.document;
 use neocogi.ui.core::{Mount, IWidget, ILeafLayout, Activation, IWidgetHost, IContainer, ChildEditResult};
@@ -45,13 +47,12 @@ enum CounterEvent: u8 {
 
 #[version(2)]
 /// A custom control with one enum-valued event port and a concrete editing interface.
-interface Counter: IWidget + ILeafLayout + IWidgetProbe {
+class Counter: IWidget + ILeafLayout + IWidgetProbe + IEventStream<CounterEvent> {
     /// Reads the actual current activation count.
     fn count(&self) -> Result<u32>;
     /// Silently replaces the displayed count and invalidates its preferred text size when changed.
     fn set_count(&mut self, value: u32) -> Result<()>;
-    /// Sole connection point for both activation and committed count cases.
-    event: CounterEvent;
+
 }
 
 #[version(2)]

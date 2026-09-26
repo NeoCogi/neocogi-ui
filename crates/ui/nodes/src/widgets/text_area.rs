@@ -59,7 +59,6 @@
 //! programmatic replacement, and text input convert CRLF and lone CR at ingress. Rendering uses the
 //! selected atlas's glyph coverage and missing-character fallback.
 
-use neocogi_ui_nodes_contracts::TextAreaObserverAbi;
 use crate::{ControlRole};
 
 use crate::text_layout::{TextLine, build_text_lines, text_block_size};
@@ -101,7 +100,8 @@ use super::text_edit::{
 #[neocogi_com::com_object(interfaces(
     neocogi_ui_core_contracts::IMultilineEditor,
     neocogi_ui_core_contracts::ILeafLayout,
-    neocogi_ui_core_contracts::IFontStyle
+    neocogi_ui_core_contracts::IFontStyle,
+    neocogi_ui_nodes_contracts::TextAreaStream
 ))]
 pub struct TextEditor {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -124,12 +124,12 @@ pub struct TextEditor {
     interaction: TextAreaInteraction,
     /// Shared scalar scroll data supports caret reveal without retaining a parent widget or tree.
     scroll_area: Option<std::rc::Rc<crate::ScrollModel>>,
-    /// One constructor-supplied destination shared by edits and submissions.
-    observer: Option<ComPtr<TextAreaObserverAbi>>,
+    /// Single event slot shared by edits and submissions; the parent attaches after creation.
+    events: neocogi_ui_nodes_contracts::TextAreaEventPort,
 }
 
 /// Concrete fixed scrolling text-area class with one actual editor child.
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::TextArea)]
+#[neocogi_com::com_class(neocogi_ui_nodes_contracts::TextArea)]
 pub struct TextArea {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::widget_object::WidgetRuntime,
@@ -302,13 +302,15 @@ impl TextEditor {
 
         // Emit complete immutable snapshots after the semantic update has committed cursor and text.
         if outcome.changed {
-            ctx.posted(
-                neocogi_ui_nodes_contracts::TextAreaEvent::Changed(crate::TextChanged { text: self.buf.clone(), cursor: self.cursor as u64 })
-                .post_to_observer(&mut self.observer),
-            );
+            ctx.posted(self.events.post(&neocogi_ui_nodes_contracts::TextAreaEvent::Changed(crate::TextChanged {
+                text: self.buf.clone(),
+                cursor: self.cursor as u64,
+            })));
         }
         if outcome.submitted {
-            ctx.posted(neocogi_ui_nodes_contracts::TextAreaEvent::Submitted(crate::TextSubmitted { text: self.buf.clone() }).post_to_observer(&mut self.observer));
+            ctx.posted(self.events.post(&neocogi_ui_nodes_contracts::TextAreaEvent::Submitted(crate::TextSubmitted {
+                text: self.buf.clone(),
+            })));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(outcome.changed)
@@ -665,7 +667,7 @@ impl TextEditor {
             font,
             interaction: TextAreaInteraction::default(),
             scroll_area: model,
-            observer: None,
+            events: Default::default(),
         }
     }
     /// Reads the one wrapping choice consumed by both measurement and caret geometry.
@@ -682,12 +684,12 @@ impl TextEditor {
 impl crate::widget_object::WidgetAlgorithm for TextEditor {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
-        self.observer = None;
+        self.events.close();
     }
 }
 
 impl crate::widget_object::HostedWidget for TextEditor {
-    /// Releases observers, revokes outstanding clipboard receipts, and drops local history.
+    /// Releases sinks, revokes outstanding clipboard receipts, and drops local history.
     fn close_contents(&mut self) -> Result<(), neocogi_com::NcStatus> {
         crate::widget_object::WidgetAlgorithm::close_events(self);
         self.editing = super::editing::Editing::default();
@@ -739,12 +741,10 @@ impl TextEditor {
         wrap: crate::TextWrap,
         model: std::rc::Rc<crate::ScrollModel>,
         resources: Option<&crate::widget_object::SharedAssets>,
-        observer: Option<neocogi_com::ComRef<'_, TextAreaObserverAbi>>,
     ) -> Result<ComPtr<IMultilineEditorAbi>, NcStatus> {
         let runtime = crate::widget_object::WidgetRuntime::for_resources(host, crate::WidgetOption::NONE, resources)?;
-        let mut value = Self::from_runtime(runtime, text, wrap, crate::FontRef::Role(crate::FontRole::Body), Some(model));
-        // The leaf retains the sole destination before any parent can publish it.
-        value.observer = observer.map(|destination| destination.add_ref());
+        let value = Self::from_runtime(runtime, text, wrap, crate::FontRef::Role(crate::FontRole::Body), Some(model));
+        // The outer class delegates attachment to this leaf's one initialized event slot.
         Ok(Self::from_value(value)
             .query()
             .expect("TextEditor declares its editing, font, event, and leaf capabilities"))
@@ -830,9 +830,8 @@ impl TextArea {
         text: NcCopyFromBufferOffset<'_, u8>,
         wrapping: TextWrapping,
         scrolling: bool,
-        observer: Option<neocogi_com::ComRef<'_, TextAreaObserverAbi>>,
     ) -> Result<ComPtr<TextAreaAbi>, NcStatus> {
-        let value = Self::build(host, text, wrapping, scrolling, Some(&resources), observer)?;
+        let value = Self::build(host, text, wrapping, scrolling, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("TextArea declares its callable class contract"))
     }
 
@@ -843,12 +842,11 @@ impl TextArea {
         wrapping: TextWrapping,
         scrolling: bool,
         resources: Option<&crate::widget_object::SharedAssets>,
-        observer: Option<neocogi_com::ComRef<'_, TextAreaObserverAbi>>,
     ) -> Result<Self, NcStatus> {
         let text_value = crate::boundary::text(input)?;
         let wrap = crate::widget_object::local_wrap(wrapping)?;
         let parts = crate::ScrollParts::prepare(host.clone(), scrolling, resources)?;
-        let text = TextEditor::create_com(host.clone(), text_value, wrap, parts.model.clone(), resources, observer)?;
+        let text = TextEditor::create_com(host.clone(), text_value, wrap, parts.model.clone(), resources)?;
         let font = text.query()?;
         parts
             .content
@@ -924,16 +922,15 @@ mod tests {
         Submitted(String),
     }
 
-    /// Maps both outputs into one ordinary consumer FIFO, preserving their actual post order.
+    /// Maps both enum variants into one ordinary consumer FIFO, preserving their actual post order.
     fn text_dispatcher(text_area: &mut TextEditor) -> impl FnMut(&mut Vec<RecordedEvent>) -> bool + use<> {
         let (events_tx, events) = std::sync::mpsc::channel();
-        text_area.observer = Some(
-            neocogi_ui::text_area::observer(events_tx, |event| match event {
-                neocogi_ui::text_area::Event::Changed(value) => RecordedEvent::Changed(value.text, value.cursor),
-                neocogi_ui::text_area::Event::Submitted(value) => RecordedEvent::Submitted(value.text),
-            })
-            .unwrap(),
-        );
+        let sink = neocogi_ui::text_area::sink(events_tx, |event| match event {
+            neocogi_ui::text_area::Event::Changed(value) => RecordedEvent::Changed(value.text, value.cursor),
+            neocogi_ui::text_area::Event::Submitted(value) => RecordedEvent::Submitted(value.text),
+        })
+        .unwrap();
+        text_area.events.attach(sink.as_com_ref()).unwrap();
         move |values| {
             let before = values.len();
             values.extend(events.try_iter());
@@ -1200,5 +1197,18 @@ mod tests {
 
         assert_eq!(text_area.text(), "\ntext");
         assert_eq!(text_area.cursor(), 0);
+    }
+}
+
+impl neocogi_ui_nodes_contracts::TextAreaStream for TextEditor {
+    /// Installs the parent's sole receiver into the real editor's owned port.
+    fn attach(&mut self, consumer: neocogi_com::ComRef<'_, neocogi_ui_nodes_contracts::TextAreaSinkAbi>) -> Result<(), NcStatus> {
+        self.events.attach(consumer)
+    }
+}
+impl neocogi_ui_nodes_contracts::TextAreaStream for TextArea {
+    /// Both outer and leaf projections reach the same slot, never a second consumer.
+    fn attach(&mut self, consumer: neocogi_com::ComRef<'_, neocogi_ui_nodes_contracts::TextAreaSinkAbi>) -> Result<(), NcStatus> {
+        self.text.query::<neocogi_ui_nodes_contracts::TextAreaStreamAbi>()?.attach(consumer)
     }
 }

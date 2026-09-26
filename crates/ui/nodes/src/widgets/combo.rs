@@ -71,7 +71,7 @@ impl Default for ComboParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Combo)]
+#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Combo)]
 /// Concrete retained combo and dynamically constructible COM object.
 pub struct Combo {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -368,5 +368,12 @@ impl neocogi_ui_nodes_contracts::Combo for Combo {
     /// Resolves one exact named font before replacing the Combo's selection.
     fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         set_direct_named_font(self, name)
+    }
+}
+
+impl neocogi_ui_nodes_contracts::ComboStream for Combo {
+    /// Forwards attachment to the authoritative selection object's single lifetime slot.
+    fn attach(&mut self, consumer: neocogi_com::ComRef<'_, neocogi_ui_nodes_contracts::ComboSinkAbi>) -> Result<(), NcStatus> {
+        neocogi_com::events::attach_source(self.menu.as_com_ref(), consumer)
     }
 }

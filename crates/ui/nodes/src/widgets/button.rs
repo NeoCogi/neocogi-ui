@@ -33,7 +33,6 @@
 //! Buttons support text, arbitrary atlas icons, and external textures through one shared inline
 //! placement path.
 
-use neocogi_ui_nodes_contracts::ButtonObserverAbi;
 use crate::ControlRole;
 use crate::widget_object::{
     HostedWidget, ImageState, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_icon_role, set_direct_named_font,
@@ -98,7 +97,7 @@ impl ButtonParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Button)]
+#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Button, event = events)]
 /// Concrete retained button and dynamically constructible COM object.
 ///
 /// The allocation owns its semantic fields directly. `runtime` contains only common host,
@@ -113,8 +112,8 @@ pub struct Button {
     /// Base widget options.
     /// Initialization-only fill behavior.
     fill: WidgetFillOption,
-    /// Sole observer retained at construction; released on logical closure.
-    observer: Option<ComPtr<ButtonObserverAbi>>,
+    /// Single event slot; attaches once after creation and closes with the widget.
+    events: neocogi_ui_nodes_contracts::ButtonEventPort,
 }
 
 impl Button {
@@ -125,7 +124,7 @@ impl Button {
             content: parameters.content,
             font: parameters.font,
             fill: parameters.fill,
-            observer: None,
+            events: Default::default(),
         }
     }
 
@@ -217,10 +216,10 @@ impl Widget for Button {
             return crate::Change::NoChange;
         }
         // Pointer click, Enter, and Space converge on the button's single typed submission port.
-        if self.observer.is_some() {
-            ctx.posted(
-                neocogi_ui_nodes_contracts::ButtonEvent::Activated(crate::Activation { label: self.com_label().to_owned() }).post_to(&mut self.observer),
-            );
+        if self.events.is_bound() {
+            ctx.posted(self.events.post(&neocogi_ui_nodes_contracts::ButtonEvent::Activated(crate::Activation {
+                label: self.com_label().to_owned(),
+            })));
         }
 
         // Submitting leaves the label and preferred dimensions unchanged.
@@ -241,7 +240,7 @@ impl Widget for Button {
 impl crate::widget_object::WidgetAlgorithm for Button {
     /// Logical COM closure cancels ordinary submissions while retained widget references remain safe.
     fn close_events(&mut self) {
-        self.observer = None;
+        self.events.close();
     }
 }
 
@@ -335,11 +334,9 @@ impl Button {
         resources: crate::widget_object::SharedAssets,
         label: NcCopyFromBufferOffset<'_, u8>,
         options: WidgetOptions,
-        observer: Option<neocogi_com::ComRef<'_, ButtonObserverAbi>>,
     ) -> Result<ComPtr<ButtonAbi>, NcStatus> {
-        let mut value = Self::build(host, label, options, Some(&resources))?;
+        let value = Self::build(host, label, options, Some(&resources))?;
         // Retain the sole destination before publishing the completed widget.
-        value.observer = observer.map(|destination| destination.add_ref());
         Ok(Self::from_value(value).query().expect("Button declares its callable class contract"))
     }
 

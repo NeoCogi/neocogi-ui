@@ -1,9 +1,11 @@
+use neocogi.com.events::IEventStream;
+extern neocogi.com.events;
 extern neocogi.ui.core;
 extern neocogi.renderer;
 extern neocogi.gfx;
 
 use neocogi.ui.core::{
-    IChoiceMenuObserver, Mount, ChildEditResult, ChoiceMenuEntry, ChoiceSelection, Activation, IChildren,
+    IChoiceMenuEvent, Mount, ChildEditResult, ChoiceMenuEntry, ChoiceSelection, Activation, IChildren,
     IConstructionHost, IContainerLayout, IFileDialogs, ILeafLayout, IScrolling,
     TextChanged, TextSubmitted, ITextContent, IWidget, IWidgetHost, IWindow, ScrollInfo,
     TextWrapping, UiRuntime, WidgetOptions,

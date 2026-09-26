@@ -2,7 +2,7 @@
 /// Complete captured widget events, one variant per event-producing widget.
 pub enum Event {
     /// Complete event stream from authored widget "save".
-    Widget2(neocogi_ui::events::Activation),
+    Widget2(neocogi_ui::button::Event),
     /// Complete event stream from authored widget "extension".
     Widget3(neocogi_demo_contracts::CounterEvent),
 }
@@ -16,7 +16,7 @@ pub struct Message {
 /// Application-owned behavior; every emitting widget requires an implementation.
 pub trait Handlers {
     /// Handles the event from widget "save" after traversal releases widget borrows.
-    fn on_save_2(&mut self, event: neocogi_ui::events::Activation) -> Result<(), neocogi_com::NcStatus>;
+    fn on_save_2(&mut self, event: neocogi_ui::button::Event) -> Result<(), neocogi_com::NcStatus>;
     /// Handles the event from widget "extension" after traversal releases widget borrows.
     fn on_extension_3(&mut self, event: neocogi_demo_contracts::CounterEvent) -> Result<(), neocogi_com::NcStatus>;
 }
@@ -57,7 +57,6 @@ pub fn bind(
     let inputs = Inputs {
         input_title_0: component.input::<neocogi_ui_document::contracts::SetText>("title")?,
     };
-    use neocogi_demo_contracts::CounterOutputs as _;
     let form = Form {
         inputs,
         widget_root_0: component.widget::<neocogi_ui::LinearAbi>("root")?,
@@ -65,8 +64,7 @@ pub fn bind(
         widget_save_2: component.widget::<neocogi_ui::ButtonAbi>("save")?,
         widget_extension_3: component.widget::<neocogi_demo_contracts::CounterAbi>("extension")?,
     };
-    let outputs = component.outputs()?;
-    neocogi_com::events::bind_output(outputs.as_com_ref(), "save_requested", send.clone(), move |event: neocogi_ui::events::Activation| Message { generation, event: Event::Widget2(event) })?;
-    neocogi_com::events::bind(form.widget_extension_3.as_interface().event(), send.clone(), move |event: neocogi_demo_contracts::CounterEvent| Message { generation, event: Event::Widget3(event) })?;
+    neocogi_com::events::bind_source(form.widget_save_2.as_interface(), send.clone(), move |event: neocogi_ui::button::Event| Message { generation, event: Event::Widget2(event) })?;
+    neocogi_com::events::bind_source(form.widget_extension_3.as_interface(), send.clone(), move |event: neocogi_demo_contracts::CounterEvent| Message { generation, event: Event::Widget3(event) })?;
     Ok(form)
 }

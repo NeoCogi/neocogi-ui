@@ -201,7 +201,7 @@ pub(crate) struct MenuItemRecord {
     /// Mutable presentation and interaction values stored without a second mirror type.
     pub(crate) parameters: MenuItemParameters,
     /// Installed concrete activation receiver; no pending messages belong to the item.
-    pub(crate) submitted_event: Option<neocogi_com::ComPtr<neocogi_ui_core_contracts::__ActivationReceiverAbi>>,
+    pub(crate) submitted_event: neocogi_ui_core_contracts::IActivationEventsEventPort,
 }
 
 /// Uniquely owned declaration value for one actionable menu row.
@@ -219,7 +219,7 @@ impl MenuItem {
         // The record owns its optional destination through declaration-to-surface transfer;
         // its handle needs only the stable identity used for checked lookup.
         let id = MenuItemId::allocate();
-        let submitted_event = None;
+        let submitted_event = Default::default();
         let handle = MenuItemHandle::new(id);
         let item = Self {
             record: MenuItemRecord { id, parameters, submitted_event },
@@ -639,7 +639,7 @@ impl MenuSurface {
             MenuSlot::Item(item) if item.parameters.enabled => {
                 // Queue only the semantic event; WindowManager closes the complete path after this
                 // mutable surface borrow ends and before application dispatch begins.
-                let posted = MenuItemSubmitted { label: item.parameters.label.clone() }.post_to(&mut item.submitted_event);
+                let posted = item.submitted_event.post(&MenuItemSubmitted { label: item.parameters.label.clone() });
                 Some(MenuAction::SubmitAndClose(posted))
             }
             MenuSlot::Choice { enabled: false, .. } | MenuSlot::Item(_) | MenuSlot::Separator => None,
@@ -714,7 +714,7 @@ impl MenuSurface {
                 MenuSlot::Item(item) if item.parameters.enabled => {
                     // Emission only queues a typed value. Application code cannot run until the
                     // manager has consumed `SubmitAndClose` and released every surface borrow.
-                    let posted = MenuItemSubmitted { label: item.parameters.label.clone() }.post_to(&mut item.submitted_event);
+                    let posted = item.submitted_event.post(&MenuItemSubmitted { label: item.parameters.label.clone() });
                     Some(MenuAction::SubmitAndClose(posted))
                 }
                 MenuSlot::Choice { enabled: false, .. } | MenuSlot::Item(_) | MenuSlot::Separator => None,
@@ -728,7 +728,14 @@ impl MenuSurface {
     }
 
     /// Paints the complete bar or popup from the geometry shared with measurement and hit testing.
-    pub(crate) fn paint(&mut self, display_list: &mut crate::render::DisplayList, style: &Skin, atlas: &AtlasHandle, window_active: bool, enabled: bool) -> Result<(), neocogi_com::NcStatus> {
+    pub(crate) fn paint(
+        &mut self,
+        display_list: &mut crate::render::DisplayList,
+        style: &Skin,
+        atlas: &AtlasHandle,
+        window_active: bool,
+        enabled: bool,
+    ) -> Result<(), neocogi_com::NcStatus> {
         // Reuse the concrete built-in paint services without retaining a `Widget`, node identity, or
         // runtime. This keeps control text and atlas clipping exactly aligned with other controls.
         let mut ctx = WidgetPaintCtx::new_with_content_geometry(
@@ -807,7 +814,7 @@ impl MenuSurface {
                 }
             }
         }
-            ctx.finish()
+        ctx.finish()
     }
 
     /// Resolves one local slot into screen coordinates for popup anchoring and diagnostics.

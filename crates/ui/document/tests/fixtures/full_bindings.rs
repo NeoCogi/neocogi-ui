@@ -2,19 +2,19 @@
 /// Complete captured widget events, one variant per event-producing widget.
 pub enum Event {
     /// Complete event stream from authored widget "button".
-    Widget1(neocogi_ui::events::Activation),
+    Widget1(neocogi_ui::button::Event),
     /// Complete event stream from authored widget "check".
-    Widget2(neocogi_ui::events::CheckboxChanged),
+    Widget2(neocogi_ui::checkbox::Event),
     /// Complete event stream from authored widget "text".
     Widget3(neocogi_ui::textbox::Event),
     /// Complete event stream from authored widget "slider".
-    Widget4(neocogi_ui::events::NumericChanged),
+    Widget4(neocogi_ui::slider::Event),
     /// Complete event stream from authored widget "scroll".
-    Widget5(neocogi_ui::events::ScrollbarChanged),
+    Widget5(neocogi_ui::scrollbar::Event),
     /// Complete event stream from authored widget "split".
-    Widget6(neocogi_ui::events::SplitChanged),
+    Widget6(neocogi_ui::split_view::Event),
     /// Complete event stream from authored widget "combo".
-    Widget7(neocogi_ui::events::ChoiceSelection),
+    Widget7(neocogi_ui::combo::Event),
 }
 /// A captured event belongs to exactly one component reload attempt.
 pub struct Message {
@@ -26,19 +26,19 @@ pub struct Message {
 /// Application-owned behavior; every emitting widget requires an implementation.
 pub trait Handlers {
     /// Handles the event from widget "button" after traversal releases widget borrows.
-    fn on_button_1(&mut self, event: neocogi_ui::events::Activation) -> Result<(), neocogi_com::NcStatus>;
+    fn on_button_1(&mut self, event: neocogi_ui::button::Event) -> Result<(), neocogi_com::NcStatus>;
     /// Handles the event from widget "check" after traversal releases widget borrows.
-    fn on_check_2(&mut self, event: neocogi_ui::events::CheckboxChanged) -> Result<(), neocogi_com::NcStatus>;
+    fn on_check_2(&mut self, event: neocogi_ui::checkbox::Event) -> Result<(), neocogi_com::NcStatus>;
     /// Handles the event from widget "text" after traversal releases widget borrows.
     fn on_text_3(&mut self, event: neocogi_ui::textbox::Event) -> Result<(), neocogi_com::NcStatus>;
     /// Handles the event from widget "slider" after traversal releases widget borrows.
-    fn on_slider_4(&mut self, event: neocogi_ui::events::NumericChanged) -> Result<(), neocogi_com::NcStatus>;
+    fn on_slider_4(&mut self, event: neocogi_ui::slider::Event) -> Result<(), neocogi_com::NcStatus>;
     /// Handles the event from widget "scroll" after traversal releases widget borrows.
-    fn on_scroll_5(&mut self, event: neocogi_ui::events::ScrollbarChanged) -> Result<(), neocogi_com::NcStatus>;
+    fn on_scroll_5(&mut self, event: neocogi_ui::scrollbar::Event) -> Result<(), neocogi_com::NcStatus>;
     /// Handles the event from widget "split" after traversal releases widget borrows.
-    fn on_split_6(&mut self, event: neocogi_ui::events::SplitChanged) -> Result<(), neocogi_com::NcStatus>;
+    fn on_split_6(&mut self, event: neocogi_ui::split_view::Event) -> Result<(), neocogi_com::NcStatus>;
     /// Handles the event from widget "combo" after traversal releases widget borrows.
-    fn on_combo_7(&mut self, event: neocogi_ui::events::ChoiceSelection) -> Result<(), neocogi_com::NcStatus>;
+    fn on_combo_7(&mut self, event: neocogi_ui::combo::Event) -> Result<(), neocogi_com::NcStatus>;
 }
 impl Event {
     /// Dispatch only after checking the enclosing message generation.
@@ -128,13 +128,12 @@ pub fn bind(
         widget_combo_7: component.widget::<neocogi_ui::ComboAbi>("combo")?,
         widget_disclosure_8: component.widget::<neocogi_ui::DisclosureAbi>("disclosure")?,
     };
-    let outputs = component.outputs()?;
-    neocogi_com::events::bind_output(outputs.as_com_ref(), "save", send.clone(), move |event: neocogi_ui::events::Activation| Message { generation, event: Event::Widget1(event) })?;
-    neocogi_com::events::bind_output(outputs.as_com_ref(), "type", send.clone(), move |event: neocogi_ui::events::CheckboxChanged| Message { generation, event: Event::Widget2(event) })?;
-    neocogi_com::events::bind_output(outputs.as_com_ref(), "quote\"\n// x", send.clone(), move |event: neocogi_ui::textbox::Event| Message { generation, event: Event::Widget3(event) })?;
-    neocogi_com::events::bind_output(outputs.as_com_ref(), "value", send.clone(), move |event: neocogi_ui::events::NumericChanged| Message { generation, event: Event::Widget4(event) })?;
-    neocogi_com::events::bind_output(outputs.as_com_ref(), "pixel-offset", send.clone(), move |event: neocogi_ui::events::ScrollbarChanged| Message { generation, event: Event::Widget5(event) })?;
-    neocogi_com::events::bind_output(outputs.as_com_ref(), "pixel_offset", send.clone(), move |event: neocogi_ui::events::SplitChanged| Message { generation, event: Event::Widget6(event) })?;
-    neocogi_com::events::bind_output(outputs.as_com_ref(), "selection", send.clone(), move |event: neocogi_ui::events::ChoiceSelection| Message { generation, event: Event::Widget7(event) })?;
+    neocogi_com::events::bind_source(form.widget_button_1.as_interface(), send.clone(), move |event: neocogi_ui::button::Event| Message { generation, event: Event::Widget1(event) })?;
+    neocogi_com::events::bind_source(form.widget_check_2.as_interface(), send.clone(), move |event: neocogi_ui::checkbox::Event| Message { generation, event: Event::Widget2(event) })?;
+    neocogi_com::events::bind_source(form.widget_text_3.as_interface(), send.clone(), move |event: neocogi_ui::textbox::Event| Message { generation, event: Event::Widget3(event) })?;
+    neocogi_com::events::bind_source(form.widget_slider_4.as_interface(), send.clone(), move |event: neocogi_ui::slider::Event| Message { generation, event: Event::Widget4(event) })?;
+    neocogi_com::events::bind_source(form.widget_scroll_5.as_interface(), send.clone(), move |event: neocogi_ui::scrollbar::Event| Message { generation, event: Event::Widget5(event) })?;
+    neocogi_com::events::bind_source(form.widget_split_6.as_interface(), send.clone(), move |event: neocogi_ui::split_view::Event| Message { generation, event: Event::Widget6(event) })?;
+    neocogi_com::events::bind_source(form.widget_combo_7.as_interface(), send.clone(), move |event: neocogi_ui::combo::Event| Message { generation, event: Event::Widget7(event) })?;
     Ok(form)
 }

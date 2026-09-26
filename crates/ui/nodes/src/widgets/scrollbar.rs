@@ -54,7 +54,6 @@
 //!
 //! The widget owns range state, input, events, and paint while its parent remains responsible for
 //! allocating the track. Shared geometry keeps paint, dragging, and track clicks consistent.
-use neocogi_ui_nodes_contracts::ScrollbarObserverAbi;
 use crate::{ControlRole};
 
 use crate::math::{clamp_i64_to_i32, RectExt};
@@ -259,7 +258,7 @@ impl ScrollbarParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Scrollbar)]
+#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Scrollbar, event = events)]
 /// Standalone one-axis scrollbar and dynamically constructible COM object.
 pub struct Scrollbar {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -270,7 +269,7 @@ pub struct Scrollbar {
     pub(crate) axis_state: std::rc::Rc<ScrollAxisState>,
     /// Caller-authored options; dynamic range policy is resolved from the same shared state.
     /// Typed source for user-originated movement; programmatic requests remain silent.
-    observer: Option<neocogi_com::ComPtr<ScrollbarObserverAbi>>,
+    events: neocogi_ui_nodes_contracts::ScrollbarEventPort,
 }
 
 /// Coherent copied values shared by a real scrollbar and its co-packaged scroll layout.
@@ -344,7 +343,7 @@ impl Scrollbar {
             runtime,
             axis: parameters.axis,
             axis_state,
-            observer: None,
+            events: Default::default(),
         }
     }
 }
@@ -430,7 +429,9 @@ impl Widget for Scrollbar {
         if self.offset() != previous {
             // Publish only user-originated movement. Programmatic setters intentionally remain
             // silent so owners can synchronize range and offset without recursive notifications.
-            ctx.posted(neocogi_ui_nodes_contracts::ScrollbarEvent::Changed(crate::ScrollbarChanged { offset: self.offset() }).post_to(&mut self.observer));
+            ctx.posted(self.events.post(&neocogi_ui_nodes_contracts::ScrollbarEvent::Changed(crate::ScrollbarChanged {
+                offset: self.offset(),
+            })));
         }
 
         // A containing ScrollArea reads this offset when placing its content.
@@ -464,7 +465,7 @@ impl crate::LeafWidget for Scrollbar {
 impl crate::widget_object::WidgetAlgorithm for Scrollbar {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
-        self.observer = None;
+        self.events.close();
     }
 
     /// A zero range paints a full thumb but must not establish meaningless pointer capture.
@@ -568,11 +569,9 @@ impl Scrollbar {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         range: ScrollRange,
-        observer: Option<neocogi_com::ComRef<'_, ScrollbarObserverAbi>>,
     ) -> Result<ComPtr<ScrollbarAbi>, NcStatus> {
-        let mut value = Self::build(host, range, Some(&resources))?;
+        let value = Self::build(host, range, Some(&resources))?;
         // Retain the sole destination before publishing the completed widget.
-        value.observer = observer.map(|destination| destination.add_ref());
         Ok(Self::from_value(value).query().expect("Scrollbar declares its callable class contract"))
     }
 

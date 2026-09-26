@@ -5,11 +5,9 @@ use neocogi_com::{
     NC_E_OUT_OF_RANGE,
 };
 use neocogi_com::persistence::{FactoryRegistry, ObjectRecord, IPersistable, IPersistenceFactory, IObjectChildrenAbi};
-use neocogi_com::events::{NamedOutputs, INamedOutputsAbi};
-use neocogi_com::events::INamedOutputs;
 use neocogi_ui::{Ui, Widget, IWidgetAbi, IWindowAbi, ITextureAbi};
-use std::{collections::BTreeMap, sync::mpsc};
-use neocogi_ui::{IEventOwner, IEventOwnerAbi, IEventOwnerInterfacesFor, Mount, Mountable, events::Controller};
+use std::collections::BTreeMap;
+use neocogi_ui::{IEventOwner, IEventOwnerAbi, IEventOwnerInterfacesFor, Mount, Mountable};
 
 /// Recipe identity describes the authored component schema, never a runtime instance.
 pub const DOCUMENT_TYPE: NcGuid = neocogi_com::guid_from_qualified_name("neocogi.ui.authored-component");
@@ -84,16 +82,15 @@ pub struct Loader {
     services: std::rc::Rc<Services>,
 }
 impl Loader {
-    /// Binds construction services and an application-owned bounded diagnostic channel.
-    /// The parent is needed only for controls that own popups; the receiver should
-    /// be drained after updates so rejected independent effects remain visible.
-    pub fn new(ui: Ui, parent: Option<ComPtr<IWindowAbi>>, resources: Resources, diagnostics: crate::EventDeliverySender) -> Result<Self, NcStatus> {
-        Self::new_with_custom(ui, parent, resources, diagnostics, crate::CustomWidgetRegistry::new())
+    /// Binds construction services; application receivers attach directly to completed widgets.
+    /// The parent window is needed only for controls that own popups.
+    pub fn new(ui: Ui, parent: Option<ComPtr<IWindowAbi>>, resources: Resources) -> Result<Self, NcStatus> {
+        Self::new_with_custom(ui, parent, resources, crate::CustomWidgetRegistry::new())
     }
     /// Binds trusted custom COM factories alongside the ordinary built-in constructors.
-    pub fn new_with_custom(ui: Ui, parent: Option<ComPtr<IWindowAbi>>, resources: Resources, diagnostics: crate::EventDeliverySender, custom: crate::CustomWidgetRegistry) -> Result<Self, NcStatus> {
+    pub fn new_with_custom(ui: Ui, parent: Option<ComPtr<IWindowAbi>>, resources: Resources, custom: crate::CustomWidgetRegistry) -> Result<Self, NcStatus> {
         let mut registry = FactoryRegistry::new()?;
-        let services = std::rc::Rc::new(Services { ui, parent, resources, diagnostics, custom });
+        let services = std::rc::Rc::new(Services { ui, parent, resources, custom });
         registry.register(DOCUMENT_TYPE, Factory::from_value(Factory { services: services.clone() }).query()?)?;
         Ok(Self { registry, services })
     }
@@ -128,10 +125,6 @@ impl Component {
         let base = self.interface.widget(NcCopyFromBufferOffset::new(0, name.as_bytes()))?;
         Ok(Widget::from_interface(base.query()?))
     }
-    /// The existing typed named-output binding API accepts this capability.
-    pub fn outputs(&self) -> Result<ComPtr<INamedOutputsAbi>, NcStatus> {
-        self.object.query()
-    }
     /// Resolves a concrete input once and rejects an incompatible message contract immediately.
     pub fn input<C: Command>(&self, name: &str) -> Result<InputHandle<C>, NcStatus> {
         let receiver = self.interface.input(NcCopyFromBufferOffset::new(0, name.as_bytes()))?.query()?;
@@ -144,7 +137,7 @@ impl Component {
 }
 
 impl Mountable for Component {
-    /// Attaches view and its one event-capture owner for the subtree lifetime.
+    /// Attaches the view and retains its publication/retirement guard for the subtree lifetime.
     fn mount_description(&self) -> Result<Mount, NcStatus> {
         Ok(Mount::Component {
             view: self.interface.root()?,
@@ -154,33 +147,57 @@ impl Mountable for Component {
 }
 
 /// One persistent composition owns its initialization and the concrete binding capabilities.
-#[neocogi_com::com_object(interfaces(contracts::IUiComponent, neocogi_com::events::INamedOutputs, neocogi_com::persistence::IPersistable, IEventOwner))]
+#[neocogi_com::com_object(interfaces(contracts::IUiComponent, neocogi_com::persistence::IPersistable, IEventOwner))]
 struct Loaded {
     /// Exact authored values; intentionally independent of live interactive state.
     document: Document,
-    /// Private command queue uses the same owned-controller lifecycle as application composites.
-    wiring: Controller<crate::wiring::Wiring>,
+    /// Retains construction cleanup authority until the runtime claims the subtree.
+    phase: LoadedPhase,
     /// Real tree root, attached only when the host commits the candidate.
     root: Widget<IWidgetAbi>,
-    /// Public output names resolve only during connection.
-    outputs: NamedOutputs,
     /// Authored widget keys retain each concrete object for checked application queries.
     nodes: BTreeMap<String, Widget<IWidgetAbi>>,
     /// Typed receivers retain only the nodes needed by public commands.
     inputs: BTreeMap<String, ComPtr<IUnknown>>,
 }
+/// Publication lifecycle only; the application owns all event queues and handlers.
+enum LoadedPhase {
+    /// Failed candidates must close every resource they created.
+    Prepared,
+    /// The runtime owns subtree retirement and retains this metadata allocation.
+    Mounted,
+    /// Logical subtree removal is permanent even when clients retain handles.
+    Retired,
+}
 impl IEventOwner for Loaded {
-    /// Claims this controller and root exactly once through ordinary runtime mounting.
-    fn mount(&mut self, view: ComRef<'_, IWidgetAbi>) -> Result<(), NcStatus> {
-        self.wiring.mount(view)
+    /// Keeps the recipe and cleanup guard alive for the mounted subtree, without an event relay.
+    fn mount(&mut self, mut view: ComRef<'_, IWidgetAbi>) -> Result<(), NcStatus> {
+        match self.phase {
+            LoadedPhase::Prepared => {
+                // Reject a different view before transferring this candidate's lifetime.
+                if view.add_ref().query::<IUnknown>()?.as_ptr() != self.root.node_interface()?.query::<IUnknown>()?.as_ptr() {
+                    return Err(neocogi_ui::UI_E_OWNER);
+                }
+                view.mount()?;
+                self.phase = LoadedPhase::Mounted;
+                Ok(())
+            }
+            LoadedPhase::Mounted => Err(neocogi_ui::UI_E_OWNER),
+            LoadedPhase::Retired => Err(neocogi_ui::UI_E_CLOSED),
+        }
     }
-    /// Forwards one queued widget event after traversal releases widget borrows.
+    /// There is no intermediate inbox: widgets deliver directly into the application's queue.
     fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
-        self.wiring.dispatch_next()
+        match self.phase {
+            LoadedPhase::Mounted => Ok(false),
+            LoadedPhase::Prepared => Err(neocogi_ui::UI_E_OWNER),
+            LoadedPhase::Retired => Err(neocogi_ui::UI_E_CLOSED),
+        }
     }
-    /// Disconnects queued work permanently when the mounted subtree closes.
+    /// Records the runtime's irreversible retirement without consuming application messages.
     fn retire(&mut self) -> Result<(), NcStatus> {
-        self.wiring.retire()
+        self.phase = LoadedPhase::Retired;
+        Ok(())
     }
 }
 impl Drop for Loaded {
@@ -211,12 +228,6 @@ impl contracts::IUiComponent for Loaded {
         }
         let name = std::str::from_utf8(name.as_slice()).map_err(|_| NC_E_INVALID_ARG)?;
         self.inputs.get(name).cloned().ok_or(NC_E_NOT_FOUND)
-    }
-}
-impl INamedOutputs for Loaded {
-    /// Installs the exact typed destination selected by the public output declaration.
-    fn bind_output(&mut self, name: NcCopyFromBufferOffset<'_, u8>, receiver: ComRef<'_, IUnknown>) -> Result<(), NcStatus> {
-        self.outputs.bind_com(name, receiver)
     }
 }
 impl IPersistable for Loaded {
@@ -258,8 +269,6 @@ struct Services {
     parent: Option<ComPtr<IWindowAbi>>,
     /// Supplied logical image map.
     resources: Resources,
-    /// Nonblocking typed diagnostics owned and drained by the constructing application.
-    diagnostics: crate::EventDeliverySender,
     /// Trusted custom widget construction authority, separate from serialized document data.
     custom: crate::CustomWidgetRegistry,
 }
@@ -291,12 +300,7 @@ impl IPersistenceFactory for Factory {
 impl Services {
     /// Builds the checked tree and concrete endpoints with one cleanup guard until ownership transfers.
     fn construct(&self, document: Document) -> Result<ComPtr<IUnknown>, NcStatus> {
-        let (sender, messages) = mpsc::channel();
         let mut construction = Construction {
-            declarations: &document.outputs,
-            sender,
-            public: BTreeMap::new(),
-            outputs: NamedOutputs::new(),
             ui: &self.ui,
             custom: &self.custom,
             parent: self.parent.as_ref(),
@@ -304,13 +308,16 @@ impl Services {
             nodes: BTreeMap::new(),
         };
         let root = construction.build(&document.root)?;
-        let outputs = std::mem::take(&mut construction.outputs);
-        let public = std::mem::take(&mut construction.public);
         let inputs = crate::bindings::inputs(&document, &construction.nodes)?;
-        let wiring = crate::wiring::prepare(public, messages, self.diagnostics.clone());
         // Success transfers the complete typed tree to Loaded; the failed-build guard is disarmed.
         let nodes = std::mem::take(&mut construction.nodes);
         drop(construction);
-        Ok(Loaded::from_value(Loaded { document, root, outputs, inputs, nodes, wiring }))
+        Ok(Loaded::from_value(Loaded {
+            document,
+            root,
+            inputs,
+            nodes,
+            phase: LoadedPhase::Prepared,
+        }))
     }
 }

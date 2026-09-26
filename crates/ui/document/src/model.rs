@@ -23,7 +23,7 @@ pub struct Document {
     pub name: String,
     /// The single owned widget tree.
     pub root: Node,
-    /// Public events mapped to internal concrete ports.
+    /// Optional trace/display aliases for complete widget streams; not binding endpoints.
     pub outputs: Vec<Output>,
     /// Public commands mapped to typed internal setters.
     pub inputs: Vec<Input>,
@@ -314,11 +314,11 @@ pub enum WidgetSpec {
     },
 }
 
-/// One public name for a widget's sole typed event stream.
+/// Optional trace/display name for a widget's sole typed event stream.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ComSerialize, ComDeserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Output {
-    /// Public application-facing name.
+    /// Name shown by authoring tools; bindings still use the node key.
     pub name: String,
     /// Internal node key.
     pub node: String,
@@ -517,7 +517,7 @@ impl Document {
             if !exported_nodes.insert(&output.node) {
                 return Err(format!("Widget {} exports its event stream twice", output.node));
             }
-            if node.widget.outputs().len() != 1 {
+            if node.widget.event_stream().is_none() {
                 return Err(format!("{} has no event stream", output.node));
             }
             if nodes.contains_key(output.name.as_str()) && output.name != output.node {
@@ -525,7 +525,7 @@ impl Document {
             }
         }
         for node in nodes.values() {
-            if !node.widget.outputs().is_empty() && !exported_nodes.contains(&node.key) && names.contains(&node.key) {
+            if node.widget.event_stream().is_some() && !exported_nodes.contains(&node.key) && names.contains(&node.key) {
                 return Err(format!("Widget event name {} conflicts with an exported alias", node.key));
             }
         }
@@ -588,35 +588,22 @@ impl Track {
     }
 }
 impl WidgetSpec {
-    /// The widget's zero or one physical event stream and its complete payload type.
-    pub fn outputs(&self) -> &'static [OutputPort] {
+    /// The built-in class's complete resolved stream, taken from generated IDL metadata.
+    /// Custom kinds obtain the equivalent owned description through their COM catalog.
+    pub fn event_stream(&self) -> Option<neocogi_com::design::IdlEventStream> {
+        use neocogi_ui::*;
         match self {
-            Self::Button { .. } | Self::ListItem { .. } | Self::ListBox { .. } => &[OutputPort {
-                name: "activated",
-                payload: OutputType::Activation,
-            }],
-            Self::Checkbox { .. } => &[OutputPort {
-                name: "changed",
-                payload: OutputType::Checked,
-            }],
-            Self::Slider { .. } | Self::Number { .. } => &[OutputPort {
-                name: "changed",
-                payload: OutputType::Number,
-            }],
-            Self::Textbox { .. } => &[OutputPort { name: "event", payload: OutputType::TextboxEvent }],
-            Self::TextArea { .. } => &[OutputPort { name: "event", payload: OutputType::TextAreaEvent }],
-            Self::Scrollbar { .. } => &[OutputPort {
-                name: "changed",
-                payload: OutputType::Offset,
-            }],
-            Self::Split { .. } => &[OutputPort {
-                name: "changed",
-                payload: OutputType::Position,
-            }],
-            Self::Combo { .. } => &[OutputPort {
-                name: "changed",
-                payload: OutputType::Selection,
-            }],
+            Self::Button { .. } => ButtonAbi::IDL_INTERFACE.stream,
+            Self::Checkbox { .. } => CheckboxAbi::IDL_INTERFACE.stream,
+            Self::Slider { .. } => SliderAbi::IDL_INTERFACE.stream,
+            Self::Number { .. } => NumberAbi::IDL_INTERFACE.stream,
+            Self::ListItem { .. } => ListItemAbi::IDL_INTERFACE.stream,
+            Self::ListBox { .. } => ListBoxAbi::IDL_INTERFACE.stream,
+            Self::Textbox { .. } => TextboxAbi::IDL_INTERFACE.stream,
+            Self::TextArea { .. } => TextAreaAbi::IDL_INTERFACE.stream,
+            Self::Scrollbar { .. } => ScrollbarAbi::IDL_INTERFACE.stream,
+            Self::Split { .. } => SplitViewAbi::IDL_INTERFACE.stream,
+            Self::Combo { .. } => ComboAbi::IDL_INTERFACE.stream,
             Self::TextBlock { .. }
             | Self::ColorSwatch { .. }
             | Self::Linear { .. }
@@ -624,7 +611,7 @@ impl WidgetSpec {
             | Self::Scroll { .. }
             | Self::Form { .. }
             | Self::Disclosure { .. }
-            | Self::Custom { .. } => &[],
+            | Self::Custom { .. } => None,
         }
     }
     /// Whether authored font selection has a concrete setter, including a disclosure's header.
@@ -642,7 +629,13 @@ impl WidgetSpec {
             | Self::ListBox { .. }
             | Self::Combo { .. }
             | Self::Disclosure { .. } => true,
-            Self::Scrollbar { .. } | Self::Linear { .. } | Self::Grid { .. } | Self::Split { .. } | Self::Scroll { .. } | Self::Form { .. } | Self::Custom { .. } => false,
+            Self::Scrollbar { .. }
+            | Self::Linear { .. }
+            | Self::Grid { .. }
+            | Self::Split { .. }
+            | Self::Scroll { .. }
+            | Self::Form { .. }
+            | Self::Custom { .. } => false,
         }
     }
     /// Whether a named icon can be applied through the class's concrete visual API.
@@ -713,10 +706,11 @@ fn validate_node<'a>(node: &'a Node, depth: usize, nodes: &mut BTreeMap<&'a str,
         Form { width, height } => *width > 0 && *height > 0,
         Custom { kind, properties } => {
             let mut names = std::collections::BTreeSet::new();
-            !kind.is_empty() && properties.iter().all(|property| {
-                !property.name.is_empty() && names.insert(&property.name) && property.value.valid()
-            })
-        },
+            !kind.is_empty()
+                && properties
+                    .iter()
+                    .all(|property| !property.name.is_empty() && names.insert(&property.name) && property.value.valid())
+        }
         Scroll { .. } => node.children.len() == 1,
         Linear { cross: Cross::Fixed { pixels }, .. } => *pixels >= 0,
         _ => true,
@@ -774,7 +768,9 @@ impl WidgetSpec {
             | Self::Scroll { .. } => Options::FRAME,
             Self::ColorSwatch { .. } => Options::FRAME | Options::ALIGN_CENTER | Options::NO_INTERACT,
             Self::Form { .. } | Self::TextBlock { .. } | Self::Linear { .. } | Self::Grid { .. } | Self::Disclosure { .. } => Options::NO_INTERACT,
-            Self::Checkbox { .. } | Self::ListItem { .. } | Self::ListBox { .. } | Self::Scrollbar { .. } | Self::Split { .. } | Self::Custom { .. } => Options::NONE,
+            Self::Checkbox { .. } | Self::ListItem { .. } | Self::ListBox { .. } | Self::Scrollbar { .. } | Self::Split { .. } | Self::Custom { .. } => {
+                Options::NONE
+            }
         }
     }
 }
@@ -798,34 +794,4 @@ mod binding_tests {
         document.inputs[1].node = "save".into();
         document.validate().unwrap();
     }
-}
-
-/// One statically declared output endpoint; this record contains no runtime receiver.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct OutputPort {
-    /// Physical stream name declared by the concrete widget contract.
-    pub name: &'static str,
-    /// Complete captured message contract for this stream or logical variant.
-    pub payload: OutputType,
-}
-
-/// Concrete output contracts shared by validation, runtime binding, and authoring.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum OutputType {
-    /// Activation with its captured label, available to text commands.
-    Activation,
-    /// Checkbox boolean snapshot.
-    Checked,
-    /// Finite numeric snapshot.
-    Number,
-    /// Pixel scroll offset.
-    Offset,
-    /// Pixel divider position.
-    Position,
-    /// Optional combo selection identity.
-    Selection,
-    /// Complete single-line editor event sum, exported as one typed stream.
-    TextboxEvent,
-    /// Complete multiline editor event sum, exported as one typed stream.
-    TextAreaEvent,
 }

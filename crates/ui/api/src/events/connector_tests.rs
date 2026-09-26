@@ -1,47 +1,50 @@
 //! Concrete foreign producers exercise direct replacement, ownership and deferred behavior.
 use super::*;
-use neocogi_com::{com_object, ComPtr, NcMessage};
+use neocogi_com::{com_object, NcMessage};
 use std::{cell::Cell, rc::Rc};
 
 #[com_object(interfaces(IActivationEvents, __ActivationReceiver))]
 /// Foreign producer uses only ordinary fields and mutable COM methods.
 struct ForeignActivation {
     /// The complete delivery storage: one optional typed destination.
-    destination: Option<ComPtr<__ActivationReceiverAbi>>,
+    destination: IActivationEventsEventPort,
     /// One failed setup proves mapper captures are released on installation errors.
     fail_once: bool,
 }
-impl IActivationEvents for ForeignActivation {
+impl IActivationEvents for ForeignActivation {}
+impl IActivationEventsStream for ForeignActivation {
     /// Failed setup leaves the old destination intact; successful setup replaces it.
-    fn __map_activated(&mut self, destination: ComRef<'_, __ActivationReceiverAbi>) -> Result<(), NcStatus> {
+    fn attach(&mut self, destination: ComRef<'_, IActivationEventsSinkAbi>) -> Result<(), NcStatus> {
         match std::mem::replace(&mut self.fail_once, false) {
             true => Err(NC_E_INVALID_ARG),
-            false => {
-                self.destination = Some(destination.add_ref());
-                Ok(())
-            }
+            false => self.destination.attach(destination),
         }
     }
 }
 impl __ActivationReceiver for ForeignActivation {
     /// Acquires the input before publishing through the installed receiver.
     fn post(&mut self, message: NcMessage<'_, Activation>) -> Result<(), NcStatus> {
-        message.to_owned()?.post_to(&mut self.destination)
+        self.destination.post(&message.to_owned()?)
     }
 }
 /// Creates one independently owned foreign producer, initially without a destination.
-fn source(fail_once: bool) -> ComPtr<__ActivationReceiverAbi> {
-    ForeignActivation::from_value(ForeignActivation { destination: None, fail_once })
-        .query()
-        .unwrap()
+fn source(fail_once: bool) -> neocogi_com::LocalCom<ForeignActivation> {
+    ForeignActivation::into_local(ForeignActivation {
+        destination: Default::default(),
+        fail_once,
+    })
 }
 /// Uses the producer's generated output accessor, including its checked COM installation call.
-fn output(source: &ComPtr<__ActivationReceiverAbi>) -> impl FnOnce(Box<dyn FnMut(Activation) -> Result<(), NcStatus>>) -> Result<(), NcStatus> + use<> {
-    source.query::<IActivationEventsAbi>().unwrap().activated()
+fn output(
+    source: &neocogi_com::LocalCom<ForeignActivation>,
+) -> impl FnOnce(Box<dyn FnMut(Activation) -> Result<(), NcStatus>>) -> Result<(), NcStatus> + use<> {
+    install_stream(source.query::<IActivationEventsAbi>().unwrap())
 }
 /// Lends an input string only for one fixture producer call.
-fn emit(source: &ComPtr<__ActivationReceiverAbi>, label: &str) -> Result<(), NcStatus> {
-    source.clone().post(NcMessage::new(&Activation { label: label.into() }))
+fn emit(source: &neocogi_com::LocalCom<ForeignActivation>, label: &str) -> Result<(), NcStatus> {
+    source
+        .query::<__ActivationReceiverAbi>()?
+        .post(NcMessage::new(&Activation { label: label.into() }))
 }
 /// Makes capture destruction observable independently of both producer and consumer ownership.
 struct Lifetime(Rc<Cell<u32>>);
@@ -94,17 +97,21 @@ fn failure_validation_fifo_and_producer_lifetime() {
 
 /// Remapping changes only future delivery, even between different consumer message types.
 #[test]
-fn replacement_preserves_queued_values_and_routing_ids() {
+fn rejected_replacement_preserves_queued_values_and_original_consumer() {
     let producer = source(false);
     let (first_tx, first) = std::sync::mpsc::channel();
     let (second_tx, second) = std::sync::mpsc::channel();
     neocogi_com::events::bind(output(&producer), first_tx.clone(), |event| (10, event.label)).unwrap();
     emit(&producer, "old").unwrap();
-    neocogi_com::events::bind(output(&producer), second_tx.clone(), |event| event.label.len()).unwrap();
+    assert_eq!(
+        neocogi_com::events::bind(output(&producer), second_tx.clone(), |event| event.label.len()),
+        Err(neocogi_com::NC_E_ALREADY_BOUND)
+    );
     emit(&producer, "replacement").unwrap();
     drop(producer);
     assert_eq!(first.try_recv().ok(), Some((10, "old".into())));
-    assert_eq!(second.try_recv().ok(), Some(11));
+    assert!(second.try_recv().is_err());
+    assert_eq!(first.try_recv().ok(), Some((10, "replacement".into())));
     assert!(first.try_recv().is_err());
 }
 
@@ -129,7 +136,12 @@ fn abandoned_consumer_discards_delivery_and_mapper_lives_until_replacement() {
     assert_eq!(calls.get(), 2, "standard send discovers disconnection after translation");
     assert_eq!(drops.get(), 0, "producer owns the adapter until replacement or destruction");
     let (replacement_tx, _replacement) = std::sync::mpsc::channel();
-    neocogi_com::events::bind(output(&producer), replacement_tx.clone(), |_| ()).unwrap();
+    assert_eq!(
+        neocogi_com::events::bind(output(&producer), replacement_tx.clone(), |_| ()),
+        Err(neocogi_com::NC_E_ALREADY_BOUND)
+    );
+    assert_eq!(drops.get(), 0);
+    producer.try_borrow_mut().unwrap().destination.close();
     assert_eq!(drops.get(), 1);
 }
 
@@ -210,27 +222,35 @@ fn ordinary_com_gate_rejects_recursive_emission() {
     .unwrap();
     emit(&producer, "outer").unwrap();
     assert_eq!(events.try_recv().ok().as_deref(), Some("outer"));
-    // Release the deliberately self-capturing test mapper by replacing it.
-    neocogi_com::events::bind(output(&producer), events_tx.clone(), |event| event.label).unwrap();
+    // Close the fixture producer to release its deliberately self-capturing mapper.
+    producer.try_borrow_mut().unwrap().destination.close();
 }
-/// The generated aggregate observer preserves facade domain checks before mapping.
+/// The generated aggregate sink preserves facade domain checks before mapping.
 #[test]
-fn constructor_observers_reject_invalid_payloads_before_the_mapper_runs() {
+fn constructor_sinks_reject_invalid_payloads_before_the_mapper_runs() {
     let (sender, receiver) = std::sync::mpsc::channel();
-    let mut observer = super::textbox::observer(sender, |event| event).unwrap();
+    let mut sink = super::textbox::sink(sender, |event| event).unwrap();
     let invalid = super::textbox::Event::Changed(super::TextChanged { text: "é".into(), cursor: 1 });
-    assert_eq!(observer.event(neocogi_com::NcMessage::new(&invalid)), Err(NC_E_INVALID_ARG));
+    assert_eq!(sink.post(neocogi_com::NcMessage::new(&invalid)), Err(NC_E_INVALID_ARG));
     assert!(receiver.try_recv().is_err());
     let valid = super::textbox::Event::Changed(super::TextChanged { text: "é".into(), cursor: 2 });
-    observer.event(neocogi_com::NcMessage::new(&valid)).unwrap();
-    observer.event(neocogi_com::NcMessage::new(&super::textbox::Event::Submitted(super::TextSubmitted { text: "é".into() }))).unwrap();
-    assert!(matches!(receiver.try_recv().unwrap(), super::textbox::Event::Changed(super::TextChanged { cursor: 2, .. })));
+    sink.post(neocogi_com::NcMessage::new(&valid)).unwrap();
+    sink.post(neocogi_com::NcMessage::new(&super::textbox::Event::Submitted(super::TextSubmitted {
+        text: "é".into(),
+    })))
+    .unwrap();
+    assert!(matches!(
+        receiver.try_recv().unwrap(),
+        super::textbox::Event::Changed(super::TextChanged { cursor: 2, .. })
+    ));
     assert!(matches!(receiver.try_recv().unwrap(), super::textbox::Event::Submitted(super::TextSubmitted { text }) if text == "é"));
 
     let (sender, receiver) = std::sync::mpsc::channel();
-    let mut observer = super::number::observer(sender, |_| ()).unwrap();
+    let mut sink = super::number::sink(sender, |_| ()).unwrap();
     assert_eq!(
-        observer.changed(neocogi_com::NcMessage::new(&NumericChanged { value: f32::INFINITY })),
+        sink.post(neocogi_com::NcMessage::new(&super::number::Event::Changed(NumericChanged {
+            value: f32::INFINITY
+        }))),
         Err(NC_E_INVALID_ARG)
     );
     assert!(receiver.try_recv().is_err());

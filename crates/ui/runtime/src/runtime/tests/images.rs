@@ -129,7 +129,7 @@ struct ImageFrameRenderer {
     quads: Rc<RefCell<Vec<[RenderVertex; 4]>>>,
 }
 impl IRenderer for ImageFrameRenderer {
-    /// The CPU observer has no upload phase; the runtime already validated the immutable image.
+    /// The CPU sink has no upload phase; the runtime already validated the immutable image.
     fn prepare_atlas(&self, _: ComRef<'_, IRgbaImageAbi>) -> Result<(), NcStatus> {
         Ok(())
     }

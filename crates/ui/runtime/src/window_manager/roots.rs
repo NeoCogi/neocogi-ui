@@ -542,7 +542,7 @@ struct RootState {
     /// Expanded outer height retained while the minimize button shows a compact window.
     unminimized_height: Option<i32>,
     /// Strong owner of the unified window geometry/lifecycle event stream.
-    events: Option<neocogi_com::ComPtr<neocogi_ui_core_contracts::__WindowEventReceiverAbi>>,
+    events: neocogi_ui_core_contracts::IWindowEventsEventPort,
     /// Optional concrete menu bar laid out above the application widget body.
     menu_bar: Option<MenuSurface>,
     /// Descendant viewport policy applied when layout enters direct structural child windows.
@@ -569,7 +569,7 @@ enum PopupState {
         /// Exact screen rectangle supplied by the public popup API.
         anchor: Recti,
         /// Strong owner of policy-driven popup lifecycle events.
-        events: Option<neocogi_com::ComPtr<neocogi_ui_core_contracts::__PopupDismissedReceiverAbi>>,
+        events: neocogi_ui_core_contracts::IPopupEventsEventPort,
         /// Whether the next committed layout must select this popup's first keyboard target.
         focus_on_layout: bool,
     },
@@ -770,7 +770,7 @@ impl SurfaceNode {
     /// Emits one concrete window event at the next safe application dispatch boundary.
     fn emit_window_event(&mut self, event: WindowEvent) -> Result<(), neocogi_com::NcStatus> {
         // The record owns its receiver; posting owns no queue and invokes no app behavior.
-        event.post_to(&mut self.root_mut().expect("window events are emitted only by roots").events)
+        self.root_mut().expect("window events are emitted only by roots").events.post(&event)
     }
 
     /// Dismisses an active popup and emits exactly one policy event.
@@ -779,7 +779,7 @@ impl SurfaceNode {
         self.surface.body.clear_transient_targets();
         if let Some(PopupState::Application { events, .. }) = self.popup_mut() {
             // Menu popups have no unobservable lifecycle port; their visibility is wholly internal.
-            PopupEvent::Dismissed.post_to(events)?;
+            events.post(&PopupEvent::Dismissed)?;
         }
         Ok(())
     }
@@ -1278,24 +1278,25 @@ impl WindowManager {
     pub(crate) fn map_window_events(
         &mut self,
         window: &WindowHandle,
-        destination: neocogi_com::ComPtr<neocogi_ui_core_contracts::__WindowEventReceiverAbi>,
-    ) -> Result<(), SurfaceMutationError> {
-        let id = self.window_id(window)?;
-        self.root_node_mut(id)?.root_mut().expect("window ID resolves a root").events = Some(destination);
-        Ok(())
+        destination: neocogi_com::ComPtr<neocogi_ui_core_contracts::IWindowEventsSinkAbi>,
+    ) -> Result<(), neocogi_com::NcStatus> {
+        let id = self.window_id(window).map_err(|_| neocogi_ui_core_contracts::UI_E_CLOSED)?;
+        self.root_node_mut(id)
+            .map_err(|_| neocogi_ui_core_contracts::UI_E_CLOSED)?
+            .root_mut()
+            .expect("window ID resolves a root")
+            .events
+            .attach(destination.as_com_ref())
     }
     /// Installs dismissal delivery without allocating a popup projection or queue.
     pub(crate) fn map_popup_events(
         &mut self,
         popup: &PopupHandle,
-        destination: neocogi_com::ComPtr<neocogi_ui_core_contracts::__PopupDismissedReceiverAbi>,
-    ) -> Result<(), SurfaceMutationError> {
-        let id = self.popup_id(popup)?;
+        destination: neocogi_com::ComPtr<neocogi_ui_core_contracts::IPopupEventsSinkAbi>,
+    ) -> Result<(), neocogi_com::NcStatus> {
+        let id = self.popup_id(popup).map_err(|_| neocogi_ui_core_contracts::UI_E_CLOSED)?;
         match self.surfaces.popup_node_mut(id).and_then(SurfaceNode::popup_mut) {
-            Some(PopupState::Application { events, .. }) => {
-                *events = Some(destination);
-                Ok(())
-            }
+            Some(PopupState::Application { events, .. }) => events.attach(destination.as_com_ref()),
             _ => unreachable!("validated application popup has application policy"),
         }
     }
@@ -1303,16 +1304,14 @@ impl WindowManager {
     pub(crate) fn map_menu_item(
         &mut self,
         handle: &crate::MenuItemHandle,
-        destination: neocogi_com::ComPtr<neocogi_ui_core_contracts::__ActivationReceiverAbi>,
+        destination: neocogi_com::ComPtr<neocogi_ui_core_contracts::IActivationEventsSinkAbi>,
     ) -> Result<(), neocogi_com::NcStatus> {
         for node in &mut self.surfaces.nodes {
             if let Some(item) = node.root_mut().and_then(|root| root.menu_bar.as_mut()).and_then(|menu| menu.item_mut(handle)) {
-                item.submitted_event = Some(destination);
-                return Ok(());
+                return item.submitted_event.attach(destination.as_com_ref());
             }
             if let Some(item) = node.surface.body.menu_mut().and_then(|menu| menu.item_mut(handle)) {
-                item.submitted_event = Some(destination);
-                return Ok(());
+                return item.submitted_event.attach(destination.as_com_ref());
             }
         }
         Err(neocogi_ui_core_contracts::UI_E_CLOSED)
@@ -1435,7 +1434,7 @@ impl WindowManager {
 
         // The handle copies only identity. The forest owns the optional destination directly.
         let id = RootId::allocate();
-        let events = None;
+        let events = Default::default();
         self.surfaces.insert_root(SurfaceNode {
             key: SurfaceKey::Root(id),
             parent: parent.map(SurfaceKey::Root),
@@ -1671,7 +1670,7 @@ impl WindowManager {
     fn register_application_popup(&mut self, parent: SurfaceKey, surface: Surface) -> PopupHandle {
         let id = PopupId::allocate();
         // The forest record owns delivery; the handle needs only its existing lookup identity.
-        let events = None;
+        let events = Default::default();
         self.surfaces.insert_popup(SurfaceNode {
             key: SurfaceKey::Popup(id),
             parent: Some(parent),
@@ -2077,7 +2076,12 @@ impl WindowManager {
         for &id in &removed {
             // Commit the final fact before removing the record. Consumer queues own it
             // independently, so components can settle requests after native teardown.
-            let result = WindowEvent::Destroyed.post_to(&mut self.root_node_mut(id)?.root_mut().expect("collected roots have root policy").events);
+            let result = self
+                .root_node_mut(id)?
+                .root_mut()
+                .expect("collected roots have root policy")
+                .events
+                .post(&WindowEvent::Destroyed);
             self.posted(result);
         }
         self.surfaces.remove_roots(&removed);
@@ -3337,7 +3341,14 @@ impl WindowManager {
     }
 
     /// Records one ordinary root family with each parent's application content below its children.
-    fn paint_root_tree(&mut self, root: RootId, style: &Skin, atlas: &crate::AtlasHandle, focus_surface: Option<SurfaceKey>, active_window: Option<RootId>) -> Result<(), neocogi_com::NcStatus> {
+    fn paint_root_tree(
+        &mut self,
+        root: RootId,
+        style: &Skin,
+        atlas: &crate::AtlasHandle,
+        focus_surface: Option<SurfaceKey>,
+        active_window: Option<RootId>,
+    ) -> Result<(), neocogi_com::NcStatus> {
         {
             // A short node borrow records the base before recursion. Releasing it here lets direct
             // child calls borrow arbitrary later forest entries without unsafe aliasing or mirrors.

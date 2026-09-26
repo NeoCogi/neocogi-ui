@@ -9,9 +9,8 @@ enum TextboxEvent: u8 {
 }
 
 #[version(4)]
-#[observer]
 /// Constructible single-line editor whose complete concrete API is the class contract.
-interface Textbox: IWidget + ILeafLayout {
+class Textbox: IWidget + ILeafLayout + IEventStream<TextboxEvent> {
     /// Returns an independently owned immutable UTF-8 snapshot.
     fn text(&self) -> Result<String>;
     /// Replaces complete UTF-8 text after applying the single-line normalization policy.
@@ -24,8 +23,7 @@ interface Textbox: IWidget + ILeafLayout {
     fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
-    /// The sole output port carries every typed textbox event to its owner.
-    event: TextboxEvent;
+
 }
 
 #[version(1)]
@@ -46,9 +44,8 @@ interface TextBlock: IWidget + ILeafLayout {
 }
 
 #[version(2)]
-#[observer]
 /// Constructible boolean control with no redundant Checkbox-only interface.
-interface Checkbox: IWidget + ILeafLayout {
+class Checkbox: IWidget + ILeafLayout + IEventStream<CheckboxEvent> {
 
     /// Returns the current boolean value.
     fn checked(&self) -> Result<bool>;
@@ -62,8 +59,7 @@ interface Checkbox: IWidget + ILeafLayout {
     fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
-    /// Connection access for captured CheckboxChanged values.
-    changed: CheckboxChanged;
+
 }
 
 #[version(1)]
@@ -93,9 +89,8 @@ struct NumberOptions {
 }
 
 #[version(2)]
-#[observer]
 /// Constructible bounded numeric control whose concrete API is one class contract.
-interface Slider: IWidget + ILeafLayout {
+class Slider: IWidget + ILeafLayout + IEventStream<SliderEvent> {
     /// Returns the current finite value after range clamping and step snapping.
     fn value(&self) -> Result<f32>;
     /// Replaces a finite value silently after applying the configured range and step.
@@ -106,14 +101,12 @@ interface Slider: IWidget + ILeafLayout {
     fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
-    /// Connection access for captured NumericChanged values.
-    changed: NumericChanged;
+
 }
 
 #[version(2)]
-#[observer]
 /// Constructible unbounded numeric editor whose concrete API is one class contract.
-interface Number: IWidget + ILeafLayout {
+class Number: IWidget + ILeafLayout + IEventStream<NumberEvent> {
     /// Returns the current finite value.
     fn value(&self) -> Result<f32>;
     /// Replaces a finite value silently using the configured precision.
@@ -124,8 +117,7 @@ interface Number: IWidget + ILeafLayout {
     fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
-    /// Connection access for captured NumericChanged values.
-    changed: NumericChanged;
+
 }
 
 #[version(1)]
@@ -146,9 +138,8 @@ interface ColorSwatch: IWidget + ILeafLayout {
 }
 
 #[version(2)]
-#[observer]
 /// Constructible labelled row; generic application data remains in the static event adapter.
-interface ListItem: IWidget + ILeafLayout {
+class ListItem: IWidget + ILeafLayout + IEventStream<ListItemEvent> {
     /// Returns an independently owned immutable UTF-8 label snapshot.
     fn text(&self) -> Result<String>;
     /// Replaces the complete UTF-8 label and invalidates preferred size when changed.
@@ -161,14 +152,12 @@ interface ListItem: IWidget + ILeafLayout {
     fn set_icon_role(&mut self, icon: ContentIcon) -> Result<()>;
     /// Resolves an exact named icon before replacing the existing selection.
     fn set_named_icon(&mut self, name: &[u8]) -> Result<()>;
-    /// Connection access for captured Activation values.
-    activated: Activation;
+
 }
 
 #[version(2)]
-#[observer]
 /// Constructible button-like list entry with direct label, image, and activation operations.
-interface ListBox: IWidget + ILeafLayout {
+class ListBox: IWidget + ILeafLayout + IEventStream<ListBoxEvent> {
     /// Returns an independently owned immutable UTF-8 label snapshot.
     fn text(&self) -> Result<String>;
     /// Replaces the complete UTF-8 label and invalidates preferred size when changed.
@@ -181,8 +170,7 @@ interface ListBox: IWidget + ILeafLayout {
     fn set_image(&mut self, image: &ITexture, fit_width: bool) -> Result<()>;
     /// Removes image content while retaining the current label and font.
     fn clear_image(&mut self) -> Result<()>;
-    /// Connection access for captured Activation values.
-    activated: Activation;
+
 }
 
 #[version(1)]
@@ -208,9 +196,8 @@ struct ScrollRange {
 }
 
 #[version(2)]
-#[observer]
 /// Constructible scrollbar with its concrete editing and event surface in one class contract.
-interface Scrollbar: IWidget + ILeafLayout {
+class Scrollbar: IWidget + ILeafLayout + IEventStream<ScrollbarEvent> {
 
     /// Returns a coherent copied range snapshot.
     fn range(&self) -> Result<ScrollRange>;
@@ -218,8 +205,7 @@ interface Scrollbar: IWidget + ILeafLayout {
     fn set_lengths(&mut self, viewport: i32, content: i32) -> Result<()>;
     /// Clamps a requested offset to the current range without publishing user input.
     fn set_offset(&mut self, offset: i32) -> Result<()>;
-    /// Connection access for captured ScrollbarChanged values.
-    changed: ScrollbarChanged;
+
 }
 
 #[version(1)]
@@ -271,9 +257,8 @@ enum TextAreaEvent: u8 {
 }
 
 #[version(4)]
-#[observer]
 /// Constructible fixed scrolling editor whose class forwards to one actual internal editor.
-interface TextArea: IWidget + IContainerLayout + IScrolling {
+class TextArea: IWidget + IContainerLayout + IScrolling + IEventStream<TextAreaEvent> {
     /// Returns an independently owned immutable UTF-8 snapshot from the actual editor.
     fn text(&self) -> Result<String>;
     /// Replaces normalized text on the actual editor and schedules caret reveal.
@@ -290,13 +275,12 @@ interface TextArea: IWidget + IContainerLayout + IScrolling {
     fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
-    /// The sole output port carries every typed text-area event to its owner.
-    event: TextAreaEvent;
+
 }
 
 #[version(3)]
 /// Runtime-owned combo box whose header, item model, popup, and interaction state form one control.
-interface Combo: IWidget + ILeafLayout {
+class Combo: IWidget + ILeafLayout + IEventStream<IChoiceMenuEvent> {
     /// Returns the committed stable leaf identity, preserving `None` independently of every ID.
     fn selection(&self) -> Result<ChoiceSelection>;
     /// Returns the exact rendered header text: the selected label or the configured placeholder.
@@ -317,4 +301,52 @@ interface Combo: IWidget + ILeafLayout {
     fn set_font_role(&mut self, role: FontRole) -> Result<()>;
     /// Resolves an exact named font in the current host bundle before committing.
     fn set_named_font(&mut self, name: &[u8]) -> Result<()>;
+}
+
+#[version(1)]
+#[message]
+/// Complete typed event stream of Checkbox; consumed by its behavioral parent.
+enum CheckboxEvent {
+    /// Captured changed fact, acquired before the producer call returns.
+    Changed(CheckboxChanged),
+}
+
+#[version(1)]
+#[message]
+/// Complete typed event stream of Slider; consumed by its behavioral parent.
+enum SliderEvent {
+    /// Captured changed fact, acquired before the producer call returns.
+    Changed(NumericChanged),
+}
+
+#[version(1)]
+#[message]
+/// Complete typed event stream of Number; consumed by its behavioral parent.
+enum NumberEvent {
+    /// Captured changed fact, acquired before the producer call returns.
+    Changed(NumericChanged),
+}
+
+#[version(1)]
+#[message]
+/// Complete typed event stream of ListItem; consumed by its behavioral parent.
+enum ListItemEvent {
+    /// Captured activated fact, acquired before the producer call returns.
+    Activated(Activation),
+}
+
+#[version(1)]
+#[message]
+/// Complete typed event stream of ListBox; consumed by its behavioral parent.
+enum ListBoxEvent {
+    /// Captured activated fact, acquired before the producer call returns.
+    Activated(Activation),
+}
+
+#[version(1)]
+#[message]
+/// Complete typed event stream of Scrollbar; consumed by its behavioral parent.
+enum ScrollbarEvent {
+    /// Captured changed fact, acquired before the producer call returns.
+    Changed(ScrollbarChanged),
 }

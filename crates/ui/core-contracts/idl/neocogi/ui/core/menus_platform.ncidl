@@ -56,13 +56,12 @@ enum ChoiceSelection: u8 {
 
 
 #[version(2)]
-#[observer]
 /// Live selection-oriented menu owned by the core popup manager.
 ///
 /// The menu owns hierarchy, navigation, placement and committed selection. A header control such
 /// as Combo owns only its presentation and delegates these menu responsibilities through this
 /// interface. Mutations are silent; only user submission publishes `ChoiceSelection`.
-interface IChoiceMenu {
+class IChoiceMenu: IEventStream<IChoiceMenuEvent> {
     /// Returns the exact committed stable identity, including explicit absence.
     fn selection(&self) -> Result<ChoiceSelection>;
     /// Copies the selected leaf label, or an empty string when no leaf is committed.
@@ -81,8 +80,7 @@ interface IChoiceMenu {
     fn hide(&mut self) -> Result<()>;
     /// Requests activation or dismissal according to the menu's current reconciled intent.
     fn toggle_at(&mut self, anchor: Rect) -> Result<()>;
-    /// Connection access for captured ChoiceSelection values.
-    changed: ChoiceSelection;
+
     /// Permanently retires the private popup and ends event delivery.
     fn close(&mut self) -> Result<()>;
 }
@@ -96,7 +94,7 @@ interface IChoiceMenus {
         parent: &IWindow,
         menu_text: &[u8],
         entries: &[ChoiceMenuEntry],
-        selection: ChoiceSelection, observer: Option<&IChoiceMenuObserver>) -> Result<IChoiceMenu>;
+        selection: ChoiceSelection) -> Result<IChoiceMenu>;
 }
 
 #[version(1)]
@@ -140,4 +138,12 @@ interface IMenus {
     fn attach_bar(&self, window: &IWindow, menu: &IMenuBuilder) -> Result<()>;
     /// Creates an ordinary hidden popup from one root declaration, including all its nested menus.
     fn create_popup(&self, window: &IWindow, menu: &IMenuBuilder) -> Result<IPopup>;
+}
+
+#[version(1)]
+#[message]
+/// Complete typed event stream of IChoiceMenu; consumed by its behavioral parent.
+enum IChoiceMenuEvent {
+    /// Captured changed fact, acquired before the producer call returns.
+    Changed(ChoiceSelection),
 }

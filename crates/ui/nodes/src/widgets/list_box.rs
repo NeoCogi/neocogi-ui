@@ -30,7 +30,6 @@
 
 //! Retained list-box widget.
 
-use neocogi_ui_nodes_contracts::ListBoxObserverAbi;
 use crate::{ControlRole};
 
 use super::*;
@@ -65,7 +64,7 @@ impl ListBoxParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::ListBox)]
+#[neocogi_com::com_class(neocogi_ui_nodes_contracts::ListBox, event = events)]
 /// Concrete retained list box and dynamically constructible COM object.
 pub struct ListBox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -78,8 +77,8 @@ pub struct ListBox {
     fit_width: bool,
     /// Initialization-only font.
     font: FontRef,
-    /// Sole observer retained at construction; released on logical closure.
-    observer: Option<neocogi_com::ComPtr<ListBoxObserverAbi>>,
+    /// Single event slot; attaches once after creation and closes with the widget.
+    events: neocogi_ui_nodes_contracts::ListBoxEventPort,
 }
 
 impl ListBox {
@@ -91,7 +90,7 @@ impl ListBox {
             image: parameters.image,
             fit_width: false,
             font: parameters.font,
-            observer: None,
+            events: Default::default(),
         }
     }
 
@@ -135,10 +134,10 @@ impl Widget for ListBox {
             return crate::Change::NoChange;
         }
         // Pointer and keyboard activation publish the same application-facing submission.
-        if self.observer.is_some() {
-            ctx.posted(
-                neocogi_ui_nodes_contracts::ListBoxEvent::Activated(crate::Activation { label: self.com_label().to_owned() }).post_to(&mut self.observer),
-            );
+        if self.events.is_bound() {
+            ctx.posted(self.events.post(&neocogi_ui_nodes_contracts::ListBoxEvent::Activated(crate::Activation {
+                label: self.com_label().to_owned(),
+            })));
         }
 
         // The submitted event does not change this header's intrinsic inputs.
@@ -157,7 +156,7 @@ impl Widget for ListBox {
 impl crate::widget_object::WidgetAlgorithm for ListBox {
     /// Logical COM closure cancels ordinary submissions while retained widget references remain safe.
     fn close_events(&mut self) {
-        self.observer = None;
+        self.events.close();
     }
 }
 
@@ -222,11 +221,9 @@ impl ListBox {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         label: NcCopyFromBufferOffset<'_, u8>,
-        observer: Option<neocogi_com::ComRef<'_, ListBoxObserverAbi>>,
     ) -> Result<ComPtr<ListBoxAbi>, NcStatus> {
-        let mut value = Self::build(host, label, Some(&resources))?;
+        let value = Self::build(host, label, Some(&resources))?;
         // Retain the sole destination before publishing the completed widget.
-        value.observer = observer.map(|destination| destination.add_ref());
         Ok(Self::from_value(value).query().expect("ListBox declares its callable class contract"))
     }
 

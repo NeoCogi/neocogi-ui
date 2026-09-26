@@ -242,9 +242,9 @@ impl IFontStyle for Item {
         self.edit(Edit::Font(crate::FontRef::Named(font)))
     }
 }
-impl IActivationEvents for Item {
+impl IActivationEventsStream for Item {
     /// Installs into the declaration before mounting, or the same moved record afterward.
-    fn __map_activated(&mut self, destination: ComRef<'_, __ActivationReceiverAbi>) -> Result<(), NcStatus> {
+    fn attach(&mut self, destination: ComRef<'_, IActivationEventsSinkAbi>) -> Result<(), NcStatus> {
         let runtime = self.owner()?;
         runtime.factory.host.check_mutation()?;
         if let Some(declaration) = self.declaration.upgrade() {
@@ -252,8 +252,7 @@ impl IActivationEvents for Item {
             if let Some(menu) = data.as_mut() {
                 match menu_at(menu, &self.path)?.entries.get_mut(self.slot) {
                     Some(MenuEntry::Item(item)) => {
-                        item.record.submitted_event = Some(destination.add_ref());
-                        return Ok(());
+                        return item.record.submitted_event.attach(destination);
                     }
                     _ => return Err(UI_E_CLOSED),
                 }
@@ -351,3 +350,6 @@ impl IMenus for Runtime {
         identity.query()
     }
 }
+
+/// Marker projection shares the same generic stream and object identity.
+impl IActivationEvents for Item {}

@@ -3,32 +3,32 @@
 use super::*;
 use neocogi_ui_support::test_support::events::TestApp;
 use neocogi_ui_core_contracts::{
-    Activation, IActivationEvents, IActivationEventsAbi, IActivationEventsInterfacesFor, IActivationEventsOutputs, __ActivationReceiverAbi,
+    Activation, IActivationEvents, IActivationEventsAbi, IActivationEventsInterfacesFor, IActivationEventsStream, IActivationEventsEventPort,
+    IActivationEventsSinkAbi,
 };
 
-#[com_object(interfaces(neocogi_ui_core_contracts::__ActivationReceiver, IActivationEvents))]
+#[com_object(interfaces(neocogi_ui_core_contracts::IActivationEventsSink, IActivationEvents))]
 /// Minimal producer; there is no event-specific shared slot or lifetime state.
 struct Emitter {
     /// The installed COM receiver owns the mapping and a standard channel sender.
-    destination: Option<ComPtr<__ActivationReceiverAbi>>,
+    destination: IActivationEventsEventPort,
 }
 impl Emitter {
     /// Allocates a fixture producer with no receiver and no event queue.
-    fn create() -> ComPtr<__ActivationReceiverAbi> {
-        Self::from_value(Self { destination: None }).query().unwrap()
+    fn create() -> ComPtr<IActivationEventsSinkAbi> {
+        Self::from_value(Self { destination: Default::default() }).query().unwrap()
     }
 }
-impl neocogi_ui_core_contracts::__ActivationReceiver for Emitter {
+impl neocogi_ui_core_contracts::IActivationEventsSink for Emitter {
     /// The generated concrete receiver also supplies this fixture's posting entry point.
     fn post(&mut self, message: neocogi_com::NcMessage<'_, Activation>) -> Result<(), NcStatus> {
-        message.to_owned()?.post_to(&mut self.destination)
+        self.destination.post(&message.to_owned()?)
     }
 }
-impl IActivationEvents for Emitter {
+impl IActivationEventsStream for Emitter {
     /// Replaces future delivery without affecting values already in any queue.
-    fn __map_activated(&mut self, destination: ComRef<'_, __ActivationReceiverAbi>) -> Result<(), NcStatus> {
-        self.destination = Some(destination.add_ref());
-        Ok(())
+    fn attach(&mut self, destination: ComRef<'_, IActivationEventsSinkAbi>) -> Result<(), NcStatus> {
+        self.destination.attach(destination)
     }
 }
 
@@ -40,7 +40,7 @@ struct PrivateRecord {
     /// Component name used to prove child/surface ordering at the boundary.
     name: &'static str,
     /// Optional public output makes upward delivery explicit rather than exposing child events.
-    forward: Option<ComPtr<__ActivationReceiverAbi>>,
+    forward: Option<ComPtr<IActivationEventsSinkAbi>>,
     /// One ordinary tree edit, consumed before entering foreign topology code.
     edit: Edit,
 }
@@ -97,13 +97,13 @@ fn component(
     ui: &neocogi_ui::Ui,
     trace: &Trace,
     name: &'static str,
-    source: &ComPtr<__ActivationReceiverAbi>,
-    forward: Option<ComPtr<__ActivationReceiverAbi>>,
+    source: &ComPtr<IActivationEventsSinkAbi>,
+    forward: Option<ComPtr<IActivationEventsSinkAbi>>,
     edit: Edit,
 ) -> (neocogi_ui::Component<IWidgetAbi>, neocogi_ui::LinearWidget) {
     let shell = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let (send, messages) = std::sync::mpsc::channel();
-    neocogi_ui::events::bind(source.query::<IActivationEventsAbi>().unwrap().activated(), send, |event| event).unwrap();
+    neocogi_ui::events::bind_source(source.query::<IActivationEventsAbi>().unwrap().as_com_ref(), send, |event| event).unwrap();
     let controller = neocogi_ui::events::Controller::new(
         Consumer {
             trace: trace.clone(),
@@ -117,7 +117,7 @@ fn component(
 }
 
 /// Emits a captured fixture fact without entering any application callback.
-fn emit(source: &ComPtr<__ActivationReceiverAbi>) {
+fn emit(source: &ComPtr<IActivationEventsSinkAbi>) {
     source
         .clone()
         .post(neocogi_com::NcMessage::new(&Activation { label: "fixture".into() }))
@@ -137,7 +137,7 @@ fn nested_components_dispatch_child_first_and_promote_only_explicit_outputs() {
     root_shell.insert(0, &parent, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
     let window = ui.window("nested", RECT, &root).unwrap();
     let (app_tx, app) = std::sync::mpsc::channel();
-    neocogi_ui::events::bind(sources[3].query::<IActivationEventsAbi>().unwrap().activated(), app_tx.clone(), |_| ()).unwrap();
+    neocogi_ui::events::bind_source(sources[3].query::<IActivationEventsAbi>().unwrap().as_com_ref(), app_tx.clone(), |_| ()).unwrap();
 
     emit(&sources[0]);
     ui.update(SIZE).unwrap(); // No application dispatcher is needed to drive every private level.
@@ -171,7 +171,7 @@ fn callback_mounted_descendant_is_discovered_without_application_registration() 
     let window = ui.window("dynamic", RECT, &parent).unwrap();
     let trigger = Emitter::create();
     let (app_tx, app) = std::sync::mpsc::channel();
-    neocogi_ui::events::bind(trigger.query::<IActivationEventsAbi>().unwrap().activated(), app_tx.clone(), |_| ()).unwrap();
+    neocogi_ui::events::bind_source(trigger.query::<IActivationEventsAbi>().unwrap().as_com_ref(), app_tx.clone(), |_| ()).unwrap();
     let action = PrivateRecord {
         name: "application",
         forward: None,
@@ -219,7 +219,7 @@ fn mounted_component_events_dispatch_before_application_and_skip_removed_snapsho
     let newer_window = ui.window("newer", RECT, &newer).unwrap();
     let app_source = Emitter::create();
     let (app_tx, app) = std::sync::mpsc::channel();
-    neocogi_ui::events::bind(app_source.query::<IActivationEventsAbi>().unwrap().activated(), app_tx.clone(), |_| ()).unwrap();
+    neocogi_ui::events::bind_source(app_source.query::<IActivationEventsAbi>().unwrap().as_com_ref(), app_tx.clone(), |_| ()).unwrap();
     for source in [&older_source, &newer_source, &app_source] {
         emit(source);
     }
@@ -271,3 +271,6 @@ fn self_removal_stops_private_delivery_before_the_next_message() {
     ui.update(SIZE).unwrap();
     assert_eq!(&*trace.borrow(), &["remover"]);
 }
+
+/// Marker projection shares the same generic stream and object identity.
+impl IActivationEvents for Emitter {}

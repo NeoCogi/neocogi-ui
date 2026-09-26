@@ -8,9 +8,6 @@ pub use model::*;
 /// Generated opaque component and concrete application command contracts.
 pub use neocogi_ui_document_contracts as contracts;
 mod bindings;
-mod diagnostics;
-mod wiring;
-pub use diagnostics::{EventDeliveryDiagnostic, EventDeliveryBatch, EventDeliverySender, EventDeliveryReceiver, event_delivery_diagnostics};
 /// Owned COM-transportable authoring metadata for custom widgets.
 pub use neocogi_ui_design as design;
 mod custom;

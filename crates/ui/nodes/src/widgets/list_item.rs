@@ -33,7 +33,6 @@
 //! `ListItem` represents one selectable row in a retained list. Application payloads stay in the
 //! statically linked caller and are mapped from the row's typed activation event.
 
-use neocogi_ui_nodes_contracts::ListItemObserverAbi;
 use crate::{ControlRole};
 
 use super::*;
@@ -78,7 +77,7 @@ impl ListItemParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::ListItem)]
+#[neocogi_com::com_class(neocogi_ui_nodes_contracts::ListItem, event = events)]
 /// Concrete retained list item and dynamically constructible COM object.
 pub struct ListItem {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -90,8 +89,8 @@ pub struct ListItem {
     /// Base widget options.
     /// Mutable label displayed for the item.
     label: String,
-    /// Sole observer retained at construction; released on logical closure.
-    observer: Option<neocogi_com::ComPtr<ListItemObserverAbi>>,
+    /// Single event slot; attaches once after creation and closes with the widget.
+    events: neocogi_ui_nodes_contracts::ListItemEventPort,
 }
 
 impl ListItem {
@@ -102,7 +101,7 @@ impl ListItem {
             icon: parameters.icon,
             font: parameters.font,
             label: parameters.label,
-            observer: None,
+            events: Default::default(),
         }
     }
 
@@ -173,9 +172,12 @@ impl Widget for ListItem {
         if ctx.action(input, self.keyboard_behavior()) != Some(KeyboardAction::Activate) {
             return crate::Change::NoChange;
         }
-        // Clone before emission so observers receive an immutable selection snapshot.
+        // Clone before emission so sinks receive an immutable selection snapshot.
         let label = self.label.clone();
-        ctx.posted(neocogi_ui_nodes_contracts::ListItemEvent::Activated(crate::Activation { label }).post_to(&mut self.observer));
+        ctx.posted(
+            self.events
+                .post(&neocogi_ui_nodes_contracts::ListItemEvent::Activated(crate::Activation { label })),
+        );
 
         // Submitting preserves the label and icon used by intrinsic measurement.
         crate::Change::NoChange
@@ -201,7 +203,7 @@ impl From<ListItemParameters> for crate::test_support::algorithm::Algorithm<List
 impl crate::widget_object::WidgetAlgorithm for ListItem {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
-        self.observer = None;
+        self.events.close();
     }
 }
 
@@ -293,11 +295,9 @@ impl ListItem {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         label: NcCopyFromBufferOffset<'_, u8>,
-        observer: Option<neocogi_com::ComRef<'_, ListItemObserverAbi>>,
     ) -> Result<ComPtr<ListItemAbi>, NcStatus> {
-        let mut value = Self::build(host, label, Some(&resources))?;
+        let value = Self::build(host, label, Some(&resources))?;
         // Retain the sole destination before publishing the completed widget.
-        value.observer = observer.map(|destination| destination.add_ref());
         Ok(Self::from_value(value).query().expect("ListItem declares its callable class contract"))
     }
 

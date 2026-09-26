@@ -161,7 +161,7 @@ impl RuntimeStorage {
         self.factory.state.error.set(None);
         match context.window_manager.collect_widget_changes() {
             Ok(true) => self.pending.set(true),
-            Ok(false) => {},
+            Ok(false) => {}
             Err(error) => {
                 self.pending.set(true);
                 return Err(error);
@@ -207,9 +207,8 @@ impl IChoiceMenus for Runtime {
         menu_text: NcCopyFromBufferOffset<'_, u8>,
         entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
         selection: ChoiceSelectionAbi,
-        observer: Option<ComRef<'_, neocogi_ui_core_contracts::IChoiceMenuObserverAbi>>,
     ) -> Result<ComPtr<IChoiceMenuAbi>, NcStatus> {
-        choices::create_choice_menu(&self.storage, parent, menu_text, entries, selection, observer)
+        choices::create_choice_menu(&self.storage, parent, menu_text, entries, selection)
     }
 }
 

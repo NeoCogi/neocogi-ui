@@ -1,15 +1,16 @@
 //! Exercises the static facade against independent concrete COM implementations.
 mod tests {
     use neocogi_ui::com::*;
-    use neocogi_ui::com::nodes::ButtonInterfacesFor;
     use neocogi_com::{ComRef, NcCopyFromBufferOffset, NcStatus};
-    use neocogi_com::{ComPtr, IUnknown, NcString, NC_E_INVALID_ARG, com_object};
+    use neocogi_com::{ComPtr, IUnknown, NcString, NC_E_INVALID_ARG};
 
-    #[com_object(Button)]
+    #[neocogi_com::com_class(neocogi_ui::nodes::Button, event = events)]
     /// Concrete stand-in for a plugin button, using the same COM macro and ownership path.
     struct TestButton {
         /// Plugin-local UTF-8 storage; its Rust layout never crosses the boundary.
         label: String,
+        /// Explicit producer storage enforces one behavioral parent.
+        events: neocogi_ui::nodes::ButtonEventPort,
         /// Sticky invalidation consumed by runtime traversal.
         changed: bool,
     }
@@ -131,7 +132,11 @@ mod tests {
     /// The generic host proxy edits a concrete COM object and shares its invalidation state.
     #[test]
     fn generic_proxy_calls_com_contract() -> Result<(), NcStatus> {
-        let unknown: ComPtr<IUnknown> = TestButton::from_value(TestButton { label: String::new(), changed: false });
+        let unknown: ComPtr<IUnknown> = TestButton::from_value(TestButton {
+            label: String::new(),
+            events: Default::default(),
+            changed: false,
+        });
         let mut button = ButtonWidget::from_interface(unknown.query::<ButtonAbi>()?);
         button.set_label("Save")?;
         assert_eq!(button.label()?, "Save");
@@ -148,6 +153,7 @@ mod tests {
     fn concrete_proxy_rejects_wrong_capabilities_and_invalid_text() {
         let unknown = TestButton::from_value(TestButton {
             label: String::from("before"),
+            events: Default::default(),
             changed: false,
         });
         assert_eq!(unknown.query::<IChildrenAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);

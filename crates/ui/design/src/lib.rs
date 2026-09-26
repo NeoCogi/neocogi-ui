@@ -36,11 +36,10 @@ pub enum CustomValue {
 impl CustomValue {
     /// Compares property kinds independently of their authored values.
     pub fn same_kind(&self, other: &Self) -> bool {
-        matches!((self, other),
-            (Self::Text(_), Self::Text(_)) |
-            (Self::Boolean(_), Self::Boolean(_)) |
-            (Self::Integer(_), Self::Integer(_)) |
-            (Self::Number(_), Self::Number(_)))
+        matches!(
+            (self, other),
+            (Self::Text(_), Self::Text(_)) | (Self::Boolean(_), Self::Boolean(_)) | (Self::Integer(_), Self::Integer(_)) | (Self::Number(_), Self::Number(_))
+        )
     }
     /// Rejects nonfinite authored numeric values before calling a plugin factory.
     pub fn valid(&self) -> bool {
@@ -54,7 +53,7 @@ impl CustomValue {
 /// Maximum encoded bytes accepted for one plugin-provided widget description.
 pub const MAX_DESIGN_DESCRIPTOR_BYTES: usize = 64 * 1024;
 /// Current authoring descriptor schema revision.
-pub const DESIGN_DESCRIPTOR_VERSION: u32 = 1;
+pub const DESIGN_DESCRIPTOR_VERSION: u32 = 2;
 
 /// One source-level field, including the exact IDL type spelling.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -112,12 +111,14 @@ pub struct DesignType {
     pub message: bool,
 }
 
-/// One output declared directly on the widget's COM interface.
+/// The one complete event stream resolved through the class ancestry.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct DesignOutput {
-    /// IDL output port name.
-    pub name: String,
+pub struct DesignStream {
+    /// Closed generic COM stream identity.
+    pub iid: [u8; 16],
+    /// Full stream ABI signature, including its event layout.
+    pub signature: [u8; 32],
     /// Exact generated message payload.
     pub message: DesignType,
 }
@@ -132,10 +133,8 @@ pub struct DesignInterface {
     pub signature: [u8; 32],
     /// Public Rust `*Abi` projection used by generated forms.
     pub rust_abi: String,
-    /// Generated output-accessor trait, when there is one output port.
-    pub rust_outputs: Option<String>,
-    /// Directly declared ports in IDL order.
-    pub outputs: Vec<DesignOutput>,
+    /// Optional single stream, including inherited generic projections.
+    pub stream: Option<DesignStream>,
 }
 
 /// One constructible widget kind and its typed constructor defaults.
@@ -159,49 +158,75 @@ impl DesignWidgetManifest {
         if primary.interface_id != source.abi.interface_id || primary.abi_signature != source.abi.abi_signature {
             return Err("IDL interface has an inconsistent COM chain".into());
         }
-        let mut physical_ports = Vec::new();
-        for descriptor in source.chain {
-            // SAFETY: generated static descriptors and method tables remain live.
-            let methods = unsafe { descriptor.methods() }.map_err(|error| error.to_string())?;
-            for method in methods {
-                // SAFETY: method names point to generated static UTF-8 data.
-                let name = unsafe { method.name.as_str() }.map_err(|error| error.to_string())?;
-                if let Some(port) = name.strip_prefix("__map_") {
-                    physical_ports.push(port.to_owned());
-                }
+        if let Some(stream) = &source.stream {
+            if !source
+                .chain
+                .iter()
+                .any(|interface| interface.interface_id == stream.abi.interface_id && interface.abi_signature == stream.abi.abi_signature)
+            {
+                return Err("Resolved event stream is absent from the COM projection chain".into());
             }
-        }
-        if physical_ports.len() != source.outputs.len()
-            || physical_ports.iter().zip(source.outputs).any(|(physical, output)| physical != output.name)
-        {
-            return Err("IDL output metadata disagrees with its COM method table".into());
         }
         // SAFETY: the generated ABI signature points to immutable static bytes.
         let digest: [u8; 32] = unsafe { source.abi.abi_signature.as_bytes() }
             .map_err(|error| error.to_string())?
-            .try_into().map_err(|_| "IDL interface has a non-SHA-256 signature")?;
-        let outputs = source.outputs.iter().map(|output| DesignOutput {
-            name: output.name.to_owned(),
-            message: DesignType {
-                qualified_name: output.message.qualified_name.to_owned(),
-                rust_type: output.message.rust_type.to_owned(),
-                shape: match output.message.shape {
-                    IdlShape::Struct(fields) => DesignShape::Struct(fields.iter().map(|field| DesignField {
-                        name: field.name.to_owned(), ty: field.ty.to_owned(),
-                    }).collect()),
-                    IdlShape::Enum(variants) => DesignShape::Enum(variants.iter().map(|variant| DesignVariant {
-                        name: variant.name.to_owned(),
-                        fields: variant.fields.iter().map(|field| DesignField {
-                            name: field.name.to_owned(), ty: field.ty.to_owned(),
-                        }).collect(),
-                    }).collect()),
-                    IdlShape::BitEnum(flags) => DesignShape::BitEnum(flags.iter().map(|flag| DesignFlag {
-                        name: flag.name.to_owned(), value: flag.value,
-                    }).collect()),
-                },
-                message: output.message.message,
-            },
-        }).collect();
+            .try_into()
+            .map_err(|_| "IDL interface has a non-SHA-256 signature")?;
+        let stream = source
+            .stream
+            .as_ref()
+            .map(|output| -> Result<DesignStream, String> {
+                Ok(DesignStream {
+                    iid: output.abi.interface_id.to_uuid_bytes(),
+                    // SAFETY: IDL owns this immutable static descriptor.
+                    signature: unsafe { output.abi.abi_signature.as_bytes() }
+                        .map_err(|error| error.to_string())?
+                        .try_into()
+                        .map_err(|_| "Stream signature is not SHA-256")?,
+                    message: DesignType {
+                        qualified_name: output.message.qualified_name.to_owned(),
+                        rust_type: output.message.rust_type.to_owned(),
+                        shape: match output.message.shape {
+                            IdlShape::Struct(fields) => DesignShape::Struct(
+                                fields
+                                    .iter()
+                                    .map(|field| DesignField {
+                                        name: field.name.to_owned(),
+                                        ty: field.ty.to_owned(),
+                                    })
+                                    .collect(),
+                            ),
+                            IdlShape::Enum(variants) => DesignShape::Enum(
+                                variants
+                                    .iter()
+                                    .map(|variant| DesignVariant {
+                                        name: variant.name.to_owned(),
+                                        fields: variant
+                                            .fields
+                                            .iter()
+                                            .map(|field| DesignField {
+                                                name: field.name.to_owned(),
+                                                ty: field.ty.to_owned(),
+                                            })
+                                            .collect(),
+                                    })
+                                    .collect(),
+                            ),
+                            IdlShape::BitEnum(flags) => DesignShape::BitEnum(
+                                flags
+                                    .iter()
+                                    .map(|flag| DesignFlag {
+                                        name: flag.name.to_owned(),
+                                        value: flag.value,
+                                    })
+                                    .collect(),
+                            ),
+                        },
+                        message: output.message.message,
+                    },
+                })
+            })
+            .transpose()?;
         let manifest = Self {
             version: DESIGN_DESCRIPTOR_VERSION,
             kind: kind.into(),
@@ -210,8 +235,7 @@ impl DesignWidgetManifest {
                 iid: source.abi.interface_id.to_uuid_bytes(),
                 signature: digest,
                 rust_abi: source.rust_abi.to_owned(),
-                rust_outputs: source.rust_outputs.map(str::to_owned),
-                outputs,
+                stream,
             },
         };
         manifest.validate()?;
@@ -223,33 +247,39 @@ impl DesignWidgetManifest {
         if self.version != DESIGN_DESCRIPTOR_VERSION || self.kind.is_empty() || self.interface.iid == [0; 16] {
             return Err("Invalid design widget descriptor identity or version".into());
         }
-        if !rust_path(&self.interface.rust_abi)
-            || self.interface.rust_outputs.as_deref().is_some_and(|path| !rust_path(path))
-            || self.interface.outputs.len() > 1
-        {
+        if !rust_path(&self.interface.rust_abi) {
             return Err("Invalid design widget interface or output policy".into());
         }
         let mut names = std::collections::BTreeSet::new();
-        if !self.defaults.iter().all(|property| !property.name.is_empty() && names.insert(&property.name) && property.value.valid()) {
+        if !self
+            .defaults
+            .iter()
+            .all(|property| !property.name.is_empty() && names.insert(&property.name) && property.value.valid())
+        {
             return Err("Invalid design widget property defaults".into());
         }
-        for output in &self.interface.outputs {
-            if !identifier(&output.name) || !output.message.message || !rust_path(&output.message.rust_type)
-                || self.interface.rust_outputs.is_none()
-            {
+        if let Some(output) = &self.interface.stream {
+            if output.iid == [0; 16] || !output.message.message || !rust_path(&output.message.rust_type) {
                 return Err("Invalid design widget output metadata".into());
             }
             match &output.message.shape {
                 DesignShape::Struct(fields) => {
-                    if !fields.iter().all(|field| !field.name.is_empty() && !field.ty.is_empty()) { return Err("Invalid IDL struct field".into()); }
+                    if !fields.iter().all(|field| !field.name.is_empty() && !field.ty.is_empty()) {
+                        return Err("Invalid IDL struct field".into());
+                    }
                 }
                 DesignShape::Enum(variants) => {
-                    if !variants.iter().all(|variant| identifier(&variant.name) && variant.fields.iter().all(|field| !field.name.is_empty() && !field.ty.is_empty())) {
+                    if !variants
+                        .iter()
+                        .all(|variant| identifier(&variant.name) && variant.fields.iter().all(|field| !field.name.is_empty() && !field.ty.is_empty()))
+                    {
                         return Err("Invalid IDL enum variant".into());
                     }
                 }
                 DesignShape::BitEnum(flags) => {
-                    if !flags.iter().all(|flag| identifier(&flag.name)) { return Err("Invalid IDL bit flag".into()); }
+                    if !flags.iter().all(|flag| identifier(&flag.name)) {
+                        return Err("Invalid IDL bit flag".into());
+                    }
                 }
             }
         }
@@ -260,13 +290,17 @@ impl DesignWidgetManifest {
     pub fn encode(&self) -> Result<Vec<u8>, String> {
         self.validate()?;
         let bytes = serde_json::to_vec(self).map_err(|error| error.to_string())?;
-        if bytes.len() > MAX_DESIGN_DESCRIPTOR_BYTES { return Err("Design widget descriptor exceeds byte limit".into()); }
+        if bytes.len() > MAX_DESIGN_DESCRIPTOR_BYTES {
+            return Err("Design widget descriptor exceeds byte limit".into());
+        }
         Ok(bytes)
     }
 
     /// Decodes one bounded, owned descriptor copied through COM.
     pub fn decode(bytes: &[u8]) -> Result<Self, String> {
-        if bytes.len() > MAX_DESIGN_DESCRIPTOR_BYTES { return Err("Design widget descriptor exceeds byte limit".into()); }
+        if bytes.len() > MAX_DESIGN_DESCRIPTOR_BYTES {
+            return Err("Design widget descriptor exceeds byte limit".into());
+        }
         let manifest: Self = serde_json::from_slice(bytes).map_err(|error| error.to_string())?;
         manifest.validate()?;
         Ok(manifest)
@@ -297,21 +331,24 @@ mod tests {
         let manifest = DesignWidgetManifest {
             version: DESIGN_DESCRIPTOR_VERSION,
             kind: "example.counter".into(),
-            defaults: vec![CustomProperty { name: "count".into(), value: CustomValue::Integer(0) }],
+            defaults: vec![CustomProperty {
+                name: "count".into(),
+                value: CustomValue::Integer(0),
+            }],
             interface: DesignInterface {
                 iid: [1; 16],
                 signature: [2; 32],
                 rust_abi: "example_contracts::CounterAbi".into(),
-                rust_outputs: Some("example_contracts::CounterOutputs".into()),
-                outputs: vec![DesignOutput {
-                    name: "event".into(),
+                stream: Some(DesignStream {
+                    iid: [2; 16],
+                    signature: [3; 32],
                     message: DesignType {
                         qualified_name: "example.CounterEvent".into(),
                         rust_type: "example_contracts::CounterEvent".into(),
                         shape: DesignShape::Enum(vec![DesignVariant { name: "Activated".into(), fields: vec![] }]),
                         message: true,
                     },
-                }],
+                }),
             },
         };
         assert_eq!(DesignWidgetManifest::decode(&manifest.encode().unwrap()).unwrap(), manifest);

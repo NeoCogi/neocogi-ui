@@ -53,7 +53,6 @@
 //! Retained slider widget.
 //!
 //! Sliders support dragging, wheel increments, snapping, and shift-click text entry.
-use neocogi_ui_nodes_contracts::SliderObserverAbi;
 use crate::{ControlRole};
 
 use crate::*;
@@ -120,7 +119,7 @@ impl SliderParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Slider)]
+#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Slider, event = events)]
 /// Concrete retained slider and dynamically constructible COM object.
 pub struct Slider {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -140,8 +139,8 @@ pub struct Slider {
     high: Real,
     /// Inline numeric editing state.
     edit: NumberEditState,
-    /// Sole construction-time observer; user changes publish here until logical closure.
-    observer: Option<neocogi_com::ComPtr<SliderObserverAbi>>,
+    /// Single lifetime event slot; the parent attaches once before publishing the widget.
+    events: neocogi_ui_nodes_contracts::SliderEventPort,
 }
 
 impl Slider {
@@ -157,7 +156,7 @@ impl Slider {
             low: parameters.low,
             high: parameters.high,
             edit: NumberEditState::default(),
-            observer: None,
+            events: Default::default(),
         }
     }
 
@@ -261,7 +260,10 @@ impl Slider {
         value = clamp_slider_value(snap_slider_value(value, self.low, self.step), self.low, self.high);
         self.value = value;
         if last != value {
-            ctx.posted(neocogi_ui_nodes_contracts::SliderEvent::Changed(crate::NumericChanged { value }).post_to(&mut self.observer));
+            ctx.posted(
+                self.events
+                    .post(&neocogi_ui_nodes_contracts::SliderEvent::Changed(crate::NumericChanged { value })),
+            );
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(self.value != last)
@@ -391,12 +393,12 @@ impl From<SliderParameters> for crate::test_support::algorithm::Algorithm<Slider
 impl crate::widget_object::WidgetAlgorithm for Slider {
     /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
     fn close_events(&mut self) {
-        self.observer = None;
+        self.events.close();
     }
 }
 
 impl crate::widget_object::HostedWidget for Slider {
-    /// Releases observers, revokes outstanding clipboard receipts, and drops local history.
+    /// Releases sinks, revokes outstanding clipboard receipts, and drops local history.
     fn close_contents(&mut self) -> Result<(), neocogi_com::NcStatus> {
         crate::widget_object::WidgetAlgorithm::close_events(self);
         self.edit = NumberEditState::default();
@@ -499,7 +501,7 @@ mod tests {
         }
     }
 
-    /// Drains queued numeric values after the temporary observer installation borrow ends.
+    /// Drains queued numeric values after the temporary sink installation borrow ends.
     type NumericDispatcher = Box<dyn FnMut(&mut Vec<Real>) -> bool>;
 
     /// Collects the shared numeric message from either control through its generated concrete receiver.
@@ -680,10 +682,10 @@ mod tests {
                 .expect("finite ascending fractional slider parameters must validate"),
         );
         let mut dispatcher = numeric_dispatcher(|mut consume| {
-            slider.observer = Some(neocogi_ui_nodes_contracts::SliderEvent::observer(
+            let receiver = <neocogi_ui_nodes_contracts::SliderSinkAbi as neocogi_com::events::MessageSinkInterface>::receiver(
                 move |neocogi_ui_nodes_contracts::SliderEvent::Changed(event)| consume(event),
-            )?);
-            Ok(())
+            )?;
+            slider.events.attach(receiver.as_com_ref())
         });
         run_slider_once(&mut slider, rect(0, 0, 100, 20), Vec::new(), true, false, false, Some(vec2(0, 1)));
 
@@ -914,10 +916,10 @@ mod tests {
             SliderParameters::new(0.0, -5.0, 5.0).expect("finite ascending slider parameters must validate"),
         );
         let mut dispatcher = numeric_dispatcher(|mut consume| {
-            slider.observer = Some(neocogi_ui_nodes_contracts::SliderEvent::observer(
+            let receiver = <neocogi_ui_nodes_contracts::SliderSinkAbi as neocogi_com::events::MessageSinkInterface>::receiver(
                 move |neocogi_ui_nodes_contracts::SliderEvent::Changed(event)| consume(event),
-            )?);
-            Ok(())
+            )?;
+            slider.events.attach(receiver.as_com_ref())
         });
         slider.set_value(4.0);
         assert_eq!(slider.value(), 4.0);
@@ -931,10 +933,10 @@ mod tests {
             SliderParameters::with_opt(2.0, 0.0, 10.0, 1.0, DecimalPrecision::ZERO, WidgetOption::FRAME).unwrap(),
         );
         let mut dispatcher = numeric_dispatcher(|mut consume| {
-            slider.observer = Some(neocogi_ui_nodes_contracts::SliderEvent::observer(
+            let receiver = <neocogi_ui_nodes_contracts::SliderSinkAbi as neocogi_com::events::MessageSinkInterface>::receiver(
                 move |neocogi_ui_nodes_contracts::SliderEvent::Changed(event)| consume(event),
-            )?);
-            Ok(())
+            )?;
+            slider.events.attach(receiver.as_com_ref())
         });
         slider.edit.editing = true;
         // Enter through the editing contract instead of reaching into the private numeric buffer.
@@ -1036,11 +1038,9 @@ impl Slider {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         options: SliderOptions,
-        observer: Option<neocogi_com::ComRef<'_, SliderObserverAbi>>,
     ) -> Result<ComPtr<SliderAbi>, NcStatus> {
-        let mut value = Self::build(host, options, Some(&resources))?;
+        let value = Self::build(host, options, Some(&resources))?;
         // Retain the sole destination before publishing the completed widget.
-        value.observer = observer.map(|destination| destination.add_ref());
         Ok(Self::from_value(value).query().expect("Slider declares its callable class contract"))
     }
 

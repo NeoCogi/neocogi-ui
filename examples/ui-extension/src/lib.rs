@@ -3,7 +3,7 @@
 //! The two concrete objects share only lifecycle plumbing. The counter owns its scalar value and
 //! event producer; the inset owns its padding and the host's sole authoritative child editor.
 #![deny(missing_docs)]
-use neocogi_demo_contracts::__CounterEventReceiverAbi;
+use neocogi_demo_contracts::CounterEventPort;
 use neocogi_ui::com::widget::WidgetState;
 use neocogi_ui_core_contracts::*;
 use neocogi_demo_contracts::*;
@@ -92,7 +92,7 @@ macro_rules! widget {
     };
 }
 
-#[com_object(neocogi_demo_contracts::Counter)]
+#[neocogi_com::com_class(neocogi_demo_contracts::Counter, event = event)]
 /// Private implementation of the externally declared counter class.
 struct CounterObject {
     /// Common options are authoritative here, without a duplicate presentation copy.
@@ -100,7 +100,7 @@ struct CounterObject {
     /// The one semantic counter value; labels are short-lived snapshots of it.
     count: u32,
     /// Sole destination for the complete enum-valued event stream.
-    event: Option<ComPtr<__CounterEventReceiverAbi>>,
+    event: CounterEventPort,
 }
 impl CounterObject {
     /// Validates runtime authority and publishes one fully initialized counter identity.
@@ -109,7 +109,7 @@ impl CounterObject {
         Self::from_value(Self {
             common: Common::new(host, WidgetOptions::FRAME),
             count: 0,
-            event: None,
+            event: Default::default(),
         })
         .query()
     }
@@ -120,8 +120,8 @@ impl CounterObject {
             self.count = self.count.saturating_add(1);
             // A rejected foreign post cannot erase this already committed change.
             self.common.state.record_change(GeometryChange::Changed);
-            CounterEvent::Activated(Activation { label: self.count.to_string() }).post_to(&mut self.event)?;
-            CounterEvent::Changed(CounterChanged { value: self.count }).post_to(&mut self.event)?;
+            self.event.post(&CounterEvent::Activated(Activation { label: self.count.to_string() }))?;
+            self.event.post(&CounterEvent::Changed(CounterChanged { value: self.count }))?;
             Ok(GeometryChange::Changed)
         } else {
             Ok(GeometryChange::NoChange)
@@ -133,20 +133,13 @@ impl CounterObject {
     }
     /// Ordinary interaction work expires even if callers retain the closed control.
     fn close_content(&mut self) -> Result<(), NcStatus> {
-        self.event = None;
+        self.event.close();
         Ok(())
     }
 }
 // Focus=1, Tab=2, Enter=4 and Space=8 are the canonical WidgetProperties keyboard bits.
 widget!(CounterObject, 1 | 2 | 4 | 8, WidgetFrame::Button);
 impl Counter for CounterObject {
-    /// Replaces this output's concrete destination after checking widget access.
-    fn __map_event(&mut self, destination: ComRef<'_, __CounterEventReceiverAbi>) -> Result<(), NcStatus> {
-        self.common.state.writable()?;
-        self.event = Some(destination.add_ref());
-        Ok(())
-    }
-
     /// Reads the committed scalar directly from the real object.
     fn count(&self) -> Result<u32, NcStatus> {
         self.common.state.readable()?;
@@ -310,14 +303,16 @@ pub struct ExtensionProviderObject;
 impl IDesignWidgetCatalog for ExtensionProviderObject {
     /// The example publishes its leaf counter; its inset is a container and
     /// cannot be represented by the document's custom leaf schema.
-    fn widget_count(&self) -> Result<u32, NcStatus> { Ok(1) }
+    fn widget_count(&self) -> Result<u32, NcStatus> {
+        Ok(1)
+    }
 
     /// Copies generated Counter IDL metadata through the common COM catalog.
     fn describe(&self, index: u32, mut output: NcCopyToBufferOffset<'_, u8>) -> Result<u32, NcStatus> {
-        if index != 0 { return Err(NC_E_INVALID_ARG); }
-        let manifest = DesignWidgetManifest::from_idl(
-            "example.counter", vec![], &CounterAbi::IDL_INTERFACE,
-        ).map_err(|_| NC_E_INVALID_ARG)?;
+        if index != 0 {
+            return Err(NC_E_INVALID_ARG);
+        }
+        let manifest = DesignWidgetManifest::from_idl("example.counter", vec![], &CounterAbi::IDL_INTERFACE).map_err(|_| NC_E_INVALID_ARG)?;
         let bytes = manifest.encode().map_err(|_| NC_E_INVALID_ARG)?;
         let required = u32::try_from(bytes.len()).map_err(|_| NC_E_INVALID_ARG)?;
         if output.len() >= bytes.len() {
@@ -328,10 +323,13 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
 
     /// Constructs the concrete counter through COM after checking the property payload.
     fn create_widget(&self, index: u32, host: ComRef<'_, IWidgetHostAbi>, properties: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
-        if index != 0 { return Err(NC_E_INVALID_ARG); }
-        let values: Vec<CustomProperty> = serde_json::from_slice(properties.as_slice())
-            .map_err(|_| NC_E_INVALID_ARG)?;
-        if !values.is_empty() { return Err(NC_E_INVALID_ARG); }
+        if index != 0 {
+            return Err(NC_E_INVALID_ARG);
+        }
+        let values: Vec<CustomProperty> = serde_json::from_slice(properties.as_slice()).map_err(|_| NC_E_INVALID_ARG)?;
+        if !values.is_empty() {
+            return Err(NC_E_INVALID_ARG);
+        }
         CounterObject::create(host)?.query::<IWidgetAbi>()
     }
 }

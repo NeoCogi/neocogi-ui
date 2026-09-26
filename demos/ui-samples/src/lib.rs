@@ -3,7 +3,7 @@
 use neocogi_com::{ComInterface, ComRef, NcStatus};
 use neocogi_ui::*;
 
-/// One built sample and the real buttons created with the caller's observer.
+/// One built sample and the real buttons created with the caller's sink.
 pub struct Sample {
     /// Mount this root exactly once using the caller's own parent/window relationship.
     pub content: LinearWidget,
@@ -14,7 +14,7 @@ pub struct Sample {
 const FLEX: LayoutTrack = LayoutTrack::Flex { weight: 1.0 };
 
 /// Preserves the full demo's two opposing vertical stacks and their original dimensions.
-pub fn directions(ui: &Ui, observer: Option<ComRef<'_, ButtonObserverAbi>>) -> Result<Sample, NcStatus> {
+pub fn directions(ui: &Ui, sink: Option<ComRef<'_, ButtonSinkAbi>>) -> Result<Sample, NcStatus> {
     let mut content = ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Content)?;
     let mut buttons = Vec::new();
     for (name, direction) in [("Top to bottom", FlowDirection::TopToBottom), ("Bottom to top", FlowDirection::BottomToTop)] {
@@ -22,7 +22,7 @@ pub fn directions(ui: &Ui, observer: Option<ComRef<'_, ButtonObserverAbi>>) -> R
         append(&mut column, &ui.widgets().text_block(name, TextWrapping::None)?, LayoutTrack::Content)?;
         let mut stack = ui.widgets().linear(direction, CrossSize::Stretch)?;
         for text in ["First", "Second", "Third"] {
-            let control = button(ui, text, observer)?;
+            let control = button(ui, text, sink)?;
             append(&mut stack, &control, LayoutTrack::Fixed { extent: 28 })?;
             buttons.push(control);
         }
@@ -33,7 +33,7 @@ pub fn directions(ui: &Ui, observer: Option<ComRef<'_, ButtonObserverAbi>>) -> R
 }
 
 /// Preserves the full demo's weighted row and grid; preview and demo use identical retained nodes.
-pub fn weights(ui: &Ui, observer: Option<ComRef<'_, ButtonObserverAbi>>) -> Result<Sample, NcStatus> {
+pub fn weights(ui: &Ui, sink: Option<ComRef<'_, ButtonSinkAbi>>) -> Result<Sample, NcStatus> {
     let mut content = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     let mut buttons = Vec::new();
     append(
@@ -43,7 +43,7 @@ pub fn weights(ui: &Ui, observer: Option<ComRef<'_, ButtonObserverAbi>>) -> Resu
     )?;
     let mut line = ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Content)?;
     for (text, weight) in [("1x", 1.0), ("2x", 2.0), ("3x", 3.0)] {
-        let control = button(ui, text, observer)?;
+        let control = button(ui, text, sink)?;
         append(&mut line, &control, LayoutTrack::Flex { weight })?;
         buttons.push(control);
     }
@@ -55,7 +55,7 @@ pub fn weights(ui: &Ui, observer: Option<ComRef<'_, ButtonObserverAbi>>) -> Resu
     )?;
     let mut grid = ui.widgets().grid(&[FLEX; 3], &[FLEX, LayoutTrack::Flex { weight: 2.0 }])?;
     for index in 0..6 {
-        let control = button(ui, &format!("Cell {}", index + 1), observer)?;
+        let control = button(ui, &format!("Cell {}", index + 1), sink)?;
         grid.insert(index, &control, GridExtent { columns: 1, rows: 1 })?.finish()?;
         buttons.push(control);
     }
@@ -64,8 +64,8 @@ pub fn weights(ui: &Ui, observer: Option<ComRef<'_, ButtonObserverAbi>>) -> Resu
 }
 
 /// Creates the same framed centered control as the full demo without prescribing its application action.
-fn button(ui: &Ui, text: &str, observer: Option<ComRef<'_, ButtonObserverAbi>>) -> Result<ButtonWidget, NcStatus> {
-    let mut button = ui.widgets().button_with_observer(text, observer)?;
+fn button(ui: &Ui, text: &str, sink: Option<ComRef<'_, ButtonSinkAbi>>) -> Result<ButtonWidget, NcStatus> {
+    let mut button = ui.widgets().button_with_sink(text, sink)?;
     button.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
     Ok(button)
 }

@@ -1,5 +1,5 @@
 //! Deterministic Rust contract generation; exported names remain string literals, never source code.
-use crate::{CustomWidgetRegistry, Document, InputKind, Node, OutputType, WidgetSpec, MAX_BYTES};
+use crate::{CustomWidgetRegistry, Document, InputKind, Node, WidgetSpec, MAX_BYTES};
 use std::fmt::Write;
 
 /// Builds a valid, collision-free symbol with a role prefix and declaration ordinal.
@@ -35,6 +35,24 @@ fn collect_nodes<'a>(node: &'a Node, nodes: &mut Vec<&'a Node>) {
 }
 
 impl WidgetSpec {
+    /// Complete typed stream payload used by direct generated form handlers.
+    fn rust_event_type(&self) -> Option<&'static str> {
+        Some(match self {
+            Self::Button { .. } => "neocogi_ui::button::Event",
+            Self::Checkbox { .. } => "neocogi_ui::checkbox::Event",
+            Self::Textbox { .. } => "neocogi_ui::textbox::Event",
+            Self::TextArea { .. } => "neocogi_ui::text_area::Event",
+            Self::Slider { .. } => "neocogi_ui::slider::Event",
+            Self::Number { .. } => "neocogi_ui::number::Event",
+            Self::ListItem { .. } => "neocogi_ui::list_item::Event",
+            Self::ListBox { .. } => "neocogi_ui::list_box::Event",
+            Self::Scrollbar { .. } => "neocogi_ui::scrollbar::Event",
+            Self::Split { .. } => "neocogi_ui::split_view::Event",
+            Self::Combo { .. } => "neocogi_ui::combo::Event",
+            _ => return None,
+        })
+    }
+
     /// Returns the concrete built-in COM projection used by generated form fields.
     /// QueryInterface checks this expectation when a candidate form is bound.
     fn rust_interface<'a>(&'a self, custom: &'a CustomWidgetRegistry) -> Result<&'a str, String> {
@@ -62,21 +80,6 @@ impl WidgetSpec {
     }
 }
 
-impl OutputType {
-    /// Public Rust payload spelling shared with generated event variants and handler signatures.
-    pub fn rust_type(self) -> &'static str {
-        match self {
-            Self::Activation => "neocogi_ui::events::Activation",
-            Self::Checked => "neocogi_ui::events::CheckboxChanged",
-            Self::Number => "neocogi_ui::events::NumericChanged",
-            Self::Offset => "neocogi_ui::events::ScrollbarChanged",
-            Self::Position => "neocogi_ui::events::SplitChanged",
-            Self::Selection => "neocogi_ui::events::ChoiceSelection",
-            Self::TextboxEvent => "neocogi_ui::textbox::Event",
-            Self::TextAreaEvent => "neocogi_ui::text_area::Event",
-        }
-    }
-}
 impl InputKind {
     /// Public Rust command spelling for generated, statically resolved input handles.
     pub fn rust_type(&self) -> &'static str {
@@ -105,75 +108,92 @@ impl Document {
         custom.validate_document(self)?;
         let mut nodes = Vec::new();
         collect_nodes(&self.root, &mut nodes);
-        // Each record has the source node, public name, complete payload type,
-        // and optional concrete output accessor plus its generated trait path.
+        // The generated contract has one required handler per actual emitting widget.
+        // Plugin streams use the same EventSource trait as built-ins.
         let mut events = Vec::new();
         for (index, node) in nodes.iter().enumerate() {
-            match &node.widget {
-                WidgetSpec::Custom { kind, .. } => {
-                    let interface = custom.interface(kind)?;
-                    if let Some(port) = interface.outputs.first() {
-                        let trait_path = interface.rust_outputs.as_deref().ok_or("Custom output trait is missing")?;
-                        events.push((index, *node, node.key.clone(), port.message.rust_type.to_owned(),
-                            Some((port.name.to_owned(), trait_path.to_owned()))));
-                    }
-                }
-                widget => if let Some(port) = widget.outputs().first() {
-                    let name = self.outputs.iter().find(|output| output.node == node.key)
-                        .map_or(node.key.as_str(), |output| output.name.as_str());
-                    events.push((index, *node, name.to_owned(), port.payload.rust_type().to_owned(), None));
-                },
+            let payload = match &node.widget {
+                WidgetSpec::Custom { kind, .. } => custom.interface(kind)?.stream.as_ref().map(|stream| stream.message.rust_type.clone()),
+                widget => widget.rust_event_type().map(str::to_owned),
+            };
+            if let Some(payload) = payload {
+                events.push((index, *node, payload));
             }
         }
         let mut source = String::from("// Generated from a validated UI document. Implement Handlers in application-owned code.\n");
         source.push_str("/// Complete captured widget events, one variant per event-producing widget.\npub enum Event {\n");
-        for (index, node, _, payload, _) in &events {
-            writeln!(source, "    /// Complete event stream from authored widget {:?}.\n    Widget{index}({}),", node.key, payload).unwrap();
+        for (index, node, payload) in &events {
+            writeln!(
+                source,
+                "    /// Complete event stream from authored widget {:?}.\n    Widget{index}({}),",
+                node.key, payload
+            )
+            .unwrap();
         }
         source.push_str("}\n/// A captured event belongs to exactly one component reload attempt.\npub struct Message {\n    /// Reject stale messages with ReloadSlot::accepts before dispatch.\n    pub generation: neocogi_ui_document::Generation,\n    /// Complete typed widget event.\n    pub event: Event,\n}\n");
         source.push_str("/// Application-owned behavior; every emitting widget requires an implementation.\npub trait Handlers {\n");
-        for (index, node, _, payload, _) in &events {
+        for (index, node, payload) in &events {
             writeln!(source, "    /// Handles the event from widget {:?} after traversal releases widget borrows.\n    fn {}(&mut self, event: {}) -> Result<(), neocogi_com::NcStatus>;", node.key, symbol("on", &node.key, *index), payload).unwrap();
         }
         source.push_str("}\nimpl Event {\n    /// Dispatch only after checking the enclosing message generation.\n    pub fn dispatch(self, handlers: &mut impl Handlers) -> Result<(), neocogi_com::NcStatus> {\n        match self {\n");
-        for (index, node, _, _, _) in &events {
-            writeln!(source, "            Self::Widget{index}(event) => handlers.{}(event),", symbol("on", &node.key, *index)).unwrap();
+        for (index, node, _) in &events {
+            writeln!(
+                source,
+                "            Self::Widget{index}(event) => handlers.{}(event),",
+                symbol("on", &node.key, *index)
+            )
+            .unwrap();
         }
         source.push_str("        }\n    }\n}\n/// Reconnect concrete command handles after every successful component replacement.\npub struct Inputs {\n");
         for (index, input) in self.inputs.iter().enumerate() {
-            writeln!(source, "    /// Public command {:?}; its receiver is checked when binding.\n    pub {}: neocogi_ui_document::InputHandle<{}>,", input.name, symbol("input", &input.name, index), input.kind.rust_type()).unwrap();
+            writeln!(
+                source,
+                "    /// Public command {:?}; its receiver is checked when binding.\n    pub {}: neocogi_ui_document::InputHandle<{}>,",
+                input.name,
+                symbol("input", &input.name, index),
+                input.kind.rust_type()
+            )
+            .unwrap();
         }
         source.push_str("}\n/// Checked concrete handles for every authored widget and the exported commands.\npub struct Form {\n    /// Public command endpoints retained for message-based integrations.\n    pub inputs: Inputs,\n");
         for (index, node) in nodes.iter().enumerate() {
-            writeln!(source, "    /// Authored widget {:?}; the concrete COM interface is checked when binding.\n    pub {}: neocogi_ui::Widget<{}>,", node.key, symbol("widget", &node.key, index), node.widget.rust_interface(custom)?).unwrap();
+            writeln!(
+                source,
+                "    /// Authored widget {:?}; the concrete COM interface is checked when binding.\n    pub {}: neocogi_ui::Widget<{}>,",
+                node.key,
+                symbol("widget", &node.key, index),
+                node.widget.rust_interface(custom)?
+            )
+            .unwrap();
         }
         source.push_str("}\n/// Checks widget fields and binds each complete event stream to the application queue.\n/// Use inside ReloadSlot::reload; failed preparation preserves the published component.\npub fn bind(\n    component: &neocogi_ui_document::Component,\n    generation: neocogi_ui_document::Generation,\n    send: std::sync::mpsc::Sender<Message>,\n) -> Result<Form, neocogi_com::NcStatus> {\n    let inputs = Inputs {\n");
         for (index, input) in self.inputs.iter().enumerate() {
-            writeln!(source, "        {}: component.input::<{}>({:?})?,", symbol("input", &input.name, index), input.kind.rust_type(), input.name).unwrap();
+            writeln!(
+                source,
+                "        {}: component.input::<{}>({:?})?,",
+                symbol("input", &input.name, index),
+                input.kind.rust_type(),
+                input.name
+            )
+            .unwrap();
         }
         source.push_str("    };\n");
-        for (_, _, _, _, direct) in &events {
-            if let Some((_, trait_path)) = direct {
-                writeln!(source, "    use {} as _;", trait_path).unwrap();
-            }
-        }
         source.push_str("    let form = Form {\n        inputs,\n");
         for (index, node) in nodes.iter().enumerate() {
-            writeln!(source, "        {}: component.widget::<{}>({:?})?,", symbol("widget", &node.key, index), node.widget.rust_interface(custom)?, node.key).unwrap();
+            writeln!(
+                source,
+                "        {}: component.widget::<{}>({:?})?,",
+                symbol("widget", &node.key, index),
+                node.widget.rust_interface(custom)?,
+                node.key
+            )
+            .unwrap();
         }
         source.push_str("    };\n");
-        if events.iter().any(|(_, _, _, _, direct)| direct.is_none()) {
-            source.push_str("    let outputs = component.outputs()?;\n");
-        }
-        for (index, node, name, payload, direct) in &events {
-            match direct {
-                Some((method, _)) => writeln!(source,
-                    "    neocogi_com::events::bind(form.{}.as_interface().{}(), send.clone(), move |event: {}| Message {{ generation, event: Event::Widget{index}(event) }})?;",
-                    symbol("widget", &node.key, *index), method, payload).unwrap(),
-                None => writeln!(source,
-                    "    neocogi_com::events::bind_output(outputs.as_com_ref(), {:?}, send.clone(), move |event: {}| Message {{ generation, event: Event::Widget{index}(event) }})?;",
-                    name, payload).unwrap(),
-            }
+        for (index, node, payload) in &events {
+            writeln!(source,
+                "    neocogi_com::events::bind_source(form.{}.as_interface(), send.clone(), move |event: {}| Message {{ generation, event: Event::Widget{index}(event) }})?;",
+                symbol("widget", &node.key, *index), payload).unwrap();
         }
         source.push_str("    Ok(form)\n}\n");
         if source.len() > MAX_BYTES {

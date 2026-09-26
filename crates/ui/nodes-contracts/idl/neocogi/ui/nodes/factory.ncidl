@@ -1,7 +1,6 @@
 #[version(2)]
-#[observer]
 /// Constructible button class with only its shared widget and leaf-layout protocols separated.
-interface Button: IWidget + ILeafLayout {
+class Button: IWidget + ILeafLayout + IEventStream<ButtonEvent> {
 
     /// Replaces the complete UTF-8 label; the logical input offset must be zero.
     fn set_label(&mut self, label: &[u8]) -> Result<()>;
@@ -9,8 +8,7 @@ interface Button: IWidget + ILeafLayout {
     /// Returns the current label as an independently owned immutable string object.
     fn label(&self) -> Result<String>;
 
-    /// Connection access for captured Activation values.
-    activated: Activation;
+
 
     /// Selects a semantic font role and invalidates measurement only when it differs.
     fn set_font_role(&mut self, role: FontRole) -> Result<()>;
@@ -42,7 +40,7 @@ interface Button: IWidget + ILeafLayout {
 factory UiFactory: IConstructionHost + IFileDialogs {
 
     /// Creates a fixed scrolling multiline editor; CRLF and CR normalize to LF and the cursor starts at the end.
-    fn create_text_area(&self, text: &[u8], wrapping: TextWrapping, scrolling: bool, observer: Option<&TextAreaObserver>) -> Result<TextArea>;
+    fn create_text_area(&self, text: &[u8], wrapping: TextWrapping, scrolling: bool) -> Result<TextArea>;
     /// Creates an empty disclosure with a real text header and editable vertical Linear body.
     fn create_disclosure(&self, label: &[u8], style: DisclosureStyle, expanded: bool) -> Result<Disclosure>;
     /// Creates a framed scroll composite around one unmounted content object; generic options can subsequently change its frame.
@@ -50,7 +48,7 @@ factory UiFactory: IConstructionHost + IFileDialogs {
     /// Creates an empty directional container after validating its complete initial policy.
     fn create_linear(&self, direction: FlowDirection, cross: CrossSize) -> Result<Linear>;
     /// Creates an empty split view; panes attach through its validated two-child editor.
-    fn create_split_view(&self, settings: SplitOptions, observer: Option<&SplitViewObserver>) -> Result<SplitView>;
+    fn create_split_view(&self, settings: SplitOptions) -> Result<SplitView>;
     /// Creates a fixed-coordinate form with a positive preferred content size.
     fn create_form(&self, size: Size) -> Result<Form>;
     /// Creates an empty Grid with validated complete column and row policies; input offsets must be zero.
@@ -60,32 +58,32 @@ factory UiFactory: IConstructionHost + IFileDialogs {
         rows: &[LayoutTrack],
     ) -> Result<Grid>;
     /// Constructs an unmounted boolean control with body-font presentation.
-    fn create_checkbox(&self, checked: bool, label: &[u8], observer: Option<&CheckboxObserver>) -> Result<Checkbox>;
+    fn create_checkbox(&self, checked: bool, label: &[u8]) -> Result<Checkbox>;
     /// Constructs an unmounted normalized single-line editor.
-    fn create_textbox(&self, text: &[u8], observer: Option<&TextboxObserver>) -> Result<Textbox>;
+    fn create_textbox(&self, text: &[u8]) -> Result<Textbox>;
     /// Constructs multiline display text using the explicit wrapping policy.
     fn create_text_block(&self, text: &[u8], wrapping: TextWrapping) -> Result<TextBlock>;
     /// Constructs a slider after validating every arithmetic input.
-    fn create_slider(&self, options: SliderOptions, observer: Option<&SliderObserver>) -> Result<Slider>;
+    fn create_slider(&self, options: SliderOptions) -> Result<Slider>;
     /// Constructs standalone numeric entry after validating arithmetic inputs.
-    fn create_number(&self, options: NumberOptions, observer: Option<&NumberObserver>) -> Result<Number>;
+    fn create_number(&self, options: NumberOptions) -> Result<Number>;
     /// Constructs an RGBA swatch with an optional label.
     fn create_color_swatch(&self, rgba: u32, label: &[u8]) -> Result<ColorSwatch>;
     /// Constructs one list row; application data is attached in its static adapter.
-    fn create_list_item(&self, label: &[u8], observer: Option<&ListItemObserver>) -> Result<ListItem>;
+    fn create_list_item(&self, label: &[u8]) -> Result<ListItem>;
     /// Constructs a button-like list entry.
-    fn create_list_box(&self, label: &[u8], observer: Option<&ListBoxObserver>) -> Result<ListBox>;
+    fn create_list_box(&self, label: &[u8]) -> Result<ListBox>;
     /// Constructs a scrollbar with a validated orientation and normalized range.
-    fn create_scrollbar(&self, range: ScrollRange, observer: Option<&ScrollbarObserver>) -> Result<Scrollbar>;
+    fn create_scrollbar(&self, range: ScrollRange) -> Result<Scrollbar>;
     /// Constructs an initialized, unmounted Button through its concrete class contract.
-    fn create_button(&self, label: &[u8], options: WidgetOptions, observer: Option<&ButtonObserver>) -> Result<Button>;
+    fn create_button(&self, label: &[u8], options: WidgetOptions) -> Result<Button>;
     /// Atomically binds one combo header, choice-menu popup, and validated model to its window.
     fn create_combo_box(
         &self,
         parent: &IWindow,
         menu_text: &[u8],
         entries: &[ChoiceMenuEntry],
-        selection: ChoiceSelection, observer: Option<&IChoiceMenuObserver>) -> Result<Combo>;
+        selection: ChoiceSelection) -> Result<Combo>;
 }
 
 #[version(1)]
@@ -93,4 +91,12 @@ factory UiFactory: IConstructionHost + IFileDialogs {
 factory NodesPluginFactory {
     /// Binds one concrete node factory to public services exposed by the supplied core runtime.
     fn bind(&self, runtime: &UiRuntime) -> Result<UiFactory>;
+}
+
+#[version(1)]
+#[message]
+/// Complete typed event stream of Button; consumed by its behavioral parent.
+enum ButtonEvent {
+    /// Captured activated fact, acquired before the producer call returns.
+    Activated(Activation),
 }

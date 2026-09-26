@@ -19,7 +19,7 @@ fn runtime() -> ComPtr<UiRuntimeAbi> {
 fn button(runtime: &ComPtr<UiRuntimeAbi>) -> ComPtr<ButtonAbi> {
     nc_ui_nodes::UiFactory::bind(runtime.as_com_ref())
         .unwrap()
-        .create_button(NcCopyFromBufferOffset::new(0, b""), WidgetOptions::FRAME, None)
+        .create_button(NcCopyFromBufferOffset::new(0, b""), WidgetOptions::FRAME)
         .unwrap()
 }
 
@@ -156,36 +156,30 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
     assert!(calls.get() > 0, "an independent provider must validate and import its initial revision");
     calls.set(0);
     let label = NcCopyFromBufferOffset::new(0, b"shared");
-    let button = factory.create_button(label, WidgetOptions::FRAME, None).unwrap();
-    let _checkbox = factory.create_checkbox(false, label, None).unwrap();
-    let _textbox = factory.create_textbox(label, None).unwrap();
+    let button = factory.create_button(label, WidgetOptions::FRAME).unwrap();
+    let _checkbox = factory.create_checkbox(false, label).unwrap();
+    let _textbox = factory.create_textbox(label).unwrap();
     let _text_block = factory.create_text_block(label, TextWrapping::Word).unwrap();
     let _slider = factory
-        .create_slider(
-            SliderOptions {
-                value: 0.0,
-                low: 0.0,
-                high: 1.0,
-                step: 0.1,
-                precision: 1,
-            },
-            None,
-        )
+        .create_slider(SliderOptions {
+            value: 0.0,
+            low: 0.0,
+            high: 1.0,
+            step: 0.1,
+            precision: 1,
+        })
         .unwrap();
-    let _number = factory.create_number(NumberOptions { value: 0.0, step: 1.0, precision: 0 }, None).unwrap();
+    let _number = factory.create_number(NumberOptions { value: 0.0, step: 1.0, precision: 0 }).unwrap();
     let _swatch = factory.create_color_swatch(u32::MAX, label).unwrap();
-    let _list_item = factory.create_list_item(label, None).unwrap();
-    let _list_box = factory.create_list_box(label, None).unwrap();
+    let _list_item = factory.create_list_item(label).unwrap();
+    let _list_box = factory.create_list_box(label).unwrap();
     let _scrollbar = factory
-        .create_scrollbar(
-            ScrollRange {
-                axis: ScrollAxis::Vertical,
-                viewport: 1,
-                content: 2,
-                offset: 0,
-            },
-            None,
-        )
+        .create_scrollbar(ScrollRange {
+            axis: ScrollAxis::Vertical,
+            viewport: 1,
+            content: 2,
+            offset: 0,
+        })
         .unwrap();
     let _linear = factory.create_linear(FlowDirection::TopToBottom, CrossSize::Stretch.into()).unwrap();
     let tracks = [LayoutTrack::Content.into()];
@@ -197,7 +191,7 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
     let _scroll = factory
         .create_scroll_area(neocogi_ui_core_contracts::Mount::widget(content.as_com_ref()).as_message(), true)
         .unwrap();
-    let area = factory.create_text_area(label, TextWrapping::Word, true, None).unwrap();
+    let area = factory.create_text_area(label, TextWrapping::Word, true).unwrap();
     let root = area.query::<IWidgetAbi>().unwrap();
     let _window = mount(&runtime, &root).unwrap();
     runtime.update(SIZE).unwrap();

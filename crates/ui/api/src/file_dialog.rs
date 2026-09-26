@@ -1,4 +1,4 @@
-//! Standard native-path file-picker requests with one construction-time observer.
+//! Standard native-path file-picker requests with one construction-time sink.
 //!
 //! ```no_run
 //! use neocogi_ui::{Ui, IWindowAbi, FileDialogRequest};
@@ -62,7 +62,7 @@ impl FileDialog {
     pub fn from_interface(interface: ComPtr<IFileDialogAbi>) -> Self {
         Self { interface }
     }
-    /// Borrows the concrete component interface for custom static helpers; its observer was already supplied at construction.
+    /// Borrows the concrete component interface for custom static helpers; its single sink was attached by the constructor helper.
     pub fn as_interface(&self) -> ComRef<'_, IFileDialogAbi> {
         self.interface.as_com_ref()
     }
@@ -100,5 +100,5 @@ impl FileDialog {
     }
 }
 
-/// Constructor-bound completion observer and its generated local event type.
-pub use crate::events::file_dialog::{Event, observer, filter_observer};
+/// Constructor-bound completion sink and its generated local event type.
+pub use crate::events::file_dialog::{Event, sink, filter_sink};

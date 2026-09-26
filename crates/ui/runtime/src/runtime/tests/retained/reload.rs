@@ -1,15 +1,13 @@
 //! Real loaded controls exercise publication, binding, authored defaults, and stale handles.
 use super::*;
 use neocogi_ui_document::{*, contracts::SetText};
-use neocogi_com::events::bind_output;
-use neocogi_ui_nodes_contracts::ScrollbarChanged;
+use neocogi_com::events::bind_source;
 
 /// Mounts a document slot in an ordinary window using the production runtime.
 fn slot(ui: &Ui) -> ReloadSlot {
     let mut root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let owner = window(ui, "runtime documents", Rect { x: 10, y: 10, width: 400, height: 400 }, &root);
-    let (diagnostics, _received) = route_diagnostics(64);
-    let slot = ReloadSlot::new(ui.clone(), owner, diagnostics).unwrap();
+    let slot = ReloadSlot::new(ui.clone(), owner).unwrap();
     root.insert(0, slot.widget(), LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
         .unwrap()
         .finish()
@@ -57,9 +55,11 @@ fn outputs_rebind_and_queued_old_events_have_distinct_generations() {
     document.inputs.clear();
     let (sender, events) = std::sync::mpsc::channel();
     let bind = |component: &neocogi_ui_document::Component, generation| {
-        bind_output(component.outputs()?.as_com_ref(), "save_requested", sender.clone(), move |_: Activation| {
-            generation
-        })
+        bind_source(
+            component.widget::<ButtonAbi>("save")?.as_interface(),
+            sender.clone(),
+            move |_: neocogi_ui::button::Event| generation,
+        )
     };
     slot.reload(&document, Resources::new(), bind).unwrap();
     fixture.frame(VIEW).unwrap();
@@ -157,10 +157,10 @@ fn all_builtin_document_controls_construct_and_reload() {
         let name = root.widget.name();
         let outputs = root
             .widget
-            .outputs()
-            .iter()
-            .map(|port| Output {
-                name: port.name.into(),
+            .event_stream()
+            .into_iter()
+            .map(|_| Output {
+                name: "event".into(),
                 node: "root".into(),
             })
             .collect();
@@ -175,7 +175,6 @@ fn all_builtin_document_controls_construct_and_reload() {
             .collect();
         let document = Document {
             version: VERSION,
-            connections: vec![],
             name: name.into(),
             root,
             outputs,
@@ -198,21 +197,25 @@ fn all_builtin_document_controls_construct_and_reload() {
                     InputKind::Position => component.input::<SetPosition>(&input.name).map(drop),
                 }?;
             }
-            let outputs = component.outputs()?;
             let (sender, _events) = std::sync::mpsc::channel::<()>();
-            for port in document.root.widget.outputs() {
-                match port.payload {
-                    OutputType::Activation => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: Activation| ()),
-                    OutputType::Checked => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: neocogi_ui::events::CheckboxChanged| ()),
-                    OutputType::Number => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: neocogi_ui::events::NumericChanged| ()),
-                    OutputType::TextChanged => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: neocogi_ui::events::TextChanged| ()),
-                    OutputType::TextSubmitted => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: neocogi_ui::events::TextSubmitted| ()),
-                    OutputType::Offset => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: ScrollbarChanged| ()),
-                    OutputType::Position => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: neocogi_ui::events::SplitChanged| ()),
-                    OutputType::Selection => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: neocogi_ui::events::ChoiceSelection| ()),
-                    OutputType::TextboxEvent => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: neocogi_ui::textbox::Event| ()),
-                    OutputType::TextAreaEvent => bind_output(outputs.as_com_ref(), port.name, sender.clone(), |_: neocogi_ui::text_area::Event| ()),
-                }?;
+            macro_rules! bind {
+                ($abi:ty) => {
+                    bind_source(component.widget::<$abi>(&document.root.key)?.as_interface(), sender.clone(), |_| ())?
+                };
+            }
+            match &document.root.widget {
+                WidgetSpec::Button { .. } => bind!(ButtonAbi),
+                WidgetSpec::Checkbox { .. } => bind!(CheckboxAbi),
+                WidgetSpec::Textbox { .. } => bind!(TextboxAbi),
+                WidgetSpec::TextArea { .. } => bind!(TextAreaAbi),
+                WidgetSpec::Slider { .. } => bind!(SliderAbi),
+                WidgetSpec::Number { .. } => bind!(NumberAbi),
+                WidgetSpec::ListItem { .. } => bind!(ListItemAbi),
+                WidgetSpec::ListBox { .. } => bind!(ListBoxAbi),
+                WidgetSpec::Scrollbar { .. } => bind!(ScrollbarAbi),
+                WidgetSpec::Combo { .. } => bind!(ComboAbi),
+                WidgetSpec::Split { .. } => bind!(SplitViewAbi),
+                _ => {}
             }
             Ok(())
         })
@@ -260,7 +263,6 @@ fn typed_inputs_validate_payloads_and_do_not_emit_user_events() {
     for (widget, kind) in cases {
         let document = Document {
             version: VERSION,
-            connections: vec![],
             name: "input".into(),
             root: Node::new("root", widget),
             outputs: vec![],
@@ -325,7 +327,6 @@ fn typed_enablement_preserves_authored_options_without_capturing_dynamic_routing
     });
     let document = Document {
         version: VERSION,
-        connections: vec![],
         name: "routing".into(),
         root,
         outputs: vec![],
@@ -364,7 +365,11 @@ fn authored_form_rectangles_survive_binary_reload_and_route_real_clicks() {
     assert_eq!(Document::from_binary(&bytes).unwrap(), document);
     let (sender, events) = std::sync::mpsc::channel();
     slot.reload(&document, Resources::new(), |component, generation| {
-        bind_output(component.outputs()?.as_com_ref(), "save_requested", sender, move |_: Activation| generation)
+        bind_source(
+            component.widget::<ButtonAbi>("save")?.as_interface(),
+            sender,
+            move |_: neocogi_ui::button::Event| generation,
+        )
     })
     .unwrap();
     fixture.frame(VIEW).unwrap();
@@ -388,8 +393,7 @@ fn authored_form_rectangles_survive_binary_reload_and_route_real_clicks() {
 fn typed_and_binary_preparation_have_equivalent_authored_state() {
     let fixture = Headless::standard();
     let document = Document::new("preparation paths");
-    let (diagnostics, _received) = route_diagnostics(64);
-    let loader = Loader::new(fixture.ui.clone(), None, Resources::new(), diagnostics).unwrap();
+    let loader = Loader::new(fixture.ui.clone(), None, Resources::new()).unwrap();
     let typed = loader.prepare(&document).unwrap();
     let binary = loader.load(&document.to_binary().unwrap()).unwrap();
     assert_ne!(typed.root().unwrap().as_interface().as_ptr(), binary.root().unwrap().as_interface().as_ptr());
@@ -411,7 +415,6 @@ fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
     let mut slot = slot(&fixture.ui);
     let mut document = Document {
         version: VERSION,
-        connections: vec![],
         name: "focused commands".into(),
         root: Node::new(
             "root",
@@ -433,7 +436,7 @@ fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
     };
     let (sender, events) = std::sync::mpsc::channel();
     slot.reload(&document, Resources::new(), |component, _| {
-        bind_output(component.outputs()?.as_com_ref(), "changed", sender.clone(), |_: ChoiceSelection| ())
+        bind_source(component.widget::<ComboAbi>("root")?.as_interface(), sender.clone(), |_| ())
     })
     .unwrap();
     let component = slot.component().unwrap();
@@ -457,7 +460,7 @@ fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
     };
     document.inputs[0].kind = InputKind::Offset;
     slot.reload(&document, Resources::new(), |component, _| {
-        bind_output(component.outputs()?.as_com_ref(), "changed", sender.clone(), |_: ScrollbarChanged| ())
+        bind_source(component.widget::<ScrollbarAbi>("root")?.as_interface(), sender.clone(), |_| ())
     })
     .unwrap();
     assert!(selection.send(SetSelection { selected: 0 }).is_err());
@@ -480,7 +483,7 @@ fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
     };
     document.inputs[0].kind = InputKind::Position;
     slot.reload(&document, Resources::new(), |component, _| {
-        bind_output(component.outputs()?.as_com_ref(), "changed", sender.clone(), |_: SplitChanged| ())
+        bind_source(component.widget::<SplitViewAbi>("root")?.as_interface(), sender.clone(), |_| ())
     })
     .unwrap();
     assert!(offset.send(SetOffset { offset: 0 }).is_err());
@@ -507,7 +510,7 @@ fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
 
 /// A self-targeting activation applies only after input traversal, without a reentrant borrow.
 #[test]
-fn private_connection_executes_after_real_click_and_retires_with_its_scope() {
+fn application_handles_real_click_and_closed_form_retires() {
     use neocogi_ui::{Mount, Mountable, IEventOwnerAbi};
     let mut fixture = Headless::standard();
     let mut slot = slot(&fixture.ui);
@@ -515,17 +518,16 @@ fn private_connection_executes_after_real_click_and_retires_with_its_scope() {
     document.root = Node::new("button", WidgetSpec::Button { text: "Before".into() });
     document.inputs.clear();
     document.outputs.clear();
-    document.connections.push(Connection {
-        source: "button".into(),
-        event: "activated".into(),
-        target: "button".into(),
-        action: Action::Text("After".into()),
-    });
+    // Application behavior is queued explicitly; documents do not contain executable routes.
+    let (sender, messages) = std::sync::mpsc::channel();
     let bytes = document.to_binary().unwrap();
     assert_eq!(Document::from_binary(&bytes).unwrap(), document);
-    slot.reload(&document, Resources::new(), |_, _| Ok(())).unwrap();
+    slot.reload(&document, Resources::new(), |component, _| {
+        bind_source(component.widget::<ButtonAbi>("button")?.as_interface(), sender.clone(), |_| ())
+    })
+    .unwrap();
     let component = slot.component().unwrap();
-    let button = Widget::from_interface(component.root().unwrap().as_interface().add_ref().query::<ButtonAbi>().unwrap());
+    let mut button = component.widget::<ButtonAbi>("button").unwrap();
     let mut owner: neocogi_com::ComPtr<IEventOwnerAbi> = match component.mount_description().unwrap() {
         Mount::Component { owner, .. } => owner,
         _ => panic!("document must retain its event owner"),
@@ -534,6 +536,9 @@ fn private_connection_executes_after_real_click_and_retires_with_its_scope() {
     pointer(&fixture.ui, Point { x: 30, y: 30 }, true);
     pointer(&fixture.ui, Point { x: 30, y: 30 }, false);
     fixture.frame(VIEW).unwrap();
+    assert_eq!(button.label().unwrap(), "Before");
+    messages.try_recv().unwrap();
+    button.set_label("After").unwrap();
     assert_eq!(button.label().unwrap(), "After");
     assert_eq!(slot.component().unwrap().save().unwrap(), bytes);
     assert_eq!(owner.dispatch_next(), Ok(false));
@@ -544,9 +549,9 @@ fn private_connection_executes_after_real_click_and_retires_with_its_scope() {
     assert!(button.label().is_err());
 }
 
-/// The form consumes one checkbox event, applies two actions, and forwards its public value.
+/// One application consumer receives the complete checkbox event and edits two typed fields.
 #[test]
-fn form_owns_checkbox_actions_and_public_forwarding() {
+fn application_owns_checkbox_actions_and_complete_event_consumption() {
     let mut fixture = Headless::standard();
     let mut slot = slot(&fixture.ui);
     let mut document = Document::new("forwarded state");
@@ -562,43 +567,38 @@ fn form_owns_checkbox_actions_and_public_forwarding() {
         node: "source".into(),
     }];
     document.inputs.clear();
-    for key in ["target", "second"] {
-        document.connections.push(Connection {
-            source: "source".into(),
-            event: "changed".into(),
-            target: key.into(),
-            action: Action::Forward(InputKind::Checked),
-        });
-    }
+    // One application handler may issue commands to multiple typed widget fields.
     let (sender, events) = std::sync::mpsc::channel();
     slot.reload(&document, Resources::new(), |component, _| {
-        bind_output(
-            component.outputs()?.as_com_ref(),
-            "source_changed",
+        bind_source(
+            component.widget::<CheckboxAbi>("source")?.as_interface(),
             sender,
-            |event: neocogi_ui_nodes_contracts::CheckboxChanged| event.checked,
+            |neocogi_ui::checkbox::Event::Changed(event)| event.checked,
         )
     })
     .unwrap();
     fixture.frame(VIEW).unwrap();
     let form = slot.component().unwrap().root().unwrap().as_interface().add_ref().query::<FormAbi>().unwrap();
     let children = form.children().unwrap();
-    let target = Widget::from_interface(children.child(1).unwrap().query::<CheckboxAbi>().unwrap());
-    let second = Widget::from_interface(children.child(2).unwrap().query::<CheckboxAbi>().unwrap());
+    let mut target = Widget::from_interface(children.child(1).unwrap().query::<CheckboxAbi>().unwrap());
+    let mut second = Widget::from_interface(children.child(2).unwrap().query::<CheckboxAbi>().unwrap());
     assert!(!target.checked().unwrap());
     assert!(!second.checked().unwrap());
     pointer(&fixture.ui, Point { x: 30, y: 30 }, true);
     pointer(&fixture.ui, Point { x: 30, y: 30 }, false);
     fixture.frame(VIEW).unwrap();
+    assert!(!target.checked().unwrap());
+    let checked = events.try_recv().unwrap();
+    target.set_checked(checked).unwrap();
+    second.set_checked(checked).unwrap();
     assert!(target.checked().unwrap());
     assert!(second.checked().unwrap());
-    assert_eq!(events.try_recv(), Ok(true));
 }
 
 /// One text event enum reaches the form; its changed variant updates a visual target
 /// while both changed and submitted remain visible through the sole public stream.
 #[test]
-fn textbox_enum_stream_drives_form_action_and_public_observer() {
+fn textbox_enum_stream_drives_form_action_and_public_sink() {
     let mut fixture = Headless::standard();
     let mut slot = slot(&fixture.ui);
     let mut document = Document::new("text event owner");
@@ -622,29 +622,33 @@ fn textbox_enum_stream_drives_form_action_and_public_observer() {
         node: "name".into(),
     }];
     document.inputs.clear();
-    document.connections.push(Connection {
-        source: "name".into(),
-        event: "changed".into(),
-        target: "preview".into(),
-        action: Action::Forward(InputKind::Text),
-    });
+    // The application matches the enum and edits its preview field after traversal.
     let (sender, events) = std::sync::mpsc::channel();
     slot.reload(&document, Resources::new(), |component, _| {
-        bind_output(component.outputs()?.as_com_ref(), "name_event", sender, |event: neocogi_ui::textbox::Event| {
-            event
-        })
+        bind_source(
+            component.widget::<TextboxAbi>("name")?.as_interface(),
+            sender,
+            |event: neocogi_ui::textbox::Event| event,
+        )
     })
     .unwrap();
     fixture.frame(VIEW).unwrap();
     let form = slot.component().unwrap().root().unwrap().as_interface().add_ref().query::<FormAbi>().unwrap();
     let children = form.children().unwrap();
-    let preview = Widget::from_interface(children.child(1).unwrap().query::<TextBlockAbi>().unwrap());
+    let mut preview = Widget::from_interface(children.child(1).unwrap().query::<TextBlockAbi>().unwrap());
     pointer(&fixture.ui, Point { x: 30, y: 30 }, true);
     pointer(&fixture.ui, Point { x: 30, y: 30 }, false);
     fixture.ui.input(UiInput::Text, "Ada").unwrap();
     fixture.frame(VIEW).unwrap();
+    assert_eq!(preview.text().unwrap(), "");
+    match events.try_recv().unwrap() {
+        neocogi_ui::textbox::Event::Changed(value) => {
+            assert_eq!(value.cursor, 3);
+            preview.set_text(&value.text).unwrap();
+        }
+        neocogi_ui::textbox::Event::Submitted(_) => panic!("edit must arrive before submit"),
+    }
     assert_eq!(preview.text().unwrap(), "Ada");
-    assert!(matches!(events.try_recv(), Ok(neocogi_ui::textbox::Event::Changed(value)) if value.text == "Ada" && value.cursor == 3));
     key(&fixture.ui, KeyCode::Enter, 0, 0);
     fixture.frame(VIEW).unwrap();
     assert!(matches!(events.try_recv(), Ok(neocogi_ui::textbox::Event::Submitted(value)) if value.text == "Ada"));

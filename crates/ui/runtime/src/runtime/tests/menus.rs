@@ -55,9 +55,12 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
     ui.input(UiInput::Text, "focus restored").unwrap();
     ui.update(SIZE).unwrap();
     item.set_label("Later").unwrap();
-    // Installation now resolves the moved forest record. The queued old mapping's
-    // value remains unchanged, while the next activation uses the replacement.
-    neocogi_ui::events::bind(item.activated().unwrap(), session_tx.clone(), |event| format!("mapped:{}", event.label)).unwrap();
+    // Moving the menu into the runtime preserves the original consumer slot.
+    // Neither a queued snapshot nor the mapping for future activations is replaced.
+    assert_eq!(
+        neocogi_ui::events::bind(item.activated().unwrap(), session_tx.clone(), |event| format!("mapped:{}", event.label)),
+        Err(neocogi_com::NC_E_ALREADY_BOUND),
+    );
     labels.extend(session.try_iter());
     assert_eq!(&labels, &["Captured"]);
     assert_eq!(editor.text().unwrap(), "focus restored");
@@ -69,7 +72,7 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
         Ok(())
     });
     ui.update_with_events(SIZE, app.as_interface()).unwrap();
-    assert_eq!(&*app.state(), &["Captured", "mapped:Later"]);
+    assert_eq!(&*app.state(), &["Captured", "Later"]);
     let (renderer, _) = renderer();
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
     item.set_shortcut_hint("A longer accelerator").unwrap();

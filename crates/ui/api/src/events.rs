@@ -28,7 +28,7 @@
 //! }
 //! ```
 /// Installs a typed COM mapping into a standard application or component channel.
-pub use neocogi_com::events::bind;
+pub use neocogi_com::events::{bind, bind_source, bind_stream, attach_source};
 
 /// Owned application fixtures for integration tests, without borrowed callback adapters.
 #[cfg(feature = "test-support")]
@@ -49,7 +49,7 @@ pub use neocogi_ui_nodes_contracts::{CheckboxChanged, NumericChanged, ScrollbarC
 /// An observed widget has one event port and one construction-time consumer;
 /// controls with several event kinds carry a typed enum on that port. A composite
 /// consumes child events with `EventModel::handle(&mut self, message)` and owns
-/// any visual actions or public forwarding derived from them.
+/// the application behavior derived from them.
 /// The event type remains statically known; this alias hides only repeated closure syntax.
 pub type EventConsumer<E> = Box<dyn FnMut(E) -> Result<(), NcStatus>>;
 
@@ -67,23 +67,19 @@ fn checked<E: 'static>(
 }
 
 /// Obtains lifecycle output installation; setup temporarily retains the actual window.
-pub fn window_events(
-    window: ComRef<'_, IWindowAbi>,
-) -> Result<impl FnOnce(EventConsumer<WindowEvent>) -> Result<(), NcStatus> + use<>, NcStatus> {
-    Ok(checked(window.add_ref().query::<IWindowEventsAbi>()?.changed(), valid_window_event))
+pub fn window_events(window: ComRef<'_, IWindowAbi>) -> Result<impl FnOnce(EventConsumer<WindowEvent>) -> Result<(), NcStatus> + use<>, NcStatus> {
+    Ok(checked(install_stream(window.add_ref().query::<IWindowEventsAbi>()?), valid_window_event))
 }
 
 /// Obtains dismissal output installation; delivery describes a captured fact.
-pub fn popup_events(
-    popup: ComRef<'_, IPopupAbi>,
-) -> Result<impl FnOnce(EventConsumer<PopupDismissed>) -> Result<(), NcStatus> + use<>, NcStatus> {
-    Ok(popup.add_ref().query::<IPopupEventsAbi>()?.dismissed())
+pub fn popup_events(popup: ComRef<'_, IPopupAbi>) -> Result<impl FnOnce(EventConsumer<PopupDismissed>) -> Result<(), NcStatus> + use<>, NcStatus> {
+    Ok(install_stream(popup.add_ref().query::<IPopupEventsAbi>()?))
 }
 
 impl crate::MenuItem {
     /// Obtains this row's activation installation operation through its actual COM interface.
     pub fn activated(&self) -> Result<impl FnOnce(EventConsumer<Activation>) -> Result<(), NcStatus> + use<>, NcStatus> {
-        Ok(self.as_interface().add_ref().query::<IActivationEventsAbi>()?.activated())
+        Ok(install_stream(self.as_interface().add_ref().query::<IActivationEventsAbi>()?))
     }
 }
 
@@ -105,11 +101,7 @@ fn valid_split(event: &SplitChanged) -> Result<(), NcStatus> {
 /// Checks the captured cursor against the complete generated UTF-8 text snapshot.
 fn valid_text_cursor(text: &str, cursor: u64) -> Result<(), NcStatus> {
     let position = usize::try_from(cursor).map_err(|_| NC_E_INVALID_ARG)?;
-    if text.is_char_boundary(position) {
-        Ok(())
-    } else {
-        Err(NC_E_INVALID_ARG)
-    }
+    if text.is_char_boundary(position) { Ok(()) } else { Err(NC_E_INVALID_ARG) }
 }
 
 /// Checks copied window geometry before message translation.
@@ -141,38 +133,38 @@ fn valid_file_dialog_path(event: &FileDialogCompletion) -> Result<(), NcStatus> 
 #[cfg(test)]
 mod connector_tests;
 
-/// Adds the standard channel transport to one generated observer contract.
+/// Adds the standard channel transport to one generated sink contract.
 /// The mapper executes during posting; owner state is handled when its inbox drains.
-macro_rules! widget_observer {
+macro_rules! widget_sink {
     ($module:ident, $event:path, $abi:ident, $validate:expr) => {
-        /// Construction-time observer and owned event variants for this widget.
+        /// Construction-time sink and owned event variants for this widget.
         pub mod $module {
             use super::*;
             /// The IDL-derived local sum of this widget's output payloads.
             pub use $event as Event;
 
-            /// Creates one observer containing its sender and mapper inline.
+            /// Creates one sink containing its sender and mapper inline.
             /// A disconnected owner discards future messages without failing UI input.
-            pub fn observer<M: 'static>(
+            pub fn sink<M: 'static>(
                 sender: std::sync::mpsc::Sender<M>,
                 mut map: impl FnMut(Event) -> M + 'static,
             ) -> Result<neocogi_com::ComPtr<$abi>, NcStatus> {
-                filter_observer(sender, move |event| Some(map(event)))
+                filter_sink(sender, move |event| Some(map(event)))
             }
 
             /// Checks the concrete event domain independently of its consumer or transport.
-            /// Form-owned observers call this same boundary check before queueing events.
+            /// Form-owned sinks call this same boundary check before queueing events.
             pub fn validate(event: &Event) -> Result<(), NcStatus> {
                 ($validate)(event)
             }
 
-            /// Creates an observer that can ignore output variants before queueing.
+            /// Creates an sink that can ignore output variants before queueing.
             /// Domain checks run before the mapper, including for ignored variants.
-            pub fn filter_observer<M: 'static>(
+            pub fn filter_sink<M: 'static>(
                 sender: std::sync::mpsc::Sender<M>,
                 mut map: impl FnMut(Event) -> Option<M> + 'static,
             ) -> Result<neocogi_com::ComPtr<$abi>, NcStatus> {
-                Event::observer(move |event| {
+                <$abi as neocogi_com::events::MessageSinkInterface>::receiver(move |event| {
                     validate(&event)?;
                     if let Some(message) = map(event) {
                         let _ = sender.send(message);
@@ -183,83 +175,78 @@ macro_rules! widget_observer {
         }
     };
 }
-widget_observer!(
-    button,
-    neocogi_ui_nodes_contracts::ButtonEvent,
-    ButtonObserverAbi,
-    |_: &Event| Ok::<(), NcStatus>(())
-);
-widget_observer!(checkbox, neocogi_ui_nodes_contracts::CheckboxEvent, CheckboxObserverAbi, |_: &Event| Ok::<
+widget_sink!(button, neocogi_ui_nodes_contracts::ButtonEvent, ButtonSinkAbi, |_: &Event| Ok::<(), NcStatus>(
+    ()
+));
+widget_sink!(checkbox, neocogi_ui_nodes_contracts::CheckboxEvent, CheckboxSinkAbi, |_: &Event| Ok::<
     (),
     NcStatus,
 >(()));
-widget_observer!(
-    textbox,
-    neocogi_ui_nodes_contracts::TextboxEvent,
-    TextboxObserverAbi,
-    |event: &Event| match event {
-        Event::Changed(value) => valid_text_cursor(&value.text, value.cursor),
-        Event::Submitted(_) => Ok(()),
-    }
-);
-widget_observer!(
+widget_sink!(textbox, neocogi_ui_nodes_contracts::TextboxEvent, TextboxSinkAbi, |event: &Event| match event {
+    Event::Changed(value) => valid_text_cursor(&value.text, value.cursor),
+    Event::Submitted(_) => Ok(()),
+});
+widget_sink!(
     text_area,
     neocogi_ui_nodes_contracts::TextAreaEvent,
-    TextAreaObserverAbi,
+    TextAreaSinkAbi,
     |event: &Event| match event {
         Event::Changed(value) => valid_text_cursor(&value.text, value.cursor),
         Event::Submitted(_) => Ok(()),
     }
 );
-widget_observer!(
-    slider,
-    neocogi_ui_nodes_contracts::SliderEvent,
-    SliderObserverAbi,
-    |event: &Event| match event {
-        Event::Changed(value) => valid_numeric(value),
-    }
-);
-widget_observer!(
-    number,
-    neocogi_ui_nodes_contracts::NumberEvent,
-    NumberObserverAbi,
-    |event: &Event| match event {
-        Event::Changed(value) => valid_numeric(value),
-    }
-);
-widget_observer!(list_item, neocogi_ui_nodes_contracts::ListItemEvent, ListItemObserverAbi, |_: &Event| Ok::<
+widget_sink!(slider, neocogi_ui_nodes_contracts::SliderEvent, SliderSinkAbi, |event: &Event| match event {
+    Event::Changed(value) => valid_numeric(value),
+});
+widget_sink!(number, neocogi_ui_nodes_contracts::NumberEvent, NumberSinkAbi, |event: &Event| match event {
+    Event::Changed(value) => valid_numeric(value),
+});
+widget_sink!(list_item, neocogi_ui_nodes_contracts::ListItemEvent, ListItemSinkAbi, |_: &Event| Ok::<
     (),
     NcStatus,
 >(()));
-widget_observer!(list_box, neocogi_ui_nodes_contracts::ListBoxEvent, ListBoxObserverAbi, |_: &Event| Ok::<
-    (),
-    NcStatus,
->(()));
-widget_observer!(
+widget_sink!(
+    list_box,
+    neocogi_ui_nodes_contracts::ListBoxEvent,
+    ListBoxSinkAbi,
+    |_: &Event| Ok::<(), NcStatus>(())
+);
+widget_sink!(
     scrollbar,
     neocogi_ui_nodes_contracts::ScrollbarEvent,
-    ScrollbarObserverAbi,
+    ScrollbarSinkAbi,
     |event: &Event| match event {
         Event::Changed(value) => valid_scrollbar(value),
     }
 );
-widget_observer!(
+widget_sink!(
     split_view,
     neocogi_ui_nodes_contracts::SplitViewEvent,
-    SplitViewObserverAbi,
+    SplitViewSinkAbi,
     |event: &Event| match event {
         Event::Changed(value) => valid_split(value),
     }
 );
-widget_observer!(combo, neocogi_ui_core_contracts::IChoiceMenuEvent, IChoiceMenuObserverAbi, |_: &Event| Ok::<
+widget_sink!(combo, neocogi_ui_core_contracts::IChoiceMenuEvent, IChoiceMenuSinkAbi, |_: &Event| Ok::<
     (),
     NcStatus,
 >(()));
-widget_observer!(
+widget_sink!(
     file_dialog,
     neocogi_ui_core_contracts::IFileDialogEvent,
-    IFileDialogObserverAbi,
+    IFileDialogSinkAbi,
     |event: &Event| match event {
         Event::Completed(value) => valid_file_dialog_path(value),
     }
 );
+
+/// Retains only a checked source capability until its one attachment is installed.
+fn install_stream<C: neocogi_com::events::EventSource>(
+    source: neocogi_com::ComPtr<C>,
+) -> impl FnOnce(EventConsumer<neocogi_com::events::EventOf<C>>) -> Result<(), NcStatus> {
+    move |consume| {
+        use neocogi_com::events::MessageSinkInterface;
+        let sink = neocogi_com::events::SinkOf::<C>::receiver(consume)?;
+        attach_source(source.as_com_ref(), sink.as_com_ref())
+    }
+}

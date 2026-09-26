@@ -45,16 +45,25 @@ fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
         /// Copies the generated projection and typed constructor defaults.
         fn manifest(&self) -> Result<neocogi_ui_document::design::DesignWidgetManifest, String> {
             neocogi_ui_document::design::DesignWidgetManifest::from_idl(
-                "example.button", self.defaults.clone(), &neocogi_demo_contracts::CounterAbi::IDL_INTERFACE,
+                "example.button",
+                self.defaults.clone(),
+                &neocogi_demo_contracts::CounterAbi::IDL_INTERFACE,
             )
         }
         /// Binding generation never constructs a live widget.
-        fn create(&self, _: &Ui, _: &[CustomProperty]) -> Result<Widget<IWidgetAbi>, NcStatus> { Err(NC_E_INVALID_ARG) }
+        fn create(&self, _: &Ui, _: &[CustomProperty]) -> Result<Widget<IWidgetAbi>, NcStatus> {
+            Err(NC_E_INVALID_ARG)
+        }
     }
     let mut registry = CustomWidgetRegistry::new();
-    registry.register(Rc::new(CounterFactory {
-        defaults: vec![CustomProperty { name: "label".into(), value: CustomValue::Text("Custom".into()) }],
-    })).unwrap();
+    registry
+        .register(Rc::new(CounterFactory {
+            defaults: vec![CustomProperty {
+                name: "label".into(),
+                value: CustomValue::Text("Custom".into()),
+            }],
+        }))
+        .unwrap();
     let mut document = Document::new("custom");
     document.root.children.push(Child {
         edge: Edge::Linear { main: Track::Content, cross: None },
@@ -64,30 +73,36 @@ fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
     assert_eq!(Document::from_json(&document.to_json().unwrap()).unwrap(), document);
     assert_eq!(Document::from_binary(&document.to_binary().unwrap()).unwrap(), document);
     let metadata = &neocogi_demo_contracts::CounterEvent::IDL_MESSAGE;
-    let neocogi_com::design::IdlShape::Enum(cases) = metadata.shape else { panic!("CounterEvent must be an enum") };
+    let neocogi_com::design::IdlShape::Enum(cases) = metadata.shape else {
+        panic!("CounterEvent must be an enum")
+    };
     assert_eq!(cases.iter().map(|case| case.name).collect::<Vec<_>>(), ["Activated", "Changed"]);
     assert_eq!(cases[1].fields[0].ty, "neocogi.demo.CounterChanged");
     assert!(document.rust_bindings().unwrap_err().contains("not registered"));
-    let WidgetSpec::Custom { properties, .. } = &mut document.root.children.last_mut().unwrap().node.widget else { unreachable!() };
+    let WidgetSpec::Custom { properties, .. } = &mut document.root.children.last_mut().unwrap().node.widget else {
+        unreachable!()
+    };
     properties[0].value = CustomValue::Integer(2);
     assert!(registry.validate_document(&document).unwrap_err().contains("schema mismatch"));
 }
 
-/// Registry registration rejects metadata that conceals an actual COM output setter.
+/// Registry registration rejects a stream descriptor outside the advertised COM chain.
 #[test]
-fn custom_factory_cannot_hide_a_second_event_contract_in_com_metadata() {
+fn custom_factory_cannot_advertise_a_stream_outside_its_com_chain() {
     use neocogi_com::{NcStatus, NC_E_INVALID_ARG, design::IdlInterface};
     use neocogi_ui::{IWidgetAbi, Ui, Widget};
     use neocogi_ui_document::{CustomProperty, CustomWidgetFactory, CustomWidgetRegistry};
     use std::rc::Rc;
 
-    /// Fabricated source metadata intentionally hides Counter's physical event setter.
+    /// Fabricated source metadata advertises an unrelated projection as the stream.
     static HIDDEN: IdlInterface = IdlInterface {
         abi: &neocogi_demo_contracts::CounterAbi::INTERFACE_DESCRIPTOR,
         chain: &neocogi_demo_contracts::CounterAbi::INTERFACE_CHAIN,
         rust_abi: "neocogi_demo_contracts::CounterAbi",
-        rust_outputs: None,
-        outputs: &[],
+        stream: Some(neocogi_com::design::IdlEventStream {
+            abi: &neocogi_ui::TextboxAbi::INTERFACE_DESCRIPTOR,
+            message: &neocogi_demo_contracts::CounterEvent::IDL_MESSAGE,
+        }),
     };
     /// A provider whose advertised source metadata disagrees with the COM descriptor.
     struct HiddenFactory;
@@ -97,7 +112,14 @@ fn custom_factory_cannot_hide_a_second_event_contract_in_com_metadata() {
             neocogi_ui_document::design::DesignWidgetManifest::from_idl("hidden.counter", vec![], &HIDDEN)
         }
         /// Registration rejects this provider before construction is possible.
-        fn create(&self, _: &Ui, _: &[CustomProperty]) -> Result<Widget<IWidgetAbi>, NcStatus> { Err(NC_E_INVALID_ARG) }
+        fn create(&self, _: &Ui, _: &[CustomProperty]) -> Result<Widget<IWidgetAbi>, NcStatus> {
+            Err(NC_E_INVALID_ARG)
+        }
     }
-    assert!(CustomWidgetRegistry::new().register(Rc::new(HiddenFactory)).unwrap_err().contains("disagrees"));
+    assert!(
+        CustomWidgetRegistry::new()
+            .register(Rc::new(HiddenFactory))
+            .unwrap_err()
+            .contains("absent from")
+    );
 }

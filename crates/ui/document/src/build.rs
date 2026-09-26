@@ -1,20 +1,12 @@
 //! Concrete factory mappings and ownership cleanup for unpublished candidates.
 use crate::model::*;
-use crate::{Resources, wiring::{Message, PublicEmitter, WidgetEvent}};
+use crate::Resources;
 use neocogi_com::{ComPtr, ComInterface, NcStatus, NcCopyFromBufferOffset, NC_E_INVALID_ARG, NC_E_NOT_FOUND};
 use neocogi_ui::*;
-use std::{collections::BTreeMap, sync::mpsc::Sender};
+use std::collections::BTreeMap;
 
 /// Owns all created nodes until construction transfers them to the loaded component.
 pub(crate) struct Construction<'a> {
-    /// Optional authored aliases for a widget event stream.
-    pub declarations: &'a [crate::model::Output],
-    /// Each observed child sends its complete typed event to the form's one inbox.
-    pub sender: Sender<Message>,
-    /// Form-owned public relays; none is passed to a child widget.
-    pub public: BTreeMap<String, PublicEmitter>,
-    /// Component-owned application bindings, separate from widget lifetimes.
-    pub outputs: neocogi_com::events::NamedOutputs,
     /// Explicitly registered custom COM factories.
     pub custom: &'a crate::CustomWidgetRegistry,
     /// Existing runtime and independently deployed built-in factory.
@@ -60,88 +52,36 @@ impl Construction<'_> {
     pub fn build(&mut self, node: &Node) -> Result<Widget<IWidgetAbi>, NcStatus> {
         let children = node.children.iter().map(|child| self.build(&child.node)).collect::<Result<Vec<_>, _>>()?;
         let factory = self.ui.widgets();
-        // Each emitting child receives one adapter at construction. Application
-        // handlers run later, after the runtime traversal releases widget borrows.
-        macro_rules! create {
-            ($factory:expr, $method:ident, $event:ty, $kind:ident, $($argument:expr),* $(,)?) => {{
-                let exported = self.declarations.iter().find(|output| output.node == node.key);
-                let observer = {
-                    let sender = self.sender.clone();
-                    let source = node.key.clone();
-                    Some(<$event>::observer(move |event| {
-                        let event = WidgetEvent::$kind(event);
-                        event.validate()?;
-                        // A retired form may disconnect normally; no child call becomes an error.
-                        let _ = sender.send(Message { source: source.clone(), event });
-                        Ok(())
-                    })?)
-                };
-                let (proxy, bindings) = <$event>::exported_observer()?;
-                let name = exported.map(|output| output.name.as_str()).unwrap_or(node.key.as_str());
-                self.outputs.export_component(name, bindings, node.widget.outputs()[0].name)?;
-                self.public.insert(node.key.clone(), PublicEmitter::$kind(Some(proxy)));
-                $factory.$method($($argument,)* observer.as_ref().map(|value| value.as_com_ref()))?
-            }};
-        }
         let mut widget = match &node.widget {
-            WidgetSpec::Button { text } => root(create!(factory, button_with_observer, nodes::ButtonEvent, Button, text))?,
-            WidgetSpec::Checkbox { text, checked } => root(create!(factory, checkbox_with_observer, nodes::CheckboxEvent, Checkbox, text, *checked))?,
-            WidgetSpec::Textbox { text } => root(create!(factory, textbox_with_observer, nodes::TextboxEvent, Textbox, text))?,
+            WidgetSpec::Button { text } => root(factory.button_unobserved(text)?)?,
+            WidgetSpec::Checkbox { text, checked } => root(factory.checkbox_unobserved(text, *checked)?)?,
+            WidgetSpec::Textbox { text } => root(factory.textbox_unobserved(text)?)?,
             WidgetSpec::TextBlock { text, wrapping: policy } => root(factory.text_block(text, wrapping(policy))?)?,
-            WidgetSpec::TextArea { text, wrapping: policy, scrolling } => root(create!(
-                factory,
-                text_area_with_observer,
-                nodes::TextAreaEvent, TextArea,
-                text,
-                wrapping(policy),
-                *scrolling
-            ))?,
-            WidgetSpec::Slider { value, low, high, step, precision } => root(create!(
-                factory,
-                slider_with_observer,
-                nodes::SliderEvent, Slider,
-                SliderOptions {
-                    value: *value,
-                    low: *low,
-                    high: *high,
-                    step: *step,
-                    precision: *precision,
-                }
-            ))?,
-            WidgetSpec::Number { value, step, precision } => root(create!(
-                factory,
-                number_with_observer,
-                nodes::NumberEvent, Number,
-                NumberOptions {
-                    value: *value,
-                    step: *step,
-                    precision: *precision,
-                }
-            ))?,
+            WidgetSpec::TextArea { text, wrapping: policy, scrolling } => root(factory.text_area_unobserved(text, wrapping(policy), *scrolling)?)?,
+            WidgetSpec::Slider { value, low, high, step, precision } => root(factory.slider_unobserved(SliderOptions {
+                value: *value,
+                low: *low,
+                high: *high,
+                step: *step,
+                precision: *precision,
+            })?)?,
+            WidgetSpec::Number { value, step, precision } => root(factory.number_unobserved(NumberOptions {
+                value: *value,
+                step: *step,
+                precision: *precision,
+            })?)?,
             WidgetSpec::ColorSwatch { text, rgba } => root(factory.color_swatch(*rgba, text)?)?,
-            WidgetSpec::ListItem { text } => root(create!(factory, list_item_with_observer, nodes::ListItemEvent, ListItem, text))?,
-            WidgetSpec::ListBox { text } => root(create!(factory, list_box_with_observer, nodes::ListBoxEvent, ListBox, text))?,
-            WidgetSpec::Scrollbar { vertical, viewport, content, offset } => root(create!(
-                factory,
-                scrollbar_with_observer,
-                nodes::ScrollbarEvent, Scrollbar,
-                ScrollRange {
-                    axis: if *vertical { ScrollAxis::Vertical } else { ScrollAxis::Horizontal },
-                    viewport: *viewport,
-                    content: *content,
-                    offset: *offset,
-                }
-            ))?,
+            WidgetSpec::ListItem { text } => root(factory.list_item_unobserved(text)?)?,
+            WidgetSpec::ListBox { text } => root(factory.list_box_unobserved(text)?)?,
+            WidgetSpec::Scrollbar { vertical, viewport, content, offset } => root(factory.scrollbar_unobserved(ScrollRange {
+                axis: if *vertical { ScrollAxis::Vertical } else { ScrollAxis::Horizontal },
+                viewport: *viewport,
+                content: *content,
+                offset: *offset,
+            })?)?,
             WidgetSpec::Combo { labels, selected, placeholder } => {
                 let parent = self.parent.ok_or(NC_E_INVALID_ARG)?;
-                let mut combo = create!(
-                    self.ui,
-                    combo_box_with_observer,
-                    IChoiceMenuEvent, Combo,
-                    parent.as_com_ref(),
-                    labels,
-                    selection(*selected)
-                );
+                let mut combo = self.ui.combo_box_unobserved(parent.as_com_ref(), labels, selection(*selected))?;
                 // Retain the root before further fallible setters so cleanup also removes its popup.
                 let widget = root(combo.clone())?;
                 self.nodes.insert(node.key.clone(), widget.clone());
@@ -173,18 +113,13 @@ impl Construction<'_> {
                 minimum_first,
                 minimum_second,
                 handle,
-            } => root(create!(
-                factory,
-                split_view_with_observer,
-                nodes::SplitViewEvent, Split,
-                SplitOptions {
-                    axis: if *vertical { SplitAxis::Vertical } else { SplitAxis::Horizontal },
-                    position: *position,
-                    minimum_first: *minimum_first,
-                    minimum_second: *minimum_second,
-                    handle_width: *handle,
-                }
-            ))?,
+            } => root(factory.split_view_unobserved(SplitOptions {
+                axis: if *vertical { SplitAxis::Vertical } else { SplitAxis::Horizontal },
+                position: *position,
+                minimum_first: *minimum_first,
+                minimum_second: *minimum_second,
+                handle_width: *handle,
+            })?)?,
             WidgetSpec::Scroll { enabled } => root(factory.scroll_area(children.first().ok_or(NC_E_INVALID_ARG)?, *enabled)?)?,
             WidgetSpec::Disclosure { text, tree, expanded } => {
                 root(factory.disclosure(text, if *tree { DisclosureStyle::Tree } else { DisclosureStyle::Header }, *expanded)?)?
