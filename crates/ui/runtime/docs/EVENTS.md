@@ -1,4 +1,4 @@
-# Constructor observers and owned event controllers
+# Typed class streams and owned event controllers
 
 Widgets post typed facts into their owner's standard Rust channel. A nested
 component consumes its children's messages and emits its own public results
@@ -70,12 +70,12 @@ allocate. An allocation regression compares 64 warmed ordinary updates with
 
 ## Construction and posting
 
-Declare cross-COM facts as concrete NCIDL `#[message]` structs/enums and mark the
-producing interface `#[observer]`. The compiler generates one typed observer
-interface for the producer's sole output port. When the widget reports several
-event kinds, that port carries a message enum. For example, `TextboxEvent` has `Changed(TextChanged)` and
-`Submitted(TextSubmitted)` variants that reuse the core message contracts.
-No output setter is generated for that producer. Its factory explicitly accepts `Option<&TextboxObserver>`.
+Declare cross-COM facts as concrete NCIDL `#[message]` structs/enums. An emitting
+class requires `IEventStream<Event>`, an ordinary generic COM interface. Several
+event kinds travel as variants of that one message; `TextboxEvent` carries
+`Changed(TextChanged)` and `Submitted(TextSubmitted)`. The factory returns an
+unbound widget. Its behavioral parent attaches one typed sink before publishing
+it. A second attachment is rejected, including through an inherited projection.
 
 The Rust facade supplies the standard channel adapter:
 
@@ -94,20 +94,20 @@ fn example(ui: &Ui) -> Result<(), NcStatus> {
 }
 ```
 
-`textbox::observer(sender, mapper)` creates the same observer separately, for
-passing through `textbox_with_observer(text, Some(observer.as_com_ref()))`.
-`textbox::filter_observer` permits dropping selected variants before enqueueing.
-`textbox_unobserved(text)` passes `None` and allocates no observer.
+`textbox::sink(sender, mapper)` creates the same adapter separately, for
+`textbox_with_sink(text, Some(sink.as_com_ref()))`. `filter_sink` permits dropping
+selected variants before enqueueing. `textbox_unobserved(text)` leaves the
+stream unbound and allocates no receiver.
 
-An observed constructor allocates one COM observer with the sender and mapper
-stored inline. Both textbox variants travel through its one output port. The
-widget retains it before the factory returns; a factory failure releases temporary captures. Separate calls
-normally create separate observers, but callers may explicitly share an observer
-when their mapping is identical. There is no additional event queue per widget.
+An observed convenience constructor creates one COM receiver holding the mapper
+and sender inline, creates the widget through its COM factory, and attaches that
+receiver before returning. There is no additional event queue per widget.
+Factory or attachment failure releases temporary captures. For custom classes,
+`neocogi_com::events::bind_source` attaches the same generic protocol directly.
 
 ```text
 widget commits state
-  → calls the corresponding method on its one concrete observer
+  → calls post on its one concrete IMessageSink<Event>
   → generated codec validates/copies/retains the concrete message
   → UI domain validation precedes the owner's typed mapper
   → Sender::send queues the owned private message
@@ -121,7 +121,7 @@ Captures must be owned or otherwise `'static`. The ordinary channel adapter adds
 no `Any`, local pointer cast, or handwritten unsafe callback machinery. COM object
 allocation, vtables and wire codecs still use the shared checked ABI machinery.
 The existing `LocalCom` controller access separately contains unsafe pointer
-reconstruction under its borrow gate; this constructor change does not remove it.
+reconstruction under its borrow gate; the stream adapter does not replace it.
 
 Use `std::sync::mpsc::channel()`. Clone its sender for each observed child.
 Neither threads nor `Message: Send` are needed while endpoints stay on the UI
@@ -132,25 +132,26 @@ An owner receives its channel's sequential UI-thread send order. Separate channe
 have no global FIFO. Already queued facts keep their values and routing after
 producer closure. Dropping the receiver discards pending work. Subsequent valid
 posts still run the mapper and discard the translated message on disconnection;
-this is a successful producer no-op. Logical widget closure releases its observer,
-including when editing handles remain alive. Explicitly retained observer handles
+this is a successful producer no-op. Logical widget closure releases its sink,
+including when editing handles remain alive. Explicitly retained sink handles
 keep their own captures alive. Capture routing data rather than the producer or
 owning UI to avoid reference cycles.
 
-The constructor policy covers built-in node controls, choice menus and file
-dialogs. Window, popup and application-menu event capabilities still use
-`events::bind(output, sender, mapper)`. Unannotated IDL producers also retain their
-ordinary per-output setters. A document form supplies each observed child's
-sole observer at construction.
-The form matches the complete typed stream, performs visual actions, and may
-forward it through a separate form-owned generated observer. `INamedOutputs`
-rebinds that proxy's one application destination; it never replaces the child's
-observer. See [construction observers](../../../../docs/CONSTRUCTION_OBSERVERS.md).
+Node controls, choice menus, file dialogs, windows, popups, and menu items all
+use the same irreversible attachment rule. `events::bind` on a window or menu
+convenience capability also rejects replacement with `NC_E_ALREADY_BOUND`.
+Teardown closes the slot permanently; an unbound preview discards events.
+
+Generated forms query concrete widget fields and attach their streams directly
+to the application's queue. The loader supplies no intermediate receiver and
+performs no visual actions. The application implements required handler methods
+and checks reload generations before dispatching queued facts. See
+[class event streams](../../../../docs/CLASS_EVENT_STREAMS.md).
 
 ## Composites and attachment
 
 A behavioral composite uses `Controller::new(model, receiver)` before mounting.
-Construct its children with observers targeting that receiver. Its model emits declared public outputs
+Attach its children to sinks targeting that receiver. Its model emits declared public outputs
 into its enclosing owner's channel. Exposing a particular child output directly
 to the application is an explicit binding choice; private messages do not bubble
 automatically through unrelated containers. A structural `ScrollArea`, layout,
@@ -227,9 +228,9 @@ Install immutable asset candidates after update returns.
 ## Static and dynamic linkage
 
 Typed mappings, channels and concrete controllers compile into their owner's
-binary. `IEventOwner` and `Mount` belong to UI core contracts. Generated observer
-contracts live alongside each producer; channel shims belong to the static UI
-facade. Generic `bind` and named output support belong to the COM facade. The COM process runtime has no event
+binary. `IEventOwner` and `Mount` belong to UI core contracts. Closed generic stream and sink
+contracts live alongside each producer; domain-checking channel shims belong to
+the static UI facade. Generic stream binding belongs to the COM facade. The COM process runtime has no event
 loop or UI dispatch adapter. No additional event shared library is introduced.
 Dynamic plugins and monoliths use the same contracts. Rebuild hosts and plugins
 together after these signature changes; no legacy dispatcher bridge remains.

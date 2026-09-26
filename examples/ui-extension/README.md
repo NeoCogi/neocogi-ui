@@ -28,8 +28,8 @@ Use `vulkan` or `wgpu` for the other native renderers. The same crate also compi
 for `wasm32-unknown-unknown`; static applications register its descriptor explicitly.
 
 The contracts live in [the demo IDL module](../../demos/contracts/idl/neocogi/demo.ncidl).
-`Counter: IWidget + ILeafLayout + IWidgetProbe` and
-`IInset: IContainer` are callable interfaces.
+`class Counter: IWidget + ILeafLayout + IWidgetProbe + IEventStream<CounterEvent>`
+is the concrete counter contract; `IInset: IContainer` is a reusable capability.
 The registered `ExtensionProvider` factory constructs both with a typed
 `IWidgetHost` argument. Factories are the only parameterless activation roots.
 
@@ -39,15 +39,15 @@ External controls share the built-in ownership and routing rules.
 
 The [implementation](src/lib.rs) uses `WidgetState` for common options, mount-once
 ownership, logical closure and sticky invalidation. The counter stores its value
-once and exposes one physical `event: CounterEvent` port. `CounterEvent` is an
+once and owns a `CounterEventPort`, exposed through `IEventStream<CounterEvent>`. `CounterEvent` is an
 IDL message enum with `Activated(Activation)` and `Changed(CounterChanged)`
 cases; `CounterChanged` is a nested message struct carrying the committed count.
 This is the complete event stream, so installing one receiver consumes the
-port exactly once. The producer retains one generated concrete receiver and
-posts each enum case after the corresponding state transition.
+port exactly once. The `com_class` macro delegates attachment to that field; a second attachment
+is rejected. It posts each enum case after the corresponding state transition.
 
 The [acceptance host](../../demos/smoke/src/extension.rs) binds the one typed
-port through `events::bind(counter.event(), ...)`. Its application handler
+stream through `neocogi_com::events::bind_source(counter.as_com_ref(), ...)`. Its application handler
 matches the complete `CounterEvent` enum after UI traversal releases widget
 borrows. The same implementation and generated contracts serve both build
 commands above. `CounterAbi::IDL_INTERFACE` and `CounterEvent::IDL_MESSAGE`

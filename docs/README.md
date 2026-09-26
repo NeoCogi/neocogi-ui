@@ -35,7 +35,7 @@ start with [COM_AUTHORS.md](COM_AUTHORS.md) and the working [examples](EXAMPLES.
 - [Built-in widgets](../crates/ui/nodes/docs/WIDGETS.md) — control and container selection, typed events, ownership, and
   retained mutation.
 - [Layout](../crates/ui/runtime/docs/LAYOUT.md) — measurement, tracks, placement, invalidation, and update/paint boundaries.
-- [Constructor observers](CONSTRUCTION_OBSERVERS.md) — generated widget observers, creation-time channel shims, ownership and measured sizes.
+- [Class event streams](CLASS_EVENT_STREAMS.md) — generic COM contracts, one lifetime consumer, generated forms, ownership and state diagrams.
 - Owned event controllers — persistent model ownership, validation, and dynamic/monolithic min-size comparison.
 - [Application menus](../crates/ui/runtime/docs/MENUS.md) — concrete registered items, retained composition, popup
   coordination, and Windows-style keyboard/submenu navigation.

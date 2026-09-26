@@ -1,6 +1,6 @@
 # Runtime UI loading example
 
-This application binds the form-owned `save_requested: Activation` event relay and
+This application binds the `save` button's complete `ButtonEvent` stream directly and
 checks the authored `title` node as a concrete `TextBlockAbi` widget. Clicking
 Save queues an application message; its handler updates the title through that
 typed widget handle at the normal update boundary. File → Reload replaces the UI

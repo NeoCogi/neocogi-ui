@@ -37,7 +37,7 @@ pointers. Final COM release frees the allocation separately.
 
 ## Controls and standard events
 
-| Client | Purpose | Observer event |
+| Client | Purpose | Event enum variant |
 | --- | --- | --- |
 | `Button` | Text/image action | `Event::Activated` |
 | `Checkbox` | Boolean choice | `Event::Changed` |
@@ -50,8 +50,10 @@ pointers. Final COM release frees the allocation separately.
 | `TextBlock` | Read-only text with explicit wrapping | None |
 | `ColorSwatch` | Color preview and optional label | None |
 
-Each observed widget retains one observer, supplied to its actual COM constructor.
-The local `neocogi_ui::textbox::Event` enum, for example, covers both text outputs.
+Each emitting class exposes one `IEventStream<Event>`. The constructor helper
+attaches one sink after COM factory creation; another attachment is rejected.
+`neocogi_ui::textbox::Event`, for example, is the actual contract message enum
+covering both Changed and Submitted.
 Use `*_unobserved` constructors when no events are needed.
 Events own the value captured at the interaction. Ordinary programmatic setters
 remain silent. The [events guide](../../runtime/docs/EVENTS.md) describes delivery; exact interfaces and
@@ -157,8 +159,8 @@ and composes `WidgetState` directly.
 The [independent extension](../../../../examples/ui-extension) demonstrates a real
 constructible `Counter: IWidget + ILeafLayout`, standard activation events, and an
 `IInset: IContainer` using `IChildrenEditor` and bounded `ILayoutService` calls.
-The host activates `Counter` directly through the COM runtime with a typed
-`IWidgetHost` constructor argument. Neither widget imports the UI implementation,
+The host activates the extension factory and calls its typed `counter` method
+with an `IWidgetHost` constructor argument. Neither widget imports the UI implementation,
 native atlas IDs, tree borrows, GPU contexts or backend callbacks.
 Custom drawing uses the painter's solid geometry/image methods or an owned
 `IRenderItem` implemented by the renderer assembly.
@@ -167,8 +169,8 @@ External controls may also implement standard event capabilities such as
 `IActivationEvents`. The application queries that typed capability once while
 mapping to its standard message channel; producers post through the cached typed
 receiver. A custom text editor with several event kinds should declare one
-enum-valued observer port, as the built-in Textbox and TextArea do, rather than
-separate changed and submitted ports. Dispatch consumes local messages and never
+`IEventStream<EditorEvent>` with a complete enum, as Textbox and TextArea do.
+The concrete class cannot accumulate different stream types through inheritance. Dispatch consumes local messages and never
 consults the class registry.
 
 ## Native text input and cancellation

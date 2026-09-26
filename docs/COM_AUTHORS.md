@@ -101,16 +101,14 @@ Separate dialogs can bind their same protocol to different application destinati
 When reusing one dialog across requests, request identity remains application/domain
 policy; binding does not manufacture an invocation ID absent from the protocol.
 
-Declare published cross-COM outputs as concrete `#[message]` structs/enums in
-NCIDL, such as `completed: FileDialogCompletion;`. Application and
-component-private enums stay in Rust. `#[observer]` producers receive a generated
-observer interface with one method per declared output, and a local aggregate
-`Event` enum. Their explicit COM factory argument accepts an optional borrowed
-observer, which the implementation retains before publishing the new widget.
-There are no generated output setters on these producers. See
-[IDL syntax](IDL_MODULES.md#concrete-messages-and-outputs).
+Declare cross-COM facts as concrete `#[message]` structs/enums and require one
+`IEventStream<Event>` on the concrete class. Multiple event kinds are cases of
+that one enum. The factory returns an unbound widget; its behavioral parent
+attaches one typed sink before publishing it. `#[com_class(Contract, event = events)]`
+delegates attachment to an explicit `ContractEventPort` field. See
+[IDL syntax](IDL_MODULES.md#concrete-messages-and-streams).
 
-| Local variant | Producers | Concrete message |
+| Complete event enum variant | Producers | Nested message |
 | --- | --- | --- |
 | `Event::Activated` | Buttons, list rows | `Activation` |
 | `Event::Changed` | Checkbox | `CheckboxChanged` |
@@ -120,39 +118,35 @@ There are no generated output setters on these producers. See
 | `Event::Changed` | Combo | `ChoiceSelection` |
 | `Event::Completed` | FileDialog | `FileDialogCompletion` |
 
-Commit state before calling `ProducerEvent::Variant(message).post_to(&mut observer)?`.
+Commit state before calling `self.events.post(&ProducerEvent::Variant(message))?`.
 Mapping runs synchronously and should only translate data or attach routing IDs;
 UI behavior belongs in the later consumer. Rust cannot prove closure purity.
 Generated methods validate/copy/retain the concrete wire message, and the UI shim
 validates domain values before calling the mapper. Captures must be owned or
 `'static`; the later controller owns its ordinary mutable model.
 
-A custom widget intended for authored forms has at most one physical event
-port across its concrete interface and required interface chain. Put distinct
-events in one `#[message] enum` and declare that enum on the concrete widget
-interface. The generated `*Abi::IDL_INTERFACE` and message `IDL_MESSAGE`
-descriptions retain the port and enum shape next to the physical COM method
-descriptor. An authored document names only a registered widget kind and typed
-constructor values; application code owns the event handler and any reaction
-to another widget. Each installed receiver is the port's sole consumer.
+A custom class intended for authored forms has at most one resolved event stream
+across its complete interface chain. IDL-generated `*Abi::IDL_INTERFACE.stream`
+records the closed stream's identity and message shape, including inheritance.
+The plugin's `IDesignWidgetCatalog` transports those descriptions through COM.
+The loader verifies the advertised concrete class and stream on each constructed
+object. A document names only the registered kind and typed constructor values;
+the generated form exposes the actual concrete widget projection to application
+handlers.
 
-Each built-in widget has one fixed observer covering all outputs. `textbox::observer`
-creates that adapter separately; `textbox::filter_observer` can ignore selected
-variants. `*_with_observer` constructors borrow it, and `*_unobserved` constructors
-pass no observer. Separate factory convenience calls allocate separate observers.
-Already queued facts retain their captured values. A disconnected channel still
-runs the mapper and discards the translated value successfully. Logical closure
-releases the widget's observer reference, while explicit observer handles retain
-their own captures. Setup, decoding and posting failures propagate; committed
-state does not roll back.
+Each widget has one lifetime consumer. `textbox::sink` creates that adapter
+separately; `textbox::filter_sink` can discard selected variants.
+`*_with_sink` convenience constructors attach after the COM factory returns;
+`*_unobserved` leaves the stream unbound. All second attachments return
+`NC_E_ALREADY_BOUND`; window, popup, and menu bindings follow this rule too.
+Logical teardown calls `events.close()`, releases the sink, and permanently
+rejects later attachment or emission. Explicit sink handles retain their own
+captures. Already queued facts retain their values; channel disconnection
+successfully discards future mapped values. Delivery failures propagate after
+the state transition and do not roll it back. See the
+[class event stream guide](CLASS_EVENT_STREAMS.md) for the complete state machine.
 
-Window, popup and application-menu capabilities still use `events::bind`, as do
-unannotated IDL producers. Named component exports configure downstream targets
-on a generated observer installed during construction; the widget itself cannot
-be rebound. These distinctions are documented in the
-[constructor observer guide](CONSTRUCTION_OBSERVERS.md).
-
-Behavioral composites construct children with observers targeting a private typed channel and own
+Behavioral composites bind their children to sinks targeting a private typed channel and own
 that receiver with their ordinary model in `events::Controller<Model>`. Public
 editing methods may share the controller's COM allocation and borrow gate.
 Mount the distinct view and `IEventOwner` explicitly using `Component` or
@@ -763,7 +757,7 @@ Retaining a picker cannot keep its runtime alive. The static facade still depend
 plugin uses its ordinary owned adapters internally without passing Rust model
 state across the ABI.
 
-Construct the component with its completion observer, then open it from an ordinary
+Construct the component with its completion sink, then open it from an ordinary
 application handler:
 
 ```rust
@@ -807,8 +801,8 @@ that handles the navigation message. Application
 callbacks may open an already prepared picker through its ordinary interface;
 the following layout establishes its modal scope before later queued input.
 The picker maps its window's lifecycle output into its private queue. Use its
-completion output for application outcomes; remapping that private lifecycle
-output would replace the picker's destination. Its returned window remains
+completion stream for application outcomes; attaching to its private lifecycle
+stream again is rejected because the picker already owns that consumer slot. Its returned window remains
 available for ordinary geometry, visibility and destruction operations.
 
 Cancellation hides the reusable modal and completes one active request. Reopening

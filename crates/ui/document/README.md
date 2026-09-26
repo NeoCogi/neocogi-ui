@@ -9,10 +9,10 @@ A `Document` contains a tree of built-in widget constructors, styles, resources,
 and parent-owned layout edges. Each node has a unique stable key. Its physical
 event port count is zero or one. A text editor's single port carries the whole
 `TextboxEvent` or `TextAreaEvent` enum, including `Changed` and `Submitted`.
-An event port has exactly one consumer: the observer supplied when the widget is
-constructed. The loaded component supplies that observer, captures the complete
-typed event, and queues it until UI traversal releases widget borrows. It does
-not decide what an event means or mutate other widgets in response.
+An event stream has exactly one lifetime consumer, attached by the behavioral
+parent. The loader constructs unbound widgets; generated form bindings attach
+their typed sinks directly to the application's message queue. There is no
+intermediate loader queue or form relay. A second attachment is rejected.
 
 The application owns event behavior. Every event-producing node is represented
 by one required method in the generated `Handlers` trait. The application
@@ -23,12 +23,10 @@ serialized visual output-to-input graph, route expression, or route editor.
 
 ## Loading and typed widget access
 
-Create an `event_delivery_diagnostics(capacity)` sender and receiver, then pass
-the sender to `Loader::new(ui, parent_window, resources, sender)` or
-`ReloadSlot::new(ui, parent_window, sender)`. Drain the receiver after updates.
-Delivery reports are nonfatal; a full channel keeps the newest overflowed
-failure and counts omitted intermediate reports. The loader returns a
-`Component` whose `root()` is mountable through the component owner.
+Use `Loader::new(ui, parent_window, resources)` or
+`ReloadSlot::new(ui, parent_window)`. The loader returns a `Component` whose
+concrete children can be queried and bound before mounting. Delivery errors
+propagate through the emitting operation; there is no relay diagnostic channel.
 
 `Component::widget::<ButtonAbi>("save")` resolves an authored node key and checks
 its concrete COM interface before returning an owned `Widget<ButtonAbi>` handle.
@@ -40,13 +38,10 @@ command graph. Optional named `InputHandle<SetText>` endpoints remain available
 for message-based integrations; they are independent of the generated widget
 fields.
 
-A loaded component owns the complete widget tree and the construction-time
-event adapters. The form-level event relay is separate from the child port: the
-child still has exactly one consumer. A public output declaration may rename a
-relay for external binding; a widget without an explicit alias uses its node key.
-Aliases cannot collide with another widget's event name. Rebinding a relay
-replaces its one downstream receiver. No event adapter is created for widgets
-without an event port.
+A loaded component owns the widget tree and its publication/retirement guard.
+It creates no event adapters. An optional document output alias supplies a
+trace/display name; it does not create a separate bindable endpoint or permit
+receiver replacement. Generated application bindings resolve widgets by node key.
 
 ## Generated application contract
 
@@ -74,9 +69,11 @@ handler can use the generated typed fields directly:
 impl generated::Handlers for generated::Form {
     fn on_save_2(
         &mut self,
-        event: neocogi_ui::events::Activation,
+        event: neocogi_ui::button::Event,
     ) -> Result<(), neocogi_com::NcStatus> {
-        self.widget_title_1.set_text(&event.label)
+        match event {
+            neocogi_ui::button::Event::Activated(value) => self.widget_title_1.set_text(&value.label),
+        }
     }
 }
 ```
@@ -100,8 +97,8 @@ a distinct generation, even when preparation fails.
 
 Mount `Component` itself or use `ReloadSlot` so the runtime retains both view and
 event owner. `root()` alone is an inspection capability. Closing or replacing a
-subtree retires its controller and discards pending work at the next safe update
-boundary. Application edits belong at ordinary mutation boundaries, outside
+subtree retires its lifetime guard and closes its streams. Application messages
+already queued remain owned snapshots; generation checks reject stale ones. Application edits belong at ordinary mutation boundaries, outside
 layout and paint. `Component::save()` preserves authored defaults rather than
 user interaction, focus, scrolling, or live application state.
 
@@ -122,7 +119,7 @@ A host installs custom widgets through `CustomWidgetRegistry`. A local
 `CustomWidgetFactory` returns an owned `DesignWidgetManifest`, normally made by
 `DesignWidgetManifest::from_idl(kind, defaults, &CounterAbi::IDL_INTERFACE)`,
 and a constructor returning `Widget<IWidgetAbi>`. Static conversion checks the
-generated physical method table and required interface chain. A custom widget
+generated resolved stream against the complete required interface chain. A custom widget
 may expose zero or one event port; multiple logical events belong in one
 `#[message] enum`, such as `CounterEvent::Activated` and
 `CounterEvent::Changed`.
@@ -136,7 +133,7 @@ codec, so plugin implementations do not link the document runtime or designer.
 `register_catalog` validates all kinds transactionally before publishing any.
 The COM catalog accepts one widget index, the runtime's `IWidgetHost`, and the
 validated property values encoded with the shared codec. The returned object's
-exact IID and ABI signature are checked before the document owns it.
+exact class and stream IIDs and ABI signatures are checked before the document owns it.
 
 The document stores only `Custom { kind, properties }`. It does not store Rust
 paths, event traits, message types, executable code, or a copy of the property

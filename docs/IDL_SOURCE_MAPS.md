@@ -78,9 +78,8 @@ methods, functions, fields, variants and helpers.
 | Copied struct or enum | Its declaration identifier |
 | Named field or enum alternative | Its authored field or variant identifier |
 | Integer enum or bit flag macro body | Its declaration and each variant/flag |
-| Interface method and associated generated output methods | The method or output identifier |
-| `TextboxObserver` | The `Textbox` declaration that requests an observer |
-| Observer `event` method | The producer's sole `event` output |
+| Interface/class method and generated forwarding methods | The authored method identifier |
+| Closed generic interface methods | The method in the generic template |
 | `TextboxEvent::Changed` | The message enum's `Changed` variant |
 | Message wire record and codec helpers | The originating message declaration |
 | Message case helper and borrowed named fields | The originating variant and field |
@@ -162,7 +161,7 @@ origin explicitly.
 ## Validation
 
 Tests cover Unicode columns, multipart ordering, formatting, macro enum/flag
-bodies, message fields/cases, derived observers, callback bodies, imports, EOF
+bodies, message fields/cases, closed generic interfaces, callback bodies, imports, EOF
 boundaries and JSON round-tripping. A real Cargo module-generation test verifies
 reported map paths, resolution to the authored file, unchanged-output reuse, and
 location-only edits refreshing the map without changing binding behavior.
