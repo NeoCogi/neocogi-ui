@@ -588,22 +588,24 @@ impl Track {
     }
 }
 impl WidgetSpec {
-    /// The built-in class's complete resolved stream, taken from generated IDL metadata.
-    /// Custom kinds obtain the equivalent owned description through their COM catalog.
-    pub fn event_stream(&self) -> Option<neocogi_com::design::IdlEventStream> {
+    /// Generated metadata for a built-in event source, including its complete
+    /// reachable value graph. Custom kinds obtain equivalent owned metadata through
+    /// their COM catalog. Keep class selection here so stream and inspector lookups
+    /// cannot drift apart. Widgets without an event stream return `None`.
+    pub fn event_source_metadata(&self) -> Option<&'static neocogi_com::design::IdlInterface> {
         use neocogi_ui::*;
         match self {
-            Self::Button { .. } => ButtonAbi::IDL_INTERFACE.stream,
-            Self::Checkbox { .. } => CheckboxAbi::IDL_INTERFACE.stream,
-            Self::Slider { .. } => SliderAbi::IDL_INTERFACE.stream,
-            Self::Number { .. } => NumberAbi::IDL_INTERFACE.stream,
-            Self::ListItem { .. } => ListItemAbi::IDL_INTERFACE.stream,
-            Self::ListBox { .. } => ListBoxAbi::IDL_INTERFACE.stream,
-            Self::Textbox { .. } => TextboxAbi::IDL_INTERFACE.stream,
-            Self::TextArea { .. } => TextAreaAbi::IDL_INTERFACE.stream,
-            Self::Scrollbar { .. } => ScrollbarAbi::IDL_INTERFACE.stream,
-            Self::Split { .. } => SplitViewAbi::IDL_INTERFACE.stream,
-            Self::Combo { .. } => ComboAbi::IDL_INTERFACE.stream,
+            Self::Button { .. } => Some(&ButtonAbi::IDL_INTERFACE),
+            Self::Checkbox { .. } => Some(&CheckboxAbi::IDL_INTERFACE),
+            Self::Slider { .. } => Some(&SliderAbi::IDL_INTERFACE),
+            Self::Number { .. } => Some(&NumberAbi::IDL_INTERFACE),
+            Self::ListItem { .. } => Some(&ListItemAbi::IDL_INTERFACE),
+            Self::ListBox { .. } => Some(&ListBoxAbi::IDL_INTERFACE),
+            Self::Textbox { .. } => Some(&TextboxAbi::IDL_INTERFACE),
+            Self::TextArea { .. } => Some(&TextAreaAbi::IDL_INTERFACE),
+            Self::Scrollbar { .. } => Some(&ScrollbarAbi::IDL_INTERFACE),
+            Self::Split { .. } => Some(&SplitViewAbi::IDL_INTERFACE),
+            Self::Combo { .. } => Some(&ComboAbi::IDL_INTERFACE),
             Self::TextBlock { .. }
             | Self::ColorSwatch { .. }
             | Self::Linear { .. }
@@ -613,6 +615,11 @@ impl WidgetSpec {
             | Self::Disclosure { .. }
             | Self::Custom { .. } => None,
         }
+    }
+    /// The built-in class's complete resolved stream, taken from generated IDL metadata.
+    /// Custom kinds obtain the equivalent owned description through their COM catalog.
+    pub fn event_stream(&self) -> Option<neocogi_com::design::IdlEventStream> {
+        self.event_source_metadata()?.stream
     }
     /// Whether authored font selection has a concrete setter, including a disclosure's header.
     pub fn supports_font(&self) -> bool {
