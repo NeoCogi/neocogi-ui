@@ -144,10 +144,10 @@ locally required stream. Querying another interface cannot create another slot
 in the supplied implementation. Interfaces remain reusable COM capabilities;
 the one-stream check belongs to the concrete class contract.
 
-Repeated inheritance of the same closed stream contract also shares one physical
-header in generated objects. [Canonical interface storage](COM_INTERFACE_STORAGE.md)
-merges the required contracts at compilation; all queried stream projections
-reach the same concrete implementation. Different stream types are still
+Inherited stream projections reach the same concrete implementation and its one
+consumer slot, even when recursive interface storage duplicates a physical
+header. Header deduplication remains unresolved after the
+storage rollback. Different stream types are still
 rejected by the separate one-stream class check.
 
 The behavioral-parent rule is construction discipline, not access control. The
