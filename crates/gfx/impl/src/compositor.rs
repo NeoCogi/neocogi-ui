@@ -12,7 +12,7 @@ use neocogi_com::{
 use neocogi_gfx_contracts::*;
 use neocogi_gfx_support::AssetTables;
 use neocogi_renderer_contracts::{
-    IRenderItemAbi, IRenderStream, IRenderStreamAbi, IRenderStreamVtblFor, IRgbaImageAbi, IRendererAbi, ITextureAbi, MAX_RENDER_BATCHES,
+    IRenderItemAbi, IRenderStream, IRenderStreamAbi, IRenderStreamInterfacesFor, IRgbaImageAbi, IRendererAbi, ITextureAbi, MAX_RENDER_BATCHES,
     MAX_RENDER_VERTICES, RenderBatch, RenderBatchAbi, RenderInfo, RenderVertex,
 };
 use std::{

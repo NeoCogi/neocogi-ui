@@ -69,7 +69,7 @@ class Textbox: IWidget + IEventStream<TextboxEvent> {
     fn set_text(&mut self, text: &[u8]) -> Result<()>;
 }
 factory Widgets {
-    fn create_textbox(&self, text: &[u8]) -> Result<Textbox>;
+    fn create_textbox(&self, text: &[u8]) -> Result<ComPtr<Textbox>>;
 }
 ```
 
@@ -143,6 +143,12 @@ types through their interface chain. An inherited stream counts exactly as a
 locally required stream. Querying another interface cannot create another slot
 in the supplied implementation. Interfaces remain reusable COM capabilities;
 the one-stream check belongs to the concrete class contract.
+
+Repeated inheritance of the same closed stream contract also shares one physical
+header in generated objects. [Canonical interface storage](COM_INTERFACE_STORAGE.md)
+merges the required contracts at compilation; all queried stream projections
+reach the same concrete implementation. Different stream types are still
+rejected by the separate one-stream class check.
 
 The behavioral-parent rule is construction discipline, not access control. The
 parent creates and binds its children before publishing the form. Neither COM

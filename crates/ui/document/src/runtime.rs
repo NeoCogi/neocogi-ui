@@ -7,7 +7,7 @@ use neocogi_com::{
 use neocogi_com::persistence::{FactoryRegistry, ObjectRecord, IPersistable, IPersistenceFactory, IObjectChildrenAbi};
 use neocogi_ui::{Ui, Widget, IWidgetAbi, IWindowAbi, ITextureAbi};
 use std::collections::BTreeMap;
-use neocogi_ui::{IEventOwner, IEventOwnerAbi, IEventOwnerVtblFor, Mount, Mountable};
+use neocogi_ui::{IEventOwner, IEventOwnerAbi, IEventOwnerInterfacesFor, Mount, Mountable};
 
 /// Recipe identity describes the authored component schema, never a runtime instance.
 pub const DOCUMENT_TYPE: NcGuid = neocogi_com::guid_from_qualified_name("neocogi.ui.authored-component");
