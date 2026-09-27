@@ -76,7 +76,7 @@ fn bundled_themes_cross_only_typed_gfx_capabilities() {
         let source = loader.load_theme(path.as_interface(), base.as_com_ref()).unwrap();
         let loaded = ImportedAssets::read(source.as_com_ref(), Some(&imported)).unwrap();
         assert_eq!(loaded.bundle().atlas().font_id("body"), imported.original().font_id("body"));
-        assert_ne!(source.as_ptr(), base.as_ptr());
+        assert_ne!(source.as_raw().object, base.as_raw().object);
     }
 
     // Diagnostic storage belongs to Skin even when a filesystem operation fails before GFX.

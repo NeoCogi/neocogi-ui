@@ -515,7 +515,7 @@ impl Ui {
     pub fn from_interfaces(runtime: ComPtr<UiRuntimeAbi>, factory: ComPtr<UiFactoryAbi>) -> Result<Self, NcStatus> {
         let runtime_host = runtime.construction_host()?.host()?.query::<IUnknown>()?;
         let factory_host = factory.query::<IConstructionHostAbi>()?.host()?.query::<IUnknown>()?;
-        if runtime_host.as_ptr() != factory_host.as_ptr() {
+        if runtime_host.as_raw().object != factory_host.as_raw().object {
             return Err(UI_E_OWNER);
         }
         let factory = WidgetFactory::from_interface(factory);

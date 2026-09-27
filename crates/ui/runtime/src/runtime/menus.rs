@@ -266,7 +266,7 @@ impl RuntimeStorage {
     /// Authenticates a root builder by canonical COM identity and live weak registration before taking native data.
     fn menu_declaration(&self, menu: ComRef<'_, IMenuBuilderAbi>) -> Result<Rc<Declaration>, NcStatus> {
         let identity: ComPtr<IUnknown> = menu.add_ref().query()?;
-        let key = identity.as_ptr() as usize;
+        let key = identity.as_raw().object as usize;
         self.menus
             .borrow()
             .iter()
@@ -294,7 +294,7 @@ impl IMenus for Runtime {
         });
         let mut registry = self.storage.menus.borrow_mut();
         registry.retain(|(_, state)| state.upgrade().is_some_and(|state| state.alive.get()));
-        registry.push((identity.as_ptr() as usize, Rc::downgrade(&declaration)));
+        registry.push((identity.as_raw().object as usize, Rc::downgrade(&declaration)));
         drop(registry);
         identity.query()
     }

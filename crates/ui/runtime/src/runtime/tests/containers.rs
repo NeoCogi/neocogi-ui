@@ -385,8 +385,8 @@ fn builtin_linear_reuses_track_resolution_and_validates_edges_before_mounting() 
     let common = row.node_interface().unwrap();
     assert_eq!(common.query::<IContainerAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     assert_eq!(
-        common.query::<IUnknown>().unwrap().as_ptr(),
-        row.as_interface().add_ref().query::<IUnknown>().unwrap().as_ptr()
+        common.query::<IUnknown>().unwrap().as_raw().object,
+        row.as_interface().add_ref().query::<IUnknown>().unwrap().as_raw().object
     );
     assert_eq!(
         row.children().unwrap().query::<IChildrenEditorAbi>().unwrap_err(),
@@ -508,8 +508,8 @@ fn builtin_scroll_area_uses_real_children_and_shared_sticky_invalidation() {
     assert_eq!(vertical.range().unwrap().axis, ScrollAxis::Vertical);
     let content_identity = content.node_interface().unwrap().query::<IUnknown>().unwrap();
     assert_eq!(
-        scroll.content().unwrap().node_interface().unwrap().query::<IUnknown>().unwrap().as_ptr(),
-        content_identity.as_ptr()
+        scroll.content().unwrap().node_interface().unwrap().query::<IUnknown>().unwrap().as_raw().object,
+        content_identity.as_raw().object
     );
     let window = ui.window("scroll", RECT, &scroll).unwrap();
     runtime.update(SIZE).unwrap();
@@ -609,12 +609,12 @@ fn disclosure_com_header_controls_the_actual_body_without_a_parent_backpointer()
     let children = root.query::<IContainerLayoutAbi>().unwrap().children().unwrap();
     assert_eq!(children.child_count().unwrap(), 2);
     assert_eq!(
-        children.child(0).unwrap().query::<IUnknown>().unwrap().as_ptr(),
-        header.node_interface().unwrap().query::<IUnknown>().unwrap().as_ptr()
+        children.child(0).unwrap().query::<IUnknown>().unwrap().as_raw().object,
+        header.node_interface().unwrap().query::<IUnknown>().unwrap().as_raw().object
     );
     assert_eq!(
-        children.child(1).unwrap().query::<IUnknown>().unwrap().as_ptr(),
-        body.node_interface().unwrap().query::<IUnknown>().unwrap().as_ptr()
+        children.child(1).unwrap().query::<IUnknown>().unwrap().as_raw().object,
+        body.node_interface().unwrap().query::<IUnknown>().unwrap().as_raw().object
     );
     let (leaf, probe) = recorded_leaf(&runtime);
     body.insert(0, &leaf, LinearEdge::new(LayoutTrack::Fixed { extent: 33 }))
@@ -674,16 +674,16 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
     let root = area.node_interface().unwrap();
     let identity = root.query::<IUnknown>().unwrap();
     let concrete = area.as_interface().add_ref();
-    assert_eq!(concrete.query::<IUnknown>().unwrap().as_ptr(), identity.as_ptr());
+    assert_eq!(concrete.query::<IUnknown>().unwrap().as_raw().object, identity.as_raw().object);
     assert_eq!(root.query::<ITextEditorAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     assert_eq!(root.query::<ScrollAreaAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     let mut scroll = area.scrolling().unwrap();
-    assert_eq!(scroll.node_interface().unwrap().query::<IUnknown>().unwrap().as_ptr(), identity.as_ptr());
+    assert_eq!(scroll.node_interface().unwrap().query::<IUnknown>().unwrap().as_raw().object, identity.as_raw().object);
     let structural = root.query::<IContainerLayoutAbi>().unwrap().children().unwrap();
     assert_eq!(structural.child_count().unwrap(), 3);
     let surface = structural.child(0).unwrap().query::<IContainerLayoutAbi>().unwrap();
     let editor = surface.children().unwrap().child(0).unwrap().query::<IMultilineEditorAbi>().unwrap();
-    assert_ne!(editor.query::<IUnknown>().unwrap().as_ptr(), identity.as_ptr());
+    assert_ne!(editor.query::<IUnknown>().unwrap().as_raw().object, identity.as_raw().object);
     assert_eq!(editor.query::<TextAreaAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     area.set_cursor(3).unwrap();
     assert_eq!(area.cursor().unwrap(), 1); // A byte inside the snowman clamps to its preceding scalar boundary.

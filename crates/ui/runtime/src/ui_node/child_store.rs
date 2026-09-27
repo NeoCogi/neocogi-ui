@@ -187,7 +187,7 @@ pub(super) fn create(factory: Rc<NodeFactory>) -> ComPtr<IChildrenEditorAbi> {
     let view: ComPtr<IChildrenAbi> = ChildView::from_value(ChildView { store: store.clone() })
         .query()
         .expect("view declares IChildren");
-    let identity = view.query::<IUnknown>().expect("every COM object has IUnknown").as_ptr() as usize;
+    let identity = view.query::<IUnknown>().expect("every COM object has IUnknown").as_raw().object as usize;
     store.identity.set(identity);
     factory.children.borrow_mut().insert(identity, Rc::downgrade(&store));
     ChildEditor::from_value(ChildEditor { store, view })

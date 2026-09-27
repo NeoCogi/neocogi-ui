@@ -156,7 +156,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let host = ui.widgets().host()?;
     if options.smoke {
-        assert_eq!(ui.widgets().host()?.as_ptr(), host.as_ptr());
+        assert_eq!(ui.widgets().host()?.as_raw().object, host.as_raw().object);
     }
     let (session_tx, session) = std::sync::mpsc::channel();
     let mut button = ui

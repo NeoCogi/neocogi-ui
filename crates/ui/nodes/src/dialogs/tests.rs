@@ -129,13 +129,13 @@ fn failed_open_and_overlapping_requests_preserve_previous_state_and_expose_nativ
     assert_eq!(fixture.handle.open(&neocogi_ui::FileDialogRequest::new(&missing)), Err(UI_E_IO));
     assert!(!fixture.handle.active().unwrap());
     assert_eq!(fixture.handle.window().unwrap().snapshot().unwrap().visibility, Visibility::Hidden);
-    assert_eq!(fixture.file_root().as_ptr(), original.as_ptr());
+    assert_eq!(fixture.file_root().as_raw().object, original.as_raw().object);
     assert!(fixture.handle.diagnostic().unwrap().contains("missing"));
     fixture.open(directory.path());
     let live = fixture.file_root();
-    assert_ne!(live.as_ptr(), original.as_ptr());
+    assert_ne!(live.as_raw().object, original.as_raw().object);
     assert_eq!(fixture.handle.open(&neocogi_ui::FileDialogRequest::new(&missing)), Err(UI_E_BUSY));
-    assert_eq!(fixture.file_root().as_ptr(), live.as_ptr());
+    assert_eq!(fixture.file_root().as_raw().object, live.as_raw().object);
     assert!(fixture.handle.diagnostic().unwrap().is_empty());
     assert_eq!(fixture.controller.try_borrow().unwrap().controller.model.directory, directory.path());
     fixture.handle.close().unwrap();
@@ -152,7 +152,7 @@ fn broken_entry_rejects_the_complete_directory_candidate() {
     std::os::unix::fs::symlink("missing-target", directory.path().join("broken-link")).unwrap();
     let previous = fixture.file_root();
     assert_eq!(fixture.handle.open(&neocogi_ui::FileDialogRequest::new(directory.path())), Err(UI_E_IO));
-    assert_eq!(fixture.file_root().as_ptr(), previous.as_ptr());
+    assert_eq!(fixture.file_root().as_raw().object, previous.as_raw().object);
     assert_eq!(fixture.handle.active(), Ok(false));
 }
 
@@ -276,7 +276,7 @@ fn unreadable_navigation_preserves_selection_directory_and_dynamic_widget_identi
     fixture.key(KeyCode::Tab, 4); // Shift+Tab returns to the now-unreadable retained folder row.
     fixture.key(KeyCode::Space, 0);
     fixture.ui.update(SIZE).unwrap();
-    assert_eq!(fixture.file_root().as_ptr(), root.as_ptr());
+    assert_eq!(fixture.file_root().as_raw().object, root.as_raw().object);
     let held = fixture.controller.try_borrow().unwrap();
     let model = &held.controller.model;
     assert_eq!(model.selected.as_ref(), Some(&file));
@@ -358,7 +358,7 @@ fn successful_navigation_reuses_fixed_controls_and_replaces_the_complete_dynamic
     fixture.tabs(6); // Four toolbar stops, parent folder, then the child directory.
     fixture.key(KeyCode::Space, 0);
     fixture.ui.update(SIZE).unwrap();
-    assert_ne!(fixture.file_root().as_ptr(), old_root.as_ptr());
+    assert_ne!(fixture.file_root().as_raw().object, old_root.as_raw().object);
     assert_eq!(fixture.controller.try_borrow().unwrap().controller.model.directory, child);
     assert_eq!(path.text().unwrap(), child.to_string_lossy());
     assert_eq!(scroll.info().unwrap().requested.y, 0);

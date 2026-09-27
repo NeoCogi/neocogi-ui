@@ -167,7 +167,7 @@ fn independent_surface_snapshots_keep_orientation_and_device_lifetime() {
     {
         let owner = weak.upgrade().unwrap();
         let mut access = owner.access().unwrap();
-        assert_eq!(access.state().atlas.as_ptr(), atlas.as_ptr(), "surface upload must preserve the window atlas");
+        assert_eq!(access.state().atlas.as_raw().object, atlas.as_raw().object, "surface upload must preserve the window atlas");
         let pixels = access.state().gpu.last_pixels();
         assert_eq!(pixel(pixels, 4, 4), [255, 0, 0, 255]);
         assert_eq!(pixel(pixels, 24, 4), [0, 255, 0, 255]);

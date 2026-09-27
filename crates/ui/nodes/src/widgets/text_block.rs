@@ -340,10 +340,11 @@ impl neocogi_ui_nodes_contracts::TextBlock for TextBlock {
 /// Ordinary leaves reserve no duplicate ancestors or per-instance descriptor tables.
 #[cfg(all(test, target_pointer_width = "64"))]
 #[test]
-fn com_header_storage_stays_compact() {
+fn com_object_control_is_independent_of_interface_count() {
     // Refcount, padding and the shared call guard occupy 16 bytes on this target.
-    // Every remaining prefix byte belongs to one single-pointer interface header.
+    // No per-interface fields remain; handles carry their selected tables.
     assert_eq!(TextBlock::COM_INTERFACE_COUNT, 4);
-    assert_eq!(core::mem::offset_of!(TextBlockComObject, value), 16 + 4 * core::mem::size_of::<neocogi_com::IUnknown>());
-    assert_eq!(core::mem::size_of::<TextBlockComObject>(), core::mem::size_of::<TextBlock>() + 48);
+    println!("TextBlock: state={}, allocation={}", core::mem::size_of::<TextBlock>(), core::mem::size_of::<TextBlockComObject>());
+    assert_eq!(core::mem::offset_of!(TextBlockComObject, value), 16);
+    assert_eq!(core::mem::size_of::<TextBlockComObject>(), core::mem::size_of::<TextBlock>() + 16);
 }

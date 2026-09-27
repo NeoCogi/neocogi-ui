@@ -304,12 +304,12 @@ impl PaintService {
 
     /// Uses neocogi-com's object-wide exclusive gate to access the recorder implementation it created.
     fn with_recorder_mut<T>(&mut self, call: impl FnOnce(&mut Recorder) -> T) -> Result<T, NcStatus> {
-        let header = <IPainterAbi as neocogi_com::ComInterface>::iunknown(self.painter.as_mut_ptr());
+        let object = self.painter.as_raw().object;
         // SAFETY: `painter` was created exclusively by `Recorder::from_value` in `new` and keeps
         // that allocation alive. Its generated interface header therefore carries the matching
         // Recorder storage pointer. `borrow_abi_mut` applies the same exclusive call gate used by
         // normal mutable COM dispatch and keeps it held for the complete closure invocation.
-        let mut recorder = unsafe { <Recorder as neocogi_com::ComAbiObject>::borrow_abi_mut(neocogi_com::__nc_object_from_interface(header.cast())) }?;
+        let mut recorder = unsafe { <Recorder as neocogi_com::ComAbiObject>::borrow_abi_mut(object) }?;
         Ok(call(&mut recorder))
     }
 

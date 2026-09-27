@@ -69,7 +69,7 @@ impl WidgetRuntime {
     /// Follows the host's installed immutable revision for every class and factory product.
     pub(crate) fn resources(&mut self) -> Result<SharedAssets, NcStatus> {
         let source = self.state.host().assets()?;
-        if self.resources.borrow().source().as_ptr() != source.as_ptr() {
+        if self.resources.borrow().source().as_raw().object != source.as_raw().object {
             // Authenticate and completely import the replacement before publishing it to siblings.
             let replacement = {
                 let current = self.resources.borrow();

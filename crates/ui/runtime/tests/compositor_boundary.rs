@@ -44,7 +44,7 @@ impl IRenderer for CaptureRenderer {
         self.observation.vertices.set(vertex_count);
         self.observation.batches.set(batch_count);
         self.observation.calls.set(self.observation.calls.get() + 1);
-        self.observation.atlas.set(atlas.as_ptr() as usize);
+        self.observation.atlas.set(atlas.as_raw().object as usize);
         Ok(())
     }
 }
@@ -80,10 +80,10 @@ fn assert_frame(ui: &Ui, assets: ComRef<'_, IAssetBundleAbi>, renderer: ComRef<'
     let image = assets.image().unwrap();
     let calls = observation.calls.get();
     // The original bug kept Ui::assets correct while silently substituting another image.
-    assert_eq!(ui.assets().unwrap().as_ptr(), assets.as_ptr());
+    assert_eq!(ui.assets().unwrap().as_raw().object, assets.as_raw().object);
     ui.render(SIZE, renderer).unwrap();
     assert_eq!(observation.calls.get(), calls + 1);
-    assert_eq!(observation.atlas.get(), image.as_ptr() as usize);
+    assert_eq!(observation.atlas.get(), image.as_raw().object as usize);
     assert!(observation.vertices.get() > 0);
     assert!(observation.batches.get() > 0);
 }
@@ -121,7 +121,7 @@ fn shared_graphics_service_keeps_runtime_resources_independent() {
         .unwrap();
     let base_image = base.image().unwrap();
     let revision_image = revision.image().unwrap();
-    assert_ne!(base_image.as_ptr(), revision_image.as_ptr());
+    assert_ne!(base_image.as_raw().object, revision_image.as_raw().object);
     let gfx = neocogi_ui_support::test_support::gfx_factory();
     let first = create_ui(base.as_com_ref(), gfx.as_com_ref());
     let mut second = create_ui(revision.as_com_ref(), gfx.as_com_ref());
@@ -159,7 +159,7 @@ fn shared_graphics_service_keeps_runtime_resources_independent() {
 fn shared_factory_supports_independent_catalogs() {
     let base = neocogi_demo_assets::load_bundle().unwrap();
     let unrelated = neocogi_demo_assets::load_bundle().unwrap();
-    assert_ne!(base.catalog().unwrap().as_ptr(), unrelated.catalog().unwrap().as_ptr());
+    assert_ne!(base.catalog().unwrap().as_raw().object, unrelated.catalog().unwrap().as_raw().object);
     let gfx = neocogi_ui_support::test_support::gfx_factory();
     let mut first = create_ui(base.as_com_ref(), gfx.as_com_ref());
     let second = create_ui(unrelated.as_com_ref(), gfx.as_com_ref());

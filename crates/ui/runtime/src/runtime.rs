@@ -243,7 +243,7 @@ impl UiRuntime for Runtime {
         let _phase = Observation::begin(&storage.factory.state);
         let next = {
             let previous = storage.factory.resources.borrow();
-            if previous.source().as_ptr() == source.as_ptr() {
+            if previous.source().as_raw().object == source.as_raw().object {
                 None
             } else {
                 Some(crate::assets::ImportedAssets::read(source, Some(&previous))?)

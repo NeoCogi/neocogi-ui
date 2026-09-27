@@ -78,7 +78,7 @@ impl RuntimeStorage {
             .borrow()
             .iter()
             .find_map(|mount| {
-                if mount.identity.as_ptr() != identity.as_ptr() {
+                if mount.identity.as_raw().object != identity.as_raw().object {
                     return None;
                 }
                 match &mount.surface {

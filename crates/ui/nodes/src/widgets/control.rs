@@ -165,7 +165,7 @@ pub(super) fn image_size(image: &neocogi_ui::Image) -> Dimensioni {
 
 /// Equal retained interface projections preserve geometry; different aliases conservatively remeasure.
 pub(super) fn same_image(a: &Option<neocogi_ui::Image>, b: &Option<neocogi_ui::Image>) -> bool {
-    a.as_ref().map(|image| image.as_interface().as_ptr()) == b.as_ref().map(|image| image.as_interface().as_ptr())
+    a.as_ref().map(|image| image.as_interface().as_raw().object) == b.as_ref().map(|image| image.as_interface().as_raw().object)
 }
 
 #[cfg(test)]

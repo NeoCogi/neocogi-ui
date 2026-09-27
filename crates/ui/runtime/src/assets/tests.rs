@@ -192,7 +192,7 @@ impl IRenderer for UploadRenderer {
         self.0.uploads.set(self.0.uploads.get() + 1);
         // The independently allocated host still exposes the old, fully installed UI revision.
         let installed = self.0.button.host()?.assets()?.image()?;
-        assert_eq!(installed.as_ptr(), self.0.current.borrow().as_ptr());
+        assert_eq!(installed.as_raw().object, self.0.current.borrow().as_raw().object);
         // The mutable runtime call excludes every overlapping call on that same COM allocation.
         assert_eq!(self.0.runtime.update(SIZE), Err(NC_E_BUSY));
         let mut button = self.0.button.clone();
@@ -211,7 +211,7 @@ impl IRenderer for UploadRenderer {
     }
     /// Final geometry must use the exact bundle prepared by the successful upload.
     fn render(&self, info: RenderInfo, source: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        assert_eq!(source.as_ptr(), self.0.current.borrow().as_ptr());
+        assert_eq!(source.as_raw().object, self.0.current.borrow().as_raw().object);
         let mut vertices = vec![RenderVertex::default(); info.vertex_count as usize];
         assert_eq!(
             stream.vertices(info.invocation, NcCopyToBufferOffset::new(0, &mut vertices))?,
@@ -291,7 +291,7 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
     }
     let app = neocogi_ui_support::test_support::events::TestApp::new(state, session, |state, message| InstallTheme.handle(state, &message));
     assert_eq!(app.update(&ui, SIZE), Err(NC_E_BUSY));
-    assert_eq!(ui.assets().unwrap().as_ptr(), source.as_ptr());
+    assert_eq!(ui.assets().unwrap().as_raw().object, source.as_raw().object);
     assert_eq!(app.state().installed, 0);
     assert_eq!(probe.uploads.get(), 0);
 
@@ -303,7 +303,7 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
         let renderer = state.renderer.clone();
         assert_eq!(state.ui.install_assets(candidate.as_com_ref(), renderer.as_com_ref()), Err(UI_E_RENDER));
     }
-    assert_eq!(ui.assets().unwrap().as_ptr(), source.as_ptr());
+    assert_eq!(ui.assets().unwrap().as_raw().object, source.as_raw().object);
     assert_eq!(probe.uploads.get(), 1);
     probe.fail.set(false);
     {
@@ -315,7 +315,7 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
     }
     assert_eq!(probe.uploads.get(), 2);
     assert_eq!(app.state().installed, 1);
-    assert_eq!(ui.assets().unwrap().as_ptr(), candidate.as_ptr());
+    assert_eq!(ui.assets().unwrap().as_raw().object, candidate.as_raw().object);
     // Installation occurred outside update, so one explicit synchronization commits the revision.
     app.update(&ui, SIZE).unwrap();
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
@@ -353,7 +353,7 @@ fn runtime_install_is_atomic_and_updates_shared_widget_measurement() {
     let candidate = data.into_revision(source.as_com_ref()).unwrap();
     probe.fail.set(true);
     assert_eq!(ui.install_assets(candidate.as_com_ref(), renderer.as_com_ref()), Err(UI_E_RENDER));
-    assert_eq!(ui.assets().unwrap().as_ptr(), source.as_ptr());
+    assert_eq!(ui.assets().unwrap().as_raw().object, source.as_raw().object);
     assert_eq!(leaf.measure(limits, metrics.as_com_ref()).unwrap(), before);
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
 
@@ -363,7 +363,7 @@ fn runtime_install_is_atomic_and_updates_shared_widget_measurement() {
     probe.fail.set(false);
     ui.install_assets(candidate.as_com_ref(), renderer.as_com_ref()).unwrap();
     assert_eq!(probe.uploads.get(), 2);
-    assert_eq!(button_interface.host().unwrap().assets().unwrap().as_ptr(), candidate.as_ptr());
+    assert_eq!(button_interface.host().unwrap().assets().unwrap().as_raw().object, candidate.as_raw().object);
     assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
     let after = leaf.measure(limits, metrics.as_com_ref()).unwrap();
     assert_eq!(after.width, before.width + 20);
@@ -390,8 +390,8 @@ fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision
     metrics.padding += 4;
     let candidate = compiler.derive_style(source.as_com_ref(), metrics, PaletteEdit::Preserve.into()).unwrap();
     assert_eq!(
-        ui.assets().unwrap().as_ptr(),
-        source.as_ptr(),
+        ui.assets().unwrap().as_raw().object,
+        source.as_raw().object,
         "deriving a candidate cannot publish or schedule a UI edit"
     );
     let imported = ImportedAssets::read(candidate.as_com_ref(), Some(&original)).unwrap();
@@ -420,7 +420,7 @@ fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision
     );
     let invalid = PaletteEditAbi::from_unknown_tag(PaletteEditTag::from_raw(255)).unwrap();
     assert_eq!(compiler.derive_style(source.as_com_ref(), metrics, invalid).unwrap_err(), neocogi_com::NC_E_INVALID_TAG);
-    assert_eq!(ui.assets().unwrap().as_ptr(), source.as_ptr());
+    assert_eq!(ui.assets().unwrap().as_raw().object, source.as_raw().object);
     ui.close().unwrap();
     // Compilation owns no UI lifetime: retained resource data remains authorable after closure.
     compiler.derive_style(source.as_com_ref(), metrics, PaletteEdit::Preserve.into()).unwrap();

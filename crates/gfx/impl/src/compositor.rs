@@ -531,7 +531,7 @@ impl GfxCompositor for GfxCompositorObject {
         let resources = Resources::read(assets).inspect_err(|status| {
             self.diagnostic.failure(*status);
         })?;
-        if resources.catalog.as_ptr() != self.resources.catalog.as_ptr() {
+        if resources.catalog.as_raw().object != self.resources.catalog.as_raw().object {
             return Err(self.diagnostic.failure("asset revision belongs to another catalog"));
         }
         self.resources = resources;

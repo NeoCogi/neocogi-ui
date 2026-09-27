@@ -28,7 +28,7 @@ impl ImportedAssets {
         let catalog = source.catalog()?;
         let identity = catalog.query::<IUnknown>()?;
         let image = source.image()?;
-        if previous.is_some_and(|previous| previous.identity.as_ptr() != identity.as_ptr()) {
+        if previous.is_some_and(|previous| previous.identity.as_raw().object != identity.as_raw().object) {
             return Err(UI_E_OWNER);
         }
         // UI imports lookup metadata and validates only the required white-tile rows. Full

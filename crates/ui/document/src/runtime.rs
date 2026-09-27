@@ -175,7 +175,7 @@ impl IEventOwner for Loaded {
         match self.phase {
             LoadedPhase::Prepared => {
                 // Reject a different view before transferring this candidate's lifetime.
-                if view.add_ref().query::<IUnknown>()?.as_ptr() != self.root.node_interface()?.query::<IUnknown>()?.as_ptr() {
+                if view.add_ref().query::<IUnknown>()?.as_raw().object != self.root.node_interface()?.query::<IUnknown>()?.as_raw().object {
                     return Err(neocogi_ui::UI_E_OWNER);
                 }
                 view.mount()?;

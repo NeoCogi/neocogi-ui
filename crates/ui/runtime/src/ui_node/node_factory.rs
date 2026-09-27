@@ -45,7 +45,7 @@ impl NodeFactory {
             Mount::Component { view, owner } => (view, Some(owner)),
         };
         let owner: ComPtr<IUnknown> = widget.host()?.query()?;
-        if owner.as_ptr() != self.host.query::<IUnknown>()?.as_ptr() {
+        if owner.as_raw().object != self.host.query::<IUnknown>()?.as_raw().object {
             return Err(UI_E_OWNER);
         }
         // Only NOINTERFACE means an absent capability. ABI mismatches and other
@@ -56,7 +56,7 @@ impl NodeFactory {
             (Ok(leaf), Err(neocogi_com::NC_E_NOINTERFACE)) => NodeLayoutKind::Leaf(leaf),
             (Err(neocogi_com::NC_E_NOINTERFACE), Ok(policy)) => {
                 let view = policy.children()?;
-                let identity = view.query::<IUnknown>()?.as_ptr() as usize;
+                let identity = view.query::<IUnknown>()?.as_raw().object as usize;
                 let children = self
                     .children
                     .try_borrow()
@@ -77,7 +77,7 @@ impl NodeFactory {
         // Ordinary widgets require no optional event-capability discovery.
         let event_driver = match event_owner {
             Some(mut event_owner) => {
-                if event_owner.query::<IUnknown>()?.as_ptr() == widget.query::<IUnknown>()?.as_ptr() {
+                if event_owner.query::<IUnknown>()?.as_raw().object == widget.query::<IUnknown>()?.as_raw().object {
                     return Err(NC_E_INVALID_ARG);
                 }
                 // All view/layout validation succeeded. The owner claims both

@@ -396,7 +396,7 @@ fn typed_and_binary_preparation_have_equivalent_authored_state() {
     let loader = Loader::new(fixture.ui.clone(), None, Resources::new()).unwrap();
     let typed = loader.prepare(&document).unwrap();
     let binary = loader.load(&document.to_binary().unwrap()).unwrap();
-    assert_ne!(typed.root().unwrap().as_interface().as_ptr(), binary.root().unwrap().as_interface().as_ptr());
+    assert_ne!(typed.root().unwrap().as_interface().as_raw().object, binary.root().unwrap().as_interface().as_raw().object);
     for component in [&typed, &binary] {
         component
             .input::<SetText>("title")
