@@ -2,6 +2,15 @@
 
 ## 0.0.0 (unreleased)
 
+- Make IDL collection ownership explicit with `Vec<T>`, `Slice<T>` / `[T]`, and
+  `Array<T, N>` / `[T; N]`. Support recursively copied arrays in methods and
+  buffers through checked wire codecs. Move `Option<T>` into an ordinary bundled
+  generic enum, remove special optional lowering, and require borrowing the whole
+  enum for owned payloads. Expose enum deserialization and conditional library
+  decoder policies. COM designer catalog schema 5 uses named enum definitions
+  for optional fields. See [the generic value contract](IDL_GENERIC_VALUES.md) for syntax,
+  ownership, migration rules, and the remaining explicit limits.
+
 - Reset all workspace packages and plugin release metadata to **0.0.0** for
   NeoCogi UI. The project was formerly **microui-redux** and has grown
   to include COM components and IDL tooling, shared libraries and plugins, a

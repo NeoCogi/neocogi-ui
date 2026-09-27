@@ -53,7 +53,9 @@ impl CustomValue {
 /// Maximum encoded bytes accepted for one plugin-provided widget description.
 pub const MAX_DESIGN_DESCRIPTOR_BYTES: usize = 64 * 1024;
 /// Current authoring descriptor schema revision.
-pub const DESIGN_DESCRIPTOR_VERSION: u32 = 4;
+/// Revision 5 represents optional values as ordinary named enum definitions;
+/// it removes the parallel Optional field constructor from the transported graph.
+pub const DESIGN_DESCRIPTOR_VERSION: u32 = 5;
 
 /// Owned structural field expression copied through the COM design catalog.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -73,8 +75,6 @@ pub enum DesignValueType {
     Sequence(Box<DesignValueType>),
     /// Inline fixed-size array.
     Array(Box<DesignValueType>, u32),
-    /// Inline tagged optional field.
-    Optional(Box<DesignValueType>),
 }
 impl From<&neocogi_com::design::IdlValueType> for DesignValueType {
     /// Copies structure without recursively expanding named definitions.
@@ -88,7 +88,6 @@ impl From<&neocogi_com::design::IdlValueType> for DesignValueType {
             I::Object(name) => Self::Object((*name).into()),
             I::Sequence(value) => Self::Sequence(Box::new((*value).into())),
             I::Array(value, len) => Self::Array(Box::new((*value).into()), *len),
-            I::Optional(value) => Self::Optional(Box::new((*value).into())),
         }
     }
 }
@@ -101,7 +100,6 @@ impl std::fmt::Display for DesignValueType {
             Self::Scalar(name) | Self::Named(name) | Self::Object(name) => formatter.write_str(name),
             Self::Sequence(value) => write!(formatter, "Vec<{value}>"),
             Self::Array(value, len) => write!(formatter, "[{value}; {len}]"),
-            Self::Optional(value) => write!(formatter, "Option<{value}>"),
         }
     }
 }
@@ -401,7 +399,7 @@ fn validate_value_graph(values: &[DesignType]) -> Result<(), String> {
                 }
             }
             DesignValueType::Sequence(value) => field(value, definitions, false, edges, depth - 1)?,
-            DesignValueType::Array(value, _) | DesignValueType::Optional(value) => field(value, definitions, inline, edges, depth - 1)?,
+            DesignValueType::Array(value, _) => field(value, definitions, inline, edges, depth - 1)?,
         }
         Ok(())
     }
@@ -544,8 +542,20 @@ mod tests {
         assert_eq!(serde_json::from_slice::<DesignType>(&encoded).unwrap(), tree);
         let mut invalid = tree.clone();
         let DesignShape::Struct(fields) = &mut invalid.shape else { unreachable!() };
-        fields[0].ty = DesignValueType::Optional(Box::new(DesignValueType::Named("example.Tree".into())));
-        assert_eq!(validate_value_graph(&[invalid]).unwrap_err(), "Recursive inline value layout");
+        fields[0].ty = DesignValueType::Named("example.OptionalTree".into());
+        // Optional storage is an ordinary enum edge. Its active payload is
+        // inline, so the Tree -> Option<Tree> -> Tree cycle remains invalid.
+        let optional = DesignType {
+            qualified_name: "example.OptionalTree".into(),
+            rust_type: "example_contracts::OptionalTree".into(),
+            shape: DesignShape::Enum(vec![
+                DesignVariant { name: "None".into(), tag: 0, fields: vec![] },
+                DesignVariant { name: "Some".into(), tag: 1, fields: vec![DesignField {
+                    name: "0".into(), ty: DesignValueType::Named("example.Tree".into()),
+                }] },
+            ]),
+        };
+        assert_eq!(validate_value_graph(&[invalid, optional]).unwrap_err(), "Recursive inline value layout");
         let mut missing = tree.clone();
         let DesignShape::Struct(fields) = &mut missing.shape else { unreachable!() };
         fields[0].ty = DesignValueType::Named("example.Missing".into());
