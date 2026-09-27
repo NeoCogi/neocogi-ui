@@ -77,7 +77,7 @@ fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
         panic!("CounterEvent must be an enum")
     };
     assert_eq!(cases.iter().map(|case| case.name).collect::<Vec<_>>(), ["Activated", "Changed"]);
-    assert_eq!(cases[1].fields[0].ty, "neocogi.demo.CounterChanged");
+    assert_eq!(cases[1].fields[0].ty, neocogi_com::design::IdlValueType::Named("neocogi.demo.CounterChanged"));
     assert!(document.rust_bindings().unwrap_err().contains("not registered"));
     let WidgetSpec::Custom { properties, .. } = &mut document.root.children.last_mut().unwrap().node.widget else {
         unreachable!()
@@ -103,6 +103,7 @@ fn custom_factory_cannot_advertise_a_stream_outside_its_com_chain() {
             abi: &neocogi_ui::TextboxAbi::INTERFACE_DESCRIPTOR,
             message: &neocogi_demo_contracts::CounterEvent::IDL_TYPE,
         }),
+        values: &[],
     };
     /// A provider whose advertised source metadata disagrees with the COM descriptor.
     struct HiddenFactory;

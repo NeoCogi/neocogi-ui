@@ -113,7 +113,7 @@ impl Document {
         let mut events = Vec::new();
         for (index, node) in nodes.iter().enumerate() {
             let payload = match &node.widget {
-                WidgetSpec::Custom { kind, .. } => custom.interface(kind)?.stream.as_ref().map(|stream| stream.message.rust_type.clone()),
+                WidgetSpec::Custom { kind, .. } => custom.interface(kind)?.event_value().map(|value| value.rust_type.clone()),
                 widget => widget.rust_event_type().map(str::to_owned),
             };
             if let Some(payload) = payload {

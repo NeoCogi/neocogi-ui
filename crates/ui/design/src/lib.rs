@@ -53,7 +53,58 @@ impl CustomValue {
 /// Maximum encoded bytes accepted for one plugin-provided widget description.
 pub const MAX_DESIGN_DESCRIPTOR_BYTES: usize = 64 * 1024;
 /// Current authoring descriptor schema revision.
-pub const DESIGN_DESCRIPTOR_VERSION: u32 = 3;
+pub const DESIGN_DESCRIPTOR_VERSION: u32 = 4;
+
+/// Owned structural field expression copied through the COM design catalog.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub enum DesignValueType {
+    /// Empty value.
+    Unit,
+    /// Built-in scalar and its exact width.
+    Scalar(String),
+    /// Owned UTF-8 text.
+    Text,
+    /// Canonical edge to one entry in the finite value-definition table.
+    Named(String),
+    /// Explicit owned COM capability; its interface is inspected separately.
+    Object(String),
+    /// Explicitly indirect sequence of recursive values.
+    Sequence(Box<DesignValueType>),
+    /// Inline fixed-size array.
+    Array(Box<DesignValueType>, u32),
+    /// Inline tagged optional field.
+    Optional(Box<DesignValueType>),
+}
+impl From<&neocogi_com::design::IdlValueType> for DesignValueType {
+    /// Copies structure without recursively expanding named definitions.
+    fn from(source: &neocogi_com::design::IdlValueType) -> Self {
+        use neocogi_com::design::IdlValueType as I;
+        match source {
+            I::Unit => Self::Unit,
+            I::Text => Self::Text,
+            I::Scalar(name) => Self::Scalar((*name).into()),
+            I::Named(name) => Self::Named((*name).into()),
+            I::Object(name) => Self::Object((*name).into()),
+            I::Sequence(value) => Self::Sequence(Box::new((*value).into())),
+            I::Array(value, len) => Self::Array(Box::new((*value).into()), *len),
+            I::Optional(value) => Self::Optional(Box::new((*value).into())),
+        }
+    }
+}
+impl std::fmt::Display for DesignValueType {
+    /// Presents readable type spelling without making strings the metadata model.
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unit => formatter.write_str("()"),
+            Self::Text => formatter.write_str("String"),
+            Self::Scalar(name) | Self::Named(name) | Self::Object(name) => formatter.write_str(name),
+            Self::Sequence(value) => write!(formatter, "Vec<{value}>"),
+            Self::Array(value, len) => write!(formatter, "[{value}; {len}]"),
+            Self::Optional(value) => write!(formatter, "Option<{value}>"),
+        }
+    }
+}
 
 /// One source-level field, including the exact IDL type spelling.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -62,7 +113,7 @@ pub struct DesignField {
     /// Authored name or decimal tuple position.
     pub name: String,
     /// Authored type expression.
-    pub ty: String,
+    pub ty: DesignValueType,
 }
 
 /// One tagged enum case and its ordered fields.
@@ -71,6 +122,8 @@ pub struct DesignField {
 pub struct DesignVariant {
     /// Authored variant name.
     pub name: String,
+    /// Exact declared integer discriminant.
+    pub tag: i64,
     /// Complete payload field list.
     pub fields: Vec<DesignField>,
 }
@@ -109,6 +162,47 @@ pub struct DesignType {
     pub shape: DesignShape,
 }
 
+impl From<&neocogi_com::design::IdlType> for DesignType {
+    /// Copies a single named definition; recursive named edges remain references.
+    fn from(source: &neocogi_com::design::IdlType) -> Self {
+        fn fields(values: &[neocogi_com::design::IdlField]) -> Vec<DesignField> {
+            values
+                .iter()
+                .map(|field| DesignField {
+                    name: field.name.into(),
+                    ty: (&field.ty).into(),
+                })
+                .collect()
+        }
+        Self {
+            qualified_name: source.qualified_name.into(),
+            rust_type: source.rust_type.into(),
+            shape: match source.shape {
+                IdlShape::Struct(values) => DesignShape::Struct(fields(values)),
+                IdlShape::Enum(values) => DesignShape::Enum(
+                    values
+                        .iter()
+                        .map(|value| DesignVariant {
+                            name: value.name.into(),
+                            tag: value.tag,
+                            fields: fields(value.fields),
+                        })
+                        .collect(),
+                ),
+                IdlShape::BitEnum(values) => DesignShape::BitEnum(
+                    values
+                        .iter()
+                        .map(|value| DesignFlag {
+                            name: value.name.into(),
+                            value: value.value,
+                        })
+                        .collect(),
+                ),
+            },
+        }
+    }
+}
+
 /// The one complete event stream resolved through the class ancestry.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -118,7 +212,7 @@ pub struct DesignStream {
     /// Full stream ABI signature, including its event layout.
     pub signature: [u8; 32],
     /// Exact generated message payload.
-    pub message: DesignType,
+    pub message: String,
 }
 
 /// Exact widget interface identity and its authoring-level output contracts.
@@ -133,6 +227,15 @@ pub struct DesignInterface {
     pub rust_abi: String,
     /// Optional single stream, including inherited generic projections.
     pub stream: Option<DesignStream>,
+    /// Complete finite value graph reachable from this interface and its stream.
+    pub values: Vec<DesignType>,
+}
+impl DesignInterface {
+    /// Resolves the stream's canonical value edge through the authoritative graph.
+    pub fn event_value(&self) -> Option<&DesignType> {
+        let stream = self.stream.as_ref()?;
+        self.values.iter().find(|value| value.qualified_name == stream.message)
+    }
 }
 
 /// One constructible widget kind and its typed constructor defaults.
@@ -181,46 +284,7 @@ impl DesignWidgetManifest {
                         .map_err(|error| error.to_string())?
                         .try_into()
                         .map_err(|_| "Stream signature is not SHA-256")?,
-                    message: DesignType {
-                        qualified_name: output.message.qualified_name.to_owned(),
-                        rust_type: output.message.rust_type.to_owned(),
-                        shape: match output.message.shape {
-                            IdlShape::Struct(fields) => DesignShape::Struct(
-                                fields
-                                    .iter()
-                                    .map(|field| DesignField {
-                                        name: field.name.to_owned(),
-                                        ty: field.ty.to_owned(),
-                                    })
-                                    .collect(),
-                            ),
-                            IdlShape::Enum(variants) => DesignShape::Enum(
-                                variants
-                                    .iter()
-                                    .map(|variant| DesignVariant {
-                                        name: variant.name.to_owned(),
-                                        fields: variant
-                                            .fields
-                                            .iter()
-                                            .map(|field| DesignField {
-                                                name: field.name.to_owned(),
-                                                ty: field.ty.to_owned(),
-                                            })
-                                            .collect(),
-                                    })
-                                    .collect(),
-                            ),
-                            IdlShape::BitEnum(flags) => DesignShape::BitEnum(
-                                flags
-                                    .iter()
-                                    .map(|flag| DesignFlag {
-                                        name: flag.name.to_owned(),
-                                        value: flag.value,
-                                    })
-                                    .collect(),
-                            ),
-                        },
-                    },
+                    message: output.message.qualified_name.to_owned(),
                 })
             })
             .transpose()?;
@@ -233,6 +297,7 @@ impl DesignWidgetManifest {
                 signature: digest,
                 rust_abi: source.rust_abi.to_owned(),
                 stream,
+                values: source.values.iter().map(DesignType::from).collect(),
             },
         };
         manifest.validate()?;
@@ -256,30 +321,16 @@ impl DesignWidgetManifest {
             return Err("Invalid design widget property defaults".into());
         }
         if let Some(output) = &self.interface.stream {
-            if output.iid == [0; 16] || !rust_path(&output.message.rust_type) {
+            if output.iid == [0; 16] || !qualified_name(&output.message) {
                 return Err("Invalid design widget output metadata".into());
             }
-            match &output.message.shape {
-                DesignShape::Struct(fields) => {
-                    if !fields.iter().all(|field| !field.name.is_empty() && !field.ty.is_empty()) {
-                        return Err("Invalid IDL struct field".into());
-                    }
-                }
-                DesignShape::Enum(variants) => {
-                    if !variants
-                        .iter()
-                        .all(|variant| identifier(&variant.name) && variant.fields.iter().all(|field| !field.name.is_empty() && !field.ty.is_empty()))
-                    {
-                        return Err("Invalid IDL enum variant".into());
-                    }
-                }
-                DesignShape::BitEnum(flags) => {
-                    if !flags.iter().all(|flag| identifier(&flag.name)) {
-                        return Err("Invalid IDL bit flag".into());
-                    }
-                }
-            }
+            self.interface
+                .values
+                .iter()
+                .find(|value| value.qualified_name == output.message)
+                .ok_or("Event value is absent from its definition graph")?;
         }
+        validate_value_graph(&self.interface.values)?;
         Ok(())
     }
 
@@ -304,6 +355,119 @@ impl DesignWidgetManifest {
     }
 }
 
+/// Checks canonical logical names without accepting source-code fragments.
+fn qualified_name(name: &str) -> bool {
+    !name.is_empty() && name.split('.').all(identifier)
+}
+
+/// Validates a bounded finite graph, including references and inline layout cycles.
+fn validate_value_graph(values: &[DesignType]) -> Result<(), String> {
+    use std::collections::{BTreeMap, BTreeSet};
+    if values.len() > 1024 {
+        return Err("Too many value definitions".into());
+    }
+    let mut definitions = BTreeMap::new();
+    for value in values {
+        if !qualified_name(&value.qualified_name) || !rust_path(&value.rust_type) || definitions.insert(value.qualified_name.as_str(), value).is_some() {
+            return Err("Invalid or duplicate value definition".into());
+        }
+    }
+    /// Field expressions are bounded independently of named graph traversal.
+    fn field(ty: &DesignValueType, definitions: &BTreeMap<&str, &DesignType>, inline: bool, edges: &mut BTreeSet<String>, depth: usize) -> Result<(), String> {
+        if depth == 0 {
+            return Err("Value expression exceeds nesting limit".into());
+        }
+        match ty {
+            DesignValueType::Unit | DesignValueType::Text => {}
+            DesignValueType::Scalar(name) => {
+                if !matches!(
+                    name.as_str(),
+                    "bool" | "u8" | "u16" | "u32" | "u64" | "usize" | "i8" | "i16" | "i32" | "i64" | "isize" | "f32" | "f64" | "Guid" | "Status"
+                ) {
+                    return Err("Unknown scalar definition".into());
+                }
+            }
+            DesignValueType::Object(name) => {
+                if !qualified_name(name) {
+                    return Err("Invalid object identity".into());
+                }
+            }
+            DesignValueType::Named(name) => {
+                if !definitions.contains_key(name.as_str()) {
+                    return Err(format!("Missing value definition {name}"));
+                }
+                if inline {
+                    edges.insert(name.clone());
+                }
+            }
+            DesignValueType::Sequence(value) => field(value, definitions, false, edges, depth - 1)?,
+            DesignValueType::Array(value, _) | DesignValueType::Optional(value) => field(value, definitions, inline, edges, depth - 1)?,
+        }
+        Ok(())
+    }
+    /// Names distinguish ordered tuple positions from ordinary named record fields.
+    fn fields(values: &[DesignField], definitions: &BTreeMap<&str, &DesignType>, edges: &mut BTreeSet<String>, remaining: &mut usize) -> Result<(), String> {
+        *remaining = remaining.checked_sub(values.len()).ok_or("Too many value fields")?;
+        let mut names = BTreeSet::new();
+        let tuple = values.iter().enumerate().all(|(index, value)| value.name == index.to_string());
+        for value in values {
+            if (!tuple && !identifier(&value.name)) || !names.insert(&value.name) {
+                return Err("Invalid or duplicate field name".into());
+            }
+            field(&value.ty, definitions, true, edges, 64)?;
+        }
+        Ok(())
+    }
+    let mut pending = BTreeMap::new();
+    let mut remaining = 4096;
+    for value in values {
+        let mut edges = BTreeSet::new();
+        match &value.shape {
+            DesignShape::Struct(values) => fields(values, &definitions, &mut edges, &mut remaining)?,
+            DesignShape::Enum(variants) => {
+                let mut names = BTreeSet::new();
+                let mut tags = BTreeSet::new();
+                if variants.is_empty() {
+                    return Err("Empty enum definition".into());
+                }
+                for variant in variants {
+                    if !identifier(&variant.name) || !names.insert(&variant.name) || !tags.insert(variant.tag) {
+                        return Err("Invalid or duplicate enum case".into());
+                    }
+                    fields(&variant.fields, &definitions, &mut edges, &mut remaining)?;
+                }
+            }
+            DesignShape::BitEnum(flags) => {
+                let mut names = BTreeSet::new();
+                if !flags.iter().all(|flag| identifier(&flag.name) && names.insert(&flag.name)) {
+                    return Err("Invalid or duplicate bit flag".into());
+                }
+            }
+        }
+        pending.insert(value.qualified_name.clone(), edges);
+    }
+    // Iterative topological removal avoids recursion on producer-supplied names.
+    while !pending.is_empty() {
+        let leaves = pending
+            .iter()
+            .filter(|(_, edges)| edges.is_empty())
+            .map(|(name, _)| name.clone())
+            .collect::<Vec<_>>();
+        if leaves.is_empty() {
+            return Err("Recursive inline value layout".into());
+        }
+        for name in &leaves {
+            pending.remove(name);
+        }
+        for edges in pending.values_mut() {
+            for name in &leaves {
+                edges.remove(name);
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Checks one generated Rust identifier before interpolating it into output.
 fn identifier(value: &str) -> bool {
     let mut chars = value.chars();
@@ -325,7 +489,7 @@ mod tests {
     /// malformed versions, Rust paths, and nonfinite constructor defaults.
     #[test]
     fn manifest_round_trip_and_validation_guard_generated_bindings() {
-        let manifest = DesignWidgetManifest {
+        let mut manifest = DesignWidgetManifest {
             version: DESIGN_DESCRIPTOR_VERSION,
             kind: "example.counter".into(),
             defaults: vec![CustomProperty {
@@ -336,17 +500,23 @@ mod tests {
                 iid: [1; 16],
                 signature: [2; 32],
                 rust_abi: "example_contracts::CounterAbi".into(),
+                values: vec![],
                 stream: Some(DesignStream {
                     iid: [2; 16],
                     signature: [3; 32],
-                    message: DesignType {
-                        qualified_name: "example.CounterEvent".into(),
-                        rust_type: "example_contracts::CounterEvent".into(),
-                        shape: DesignShape::Enum(vec![DesignVariant { name: "Activated".into(), fields: vec![] }]),
-                    },
+                    message: "example.CounterEvent".into(),
                 }),
             },
         };
+        manifest.interface.values.push(DesignType {
+            qualified_name: "example.CounterEvent".into(),
+            rust_type: "example_contracts::CounterEvent".into(),
+            shape: DesignShape::Enum(vec![DesignVariant {
+                name: "Activated".into(),
+                tag: 0,
+                fields: vec![],
+            }]),
+        });
         assert_eq!(DesignWidgetManifest::decode(&manifest.encode().unwrap()).unwrap(), manifest);
         let mut invalid = manifest.clone();
         invalid.version += 1;
@@ -357,5 +527,51 @@ mod tests {
         invalid = manifest.clone();
         invalid.defaults[0].value = CustomValue::Number(f32::NAN);
         assert!(invalid.encode().is_err());
+    }
+    /// Recursive named edges are finite metadata, while inline cycles are invalid layouts.
+    #[test]
+    fn recursive_graph_requires_complete_definitions_and_real_indirection() {
+        let tree = DesignType {
+            qualified_name: "example.Tree".into(),
+            rust_type: "example_contracts::Tree".into(),
+            shape: DesignShape::Struct(vec![DesignField {
+                name: "children".into(),
+                ty: DesignValueType::Sequence(Box::new(DesignValueType::Named("example.Tree".into()))),
+            }]),
+        };
+        assert!(validate_value_graph(&[tree.clone()]).is_ok());
+        let encoded = serde_json::to_vec(&tree).unwrap();
+        assert_eq!(serde_json::from_slice::<DesignType>(&encoded).unwrap(), tree);
+        let mut invalid = tree.clone();
+        let DesignShape::Struct(fields) = &mut invalid.shape else { unreachable!() };
+        fields[0].ty = DesignValueType::Optional(Box::new(DesignValueType::Named("example.Tree".into())));
+        assert_eq!(validate_value_graph(&[invalid]).unwrap_err(), "Recursive inline value layout");
+        let mut missing = tree.clone();
+        let DesignShape::Struct(fields) = &mut missing.shape else { unreachable!() };
+        fields[0].ty = DesignValueType::Named("example.Missing".into());
+        assert!(validate_value_graph(&[missing]).unwrap_err().contains("Missing value definition"));
+        assert!(validate_value_graph(&[tree.clone(), tree]).unwrap_err().contains("duplicate"));
+    }
+
+    /// Tagged cases must identify an unambiguous payload at every named definition.
+    #[test]
+    fn nested_enum_duplicate_tags_are_rejected() {
+        let value = DesignType {
+            qualified_name: "example.Choice".into(),
+            rust_type: "example_contracts::Choice".into(),
+            shape: DesignShape::Enum(vec![
+                DesignVariant {
+                    name: "First".into(),
+                    tag: 4,
+                    fields: vec![],
+                },
+                DesignVariant {
+                    name: "Second".into(),
+                    tag: 4,
+                    fields: vec![],
+                },
+            ]),
+        };
+        assert!(validate_value_graph(&[value]).unwrap_err().contains("duplicate enum case"));
     }
 }
