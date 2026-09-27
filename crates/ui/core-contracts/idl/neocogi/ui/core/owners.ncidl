@@ -20,13 +20,13 @@ enum Mount: u8 {
     /// A widget whose outputs are bound directly to an enclosing owner.
     Widget {
         /// Actual view mounted and closed by the runtime.
-        view: IWidget,
+        view: ComPtr<IWidget>,
     },
     /// A composed view and its separately owned behavior share one mount lifetime.
     Component {
         /// Actual view; it never retains the controller through this relationship.
-        view: IWidget,
+        view: ComPtr<IWidget>,
         /// Persistent controller retained by the mount and retired after active dispatch returns.
-        owner: IEventOwner,
+        owner: ComPtr<IEventOwner>,
     },
 }

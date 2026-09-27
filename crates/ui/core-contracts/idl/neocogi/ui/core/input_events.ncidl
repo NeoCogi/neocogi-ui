@@ -179,7 +179,7 @@ enum FileDialogCompletion: u8 {
     /// The request accepted this exact native path.
     Accepted {
         /// Owned path capability retained independently of the producer.
-        path: INativePath,
+        path: ComPtr<INativePath>,
     },
     /// The request was cancelled or its active owner closed.
     Cancelled,
@@ -198,7 +198,7 @@ enum FileDialogMode: u8 {
 /// Nodes-provider file picker controller and real COM controls; retaining it does not keep its runtime open.
 class IFileDialog: IEventStream<IFileDialogEvent> {
     /// Returns the actual stable modal window capability for ordinary lifecycle and geometry operations.
-    fn window(&self) -> Result<IWindow>;
+    fn window(&self) -> Result<ComPtr<IWindow>>;
     /// Reads and validates a complete native directory before changing request state or showing the modal.
     fn open(&mut self, title: &[u8], rect: Rect, directory: &INativePath, mode: FileDialogMode, filename: &INativePath) -> Result<()>;
     /// Reports whether a request is active; hidden/idle is distinct from permanently closed.
@@ -208,7 +208,7 @@ class IFileDialog: IEventStream<IFileDialogEvent> {
     /// Permanently destroys the modal and ends its active request, while retained handles remain safe.
     fn close(&mut self) -> Result<()>;
     /// Copies the latest failed directory-read diagnostic without replacing the previous valid listing.
-    fn diagnostic(&self) -> Result<String>;
+    fn diagnostic(&self) -> Result<ComPtr<INcString>>;
 
 }
 
@@ -216,7 +216,7 @@ class IFileDialog: IEventStream<IFileDialogEvent> {
 /// Standard picker construction capability exposed by a nodes factory bound to window management.
 interface IFileDialogs {
     /// Creates one hidden reusable modal owned by the authenticated ordinary window.
-    fn create(&self, parent: &IWindow) -> Result<IFileDialog>;
+    fn create(&self, parent: &IWindow) -> Result<ComPtr<IFileDialog>>;
 }
 
 #[version(1)]

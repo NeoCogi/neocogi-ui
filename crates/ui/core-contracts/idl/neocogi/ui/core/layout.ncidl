@@ -146,7 +146,7 @@ interface ILayoutService {
 interface IContainerLayout {
     /// Returns this container's immutable, host-issued collection identity for its entire lifetime.
     /// The implementation retains its matching editor privately and publishes metadata after every committed edit.
-    fn children(&self) -> Result<IChildren>;
+    fn children(&self) -> Result<ComPtr<IChildren>>;
     /// Measures content through indexed scoped access; semantic and topology mutations are forbidden.
     fn measure(&mut self, scope: LayoutScope, bounds: LayoutLimits, layout: &ILayoutService) -> Result<Size>;
     /// Places direct children and returns complete copied viewport/content policy.
@@ -162,7 +162,7 @@ interface IContainerLayout {
 /// bypass a concrete container's matching Linear/Grid/domain edge metadata.
 interface IChildrenEditor {
     /// Returns the read-only capability used by the runtime's authoritative traversal.
-    fn view(&self) -> Result<IChildren>;
+    fn view(&self) -> Result<ComPtr<IChildren>>;
     /// Inserts one unmounted child at index (including count), committing only after validation.
     fn insert(&self, index: u32, widget: &Mount) -> Result<ChildEditResult>;
     /// Validates the replacement before permanently closing the old indexed subtree.
@@ -188,7 +188,7 @@ struct ChildEditResult {
 /// Common editing capability inherited by built-in concrete container interfaces.
 interface IContainer: IWidget {
     /// Returns the stable read-only view; editing stays on the concrete container to preserve edge metadata.
-    fn children(&self) -> Result<IChildren>;
+    fn children(&self) -> Result<ComPtr<IChildren>>;
     /// Removes one complete subtree and matching edge metadata; Ok reports a committed edit.
     fn remove(&mut self, index: u32) -> Result<ChildEditResult>;
     /// Removes all owned subtrees and their matching metadata while retaining reusable capacity.
@@ -227,7 +227,7 @@ interface IScrolling: IWidget {
 /// Shared whole-text editing inherited by text controls and labelled list entries.
 interface ITextContent: IWidget {
     /// Returns an independently owned immutable UTF-8 snapshot.
-    fn text(&self) -> Result<String>;
+    fn text(&self) -> Result<ComPtr<INcString>>;
     /// Replaces complete UTF-8 text at offset zero, applying the control's line policy.
     fn set_text(&mut self, text: &[u8]) -> Result<()>;
 }

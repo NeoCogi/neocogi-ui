@@ -36,7 +36,7 @@ interface IPainter {
 /// Common retained widget capability shared by all concrete widget interfaces.
 interface IWidget {
     /// Returns the allocating runtime's identity service, which owns no tree.
-    fn host(&self) -> Result<IWidgetHost>;
+    fn host(&self) -> Result<ComPtr<IWidgetHost>>;
     /// Claims the only tree attachment; a second call fails without changing state.
     fn mount(&mut self) -> Result<()>;
     /// Logically closes the widget without requiring its final reference release.
@@ -62,7 +62,7 @@ interface IChildren {
     /// Returns the current number of direct children.
     fn child_count(&self) -> Result<u32>;
     /// Returns an owned reference to one direct child; topology ownership is a separate contract.
-    fn child(&self, index: u32) -> Result<IWidget>;
+    fn child(&self, index: u32) -> Result<ComPtr<IWidget>>;
 }
 
 #[version(1)]
@@ -192,7 +192,7 @@ interface IWindow {
     /// Copies current authoritative geometry, visibility and policy without caching app-side state.
     fn snapshot(&self) -> Result<WindowSnapshot>;
     /// Returns an immutable UTF-8 title snapshot.
-    fn title(&self) -> Result<String>;
+    fn title(&self) -> Result<ComPtr<INcString>>;
     /// Replaces the complete title silently; UTF-8 input offset must be zero.
     fn set_title(&self, title: &[u8]) -> Result<()>;
     /// Changes local visibility intent; ancestors and modal policy determine effective visibility.
@@ -221,7 +221,7 @@ interface IWindowManager {
         title: &[u8],
         rect: Rect,
         root: &Mount,
-    ) -> Result<IWindow>;
+    ) -> Result<ComPtr<IWindow>>;
     /// Creates a hidden modal dialog owned by an ordinary window.
     fn create_dialog(
         &self,
@@ -229,23 +229,23 @@ interface IWindowManager {
         title: &[u8],
         rect: Rect,
         root: &Mount,
-    ) -> Result<IWindow>;
+    ) -> Result<ComPtr<IWindow>>;
     /// Creates a hidden auto-sized popup owned by a live window or dialog.
     fn create_popup(
         &self,
         parent: &IWindow,
         title: &[u8],
         root: &Mount,
-    ) -> Result<IPopup>;
+    ) -> Result<ComPtr<IPopup>>;
     /// Mounts one previously unmounted root and creates its logical window.
-    fn create_window(&self, title: &[u8], rect: Rect, root: &Mount) -> Result<IWindow>;
+    fn create_window(&self, title: &[u8], rect: Rect, root: &Mount) -> Result<ComPtr<IWindow>>;
 }
 
 #[version(1)]
 /// Runtime-bound authority used to authenticate independently provided node factories.
 interface IConstructionHost {
     /// Returns the non-owning widget authority used by independently implemented node classes.
-    fn host(&self) -> Result<IWidgetHost>;
+    fn host(&self) -> Result<ComPtr<IWidgetHost>>;
 }
 
 #[version(4)]
@@ -253,14 +253,14 @@ interface IConstructionHost {
 interface UiRuntime: IInputSink + IWindowManager + IMenus + IChoiceMenus {
 
     /// Returns the core construction authority without exposing a concrete nodes factory.
-    fn construction_host(&self) -> Result<IConstructionHost>;
+    fn construction_host(&self) -> Result<ComPtr<IConstructionHost>>;
 
     /// Installs the host clipboard capability before ordinary editing. Replacement affects new
     /// requests; in-flight completions retain authority only while their requesting edit remains current.
     fn set_clipboard(&mut self, clipboard: &ITextClipboard) -> Result<()>;
 
     /// Retains the currently installed immutable revision, suitable for restoration or another consumer.
-    fn assets(&self) -> Result<IAssetBundle>;
+    fn assets(&self) -> Result<ComPtr<IAssetBundle>>;
     /// Validates compatible resources and prepares the renderer upload before publishing either UI
     /// projection. The mutable receiver makes the authority to replace this runtime-wide value
     /// explicit. Failure preserves the old bundle. Success requires update before rendering.
@@ -286,13 +286,13 @@ interface UiRuntime: IInputSink + IWindowManager + IMenus + IChoiceMenus {
 /// Runtime identity and mutation authority without a reference back to its tree.
 interface IWidgetHost {
     /// Returns the installed clipboard during ordinary mutation, or NotFound for headless hosts.
-    fn clipboard(&self) -> Result<ITextClipboard>;
+    fn clipboard(&self) -> Result<ComPtr<ITextClipboard>>;
     /// Retains the current immutable resource revision without owning the runtime tree.
     /// Custom widgets cache bulk metadata by this bundle identity and refresh it during the next
     /// measure/paint after replacement; never retain UVs or glyph metrics across a different revision.
-    fn assets(&self) -> Result<IAssetBundle>;
+    fn assets(&self) -> Result<ComPtr<IAssetBundle>>;
     /// Creates an empty private child editor; containers expose only its read-only view.
-    fn create_children(&self) -> Result<IChildrenEditor>;
+    fn create_children(&self) -> Result<ComPtr<IChildrenEditor>>;
     /// Checks lifetime without forbidding observational reads during layout or painting.
     fn check_open(&self) -> Result<()>;
     /// Rejects closed runtimes and mutation during layout or painting.

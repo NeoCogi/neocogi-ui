@@ -5,11 +5,11 @@ use neocogi.ui.core::{IWidget, IWidgetHost};
 /// A loaded component exposes its mountable root, named widget identities, and inputs.
 interface IUiComponent {
     /// Returns the component's real root; private child handles remain private.
-    fn root(&self) -> Result<IWidget>;
+    fn root(&self) -> Result<ComPtr<IWidget>>;
     /// Resolves one authored widget by its stable node key for a checked concrete interface query.
-    fn widget(&self, name: &[u8]) -> Result<IWidget>;
+    fn widget(&self, name: &[u8]) -> Result<ComPtr<IWidget>>;
     /// Resolves an input once; the consumer queries its concrete message receiver.
-    fn input(&self, name: &[u8]) -> Result<IUnknown>;
+    fn input(&self, name: &[u8]) -> Result<ComPtr<IUnknown>>;
 }
 
 #[version(1)]
@@ -84,7 +84,7 @@ interface IDesignWidgetCatalog {
     fn describe(&self, index: u32, output: &mut [u8]) -> Result<u32>;
     /// Constructs one widget through COM using its stable catalog index and
     /// encoded, previously validated constructor properties.
-    fn create_widget(&self, index: u32, host: &IWidgetHost, properties: &[u8]) -> Result<IWidget>;
+    fn create_widget(&self, index: u32, host: &IWidgetHost, properties: &[u8]) -> Result<ComPtr<IWidget>>;
 }
 
 #[version(1)]

@@ -2,14 +2,14 @@
 /// Process entry for the cohesive CPU decoding and resource-baking plugin.
 factory GfxPluginFactory {
     /// Creates one PNG upload service with independent diagnostic history.
-    fn png_decoder(&self) -> Result<PngDecoder>;
+    fn png_decoder(&self) -> Result<ComPtr<PngDecoder>>;
     /// Creates the optional font and atlas builder selected by the deployment.
-    fn asset_loader(&self) -> Result<AssetLoader>;
+    fn asset_loader(&self) -> Result<ComPtr<AssetLoader>>;
     /// Creates the resource-preserving revision publisher available in every GFX deployment.
-    fn asset_publisher(&self) -> Result<AssetPublisher>;
+    fn asset_publisher(&self) -> Result<ComPtr<AssetPublisher>>;
     /// Imports one immutable resource revision into an independent renderer-neutral compositor.
     /// Every successful call returns a fresh mutable object, even for the same asset bundle.
     /// Resource installation, frame state, diagnostics, and stream storage are local to that
     /// object. The factory must not retain or distribute aliases that can mutate the result.
-    fn create_compositor(&self, assets: &IAssetBundle) -> Result<GfxCompositor>;
+    fn create_compositor(&self, assets: &IAssetBundle) -> Result<ComPtr<GfxCompositor>>;
 }

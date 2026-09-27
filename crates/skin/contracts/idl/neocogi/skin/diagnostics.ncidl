@@ -2,5 +2,5 @@
 /// Owned diagnostic snapshots for appearance and external-theme compilation failures.
 interface ISkinDiagnostics {
     /// Returns the latest schema, filesystem, decoding, or validation cause as immutable text.
-    fn diagnostic(&self) -> Result<String>;
+    fn diagnostic(&self) -> Result<ComPtr<INcString>>;
 }

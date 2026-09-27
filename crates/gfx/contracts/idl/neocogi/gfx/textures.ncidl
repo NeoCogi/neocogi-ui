@@ -5,5 +5,5 @@ factory PngDecoder: IGfxDiagnostics {
     /// The complete input starts at offset zero; encoded and decoded data are bounded to 64 MiB.
     /// Decoder failures never call the factory. Upload failures preserve their original status.
     /// The caller supplies its remaining RGBA budget; reject before allocating decoded pixels or uploading.
-    fn upload(&self, png: &[u8], rgba_limit: u64, target: &ITextureFactory) -> Result<ITexture>;
+    fn upload(&self, png: &[u8], rgba_limit: u64, target: &ITextureFactory) -> Result<ComPtr<ITexture>>;
 }

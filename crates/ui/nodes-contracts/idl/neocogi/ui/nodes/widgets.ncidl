@@ -11,7 +11,7 @@ enum TextboxEvent: u8 {
 /// Constructible single-line editor whose complete concrete API is the class contract.
 class Textbox: IWidget + ILeafLayout + IEventStream<TextboxEvent> {
     /// Returns an independently owned immutable UTF-8 snapshot.
-    fn text(&self) -> Result<String>;
+    fn text(&self) -> Result<ComPtr<INcString>>;
     /// Replaces complete UTF-8 text after applying the single-line normalization policy.
     fn set_text(&mut self, text: &[u8]) -> Result<()>;
     /// Returns the byte cursor at a Unicode scalar boundary.
@@ -29,7 +29,7 @@ class Textbox: IWidget + ILeafLayout + IEventStream<TextboxEvent> {
 /// Constructible multiline display text with its complete concrete API in one class contract.
 interface TextBlock: IWidget + ILeafLayout {
     /// Returns an independently owned immutable UTF-8 snapshot.
-    fn text(&self) -> Result<String>;
+    fn text(&self) -> Result<ComPtr<INcString>>;
     /// Replaces complete UTF-8 text at offset zero.
     fn set_text(&mut self, text: &[u8]) -> Result<()>;
     /// Returns the current wrapping policy.
@@ -51,7 +51,7 @@ class Checkbox: IWidget + ILeafLayout + IEventStream<CheckboxEvent> {
     /// Replaces the value without publishing user interaction or dirtying geometry.
     fn set_checked(&mut self, checked: bool) -> Result<()>;
     /// Returns an owned immutable label snapshot.
-    fn label(&self) -> Result<String>;
+    fn label(&self) -> Result<ComPtr<INcString>>;
     /// Replaces the complete UTF-8 label and invalidates preferred size when changed.
     fn set_label(&mut self, label: &[u8]) -> Result<()>;
     /// Selects a semantic font role and invalidates measurement only when it differs.
@@ -123,7 +123,7 @@ class Number: IWidget + ILeafLayout + IEventStream<NumberEvent> {
 /// Constructible RGBA preview whose optional label is part of the concrete class API.
 interface ColorSwatch: IWidget + ILeafLayout {
     /// Returns an independently owned immutable UTF-8 label snapshot.
-    fn text(&self) -> Result<String>;
+    fn text(&self) -> Result<ComPtr<INcString>>;
     /// Replaces the complete UTF-8 label and invalidates preferred size when changed.
     fn set_text(&mut self, text: &[u8]) -> Result<()>;
     /// Returns RGBA packed with red in the least significant byte.
@@ -140,7 +140,7 @@ interface ColorSwatch: IWidget + ILeafLayout {
 /// Constructible labelled row; generic application data remains in the static event adapter.
 class ListItem: IWidget + ILeafLayout + IEventStream<ListItemEvent> {
     /// Returns an independently owned immutable UTF-8 label snapshot.
-    fn text(&self) -> Result<String>;
+    fn text(&self) -> Result<ComPtr<INcString>>;
     /// Replaces the complete UTF-8 label and invalidates preferred size when changed.
     fn set_text(&mut self, text: &[u8]) -> Result<()>;
     /// Selects a semantic font role and invalidates measurement only when it differs.
@@ -158,7 +158,7 @@ class ListItem: IWidget + ILeafLayout + IEventStream<ListItemEvent> {
 /// Constructible button-like list entry with direct label, image, and activation operations.
 class ListBox: IWidget + ILeafLayout + IEventStream<ListBoxEvent> {
     /// Returns an independently owned immutable UTF-8 label snapshot.
-    fn text(&self) -> Result<String>;
+    fn text(&self) -> Result<ComPtr<INcString>>;
     /// Replaces the complete UTF-8 label and invalidates preferred size when changed.
     fn set_text(&mut self, text: &[u8]) -> Result<()>;
     /// Selects a semantic font role and invalidates measurement only when it differs.
@@ -258,7 +258,7 @@ enum TextAreaEvent: u8 {
 /// Constructible fixed scrolling editor whose class forwards to one actual internal editor.
 class TextArea: IWidget + IContainerLayout + IScrolling + IEventStream<TextAreaEvent> {
     /// Returns an independently owned immutable UTF-8 snapshot from the actual editor.
-    fn text(&self) -> Result<String>;
+    fn text(&self) -> Result<ComPtr<INcString>>;
     /// Replaces normalized text on the actual editor and schedules caret reveal.
     fn set_text(&mut self, text: &[u8]) -> Result<()>;
     /// Returns the actual editor's scalar-aligned byte cursor.
@@ -282,17 +282,17 @@ class Combo: IWidget + ILeafLayout + IEventStream<IChoiceMenuEvent> {
     /// Returns the committed stable leaf identity, preserving `None` independently of every ID.
     fn selection(&self) -> Result<ChoiceSelection>;
     /// Returns the exact rendered header text: the selected label or the configured placeholder.
-    fn display_text(&self) -> Result<String>;
+    fn display_text(&self) -> Result<ComPtr<INcString>>;
     /// Returns the number of selectable leaves retained across the complete hierarchy.
     fn choice_count(&self) -> Result<u64>;
     /// Copies one exact leaf label in preorder; an out-of-range ordinal is rejected.
-    fn choice_label(&self, ordinal: u64) -> Result<String>;
+    fn choice_label(&self, ordinal: u64) -> Result<ComPtr<INcString>>;
     /// Atomically replaces the complete preorder menu and optional selection after validating both.
     fn replace_menu(&mut self, menu_text: &[u8], entries: &[ChoiceMenuEntry], selection: ChoiceSelection) -> Result<()>;
     /// Silently replaces the committed optional selection; an unknown leaf identity is rejected.
     fn set_selection(&mut self, selection: ChoiceSelection) -> Result<()>;
     /// Returns the fallback rendered when the committed selection is `None`.
-    fn placeholder(&self) -> Result<String>;
+    fn placeholder(&self) -> Result<ComPtr<INcString>>;
     /// Replaces the fallback without changing the committed selection or publishing a user event.
     fn set_placeholder(&mut self, placeholder: &[u8]) -> Result<()>;
     /// Selects a semantic font role and invalidates measurement only when it differs.

@@ -2,5 +2,5 @@
 /// Owned diagnostic snapshots for decoding, rasterization, and packing failures.
 interface IGfxDiagnostics {
     /// Returns the latest native or decoder cause as independent immutable text.
-    fn diagnostic(&self) -> Result<String>;
+    fn diagnostic(&self) -> Result<ComPtr<INcString>>;
 }

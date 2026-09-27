@@ -64,11 +64,11 @@ class IChoiceMenu: IEventStream<IChoiceMenuEvent> {
     /// Returns the exact committed stable identity, including explicit absence.
     fn selection(&self) -> Result<ChoiceSelection>;
     /// Copies the selected leaf label, or an empty string when no leaf is committed.
-    fn selected_label(&self) -> Result<String>;
+    fn selected_label(&self) -> Result<ComPtr<INcString>>;
     /// Returns the number of selectable leaves across the complete hierarchy.
     fn choice_count(&self) -> Result<u64>;
     /// Copies one leaf label in preorder; an out-of-range ordinal is rejected.
-    fn choice_label(&self, ordinal: u64) -> Result<String>;
+    fn choice_label(&self, ordinal: u64) -> Result<ComPtr<INcString>>;
     /// Atomically replaces the complete hierarchy and optional selection after validating both.
     fn replace(&mut self, menu_text: &[u8], entries: &[ChoiceMenuEntry], selection: ChoiceSelection) -> Result<()>;
     /// Silently changes the committed selection; an unknown identity is rejected.
@@ -93,14 +93,14 @@ interface IChoiceMenus {
         parent: &IWindow,
         menu_text: &[u8],
         entries: &[ChoiceMenuEntry],
-        selection: ChoiceSelection) -> Result<IChoiceMenu>;
+        selection: ChoiceSelection) -> Result<ComPtr<IChoiceMenu>>;
 }
 
 #[version(1)]
 /// Live compact row capability, editable before mounting and while its owning surface exists.
 interface IMenuItem {
     /// Returns the same label used by measurement, paint and captured submissions.
-    fn label(&self) -> Result<String>;
+    fn label(&self) -> Result<ComPtr<INcString>>;
     /// Replaces complete UTF-8 display text without publishing user activation.
     fn set_label(&self, label: &[u8]) -> Result<()>;
     /// Reports pointer and keyboard eligibility, independently of marker presentation.
@@ -112,7 +112,7 @@ interface IMenuItem {
     /// Silently changes the complete marker role; radio grouping remains the caller's responsibility.
     fn set_mark(&self, mark: MenuMark) -> Result<()>;
     /// Returns presentation-only accelerator text, with empty text representing absence.
-    fn shortcut_hint(&self) -> Result<String>;
+    fn shortcut_hint(&self) -> Result<ComPtr<INcString>>;
     /// Changes presentation only; it does not install a keyboard shortcut handler.
     fn set_shortcut_hint(&self, hint: &[u8]) -> Result<()>;
 }
@@ -121,22 +121,22 @@ interface IMenuItem {
 /// Unique declaration tree consumed once by the owning manager; retained item capabilities remain live afterward.
 interface IMenuBuilder {
     /// Appends an enabled unmarked row and returns its editing/event capability.
-    fn item(&self, label: &[u8]) -> Result<IMenuItem>;
+    fn item(&self, label: &[u8]) -> Result<ComPtr<IMenuItem>>;
     /// Appends one noninteractive separator in exact declaration order.
     fn separator(&self) -> Result<()>;
     /// Appends a submenu and returns a builder scoped to that child; only the root is mountable.
-    fn submenu(&self, label: &[u8]) -> Result<IMenuBuilder>;
+    fn submenu(&self, label: &[u8]) -> Result<ComPtr<IMenuBuilder>>;
 }
 
 #[version(1)]
 /// Menu construction and attachment capability on the same runtime identity as the window manager.
 interface IMenus {
     /// Creates one root declaration; for a bar its direct entries must all be submenus.
-    fn create(&self, label: &[u8]) -> Result<IMenuBuilder>;
+    fn create(&self, label: &[u8]) -> Result<ComPtr<IMenuBuilder>>;
     /// Installs a bar once on a live window; validates owner, declaration shape and prior attachment before transfer.
     fn attach_bar(&self, window: &IWindow, menu: &IMenuBuilder) -> Result<()>;
     /// Creates an ordinary hidden popup from one root declaration, including all its nested menus.
-    fn create_popup(&self, window: &IWindow, menu: &IMenuBuilder) -> Result<IPopup>;
+    fn create_popup(&self, window: &IWindow, menu: &IMenuBuilder) -> Result<ComPtr<IPopup>>;
 }
 
 #[version(1)]

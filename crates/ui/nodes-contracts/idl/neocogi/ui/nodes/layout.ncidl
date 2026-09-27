@@ -76,7 +76,7 @@ struct GridExtent {
 /// Constructible directional container whose concrete editing API is one class contract.
 interface Linear: IWidget + IContainerLayout {
     /// Returns the stable read-only topology view for this container's lifetime.
-    fn children(&self) -> Result<IChildren>;
+    fn children(&self) -> Result<ComPtr<IChildren>>;
     /// Removes one complete subtree and matching edge metadata.
     fn remove(&mut self, index: u32) -> Result<ChildEditResult>;
     /// Removes all owned subtrees and matching metadata while retaining reusable capacity.
@@ -103,7 +103,7 @@ interface Linear: IWidget + IContainerLayout {
 /// Constructible Grid whose topology, spans, and both track axes share one class contract.
 interface Grid: IWidget + IContainerLayout {
     /// Returns the stable read-only topology view for this container's lifetime.
-    fn children(&self) -> Result<IChildren>;
+    fn children(&self) -> Result<ComPtr<IChildren>>;
     /// Removes one complete subtree and matching span metadata.
     fn remove(&mut self, index: u32) -> Result<ChildEditResult>;
     /// Removes all owned subtrees and matching metadata while retaining reusable capacity.
@@ -155,7 +155,7 @@ struct SplitOptions {
 /// Zero children is empty; one fills the allocation; two enable the divider.
 class SplitView: IWidget + IContainerLayout + IEventStream<SplitViewEvent> {
     /// Returns immutable topology; indices zero and one identify first and second panes.
-    fn children(&self) -> Result<IChildren>;
+    fn children(&self) -> Result<ComPtr<IChildren>>;
     /// Inserts one unmounted pane at index, rejecting a third child before attachment.
     fn insert(&mut self, index: u32, child: &Mount) -> Result<ChildEditResult>;
     /// Replaces one pane after validation, permanently closing its previous subtree.
@@ -175,7 +175,7 @@ class SplitView: IWidget + IContainerLayout + IEventStream<SplitViewEvent> {
 /// Constructible scroll composite with one replaceable content root and private structural roles.
 interface ScrollArea: IWidget + IContainerLayout + IScrolling {
     /// Returns the actual application content widget, without its surrounding transform surface.
-    fn content(&self) -> Result<IWidget>;
+    fn content(&self) -> Result<ComPtr<IWidget>>;
     /// Validates replacement before closing old content; structural roles and model identity stay fixed.
     fn replace_content(&mut self, content: &Mount) -> Result<ChildEditResult>;
 }
@@ -197,9 +197,9 @@ interface Disclosure: IWidget + IContainerLayout {
     /// Changes expansion and retains layout invalidation even while this subtree is hidden.
     fn set_expanded(&mut self, expanded: bool) -> Result<()>;
     /// Returns the real header's text capability, including its inherited widget options.
-    fn header(&self) -> Result<ITextContent>;
+    fn header(&self) -> Result<ComPtr<ITextContent>>;
     /// Returns the real body container; its child editor keeps topology and edge metadata consistent.
-    fn body(&self) -> Result<Linear>;
+    fn body(&self) -> Result<ComPtr<Linear>>;
 }
 
 #[version(2)]
@@ -207,7 +207,7 @@ interface Disclosure: IWidget + IContainerLayout {
 /// Children paint in insertion order, so later siblings appear above earlier ones.
 interface Form: IWidget + IContainerLayout {
     /// Returns read-only topology; edits cannot bypass rectangle validation.
-    fn children(&self) -> Result<IChildren>;
+    fn children(&self) -> Result<ComPtr<IChildren>>;
     /// Removes and closes one subtree together with its rectangle.
     fn remove(&mut self, index: u32) -> Result<ChildEditResult>;
     /// Closes all children and clears their rectangles.

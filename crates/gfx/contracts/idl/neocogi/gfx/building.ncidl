@@ -41,17 +41,17 @@ interface IAssetBuilder {
     fn add_font_bytes(&self, name: &[u8], font: &[u8], pixels: u32) -> Result<()>;
     /// Consumes the session even on validation failure. A successful result has all required
     /// semantic resources and the ordinary immutable bundle form; nested operations return Busy.
-    fn finish(&self) -> Result<IAssetBundle>;
+    fn finish(&self) -> Result<ComPtr<IAssetBundle>>;
 }
 
 #[version(2)]
 /// Constructible CPU resource root; UI and hosts need no linked font or PNG implementation.
 factory AssetLoader: IGfxDiagnostics {
     /// Starts a fresh atlas using an opaque-white PNG tile; dimensions are validated before reading files.
-    fn create_builder(&self, size: Size, white: &INativePath) -> Result<IAssetBuilder>;
+    fn create_builder(&self, size: Size, white: &INativePath) -> Result<ComPtr<IAssetBuilder>>;
     /// Copies an existing bundle into a new packing area while retaining its catalog namespace.
     /// Complete semantic catalogs selected for replacement are omitted before any new resource is packed.
-    fn derive_builder(&self, size: Size, base: &IAssetBundle, options: AssetDeriveOptions) -> Result<IAssetBuilder>;
+    fn derive_builder(&self, size: Size, base: &IAssetBundle, options: AssetDeriveOptions) -> Result<ComPtr<IAssetBuilder>>;
 }
 
 #[version(1)]
@@ -68,5 +68,5 @@ factory AssetPublisher: IGfxDiagnostics {
         controls: &[AssetControlVisuals],
         menus: &[AssetMenuVisuals],
         window_chrome: &[AssetChromeVisuals],
-    ) -> Result<IAssetBundle>;
+    ) -> Result<ComPtr<IAssetBundle>>;
 }

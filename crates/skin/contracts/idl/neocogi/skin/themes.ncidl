@@ -2,7 +2,7 @@
 /// Constructible optional external theme compiler producing ordinary immutable bundles.
 factory ThemeLoader: ISkinDiagnostics {
     /// Resolves a native theme path against the base catalog while preserving resource names.
-    fn load_theme(&self, path: &INativePath, base: &IAssetBundle) -> Result<IAssetBundle>;
+    fn load_theme(&self, path: &INativePath, base: &IAssetBundle) -> Result<ComPtr<IAssetBundle>>;
 }
 
 #[version(1)]
@@ -19,5 +19,5 @@ enum PaletteEdit: u8 {
 factory StyleCompiler: ISkinDiagnostics {
     /// Derives a complete immutable revision in the base catalog without installing it.
     /// Preserve retains artwork; Flat recompiles every appearance from one concrete palette.
-    fn derive_style(&self, base: &IAssetBundle, metrics: AssetMetrics, palette: PaletteEdit) -> Result<IAssetBundle>;
+    fn derive_style(&self, base: &IAssetBundle, metrics: AssetMetrics, palette: PaletteEdit) -> Result<ComPtr<IAssetBundle>>;
 }

@@ -5,5 +5,5 @@ factory UiPluginFactory {
     /// The returned runtime privately owns that compositor, including its resource revision and
     /// frame state. Callers may reuse this factory and the bundle across independent runtimes.
     /// Failed UI import or compositor creation publishes no runtime and changes no existing UI.
-    fn create_runtime(&self, assets: &IAssetBundle, gfx: &GfxPluginFactory) -> Result<UiRuntime>;
+    fn create_runtime(&self, assets: &IAssetBundle, gfx: &GfxPluginFactory) -> Result<ComPtr<UiRuntime>>;
 }

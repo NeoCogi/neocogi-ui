@@ -2,9 +2,9 @@
 /// Process entry for coarse-grained appearance compilation and external themes.
 factory SkinPluginFactory {
     /// Creates one typed palette and metric compiler using the narrow GFX revision capability.
-    fn style_compiler(&self, publisher: &AssetPublisher) -> Result<StyleCompiler>;
+    fn style_compiler(&self, publisher: &AssetPublisher) -> Result<ComPtr<StyleCompiler>>;
     /// Creates the optional external JSON compiler with explicit GFX construction and publication capabilities.
     /// Retaining this typed dependency avoids a hidden service lookup and keeps image decoding,
     /// font rasterization, and atlas packing in the single GFX implementation.
-    fn theme_loader(&self, assets: &AssetLoader, publisher: &AssetPublisher) -> Result<ThemeLoader>;
+    fn theme_loader(&self, assets: &AssetLoader, publisher: &AssetPublisher) -> Result<ComPtr<ThemeLoader>>;
 }
