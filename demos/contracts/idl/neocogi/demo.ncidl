@@ -6,7 +6,6 @@ use neocogi.ui.core::{Mount, IWidget, ILeafLayout, Activation, IWidgetHost, ICon
 use neocogi.ui.document::IDesignWidgetCatalog;
 
 #[version(1)]
-#[message]
 /// Committed value from the example counter.
 struct CounterChanged {
     /// Committed counter value.
@@ -36,7 +35,6 @@ interface IWidgetProbe {
 }
 
 #[version(1)]
-#[message]
 /// One complete event stream for every user-visible Counter transition.
 enum CounterEvent: u8 {
     /// Activation captures the displayed count label.

@@ -94,7 +94,6 @@ factory NodesPluginFactory {
 }
 
 #[version(1)]
-#[message]
 /// Complete typed event stream of Button; consumed by its behavioral parent.
 enum ButtonEvent {
     /// Captured activated fact, acquired before the producer call returns.

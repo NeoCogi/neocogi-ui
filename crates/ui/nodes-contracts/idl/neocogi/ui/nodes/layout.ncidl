@@ -227,7 +227,6 @@ interface Form: IWidget + IContainerLayout {
 }
 
 #[version(1)]
-#[message]
 /// Complete typed event stream of SplitView; consumed by its behavioral parent.
 enum SplitViewEvent {
     /// Captured changed fact, acquired before the producer call returns.

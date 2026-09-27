@@ -130,7 +130,7 @@ A host installs custom widgets through `CustomWidgetRegistry`. A local
 and a constructor returning `Widget<IWidgetAbi>`. Static conversion checks the
 generated resolved stream against the complete required interface chain. A custom widget
 may expose zero or one event port; multiple logical events belong in one
-`#[message] enum`, such as `CounterEvent::Activated` and
+`enum`, such as `CounterEvent::Activated` and
 `CounterEvent::Changed`.
 
 An independently built plugin can expose `IDesignWidgetCatalog` on its root COM

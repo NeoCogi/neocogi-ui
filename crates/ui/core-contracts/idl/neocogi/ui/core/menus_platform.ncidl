@@ -44,7 +44,6 @@ enum ChoiceMenuEntry: u8 {
 }
 
 #[version(1)]
-#[message]
 /// Optional committed selection for a choice menu, with no reserved in-band identity.
 enum ChoiceSelection: u8 {
     /// No leaf is committed.
@@ -141,7 +140,6 @@ interface IMenus {
 }
 
 #[version(1)]
-#[message]
 /// Complete typed event stream of IChoiceMenu; consumed by its behavioral parent.
 enum IChoiceMenuEvent {
     /// Captured changed fact, acquired before the producer call returns.

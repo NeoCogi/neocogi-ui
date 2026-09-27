@@ -531,7 +531,7 @@ impl Ui {
         self.windows.create_window(
             NcCopyFromBufferOffset::new(0, title.as_bytes()),
             rect,
-            neocogi_com::NcMessage::new(&root.mount_description()?),
+            neocogi_com::NcValueRef::new(&root.mount_description()?)?,
         )
     }
     /// Mounts a structural child under a live window from this UI.
@@ -540,7 +540,7 @@ impl Ui {
             parent,
             NcCopyFromBufferOffset::new(0, title.as_bytes()),
             rect,
-            neocogi_com::NcMessage::new(&root.mount_description()?),
+            neocogi_com::NcValueRef::new(&root.mount_description()?)?,
         )
     }
     /// Mounts a hidden modal dialog; show it after initialization with set_visibility.
@@ -549,7 +549,7 @@ impl Ui {
             parent,
             NcCopyFromBufferOffset::new(0, title.as_bytes()),
             rect,
-            neocogi_com::NcMessage::new(&root.mount_description()?),
+            neocogi_com::NcValueRef::new(&root.mount_description()?)?,
         )
     }
     /// Mounts a hidden auto-sized popup with a distinct popup capability.
@@ -557,7 +557,7 @@ impl Ui {
         self.windows.create_popup(
             parent,
             NcCopyFromBufferOffset::new(0, title.as_bytes()),
-            neocogi_com::NcMessage::new(&root.mount_description()?),
+            neocogi_com::NcValueRef::new(&root.mount_description()?)?,
         )
     }
     /// Queues a typed host event while keeping its text buffer local to this call.

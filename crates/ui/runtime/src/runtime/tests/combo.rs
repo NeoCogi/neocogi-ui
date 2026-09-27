@@ -31,7 +31,7 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
             &["first", "second"],
             ChoiceSelection::Selected(1),
             session_tx.clone(),
-            move |neocogi_ui::combo::Event::Changed(event)| event,
+            move |neocogi_ui::combo::Event::Changed(event)| ChoiceSelection::try_from(event).unwrap(),
         )
         .unwrap();
     combo.set_placeholder("Choose a value").unwrap();
@@ -126,7 +126,7 @@ fn combo_choice_menu_uses_shared_submenu_navigation() {
             &menu,
             ChoiceSelection::Selected(10),
             session_tx.clone(),
-            move |neocogi_ui::combo::Event::Changed(event)| event,
+            move |neocogi_ui::combo::Event::Changed(event)| ChoiceSelection::try_from(event).unwrap(),
         )
         .unwrap();
     root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();

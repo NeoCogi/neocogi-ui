@@ -15,7 +15,6 @@ interface IEventOwner {
 }
 
 #[version(1)]
-#[message]
 /// Explicit content for one irreversible tree attachment; no forwarding widget is needed.
 enum Mount: u8 {
     /// A widget whose outputs are bound directly to an enclosing owner.

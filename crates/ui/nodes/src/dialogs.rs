@@ -229,7 +229,7 @@ fn line(
         line.as_interface()
             .insert(
                 index as u32,
-                neocogi_ui_core_contracts::Mount::widget(child.as_com_ref()).as_message(),
+                neocogi_ui_core_contracts::Mount::widget(child.as_com_ref()).as_value()?,
                 LinearEdge::new(track),
             )?
             .finish()?;
@@ -335,13 +335,13 @@ impl FileDialog {
         let folders = ScrollAreaWidget::from_interface(crate::ScrollArea::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
-            neocogi_ui_core_contracts::Mount::widget(folder_content.root.node_interface()?.as_com_ref()).as_message(),
+            neocogi_ui_core_contracts::Mount::widget(folder_content.root.node_interface()?.as_com_ref()).as_value()?,
             true,
         )?);
         let files = ScrollAreaWidget::from_interface(crate::ScrollArea::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
-            neocogi_ui_core_contracts::Mount::widget(file_content.root.node_interface()?.as_com_ref()).as_message(),
+            neocogi_ui_core_contracts::Mount::widget(file_content.root.node_interface()?.as_com_ref()).as_value()?,
             true,
         )?);
         let error = label(&nodes, "")?;
@@ -427,7 +427,7 @@ impl FileDialog {
             owner: dialog.query()?,
         };
         let windows = services.windows.clone();
-        let window = windows.create_dialog(parent, NcCopyFromBufferOffset::new(0, b"Open File"), FILE_DIALOG_RECT, mount.as_message())?;
+        let window = windows.create_dialog(parent, NcCopyFromBufferOffset::new(0, b"Open File"), FILE_DIALOG_RECT, mount.as_value()?)?;
         let connected = (|| {
             window.set_options(WindowOptions::FRAME)?;
             let mut local = dialog.try_borrow_mut()?;

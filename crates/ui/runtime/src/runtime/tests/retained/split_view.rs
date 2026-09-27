@@ -146,7 +146,9 @@ fn split_topology_and_settings_are_validated_before_mutation() {
         SplitOptions { minimum_second: -1, ..initial },
         SplitOptions { handle_width: 0, ..initial },
     ] {
-        assert!(matches!(fixture.ui.widgets().split_view_unobserved(bad), Err(neocogi_com::NC_E_INVALID_ARG)));
+        // Raw enum tags fail transport validation; valid axes reach domain checks.
+        let expected = if bad.axis.is_known() { neocogi_com::NC_E_INVALID_ARG } else { neocogi_com::NC_E_INVALID_TAG };
+        assert!(matches!(fixture.ui.widgets().split_view_unobserved(bad), Err(status) if status == expected));
     }
     let mut split = fixture.ui.widgets().split_view_unobserved(initial).unwrap();
     let (first, first_state) = probe::<0>(&fixture.ui, Size { width: 10, height: 10 }, WidgetOptions::NONE);

@@ -36,7 +36,7 @@ pub(crate) struct NodeFactory {
 
 impl NodeFactory {
     /// Validates every fallible capability query before claiming the sole attachment.
-    pub(crate) fn mount_node(&self, mount: neocogi_com::NcMessage<'_, Mount>, parent: Option<&Rc<ChildStore>>) -> Result<crate::Node, NcStatus> {
+    pub(crate) fn mount_node(&self, mount: neocogi_com::NcValueRef<'_, Mount>, parent: Option<&Rc<ChildStore>>) -> Result<crate::Node, NcStatus> {
         self.check_edit()?;
         self.attaching.set(true);
         let _attachment = Attachment(&self.attaching);

@@ -21,7 +21,7 @@ impl Emitter {
 }
 impl neocogi_ui_core_contracts::IActivationEventsSink for Emitter {
     /// The generated concrete receiver also supplies this fixture's posting entry point.
-    fn post(&mut self, message: neocogi_com::NcMessage<'_, Activation>) -> Result<(), NcStatus> {
+    fn post(&mut self, message: neocogi_com::NcValueRef<'_, Activation>) -> Result<(), NcStatus> {
         self.destination.post(&message.to_owned()?)
     }
 }
@@ -50,7 +50,7 @@ impl PrivateRecord {
     fn handle(&mut self, trace: &Trace) -> Result<(), NcStatus> {
         trace.borrow_mut().push(self.name);
         if let Some(source) = &self.forward {
-            source.clone().post(neocogi_com::NcMessage::new(&Activation { label: self.name.into() }))?;
+            source.clone().post(neocogi_com::NcValueRef::new(&Activation { label: self.name.into() }).unwrap())?;
         }
         // A consumed edit cannot repeat during a later dispatch sweep.
         match std::mem::replace(&mut self.edit, Edit::None) {
@@ -120,7 +120,7 @@ fn component(
 fn emit(source: &ComPtr<IActivationEventsSinkAbi>) {
     source
         .clone()
-        .post(neocogi_com::NcMessage::new(&Activation { label: "fixture".into() }))
+        .post(neocogi_com::NcValueRef::new(&Activation { label: "fixture".into() }).unwrap())
         .unwrap();
 }
 

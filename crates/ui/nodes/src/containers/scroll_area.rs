@@ -684,18 +684,18 @@ impl ScrollParts {
             .expect("ScrollSurface declares its widget and container-layout capabilities");
         let editor = host.create_children()?;
         editor
-            .insert(0, neocogi_ui_core_contracts::Mount::widget(surface.as_com_ref()).as_message())?
+            .insert(0, neocogi_ui_core_contracts::Mount::widget(surface.as_com_ref()).as_value()?)?
             .finish()?;
         editor
             .insert(
                 1,
-                neocogi_ui_core_contracts::Mount::widget(horizontal.query::<IWidgetAbi>()?.as_com_ref()).as_message(),
+                neocogi_ui_core_contracts::Mount::widget(horizontal.query::<IWidgetAbi>()?.as_com_ref()).as_value()?,
             )?
             .finish()?;
         editor
             .insert(
                 2,
-                neocogi_ui_core_contracts::Mount::widget(vertical.query::<IWidgetAbi>()?.as_com_ref()).as_message(),
+                neocogi_ui_core_contracts::Mount::widget(vertical.query::<IWidgetAbi>()?.as_com_ref()).as_value()?,
             )?
             .finish()?;
         Ok(Self { editor, content, model })
@@ -707,7 +707,7 @@ impl ScrollArea {
     pub(crate) fn create_com(
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
-        content: neocogi_com::NcMessage<'_, neocogi_ui_core_contracts::Mount>,
+        content: neocogi_com::NcValueRef<'_, neocogi_ui_core_contracts::Mount>,
         enabled: bool,
     ) -> Result<ComPtr<ScrollAreaAbi>, NcStatus> {
         let value = Self::build(host, content, enabled, Some(&resources))?;
@@ -717,7 +717,7 @@ impl ScrollArea {
     /// Builds the fixed scroll composition with either direct or runtime-shared resources.
     fn build(
         host: ComPtr<IWidgetHostAbi>,
-        content: neocogi_com::NcMessage<'_, neocogi_ui_core_contracts::Mount>,
+        content: neocogi_com::NcValueRef<'_, neocogi_ui_core_contracts::Mount>,
         enabled: bool,
         resources: Option<&crate::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
@@ -736,7 +736,7 @@ impl neocogi_ui_nodes_contracts::ScrollArea for ScrollArea {
     }
 
     /// Replaces only application content while preserving every fixed structural role.
-    fn replace_content(&mut self, content: neocogi_com::NcMessage<'_, neocogi_ui_core_contracts::Mount>) -> Result<ChildEditResult, NcStatus> {
+    fn replace_content(&mut self, content: neocogi_com::NcValueRef<'_, neocogi_ui_core_contracts::Mount>) -> Result<ChildEditResult, NcStatus> {
         self.runtime().state.writable()?;
         self.content.replace(0, content)
     }

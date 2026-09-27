@@ -1,5 +1,4 @@
 #[version(2)]
-#[message]
 /// One typed output stream for every user-visible single-line edit event.
 enum TextboxEvent: u8 {
     /// A committed user edit reuses the core text/cursor message contract.
@@ -247,7 +246,6 @@ bitenum FillStates: u8 {
 }
 
 #[version(2)]
-#[message]
 /// One typed output stream for every user-visible multiline edit event.
 enum TextAreaEvent: u8 {
     /// A committed user edit reuses the core text/cursor message contract.
@@ -304,7 +302,6 @@ class Combo: IWidget + ILeafLayout + IEventStream<IChoiceMenuEvent> {
 }
 
 #[version(1)]
-#[message]
 /// Complete typed event stream of Checkbox; consumed by its behavioral parent.
 enum CheckboxEvent {
     /// Captured changed fact, acquired before the producer call returns.
@@ -312,7 +309,6 @@ enum CheckboxEvent {
 }
 
 #[version(1)]
-#[message]
 /// Complete typed event stream of Slider; consumed by its behavioral parent.
 enum SliderEvent {
     /// Captured changed fact, acquired before the producer call returns.
@@ -320,7 +316,6 @@ enum SliderEvent {
 }
 
 #[version(1)]
-#[message]
 /// Complete typed event stream of Number; consumed by its behavioral parent.
 enum NumberEvent {
     /// Captured changed fact, acquired before the producer call returns.
@@ -328,7 +323,6 @@ enum NumberEvent {
 }
 
 #[version(1)]
-#[message]
 /// Complete typed event stream of ListItem; consumed by its behavioral parent.
 enum ListItemEvent {
     /// Captured activated fact, acquired before the producer call returns.
@@ -336,7 +330,6 @@ enum ListItemEvent {
 }
 
 #[version(1)]
-#[message]
 /// Complete typed event stream of ListBox; consumed by its behavioral parent.
 enum ListBoxEvent {
     /// Captured activated fact, acquired before the producer call returns.
@@ -344,7 +337,6 @@ enum ListBoxEvent {
 }
 
 #[version(1)]
-#[message]
 /// Complete typed event stream of Scrollbar; consumed by its behavioral parent.
 enum ScrollbarEvent {
     /// Captured changed fact, acquired before the producer call returns.

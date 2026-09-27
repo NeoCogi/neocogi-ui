@@ -13,42 +13,36 @@ interface IUiComponent {
 }
 
 #[version(1)]
-#[message]
 /// Replaces one exported text or label value without emitting a user event.
 struct SetText {
     /// Complete UTF-8 text owned by this command.
     text: String,
 }
 #[version(1)]
-#[message]
 /// Replaces an exported boolean value.
 struct SetChecked {
     /// New checkbox value.
     checked: bool,
 }
 #[version(1)]
-#[message]
 /// Replaces a finite numeric value; the destination applies its normal range policy.
 struct SetValue {
     /// Requested finite value.
     value: f32,
 }
 #[version(1)]
-#[message]
 /// Changes whether an exported control can receive ordinary input.
 struct SetEnabled {
     /// True enables the control; other presentation bits are preserved.
     enabled: bool,
 }
 #[version(1)]
-#[message]
 /// Sets an exported disclosure's expansion state.
 struct SetExpanded {
     /// Requested expansion.
     expanded: bool,
 }
 #[version(1)]
-#[message]
 /// Replaces a flat combo model and its selection in one validated operation.
 struct SetChoices {
     /// Concatenated UTF-8 labels; ends contains their exclusive byte boundaries.
@@ -60,21 +54,18 @@ struct SetChoices {
 }
 
 #[version(1)]
-#[message]
 /// Selects one existing combo item without replacing its labels or emitting a user event.
 struct SetSelection {
     /// Selected ordinal, or -1 to clear selection; other negative values are invalid.
     selected: i32,
 }
 #[version(1)]
-#[message]
 /// Moves a scrollbar without changing its lengths or emitting a user event.
 struct SetOffset {
     /// Requested pixel offset, clamped to the current scroll range by the destination.
     offset: i32,
 }
 #[version(1)]
-#[message]
 /// Moves a split divider while retaining its current axis, limits, and handle width.
 struct SetPosition {
     /// Requested first-pane extent; temporary allocation clamping does not discard it.
@@ -94,4 +85,67 @@ interface IDesignWidgetCatalog {
     /// Constructs one widget through COM using its stable catalog index and
     /// encoded, previously validated constructor properties.
     fn create_widget(&self, index: u32, host: &IWidgetHost, properties: &[u8]) -> Result<IWidget>;
+}
+
+#[version(1)]
+/// Explicit application command delivery for SetText; ordinary values do not generate receivers.
+interface ISetTextReceiver {
+    /// Acquires the command before applying it to the exported control.
+    fn post(&mut self, value: &SetText) -> Result<()>;
+}
+
+#[version(1)]
+/// Explicit application command delivery for SetChecked; ordinary values do not generate receivers.
+interface ISetCheckedReceiver {
+    /// Acquires the command before applying it to the exported control.
+    fn post(&mut self, value: &SetChecked) -> Result<()>;
+}
+
+#[version(1)]
+/// Explicit application command delivery for SetValue; ordinary values do not generate receivers.
+interface ISetValueReceiver {
+    /// Acquires the command before applying it to the exported control.
+    fn post(&mut self, value: &SetValue) -> Result<()>;
+}
+
+#[version(1)]
+/// Explicit application command delivery for SetEnabled; ordinary values do not generate receivers.
+interface ISetEnabledReceiver {
+    /// Acquires the command before applying it to the exported control.
+    fn post(&mut self, value: &SetEnabled) -> Result<()>;
+}
+
+#[version(1)]
+/// Explicit application command delivery for SetExpanded; ordinary values do not generate receivers.
+interface ISetExpandedReceiver {
+    /// Acquires the command before applying it to the exported control.
+    fn post(&mut self, value: &SetExpanded) -> Result<()>;
+}
+
+#[version(1)]
+/// Explicit application command delivery for SetChoices; ordinary values do not generate receivers.
+interface ISetChoicesReceiver {
+    /// Acquires the command before applying it to the exported control.
+    fn post(&mut self, value: &SetChoices) -> Result<()>;
+}
+
+#[version(1)]
+/// Explicit application command delivery for SetSelection; ordinary values do not generate receivers.
+interface ISetSelectionReceiver {
+    /// Acquires the command before applying it to the exported control.
+    fn post(&mut self, value: &SetSelection) -> Result<()>;
+}
+
+#[version(1)]
+/// Explicit application command delivery for SetOffset; ordinary values do not generate receivers.
+interface ISetOffsetReceiver {
+    /// Acquires the command before applying it to the exported control.
+    fn post(&mut self, value: &SetOffset) -> Result<()>;
+}
+
+#[version(1)]
+/// Explicit application command delivery for SetPosition; ordinary values do not generate receivers.
+interface ISetPositionReceiver {
+    /// Acquires the command before applying it to the exported control.
+    fn post(&mut self, value: &SetPosition) -> Result<()>;
 }

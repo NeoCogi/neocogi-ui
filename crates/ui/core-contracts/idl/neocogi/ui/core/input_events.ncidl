@@ -93,7 +93,6 @@ struct WidgetUpdate {
     }
 
 #[version(1)]
-#[message]
 /// Labelled activation shared by buttons and list items.
 struct Activation {
     /// Label captured when the command is activated.
@@ -107,7 +106,6 @@ interface IActivationEvents: IEventStream<Activation> {
 }
 
 #[version(1)]
-#[message]
 /// Complete text and cursor captured when a user edit commits.
 struct TextChanged {
     /// Complete normalized text at the edit.
@@ -117,7 +115,6 @@ struct TextChanged {
 }
 
 #[version(1)]
-#[message]
 /// Complete text captured when the user submits.
 struct TextSubmitted {
     /// Complete submitted text, independent of later edits.
@@ -125,7 +122,6 @@ struct TextSubmitted {
 }
 
 #[version(1)]
-#[message]
 /// Captured window lifecycle or user chrome interaction; Destroyed is the one terminal fact.
 enum WindowEvent: u8 {
     /// A user move or resize committed this complete outer rectangle.
@@ -165,7 +161,6 @@ interface IWindowEvents: IEventStream<WindowEvent> {
 }
 
 #[version(1)]
-#[message]
 /// Captured popup dismissal fact.
 enum PopupDismissed: u8 {
     /// The popup left the active branch without fabricating destruction history.
@@ -179,7 +174,6 @@ interface IPopupEvents: IEventStream<PopupDismissed> {
 }
 
 #[version(1)]
-#[message]
 /// Terminal outcome of one request; Pending is not a deliverable event.
 enum FileDialogCompletion: u8 {
     /// The request accepted this exact native path.
@@ -226,7 +220,6 @@ interface IFileDialogs {
 }
 
 #[version(1)]
-#[message]
 /// Complete typed event stream of IFileDialog; consumed by its behavioral parent.
 enum IFileDialogEvent {
     /// Captured completed fact, acquired before the producer call returns.

@@ -512,7 +512,7 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
         &FRUIT,
         ChoiceSelection::Selected(0),
         events_tx.clone(),
-        |neocogi_ui::combo::Event::Changed(event)| Message::Choice(event),
+        |neocogi_ui::combo::Event::Changed(event)| Message::Choice(ChoiceSelection::try_from(event).expect("checked COM event")),
     )?;
     let menus = ui.menus()?;
     let mut pending = Vec::new();

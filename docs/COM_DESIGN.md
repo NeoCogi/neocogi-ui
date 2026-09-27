@@ -62,7 +62,7 @@ conflicting/reentrant access as `NC_E_BUSY`. Its internal `UnsafeCell` is the
 single audited bridge from ABI pointers to a guarded Rust borrow; ordinary
 implementation fields do not need `Cell` or `RefCell` for this purpose.
 
-Named outputs carry concrete `#[message]` data through generated COM posting. A receiver
+Named outputs carry concrete data through generated COM posting. A receiver
 copies and maps each emitted fact into an application message and sends it through
 `std::sync::mpsc`. A persistent `Controller<Model>` owns the receiver and ordinary
 model state. Application and composite behavior share `IEventOwner`; composite

@@ -1,6 +1,6 @@
 //! Name resolution is setup-only; concrete receivers own subsequent typed calls.
 use crate::{model::*, contracts::*};
-use neocogi_com::{ComPtr, IUnknown, ComInterface, NcMessage, NcStatus, NcCopyFromBufferOffset, NC_E_INVALID_ARG};
+use neocogi_com::{ComPtr, IUnknown, ComInterface, NcValueRef, NcStatus, NcCopyFromBufferOffset, NC_E_INVALID_ARG};
 use neocogi_ui::*;
 use std::collections::BTreeMap;
 
@@ -23,20 +23,20 @@ pub(crate) fn receiver(authored: &Node, mut source: ComPtr<IWidgetAbi>, input: &
         InputKind::Text => text_receiver(source, kind)?,
         InputKind::Checked => {
             let mut source = source.query::<CheckboxAbi>()?;
-            SetChecked::__receiver(Box::new(move |value| source.set_checked(value.checked)))?.query()?
+            SetCheckedReceiver::create(Box::new(move |value| source.set_checked(value.checked)))?.query()?
         }
         InputKind::Value => match kind {
             WidgetSpec::Slider { .. } => {
                 let mut source = source.query::<SliderAbi>()?;
-                SetValue::__receiver(Box::new(move |value| source.set_value(value.value)))?.query()?
+                SetValueReceiver::create(Box::new(move |value| source.set_value(value.value)))?.query()?
             }
             WidgetSpec::Number { .. } => {
                 let mut source = source.query::<NumberAbi>()?;
-                SetValue::__receiver(Box::new(move |value| source.set_value(value.value)))?.query()?
+                SetValueReceiver::create(Box::new(move |value| source.set_value(value.value)))?.query()?
             }
             _ => return Err(NC_E_INVALID_ARG),
         },
-        InputKind::Enabled => SetEnabled::__receiver(Box::new(move |value| {
+        InputKind::Enabled => SetEnabledReceiver::create(Box::new(move |value| {
             let old = authored_options;
             let options = if value.enabled {
                 WidgetOptions::from_raw(old.raw() & !WidgetOptions::NO_INTERACT.raw())
@@ -48,11 +48,11 @@ pub(crate) fn receiver(authored: &Node, mut source: ComPtr<IWidgetAbi>, input: &
         .query()?,
         InputKind::Expanded => {
             let mut source = source.query::<DisclosureAbi>()?;
-            SetExpanded::__receiver(Box::new(move |value| source.set_expanded(value.expanded)))?.query()?
+            SetExpandedReceiver::create(Box::new(move |value| source.set_expanded(value.expanded)))?.query()?
         }
         InputKind::Selection => {
             let mut source = source.query::<ComboAbi>()?;
-            SetSelection::__receiver(Box::new(move |value| {
+            SetSelectionReceiver::create(Box::new(move |value| {
                 // Preserve the distinction between clearing selection and malformed ordinals.
                 let selection = match value.selected {
                     -1 => ChoiceSelection::None,
@@ -65,11 +65,11 @@ pub(crate) fn receiver(authored: &Node, mut source: ComPtr<IWidgetAbi>, input: &
         }
         InputKind::Offset => {
             let mut source = source.query::<ScrollbarAbi>()?;
-            SetOffset::__receiver(Box::new(move |value| source.set_offset(value.offset)))?.query()?
+            SetOffsetReceiver::create(Box::new(move |value| source.set_offset(value.offset)))?.query()?
         }
         InputKind::Position => {
             let mut source = source.query::<SplitViewAbi>()?;
-            SetPosition::__receiver(Box::new(move |value| {
+            SetPositionReceiver::create(Box::new(move |value| {
                 // Read current settings for each command: callers may edit limits separately.
                 let mut settings = source.settings()?;
                 settings.position = value.position;
@@ -79,7 +79,7 @@ pub(crate) fn receiver(authored: &Node, mut source: ComPtr<IWidgetAbi>, input: &
         }
         InputKind::Choices => {
             let mut source = Widget::from_interface(source.query::<ComboAbi>()?);
-            SetChoices::__receiver(Box::new(move |value| {
+            SetChoicesReceiver::create(Box::new(move |value| {
                 let mut previous = 0;
                 let mut labels = Vec::new();
                 for end in value.ends {
@@ -106,7 +106,7 @@ fn text_receiver(source: ComPtr<IWidgetAbi>, kind: &WidgetSpec) -> Result<ComPtr
     macro_rules! text {
         ($ty:ty, $setter:ident) => {{
             let mut source = source.query::<$ty>()?;
-            SetText::__receiver(Box::new(move |value| source.$setter(NcCopyFromBufferOffset::new(0, value.text.as_bytes()))))?.query()
+            SetTextReceiver::create(Box::new(move |value| source.$setter(NcCopyFromBufferOffset::new(0, value.text.as_bytes()))))?.query()
         }};
     }
     match kind {
@@ -120,7 +120,7 @@ fn text_receiver(source: ComPtr<IWidgetAbi>, kind: &WidgetSpec) -> Result<ComPtr
         WidgetSpec::ListBox { .. } => text!(ListBoxAbi, set_text),
         WidgetSpec::Disclosure { .. } => {
             let mut source = source.query::<DisclosureAbi>()?.header()?;
-            SetText::__receiver(Box::new(move |value| source.set_text(NcCopyFromBufferOffset::new(0, value.text.as_bytes()))))?.query()
+            SetTextReceiver::create(Box::new(move |value| source.set_text(NcCopyFromBufferOffset::new(0, value.text.as_bytes()))))?.query()
         }
         _ => Err(NC_E_INVALID_ARG),
     }
@@ -139,20 +139,20 @@ macro_rules! command {
         impl Command for $message {
             type Receiver = $receiver;
             fn post(&self, receiver: &mut ComPtr<Self::Receiver>) -> Result<(), NcStatus> {
-                receiver.post(NcMessage::new(self))
+                receiver.post(NcValueRef::new(self)?)
             }
         }
     };
 }
-command!(SetText, __SetTextReceiverAbi);
-command!(SetChecked, __SetCheckedReceiverAbi);
-command!(SetValue, __SetValueReceiverAbi);
-command!(SetEnabled, __SetEnabledReceiverAbi);
-command!(SetExpanded, __SetExpandedReceiverAbi);
-command!(SetChoices, __SetChoicesReceiverAbi);
-command!(SetSelection, __SetSelectionReceiverAbi);
-command!(SetOffset, __SetOffsetReceiverAbi);
-command!(SetPosition, __SetPositionReceiverAbi);
+command!(SetText, ISetTextReceiverAbi);
+command!(SetChecked, ISetCheckedReceiverAbi);
+command!(SetValue, ISetValueReceiverAbi);
+command!(SetEnabled, ISetEnabledReceiverAbi);
+command!(SetExpanded, ISetExpandedReceiverAbi);
+command!(SetChoices, ISetChoicesReceiverAbi);
+command!(SetSelection, ISetSelectionReceiverAbi);
+command!(SetOffset, ISetOffsetReceiverAbi);
+command!(SetPosition, ISetPositionReceiverAbi);
 
 /// A resolved typed application input; reconnect after replacing its component.
 pub struct InputHandle<C: Command> {
@@ -165,3 +165,36 @@ impl<C: Command> InputHandle<C> {
         command.post(&mut self.receiver)
     }
 }
+
+/// Implements explicit document command contracts without adding behavior to data types.
+macro_rules! receiver_adapter {
+    ($value:ty, $interface:ident, $abi:ty, $adapter:ident) => {
+        #[neocogi_com::com_object($interface)]
+        /// Owns one application command implementation with a concrete argument type.
+        struct $adapter {
+            /// Acquired command is applied only after recursive wire validation.
+            consume: Box<dyn FnMut($value) -> Result<(), NcStatus>>,
+        }
+        impl $adapter {
+            /// Allocates the implementation of the explicitly declared command interface.
+            fn create(consume: Box<dyn FnMut($value) -> Result<(), NcStatus>>) -> Result<ComPtr<$abi>, NcStatus> {
+                Self::from_value(Self { consume }).query()
+            }
+        }
+        impl $interface for $adapter {
+            /// Owns the complete command before producer call storage expires.
+            fn post(&mut self, value: NcValueRef<'_, $value>) -> Result<(), NcStatus> {
+                (self.consume)(value.to_owned()?)
+            }
+        }
+    };
+}
+receiver_adapter!(SetText, ISetTextReceiver, ISetTextReceiverAbi, SetTextReceiver);
+receiver_adapter!(SetChecked, ISetCheckedReceiver, ISetCheckedReceiverAbi, SetCheckedReceiver);
+receiver_adapter!(SetValue, ISetValueReceiver, ISetValueReceiverAbi, SetValueReceiver);
+receiver_adapter!(SetEnabled, ISetEnabledReceiver, ISetEnabledReceiverAbi, SetEnabledReceiver);
+receiver_adapter!(SetExpanded, ISetExpandedReceiver, ISetExpandedReceiverAbi, SetExpandedReceiver);
+receiver_adapter!(SetChoices, ISetChoicesReceiver, ISetChoicesReceiverAbi, SetChoicesReceiver);
+receiver_adapter!(SetSelection, ISetSelectionReceiver, ISetSelectionReceiverAbi, SetSelectionReceiver);
+receiver_adapter!(SetOffset, ISetOffsetReceiver, ISetOffsetReceiverAbi, SetOffsetReceiver);
+receiver_adapter!(SetPosition, ISetPositionReceiver, ISetPositionReceiverAbi, SetPositionReceiver);

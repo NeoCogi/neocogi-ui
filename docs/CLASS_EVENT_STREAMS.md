@@ -61,7 +61,6 @@ interface IEventStream<E> {
     fn attach(&mut self, consumer: &IMessageSink<E>) -> Result<()>;
 }
 
-#[message]
 enum TextboxEvent {
     Changed(TextChanged),
     Submitted(TextSubmitted),

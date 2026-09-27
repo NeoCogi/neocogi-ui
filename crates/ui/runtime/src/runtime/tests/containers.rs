@@ -200,13 +200,13 @@ fn nested_container_layout_scopes_expire_and_teardown_closes_descendants() {
     child_editor
         .insert(
             0,
-            neocogi_ui_core_contracts::Mount::widget(leaf.query::<IWidgetAbi>().unwrap().as_com_ref()).as_message(),
+            neocogi_ui_core_contracts::Mount::widget(leaf.query::<IWidgetAbi>().unwrap().as_com_ref()).as_value().unwrap(),
         )
         .unwrap()
         .finish()
         .unwrap();
     parent_editor
-        .insert(0, neocogi_ui_core_contracts::Mount::widget(child.as_com_ref()).as_message())
+        .insert(0, neocogi_ui_core_contracts::Mount::widget(child.as_com_ref()).as_value().unwrap())
         .unwrap()
         .finish()
         .unwrap();
@@ -237,12 +237,12 @@ fn container_topology_rejects_cycles_shared_collections_and_reentrant_edits() {
     let (a, a_editor, a_probe) = container(&runtime, Rc::default());
     let (b, b_editor, _) = container(&runtime, Rc::default());
     a_editor
-        .insert(0, neocogi_ui_core_contracts::Mount::widget(b.as_com_ref()).as_message())
+        .insert(0, neocogi_ui_core_contracts::Mount::widget(b.as_com_ref()).as_value().unwrap())
         .unwrap()
         .finish()
         .unwrap();
     assert_eq!(
-        b_editor.insert(0, neocogi_ui_core_contracts::Mount::widget(a.as_com_ref()).as_message()),
+        b_editor.insert(0, neocogi_ui_core_contracts::Mount::widget(a.as_com_ref()).as_value().unwrap()),
         Err(UI_E_OWNER)
     );
     assert_eq!(a_editor.view().unwrap().child_count().unwrap(), 1);
@@ -270,7 +270,7 @@ fn failed_container_layout_retries_without_caching_failed_parent_geometry() {
     editor
         .insert(
             0,
-            neocogi_ui_core_contracts::Mount::widget(leaf.query::<IWidgetAbi>().unwrap().as_com_ref()).as_message(),
+            neocogi_ui_core_contracts::Mount::widget(leaf.query::<IWidgetAbi>().unwrap().as_com_ref()).as_value().unwrap(),
         )
         .unwrap()
         .finish()
@@ -309,7 +309,7 @@ fn final_child_writer_release_during_layout_closes_retained_descendants() {
     editor
         .insert(
             0,
-            neocogi_ui_core_contracts::Mount::widget(leaf.query::<IWidgetAbi>().unwrap().as_com_ref()).as_message(),
+            neocogi_ui_core_contracts::Mount::widget(leaf.query::<IWidgetAbi>().unwrap().as_com_ref()).as_value().unwrap(),
         )
         .unwrap()
         .finish()
@@ -347,7 +347,7 @@ fn layout_service_rejects_direct_reentry_without_holding_an_interior_borrow() {
     let (leaf, leaf_probe) = recorded_leaf(&runtime);
     *probe.leaf_probe.borrow_mut() = Some(leaf_probe.clone());
     editor
-        .insert(0, neocogi_ui_core_contracts::Mount::widget(leaf.as_interface()).as_message())
+        .insert(0, neocogi_ui_core_contracts::Mount::widget(leaf.as_interface()).as_value().unwrap())
         .unwrap()
         .finish()
         .unwrap();
@@ -751,7 +751,7 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
     area.set_wrapping(TextWrapping::WordOrCharacter).unwrap();
     assert_eq!(editor.wrapping().unwrap(), TextWrapping::WordOrCharacter);
     runtime.update(SIZE).unwrap();
-    assert_eq!(area.set_wrapping(TextWrapping::from_raw(255)), Err(NC_E_INVALID_ARG));
+    assert_eq!(area.set_wrapping(TextWrapping::from_raw(255)), Err(neocogi_com::NC_E_INVALID_TAG));
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     scroll.set_enabled(false).unwrap();
     runtime.update(SIZE).unwrap();

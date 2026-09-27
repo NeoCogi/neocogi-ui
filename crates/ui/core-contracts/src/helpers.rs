@@ -91,8 +91,8 @@ impl Mount {
 
     /// Borrows this concrete description for a synchronous COM attachment call.
     /// The receiver validates and retains capabilities before this borrow ends.
-    pub fn as_message(&self) -> neocogi_com::NcMessage<'_, Self> {
-        neocogi_com::NcMessage::new(self)
+    pub fn as_value(&self) -> Result<neocogi_com::NcValueRef<'_, Self>, neocogi_com::NcStatus> {
+        neocogi_com::NcValueRef::new(self)
     }
 }
 

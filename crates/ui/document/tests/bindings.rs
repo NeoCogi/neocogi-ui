@@ -72,7 +72,7 @@ fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
     assert_eq!(document.rust_bindings_with(&registry).unwrap(), include_str!("fixtures/custom_bindings.rs"));
     assert_eq!(Document::from_json(&document.to_json().unwrap()).unwrap(), document);
     assert_eq!(Document::from_binary(&document.to_binary().unwrap()).unwrap(), document);
-    let metadata = &neocogi_demo_contracts::CounterEvent::IDL_MESSAGE;
+    let metadata = &neocogi_demo_contracts::CounterEvent::IDL_TYPE;
     let neocogi_com::design::IdlShape::Enum(cases) = metadata.shape else {
         panic!("CounterEvent must be an enum")
     };
@@ -101,7 +101,7 @@ fn custom_factory_cannot_advertise_a_stream_outside_its_com_chain() {
         rust_abi: "neocogi_demo_contracts::CounterAbi",
         stream: Some(neocogi_com::design::IdlEventStream {
             abi: &neocogi_ui::TextboxAbi::INTERFACE_DESCRIPTOR,
-            message: &neocogi_demo_contracts::CounterEvent::IDL_MESSAGE,
+            message: &neocogi_demo_contracts::CounterEvent::IDL_TYPE,
         }),
     };
     /// A provider whose advertised source metadata disagrees with the COM descriptor.

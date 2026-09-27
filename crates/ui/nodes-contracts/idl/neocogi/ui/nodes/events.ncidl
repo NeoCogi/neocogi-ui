@@ -1,5 +1,4 @@
 #[version(1)]
-#[message]
 /// User checkbox state; programmatic setters do not publish it.
 struct CheckboxChanged {
     /// Committed checked state.
@@ -7,7 +6,6 @@ struct CheckboxChanged {
 }
 
 #[version(1)]
-#[message]
 /// Finite user value shared by Slider and Number.
 struct NumericChanged {
     /// Committed finite numeric value.
@@ -15,7 +13,6 @@ struct NumericChanged {
 }
 
 #[version(1)]
-#[message]
 /// Clamped scrollbar offset committed by pointer input.
 struct ScrollbarChanged {
     /// Committed nonnegative offset.
@@ -23,7 +20,6 @@ struct ScrollbarChanged {
 }
 
 #[version(1)]
-#[message]
 /// First-pane extent committed by direct divider interaction.
 struct SplitChanged {
     /// Nonnegative pixel position after clamping against the current pane limits.

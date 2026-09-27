@@ -19,11 +19,11 @@ impl Widget<SplitViewAbi> {
     }
     /// Inserts a first or second pane; a third pane is rejected before attachment.
     pub fn insert(&mut self, index: u32, pane: &impl Mountable) -> Result<ChildEditResult, NcStatus> {
-        self.interface.insert(index, neocogi_com::NcMessage::new(&pane.mount_description()?))
+        self.interface.insert(index, neocogi_com::NcValueRef::new(&pane.mount_description()?)?)
     }
     /// Replaces and closes one pane while preserving the split container.
     pub fn replace(&mut self, index: u32, pane: &impl Mountable) -> Result<ChildEditResult, NcStatus> {
-        self.interface.replace(index, neocogi_com::NcMessage::new(&pane.mount_description()?))
+        self.interface.replace(index, neocogi_com::NcValueRef::new(&pane.mount_description()?)?)
     }
     /// Removes one pane; the surviving pane fills the allocation after layout.
     pub fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus> {
@@ -121,7 +121,7 @@ impl Widget<ScrollAreaAbi> {
     }
     /// Replaces and closes application content while retaining the same outer scroll object and model.
     pub fn replace_content(&mut self, content: &impl Mountable) -> Result<ChildEditResult, NcStatus> {
-        self.interface.replace_content(neocogi_com::NcMessage::new(&content.mount_description()?))
+        self.interface.replace_content(neocogi_com::NcValueRef::new(&content.mount_description()?)?)
     }
 }
 
@@ -145,12 +145,12 @@ macro_rules! container_proxy {
             /// Err leaves topology unchanged; Ok requires inspecting its separate teardown status when relevant.
             pub fn insert(&mut self, index: u32, child: &impl Mountable, edge: $edge) -> Result<ChildEditResult, NcStatus> {
                 self.interface
-                    .insert(index, neocogi_com::NcMessage::new(&child.mount_description()?), edge)
+                    .insert(index, neocogi_com::NcValueRef::new(&child.mount_description()?)?, edge)
             }
             /// Replaces one subtree and relationship together. Ok reports committed replacement even if old-child teardown failed.
             pub fn replace(&mut self, index: u32, child: &impl Mountable, edge: $edge) -> Result<ChildEditResult, NcStatus> {
                 self.interface
-                    .replace(index, neocogi_com::NcMessage::new(&child.mount_description()?), edge)
+                    .replace(index, neocogi_com::NcValueRef::new(&child.mount_description()?)?, edge)
             }
             /// Removes and closes one subtree; call the returned outcome's finish after observing the committed edit.
             pub fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus> {
@@ -254,7 +254,7 @@ impl WidgetFactory {
     pub fn scroll_area(&self, content: &impl Mountable, enabled: bool) -> Result<ScrollAreaWidget, NcStatus> {
         Ok(ScrollAreaWidget::from_interface(
             self.interface
-                .create_scroll_area(neocogi_com::NcMessage::new(&content.mount_description()?), enabled)?,
+                .create_scroll_area(neocogi_com::NcValueRef::new(&content.mount_description()?)?, enabled)?,
         ))
     }
     /// Creates an empty directional container with one complete axis/cross configuration.
@@ -297,11 +297,11 @@ impl Widget<FormAbi> {
     }
     /// Attaches one child after validating its complete rectangle.
     pub fn insert(&mut self, index: u32, child: &impl Mountable, edge: Rect) -> Result<ChildEditResult, NcStatus> {
-        self.interface.insert(index, neocogi_com::NcMessage::new(&child.mount_description()?), edge)
+        self.interface.insert(index, neocogi_com::NcValueRef::new(&child.mount_description()?)?, edge)
     }
     /// Replaces a child with the supplied geometry.
     pub fn replace(&mut self, index: u32, child: &impl Mountable, edge: Rect) -> Result<ChildEditResult, NcStatus> {
-        self.interface.replace(index, neocogi_com::NcMessage::new(&child.mount_description()?), edge)
+        self.interface.replace(index, neocogi_com::NcValueRef::new(&child.mount_description()?)?, edge)
     }
     /// Closes one owned subtree.
     pub fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus> {

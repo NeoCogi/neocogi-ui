@@ -101,7 +101,7 @@ Separate dialogs can bind their same protocol to different application destinati
 When reusing one dialog across requests, request identity remains application/domain
 policy; binding does not manufacture an invocation ID absent from the protocol.
 
-Declare cross-COM facts as concrete `#[message]` structs/enums and require one
+Declare cross-COM facts as concrete structs/enums and require one
 `IEventStream<Event>` on the concrete class. Multiple event kinds are cases of
 that one enum. The factory returns an unbound widget; its behavioral parent
 attaches one typed sink before publishing it. `#[com_class(Contract, event = events)]`

@@ -152,7 +152,8 @@ fn malformed_portable_metadata_never_reaches_a_live_skin() {
             _ => unreachable!(),
         }
         let source = data.into_bundle().unwrap();
-        assert!(matches!(ImportedAssets::read(source.as_com_ref(), None), Err(NC_E_INVALID_ARG)), "case {case}");
+        let expected = match case { 8 => neocogi_com::NC_E_INVALID_TAG, _ => NC_E_INVALID_ARG };
+        assert!(matches!(ImportedAssets::read(source.as_com_ref(), None), Err(status) if status == expected), "case {case}");
     }
     let mut data = export_bundle_data(&bundle()).unwrap();
     data.tables.size.width = i32::MAX;
@@ -418,7 +419,7 @@ fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision
         NC_E_INVALID_ARG
     );
     let invalid = PaletteEditAbi::from_unknown_tag(PaletteEditTag::from_raw(255)).unwrap();
-    assert_eq!(compiler.derive_style(source.as_com_ref(), metrics, invalid).unwrap_err(), NC_E_INVALID_ARG);
+    assert_eq!(compiler.derive_style(source.as_com_ref(), metrics, invalid).unwrap_err(), neocogi_com::NC_E_INVALID_TAG);
     assert_eq!(ui.assets().unwrap().as_ptr(), source.as_ptr());
     ui.close().unwrap();
     // Compilation owns no UI lifetime: retained resource data remains authorable after closure.

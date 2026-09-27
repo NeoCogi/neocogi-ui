@@ -70,7 +70,7 @@ allocate. An allocation regression compares 64 warmed ordinary updates with
 
 ## Construction and posting
 
-Declare cross-COM facts as concrete NCIDL `#[message]` structs/enums. An emitting
+Declare cross-COM facts as concrete NCIDL structs/enums. An emitting
 class requires `IEventStream<Event>`, an ordinary generic COM interface. Several
 event kinds travel as variants of that one message; `TextboxEvent` carries
 `Changed(TextChanged)` and `Submitted(TextSubmitted)`. The factory returns an

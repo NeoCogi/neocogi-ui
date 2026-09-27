@@ -53,7 +53,7 @@ impl CustomValue {
 /// Maximum encoded bytes accepted for one plugin-provided widget description.
 pub const MAX_DESIGN_DESCRIPTOR_BYTES: usize = 64 * 1024;
 /// Current authoring descriptor schema revision.
-pub const DESIGN_DESCRIPTOR_VERSION: u32 = 2;
+pub const DESIGN_DESCRIPTOR_VERSION: u32 = 3;
 
 /// One source-level field, including the exact IDL type spelling.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -107,8 +107,6 @@ pub struct DesignType {
     pub rust_type: String,
     /// Complete struct, enum, or bit-enum shape.
     pub shape: DesignShape,
-    /// Whether the payload can be posted through a COM message receiver.
-    pub message: bool,
 }
 
 /// The one complete event stream resolved through the class ancestry.
@@ -222,7 +220,6 @@ impl DesignWidgetManifest {
                                     .collect(),
                             ),
                         },
-                        message: output.message.message,
                     },
                 })
             })
@@ -259,7 +256,7 @@ impl DesignWidgetManifest {
             return Err("Invalid design widget property defaults".into());
         }
         if let Some(output) = &self.interface.stream {
-            if output.iid == [0; 16] || !output.message.message || !rust_path(&output.message.rust_type) {
+            if output.iid == [0; 16] || !rust_path(&output.message.rust_type) {
                 return Err("Invalid design widget output metadata".into());
             }
             match &output.message.shape {
@@ -346,7 +343,6 @@ mod tests {
                         qualified_name: "example.CounterEvent".into(),
                         rust_type: "example_contracts::CounterEvent".into(),
                         shape: DesignShape::Enum(vec![DesignVariant { name: "Activated".into(), fields: vec![] }]),
-                        message: true,
                     },
                 }),
             },

@@ -522,13 +522,13 @@ fn prepare_children(
     editor
         .insert(
             0,
-            neocogi_ui_core_contracts::Mount::widget(header.query::<IWidgetAbi>()?.as_com_ref()).as_message(),
+            neocogi_ui_core_contracts::Mount::widget(header.query::<IWidgetAbi>()?.as_com_ref()).as_value()?,
         )?
         .finish()?;
     editor
         .insert(
             1,
-            neocogi_ui_core_contracts::Mount::widget(body.query::<IWidgetAbi>()?.as_com_ref()).as_message(),
+            neocogi_ui_core_contracts::Mount::widget(body.query::<IWidgetAbi>()?.as_com_ref()).as_value()?,
         )?
         .finish()?;
     Ok(DisclosureChildren { editor, header, body })

@@ -95,7 +95,7 @@ impl RuntimeStorage {
         placement: Placement,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: neocogi_com::NcMessage<'_, Mount>,
+        root: neocogi_com::NcValueRef<'_, Mount>,
     ) -> Result<ComPtr<IUnknown>, NcStatus> {
         self.factory.host.check_mutation()?;
         if rect.width < 0 || rect.height < 0 {
@@ -160,7 +160,7 @@ impl IWindowManager for Runtime {
         &self,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: neocogi_com::NcMessage<'_, Mount>,
+        root: neocogi_com::NcValueRef<'_, Mount>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.storage.create(Placement::Root, title, rect, root)?.query()
     }
@@ -170,7 +170,7 @@ impl IWindowManager for Runtime {
         parent: ComRef<'_, IWindowAbi>,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: neocogi_com::NcMessage<'_, Mount>,
+        root: neocogi_com::NcValueRef<'_, Mount>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.storage.create(Placement::Child(self.storage.parent(parent)?), title, rect, root)?.query()
     }
@@ -180,7 +180,7 @@ impl IWindowManager for Runtime {
         parent: ComRef<'_, IWindowAbi>,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: neocogi_com::NcMessage<'_, Mount>,
+        root: neocogi_com::NcValueRef<'_, Mount>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.storage.create(Placement::Dialog(self.storage.parent(parent)?), title, rect, root)?.query()
     }
@@ -189,7 +189,7 @@ impl IWindowManager for Runtime {
         &self,
         parent: ComRef<'_, IWindowAbi>,
         title: NcCopyFromBufferOffset<'_, u8>,
-        root: neocogi_com::NcMessage<'_, Mount>,
+        root: neocogi_com::NcValueRef<'_, Mount>,
     ) -> Result<ComPtr<IPopupAbi>, NcStatus> {
         self.storage
             .create(Placement::Popup(self.storage.parent(parent)?), title, Rect::default(), root)?

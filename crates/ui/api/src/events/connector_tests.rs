@@ -1,9 +1,9 @@
 //! Concrete foreign producers exercise direct replacement, ownership and deferred behavior.
 use super::*;
-use neocogi_com::{com_object, NcMessage};
+use neocogi_com::{com_object, NcValueRef};
 use std::{cell::Cell, rc::Rc};
 
-#[com_object(interfaces(IActivationEvents, __ActivationReceiver))]
+#[com_object(interfaces(IActivationEvents, IActivationEventsSink))]
 /// Foreign producer uses only ordinary fields and mutable COM methods.
 struct ForeignActivation {
     /// The complete delivery storage: one optional typed destination.
@@ -21,9 +21,9 @@ impl IActivationEventsStream for ForeignActivation {
         }
     }
 }
-impl __ActivationReceiver for ForeignActivation {
+impl IActivationEventsSink for ForeignActivation {
     /// Acquires the input before publishing through the installed receiver.
-    fn post(&mut self, message: NcMessage<'_, Activation>) -> Result<(), NcStatus> {
+    fn post(&mut self, message: NcValueRef<'_, Activation>) -> Result<(), NcStatus> {
         self.destination.post(&message.to_owned()?)
     }
 }
@@ -43,8 +43,8 @@ fn output(
 /// Lends an input string only for one fixture producer call.
 fn emit(source: &neocogi_com::LocalCom<ForeignActivation>, label: &str) -> Result<(), NcStatus> {
     source
-        .query::<__ActivationReceiverAbi>()?
-        .post(NcMessage::new(&Activation { label: label.into() }))
+        .query::<IActivationEventsSinkAbi>()?
+        .post(NcValueRef::new(&Activation { label: label.into() }).unwrap())
 }
 /// Makes capture destruction observable independently of both producer and consumer ownership.
 struct Lifetime(Rc<Cell<u32>>);
@@ -172,8 +172,8 @@ fn generated_receiver_checks_domain_values_before_mapping() {
     let mut receiver = None;
     neocogi_com::events::bind(
         checked(
-            |consume| {
-                receiver = Some(NumericChanged::__receiver(consume)?);
+            |mut consume| {
+                receiver = Some(<neocogi_ui_nodes_contracts::NumberSinkAbi as neocogi_com::events::MessageSinkInterface>::receiver(move |number::Event::Changed(event)| consume(event))?);
                 Ok(())
             },
             valid_numeric,
@@ -183,15 +183,15 @@ fn generated_receiver_checks_domain_values_before_mapping() {
     )
     .unwrap();
     let receiver = receiver.as_mut().unwrap();
-    assert_eq!(receiver.post(NcMessage::new(&NumericChanged { value: f32::NAN })), Err(NC_E_INVALID_ARG));
-    receiver.post(NcMessage::new(&NumericChanged { value: 1.0 })).unwrap();
+    assert_eq!(receiver.post(NcValueRef::new(&number::Event::Changed(NumericChanged { value: f32::NAN })).unwrap()), Err(NC_E_INVALID_ARG));
+    receiver.post(NcValueRef::new(&number::Event::Changed(NumericChanged { value: 1.0 })).unwrap()).unwrap();
     assert_eq!(numeric.try_recv().ok(), Some(1.0));
     let (text_tx, text) = std::sync::mpsc::channel();
     let mut receiver = None;
     neocogi_com::events::bind(
         checked(
-            |consume| {
-                receiver = Some(TextChanged::__receiver(consume)?);
+            |mut consume| {
+                receiver = Some(<neocogi_ui_nodes_contracts::TextboxSinkAbi as neocogi_com::events::MessageSinkInterface>::receiver(move |event| match event { textbox::Event::Changed(event) => consume(event), textbox::Event::Submitted(_) => Ok(()) })?);
                 Ok(())
             },
             |event: &TextChanged| valid_text_cursor(&event.text, event.cursor),
@@ -202,10 +202,10 @@ fn generated_receiver_checks_domain_values_before_mapping() {
     .unwrap();
     let receiver = receiver.as_mut().unwrap();
     assert_eq!(
-        receiver.post(NcMessage::new(&TextChanged { text: "é".into(), cursor: 1 })),
+        receiver.post(NcValueRef::new(&textbox::Event::Changed(TextChanged { text: "é".into(), cursor: 1 })).unwrap()),
         Err(NC_E_INVALID_ARG)
     );
-    receiver.post(NcMessage::new(&TextChanged { text: "é".into(), cursor: 2 })).unwrap();
+    receiver.post(NcValueRef::new(&textbox::Event::Changed(TextChanged { text: "é".into(), cursor: 2 })).unwrap()).unwrap();
     assert_eq!(text.try_recv().ok().as_deref(), Some("é"));
 }
 
@@ -231,13 +231,13 @@ fn constructor_sinks_reject_invalid_payloads_before_the_mapper_runs() {
     let (sender, receiver) = std::sync::mpsc::channel();
     let mut sink = super::textbox::sink(sender, |event| event).unwrap();
     let invalid = super::textbox::Event::Changed(super::TextChanged { text: "é".into(), cursor: 1 });
-    assert_eq!(sink.post(neocogi_com::NcMessage::new(&invalid)), Err(NC_E_INVALID_ARG));
+    assert_eq!(sink.post(neocogi_com::NcValueRef::new(&invalid).unwrap()), Err(NC_E_INVALID_ARG));
     assert!(receiver.try_recv().is_err());
     let valid = super::textbox::Event::Changed(super::TextChanged { text: "é".into(), cursor: 2 });
-    sink.post(neocogi_com::NcMessage::new(&valid)).unwrap();
-    sink.post(neocogi_com::NcMessage::new(&super::textbox::Event::Submitted(super::TextSubmitted {
+    sink.post(neocogi_com::NcValueRef::new(&valid).unwrap()).unwrap();
+    sink.post(neocogi_com::NcValueRef::new(&super::textbox::Event::Submitted(super::TextSubmitted {
         text: "é".into(),
-    })))
+    })).unwrap())
     .unwrap();
     assert!(matches!(
         receiver.try_recv().unwrap(),
@@ -248,9 +248,9 @@ fn constructor_sinks_reject_invalid_payloads_before_the_mapper_runs() {
     let (sender, receiver) = std::sync::mpsc::channel();
     let mut sink = super::number::sink(sender, |_| ()).unwrap();
     assert_eq!(
-        sink.post(neocogi_com::NcMessage::new(&super::number::Event::Changed(NumericChanged {
+        sink.post(neocogi_com::NcValueRef::new(&super::number::Event::Changed(NumericChanged {
             value: f32::INFINITY
-        }))),
+        })).unwrap()),
         Err(NC_E_INVALID_ARG)
     );
     assert!(receiver.try_recv().is_err());
