@@ -11,7 +11,7 @@ use neocogi_com::{
     com_object,
 };
 use neocogi_ui_core_contracts::{
-    ChoiceMenuEntry, ChoiceMenuEntryAbi, ChoiceSelection, ChoiceSelectionAbi, IChoiceMenu, IChoiceMenuAbi, IChoiceMenuInterfacesFor, MenuTextRange, Rect,
+    ChoiceMenuEntry, ChoiceMenuEntryAbi, ChoiceSelection, ChoiceSelectionAbi, IChoiceMenu, IChoiceMenuAbi, IChoiceMenuVtblFor, MenuTextRange, Rect,
 };
 
 /// Maximum accepted branch nesting, keeping foreign preorder input bounded on the native stack.

@@ -2,7 +2,7 @@
 
 use std::sync::mpsc::{Receiver, TryRecvError};
 use neocogi_com::{ComRef, NcStatus, com_object};
-use neocogi_ui_core_contracts::{IEventOwner, IEventOwnerAbi, IEventOwnerInterfacesFor, IWidgetAbi, UI_E_CLOSED, UI_E_OWNER};
+use neocogi_ui_core_contracts::{IEventOwner, IEventOwnerAbi, IEventOwnerVtblFor, IWidgetAbi, UI_E_CLOSED, UI_E_OWNER};
 
 /// Local behavior behind a persistent COM event owner.
 ///

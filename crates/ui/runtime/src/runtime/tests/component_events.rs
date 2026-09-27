@@ -3,7 +3,7 @@
 use super::*;
 use neocogi_ui_support::test_support::events::TestApp;
 use neocogi_ui_core_contracts::{
-    Activation, IActivationEvents, IActivationEventsAbi, IActivationEventsInterfacesFor, IActivationEventsStream, IActivationEventsEventPort,
+    Activation, IActivationEvents, IActivationEventsAbi, IActivationEventsVtblFor, IActivationEventsStream, IActivationEventsEventPort,
     IActivationEventsSinkAbi,
 };
 
