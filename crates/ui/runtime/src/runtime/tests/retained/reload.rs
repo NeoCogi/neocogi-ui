@@ -315,9 +315,54 @@ fn typed_inputs_validate_payloads_and_do_not_emit_user_events() {
     }
 }
 
-/// Programmatic enablement must not freeze effective wheel eligibility into authored option bits.
+/// Enablement changes only interaction intent, preserving application edits made after construction.
 #[test]
-fn typed_enablement_preserves_authored_options_without_capturing_dynamic_routing() {
+fn typed_enablement_preserves_live_application_flags() {
+    let fixture = Headless::standard();
+    let mut slot = slot(&fixture.ui);
+    let document = Document {
+        version: VERSION,
+        name: "live flags".into(),
+        root: Node::new("button", WidgetSpec::Button { text: "toggle".into() }),
+        outputs: vec![],
+        inputs: vec![Input {
+            name: "enabled".into(),
+            node: "button".into(),
+            kind: InputKind::Enabled,
+        }],
+    };
+    slot.reload(&document, Resources::new(), |_, _| Ok(())).unwrap();
+    let component = slot.component().unwrap();
+    let mut button = component.widget::<ButtonAbi>("button").unwrap();
+    let mut enabled = component.input::<contracts::SetEnabled>("enabled").unwrap();
+    assert_eq!(button.as_interface().properties().unwrap().options, WidgetOptions::FRAME);
+
+    // A later application edit removes an initial bit and adds a different bit.
+    // Disabling must preserve both decisions rather than restoring authored defaults.
+    button.replace_flags(WidgetOptions::ALIGN_RIGHT).unwrap();
+    enabled.send(contracts::SetEnabled { enabled: false }).unwrap();
+    assert_eq!(
+        button.as_interface().properties().unwrap().options,
+        WidgetOptions::ALIGN_RIGHT | WidgetOptions::NO_INTERACT
+    );
+
+    // The application may also edit presentation while the control is disabled.
+    // Enabling changes only NO_INTERACT and repeated enablement is idempotent.
+    button
+        .replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER | WidgetOptions::NO_INTERACT)
+        .unwrap();
+    for _ in 0..2 {
+        enabled.send(contracts::SetEnabled { enabled: true }).unwrap();
+        assert_eq!(
+            button.as_interface().properties().unwrap().options,
+            WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER
+        );
+    }
+}
+
+/// Selective enablement preserves live presentation edits and never stores derived input flags.
+#[test]
+fn typed_enablement_preserves_requested_flags_without_capturing_effective_flags() {
     let fixture = Headless::standard();
     let mut slot = slot(&fixture.ui);
     let mut root = Node::new("scroll", WidgetSpec::Scroll { enabled: true });
@@ -339,14 +384,32 @@ fn typed_enablement_preserves_authored_options_without_capturing_dynamic_routing
     slot.reload(&document, Resources::new(), |_, _| Ok(())).unwrap();
     let component = slot.component().unwrap();
     let root = component.root().unwrap();
-    assert!(root.as_interface().properties().unwrap().options.contains(WidgetOptions::GRAB_SCROLL));
-    component
-        .input::<contracts::SetEnabled>("enabled")
-        .unwrap()
-        .send(contracts::SetEnabled { enabled: true })
-        .unwrap();
-    root.as_interface().add_ref().query::<IScrollingAbi>().unwrap().set_enabled(false).unwrap();
-    assert!(!root.as_interface().properties().unwrap().options.contains(WidgetOptions::GRAB_SCROLL));
+    let mut common = root.as_interface().add_ref();
+    assert_eq!(common.properties().unwrap().options, WidgetOptions::FRAME | WidgetOptions::GRAB_SCROLL);
+    common.clear_flags(WidgetOptions::FRAME).unwrap();
+    common.set_flags(WidgetOptions::ALIGN_RIGHT).unwrap();
+    let mut enabled = component.input::<contracts::SetEnabled>("enabled").unwrap();
+    for value in [false, true] {
+        enabled.send(contracts::SetEnabled { enabled: value }).unwrap();
+        let expected = match value {
+            true => WidgetOptions::ALIGN_RIGHT | WidgetOptions::GRAB_SCROLL,
+            false => WidgetOptions::ALIGN_RIGHT | WidgetOptions::GRAB_SCROLL | WidgetOptions::NO_INTERACT,
+        };
+        assert_eq!(common.properties().unwrap().options, expected);
+    }
+
+    // Scrolling's own model contributes temporary input policy independently of
+    // requested surface flags. Disablement must remove wheel handling immediately.
+    let mut scrolling = common.query::<IScrollingAbi>().unwrap();
+    scrolling.set_enabled(false).unwrap();
+    assert_eq!(common.properties().unwrap().options, WidgetOptions::ALIGN_RIGHT | WidgetOptions::NO_INTERACT);
+
+    // The reverse transition must not retain the model's temporary NO_INTERACT.
+    // An enable command edits intent only; a disabled scroll model remains inert.
+    enabled.send(contracts::SetEnabled { enabled: true }).unwrap();
+    assert_eq!(common.properties().unwrap().options, WidgetOptions::ALIGN_RIGHT | WidgetOptions::NO_INTERACT);
+    scrolling.set_enabled(true).unwrap();
+    assert_eq!(common.properties().unwrap().options, WidgetOptions::ALIGN_RIGHT | WidgetOptions::GRAB_SCROLL);
 }
 
 /// A fixed-coordinate form uses the same geometry for rendering and pointer routing.

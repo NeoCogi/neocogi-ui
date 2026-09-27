@@ -111,6 +111,19 @@ already queued remain owned snapshots; generation checks reject stale ones. Appl
 layout and paint. `Component::save()` preserves authored defaults rather than
 user interaction, focus, scrolling, or live application state.
 
+`SetEnabled` changes only the exported widget's current requested `NO_INTERACT`
+bit: enabling calls `clear_flags`, disabling calls `set_flags`. Application edits
+to frame or alignment flags survive both operations. The adapter keeps no copy
+of live options and never writes `properties().options` back into settings:
+those effective properties may include temporary mouse-wheel or participation
+flags. Constructor defaults initialize state once; `replace_flags` is the explicit
+operation for replacing the whole requested set later.
+
+Enablement applies to the exported surface, not recursively to its descendants.
+Behavior-specific policy remains separate: for example, enabling the surface
+does not turn on a disabled scroll model. The effective flags continue to reflect
+both the current requested value and the widget's own behavior.
+
 Fonts and icons resolve through the supplied immutable UI asset bundle. Images
 use logical keys resolved by the caller's `Resources` map. Source documents do
 not embed GPU handles, file paths selected by the loader, receivers, or plugin

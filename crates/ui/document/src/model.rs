@@ -346,7 +346,7 @@ pub enum InputKind {
     Checked,
     /// SetValue changes numeric state.
     Value,
-    /// SetEnabled preserves other option bits.
+    /// SetEnabled changes only NO_INTERACT in current requested flags, preserving live application edits.
     Enabled,
     /// SetExpanded changes disclosure expansion.
     Expanded,

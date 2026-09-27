@@ -18,7 +18,6 @@ pub(crate) fn inputs(document: &Document, nodes: &BTreeMap<String, Widget<IWidge
 /// Resolves one concrete command capability for one declared application command.
 pub(crate) fn receiver(authored: &Node, mut source: ComPtr<IWidgetAbi>, input: &InputKind) -> Result<ComPtr<IUnknown>, NcStatus> {
     let kind = &authored.widget;
-    let authored_options = authored.style.options.map(WidgetOptions::from_raw).unwrap_or_else(|| kind.default_options());
     let receiver = match input {
         InputKind::Text => text_receiver(source, kind)?,
         InputKind::Checked => {
@@ -37,13 +36,12 @@ pub(crate) fn receiver(authored: &Node, mut source: ComPtr<IWidgetAbi>, input: &
             _ => return Err(NC_E_INVALID_ARG),
         },
         InputKind::Enabled => SetEnabledReceiver::create(Box::new(move |value| {
-            let old = authored_options;
-            let options = if value.enabled {
-                WidgetOptions::from_raw(old.raw() & !WidgetOptions::NO_INTERACT.raw())
-            } else {
-                old | WidgetOptions::NO_INTERACT
-            };
-            source.replace_flags(options)
+            // The widget edits its current requested flags under its own mutation authority.
+            // Neither authored defaults nor behavior-derived properties are a live settings cache.
+            match value.enabled {
+                true => source.clear_flags(WidgetOptions::NO_INTERACT),
+                false => source.set_flags(WidgetOptions::NO_INTERACT),
+            }
         }))?
         .query()?,
         InputKind::Expanded => {

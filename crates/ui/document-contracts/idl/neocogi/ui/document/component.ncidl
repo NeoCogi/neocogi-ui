@@ -31,9 +31,11 @@ struct SetValue {
     value: f32,
 }
 #[version(1)]
-/// Changes whether an exported control can receive ordinary input.
+/// Changes only NO_INTERACT in the exported widget's current requested flags.
+/// Preserves live application presentation edits and never stores effective input policy.
+/// This affects the surface only, not its descendants or its behavior-specific enablement.
 struct SetEnabled {
-    /// True enables the control; other presentation bits are preserved.
+    /// True clears the requested NO_INTERACT bit; false sets it.
     enabled: bool,
 }
 #[version(1)]
