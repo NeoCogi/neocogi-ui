@@ -2,7 +2,7 @@
 use super::*;
 use crate::test_support::{test_bundle, data};
 use neocogi_com::{com_object, NcCopyToBufferOffset};
-use neocogi_renderer_contracts::{IRenderer, IRendererInterfacesFor};
+use neocogi_renderer_contracts::{IRenderer, IRendererVtblFor};
 
 /// Renderer observations shared with the concrete COM mock after object publication.
 #[derive(Default)]

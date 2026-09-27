@@ -336,3 +336,14 @@ impl neocogi_ui_nodes_contracts::TextBlock for TextBlock {
         set_direct_named_font(self, name)
     }
 }
+
+/// Ordinary leaves reserve no duplicate ancestors or per-instance descriptor tables.
+#[cfg(all(test, target_pointer_width = "64"))]
+#[test]
+fn com_header_storage_stays_compact() {
+    // Refcount, padding and the shared call guard occupy 16 bytes on this target.
+    // Every remaining prefix byte belongs to one two-pointer interface header.
+    assert_eq!(TextBlock::COM_INTERFACE_COUNT, 4);
+    assert_eq!(core::mem::offset_of!(TextBlockComObject, value), 16 + 4 * core::mem::size_of::<neocogi_com::IUnknown>());
+    assert_eq!(core::mem::size_of::<TextBlockComObject>(), core::mem::size_of::<TextBlock>() + 80);
+}

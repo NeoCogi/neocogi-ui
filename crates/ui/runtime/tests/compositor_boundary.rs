@@ -2,7 +2,7 @@
 
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, NC_E_OUT_OF_MEMORY, com_object};
 use neocogi_gfx_contracts::{AssetAppearanceRevision, AssetPublisherAbi, GfxPluginFactoryAbi, IAssetBundleAbi};
-use neocogi_renderer_contracts::{IRenderStreamAbi, IRenderer, IRendererAbi, IRendererInterfacesFor, IRgbaImageAbi, RenderBatch, RenderInfo, RenderVertex};
+use neocogi_renderer_contracts::{IRenderStreamAbi, IRenderer, IRendererAbi, IRendererVtblFor, IRgbaImageAbi, RenderBatch, RenderInfo, RenderVertex};
 use neocogi_ui::{Rect, Size, TextWrapping, Ui, UI_E_OWNER};
 use std::{cell::Cell, rc::Rc};
 
