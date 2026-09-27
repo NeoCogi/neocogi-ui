@@ -438,8 +438,8 @@ impl neocogi_ui_nodes_contracts::Button for Button {
 #[test]
 fn com_header_storage_stays_compact() {
     // Refcount, padding and the shared call guard occupy 16 bytes on this target.
-    // Every remaining prefix byte belongs to one two-pointer interface header.
+    // Every remaining prefix byte belongs to one single-pointer interface header.
     assert_eq!(Button::COM_INTERFACE_COUNT, 5);
     assert_eq!(core::mem::offset_of!(ButtonComObject, value), 16 + 5 * core::mem::size_of::<neocogi_com::IUnknown>());
-    assert_eq!(core::mem::size_of::<ButtonComObject>(), core::mem::size_of::<Button>() + 96);
+    assert_eq!(core::mem::size_of::<ButtonComObject>(), core::mem::size_of::<Button>() + 56);
 }
