@@ -50,7 +50,7 @@ struct SetChoices {
     /// Concatenated UTF-8 labels; ends contains their exclusive byte boundaries.
     text: String,
     /// Nondecreasing UTF-8 boundaries, ending at text length.
-    ends: &[u32],
+    ends: Vec<u32>,
     /// Selected ordinal, or -1 for no selection.
     selected: i32,
 }
