@@ -269,7 +269,7 @@ mod tests {
             false,
             false,
             true,
-            WidgetOption::from_bits_retain(item.runtime.state.options().unwrap().raw() as u32),
+            WidgetOption::from_bits_retain(item.runtime.state.requested_flags().unwrap().raw() as u32),
         );
 
         item.paint(&mut ctx);

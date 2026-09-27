@@ -122,14 +122,14 @@ impl Workload {
             let mut grid = factory.grid(&tracks, &tracks)?;
             for index in 0..1024 {
                 let mut button = factory.button_unobserved("MMMM")?;
-                button.set_options(WidgetOptions::NONE)?;
+                button.replace_flags(WidgetOptions::NONE)?;
                 grid.insert(index, &button, GridExtent { columns: 1, rows: 1 })?.finish()?;
                 buttons.push(button);
             }
             grid.node_interface()?
         } else {
             let mut button = factory.button_unobserved("MMMM")?;
-            button.set_options(WidgetOptions::NONE)?;
+            button.replace_flags(WidgetOptions::NONE)?;
             let mut root = button.node_interface()?;
             buttons.push(button);
             if shape == "deep" {

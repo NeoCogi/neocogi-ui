@@ -182,7 +182,7 @@ impl Construction<'_> {
                 _ => return Err(NC_E_INVALID_ARG),
             }
         }
-        widget.set_options(node.style.options.map(WidgetOptions::from_raw).unwrap_or_else(|| node.widget.default_options()))?;
+        widget.replace_flags(node.style.options.map(WidgetOptions::from_raw).unwrap_or_else(|| node.widget.default_options()))?;
         apply_style(&widget, node, self.resources)?;
         Ok(widget)
     }

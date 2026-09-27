@@ -82,14 +82,22 @@ impl IWidget for TestContainer {
     /// This geometry-only container leaves pointer targeting to enabled descendants.
     fn properties(&self) -> Result<WidgetProperties, NcStatus> {
         Ok(WidgetProperties {
-            options: self.state.options()?,
+            options: self.state.requested_flags()?,
             keyboard: 0,
             frame: WidgetFrame::Panel,
         })
     }
     /// Common option changes share the same sticky invalidation as built-in widgets.
-    fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus> {
-        self.state.set_options(options)
+    fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.state.replace_flags(flags)
+    }
+    /// Sets current requested bits through the same widget-owned mutation authority.
+    fn set_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.state.set_flags(flags)
+    }
+    /// Clears requested bits without copying effective properties back into settings.
+    fn clear_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.state.clear_flags(flags)
     }
     /// This fixture's layout inputs change through setters only.
     fn update(&mut self, _state: WidgetUpdate, _event: WidgetEventAbi, _text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
@@ -328,7 +336,7 @@ fn final_child_writer_release_during_layout_closes_retained_descendants() {
 /// Creates a custom leaf with copied geometry observations and no frame inset to obscure its assigned rectangle.
 fn recorded_leaf(runtime: &ComPtr<UiRuntimeAbi>) -> (neocogi_ui::Widget<IWidgetAbi>, Rc<WidgetProbe>) {
     let mut button = button(runtime);
-    button.set_options(WidgetOptions::NONE).unwrap();
+    button.replace_flags(WidgetOptions::NONE).unwrap();
     let probe = Rc::new(WidgetProbe::default());
     let object = RetainingWidget::from_value(RetainingWidget {
         lifetime: button.query().unwrap(),
@@ -779,15 +787,15 @@ fn disclosure_headers_use_the_common_frame_policy_for_both_variants() {
         let (renderer, _) = renderer();
         // The common traversal supplies the frame once; the content algorithm consumes its
         // inset rectangle. A policy change must make render wait for the new measurement.
-        header.set_options(WidgetOptions::NONE).unwrap();
+        header.replace_flags(WidgetOptions::NONE).unwrap();
         runtime.update(SIZE).unwrap();
         runtime.render(SIZE, renderer.as_com_ref()).unwrap();
-        header.set_options(WidgetOptions::FRAME).unwrap();
+        header.replace_flags(WidgetOptions::FRAME).unwrap();
         assert_eq!(header.properties().unwrap().options, WidgetOptions::FRAME);
         assert_eq!(runtime.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
         runtime.update(SIZE).unwrap();
         runtime.render(SIZE, renderer.as_com_ref()).unwrap();
-        header.set_options(WidgetOptions::FRAME).unwrap();
+        header.replace_flags(WidgetOptions::FRAME).unwrap();
         assert_eq!(header.take_change().unwrap(), GeometryChange::NoChange);
         window.close().unwrap();
     }

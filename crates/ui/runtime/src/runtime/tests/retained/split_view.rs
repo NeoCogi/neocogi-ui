@@ -121,11 +121,11 @@ fn split_keyboard_and_capture_loss_use_core_routing_on_both_axes() {
         assert_eq!(split.settings().unwrap().position, 128);
         pointer(&fixture.ui, grab, true);
         fixture.frame(VIEW).unwrap();
-        split.set_options(WidgetOptions::NO_INTERACT).unwrap();
+        split.replace_flags(WidgetOptions::NO_INTERACT).unwrap();
         fixture.ui.input(UiInput::Pointer(Point { x: 300, y: 300 }), "").unwrap();
         pointer(&fixture.ui, Point { x: 300, y: 300 }, false);
         fixture.frame(VIEW).unwrap();
-        split.set_options(WidgetOptions::NONE).unwrap();
+        split.replace_flags(WidgetOptions::NONE).unwrap();
         fixture.frame(VIEW).unwrap();
         assert_eq!(split.settings().unwrap().position, 128);
     }

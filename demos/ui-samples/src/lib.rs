@@ -66,7 +66,7 @@ pub fn weights(ui: &Ui, sink: Option<ComRef<'_, ButtonSinkAbi>>) -> Result<Sampl
 /// Creates the same framed centered control as the full demo without prescribing its application action.
 fn button(ui: &Ui, text: &str, sink: Option<ComRef<'_, ButtonSinkAbi>>) -> Result<ButtonWidget, NcStatus> {
     let mut button = ui.widgets().button_with_sink(text, sink)?;
-    button.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
+    button.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
     Ok(button)
 }
 /// Appends one explicit relationship using authoritative topology, with no parallel child-state model.

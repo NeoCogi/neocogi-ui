@@ -15,8 +15,8 @@ use neocogi_com::{ComPtr, ComRef, NcStatus};
 pub struct WidgetState {
     /// Runtime authority shared across widgets without an ownership cycle.
     host: ComPtr<IWidgetHostAbi>,
-    /// Mutable common presentation and routing options.
-    options: WidgetOptions,
+    /// Authoritative requested flags; effective behavior-derived flags are never stored here.
+    requested_flags: WidgetOptions,
     /// Geometry changes retained until the runtime collects them before layout.
     dirty: bool,
     /// One-way attachment state for the lifetime of this allocation.
@@ -30,28 +30,57 @@ impl WidgetState {
     pub fn new(host: ComPtr<IWidgetHostAbi>, options: WidgetOptions) -> Self {
         Self {
             host,
-            options,
+            requested_flags: options,
             dirty: false,
             mounted: false,
             closed: false,
         }
     }
 
-    /// Reads the current copied options without exposing a state reference.
-    pub fn options(&self) -> Result<WidgetOptions, NcStatus> {
+    /// Reads current requested flags without adding behavior-derived input policy.
+    /// Widget algorithms use this value to compute effective properties; callers
+    /// change individual bits through the in-object operations below.
+    pub fn requested_flags(&self) -> Result<WidgetOptions, NcStatus> {
         self.readable()?;
-        Ok(self.options)
+        Ok(self.requested_flags)
     }
 
-    /// Validates an option replacement before mutation and retains its geometry marker.
-    pub fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus> {
+    /// Replaces the complete requested flag set after authority and bit validation.
+    /// Flags omitted from the replacement are intentionally cleared.
+    pub fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
         self.writable()?;
-        options.validate()?;
-        if self.options != options {
-            self.options = options;
+        flags.validate()?;
+        self.apply_flags(flags);
+        Ok(())
+    }
+
+    /// Sets selected requested bits while preserving every unrelated application edit.
+    /// Reads and writes the authoritative value during this exclusive widget call.
+    pub fn set_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.writable()?;
+        flags.validate()?;
+        self.apply_flags(self.requested_flags | flags);
+        Ok(())
+    }
+
+    /// Clears selected requested bits without capturing transient effective flags.
+    /// Validate the mask before combining it: an unknown bit cannot become a
+    /// silently accepted no-op merely because it was absent from the stored value.
+    pub fn clear_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.writable()?;
+        flags.validate()?;
+        self.apply_flags(WidgetOptions::from_raw(self.requested_flags.raw() & !flags.raw()));
+        Ok(())
+    }
+
+    /// Stores an authorized, validated replacement and marks actual changes once.
+    /// Public mutations perform all fallible checks first. No-op operations leave
+    /// an earlier geometry marker intact, including on hidden widgets.
+    fn apply_flags(&mut self, flags: WidgetOptions) {
+        if self.requested_flags != flags {
+            self.requested_flags = flags;
             self.record_change(GeometryChange::Changed);
         }
-        Ok(())
     }
 
     /// Borrows the immutable owner capability for attachment authentication.

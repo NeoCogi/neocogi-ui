@@ -129,7 +129,7 @@ pub(super) fn slider(ui: &Ui, value: f32, high: f32, sender: std::sync::mpsc::Se
         sender,
         move |neocogi_ui::slider::Event::Changed(event)| target.message(event),
     )?;
-    control.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
+    control.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
     Ok(control)
 }
 /// Owns the same typed activation mapper for individual buttons and shared samples.
@@ -141,7 +141,7 @@ fn activation_sink(sender: std::sync::mpsc::Sender<Message>, action: Action) -> 
 fn button(ui: &Ui, events_tx: &std::sync::mpsc::Sender<Message>, text: &str, action: Action) -> Result<ButtonWidget, NcStatus> {
     let sink = activation_sink(events_tx.clone(), action)?;
     let mut control = ui.widgets().button_with_sink(text, Some(sink.as_com_ref()))?;
-    control.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
+    control.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
     Ok(control)
 }
 /// A disclosure body is its actual editable Linear COM object, with no placeholder replacement tree.
@@ -641,7 +641,7 @@ fn build_controls(host: &Host, state: &State, events_tx: &std::sync::mpsc::Sende
         append(&mut line, &button(ui, events_tx, a, Action::Log)?, FLEX)?;
         let mut right = button(ui, events_tx, b, action)?;
         if matches!(action, Action::Open) && state.file_dialog.is_none() {
-            right.set_options(WidgetOptions::FRAME | WidgetOptions::NO_INTERACT)?;
+            right.replace_flags(WidgetOptions::FRAME | WidgetOptions::NO_INTERACT)?;
         }
         append(&mut line, &right, FLEX)?;
         append(&mut tests, &line, LayoutTrack::Content)?;

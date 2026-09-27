@@ -9,6 +9,8 @@ mod tests {
     struct TestButton {
         /// Plugin-local UTF-8 storage; its Rust layout never crosses the boundary.
         label: String,
+        /// Current requested flags owned by this independent COM fixture.
+        requested_flags: WidgetOptions,
         /// Explicit producer storage enforces one behavioral parent.
         events: neocogi_ui::nodes::ButtonEventPort,
         /// Sticky invalidation consumed by runtime traversal.
@@ -99,14 +101,27 @@ mod tests {
         /// Fixture policy is independent of any native runtime or theme implementation.
         fn properties(&self) -> Result<WidgetProperties, NcStatus> {
             Ok(WidgetProperties {
-                options: WidgetOptions::NONE,
+                options: self.requested_flags,
                 keyboard: 0,
                 frame: WidgetFrame::Generic,
             })
         }
-        /// This fixed fixture permits only its supported inert option policy.
-        fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus> {
-            if options == WidgetOptions::NONE { Ok(()) } else { Err(NC_E_INVALID_ARG) }
+        /// Replaces requested bits and preserves earlier label/geometry invalidation.
+        fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+            flags.validate()?;
+            self.changed |= self.requested_flags != flags;
+            self.requested_flags = flags;
+            Ok(())
+        }
+        /// Adds selected bits to the fixture's authoritative requested state.
+        fn set_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+            flags.validate()?;
+            self.replace_flags(self.requested_flags | flags)
+        }
+        /// Validates the clear mask before removing bits from requested state.
+        fn clear_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+            flags.validate()?;
+            self.replace_flags(WidgetOptions::from_raw(self.requested_flags.raw() & !flags.raw()))
         }
         /// Input validation remains typed even in a facade-only fake component.
         fn update(&mut self, _state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
@@ -134,6 +149,7 @@ mod tests {
     fn generic_proxy_calls_com_contract() -> Result<(), NcStatus> {
         let unknown: ComPtr<IUnknown> = TestButton::from_value(TestButton {
             label: String::new(),
+            requested_flags: WidgetOptions::NONE,
             events: Default::default(),
             changed: false,
         });
@@ -145,6 +161,15 @@ mod tests {
         assert_eq!(node.take_change()?, GeometryChange::NoChange);
         button.set_label("Save")?;
         assert_eq!(node.take_change()?, GeometryChange::NoChange);
+        // The facade forwards all three operations to the independent object's current state.
+        button.replace_flags(WidgetOptions::ALIGN_RIGHT)?;
+        button.set_flags(WidgetOptions::NO_INTERACT)?;
+        assert_eq!(node.properties()?.options, WidgetOptions::ALIGN_RIGHT | WidgetOptions::NO_INTERACT);
+        button.clear_flags(WidgetOptions::NO_INTERACT)?;
+        assert_eq!(node.properties()?.options, WidgetOptions::ALIGN_RIGHT);
+        assert_eq!(node.take_change()?, GeometryChange::Changed);
+        button.clear_flags(WidgetOptions::NO_INTERACT)?;
+        assert_eq!(node.take_change()?, GeometryChange::NoChange);
         Ok(())
     }
 
@@ -153,6 +178,7 @@ mod tests {
     fn concrete_proxy_rejects_wrong_capabilities_and_invalid_text() {
         let unknown = TestButton::from_value(TestButton {
             label: String::from("before"),
+            requested_flags: WidgetOptions::NONE,
             events: Default::default(),
             changed: false,
         });

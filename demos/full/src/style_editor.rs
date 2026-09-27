@@ -313,7 +313,7 @@ impl StyleEditor {
                     } else {
                         WidgetOptions::NO_INTERACT
                     };
-                control.set_options(options)?;
+                control.replace_flags(options)?;
             }
             row.swatch.set_fill(rgba(*color))?;
         }

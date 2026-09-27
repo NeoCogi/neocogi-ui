@@ -69,9 +69,20 @@ impl<I: ComInterface> Widget<I> {
         self.interface.as_com_ref()
     }
 
-    /// Replaces common options through the same widget object used by the runtime.
-    pub fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus> {
-        self.node_interface()?.set_options(options)
+    /// Replaces all requested widget flags, clearing every omitted bit.
+    /// The widget validates and records changes through its own mutation authority.
+    pub fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.node_interface()?.replace_flags(flags)
+    }
+
+    /// Sets selected requested bits while preserving unrelated live application settings.
+    pub fn set_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.node_interface()?.set_flags(flags)
+    }
+
+    /// Clears selected requested bits without writing effective input policy into settings.
+    pub fn clear_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.node_interface()?.clear_flags(flags)
     }
 
     /// Obtains the common node capability for attachment; callers cache this at mount.

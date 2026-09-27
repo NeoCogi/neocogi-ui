@@ -52,14 +52,22 @@ macro_rules! widget {
             /// Policy observation reads only common state and remains available during shared calls.
             fn properties(&self) -> Result<WidgetProperties, NcStatus> {
                 Ok(WidgetProperties {
-                    options: self.common.state.options()?,
+                    options: self.common.state.requested_flags()?,
                     keyboard: $keyboard,
                     frame: $frame,
                 })
             }
             /// Common option edits retain a geometry marker without copying options into content state.
-            fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus> {
-                self.common.state.set_options(options)
+            fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+                self.common.state.replace_flags(flags)
+            }
+            /// Sets current requested bits through the same widget-owned mutation authority.
+            fn set_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+                self.common.state.set_flags(flags)
+            }
+            /// Clears requested bits without copying effective properties back into settings.
+            fn clear_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+                self.common.state.clear_flags(flags)
             }
             /// Validate complete copied input before the concrete behavior can mutate or emit.
             fn update(&mut self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {

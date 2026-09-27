@@ -4,6 +4,7 @@ use neocogi_ui_nodes_contracts::*;
 use neocogi_com::{INcStringComPtrExt, NC_E_BUSY, NcCopyToBufferOffset};
 mod containers;
 mod embedded_input;
+mod widget_flags;
 
 /// Positive drawable size shared by the deterministic headless fixtures.
 const SIZE: Size = Size { width: 640, height: 400 };
@@ -375,6 +376,12 @@ impl ILeafLayout for RetainingWidget {
         }
         assert_eq!(self.runtime.update(SIZE), Err(UI_E_BUSY));
         assert_eq!(self.button.set_label(NcCopyFromBufferOffset::new(0, b"forbidden")), Err(UI_E_BUSY));
+        // Even no-op flag edits must respect the host's observational phase.
+        let before = self.button.properties()?;
+        assert_eq!(self.button.replace_flags(before.options), Err(UI_E_BUSY));
+        assert_eq!(self.button.set_flags(WidgetOptions::NONE), Err(UI_E_BUSY));
+        assert_eq!(self.button.clear_flags(WidgetOptions::NONE), Err(UI_E_BUSY));
+        assert_eq!(self.button.properties()?, before);
         assert_eq!(self.lifetime.close(), Err(UI_E_BUSY));
         Ok(Size {
             width: self.probe.width.get().max(100),
@@ -411,8 +418,16 @@ impl IWidget for RetainingWidget {
         Ok(properties)
     }
     /// Common options are delegated to the shared fixture state.
-    fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus> {
-        self.button.set_options(options)
+    fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.button.replace_flags(flags)
+    }
+    /// Sets current requested bits through the same widget-owned mutation authority.
+    fn set_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.button.set_flags(flags)
+    }
+    /// Clears requested bits without copying effective properties back into settings.
+    fn clear_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.button.clear_flags(flags)
     }
     /// Eventless updates do not change this fixture's fixed content geometry.
     fn update(&mut self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
@@ -439,6 +454,12 @@ impl IWidget for RetainingWidget {
     fn paint(&mut self, scope: PaintScope, state: WidgetPaint, mut painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
         assert_eq!(self.runtime.update(SIZE), Err(UI_E_BUSY));
         assert_eq!(self.button.set_label(NcCopyFromBufferOffset::new(0, b"forbidden")), Err(UI_E_BUSY));
+        // Even no-op flag edits must respect the host's observational phase.
+        let before = self.button.properties()?;
+        assert_eq!(self.button.replace_flags(before.options), Err(UI_E_BUSY));
+        assert_eq!(self.button.set_flags(WidgetOptions::NONE), Err(UI_E_BUSY));
+        assert_eq!(self.button.clear_flags(WidgetOptions::NONE), Err(UI_E_BUSY));
+        assert_eq!(self.button.properties()?, before);
         for (old, expired) in self.probe.painters.borrow_mut().iter_mut() {
             assert_eq!(old.fill(*expired, state.rect, 0), Err(UI_E_EXPIRED_SCOPE));
             assert_eq!(old.triangles(*expired, NcCopyFromBufferOffset::new(0, &[])), Err(UI_E_EXPIRED_SCOPE));
@@ -748,13 +769,13 @@ fn com_nodes_update_without_activation_and_collect_hidden_widget_changes() {
     assert_eq!(probe.measures.get(), measured, "NoChange text processing must preserve measurement");
 
     let before = button.properties().unwrap().options;
-    assert_eq!(button.set_options(WidgetOptions::from_raw(8)), Err(neocogi_com::NC_E_INVALID_TAG));
+    assert_eq!(button.replace_flags(WidgetOptions::from_raw(8)), Err(neocogi_com::NC_E_INVALID_TAG));
     assert_eq!(button.properties().unwrap().options, before);
     window.set_visibility(Visibility::Hidden).unwrap();
     runtime.update(SIZE).unwrap();
     let updates = probe.updates.get();
     let measured = probe.measures.get();
-    button.set_options(WidgetOptions::NONE).unwrap();
+    button.replace_flags(WidgetOptions::NONE).unwrap();
     runtime.update(SIZE).unwrap();
     assert_eq!(probe.updates.get(), updates, "hidden widgets skip update but retain setter invalidation");
     window.set_visibility(Visibility::Visible).unwrap();
@@ -1256,7 +1277,7 @@ impl IPainter for BuiltinPainter {
 fn builtin_scoped_paint_preserves_alignment_with_inline_semantic_state() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let mut button = ui.widgets().button_unobserved("AB").unwrap();
-    button.set_options(WidgetOptions::NONE).unwrap();
+    button.replace_flags(WidgetOptions::NONE).unwrap();
     button.set_fill_states(FillStates::NONE).unwrap();
     let mut common = button.node_interface().unwrap();
     common.take_change().unwrap();
@@ -1292,7 +1313,7 @@ fn builtin_scoped_paint_preserves_alignment_with_inline_semantic_state() {
     assert_eq!(common.paint(scope, paint, painter.as_com_ref()), Err(UI_E_RENDER));
     common.paint(scope, paint, painter.as_com_ref()).unwrap();
     let left = probe.text_positions.borrow().last().expect("left-aligned text was recorded").x;
-    button.set_options(WidgetOptions::ALIGN_RIGHT).unwrap();
+    button.replace_flags(WidgetOptions::ALIGN_RIGHT).unwrap();
     common.paint(scope, paint, painter.as_com_ref()).unwrap();
     let right = probe.text_positions.borrow().last().expect("right-aligned text was recorded").x;
     assert!(right > left + 40, "right alignment must reach the semantic paint algorithm");
@@ -1464,6 +1485,12 @@ fn static_leaf_content_recovers_from_reentry_and_errors_with_one_owned_lifetime(
         )
         .unwrap();
     let mut node = widget.node_interface().unwrap();
+    // The static custom-leaf adapter shares the same current-requested-flags contract.
+    node.set_flags(WidgetOptions::FRAME).unwrap();
+    assert_eq!(node.properties().unwrap().options, WidgetOptions::FRAME | WidgetOptions::NO_INTERACT);
+    node.clear_flags(WidgetOptions::NO_INTERACT).unwrap();
+    assert_eq!(node.properties().unwrap().options, WidgetOptions::FRAME);
+    node.replace_flags(WidgetOptions::NO_INTERACT).unwrap();
     *target.borrow_mut() = Some(node.clone());
     let window = ui.window("Local leaf", RECT, &widget).unwrap();
     probe.fail_measure.set(true);

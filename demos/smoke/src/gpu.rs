@@ -31,14 +31,22 @@ impl IWidget for SceneView {
     /// The scene is a passive fixed-preference surface, with no synthetic keyboard target.
     fn properties(&self) -> Result<WidgetProperties, NcStatus> {
         Ok(WidgetProperties {
-            options: self.state.options()?,
+            options: self.state.requested_flags()?,
             keyboard: 0,
             frame: WidgetFrame::Generic,
         })
     }
     /// Common presentation changes invalidate measurement consistently with every other widget.
-    fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus> {
-        self.state.set_options(options)
+    fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.state.replace_flags(flags)
+    }
+    /// Sets current requested bits through the same widget-owned mutation authority.
+    fn set_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.state.set_flags(flags)
+    }
+    /// Clears requested bits without copying effective properties back into settings.
+    fn clear_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.state.clear_flags(flags)
     }
     /// Scene data affects paint only; the host explicitly updates transforms outside UI observation.
     fn update(&mut self, _state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {

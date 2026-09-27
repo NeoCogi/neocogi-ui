@@ -154,7 +154,10 @@ A local leaf can implement the static `LeafContent` trait and call
 `ui.widgets().leaf(content, options)`. Its concrete content remains inline in one
 COM object; the helper shares common lifecycle and bounded paint/input validation.
 A widget with custom editing interfaces implements those declared COM interfaces
-and composes `WidgetState` directly.
+and composes `WidgetState` directly. The common `IWidget` contract exposes
+`replace_flags`, `set_flags`, and `clear_flags` over current requested
+`WidgetOptions`; delegate them to that shared state. Effective `properties()`
+may add transient behavior flags and must not be copied back as requested flags.
 
 The [independent extension](../../../../examples/ui-extension) demonstrates a real
 constructible `Counter: IWidget + ILeafLayout`, standard activation events, and an

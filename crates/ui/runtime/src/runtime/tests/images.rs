@@ -55,7 +55,7 @@ fn image_controls_keep_owned_pixels_and_forward_ordered_semantic_paint_after_err
     let assets = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_skin(skin)).unwrap();
     let ui = nc_ui_nodes::bind_builtin_nodes(crate::test_support::runtime_from_assets(assets.as_com_ref()).unwrap()).unwrap();
     let mut button = ui.widgets().button_unobserved("AB").unwrap();
-    button.set_options(WidgetOptions::NONE).unwrap();
+    button.replace_flags(WidgetOptions::NONE).unwrap();
     button.set_fill_states(FillStates::NONE).unwrap();
     let mut common = button.node_interface().unwrap();
     let target = Rc::new(RefCell::new(Some(button.as_interface().add_ref())));
@@ -156,7 +156,7 @@ impl IRenderer for ImageFrameRenderer {
 fn image_buttons_survive_both_builtin_and_runtime_clipping_in_a_complete_frame() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let mut button = ui.widgets().button_unobserved("AB").unwrap();
-    button.set_options(WidgetOptions::NONE).unwrap();
+    button.replace_flags(WidgetOptions::NONE).unwrap();
     let image_probe = Rc::new(ImageProbe::default());
     let image: ComPtr<ITextureAbi> = ImageTexture::from_value(ImageTexture { probe: image_probe.clone() }).query().unwrap();
     button.set_image(image.as_com_ref(), false).unwrap();

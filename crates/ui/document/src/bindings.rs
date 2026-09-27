@@ -43,7 +43,7 @@ pub(crate) fn receiver(authored: &Node, mut source: ComPtr<IWidgetAbi>, input: &
             } else {
                 old | WidgetOptions::NO_INTERACT
             };
-            source.set_options(options)
+            source.replace_flags(options)
         }))?
         .query()?,
         InputKind::Expanded => {

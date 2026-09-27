@@ -200,7 +200,7 @@ macro_rules! direct_widget_phase_impl {
             /// Copies routing and frame policy from the concrete widget and its common options.
             fn properties(&self) -> Result<neocogi_ui_core_contracts::WidgetProperties, neocogi_com::NcStatus> {
                 let runtime = <$name as crate::widget_object::HostedWidget>::runtime(self);
-                let options = runtime.state.options()?;
+                let options = runtime.state.requested_flags()?;
                 Ok(neocogi_ui_core_contracts::WidgetProperties {
                     options: neocogi_ui_core_contracts::WidgetOptions::from_raw(
                         <$name as crate::widget_object::WidgetAlgorithm>::effective_options(
@@ -214,12 +214,21 @@ macro_rules! direct_widget_phase_impl {
                 })
             }
 
-            /// Replaces the single common option value after complete validation.
-            fn set_options(&mut self, options: neocogi_ui_core_contracts::WidgetOptions) -> Result<(), neocogi_com::NcStatus> {
-                options.validate()?;
+            /// Replaces requested flags using the concrete widget's one common state.
+            fn replace_flags(&mut self, flags: neocogi_ui_core_contracts::WidgetOptions) -> Result<(), neocogi_com::NcStatus> {
                 <$name as crate::widget_object::HostedWidget>::runtime_mut(self)
                     .state
-                    .set_options(options)
+                    .replace_flags(flags)
+            }
+
+            /// Sets selected requested bits without overwriting unrelated application settings.
+            fn set_flags(&mut self, flags: neocogi_ui_core_contracts::WidgetOptions) -> Result<(), neocogi_com::NcStatus> {
+                <$name as crate::widget_object::HostedWidget>::runtime_mut(self).state.set_flags(flags)
+            }
+
+            /// Clears selected requested bits without persisting behavior-derived options.
+            fn clear_flags(&mut self, flags: neocogi_ui_core_contracts::WidgetOptions) -> Result<(), neocogi_com::NcStatus> {
+                <$name as crate::widget_object::HostedWidget>::runtime_mut(self).state.clear_flags(flags)
             }
 
             /// Runs copied input directly against this concrete widget's semantic fields.
@@ -283,7 +292,7 @@ macro_rules! direct_widget_phase_impl {
                 // Reading options performs the one lifecycle check required by
                 // the complete paint invocation. Repeating it before the same
                 // immutable state read would cross the host COM boundary twice.
-                let options = <$name as crate::widget_object::HostedWidget>::runtime(self).state.options()?;
+                let options = <$name as crate::widget_object::HostedWidget>::runtime(self).state.requested_flags()?;
                 let assets = <$name as crate::widget_object::HostedWidget>::runtime_mut(self).resources()?;
                 let assets = assets.borrow();
                 let mut ctx = crate::WidgetPaintCtx::new_scoped(

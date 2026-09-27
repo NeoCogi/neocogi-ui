@@ -362,7 +362,7 @@ fn run() -> Result<(), HostError> {
     let host = Host::new("Calculator", Size { width: 320, height: 420 }, neocogi_demo_assets::load_bundle()?)?;
     let mut display = host.ui.widgets().textbox_unobserved("0")?;
     display.set_named_font(DISPLAY_FONT)?;
-    display.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_RIGHT | WidgetOptions::NO_INTERACT)?;
+    display.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_RIGHT | WidgetOptions::NO_INTERACT)?;
     let mut grid = host.ui.widgets().grid(
         &[LayoutTrack::Flex { weight: 1.0 }; 4],
         &[LayoutTrack::Flex { weight: KEYPAD_ROW_HEIGHT_WEIGHT }; 5],
@@ -406,7 +406,7 @@ fn run() -> Result<(), HostError> {
     .enumerate()
     {
         let mut button = host.ui.widgets().button(label, events_tx.clone(), move |_| action)?;
-        button.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
+        button.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
         grid.insert(index as u32, &button, GridExtent { columns: 1, rows: 1 })?.finish()?;
     }
     host.run(state, events)

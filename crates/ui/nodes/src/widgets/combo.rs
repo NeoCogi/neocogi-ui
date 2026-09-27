@@ -119,7 +119,7 @@ impl Combo {
         // Traversal intentionally gives widgets their content rectangle. Recover this control's
         // border box with the same normal-state insets used by measurement and layout, including
         // the valid unframed case without introducing theme-dependent pixel constants.
-        let options = self.runtime.state.options().expect("a mounted combo update has readable common state");
+        let options = self.runtime.state.requested_flags().expect("a mounted combo update has readable common state");
         let options = WidgetOption::from_bits_retain(u32::from(options.raw()));
         let insets = if options.intersects(WidgetOption::FRAME) {
             crate::frame::normal_frame_visual(ctx.skin(), self.frame_appearance_role())

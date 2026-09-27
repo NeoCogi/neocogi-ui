@@ -220,13 +220,13 @@ methods, and `Ui::from_interfaces` rejects a factory bound to a different runtim
 ## Common state, input and node ownership
 
 Each concrete widget embeds one private `WidgetRuntime`. That non-generic helper
-contains `neocogi_ui_core_contracts::widget::WidgetState` plus host-backed resource and
+contains `neocogi_ui::com::widget::WidgetState` plus host-backed resource and
 rendering machinery; it cannot store a semantic widget implementation. `WidgetState`
 owns the host authority, common options, mount-once claim, logical closed flag, and
 sticky geometry flag. Neither helper owns a runtime tree, application callback, or
 additional widget allocation. Concrete class contracts require `IWidget`, whose
-protocol includes host/mount/close, properties/set_options, update, take_change,
-and paint. Leaf measurement remains the shared `ILeafLayout` protocol. Button
+protocol includes host/mount/close, effective properties, requested flag mutations,
+update, take_change, and paint. Leaf measurement remains the shared `ILeafLayout` protocol. Button
 activation and button-specific styling live directly on `Button`; no
 activation-only, style-only, or lifetime interface is required for that class.
 
@@ -239,12 +239,29 @@ receiver contract and make state flow harder to follow.
 A semantic setter checks `state.writable()` before borrowing its data, validates
 all replacement inputs, commits atomically, and calls
 `state.record_change(GeometryChange::Changed)` when measurement/placement inputs
-actually differ. Common option setters use `state.set_options`. Return the
+actually differ. Common flags use `state.replace_flags`, `state.set_flags`, and
+`state.clear_flags`. These operate on the current requested value stored inside
+the widget, with `&mut self`; they never restore a construction snapshot or copy
+effective properties back into requested state. Return the
 update's own geometry result; NO_CHANGE must never erase a prior setter marker.
 The runtime collects markers across the authoritative forest, including hidden
 surfaces and descendants, before using measurement caches. Hidden/clipped widgets
 still skip their ordinary update; authors must not rely on that update to notice
 externally shared mutations or to flush a setter's pending marker.
+
+`replace_flags(flags)` replaces the entire requested bitset, clearing omitted
+bits. `set_flags(flags)` adds selected bits; `clear_flags(flags)` removes selected
+bits. All three reject unknown bits before mutation, including unknown clear-mask
+bits. Actual changes mark geometry dirty; no-ops neither add a marker nor erase
+an earlier one. Lifetime and mutation-phase checks apply even to no-ops.
+
+`WidgetState::requested_flags()` exposes requested configuration to the concrete
+implementation. `IWidget::properties().options` reports effective behavior and
+may add transient mouse-wheel or participation flags. It is an observation, not
+a configuration snapshot to feed back into a mutation. Custom widgets implement
+all three methods through their same common state, as shown in the independent
+[UI extension](../examples/ui-extension/src/lib.rs). Window-specific
+`WindowOptions` remain a distinct interface contract.
 
 The app queues raw input and then updates explicitly:
 

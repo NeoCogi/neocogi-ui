@@ -817,7 +817,7 @@ mod tests {
             false,
             false,
             true,
-            WidgetOption::from_bits_retain(slider.runtime.state.options().unwrap().raw() as u32),
+            WidgetOption::from_bits_retain(slider.runtime.state.requested_flags().unwrap().raw() as u32),
         );
 
         slider.paint(&mut ctx);
@@ -1014,7 +1014,7 @@ mod tests {
             false,
             false,
             true,
-            WidgetOption::from_bits_retain(slider.runtime.state.options().unwrap().raw() as u32),
+            WidgetOption::from_bits_retain(slider.runtime.state.requested_flags().unwrap().raw() as u32),
         );
 
         slider.paint(&mut ctx);

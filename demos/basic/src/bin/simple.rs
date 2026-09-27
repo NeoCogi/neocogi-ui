@@ -66,7 +66,7 @@ fn run() -> Result<(), HostError> {
     neocogi_demo_host::initialize()?;
     let host = Host::new("Hello", Size { width: 640, height: 480 }, neocogi_demo_assets::load_bundle()?)?;
     let mut hello = host.ui.widgets().button_unobserved("Hello World!")?;
-    hello.set_options(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
+    hello.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
     let mut tree = host.ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Stretch)?;
     tree.insert(0, &hello, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))?.finish()?;
     host.ui.window("Hello Window", Rect { x: 40, y: 40, width: 300, height: 400 }, &tree)?;

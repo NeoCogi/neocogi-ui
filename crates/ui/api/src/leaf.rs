@@ -57,14 +57,22 @@ impl<Content: LeafContent> IWidget for LeafObject<Content> {
     /// Common observations read only lifecycle state and remain safe during shared content calls.
     fn properties(&self) -> Result<WidgetProperties, NcStatus> {
         Ok(WidgetProperties {
-            options: self.state.options()?,
+            options: self.state.requested_flags()?,
             keyboard: Content::KEYBOARD,
             frame: Content::FRAME,
         })
     }
     /// Options and their sticky geometry effect follow the standard widget contract.
-    fn set_options(&mut self, options: WidgetOptions) -> Result<(), NcStatus> {
-        self.state.set_options(options)
+    fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.state.replace_flags(flags)
+    }
+    /// Sets current requested bits through the same widget-owned mutation authority.
+    fn set_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.state.set_flags(flags)
+    }
+    /// Clears requested bits without copying effective properties back into settings.
+    fn clear_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.state.clear_flags(flags)
     }
     /// Validates all copied input before mutating content; changes remain sticky until collected.
     fn update(&mut self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {

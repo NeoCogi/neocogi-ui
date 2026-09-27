@@ -32,7 +32,7 @@ interface IPainter {
     fn text_run(&mut self, scope: PaintScope, font: PaintFont, position: Point, rgba: u32, text: &[u8]) -> Result<()>;
 }
 
-#[version(1)]
+#[version(2)]
 /// Common retained widget capability shared by all concrete widget interfaces.
 interface IWidget {
     /// Returns the allocating runtime's identity service, which owns no tree.
@@ -42,10 +42,21 @@ interface IWidget {
     /// Logically closes the widget without requiring its final reference release.
     fn close(&mut self) -> Result<()>;
 
-    /// Returns current frame, focus and pointer-routing policy as one copied record.
+    /// Returns effective frame, focus and input policy, including behavior-derived flags.
+    /// This observation is not requested configuration and must not be written back as such.
     fn properties(&self) -> Result<WidgetProperties>;
-    /// Changes common options and records sticky geometry invalidation when they differ.
-    fn set_options(&mut self, options: WidgetOptions) -> Result<()>;
+    /// Replaces all current requested flags; unspecified flags are cleared.
+    /// Rejects unknown bits and forbidden mutations before changing state. A real change
+    /// records sticky geometry invalidation; an identical replacement preserves that marker.
+    fn replace_flags(&mut self, flags: WidgetOptions) -> Result<()>;
+    /// Sets selected bits in the widget's current requested flags, preserving all other bits.
+    /// Uses the same validation, lifetime and invalidation contract as replace_flags.
+    /// Never captures effective flags or restores construction-time settings.
+    fn set_flags(&mut self, flags: WidgetOptions) -> Result<()>;
+    /// Clears selected bits in the widget's current requested flags, preserving all other bits.
+    /// Rejects unknown mask bits even when they would clear nothing. Clearing absent bits
+    /// is a no-op and must not erase an earlier pending geometry change.
+    fn clear_flags(&mut self, flags: WidgetOptions) -> Result<()>;
     /// Processes one router-owned snapshot; the text argument is UTF-8 only for Text events.
     /// Return CHANGED for every modification to measurement or child placement inputs.
     fn update(&mut self, state: WidgetUpdate, event: WidgetEvent, text: &[u8]) -> Result<GeometryChange>;
