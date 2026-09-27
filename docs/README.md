@@ -19,8 +19,9 @@ guides cover architecture, authoring tools, integration, and repository workflow
 - Assembly build performance — compiler reuse, shared-library LTO, and measured build times.
 - COM crate consolidation measurements — five-crate ownership, verified linkage, and before/after Vulkan min-size sizes.
 - [IDL contract modules](IDL_MODULES.md) — Rust-like contract syntax, Cargo generation, explicit Rust locations, exact native linking, and factory-only activation.
+- [Recursive value contract](RECURSIVE_VALUE_CONTRACT.md) — scalar and aggregate wire rules, explicit recursion, budgets, buffers, and COM inspection graphs.
 - [IDL source maps](IDL_SOURCE_MAPS.md) — generated Rust provenance, readable annotations, sidecar format and source lookup.
-- [Local COM implementation](../crates/com/README.md) and [ABI specification](../crates/com/docs/abi-v7.md).
+- [Local COM implementation](../crates/com/README.md) and [ABI specification](../crates/com/docs/abi-v8.md).
 - [Accepted design](COM_DESIGN.md), [feature ownership](FEATURES.md), and [unreleased changes](CHANGELOG.md).
 
 ## UI implementation notes

@@ -113,14 +113,15 @@ with `static-runtime`. Both paths share factory activation and pointer checks.
 
 Plugin descriptor and runtime table ABIs both remain v1 during pre-alpha; their
 exported getters and Rust table types use that version consistently. Core object
-ABI remains v7. These version numbers are not a compatibility promise across
+ABI is v8. These version numbers are not a compatibility promise across
 pre-alpha revisions: build hosts, runtimes, and plugins from the same checkout.
 There is no compatibility adapter retaining the deleted mechanisms.
 
 Inspection schema 9 contains plugin/dependency information and complete root
 factory compatibility data. Full module/declaration inventories remain available
-from IDL source tooling at build time, rather than shipping a parallel runtime
-graph solely for inspection.
+from IDL source tooling at build time. A widget catalog additionally transports
+the finite structural value graph needed to author independently built widgets;
+see [recursive values and inspection](RECURSIVE_VALUE_CONTRACT.md#com-inspection-graph).
 
 ## Why the previous mechanisms existed
 

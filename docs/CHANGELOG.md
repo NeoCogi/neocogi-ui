@@ -545,3 +545,15 @@ Version 0.6 introduced retained `WidgetTree` authoring on top of the earlier per
 - Custom drawing and 3D pass-through rendering gained mouse, keyboard, text, and drag input.
 - Dialogs and the file dialog were introduced.
 - The calculator, simple example, and full rendering demo established the example suite.
+
+- Unify IDL records/enums as recursively checked values and remove `#[message]`.
+  Separate application storage, raw wire fields, and typed producer guards;
+  check bool bytes and selected enum payloads in copied slots, borrowed values,
+  and buffers. Reject inline recursion, allow explicit recursive sequences, and
+  share byte/work/depth budgets through nested conversion. Preserve zero-copy
+  numeric buffers only through an explicit layout/content proof. Advance core
+  ABI to 8 and canonical IDL encoding to 3; rebuild all components together.
+- Transport complete structured value definitions, named recursion, and enum tags
+  through COM designer catalog schema 4. Keep one stream/one lifetime consumer
+  and explicit application handlers; values no longer manufacture receivers.
+  See [the recursive value contract](RECURSIVE_VALUE_CONTRACT.md) for the supported positions and validation evidence.
