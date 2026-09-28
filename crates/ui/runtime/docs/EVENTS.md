@@ -69,6 +69,25 @@ method and polls the receiver. Channel blocks and owned message payloads may
 allocate. An allocation regression compares 64 warmed ordinary updates with
 64 updates using an empty persistent root and checks for zero extra allocations.
 
+## Widget methods and event notifications
+
+Getters and setters belong to the concrete widget class or its appropriate COM
+interface. A getter returns a current snapshot; a setter validates and applies
+an application request synchronously, returning its result. Event sinks receive
+facts emitted by the widget and, through the standard adapter, enqueue the
+behavioral parent's mapped messages. Similar argument types do not make these
+contracts interchangeable. Ordinary state setters do not synthesize user edits.
+
+Selective operations preserve the widget's other current settings. Use
+`set_flags`/`clear_flags` for requested interaction bits rather than writing a
+snapshot of effective flags back into the widget. Scrolling's own `set_enabled`
+controls its scroll model and is separate from those surface flags.
+`SplitView::set_position` changes only its nonnegative requested position in one
+COM call; it preserves the current axis, minima and handle width. A changed
+position cancels divider dragging and invalidates layout without emitting an
+event. `set_settings` remains the explicit whole-policy replacement. The combo's
+`replace_items`/`replace_menu` validate and commit labels and selection together.
+
 ## Construction and posting
 
 Declare cross-COM facts as concrete NCIDL structs/enums. The factory accepts

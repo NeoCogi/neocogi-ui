@@ -176,3 +176,68 @@ fn split_topology_and_settings_are_validated_before_mutation() {
     assert!(second_state.borrow().closed);
     assert_eq!(split.settings(), Err(UI_E_CLOSED));
 }
+
+/// Direct setters retain unrelated live settings, validate before mutation and remain silent.
+#[test]
+fn split_position_setter_preserves_policy_and_checks_the_real_com_boundary() {
+    for axis in [SplitAxis::Horizontal, SplitAxis::Vertical] {
+        let fixture = Headless::standard();
+        let (send, events) = std::sync::mpsc::channel();
+        let mut split = fixture.ui.widgets().split_view(settings(axis), send, |event| event).unwrap();
+        let mut common = split.node_interface().unwrap();
+        // Change every surrounding field after construction. The position setter must
+        // operate on this live policy rather than the constructor's original snapshot.
+        let live = SplitOptions {
+            axis,
+            position: 42,
+            minimum_first: 13,
+            minimum_second: 29,
+            handle_width: 5,
+        };
+        split.set_settings(live).unwrap();
+        common.take_change().unwrap();
+        for position in [0, 150, i32::MAX] {
+            split.set_position(position).unwrap();
+            assert_eq!(split.settings().unwrap(), SplitOptions { position, ..live });
+            assert_eq!(common.take_change().unwrap(), GeometryChange::Changed);
+            split.set_position(position).unwrap();
+            assert_eq!(common.take_change().unwrap(), GeometryChange::NoChange);
+        }
+        let before = split.settings().unwrap();
+        // Invoke the raw generated projection as well as the facade: validation
+        // belongs to the widget implementation, never just its Rust convenience API.
+        let mut abi = split.as_interface().add_ref();
+        for invalid in [-1, i32::MIN] {
+            assert_eq!(abi.set_position(invalid), Err(neocogi_com::NC_E_INVALID_ARG));
+            assert_eq!(split.settings().unwrap(), before);
+            assert_eq!(common.take_change().unwrap(), GeometryChange::NoChange);
+        }
+        assert!(events.try_recv().is_err(), "programmatic setters must not publish divider events");
+        common.close().unwrap();
+        assert_eq!(split.set_position(100), Err(UI_E_CLOSED));
+        assert_eq!(abi.set_position(-1), Err(UI_E_CLOSED));
+        assert_eq!(events.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected));
+    }
+}
+
+/// A programmatic position wins over an already captured gesture without publishing an edit.
+#[test]
+fn split_position_setter_cancels_active_drag_and_relayouts_panes() {
+    let mut fixture = Headless::standard();
+    let (send, events) = std::sync::mpsc::channel();
+    let mut split = fixture.ui.widgets().split_view(settings(SplitAxis::Horizontal), send, |event| event).unwrap();
+    let (first, state) = probe::<0>(&fixture.ui, Size { width: 10, height: 10 }, WidgetOptions::NONE);
+    split.insert(0, &first).unwrap().finish().unwrap();
+    split.insert(1, &fixture.ui.widgets().text_block("second", TextWrapping::None).unwrap()).unwrap().finish().unwrap();
+    let _owner = window(&fixture.ui, "setter during capture", Rect { x: 10, y: 10, width: 400, height: 120 }, &split);
+    fixture.frame(VIEW).unwrap();
+    pointer(&fixture.ui, Point { x: 134, y: 40 }, true);
+    fixture.frame(VIEW).unwrap();
+    split.set_position(180).unwrap();
+    fixture.ui.input(UiInput::Pointer(Point { x: 270, y: 40 }), "").unwrap();
+    pointer(&fixture.ui, Point { x: 270, y: 40 }, false);
+    fixture.frame(VIEW).unwrap();
+    assert_eq!(split.settings().unwrap().position, 180);
+    assert_eq!(state.borrow().paints.last().unwrap().rect.width, 180);
+    assert!(events.try_recv().is_err(), "cancelled drag cannot publish a later user change");
+}

@@ -271,6 +271,12 @@ impl neocogi_ui_nodes_contracts::SplitView for SplitView {
         }
         Ok(())
     }
+    /// Edits one field under the same exclusive COM borrow as validation and invalidation.
+    fn set_position(&mut self, position: i32) -> Result<(), NcStatus> {
+        // Reuse the authoritative complete-policy setter with the current local fields.
+        // No caller snapshot can accidentally restore an older axis, minimum or width.
+        self.set_settings(SplitOptions { position, ..self.settings })
+    }
 }
 
 impl ContainerWidget for SplitView {

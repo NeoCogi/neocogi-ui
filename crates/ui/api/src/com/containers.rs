@@ -41,6 +41,11 @@ impl Widget<SplitViewAbi> {
     pub fn set_settings(&mut self, settings: SplitOptions) -> Result<(), NcStatus> {
         self.interface.set_settings(settings)
     }
+    /// Changes only the requested position in one checked COM call.
+    /// Preserves current sizing policy, rejects negative positions, and emits no user event.
+    pub fn set_position(&mut self, position: i32) -> Result<(), NcStatus> {
+        self.interface.set_position(position)
+    }
 }
 
 /// Static convenience wrapper around the dynamically constructed Disclosure class projection.

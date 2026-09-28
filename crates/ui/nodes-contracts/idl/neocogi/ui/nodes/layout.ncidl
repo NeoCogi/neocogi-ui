@@ -150,7 +150,7 @@ struct SplitOptions {
     handle_width: i32,
 }
 
-#[version(3)]
+#[version(4)]
 /// Two-pane layout with a draggable divider owned by this same concrete container.
 /// Zero children is empty; one fills the allocation; two enable the divider.
 class SplitView: IWidget + IContainerLayout {
@@ -168,7 +168,11 @@ class SplitView: IWidget + IContainerLayout {
     fn settings(&self) -> Result<SplitOptions>;
     /// Validates all settings before mutation and ends any active divider gesture.
     fn set_settings(&mut self, settings: SplitOptions) -> Result<()>;
-
+    /// Changes only the nonnegative requested position, retaining the current axis,
+    /// minima and handle width. Allocation clamping never rewrites this request.
+    /// A changed request cancels the gesture and invalidates layout without a user event;
+    /// invalid or closed calls leave the settings unchanged.
+    fn set_position(&mut self, position: i32) -> Result<()>;
 }
 
 #[version(2)]
